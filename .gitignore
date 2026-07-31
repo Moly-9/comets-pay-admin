@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.token
+credentials*
+secrets*
+tmp/
+remote-snapshot/
