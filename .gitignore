@@ -9,3 +9,4 @@ credentials*
 secrets*
 tmp/
 remote-snapshot/
+local-preview/

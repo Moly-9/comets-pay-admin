@@ -47,6 +47,21 @@ git log --oneline --decorate
 不应进入 Git 历史的数据，因此保留在 `remote-snapshot/`；它的版本变化记录在
 [RELEASE_HISTORY.md](./RELEASE_HISTORY.md)。
 
+## 构建本地前端预览
+
+远端缺少原始 React/Vite 源工程，因此当前前端改动先以可追踪的增强源码维护，
+构建时注入到远端静态快照的副本中，不直接修改压缩后的生产 JS。
+
+```bash
+/Users/aria/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+  scripts/build-local-preview.mjs
+
+python3 -m http.server 4175 --directory local-preview/dist
+```
+
+浏览器访问 `http://127.0.0.1:4175/`。生成的 `local-preview/` 不进入 Git，
+每次构建都会由 `remote-snapshot/current/dist` 和 `enhancements/` 重新生成。
+
 ## 后续维护原则
 
 1. 不直接把压缩后的 `dist/assets/*.js` 当作长期源码维护。
