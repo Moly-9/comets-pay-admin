@@ -49,15 +49,10 @@ git log --oneline --decorate
 
 ## 构建本地前端预览
 
-远端缺少原始 React/Vite 源工程，因此当前前端改动以可追踪的增强源码维护。
-合同管理使用独立 React/Vite 插件，构建时与项目草稿增强一起装配到远端静态快照
-的副本中，不直接修改压缩后的生产 JS。
+远端缺少原始 React/Vite 源工程，因此当前前端改动先以可追踪的增强源码维护，
+构建时注入到远端静态快照的副本中，不直接修改压缩后的生产 JS。
 
 ```bash
-env PATH=/Users/aria/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/usr/bin:/bin \
-  /Users/aria/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback/pnpm \
-  --dir enhancements/contract-recognition run build:plugin
-
 /Users/aria/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   scripts/build-local-preview.mjs
 
@@ -66,8 +61,6 @@ python3 -m http.server 4175 --directory local-preview/dist
 
 浏览器访问 `http://127.0.0.1:4175/`。生成的 `local-preview/` 不进入 Git，
 每次构建都会由 `remote-snapshot/current/dist` 和 `enhancements/` 重新生成。
-合同插件的结构、数据流和依赖见
-[`enhancements/contract-recognition/README.md`](./enhancements/contract-recognition/README.md)。
 
 ## 后续维护原则
 
