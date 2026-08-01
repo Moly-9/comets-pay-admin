@@ -177,13 +177,13 @@
         aria-describedby="cp-draft-confirm-description"
       >
         <div class="cp-draft-confirm-copy">
-          <h2 id="cp-draft-confirm-title">是否保存当前内容为草稿？</h2>
-          <p id="cp-draft-confirm-description">保存后，下次新建项目时可继续填写。</p>
+          <h2 id="cp-draft-confirm-title">退出新建项目？</h2>
+          <p id="cp-draft-confirm-description">当前内容尚未保存，你可以保存为草稿后退出。</p>
           <p class="cp-draft-confirm-error" role="alert" hidden></p>
         </div>
         <div class="cp-draft-confirm-actions">
-          <button class="cp-draft-confirm-save" type="button" data-action="save">保存草稿并退出</button>
           <button class="cp-draft-confirm-discard" type="button" data-action="discard">放弃并退出</button>
+          <button class="cp-draft-confirm-save" type="button" data-action="save">保存草稿并退出</button>
           <button class="cp-draft-confirm-continue" type="button" data-action="continue">继续编辑</button>
         </div>
       </section>

@@ -155,9 +155,15 @@
 }
 
 .cp-draft-confirm-actions .cp-draft-confirm-discard {
-  border-color: transparent;
-  background: transparent;
+  border-color: #efc4bf;
+  background: #fff;
   color: #c64b40;
+}
+
+.cp-draft-confirm-actions .cp-draft-confirm-discard:hover:not(:disabled),
+.cp-draft-confirm-actions .cp-draft-confirm-discard:focus-visible {
+  border-color: #db948c;
+  background: #fff7f6;
 }
 
 .cp-draft-confirm-actions .cp-draft-confirm-continue {
@@ -280,7 +286,6 @@
 
   .cp-draft-confirm-actions .cp-draft-confirm-continue {
     grid-column: 1 / -1;
-    grid-row: 1;
   }
 
   .cp-draft-confirm-actions button {
