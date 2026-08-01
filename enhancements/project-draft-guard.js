@@ -28,11 +28,33 @@
   const getField = (dialog, placeholder) =>
     dialog.querySelector(`[placeholder="${placeholder}"]`);
 
+  const getCustomerField = (dialog) =>
+    dialog.querySelector(
+      '[placeholder="输入客户名称"], [placeholder="输入合作品牌"]'
+    );
+
   const getFields = (dialog) => ({
     projectName: getField(dialog, "例如：秋季新品首发"),
-    brand: getField(dialog, "输入合作品牌"),
+    brand: getCustomerField(dialog),
     requestReason: getField(dialog, "填写本项目的请款背景或用途"),
   });
+
+  const relabelCustomerField = (dialog) => {
+    const input = getCustomerField(dialog);
+    const label = input?.closest("label");
+    const fieldLabel = label?.querySelector(":scope > span");
+    if (!input || !fieldLabel) return;
+
+    if (fieldLabel.textContent?.trim() !== "客户") {
+      fieldLabel.textContent = "客户";
+    }
+    if (input.placeholder !== "输入客户名称") {
+      input.placeholder = "输入客户名称";
+    }
+    if (input.getAttribute("aria-label") !== "客户") {
+      input.setAttribute("aria-label", "客户");
+    }
+  };
 
   const getCurrentPm = (dialog) =>
     dialog.querySelector('[role="combobox"][aria-label="选择项目PM"] .custom-select-value')
@@ -491,6 +513,7 @@
   };
 
   const enhanceDialog = async (dialog) => {
+    relabelCustomerField(dialog);
     if (dialog.dataset.projectDraftGuard === "ready") return;
     dialog.dataset.projectDraftGuard = "ready";
 
