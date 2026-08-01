@@ -19,6 +19,10 @@
 
 完整检查结论见 [SYSTEM_AUDIT.md](./SYSTEM_AUDIT.md)。
 
+后续前端、后端、数据库与外部接口统一遵循
+[ID_STANDARD.md](./ID_STANDARD.md)，不再使用姓名、社媒 Handle 或渠道收款人编号
+作为跨模块主键。
+
 ## 查看每次修改
 
 本工作区使用本地 Git 记录维护文档和后续可维护源码。常用命令：
