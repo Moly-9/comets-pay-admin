@@ -1,0 +1,40 @@
+import type { ContractRecord } from "../types";
+
+export const sampleContracts: ContractRecord[] = [
+  {
+    id: "CON-260724-KOL-01",
+    ioId: "IO-260724-NQ-FR",
+    name: "Nebula Quest 法国 KOL 推广服务合同",
+    advertiser: "Muse Commerce Limited",
+    publisher: "Léa Martin",
+    projectName: "Nebula Quest 法国创作者推广",
+    brandName: "Nebula Quest",
+    status: "已确认",
+    updatedAt: "2026-07-24 16:20",
+    sourceNames: ["Nebula_Quest_FR_KOL_Agreement.pdf"],
+  },
+  {
+    id: "CON-260722-KOC-04",
+    ioId: "IO-260722-OW-EU",
+    name: "Once Human 欧洲 KOC 合作协议",
+    advertiser: "NetEase Games",
+    publisher: "Mina Kato",
+    projectName: "Once Human 主机上线合作",
+    brandName: "Once Human",
+    status: "待确认",
+    updatedAt: "2026-07-22 11:08",
+    sourceNames: ["Once_Human_EU_IO.pdf", "Standard_Terms.docx"],
+  },
+  {
+    id: "CON-260718-LIVE-02",
+    ioId: "IO-260718-MR-NA",
+    name: "Marvel Rivals S8 前瞻直播合同",
+    advertiser: "NetEase Games",
+    publisher: "Kenji Mori",
+    projectName: "Marvel Rivals S8 前瞻直播",
+    brandName: "Marvel Rivals",
+    status: "需核对",
+    updatedAt: "2026-07-18 09:42",
+    sourceNames: ["MR_S8_IO.pdf", "Payment_Addendum.pdf"],
+  },
+];
