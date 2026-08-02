@@ -1,0 +1,255 @@
+.crw-confirm-button {
+  border-color: #367b5f;
+  background: #367b5f;
+  color: #fff;
+  box-shadow: 0 7px 16px rgb(34 101 75 / 18%);
+}
+
+.crw-confirm-button:hover:not(:disabled),
+.crw-confirm-button:focus-visible {
+  border-color: #2d6c52;
+  background: #2d6c52;
+  box-shadow: 0 9px 20px rgb(34 101 75 / 24%);
+}
+
+.crw-confirm-button:focus-visible,
+.crw-edit-button:focus-visible,
+.crw-editor-actions button:focus-visible {
+  outline: 3px solid rgb(71 145 110 / 22%);
+  outline-offset: 2px;
+}
+
+.crw-confirm-button:disabled {
+  border-color: #dfe2e7;
+  background: #eceef1;
+  color: #979ca6;
+  box-shadow: none;
+}
+
+.crw-confirm-button.crw-is-confirmed:disabled {
+  border-color: #cfe6da;
+  background: #edf8f2;
+  color: #2f7659;
+}
+
+.crw-confirm-button img {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) invert(1);
+}
+
+.crw-confirm-button.crw-is-confirmed img {
+  filter: invert(40%) sepia(14%) saturate(1555%) hue-rotate(102deg)
+    brightness(92%) contrast(88%);
+}
+
+.crw-review-banner {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 2px;
+  border: 1px solid #ebeef2;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 8px 10px;
+}
+
+.crw-review-banner span {
+  color: #747a86;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.crw-review-badge {
+  flex: none;
+  border-radius: 99px;
+  background: #fff3e8;
+  padding: 4px 7px;
+  color: #b46032;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.crw-review-banner[data-phase="parsing"] .crw-review-badge {
+  background: #eef3fb;
+  color: #526b92;
+}
+
+.crw-review-banner[data-phase="confirmed"] {
+  border-color: #d9ebe2;
+  background: #f6fbf8;
+}
+
+.crw-review-banner[data-phase="confirmed"] .crw-review-badge {
+  background: #e4f4eb;
+  color: #2f7659;
+}
+
+.crw-field-line {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.crw-field-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.crw-field-value.crw-is-missing {
+  color: #a15b37;
+}
+
+.crw-edit-button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #7a6b99;
+}
+
+.crw-edit-button:hover,
+.crw-edit-button:focus-visible {
+  border-color: #ddd5e8;
+  background: #f7f3fb;
+  color: #5f4a89;
+}
+
+.crw-edit-button img {
+  width: 14px;
+  height: 14px;
+  opacity: 0.82;
+}
+
+.crw-editor {
+  display: grid;
+  gap: 7px;
+}
+
+.crw-editor input,
+.crw-editor textarea {
+  width: 100%;
+  border: 1px solid #cfd3dc;
+  border-radius: 7px;
+  background: #fff;
+  padding: 7px 9px;
+  color: #292b31;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.crw-editor textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.crw-editor input:focus,
+.crw-editor textarea:focus {
+  border-color: #8d7aae;
+  outline: 3px solid rgb(128 103 169 / 14%);
+}
+
+.crw-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.crw-editor-actions button {
+  min-height: 27px;
+  border: 1px solid #dadde4;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 9px;
+  color: #656b77;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.crw-editor-actions .crw-save-field {
+  border-color: #78639c;
+  background: #78639c;
+  color: #fff;
+}
+
+.crw-source {
+  grid-column: 1 / -1;
+}
+
+.crw-success-text {
+  color: #2f7659 !important;
+}
+
+.contracts-page td.crw-list-confirmed > * {
+  color: #2f7659;
+}
+
+.crw-toast {
+  position: fixed;
+  z-index: 320;
+  right: 22px;
+  bottom: 22px;
+  display: grid;
+  width: min(370px, calc(100vw - 32px));
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px 14px;
+  box-shadow: 0 18px 46px rgb(30 27 39 / 18%);
+}
+
+.crw-toast::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38966b;
+  content: "";
+}
+
+.crw-toast.crw-toast-warning::before {
+  background: #d47b43;
+}
+
+.crw-toast strong,
+.crw-toast small {
+  display: block;
+}
+
+.crw-toast strong {
+  color: #282a30;
+  font-size: 12px;
+}
+
+.crw-toast small {
+  margin-top: 2px;
+  color: #777d88;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .contract-detail-page .page-heading-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .contract-detail-page .page-heading-actions .crw-confirm-button {
+    grid-column: 1 / -1;
+  }
+
+  .crw-review-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
