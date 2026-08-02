@@ -164,8 +164,11 @@ export function ContractDetail({
   const pendingCount = Object.values(result.fields).filter(
     (field) => field.status !== "confirmed",
   ).length;
-  const allPopulatedFieldsConfirmed =
-    pendingCount === 0 && confirmedCount === fieldDefinitions.length;
+  const hasConfirmableFields = Object.values(result.fields).some(
+    (field) => field.rawValue.trim() && field.status !== "confirmed",
+  );
+  const hasSavedConfirmation =
+    confirmedCount > 0 && !hasConfirmableFields;
 
   const updateField = (field: RecognitionField) => {
     setResult((current) => ({
@@ -254,7 +257,7 @@ export function ContractDetail({
                 </button>
                 <button
                   type="button"
-                  className="cr-button cr-button-primary"
+                  className="cr-button cr-button-confirm"
                   onClick={commit}
                 >
                   <Check size={15} />
@@ -262,14 +265,25 @@ export function ContractDetail({
                 </button>
               </>
             ) : (
-              <button
-                type="button"
-                className="cr-button cr-button-secondary"
-                onClick={startEditing}
-              >
-                <Pencil size={15} />
-                修改解析内容
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="cr-button cr-button-edit"
+                  onClick={startEditing}
+                >
+                  <Pencil size={15} />
+                  修改解析内容
+                </button>
+                <button
+                  type="button"
+                  className="cr-button cr-button-confirm"
+                  disabled={!hasConfirmableFields}
+                  onClick={commit}
+                >
+                  <CheckCircle2 size={15} />
+                  {hasConfirmableFields ? "确认解析内容" : "已确认解析内容"}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -281,14 +295,14 @@ export function ContractDetail({
           <strong>
             {isEditing
               ? "正在修改解析内容"
-              : allPopulatedFieldsConfirmed
+              : hasSavedConfirmation
                 ? "解析结果已确认保存"
                 : "解析结果等待确认"}
           </strong>
           <span>
             {isEditing
               ? "修改只作用于当前浏览器中的识别结果，保存前不会覆盖原资料。"
-              : `已确认 ${confirmedCount} 项，${pendingCount} 项待确认或补充。点击“修改解析内容”后可统一编辑并保存。`}
+              : `已确认 ${confirmedCount} 项，${pendingCount} 项待确认或补充。可直接确认解析结果，或修改后再保存。`}
           </span>
         </div>
       </div>

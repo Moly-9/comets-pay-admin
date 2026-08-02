@@ -109,6 +109,32 @@ body.cr-recognition-open {
   background: #f8f9fa;
 }
 
+.cr-button-edit {
+  border-color: #e6e1ee;
+  background: #f5f2f8;
+  color: #665978;
+  box-shadow: 0 2px 8px rgb(73 58 91 / 5%);
+}
+
+.cr-button-edit:hover:not(:disabled) {
+  border-color: #d9d0e5;
+  background: #eee9f4;
+  color: #554666;
+}
+
+.cr-button-confirm {
+  border-color: #d7eadf;
+  background: #edf7f1;
+  color: #2f7252;
+  box-shadow: 0 2px 8px rgb(47 114 82 / 6%);
+}
+
+.cr-button-confirm:hover:not(:disabled) {
+  border-color: #c4dfcf;
+  background: #e3f2e9;
+  color: #286347;
+}
+
 .cr-button:disabled {
   border-color: #e3e5e9;
   background: #e8eaed;

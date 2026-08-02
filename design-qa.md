@@ -4,7 +4,8 @@
 - User annotation: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-afb238bb-660d-4b14-8e39-04525da3c096.png`
 - Restored read-only state: `qa/contract-recognition-restored-qa.png`
 - Edit state: `qa/contract-recognition-edit-qa.png`
-- Combined comparison: `qa/original-vs-restored-contract-detail.jpg`
+- Confirmation actions state: `qa/contract-confirm-actions-qa.png`
+- Latest combined comparison: `qa/original-vs-confirm-actions.jpg`
 - Original viewport: 1265 x 712 CSS px
 - Implementation viewport: 1280 x 720 CSS px
 - Comparison normalization: original image scaled to 1280 x 720
@@ -21,6 +22,11 @@ snapshot, while `同意确认并保存` confirms all populated fields together a
 view to read-only mode. Missing fields remain unresolved rather than receiving guessed
 values.
 
+The read-only state also provides `确认解析内容` for users who have reviewed the parsed
+result and do not need to edit it. The modify action uses a restrained purple-gray tint,
+while the confirmation action uses the existing low-saturation success green. Both use
+soft borders, 7 px radii, and the same compact typography as the surrounding system.
+
 ## Findings
 
 - Initial P1: the custom review UI replaced the original four-tab contract detail layout
@@ -28,6 +34,8 @@ values.
   inconsistent with the existing product.
 - Fix: restore the original split layout and tab structure, keep parsed fields read-only
   by default, and expose editing through a single explicit action.
+- Confirmation-action review: no P0/P1/P2 issue was found. The two actions remain
+  visually distinct without introducing a heavy primary-button treatment.
 - No actionable P0, P1, or P2 findings remain in the final comparison.
 
 ## Interaction Verification
@@ -38,6 +46,10 @@ values.
 - Changed a parsed value and verified `取消修改` restored the original value.
 - Changed a parsed value and verified `同意确认并保存` persisted the value, confirmed
   populated fields, and returned to read-only mode.
+- Confirmed parsed content directly from read-only mode and verified the action became
+  disabled as `已确认解析内容`.
+- Verified modify button colors as `#f5f2f8` / `#665978` and confirmation button colors
+  as `#edf7f1` / `#2f7252`, with 7 px radii and subtle borders.
 - Opened all four detail tabs and verified their content.
 - Browser console errors and warnings: none.
 
