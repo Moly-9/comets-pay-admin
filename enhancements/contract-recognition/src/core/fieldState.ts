@@ -57,14 +57,7 @@ export const editRecognitionField = (
   editedValue: value,
   confidence: 1,
   status: value.trim() ? "detected" : "missing",
-  source: value.trim()
-    ? {
-        documentType: "SYSTEM",
-        fileName: "人工编辑",
-        section: "人工确认",
-        sourceText: value,
-      }
-    : null,
+  source: field.source,
 });
 
 export const confirmRecognitionField = (
@@ -77,3 +70,13 @@ export const confirmRecognitionField = (
 export const allFieldsConfirmed = (
   fields: Record<FieldKey, RecognitionField>,
 ) => Object.values(fields).every((field) => field.status === "confirmed");
+
+export const confirmPopulatedFields = (
+  fields: Record<FieldKey, RecognitionField>,
+): Record<FieldKey, RecognitionField> =>
+  Object.fromEntries(
+    Object.entries(fields).map(([key, field]) => [
+      key,
+      confirmRecognitionField(field),
+    ]),
+  ) as Record<FieldKey, RecognitionField>;

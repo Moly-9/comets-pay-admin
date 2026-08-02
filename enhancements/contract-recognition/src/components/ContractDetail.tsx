@@ -1,13 +1,15 @@
 import {
   ArrowLeft,
+  Check,
   CheckCircle2,
+  FileCheck2,
   FileWarning,
   Files,
-  Info,
-  Save,
+  Pencil,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { allFieldsConfirmed } from "../core/fieldState";
+import { confirmPopulatedFields } from "../core/fieldState";
 import { fieldDefinitions } from "../core/fieldDefinitions";
 import type {
   ContractRecord,
@@ -22,9 +24,28 @@ import { FieldRow } from "./FieldRow";
 interface ContractDetailProps {
   contract: ContractRecord;
   onBack: () => void;
-  onUpdate: (contract: ContractRecord) => void;
   onCommitted: (contract: ContractRecord) => void;
 }
+
+type DetailTab = "summary" | "fulfillment" | "payment" | "validation";
+
+const tabFieldKeys: Record<Exclude<DetailTab, "validation">, FieldKey[]> = {
+  summary: ["advertiser", "publisher", "contractNumber", "effectiveDate"],
+  fulfillment: [
+    "ioNumber",
+    "projectBrand",
+    "platformChannel",
+    "campaignPeriod",
+  ],
+  payment: [
+    "projectTotalFees",
+    "invoiceIssuePeriod",
+    "paymentTerm",
+    "paymentMethod",
+    "transferFee",
+    "beneficiaryAccount",
+  ],
+};
 
 const systemSource = (value: string): SourceLocation => ({
   documentType: "SYSTEM",
@@ -85,56 +106,75 @@ const legacyResult = (contract: ContractRecord): RecognitionResult => {
 const fieldValue = (
   fields: Record<FieldKey, RecognitionField>,
   key: FieldKey,
-) => fields[key].rawValue || "";
+) => fields[key].rawValue.trim();
+
+const projectBrandValue = (
+  fields: Record<FieldKey, RecognitionField>,
+  contract: ContractRecord,
+) => {
+  const field = fields.projectBrand;
+  if (field.editedValue !== undefined) {
+    const [projectName = "", brandName = ""] = field.rawValue
+      .split(/\s*(?:\/|·)\s*/, 2)
+      .map((item) => item.trim());
+    return { projectName, brandName };
+  }
+  const normalized = field.normalizedValue;
+  if (normalized && typeof normalized === "object") {
+    return {
+      projectName: String(
+        (normalized as Record<string, unknown>).projectName ?? "",
+      ),
+      brandName: String(
+        (normalized as Record<string, unknown>).brandName ?? "",
+      ),
+    };
+  }
+  return {
+    projectName: contract.projectName,
+    brandName: contract.brandName,
+  };
+};
 
 export function ContractDetail({
   contract,
   onBack,
-  onUpdate,
   onCommitted,
 }: ContractDetailProps) {
-  const [tab, setTab] = useState<"summary" | "payment" | "documents">("summary");
+  const [tab, setTab] = useState<DetailTab>("summary");
   const [result, setResult] = useState<RecognitionResult>(
     () => contract.result ?? legacyResult(contract),
   );
+  const [editBaseline, setEditBaseline] = useState<RecognitionResult | null>(
+    null,
+  );
+  const [isEditing, setIsEditing] = useState(false);
   const [activeSource, setActiveSource] = useState<SourceLocation | null>(null);
   const [selectedFileName, setSelectedFileName] = useState(
     contract.result?.documents[0]?.fileName ?? contract.sourceNames[0] ?? "",
   );
 
   const fieldKeys = useMemo(
-    () =>
-      fieldDefinitions
-        .filter((definition) =>
-          tab === "summary"
-            ? definition.group === "summary"
-            : definition.group === "payment",
-        )
-        .map((definition) => definition.key),
+    () => (tab === "validation" ? [] : tabFieldKeys[tab]),
     [tab],
   );
   const confirmedCount = Object.values(result.fields).filter(
     (field) => field.status === "confirmed",
   ).length;
+  const pendingCount = Object.values(result.fields).filter(
+    (field) => field.status !== "confirmed",
+  ).length;
+  const allPopulatedFieldsConfirmed =
+    pendingCount === 0 && confirmedCount === fieldDefinitions.length;
 
   const updateField = (field: RecognitionField) => {
-    const nextResult = {
-      ...result,
+    setResult((current) => ({
+      ...current,
       fields: {
-        ...result.fields,
+        ...current.fields,
         [field.fieldKey]: field,
       },
-    };
-    setResult(nextResult);
-    const hasConflict = Object.values(nextResult.fields).some(
-      (item) => item.status === "conflict",
-    );
-    onUpdate({
-      ...contract,
-      result: nextResult,
-      status: hasConflict ? "需核对" : "待确认",
-      updatedAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-    });
+    }));
   };
 
   const locateSource = (source: SourceLocation) => {
@@ -144,37 +184,52 @@ export function ContractDetail({
     }
   };
 
+  const startEditing = () => {
+    setEditBaseline(result);
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    if (editBaseline) setResult(editBaseline);
+    setEditBaseline(null);
+    setIsEditing(false);
+  };
+
   const commit = () => {
-    if (!allFieldsConfirmed(result.fields)) return;
-    const projectBrand = result.fields.projectBrand.normalizedValue;
-    const projectName =
-      projectBrand && typeof projectBrand === "object"
-        ? String((projectBrand as Record<string, unknown>).projectName ?? "")
-        : contract.projectName;
-    const brandName =
-      projectBrand && typeof projectBrand === "object"
-        ? String((projectBrand as Record<string, unknown>).brandName ?? "")
-        : contract.brandName;
-    onCommitted({
+    const confirmedFields = confirmPopulatedFields(result.fields);
+    const nextResult = { ...result, fields: confirmedFields };
+    const { projectName, brandName } = projectBrandValue(
+      confirmedFields,
+      contract,
+    );
+    const hasUnresolved = Object.values(confirmedFields).some(
+      (field) => field.status === "missing" || field.status === "conflict",
+    );
+    const nextContract: ContractRecord = {
       ...contract,
-      id: fieldValue(result.fields, "contractNumber") || contract.id,
-      ioId: fieldValue(result.fields, "ioNumber") || contract.ioId,
-      advertiser: fieldValue(result.fields, "advertiser"),
-      publisher: fieldValue(result.fields, "publisher"),
+      id: fieldValue(confirmedFields, "contractNumber") || contract.id,
+      ioId: fieldValue(confirmedFields, "ioNumber") || contract.ioId,
+      advertiser: fieldValue(confirmedFields, "advertiser") || "待补充",
+      publisher: fieldValue(confirmedFields, "publisher") || "待补充",
       projectName,
       brandName,
-      name: [projectName, brandName].filter(Boolean).join(" · ") || contract.name,
-      result,
-      status: "已确认",
+      name:
+        [projectName, brandName].filter(Boolean).join(" · ") || contract.name,
+      result: nextResult,
+      status: hasUnresolved ? "需核对" : "已确认",
       updatedAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-    });
+    };
+    setResult(nextResult);
+    setEditBaseline(null);
+    setIsEditing(false);
+    onCommitted(nextContract);
   };
 
   return (
     <div className="cr-page-stack" data-testid="contract-recognition-workspace">
       <div className="cr-detail-heading">
         <button type="button" onClick={onBack}>
-          <ArrowLeft size={17} />
+          <ArrowLeft size={16} />
           返回合同列表
         </button>
         <div className="cr-detail-title-row">
@@ -186,139 +241,201 @@ export function ContractDetail({
               {contract.updatedAt}
             </p>
           </div>
-          <button
-            type="button"
-            className="cr-button cr-button-primary"
-            disabled={!allFieldsConfirmed(result.fields)}
-            onClick={commit}
-          >
-            <Save size={16} />
-            保存确认结果
-          </button>
+          <div className="cr-detail-actions">
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  className="cr-button cr-button-secondary"
+                  onClick={cancelEditing}
+                >
+                  <X size={15} />
+                  取消修改
+                </button>
+                <button
+                  type="button"
+                  className="cr-button cr-button-primary"
+                  onClick={commit}
+                >
+                  <Check size={15} />
+                  同意确认并保存
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="cr-button cr-button-secondary"
+                onClick={startEditing}
+              >
+                <Pencil size={15} />
+                修改解析内容
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="cr-review-banner">
-        <Info size={17} />
+        <FileCheck2 size={17} />
         <div>
-          <strong>识别结果需要人工确认</strong>
+          <strong>
+            {isEditing
+              ? "正在修改解析内容"
+              : allPopulatedFieldsConfirmed
+                ? "解析结果已确认保存"
+                : "解析结果等待确认"}
+          </strong>
           <span>
-            已确认 {confirmedCount} / {fieldDefinitions.length} 项。金额、日期、主体和收款账户不会自动覆盖现有资料；当前结果仅保存在本地浏览器。
+            {isEditing
+              ? "修改只作用于当前浏览器中的识别结果，保存前不会覆盖原资料。"
+              : `已确认 ${confirmedCount} 项，${pendingCount} 项待确认或补充。点击“修改解析内容”后可统一编辑并保存。`}
           </span>
         </div>
       </div>
 
       <section className="cr-detail-card">
-        <div className="cr-tabs">
-          <button
-            type="button"
-            className={tab === "summary" ? "cr-tab-active" : ""}
-            onClick={() => setTab("summary")}
-          >
-            合同摘要
-          </button>
-          <button
-            type="button"
-            className={tab === "payment" ? "cr-tab-active" : ""}
-            onClick={() => setTab("payment")}
-          >
-            付款与 Invoice
-          </button>
-          <button
-            type="button"
-            className={tab === "documents" ? "cr-tab-active" : ""}
-            onClick={() => setTab("documents")}
-          >
-            合同文件 <span>{contract.sourceNames.length}</span>
-          </button>
-        </div>
+        <div className="cr-review-layout">
+          <DocumentPreview
+            documents={result.documents}
+            files={contract.fileRefs ?? []}
+            activeSource={activeSource}
+            selectedFileName={selectedFileName}
+            onSelectFile={(fileName) => {
+              setSelectedFileName(fileName);
+              setActiveSource(null);
+            }}
+          />
 
-        {tab === "documents" ? (
-          <div className="cr-documents-panel">
-            {result.documents.length ? (
-              result.documents.map((document) => (
-                <article key={document.id}>
-                  <span
-                    className={
-                      document.status === "parsed"
-                        ? "cr-document-ok"
-                        : "cr-document-error"
-                    }
-                  >
-                    {document.status === "parsed" ? (
-                      <CheckCircle2 size={19} />
-                    ) : (
-                      <FileWarning size={19} />
-                    )}
-                  </span>
+          <section className="cr-details-panel">
+            <div className="cr-tabs" role="tablist" aria-label="合同详情分类">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "summary"}
+                className={tab === "summary" ? "cr-tab-active" : ""}
+                onClick={() => setTab("summary")}
+              >
+                合同摘要
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "fulfillment"}
+                className={tab === "fulfillment" ? "cr-tab-active" : ""}
+                onClick={() => setTab("fulfillment")}
+              >
+                IO与履约
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "payment"}
+                className={tab === "payment" ? "cr-tab-active" : ""}
+                onClick={() => setTab("payment")}
+              >
+                付款与Invoice
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "validation"}
+                className={tab === "validation" ? "cr-tab-active" : ""}
+                onClick={() => setTab("validation")}
+              >
+                校验记录
+              </button>
+            </div>
+
+            {tab === "validation" ? (
+              <div className="cr-documents-panel">
+                <header className="cr-structured-header">
                   <div>
-                    <strong>{document.fileName}</strong>
-                    <small>
-                      {document.documentType}
-                      {document.pageCount ? ` · ${document.pageCount} 页` : ""}
-                      {document.textLength
-                        ? ` · ${document.textLength.toLocaleString()} 字符`
-                        : ""}
-                    </small>
-                    {document.errorMessage ? (
-                      <p>{document.errorMessage}</p>
-                    ) : null}
+                    <CheckCircle2 size={18} />
+                    <div>
+                      <h2>文件校验记录</h2>
+                      <p>查看解析状态、文件类型和异常提示</p>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    className="cr-button cr-button-secondary"
-                    disabled={document.status !== "parsed"}
-                    onClick={() => {
-                      setSelectedFileName(document.fileName);
-                      setTab("summary");
-                    }}
-                  >
-                    查看原文
-                  </button>
-                </article>
-              ))
+                </header>
+                {result.documents.length ? (
+                  result.documents.map((document) => (
+                    <article key={document.id}>
+                      <span
+                        className={
+                          document.status === "parsed"
+                            ? "cr-document-ok"
+                            : "cr-document-error"
+                        }
+                      >
+                        {document.status === "parsed" ? (
+                          <CheckCircle2 size={18} />
+                        ) : (
+                          <FileWarning size={18} />
+                        )}
+                      </span>
+                      <div>
+                        <strong>{document.fileName}</strong>
+                        <small>
+                          {document.documentType}
+                          {document.pageCount
+                            ? ` · ${document.pageCount} 页`
+                            : ""}
+                          {document.textLength
+                            ? ` · ${document.textLength.toLocaleString()} 字符`
+                            : ""}
+                        </small>
+                        {document.errorMessage ? (
+                          <p>{document.errorMessage}</p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="cr-button cr-button-secondary"
+                        disabled={document.status !== "parsed"}
+                        onClick={() => setSelectedFileName(document.fileName)}
+                      >
+                        查看原文
+                      </button>
+                    </article>
+                  ))
+                ) : (
+                  <div className="cr-no-recognition">
+                    <Files size={28} />
+                    <strong>没有字段识别快照</strong>
+                    <span>重新上传合同文件后可生成校验记录。</span>
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="cr-no-recognition">
-                <Files size={30} />
-                <strong>历史合同没有字段识别快照</strong>
-                <span>重新上传合同文件后可生成来源信息。</span>
-              </div>
+              <section className="cr-fields-panel">
+                <header className="cr-structured-header">
+                  <div>
+                    <FileCheck2 size={18} />
+                    <div>
+                      <h2>结构化合同信息</h2>
+                      <p>
+                        {isEditing
+                          ? "编辑完成后统一确认并保存"
+                          : "每个字段保留合同来源位置"}
+                      </p>
+                    </div>
+                  </div>
+                </header>
+                <dl className="cr-field-list">
+                  {fieldKeys.map((key) => (
+                    <FieldRow
+                      key={key}
+                      editing={isEditing}
+                      field={result.fields[key]}
+                      onChange={updateField}
+                      onLocate={locateSource}
+                    />
+                  ))}
+                </dl>
+              </section>
             )}
-          </div>
-        ) : (
-          <div className="cr-review-layout">
-            <DocumentPreview
-              documents={result.documents}
-              files={contract.fileRefs ?? []}
-              activeSource={activeSource}
-              selectedFileName={selectedFileName}
-              onSelectFile={(fileName) => {
-                setSelectedFileName(fileName);
-                setActiveSource(null);
-              }}
-            />
-            <section className="cr-fields-panel">
-              <header>
-                <div>
-                  <h2>
-                    {tab === "summary" ? "合同摘要" : "付款与 Invoice"}
-                  </h2>
-                  <p>编辑识别值后逐项确认，点击来源可定位原文。</p>
-                </div>
-              </header>
-              <div className="cr-field-list">
-                {fieldKeys.map((key) => (
-                  <FieldRow
-                    key={key}
-                    field={result.fields[key]}
-                    onChange={updateField}
-                    onLocate={locateSource}
-                  />
-                ))}
-              </div>
-            </section>
-          </div>
-        )}
+          </section>
+        </div>
       </section>
     </div>
   );

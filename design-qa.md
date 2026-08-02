@@ -1,51 +1,44 @@
 # Contract Recognition Design QA
 
-- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-7b2a92d1-3080-45d1-94a8-bb2cc816edf4.png`
-- Upload screenshot: `qa/contract-upload-dialog.png`
-- Review screenshot: `qa/contract-recognition-review-final.png`
-- Combined comparison: `qa/reference-vs-review.png`
-- Viewport: 1595 x 682 CSS px
-- Source pixels: 1595 x 682 at 1x
-- Implementation pixels: 1595 x 682 at 1x
-- State: contract management visual reference compared with parsed DOCX review workspace
+- Primary visual truth: `qa/original-contract-detail.png`
+- User annotation: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-afb238bb-660d-4b14-8e39-04525da3c096.png`
+- Restored read-only state: `qa/contract-recognition-restored-qa.png`
+- Edit state: `qa/contract-recognition-edit-qa.png`
+- Combined comparison: `qa/original-vs-restored-contract-detail.jpg`
+- Original viewport: 1265 x 712 CSS px
+- Implementation viewport: 1280 x 720 CSS px
+- Comparison normalization: original image scaled to 1280 x 720
 
-## Full-view comparison
+## Comparison
 
-The implementation preserves the existing COMETS Pay top bar, navigation, canvas color,
-typography, compact controls, border treatment, and restrained shadow/radius language.
-The review workspace stays inside the original main content bounds and does not replace
-or restyle the contract management list.
+The restored review view follows the original contract detail composition: contract
+document on the left, structured information on the right, and the original four tabs
+for summary, fulfillment, payment, and validation. Parsed values are compact read-only
+rows with their source locations instead of permanently visible form controls.
 
-## Focused comparison
-
-The upload modal was checked separately because the reference does not show an upload
-state. It uses the existing system's compact title hierarchy, black primary action,
-neutral secondary action, 7-8 px radii, thin borders, and Noto Sans SC typography.
-The review split view was checked for table-like density, field alignment, source links,
-status colors, disabled state, and scroll containment.
+The explicit `修改解析内容` action enters edit mode. `取消修改` restores the pre-edit
+snapshot, while `同意确认并保存` confirms all populated fields together and returns the
+view to read-only mode. Missing fields remain unresolved rather than receiving guessed
+values.
 
 ## Findings
 
-- No actionable P0, P1, or P2 findings remain.
-- P3: the DOCX preview intentionally uses a document serif font so contract content is
-  distinguishable from management UI text.
+- Initial P1: the custom review UI replaced the original four-tab contract detail layout
+  with full-time form rows, making the highlighted area visually and behaviorally
+  inconsistent with the existing product.
+- Fix: restore the original split layout and tab structure, keep parsed fields read-only
+  by default, and expose editing through a single explicit action.
+- No actionable P0, P1, or P2 findings remain in the final comparison.
 
-## Comparison history
+## Interaction Verification
 
-1. P1: the first review workspace started at the top of the main element and covered the
-   right side of the global top bar.
-2. Fix: derive the workspace top edge from the rendered header bottom, retain the main
-   element's left/width bounds, and lock the underlying page scroll while reviewing.
-3. Post-fix evidence: `qa/contract-recognition-review-final.png` shows the complete top
-   bar, unchanged navigation, one workspace scrollbar, and no overlap.
-
-## Interaction verification
-
-- Opened the original contract management page and its existing upload action.
-- Uploaded a local DOCX through the browser file chooser.
-- Parsed 14 summary/payment fields and displayed paragraph-level sources.
-- Switched to Payment & Invoice, confirmed Project Total Fees, and observed 1/14.
-- Returned to the unchanged original contract list.
+- Uploaded a local DOCX and parsed 14 contract and payment fields.
+- Confirmed the initial result contains no editable text boxes.
+- Entered edit mode with `修改解析内容`.
+- Changed a parsed value and verified `取消修改` restored the original value.
+- Changed a parsed value and verified `同意确认并保存` persisted the value, confirmed
+  populated fields, and returned to read-only mode.
+- Opened all four detail tabs and verified their content.
 - Browser console errors and warnings: none.
 
 final result: passed

@@ -7,31 +7,47 @@ import { FieldRow } from "./FieldRow";
 const initialField: RecognitionField = {
   fieldKey: "paymentMethod",
   label: "Payment Method",
-  rawValue: "",
-  normalizedValue: null,
-  source: null,
-  confidence: 0,
-  status: "missing",
+  rawValue: "Bank Transfer",
+  normalizedValue: "BANK_TRANSFER",
+  source: {
+    documentType: "IO",
+    fileName: "campaign-io.docx",
+    paragraphIndex: 16,
+    section: "Payment",
+    sourceText: "Payment Method: Bank Transfer",
+  },
+  confidence: 0.95,
+  status: "detected",
   candidates: [],
 };
 
-function Harness() {
+function Harness({ editing }: { editing: boolean }) {
   const [field, setField] = useState(initialField);
   return (
-    <FieldRow field={field} onChange={setField} onLocate={() => undefined} />
+    <dl>
+      <FieldRow
+        editing={editing}
+        field={field}
+        onChange={setField}
+        onLocate={() => undefined}
+      />
+    </dl>
   );
 }
 
 describe("FieldRow", () => {
-  it("lets the user edit and explicitly confirm a detected field", () => {
-    const { container } = render(<Harness />);
-    fireEvent.change(screen.getByLabelText("Payment Method"), {
-      target: { value: "PayPal" },
-    });
-    expect(container.querySelector(".cr-status-detected")).toBeInTheDocument();
+  it("shows parsed content as a compact read-only field by default", () => {
+    render(<Harness editing={false} />);
+    expect(screen.getByText("Bank Transfer")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "IO · 第16段" })).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "确认" }));
-    expect(container.querySelector(".cr-status-confirmed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Payment Method")).toHaveValue("PayPal");
+  it("allows editing only after the parent enters edit mode", () => {
+    render(<Harness editing />);
+    const input = screen.getByLabelText("Payment Method");
+    fireEvent.change(input, { target: { value: "PayPal" } });
+    expect(input).toHaveValue("PayPal");
+    expect(screen.getByText("待确认")).toBeInTheDocument();
   });
 });

@@ -116,6 +116,11 @@ body.cr-recognition-open {
   box-shadow: none;
 }
 
+.cr-button:focus-visible {
+  outline: 2px solid rgb(93 99 112 / 22%);
+  outline-offset: 2px;
+}
+
 .cr-icon-button {
   display: inline-grid;
   width: 34px;
@@ -365,7 +370,7 @@ body.cr-recognition-open {
 }
 
 .cr-context-grid input:focus,
-.cr-field-control textarea:focus,
+.cr-field-row textarea:focus,
 .cr-preview-header select:focus {
   border-color: #9399a5;
   box-shadow: 0 0 0 3px rgb(56 58 66 / 8%);
@@ -444,6 +449,13 @@ body.cr-recognition-open {
   font-size: 11px;
 }
 
+.cr-detail-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 .cr-review-banner {
   display: flex;
   min-height: 54px;
@@ -484,13 +496,24 @@ body.cr-recognition-open {
   box-shadow: 0 8px 24px rgb(30 32 38 / 5%);
 }
 
+.cr-review-layout {
+  display: grid;
+  min-height: 610px;
+  grid-template-columns: minmax(420px, 1.08fr) minmax(390px, 0.92fr);
+}
+
+.cr-details-panel {
+  min-width: 0;
+  background: #fff;
+}
+
 .cr-tabs {
   display: flex;
   min-height: 48px;
   align-items: stretch;
-  gap: 26px;
+  gap: 22px;
   border-bottom: 1px solid var(--cr-line);
-  padding: 0 18px;
+  padding: 0 20px;
 }
 
 .cr-tabs button {
@@ -498,9 +521,10 @@ body.cr-recognition-open {
   border: 0;
   background: transparent;
   padding: 0 2px;
-  color: #777d88;
-  font-size: 11.5px;
+  color: #737985;
+  font-size: 11px;
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .cr-tabs button::after {
@@ -518,19 +542,17 @@ body.cr-recognition-open {
 }
 
 .cr-tabs button.cr-tab-active::after {
-  background: var(--cr-accent);
+  background: #25262b;
 }
 
-.cr-tabs button span {
-  margin-left: 4px;
-  color: #9297a1;
-  font-size: 9.5px;
+.cr-tabs button:focus-visible {
+  border-color: transparent !important;
+  outline: 0;
+  box-shadow: none;
 }
 
-.cr-review-layout {
-  display: grid;
-  min-height: 610px;
-  grid-template-columns: minmax(340px, 0.9fr) minmax(430px, 1.1fr);
+.cr-tabs button:focus-visible::after {
+  background: #25262b;
 }
 
 .cr-preview {
@@ -665,53 +687,97 @@ body.cr-recognition-open {
   background: #fff;
 }
 
-.cr-fields-panel > header {
+.cr-structured-header {
   display: flex;
-  min-height: 58px;
+  min-height: 72px;
   align-items: center;
   border-bottom: 1px solid var(--cr-line);
-  padding: 9px 18px;
+  padding: 12px 20px;
 }
 
-.cr-fields-panel h2 {
+.cr-structured-header > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cr-structured-header > div > svg {
+  flex: none;
+  margin-top: 2px;
+  color: #79669a;
+}
+
+.cr-structured-header h2 {
   margin: 0;
   color: #2b2d33;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
-.cr-fields-panel p {
+.cr-structured-header p {
   margin: 3px 0 0;
   color: #8a909a;
-  font-size: 9px;
+  font-size: 9.5px;
 }
 
 .cr-field-list {
+  margin: 0;
   max-height: 552px;
   overflow-y: auto;
 }
 
 .cr-field-row {
   display: grid;
-  gap: 8px;
+  min-height: 74px;
+  grid-template-columns: minmax(112px, 0.38fr) minmax(0, 0.62fr);
+  align-items: start;
+  gap: 14px;
   border-bottom: 1px solid var(--cr-soft-line);
-  padding: 13px 18px;
+  padding: 14px 20px;
 }
 
 .cr-field-row:last-child {
   border-bottom: 0;
 }
 
-.cr-field-row > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.cr-field-row dt {
+  margin: 1px 0 0;
+  color: #7b818c;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.cr-field-row dd {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  margin: 0;
 }
 
 .cr-field-row label {
-  color: #363940;
-  font-size: 11px;
+  color: #6f7580;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.cr-field-value-line {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cr-field-value-line strong {
+  overflow-wrap: anywhere;
+  color: #282a30;
+  font-size: 11.5px;
   font-weight: 700;
+  line-height: 1.55;
+}
+
+.cr-field-value-line .cr-value-missing {
+  color: #9a9fa8;
+  font-weight: 500;
 }
 
 .cr-status {
@@ -735,14 +801,14 @@ body.cr-recognition-open {
   color: var(--cr-green);
 }
 
-.cr-field-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: stretch;
-  gap: 7px;
+.cr-field-edit-heading {
+  display: flex;
+  min-height: 14px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
-.cr-field-control textarea {
+.cr-field-row textarea {
   width: 100%;
   min-height: 49px;
   resize: vertical;
@@ -756,58 +822,41 @@ body.cr-recognition-open {
   line-height: 1.5;
 }
 
-.cr-field-row-conflict .cr-field-control textarea {
+.cr-field-row-conflict textarea {
   border-color: #e6bcb7;
   background: #fffafa;
 }
 
-.cr-confirm-button {
-  display: inline-flex;
-  min-width: 68px;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: 1px solid #d5d9e0;
-  border-radius: 7px;
-  background: #fff;
-  padding: 0 9px;
-  color: #42464e;
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.cr-confirm-button:hover:not(:disabled) {
-  border-color: #99baa5;
-  background: #f3faf6;
-  color: #347252;
-}
-
-.cr-confirm-button:disabled {
-  background: #f3f4f6;
-  color: #a3a7af;
-}
-
 .cr-source-link {
-  display: grid;
+  display: inline-flex;
+  width: fit-content;
   min-width: 0;
-  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
-  justify-content: flex-start;
-  gap: 5px;
+  gap: 4px;
   border: 0;
   background: transparent;
   padding: 0;
-  color: #56759c;
-  font-size: 9px;
+  color: #8b8796;
+  font-size: 9.5px;
   text-align: left;
 }
 
+.cr-source-link:hover {
+  color: #5f5680;
+}
+
 .cr-source-link small {
+  max-width: 140px;
   overflow: hidden;
-  color: #9398a2;
+  color: #a0a4ad;
   font-size: 8.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cr-source-missing {
+  color: #b0b4bc;
+  font-size: 9px;
 }
 
 .cr-candidates {
@@ -851,6 +900,7 @@ body.cr-recognition-open {
 
 .cr-documents-panel {
   display: grid;
+  align-content: start;
 }
 
 .cr-documents-panel article {
@@ -1011,6 +1061,12 @@ body.cr-recognition-open {
     width: 100%;
   }
 
+  .cr-detail-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
   .cr-context-grid {
     grid-template-columns: 1fr;
   }
@@ -1042,12 +1098,9 @@ body.cr-recognition-open {
     overflow-x: auto;
   }
 
-  .cr-field-control {
+  .cr-field-row {
     grid-template-columns: 1fr;
-  }
-
-  .cr-confirm-button {
-    min-height: 34px;
+    gap: 7px;
   }
 }
 

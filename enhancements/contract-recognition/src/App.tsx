@@ -80,7 +80,6 @@ export function ContractRecognitionApp({ initialOpen = false }: AppProps) {
           <ContractDetail
             contract={selected}
             onBack={() => setSelected(null)}
-            onUpdate={(contract) => save(contract)}
             onCommitted={(contract) => save(contract, true)}
           />
         </div>
@@ -94,7 +93,7 @@ export function ContractRecognitionApp({ initialOpen = false }: AppProps) {
             setShowUpload(false);
             setToast({
               title: "合同识别完成",
-              message: "请核对字段来源，并逐项确认识别结果。",
+              message: "可修改解析内容，核对后统一确认并保存。",
             });
           }}
         />
