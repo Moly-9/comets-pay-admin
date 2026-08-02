@@ -8,10 +8,5 @@
 credentials*
 secrets*
 tmp/
-node_modules/
-*.tsbuildinfo
-enhancements/contract-recognition/dist/
-enhancements/contract-recognition/dist-plugin/
 remote-snapshot/
 local-preview/
-qa/

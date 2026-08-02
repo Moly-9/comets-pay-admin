@@ -62,10 +62,6 @@ python3 -m http.server 4175 --directory local-preview/dist
 浏览器访问 `http://127.0.0.1:4175/`。生成的 `local-preview/` 不进入 Git，
 每次构建都会由 `remote-snapshot/current/dist` 和 `enhancements/` 重新生成。
 
-合同识别增强模块位于 `enhancements/contract-recognition/`。先在该目录运行
-`pnpm run build:plugin`，再运行上面的组装脚本。模块仅接管合同管理页原有的
-“上传合同”按钮，合同文件在浏览器本地 Worker 中解析，不会上传到服务器。
-
 ## 后续维护原则
 
 1. 不直接把压缩后的 `dist/assets/*.js` 当作长期源码维护。
