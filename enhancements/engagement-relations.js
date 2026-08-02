@@ -3,6 +3,7 @@
 
   const STORE_KEY = "comets-pay.engagement-relations.v2";
   const STORE_VERSION = 2;
+  const CONTRACT_REVIEW_PREFIX = "comets-pay.contract-review.v1:";
   const ENGAGEMENT_ID_PATTERN = /^ENG-[A-Z0-9-]+$/;
   const PROJECT_ID_PATTERN = /^PRJ-\d{6}(?:-\d{2})?$/;
   const PROJECT_ID_SEARCH_PATTERN = /PRJ-\d{6}(?:-\d{2})?/;
@@ -57,6 +58,7 @@
 
   let pendingInvoiceRelation = null;
   let observerQueued = false;
+  let relationNoticeTimer = 0;
 
   const normalizeText = (value) =>
     String(value || "")
@@ -239,7 +241,7 @@
   const engagementKey = (projectId, creatorId) =>
     `${projectId}::${creatorId}`;
 
-  const ensureEngagement = (project, creator) => {
+  const ensureEngagement = (project, creator, preferredEngagementId = "") => {
     const storedProject = ensureProject(project);
     const storedCreator = ensureCreator(creator);
     if (!storedProject || !storedCreator) return null;
@@ -257,11 +259,21 @@
           engagement !== existing &&
           engagement?.engagementId === existing.engagementId
       );
+    const normalizedPreferredId = normalizeText(preferredEngagementId);
+    const preferredIdIsAvailable =
+      ENGAGEMENT_ID_PATTERN.test(normalizedPreferredId) &&
+      !Object.values(store.engagements).some(
+        (engagement) =>
+          engagement !== existing &&
+          engagement?.engagementId === normalizedPreferredId
+      );
     const now = new Date().toISOString();
     const next = {
       engagementId: existingIdIsUnique
         ? existing.engagementId
-        : generateUniqueEngagementId(store),
+        : preferredIdIsAvailable
+          ? normalizedPreferredId
+          : generateUniqueEngagementId(store),
       projectId: storedProject.projectId,
       projectName: storedProject.projectName,
       customer: storedProject.customer,
@@ -346,10 +358,20 @@
   const relationStoreKey = (entityType) =>
     entityType === "invoice" ? "invoices" : "contracts";
 
-  const recordRelation = (entityType, entityId, project, creator) => {
+  const recordRelation = (
+    entityType,
+    entityId,
+    project,
+    creator,
+    preferredEngagementId = ""
+  ) => {
     const normalizedEntityId = normalizeText(entityId);
     if (!normalizedEntityId) return null;
-    const engagement = ensureEngagement(project, creator);
+    const engagement = ensureEngagement(
+      project,
+      creator,
+      preferredEngagementId
+    );
     if (!engagement) return null;
 
     const store = readStore();
@@ -381,6 +403,102 @@
       })
     );
     return relation;
+  };
+
+  const readContractReviewState = (contractId) => {
+    const normalizedId = normalizeText(contractId);
+    if (!normalizedId) return null;
+    try {
+      const parsed = JSON.parse(
+        localStorage.getItem(`${CONTRACT_REVIEW_PREFIX}${normalizedId}`) ||
+          "null"
+      );
+      return parsed?.version === 1 && parsed.contractId === normalizedId
+        ? parsed
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const listContractReviewStates = () => {
+    const states = [];
+    try {
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key?.startsWith(CONTRACT_REVIEW_PREFIX)) continue;
+        const contractId = key.slice(CONTRACT_REVIEW_PREFIX.length);
+        const state = readContractReviewState(contractId);
+        if (state) states.push(state);
+      }
+    } catch {
+      return states;
+    }
+    return states;
+  };
+
+  const repairStoredContractRelations = () => {
+    listContractReviewStates().forEach((state) => {
+      const project = state.uploadContext?.project;
+      const creator = state.uploadContext?.creator;
+      if (!project || !creator) return;
+      const relation = recordRelation(
+        "contract",
+        state.contractId,
+        project,
+        creator,
+        state.engagementId || state.uploadContext?.engagementId
+      );
+      if (!relation || state.engagementId === relation.engagementId) return;
+      try {
+        localStorage.setItem(
+          `${CONTRACT_REVIEW_PREFIX}${state.contractId}`,
+          JSON.stringify({
+            ...state,
+            engagementId: relation.engagementId,
+          })
+        );
+      } catch {
+        // The repaired relation remains usable for the current page session.
+      }
+    });
+  };
+
+  const contractStatus = (state) => {
+    if (state?.phase === "confirmed") return "可用于请款";
+    if (state?.phase === "parsing") return "解析中";
+    if (state?.phase === "review") return "待确认";
+    return "已关联";
+  };
+
+  const listProjectContracts = (projectId) => {
+    repairStoredContractRelations();
+    const normalizedId = normalizeText(projectId);
+    if (!PROJECT_ID_PATTERN.test(normalizedId)) return [];
+    const store = readStore();
+    const engagementIds = new Set(
+      Object.values(store.engagements)
+        .filter((engagement) => engagement.projectId === normalizedId)
+        .map((engagement) => engagement.engagementId)
+    );
+    return Object.values(store.contracts)
+      .filter((relation) => engagementIds.has(relation.engagementId))
+      .map((relation) => {
+        const state = readContractReviewState(relation.entityId);
+        return {
+          ...relation,
+          contractId: relation.entityId,
+          contractName: normalizeText(state?.fileName) || relation.entityId,
+          amount: normalizeText(state?.fields?.totalFees?.value),
+          phase: state?.phase || "linked",
+          status: contractStatus(state),
+        };
+      })
+      .sort((left, right) =>
+        normalizeText(right.linkedAt).localeCompare(
+          normalizeText(left.linkedAt)
+        )
+      );
   };
 
   const projectFromRow = (row) => {
@@ -441,6 +559,188 @@
     if (detailPage && projectId) {
       applyProjectEngagementAttributes(detailPage, projectId);
     }
+  };
+
+  const createProjectContractRow = (
+    template,
+    contract,
+    index,
+    total
+  ) => {
+    const row = document.createElement("article");
+    row.className =
+      "project-resource-row project-resource-row-contract engagement-contract-row";
+    row.dataset.engagementContractRow = "true";
+    row.dataset.engagementId = contract.engagementId;
+    row.dataset.contractState = contract.phase;
+
+    const icon =
+      template.querySelector(".project-resource-icon")?.cloneNode(true) ||
+      document.createElement("span");
+    icon.classList.add(
+      "project-resource-icon",
+      "project-resource-icon-contract"
+    );
+    icon.setAttribute("aria-hidden", "true");
+
+    const copy = document.createElement("div");
+    copy.className = "project-resource-copy";
+    const heading = document.createElement("div");
+    heading.className = "project-resource-heading";
+    const label = document.createElement("h3");
+    label.className = "project-resource-label";
+    label.textContent = "合同";
+    const count = document.createElement("span");
+    count.className = "project-resource-count";
+    count.textContent = total === 1 ? "1 条已关联" : `${index + 1} / ${total}`;
+    heading.append(label, count);
+    const name = document.createElement("strong");
+    name.textContent = contract.contractName;
+    const meta = document.createElement("span");
+    meta.className = "project-resource-meta";
+    meta.textContent = [
+      contract.contractId,
+      contract.creatorName,
+      contract.amount,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    copy.append(heading, name, meta);
+
+    const status = document.createElement("span");
+    status.className = "project-resource-status";
+    status.append(document.createElement("i"), contract.status);
+
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "text-link";
+    action.dataset.linkedContractId = contract.contractId;
+    action.setAttribute(
+      "aria-label",
+      `查看合同：${contract.contractName}`
+    );
+    action.textContent = "查看合同";
+
+    row.append(icon, copy, status, action);
+    return row;
+  };
+
+  const updateProjectContractProgress = (detailPage, contracts) => {
+    if (!contracts.length) return;
+    const progressItem = [
+      ...detailPage.querySelectorAll(".project-progress-item"),
+    ].find(
+      (item) =>
+        normalizeText(item.querySelector("strong")?.textContent) === "补充合同"
+    );
+    const description = progressItem?.querySelector("p");
+    if (!description) return;
+    const readyCount = contracts.filter(
+      (contract) => contract.phase === "confirmed"
+    ).length;
+    const nextDescription =
+      readyCount === contracts.length
+        ? `已关联 ${contracts.length} 份合同，可用于请款`
+        : `已关联 ${contracts.length} 份合同，${contracts.length - readyCount} 份待确认`;
+    if (description.textContent !== nextDescription) {
+      description.textContent = nextDescription;
+    }
+  };
+
+  const renderProjectContracts = () => {
+    const detailPage = document.querySelector(".project-detail-page");
+    const subtitle = detailPage?.querySelector(
+      ":scope > .page-heading-row p"
+    )?.textContent;
+    const projectId = normalizeText(subtitle).match(
+      PROJECT_ID_SEARCH_PATTERN
+    )?.[0];
+    const resourceList = detailPage?.querySelector(".project-resource-list");
+    const template = resourceList?.querySelector(
+      ".project-resource-row-contract:not([data-engagement-contract-row])"
+    );
+    if (!detailPage || !projectId || !resourceList || !template) return;
+
+    const contracts = listProjectContracts(projectId);
+    const renderedRows = resourceList.querySelectorAll(
+      "[data-engagement-contract-row]"
+    );
+    const signature = contracts
+      .map(
+        (contract) =>
+          `${contract.contractId}:${contract.engagementId}:${contract.phase}`
+      )
+      .join("|");
+    if (
+      contracts.length &&
+      detailPage.dataset.engagementContractSignature === signature &&
+      renderedRows.length === contracts.length
+    ) {
+      updateProjectContractProgress(detailPage, contracts);
+      return;
+    }
+    renderedRows.forEach((row) => row.remove());
+    if (!contracts.length) {
+      template.hidden = false;
+      delete detailPage.dataset.engagementContractSignature;
+      return;
+    }
+
+    template.hidden = true;
+    const invoiceRow = resourceList.querySelector(
+      ".project-resource-row-invoice"
+    );
+    contracts.forEach((contract, index) => {
+      resourceList.insertBefore(
+        createProjectContractRow(
+          template,
+          contract,
+          index,
+          contracts.length
+        ),
+        invoiceRow
+      );
+    });
+    detailPage.dataset.engagementContractSignature = signature;
+    updateProjectContractProgress(detailPage, contracts);
+  };
+
+  const showRelationNotice = (title, message) => {
+    document.querySelector(".engagement-relation-notice")?.remove();
+    window.clearTimeout(relationNoticeTimer);
+    const notice = document.createElement("div");
+    notice.className = "engagement-relation-notice";
+    notice.setAttribute("role", "status");
+    const strong = document.createElement("strong");
+    strong.textContent = title;
+    const span = document.createElement("span");
+    span.textContent = message;
+    notice.append(strong, span);
+    document.body.append(notice);
+    relationNoticeTimer = window.setTimeout(() => notice.remove(), 4200);
+  };
+
+  const openLinkedContract = (contractId, attempt = 0) => {
+    const row = [...document.querySelectorAll(".contracts-page tbody tr")].find(
+      (candidate) =>
+        normalizeText(candidate.textContent).match(CONTRACT_ID_PATTERN)?.[0] ===
+        contractId
+    );
+    if (row) {
+      const action = [...row.querySelectorAll("button")].find(
+        (button) => normalizeText(button.textContent) === "查看合同"
+      );
+      (action || row.querySelector("button"))?.click();
+      return;
+    }
+    if (attempt < 20) {
+      window.setTimeout(() => openLinkedContract(contractId, attempt + 1), 80);
+      return;
+    }
+    showRelationNotice(
+      "未找到合同记录",
+      "该本地合同已不在当前页面会话中，请重新上传合同后再查看。"
+    );
   };
 
   const fieldInputByLabel = (root, labelPrefix) =>
@@ -569,6 +869,7 @@
     },
     listProjects,
     listProjectEngagements,
+    listProjectContracts,
     recordInvoice: (invoiceId, project, creator) =>
       recordRelation("invoice", invoiceId, project, creator),
     recordContract: (contractId, project, creator) =>
@@ -596,10 +897,34 @@
     true
   );
 
+  document.addEventListener(
+    "click",
+    (event) => {
+      const button = event.target.closest("button[data-linked-contract-id]");
+      if (!button) return;
+      const contractId = normalizeText(button.dataset.linkedContractId);
+      if (!CONTRACT_ID_PATTERN.test(contractId)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const contractsNavigation = [...document.querySelectorAll("nav button")].find(
+        (candidate) =>
+          normalizeText(candidate.textContent) === "合同管理"
+      );
+      if (!contractsNavigation) {
+        showRelationNotice("无法打开合同", "请先进入合同管理后重试。");
+        return;
+      }
+      contractsNavigation.click();
+      openLinkedContract(contractId);
+    },
+    true
+  );
+
   const enhance = () => {
     registerVisibleProjects();
     resolvePendingInvoiceRelation();
     decorateEntityRelations();
+    renderProjectContracts();
   };
 
   const runEnhance = () => {

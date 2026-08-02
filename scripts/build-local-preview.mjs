@@ -35,6 +35,10 @@ const engagementRelationsSource = path.join(
   workspaceRoot,
   "enhancements/engagement-relations.js"
 );
+const engagementRelationsStyles = path.join(
+  workspaceRoot,
+  "enhancements/engagement-relations.css"
+);
 const contractReviewSourceDirectory = path.join(
   workspaceRoot,
   "enhancements/contract-review-workflow"
@@ -73,6 +77,10 @@ await cp(
   engagementRelationsSource,
   path.join(assetsDirectory, "engagement-relations.js")
 );
+await cp(
+  engagementRelationsStyles,
+  path.join(assetsDirectory, "engagement-relations.css")
+);
 await cp(contractReviewSourceDirectory, contractReviewOutputDirectory, {
   recursive: true,
 });
@@ -91,6 +99,7 @@ const projectDraftGuardVersion = createHash("sha256")
   .slice(0, 12);
 const engagementRelationsVersion = createHash("sha256")
   .update(await readFile(engagementRelationsSource))
+  .update(await readFile(engagementRelationsStyles))
   .digest("hex")
   .slice(0, 12);
 const payoutActionsVersion = createHash("sha256")
@@ -132,6 +141,13 @@ if (!indexHtml.includes("/assets/project-draft-guard.css")) {
   indexHtml = indexHtml.replace(
     "</head>",
     '    <link rel="stylesheet" href="/assets/project-draft-guard.css">\n  </head>'
+  );
+}
+
+if (!indexHtml.includes("/assets/engagement-relations.css")) {
+  indexHtml = indexHtml.replace(
+    "</head>",
+    `    <link rel="stylesheet" href="/assets/engagement-relations.css?v=${engagementRelationsVersion}">\n  </head>`
   );
 }
 

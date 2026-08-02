@@ -116,6 +116,31 @@
     }
   };
 
+  const creatorsForProject = (projectId) => {
+    const creators = new Map();
+    (readCreatorStore()[projectId]?.creators || []).forEach((creator) => {
+      const key = creator.creatorId || creator.id || creator.handle || creator.name;
+      if (key) creators.set(key, creator);
+    });
+    window.CometsPayEngagements
+      ?.listProjectEngagements(projectId)
+      .forEach((engagement) => {
+        const key =
+          engagement.creatorId ||
+          engagement.creatorHandle ||
+          engagement.creatorName;
+        if (!key || creators.has(key)) return;
+        creators.set(key, {
+          id: engagement.creatorId,
+          creatorId: engagement.creatorId,
+          name: engagement.creatorName,
+          creatorName: engagement.creatorName,
+          handle: engagement.creatorHandle,
+        });
+      });
+    return [...creators.values()];
+  };
+
   const readProjectStore = () => {
     try {
       const parsed = JSON.parse(localStorage.getItem(PROJECT_STORE_KEY) || "[]");
@@ -244,6 +269,9 @@
       updatedAt: new Date().toISOString(),
     };
     writeCreatorStore(store);
+    selected.forEach((creator) =>
+      window.CometsPayEngagements?.ensureEngagement(project, creator)
+    );
   };
 
   const captureCreatorTable = () => {
@@ -271,6 +299,9 @@
       updatedAt: new Date().toISOString(),
     };
     writeCreatorStore(store);
+    creators.forEach((creator) =>
+      window.CometsPayEngagements?.ensureEngagement(project, creator)
+    );
   };
 
   const capturePendingProjectCreation = () => {
@@ -647,7 +678,7 @@
       helper.textContent = "达人名单仅来自当前项目已关联的达人档案。";
       return;
     }
-    const creators = readCreatorStore()[project.id]?.creators || [];
+    const creators = creatorsForProject(project.id);
     if (!creators.length) {
       select.append(new Option("当前项目尚未关联具体达人", ""));
       select.disabled = true;

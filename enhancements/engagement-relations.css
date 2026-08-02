@@ -1,0 +1,93 @@
+.project-detail-page .project-resource-row-contract[hidden] {
+  display: none;
+}
+
+.engagement-contract-row[data-contract-state="confirmed"] {
+  --project-resource-accent: #247a58;
+  --project-resource-soft: #eef9f3;
+  --project-resource-border: #d7ece2;
+}
+
+.engagement-contract-row[data-contract-state="confirmed"]
+  .project-resource-status {
+  color: #247a58;
+}
+
+.engagement-contract-row[data-contract-state="confirmed"]
+  .project-resource-status
+  i {
+  background: #36a678;
+}
+
+.engagement-contract-row[data-contract-state="review"]
+  .project-resource-status,
+.engagement-contract-row[data-contract-state="parsing"]
+  .project-resource-status {
+  color: #9a6428;
+}
+
+.engagement-contract-row[data-contract-state="review"]
+  .project-resource-status
+  i,
+.engagement-contract-row[data-contract-state="parsing"]
+  .project-resource-status
+  i {
+  background: #d89442;
+}
+
+.engagement-contract-row .text-link {
+  min-width: 64px;
+}
+
+.engagement-relation-notice {
+  position: fixed;
+  z-index: 1400;
+  right: 24px;
+  bottom: 24px;
+  display: grid;
+  max-width: min(360px, calc(100vw - 32px));
+  gap: 4px;
+  border: 1px solid #ead9ca;
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px 15px;
+  box-shadow: 0 16px 38px rgb(37 31 28 / 16%);
+  color: #3e4148;
+}
+
+.engagement-relation-notice strong {
+  font-size: 12px;
+}
+
+.engagement-relation-notice span {
+  color: #777d88;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 680px) {
+  .project-detail-page .engagement-contract-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    row-gap: 9px;
+  }
+
+  .engagement-contract-row .project-resource-copy {
+    grid-column: 2;
+  }
+
+  .engagement-contract-row .project-resource-status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .engagement-contract-row .text-link {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .engagement-relation-notice {
+    right: 16px;
+    bottom: 16px;
+  }
+}
