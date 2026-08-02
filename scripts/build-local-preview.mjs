@@ -31,6 +31,10 @@ const sourceStyles = path.join(
   workspaceRoot,
   "enhancements/project-draft-guard.css"
 );
+const engagementRelationsSource = path.join(
+  workspaceRoot,
+  "enhancements/engagement-relations.js"
+);
 const contractReviewSourceDirectory = path.join(
   workspaceRoot,
   "enhancements/contract-review-workflow"
@@ -65,6 +69,10 @@ await mkdir(assetsDirectory, { recursive: true });
 
 await cp(sourceScript, path.join(assetsDirectory, "project-draft-guard.js"));
 await cp(sourceStyles, path.join(assetsDirectory, "project-draft-guard.css"));
+await cp(
+  engagementRelationsSource,
+  path.join(assetsDirectory, "engagement-relations.js")
+);
 await cp(contractReviewSourceDirectory, contractReviewOutputDirectory, {
   recursive: true,
 });
@@ -79,6 +87,10 @@ const indexPath = path.join(outputDirectory, "index.html");
 let indexHtml = await readFile(indexPath, "utf8");
 const projectDraftGuardVersion = createHash("sha256")
   .update(await readFile(sourceScript))
+  .digest("hex")
+  .slice(0, 12);
+const engagementRelationsVersion = createHash("sha256")
+  .update(await readFile(engagementRelationsSource))
   .digest("hex")
   .slice(0, 12);
 const payoutActionsVersion = createHash("sha256")
@@ -153,6 +165,13 @@ if (
   indexHtml = indexHtml.replace(
     "</head>",
     `    <link rel="stylesheet" href="/assets/payout-account-actions/payout-account-actions.css?v=${payoutActionsVersion}">\n  </head>`
+  );
+}
+
+if (!indexHtml.includes("/assets/engagement-relations.js")) {
+  indexHtml = indexHtml.replace(
+    "</body>",
+    `    <script src="/assets/engagement-relations.js?v=${engagementRelationsVersion}"></script>\n  </body>`
   );
 }
 

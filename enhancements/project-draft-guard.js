@@ -398,6 +398,28 @@
     });
   };
 
+  const requireProjectCreator = (dialog) => {
+    const picker = dialog.querySelector('[data-testid="project-creator-picker"]');
+    const field = picker?.closest(".form-field");
+    const meta = field?.querySelector(".form-field-label-with-meta small");
+    if (meta && meta.textContent?.trim() !== "必填 · 来自达人档案") {
+      meta.textContent = "必填 · 来自达人档案";
+    }
+  };
+
+  const syncCreateButtonState = (dialog) => {
+    if (!activeSession || activeSession.dialog !== dialog) return;
+    const createButton = [...dialog.querySelectorAll(".modal-footer button")].find(
+      (button) => button.textContent?.trim() === "创建项目"
+    );
+    if (!createButton) return;
+    const hasProjectName = Boolean(
+      getFields(dialog).projectName?.value.trim()
+    );
+    createButton.disabled =
+      !hasProjectName || activeSession.creatorHandles.size === 0;
+  };
+
   const getCurrentPm = (dialog) =>
     dialog.querySelector('[role="combobox"][aria-label="选择项目PM"] .custom-select-value')
       ?.textContent?.trim() || "";
@@ -749,7 +771,11 @@
   const enhanceDialog = async (dialog) => {
     relabelCustomerField(dialog);
     deferProjectRelationFields(dialog);
-    if (dialog.dataset.projectDraftGuard === "ready") return;
+    requireProjectCreator(dialog);
+    if (dialog.dataset.projectDraftGuard === "ready") {
+      syncCreateButtonState(dialog);
+      return;
+    }
     dialog.dataset.projectDraftGuard = "ready";
 
     activeSession = {
@@ -760,6 +786,10 @@
       restoring: false,
       restored: false,
     };
+    getFields(dialog).projectName?.addEventListener("input", () => {
+      queueMicrotask(() => syncCreateButtonState(dialog));
+    });
+    syncCreateButtonState(dialog);
 
     const draft = loadDraft();
     if (draft) {
@@ -769,6 +799,7 @@
         activeSession.restoring = false;
         showToast("草稿恢复失败", "表单仍可继续编辑，请重新选择关联对象。", "error");
       }
+      syncCreateButtonState(dialog);
     }
   };
 
@@ -842,6 +873,7 @@
       if (!dialog) return;
 
       syncSelectedStateFromClick(event, dialog);
+      queueMicrotask(() => syncCreateButtonState(dialog));
 
       const closeButton = event.target.closest('.modal-header button[aria-label="关闭"]');
       const cancelButton = [...dialog.querySelectorAll(".modal-footer button")].find(
@@ -855,6 +887,17 @@
       const createButton = [...dialog.querySelectorAll(".modal-footer button")].find(
         (button) => button.textContent?.trim() === "创建项目"
       );
+      if (
+        createButton &&
+        createButton.contains(event.target) &&
+        activeSession.creatorHandles.size === 0
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showToast("请选择合作达人", "项目至少需要关联 1 位达人。", "error");
+        syncCreateButtonState(dialog);
+        return;
+      }
       if (createButton && createButton.contains(event.target) && !createButton.disabled) {
         pendingCreation = {
           draftKey: getDraftKey(),

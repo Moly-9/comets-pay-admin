@@ -211,6 +211,13 @@
 
   const createState = ({ contractId, fileName }) => {
     const uploadContext = takePendingUpload(fileName);
+    const relation = uploadContext?.project
+      ? window.CometsPayEngagements?.recordContract(
+          contractId,
+          uploadContext.project,
+          uploadContext.creator
+        )
+      : null;
     return {
       version: 1,
       contractId,
@@ -224,6 +231,10 @@
         },
       },
       uploadContext,
+      engagementId:
+        relation?.engagementId ||
+        uploadContext?.engagementId ||
+        null,
       revision: 0,
       parsedAt: null,
       confirmedAt: null,
@@ -735,6 +746,18 @@
     if (!state) {
       state = createState(context);
       saveState(state);
+    }
+    if (state.uploadContext?.project) {
+      const relation = window.CometsPayEngagements?.recordContract(
+        context.contractId,
+        state.uploadContext.project,
+        state.uploadContext.creator
+      );
+      if (relation && state.engagementId !== relation.engagementId) {
+        state.engagementId = relation.engagementId;
+        saveState(state);
+      }
+      if (relation) context.page.dataset.engagementId = relation.engagementId;
     }
     updatePageStatus(context, state);
     renderConfirmButton(context, state);

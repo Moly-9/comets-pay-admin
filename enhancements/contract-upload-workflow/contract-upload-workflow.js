@@ -7,6 +7,8 @@
   const PENDING_UPLOAD_KEY = "comets-pay.contract-upload.pending.v1";
   const ACCEPTED_FILE_PATTERN = /\.(pdf|doc|docx)$/i;
   const MAX_FILE_SIZE = 30 * 1024 * 1024;
+  const PROJECT_ID_PATTERN = /^PRJ-\d{6}(?:-\d{2})?$/;
+  const PROJECT_ID_SEARCH_PATTERN = /PRJ-\d{6}(?:-\d{2})?/;
 
   const BASE_PROJECTS = [
     ["PRJ-301164", "#301164 DCD欧美&东南亚地区创作者生态项目（26年4-6月）", "网易"],
@@ -150,7 +152,7 @@
           value
         )
       );
-    if (!/^PRJ-[A-Z0-9-]+$/.test(id || "") || !name) return null;
+    if (!PROJECT_ID_PATTERN.test(id || "") || !name) return null;
     return { id, name, brand: brand || "待补充", status: status || "" };
   };
 
@@ -176,9 +178,18 @@
   const mergeProjects = () => {
     const projectMap = new Map(BASE_PROJECTS.map((project) => [project.id, project]));
     readProjectStore().forEach((project) => {
-      if (/^PRJ-[A-Z0-9-]+$/.test(project?.id || "") && project?.name) {
+      if (PROJECT_ID_PATTERN.test(project?.id || "") && project?.name) {
         projectMap.set(project.id, project);
       }
+    });
+    window.CometsPayEngagements?.listProjects().forEach((project) => {
+      const existing = projectMap.get(project.projectId);
+      projectMap.set(project.projectId, {
+        ...existing,
+        id: project.projectId,
+        name: project.projectName,
+        brand: project.customer || "待补充",
+      });
     });
     const currentProjects = visibleProjects();
     currentProjects.forEach((project) => {
@@ -188,13 +199,17 @@
       });
     });
     if (currentProjects.length) persistProjects(currentProjects);
-    return [...projectMap.values()];
+    const projects = [...projectMap.values()];
+    projects.forEach((project) =>
+      window.CometsPayEngagements?.ensureProject(project)
+    );
+    return projects;
   };
 
   const currentProjectContext = () => {
     const page = document.querySelector(".project-detail-page");
     const subtitle = page?.querySelector(":scope > .page-heading-row p")?.textContent || "";
-    const id = subtitle.match(/PRJ-[A-Z0-9-]+/)?.[0];
+    const id = subtitle.match(PROJECT_ID_SEARCH_PATTERN)?.[0];
     const name = page?.querySelector(":scope > .page-heading-row h1")?.textContent?.trim();
     return id && name ? { id, name } : null;
   };
@@ -207,7 +222,12 @@
     const text = normalizeText(option.textContent);
     const handle = text.match(/@[A-Za-z0-9._-]+/)?.[0] || "";
     const meta = option.querySelector(".project-creator-modal-meta")?.textContent?.trim() || "";
-    return name ? { name, handle, meta } : null;
+    if (!name) return null;
+    const identity = window.CometsPayEngagements?.identifyCreator({
+      name,
+      handle,
+    });
+    return identity ? { ...identity, meta } : { name, handle, meta };
   };
 
   const captureProjectCreatorManager = () => {
@@ -302,6 +322,26 @@
         status: projectFromRow(row)?.status || pendingCreatedProject.status,
       },
     ]);
+    const project = {
+      id,
+      name: pendingCreatedProject.name,
+      brand: pendingCreatedProject.brand,
+    };
+    const engagementIds = pendingCreatedProject.creators
+      .map(
+        (creator) =>
+          window.CometsPayEngagements?.ensureEngagement(project, creator)
+            ?.engagementId
+      )
+      .filter(Boolean);
+    if (engagementIds.length) {
+      row.dataset.engagementIds = engagementIds.join(" ");
+      if (engagementIds.length === 1) {
+        row.dataset.engagementId = engagementIds[0];
+      } else {
+        delete row.dataset.engagementId;
+      }
+    }
     pendingCreatedProject = null;
   };
 
@@ -702,11 +742,16 @@
       return;
     }
     const { project, creator, file, fields } = activeWorkflow;
+    const engagement = window.CometsPayEngagements?.ensureEngagement(
+      project,
+      creator
+    );
     const pendingContext = {
       version: 1,
       fileName: file.name,
       project,
       creator,
+      engagementId: engagement?.engagementId || null,
       fields: Object.fromEntries(
         fields
           .filter((field) => field.status !== "missing")
