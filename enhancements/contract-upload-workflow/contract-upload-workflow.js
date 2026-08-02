@@ -3,6 +3,7 @@
 
   const DIALOG_LABEL = "上传合同";
   const CREATOR_STORE_KEY = "comets-pay.project-creators.v2";
+  const PROJECT_STORE_KEY = "comets-pay.contract-upload.projects.v1";
   const PENDING_UPLOAD_KEY = "comets-pay.contract-upload.pending.v1";
   const ACCEPTED_FILE_PATTERN = /\.(pdf|doc|docx)$/i;
   const MAX_FILE_SIZE = 30 * 1024 * 1024;
@@ -113,16 +114,80 @@
     }
   };
 
+  const readProjectStore = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PROJECT_STORE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeProjectStore = (projects) => {
+    try {
+      localStorage.setItem(PROJECT_STORE_KEY, JSON.stringify(projects));
+    } catch {
+      // Visible projects remain available for the current React session.
+    }
+  };
+
+  const projectsPage = () =>
+    [...document.querySelectorAll(".page-stack")].find(
+      (page) =>
+        page.querySelector(":scope > .page-heading-row h1")?.textContent?.trim() ===
+        "我的项目"
+    );
+
+  const projectFromRow = (row) => {
+    const cells = [...row.querySelectorAll("td")];
+    const id = cells[0]?.querySelector(".cell-subtext")?.textContent?.trim();
+    const name = cells[0]?.querySelector("strong")?.textContent?.trim();
+    const brand = cells[1]?.textContent?.trim();
+    const status = cells
+      .map((cell) => normalizeText(cell.textContent))
+      .find((value) =>
+        ["草稿", "待启动", "进行中", "执行中", "已完成", "已暂停", "已归档"].includes(
+          value
+        )
+      );
+    if (!/^PRJ-[A-Z0-9-]+$/.test(id || "") || !name) return null;
+    return { id, name, brand: brand || "待补充", status: status || "" };
+  };
+
+  const visibleProjects = () =>
+    [...(projectsPage()?.querySelectorAll(".data-table tbody tr") || [])]
+      .map(projectFromRow)
+      .filter(Boolean);
+
+  const persistProjects = (projects) => {
+    const projectMap = new Map(
+      readProjectStore().map((project) => [project.id, project])
+    );
+    projects.forEach((project) => {
+      if (!project?.id || !project?.name) return;
+      projectMap.set(project.id, {
+        ...projectMap.get(project.id),
+        ...project,
+      });
+    });
+    writeProjectStore([...projectMap.values()]);
+  };
+
   const mergeProjects = () => {
     const projectMap = new Map(BASE_PROJECTS.map((project) => [project.id, project]));
-    document.querySelectorAll(".projects-page tbody tr").forEach((row) => {
-      const text = normalizeText(row.textContent);
-      const id = text.match(/PRJ-[A-Z0-9-]+/)?.[0];
-      const cells = row.querySelectorAll("td");
-      const name = cells[0]?.querySelector("strong")?.textContent?.trim();
-      const brand = cells[1]?.textContent?.trim();
-      if (id && name) projectMap.set(id, { id, name, brand: brand || "待补充" });
+    readProjectStore().forEach((project) => {
+      if (/^PRJ-[A-Z0-9-]+$/.test(project?.id || "") && project?.name) {
+        projectMap.set(project.id, project);
+      }
     });
+    const currentProjects = visibleProjects();
+    currentProjects.forEach((project) => {
+      projectMap.set(project.id, {
+        ...projectMap.get(project.id),
+        ...project,
+      });
+    });
+    if (currentProjects.length) persistProjects(currentProjects);
     return [...projectMap.values()];
   };
 
@@ -193,22 +258,34 @@
     if (!dialog) return;
     const name = dialog.querySelector('[placeholder="例如：秋季新品首发"]')?.value.trim();
     if (!name) return;
+    const brand = dialog.querySelector(
+      '[placeholder="输入客户名称"], [placeholder="输入合作品牌"]'
+    )?.value.trim();
     const creators = [...dialog.querySelectorAll('.creator-option[aria-selected="true"]')]
       .map((option) => {
         const creator = creatorFromOption(option);
         return creator;
       })
       .filter(Boolean);
-    pendingCreatedProject = { name, creators };
+    pendingCreatedProject = {
+      name,
+      brand: brand || "待补充",
+      status: "草稿",
+      creators,
+    };
   };
 
   const resolvePendingProjectCreation = () => {
     if (!pendingCreatedProject) return;
-    const row = [...document.querySelectorAll(".projects-page tbody tr")].find(
+    const row = [
+      ...(projectsPage()?.querySelectorAll(".data-table tbody tr") || []),
+    ].find(
       (candidate) =>
         candidate.querySelector("strong")?.textContent?.trim() === pendingCreatedProject.name
     );
-    const id = row?.textContent?.match(/PRJ-[A-Z0-9-]+/)?.[0];
+    const id = row
+      ?.querySelector("td:first-child .cell-subtext")
+      ?.textContent?.trim();
     if (!id) return;
     const store = readCreatorStore();
     store[id] = {
@@ -217,6 +294,14 @@
       updatedAt: new Date().toISOString(),
     };
     writeCreatorStore(store);
+    persistProjects([
+      {
+        id,
+        name: pendingCreatedProject.name,
+        brand: pendingCreatedProject.brand,
+        status: projectFromRow(row)?.status || pendingCreatedProject.status,
+      },
+    ]);
     pendingCreatedProject = null;
   };
 
@@ -404,13 +489,25 @@
           <li data-step="save"><span>5</span><em>保存合同</em></li>
         </ol>
         <div class="cuw-body">
-          <label class="cuw-field">
-            <span>选择项目</span>
-            <select aria-label="选择合同所属项目">
-              <option value="">请选择项目</option>
-            </select>
+          <div class="cuw-field">
+            <span id="cuw-project-label">选择项目</span>
+            <div class="cuw-project-combobox">
+              <input
+                type="text"
+                role="combobox"
+                aria-labelledby="cuw-project-label"
+                aria-label="搜索并选择合同所属项目"
+                aria-expanded="false"
+                aria-autocomplete="list"
+                aria-controls="cuw-project-options"
+                autocomplete="off"
+                placeholder="输入项目名称或编号"
+              >
+              <button class="cuw-project-toggle" type="button" aria-label="展开项目列表"></button>
+              <div id="cuw-project-options" class="cuw-project-options" role="listbox" hidden></div>
+            </div>
             <small>仅展示当前系统中的项目。</small>
-          </label>
+          </div>
           <label class="cuw-field cuw-creator-field">
             <span>选择该项目中的达人</span>
             <select aria-label="选择项目达人" disabled>
@@ -640,12 +737,14 @@
     if (activeWorkflow) return;
     const backdrop = createModal();
     const projects = mergeProjects();
-    const projectSelect = backdrop.querySelector('[aria-label="选择合同所属项目"]');
-    projects.forEach((project) => {
-      const option = new Option(`${project.name} · ${project.id}`, project.id);
-      option.dataset.project = JSON.stringify(project);
-      projectSelect.append(option);
-    });
+    const projectInput = backdrop.querySelector(
+      '[aria-label="搜索并选择合同所属项目"]'
+    );
+    const projectOptions = backdrop.querySelector(".cuw-project-options");
+    const projectToggle = backdrop.querySelector(".cuw-project-toggle");
+    const sourceChevron = document.querySelector(".custom-select-chevron");
+    if (sourceChevron) projectToggle.append(sourceChevron.cloneNode(true));
+    else projectToggle.textContent = "展开";
     activeWorkflow = {
       backdrop,
       project: null,
@@ -661,11 +760,10 @@
     const fileField = backdrop.querySelector(".cuw-file-field");
     const confirmFields = backdrop.querySelector(".cuw-confirm-fields");
 
-    projectSelect.addEventListener("change", () => {
-      const selected = projectSelect.selectedOptions[0];
-      activeWorkflow.project = selected?.dataset.project
-        ? JSON.parse(selected.dataset.project)
-        : null;
+    let filteredProjects = projects;
+    let highlightedProjectIndex = -1;
+
+    const resetProjectDependents = () => {
       activeWorkflow.file = null;
       fileInput.value = "";
       fileButton.textContent = "选择 Word 或 PDF";
@@ -674,6 +772,123 @@
       renderCreators();
       resetReview();
       showWorkflowError();
+    };
+
+    const closeProjectOptions = () => {
+      projectOptions.hidden = true;
+      projectInput.setAttribute("aria-expanded", "false");
+      projectInput.removeAttribute("aria-activedescendant");
+      highlightedProjectIndex = -1;
+    };
+
+    const highlightProject = (index) => {
+      const options = [...projectOptions.querySelectorAll('[role="option"]')];
+      if (!options.length) return;
+      highlightedProjectIndex = (index + options.length) % options.length;
+      options.forEach((option, optionIndex) => {
+        const highlighted = optionIndex === highlightedProjectIndex;
+        option.classList.toggle("cuw-project-option-active", highlighted);
+        option.setAttribute("aria-selected", highlighted ? "true" : "false");
+      });
+      const activeOption = options[highlightedProjectIndex];
+      projectInput.setAttribute("aria-activedescendant", activeOption.id);
+      activeOption.scrollIntoView({ block: "nearest" });
+    };
+
+    const selectProject = (project) => {
+      activeWorkflow.project = project;
+      projectInput.value = project.name;
+      closeProjectOptions();
+      resetProjectDependents();
+    };
+
+    const renderProjectOptions = (query = "") => {
+      const normalizedQuery = normalizeText(query).toLocaleLowerCase();
+      filteredProjects = projects.filter((project) =>
+        [project.name, project.id, project.brand, project.status]
+          .filter(Boolean)
+          .some((value) =>
+            String(value).toLocaleLowerCase().includes(normalizedQuery)
+          )
+      );
+      projectOptions.replaceChildren();
+      if (!filteredProjects.length) {
+        const empty = document.createElement("p");
+        empty.className = "cuw-project-empty";
+        empty.textContent = "没有匹配的项目";
+        projectOptions.append(empty);
+      } else {
+        filteredProjects.forEach((project, index) => {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.id = `cuw-project-option-${index}`;
+          option.className = "cuw-project-option";
+          option.setAttribute("role", "option");
+          option.setAttribute("aria-selected", "false");
+          option.innerHTML = `
+            <span class="cuw-project-option-main">
+              <strong>${escapeHtml(project.name)}</strong>
+              ${
+                project.status
+                  ? `<em data-status="${escapeHtml(project.status)}">${escapeHtml(project.status)}</em>`
+                  : ""
+              }
+            </span>
+            <small>${escapeHtml(project.brand || "待补充")}</small>
+          `;
+          option.addEventListener("mousedown", (event) => event.preventDefault());
+          option.addEventListener("click", () => selectProject(project));
+          projectOptions.append(option);
+        });
+      }
+      projectOptions.hidden = false;
+      projectInput.setAttribute("aria-expanded", "true");
+      highlightedProjectIndex = -1;
+    };
+
+    projectInput.addEventListener("focus", () => {
+      renderProjectOptions(
+        activeWorkflow.project && projectInput.value === activeWorkflow.project.name
+          ? ""
+          : projectInput.value
+      );
+    });
+    projectInput.addEventListener("input", () => {
+      if (
+        activeWorkflow.project &&
+        projectInput.value !== activeWorkflow.project.name
+      ) {
+        activeWorkflow.project = null;
+        resetProjectDependents();
+      }
+      renderProjectOptions(projectInput.value);
+    });
+    projectInput.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (projectOptions.hidden) renderProjectOptions(projectInput.value);
+        highlightProject(
+          highlightedProjectIndex + (event.key === "ArrowDown" ? 1 : -1)
+        );
+      } else if (event.key === "Enter" && highlightedProjectIndex >= 0) {
+        event.preventDefault();
+        selectProject(filteredProjects[highlightedProjectIndex]);
+      } else if (event.key === "Escape") {
+        event.stopPropagation();
+        closeProjectOptions();
+      }
+    });
+    projectToggle.addEventListener("click", () => {
+      if (projectOptions.hidden) {
+        projectInput.focus();
+        renderProjectOptions("");
+      } else {
+        closeProjectOptions();
+        projectInput.focus();
+      }
+    });
+    backdrop.addEventListener("mousedown", (event) => {
+      if (!event.target.closest(".cuw-project-combobox")) closeProjectOptions();
     });
 
     creatorSelect.addEventListener("change", () => {
@@ -727,7 +942,7 @@
       if (event.target === backdrop) closeWorkflow();
     });
     renderStepState();
-    projectSelect.focus();
+    projectInput.focus();
   };
 
   document.addEventListener(
@@ -760,6 +975,8 @@
   });
 
   const enhance = () => {
+    const currentProjects = visibleProjects();
+    if (currentProjects.length) persistProjects(currentProjects);
     captureCreatorTable();
     resolvePendingProjectCreation();
   };

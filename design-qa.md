@@ -116,4 +116,27 @@ shows an input with Cancel and Save actions.
   confirmation remain available.
 - Browser warning/error logs were empty after Word and PDF end-to-end tests.
 
+## Searchable Contract Project Selector
+
+### Evidence
+
+- Searchable selector with draft projects:
+  `qa/contract-upload-project-search.png`
+- Reference and implementation comparison:
+  `qa/contract-upload-project-search-comparison.png`
+
+### Verification
+
+- The project field accepts project-name or project-number searches and opens
+  the matching dropdown while typing.
+- Dropdown rows display only the project name, customer, and status; project
+  numbers remain searchable without being shown in the option text.
+- Draft projects created in “我的项目” are persisted locally and appear with
+  a restrained draft badge in the upload selector.
+- Mouse selection and Arrow Up/Down plus Enter selection both work.
+- Changing the project still resets the creator, file, extracted fields, and
+  save readiness. The creator selector remains limited to profiles linked to
+  the selected project.
+- Browser warning/error logs were empty after the interaction checks.
+
 final result: passed
