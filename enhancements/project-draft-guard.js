@@ -5,6 +5,14 @@
   const DRAFT_KEY_PREFIX = "comets-pay.project-create-draft.v1";
   const DIALOG_LABEL = "新建项目";
   const DEFAULT_PM_FALLBACK = "张咏诗";
+  const CONTRACT_UPLOAD_ACCEPT = [
+    ".pdf",
+    ".doc",
+    ".docx",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ].join(",");
 
   let activeSession = null;
   let confirmation = null;
@@ -14,6 +22,15 @@
 
   const nextFrame = () =>
     new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+  const enhanceContractUploadInput = () => {
+    const input = document.querySelector(
+      '.contracts-page input.sr-only[type="file"]'
+    );
+    if (input && input.accept !== CONTRACT_UPLOAD_ACCEPT) {
+      input.accept = CONTRACT_UPLOAD_ACCEPT;
+    }
+  };
 
   const findCreateDialog = () =>
     document.querySelector(`section[role="dialog"][aria-label="${DIALOG_LABEL}"]`);
@@ -680,6 +697,7 @@
     observerQueued = true;
     queueMicrotask(() => {
       observerQueued = false;
+      enhanceContractUploadInput();
       const dialog = findCreateDialog();
       if (dialog) {
         void enhanceDialog(dialog);
@@ -695,6 +713,7 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+  enhanceContractUploadInput();
   const existingDialog = findCreateDialog();
   if (existingDialog) void enhanceDialog(existingDialog);
 })();
