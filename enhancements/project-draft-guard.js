@@ -13,6 +13,10 @@
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ].join(",");
+  const WORD_FILE_PATTERN = /\.docx?$/i;
+  const wordContractPreviews = new Map();
+  const pendingWordContractPreviews = [];
+  const nativeCreateObjectURL = URL.createObjectURL.bind(URL);
 
   let activeSession = null;
   let confirmation = null;
@@ -27,9 +31,317 @@
     const input = document.querySelector(
       '.contracts-page input.sr-only[type="file"]'
     );
-    if (input && input.accept !== CONTRACT_UPLOAD_ACCEPT) {
+    if (!input) return;
+    if (input.accept !== CONTRACT_UPLOAD_ACCEPT) {
       input.accept = CONTRACT_UPLOAD_ACCEPT;
     }
+    if (input.dataset.wordPreviewEnhanced !== "true") {
+      input.dataset.wordPreviewEnhanced = "true";
+      input.addEventListener("change", handleWordContractSelection, true);
+    }
+  };
+
+  const escapeHtml = (value) =>
+    String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+
+  const wordPreviewDocument = (file, content, state = "ready") => `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <style>
+      * { box-sizing: border-box; }
+      html { background: #edf0f4; }
+      body {
+        margin: 0;
+        padding: 24px;
+        color: #25272d;
+        font-family: "Noto Sans SC", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .word-page {
+        width: min(100%, 760px);
+        min-height: calc(100vh - 48px);
+        margin: 0 auto;
+        border: 1px solid #e1e4ea;
+        border-radius: 3px;
+        background: #fff;
+        padding: 54px 58px 64px;
+        box-shadow: 0 8px 24px rgb(31 33 38 / 8%);
+      }
+      .word-file-name {
+        margin: 0 0 28px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid #eceef2;
+        color: #858b97;
+        font-size: 12px;
+      }
+      h1, h2, h3 { margin: 1.3em 0 .55em; color: #1f2024; line-height: 1.35; }
+      h1 { font-size: 24px; }
+      h2 { font-size: 20px; }
+      h3 { font-size: 17px; }
+      p { margin: 0 0 12px; font-family: Georgia, "Times New Roman", serif; font-size: 15px; line-height: 1.75; }
+      table { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 13px; }
+      td { border: 1px solid #dfe2e7; padding: 8px 10px; vertical-align: top; }
+      .word-state { display: grid; min-height: 320px; place-content: center; gap: 8px; color: #777e8b; text-align: center; }
+      .word-state strong { color: #383b43; font-size: 15px; }
+      .word-state span { max-width: 360px; font-size: 12px; line-height: 1.6; }
+      .word-state[data-state="error"] strong { color: #9b4e45; }
+    </style>
+  </head>
+  <body>
+    <main class="word-page">
+      <div class="word-file-name">${escapeHtml(file.name)}</div>
+      ${state === "ready" ? content : `<div class="word-state" data-state="${state}">${content}</div>`}
+    </main>
+  </body>
+</html>`;
+
+  const descendantsByLocalName = (node, localName) =>
+    [...node.getElementsByTagName("*")].filter(
+      (element) => element.localName === localName
+    );
+
+  const nodeText = (node) =>
+    descendantsByLocalName(node, "t")
+      .map((element) => element.textContent || "")
+      .join("");
+
+  const docxXmlToHtml = (xmlText) => {
+    const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+    if (xml.querySelector("parsererror")) {
+      throw new Error("Word 文档正文 XML 无法解析");
+    }
+    const body = [...xml.getElementsByTagName("*")].find(
+      (element) => element.localName === "body"
+    );
+    if (!body) throw new Error("Word 文档缺少正文");
+
+    const blocks = [];
+    [...body.children].forEach((element) => {
+      if (element.localName === "p") {
+        const text = nodeText(element).trim();
+        if (!text) return;
+        const style = descendantsByLocalName(element, "pStyle")[0];
+        const styleName =
+          style?.getAttribute("w:val") || style?.getAttribute("val") || "";
+        const headingMatch = styleName.match(/(?:heading|标题)\s*([1-3])?/i);
+        if (headingMatch) {
+          const level = Number(headingMatch[1] || 2);
+          blocks.push(`<h${level}>${escapeHtml(text)}</h${level}>`);
+        } else {
+          blocks.push(`<p>${escapeHtml(text)}</p>`);
+        }
+        return;
+      }
+
+      if (element.localName === "tbl") {
+        const rows = [...element.children].filter(
+          (child) => child.localName === "tr"
+        );
+        const rowHtml = rows
+          .map((row) => {
+            const cells = [...row.children].filter(
+              (child) => child.localName === "tc"
+            );
+            return `<tr>${cells
+              .map((cell) => `<td>${escapeHtml(nodeText(cell).trim())}</td>`)
+              .join("")}</tr>`;
+          })
+          .join("");
+        if (rowHtml) blocks.push(`<table><tbody>${rowHtml}</tbody></table>`);
+      }
+    });
+
+    if (!blocks.length) throw new Error("Word 文档中没有可展示的正文");
+    return blocks.join("");
+  };
+
+  const extractDocxDocumentXml = async (file) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let endOffset = -1;
+    for (let index = bytes.length - 22; index >= Math.max(0, bytes.length - 65557); index -= 1) {
+      if (view.getUint32(index, true) === 0x06054b50) {
+        endOffset = index;
+        break;
+      }
+    }
+    if (endOffset < 0) throw new Error("不是有效的 DOCX 文件");
+
+    const entryCount = view.getUint16(endOffset + 10, true);
+    let directoryOffset = view.getUint32(endOffset + 16, true);
+    const decoder = new TextDecoder("utf-8");
+
+    for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
+      if (view.getUint32(directoryOffset, true) !== 0x02014b50) break;
+      const method = view.getUint16(directoryOffset + 10, true);
+      const compressedSize = view.getUint32(directoryOffset + 20, true);
+      const nameLength = view.getUint16(directoryOffset + 28, true);
+      const extraLength = view.getUint16(directoryOffset + 30, true);
+      const commentLength = view.getUint16(directoryOffset + 32, true);
+      const localOffset = view.getUint32(directoryOffset + 42, true);
+      const name = decoder.decode(
+        bytes.subarray(directoryOffset + 46, directoryOffset + 46 + nameLength)
+      );
+
+      if (name === "word/document.xml") {
+        if (view.getUint32(localOffset, true) !== 0x04034b50) {
+          throw new Error("DOCX 正文索引损坏");
+        }
+        const localNameLength = view.getUint16(localOffset + 26, true);
+        const localExtraLength = view.getUint16(localOffset + 28, true);
+        const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+        const compressed = bytes.slice(dataOffset, dataOffset + compressedSize);
+        let documentBytes;
+        if (method === 0) {
+          documentBytes = compressed;
+        } else if (method === 8) {
+          const stream = new Blob([compressed])
+            .stream()
+            .pipeThrough(new DecompressionStream("deflate-raw"));
+          documentBytes = new Uint8Array(await new Response(stream).arrayBuffer());
+        } else {
+          throw new Error("暂不支持该 DOCX 压缩格式");
+        }
+        return decoder.decode(documentBytes);
+      }
+
+      directoryOffset += 46 + nameLength + extraLength + commentLength;
+    }
+
+    throw new Error("DOCX 文件缺少 word/document.xml");
+  };
+
+  const renderWordPreview = async (record, frame) => {
+    if (frame.dataset.wordPreviewReady === record.previewUrl) return;
+    frame.dataset.wordPreviewReady = record.previewUrl;
+    frame.title = `${record.file.name} Word 原文`;
+    frame.srcdoc = wordPreviewDocument(
+      record.file,
+      "<strong>正在载入 Word 文档</strong><span>文件仅在当前浏览器中处理</span>",
+      "loading"
+    );
+
+    if (/\.doc$/i.test(record.file.name)) {
+      frame.srcdoc = wordPreviewDocument(
+        record.file,
+        "<strong>旧版 Word 文档</strong><span>该格式暂不支持正文解析，请点击“下载原件”使用 Word 查看。</span>",
+        "error"
+      );
+      return;
+    }
+
+    try {
+      record.contentPromise ||= extractDocxDocumentXml(record.file).then(docxXmlToHtml);
+      frame.srcdoc = wordPreviewDocument(
+        record.file,
+        await record.contentPromise
+      );
+    } catch (error) {
+      frame.srcdoc = wordPreviewDocument(
+        record.file,
+        `<strong>Word 文档暂时无法预览</strong><span>${escapeHtml(error?.message || "请下载原件查看")}</span>`,
+        "error"
+      );
+    }
+  };
+
+  const setDownloadLabel = (anchor, label) => {
+    const labelElement = anchor.querySelector("span");
+    if (labelElement) {
+      if (labelElement.textContent !== label) {
+        labelElement.textContent = label;
+      }
+      return;
+    }
+    const textNode = [...anchor.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE
+    );
+    if (textNode) {
+      if (textNode.textContent !== label) textNode.textContent = label;
+      return;
+    }
+    anchor.append(document.createTextNode(label));
+  };
+
+  const enhanceWordContractPreview = () => {
+    const frame = document.querySelector(
+      ".contract-document-panel iframe.contract-pdf-frame"
+    );
+    if (!frame) return;
+    const previewUrl = frame.getAttribute("src")?.split("#toolbar=")[0] || "";
+    let record = wordContractPreviews.get(previewUrl);
+    if (
+      !record &&
+      pendingWordContractPreviews.length &&
+      previewUrl.startsWith("blob:")
+    ) {
+      record = pendingWordContractPreviews.shift();
+      record.previewUrl = previewUrl;
+      wordContractPreviews.set(previewUrl, record);
+    }
+    if (!record) return;
+
+    void renderWordPreview(record, frame);
+    document.querySelectorAll(".contract-detail-page a").forEach((anchor) => {
+      const href = anchor.getAttribute("href");
+      if (
+        href !== record.previewUrl &&
+        anchor.dataset.wordPreviewUrl !== record.previewUrl
+      ) {
+        return;
+      }
+      anchor.dataset.wordPreviewUrl = record.previewUrl;
+      anchor.href = record.originalUrl;
+      anchor.download = record.file.name;
+      anchor.removeAttribute("target");
+      anchor.removeAttribute("rel");
+      setDownloadLabel(anchor, "下载原件");
+    });
+  };
+
+  function handleWordContractSelection(event) {
+    const input = event.currentTarget;
+    if (input.dataset.wordPreviewDispatch === "true") {
+      delete input.dataset.wordPreviewDispatch;
+      return;
+    }
+
+    const file = input.files?.[0];
+    if (!file || !WORD_FILE_PATTERN.test(file.name)) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    pendingWordContractPreviews.push({
+      file,
+      originalUrl: nativeCreateObjectURL(file),
+      previewUrl: "",
+      contentPromise: null,
+    });
+
+    const previewFile = new File(
+      [
+        wordPreviewDocument(
+          file,
+          "<strong>正在载入 Word 文档</strong><span>文件仅在当前浏览器中处理</span>",
+          "loading"
+        ),
+      ],
+      file.name,
+      {
+        type: "text/html",
+        lastModified: file.lastModified,
+      }
+    );
+    const transfer = new DataTransfer();
+    transfer.items.add(previewFile);
+    input.files = transfer.files;
+    input.dataset.wordPreviewDispatch = "true";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   };
 
   const findCreateDialog = () =>
@@ -698,6 +1010,7 @@
     queueMicrotask(() => {
       observerQueued = false;
       enhanceContractUploadInput();
+      enhanceWordContractPreview();
       const dialog = findCreateDialog();
       if (dialog) {
         void enhanceDialog(dialog);
@@ -714,6 +1027,7 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
   enhanceContractUploadInput();
+  enhanceWordContractPreview();
   const existingDialog = findCreateDialog();
   if (existingDialog) void enhanceDialog(existingDialog);
 })();

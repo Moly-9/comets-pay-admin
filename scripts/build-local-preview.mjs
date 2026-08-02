@@ -55,6 +55,10 @@ await cp(payoutActionsBuildDirectory, payoutActionsOutputDirectory, {
 
 const indexPath = path.join(outputDirectory, "index.html");
 let indexHtml = await readFile(indexPath, "utf8");
+const projectDraftGuardVersion = createHash("sha256")
+  .update(await readFile(sourceScript))
+  .digest("hex")
+  .slice(0, 12);
 const payoutActionsVersion = createHash("sha256")
   .update(
     await readFile(
@@ -85,7 +89,7 @@ if (
 if (!indexHtml.includes("/assets/project-draft-guard.js")) {
   indexHtml = indexHtml.replace(
     "</body>",
-    '    <script src="/assets/project-draft-guard.js"></script>\n  </body>'
+    `    <script src="/assets/project-draft-guard.js?v=${projectDraftGuardVersion}"></script>\n  </body>`
   );
 }
 
