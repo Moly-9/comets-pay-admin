@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_PREFIX = "comets-pay.contract-review.v1";
+  const PENDING_UPLOAD_KEY = "comets-pay.contract-upload.pending.v1";
   const ICON_ROOT = "/assets/contract-review-workflow";
   const PLACEHOLDER_PATTERN =
     /^(?:待识别|待补充|待解析|待关联|待选择|未识别|缺失|—|-|)$/;
@@ -186,22 +187,48 @@
     };
   };
 
-  const createState = ({ contractId, fileName }) => ({
-    version: 1,
-    contractId,
-    fileName,
-    phase: "parsing",
-    fields: {
-      contractNumber: {
-        value: contractId,
-        source: "系统字段",
-        status: "detected",
+  const takePendingUpload = (fileName) => {
+    try {
+      const raw = sessionStorage.getItem(PENDING_UPLOAD_KEY);
+      if (!raw) return null;
+      const pending = JSON.parse(raw);
+      const fileIdentity = (value) =>
+        normalizeText(value)
+          .toLocaleLowerCase()
+          .replace(/\.(?:pdf|docx?|html)$/i, "");
+      if (
+        pending?.version !== 1 ||
+        fileIdentity(pending.fileName) !== fileIdentity(fileName)
+      ) {
+        return null;
+      }
+      sessionStorage.removeItem(PENDING_UPLOAD_KEY);
+      return pending;
+    } catch {
+      return null;
+    }
+  };
+
+  const createState = ({ contractId, fileName }) => {
+    const uploadContext = takePendingUpload(fileName);
+    return {
+      version: 1,
+      contractId,
+      fileName,
+      phase: "parsing",
+      fields: {
+        contractNumber: {
+          value: contractId,
+          source: "系统字段",
+          status: "detected",
+        },
       },
-    },
-    revision: 0,
-    parsedAt: null,
-    confirmedAt: null,
-  });
+      uploadContext,
+      revision: 0,
+      parsedAt: null,
+      confirmedAt: null,
+    };
+  };
 
   const readVisibleFieldDefaults = () => {
     const defaults = {};
@@ -252,7 +279,12 @@
     return "";
   };
 
-  const parseDocumentFields = (documentText, contractId, defaults) => {
+  const parseDocumentFields = (
+    documentText,
+    contractId,
+    defaults,
+    confirmedUploadFields = {}
+  ) => {
     const lines = documentText
       .split(/\r?\n/)
       .map(normalizeText)
@@ -284,6 +316,15 @@
               ? "未识别 · 请人工补充"
               : definition.source,
         status: value === "待补充" ? "missing" : "detected",
+      };
+    });
+
+    Object.entries(confirmedUploadFields).forEach(([key, confirmedField]) => {
+      if (!fields[key] || isPlaceholder(confirmedField?.value)) return;
+      fields[key] = {
+        value: confirmedField.value,
+        source: `${confirmedField.source || "上传表单"} · 上传前已确认`,
+        status: "detected",
       };
     });
 
@@ -321,7 +362,8 @@
       state.fields = parseDocumentFields(
         documentText,
         context.contractId,
-        readVisibleFieldDefaults()
+        readVisibleFieldDefaults(),
+        state.uploadContext?.fields
       );
       state.phase = "review";
       state.parsedAt = new Date().toISOString();

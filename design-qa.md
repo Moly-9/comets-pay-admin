@@ -87,4 +87,33 @@ shows an input with Cancel and Save actions.
 
 - No P3 issue is required for this scoped workflow.
 
+## Five-Step Contract Upload
+
+### Evidence
+
+- Project and project-creator linkage:
+  `qa/contract-upload-project-creator.png`
+- Extracted fields confirmed before saving:
+  `qa/contract-upload-five-step.png`
+- Saved contract detail with upload associations:
+  `qa/contract-upload-linked-detail.png`
+
+### Verification
+
+- The upload action now opens the ordered flow: project, project creator, file,
+  extracted-field confirmation, and save.
+- The creator select remains disabled until a project is selected.
+- Projects with only a creator count and no linked creator profiles show a
+  blocking explanation instead of displaying guessed creators.
+- After a creator profile is linked from the project detail, only that
+  project's linked creators appear in the upload select.
+- DOCX parsing populated Advertiser, IO number, platform/channel, dates, fees,
+  and payment terms before save.
+- Project and Publisher use the selected system relationship as the
+  authoritative value and carry into the saved contract detail.
+- PDF and Word files both reach the original contract detail flow. Existing
+  preview, original-file download, field editing, and final payment-readiness
+  confirmation remain available.
+- Browser warning/error logs were empty after Word and PDF end-to-end tests.
+
 final result: passed

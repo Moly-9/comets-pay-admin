@@ -39,6 +39,14 @@ const contractReviewOutputDirectory = path.join(
   assetsDirectory,
   "contract-review-workflow"
 );
+const contractUploadSourceDirectory = path.join(
+  workspaceRoot,
+  "enhancements/contract-upload-workflow"
+);
+const contractUploadOutputDirectory = path.join(
+  assetsDirectory,
+  "contract-upload-workflow"
+);
 
 try {
   await access(
@@ -58,6 +66,9 @@ await mkdir(assetsDirectory, { recursive: true });
 await cp(sourceScript, path.join(assetsDirectory, "project-draft-guard.js"));
 await cp(sourceStyles, path.join(assetsDirectory, "project-draft-guard.css"));
 await cp(contractReviewSourceDirectory, contractReviewOutputDirectory, {
+  recursive: true,
+});
+await cp(contractUploadSourceDirectory, contractUploadOutputDirectory, {
   recursive: true,
 });
 await cp(payoutActionsBuildDirectory, payoutActionsOutputDirectory, {
@@ -91,6 +102,19 @@ const contractReviewVersion = createHash("sha256")
   )
   .digest("hex")
   .slice(0, 12);
+const contractUploadVersion = createHash("sha256")
+  .update(
+    await readFile(
+      path.join(contractUploadSourceDirectory, "contract-upload-workflow.js")
+    )
+  )
+  .update(
+    await readFile(
+      path.join(contractUploadSourceDirectory, "contract-upload-workflow.css")
+    )
+  )
+  .digest("hex")
+  .slice(0, 12);
 
 if (!indexHtml.includes("/assets/project-draft-guard.css")) {
   indexHtml = indexHtml.replace(
@@ -107,6 +131,17 @@ if (
   indexHtml = indexHtml.replace(
     "</head>",
     `    <link rel="stylesheet" href="/assets/contract-review-workflow/contract-review-workflow.css?v=${contractReviewVersion}">\n  </head>`
+  );
+}
+
+if (
+  !indexHtml.includes(
+    "/assets/contract-upload-workflow/contract-upload-workflow.css"
+  )
+) {
+  indexHtml = indexHtml.replace(
+    "</head>",
+    `    <link rel="stylesheet" href="/assets/contract-upload-workflow/contract-upload-workflow.css?v=${contractUploadVersion}">\n  </head>`
   );
 }
 
@@ -136,6 +171,17 @@ if (
   indexHtml = indexHtml.replace(
     "</body>",
     `    <script src="/assets/contract-review-workflow/contract-review-workflow.js?v=${contractReviewVersion}"></script>\n  </body>`
+  );
+}
+
+if (
+  !indexHtml.includes(
+    "/assets/contract-upload-workflow/contract-upload-workflow.js"
+  )
+) {
+  indexHtml = indexHtml.replace(
+    "</body>",
+    `    <script src="/assets/contract-upload-workflow/contract-upload-workflow.js?v=${contractUploadVersion}"></script>\n  </body>`
   );
 }
 
