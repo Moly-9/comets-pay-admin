@@ -385,6 +385,19 @@
     }
   };
 
+  const deferProjectRelationFields = (dialog) => {
+    const relationFields = [
+      dialog.querySelector(".upload-box")?.closest("label"),
+      dialog.querySelector(".invoice-picker")?.closest(".form-field"),
+    ].filter(Boolean);
+
+    relationFields.forEach((field) => {
+      field.classList.add("cp-project-create-deferred-relation");
+      field.setAttribute("aria-hidden", "true");
+      field.inert = true;
+    });
+  };
+
   const getCurrentPm = (dialog) =>
     dialog.querySelector('[role="combobox"][aria-label="选择项目PM"] .custom-select-value')
       ?.textContent?.trim() || "";
@@ -447,22 +460,12 @@
         fields.requestReason?.value.trim() ||
         (getCurrentPm(dialog) &&
           getCurrentPm(dialog) !== (session.initialPm || DEFAULT_PM_FALLBACK)) ||
-        session.creatorHandles.size ||
-        session.invoiceIds.size ||
-        session.contract ||
-        session.contractDraftReference
+        session.creatorHandles.size
     );
   };
 
   const getDraftSnapshot = (dialog) => {
     const fields = getFields(dialog);
-    const contract = activeSession.contract
-      ? {
-          hadSelection: true,
-          name: activeSession.contract.name,
-          type: activeSession.contract.type,
-        }
-      : activeSession.contractDraftReference || { hadSelection: false };
 
     return {
       version: DRAFT_VERSION,
@@ -472,8 +475,6 @@
       pm: getCurrentPm(dialog) || activeSession.initialPm || DEFAULT_PM_FALLBACK,
       requestReason: fields.requestReason?.value.trim() || "",
       creatorHandles: [...activeSession.creatorHandles],
-      invoiceIds: [...activeSession.invoiceIds],
-      contract,
     };
   };
 
@@ -661,38 +662,6 @@
     return invalid;
   };
 
-  const restoreInvoices = async (dialog, ids) => {
-    if (!ids.length) return [];
-    const trigger = dialog.querySelector(".invoice-picker > .invoice-picker-trigger");
-    const wasOpen = trigger?.getAttribute("aria-expanded") === "true";
-    if (!wasOpen) {
-      trigger?.click();
-      await nextFrame();
-    }
-
-    const options = [...dialog.querySelectorAll("#project-invoice-options .invoice-option")];
-    const available = new Map(
-      options.map((option) => [option.querySelector("strong")?.textContent?.trim(), option])
-    );
-    const invalid = ids.filter((id) => !available.has(id));
-
-    for (const id of ids) {
-      const option = available.get(id);
-      if (option && option.getAttribute("aria-selected") !== "true") {
-        option.click();
-        await nextFrame();
-      }
-    }
-
-    activeSession.invoiceIds = new Set(ids.filter((id) => available.has(id)));
-    const freshTrigger = dialog.querySelector(".invoice-picker > .invoice-picker-trigger");
-    if (!wasOpen && freshTrigger?.getAttribute("aria-expanded") === "true") {
-      freshTrigger.click();
-      await nextFrame();
-    }
-    return invalid;
-  };
-
   const addRestoreTools = (dialog) => {
     const modalContent = dialog.querySelector(".modal-content");
     if (!modalContent || modalContent.querySelector(".cp-draft-tools")) return;
@@ -708,7 +677,6 @@
   };
 
   const addValidationNotice = (dialog, messages) => {
-    activeSession.validationMessages = messages;
     dialog.querySelector(".cp-draft-validation")?.remove();
     if (!messages.length) return;
 
@@ -726,10 +694,7 @@
   const clearRelationSelections = async (dialog) => {
     dialog.querySelector(".creator-selection-chips .invoice-selection-clear")?.click();
     await nextFrame();
-    dialog.querySelector(".invoice-picker + .invoice-selection-clear")?.click();
-    await nextFrame();
     activeSession.creatorHandles.clear();
-    activeSession.invoiceIds.clear();
   };
 
   const clearAndStartNew = async (dialog) => {
@@ -747,11 +712,7 @@
     await choosePm(dialog, activeSession.initialPm || DEFAULT_PM_FALLBACK);
     await clearRelationSelections(dialog);
 
-    activeSession.contract = null;
-    activeSession.contractDraftReference = null;
     activeSession.restored = false;
-    document.querySelector(".cp-contract-file-input")?.remove();
-    dialog.querySelector(".cp-contract-selection")?.remove();
     dialog.querySelector(".cp-draft-validation")?.remove();
     dialog.querySelector(".cp-draft-tools")?.remove();
 
@@ -769,7 +730,6 @@
 
     const pmValid = await choosePm(dialog, draft.pm);
     const invalidCreators = await restoreCreators(dialog, draft.creatorHandles || []);
-    const invalidInvoices = await restoreInvoices(dialog, draft.invoiceIds || []);
     const validationMessages = [];
 
     if (!pmValid && draft.pm) {
@@ -777,15 +737,6 @@
     }
     if (invalidCreators.length) {
       validationMessages.push(`${invalidCreators.length} 位达人已失效，请重新选择`);
-    }
-    if (invalidInvoices.length) {
-      validationMessages.push(`${invalidInvoices.length} 份 Invoice 已失效，请重新选择`);
-    }
-    if (draft.contract?.hadSelection) {
-      activeSession.contractDraftReference = draft.contract;
-      validationMessages.push(
-        `合同文件“${draft.contract.name || "未命名文件"}”需重新选择`
-      );
     }
 
     activeSession.restoring = false;
@@ -795,54 +746,9 @@
     showToast("已恢复上次未完成的项目草稿", "请确认关联对象仍然有效。");
   };
 
-  const showContractSelection = (dialog) => {
-    const existing = dialog.querySelector(".cp-contract-selection");
-    if (!activeSession.contract) return;
-    if (existing?.querySelector("span")?.textContent === activeSession.contract.name) {
-      return;
-    }
-    existing?.remove();
-
-    const uploadButton = dialog.querySelector(".upload-box");
-    const selection = document.createElement("div");
-    selection.className = "cp-contract-selection";
-    selection.innerHTML = `
-      <span></span>
-      <button type="button">移除</button>
-    `;
-    selection.querySelector("span").textContent = activeSession.contract.name;
-    selection.querySelector("button").addEventListener("click", () => {
-      activeSession.contract = null;
-      activeSession.contractDraftReference = null;
-      selection.remove();
-    });
-    uploadButton?.after(selection);
-  };
-
-  const openContractPicker = (dialog) => {
-    document.querySelector(".cp-contract-file-input")?.remove();
-    const input = document.createElement("input");
-    input.className = "cp-contract-file-input";
-    input.type = "file";
-    input.accept = "application/pdf,.pdf";
-    input.hidden = true;
-    input.addEventListener("change", () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      activeSession.contract = { name: file.name, type: file.type || "application/pdf" };
-      activeSession.contractDraftReference = null;
-      showContractSelection(dialog);
-      const messages = (activeSession.validationMessages || []).filter(
-        (message) => !message.includes("合同文件")
-      );
-      addValidationNotice(dialog, messages);
-    });
-    document.body.appendChild(input);
-    input.click();
-  };
-
   const enhanceDialog = async (dialog) => {
     relabelCustomerField(dialog);
+    deferProjectRelationFields(dialog);
     if (dialog.dataset.projectDraftGuard === "ready") return;
     dialog.dataset.projectDraftGuard = "ready";
 
@@ -851,10 +757,6 @@
       initialPm: getCurrentPm(dialog) || DEFAULT_PM_FALLBACK,
       creatorHandles: new Set(),
       creatorNameByHandle: new Map(),
-      invoiceIds: new Set(),
-      contract: null,
-      contractDraftReference: null,
-      validationMessages: [],
       restoring: false,
       restored: false,
     };
@@ -905,24 +807,8 @@
       return;
     }
 
-    const invoiceOption = event.target.closest("#project-invoice-options .invoice-option");
-    if (invoiceOption && dialog.contains(invoiceOption)) {
-      const id = invoiceOption.querySelector("strong")?.textContent?.trim();
-      if (!id) return;
-      if (invoiceOption.getAttribute("aria-selected") === "true") {
-        activeSession.invoiceIds.delete(id);
-      } else {
-        activeSession.invoiceIds.add(id);
-      }
-      return;
-    }
-
     if (event.target.closest(".creator-selection-chips .invoice-selection-clear")) {
       activeSession.creatorHandles.clear();
-      return;
-    }
-    if (event.target.closest(".invoice-picker + .invoice-selection-clear")) {
-      activeSession.invoiceIds.clear();
       return;
     }
 
@@ -966,14 +852,6 @@
         return;
       }
 
-      const uploadButton = event.target.closest(".upload-box");
-      if (uploadButton && dialog.contains(uploadButton)) {
-        event.preventDefault();
-        event.stopPropagation();
-        openContractPicker(dialog);
-        return;
-      }
-
       const createButton = [...dialog.querySelectorAll(".modal-footer button")].find(
         (button) => button.textContent?.trim() === "创建项目"
       );
@@ -1014,12 +892,10 @@
       const dialog = findCreateDialog();
       if (dialog) {
         void enhanceDialog(dialog);
-        if (activeSession?.contract) showContractSelection(dialog);
         if (activeSession?.restored) addRestoreTools(dialog);
       } else if (activeSession) {
         activeSession = null;
         closeConfirmation();
-        document.querySelector(".cp-contract-file-input")?.remove();
       }
       checkCreationSuccess();
     });
