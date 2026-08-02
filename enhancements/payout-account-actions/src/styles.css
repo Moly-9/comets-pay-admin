@@ -1,0 +1,466 @@
+.cp-payout-actions-active .creator-profile-editor-modal .payout-account-tab {
+  padding-right: 68px;
+}
+
+.cp-payout-actions-active
+  .creator-profile-editor-modal
+  .payout-account-default-star {
+  right: 43px;
+}
+
+.cp-payout-actions-active
+  .creator-profile-editor-modal
+  .payout-account-actions
+  [data-cp-hide-default="true"] {
+  display: none;
+}
+
+.cp-account-menu-trigger {
+  position: fixed;
+  z-index: 1210;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #737986;
+}
+
+.cp-account-menu-trigger:hover,
+.cp-account-menu-trigger:focus-visible,
+.cp-account-menu-trigger[aria-expanded="true"] {
+  border-color: #d8dbe2;
+  background: #fff;
+  color: #343941;
+}
+
+.cp-account-menu-trigger:focus-visible {
+  outline: 3px solid rgb(238 108 87 / 20%);
+  outline-offset: 1px;
+}
+
+.cp-account-action-menu {
+  position: fixed;
+  z-index: 1220;
+  display: grid;
+  width: 190px;
+  gap: 2px;
+  border: 1px solid #dfe2e8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgb(34 39 48 / 16%);
+  padding: 5px;
+}
+
+.cp-account-action-menu button {
+  position: relative;
+  display: grid;
+  min-height: 34px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 9px;
+  color: #414650;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+.cp-account-action-menu button:hover,
+.cp-account-action-menu button:focus-visible {
+  background: #f6f7f9;
+  outline: 0;
+}
+
+.cp-account-action-menu button[aria-disabled="true"] {
+  color: #a0a5ae;
+  cursor: not-allowed;
+}
+
+.cp-account-action-menu button[aria-disabled="true"]:hover,
+.cp-account-action-menu button[aria-disabled="true"]:focus-visible {
+  background: #f7f7f8;
+}
+
+.cp-account-action-menu .cp-account-menu-danger {
+  color: #c64b40;
+}
+
+.cp-account-action-menu .cp-account-menu-danger:hover,
+.cp-account-action-menu .cp-account-menu-danger:focus-visible {
+  background: #fff3f2;
+}
+
+.cp-account-action-reason {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: none;
+  width: 210px;
+  border: 1px solid #e3e5e9;
+  border-radius: 7px;
+  background: #343941;
+  box-shadow: 0 8px 22px rgb(34 39 48 / 18%);
+  padding: 7px 9px;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.cp-account-action-menu
+  button[aria-disabled="true"]:hover
+  .cp-account-action-reason,
+.cp-account-action-menu
+  button[aria-disabled="true"]:focus-visible
+  .cp-account-action-reason {
+  display: block;
+}
+
+.cp-account-availability-host {
+  min-width: 0;
+}
+
+.cp-account-availability {
+  display: flex;
+  min-height: 26px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px 9px;
+  color: #858b96;
+  font-size: 10px;
+}
+
+.cp-account-availability span:first-child {
+  border: 1px solid #e1e4e9;
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px 8px;
+}
+
+.cp-account-availability strong {
+  color: #3f454f;
+}
+
+.cp-account-dialog-backdrop {
+  position: fixed;
+  z-index: 1400;
+  inset: 0;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  background: rgb(22 25 31 / 42%);
+  padding: 20px;
+}
+
+.cp-account-dialog {
+  width: min(480px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 58px rgb(23 27 34 / 22%);
+}
+
+.cp-account-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #eceef2;
+  padding: 18px 18px 15px;
+}
+
+.cp-account-dialog > header span {
+  display: grid;
+  gap: 6px;
+}
+
+.cp-account-dialog h2,
+.cp-account-dialog p {
+  margin: 0;
+}
+
+.cp-account-dialog h2 {
+  color: #252931;
+  font-size: 16px;
+  font-weight: 680;
+}
+
+.cp-account-dialog p {
+  color: #777e89;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.cp-account-icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #7c828d;
+}
+
+.cp-account-icon-button:hover,
+.cp-account-icon-button:focus-visible {
+  border-color: #dfe2e7;
+  background: #f8f9fa;
+  color: #343941;
+  outline: 0;
+}
+
+.cp-account-dialog-body {
+  display: grid;
+  gap: 14px;
+  padding: 17px 18px 18px;
+}
+
+.cp-account-dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #eceef2;
+  background: #fafbfc;
+  padding: 13px 18px;
+}
+
+.cp-account-dialog-button {
+  min-height: 36px;
+  border: 1px solid #d5d9e0;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 14px;
+  color: #414650;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.cp-account-dialog-button:hover:not(:disabled),
+.cp-account-dialog-button:focus-visible {
+  border-color: #bfc4cc;
+  background: #f6f7f9;
+  outline: 3px solid rgb(238 108 87 / 16%);
+  outline-offset: 1px;
+}
+
+.cp-account-dialog-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cp-account-dialog-primary {
+  border-color: #24262c;
+  background: #24262c;
+  color: #fff;
+}
+
+.cp-account-dialog-primary:hover:not(:disabled),
+.cp-account-dialog-primary:focus-visible {
+  border-color: #343740;
+  background: #343740;
+}
+
+.cp-account-dialog-danger {
+  border-color: #c9433a;
+  background: #c9433a;
+  color: #fff;
+}
+
+.cp-account-dialog-danger:hover:not(:disabled),
+.cp-account-dialog-danger:focus-visible {
+  border-color: #b43831;
+  background: #b43831;
+}
+
+.cp-account-dialog-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e1e4e9;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 11px 12px;
+}
+
+.cp-account-dialog-summary-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f0edf5;
+  color: #735f80;
+}
+
+.cp-account-dialog-summary > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cp-account-dialog-summary strong,
+.cp-account-dialog-summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-account-dialog-summary strong {
+  color: #333841;
+  font-size: 11.5px;
+}
+
+.cp-account-dialog-summary small {
+  color: #848b96;
+  font-size: 9.5px;
+}
+
+.cp-account-choice-list {
+  display: grid;
+  gap: 7px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.cp-account-choice-list legend {
+  margin-bottom: 7px;
+  color: #4c525c;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.cp-account-choice-list > label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e0e3e8;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.cp-account-choice-list > label:has(input:checked) {
+  border-color: #e49684;
+  background: #fff9f7;
+}
+
+.cp-account-choice-list input {
+  width: 15px;
+  height: 15px;
+  accent-color: #e96f58;
+}
+
+.cp-account-choice-list .cp-account-dialog-summary {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.cp-account-no-replacement {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #ecd6a3;
+  border-radius: 8px;
+  background: #fff9ea;
+  padding: 11px 12px;
+  color: #9a650d;
+}
+
+.cp-account-no-replacement > span {
+  display: grid;
+  gap: 3px;
+}
+
+.cp-account-no-replacement strong {
+  font-size: 11px;
+}
+
+.cp-account-no-replacement small {
+  color: #987644;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.cp-account-toast {
+  position: fixed;
+  z-index: 1500;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  min-width: 250px;
+  max-width: min(390px, calc(100vw - 36px));
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #cde4d7;
+  border-radius: 8px;
+  background: #f2faf5;
+  box-shadow: 0 12px 34px rgb(33 39 47 / 16%);
+  padding: 11px 12px;
+  color: #2d7250;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.cp-account-toast-warning {
+  border-color: #ecd6a3;
+  background: #fff9ea;
+  color: #94630f;
+}
+
+.cp-account-toast-error {
+  border-color: #efc9c5;
+  background: #fff3f2;
+  color: #b7443d;
+}
+
+.cp-account-toast button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: currentColor;
+}
+
+.cp-account-toast button:hover,
+.cp-account-toast button:focus-visible {
+  background: rgb(255 255 255 / 72%);
+  outline: 0;
+}
+
+@media (max-width: 720px) {
+  .cp-account-dialog-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .cp-account-dialog {
+    width: 100%;
+  }
+
+  .cp-account-dialog > footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

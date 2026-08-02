@@ -8,5 +8,8 @@
 credentials*
 secrets*
 tmp/
+node_modules/
+*.tsbuildinfo
+enhancements/payout-account-actions/dist-plugin/
 remote-snapshot/
 local-preview/

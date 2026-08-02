@@ -62,6 +62,14 @@ python3 -m http.server 4175 --directory local-preview/dist
 浏览器访问 `http://127.0.0.1:4175/`。生成的 `local-preview/` 不进入 Git，
 每次构建都会由 `remote-snapshot/current/dist` 和 `enhancements/` 重新生成。
 
+账户卡片菜单由独立增强包维护。首次构建或修改该功能后先执行：
+
+```bash
+cd enhancements/payout-account-actions
+pnpm install
+pnpm run build:plugin
+```
+
 ## 后续维护原则
 
 1. 不直接把压缩后的 `dist/assets/*.js` 当作长期源码维护。

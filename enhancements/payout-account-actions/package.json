@@ -1,0 +1,24 @@
+{
+  "name": "@comets-pay/payout-account-actions",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:plugin": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "5.4.21",
+    "vitest": "^2.1.8"
+  }
+}
