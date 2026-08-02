@@ -404,11 +404,11 @@
     };
 
     if (state.phase === "parsing") {
-      setMetric(readiness, "解析中", "正在识别合同字段与来源位置");
+      setMetric(readiness, "等待解析中", "正在识别合同字段与来源位置");
       setMetric(amountMetric, "识别中", "正在读取金额与币种");
       setMetric(contractStatus, "解析中", "解析完成后需要人工确认");
     } else if (state.phase === "confirmed") {
-      setMetric(readiness, "可用于请款", "解析内容已人工确认", true);
+      setMetric(readiness, "可用于付款项目", "解析内容已人工确认", true);
       setMetric(
         amountMetric,
         state.fields.totalFees?.value || "待补充",
@@ -419,7 +419,7 @@
       );
       setMetric(contractStatus, "已确认", "字段准确性已由用户确认", true);
     } else {
-      setMetric(readiness, "待确认", "请核对解析内容并统一确认");
+      setMetric(readiness, "等待解析中", "请核对解析内容并统一确认");
       setMetric(
         amountMetric,
         state.fields.totalFees?.value || "待补充",
@@ -444,6 +444,25 @@
 
   const setText = (element, text) => {
     if (element && element.textContent !== text) element.textContent = text;
+  };
+
+  const renderListReadiness = (cell, isConfirmed) => {
+    if (!cell) return;
+    const label = isConfirmed ? "可用于付款项目" : "等待解析中";
+    let status = cell.querySelector(".simple-status");
+    if (!status) {
+      status = document.createElement("span");
+      status.className = "simple-status";
+      cell.replaceChildren(status);
+    }
+    if (
+      !status.querySelector("i") ||
+      normalizeText(status.textContent) !== label
+    ) {
+      status.replaceChildren(document.createElement("i"), label);
+    }
+    cell.classList.toggle("crw-list-confirmed", isConfirmed);
+    cell.classList.toggle("crw-list-pending", !isConfirmed);
   };
 
   const enhanceContractList = () => {
@@ -473,17 +492,7 @@
       setText(projectStrong?.nextElementSibling, brandName);
       setText(cells[3], state.fields.totalFees?.value || "待补充");
 
-      const readiness =
-        state.phase === "parsing"
-          ? "解析中"
-          : state.phase === "confirmed"
-            ? "可用于请款"
-            : "待确认";
-      setText(cells[4].firstElementChild || cells[4], readiness);
-      cells[4].classList.toggle(
-        "crw-list-confirmed",
-        state.phase === "confirmed"
-      );
+      renderListReadiness(cells[4], state.phase === "confirmed");
     });
   };
 

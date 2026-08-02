@@ -189,8 +189,28 @@
   color: #2f7659 !important;
 }
 
-.contracts-page td.crw-list-confirmed > * {
+.contracts-page td.crw-list-confirmed > .simple-status {
   color: #2f7659;
+  font-weight: 650;
+}
+
+.contracts-page td.crw-list-confirmed > .simple-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #35b884;
+}
+
+.contracts-page td.crw-list-pending > .simple-status {
+  color: #b96535;
+  font-weight: 650;
+}
+
+.contracts-page td.crw-list-pending > .simple-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d87942;
 }
 
 .crw-toast {

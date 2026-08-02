@@ -139,4 +139,32 @@ shows an input with Cancel and Save actions.
   the selected project.
 - Browser warning/error logs were empty after the interaction checks.
 
+## Contract Payment Readiness States
+
+### Evidence
+
+- Uploaded contract awaiting review:
+  `qa/contract-readiness-pending.png`
+- Confirmed contract ready for payment projects:
+  `qa/contract-readiness-confirmed.png`
+- Confirmed-state reference and implementation comparison:
+  `qa/contract-readiness-comparison.png`
+
+### Verification
+
+- A newly uploaded contract displays `等待解析中` in the payment-readiness
+  metric and in the contract list through both parsing and manual-review phases.
+- The pending list state follows the existing attention treatment with an
+  orange 6px circular marker and orange status text.
+- The readiness state changes only after the user clicks `确认解析内容` and all
+  required fields are complete.
+- After confirmation, both the detail metric and contract-list status display
+  `可用于付款项目`.
+- The confirmed list state follows the existing ready treatment with a green
+  6px circular marker and green status text.
+- Contract metadata continues to show its separate processing phase
+  (`待确认` or `已确认`) without being conflated with payment readiness.
+- Browser warning/error logs were empty after the complete upload, review,
+  confirmation, and list-return flow.
+
 final result: passed

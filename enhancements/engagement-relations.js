@@ -465,9 +465,10 @@
   };
 
   const contractStatus = (state) => {
-    if (state?.phase === "confirmed") return "可用于请款";
-    if (state?.phase === "parsing") return "解析中";
-    if (state?.phase === "review") return "待确认";
+    if (state?.phase === "confirmed") return "可用于付款项目";
+    if (state?.phase === "parsing" || state?.phase === "review") {
+      return "等待解析中";
+    }
     return "已关联";
   };
 
