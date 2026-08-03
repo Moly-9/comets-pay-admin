@@ -26,6 +26,8 @@ prototype behavior. The remote host does not contain the original Vite source pr
 
 ## Change Rules
 
+- Read `PROJECT_CONTEXT.md` at the start of every new task to restore the agreed product,
+  engineering, Git, and deployment context.
 - Read `SYSTEM_AUDIT.md` before substantial changes.
 - Before editing, inspect `git status` and preserve unrelated user changes.
 - After editing, report changed files, behavior changes, verification, and the local commit ID.
