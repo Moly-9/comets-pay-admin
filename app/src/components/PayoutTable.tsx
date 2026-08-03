@@ -1,0 +1,100 @@
+import { useState } from 'react';
+import { Avatar, Button, StatusMark } from './Common';
+import { Pagination } from './Pagination';
+import { formatAmount } from '../data';
+import type { Payout } from '../types';
+
+const ACTION_LABELS: Record<Payout['status'], string> = {
+  待财务复核: '审核',
+  等待付款: '执行打款',
+  信息异常: '查看原因',
+  飞书审批中: '查看',
+  付款处理中: '查看进度',
+  已付款: '查看详情',
+  已退回: '查看原因',
+};
+
+export function PayoutTable({
+  payouts,
+  onSelect,
+  emptyText = '当前筛选条件下没有付款记录',
+  statusLabels,
+}: {
+  payouts: Payout[];
+  onSelect: (payout: Payout) => void;
+  emptyText?: string;
+  statusLabels?: Partial<Record<Payout['status'], string>>;
+}) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const totalPages = Math.max(1, Math.ceil(payouts.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visiblePayouts = payouts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  return (
+    <div className="table-shell">
+      <div className="table-scroll">
+        <table className="data-table payout-table">
+          <thead>
+            <tr>
+              <th>达人 / 项目</th>
+              <th>Invoice</th>
+              <th>渠道</th>
+              <th>状态</th>
+              <th className="amount-cell">金额</th>
+              <th className="action-cell">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visiblePayouts.length ? visiblePayouts.map((payout) => (
+              <tr key={payout.id} onClick={() => onSelect(payout)}>
+                <td>
+                  <div className="creator-cell">
+                    <Avatar initials={payout.initials} accent={payout.accent} size="sm" />
+                    <span><strong>{payout.creator}</strong><small>{payout.project}</small></span>
+                  </div>
+                </td>
+                <td className="mono-cell">{payout.invoice}</td>
+                <td>{payout.provider}</td>
+                <td><StatusMark status={payout.status} label={statusLabels?.[payout.status]} /></td>
+                <td className="amount-cell">{formatAmount(payout)}</td>
+                <td className="action-cell">
+                  <Button
+                    variant={payout.status === '待财务复核' ? 'primary' : 'secondary'}
+                    className="table-action"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect(payout);
+                    }}
+                  >
+                    {ACTION_LABELS[payout.status]}
+                  </Button>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={6}>
+                  <div className="empty-table">{emptyText}</div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-footer">
+        <span>共 {payouts.length} 条</span>
+        <Pagination
+          ariaLabel="付款列表分页"
+          page={currentPage}
+          pageSize={pageSize}
+          total={payouts.length}
+          onPageChange={setPage}
+          onPageSizeChange={(nextPageSize) => {
+            setPageSize(nextPageSize);
+            setPage(1);
+          }}
+        />
+      </div>
+    </div>
+  );
+}

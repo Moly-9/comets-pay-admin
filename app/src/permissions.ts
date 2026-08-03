@@ -1,0 +1,115 @@
+import type { SystemRoleKey, SystemUser } from './data';
+import type { NavPage } from './types';
+
+export type PermissionId =
+  | 'creator_records_view'
+  | 'creator_records_manage'
+  | 'contract_view'
+  | 'contract_manage'
+  | 'invoice_view'
+  | 'invoice_manage'
+  | 'request_project_view'
+  | 'project_manage'
+  | 'request_list_view'
+  | 'request_create'
+  | 'request_material_view'
+  | 'request_review'
+  | 'payout_execute'
+  | 'payment_view'
+  | 'account_manage'
+  | 'approval_manage'
+  | 'channel_manage';
+
+export type PermissionOption = {
+  id: PermissionId;
+  group: '业务资料' | '财务与付款' | '系统管理';
+  label: string;
+  description: string;
+};
+
+export const PERMISSION_OPTIONS: PermissionOption[] = [
+  { id: 'creator_records_view', group: '业务资料', label: '查看网红档案库', description: '访问达人档案、账户与合作资料。' },
+  { id: 'creator_records_manage', group: '业务资料', label: '管理网红档案与合作名单', description: '新增、编辑达人档案并导入合作名单。' },
+  { id: 'contract_view', group: '业务资料', label: '查看合同模块', description: '查看项目合同及其关联状态。' },
+  { id: 'contract_manage', group: '业务资料', label: '上传与管理合同', description: '上传合同并维护合同与项目的关联资料。' },
+  { id: 'invoice_view', group: '业务资料', label: '查看 Invoice 模块', description: '查看并选择系统内的 Invoice。' },
+  { id: 'invoice_manage', group: '业务资料', label: '生成与管理 Invoice', description: '生成 Invoice 文件并维护 Invoice 业务资料。' },
+  { id: 'request_project_view', group: '业务资料', label: '查看请款项目', description: '查看项目基本信息与请款进度。' },
+  { id: 'project_manage', group: '业务资料', label: '新建与维护项目', description: '新建项目并维护项目、达人、PM 与预算资料。' },
+  { id: 'request_list_view', group: '业务资料', label: '查看请款清单', description: '查看已提交的请款明细与状态。' },
+  { id: 'request_create', group: '业务资料', label: '新建并提交请款项目', description: '关联合同与 Invoice，生成付款清单并提交审批。' },
+  { id: 'request_material_view', group: '财务与付款', label: '查看请款审核资料', description: '查看合同、Invoice 与请款单信息。' },
+  { id: 'request_review', group: '财务与付款', label: '审核请款项目', description: '通过、退回并记录请款审核结果。' },
+  { id: 'payout_execute', group: '财务与付款', label: '执行 Airwallex 自动打款', description: '审核通过后发起付款，操作前需完成登录认证。' },
+  { id: 'payment_view', group: '财务与付款', label: '查看付款板块', description: '查看付款批次、交易记录与付款状态。' },
+  { id: 'account_manage', group: '系统管理', label: '管理系统账号与权限', description: '新增、启停账号并编辑账号操作权限。' },
+  { id: 'approval_manage', group: '系统管理', label: '管理请款审批流程', description: '配置请款项目的审批节点、审批角色与启停状态。' },
+  { id: 'channel_manage', group: '系统管理', label: '配置付款渠道', description: '管理 Airwallex 连接、渠道设置与路由规则。' },
+];
+
+export const ALL_PERMISSION_IDS = PERMISSION_OPTIONS.map((permission) => permission.id);
+export const PERMISSION_GROUPS: PermissionOption['group'][] = ['业务资料', '财务与付款', '系统管理'];
+
+export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
+  media: [
+    'creator_records_view',
+    'creator_records_manage',
+    'contract_view',
+    'contract_manage',
+    'invoice_view',
+    'invoice_manage',
+    'request_project_view',
+    'project_manage',
+  ],
+  pm: ['request_project_view', 'request_list_view', 'request_material_view', 'request_review'],
+  finance: ['request_material_view', 'request_review', 'payout_execute', 'payment_view'],
+  admin: [...ALL_PERMISSION_IDS],
+  owner: [...ALL_PERMISSION_IDS],
+  project: [
+    'creator_records_view',
+    'contract_view',
+    'invoice_view',
+    'request_project_view',
+    'project_manage',
+    'request_list_view',
+    'request_material_view',
+    'request_review',
+  ],
+};
+
+const PAGE_PERMISSION_RULES: Partial<Record<NavPage, PermissionId[]>> = {
+  projects: ['request_project_view'],
+  requests: ['request_list_view', 'request_material_view'],
+  contracts: ['contract_view', 'request_material_view'],
+  invoice: ['invoice_view', 'request_material_view'],
+  'invoice-create': ['invoice_manage'],
+  creators: ['creator_records_view'],
+  collaborations: ['creator_records_view'],
+  'payment-workbench': ['payment_view'],
+  batches: ['payment_view'],
+  'new-batch': ['payout_execute'],
+  transactions: ['payment_view'],
+  organization: ['account_manage'],
+  channels: ['channel_manage'],
+  'system-settings': ['account_manage', 'approval_manage'],
+};
+
+const ROLE_BLOCKED_PAGES: Partial<Record<SystemRoleKey, NavPage[]>> = {
+  media: ['dashboard', 'requests'],
+};
+
+export const hasPermission = (user: SystemUser, permission: PermissionId) => (
+  ROLE_PERMISSION_IDS[user.roleKey].includes(permission)
+);
+
+export const canAccessPage = (user: SystemUser, page: NavPage) => {
+  if (ROLE_BLOCKED_PAGES[user.roleKey]?.includes(page)) return false;
+  const requiredPermissions = PAGE_PERMISSION_RULES[page];
+  return !requiredPermissions || requiredPermissions.some((permission) => hasPermission(user, permission));
+};
+
+export const getDefaultPageForRole = (role: SystemRoleKey): NavPage => {
+  if (role === 'media' || role === 'pm' || role === 'project') return 'projects';
+  if (role === 'finance') return 'payment-workbench';
+  return 'dashboard';
+};

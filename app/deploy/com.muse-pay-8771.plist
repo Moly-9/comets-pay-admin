@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.muse-pay-8771</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/mac/Services/muse-pay-8771/deploy/server.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/mac/Services/muse-pay-8771</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOST</key>
+    <string>0.0.0.0</string>
+    <key>PORT</key>
+    <string>8771</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+
+  <key>UserName</key>
+  <string>mac</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/mac/Services/muse-pay-8771/logs/stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mac/Services/muse-pay-8771/logs/stderr.log</string>
+</dict>
+</plist>

@@ -9,6 +9,7 @@
 - 远端目录：`/Users/mac/Services/muse-pay-8771`
 - 守护服务：`system/com.muse-pay-8771`
 - 启动入口：`deploy/server.mjs`
+- 本地可维护源码：`app`
 - 当前发布包快照：`remote-snapshot/current`
 - 当前压缩包：`remote-snapshot/muse-pay-8771-20260731-184842.tar.gz`
 - 拉取时间：`2026-07-31 18:48:42`（Asia/Shanghai）
@@ -16,6 +17,9 @@
 当前系统是静态 React 前端原型，不是可用于真实付款的生产系统。认证、权限、
 账号、业务记录、审批、渠道连接和付款状态均在浏览器端模拟；页面刷新后会恢复
 初始数据。远端没有源工程、`package.json` 或对应 Git 仓库，只有 Vite 构建产物。
+可维护的 React/Vite/TypeScript 源码现已单独导入本地 `app/`，以后前端功能和页面
+设计以该目录为主；源码来源和基线差异见
+[app/SOURCE_BASELINE.md](./app/SOURCE_BASELINE.md)。
 
 完整检查结论见 [SYSTEM_AUDIT.md](./SYSTEM_AUDIT.md)。
 
@@ -49,31 +53,31 @@ git log --oneline --decorate
 
 ## 构建本地前端预览
 
-远端缺少原始 React/Vite 源工程，因此当前前端改动先以可追踪的增强源码维护，
-构建时注入到远端静态快照的副本中，不直接修改压缩后的生产 JS。
+今后的前端开发以 `app/` 中的可维护源码为主：
 
 ```bash
-/Users/aria/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
-  scripts/build-local-preview.mjs
-
-python3 -m http.server 4175 --directory local-preview/dist
+cd app
+npm ci
+npm run dev
 ```
 
-浏览器访问 `http://127.0.0.1:4175/`。生成的 `local-preview/` 不进入 Git，
-每次构建都会由 `remote-snapshot/current/dist` 和 `enhancements/` 重新生成。
-
-账户卡片菜单由独立增强包维护。首次构建或修改该功能后先执行：
+浏览器访问 `http://127.0.0.1:5173/`。提交代码前执行：
 
 ```bash
-cd enhancements/payout-account-actions
-pnpm install
-pnpm run build:plugin
+cd app
+npm run build
 ```
+
+此前基于 `remote-snapshot/current` 和 `enhancements/` 生成的 `local-preview/`
+仍保留为历史兼容路径，不删除、不覆盖，但不再作为新功能的默认开发入口。
+
+本地源码构建结果位于 `app/dist/` 且不进入 Git。只有用户明确要求部署后，才会先
+备份 Mac 当前版本，再使用经过验收的 `app/dist/` 更新 `8771`。
 
 ## 后续维护原则
 
 1. 不直接把压缩后的 `dist/assets/*.js` 当作长期源码维护。
-2. 优先找回原始 React/Vite 源工程；找不到时，在本目录重建可维护源码。
+2. 所有新功能和页面设计在本地 `app/` 源码中完成，不覆盖历史增强源码。
 3. 所有改动先在本地构建和验证，再备份远端当前版本并原子替换 `dist`。
 4. 部署后检查 `/health`、首页、静态资源、服务状态和错误日志。
 5. 不在本目录、Git 历史、脚本或文档中保存 SSH 密码、API Token 或付款密钥。
