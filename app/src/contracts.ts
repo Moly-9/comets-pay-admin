@@ -25,6 +25,16 @@ export type ContractDeliverable = {
   source: string;
 };
 
+export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed';
+
+export type ContractFieldReview = {
+  key: string;
+  label: string;
+  value: string;
+  source: string;
+  required: boolean;
+};
+
 export type ContractRecord = {
   id: string;
   ioId: string;
@@ -60,6 +70,12 @@ export type ContractRecord = {
   updated: string;
   deliverables: ContractDeliverable[];
   issues: ContractIssue[];
+  projectId?: string;
+  creatorId?: string;
+  creatorHandle?: string;
+  engagementId?: string;
+  extractionStage?: ContractExtractionStage;
+  extractedFields?: ContractFieldReview[];
 };
 
 export const formatContractMoney = (contract: ContractRecord) => {
@@ -303,10 +319,46 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
   },
 ];
 
-export const createUploadedContract = (file: File, documentUrl: string): ContractRecord => {
+export type ContractUploadInput = {
+  file: File;
+  documentUrl: string;
+  projectId: string;
+  projectName: string;
+  customer: string;
+  creatorId: string;
+  creatorName: string;
+  creatorHandle: string;
+  creatorPlatform: string;
+  engagementId: string;
+  fields: ContractFieldReview[];
+  parseNote?: string;
+};
+
+const fieldValue = (fields: ContractFieldReview[], key: string) => (
+  fields.find((field) => field.key === key)?.value.trim() ?? ''
+);
+
+export const createUploadedContract = ({
+  file,
+  documentUrl,
+  projectId,
+  projectName,
+  customer,
+  creatorId,
+  creatorName,
+  creatorHandle,
+  creatorPlatform,
+  engagementId,
+  fields,
+  parseNote,
+}: ContractUploadInput): ContractRecord => {
   const timestamp = Date.now().toString().slice(-7);
   const today = new Intl.DateTimeFormat('en-CA').format(new Date());
-  const displayName = file.name.replace(/\.pdf$/i, '').trim();
+  const displayName = file.name.replace(/\.(pdf|docx?|doc)$/i, '').trim();
+  const amountValue = fieldValue(fields, 'totalFee').replace(/,/g, '');
+  const amount = Number(amountValue.match(/\d+(?:\.\d+)?/)?.[0] ?? '');
+  const currency = fieldValue(fields, 'currency').toUpperCase();
+  const missingFields = fields.filter((field) => field.required && !field.value.trim());
 
   return {
     id: `CON-UPL-${timestamp}`,
@@ -315,19 +367,20 @@ export const createUploadedContract = (file: File, documentUrl: string): Contrac
     templateFamily: '待识别',
     sourceName: file.name,
     documentUrl,
+    documentNote: parseNote,
     isTemplate: false,
-    project: '待关联',
-    brand: '待识别',
-    advertiser: '待识别',
-    publisher: '',
+    project: projectName,
+    brand: customer || '待补充客户',
+    advertiser: fieldValue(fields, 'advertiser') || '待识别',
+    publisher: fieldValue(fields, 'publisher') || creatorName,
     channelName: '',
     channelLink: '',
-    platform: '',
+    platform: creatorPlatform,
     effectiveDate: '',
     campaignStart: '',
     campaignEnd: '',
-    currency: '',
-    totalFee: null,
+    currency,
+    totalFee: Number.isFinite(amount) && amount > 0 ? amount : null,
     licensePrice: null,
     licenseIncludedInTotal: null,
     invoiceWithinWorkingDays: null,
@@ -337,17 +390,30 @@ export const createUploadedContract = (file: File, documentUrl: string): Contrac
     accountName: '',
     accountFingerprint: '',
     signed: false,
-    status: '待解析',
+    status: missingFields.length ? '待补字段' : '待签署',
     updated: today,
     deliverables: [],
     issues: [
       {
-        id: 'parsing',
-        label: '等待结构化解析',
-        description: 'PDF已保存，可查看原文；完成字段提取和人工确认后才能用于付款项目。',
+        id: 'signature',
+        label: '合同尚未完成签署',
+        description: '字段复核不代表合同签署；双方签署完成后才能进入付款项目。',
         severity: 'blocker',
-        source: '上传文件',
+        source: '签署页',
       },
+      ...missingFields.map((field) => ({
+        id: `missing-${field.key}`,
+        label: `${field.label}缺失`,
+        description: '本地解析未识别该关键字段，需要人工补充后确认。',
+        severity: 'blocker' as const,
+        source: field.source || '上传文件',
+      })),
     ],
+    projectId,
+    creatorId,
+    creatorHandle,
+    engagementId,
+    extractionStage: 'review',
+    extractedFields: fields,
   };
 };

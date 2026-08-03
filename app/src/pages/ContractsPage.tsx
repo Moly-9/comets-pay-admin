@@ -1,35 +1,45 @@
 import { Search, Upload } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, PageHeading } from '../components/Common';
+import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import {
   formatContractMoney,
   getContractReadiness,
   type ContractRecord,
+  type ContractUploadInput,
 } from '../contracts';
+import type { CreatorProfile } from '../types';
 import { ContractDetailPage } from './ContractDetailPage';
+import type { ProjectSummary } from './ProjectDetailPage';
 
 type Notify = (title: string, message: string) => void;
 type ContractFilter = 'all' | 'ready' | 'attention' | 'template';
 
 export function ContractsPage({
   contracts,
+  projects,
+  creators,
   canUpload,
   focusedContractId,
   onFocusCleared,
   onUploadContract,
+  onUpdateContract,
   notify,
 }: {
   contracts: ContractRecord[];
+  projects: ProjectSummary[];
+  creators: CreatorProfile[];
   canUpload: boolean;
   focusedContractId: string | null;
   onFocusCleared: () => void;
-  onUploadContract: (file: File) => ContractRecord;
+  onUploadContract: (input: ContractUploadInput) => ContractRecord;
+  onUpdateContract: (contract: ContractRecord) => void;
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ContractFilter>('all');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(focusedContractId);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const selectedContract = selectedContractId
     ? contracts.find((contract) => contract.id === selectedContractId)
     : null;
@@ -65,6 +75,7 @@ export function ContractsPage({
       <ContractDetailPage
         contract={selectedContract}
         notify={notify}
+        onUpdateContract={onUpdateContract}
         onBack={() => {
           setSelectedContractId(null);
           onFocusCleared();
@@ -79,25 +90,7 @@ export function ContractsPage({
       <PageHeading
         title="合同管理"
         subtitle="上传合同、查看原文与结构化字段，并确认合同是否可进入付款项目。"
-        actions={canUpload ? (
-          <>
-            <input
-              ref={fileInputRef}
-              className="sr-only"
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                const contract = onUploadContract(file);
-                openContract(contract.id);
-                notify('合同已上传', `${file.name} 已加入合同列表，正在等待结构化解析。`);
-                event.target.value = '';
-              }}
-            />
-            <Button icon={<Upload size={17} />} onClick={() => fileInputRef.current?.click()}>上传合同</Button>
-          </>
-        ) : undefined}
+        actions={canUpload ? <Button icon={<Upload size={17} />} onClick={() => setUploadOpen(true)}>上传合同</Button> : undefined}
       />
 
       <div className="contract-overview-strip">
@@ -205,6 +198,19 @@ export function ContractsPage({
           </table>
         </div>
       </section>
+      {uploadOpen ? (
+        <ContractUploadWizard
+          projects={projects}
+          creators={creators}
+          onClose={() => setUploadOpen(false)}
+          onSave={(input) => {
+            const contract = onUploadContract(input);
+            setUploadOpen(false);
+            openContract(contract.id);
+            notify('合同已保存', `${input.file.name} 已关联 ${input.projectName} / ${input.creatorName}，等待签署确认。`);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Avatar, Button, Modal, PageHeading, SelectField } from '../components/Common';
+import type { ContractRecord } from '../contracts';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -30,7 +31,13 @@ export type ProjectSummary = {
   media: string;
   pm: string;
   creators: number;
-  creatorProfiles?: Array<{ name: string; handle: string; platform: string }>;
+  creatorProfiles?: Array<{
+    creatorId: string;
+    engagementId: string;
+    name: string;
+    handle: string;
+    platform: string;
+  }>;
   requestReason?: string;
   invoiceCount?: number;
   paymentOrder?: string;
@@ -488,6 +495,8 @@ function resolveProjectCreatorReferences(
     const currentProfile = archiveByHandle.get(reference.handle);
     return currentProfile
       ? {
+          creatorId: currentProfile.id,
+          engagementId: reference.engagementId,
           name: currentProfile.name,
           handle: currentProfile.handle,
           platform: currentProfile.platform,
@@ -914,12 +923,16 @@ export function ProjectDetailPage({
   creatorArchive,
   onBack,
   onUpdateCreators,
+  contracts = [],
+  onOpenContract,
   notify,
 }: {
   project: ProjectSummary;
   creatorArchive: CreatorProfile[];
   onBack: () => void;
   onUpdateCreators: (creatorHandles: string[]) => void;
+  contracts?: ContractRecord[];
+  onOpenContract?: (contractId: string) => void;
   notify: Notify;
 }) {
   const [viewer, setViewer] = useState<ProjectResourceViewerState | null>(null);
@@ -930,10 +943,19 @@ export function ProjectDetailPage({
   } | null>(null);
   const detail = getProjectDetail(project, creatorArchive);
   const records = getProjectResourceRecords(project, creatorArchive);
+  const linkedContracts = contracts.filter((contract) => contract.projectId === project.id);
   const resources = PROJECT_RESOURCE_CONFIG.map((resource) => ({
     ...resource,
-    data: detail[resource.kind],
-    count: records[resource.kind].length,
+    data: resource.kind === 'contract' && linkedContracts.length > 0
+      ? {
+          id: `${linkedContracts.length} 份合同`,
+          meta: `已按项目 ID 关联 ${linkedContracts.length} 位达人合同`,
+          status: linkedContracts.every((contract) => contract.signed) ? '已签署' : '待处理',
+        }
+      : detail[resource.kind],
+    count: resource.kind === 'contract' && linkedContracts.length > 0
+      ? linkedContracts.length
+      : records[resource.kind].length,
   }));
 
   if (documentViewer) {
@@ -1030,10 +1052,25 @@ export function ProjectDetailPage({
                       type="button"
                       aria-label={`${resource.action}：${project.name}`}
                       data-testid={`open-project-${resource.kind}`}
-                      onClick={() => setViewer({ kind: resource.kind, recordId: null })}
+                      onClick={() => {
+                        if (resource.kind === 'contract' && linkedContracts.length === 1 && onOpenContract) {
+                          onOpenContract(linkedContracts[0].id);
+                          return;
+                        }
+                        setViewer({ kind: resource.kind, recordId: null });
+                      }}
                     >
                       {resource.action}
                     </button>
+                    {resource.kind === 'contract' && linkedContracts.length > 1 && onOpenContract ? (
+                      <div className="project-linked-contracts">
+                        {linkedContracts.map((contract) => (
+                          <button type="button" key={contract.id} onClick={() => onOpenContract(contract.id)}>
+                            {contract.id} · {contract.creatorHandle || contract.publisher}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}

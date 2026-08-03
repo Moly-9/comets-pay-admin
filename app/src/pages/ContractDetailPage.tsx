@@ -9,11 +9,13 @@ import {
   FileSearch,
   FileText,
   Landmark,
+  Pencil,
   ReceiptText,
+  Save,
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, PageHeading } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
@@ -54,14 +56,20 @@ export function ContractDetailPage({
   onBack,
   backLabel = '返回合同列表',
   notify,
+  onUpdateContract,
 }: {
   contract: ContractRecord;
   onBack: () => void;
   backLabel?: string;
   notify: Notify;
+  onUpdateContract?: (contract: ContractRecord) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ContractDetailTab>('summary');
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
+  const [editingFields, setEditingFields] = useState(false);
+  const [draftFields, setDraftFields] = useState(contract.extractedFields ?? []);
+  useEffect(() => setDraftFields(contract.extractedFields ?? []), [contract]);
+  const canPreviewInline = Boolean(contract.documentUrl && /\.pdf$/i.test(contract.sourceName));
   const readiness = getContractReadiness(contract);
   const tabs: Array<{ id: ContractDetailTab; label: string }> = [
     { id: 'summary', label: '合同摘要' },
@@ -73,6 +81,34 @@ export function ContractDetailPage({
   const copyContractId = async () => {
     await navigator.clipboard.writeText(contract.id);
     notify('合同编号已复制', contract.id);
+  };
+
+  const confirmExtractedFields = () => {
+    const missing = draftFields.filter((field) => field.required && !field.value.trim());
+    if (missing.length > 0) {
+      notify('仍有关键字段缺失', `请补充：${missing.map((field) => field.label).join('、')}`);
+      return;
+    }
+    const valueFor = (key: string) => draftFields.find((field) => field.key === key)?.value.trim() ?? '';
+    const amountText = valueFor('totalFee').replace(/,/g, '');
+    const amount = Number(amountText.match(/\d+(?:\.\d+)?/)?.[0] ?? '');
+    const paymentDays = Number(valueFor('paymentTerm').match(/\d+/)?.[0] ?? '');
+    const updated: ContractRecord = {
+      ...contract,
+      advertiser: valueFor('advertiser') || contract.advertiser,
+      publisher: valueFor('publisher') || contract.publisher,
+      ioId: valueFor('ioId') || contract.ioId,
+      currency: valueFor('currency').toUpperCase() || contract.currency,
+      totalFee: Number.isFinite(amount) && amount > 0 ? amount : contract.totalFee,
+      paymentWithinWorkingDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : contract.paymentWithinWorkingDays,
+      extractedFields: draftFields,
+      extractionStage: 'confirmed',
+      status: contract.signed ? contract.status : '待签署',
+      issues: contract.issues.filter((issue) => !issue.id.startsWith('missing-') && issue.id !== 'parsing'),
+    };
+    onUpdateContract?.(updated);
+    setEditingFields(false);
+    notify('合同字段已确认', '解析字段已保存；签署状态和付款就绪度未被改变。');
   };
 
   return (
@@ -145,12 +181,18 @@ export function ContractDetailPage({
               </a>
             ) : null}
           </header>
-          {contract.documentUrl ? (
+          {canPreviewInline ? (
             <iframe
               className="contract-pdf-frame"
               src={`${contract.documentUrl}#toolbar=1&navpanes=0&view=FitH`}
               title={`${contract.name} PDF原文`}
             />
+          ) : contract.documentUrl ? (
+            <div className="contract-document-canvas contract-document-download-only">
+              <FileText size={32} />
+              <strong>该 Word 文件需下载后查看</strong>
+              <p>浏览器已完成可用字段的本地提取，但不会把 DOC 或 DOCX 伪装成 PDF 预览。</p>
+            </div>
           ) : (
             <div className="contract-document-canvas">
               <ContractDocumentView contract={contract} ariaLabel={`${contract.id} 合同全文`} />
@@ -180,8 +222,32 @@ export function ContractDetailPage({
                 <div className="contract-section-heading">
                   <FileSearch size={18} />
                   <span><strong>结构化合同信息</strong><small>每个字段保留合同来源位置</small></span>
+                  {contract.extractedFields?.length && onUpdateContract ? (
+                    <Button
+                      variant="secondary"
+                      icon={editingFields ? <Save size={15} /> : <Pencil size={15} />}
+                      onClick={editingFields ? confirmExtractedFields : () => setEditingFields(true)}
+                    >
+                      {editingFields ? '确认字段' : contract.extractionStage === 'confirmed' ? '编辑字段' : '复核字段'}
+                    </Button>
+                  ) : null}
                 </div>
-                <ContractDefinitionList contract={contract} />
+                {editingFields ? (
+                  <div className="contract-field-review contract-field-review-detail">
+                    {draftFields.map((field) => (
+                      <label key={field.key}>
+                        <span>{field.label}{field.required ? ' *' : ''}<small>{field.source}</small></span>
+                        <input
+                          value={field.value}
+                          placeholder="待补充"
+                          onChange={(event) => setDraftFields((current) => current.map((item) => item.key === field.key
+                            ? { ...item, value: event.target.value, source: '人工复核' }
+                            : item))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                ) : <ContractDefinitionList contract={contract} />}
                 {contract.channelLink ? <a className="contract-channel-link" href={contract.channelLink} target="_blank" rel="noreferrer"><ExternalLink size={15} />查看达人社媒账号主页</a> : null}
               </>
             ) : null}

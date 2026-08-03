@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { Toast } from './components/Common';
-import { createUploadedContract, INITIAL_CONTRACTS, type ContractRecord } from './contracts';
+import { createUploadedContract, INITIAL_CONTRACTS, type ContractRecord, type ContractUploadInput } from './contracts';
 import {
   authenticateSystemUser,
   CURRENT_USER,
@@ -79,10 +79,14 @@ export default function App() {
     setToast({ title, message });
   }, []);
 
-  const uploadContract = useCallback((file: File) => {
-    const record = createUploadedContract(file, URL.createObjectURL(file));
+  const uploadContract = useCallback((input: ContractUploadInput) => {
+    const record = createUploadedContract(input);
     setContracts((current) => [record, ...current]);
     return record;
+  }, []);
+
+  const updateContract = useCallback((updated: ContractRecord) => {
+    setContracts((current) => current.map((contract) => contract.id === updated.id ? updated : contract));
   }, []);
 
   useEffect(() => {
@@ -205,6 +209,11 @@ export default function App() {
           creators={creators}
           currentUser={currentUser}
           projects={projects}
+          contracts={contracts}
+          onOpenContract={(contractId) => {
+            setFocusedContractId(contractId);
+            setActivePage('contracts');
+          }}
           onProjectsChange={setProjects}
           canCreateProject={canManageProjects}
         />
@@ -227,10 +236,13 @@ export default function App() {
         <ContractsPage
           notify={notify}
           contracts={contracts}
+          projects={projects}
+          creators={creators}
           canUpload={canUploadContracts}
           focusedContractId={focusedContractId}
           onFocusCleared={() => setFocusedContractId(null)}
           onUploadContract={uploadContract}
+          onUpdateContract={updateContract}
         />
       );
       break;

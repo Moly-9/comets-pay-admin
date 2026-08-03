@@ -103,6 +103,13 @@ export type AirwallexPayoutAccount = {
   nameMatchResult: AirwallexNameMatchResult;
   validatedAt: string;
   verifiedAt: string;
+  linkedProjectIds?: string[];
+  invoiceIds?: string[];
+  paymentBatchIds?: string[];
+  transactionIds?: string[];
+  activePaymentId?: string;
+  hasPaymentHistory?: boolean;
+  statusBeforeDisabled?: Exclude<PayoutAccountStatus, 'DISABLED'>;
 };
 
 export type PayPalPayoutAccount = {
@@ -113,6 +120,13 @@ export type PayPalPayoutAccount = {
   status: PayoutAccountStatus;
   paypalUsername: string;
   paypalEmail: string;
+  linkedProjectIds?: string[];
+  invoiceIds?: string[];
+  paymentBatchIds?: string[];
+  transactionIds?: string[];
+  activePaymentId?: string;
+  hasPaymentHistory?: boolean;
+  statusBeforeDisabled?: Exclude<PayoutAccountStatus, 'DISABLED'>;
 };
 
 export type CreatorPayoutAccount = AirwallexPayoutAccount | PayPalPayoutAccount;
@@ -188,6 +202,8 @@ export type InvoiceDocumentModel = {
   billTo: InvoiceEntity;
   creatorHandle: string;
   creatorName: string;
+  creatorId?: string;
+  engagementId?: string;
   projectId: string;
   projectName: string;
   from: CreatorInvoiceContact;

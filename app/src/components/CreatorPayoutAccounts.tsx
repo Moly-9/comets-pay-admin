@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  Ban,
   Braces,
   Building2,
   CheckCircle2,
@@ -7,19 +8,24 @@ import {
   Landmark,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Star,
+  Trash2,
   Wallet,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createEmptyAirwallexAccount,
   createEmptyPayPalAccount,
+  canDeletePayoutAccount,
+  canDisablePayoutAccount,
   getDefaultPayoutAccount,
   getPayoutAccountIdentifier,
   getPayoutAccountStatusMeta,
   getPayoutAccountSummary,
+  isPayoutAccountVerified,
   invalidateAirwallexVerification,
   normalizePayPalStatus,
 } from '../payoutAccounts';
@@ -497,6 +503,7 @@ export function CreatorPayoutAccounts({
 }: CreatorPayoutAccountsProps) {
   const defaultAccount = useMemo(() => getDefaultPayoutAccount(accounts), [accounts]);
   const [selectedId, setSelectedId] = useState(defaultAccount?.id ?? '');
+  const [actionError, setActionError] = useState('');
   const selectedAccount = accounts.find((account) => account.id === selectedId) ?? defaultAccount;
 
   useEffect(() => {
@@ -528,12 +535,61 @@ export function CreatorPayoutAccounts({
 
   const setDefault = () => {
     if (!selectedAccount) return;
+    if (!isPayoutAccountVerified(selectedAccount)) {
+      setActionError('只有“格式校验通过”或“账户已验证”的账户可以设为默认。');
+      return;
+    }
+    setActionError('');
     onChange?.(accounts.map((account) => ({ ...account, isDefault: account.id === selectedAccount.id })));
   };
+
+  const removeAccount = () => {
+    if (!selectedAccount || !canDeletePayoutAccount(selectedAccount)) return;
+    if (selectedAccount.isDefault) {
+      setActionError('删除默认账户前，请先选择另一条已验证账户并将其设为默认。');
+      return;
+    }
+    if (!window.confirm(`确认删除“${selectedAccount.nickname}”？此操作仅允许无业务历史的草稿类账户。`)) return;
+    const next = accounts.filter((account) => account.id !== selectedAccount.id);
+    setSelectedId(next.find((account) => account.isDefault)?.id ?? next[0]?.id ?? '');
+    setActionError('');
+    onChange?.(next);
+  };
+
+  const disableAccount = () => {
+    if (!selectedAccount || !canDisablePayoutAccount(selectedAccount)) return;
+    if (selectedAccount.isDefault) {
+      setActionError('停用默认账户前，请先选择另一条已验证账户并将其设为默认。');
+      return;
+    }
+    const previousStatus = selectedAccount.status === 'DISABLED' ? 'DRAFT' : selectedAccount.status;
+    onChange?.(accounts.map((account) => {
+      if (account.id !== selectedAccount.id) return account;
+      return { ...account, isDefault: false, status: 'DISABLED', statusBeforeDisabled: previousStatus };
+    }));
+    setActionError('');
+  };
+
+  const restoreAccount = () => {
+    if (!selectedAccount || selectedAccount.status !== 'DISABLED') return;
+    replaceAccount({
+      ...selectedAccount,
+      status: selectedAccount.statusBeforeDisabled ?? 'DRAFT',
+      statusBeforeDisabled: undefined,
+      isDefault: false,
+    });
+    setActionError('');
+  };
+
+  const usableAccountCount = accounts.filter(isPayoutAccountVerified).length;
 
   return (
     <div className="payout-accounts">
       <div className="payout-account-toolbar">
+        <div className="payout-account-availability">
+          <strong>{usableAccountCount}</strong>
+          <span>个可用于付款的账户</span>
+        </div>
         <div className="payout-account-tabs" role="tablist" aria-label="达人收款账户">
           {accounts.map((account) => {
             const status = getPayoutAccountStatusMeta(account.status, account.provider);
@@ -557,11 +613,22 @@ export function CreatorPayoutAccounts({
         {editing ? (
           <div className="payout-account-actions">
             {selectedAccount && !selectedAccount.isDefault ? <Button variant="ghost" icon={<Star size={15} />} onClick={setDefault}>设为默认</Button> : null}
+            {selectedAccount?.status === 'DISABLED'
+              ? <Button variant="secondary" icon={<RotateCcw size={15} />} onClick={restoreAccount}>重新启用</Button>
+              : null}
+            {selectedAccount && canDeletePayoutAccount(selectedAccount)
+              ? <Button variant="ghost" icon={<Trash2 size={15} />} onClick={removeAccount}>删除</Button>
+              : null}
+            {selectedAccount && !canDeletePayoutAccount(selectedAccount) && canDisablePayoutAccount(selectedAccount)
+              ? <Button variant="ghost" icon={<Ban size={15} />} onClick={disableAccount}>停用</Button>
+              : null}
             <Button variant="secondary" icon={<Plus size={15} />} onClick={addAirwallex}>Airwallex 账户</Button>
             <Button variant="secondary" icon={<Plus size={15} />} onClick={addPayPal}>PayPal 账户</Button>
           </div>
         ) : null}
       </div>
+      {selectedAccount?.activePaymentId ? <p className="payout-account-action-error">账户正在处理付款 {selectedAccount.activePaymentId}，当前禁止停用或删除。</p> : null}
+      {actionError ? <p className="payout-account-action-error" role="alert">{actionError}</p> : null}
 
       {!selectedAccount ? (
         <div className="payout-account-empty">

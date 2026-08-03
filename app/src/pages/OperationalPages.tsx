@@ -396,12 +396,6 @@ export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project)
   paymentOrder: project.paymentOrder,
 }));
 
-const PROJECT_INVOICE_OPTIONS = [
-  { id: 'INV-240718', creator: '@MinaKato', amount: 'USD 3,240', status: '待财务复核' },
-  { id: 'INV-240714', creator: 'Alex Ruiz', amount: 'EUR 1,850', status: '等待付款' },
-  { id: 'INV-240702', creator: '@Luna_J', amount: 'USD 5,600', status: '飞书审批中' },
-];
-
 const PROJECT_PM_ACCENTS = ['#ff7d64', '#7568e6', '#20a874'] as const;
 const PROJECT_PM_OPTIONS = PM_USERS.map((user, index) => ({
   value: user.name,
@@ -415,6 +409,8 @@ export function ProjectsPage({
   creators,
   currentUser,
   projects,
+  contracts,
+  onOpenContract,
   onProjectsChange,
   canCreateProject,
 }: {
@@ -422,6 +418,8 @@ export function ProjectsPage({
   creators: CreatorProfile[];
   currentUser: SystemUser;
   projects: ProjectSummary[];
+  contracts: ContractRecord[];
+  onOpenContract: (contractId: string) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
 }) {
@@ -433,8 +431,7 @@ export function ProjectsPage({
   const [selectedPM, setSelectedPM] = useState(PM_USERS[0]?.name ?? '');
   const [requestReason, setRequestReason] = useState('');
   const [selectedCreatorHandles, setSelectedCreatorHandles] = useState<string[]>([]);
-  const [invoicePickerOpen, setInvoicePickerOpen] = useState(false);
-  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
+  const [closeGuardOpen, setCloseGuardOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const selectedProject = selectedProjectId ? projects.find((project) => project.id === selectedProjectId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
@@ -508,6 +505,14 @@ export function ProjectsPage({
     setSearch('');
     setFilters(createEmptyProjectListFilters());
   };
+  const draftStorageKey = `comets-pay.project-draft.v1:${currentUser.account}`;
+  const hasProjectDraftContent = Boolean(
+    name.trim()
+    || brand.trim()
+    || requestReason.trim()
+    || selectedCreatorHandles.length
+    || selectedPM !== (PM_USERS[0]?.name ?? ''),
+  );
 
   const resetProjectForm = () => {
     setName('');
@@ -515,46 +520,100 @@ export function ProjectsPage({
     setSelectedPM(PM_USERS[0]?.name ?? '');
     setRequestReason('');
     setSelectedCreatorHandles([]);
-    setInvoicePickerOpen(false);
-    setSelectedInvoices([]);
   };
 
-  const closeProjectModal = () => {
+  const discardProjectDraft = () => {
+    localStorage.removeItem(draftStorageKey);
     resetProjectForm();
+    setCloseGuardOpen(false);
     setModalOpen(false);
   };
 
-  const toggleInvoice = (invoiceId: string) => {
-    setSelectedInvoices((current) => current.includes(invoiceId)
-      ? current.filter((id) => id !== invoiceId)
-      : [...current, invoiceId]);
+  const requestCloseProjectModal = () => {
+    if (hasProjectDraftContent) {
+      setCloseGuardOpen(true);
+      return;
+    }
+    discardProjectDraft();
+  };
+
+  const saveProjectDraft = () => {
+    localStorage.setItem(draftStorageKey, JSON.stringify({
+      name,
+      customer: brand,
+      selectedPM,
+      requestReason,
+      selectedCreatorHandles,
+      savedAt: new Date().toISOString(),
+    }));
+    setCloseGuardOpen(false);
+    setModalOpen(false);
+    notify('项目草稿已保存', '下次打开新建项目时会自动恢复。');
+  };
+
+  const openProjectModal = () => {
+    resetProjectForm();
+    const saved = localStorage.getItem(draftStorageKey);
+    if (saved) {
+      try {
+        const draft = JSON.parse(saved) as {
+          name?: string;
+          customer?: string;
+          selectedPM?: string;
+          requestReason?: string;
+          selectedCreatorHandles?: string[];
+        };
+        const validPM = PM_USERS.some((user) => user.name === draft.selectedPM);
+        const creatorHandleSet = new Set(creators.map((creator) => creator.handle));
+        const validHandles = (draft.selectedCreatorHandles ?? []).filter((handle) => creatorHandleSet.has(handle));
+        setName(draft.name ?? '');
+        setBrand(draft.customer ?? '');
+        setSelectedPM(validPM ? draft.selectedPM! : (PM_USERS[0]?.name ?? ''));
+        setRequestReason(draft.requestReason ?? '');
+        setSelectedCreatorHandles(validHandles);
+        notify(
+          !validPM || validHandles.length !== (draft.selectedCreatorHandles ?? []).length
+            ? '草稿已恢复并校正'
+            : '项目草稿已恢复',
+          !validPM || validHandles.length !== (draft.selectedCreatorHandles ?? []).length
+            ? '已移除当前系统中不存在的 PM 或达人关联。'
+            : '已恢复上次未完成的项目内容。',
+        );
+      } catch {
+        localStorage.removeItem(draftStorageKey);
+      }
+    }
+    setModalOpen(true);
   };
 
   const createProject = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !selectedPM || selectedCreatorHandles.length === 0) return;
     const selectedCreatorProfiles = creators.filter((creator) => selectedCreatorHandles.includes(creator.handle));
+    if (selectedCreatorProfiles.length === 0) return;
+    const projectId = `PRJ-${Date.now().toString().slice(-6)}`;
     onProjectsChange((current) => [{
-      id: `PRJ-${Date.now().toString().slice(-6)}`,
+      id: projectId,
       name: name.trim(),
       brand: brand.trim() || '待补充品牌',
       media: currentUser.name,
       pm: selectedPM,
       creators: selectedCreatorProfiles.length,
       creatorProfiles: selectedCreatorProfiles.map((creator) => ({
+        creatorId: creator.id,
+        engagementId: `ENG-${projectId}-${creator.id}`,
         name: creator.name,
         handle: creator.handle,
         platform: creator.platform,
       })),
       requestReason: requestReason.trim(),
-      invoiceCount: selectedInvoices.length,
+      invoiceCount: 0,
       budget: 'USD 0',
       status: '草稿',
     }, ...current]);
-    const creatorSummary = selectedCreatorProfiles.length > 0 ? `，已关联 ${selectedCreatorProfiles.length} 位合作达人` : '';
-    const invoiceSummary = selectedInvoices.length > 0 ? `，已关联 ${selectedInvoices.length} 份 Invoice` : '';
+    localStorage.removeItem(draftStorageKey);
     resetProjectForm();
     setModalOpen(false);
-    notify('项目已创建', `新项目已保存为草稿${creatorSummary}${invoiceSummary}。`);
+    notify('项目已创建', `新项目已保存为草稿，已关联 ${selectedCreatorProfiles.length} 位合作达人。合同与 Invoice 请在后续独立流程中关联。`);
   };
 
   const updateProjectCreators = (projectId: string, creatorHandles: string[]) => {
@@ -565,8 +624,10 @@ export function ProjectsPage({
         ? {
             ...project,
             creators: selectedCreatorProfiles.length,
-            invoiceCount: selectedCreatorProfiles.length,
             creatorProfiles: selectedCreatorProfiles.map((creator) => ({
+              creatorId: creator.id,
+              engagementId: project.creatorProfiles?.find((item) => item.creatorId === creator.id)?.engagementId
+                ?? `ENG-${project.id}-${creator.id}`,
               name: creator.name,
               handle: creator.handle,
               platform: creator.platform,
@@ -582,6 +643,8 @@ export function ProjectsPage({
         project={selectedProject}
         creatorArchive={creators}
         notify={notify}
+        contracts={contracts}
+        onOpenContract={onOpenContract}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {
           setSelectedProjectId(null);
@@ -596,7 +659,7 @@ export function ProjectsPage({
       <PageHeading
         title="我的项目"
         subtitle="仅展示与当前账号关联的项目，集中管理项目合同与invoice、达人名单、请款进度。"
-        actions={canCreateProject ? <Button icon={<Plus size={17} />} onClick={() => { resetProjectForm(); setModalOpen(true); }}>新建项目</Button> : undefined}
+        actions={canCreateProject ? <Button icon={<Plus size={17} />} onClick={openProjectModal}>新建项目</Button> : undefined}
       />
       <div className="metrics-grid"><MetricCard label="审核中" value="5" meta="2 个待审批 · 3 个审批中" tone="peach" /><MetricCard label="待打款" value="1" meta="已完成全部审批" /><MetricCard label="请款项目总数" value={relatedProjects.length.toString()} meta="已同步真实项目名称" tone="lilac" /></div>
       <section className="content-card">
@@ -637,9 +700,9 @@ export function ProjectsPage({
       {modalOpen ? (
         <Modal
           title="新建项目"
-          onClose={closeProjectModal}
+          onClose={requestCloseProjectModal}
           width="760px"
-          footer={<><Button variant="ghost" onClick={closeProjectModal}>取消</Button><Button disabled={!name.trim()} onClick={createProject}>创建项目</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} onClick={createProject}>创建项目</Button></>}
         >
           <div className="form-grid single-column project-create-form">
             <label>
@@ -647,8 +710,8 @@ export function ProjectsPage({
               <input required aria-required="true" autoFocus placeholder="例如：秋季新品首发" value={name} onChange={(event) => setName(event.target.value)} />
             </label>
             <label>
-              <span>品牌 / 客户</span>
-              <input placeholder="输入合作品牌" value={brand} onChange={(event) => setBrand(event.target.value)} />
+              <span>客户</span>
+              <input placeholder="输入合作客户" value={brand} onChange={(event) => setBrand(event.target.value)} />
             </label>
             <div className="form-field project-pm-field">
               <span className="form-field-label">项目PM</span>
@@ -668,62 +731,31 @@ export function ProjectsPage({
             </label>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta">
-                <span>合作达人</span>
-                <small>选填 · 来自达人档案</small>
+                <span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span>
+                <small>必填 · 来自达人档案</small>
               </span>
               <ProjectCreatorPicker creators={creators} selectedHandles={selectedCreatorHandles} onChange={setSelectedCreatorHandles} />
             </div>
-            <label>
-              <span>关联合同</span>
-              <button className="upload-box" type="button"><Upload size={18} />上传合同 PDF</button>
-            </label>
-            <div className="form-field">
-              <span className="form-field-label">Invoice</span>
-              <div className="invoice-picker">
-                <button
-                  className={`invoice-picker-trigger ${invoicePickerOpen ? 'invoice-picker-trigger-open' : ''}`}
-                  type="button"
-                  aria-expanded={invoicePickerOpen}
-                  aria-controls="project-invoice-options"
-                  onClick={() => setInvoicePickerOpen((current) => !current)}
-                >
-                  <span className="invoice-picker-leading">
-                    <FileCheck2 size={18} />
-                    <span className="invoice-picker-copy">
-                      <strong>{selectedInvoices.length > 0 ? `已选择 ${selectedInvoices.length} 份 Invoice` : '从系统选择 Invoice'}</strong>
-                      <small>关联已录入系统的 Invoice，可多选</small>
-                    </span>
-                  </span>
-                  <ChevronDown className="invoice-picker-chevron" size={18} />
-                </button>
-                {invoicePickerOpen ? (
-                  <div id="project-invoice-options" className="invoice-options" role="listbox" aria-label="系统 Invoice 列表" aria-multiselectable="true">
-                    {PROJECT_INVOICE_OPTIONS.map((invoice) => {
-                      const selected = selectedInvoices.includes(invoice.id);
-                      return (
-                        <button
-                          className={`invoice-option ${selected ? 'invoice-option-selected' : ''}`}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          key={invoice.id}
-                          onClick={() => toggleInvoice(invoice.id)}
-                        >
-                          <FileText className="invoice-option-icon" size={17} />
-                          <span className="invoice-option-copy">
-                            <strong>{invoice.id}</strong>
-                            <small>{invoice.creator} · {invoice.amount} · <em>{invoice.status}</em></small>
-                          </span>
-                          {selected ? <CheckCircle2 className="invoice-option-mark invoice-option-mark-selected" size={18} /> : <Circle className="invoice-option-mark" size={18} />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-              {selectedInvoices.length > 0 ? <button className="invoice-selection-clear" type="button" onClick={() => setSelectedInvoices([])}>清除已选</button> : null}
-            </div>
+            <NoticeBanner>
+              后续关联：合同与 Invoice 将在项目创建后分别通过合同管理和 Invoice 流程关联，避免在项目基础信息未确定时绑定业务单据。
+            </NoticeBanner>
           </div>
+        </Modal>
+      ) : null}
+      {closeGuardOpen ? (
+        <Modal
+          title="保留未完成的项目？"
+          onClose={() => setCloseGuardOpen(false)}
+          width="520px"
+          footer={(
+            <>
+              <Button variant="ghost" onClick={discardProjectDraft}>放弃并退出</Button>
+              <Button variant="secondary" onClick={saveProjectDraft}>保存草稿并退出</Button>
+              <Button onClick={() => setCloseGuardOpen(false)}>继续编辑</Button>
+            </>
+          )}
+        >
+          <p className="project-draft-guard-copy">当前表单已有内容。草稿仅保存在此账号当前浏览器中，不会提交审批或同步到其他设备。</p>
         </Modal>
       ) : null}
     </div>

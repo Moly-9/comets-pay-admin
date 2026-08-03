@@ -11082,3 +11082,275 @@ button:disabled {
     min-width: 0;
   }
 }
+
+.project-draft-guard-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.contract-upload-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.contract-upload-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #7b8190;
+}
+
+.contract-upload-steps li span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid #d9dce5;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.contract-upload-steps li em {
+  overflow: hidden;
+  font-size: 13px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-upload-steps li.active,
+.contract-upload-steps li.complete {
+  color: #242938;
+}
+
+.contract-upload-steps li.active span {
+  border-color: #ff7259;
+  background: #ff7259;
+  color: #fff;
+}
+
+.contract-upload-steps li.complete span {
+  border-color: #2c9b71;
+  background: #eaf8f2;
+  color: #247c5c;
+}
+
+.contract-upload-pane {
+  min-height: 340px;
+}
+
+.contract-upload-pane > .search-control {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.contract-upload-options {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.contract-upload-options > button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid #e1e3e9;
+  border-radius: 6px;
+  background: #fff;
+  color: #343947;
+  text-align: left;
+}
+
+.contract-upload-options > button:hover,
+.contract-upload-options > button.selected {
+  border-color: #ff8d79;
+  background: #fff8f6;
+}
+
+.contract-upload-options > button span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.contract-upload-options > button small {
+  overflow: hidden;
+  color: #777d8c;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-upload-context,
+.contract-upload-warning,
+.contract-upload-error,
+.payout-account-action-error {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f5f6f8;
+  color: #555c6c;
+}
+
+.contract-upload-warning {
+  background: #fff7e7;
+  color: #79571d;
+}
+
+.contract-upload-error,
+.payout-account-action-error {
+  background: #fff0ee;
+  color: #9d372d;
+}
+
+.contract-upload-empty {
+  padding: 36px 16px;
+  color: #777d8c;
+  text-align: center;
+}
+
+.contract-file-drop {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed #c9cdd7;
+  border-radius: 6px;
+  background: #fafbfc;
+  cursor: pointer;
+}
+
+.contract-file-drop input {
+  max-width: 280px;
+  margin-top: 12px;
+}
+
+.contract-field-review {
+  display: grid;
+  gap: 12px;
+}
+
+.contract-field-review label {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.contract-field-review label > span {
+  display: grid;
+  gap: 2px;
+  font-weight: 700;
+}
+
+.contract-field-review label small {
+  color: #888e9c;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.contract-field-review input {
+  width: 100%;
+}
+
+.contract-upload-summary {
+  display: grid;
+  min-height: 340px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.contract-upload-summary > svg {
+  box-sizing: content-box;
+  padding: 12px;
+  border-radius: 50%;
+  background: #eaf8f2;
+  color: #247c5c;
+}
+
+.contract-document-download-only {
+  display: grid;
+  min-height: 420px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 28px;
+  color: #646b7a;
+  text-align: center;
+}
+
+.contract-document-download-only p {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.7;
+}
+
+.contract-section-heading .button {
+  margin-left: auto;
+}
+
+.project-linked-contracts {
+  display: flex;
+  grid-column: 2 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.project-linked-contracts button {
+  padding: 5px 8px;
+  border: 1px solid #e0e3e9;
+  border-radius: 4px;
+  background: #fff;
+  color: #3e5f9f;
+  font-size: 12px;
+}
+
+.payout-account-availability {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: #676d7b;
+}
+
+.payout-account-availability strong {
+  color: #247c5c;
+  font-size: 20px;
+}
+
+@media (max-width: 640px) {
+  .contract-upload-steps {
+    grid-template-columns: repeat(5, 28px);
+    justify-content: space-between;
+  }
+
+  .contract-upload-steps li {
+    display: grid;
+    justify-items: center;
+  }
+
+  .contract-upload-steps li em {
+    display: none;
+  }
+
+  .contract-field-review label {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .contract-upload-pane,
+  .contract-upload-summary {
+    min-height: 280px;
+  }
+}

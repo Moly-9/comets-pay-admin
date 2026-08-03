@@ -143,6 +143,8 @@ export function InvoiceBuilderPage({
     billTo,
     creatorHandle,
     creatorName: selectedCreator?.name ?? '',
+    creatorId: selectedCreator?.id,
+    engagementId: selectedCreator && selectedPayout ? `ENG-${selectedPayout.projectId}-${selectedCreator.id}` : undefined,
     projectId: selectedPayout?.projectId ?? '',
     projectName: selectedPayout?.project ?? '',
     from,
@@ -150,7 +152,7 @@ export function InvoiceBuilderPage({
     items: items.map(normalizeLineItem),
     paymentMethod,
     payment,
-  }), [billTo, creatorHandle, currency, from, invoiceDate, invoiceNumber, items, payment, paymentMethod, selectedCreator?.name, selectedPayout?.project, selectedPayout?.projectId]);
+  }), [billTo, creatorHandle, currency, from, invoiceDate, invoiceNumber, items, payment, paymentMethod, selectedCreator?.id, selectedCreator?.name, selectedPayout]);
 
   const selectCreator = (handle: string) => {
     const creator = creators.find((item) => item.handle === handle);

@@ -180,7 +180,31 @@ export const clonePayoutAccounts = (accounts: CreatorPayoutAccount[]): CreatorPa
 );
 
 export const getDefaultPayoutAccount = (accounts: CreatorPayoutAccount[]) => (
-  accounts.find((account) => account.isDefault) ?? accounts[0] ?? null
+  accounts.find((account) => account.isDefault && account.status !== 'DISABLED')
+  ?? accounts.find((account) => account.status !== 'DISABLED')
+  ?? null
+);
+
+export const isPayoutAccountVerified = (account: CreatorPayoutAccount) => (
+  account.status === 'VALIDATED' || account.status === 'VERIFIED'
+);
+
+export const hasPayoutAccountHistory = (account: CreatorPayoutAccount) => Boolean(
+  account.hasPaymentHistory
+  || account.linkedProjectIds?.length
+  || account.invoiceIds?.length
+  || account.paymentBatchIds?.length
+  || account.transactionIds?.length
+);
+
+export const canDeletePayoutAccount = (account: CreatorPayoutAccount) => (
+  !hasPayoutAccountHistory(account)
+  && !account.activePaymentId
+  && ['DRAFT', 'READY_FOR_VALIDATION', 'INVALID', 'CANNOT_VERIFY'].includes(account.status)
+);
+
+export const canDisablePayoutAccount = (account: CreatorPayoutAccount) => (
+  account.status !== 'DISABLED' && !account.activePaymentId
 );
 
 export const getPayoutAccountForProvider = (
@@ -188,11 +212,11 @@ export const getPayoutAccountForProvider = (
   provider?: Provider,
 ) => {
   if (provider === 'PayPal') {
-    return accounts.find((account) => account.provider === 'PayPal') ?? null;
+    return accounts.find((account) => account.provider === 'PayPal' && account.status !== 'DISABLED') ?? null;
   }
   if (provider) {
-    return accounts.find((account) => account.provider === 'Airwallex' && account.isDefault)
-      ?? accounts.find((account) => account.provider === 'Airwallex')
+    return accounts.find((account) => account.provider === 'Airwallex' && account.status !== 'DISABLED' && account.isDefault)
+      ?? accounts.find((account) => account.provider === 'Airwallex' && account.status !== 'DISABLED')
       ?? null;
   }
   return getDefaultPayoutAccount(accounts);
