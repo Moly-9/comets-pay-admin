@@ -207,7 +207,7 @@ export function ContractsPage({
             const contract = onUploadContract(input);
             setUploadOpen(false);
             openContract(contract.id);
-            notify('合同已保存', `${input.file.name} 已关联 ${input.projectName} / ${input.creatorName}，等待签署确认。`);
+            notify('合同已保存', `${input.sourceDocuments.length} 份文件已关联 ${input.projectName} / ${input.creatorName}，等待字段与签署确认。`);
           }}
         />
       ) : null}

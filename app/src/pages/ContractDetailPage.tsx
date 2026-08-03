@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  Check,
   CheckCircle2,
   Clipboard,
   Download,
@@ -9,16 +10,32 @@ import {
   FileSearch,
   FileText,
   Landmark,
-  Pencil,
   ReceiptText,
-  Save,
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, PageHeading } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
-import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
+import {
+  confirmRecognitionField,
+  editRecognitionField,
+} from '../contractRecognition';
+import {
+  CONTRACT_DOCUMENT_TYPE_LABELS,
+  PAYMENT_FIELD_KEYS,
+  SUMMARY_FIELD_KEYS,
+  type ContractFieldCandidate,
+  type ContractFieldKey,
+  type ContractRecognitionField,
+  type ContractSourceLocation,
+} from '../contractRecognitionTypes';
+import {
+  applyConfirmedRecognitionToContract,
+  formatContractMoney,
+  getContractReadiness,
+  type ContractRecord,
+} from '../contracts';
 
 type ContractDetailTab = 'summary' | 'io' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
@@ -33,8 +50,26 @@ const FEE_BEARER_LABELS = {
 const PAYMENT_METHOD_LABELS = {
   BANK: '银行转账',
   PAYPAL: 'PayPal',
+  AIRWALLEX: 'Airwallex',
   '': '待选择',
 } as const;
+
+const FIELD_STATUS_LABELS = {
+  detected: '待确认',
+  missing: '待补充',
+  conflict: '需核对',
+  confirmed: '已确认',
+} as const;
+
+const sourceLabel = (source: ContractSourceLocation | null) => {
+  if (!source) return '未找到可靠来源';
+  const documentLabel = source.documentId === 'system-contract'
+    ? '系统字段'
+    : CONTRACT_DOCUMENT_TYPE_LABELS[source.documentType];
+  return source.pageNumber
+    ? `${documentLabel} · 第 ${source.pageNumber} 页`
+    : `${documentLabel} · ${source.section}`;
+};
 
 function ContractDefinitionList({ contract }: { contract: ContractRecord }) {
   return (
@@ -48,6 +83,78 @@ function ContractDefinitionList({ contract }: { contract: ContractRecord }) {
       <div><dt>生效日期</dt><dd>{contract.effectiveDate || '待补充'}<small>签署页 / IO</small></dd></div>
       <div><dt>Campaign Period</dt><dd>{contract.campaignStart && contract.campaignEnd ? `${contract.campaignStart} 至 ${contract.campaignEnd}` : '待补充'}<small>IO · 第13页</small></dd></div>
     </dl>
+  );
+}
+
+function RecognitionFieldList({
+  fields,
+  fieldKeys,
+  onChange,
+  onConfirm,
+  onSelectCandidate,
+  onOpenSource,
+}: {
+  fields: ContractRecognitionField[];
+  fieldKeys: ContractFieldKey[];
+  onChange: (fieldKey: ContractFieldKey, value: string) => void;
+  onConfirm: (fieldKey: ContractFieldKey) => void;
+  onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
+  onOpenSource: (source: ContractSourceLocation) => void;
+}) {
+  return (
+    <div className="contract-recognition-detail-list">
+      {fieldKeys.map((fieldKey) => {
+        const field = fields.find((item) => item.fieldKey === fieldKey);
+        if (!field) return null;
+        return (
+          <article className={`contract-recognition-detail contract-recognition-field-${field.status}`} key={field.fieldKey}>
+            <header>
+              <strong>{field.label}</strong>
+              <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
+            </header>
+            <div className="contract-recognition-editor">
+              <input
+                aria-label={field.label}
+                value={field.rawValue}
+                placeholder="待补充"
+                onChange={(event) => onChange(field.fieldKey, event.target.value)}
+              />
+              <Button
+                variant="secondary"
+                icon={<Check size={14} />}
+                disabled={!field.rawValue.trim() || field.status === 'confirmed'}
+                onClick={() => onConfirm(field.fieldKey)}
+              >
+                {field.status === 'confirmed' ? '已确认' : '确认'}
+              </Button>
+            </div>
+            {field.source ? (
+              <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
+                <FileSearch size={14} />
+                {sourceLabel(field.source)}
+              </button>
+            ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
+            {field.status === 'conflict' && field.candidates.length > 1 ? (
+              <div className="contract-recognition-candidates">
+                <strong><AlertTriangle size={14} />发现多个候选，请选择后确认</strong>
+                {field.candidates.map((candidate, index) => (
+                  <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
+                    <span>{candidate.rawValue}</span>
+                    <small>{sourceLabel(candidate.source)}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {field.profileComparison?.status === 'conflict' ? (
+              <div className="contract-recognition-profile-conflict">
+                <AlertTriangle size={14} />
+                <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
   );
 }
 
@@ -66,11 +173,30 @@ export function ContractDetailPage({
 }) {
   const [activeTab, setActiveTab] = useState<ContractDetailTab>('summary');
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
-  const [editingFields, setEditingFields] = useState(false);
-  const [draftFields, setDraftFields] = useState(contract.extractedFields ?? []);
-  useEffect(() => setDraftFields(contract.extractedFields ?? []), [contract]);
-  const canPreviewInline = Boolean(contract.documentUrl && /\.pdf$/i.test(contract.sourceName));
+  const [draftFields, setDraftFields] = useState(contract.recognitionResults ?? []);
+  const [activeDocumentId, setActiveDocumentId] = useState(contract.sourceDocuments?.[0]?.id ?? '');
+  const [focusedSource, setFocusedSource] = useState<ContractSourceLocation | null>(null);
+  useEffect(() => {
+    setDraftFields(contract.recognitionResults ?? []);
+    setActiveDocumentId(contract.sourceDocuments?.[0]?.id ?? '');
+    setFocusedSource(null);
+  }, [contract.id]);
+  const selectedDocument = useMemo(() => (
+    contract.sourceDocuments?.find((document) => document.id === activeDocumentId)
+    ?? contract.sourceDocuments?.[0]
+  ), [activeDocumentId, contract.sourceDocuments]);
+  const sourceName = selectedDocument?.fileName ?? contract.sourceName;
+  const documentUrl = selectedDocument?.documentUrl ?? contract.documentUrl;
+  const pageCount = selectedDocument?.pageCount ?? contract.pageCount;
+  const isPdf = /\.pdf$/i.test(sourceName);
+  const previewPage = focusedSource && focusedSource.documentId === selectedDocument?.id
+    ? focusedSource.pageNumber
+    : null;
+  const previewUrl = `${documentUrl}#page=${previewPage ?? 1}&toolbar=1&navpanes=0&view=FitH`;
   const readiness = getContractReadiness(contract);
+  const hasRecognition = draftFields.length > 0;
+  const confirmedCount = draftFields.filter((field) => field.status === 'confirmed').length;
+  const allConfirmed = hasRecognition && confirmedCount === draftFields.length;
   const tabs: Array<{ id: ContractDetailTab; label: string }> = [
     { id: 'summary', label: '合同摘要' },
     { id: 'io', label: 'IO与履约' },
@@ -83,32 +209,54 @@ export function ContractDetailPage({
     notify('合同编号已复制', contract.id);
   };
 
-  const confirmExtractedFields = () => {
-    const missing = draftFields.filter((field) => field.required && !field.value.trim());
-    if (missing.length > 0) {
-      notify('仍有关键字段缺失', `请补充：${missing.map((field) => field.label).join('、')}`);
+  const updateField = (fieldKey: ContractFieldKey, value: string) => {
+    setDraftFields((current) => current.map((field) => (
+      field.fieldKey === fieldKey ? editRecognitionField(field, value) : field
+    )));
+  };
+
+  const confirmField = (fieldKey: ContractFieldKey) => {
+    const next = draftFields.map((field) => (
+      field.fieldKey === fieldKey ? confirmRecognitionField(field) : field
+    ));
+    setDraftFields(next);
+    onUpdateContract?.({
+      ...contract,
+      recognitionResults: next,
+      extractionStage: next.every((field) => field.status === 'confirmed') ? 'confirmed' : 'review',
+    });
+    notify('字段已确认', next.find((field) => field.fieldKey === fieldKey)?.label ?? fieldKey);
+  };
+
+  const selectCandidate = (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => {
+    setDraftFields((current) => current.map((field) => field.fieldKey === fieldKey
+      ? {
+          ...field,
+          rawValue: candidate.rawValue,
+          normalizedValue: candidate.normalizedValue,
+          source: candidate.source,
+          confidence: candidate.confidence,
+          status: 'detected',
+        }
+      : field));
+    setActiveDocumentId(candidate.source.documentId);
+    setFocusedSource(candidate.source);
+  };
+
+  const openSource = (source: ContractSourceLocation) => {
+    if (source.documentId !== 'system-contract') setActiveDocumentId(source.documentId);
+    setFocusedSource(source);
+  };
+
+  const applyRecognition = () => {
+    const candidate = { ...contract, recognitionResults: draftFields };
+    const applied = applyConfirmedRecognitionToContract(candidate);
+    if (!applied) {
+      notify('仍有字段未确认', `已确认 ${confirmedCount}/${draftFields.length} 项，请逐项补充并确认。`);
       return;
     }
-    const valueFor = (key: string) => draftFields.find((field) => field.key === key)?.value.trim() ?? '';
-    const amountText = valueFor('totalFee').replace(/,/g, '');
-    const amount = Number(amountText.match(/\d+(?:\.\d+)?/)?.[0] ?? '');
-    const paymentDays = Number(valueFor('paymentTerm').match(/\d+/)?.[0] ?? '');
-    const updated: ContractRecord = {
-      ...contract,
-      advertiser: valueFor('advertiser') || contract.advertiser,
-      publisher: valueFor('publisher') || contract.publisher,
-      ioId: valueFor('ioId') || contract.ioId,
-      currency: valueFor('currency').toUpperCase() || contract.currency,
-      totalFee: Number.isFinite(amount) && amount > 0 ? amount : contract.totalFee,
-      paymentWithinWorkingDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : contract.paymentWithinWorkingDays,
-      extractedFields: draftFields,
-      extractionStage: 'confirmed',
-      status: contract.signed ? contract.status : '待签署',
-      issues: contract.issues.filter((issue) => !issue.id.startsWith('missing-') && issue.id !== 'parsing'),
-    };
-    onUpdateContract?.(updated);
-    setEditingFields(false);
-    notify('合同字段已确认', '解析字段已保存；签署状态和付款就绪度未被改变。');
+    onUpdateContract?.(applied);
+    notify('识别结果已应用', '正式合同资料已更新；签署状态和付款就绪度未被自动改变。');
   };
 
   return (
@@ -124,10 +272,10 @@ export function ContractDetailPage({
         actions={(
           <>
             <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button>
-            {contract.documentUrl ? (
-              <a className="button button-primary contract-file-action" href={contract.documentUrl} download={contract.sourceName}>
+            {documentUrl ? (
+              <a className="button button-primary contract-file-action" href={documentUrl} download={sourceName}>
                 <Download size={16} />
-                <span>下载原文件</span>
+                <span>下载当前文件</span>
               </a>
             ) : null}
           </>
@@ -143,7 +291,7 @@ export function ContractDetailPage({
         <article>
           <span>合同金额</span>
           <strong>{formatContractMoney(contract)}</strong>
-          <small>{contract.licensePrice === null ? 'License费用未单列' : `License ${contract.currency} ${contract.licensePrice.toLocaleString('en-US')} · ${contract.licenseIncludedInTotal ? '已包含在总价' : '另行计算'}`}</small>
+          <small>{hasRecognition && contract.extractionStage !== 'applied' ? '识别结果尚未应用到正式字段' : '以人工确认后的正式字段为准'}</small>
         </article>
         <article>
           <span>合同状态</span>
@@ -156,12 +304,7 @@ export function ContractDetailPage({
         <div className="contract-document-note" role="note">
           <FileSearch size={17} />
           <span>{contract.documentNote}</span>
-          <button
-            className="icon-button contract-document-note-close"
-            type="button"
-            aria-label="关闭合同预览提示"
-            onClick={() => setDismissedDocumentNoteId(contract.id)}
-          >
+          <button className="icon-button contract-document-note-close" type="button" aria-label="关闭合同预览提示" onClick={() => setDismissedDocumentNoteId(contract.id)}>
             <X size={17} />
           </button>
         </div>
@@ -172,26 +315,42 @@ export function ContractDetailPage({
           <header>
             <div>
               <FileText size={19} />
-              <span><strong>合同全文</strong><small>{contract.sourceName}{contract.pageCount ? ` · ${contract.pageCount}页` : ''}</small></span>
+              <span><strong>合同全文</strong><small>{sourceName}{pageCount ? ` · ${pageCount}页` : ''}</small></span>
             </div>
-            {contract.documentUrl ? (
-              <a href={contract.documentUrl} target="_blank" rel="noreferrer">
-                <ExternalLink size={15} />
-                新窗口打开
-              </a>
-            ) : null}
+            {documentUrl ? <a href={documentUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />新窗口打开</a> : null}
           </header>
-          {canPreviewInline ? (
-            <iframe
-              className="contract-pdf-frame"
-              src={`${contract.documentUrl}#toolbar=1&navpanes=0&view=FitH`}
-              title={`${contract.name} PDF原文`}
-            />
-          ) : contract.documentUrl ? (
+          {contract.sourceDocuments && contract.sourceDocuments.length > 1 ? (
+            <div className="contract-document-switcher" role="tablist" aria-label="合同文件">
+              {contract.sourceDocuments.map((document) => (
+                <button
+                  className={selectedDocument?.id === document.id ? 'active' : ''}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedDocument?.id === document.id}
+                  key={document.id}
+                  onClick={() => { setActiveDocumentId(document.id); setFocusedSource(null); }}
+                >
+                  {document.fileName}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {documentUrl && isPdf ? (
+            <iframe className="contract-pdf-frame" src={previewUrl} title={`${contract.name} PDF原文`} />
+          ) : documentUrl && selectedDocument ? (
             <div className="contract-document-canvas contract-document-download-only">
               <FileText size={32} />
-              <strong>该 Word 文件需下载后查看</strong>
-              <p>浏览器已完成可用字段的本地提取，但不会把 DOC 或 DOCX 伪装成 PDF 预览。</p>
+              {focusedSource?.documentId === selectedDocument.id ? (
+                <>
+                  <strong>{focusedSource.section || 'DOCX 原文位置'}</strong>
+                  <p className="contract-docx-source-text">{focusedSource.sourceText}</p>
+                </>
+              ) : (
+                <>
+                  <strong>DOCX 已在浏览器本地解析</strong>
+                  <p>点击右侧字段来源可查看对应章节和原文；完整排版请下载原文件查看。</p>
+                </>
+              )}
             </div>
           ) : (
             <div className="contract-document-canvas">
@@ -203,14 +362,7 @@ export function ContractDetailPage({
         <section className="contract-inspector">
           <div className="contract-tabs" role="tablist" aria-label="合同详情分类">
             {tabs.map((tab) => (
-              <button
-                className={activeTab === tab.id ? 'contract-tab-active' : ''}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-              >
+              <button className={activeTab === tab.id ? 'contract-tab-active' : ''} type="button" role="tab" aria-selected={activeTab === tab.id} key={tab.id} onClick={() => setActiveTab(tab.id)}>
                 {tab.label}
               </button>
             ))}
@@ -221,32 +373,17 @@ export function ContractDetailPage({
               <>
                 <div className="contract-section-heading">
                   <FileSearch size={18} />
-                  <span><strong>结构化合同信息</strong><small>每个字段保留合同来源位置</small></span>
-                  {contract.extractedFields?.length && onUpdateContract ? (
-                    <Button
-                      variant="secondary"
-                      icon={editingFields ? <Save size={15} /> : <Pencil size={15} />}
-                      onClick={editingFields ? confirmExtractedFields : () => setEditingFields(true)}
-                    >
-                      {editingFields ? '确认字段' : contract.extractionStage === 'confirmed' ? '编辑字段' : '复核字段'}
-                    </Button>
-                  ) : null}
+                  <span><strong>结构化合同信息</strong><small>{hasRecognition ? `已确认 ${confirmedCount}/${draftFields.length} 项` : '每个字段保留合同来源位置'}</small></span>
                 </div>
-                {editingFields ? (
-                  <div className="contract-field-review contract-field-review-detail">
-                    {draftFields.map((field) => (
-                      <label key={field.key}>
-                        <span>{field.label}{field.required ? ' *' : ''}<small>{field.source}</small></span>
-                        <input
-                          value={field.value}
-                          placeholder="待补充"
-                          onChange={(event) => setDraftFields((current) => current.map((item) => item.key === field.key
-                            ? { ...item, value: event.target.value, source: '人工复核' }
-                            : item))}
-                        />
-                      </label>
-                    ))}
-                  </div>
+                {hasRecognition ? (
+                  <RecognitionFieldList
+                    fields={draftFields}
+                    fieldKeys={SUMMARY_FIELD_KEYS}
+                    onChange={updateField}
+                    onConfirm={confirmField}
+                    onSelectCandidate={selectCandidate}
+                    onOpenSource={openSource}
+                  />
                 ) : <ContractDefinitionList contract={contract} />}
                 {contract.channelLink ? <a className="contract-channel-link" href={contract.channelLink} target="_blank" rel="noreferrer"><ExternalLink size={15} />查看达人社媒账号主页</a> : null}
               </>
@@ -275,19 +412,30 @@ export function ContractDetailPage({
               <>
                 <div className="contract-section-heading">
                   <ReceiptText size={18} />
-                  <span><strong>付款与Invoice规则</strong><small>合同值将与Invoice及已验证账户逐项匹配</small></span>
+                  <span><strong>付款与Invoice规则</strong><small>账户识别值仅用于与达人档案人工比对</small></span>
                 </div>
-                <dl className="contract-payment-list">
-                  <div><dt>Project Total Fees</dt><dd>{formatContractMoney(contract)}</dd></div>
-                  <div><dt>Invoice开具期限</dt><dd>{contract.invoiceWithinWorkingDays ? `最终验收后${contract.invoiceWithinWorkingDays}个工作日内` : '待补充'}</dd></div>
-                  <div><dt>付款期限</dt><dd>{contract.paymentWithinWorkingDays ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日` : '待选择'}</dd></div>
-                  <div><dt>付款方式</dt><dd>{PAYMENT_METHOD_LABELS[contract.paymentMethod]}</dd></div>
-                  <div><dt>转账费用</dt><dd>{FEE_BEARER_LABELS[contract.feeBearer]}</dd></div>
-                  <div><dt>合同账户快照</dt><dd>{contract.accountName ? `${contract.accountName} · ${contract.accountFingerprint}` : '待补充'}</dd></div>
-                </dl>
+                {hasRecognition ? (
+                  <RecognitionFieldList
+                    fields={draftFields}
+                    fieldKeys={PAYMENT_FIELD_KEYS}
+                    onChange={updateField}
+                    onConfirm={confirmField}
+                    onSelectCandidate={selectCandidate}
+                    onOpenSource={openSource}
+                  />
+                ) : (
+                  <dl className="contract-payment-list">
+                    <div><dt>Project Total Fees</dt><dd>{formatContractMoney(contract)}</dd></div>
+                    <div><dt>Invoice开具期限</dt><dd>{contract.invoiceWithinWorkingDays ? `最终验收后${contract.invoiceWithinWorkingDays}个工作日内` : '待补充'}</dd></div>
+                    <div><dt>付款期限</dt><dd>{contract.paymentWithinWorkingDays ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日` : '待选择'}</dd></div>
+                    <div><dt>付款方式</dt><dd>{PAYMENT_METHOD_LABELS[contract.paymentMethod]}</dd></div>
+                    <div><dt>转账费用</dt><dd>{FEE_BEARER_LABELS[contract.feeBearer]}</dd></div>
+                    <div><dt>合同账户快照</dt><dd>{contract.accountName ? `${contract.accountName} · ${contract.accountFingerprint}` : '待补充'}</dd></div>
+                  </dl>
+                )}
                 <div className="contract-payment-rule">
                   <Landmark size={17} />
-                  <span>实际付款使用达人档案中的已验证Beneficiary；合同账户用于与Invoice做一致性校验。</span>
+                  <span>合同账户不得自动覆盖达人档案中的已验证 Beneficiary；不一致时必须人工核对。</span>
                 </div>
               </>
             ) : null}
@@ -298,6 +446,12 @@ export function ContractDetailPage({
                   <ShieldCheck size={18} />
                   <span><strong>合同完整性检查</strong><small>阻断项未解决时不能加入付款项目</small></span>
                 </div>
+                {hasRecognition && contract.extractionStage !== 'applied' ? (
+                  <div className="contract-recognition-apply">
+                    <div><strong>人工确认进度</strong><small>{confirmedCount}/{draftFields.length} 项</small></div>
+                    <Button disabled={!allConfirmed || !onUpdateContract} onClick={applyRecognition}>应用到正式合同资料</Button>
+                  </div>
+                ) : null}
                 {contract.issues.length > 0 ? (
                   <div className="contract-issue-list">
                     {contract.issues.map((issue) => (

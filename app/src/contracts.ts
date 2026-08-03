@@ -1,3 +1,6 @@
+import { allRecognitionFieldsConfirmed, normalizeDays, normalizeMoney } from './contractRecognition';
+import type { ContractRecognitionField, ContractSourceDocument } from './contractRecognitionTypes';
+
 export type ContractStatus =
   | '参考模板'
   | '待解析'
@@ -8,7 +11,7 @@ export type ContractStatus =
   | '已归档';
 
 export type ContractFeeBearer = 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
-export type ContractPaymentMethod = 'BANK' | 'PAYPAL' | '';
+export type ContractPaymentMethod = 'BANK' | 'PAYPAL' | 'AIRWALLEX' | '';
 
 export type ContractIssue = {
   id: string;
@@ -25,15 +28,7 @@ export type ContractDeliverable = {
   source: string;
 };
 
-export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed';
-
-export type ContractFieldReview = {
-  key: string;
-  label: string;
-  value: string;
-  source: string;
-  required: boolean;
-};
+export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed' | 'applied';
 
 export type ContractRecord = {
   id: string;
@@ -75,7 +70,9 @@ export type ContractRecord = {
   creatorHandle?: string;
   engagementId?: string;
   extractionStage?: ContractExtractionStage;
-  extractedFields?: ContractFieldReview[];
+  recognitionResults?: ContractRecognitionField[];
+  sourceDocuments?: ContractSourceDocument[];
+  recognitionAppliedAt?: string;
 };
 
 export const formatContractMoney = (contract: ContractRecord) => {
@@ -320,8 +317,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
 ];
 
 export type ContractUploadInput = {
-  file: File;
-  documentUrl: string;
+  systemContractNumber: string;
   projectId: string;
   projectName: string;
   customer: string;
@@ -330,57 +326,50 @@ export type ContractUploadInput = {
   creatorHandle: string;
   creatorPlatform: string;
   engagementId: string;
-  fields: ContractFieldReview[];
-  parseNote?: string;
+  recognitionResults: ContractRecognitionField[];
+  sourceDocuments: ContractSourceDocument[];
 };
 
-const fieldValue = (fields: ContractFieldReview[], key: string) => (
-  fields.find((field) => field.key === key)?.value.trim() ?? ''
-);
-
 export const createUploadedContract = ({
-  file,
-  documentUrl,
+  systemContractNumber,
   projectId,
   projectName,
   customer,
   creatorId,
-  creatorName,
   creatorHandle,
-  creatorPlatform,
   engagementId,
-  fields,
-  parseNote,
+  recognitionResults,
+  sourceDocuments,
 }: ContractUploadInput): ContractRecord => {
-  const timestamp = Date.now().toString().slice(-7);
   const today = new Intl.DateTimeFormat('en-CA').format(new Date());
-  const displayName = file.name.replace(/\.(pdf|docx?|doc)$/i, '').trim();
-  const amountValue = fieldValue(fields, 'totalFee').replace(/,/g, '');
-  const amount = Number(amountValue.match(/\d+(?:\.\d+)?/)?.[0] ?? '');
-  const currency = fieldValue(fields, 'currency').toUpperCase();
-  const missingFields = fields.filter((field) => field.required && !field.value.trim());
+  const primaryDocument = sourceDocuments[0];
+  const displayName = primaryDocument?.fileName.replace(/\.(pdf|docx)$/i, '').trim();
+  const parseWarnings = sourceDocuments
+    .filter((document) => document.parseStatus !== 'parsed')
+    .map((document) => `${document.fileName}：${document.errorMessage ?? '无法解析'}`);
 
   return {
-    id: `CON-UPL-${timestamp}`,
-    ioId: '待解析',
+    id: systemContractNumber,
+    ioId: '待确认',
     name: displayName || '新上传合同',
     templateFamily: '待识别',
-    sourceName: file.name,
-    documentUrl,
-    documentNote: parseNote,
+    sourceName: primaryDocument?.fileName ?? '合同文件',
+    documentUrl: primaryDocument?.documentUrl ?? '',
+    documentNote: parseWarnings.join('；') || '识别结果保留原文来源，全部字段需逐项人工确认。',
+    pageCount: primaryDocument?.pageCount ?? undefined,
     isTemplate: false,
     project: projectName,
     brand: customer || '待补充客户',
-    advertiser: fieldValue(fields, 'advertiser') || '待识别',
-    publisher: fieldValue(fields, 'publisher') || creatorName,
+    advertiser: '',
+    publisher: '',
     channelName: '',
     channelLink: '',
-    platform: creatorPlatform,
+    platform: '',
     effectiveDate: '',
     campaignStart: '',
     campaignEnd: '',
-    currency,
-    totalFee: Number.isFinite(amount) && amount > 0 ? amount : null,
+    currency: '',
+    totalFee: null,
     licensePrice: null,
     licenseIncludedInTotal: null,
     invoiceWithinWorkingDays: null,
@@ -390,10 +379,17 @@ export const createUploadedContract = ({
     accountName: '',
     accountFingerprint: '',
     signed: false,
-    status: missingFields.length ? '待补字段' : '待签署',
+    status: '待补字段',
     updated: today,
     deliverables: [],
     issues: [
+      {
+        id: 'recognition-review',
+        label: '合同识别结果待人工确认',
+        description: '所有摘要及付款字段逐项确认后，才能写入正式合同资料。',
+        severity: 'blocker',
+        source: '本地合同识别',
+      },
       {
         id: 'signature',
         label: '合同尚未完成签署',
@@ -401,19 +397,92 @@ export const createUploadedContract = ({
         severity: 'blocker',
         source: '签署页',
       },
-      ...missingFields.map((field) => ({
-        id: `missing-${field.key}`,
-        label: `${field.label}缺失`,
-        description: '本地解析未识别该关键字段，需要人工补充后确认。',
-        severity: 'blocker' as const,
-        source: field.source || '上传文件',
-      })),
     ],
     projectId,
     creatorId,
     creatorHandle,
     engagementId,
     extractionStage: 'review',
-    extractedFields: fields,
+    recognitionResults,
+    sourceDocuments,
+  };
+};
+
+const confirmedField = (contract: ContractRecord, fieldKey: ContractRecognitionField['fieldKey']) => (
+  contract.recognitionResults?.find((field) => field.fieldKey === fieldKey && field.status === 'confirmed')
+);
+
+const fieldText = (field: ContractRecognitionField | undefined) => (
+  field?.editedValue?.trim() || field?.rawValue.trim() || ''
+);
+
+export const applyConfirmedRecognitionToContract = (contract: ContractRecord): ContractRecord | null => {
+  const fields = contract.recognitionResults ?? [];
+  if (!allRecognitionFieldsConfirmed(fields)) return null;
+
+  const projectBrand = confirmedField(contract, 'projectBrand');
+  const platformChannel = confirmedField(contract, 'platformChannel');
+  const effectiveDate = confirmedField(contract, 'effectiveDate');
+  const campaignPeriod = confirmedField(contract, 'campaignPeriod');
+  const totalFees = confirmedField(contract, 'projectTotalFees');
+  const invoicePeriod = confirmedField(contract, 'invoiceIssuePeriod');
+  const paymentTerm = confirmedField(contract, 'paymentTerm');
+  const paymentMethodField = confirmedField(contract, 'paymentMethod');
+  const transferFeeField = confirmedField(contract, 'transferFee');
+  const paymentMethod = typeof paymentMethodField?.normalizedValue === 'string'
+    ? paymentMethodField.normalizedValue
+    : fieldText(paymentMethodField);
+  const transferFee = typeof transferFeeField?.normalizedValue === 'string'
+    ? transferFeeField.normalizedValue
+    : fieldText(transferFeeField);
+  const beneficiary = fieldText(confirmedField(contract, 'beneficiaryAccount'));
+  const objectValue = <T,>(field: ContractRecognitionField | undefined) => (
+    typeof field?.normalizedValue === 'object' && field.normalizedValue
+      ? field.normalizedValue as T
+      : {} as T
+  );
+  const projectData = objectValue<{ projectName?: string; brandName?: string }>(projectBrand);
+  const channelData = objectValue<{ platform?: string; channelName?: string; handle?: string; channelUrl?: string }>(platformChannel);
+  const effectiveData = objectValue<{ date?: string }>(effectiveDate);
+  const campaignData = objectValue<{ startDate?: string; endDate?: string }>(campaignPeriod);
+  const moneyData = typeof totalFees?.normalizedValue === 'object' && totalFees.normalizedValue
+    ? totalFees.normalizedValue as { amount?: number | null; currency?: string }
+    : normalizeMoney(fieldText(totalFees));
+  const invoiceData = objectValue<{ normalizedDays?: number | null }>(invoicePeriod);
+  const paymentData = objectValue<{ normalizedDays?: number | null }>(paymentTerm);
+
+  return {
+    ...contract,
+    advertiser: fieldText(confirmedField(contract, 'advertiser')),
+    publisher: fieldText(confirmedField(contract, 'publisher')),
+    ioId: fieldText(confirmedField(contract, 'ioNumber')) || '待补充',
+    project: projectData.projectName || contract.project,
+    brand: projectData.brandName || contract.brand,
+    platform: channelData.platform ?? '',
+    channelName: channelData.channelName || channelData.handle || '',
+    channelLink: channelData.channelUrl ?? '',
+    effectiveDate: effectiveData.date ?? '',
+    campaignStart: campaignData.startDate ?? '',
+    campaignEnd: campaignData.endDate ?? '',
+    totalFee: moneyData.amount ?? null,
+    currency: moneyData.currency ?? '',
+    invoiceWithinWorkingDays: invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)),
+    paymentWithinWorkingDays: paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)),
+    paymentMethod: paymentMethod === 'AIRWALLEX'
+      ? 'AIRWALLEX'
+      : paymentMethod === 'PAYPAL'
+        ? 'PAYPAL'
+        : paymentMethod === 'BANK_TRANSFER' || /bank|银行|电汇/i.test(paymentMethod)
+          ? 'BANK'
+          : '',
+    feeBearer: ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(transferFee)
+      ? transferFee as ContractFeeBearer
+      : '',
+    accountName: beneficiary,
+    accountFingerprint: beneficiary ? '合同识别快照' : '',
+    extractionStage: 'applied',
+    recognitionAppliedAt: new Date().toISOString(),
+    status: contract.signed ? contract.status : '待签署',
+    issues: contract.issues.filter((issue) => issue.id !== 'recognition-review'),
   };
 };
