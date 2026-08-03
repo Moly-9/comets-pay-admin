@@ -197,15 +197,21 @@ export type InvoiceLineItem = {
 export type InvoicePaymentMethod = 'bank' | 'paypal';
 
 export type InvoiceDocumentModel = {
+  invoiceId?: string;
   invoiceNumber: string;
   invoiceDate: string;
   billTo: InvoiceEntity;
   creatorHandle: string;
   creatorName: string;
   creatorId?: string;
-  engagementId?: string;
+  collaborationId?: string;
   projectId: string;
   projectName: string;
+  contractId?: string;
+  contractCode?: string;
+  contractIoId?: string;
+  ioNumber?: string;
+  contractLinkStatus?: 'LINKED' | 'NOT_LINKED_OPTIONAL';
   from: CreatorInvoiceContact;
   currency: InvoiceCurrency;
   items: InvoiceLineItem[];
@@ -231,6 +237,8 @@ export type PayoutStatus =
 
 export type Payout = {
   id: string;
+  creatorId: string;
+  collaborationId: string;
   creator: string;
   handle: string;
   initials: string;

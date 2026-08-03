@@ -47,6 +47,28 @@ const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   已退回: '飞书审批中',
 };
 
+const buildInitialProjects = (): typeof INITIAL_PROJECTS => INITIAL_PROJECTS.map((project) => {
+  const linkedCreators = new Map<string, NonNullable<(typeof project)['creatorProfiles']>[number]>();
+  INITIAL_PAYOUTS
+    .filter((payout) => payout.projectId === project.id)
+    .forEach((payout) => {
+      const creator = INITIAL_CREATORS.find((item) => item.id === payout.creatorId);
+      if (!creator || linkedCreators.has(creator.id)) return;
+      linkedCreators.set(creator.id, {
+        creatorId: creator.id,
+        engagementId: payout.collaborationId,
+        name: creator.name,
+        handle: creator.handle,
+        platform: creator.platform,
+      });
+    });
+
+  return {
+    ...project,
+    creatorProfiles: [...linkedCreators.values()],
+  };
+});
+
 const batchAmountLabel = (payouts: Payout[]) => {
   const totals = payouts.reduce<Record<string, number>>((result, payout) => ({
     ...result,
@@ -63,7 +85,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
   const [payouts, setPayouts] = useState<Payout[]>(INITIAL_PAYOUTS);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const [projects, setProjects] = useState(buildInitialProjects);
   const [contracts, setContracts] = useState<ContractRecord[]>(INITIAL_CONTRACTS);
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>([]);
@@ -280,6 +302,7 @@ export default function App() {
           payouts={payouts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}
+          contracts={contracts}
           onGenerated={addGeneratedInvoice}
           onCancel={() => setActivePage('invoice')}
           onOpenInvoiceManagement={() => { setInvoiceTab('signature'); setActivePage('invoice'); }}

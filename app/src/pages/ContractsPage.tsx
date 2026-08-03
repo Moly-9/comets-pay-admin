@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Button, PageHeading } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import {
+  allocatePrototypeContractIdentity,
   formatContractMoney,
   getContractReadiness,
   type ContractRecord,
@@ -202,6 +203,7 @@ export function ContractsPage({
         <ContractUploadWizard
           projects={projects}
           creators={creators}
+          draftIdentity={allocatePrototypeContractIdentity(contracts)}
           onClose={() => setUploadOpen(false)}
           onSave={(input) => {
             const contract = onUploadContract(input);
