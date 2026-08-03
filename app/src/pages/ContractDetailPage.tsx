@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
-  Check,
   CheckCircle2,
   Clipboard,
   Download,
@@ -108,49 +107,50 @@ function RecognitionFieldList({
         if (!field) return null;
         return (
           <article className={`contract-recognition-detail contract-recognition-field-${field.status}`} key={field.fieldKey}>
-            <header>
-              <strong>{field.label}</strong>
-              <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
-            </header>
-            <div className="contract-recognition-editor">
+            <div className="contract-recognition-label">{field.label}</div>
+            <div className="contract-recognition-value">
               <input
                 aria-label={field.label}
                 value={field.rawValue}
                 placeholder="待补充"
                 onChange={(event) => onChange(field.fieldKey, event.target.value)}
               />
-              <Button
-                variant="secondary"
-                icon={<Check size={14} />}
-                disabled={!field.rawValue.trim() || field.status === 'confirmed'}
-                onClick={() => onConfirm(field.fieldKey)}
-              >
-                {field.status === 'confirmed' ? '已确认' : '确认'}
-              </Button>
+              {field.source ? (
+                <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
+                  <FileSearch size={12} />
+                  {sourceLabel(field.source)}
+                </button>
+              ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
+              {field.status === 'conflict' && field.candidates.length > 1 ? (
+                <div className="contract-recognition-candidates">
+                  <strong><AlertTriangle size={13} />发现多个候选，请选择后确认</strong>
+                  {field.candidates.map((candidate, index) => (
+                    <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
+                      <span>{candidate.rawValue}</span>
+                      <small>{sourceLabel(candidate.source)}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {field.profileComparison?.status === 'conflict' ? (
+                <div className="contract-recognition-profile-conflict">
+                  <AlertTriangle size={13} />
+                  <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
+                </div>
+              ) : null}
             </div>
-            {field.source ? (
-              <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
-                <FileSearch size={14} />
-                {sourceLabel(field.source)}
-              </button>
-            ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
-            {field.status === 'conflict' && field.candidates.length > 1 ? (
-              <div className="contract-recognition-candidates">
-                <strong><AlertTriangle size={14} />发现多个候选，请选择后确认</strong>
-                {field.candidates.map((candidate, index) => (
-                  <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
-                    <span>{candidate.rawValue}</span>
-                    <small>{sourceLabel(candidate.source)}</small>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {field.profileComparison?.status === 'conflict' ? (
-              <div className="contract-recognition-profile-conflict">
-                <AlertTriangle size={14} />
-                <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
-              </div>
-            ) : null}
+            <div className="contract-recognition-actions">
+              <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
+              {field.status !== 'confirmed' && field.rawValue.trim() ? (
+                <button
+                  className="contract-recognition-confirm"
+                  type="button"
+                  onClick={() => onConfirm(field.fieldKey)}
+                >
+                  确认
+                </button>
+              ) : null}
+            </div>
           </article>
         );
       })}

@@ -11268,8 +11268,7 @@ button:disabled {
 }
 
 .contract-source-file-list,
-.contract-recognition-field-list,
-.contract-recognition-detail-list {
+.contract-recognition-field-list {
   display: grid;
   gap: 10px;
 }
@@ -11328,8 +11327,7 @@ button:disabled {
   background: #fff;
 }
 
-.contract-recognition-field > div,
-.contract-recognition-detail > header {
+.contract-recognition-field > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -11410,21 +11408,62 @@ button:disabled {
 
 .contract-recognition-detail {
   display: grid;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid #e1e4ea;
-  border-radius: 6px;
+  grid-template-columns: 118px minmax(0, 1fr) 54px;
+  align-items: start;
+  gap: 12px;
+  min-height: 54px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--soft-line);
 }
 
-.contract-recognition-editor {
+.contract-recognition-detail-list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px;
+  margin: 0;
 }
 
-.contract-recognition-editor input {
+.contract-recognition-label {
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.contract-recognition-value {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.contract-recognition-value input {
   width: 100%;
   min-width: 0;
+  height: 21px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #252933;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 21px;
+  letter-spacing: 0;
+}
+
+.contract-recognition-value input::placeholder {
+  color: #a0a4ae;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.contract-recognition-value input:hover {
+  background: #fafbfc;
+}
+
+.contract-recognition-value input:focus {
+  border-bottom: 1px solid #6b79a5;
+  outline: 0;
+  background: #fff;
 }
 
 .contract-recognition-source {
@@ -11436,17 +11475,69 @@ button:disabled {
   border: 0;
   background: transparent;
   color: #4569a5;
-  font-size: 12px;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .contract-recognition-missing-source {
   color: #8a909d;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.contract-recognition-actions {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.contract-recognition-actions .contract-recognition-status {
+  padding: 1px 5px;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.contract-recognition-confirm {
+  display: inline-flex;
+  width: 36px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #d8dce4;
+  border-radius: 4px;
+  background: #fff;
+  color: #596273;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.contract-recognition-confirm:hover:not(:disabled) {
+  border-color: #9aa8c1;
+  background: #f7f8fa;
+  color: #334d7c;
+}
+
+.contract-recognition-confirm:focus-visible {
+  outline: 2px solid #9db1d7;
+  outline-offset: 2px;
+}
+
+.contract-recognition-confirm:disabled {
+  border-color: transparent;
+  background: #f1f2f5;
+  color: #a6abb5;
+  cursor: not-allowed;
 }
 
 .contract-recognition-candidates {
   display: grid;
   gap: 6px;
-  padding-top: 8px;
+  margin-top: 4px;
+  padding-top: 7px;
   border-top: 1px solid #eceef2;
 }
 
@@ -11455,13 +11546,13 @@ button:disabled {
   align-items: center;
   gap: 5px;
   color: #8a5418;
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .contract-recognition-candidates button {
   display: grid;
   gap: 2px;
-  padding: 7px 8px;
+  padding: 6px 7px;
   border: 1px solid #e1e4ea;
   border-radius: 4px;
   background: #fafbfc;
@@ -11470,6 +11561,7 @@ button:disabled {
 
 .contract-recognition-candidates small {
   color: #777d8c;
+  font-size: 9.5px;
 }
 
 .contract-recognition-profile-conflict {
@@ -11480,7 +11572,7 @@ button:disabled {
   border-radius: 4px;
   background: #fff3e5;
   color: #80501b;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1.55;
 }
 
