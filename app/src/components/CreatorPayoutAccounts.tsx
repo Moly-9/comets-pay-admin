@@ -20,7 +20,10 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createEmptyAirwallexAccount,
+  createEmptyPayMaxAccount,
   createEmptyPayPalAccount,
+  AIRWALLEX_COUNTRIES,
+  AIRWALLEX_CURRENCIES,
   canDeletePayoutAccount,
   canDisablePayoutAccount,
   getDefaultPayoutAccount,
@@ -29,6 +32,7 @@ import {
   getPayoutAccountSummary,
   isPayoutAccountVerified,
   invalidateAirwallexVerification,
+  normalizePayMaxStatus,
   normalizePayPalStatus,
 } from '../payoutAccounts';
 import {
@@ -48,9 +52,11 @@ import {
   getAirwallexBeneficiaryFormSchema,
   getAirwallexDynamicOptions,
 } from '../airwallexBeneficiaryApi';
+import { getAirwallexSupplementalFields } from '../airwallexSupplementalFields';
 import type {
   AirwallexPayoutAccount,
   CreatorPayoutAccount,
+  PayMaxPayoutAccount,
   PayPalPayoutAccount,
 } from '../types';
 import { Button, SelectField } from './Common';
@@ -119,7 +125,7 @@ function TextField({
   placeholder: string;
   required?: boolean;
   fullWidth?: boolean;
-  type?: 'text' | 'email';
+  type?: 'text' | 'email' | 'tel' | 'number';
 }) {
   return (
     <label className={fullWidth ? 'full-width' : ''}>
@@ -195,7 +201,6 @@ function SchemaFieldControl({
   const isFullWidth = (
     item.path === 'beneficiary.company_name'
     || item.path.includes('street_address')
-    || item.path === 'beneficiary.address.state'
     || field.type === 'TRANSFER_METHOD'
   );
   const inputType = field.key === 'personal_email'
@@ -285,7 +290,6 @@ function DynamicSchemaSelect({
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState('');
   const [editingQuery, setEditingQuery] = useState(false);
-  const minimumLength = 3;
 
   useEffect(() => {
     if (!editingQuery) setQuery(value);
@@ -293,7 +297,7 @@ function DynamicSchemaSelect({
 
   useEffect(() => {
     const keyword = query.trim();
-    if (keyword === value || keyword.length < minimumLength) {
+    if (keyword === value || keyword.length < 3) {
       setOptions([]);
       setStatus('idle');
       setError('');
@@ -407,7 +411,11 @@ function StatusPanel({ account }: { account: CreatorPayoutAccount }) {
       {icon}
       <span><strong>{status.label}</strong><small>{status.description}</small></span>
       {account.provider === 'Airwallex' ? (
-        <code>{account.beneficiaryId || 'beneficiary_id 待生成'}</code>
+        <code>
+          {account.beneficiaryId
+            ? `${account.beneficiaryEnvironment === 'MOCK' ? '模拟 · ' : ''}${account.beneficiaryId}`
+            : 'beneficiary_id 待生成'}
+        </code>
       ) : null}
     </div>
   );
@@ -422,7 +430,7 @@ function AirwallexAccountForm({
 }) {
   const fallbackSchema = useMemo(() => generateLocalAirwallexFormSchema(account), [account]);
   const [schema, setSchema] = useState(fallbackSchema);
-  const [schemaStatus, setSchemaStatus] = useState<'loading' | 'remote' | 'fallback'>('loading');
+  const [schemaStatus, setSchemaStatus] = useState<'loading' | 'remote' | 'mock' | 'fallback'>('loading');
   const [schemaError, setSchemaError] = useState('');
   const conditionKey = getAirwallexSchemaConditionKey(account);
   const issues = useMemo(() => validateAirwallexFormSchema(account, schema), [account, schema]);
@@ -432,6 +440,10 @@ function AirwallexAccountForm({
   );
   const enabledFields = schema.fields.filter((item) => item.enabled && item.path !== 'nickname');
   const requiredFields = schema.fields.filter((item) => item.enabled && item.required);
+  const supplementalFields = useMemo(
+    () => getAirwallexSupplementalFields(schema),
+    [schema],
+  );
   const fieldsFor = (group: ReturnType<typeof getAirwallexSchemaGroup>) => (
     enabledFields.filter((item) => getAirwallexSchemaGroup(item.path) === group)
   );
@@ -449,7 +461,7 @@ function AirwallexAccountForm({
       .then((remoteSchema) => {
         const withDefaults = applyAirwallexSchemaDefaults(account, remoteSchema);
         setSchema(remoteSchema);
-        setSchemaStatus('remote');
+        setSchemaStatus(remoteSchema.meta?.simulated ? 'mock' : 'remote');
         if (JSON.stringify(withDefaults) !== JSON.stringify(account)) {
           onChange(invalidateAirwallexVerification(withDefaults));
         }
@@ -496,7 +508,7 @@ function AirwallexAccountForm({
       <div className="dynamic-schema-note">
         {schemaStatus === 'loading'
           ? <LoaderCircle className="airwallex-schema-spinner" size={18} />
-          : schemaStatus === 'remote'
+          : schemaStatus === 'remote' || schemaStatus === 'mock'
             ? <CloudCog size={18} />
             : <WifiOff size={18} />}
         <span>
@@ -505,6 +517,8 @@ function AirwallexAccountForm({
               ? '正在获取 Airwallex Form Schema'
               : schemaStatus === 'remote'
                 ? 'Airwallex Form Schema 已加载'
+                : schemaStatus === 'mock'
+                  ? 'Airwallex Form Schema 模拟接口已加载'
                 : 'Airwallex Form Schema 本地预览'}
           </strong>
           <small>
@@ -527,18 +541,14 @@ function AirwallexAccountForm({
         <span>
           {schemaStatus === 'remote'
             ? '字段、必填规则和格式校验来自 Airwallex；付款路径变化后会重新获取 Schema。'
+            : schemaStatus === 'mock'
+              ? '字段由本地 Airwallex 模拟代理返回；用于联调和验收，不代表真实账户或真实 Airwallex 校验结果。'
             : schemaStatus === 'loading'
               ? '正在通过 COMETS Pay 服务端代理连接 Airwallex，请稍候。'
-              : `${schemaError}。当前仅用于界面预览，保存时不会伪造 Airwallex 校验或 beneficiary_id。`}
+              : `${schemaError}。当前只显示本地预览；保存时不会伪造 Airwallex 校验或 beneficiary_id。`}
         </span>
         <code title={conditionKey}>condition {conditionKey}</code>
       </div>
-
-      <Section icon={<CircleDollarSign size={19} />} title="付款路径" description="先选择收款国家、币种、收款人类型和转账方式，再由 Airwallex 决定后续字段">
-        <div className="form-grid creator-payment-form-grid">
-          {renderFields(conditionFields)}
-        </div>
-      </Section>
 
       <Section icon={<Landmark size={19} />} title="账户配置" description="COMETS Pay 内部账户名称，不作为银行资料字段">
         <div className="form-grid creator-payment-form-grid">
@@ -546,14 +556,20 @@ function AirwallexAccountForm({
         </div>
       </Section>
 
-      <Section icon={<ShieldCheck size={19} />} title="收款主体" description="主体法定名称及联系信息由当前 Airwallex Schema 决定">
+      <Section icon={<CircleDollarSign size={19} />} title="付款路径" description="先选择收款国家、币种、收款人类型和转账方式，再由 Airwallex 决定后续字段">
+        <div className="form-grid creator-payment-form-grid">
+          {renderFields(conditionFields)}
+        </div>
+      </Section>
+
+      <Section icon={<ShieldCheck size={19} />} title="收款主体" description="主体名称和身份字段完全按当前 Airwallex Form Schema 展示">
         <div className="form-grid creator-payment-form-grid">
           {renderFields(identityFields)}
         </div>
       </Section>
 
       {addressFields.length ? (
-        <Section icon={<Building2 size={19} />} title="地址信息" description={schemaStatus === 'remote' ? '仅显示 Airwallex 对当前付款场景返回的地址字段' : 'Current address 为选填；街道、城市和邮编不再写死在前端'}>
+        <Section icon={<Building2 size={19} />} title="地址信息" description={schemaStatus === 'remote' || schemaStatus === 'mock' ? '仅显示当前 Form Schema 对该付款场景返回的地址字段' : 'Current address 为选填；街道、城市和邮编不写死在前端'}>
           <div className="form-grid creator-payment-form-grid">
             {renderFields(addressFields)}
           </div>
@@ -565,6 +581,24 @@ function AirwallexAccountForm({
           {renderFields(bankFields)}
         </div>
       </Section>
+
+      {supplementalFields.length ? (
+        <Section icon={<Plus size={19} />} title="补充信息" description="来自 Airwallex 信息清单；仅补充当前付款字段未覆盖的非必填项，同义字段不会重复">
+          <div className="form-grid creator-payment-form-grid airwallex-supplemental-grid">
+            {supplementalFields.map((field) => (
+              <TextField
+                label={field.label}
+                alias={`${field.sourceLabel} · 选填`}
+                value={getAirwallexFormValue(account, field.path)}
+                onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
+                placeholder={field.placeholder}
+                type={field.type}
+                key={field.key}
+              />
+            ))}
+          </div>
+        </Section>
+      ) : null}
     </div>
   );
 }
@@ -585,6 +619,56 @@ function PayPalAccountForm({
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：主 PayPal 账户" required />
           <TextField label="PayPal 用户名" alias="paypalUsername" value={account.paypalUsername} onChange={(value) => commit({ ...account, paypalUsername: value })} placeholder="账户显示名称" required />
           <TextField label="PayPal 邮箱" alias="paypalEmail" value={account.paypalEmail} onChange={(value) => commit({ ...account, paypalEmail: value })} placeholder="收款邮箱" type="email" required />
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function PayMaxAccountForm({
+  account,
+  onChange,
+}: {
+  account: PayMaxPayoutAccount;
+  onChange: (account: PayMaxPayoutAccount) => void;
+}) {
+  const commit = (next: PayMaxPayoutAccount) => onChange(normalizePayMaxStatus(next));
+  const countryOptions = AIRWALLEX_COUNTRIES.map((country) => ({
+    value: country.value,
+    label: `${country.label} · ${country.value}`,
+  }));
+  const currencyOptions = AIRWALLEX_CURRENCIES.map((currency) => ({
+    value: currency,
+    label: currency,
+  }));
+
+  return (
+    <div className="creator-payment-editor payout-account-form">
+      <StatusPanel account={account} />
+      <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="PayerMax 收款账号与 Airwallex、PayPal 资料独立维护">
+        <div className="form-grid creator-payment-form-grid">
+          <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：PayerMax 主账户" required />
+          <TextField label="收款人名称" alias="beneficiaryName" value={account.beneficiaryName} onChange={(value) => commit({ ...account, beneficiaryName: value })} placeholder="个人姓名或公司法定名称" required />
+          <TextField label="PayerMax 收款账号" alias="payermaxAccountId" value={account.payermaxAccountId} onChange={(value) => commit({ ...account, payermaxAccountId: value })} placeholder="PayerMax 返回的收款账号" required />
+          <TextField label="联系邮箱" alias="email · 选填" value={account.email} onChange={(value) => commit({ ...account, email: value })} placeholder="creator@example.com" type="email" />
+          <SelectFormField
+            label="收款国家 / 地区"
+            alias="countryCode"
+            value={account.countryCode}
+            options={countryOptions}
+            placeholder="选择国家 / 地区"
+            onChange={(value) => commit({ ...account, countryCode: value })}
+            required
+          />
+          <SelectFormField
+            label="收款币种"
+            alias="currency"
+            value={account.currency}
+            options={currencyOptions}
+            placeholder="选择币种"
+            onChange={(value) => commit({ ...account, currency: value })}
+            required
+          />
         </div>
       </Section>
     </div>
@@ -635,6 +719,7 @@ function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) 
         <DetailGrid items={[
           { label: '账户验证结果', alias: 'verificationCode', value: account.verificationCode || '尚未执行' },
           { label: '账户名匹配', alias: 'nameMatchResult', value: account.nameMatchResult || '尚未执行' },
+          { label: '接口环境', alias: 'beneficiaryEnvironment', value: account.beneficiaryEnvironment || '尚未创建' },
           { label: '最近校验时间', alias: 'validatedAt', value: account.validatedAt },
           { label: '最近验证时间', alias: 'verifiedAt', value: account.verifiedAt },
         ]} />
@@ -652,6 +737,24 @@ function PayPalAccountView({ account }: { account: PayPalPayoutAccount }) {
           { label: '账户别名', alias: 'nickname', value: account.nickname },
           { label: 'PayPal 用户名', alias: 'paypalUsername', value: account.paypalUsername },
           { label: 'PayPal 邮箱', alias: 'paypalEmail', value: account.paypalEmail, wide: true },
+        ]} />
+      </Section>
+    </div>
+  );
+}
+
+function PayMaxAccountView({ account }: { account: PayMaxPayoutAccount }) {
+  return (
+    <div className="creator-profile-content payout-account-view">
+      <StatusPanel account={account} />
+      <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="与 Airwallex 和 PayPal 收款账户独立维护">
+        <DetailGrid items={[
+          { label: '账户别名', alias: 'nickname', value: account.nickname },
+          { label: '收款人名称', alias: 'beneficiaryName', value: account.beneficiaryName },
+          { label: 'PayerMax 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId, mask: true },
+          { label: '国家 / 地区', alias: 'countryCode', value: account.countryCode },
+          { label: '收款币种', alias: 'currency', value: account.currency },
+          { label: '联系邮箱', alias: 'email', value: account.email },
         ]} />
       </Section>
     </div>
@@ -690,6 +793,15 @@ export function CreatorPayoutAccounts({
 
   const addPayPal = () => {
     const next = createEmptyPayPalAccount(creatorName, creatorEmail);
+    const normalized = accounts.length === 0
+      ? { ...next, isDefault: true }
+      : next;
+    onChange?.([...accounts, normalized]);
+    setSelectedId(normalized.id);
+  };
+
+  const addPayMax = () => {
+    const next = createEmptyPayMaxAccount(creatorName, creatorEmail);
     const normalized = accounts.length === 0
       ? { ...next, isDefault: true }
       : next;
@@ -766,7 +878,13 @@ export function CreatorPayoutAccounts({
                 key={account.id}
                 onClick={() => setSelectedId(account.id)}
               >
-                <span className="payout-account-tab-icon">{account.provider === 'Airwallex' ? <Landmark size={17} /> : <Wallet size={17} />}</span>
+                <span className="payout-account-tab-icon">
+                  {account.provider === 'Airwallex'
+                    ? <Landmark size={17} />
+                    : account.provider === 'PayPal'
+                      ? <Wallet size={17} />
+                      : <CircleDollarSign size={17} />}
+                </span>
                 <span><strong>{account.nickname}</strong><small>{getPayoutAccountSummary(account)} · {getPayoutAccountIdentifier(account)}</small></span>
                 <em className={`payout-account-mini-status payout-account-mini-status-${status.tone}`}>{status.label}</em>
                 {account.isDefault ? <Star className="payout-account-default-star" size={14} fill="currentColor" aria-label="默认账户" /> : null}
@@ -774,7 +892,7 @@ export function CreatorPayoutAccounts({
             );
           })}
         </div>
-        {editing ? (
+        {editing && selectedAccount ? (
           <div className="payout-account-actions">
             {selectedAccount && !selectedAccount.isDefault ? <Button variant="ghost" icon={<Star size={15} />} onClick={setDefault}>设为默认</Button> : null}
             {selectedAccount?.status === 'DISABLED'
@@ -788,6 +906,7 @@ export function CreatorPayoutAccounts({
               : null}
             <Button variant="secondary" icon={<Plus size={15} />} onClick={addAirwallex}>Airwallex 账户</Button>
             <Button variant="secondary" icon={<Plus size={15} />} onClick={addPayPal}>PayPal 账户</Button>
+            <Button variant="secondary" icon={<Plus size={15} />} onClick={addPayMax}>PayerMax 账户</Button>
           </div>
         ) : null}
       </div>
@@ -798,17 +917,27 @@ export function CreatorPayoutAccounts({
         <div className="payout-account-empty">
           <Landmark size={24} />
           <strong>尚未建立收款账户</strong>
-          <span>新增 Airwallex 或 PayPal 账户后，才能进入付款资料校验。</span>
-          {editing ? <Button icon={<Plus size={15} />} onClick={addAirwallex}>新增 Airwallex 账户</Button> : null}
+          <span>选择付款渠道并新建对应的收款账户；三种渠道的资料和校验状态互不覆盖。</span>
+          {editing ? (
+            <div className="payout-channel-picker" aria-label="选择付款渠道">
+              <Button variant="secondary" icon={<Landmark size={15} />} onClick={addAirwallex}>Airwallex</Button>
+              <Button variant="secondary" icon={<Wallet size={15} />} onClick={addPayPal}>PayPal</Button>
+              <Button variant="secondary" icon={<CircleDollarSign size={15} />} onClick={addPayMax}>PayerMax</Button>
+            </div>
+          ) : null}
         </div>
       ) : selectedAccount.provider === 'Airwallex' ? (
         editing
           ? <AirwallexAccountForm account={selectedAccount} onChange={replaceAccount} />
           : <AirwallexAccountView account={selectedAccount} />
-      ) : (
+      ) : selectedAccount.provider === 'PayPal' ? (
         editing
           ? <PayPalAccountForm account={selectedAccount} onChange={replaceAccount} />
           : <PayPalAccountView account={selectedAccount} />
+      ) : (
+        editing
+          ? <PayMaxAccountForm account={selectedAccount} onChange={replaceAccount} />
+          : <PayMaxAccountView account={selectedAccount} />
       )}
     </div>
   );

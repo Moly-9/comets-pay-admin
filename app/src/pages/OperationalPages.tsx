@@ -49,10 +49,10 @@ import { downloadBlob, formatInvoiceMoney, invoiceFilename, invoiceTotal } from 
 import {
   clonePayoutAccounts,
   createAirwallexPayoutAccount,
-  createEmptyAirwallexAccount,
   createPayPalPayoutAccount,
   getDefaultPayoutAccount,
   getPayoutAccountStatusMeta,
+  shouldSynchronizeAirwallexAccount,
 } from '../payoutAccounts';
 import type {
   AirwallexTransferMethod,
@@ -1653,7 +1653,7 @@ export function CreatorsPage({
       projects: 0,
       socialAccounts: [createSocialAccount(`social-${id}-1`)],
       contact: createInvoiceContact('', '', '', ''),
-      payoutAccounts: [createEmptyAirwallexAccount()],
+      payoutAccounts: [],
     });
     setEditing(true);
     setCreating(true);
@@ -1722,11 +1722,7 @@ export function CreatorsPage({
     let synchronizedAccounts = draft.payoutAccounts;
     try {
       for (const account of synchronizedAccounts) {
-        if (
-          account.provider !== 'Airwallex'
-          || account.status === 'DISABLED'
-          || (account.beneficiaryId && ['VALIDATED', 'VERIFIED'].includes(account.status))
-        ) continue;
+        if (!shouldSynchronizeAirwallexAccount(account)) continue;
         const synchronized = await synchronizeAirwallexBeneficiary(account);
         synchronizedAccounts = synchronizedAccounts.map((candidate) => (
           candidate.id === synchronized.id ? synchronized : candidate
@@ -1899,11 +1895,11 @@ export function CreatorsPage({
               <div className="creator-payment-note">
                 <ShieldCheck size={16} />
                 <span>
-                  <strong>保存前会完成 Airwallex Schema 与 Beneficiary 校验</strong>
-                  <small>校验通过后创建或更新 Beneficiary，并把返回的 beneficiary_id 保存到对应收款账户；账户验证仍需独立的 Verify Account 流程。</small>
+                  <strong>Airwallex 账户保存前会完成 Schema 与 Beneficiary 校验</strong>
+                  <small>校验通过后创建或更新 Beneficiary，并保存返回的 beneficiary_id；PayPal 与 PayerMax 账户不会触发 Airwallex 校验。</small>
                 </span>
               </div>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="一个达人可以维护多个 Airwallex 或 PayPal 账户，并指定默认付款账户">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax 三种付款渠道，可分别新建并维护多个账户">
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing

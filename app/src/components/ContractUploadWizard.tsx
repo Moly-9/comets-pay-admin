@@ -72,6 +72,12 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
         matchTokens: [account.paypalEmail, account.paypalUsername],
       };
     }
+    if (account.provider === 'PayMax') {
+      return {
+        label: `PayerMax · ${account.beneficiaryName || account.nickname}`,
+        matchTokens: [account.beneficiaryName, account.payermaxAccountId],
+      };
+    }
     const accountNumber = account.bankDetails.iban || account.bankDetails.accountNumber;
     return {
       label: `${account.bankDetails.accountName || account.nickname} · •••• ${accountNumber.replace(/\s/g, '').slice(-4)}`,

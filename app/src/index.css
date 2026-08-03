@@ -5181,10 +5181,6 @@ button:disabled {
   color: #765f83;
 }
 
-.airwallex-schema-spinner {
-  animation: auth-spin 800ms linear infinite;
-}
-
 .dynamic-schema-note > span {
   display: grid;
   min-width: 0;
@@ -5246,6 +5242,10 @@ button:disabled {
   color: #258a52;
 }
 
+.airwallex-schema-spinner {
+  animation: auth-spin 800ms linear infinite;
+}
+
 .schema-prototype-note {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -5297,6 +5297,18 @@ button:disabled {
   max-width: 380px;
   font-size: 10.5px;
   line-height: 1.5;
+}
+
+.payout-channel-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.airwallex-supplemental-grid {
+  border-top: 1px solid #eceff3;
 }
 
 .date-range-static {

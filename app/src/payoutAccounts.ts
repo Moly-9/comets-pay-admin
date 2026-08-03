@@ -6,6 +6,7 @@ import type {
   CreatorPaymentDetails,
   CreatorPayoutAccount,
   CreatorProfile,
+  PayMaxPayoutAccount,
   PayPalPayoutAccount,
   PayoutAccountStatus,
   Provider,
@@ -98,6 +99,7 @@ export const createAirwallexPayoutAccount = ({
   isDefault: false,
   status: 'DRAFT',
   beneficiaryId: '',
+  beneficiaryEnvironment: '',
   entityType: 'PERSONAL',
   firstName: '',
   lastName: '',
@@ -129,6 +131,29 @@ export const createPayPalPayoutAccount = ({
   status,
   paypalUsername,
   paypalEmail,
+});
+
+export const createPayMaxPayoutAccount = ({
+  id,
+  nickname = 'PayerMax 账户',
+  isDefault = false,
+  status = 'DRAFT',
+  beneficiaryName = '',
+  payermaxAccountId = '',
+  countryCode = '',
+  currency = '',
+  email = '',
+}: Partial<PayMaxPayoutAccount> & { id: string }): PayMaxPayoutAccount => ({
+  id,
+  provider: 'PayMax',
+  nickname,
+  isDefault,
+  status,
+  beneficiaryName,
+  payermaxAccountId,
+  countryCode,
+  currency,
+  email,
 });
 
 export const createEmptyAirwallexAccount = (
@@ -166,6 +191,16 @@ export const createEmptyPayPalAccount = (
   status: creatorName.trim() && /^\S+@\S+\.\S+$/.test(email) ? 'READY_FOR_VALIDATION' : 'DRAFT',
   paypalUsername: creatorName,
   paypalEmail: email,
+});
+
+export const createEmptyPayMaxAccount = (
+  creatorName = '',
+  email = '',
+): PayMaxPayoutAccount => createPayMaxPayoutAccount({
+  id: `payermax-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  nickname: '新的 PayerMax 账户',
+  beneficiaryName: creatorName,
+  email,
 });
 
 export const clonePayoutAccounts = (accounts: CreatorPayoutAccount[]): CreatorPayoutAccount[] => (
@@ -207,12 +242,25 @@ export const canDisablePayoutAccount = (account: CreatorPayoutAccount) => (
   account.status !== 'DISABLED' && !account.activePaymentId
 );
 
+export const shouldSynchronizeAirwallexAccount = (
+  account: CreatorPayoutAccount,
+): account is AirwallexPayoutAccount => (
+  account.provider === 'Airwallex'
+  && account.status !== 'DISABLED'
+  && !(account.beneficiaryId && ['VALIDATED', 'VERIFIED'].includes(account.status))
+);
+
 export const getPayoutAccountForProvider = (
   accounts: CreatorPayoutAccount[],
   provider?: Provider,
 ) => {
   if (provider === 'PayPal') {
     return accounts.find((account) => account.provider === 'PayPal' && account.status !== 'DISABLED') ?? null;
+  }
+  if (provider === 'PayMax') {
+    return accounts.find((account) => account.provider === 'PayMax' && account.status !== 'DISABLED' && account.isDefault)
+      ?? accounts.find((account) => account.provider === 'PayMax' && account.status !== 'DISABLED')
+      ?? null;
   }
   if (provider) {
     return accounts.find((account) => account.provider === 'Airwallex' && account.status !== 'DISABLED' && account.isDefault)
@@ -250,6 +298,18 @@ export const normalizePayPalStatus = (account: PayPalPayoutAccount): PayPalPayou
     : 'DRAFT',
 });
 
+export const normalizePayMaxStatus = (account: PayMaxPayoutAccount): PayMaxPayoutAccount => ({
+  ...account,
+  status: (
+    account.beneficiaryName.trim()
+    && account.payermaxAccountId.trim()
+    && account.countryCode.trim()
+    && account.currency.trim()
+  )
+    ? 'READY_FOR_VALIDATION'
+    : 'DRAFT',
+});
+
 export type PayoutAccountStatusMeta = {
   label: string;
   description: string;
@@ -278,6 +338,13 @@ export const getPayoutAccountStatusMeta = (
       tone: 'pending',
     } satisfies PayoutAccountStatusMeta;
   }
+  if (status === 'READY_FOR_VALIDATION' && provider === 'PayMax') {
+    return {
+      label: '待 PayerMax 确认',
+      description: '收款账号资料已完整，付款前仍需由 PayerMax 服务端校验',
+      tone: 'pending',
+    } satisfies PayoutAccountStatusMeta;
+  }
   return ACCOUNT_STATUS_META[status];
 };
 
@@ -290,12 +357,16 @@ const maskValue = (value: string) => {
 export const getPayoutAccountIdentifier = (account: CreatorPayoutAccount) => (
   account.provider === 'PayPal'
     ? account.paypalEmail || '待补充 PayPal 邮箱'
+    : account.provider === 'PayMax'
+      ? account.payermaxAccountId || '待补充 PayerMax 账号'
     : maskValue(account.bankDetails.iban || account.bankDetails.accountNumber)
 );
 
 export const getPayoutAccountSummary = (account: CreatorPayoutAccount) => (
   account.provider === 'PayPal'
     ? 'PayPal · 邮箱账户'
+    : account.provider === 'PayMax'
+      ? `PayerMax · ${account.currency || '待选币种'}${account.countryCode ? ` · ${account.countryCode}` : ''}`
     : `${account.bankDetails.accountCurrency || '待选币种'} · ${account.transferMethod}${account.transferMethod === 'LOCAL' && account.bankDetails.localClearingSystem ? ` · ${account.bankDetails.localClearingSystem}` : ''}`
 );
 
@@ -308,6 +379,14 @@ export const payoutAccountToInvoicePayment = (
       ...EMPTY_INVOICE_PAYMENT,
       paypalUsername: account.paypalUsername,
       paypalEmail: account.paypalEmail,
+    };
+  }
+  if (account.provider === 'PayMax') {
+    return {
+      ...EMPTY_INVOICE_PAYMENT,
+      accountName: account.beneficiaryName,
+      accountNumber: account.payermaxAccountId,
+      bankCountry: account.countryCode,
     };
   }
   return {

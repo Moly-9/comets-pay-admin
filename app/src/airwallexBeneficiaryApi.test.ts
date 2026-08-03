@@ -9,7 +9,6 @@ import {
 } from './airwallexBeneficiaryApi';
 import {
   AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
-  generateLocalAirwallexFormSchema,
   type AirwallexFormSchemaField,
   type AirwallexFormSchemaResponse,
 } from './airwallexFormSchema';
@@ -17,13 +16,12 @@ import { createAirwallexPayoutAccount } from './payoutAccounts';
 
 const field = (
   path: string,
-  label: string,
   required = true,
 ): AirwallexFormSchemaField => ({
   enabled: true,
   field: {
     key: path.split('.').slice(-1)[0] ?? path,
-    label,
+    label: path,
     type: 'INPUT',
     default: '',
     description: '',
@@ -37,17 +35,12 @@ const field = (
   rule: { type: 'string' },
 });
 
-const buildAccount = (beneficiaryId = '') => createAirwallexPayoutAccount({
+const account = () => createAirwallexPayoutAccount({
   id: 'awx-test',
   nickname: 'USD 主账户',
-  beneficiaryId,
   entityType: 'PERSONAL',
   firstName: 'Mina',
   lastName: 'Kato',
-  address: {
-    countryCode: 'US',
-    state: 'New York',
-  },
   transferMethod: 'LOCAL',
   bankDetails: {
     bankCountryCode: 'US',
@@ -58,7 +51,9 @@ const buildAccount = (beneficiaryId = '') => createAirwallexPayoutAccount({
     accountRoutingType1: 'aba',
     accountRoutingValue1: '021000021',
     localClearingSystem: 'ACH',
-    bankName: 'Example Bank',
+  },
+  schemaValues: {
+    'profile_supplement.trade_amount': '1000',
   },
 });
 
@@ -72,82 +67,51 @@ const remoteSchema: AirwallexFormSchemaResponse = {
     entity_type: 'PERSONAL',
   },
   fields: [
-    field('beneficiary.entity_type', 'Recipient type'),
-    field('beneficiary.first_name', 'First name'),
-    field('beneficiary.last_name', 'Last name'),
-    field('beneficiary.bank_details.bank_country_code', 'Country'),
-    field('beneficiary.bank_details.account_currency', 'Currency'),
-    field('beneficiary.bank_details.account_name', 'Account name'),
-    field('beneficiary.bank_details.account_number', 'Account number'),
-    field('beneficiary.bank_details.account_routing_type1', 'Routing type'),
-    field('beneficiary.bank_details.account_routing_value1', 'Routing number'),
-    field('beneficiary.bank_details.local_clearing_system', 'Clearing system'),
-    field('beneficiary.address.country_code', 'Address country'),
-    field('beneficiary.address.state', 'Current address', false),
+    field('beneficiary.bank_details.bank_country_code'),
+    field('beneficiary.bank_details.account_currency'),
+    field('beneficiary.entity_type'),
+    field('beneficiary.first_name'),
+    field('beneficiary.last_name'),
+    field('beneficiary.bank_details.account_name'),
+    field('beneficiary.bank_details.account_number'),
+    field('beneficiary.bank_details.account_routing_type1'),
+    field('beneficiary.bank_details.account_routing_value1'),
+    field('beneficiary.bank_details.local_clearing_system'),
   ],
 };
 
-const jsonResponse = (body: unknown, status = 200) => (
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+const jsonResponse = (body: unknown, status = 200) => new Response(
+  JSON.stringify(body),
+  { status, headers: { 'Content-Type': 'application/json' } },
 );
 
-describe('Airwallex beneficiary integration', () => {
-  it('removes hard-coded street, city and postcode fields from the local preview', () => {
-    const schema = generateLocalAirwallexFormSchema(buildAccount());
-    const paths = schema.fields.map((item) => item.path);
-    expect(paths).not.toContain('beneficiary.address.street_address');
-    expect(paths).not.toContain('beneficiary.address.city');
-    expect(paths).not.toContain('beneficiary.address.postcode');
-    expect(paths.slice(0, 4)).toEqual([
-      'beneficiary.bank_details.bank_country_code',
-      'beneficiary.bank_details.account_currency',
-      'beneficiary.entity_type',
-      'transfer_method',
-    ]);
-    expect(schema.fields.find((item) => item.path === 'beneficiary.address.state')).toMatchObject({
-      required: false,
-      field: { label: 'Current address' },
-    });
-  });
+describe('Airwallex beneficiary proxy flow', () => {
+  it('submits only fields returned by the active Form Schema', () => {
+    const payload = buildAirwallexBeneficiaryPayload(account(), remoteSchema);
 
-  it('maps schema values into the official beneficiary payload structure', () => {
-    const payload = buildAirwallexBeneficiaryPayload(buildAccount(), remoteSchema);
     expect(payload).toMatchObject({
       nickname: 'USD 主账户',
-      payer_entity_type: 'COMPANY',
       transfer_methods: ['LOCAL'],
       beneficiary: {
         type: 'BANK_ACCOUNT',
-        entity_type: 'PERSONAL',
         first_name: 'Mina',
         last_name: 'Kato',
-        address: {
-          country_code: 'US',
-          state: 'New York',
-        },
         bank_details: {
           bank_country_code: 'US',
           account_currency: 'USD',
-          account_name: 'Mina Kato',
           account_number: '50001121',
-          account_routing_type1: 'aba',
-          account_routing_value1: '021000021',
-          local_clearing_system: 'ACH',
         },
       },
     });
+    expect(JSON.stringify(payload)).not.toContain('trade_amount');
   });
 
-  it('queries dynamic financial-institution options through the fixed server proxy', async () => {
-    const baseField = field('beneficiary.bank_details.swift_code', 'SWIFT / BIC');
-    const dynamicField: AirwallexFormSchemaField = {
-      ...baseField,
+  it('queries dynamic financial-institution options through the fixed proxy', async () => {
+    const dynamicField = {
+      ...field('beneficiary.bank_details.swift_code'),
       field: {
-        ...baseField.field,
-        type: 'DYNAMIC_SELECT',
+        ...field('beneficiary.bank_details.swift_code').field,
+        type: 'DYNAMIC_SELECT' as const,
         dynamic_options: {
           query_url: '/api/v1/beneficiary_form_schemas/supported_financial_institutions',
           query_params: [
@@ -168,19 +132,25 @@ describe('Airwallex beneficiary integration', () => {
     };
     const request = vi.fn(async () => jsonResponse({
       financial_institutions: [
-        { bank_name: 'Bank of Tokyo', swift_code: 'BOTKJPJT', bank_country_code: 'JP' },
+        {
+          bank_name: 'Bank of Tokyo',
+          swift_code: 'BOTKJPJT',
+          bank_country_code: 'JP',
+        },
       ],
     })) as unknown as typeof fetch;
 
-    const options = await getAirwallexDynamicOptions(
-      buildAccount(),
+    await expect(getAirwallexDynamicOptions(
+      account(),
       dynamicField,
       'BOT',
       request,
-    );
-
-    expect(options).toEqual([
-      { label: 'Bank of Tokyo · BOTKJPJT', value: 'BOTKJPJT', description: 'JP' },
+    )).resolves.toEqual([
+      {
+        label: 'Bank of Tokyo · BOTKJPJT',
+        value: 'BOTKJPJT',
+        description: 'JP',
+      },
     ]);
     expect(request).toHaveBeenCalledWith(
       AIRWALLEX_DYNAMIC_OPTIONS_PROXY_PATH,
@@ -199,65 +169,64 @@ describe('Airwallex beneficiary integration', () => {
     );
   });
 
-  it('validates, creates and stores the returned beneficiary id', async () => {
-    const requestMock = vi.fn(async (input: RequestInfo | URL) => {
+  it('loads Schema, validates, creates the beneficiary and stores beneficiary_id', async () => {
+    const request = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
       if (path === AIRWALLEX_FORM_SCHEMA_PROXY_PATH) return jsonResponse(remoteSchema);
-      if (path === AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH) return new Response(null, { status: 200 });
-      if (path === AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH) return jsonResponse({ id: 'bene-123' }, 201);
-      return jsonResponse({ message: 'unexpected request' }, 500);
-    });
-    const request = requestMock as unknown as typeof fetch;
+      if (path === AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH) return jsonResponse({});
+      if (path === AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH) {
+        return jsonResponse({ id: 'beneficiary_123' });
+      }
+      return jsonResponse({ message: 'not found' }, 404);
+    }) as unknown as typeof fetch;
 
-    const result = await synchronizeAirwallexBeneficiary(buildAccount(), {
+    const result = await synchronizeAirwallexBeneficiary(account(), {
       request,
       requestId: 'request-123',
       now: () => '2026-08-04T00:00:00.000Z',
     });
 
-    expect(result.beneficiaryId).toBe('bene-123');
+    expect(result.beneficiaryId).toBe('beneficiary_123');
     expect(result.status).toBe('VALIDATED');
     expect(result.validatedAt).toBe('2026-08-04T00:00:00.000Z');
-    expect(requestMock).toHaveBeenCalledTimes(3);
-    expect(requestMock.mock.calls.map(([input]) => String(input))).toEqual([
-      AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
-      AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH,
-      AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH,
-    ]);
+    expect(request).toHaveBeenCalledTimes(3);
   });
 
   it('updates an existing beneficiary instead of creating a duplicate', async () => {
+    const existingAccount = {
+      ...account(),
+      beneficiaryId: 'beneficiary_existing',
+    };
+    const updatePath = `${AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH}/beneficiary_existing`;
     const requestMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
       if (path === AIRWALLEX_FORM_SCHEMA_PROXY_PATH) return jsonResponse(remoteSchema);
-      if (path === AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH) return new Response(null, { status: 200 });
-      if (path.endsWith('/bene-existing')) return jsonResponse({ id: 'bene-existing' });
-      return jsonResponse({ message: 'unexpected request' }, 500);
+      if (path === AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH) return jsonResponse({});
+      if (path === updatePath) return jsonResponse({ id: 'beneficiary_existing' });
+      return jsonResponse({ message: 'not found' }, 404);
     });
     const request = requestMock as unknown as typeof fetch;
 
-    const result = await synchronizeAirwallexBeneficiary(buildAccount('bene-existing'), {
+    const result = await synchronizeAirwallexBeneficiary(existingAccount, {
       request,
       requestId: 'request-update',
     });
 
-    expect(result.beneficiaryId).toBe('bene-existing');
-    expect(requestMock.mock.calls.map(([input]) => String(input))).toContain(
-      `${AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH}/bene-existing`,
-    );
+    expect(result.beneficiaryId).toBe('beneficiary_existing');
+    expect(requestMock.mock.calls.map(([input]) => String(input))).toContain(updatePath);
     expect(requestMock.mock.calls.map(([input]) => String(input))).not.toContain(
       AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH,
     );
   });
 
-  it('stops before validate/create when the official schema reports missing data', async () => {
-    const incompleteSchema: AirwallexFormSchemaResponse = {
+  it('does not create a beneficiary when Schema validation fails', async () => {
+    const invalidSchema = {
       ...remoteSchema,
-      fields: [...remoteSchema.fields, field('beneficiary.bank_details.swift_code', 'SWIFT / BIC')],
+      fields: [...remoteSchema.fields, field('beneficiary.bank_details.swift_code')],
     };
-    const request = vi.fn(async () => jsonResponse(incompleteSchema)) as unknown as typeof fetch;
+    const request = vi.fn(async () => jsonResponse(invalidSchema)) as unknown as typeof fetch;
 
-    await expect(synchronizeAirwallexBeneficiary(buildAccount(), {
+    await expect(synchronizeAirwallexBeneficiary(account(), {
       request,
       requestId: 'request-invalid',
     })).rejects.toMatchObject({

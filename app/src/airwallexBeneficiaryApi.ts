@@ -11,19 +11,18 @@ import {
 } from './airwallexFormSchema';
 import type { AirwallexPayoutAccount } from './types';
 
-export const AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH = '/api/integrations/airwallex/beneficiaries/validate';
-export const AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH = '/api/integrations/airwallex/beneficiaries';
-export const AIRWALLEX_DYNAMIC_OPTIONS_PROXY_PATH = '/api/integrations/airwallex/beneficiary-form-schema/options';
+export const AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH =
+  '/api/integrations/airwallex/beneficiaries/validate';
+export const AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH =
+  '/api/integrations/airwallex/beneficiaries';
+export const AIRWALLEX_DYNAMIC_OPTIONS_PROXY_PATH =
+  '/api/integrations/airwallex/beneficiary-form-schema/options';
 
 export type AirwallexBeneficiaryPayload = {
   beneficiary: Record<string, unknown>;
   nickname: string;
   payer_entity_type: 'COMPANY';
   transfer_methods: Array<AirwallexPayoutAccount['transferMethod']>;
-};
-
-export type AirwallexBeneficiaryResponse = {
-  id: string;
 };
 
 export class AirwallexIntegrationError extends Error {
@@ -61,10 +60,7 @@ const setNestedValue = (
   });
 };
 
-const responseMessage = (
-  status: number,
-  body: unknown,
-) => {
+const responseMessage = (status: number, body: unknown) => {
   if (body && typeof body === 'object') {
     const record = body as Record<string, unknown>;
     const message = record.message ?? record.detail ?? record.error;
@@ -108,10 +104,7 @@ const proxyHeaders = (requestId?: string): HeadersInit => ({
   ...(requestId ? { 'x-client-request-id': requestId } : {}),
 });
 
-const firstText = (
-  record: Record<string, unknown>,
-  keys: string[],
-) => {
+const firstText = (record: Record<string, unknown>, keys: string[]) => {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === 'string' && value.trim()) return value.trim();
@@ -245,13 +238,10 @@ export const buildAirwallexBeneficiaryPayload = (
 ): AirwallexBeneficiaryPayload => {
   const beneficiary: Record<string, unknown> = {
     type: 'BANK_ACCOUNT',
-    address: {
-      country_code: account.address.countryCode || account.bankDetails.bankCountryCode,
-    },
   };
 
   schema.fields.forEach((item) => {
-    if (!item.path.startsWith('beneficiary.')) return;
+    if (!item.enabled || !item.path.startsWith('beneficiary.')) return;
     const value = getAirwallexFormValue(account, item.path) || item.field.default;
     if (!value.trim()) return;
     setNestedValue({ beneficiary }, item.path, value);
@@ -280,27 +270,15 @@ export const validateAirwallexBeneficiary = async (
   );
 };
 
-export const createAirwallexBeneficiary = async (
+const saveAirwallexBeneficiary = async (
+  account: AirwallexPayoutAccount,
   payload: AirwallexBeneficiaryPayload,
   requestId: string,
-  request: typeof fetch = fetch,
-) => requestJson<AirwallexBeneficiaryResponse>(
-  AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH,
-  {
-    method: 'POST',
-    headers: proxyHeaders(requestId),
-    body: JSON.stringify(payload),
-  },
-  request,
-);
-
-export const updateAirwallexBeneficiary = async (
-  beneficiaryId: string,
-  payload: AirwallexBeneficiaryPayload,
-  requestId: string,
-  request: typeof fetch = fetch,
-) => requestJson<AirwallexBeneficiaryResponse>(
-  `${AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH}/${encodeURIComponent(beneficiaryId)}`,
+  request: typeof fetch,
+) => requestJson<{ id: string; simulated?: boolean }>(
+  account.beneficiaryId
+    ? `${AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH}/${encodeURIComponent(account.beneficiaryId)}`
+    : AIRWALLEX_BENEFICIARY_CREATE_PROXY_PATH,
   {
     method: 'POST',
     headers: proxyHeaders(requestId),
@@ -332,9 +310,12 @@ export const synchronizeAirwallexBeneficiary = async (
 
   const payload = buildAirwallexBeneficiaryPayload(account, schema);
   await validateAirwallexBeneficiary(payload, request);
-  const result = account.beneficiaryId
-    ? await updateAirwallexBeneficiary(account.beneficiaryId, payload, requestId, request)
-    : await createAirwallexBeneficiary(payload, requestId, request);
+  const result = await saveAirwallexBeneficiary(
+    account,
+    payload,
+    requestId,
+    request,
+  );
   if (!result?.id) {
     throw new AirwallexIntegrationError('Airwallex 未返回 beneficiary_id，档案未保存');
   }
@@ -342,6 +323,7 @@ export const synchronizeAirwallexBeneficiary = async (
   return {
     ...account,
     beneficiaryId: result.id,
+    beneficiaryEnvironment: result.simulated ? 'MOCK' : 'LIVE',
     status: 'VALIDATED',
     validatedAt: now(),
     verificationCode: '',

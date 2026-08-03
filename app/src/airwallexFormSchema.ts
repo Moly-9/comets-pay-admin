@@ -66,6 +66,10 @@ export type AirwallexFormSchemaCondition = {
 export type AirwallexFormSchemaResponse = {
   condition: AirwallexFormSchemaCondition;
   fields: AirwallexFormSchemaField[];
+  meta?: {
+    source: 'airwallex' | 'mock' | 'local';
+    simulated?: boolean;
+  };
 };
 
 type CountryProfile = {
@@ -552,6 +556,7 @@ export const generateLocalAirwallexFormSchema = (
   return {
     condition: buildAirwallexSchemaCondition(account),
     fields,
+    meta: { source: 'local', simulated: true },
   };
 };
 
@@ -648,7 +653,6 @@ export const setAirwallexFormValue = (
       const country = getAirwallexCountryProfile(value);
       next.bankDetails.bankCountryCode = value;
       next.bankDetails.bankCountryName = country?.englishLabel ?? value;
-      next.address.countryCode = value;
       if (country && !country.currencies.includes(next.bankDetails.accountCurrency)) {
         next.bankDetails.accountCurrency = country.currencies[0] ?? '';
       }

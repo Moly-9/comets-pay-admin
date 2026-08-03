@@ -86,6 +86,7 @@ export type AirwallexPayoutAccount = {
   isDefault: boolean;
   status: PayoutAccountStatus;
   beneficiaryId: string;
+  beneficiaryEnvironment: '' | 'MOCK' | 'LIVE';
   entityType: AirwallexEntityType;
   firstName: string;
   lastName: string;
@@ -129,7 +130,30 @@ export type PayPalPayoutAccount = {
   statusBeforeDisabled?: Exclude<PayoutAccountStatus, 'DISABLED'>;
 };
 
-export type CreatorPayoutAccount = AirwallexPayoutAccount | PayPalPayoutAccount;
+export type PayMaxPayoutAccount = {
+  id: string;
+  provider: 'PayMax';
+  nickname: string;
+  isDefault: boolean;
+  status: PayoutAccountStatus;
+  beneficiaryName: string;
+  payermaxAccountId: string;
+  countryCode: string;
+  currency: string;
+  email: string;
+  linkedProjectIds?: string[];
+  invoiceIds?: string[];
+  paymentBatchIds?: string[];
+  transactionIds?: string[];
+  activePaymentId?: string;
+  hasPaymentHistory?: boolean;
+  statusBeforeDisabled?: Exclude<PayoutAccountStatus, 'DISABLED'>;
+};
+
+export type CreatorPayoutAccount =
+  | AirwallexPayoutAccount
+  | PayPalPayoutAccount
+  | PayMaxPayoutAccount;
 
 // Invoice 文件使用的付款信息快照。达人主档改用 payoutAccounts[]，
 // 避免把 Airwallex、PayPal 和每笔付款字段混在同一个长期对象中。
