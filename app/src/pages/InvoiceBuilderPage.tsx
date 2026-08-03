@@ -1,13 +1,10 @@
 import {
-  AlertTriangle,
   ArrowLeft,
   Building2,
   CheckCircle2,
   Download,
   FileText,
-  FileCheck2,
   Plus,
-  Save,
   Trash2,
   UserRound,
   WalletCards,
@@ -16,11 +13,6 @@ import {
 import { useMemo, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
-import type { ContractRecord } from '../contracts';
-import {
-  resolveInvoiceContract,
-  validateInvoiceAgainstContract,
-} from '../invoice/contractValidation';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -49,7 +41,6 @@ type InvoiceBuilderPageProps = {
   payouts: Payout[];
   invoiceEntity: InvoiceEntity;
   generatedInvoices: GeneratedInvoiceRecord[];
-  contracts: ContractRecord[];
   onGenerated: (record: GeneratedInvoiceRecord) => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
@@ -113,12 +104,11 @@ export function InvoiceBuilderPage({
   payouts,
   invoiceEntity,
   generatedInvoices,
-  contracts,
   onGenerated,
   onCancel,
   onOpenInvoiceManagement,
 }: InvoiceBuilderPageProps) {
-  const [creatorId, setCreatorId] = useState('');
+  const [creatorHandle, setCreatorHandle] = useState('');
   const [payoutId, setPayoutId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState(() => nextInvoiceNumber(generatedInvoices));
   const [invoiceDate, setInvoiceDate] = useState(() => todayInputValue());
@@ -132,13 +122,12 @@ export function InvoiceBuilderPage({
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
-  const [draftSavedAt, setDraftSavedAt] = useState('');
 
-  const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
-  const creatorPayouts = useMemo(() => payouts.filter((payout) => payout.creatorId === creatorId), [creatorId, payouts]);
+  const selectedCreator = creators.find((creator) => creator.handle === creatorHandle) ?? null;
+  const creatorPayouts = useMemo(() => payouts.filter((payout) => payout.handle === creatorHandle), [creatorHandle, payouts]);
   const selectedPayout = creatorPayouts.find((payout) => payout.id === payoutId) ?? null;
   const creatorOptions = creators.map((creator) => ({
-    value: creator.id,
+    value: creator.handle,
     label: creator.name,
     description: `${creator.handle} · ${creator.region} · ${creator.platform}`,
   }));
@@ -147,50 +136,33 @@ export function InvoiceBuilderPage({
     label: payout.project,
     description: `${payout.currency} ${payout.amount.toLocaleString('en-US')} · ${payout.deliverable ?? '达人合作服务费'}`,
   }));
-  const contractLink = useMemo(() => resolveInvoiceContract(contracts, {
-    projectId: selectedPayout?.projectId ?? '',
-    collaborationId: selectedPayout?.collaborationId ?? '',
-    creatorId: selectedCreator?.id ?? '',
-  }), [contracts, selectedCreator?.id, selectedPayout?.collaborationId, selectedPayout?.projectId]);
-  const linkedContract = contractLink.contract;
-  const linkedIo = linkedContract?.contractIOs?.[0];
 
   const model = useMemo<InvoiceDocumentModel>(() => ({
     invoiceNumber,
     invoiceDate,
     billTo,
-    creatorHandle: selectedCreator?.handle ?? '',
+    creatorHandle,
     creatorName: selectedCreator?.name ?? '',
     creatorId: selectedCreator?.id,
-    collaborationId: selectedPayout?.collaborationId,
+    engagementId: selectedCreator && selectedPayout ? `ENG-${selectedPayout.projectId}-${selectedCreator.id}` : undefined,
     projectId: selectedPayout?.projectId ?? '',
     projectName: selectedPayout?.project ?? '',
-    contractId: linkedContract?.structuredContract?.contract_id,
-    contractCode: linkedContract?.structuredContract?.contract_code,
-    contractIoId: linkedIo?.contract_io_id,
-    ioNumber: linkedIo?.io_number,
-    contractLinkStatus: linkedContract ? 'LINKED' : 'NOT_LINKED_OPTIONAL',
     from,
     currency,
     items: items.map(normalizeLineItem),
     paymentMethod,
     payment,
-  }), [billTo, currency, from, invoiceDate, invoiceNumber, items, linkedContract, linkedIo, payment, paymentMethod, selectedCreator, selectedPayout]);
-  const contractValidation = useMemo(
-    () => validateInvoiceAgainstContract(linkedContract, model),
-    [linkedContract, model],
-  );
+  }), [billTo, creatorHandle, currency, from, invoiceDate, invoiceNumber, items, payment, paymentMethod, selectedCreator?.id, selectedCreator?.name, selectedPayout]);
 
-  const selectCreator = (nextCreatorId: string) => {
-    const creator = creators.find((item) => item.id === nextCreatorId);
-    setCreatorId(nextCreatorId);
+  const selectCreator = (handle: string) => {
+    const creator = creators.find((item) => item.handle === handle);
+    setCreatorHandle(handle);
     setPayoutId('');
     setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
     setPayment(invoicePaymentForCreator(creator, paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex'));
     setItems([createBlankLine(0)]);
     setErrors({});
     setGeneratedFiles(null);
-    setDraftSavedAt('');
   };
 
   const selectProject = (id: string) => {
@@ -211,7 +183,6 @@ export function InvoiceBuilderPage({
     })]);
     setErrors({});
     setGeneratedFiles(null);
-    setDraftSavedAt('');
   };
 
   const changeLine = (id: string, field: 'description' | 'unitPrice' | 'quantity', rawValue: string) => {
@@ -225,7 +196,7 @@ export function InvoiceBuilderPage({
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
-    if (!creatorId) nextErrors.creator = '请选择达人';
+    if (!creatorHandle) nextErrors.creator = '请选择达人';
     if (!payoutId) nextErrors.project = '请选择该达人关联的项目';
     if (!invoiceNumber.trim()) nextErrors.invoiceNumber = 'Invoice 编号不能为空';
     if (!invoiceDate) nextErrors.invoiceDate = '请选择 Invoice 日期';
@@ -247,26 +218,8 @@ export function InvoiceBuilderPage({
       if (!payment.paypalUsername.trim()) nextErrors.paypalUsername = '请填写 PayPal Name';
       if (!payment.paypalEmail.trim() || !/^\S+@\S+\.\S+$/.test(payment.paypalEmail)) nextErrors.paypalEmail = '请填写有效 PayPal Email';
     }
-    if (contractLink.status === 'MULTIPLE_CONTRACTS') {
-      nextErrors.contract = '该项目达人关联了多份有效合同，请先在合同模块明确 IO。';
-    } else if (!contractValidation.canGenerate) {
-      nextErrors.contract = contractValidation.blockers[0]?.reason ?? '合同与 Invoice 校验未通过';
-    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  };
-
-  const saveDraft = () => {
-    if (!creatorId || !payoutId) {
-      setErrors((current) => ({ ...current, project: '选择达人和项目后才能保存草稿' }));
-      return;
-    }
-    setDraftSavedAt(new Intl.DateTimeFormat('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date()));
-    setGeneratedFiles(null);
   };
 
   const generate = async () => {
@@ -310,7 +263,6 @@ export function InvoiceBuilderPage({
         actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={onCancel}>返回 Invoice 管理</Button>}
       />
       <NoticeBanner>生成文件会保留空白签名区；当前为前端原型，生成记录仅在本次会话内保留。</NoticeBanner>
-      {draftSavedAt ? <NoticeBanner>Invoice 草稿已保存在当前页面状态（{draftSavedAt}）；尚未进入签署、审核或请款流程。</NoticeBanner> : null}
       {Object.keys(errors).length > 0 ? (
         <div className="invoice-builder-error" role="alert"><strong>还有 {Object.keys(errors).length} 项资料需要完善</strong><span>{Object.values(errors)[0]}</span></div>
       ) : null}
@@ -334,31 +286,15 @@ export function InvoiceBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`}>
                 <span>合作达人 *</span>
-                <SelectField ariaLabel="合作达人" variant="form" value={creatorId} placeholder="从达人档案选择" options={creatorOptions} onChange={selectCreator} />
+                <SelectField ariaLabel="合作达人" variant="form" value={creatorHandle} placeholder="从达人档案选择" options={creatorOptions} onChange={selectCreator} />
                 {errors.creator ? <small>{errors.creator}</small> : null}
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>
                 <span>关联项目 *</span>
-                <SelectField ariaLabel="关联项目" variant="form" value={payoutId} placeholder={creatorId ? '选择关联项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId} />
+                <SelectField ariaLabel="关联项目" variant="form" value={payoutId} placeholder={creatorHandle ? '选择关联项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorHandle} />
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>
-            {selectedPayout ? (
-              <div className={`invoice-contract-gate ${linkedContract ? contractValidation.canGenerate ? 'is-passed' : 'is-blocked' : 'is-optional'}`}>
-                <span>{linkedContract ? contractValidation.canGenerate ? <FileCheck2 size={18} /> : <AlertTriangle size={18} /> : <FileText size={18} />}</span>
-                <div>
-                  <strong>{linkedContract
-                    ? contractValidation.canGenerate ? '合同公共字段校验通过' : '合同校验未通过，可保存草稿'
-                    : '未关联合同（非必填）'}</strong>
-                  <p>{linkedContract
-                    ? `${linkedContract.id} · ${linkedIo?.io_number ?? 'IO 待确认'} · ${contractValidation.blockers.length} 项阻断`
-                    : '该 project_id + collaboration_id + creator_id 下没有合同，只执行 Invoice 自身校验。'}</p>
-                  {contractValidation.blockers.map((blocker) => (
-                    <small key={blocker.key}>{blocker.label}：合同「{blocker.contractValue}」/ Invoice「{blocker.invoiceValue}」· {blocker.reason}</small>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
 
           <div className="invoice-builder-section">
@@ -427,7 +363,6 @@ export function InvoiceBuilderPage({
 
           <div className="invoice-builder-footer">
             <Button variant="ghost" onClick={onCancel}>取消</Button>
-            <Button variant="secondary" icon={<Save size={16} />} onClick={saveDraft}>保存草稿</Button>
             <Button icon={<WandSparkles size={17} />} disabled={generating} onClick={generate}>{generating ? '正在生成…' : '生成 PDF + DOCX'}</Button>
           </div>
         </section>

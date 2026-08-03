@@ -346,7 +346,7 @@ export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
   address: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong, China',
 };
 
-const INITIAL_PAYOUT_FIXTURES: Array<Omit<Payout, 'creatorId' | 'collaborationId'>> = [
+export const INITIAL_PAYOUTS: Payout[] = [
   {
     id: 'pay-001',
     creator: '@MinaKato',
@@ -718,35 +718,6 @@ const INITIAL_PAYOUT_FIXTURES: Array<Omit<Payout, 'creatorId' | 'collaborationId
     returnReason: '收款账号开户名与合同签约主体不一致',
   },
 ];
-
-const PAYOUT_STABLE_LINKS: Record<string, Pick<Payout, 'creatorId' | 'collaborationId'>> = {
-  'pay-001': { creatorId: 'creator-mina', collaborationId: 'collaboration-pay-001' },
-  'pay-002': { creatorId: 'creator-alex', collaborationId: 'collaboration-pay-002' },
-  'pay-003': { creatorId: 'creator-nika', collaborationId: 'collaboration-pay-003' },
-  'pay-004': { creatorId: 'creator-luna', collaborationId: 'collaboration-pay-004' },
-  'pay-005': { creatorId: 'creator-kenji', collaborationId: 'collaboration-pay-005' },
-  'pay-006': { creatorId: 'creator-sofia', collaborationId: 'collaboration-pay-006' },
-  'pay-007': { creatorId: 'creator-marc', collaborationId: 'collaboration-pay-007' },
-  'pay-008': { creatorId: 'creator-yuki', collaborationId: 'collaboration-pay-008' },
-  'pay-009': { creatorId: 'creator-camila', collaborationId: 'collaboration-pay-009' },
-  'pay-010': { creatorId: 'creator-oliver', collaborationId: 'collaboration-pay-010' },
-  'pay-011': { creatorId: 'creator-hannah', collaborationId: 'collaboration-pay-011' },
-  'pay-012': { creatorId: 'creator-luca', collaborationId: 'collaboration-pay-012' },
-  'pay-013': { creatorId: 'creator-emily', collaborationId: 'collaboration-pay-013' },
-  'pay-014': { creatorId: 'creator-mina', collaborationId: 'collaboration-pay-014' },
-  'pay-015': { creatorId: 'creator-yuki', collaborationId: 'collaboration-pay-015' },
-  'pay-016': { creatorId: 'creator-camila', collaborationId: 'collaboration-pay-016' },
-  'pay-017': { creatorId: 'creator-oliver', collaborationId: 'collaboration-pay-017' },
-  'pay-018': { creatorId: 'creator-kenji', collaborationId: 'collaboration-pay-018' },
-  'pay-019': { creatorId: 'creator-hannah', collaborationId: 'collaboration-pay-019' },
-  'pay-020': { creatorId: 'creator-marc', collaborationId: 'collaboration-pay-020' },
-  'pay-021': { creatorId: 'creator-emily', collaborationId: 'collaboration-pay-021' },
-};
-
-export const INITIAL_PAYOUTS: Payout[] = INITIAL_PAYOUT_FIXTURES.map((payout) => ({
-  ...payout,
-  ...PAYOUT_STABLE_LINKS[payout.id],
-}));
 
 export const PAGE_TITLES = {
   dashboard: '数据工作台',

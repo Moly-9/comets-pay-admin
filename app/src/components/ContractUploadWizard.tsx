@@ -7,12 +7,11 @@ import {
   type SelectedContractFile,
   validateContractFile,
 } from '../contractParserClient';
-import { recognizeContract } from '../contractRecognition';
+import { recognizeContractFields } from '../contractRecognition';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
   type ContractDocumentType,
   type ContractRecognitionField,
-  type ContractRecognitionResult,
   type ParsedContractDocument,
 } from '../contractRecognitionTypes';
 import type { ContractUploadInput } from '../contracts';
@@ -23,12 +22,6 @@ import { Button, Modal } from './Common';
 type Props = {
   projects: ProjectSummary[];
   creators: CreatorProfile[];
-  draftIdentity: {
-    contractId: string;
-    contractIoId: string;
-    contractCode: string;
-    ioNumber: string;
-  };
   onClose: () => void;
   onSave: (input: ContractUploadInput) => void;
 };
@@ -41,15 +34,15 @@ const STATUS_LABELS = {
 } as const;
 
 const FIELD_STATUS_LABELS = {
-  DETECTED: '待确认',
-  MISSING: '待补充',
-  PLACEHOLDER: '仍为占位符',
-  CONFLICT: '需核对',
-  CONFIRMED: '已确认',
-  NOT_APPLICABLE: '不适用',
+  detected: '待确认',
+  missing: '待补充',
+  conflict: '需核对',
+  confirmed: '已确认',
 } as const;
 
-export function ContractUploadWizard({ projects, creators, draftIdentity, onClose, onSave }: Props) {
+const createSystemContractNumber = () => `CON-UPL-${Date.now().toString().slice(-7)}`;
+
+export function ContractUploadWizard({ projects, creators, onClose, onSave }: Props) {
   const [step, setStep] = useState(1);
   const [search, setSearch] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -57,7 +50,7 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
   const [selectedFiles, setSelectedFiles] = useState<SelectedContractFile[]>([]);
   const [documents, setDocuments] = useState<ParsedContractDocument[]>([]);
   const [fields, setFields] = useState<ContractRecognitionField[]>([]);
-  const [recognition, setRecognition] = useState<ContractRecognitionResult | null>(null);
+  const [systemContractNumber] = useState(createSystemContractNumber);
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
@@ -93,18 +86,11 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
       const parsed = await parseContractFiles(files);
       setSelectedFiles(files);
       setDocuments(parsed);
-      const nextRecognition = recognizeContract(parsed, {
-        systemContractNumber: draftIdentity.contractCode,
-        systemIoNumber: draftIdentity.ioNumber,
-        beneficiaryReferences,
-      });
-      setRecognition(nextRecognition);
-      setFields(nextRecognition.fields);
+      setFields(recognizeContractFields(parsed, { systemContractNumber, beneficiaryReferences }));
       setStep(4);
     } catch (reason) {
       setDocuments([]);
       setFields([]);
-      setRecognition(null);
       setError(reason instanceof Error ? reason.message : '合同解析失败，请检查文件后重试。');
     } finally {
       setParsing(false);
@@ -133,22 +119,12 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
     ));
     setSelectedFiles(nextSelected);
     setDocuments(nextDocuments);
-    const nextRecognition = recognizeContract(nextDocuments, {
-      systemContractNumber: draftIdentity.contractCode,
-      systemIoNumber: draftIdentity.ioNumber,
-      beneficiaryReferences,
-    });
-    setRecognition(nextRecognition);
-    setFields(nextRecognition.fields);
+    setFields(recognizeContractFields(nextDocuments, { systemContractNumber, beneficiaryReferences }));
   };
 
   const save = () => {
-    if (!selectedProject || !selectedCreator || !selectedFiles.length || !documents.length || !recognition) return;
+    if (!selectedProject || !selectedCreator || !selectedFiles.length || !documents.length) return;
     const reference = selectedProject.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator.id);
-    if (!reference) {
-      setError('该项目达人缺少 collaboration_id，不能建立合同关联。');
-      return;
-    }
     const sourceDocuments = documents.map((document) => {
       const selected = selectedFiles.find((item) => item.id === document.id);
       return {
@@ -157,10 +133,7 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
       };
     });
     onSave({
-      contractId: draftIdentity.contractId,
-      contractIoId: draftIdentity.contractIoId,
-      systemContractNumber: draftIdentity.contractCode,
-      systemIoNumber: draftIdentity.ioNumber,
+      systemContractNumber,
       projectId: selectedProject.id,
       projectName: selectedProject.name,
       customer: selectedProject.brand,
@@ -168,9 +141,8 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
       creatorName: selectedCreator.name,
       creatorHandle: selectedCreator.handle,
       creatorPlatform: selectedCreator.platform,
-      engagementId: reference.engagementId,
+      engagementId: reference?.engagementId ?? `ENG-${selectedProject.id}-${selectedCreator.id}`,
       recognitionResults: fields,
-      recognitionResult: { ...recognition, fields },
       sourceDocuments,
     });
   };
@@ -256,9 +228,6 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
                 <div>
                   <strong>{document.fileName}</strong>
                   <small>{STATUS_LABELS[document.parseStatus]}{document.pageCount ? ` · ${document.pageCount} 页` : ''}</small>
-                  {document.templateMatch.matched ? (
-                    <p>已匹配单次商单模板 · IO 起始于第 {document.templateMatch.ioStartPage ?? '未知'} 页</p>
-                  ) : document.parseStatus === 'parsed' ? <p>未匹配支持模板，可继续人工录入</p> : null}
                   {document.errorMessage ? <p>{document.errorMessage}</p> : null}
                 </div>
                 <select
@@ -273,7 +242,7 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
           </div>
           <div className="contract-recognition-field-list">
             {fields.map((field) => (
-              <article className={`contract-recognition-field contract-recognition-field-${field.status.toLowerCase()}`} key={field.fieldKey}>
+              <article className={`contract-recognition-field contract-recognition-field-${field.status}`} key={field.fieldKey}>
                 <div>
                   <strong>{field.label}</strong>
                   <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
@@ -284,7 +253,7 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
                     ? `${CONTRACT_DOCUMENT_TYPE_LABELS[field.source.documentType]}${field.source.pageNumber ? ` · 第 ${field.source.pageNumber} 页` : ` · ${field.source.section}`}`
                     : '未找到可靠来源'}
                 </small>
-                {field.status === 'CONFLICT' ? <em><AlertTriangle size={13} />发现 {field.candidates.length} 个候选值，保存后需人工核对</em> : null}
+                {field.status === 'conflict' ? <em><AlertTriangle size={13} />发现 {field.candidates.length} 个候选值，保存后需人工核对</em> : null}
               </article>
             ))}
           </div>
@@ -295,7 +264,7 @@ export function ContractUploadWizard({ projects, creators, draftIdentity, onClos
         <div className="contract-upload-summary">
           <Check size={28} />
           <h3>将保存为待确认合同</h3>
-          <p>{draftIdentity.contractCode} · {draftIdentity.ioNumber} · {selectedProject?.name} · {selectedCreator?.name}</p>
+          <p>{systemContractNumber} · {selectedProject?.name} · {selectedCreator?.name}</p>
           <small>识别值不会自动覆盖正式合同资料。请在合同详情逐项编辑并确认，全部确认后再统一应用。</small>
         </div>
       ) : null}

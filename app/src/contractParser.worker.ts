@@ -23,65 +23,14 @@ const workerScope = typeof self === 'undefined'
   ? null
   : self as unknown as DedicatedWorkerGlobalScope;
 
-const normalizeText = (value: string) => value
-  .replace(/[\u0000-\u001f\u007f]+/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
+const normalizeText = (value: string) => value.replace(/\s+/g, ' ').trim();
 
-const headingPattern = /^(?:[·•]\s*)?(?:standard terms(?: and conditions for digital marketing services)?|insertion order|campaign details|services\s*\/?\s*deliverables|payments?, taxes and costs|payment terms?|bank details|signature|advertiser|publisher|purpose|合同摘要|付款条款|项目详情|签署页)\s*:?\s*$/i;
+const headingPattern = /^(?:standard terms|insertion order|campaign details|payment terms?|bank details|signature|advertiser|publisher|合同摘要|付款条款|项目详情|签署页)$/i;
 
 const isHeading = (text: string) => (
   headingPattern.test(text)
-  || (text.length <= 80 && /^\d{1,2}\.\s+[A-Z][A-Za-z\s,/&-]{2,45}\.?$/.test(text))
-  || (text.length <= 80 && /^[A-Z][A-Z\s/&-]{4,}$/.test(text))
-  || (text.length <= 80 && /^第[一二三四五六七八九十\d]+[章节条]$/.test(text))
+  || (text.length <= 80 && /^(?:[A-Z][A-Z\s/&-]{4,}|第[一二三四五六七八九十\d]+[章节条])$/.test(text))
 );
-
-const inferBlockDocumentType = (
-  text: string,
-  current: ContractDocumentType,
-): ContractDocumentType => {
-  const compact = text.replace(/\s+/g, '');
-  if (/^insertionorder$/i.test(compact)) return 'IO';
-  if (/^standardterms(?:andconditionsfordigitalmarketingservices)?$/i.test(compact.replace(/^[·•]/, ''))) {
-    return 'STANDARD_TERMS';
-  }
-  return current;
-};
-
-const detectTemplate = (blocks: ContractTextBlock[]) => {
-  const normalized = blocks.map((block) => block.text).join('\n');
-  const compact = normalized.replace(/\s+/g, '');
-  const headings = [
-    'Standard Terms And Conditions For Digital Marketing Services',
-    'Insertion Order',
-    'Campaign Details',
-    'Services/Deliverables',
-    'Project Total Fees',
-  ];
-  const matchedHeadings = headings.filter((heading) => {
-    const compactHeading = heading.replace(/\s+/g, '');
-    return compact.toLocaleLowerCase().includes(compactHeading.toLocaleLowerCase());
-  });
-  const ioBlock = blocks.find((block) => /^InsertionOrder$/i.test(block.text.replace(/\s+/g, '')));
-  return {
-    matched: matchedHeadings.length >= 4,
-    templateKey: matchedHeadings.length >= 4
-      ? 'COMETS_DIGITAL_MARKETING_SINGLE_CAMPAIGN' as const
-      : 'UNKNOWN' as const,
-    confidence: matchedHeadings.length / headings.length,
-    matchedHeadings,
-    ioStartPage: ioBlock?.pageNumber ?? null,
-  };
-};
-
-const emptyTemplateMatch = {
-  matched: false,
-  templateKey: 'UNKNOWN' as const,
-  confidence: 0,
-  matchedHeadings: [],
-  ioStartPage: null,
-};
 
 const inferDocumentType = (fileName: string, text: string, selected: ContractDocumentType) => {
   if (selected !== 'OTHER') return selected;
@@ -99,10 +48,7 @@ const joinPdfLine = (items: ContractTextItem[]) => {
   let previousEnd = 0;
   for (const item of ordered) {
     const gap = item.x - previousEnd;
-    const latinWordBoundary = /[A-Za-z0-9)\]"”]$/.test(result) && /^[A-Za-z0-9[(“"]/.test(item.text);
-    result += result && (gap > Math.max(3, item.height * 0.25) || latinWordBoundary)
-      ? ` ${item.text}`
-      : item.text;
+    result += result && gap > Math.max(3, item.height * 0.25) ? ` ${item.text}` : item.text;
     previousEnd = item.x + item.width;
   }
   return normalizeText(result);
@@ -124,7 +70,6 @@ export const parsePdf = async (
     const pdf = await loadingTask.promise;
     const blocks: ContractTextBlock[] = [];
     let currentSection = '正文';
-    let currentDocumentType: ContractDocumentType = selectedType === 'OTHER' ? 'STANDARD_TERMS' : selectedType;
 
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
@@ -151,8 +96,7 @@ export const parsePdf = async (
         const text = joinPdfLine(line);
         if (!text) return;
         const heading = isHeading(text);
-        currentDocumentType = inferBlockDocumentType(text, currentDocumentType);
-        if (heading) currentSection = text.replace(/^[·•]\s*/, '').replace(/:$/, '').trim();
+        if (heading) currentSection = text;
         const ordered = [...line].sort((left, right) => left.x - right.x);
         const largeGapCount = ordered.slice(1).filter((item, index) => (
           item.x - (ordered[index].x + ordered[index].width) > Math.max(24, item.height * 2)
@@ -161,7 +105,6 @@ export const parsePdf = async (
           id: `${id}-page-${pageNumber}-line-${lineIndex + 1}`,
           pageNumber,
           section: currentSection,
-          documentType: currentDocumentType,
           text,
           items: ordered,
           kind: heading ? 'heading' : largeGapCount >= 2 ? 'table-row' : 'paragraph',
@@ -178,7 +121,6 @@ export const parsePdf = async (
       parseStatus: plainText.trim() ? 'parsed' : 'scanned',
       pageCount: pdf.numPages,
       blocks,
-      templateMatch: detectTemplate(blocks),
       errorMessage: plainText.trim()
         ? undefined
         : '该文件可能是扫描件，暂不支持自动识别，请手动填写',
@@ -195,7 +137,6 @@ export const parsePdf = async (
       parseStatus: encrypted ? 'encrypted' : 'corrupt',
       pageCount: null,
       blocks: [],
-      templateMatch: emptyTemplateMatch,
       errorMessage: encrypted ? 'PDF 已加密，暂不支持自动识别' : 'PDF 文件损坏或格式不受支持',
     };
   }
@@ -290,7 +231,6 @@ export const parseDocx = async (
     const bodyChildren = findBodyChildren(ordered);
     const blocks: ContractTextBlock[] = [];
     let currentSection = '正文';
-    let currentDocumentType: ContractDocumentType = selectedType === 'OTHER' ? 'STANDARD_TERMS' : selectedType;
 
     bodyChildren.forEach((child, childIndex) => {
       if (!child || typeof child !== 'object') return;
@@ -300,13 +240,11 @@ export const parseDocx = async (
         if (!text) return;
         const style = paragraphStyle(record.p);
         const heading = /^heading|title/i.test(style) || isHeading(text);
-        currentDocumentType = inferBlockDocumentType(text, currentDocumentType);
-        if (heading) currentSection = text.replace(/^[·•]\s*/, '').replace(/:$/, '').trim();
+        if (heading) currentSection = text;
         blocks.push({
           id: `${id}-paragraph-${childIndex + 1}`,
           pageNumber: null,
           section: currentSection,
-          documentType: currentDocumentType,
           text,
           items: [],
           kind: heading ? 'heading' : 'paragraph',
@@ -324,7 +262,6 @@ export const parseDocx = async (
             id: `${id}-table-${childIndex + 1}-row-${rowIndex + 1}`,
             pageNumber: null,
             section: currentSection,
-            documentType: currentDocumentType,
             text: cells.join(' | '),
             items: [],
             kind: 'table-row',
@@ -343,7 +280,6 @@ export const parseDocx = async (
       parseStatus: 'parsed',
       pageCount: null,
       blocks,
-      templateMatch: detectTemplate(blocks),
     };
   } catch {
     return {
@@ -354,7 +290,6 @@ export const parseDocx = async (
       parseStatus: 'corrupt',
       pageCount: null,
       blocks: [],
-      templateMatch: emptyTemplateMatch,
       errorMessage: 'DOCX 文件损坏、为空或不是标准 Open XML 文档',
     };
   }

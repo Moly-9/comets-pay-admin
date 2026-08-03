@@ -54,17 +54,15 @@ const PAYMENT_METHOD_LABELS = {
 } as const;
 
 const FIELD_STATUS_LABELS = {
-  DETECTED: '待确认',
-  MISSING: '待补充',
-  PLACEHOLDER: '占位符',
-  CONFLICT: '需核对',
-  CONFIRMED: '已确认',
-  NOT_APPLICABLE: '不适用',
+  detected: '待确认',
+  missing: '待补充',
+  conflict: '需核对',
+  confirmed: '已确认',
 } as const;
 
 const sourceLabel = (source: ContractSourceLocation | null) => {
   if (!source) return '未找到可靠来源';
-  const documentLabel = source.documentId.startsWith('system-')
+  const documentLabel = source.documentId === 'system-contract'
     ? '系统字段'
     : CONTRACT_DOCUMENT_TYPE_LABELS[source.documentType];
   return source.pageNumber
@@ -92,7 +90,6 @@ function RecognitionFieldList({
   fieldKeys,
   onChange,
   onConfirm,
-  onNotApplicable,
   onSelectCandidate,
   onOpenSource,
 }: {
@@ -100,7 +97,6 @@ function RecognitionFieldList({
   fieldKeys: ContractFieldKey[];
   onChange: (fieldKey: ContractFieldKey, value: string) => void;
   onConfirm: (fieldKey: ContractFieldKey) => void;
-  onNotApplicable: (fieldKey: ContractFieldKey) => void;
   onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
   onOpenSource: (source: ContractSourceLocation) => void;
 }) {
@@ -110,7 +106,7 @@ function RecognitionFieldList({
         const field = fields.find((item) => item.fieldKey === fieldKey);
         if (!field) return null;
         return (
-          <article className={`contract-recognition-detail contract-recognition-field-${field.status.toLowerCase()}`} key={field.fieldKey}>
+          <article className={`contract-recognition-detail contract-recognition-field-${field.status}`} key={field.fieldKey}>
             <div className="contract-recognition-label">{field.label}</div>
             <div className="contract-recognition-value">
               <input
@@ -119,16 +115,13 @@ function RecognitionFieldList({
                 placeholder="待补充"
                 onChange={(event) => onChange(field.fieldKey, event.target.value)}
               />
-              {field.editedValue !== undefined && field.originalDetectedValue && field.originalDetectedValue !== field.rawValue ? (
-                <small className="contract-recognition-original">原始识别：{field.originalDetectedValue}</small>
-              ) : null}
               {field.source ? (
                 <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
                   <FileSearch size={12} />
                   {sourceLabel(field.source)}
                 </button>
               ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
-              {field.status === 'CONFLICT' && field.candidates.length > 1 ? (
+              {field.status === 'conflict' && field.candidates.length > 1 ? (
                 <div className="contract-recognition-candidates">
                   <strong><AlertTriangle size={13} />发现多个候选，请选择后确认</strong>
                   {field.candidates.map((candidate, index) => (
@@ -139,7 +132,7 @@ function RecognitionFieldList({
                   ))}
                 </div>
               ) : null}
-              {field.profileComparison?.status === 'CONFLICT' ? (
+              {field.profileComparison?.status === 'conflict' ? (
                 <div className="contract-recognition-profile-conflict">
                   <AlertTriangle size={13} />
                   <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
@@ -148,7 +141,7 @@ function RecognitionFieldList({
             </div>
             <div className="contract-recognition-actions">
               <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
-              {!['CONFIRMED', 'NOT_APPLICABLE', 'PLACEHOLDER', 'CONFLICT'].includes(field.status) && field.rawValue.trim() ? (
+              {field.status !== 'confirmed' && field.rawValue.trim() ? (
                 <button
                   className="contract-recognition-confirm"
                   type="button"
@@ -156,9 +149,6 @@ function RecognitionFieldList({
                 >
                   确认
                 </button>
-              ) : null}
-              {field.status === 'MISSING' ? (
-                <button className="contract-recognition-na" type="button" onClick={() => onNotApplicable(field.fieldKey)}>不适用</button>
               ) : null}
             </div>
           </article>
@@ -205,18 +195,8 @@ export function ContractDetailPage({
   const previewUrl = `${documentUrl}#page=${previewPage ?? 1}&toolbar=1&navpanes=0&view=FitH`;
   const readiness = getContractReadiness(contract);
   const hasRecognition = draftFields.length > 0;
-  const confirmedCount = draftFields.filter((field) => ['CONFIRMED', 'NOT_APPLICABLE'].includes(field.status)).length;
+  const confirmedCount = draftFields.filter((field) => field.status === 'confirmed').length;
   const allConfirmed = hasRecognition && confirmedCount === draftFields.length;
-  const hasUnsavedFieldChanges = JSON.stringify(draftFields) !== JSON.stringify(contract.recognitionResults ?? []);
-  useEffect(() => {
-    if (!hasUnsavedFieldChanges) return undefined;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [hasUnsavedFieldChanges]);
   const tabs: Array<{ id: ContractDetailTab; label: string }> = [
     { id: 'summary', label: '合同摘要' },
     { id: 'io', label: 'IO与履约' },
@@ -243,27 +223,9 @@ export function ContractDetailPage({
     onUpdateContract?.({
       ...contract,
       recognitionResults: next,
-      recognitionResult: contract.recognitionResult ? { ...contract.recognitionResult, fields: next } : undefined,
-      extractionStage: next.every((field) => ['CONFIRMED', 'NOT_APPLICABLE'].includes(field.status)) ? 'confirmed' : 'review',
+      extractionStage: next.every((field) => field.status === 'confirmed') ? 'confirmed' : 'review',
     });
     notify('字段已确认', next.find((field) => field.fieldKey === fieldKey)?.label ?? fieldKey);
-  };
-
-  const markNotApplicable = (fieldKey: ContractFieldKey) => {
-    const next = draftFields.map((field) => field.fieldKey === fieldKey ? {
-      ...field,
-      rawValue: '不适用',
-      normalizedValue: null,
-      status: 'NOT_APPLICABLE' as const,
-      editedValue: '不适用',
-    } : field);
-    setDraftFields(next);
-    onUpdateContract?.({
-      ...contract,
-      recognitionResults: next,
-      recognitionResult: contract.recognitionResult ? { ...contract.recognitionResult, fields: next } : undefined,
-      extractionStage: next.every((field) => ['CONFIRMED', 'NOT_APPLICABLE'].includes(field.status)) ? 'confirmed' : 'review',
-    });
   };
 
   const selectCandidate = (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => {
@@ -273,11 +235,8 @@ export function ContractDetailPage({
           rawValue: candidate.rawValue,
           normalizedValue: candidate.normalizedValue,
           source: candidate.source,
-          sourceText: candidate.source.sourceText,
-          pageNumber: candidate.source.pageNumber,
-          section: candidate.source.section,
           confidence: candidate.confidence,
-          status: candidate.placeholder ? 'PLACEHOLDER' : 'DETECTED',
+          status: 'detected',
         }
       : field));
     setActiveDocumentId(candidate.source.documentId);
@@ -285,16 +244,12 @@ export function ContractDetailPage({
   };
 
   const openSource = (source: ContractSourceLocation) => {
-    if (!source.documentId.startsWith('system-')) setActiveDocumentId(source.documentId);
+    if (source.documentId !== 'system-contract') setActiveDocumentId(source.documentId);
     setFocusedSource(source);
   };
 
   const applyRecognition = () => {
-    const candidate = {
-      ...contract,
-      recognitionResults: draftFields,
-      recognitionResult: contract.recognitionResult ? { ...contract.recognitionResult, fields: draftFields } : undefined,
-    };
+    const candidate = { ...contract, recognitionResults: draftFields };
     const applied = applyConfirmedRecognitionToContract(candidate);
     if (!applied) {
       notify('仍有字段未确认', `已确认 ${confirmedCount}/${draftFields.length} 项，请逐项补充并确认。`);
@@ -380,12 +335,6 @@ export function ContractDetailPage({
               ))}
             </div>
           ) : null}
-          {focusedSource && !focusedSource.documentId.startsWith('system-') ? (
-            <div className="contract-source-focus" role="status">
-              <span>{sourceLabel(focusedSource)}</span>
-              <mark>{focusedSource.sourceText}</mark>
-            </div>
-          ) : null}
           {documentUrl && isPdf ? (
             <iframe className="contract-pdf-frame" src={previewUrl} title={`${contract.name} PDF原文`} />
           ) : documentUrl && selectedDocument ? (
@@ -432,7 +381,6 @@ export function ContractDetailPage({
                     fieldKeys={SUMMARY_FIELD_KEYS}
                     onChange={updateField}
                     onConfirm={confirmField}
-                    onNotApplicable={markNotApplicable}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
                   />
@@ -447,69 +395,15 @@ export function ContractDetailPage({
                   <CalendarDays size={18} />
                   <span><strong>IO与履约要求</strong><small>用于后续验收与应付金额确认</small></span>
                 </div>
-                {(contract.recognitionResult?.deliverables.length ?? contract.deliverables.length) > 0 ? (
-                  <>
-                    <h3 className="contract-io-group-title">交付物</h3>
-                    <div className="contract-deliverable-list contract-structured-deliverables">
-                    {(contract.recognitionResult?.deliverables ?? contract.deliverables.map((deliverable) => ({
-                      ...deliverable,
-                      type: 'OTHER' as const,
-                      quantity: null,
-                      platform: '',
-                      format: '',
-                      language: '',
-                      duration: '',
-                      release_start: '',
-                      release_end: '',
-                      content_requirements: deliverable.description,
-                      acceptance_evidence: '',
-                      source_text: deliverable.description,
-                      source_page: null,
-                      status: 'CONFIRMED' as const,
-                      source: null,
-                    }))).map((deliverable, index) => (
+                {contract.deliverables.length > 0 ? (
+                  <div className="contract-deliverable-list">
+                    {contract.deliverables.map((deliverable, index) => (
                       <article key={deliverable.id}>
                         <span>{index + 1}</span>
-                        <div>
-                          <strong>{deliverable.title}</strong>
-                          <p>{deliverable.content_requirements}</p>
-                          <dl className="contract-deliverable-meta">
-                            <div><dt>类型</dt><dd>{deliverable.type}</dd></div>
-                            <div><dt>数量</dt><dd>{deliverable.quantity ?? '待确认'}</dd></div>
-                            <div><dt>平台</dt><dd>{deliverable.platform || '待确认'}</dd></div>
-                            <div><dt>格式 / 时长</dt><dd>{[deliverable.format, deliverable.duration].filter(Boolean).join(' · ') || '待确认'}</dd></div>
-                          </dl>
-                          {deliverable.source ? <button className="contract-recognition-source" type="button" onClick={() => openSource(deliverable.source!)}><FileSearch size={12} />{sourceLabel(deliverable.source!)}</button> : null}
-                        </div>
+                        <div><strong>{deliverable.title}</strong><p>{deliverable.description}</p><small>{deliverable.source}</small></div>
                       </article>
                     ))}
-                    </div>
-                    {(contract.recognitionResult?.obligations.length ?? 0) > 0 ? (
-                      <div className="contract-obligation-groups">
-                        {([
-                          ['PURPOSE', '推广目的'],
-                          ['PUBLISHING_SPEC', '发布规格'],
-                          ['LICENSE', '授权'],
-                          ['ACCEPTANCE_MODIFICATION', '验收与修改'],
-                          ['PAYMENT_TRIGGER', '付款触发条件'],
-                        ] as const).map(([group, label]) => {
-                          const obligations = contract.recognitionResult!.obligations.filter((item) => item.group === group);
-                          if (!obligations.length) return null;
-                          return (
-                            <section key={group}>
-                              <h3 className="contract-io-group-title">{label}</h3>
-                              {obligations.map((obligation) => (
-                                <article className="contract-obligation-row" key={obligation.id}>
-                                  <div><strong>{obligation.label}</strong><p>{obligation.rawValue}</p></div>
-                                  <button className="contract-recognition-source" type="button" onClick={() => openSource(obligation.source)}><FileSearch size={12} />{sourceLabel(obligation.source)}</button>
-                                </article>
-                              ))}
-                            </section>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </>
+                  </div>
                 ) : <div className="contract-inline-empty">当前合同尚未录入结构化交付要求。</div>}
               </>
             ) : null}
@@ -526,7 +420,6 @@ export function ContractDetailPage({
                     fieldKeys={PAYMENT_FIELD_KEYS}
                     onChange={updateField}
                     onConfirm={confirmField}
-                    onNotApplicable={markNotApplicable}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
                   />
@@ -559,20 +452,12 @@ export function ContractDetailPage({
                     <Button disabled={!allConfirmed || !onUpdateContract} onClick={applyRecognition}>应用到正式合同资料</Button>
                   </div>
                 ) : null}
-                {(contract.recognitionResult?.issues.length ?? contract.issues.length) > 0 ? (
+                {contract.issues.length > 0 ? (
                   <div className="contract-issue-list">
-                    {(contract.recognitionResult?.issues ?? contract.issues.map((issue) => ({
-                      ...issue,
-                      severity: issue.severity.toUpperCase() as 'BLOCKER' | 'REVIEW',
-                      sources: [],
-                    }))).map((issue) => (
-                      <article className={`contract-issue contract-issue-${issue.severity.toLowerCase()}`} key={issue.id}>
-                        <span>{issue.severity === 'BLOCKER' ? <AlertTriangle size={17} /> : <FileSearch size={17} />}</span>
-                        <div>
-                          <strong>{issue.severity === 'BLOCKER' ? '阻断项 · ' : '人工复核 · '}{issue.label}</strong>
-                          <p>{issue.description}</p>
-                          {issue.sources?.[0] ? <button className="contract-recognition-source" type="button" onClick={() => openSource(issue.sources[0])}>{sourceLabel(issue.sources[0])}</button> : null}
-                        </div>
+                    {contract.issues.map((issue) => (
+                      <article className={`contract-issue contract-issue-${issue.severity}`} key={issue.id}>
+                        <span>{issue.severity === 'blocker' ? <AlertTriangle size={17} /> : <FileSearch size={17} />}</span>
+                        <div><strong>{issue.label}</strong><p>{issue.description}</p><small>{issue.source}</small></div>
                       </article>
                     ))}
                   </div>
