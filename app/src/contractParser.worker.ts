@@ -32,16 +32,6 @@ const isHeading = (text: string) => (
   || (text.length <= 80 && /^(?:[A-Z][A-Z\s/&-]{4,}|第[一二三四五六七八九十\d]+[章节条])$/.test(text))
 );
 
-const inferDocumentType = (fileName: string, text: string, selected: ContractDocumentType) => {
-  if (selected !== 'OTHER') return selected;
-  const sample = `${fileName}\n${text.slice(0, 2000)}`;
-  if (/payment\s*(?:addendum|supplement)|付款补充/i.test(sample)) return 'PAYMENT_ADDENDUM';
-  if (/signature|signed|execution page|签署页|签字页/i.test(sample)) return 'SIGNATURE_PAGE';
-  if (/\bIO\b|insertion order|campaign details|投放订单/i.test(sample)) return 'IO';
-  if (/standard terms|master agreement|主协议|标准条款/i.test(sample)) return 'STANDARD_TERMS';
-  return 'OTHER';
-};
-
 const joinPdfLine = (items: ContractTextItem[]) => {
   const ordered = [...items].sort((left, right) => left.x - right.x);
   let result = '';
@@ -117,7 +107,7 @@ export const parsePdf = async (
       id,
       fileName,
       mimeType,
-      documentType: inferDocumentType(fileName, plainText, selectedType),
+      documentType: selectedType,
       parseStatus: plainText.trim() ? 'parsed' : 'scanned',
       pageCount: pdf.numPages,
       blocks,
@@ -276,7 +266,7 @@ export const parseDocx = async (
       id,
       fileName,
       mimeType,
-      documentType: inferDocumentType(fileName, plainText, selectedType),
+      documentType: selectedType,
       parseStatus: 'parsed',
       pageCount: null,
       blocks,

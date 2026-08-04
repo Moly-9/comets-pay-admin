@@ -46,6 +46,7 @@ describe('DOCX contract parser', () => {
     );
 
     expect(result.parseStatus).toBe('parsed');
+    expect(result.documentType).toBe('IO');
     expect(result.blocks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: 'heading',

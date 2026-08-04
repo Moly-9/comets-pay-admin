@@ -5,6 +5,8 @@ export type ContractDocumentType =
   | 'PAYMENT_ADDENDUM'
   | 'OTHER';
 
+export type ContractUploadDocumentType = Extract<ContractDocumentType, 'STANDARD_TERMS' | 'IO'>;
+
 export type ContractParseStatus = 'parsed' | 'scanned' | 'encrypted' | 'corrupt';
 
 export type ContractFieldStatus = 'detected' | 'missing' | 'conflict' | 'confirmed';
@@ -124,12 +126,20 @@ export type ContractParserResponse =
     };
 
 export const CONTRACT_DOCUMENT_TYPE_LABELS: Record<ContractDocumentType, string> = {
-  STANDARD_TERMS: 'Standard Terms / 主协议',
-  IO: 'IO / 投放订单',
+  STANDARD_TERMS: '合同',
+  IO: 'IO 单',
   SIGNATURE_PAGE: '签署页',
   PAYMENT_ADDENDUM: '付款补充协议',
   OTHER: '其他合同文件',
 };
+
+export const CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
+  value: ContractUploadDocumentType;
+  label: string;
+}> = [
+  { value: 'STANDARD_TERMS', label: '合同' },
+  { value: 'IO', label: 'IO 单' },
+];
 
 export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
   advertiser: 'Advertiser',

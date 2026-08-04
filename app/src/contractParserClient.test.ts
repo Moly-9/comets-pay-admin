@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createSelectedContractFiles,
   MAX_CONTRACT_FILE_SIZE,
   validateContractFile,
 } from './contractParserClient';
 
 describe('contract file validation', () => {
+  it('defaults every uploaded file to contract without inferring its type from the file name', () => {
+    const files = [
+      new File(['content'], 'campaign-io.pdf', { type: 'application/pdf' }),
+      new File(['content'], 'signed-payment-addendum.docx', {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    ];
+
+    expect(createSelectedContractFiles(files).map((file) => file.documentType)).toEqual([
+      'STANDARD_TERMS',
+      'STANDARD_TERMS',
+    ]);
+  });
+
   it('rejects an empty file', () => {
     const file = new File([], 'empty.pdf', { type: 'application/pdf' });
     expect(validateContractFile(file)).toBe('文件为空，无法解析。');

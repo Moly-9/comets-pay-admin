@@ -10,8 +10,9 @@ import {
 import { recognizeContractFields } from '../contractRecognition';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
-  type ContractDocumentType,
+  CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS,
   type ContractRecognitionField,
+  type ContractUploadDocumentType,
   type ParsedContractDocument,
 } from '../contractRecognitionTypes';
 import type { ContractUploadInput } from '../contracts';
@@ -132,7 +133,7 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
     void parseSelection(createSelectedContractFiles(files));
   };
 
-  const changeDocumentType = (documentId: string, documentType: ContractDocumentType) => {
+  const changeDocumentType = (documentId: string, documentType: ContractUploadDocumentType) => {
     const nextSelected = selectedFiles.map((item) => item.id === documentId ? { ...item, documentType } : item);
     const nextDocuments = documents.map((document) => (
       document.id === documentId ? { ...document, documentType } : document
@@ -254,7 +255,7 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
             <span><Upload size={18} /></span>
             <div>
               <h3 id="contract-upload-files-title">合同文件</h3>
-              <p>支持文字型 PDF 与标准 DOCX，可一次选择主协议、IO 和签署页。</p>
+              <p>支持文字型 PDF 与标准 DOCX，每份文件由用户选择“合同”或“IO 单”。</p>
             </div>
             {documents.length ? <em>{documents.length} 份</em> : null}
           </header>
@@ -295,9 +296,11 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
                 <select
                   aria-label={`${document.fileName} 文档类型`}
                   value={document.documentType}
-                  onChange={(event) => changeDocumentType(document.id, event.target.value as ContractDocumentType)}
+                  onChange={(event) => changeDocumentType(document.id, event.target.value as ContractUploadDocumentType)}
                 >
-                  {Object.entries(CONTRACT_DOCUMENT_TYPE_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                  {CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS.map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </article>
             ))}

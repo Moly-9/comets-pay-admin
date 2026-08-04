@@ -1,8 +1,8 @@
 import type {
-  ContractDocumentType,
   ContractParserFileInput,
   ContractParserResponse,
   ParsedContractDocument,
+  ContractUploadDocumentType,
 } from './contractRecognitionTypes';
 
 export const MAX_CONTRACT_FILE_SIZE = 30 * 1024 * 1024;
@@ -11,7 +11,7 @@ export const MAX_CONTRACT_FILE_COUNT = 10;
 export type SelectedContractFile = {
   id: string;
   file: File;
-  documentType: ContractDocumentType;
+  documentType: ContractUploadDocumentType;
 };
 
 const acceptedMimeTypes = new Set([
@@ -19,14 +19,6 @@ const acceptedMimeTypes = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '',
 ]);
-
-export const inferContractDocumentType = (fileName: string): ContractDocumentType => {
-  if (/payment|addendum|supplement|付款|补充/i.test(fileName)) return 'PAYMENT_ADDENDUM';
-  if (/signature|signed|execution|签署|签字/i.test(fileName)) return 'SIGNATURE_PAGE';
-  if (/(?:^|[-_\s])io(?:[-_\s.]|$)|insertion.?order|投放订单/i.test(fileName)) return 'IO';
-  if (/standard.?terms|master.?agreement|主协议|标准条款/i.test(fileName)) return 'STANDARD_TERMS';
-  return 'OTHER';
-};
 
 export const validateContractFile = (file: File) => {
   if (!file.size) return '文件为空，无法解析。';
@@ -40,7 +32,7 @@ export const createSelectedContractFiles = (files: File[]): SelectedContractFile
   files.map((file, index) => ({
     id: globalThis.crypto?.randomUUID?.() ?? `contract-file-${Date.now()}-${index}`,
     file,
-    documentType: inferContractDocumentType(file.name),
+    documentType: 'STANDARD_TERMS',
   }))
 );
 
