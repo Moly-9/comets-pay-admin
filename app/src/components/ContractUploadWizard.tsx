@@ -15,7 +15,14 @@ import {
   type ContractUploadDocumentType,
   type ParsedContractDocument,
 } from '../contractRecognitionTypes';
-import type { ContractUploadInput } from '../contracts';
+import type { ContractRecord, ContractUploadInput } from '../contracts';
+import {
+  createPrototypeCode,
+  type ContractId,
+  type CreatorId,
+  type EngagementId,
+  type ProjectId,
+} from '../businessWorkflow';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile } from '../types';
 import { Button, Modal, SelectField } from './Common';
@@ -23,6 +30,7 @@ import { Button, Modal, SelectField } from './Common';
 type Props = {
   projects: ProjectSummary[];
   creators: CreatorProfile[];
+  contracts: ContractRecord[];
   onClose: () => void;
   onSave: (input: ContractUploadInput) => void;
 };
@@ -41,15 +49,14 @@ const FIELD_STATUS_LABELS = {
   confirmed: '已确认',
 } as const;
 
-const createSystemContractNumber = () => `CON-UPL-${Date.now().toString().slice(-7)}`;
-
-export function ContractUploadWizard({ projects, creators, onClose, onSave }: Props) {
+export function ContractUploadWizard({ projects, creators, contracts, onClose, onSave }: Props) {
   const [projectId, setProjectId] = useState('');
   const [creatorId, setCreatorId] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<SelectedContractFile[]>([]);
   const [documents, setDocuments] = useState<ParsedContractDocument[]>([]);
   const [fields, setFields] = useState<ContractRecognitionField[]>([]);
-  const [systemContractNumber] = useState(createSystemContractNumber);
+  const [systemContractNumber] = useState(() => createPrototypeCode('CON'));
+  const [draftContractId, setDraftContractId] = useState('');
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
@@ -61,6 +68,15 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
       .filter((creator): creator is CreatorProfile => Boolean(creator));
   }, [creators, selectedProject]);
   const selectedCreator = projectCreators.find((creator) => creator.id === creatorId) ?? null;
+  const selectedProjectInternalId = selectedProject
+    ? (selectedProject.projectId ?? selectedProject.id) as ProjectId
+    : null;
+  const draftCandidates = contracts.filter((contract) => (
+    contract.lifecycle === 'GENERATED_DRAFT'
+    && Boolean(contract.contractId)
+    && contract.projectId === selectedProjectInternalId
+    && contract.creatorId === creatorId
+  ));
   const beneficiaryReferences = useMemo(() => selectedCreator?.payoutAccounts.map((account) => {
     if (account.provider === 'PayPal') {
       return {
@@ -92,7 +108,8 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
   }));
   const conflictCount = fields.filter((field) => field.status === 'conflict').length;
   const missingCount = fields.filter((field) => field.status === 'missing').length;
-  const canSave = Boolean(selectedProject && selectedCreator && documents.length && !parsing);
+  const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id);
+  const canSave = Boolean(selectedProject && selectedCreator && engagementReference && documents.length && !parsing);
 
   useEffect(() => {
     if (!documents.length) {
@@ -145,6 +162,11 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
   const save = () => {
     if (!selectedProject || !selectedCreator || !selectedFiles.length || !documents.length) return;
     const reference = selectedProject.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator.id);
+    if (!reference) {
+      setError('当前项目达人缺少稳定 Engagement ID，需先在项目详情中完成关联。');
+      return;
+    }
+    const selectedDraft = draftCandidates.find((contract) => contract.contractId === draftContractId);
     const sourceDocuments = documents.map((document) => {
       const selected = selectedFiles.find((item) => item.id === document.id);
       return {
@@ -153,15 +175,16 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
       };
     });
     onSave({
-      systemContractNumber,
-      projectId: selectedProject.id,
+      systemContractNumber: selectedDraft?.id ?? systemContractNumber,
+      projectId: (selectedProject.projectId ?? selectedProject.id) as ProjectId,
       projectName: selectedProject.name,
       customer: selectedProject.brand,
-      creatorId: selectedCreator.id,
+      creatorId: selectedCreator.id as CreatorId,
       creatorName: selectedCreator.name,
       creatorHandle: selectedCreator.handle,
       creatorPlatform: selectedCreator.platform,
-      engagementId: reference?.engagementId ?? `ENG-${selectedProject.id}-${selectedCreator.id}`,
+      engagementId: reference.engagementId as EngagementId,
+      draftContractId: selectedDraft?.contractId as ContractId | undefined,
       recognitionResults: fields,
       sourceDocuments,
     });
@@ -214,6 +237,7 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
                 onChange={(value) => {
                   setProjectId(value);
                   setCreatorId('');
+                  setDraftContractId('');
                 }}
               />
               <small>用于合同、IO 与后续 Invoice 的系统关联</small>
@@ -227,9 +251,32 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
                 placeholder={selectedProject ? '选择该项目达人' : '请先选择项目'}
                 options={creatorOptions}
                 disabled={!selectedProject}
-                onChange={setCreatorId}
+                onChange={(value) => {
+                  setCreatorId(value);
+                  setDraftContractId('');
+                }}
               />
               <small>{selectedProject ? `仅显示 ${selectedProject.name} 已关联的达人` : '选择项目后加载关联达人'}</small>
+            </div>
+            <div className="contract-upload-field">
+              <span>对应生成草稿</span>
+              <SelectField
+                ariaLabel="对应生成草稿"
+                variant="form"
+                value={draftContractId}
+                placeholder={creatorId ? '可选：选择待回传草稿' : '请先选择达人'}
+                options={[
+                  { value: '', label: '不关联生成草稿', description: '作为新的上传合同保存' },
+                  ...draftCandidates.map((contract) => ({
+                    value: contract.contractId!,
+                    label: contract.id,
+                    description: `版本 v${contract.generationVersion ?? 1} · ${contract.updated}`,
+                  })),
+                ]}
+                disabled={!creatorId}
+                onChange={setDraftContractId}
+              />
+              <small>选择后沿用草稿合同 ID，并保留原生成快照</small>
             </div>
           </div>
           {selectedProject && projectCreators.length === 0 ? (

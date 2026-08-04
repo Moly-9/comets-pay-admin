@@ -1,10 +1,18 @@
 import { allRecognitionFieldsConfirmed, normalizeDays, normalizeMoney } from './contractRecognition';
 import type { ContractRecognitionField, ContractSourceDocument } from './contractRecognitionTypes';
+import {
+  createPrototypeId,
+  type ContractId,
+  type CreatorId,
+  type EngagementId,
+  type ProjectId,
+} from './businessWorkflow';
 
 export type ContractStatus =
   | '参考模板'
   | '待解析'
   | '待补字段'
+  | '待回传'
   | '已生效'
   | '履约中'
   | '待签署'
@@ -29,8 +37,42 @@ export type ContractDeliverable = {
 };
 
 export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed' | 'applied';
+export type ContractLifecycle =
+  | 'GENERATED_DRAFT'
+  | 'UPLOADED_PENDING_CONFIRMATION'
+  | 'CONFIRMED';
+
+export type ContractGenerationModel = {
+  templateId: 'CON-TPL-2026-KOL';
+  projectId: ProjectId;
+  projectName: string;
+  brandName: string;
+  creatorId: CreatorId;
+  creatorName: string;
+  creatorHandle: string;
+  engagementId: EngagementId;
+  contractNumber: string;
+  ioNumber: string;
+  advertiser: string;
+  publisher: string;
+  platform: string;
+  channelName: string;
+  channelUrl: string;
+  effectiveDate: string;
+  campaignStart: string;
+  campaignEnd: string;
+  currency: string;
+  totalFee: string;
+  invoiceIssuePeriod: string;
+  paymentTerm: string;
+  paymentMethod: ContractPaymentMethod;
+  feeBearer: ContractFeeBearer;
+  deliverables: string;
+  additionalTerms: string;
+};
 
 export type ContractRecord = {
+  contractId?: ContractId;
   id: string;
   ioId: string;
   name: string;
@@ -65,10 +107,16 @@ export type ContractRecord = {
   updated: string;
   deliverables: ContractDeliverable[];
   issues: ContractIssue[];
-  projectId?: string;
-  creatorId?: string;
+  projectId?: ProjectId | string;
+  creatorId?: CreatorId;
   creatorHandle?: string;
-  engagementId?: string;
+  engagementId?: EngagementId;
+  lifecycle?: ContractLifecycle;
+  generationSnapshot?: ContractGenerationModel;
+  generationVersion?: number;
+  generatedFileBaseName?: string;
+  uploadedFromDraftId?: ContractId;
+  confirmedAt?: string;
   extractionStage?: ContractExtractionStage;
   recognitionResults?: ContractRecognitionField[];
   sourceDocuments?: ContractSourceDocument[];
@@ -82,8 +130,11 @@ export const formatContractMoney = (contract: ContractRecord) => {
 
 export const getContractReadiness = (contract: ContractRecord) => {
   const blockers = contract.issues.filter((issue) => issue.severity === 'blocker');
+  const lifecycleConfirmed = contract.lifecycle
+    ? contract.lifecycle === 'CONFIRMED'
+    : contract.signed;
   const ready = (
-    contract.signed
+    lifecycleConfirmed
     && !contract.isTemplate
     && blockers.length === 0
     && Boolean(contract.publisher)
@@ -98,9 +149,19 @@ export const getContractReadiness = (contract: ContractRecord) => {
     ready,
     blockerCount: blockers.length,
     reviewCount: contract.issues.length - blockers.length,
-    label: ready ? '可用于付款项目' : contract.status === '待解析' ? '等待解析' : `${blockers.length} 项待处理`,
+    label: ready
+      ? '可用于付款项目'
+      : contract.lifecycle === 'GENERATED_DRAFT'
+        ? '待上传签署合同'
+        : contract.status === '待解析'
+          ? '等待解析'
+          : `${blockers.length} 项待处理`,
   };
 };
+
+export const isConfirmedContract = (contract: ContractRecord) => (
+  contract.lifecycle ? contract.lifecycle === 'CONFIRMED' : getContractReadiness(contract).ready
+);
 
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
 
@@ -318,16 +379,98 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
 
 export type ContractUploadInput = {
   systemContractNumber: string;
-  projectId: string;
+  projectId: ProjectId;
   projectName: string;
   customer: string;
-  creatorId: string;
+  creatorId: CreatorId;
   creatorName: string;
   creatorHandle: string;
   creatorPlatform: string;
-  engagementId: string;
+  engagementId: EngagementId;
+  draftContractId?: ContractId;
   recognitionResults: ContractRecognitionField[];
   sourceDocuments: ContractSourceDocument[];
+};
+
+const blankFieldIssues = (model: ContractGenerationModel): ContractIssue[] => {
+  const fields = [
+    ['publisher', 'Publisher', model.publisher],
+    ['campaign', 'Campaign Period', model.campaignStart && model.campaignEnd],
+    ['amount', 'Project Total Fees', model.totalFee],
+    ['currency', 'Currency', model.currency],
+    ['payment-term', 'Payment Term', model.paymentTerm],
+    ['payment-method', 'Payment Method', model.paymentMethod],
+  ];
+  return fields
+    .filter(([, , value]) => !value)
+    .map(([id, label]) => ({
+      id: `draft-${id}`,
+      label: `${label} 待补充`,
+      description: '生成文件中保留空白填写区域，媒介可在线下补充后发起签署。',
+      severity: 'review' as const,
+      source: '合同生成草稿',
+    }));
+};
+
+export const createGeneratedContractDraft = (
+  model: ContractGenerationModel,
+  version = 1,
+): ContractRecord => {
+  const totalFee = model.totalFee.trim() ? Number(model.totalFee) : null;
+  const fileBaseName = `${model.contractNumber || 'contract'}-${model.creatorHandle.replace(/^@/, '') || 'creator'}-v${version}`;
+  return {
+    contractId: createPrototypeId('contract') as ContractId,
+    id: model.contractNumber,
+    ioId: model.ioNumber || '待补充',
+    name: `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,
+    templateFamily: '2026 KOL 社交媒体推广服务合同',
+    sourceName: `${fileBaseName}.docx`,
+    documentUrl: '',
+    documentNote: '合同由系统生成并下载至本地，等待媒介线下补充、签署后回传。',
+    isTemplate: false,
+    project: model.projectName,
+    brand: model.brandName,
+    advertiser: model.advertiser,
+    publisher: model.publisher,
+    channelName: model.channelName,
+    channelLink: model.channelUrl,
+    platform: model.platform,
+    effectiveDate: model.effectiveDate,
+    campaignStart: model.campaignStart,
+    campaignEnd: model.campaignEnd,
+    currency: model.currency,
+    totalFee: Number.isFinite(totalFee) ? totalFee : null,
+    licensePrice: null,
+    licenseIncludedInTotal: null,
+    invoiceWithinWorkingDays: normalizeDays(model.invoiceIssuePeriod),
+    paymentWithinWorkingDays: normalizeDays(model.paymentTerm),
+    feeBearer: model.feeBearer,
+    paymentMethod: model.paymentMethod,
+    accountName: '',
+    accountFingerprint: '',
+    signed: false,
+    status: '待回传',
+    updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
+    deliverables: model.deliverables
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((description, index) => ({
+        id: `generated-deliverable-${index + 1}`,
+        title: `交付要求 ${index + 1}`,
+        description,
+        source: '合同生成表单',
+      })),
+    issues: blankFieldIssues(model),
+    projectId: model.projectId,
+    creatorId: model.creatorId,
+    creatorHandle: model.creatorHandle,
+    engagementId: model.engagementId,
+    lifecycle: 'GENERATED_DRAFT',
+    generationSnapshot: { ...model },
+    generationVersion: version,
+    generatedFileBaseName: fileBaseName,
+  };
 };
 
 export const createUploadedContract = ({
@@ -338,6 +481,7 @@ export const createUploadedContract = ({
   creatorId,
   creatorHandle,
   engagementId,
+  draftContractId,
   recognitionResults,
   sourceDocuments,
 }: ContractUploadInput): ContractRecord => {
@@ -349,6 +493,7 @@ export const createUploadedContract = ({
     .map((document) => `${document.fileName}：${document.errorMessage ?? '无法解析'}`);
 
   return {
+    contractId: draftContractId ?? createPrototypeId('contract') as ContractId,
     id: systemContractNumber,
     ioId: '待确认',
     name: displayName || '新上传合同',
@@ -392,19 +537,42 @@ export const createUploadedContract = ({
       },
       {
         id: 'signature',
-        label: '合同尚未完成签署',
-        description: '字段复核不代表合同签署；双方签署完成后才能进入付款项目。',
+        label: '上传合同尚未确认',
+        description: '请人工确认当前上传文件是线下完成后的最终合同版本，再用于 Invoice 校验。',
         severity: 'blocker',
-        source: '签署页',
+        source: '回传文件',
       },
     ],
     projectId,
     creatorId,
     creatorHandle,
     engagementId,
+    lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
+    uploadedFromDraftId: draftContractId,
     extractionStage: 'review',
     recognitionResults,
     sourceDocuments,
+  };
+};
+
+export const completeGeneratedContractUpload = (
+  draft: ContractRecord,
+  input: ContractUploadInput,
+): ContractRecord => {
+  const uploaded = createUploadedContract({
+    ...input,
+    systemContractNumber: draft.id,
+    draftContractId: draft.contractId,
+  });
+  return {
+    ...uploaded,
+    contractId: draft.contractId,
+    id: draft.id,
+    name: draft.name,
+    generationSnapshot: draft.generationSnapshot,
+    generationVersion: draft.generationVersion,
+    generatedFileBaseName: draft.generatedFileBaseName,
+    uploadedFromDraftId: draft.contractId,
   };
 };
 
@@ -482,7 +650,10 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
     accountFingerprint: beneficiary ? '合同识别快照' : '',
     extractionStage: 'applied',
     recognitionAppliedAt: new Date().toISOString(),
-    status: contract.signed ? contract.status : '待签署',
-    issues: contract.issues.filter((issue) => issue.id !== 'recognition-review'),
+    lifecycle: 'CONFIRMED',
+    confirmedAt: new Date().toISOString(),
+    signed: true,
+    status: '已归档',
+    issues: contract.issues.filter((issue) => !['recognition-review', 'signature'].includes(issue.id)),
   };
 };

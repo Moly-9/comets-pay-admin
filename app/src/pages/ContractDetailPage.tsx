@@ -256,7 +256,7 @@ export function ContractDetailPage({
       return;
     }
     onUpdateContract?.(applied);
-    notify('识别结果已应用', '正式合同资料已更新；签署状态和付款就绪度未被自动改变。');
+    notify('合同资料已确认', '上传文件和结构化字段已确认为最终合同版本，现在可以参与 Invoice 校验。');
   };
 
   return (
@@ -296,7 +296,7 @@ export function ContractDetailPage({
         <article>
           <span>合同状态</span>
           <strong>{contract.status}</strong>
-          <small>{contract.signed ? '签署状态已确认' : '尚未确认双方签署'}</small>
+          <small>{contract.lifecycle === 'GENERATED_DRAFT' ? '等待线下补充并回传' : contract.signed ? '上传最终版本已确认' : '上传版本待人工确认'}</small>
         </article>
       </div>
 
