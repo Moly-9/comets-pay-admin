@@ -89,6 +89,11 @@ import {
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import {
+  PROJECT_DEMO_CONTRACTS,
+  PROJECT_DEMO_INVOICES,
+  PROJECT_DEMO_PAYOUTS,
+} from './prototypeResourceFixtures';
+import {
   applyRequestApprovalAction,
   canReviewRequestApproval,
   createRequestApprovalState,
@@ -146,12 +151,20 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<SystemUser>(CURRENT_USER);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
-  const [payouts, setPayouts] = useState<Payout[]>(INITIAL_PAYOUTS);
+  const [payouts, setPayouts] = useState<Payout[]>(() => [
+    ...INITIAL_PAYOUTS,
+    ...PROJECT_DEMO_PAYOUTS,
+  ]);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
-  const [contracts, setContracts] = useState<ContractRecord[]>(INITIAL_CONTRACTS);
+  const [contracts, setContracts] = useState<ContractRecord[]>(() => [
+    ...INITIAL_CONTRACTS,
+    ...PROJECT_DEMO_CONTRACTS,
+  ]);
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
-  const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>([]);
+  const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
+    PROJECT_DEMO_INVOICES
+  ));
   const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>([]);
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
   const [requestProjects, setRequestProjects] = useState(INITIAL_REQUEST_PROJECTS);

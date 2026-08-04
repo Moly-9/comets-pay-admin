@@ -71,6 +71,7 @@ export type ProjectFixture = {
   media: string;
   pm: string;
   creators: number;
+  invoiceCount?: number;
   budget: string;
   projectStatus: string;
   requestStatus: string;
@@ -86,6 +87,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     media: '赖丽红',
     pm: '张咏诗',
     creators: 18,
+    invoiceCount: 18,
     budget: 'USD 48,000',
     projectStatus: '已完成',
     requestStatus: '已完成',
