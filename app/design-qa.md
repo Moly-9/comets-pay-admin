@@ -540,3 +540,74 @@ No actionable P0, P1, or P2 visual differences remain.
 3. Post-fix evidence: `app/design-qa-contract-confirm-comparison.png`; no P0/P1/P2 findings remain.
 
 final result: passed
+
+---
+
+# Contract Confirmed-Field Editing Design QA
+
+## Reference and environment
+
+- Source visual truth:
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e7da30a7-1a08-4f68-bdc8-228752c65c9f.png`
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-2071fe97-0a6c-4b4d-bd8e-8855bdfe3687.png`
+- Browser-rendered implementation:
+  - `app/design-qa-contract-field-edit-summary.jpg`
+  - `app/design-qa-contract-field-edit-checks.jpg`
+- Combined comparison inputs:
+  - `app/design-qa-contract-field-edit-summary-comparison.jpg`
+  - `app/design-qa-contract-field-edit-checks-comparison.jpg`
+- Browser viewport: summary `1425 x 900` CSS px; checks `1265 x 712` CSS px.
+- Captured implementation pixels: summary `1410 x 891`; checks `1265 x 712`.
+- Source pixels: summary `564 x 691`; checks `568 x 458`.
+- Device scale factor: `1`; comparison crops keep native pixel density and are top-aligned.
+- State: uploaded prototype contract before formal application, with summary confirmed at `8/8` and
+  all recognition fields confirmed at `14/14`.
+
+## Full-view and focused comparison
+
+- The full desktop view preserves the existing contract reader proportions, information density, tab
+  hierarchy, field typography, source links, and status badges.
+- The focused summary comparison shows confirmed values without editable underlines, a compact `编辑`
+  action in place of the former confirmed-state button, and no extra row actions.
+- The focused checks comparison shows the progress panel using the same border, radius, spacing, and
+  two-column content rhythm as the issue panel below it, with a distinct green completion treatment.
+- At `14/14`, the stale `合同识别结果待人工确认` blocker is absent while the separate
+  `上传合同尚未确认` blocker remains until formal application.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC hierarchy, compact 10-13px inspector type, and
+  zero letter spacing are preserved.
+- Spacing and layout rhythm: passed; the edit action stays aligned to the section heading, and the
+  progress card matches the issue-card radius, padding, and vertical gap.
+- Colors and visual tokens: passed; confirmed fields retain restrained green status badges, the edit
+  action uses the existing low-saturation purple accent, and the completed progress panel uses a
+  distinct pale green treatment without relying on color alone.
+- Image quality and asset fidelity: passed; no raster UI assets were introduced and existing Lucide
+  icons are used consistently.
+- Copy and content: passed; `编辑`, `确认本页`, `已应用`, `14/14 项`, and the remaining validation
+  message correspond to their actual workflow state.
+
+## Interaction verification
+
+- Confirming the summary changes all eight fields to read-only and removes their bottom borders.
+- Direct fill attempts on confirmed fields are rejected.
+- Clicking `编辑` reopens only the current page, returns its progress to `0/8`, and permits changes.
+- Reconfirming the summary and confirming payment produces `14/14`; the checks tab count changes from
+  `2` to `1`.
+- The recognition-confirmation blocker disappears at `14/14`; the upload-final-version blocker remains.
+- Applying the fields to the formal contract removes the edit action, displays `已应用`, and keeps all
+  recognition fields read-only.
+- Browser console warnings/errors: none.
+
+## Comparison history
+
+1. The supplied summary state showed editable underlines and no way to reopen a confirmed page.
+   - Fix: confirmed fields now render read-only without underlines; before formal application, a page-level
+     `编辑` action reopens that page atomically.
+2. The supplied checks state used a visually flatter progress bar and retained the recognition blocker.
+   - Fix: the progress panel now matches the issue-card structure with a distinct semantic color, and the
+     recognition blocker is derived from live confirmation progress.
+3. Post-fix combined comparisons found no actionable P0, P1, or P2 differences.
+
+final result: passed

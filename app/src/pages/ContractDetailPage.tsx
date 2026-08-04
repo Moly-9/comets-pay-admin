@@ -9,6 +9,7 @@ import {
   FileSearch,
   FileText,
   Landmark,
+  Pencil,
   ReceiptText,
   ShieldCheck,
   X,
@@ -20,6 +21,7 @@ import {
   canConfirmRecognitionFields,
   confirmRecognitionFields,
   editRecognitionField,
+  reopenRecognitionFields,
 } from '../contractRecognition';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
@@ -92,26 +94,33 @@ function RecognitionFieldList({
   onChange,
   onSelectCandidate,
   onOpenSource,
+  recognitionLocked = false,
 }: {
   fields: ContractRecognitionField[];
   fieldKeys: ContractFieldKey[];
   onChange: (fieldKey: ContractFieldKey, value: string) => void;
   onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
   onOpenSource: (source: ContractSourceLocation) => void;
+  recognitionLocked?: boolean;
 }) {
   return (
     <div className="contract-recognition-detail-list">
       {fieldKeys.map((fieldKey) => {
         const field = fields.find((item) => item.fieldKey === fieldKey);
         if (!field) return null;
+        const fieldLocked = recognitionLocked || field.status === 'confirmed';
         return (
-          <article className={`contract-recognition-detail contract-recognition-field-${field.status}`} key={field.fieldKey}>
+          <article
+            className={`contract-recognition-detail contract-recognition-field-${field.status}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
+            key={field.fieldKey}
+          >
             <div className="contract-recognition-label">{field.label}</div>
             <div className="contract-recognition-value">
               <input
                 aria-label={field.label}
                 value={field.rawValue}
                 placeholder="待补充"
+                readOnly={fieldLocked}
                 onChange={(event) => onChange(field.fieldKey, event.target.value)}
               />
               {field.source ? (
@@ -183,10 +192,14 @@ export function ContractDetailPage({
     ? focusedSource.pageNumber
     : null;
   const previewUrl = `${documentUrl}#page=${previewPage ?? 1}&toolbar=1&navpanes=0&view=FitH`;
-  const readiness = getContractReadiness(contract);
   const hasRecognition = draftFields.length > 0;
   const confirmedCount = draftFields.filter((field) => field.status === 'confirmed').length;
   const allConfirmed = hasRecognition && confirmedCount === draftFields.length;
+  const recognitionApplied = contract.extractionStage === 'applied';
+  const visibleIssues = allConfirmed
+    ? contract.issues.filter((issue) => issue.id !== 'recognition-review')
+    : contract.issues;
+  const readiness = getContractReadiness({ ...contract, issues: visibleIssues });
   const recognitionPageState = (fieldKeys: readonly ContractFieldKey[]) => {
     const pageFields = fieldKeys
       .map((fieldKey) => draftFields.find((field) => field.fieldKey === fieldKey))
@@ -204,7 +217,7 @@ export function ContractDetailPage({
     { id: 'summary', label: '合同摘要' },
     { id: 'io', label: 'IO与履约' },
     { id: 'payment', label: '付款与Invoice' },
-    { id: 'checks', label: `校验记录${contract.issues.length ? ` ${contract.issues.length}` : ''}` },
+    { id: 'checks', label: `校验记录${visibleIssues.length ? ` ${visibleIssues.length}` : ''}` },
   ];
 
   const copyContractId = async () => {
@@ -219,6 +232,7 @@ export function ContractDetailPage({
   };
 
   const confirmPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
+    if (recognitionApplied) return;
     if (!canConfirmRecognitionFields(draftFields, fieldKeys)) {
       notify('本页仍有待处理字段', `${pageLabel}存在待补充或需核对字段，请处理后再确认。`);
       return;
@@ -231,6 +245,54 @@ export function ContractDetailPage({
       extractionStage: next.every((field) => field.status === 'confirmed') ? 'confirmed' : 'review',
     });
     notify('本页字段已确认', `${pageLabel}的字段信息已统一确认。`);
+  };
+
+  const editPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
+    if (recognitionApplied) return;
+    const next = reopenRecognitionFields(draftFields, fieldKeys);
+    setDraftFields(next);
+    onUpdateContract?.({
+      ...contract,
+      recognitionResults: next,
+      extractionStage: 'review',
+    });
+    notify('本页已进入编辑状态', `${pageLabel}字段修改后需要重新确认。`);
+  };
+
+  const renderPageAction = (
+    fieldKeys: readonly ContractFieldKey[],
+    pageLabel: string,
+    pageState: { allConfirmed: boolean; canConfirm: boolean },
+  ) => {
+    if (!hasRecognition || !onUpdateContract) return null;
+    if (pageState.allConfirmed) {
+      return recognitionApplied ? (
+        <span className="contract-page-applied">
+          <CheckCircle2 size={14} />
+          已应用
+        </span>
+      ) : (
+        <button
+          className="contract-page-confirm contract-page-edit"
+          type="button"
+          onClick={() => editPage(fieldKeys, pageLabel)}
+        >
+          <Pencil size={14} />
+          编辑
+        </button>
+      );
+    }
+    return (
+      <button
+        className="contract-page-confirm"
+        type="button"
+        disabled={!pageState.canConfirm}
+        onClick={() => confirmPage(fieldKeys, pageLabel)}
+      >
+        <CheckCircle2 size={14} />
+        确认本页
+      </button>
+    );
   };
 
   const selectCandidate = (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => {
@@ -382,17 +444,7 @@ export function ContractDetailPage({
                     <strong>结构化合同信息</strong>
                     <small>{hasRecognition ? `本页已确认 ${summaryPageState.confirmedCount}/${summaryPageState.fieldCount} 项` : '每个字段保留合同来源位置'}</small>
                   </span>
-                  {hasRecognition && onUpdateContract ? (
-                    <button
-                      className="contract-page-confirm"
-                      type="button"
-                      disabled={!summaryPageState.canConfirm || summaryPageState.allConfirmed}
-                      onClick={() => confirmPage(SUMMARY_FIELD_KEYS, '合同摘要')}
-                    >
-                      <CheckCircle2 size={14} />
-                      {summaryPageState.allConfirmed ? '本页已确认' : '确认本页'}
-                    </button>
-                  ) : null}
+                  {renderPageAction(SUMMARY_FIELD_KEYS, '合同摘要', summaryPageState)}
                 </div>
                 {hasRecognition ? (
                   <RecognitionFieldList
@@ -401,6 +453,7 @@ export function ContractDetailPage({
                     onChange={updateField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
+                    recognitionLocked={recognitionApplied}
                   />
                 ) : <ContractDefinitionList contract={contract} />}
                 {contract.channelLink ? <a className="contract-channel-link" href={contract.channelLink} target="_blank" rel="noreferrer"><ExternalLink size={15} />查看达人社媒账号主页</a> : null}
@@ -434,17 +487,7 @@ export function ContractDetailPage({
                     <strong>付款与Invoice规则</strong>
                     <small>{hasRecognition ? `本页已确认 ${paymentPageState.confirmedCount}/${paymentPageState.fieldCount} 项` : '账户识别值仅用于与达人档案人工比对'}</small>
                   </span>
-                  {hasRecognition && onUpdateContract ? (
-                    <button
-                      className="contract-page-confirm"
-                      type="button"
-                      disabled={!paymentPageState.canConfirm || paymentPageState.allConfirmed}
-                      onClick={() => confirmPage(PAYMENT_FIELD_KEYS, '付款与Invoice')}
-                    >
-                      <CheckCircle2 size={14} />
-                      {paymentPageState.allConfirmed ? '本页已确认' : '确认本页'}
-                    </button>
-                  ) : null}
+                  {renderPageAction(PAYMENT_FIELD_KEYS, '付款与Invoice', paymentPageState)}
                 </div>
                 {hasRecognition ? (
                   <RecognitionFieldList
@@ -453,6 +496,7 @@ export function ContractDetailPage({
                     onChange={updateField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
+                    recognitionLocked={recognitionApplied}
                   />
                 ) : (
                   <dl className="contract-payment-list">
@@ -478,14 +522,17 @@ export function ContractDetailPage({
                   <span><strong>合同完整性检查</strong><small>阻断项未解决时不能加入付款项目</small></span>
                 </div>
                 {hasRecognition && contract.extractionStage !== 'applied' ? (
-                  <div className="contract-recognition-apply">
+                  <div className={`contract-recognition-apply${allConfirmed ? ' contract-recognition-apply-complete' : ''}`}>
+                    <span className="contract-recognition-apply-icon">
+                      <CheckCircle2 size={17} />
+                    </span>
                     <div><strong>人工确认进度</strong><small>{confirmedCount}/{draftFields.length} 项</small></div>
                     <Button disabled={!allConfirmed || !onUpdateContract} onClick={applyRecognition}>应用到正式合同资料</Button>
                   </div>
                 ) : null}
-                {contract.issues.length > 0 ? (
+                {visibleIssues.length > 0 ? (
                   <div className="contract-issue-list">
-                    {contract.issues.map((issue) => (
+                    {visibleIssues.map((issue) => (
                       <article className={`contract-issue contract-issue-${issue.severity}`} key={issue.id}>
                         <span>{issue.severity === 'blocker' ? <AlertTriangle size={17} /> : <FileSearch size={17} />}</span>
                         <div><strong>{issue.label}</strong><p>{issue.description}</p><small>{issue.source}</small></div>

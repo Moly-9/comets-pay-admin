@@ -7,6 +7,7 @@ import {
   normalizeCampaignPeriod,
   normalizeMoney,
   recognizeContractFields,
+  reopenRecognitionFields,
 } from './contractRecognition';
 import type {
   ContractDocumentType,
@@ -170,6 +171,29 @@ describe('contract field recognition', () => {
     expect(canConfirmRecognitionFields(fields, ['publisher', 'advertiser'])).toBe(false);
     expect(confirmRecognitionFields(fields, ['publisher', 'advertiser'])).toBe(fields);
     expect(fields[0].status).toBe('detected');
+  });
+
+  it('keeps confirmed fields immutable until their page is reopened for editing', () => {
+    const publisher = confirmRecognitionField(editRecognitionField(field([], 'publisher'), 'Zoë Dupont'));
+    const advertiser = confirmRecognitionField(editRecognitionField(field([], 'advertiser'), 'COMETS INTERNATIONAL LIMITED'));
+    const paymentMethod = confirmRecognitionField(editRecognitionField(field([], 'paymentMethod'), 'Bank Transfer'));
+    const confirmed = [publisher, advertiser, paymentMethod];
+
+    expect(editRecognitionField(publisher, 'Changed Publisher')).toBe(publisher);
+
+    const reopened = reopenRecognitionFields(confirmed, ['publisher', 'advertiser']);
+    expect(reopened.find((item) => item.fieldKey === 'publisher')?.status).toBe('detected');
+    expect(reopened.find((item) => item.fieldKey === 'advertiser')?.status).toBe('detected');
+    expect(reopened.find((item) => item.fieldKey === 'paymentMethod')?.status).toBe('confirmed');
+
+    const edited = editRecognitionField(
+      reopened.find((item) => item.fieldKey === 'publisher')!,
+      'Changed Publisher',
+    );
+    expect(edited).toMatchObject({
+      rawValue: 'Changed Publisher',
+      status: 'detected',
+    });
   });
 
   it('marks a contract beneficiary mismatch against the creator profile without replacing the value', () => {

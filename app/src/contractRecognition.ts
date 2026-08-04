@@ -454,6 +454,7 @@ export const editRecognitionField = (
   field: ContractRecognitionField,
   editedValue: string,
 ): ContractRecognitionField => {
+  if (field.status === 'confirmed') return field;
   const parts = editedValue.split(/\s*[·|]\s*/);
   const normalizedValue = field.fieldKey === 'campaignPeriod'
     ? normalizeCampaignPeriod(editedValue)
@@ -515,6 +516,18 @@ export const confirmRecognitionFields = (
   const targetKeys = new Set(fieldKeys);
   return fields.map((field) => (
     targetKeys.has(field.fieldKey) ? confirmRecognitionField(field) : field
+  ));
+};
+
+export const reopenRecognitionFields = (
+  fields: ContractRecognitionField[],
+  fieldKeys: readonly ContractFieldKey[],
+): ContractRecognitionField[] => {
+  const targetKeys = new Set(fieldKeys);
+  return fields.map((field) => (
+    targetKeys.has(field.fieldKey) && field.status === 'confirmed'
+      ? { ...field, status: 'detected' }
+      : field
   ));
 };
 
