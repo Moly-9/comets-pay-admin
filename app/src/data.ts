@@ -369,19 +369,20 @@ export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
 };
 
 const returnedInvoiceReviewFixture = (
-  stage: 'MEDIA' | 'FINANCE',
+  stage: 'MEDIA' | 'APPROVAL',
   reason: string,
   occurredAt: string,
 ): Pick<Payout, 'invoiceReviewStatus' | 'invoiceReviewHistory' | 'invoiceReviewReturn'> => {
   const actor = stage === 'MEDIA'
     ? { account: 'lailihong', name: '赖丽红', role: '媒介账号' }
     : { account: 'xiwenhui', name: '奚文慧', role: '财务账号' };
-  const toStatus = stage === 'MEDIA' ? '待修改' : '已退回';
+  const reviewStage = stage === 'MEDIA' ? 'MEDIA' : 'FINANCE';
+  const toStatus = stage === 'MEDIA' ? '待签署' : '待媒介复核';
   return {
     invoiceReviewStatus: toStatus,
-    invoiceReviewReturn: { stage, reason, actorName: actor.name, occurredAt },
+    invoiceReviewReturn: { stage: reviewStage, reason, actorName: actor.name, occurredAt },
     invoiceReviewHistory: [{
-      stage,
+      stage: reviewStage,
       action: '退回',
       actorAccount: actor.account,
       actorName: actor.name,
@@ -448,7 +449,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2160,
     account: '0000000002',
     status: '未进入付款',
-    invoiceReviewStatus: '待财务审核',
+    invoiceReviewStatus: '待PM审核',
     accent: '#f97316',
   },
   {
@@ -466,7 +467,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 3750,
     account: '0000000003',
     status: '未进入付款',
-    invoiceReviewStatus: '待财务审核',
+    invoiceReviewStatus: '待项目负责人审核',
     accent: '#06b6d4',
   },
   {
@@ -557,7 +558,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2440,
     account: '000000005',
     status: '未进入付款',
-    ...returnedInvoiceReviewFixture('FINANCE', 'Invoice 缺少达人签字页', '2026-08-02T08:42:00.000Z'),
+    ...returnedInvoiceReviewFixture('APPROVAL', 'Invoice 缺少达人签字页', '2026-08-02T08:42:00.000Z'),
     accent: '#ef4444',
     issue: '财务退回：Invoice 缺少达人签字页',
     returnReason: 'Invoice 缺少达人签字页',
@@ -633,7 +634,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1260,
     account: '待补充 PayPal 邮箱',
     status: '未进入付款',
-    ...returnedInvoiceReviewFixture('FINANCE', 'Invoice 收款主体与合同不一致', '2026-08-01T07:18:00.000Z'),
+    ...returnedInvoiceReviewFixture('APPROVAL', 'Invoice 收款主体与合同不一致', '2026-08-01T07:18:00.000Z'),
     accent: '#ef4444',
     issue: '财务退回：Invoice 收款主体与合同不一致',
     returnReason: 'Invoice 收款主体与合同不一致',
@@ -653,7 +654,13 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1980,
     account: '0000000001',
     status: '未进入付款',
-    invoiceReviewStatus: '待媒介审核',
+    invoiceReviewStatus: '达人反馈',
+    creatorFeedback: {
+      reason: '达人要求更正 Invoice 地址后重新发送。',
+      actorName: '赖丽红',
+      occurredAt: '2026-08-04T06:30:00.000Z',
+    },
+    issue: '达人反馈：达人要求更正 Invoice 地址后重新发送。',
     accent: '#f59e0b',
   },
   {
@@ -671,7 +678,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1740,
     account: 'yuki.tanaka@example.com',
     status: '未进入付款',
-    invoiceReviewStatus: '待财务审核',
+    invoiceReviewStatus: '待老板审核',
     accent: '#ec4899',
   },
   {
@@ -706,9 +713,16 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 2890,
     account: '0000000003',
-    status: '付款处理中',
+    status: '付款失败',
     invoiceReviewStatus: '已通过',
     accent: '#06b6d4',
+    paymentFailure: {
+      provider: 'Airwallex',
+      errorCode: 'BENEFICIARY_DISABLED',
+      providerResponse: 'The beneficiary is currently disabled.',
+      occurredAt: '2026-08-04T08:10:00.000Z',
+    },
+    issue: '渠道付款失败：BENEFICIARY_DISABLED',
   },
   {
     id: 'pay-018',
@@ -762,10 +776,24 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 1320,
     account: 'marc.frames@example.com',
-    status: '未进入付款',
-    ...returnedInvoiceReviewFixture('FINANCE', '合同金额与 Invoice 金额不一致', '2026-08-01T09:06:00.000Z'),
+    status: '已退回',
+    invoiceReviewStatus: '已退回',
     accent: '#ef4444',
-    issue: '财务退回：合同金额与 Invoice 金额不一致',
+    paymentFailure: {
+      provider: 'PayPal',
+      errorCode: 'INVOICE_AMOUNT_MISMATCH',
+      providerResponse: 'Invoice amount differs from the approved payment item.',
+      occurredAt: '2026-08-01T08:42:00.000Z',
+    },
+    paymentFailureReturn: {
+      issueType: 'INVOICE_CONTENT',
+      reason: '合同金额与 Invoice 金额不一致',
+      actorAccount: 'xiwenhui',
+      actorName: '奚文慧',
+      occurredAt: '2026-08-01T09:06:00.000Z',
+      restartStage: 'SIGNATURE',
+    },
+    issue: '付款失败已退回：合同金额与 Invoice 金额不一致',
     returnReason: '合同金额与 Invoice 金额不一致',
   },
   {
@@ -782,11 +810,25 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 2180,
     account: '000000005',
-    status: '未进入付款',
-    ...returnedInvoiceReviewFixture('FINANCE', '收款账号开户名与合同签约主体不一致', '2026-08-01T10:35:00.000Z'),
+    status: '已退回',
+    invoiceReviewStatus: '已退回',
     accent: '#ef4444',
-    issue: '财务退回：收款账号开户名与合同签约主体不一致',
-    returnReason: '收款账号开户名与合同签约主体不一致',
+    paymentFailure: {
+      provider: 'Airwallex',
+      errorCode: 'PAYMENT_LIST_ACCOUNT_STALE',
+      providerResponse: 'Beneficiary snapshot is no longer active.',
+      occurredAt: '2026-08-01T10:12:00.000Z',
+    },
+    paymentFailureReturn: {
+      issueType: 'PAYMENT_LIST',
+      reason: '付款清单中的收款账户快照已失效，请更新后重新提交。',
+      actorAccount: 'xiwenhui',
+      actorName: '奚文慧',
+      occurredAt: '2026-08-01T10:35:00.000Z',
+      restartStage: 'MEDIA_RECHECK',
+    },
+    issue: '付款失败已退回：付款清单中的收款账户快照已失效',
+    returnReason: '付款清单中的收款账户快照已失效，请更新后重新提交。',
   },
 ];
 
@@ -796,6 +838,7 @@ export const PAGE_TITLES = {
   projects: '我的项目',
   requests: '请款项目',
   contracts: '合同管理',
+  'contract-create': '生成合同',
   creators: '达人档案',
   collaborations: '合作名单',
   invoice: 'Invoice 管理',

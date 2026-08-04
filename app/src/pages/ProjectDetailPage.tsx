@@ -977,8 +977,6 @@ export function ProjectDetailPage({
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
   onSubmitReview,
-  onReturnReview,
-  onApproveReview,
   notify,
 }: {
   project: ProjectSummary;
@@ -1007,8 +1005,6 @@ export function ProjectDetailPage({
   onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
   onSubmitReview: () => void;
-  onReturnReview: () => void;
-  onApproveReview: () => void;
   notify: Notify;
 }) {
   const [viewer, setViewer] = useState<ProjectResourceViewerState | null>(null);
@@ -1126,8 +1122,6 @@ export function ProjectDetailPage({
               onRemovePaymentInvoice={onRemovePaymentInvoice}
               onUpdatePaymentItem={onUpdatePaymentItem}
               onSubmitReview={onSubmitReview}
-              onReturnReview={onReturnReview}
-              onApproveReview={onApproveReview}
             />
           </section>
 

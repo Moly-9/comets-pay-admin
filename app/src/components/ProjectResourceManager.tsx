@@ -73,8 +73,6 @@ type Props = {
     value: string | number,
   ) => void;
   onSubmitReview: () => void;
-  onReturnReview: () => void;
-  onApproveReview: () => void;
 };
 
 const projectInternalId = (project: ProjectSummary) => (
@@ -263,8 +261,6 @@ export function ProjectResourceManager({
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
   onSubmitReview,
-  onReturnReview,
-  onApproveReview,
 }: Props) {
   const reviewStatus = project.reviewStatus ?? 'draft';
   const canEdit = canEditProject(currentUser, reviewStatus);
@@ -461,18 +457,12 @@ export function ProjectResourceManager({
           {canEdit && reviewStatus !== 'submitted' && reviewStatus !== 'approved' ? (
             <Button icon={<ShieldCheck size={16} />} onClick={onSubmitReview}>提交请款审核</Button>
           ) : null}
-          {(currentUser.roleKey === 'admin' || currentUser.roleKey === 'owner') && reviewStatus === 'submitted' ? (
-            <>
-              <Button variant="secondary" onClick={onReturnReview}>退回修改</Button>
-              <Button onClick={onApproveReview}>审核通过</Button>
-            </>
-          ) : null}
         </div>
       </div>
 
       {!canEdit ? (
         <NoticeBanner>
-          当前账号在“{projectReviewStatusLabel[reviewStatus]}”状态下仅可查看项目资料。媒介需等待审核退回后修改；管理员和老板不受状态限制。
+          当前账号在“{projectReviewStatusLabel[reviewStatus]}”状态下仅可查看项目资料。审批操作统一在“请款项目详情”按当前节点完成。
         </NoticeBanner>
       ) : null}
 

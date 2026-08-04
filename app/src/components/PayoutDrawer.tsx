@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Avatar, Button, Modal, StatusMark } from './Common';
 import { formatAmount, getProjectFixture, SYSTEM_USERS, type SystemUser } from '../data';
 import type { ContractRecord } from '../contracts';
-import type { Payout } from '../types';
+import type { PaymentFailureIssueType, Payout } from '../types';
 
 type ApprovalAssignment = {
   media: string;
@@ -74,8 +74,9 @@ const getApprovalActor = (account: string): ApprovalActor => (
 
 const timelineIndex = (status: Payout['status']) => {
   if (status === '飞书审批中') return 1;
-  if (status === '信息异常' || status === '已退回') return 4;
+  if (status === '信息异常') return 4;
   if (status === '等待付款' || status === '付款处理中') return 5;
+  if (status === '付款失败' || status === '已退回') return 5;
   if (status === '已付款') return 7;
   return 0;
 };
@@ -87,6 +88,7 @@ const currentStateLabel = (status: Payout['status']) => {
   if (status === '飞书审批中') return '审批中';
   if (status === '等待付款') return '待打款';
   if (status === '付款处理中') return '处理中';
+  if (status === '付款失败') return '失败待处理';
   return '当前步骤';
 };
 
@@ -94,15 +96,14 @@ const ACTION_LABEL: Partial<Record<Payout['status'], string>> = {
   等待付款: '执行打款',
   信息异常: '标记资料已修复',
   付款处理中: '模拟状态回写成功',
-  已退回: '重新发起审核',
 };
 
 export function PayoutDrawer({
   payout,
   onClose,
   onAdvance,
+  onPaymentFailed,
   onReturn,
-  canReview,
   canExecutePayout,
   contract,
   onViewContract,
@@ -111,8 +112,8 @@ export function PayoutDrawer({
   payout: Payout;
   onClose: () => void;
   onAdvance: (payout: Payout) => void;
-  onReturn: (payout: Payout, reason: string) => void;
-  canReview: boolean;
+  onPaymentFailed: (payout: Payout) => void;
+  onReturn: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => void;
   canExecutePayout: boolean;
   contract: ContractRecord | null;
   onViewContract: (contract: ContractRecord) => void;
@@ -120,6 +121,7 @@ export function PayoutDrawer({
 }) {
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [issueType, setIssueType] = useState<PaymentFailureIssueType | ''>('');
   const currentIndex = timelineIndex(payout.status);
   const approvalAssignment = getProjectApprovalAssignment(payout);
   const steps: Array<{ label: string; description: string; actor: ApprovalActor }> = [
@@ -148,15 +150,17 @@ export function PayoutDrawer({
   const normalizedReturnReason = returnReason.trim();
   const canAdvance = ['等待付款', '付款处理中', '信息异常'].includes(payout.status)
     && canExecutePayout;
+  const canReturnFailure = payout.status === '付款失败' && canExecutePayout;
 
   const openReturnDialog = () => {
     setReturnReason('');
+    setIssueType('');
     setReturnDialogOpen(true);
   };
 
   const submitReturn = () => {
-    if (!normalizedReturnReason) return;
-    onReturn(payout, normalizedReturnReason);
+    if (!normalizedReturnReason || !issueType) return;
+    onReturn(payout, issueType, normalizedReturnReason);
     setReturnDialogOpen(false);
     setReturnReason('');
   };
@@ -193,6 +197,35 @@ export function PayoutDrawer({
               <div><dt>付款方式</dt><dd>批量打款</dd></div>
             </dl>
           </section>
+
+          {payout.paymentFailure ? (
+            <section className="drawer-section">
+              <h3>付款失败结果</h3>
+              <dl className="detail-grid">
+                <div><dt>失败渠道</dt><dd>{payout.paymentFailure.provider}</dd></div>
+                <div><dt>错误码</dt><dd>{payout.paymentFailure.errorCode}</dd></div>
+                <div><dt>失败时间</dt><dd>{payout.paymentFailure.occurredAt}</dd></div>
+                <div><dt>渠道响应</dt><dd>{payout.paymentFailure.providerResponse}</dd></div>
+              </dl>
+              {payout.paymentFailureReturn ? (
+                <div className="drawer-alert">
+                  <AlertTriangle size={18} />
+                  <span>
+                    <strong>{
+                      payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT'
+                        ? 'Invoice 内容问题'
+                        : '付款清单问题'
+                    }</strong>
+                    {payout.paymentFailureReturn.reason} · 下一步{
+                      payout.paymentFailureReturn.restartStage === 'SIGNATURE'
+                        ? '重新签署'
+                        : '媒介复核'
+                    }
+                  </span>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="drawer-section">
             <h3>当前审批链路</h3>
@@ -232,22 +265,26 @@ export function PayoutDrawer({
         </div>
 
           <footer className="drawer-footer">
+            {payout.status === '付款处理中' && canExecutePayout ? (
+              <Button variant="secondary" onClick={() => onPaymentFailed(payout)}>模拟付款失败</Button>
+            ) : null}
             {actionLabel && canAdvance ? <Button onClick={() => onAdvance(payout)}>{actionLabel}</Button> : null}
+            {canReturnFailure ? <Button variant="danger" onClick={openReturnDialog}>退回媒介</Button> : null}
             {payout.status === '飞书审批中' ? <Button disabled>等待飞书审批</Button> : null}
-            {payout.status === '已付款' ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
+            {(payout.status === '已付款' || payout.status === '已退回') ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
           </footer>
         </aside>
       </div>
 
       {returnDialogOpen ? (
         <Modal
-          title="退回审核"
+          title="付款失败退回媒介"
           width="520px"
           onClose={() => setReturnDialogOpen(false)}
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!normalizedReturnReason} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!normalizedReturnReason || !issueType} onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >
@@ -255,10 +292,24 @@ export function PayoutDrawer({
             <div className="return-review-summary">
               <span><MessageSquareText size={19} /></span>
               <div>
-                <strong>请填写退回原因</strong>
+                <strong>请选择问题类型并填写退回原因</strong>
                 <p>{payout.creator} · {payout.invoice} · {formatAmount(payout)}</p>
               </div>
             </div>
+
+            <label className="return-review-field">
+              <span>问题类型 <em className="required-mark" aria-hidden="true">*</em></span>
+              <select
+                aria-label="付款失败问题类型"
+                value={issueType}
+                onChange={(event) => setIssueType(event.target.value as PaymentFailureIssueType | '')}
+              >
+                <option value="">请选择问题类型</option>
+                <option value="INVOICE_CONTENT">Invoice 内容问题</option>
+                <option value="PAYMENT_LIST">付款清单问题</option>
+              </select>
+              <small>必须由财务人工判断，系统不会根据渠道错误文本自动分类。</small>
+            </label>
 
             <label className="return-review-field">
               <span>退回原因 <em className="required-mark" aria-hidden="true">*</em><small>{returnReason.length}/300</small></span>
@@ -266,14 +317,20 @@ export function PayoutDrawer({
                 autoFocus
                 maxLength={300}
                 aria-label="退回原因"
-                placeholder="请说明需要修改的内容，例如：请核对收款主体与合同主体"
+                placeholder="请说明失败原因和媒介需要处理的内容"
                 value={returnReason}
                 onChange={(event) => setReturnReason(event.target.value)}
               />
-              <small>该原因将同步给项目负责人，并记录在付款详情中。</small>
+              <small>该原因、实际操作人和退回时间会记录在付款详情中。</small>
             </label>
 
-            <div className="return-review-warning"><AlertTriangle size={17} /><span>确认后，该笔付款将进入“已退回”，需修改后重新发起审核。</span></div>
+            <div className="return-review-warning"><AlertTriangle size={17} /><span>{
+              issueType === 'INVOICE_CONTENT'
+                ? '确认后进入“已退回”，重新发起时必须从达人签署开始。'
+                : issueType === 'PAYMENT_LIST'
+                  ? '确认后进入“已退回”，重新发起时从媒介复核开始，无需重新签署。'
+                  : '确认后，该笔付款将进入“已退回”，且不能直接重试付款。'
+            }</span></div>
           </div>
         </Modal>
       ) : null}

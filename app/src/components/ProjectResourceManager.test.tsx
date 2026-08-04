@@ -307,8 +307,6 @@ describe('project resource aggregation', () => {
         onRemovePaymentInvoice={vi.fn()}
         onUpdatePaymentItem={vi.fn()}
         onSubmitReview={vi.fn()}
-        onReturnReview={vi.fn()}
-        onApproveReview={vi.fn()}
       />,
     );
 

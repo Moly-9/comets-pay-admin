@@ -12,6 +12,7 @@ export type NavPage =
   | 'projects'
   | 'requests'
   | 'contracts'
+  | 'contract-create'
   | 'creators'
   | 'collaborations'
   | 'invoice'
@@ -248,17 +249,41 @@ export type InvoiceDocumentModel = {
 
 export type InvoiceReviewStatus =
   | '待签署'
+  | '达人反馈'
   | '待媒介审核'
+  | '待媒介复核'
+  | '待发起请款'
+  | '待PM审核'
+  | '待项目负责人审核'
+  | '待老板审核'
   | '待财务审核'
-  | '待修改'
   | '已通过'
   | '已退回';
 
-export type InvoiceReviewStage = 'SIGNATURE' | 'MEDIA' | 'FINANCE';
+export type InvoiceReviewStage =
+  | 'SIGNATURE'
+  | 'MEDIA'
+  | 'REQUEST'
+  | 'PM'
+  | 'PROJECT_OWNER'
+  | 'OWNER'
+  | 'FINANCE'
+  | 'PAYMENT';
 
 export type InvoiceReviewEvent = {
   stage: InvoiceReviewStage;
-  action: '签署完成' | '审核通过' | '退回' | '重新提交';
+  action:
+    | '签署完成'
+    | '达人反馈'
+    | '重新发送'
+    | '审核通过'
+    | '复核通过并重新提交'
+    | '提交请款'
+    | '退回'
+    | '重新提交'
+    | '签署失效'
+    | '付款失败'
+    | '退回媒介';
   actorAccount: string;
   actorName: string;
   actorRole: string;
@@ -266,6 +291,7 @@ export type InvoiceReviewEvent = {
   toStatus: InvoiceReviewStatus;
   reason?: string;
   occurredAt: string;
+  approvalRound?: number;
 };
 
 export type GeneratedInvoiceRecord = {
@@ -276,6 +302,7 @@ export type GeneratedInvoiceRecord = {
   generatedAt: string;
   snapshot: InvoiceDocumentModel;
   validationStatus: 'valid' | 'needs_review';
+  version?: number;
 };
 
 export type PayoutStatus =
@@ -284,8 +311,27 @@ export type PayoutStatus =
   | '信息异常'
   | '飞书审批中'
   | '付款处理中'
+  | '付款失败'
   | '已付款'
   | '已退回';
+
+export type PaymentFailureIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
+
+export type PaymentFailureRecord = {
+  provider: Exclude<Provider, '手动打款'>;
+  errorCode: string;
+  providerResponse: string;
+  occurredAt: string;
+};
+
+export type PaymentFailureReturn = {
+  issueType: PaymentFailureIssueType;
+  reason: string;
+  actorAccount: string;
+  actorName: string;
+  occurredAt: string;
+  restartStage: 'SIGNATURE' | 'MEDIA_RECHECK';
+};
 
 export type Payout = {
   id: string;
@@ -304,12 +350,24 @@ export type Payout = {
   status: PayoutStatus;
   invoiceReviewStatus: InvoiceReviewStatus;
   invoiceReviewHistory?: InvoiceReviewEvent[];
+  invoiceVersion?: number;
+  invoiceSignatureRound?: number;
+  invoiceSignedAt?: string;
+  requestApprovalRound?: number;
+  paymentListVersion?: number;
+  creatorFeedback?: {
+    reason: string;
+    actorName: string;
+    occurredAt: string;
+  };
   invoiceReviewReturn?: {
     stage: Exclude<InvoiceReviewStage, 'SIGNATURE'>;
     reason: string;
     actorName: string;
     occurredAt: string;
   };
+  paymentFailure?: PaymentFailureRecord;
+  paymentFailureReturn?: PaymentFailureReturn;
   invoiceSnapshot?: InvoiceDocumentModel;
   accent: string;
   issue?: string;

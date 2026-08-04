@@ -30,10 +30,16 @@ import { SystemSettingsPage } from './pages/SystemSettingsPage';
 import {
   applyInvoiceReviewAction,
   getAvailableInvoiceReviewActions,
+  getInvoicePageTab,
+  invalidateSignedInvoice,
+  invoiceStatusForRequestApproval,
   isInvoiceApprovedForPayment,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
+  paymentFailureRestartStage,
+  sensitiveInvoiceSnapshotChanged,
   type InvoiceReviewAction,
+  type InvoicePageTab,
 } from './invoice/invoiceReviewWorkflow';
 import {
   BatchesPage,
@@ -50,8 +56,16 @@ import {
   RequestsPage,
   TransactionsPage,
 } from './pages/OperationalPages';
-import type { InvoicePageTab } from './pages/OperationalPages';
-import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceEntity, NavPage, Payout, Provider, ToastState } from './types';
+import type {
+  CreatorProfile,
+  GeneratedInvoiceRecord,
+  InvoiceEntity,
+  NavPage,
+  PaymentFailureIssueType,
+  Payout,
+  Provider,
+  ToastState,
+} from './types';
 import {
   canEditProject,
   createAuditEvent,
@@ -74,6 +88,14 @@ import {
 } from './businessWorkflow';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
+import {
+  applyRequestApprovalAction,
+  canReviewRequestApproval,
+  createRequestApprovalState,
+  REQUEST_APPROVAL_STATUS_LABEL,
+  requestApprovalStage,
+  type RequestApprovalAction,
+} from './requestApprovalWorkflow';
 
 type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
 
@@ -295,11 +317,16 @@ export default function App() {
         account: rawAccount ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}` : '待补充',
         status: '未进入付款',
         invoiceReviewStatus: '待签署',
+        invoiceVersion: record.version ?? 1,
+        invoiceSignatureRound: 0,
         invoiceSnapshot: record.snapshot,
         accent: creator?.accent ?? '#64748b',
       }, ...current]);
     }
-    setGeneratedInvoices((current) => [record, ...current.filter((item) => item.id !== record.id)]);
+    setGeneratedInvoices((current) => [
+      { ...record, version: record.version ?? 1 },
+      ...current.filter((item) => item.id !== record.id),
+    ]);
     if (record.snapshot.projectId && record.snapshot.engagementId) {
       registerProjectMutation({
         projectId: record.snapshot.projectId as ProjectId,
@@ -465,9 +492,38 @@ export default function App() {
   };
 
   const updateGeneratedInvoice = (updated: GeneratedInvoiceRecord) => {
+    const previous = generatedInvoices.find((invoice) => invoice.invoiceId === updated.invoiceId);
+    const linkedPayout = previous
+      ? payouts.find((payout) => payout.id === previous.sourcePayoutId)
+      : undefined;
+    const invalidatesSignature = Boolean(
+      previous
+      && linkedPayout
+      && linkedPayout.invoiceReviewStatus === '待媒介复核'
+      && sensitiveInvoiceSnapshotChanged(previous, updated),
+    );
+    const nextPayout = invalidatesSignature && linkedPayout
+      ? invalidateSignedInvoice(
+          { ...linkedPayout, invoiceSnapshot: updated.snapshot },
+          { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        )
+      : linkedPayout
+        ? { ...linkedPayout, invoiceSnapshot: updated.snapshot }
+        : undefined;
     setGeneratedInvoices((current) => current.map((invoice) => (
-      invoice.invoiceId === updated.invoiceId ? updated : invoice
+      invoice.invoiceId === updated.invoiceId
+        ? {
+            ...updated,
+            version: invalidatesSignature ? (invoice.version ?? 1) + 1 : invoice.version,
+            status: nextPayout?.invoiceReviewStatus ?? updated.status,
+          }
+        : invoice
     )));
+    if (nextPayout) {
+      setPayouts((current) => current.map((payout) => (
+        payout.id === nextPayout.id ? nextPayout : payout
+      )));
+    }
     if (updated.snapshot.projectId) {
       registerProjectMutation({
         projectId: updated.snapshot.projectId as ProjectId,
@@ -475,8 +531,13 @@ export default function App() {
         entityType: 'invoice',
         entityId: updated.invoiceId,
         action: 'update',
-        summary: `已更新 Invoice ${updated.id}，等待重新校验`,
+        summary: invalidatesSignature
+          ? `已更新 Invoice ${updated.id} 的签署敏感字段，原签署失效`
+          : `已更新 Invoice ${updated.id}，等待重新校验`,
       });
+    }
+    if (invalidatesSignature) {
+      notify('需重新签署', '已修改主体、金额、币种、付款方式、收款账户、费用明细或合同关联，原签署已失效。');
     }
   };
 
@@ -602,6 +663,16 @@ export default function App() {
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
     ));
     const list = paymentLists.find((item) => item.projectId === projectId);
+    const linkedPayouts = projectInvoices.map((invoice) => (
+      payouts.find((payout) => payout.id === invoice.sourcePayoutId)
+    ));
+    if (
+      linkedPayouts.some((payout) => !payout)
+      || linkedPayouts.some((payout) => payout?.invoiceReviewStatus !== '待发起请款')
+    ) {
+      notify('暂不能发起请款', '项目内全部 Invoice 必须先完成达人签署和媒介审核。');
+      return;
+    }
     const submissionIssues = validateProjectSubmission({
       engagementIds: references.map((reference) => reference.engagementId),
       invoices: projectInvoices.map((invoice) => ({
@@ -625,13 +696,48 @@ export default function App() {
       return;
     }
     const submittedAt = nowIso();
+    const previousRequest = requestProjects.find((item) => item.projectId === projectId);
+    const approval = createRequestApprovalState(submittedAt, previousRequest?.approval);
+    const approvalInvoiceStatus = invoiceStatusForRequestApproval('PENDING_PM');
+    const invoiceIds = projectInvoices.map((invoice) => invoice.invoiceId);
+    const sourcePayoutIds = new Set(projectInvoices.map((invoice) => invoice.sourcePayoutId));
     setProjects((current) => current.map((item) => getProjectId(item) === projectId
       ? { ...item, reviewStatus: 'submitted', submittedAt, reviewUpdatedAt: submittedAt, status: '待审批' }
       : item));
     setPaymentLists((current) => current.map((item) => item.projectId === projectId
       ? { ...item, status: 'submitted', updatedAt: submittedAt }
       : item));
-    const requestId = createPrototypeCode('REQ');
+    setPayouts((current) => current.map((payout) => sourcePayoutIds.has(payout.id)
+      ? {
+          ...payout,
+          status: '未进入付款',
+          invoiceReviewStatus: approvalInvoiceStatus,
+          requestApprovalRound: approval.round,
+          paymentListVersion: list?.version ?? 1,
+          invoiceReviewHistory: [
+            ...(payout.invoiceReviewHistory ?? []),
+            {
+              stage: 'REQUEST',
+              action: '提交请款',
+              actorAccount: currentUser.account,
+              actorName: currentUser.name,
+              actorRole: currentUser.role,
+              fromStatus: payout.invoiceReviewStatus,
+              toStatus: approvalInvoiceStatus,
+              occurredAt: submittedAt,
+              approvalRound: approval.round,
+            },
+          ],
+          issue: undefined,
+          returnReason: undefined,
+        }
+      : payout));
+    setGeneratedInvoices((current) => current.map((invoice) => (
+      invoiceIds.includes(invoice.invoiceId)
+        ? { ...invoice, status: approvalInvoiceStatus }
+        : invoice
+    )));
+    const requestId = previousRequest?.id ?? createPrototypeCode('REQ');
     const requestAmount = list!.items.reduce<Record<string, number>>((result, item) => {
       const currency = String(item.overrides.currency ?? item.snapshot.currency);
       const amount = Number(item.overrides.amount ?? item.snapshot.amount);
@@ -643,6 +749,9 @@ export default function App() {
     const request: RequestProjectSummary = {
       id: requestId,
       projectId,
+      invoiceIds,
+      paymentListId: list!.paymentListId,
+      approval,
       project: project.name,
       brand: project.brand,
       media: project.media,
@@ -651,7 +760,7 @@ export default function App() {
       contracts: contracts.filter((contract) => contract.projectId === projectId && contract.lifecycle !== 'GENERATED_DRAFT').length,
       invoices: projectInvoices.length,
       paymentOrder: list!.paymentListCode,
-      status: '待审批',
+      status: REQUEST_APPROVAL_STATUS_LABEL[approval.status],
       filter: 'pending',
       generatedDetail: {
         brand: project.brand,
@@ -673,42 +782,149 @@ export default function App() {
     };
     setRequestProjects((current) => [
       request,
-      ...current.filter((item) => item.projectId !== projectId || item.filter !== 'pending'),
+      ...current.filter((item) => item.id !== request.id && item.projectId !== projectId),
     ]);
-    appendReviewAudit(project, 'submit', '已提交项目请款审核并锁定项目资料');
-    notify('已提交审核', `${project.name} 已锁定，审核退回后媒介可继续修改。`);
+    appendReviewAudit(project, 'submit', `已提交第 ${approval.round} 轮项目请款审批并锁定项目资料`);
+    notify('已提交项目请款', `${project.name} 已进入第 ${approval.round} 轮 PM 审批。`);
   };
 
-  const returnProjectReview = (project: ProjectSummary) => {
-    const projectId = getProjectId(project);
-    const returnedAt = nowIso();
-    setProjects((current) => current.map((item) => getProjectId(item) === projectId
-      ? { ...item, reviewStatus: 'returned', returnedAt, reviewUpdatedAt: returnedAt, status: '已退回' }
-      : item));
-    setPaymentLists((current) => current.map((item) => item.projectId === projectId
-      ? { ...item, status: 'draft', updatedAt: returnedAt }
-      : item));
-    setRequestProjects((current) => current.map((item) => item.projectId === projectId && item.filter === 'pending'
-      ? { ...item, status: '已退回' }
-      : item));
-    appendReviewAudit(project, 'return', '审核已退回，媒介恢复编辑权限');
-    notify('项目已退回', '媒介账号现在可以重新修改项目和关联资料。');
-  };
-
-  const approveProjectReview = (project: ProjectSummary) => {
-    const projectId = getProjectId(project);
-    const approvedAt = nowIso();
-    setProjects((current) => current.map((item) => getProjectId(item) === projectId
-      ? { ...item, reviewStatus: 'approved', reviewUpdatedAt: approvedAt, status: '已通过' }
-      : item));
-    setPaymentLists((current) => current.map((item) => item.projectId === projectId
-      ? { ...item, status: 'approved', updatedAt: approvedAt }
-      : item));
-    setRequestProjects((current) => current.map((item) => item.projectId === projectId && item.filter === 'pending'
-      ? { ...item, status: '已通过', filter: 'processed' }
-      : item));
-    appendReviewAudit(project, 'approve', '项目请款审核已通过');
-    notify('审核已通过', `${project.name} 已进入可请款状态。`);
+  const handleRequestApproval = (
+    request: RequestProjectSummary,
+    action: RequestApprovalAction,
+    reason?: string,
+  ) => {
+    if (!request.approval || !canReviewRequestApproval(currentUser, request.approval, request.pm)) {
+      notify('暂无审批权限', '当前账号不是该请款当前节点的审批人，不能越级处理。');
+      return;
+    }
+    const currentStage = requestApprovalStage(request.approval.status);
+    if (!currentStage) {
+      notify('当前状态不可审批', '该请款已结束当前审批轮次。');
+      return;
+    }
+    try {
+      const occurredAt = nowIso();
+      const nextApproval = applyRequestApprovalAction(
+        request.approval,
+        action,
+        { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        reason,
+        occurredAt,
+      );
+      const invoiceIds = new Set(request.invoiceIds ?? []);
+      const sourcePayoutIds = new Set(
+        generatedInvoices
+          .filter((invoice) => invoiceIds.has(invoice.invoiceId))
+          .map((invoice) => invoice.sourcePayoutId),
+      );
+      if (sourcePayoutIds.size === 0) {
+        const requestProjectId = request.projectId ?? request.id;
+        payouts
+          .filter((payout) => payout.projectId === requestProjectId)
+          .forEach((payout) => sourcePayoutIds.add(payout.id));
+      }
+      const isReturned = nextApproval.status === 'RETURNED_TO_MEDIA_REVIEW';
+      const isApproved = nextApproval.status === 'APPROVED';
+      const nextInvoiceStatus = isReturned
+        ? '待媒介复核'
+        : invoiceStatusForRequestApproval(nextApproval.status as Exclude<
+            typeof nextApproval.status,
+            'RETURNED_TO_MEDIA_REVIEW'
+          >);
+      setPayouts((current) => current.map((payout) => {
+        if (!sourcePayoutIds.has(payout.id)) return payout;
+        return {
+          ...payout,
+          status: isApproved ? '等待付款' : '未进入付款',
+          invoiceReviewStatus: nextInvoiceStatus,
+          invoiceReviewHistory: [
+            ...(payout.invoiceReviewHistory ?? []),
+            {
+              stage: currentStage,
+              action: action === 'APPROVE' ? '审核通过' : '退回',
+              actorAccount: currentUser.account,
+              actorName: currentUser.name,
+              actorRole: currentUser.role,
+              fromStatus: payout.invoiceReviewStatus,
+              toStatus: nextInvoiceStatus,
+              reason: reason?.trim(),
+              occurredAt,
+              approvalRound: nextApproval.round,
+            },
+          ],
+          invoiceReviewReturn: isReturned
+            ? {
+                stage: currentStage,
+                reason: reason?.trim() ?? '',
+                actorName: currentUser.name,
+                occurredAt,
+              }
+            : undefined,
+          issue: isReturned ? `项目审批退回：${reason?.trim()}` : undefined,
+          returnReason: isReturned ? reason?.trim() : undefined,
+        };
+      }));
+      setGeneratedInvoices((current) => current.map((invoice) => (
+        sourcePayoutIds.has(invoice.sourcePayoutId)
+          ? { ...invoice, status: nextInvoiceStatus }
+          : invoice
+      )));
+      setRequestProjects((current) => current.map((item) => item.id === request.id
+        ? {
+            ...item,
+            approval: nextApproval,
+            status: REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status],
+            filter: isApproved ? 'processed' : 'pending',
+            generatedDetail: item.generatedDetail
+              ? {
+                  ...item.generatedDetail,
+                  invoiceStatus: isApproved ? '已通过' : isReturned ? '待媒介复核' : REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status],
+                  paymentListStatus: isApproved ? '已批准' : isReturned ? '草稿' : '审批中',
+                }
+              : item.generatedDetail,
+          }
+        : item));
+      if (request.projectId) {
+        setProjects((current) => current.map((project) => getProjectId(project) === request.projectId
+          ? {
+              ...project,
+              reviewStatus: isApproved ? 'approved' : isReturned ? 'returned' : 'submitted',
+              reviewUpdatedAt: occurredAt,
+              returnedAt: isReturned ? occurredAt : project.returnedAt,
+              status: isApproved
+                ? '已通过'
+                : isReturned
+                  ? '待媒介复核'
+                  : REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status],
+            }
+          : project));
+        setPaymentLists((current) => current.map((list) => list.projectId === request.projectId
+          ? {
+              ...list,
+              status: isApproved ? 'approved' : isReturned ? 'draft' : 'submitted',
+              updatedAt: occurredAt,
+            }
+          : list));
+      }
+      appendReviewAudit(
+        (projects.find((project) => getProjectId(project) === request.projectId)
+          ?? { id: request.id } as ProjectSummary),
+        isReturned ? 'return' : isApproved ? 'approve' : 'approve',
+        isReturned
+          ? `第 ${nextApproval.round} 轮审批在${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}退回媒介复核`
+          : `${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}已通过`,
+      );
+      notify(
+        isReturned ? '已退回媒介复核' : isApproved ? '财务审批已通过' : '审批已通过',
+        isReturned
+          ? '该轮全部 Invoice 已进入“待媒介审核 / 待复核”，付款入口继续锁定。'
+          : isApproved
+            ? '项目请款与关联 Invoice 已通过，付款入口已解锁。'
+            : `请款已进入“${REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status]}”。`,
+      );
+    } catch (error) {
+      notify('审批操作失败', error instanceof Error ? error.message : '当前节点无法执行该操作。');
+    }
   };
 
   const advancePayout = (payout: Payout) => {
@@ -729,16 +945,111 @@ export default function App() {
     notify('付款状态已更新', `${payout.creator} 已进入“${nextStatus}”。`);
   };
 
-  const returnPayout = (payout: Payout, reason: string) => {
-    const updated: Payout = { ...payout, status: '已退回', returnReason: reason, issue: `财务退回：${reason}` };
+  const failPayout = (payout: Payout) => {
+    if (!isInvoiceApprovedForPayment(payout) || payout.status !== '付款处理中') {
+      notify('无法记录付款失败', '仅付款处理中的已通过 Invoice 可以记录渠道失败。');
+      return;
+    }
+    if (!hasPermission(currentUser, 'payout_execute')) {
+      notify('暂无付款权限', '当前账号不能操作付款结果。');
+      return;
+    }
+    const occurredAt = nowIso();
+    const failureReason = '渠道付款失败：SIMULATED_PROVIDER_DECLINE';
+    const updated: Payout = {
+      ...payout,
+      status: '付款失败',
+      paymentFailure: {
+        provider: payout.provider,
+        errorCode: 'SIMULATED_PROVIDER_DECLINE',
+        providerResponse: 'Prototype channel response: transfer was declined.',
+        occurredAt,
+      },
+      invoiceReviewHistory: [
+        ...(payout.invoiceReviewHistory ?? []),
+        {
+          stage: 'PAYMENT',
+          action: '付款失败',
+          actorAccount: currentUser.account,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          fromStatus: payout.invoiceReviewStatus,
+          toStatus: payout.invoiceReviewStatus,
+          reason: failureReason,
+          occurredAt,
+        },
+      ],
+      issue: failureReason,
+    };
     setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
-    notify('已退回审核', '退回原因已同步给项目负责人。');
+    notify('已记录付款失败', '请由财务选择问题类型并退回媒介，当前不可直接重试付款。');
+  };
+
+  const returnPayout = (
+    payout: Payout,
+    issueType: PaymentFailureIssueType,
+    reason: string,
+  ) => {
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) {
+      notify('请填写退回原因', '付款失败退回媒介时必须说明需要处理的内容。');
+      return;
+    }
+    if (
+      payout.status !== '付款失败'
+      || !payout.paymentFailure
+      || !hasPermission(currentUser, 'payout_execute')
+    ) {
+      notify('无法退回媒介', '只有财务、管理员或老板可以处理当前付款失败记录。');
+      return;
+    }
+    const occurredAt = nowIso();
+    const updated: Payout = {
+      ...payout,
+      status: '已退回',
+      invoiceReviewStatus: '已退回',
+      paymentFailureReturn: {
+        issueType,
+        reason: normalizedReason,
+        actorAccount: currentUser.account,
+        actorName: currentUser.name,
+        occurredAt,
+        restartStage: paymentFailureRestartStage(issueType),
+      },
+      invoiceReviewHistory: [
+        ...(payout.invoiceReviewHistory ?? []),
+        {
+          stage: 'PAYMENT',
+          action: '退回媒介',
+          actorAccount: currentUser.account,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          fromStatus: payout.invoiceReviewStatus,
+          toStatus: '已退回',
+          reason: normalizedReason,
+          occurredAt,
+        },
+      ],
+      returnReason: normalizedReason,
+      issue: `付款失败已退回：${normalizedReason}`,
+    };
+    setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+    setGeneratedInvoices((current) => current.map((invoice) => invoice.sourcePayoutId === payout.id
+      ? { ...invoice, status: '已退回' }
+      : invoice));
+    setSelectedPayout((current) => current?.id === payout.id ? updated : current);
+    notify(
+      '已退回媒介',
+      issueType === 'INVOICE_CONTENT'
+        ? '该 Invoice 重新发起后将从达人签署开始。'
+        : '该 Invoice 重新发起后将从媒介复核开始，无需达人重新签署。',
+    );
   };
 
   const updateInvoiceReview = (
     payout: Payout,
-    action: Exclude<InvoiceReviewAction, 'MARK_SIGNED'>,
+    action: InvoiceReviewAction,
     reason?: string,
   ) => {
     const allowedActions = getAvailableInvoiceReviewActions(payout.invoiceReviewStatus, {
@@ -757,12 +1068,94 @@ export default function App() {
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
         reason,
       );
-      setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+      const isPaymentRestart = action === 'RESTART_AFTER_PAYMENT_FAILURE';
+      const restartIssueType = payout.paymentFailureReturn?.issueType;
+      const restartProject = isPaymentRestart
+        ? projects.find((item) => item.id === payout.projectId)
+        : undefined;
+      const restartProjectId = restartProject ? getProjectId(restartProject) : undefined;
+      const nextPaymentListVersion = restartProjectId
+        ? (paymentLists.find((list) => list.projectId === restartProjectId)?.version ?? 1) + 1
+        : undefined;
+      const relatedPayoutIds = new Set(
+        payouts.filter((item) => item.projectId === payout.projectId).map((item) => item.id),
+      );
+      setPayouts((current) => current.map((item) => {
+        if (item.id === payout.id) {
+          return isPaymentRestart
+            ? { ...updated, paymentListVersion: nextPaymentListVersion ?? item.paymentListVersion }
+            : updated;
+        }
+        if (!isPaymentRestart || !relatedPayoutIds.has(item.id)) return item;
+        return {
+          ...item,
+          status: '未进入付款',
+          invoiceReviewStatus: restartIssueType === 'PAYMENT_LIST' ? '待媒介复核' : '待发起请款',
+          paymentListVersion: nextPaymentListVersion ?? item.paymentListVersion,
+          issue: restartIssueType === 'PAYMENT_LIST' ? '付款清单问题待媒介复核' : undefined,
+        };
+      }));
       setGeneratedInvoices((current) => current.map((record) => (
         record.sourcePayoutId === payout.id
           ? { ...record, status: updated.invoiceReviewStatus }
+          : isPaymentRestart && relatedPayoutIds.has(record.sourcePayoutId)
+            ? {
+                ...record,
+                status: restartIssueType === 'PAYMENT_LIST' ? '待媒介复核' : '待发起请款',
+              }
           : record
       )));
+      setInvoiceTab(getInvoicePageTab(updated.invoiceReviewStatus));
+      if (action === 'APPROVE_MEDIA') {
+        const allProjectInvoicesReady = payouts
+          .filter((item) => item.projectId === payout.projectId)
+          .every((item) => (
+            item.id === payout.id
+              ? updated.invoiceReviewStatus === '待发起请款'
+              : item.invoiceReviewStatus === '待发起请款'
+          ));
+        setProjects((current) => current.map((project) => project.id === payout.projectId
+          ? {
+              ...project,
+              status: allProjectInvoicesReady ? '待发起请款' : 'Invoice审核中',
+            }
+          : project));
+      }
+      if (isPaymentRestart) {
+        setProjects((current) => current.map((item) => item.id === payout.projectId
+          ? {
+              ...item,
+              reviewStatus: 'returned',
+              status: updated.invoiceReviewStatus === '待签署' ? '待重新签署' : '待媒介复核',
+              reviewUpdatedAt: nowIso(),
+            }
+          : item));
+        if (restartProjectId) {
+          setPaymentLists((current) => current.map((list) => list.projectId === restartProjectId
+            ? {
+                ...list,
+                status: 'draft',
+                version: nextPaymentListVersion,
+                updatedAt: nowIso(),
+              }
+            : list));
+          setRequestProjects((current) => current.map((request) => request.projectId === restartProjectId
+            ? {
+                ...request,
+                status: updated.invoiceReviewStatus === '待签署' ? '待重新签署' : '待媒介复核',
+                filter: 'pending',
+                approval: request.approval
+                  ? {
+                      ...request.approval,
+                      status: 'RETURNED_TO_MEDIA_REVIEW',
+                      returnReason: payout.paymentFailureReturn?.reason,
+                      updatedAt: nowIso(),
+                    }
+                  : request.approval,
+              }
+            : request));
+        }
+      }
       notify('Invoice 审核状态已更新', `${payout.invoice} 已进入“${updated.invoiceReviewStatus}”。`);
     } catch (error) {
       notify('状态更新失败', error instanceof Error ? error.message : '当前 Invoice 无法执行该操作。');
@@ -794,7 +1187,7 @@ export default function App() {
           ? { ...invoice, status: updatedPayout.invoiceReviewStatus }
           : invoice
       )));
-      setInvoiceTab('review');
+      setInvoiceTab('media-review');
       setFocusedInvoiceId(linkedPayout.id);
       notify('已提交媒介审核', `${record.id} 已标记签署完成，当前状态为“待媒介审核”。`);
     } catch (error) {
@@ -803,15 +1196,7 @@ export default function App() {
   };
 
   const openInvoiceFromPayout = (payout: Payout) => {
-    setInvoiceTab(
-      payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待财务审核'
-        ? 'review'
-        : payout.invoiceReviewStatus === '待修改'
-          ? 'revision'
-          : payout.invoiceReviewStatus === '已退回'
-          ? 'returned'
-          : 'approved',
-    );
+    setInvoiceTab(getInvoicePageTab(payout.invoiceReviewStatus));
     setFocusedInvoiceId(payout.id);
     setSelectedPayout(null);
     setActivePage('invoice');
@@ -856,7 +1241,6 @@ export default function App() {
     return <AuthPage onAuthenticated={authenticate} />;
   }
 
-  const canReviewRequests = hasPermission(currentUser, 'request_review');
   const canReviewInvoiceMedia = hasPermission(currentUser, 'invoice_media_review');
   const canReviewInvoiceFinance = hasPermission(currentUser, 'invoice_finance_review');
   const canExecutePayouts = hasPermission(currentUser, 'payout_execute');
@@ -910,8 +1294,6 @@ export default function App() {
           onRemovePaymentInvoice={removePaymentInvoice}
           onUpdatePaymentItem={updatePaymentItem}
           onSubmitProjectReview={submitProjectReview}
-          onReturnProjectReview={returnProjectReview}
-          onApproveProjectReview={approveProjectReview}
           onProjectsChange={setProjects}
           canCreateProject={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}
         />
@@ -925,6 +1307,7 @@ export default function App() {
           currentUser={currentUser}
           requests={requestProjects}
           onRequestCreated={(request) => setRequestProjects((current) => [request, ...current])}
+          onApprovalAction={handleRequestApproval}
           canCreateRequest={false}
         />
       );
@@ -1067,8 +1450,8 @@ export default function App() {
           payout={selectedPayout}
           onClose={() => setSelectedPayout(null)}
           onAdvance={advancePayout}
+          onPaymentFailed={failPayout}
           onReturn={returnPayout}
-          canReview={canReviewRequests}
           canExecutePayout={canExecutePayouts}
           contract={selectedPayoutContract}
           onViewContract={openContractFromPayout}

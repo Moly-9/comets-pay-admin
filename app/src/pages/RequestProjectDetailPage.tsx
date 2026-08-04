@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   Clock3,
@@ -7,7 +8,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
-import { PageHeading } from '../components/Common';
+import { Button, Modal, PageHeading } from '../components/Common';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -16,11 +17,27 @@ import type {
 } from '../projectResources';
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
-import type { ProjectId } from '../businessWorkflow';
+import type { SystemUser } from '../data';
+import type {
+  InvoiceId,
+  PaymentListId,
+  ProjectId,
+  RequestApprovalState,
+  RequestApprovalStatus,
+} from '../businessWorkflow';
+import {
+  canReviewRequestApproval,
+  REQUEST_APPROVAL_STATUS_LABEL,
+  requestApprovalStage,
+  type RequestApprovalAction,
+} from '../requestApprovalWorkflow';
 
 export type RequestProjectSummary = {
   id: string;
   projectId?: ProjectId;
+  invoiceIds?: InvoiceId[];
+  paymentListId?: PaymentListId;
+  approval?: RequestApprovalState;
   project: string;
   brand: string;
   media: string;
@@ -86,6 +103,70 @@ type RequestProjectDetail = {
 };
 
 type Notify = (title: string, message: string) => void;
+
+const APPROVAL_STEPS: Array<{
+  status: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
+  stage: NonNullable<ReturnType<typeof requestApprovalStage>>;
+  label: string;
+}> = [
+  { status: 'PENDING_PM', stage: 'PM', label: 'PM 审批' },
+  { status: 'PENDING_PROJECT_OWNER', stage: 'PROJECT_OWNER', label: '项目负责人审批' },
+  { status: 'PENDING_OWNER', stage: 'OWNER', label: '老板审批' },
+  { status: 'PENDING_FINANCE', stage: 'FINANCE', label: '财务审批' },
+];
+
+const approvalProgress = (request: RequestProjectSummary): RequestProgress[] | null => {
+  if (!request.approval) return null;
+  const currentStage = requestApprovalStage(request.approval.status);
+  return [
+    {
+      label: '请款提交',
+      description: `第 ${request.approval.round} 轮审批已提交`,
+      time: request.approval.submittedAt,
+      state: 'complete',
+    },
+    ...APPROVAL_STEPS.map((step) => {
+      const approvedEvent = [...request.approval!.history].reverse().find((event) => (
+        event.round === request.approval!.round
+        && event.stage === step.stage
+        && event.action === 'APPROVE'
+      ));
+      const returnedEvent = [...request.approval!.history].reverse().find((event) => (
+        event.round === request.approval!.round
+        && event.stage === step.stage
+        && event.action === 'RETURN'
+      ));
+      if (approvedEvent) {
+        return {
+          label: step.label,
+          description: `${approvedEvent.actorName}已审批通过`,
+          time: approvedEvent.occurredAt,
+          state: 'complete' as const,
+        };
+      }
+      if (returnedEvent) {
+        return {
+          label: step.label,
+          description: `${returnedEvent.actorName}退回媒介复核`,
+          time: returnedEvent.occurredAt,
+          state: 'current' as const,
+        };
+      }
+      return {
+        label: step.label,
+        description: currentStage === step.stage ? '等待当前节点处理' : '上一节点通过后进入',
+        time: currentStage === step.stage ? '待审批' : '待开始',
+        state: currentStage === step.stage ? 'current' as const : 'pending' as const,
+      };
+    }),
+    {
+      label: '渠道付款',
+      description: request.approval.status === 'APPROVED' ? '财务已通过，付款入口已解锁' : '全部审批完成后执行',
+      time: request.approval.status === 'APPROVED' ? request.approval.updatedAt : '待开始',
+      state: request.approval.status === 'APPROVED' ? 'current' : 'pending',
+    },
+  ];
+};
 
 const REQUEST_CREATOR_NAMES: Record<string, string[]> = {
   'PRJ-260718': ['@MinaKato', 'Yuki Tanaka', 'Camila Costa', 'Oliver Chen', 'Alex Ruiz', 'Hannah Lee'],
@@ -410,10 +491,18 @@ function getRequestProjectResourceRecords(
 
 export function RequestProjectDetailPage({
   request,
+  currentUser,
+  onApprovalAction,
   onBack,
   notify,
 }: {
   request: RequestProjectSummary;
+  currentUser: SystemUser;
+  onApprovalAction: (
+    request: RequestProjectSummary,
+    action: RequestApprovalAction,
+    reason?: string,
+  ) => void;
   onBack: () => void;
   notify: Notify;
 }) {
@@ -422,7 +511,18 @@ export function RequestProjectDetailPage({
     kind: Extract<ProjectResourceKind, 'contract' | 'invoice'>;
     recordId: string;
   } | null>(null);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
   const detail = getRequestProjectDetail(request);
+  const liveProgress = approvalProgress(request) ?? detail.progress;
+  const canReviewCurrentStage = Boolean(
+    request.approval
+    && canReviewRequestApproval(currentUser, request.approval, request.pm),
+  );
+  const currentApprovalLabel = request.approval
+    ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
+    : request.status;
+  const normalizedReturnReason = returnReason.trim();
   const payees = getRequestPayees(request, detail);
   const records = getRequestProjectResourceRecords(request, detail, payees);
   const projectContext = { id: request.id, name: request.project, brand: detail.brand };
@@ -486,13 +586,13 @@ export function RequestProjectDetailPage({
       <PageHeading
         title={request.project}
         subtitle={`${request.id} · 项目媒介 ${request.media} · 负责 PM ${request.pm}`}
-        actions={<span className="project-detail-status"><i />{request.status}</span>}
+        actions={<span className="project-detail-status"><i />{currentApprovalLabel}</span>}
       />
 
       <div className="metrics-grid project-detail-metrics">
         <article className="metric-card metric-peach"><span>请款金额</span><strong>{request.amount}</strong><small>由 {detail.submitter} 提交</small></article>
         <article className="metric-card"><span>关联资料</span><strong>{request.contracts + request.invoices} 份</strong><small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small></article>
-        <article className="metric-card metric-lilac"><span>当前状态</span><strong>{request.status}</strong><small>审批负责人 · {detail.approver}</small></article>
+        <article className="metric-card metric-lilac"><span>当前状态</span><strong>{currentApprovalLabel}</strong><small>{request.approval ? `第 ${request.approval.round} 轮审批` : `审批负责人 · ${detail.approver}`}</small></article>
       </div>
 
       <div className="project-detail-layout">
@@ -565,13 +665,25 @@ export function RequestProjectDetailPage({
         <aside className="project-detail-card project-progress-card">
           <header className="project-detail-card-header"><div><h2>审批与付款进度</h2><p>请款提交、审批、复核与渠道付款状态。</p></div></header>
           <div className="project-progress-list">
-            {detail.progress.map((step, index) => (
+            {liveProgress.map((step, index) => (
               <div className={`project-progress-item progress-${step.state}`} key={`${step.label}${step.time}`}>
                 <span className="project-progress-node">{step.state === 'complete' ? <Check size={15} /> : step.state === 'current' ? <Clock3 size={15} /> : index + 1}</span>
                 <div><strong>{step.label}</strong><p>{step.description}</p><small>{step.time}</small></div>
               </div>
             ))}
           </div>
+          {request.approval?.status === 'RETURNED_TO_MEDIA_REVIEW' ? (
+            <div className="drawer-alert">
+              <AlertTriangle size={18} />
+              <span><strong>已退回媒介复核</strong>{request.approval.returnReason}</span>
+            </div>
+          ) : null}
+          {canReviewCurrentStage ? (
+            <div className="invoice-review-actions request-approval-actions">
+              <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>退回媒介复核</Button>
+              <Button onClick={() => onApprovalAction(request, 'APPROVE')}>审批通过</Button>
+            </div>
+          ) : null}
         </aside>
       </div>
 
@@ -588,6 +700,42 @@ export function RequestProjectDetailPage({
           }}
           onClose={() => setViewer(null)}
         />
+      ) : null}
+      {returnDialogOpen ? (
+        <Modal
+          title="退回媒介复核"
+          width="520px"
+          onClose={() => setReturnDialogOpen(false)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
+              <Button
+                variant="danger"
+                disabled={!normalizedReturnReason}
+                onClick={() => {
+                  onApprovalAction(request, 'RETURN', normalizedReturnReason);
+                  setReturnDialogOpen(false);
+                  setReturnReason('');
+                }}
+              >
+                确认退回
+              </Button>
+            </>
+          )}
+        >
+          <label className="return-review-field">
+            <span>退回原因 <em className="required-mark" aria-hidden="true">*</em><small>{returnReason.length}/300</small></span>
+            <textarea
+              autoFocus
+              maxLength={300}
+              aria-label="请款审批退回原因"
+              placeholder="请说明媒介需要复核或修正的内容"
+              value={returnReason}
+              onChange={(event) => setReturnReason(event.target.value)}
+            />
+            <small>该轮全部 Invoice 将进入“待媒介审核 / 待复核”，付款清单恢复草稿。</small>
+          </label>
+        </Modal>
       ) : null}
     </div>
   );

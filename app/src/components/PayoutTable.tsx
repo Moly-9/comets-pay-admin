@@ -10,6 +10,7 @@ const ACTION_LABELS: Record<Payout['status'], string> = {
   信息异常: '查看原因',
   飞书审批中: '查看',
   付款处理中: '查看进度',
+  付款失败: '查看失败信息',
   已付款: '查看详情',
   已退回: '查看原因',
 };
@@ -20,6 +21,7 @@ export function PayoutTable({
   emptyText = '当前筛选条件下没有付款记录',
   statusLabels,
   statusFor,
+  statusLabelFor,
   actionLabelFor,
   primaryActionFor,
 }: {
@@ -28,6 +30,7 @@ export function PayoutTable({
   emptyText?: string;
   statusLabels?: Partial<Record<Payout['status'], string>>;
   statusFor?: (payout: Payout) => PayoutStatus | InvoiceReviewStatus;
+  statusLabelFor?: (payout: Payout) => string;
   actionLabelFor?: (payout: Payout) => string;
   primaryActionFor?: (payout: Payout) => boolean;
 }) {
@@ -64,7 +67,7 @@ export function PayoutTable({
                 </td>
                 <td className="mono-cell">{payout.invoice}</td>
                 <td>{payout.provider}</td>
-                <td><StatusMark status={displayStatus} label={statusLabels?.[payout.status]} /></td>
+                <td><StatusMark status={displayStatus} label={statusLabelFor?.(payout) ?? statusLabels?.[payout.status]} /></td>
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
                   <Button

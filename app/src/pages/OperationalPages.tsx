@@ -42,10 +42,12 @@ import { Pagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
+  getInvoicePageTab,
+  getInvoiceRowStatus,
   isInvoiceApprovedForPayment,
   type InvoiceReviewAction,
+  type InvoicePageTab,
 } from '../invoice/invoiceReviewWorkflow';
-import { downloadBlob, formatInvoiceMoney, invoiceFilename, invoiceTotal } from '../invoice/invoiceUtils';
 import {
   clonePayoutAccounts,
   createAirwallexPayoutAccount,
@@ -80,8 +82,11 @@ import {
   type InvoiceId,
   type PaymentListRecord,
   type ProjectId,
+  type RequestApprovalState,
+  type RequestApprovalStatus,
   type WorkflowAuditEvent,
 } from '../businessWorkflow';
+import type { RequestApprovalAction } from '../requestApprovalWorkflow';
 
 type Notify = (title: string, message: string) => void;
 type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
@@ -435,8 +440,6 @@ export function ProjectsPage({
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
   onSubmitProjectReview,
-  onReturnProjectReview,
-  onApproveProjectReview,
   onProjectsChange,
   canCreateProject,
 }: {
@@ -465,8 +468,6 @@ export function ProjectsPage({
   onRemovePaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
   onSubmitProjectReview: (project: ProjectSummary) => void;
-  onReturnProjectReview: (project: ProjectSummary) => void;
-  onApproveProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
 }) {
@@ -744,8 +745,6 @@ export function ProjectsPage({
         onRemovePaymentInvoice={(invoiceId) => onRemovePaymentInvoice(selectedProject, invoiceId)}
         onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
         onSubmitReview={() => onSubmitProjectReview(selectedProject)}
-        onReturnReview={() => onReturnProjectReview(selectedProject)}
-        onApproveReview={() => onApproveProjectReview(selectedProject)}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {
           setSelectedProjectId(null);
@@ -863,9 +862,58 @@ export function ProjectsPage({
   );
 }
 
+const createFixtureRequestApproval = (
+  requestStatus: string,
+  pmName: string,
+): RequestApprovalState => {
+  const status: RequestApprovalStatus = requestStatus.includes('财务')
+    ? 'PENDING_FINANCE'
+    : requestStatus.includes('项目负责人')
+      ? 'PENDING_PROJECT_OWNER'
+      : requestStatus.includes('老板')
+        ? 'PENDING_OWNER'
+        : requestStatus === '待打款' || requestStatus === '已完成'
+          ? 'APPROVED'
+          : requestStatus === '已退回'
+            ? 'RETURNED_TO_MEDIA_REVIEW'
+            : 'PENDING_PM';
+  const ordered = ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'] as const;
+  const currentIndex = status === 'APPROVED' ? ordered.length : ordered.indexOf(status as typeof ordered[number]);
+  const actorByStage = {
+    PM: pmName,
+    PROJECT_OWNER: '项目负责人',
+    OWNER: '老板',
+    FINANCE: '财务',
+  };
+  const history = ordered.slice(0, Math.max(currentIndex, 0)).map((fromStatus, index) => {
+    const stage = (['PM', 'PROJECT_OWNER', 'OWNER', 'FINANCE'] as const)[index];
+    return {
+      round: 1,
+      stage,
+      action: 'APPROVE' as const,
+      actorAccount: `fixture-${stage.toLowerCase()}`,
+      actorName: actorByStage[stage],
+      actorRole: `${actorByStage[stage]}账号`,
+      fromStatus,
+      toStatus: index === ordered.length - 1 ? 'APPROVED' as const : ordered[index + 1],
+      occurredAt: `2026-07-${String(18 + index).padStart(2, '0')}T02:00:00.000Z`,
+    };
+  });
+  return {
+    status,
+    round: 1,
+    history,
+    submittedAt: '2026-07-17T02:00:00.000Z',
+    returnedFromStage: status === 'RETURNED_TO_MEDIA_REVIEW' ? 'FINANCE' : undefined,
+    returnReason: status === 'RETURNED_TO_MEDIA_REVIEW' ? '请媒介复核付款资料后重新提交。' : undefined,
+    updatedAt: '2026-07-22T02:00:00.000Z',
+  };
+};
+
 export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
   ...PROJECT_FIXTURES.map((project) => ({
     id: project.id,
+    projectId: project.id as ProjectId,
     project: project.name,
     brand: project.brand,
     media: project.media,
@@ -876,6 +924,7 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     paymentOrder: project.paymentOrder,
     status: project.requestStatus,
     filter: project.requestFilter,
+    approval: createFixtureRequestApproval(project.requestStatus, project.pm),
   })),
 ];
 
@@ -885,6 +934,7 @@ export function RequestsPage({
   currentUser,
   requests,
   onRequestCreated,
+  onApprovalAction,
   canCreateRequest,
 }: {
   notify: Notify;
@@ -892,6 +942,11 @@ export function RequestsPage({
   currentUser: SystemUser;
   requests: RequestProjectSummary[];
   onRequestCreated: (request: RequestProjectSummary) => void;
+  onApprovalAction: (
+    request: RequestProjectSummary,
+    action: RequestApprovalAction,
+    reason?: string,
+  ) => void;
   canCreateRequest: boolean;
 }) {
   const [search, setSearch] = useState('');
@@ -1023,6 +1078,8 @@ export function RequestsPage({
     return (
       <RequestProjectDetailPage
         request={selectedRequest}
+        currentUser={currentUser}
+        onApprovalAction={onApprovalAction}
         notify={notify}
         onBack={() => {
           setSelectedRequestId(null);
@@ -2139,8 +2196,6 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
   return <div className="page-stack"><PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} /><section className="content-card"><div className="content-toolbar"><SearchBar value="" onChange={() => undefined} placeholder="搜索达人或项目" /><span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span></div><div className="table-scroll"><table className="data-table operational-table"><thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead><tbody>{COLLABORATIONS.map((item) => <tr key={`${item.creator}${item.project}`}><td><strong>{item.creator}</strong></td><td>{item.project}</td><td>{item.deliverable}</td><td>{item.invoice}</td><td><ProjectStatus status={item.payment} /></td><td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td></tr>)}</tbody></table></div></section></div>;
 }
 
-export type InvoicePageTab = 'signature' | 'review' | 'revision' | 'approved' | 'returned';
-
 export function InvoicePage({
   payouts,
   creators,
@@ -2175,15 +2230,12 @@ export function InvoicePage({
   onMarkSigned: (record: GeneratedInvoiceRecord) => void;
   onReviewAction: (
     payout: Payout,
-    action: Exclude<InvoiceReviewAction, 'MARK_SIGNED'>,
+    action: InvoiceReviewAction,
     reason?: string,
   ) => void;
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
-  const [downloading, setDownloading] = useState('');
-  const [signaturePage, setSignaturePage] = useState(1);
-  const [signaturePageSize, setSignaturePageSize] = useState(10);
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const effectiveSourceKey = selectedSourceKey ?? (
     focusedInvoiceId
@@ -2201,35 +2253,31 @@ export function InvoicePage({
   const selectedSource: InvoiceDetailSource | null = selectedPayout
     ? { kind: 'payout', payout: selectedPayout }
     : selectedGenerated
-      ? { kind: 'generated', record: selectedGenerated }
+      ? {
+          kind: 'generated',
+          record: selectedGenerated,
+          payout: payouts.find((payout) => payout.id === selectedGenerated.sourcePayoutId),
+        }
       : null;
   const selectedModel = selectedPayout
     ? selectedPayout.invoiceSnapshot ?? buildInvoiceReviewModel(selectedPayout, creators, invoiceEntity)
     : selectedGenerated?.snapshot ?? null;
   const groupedPayouts = useMemo(() => {
     const groups = {
-      review: [] as Payout[],
-      revision: [] as Payout[],
+      signature: [] as Payout[],
+      'media-review': [] as Payout[],
+      approval: [] as Payout[],
       approved: [] as Payout[],
       returned: [] as Payout[],
     };
 
     payouts.forEach((payout) => {
-      if (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待财务审核') {
-        groups.review.push(payout);
-      } else if (payout.invoiceReviewStatus === '待修改') {
-        groups.revision.push(payout);
-      } else if (payout.invoiceReviewStatus === '已退回') {
-        groups.returned.push(payout);
-      } else if (payout.invoiceReviewStatus === '已通过') {
-        groups.approved.push(payout);
-      }
+      groups[getInvoicePageTab(payout.invoiceReviewStatus)].push(payout);
     });
 
     return groups;
   }, [payouts]);
   const visiblePayouts = useMemo(() => {
-    if (tab === 'signature') return [];
     const query = search.trim().toLowerCase();
     const source = groupedPayouts[tab];
     if (!query) return source;
@@ -2239,48 +2287,10 @@ export function InvoicePage({
       .includes(query)
     ));
   }, [groupedPayouts, search, tab]);
-  const pendingSignatureInvoices = useMemo(
-    () => generatedInvoices.filter((record) => record.status === '待签署'),
-    [generatedInvoices],
-  );
-  const visiblePendingSignature = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return pendingSignatureInvoices;
-    return pendingSignatureInvoices.filter((record) => {
-      const searchableText = `${record.id} ${record.snapshot.creatorName} ${record.snapshot.creatorHandle} ${record.snapshot.projectName}`;
-      return searchableText.toLowerCase().includes(query);
-    });
-  }, [pendingSignatureInvoices, search]);
-  const signatureTotalPages = Math.max(1, Math.ceil(visiblePendingSignature.length / signaturePageSize));
-  const currentSignaturePage = Math.min(signaturePage, signatureTotalPages);
-  const paginatedPendingSignature = visiblePendingSignature.slice(
-    (currentSignaturePage - 1) * signaturePageSize,
-    currentSignaturePage * signaturePageSize,
-  );
-
-  const downloadPendingSignature = async (record: GeneratedInvoiceRecord, type: 'pdf' | 'docx') => {
-    const key = `${record.id}-${type}`;
-    setDownloading(key);
-    try {
-      const { generateInvoiceDocx, generateInvoicePdf } = await import('../invoice/generateInvoice');
-      const model = record.snapshot;
-      const blob = type === 'pdf' ? await generateInvoicePdf(model) : await generateInvoiceDocx(model);
-      downloadBlob(blob, invoiceFilename(model, type));
-      notify('文件已准备下载', `${record.id} 的 ${type.toUpperCase()} 已重新生成。`);
-    } catch (error) {
-      notify('下载失败', error instanceof Error ? error.message : '文件重新生成失败，请稍后重试。');
-    } finally {
-      setDownloading('');
-    }
-  };
 
   const openReviewInvoice = (payout: Payout) => {
-    setSelectedSourceKey(`payout:${payout.id}`);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const openGeneratedInvoice = (record: GeneratedInvoiceRecord) => {
-    setSelectedSourceKey(`generated:${record.id}`);
+    const generated = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
+    setSelectedSourceKey(generated ? `generated:${generated.id}` : `payout:${payout.id}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -2296,9 +2306,13 @@ export function InvoicePage({
   };
 
   const canActOnInvoice = (payout: Payout) => (
-    (payout.invoiceReviewStatus === '待媒介审核' && canReviewMedia)
-    || (payout.invoiceReviewStatus === '待财务审核' && canReviewFinance)
-    || ((payout.invoiceReviewStatus === '待修改' || payout.invoiceReviewStatus === '已退回') && canManageInvoice)
+    (payout.invoiceReviewStatus === '待签署' && canManageInvoice)
+    || (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
+    || (
+      (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
+      && canReviewMedia
+    )
+    || (payout.invoiceReviewStatus === '已退回' && canManageInvoice)
   );
 
   if (selectedSource && selectedModel) {
@@ -2326,68 +2340,27 @@ export function InvoicePage({
       />
       <section className="content-card">
         <div className="tabs-row">
-          <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{pendingSignatureInvoices.length}</span></button>
-          <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedPayouts.review.length}</span></button>
-          <button className={`tab-button ${tab === 'revision' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('revision')}>待修改 <span>{groupedPayouts.revision.length}</span></button>
+          <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedPayouts.signature.length}</span></button>
+          <button className={`tab-button ${tab === 'media-review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('media-review')}>待媒介审核 <span>{groupedPayouts['media-review'].length}</span></button>
+          <button className={`tab-button ${tab === 'approval' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approval')}>审批中 <span>{groupedPayouts.approval.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedPayouts.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedPayouts.returned.length}</span></button>
         </div>
         <div className="content-toolbar compact-toolbar">
-          <SearchBar value={search} onChange={(value) => { setSearch(value); setSignaturePage(1); }} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
-          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'signature' ? '仅展示在 Invoice 模块生成、等待提交给达人签署的 Invoice' : '审核时会自动比对合同与收款主体'}</span>
+          <SearchBar value={search} onChange={setSearch} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
+          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approval' ? '项目审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
         </div>
-        {tab === 'signature' ? (
-          <div className="table-shell">
-            <div className="table-scroll">
-              <table className="data-table operational-table generated-invoice-table">
-                <thead><tr><th>达人 / 项目</th><th>Invoice</th><th>付款方式</th><th>金额</th><th>状态</th><th className="action-cell">文件</th></tr></thead>
-                <tbody>
-                  {paginatedPendingSignature.map((record) => {
-                    const creatorName = record.snapshot.creatorName;
-                    const projectName = record.snapshot.projectName;
-                    const paymentMethod = record.snapshot.paymentMethod === 'bank' ? 'Bank transfer' : 'PayPal';
-                    const amount = formatInvoiceMoney(record.snapshot.currency, invoiceTotal(record.snapshot));
-
-                    return (
-                      <tr className="clickable-table-row" key={record.id} onClick={() => openGeneratedInvoice(record)}>
-                        <td><strong>{creatorName}</strong><small className="cell-subtext">{projectName}</small></td>
-                        <td className="mono-cell"><button className="invoice-record-link" type="button" onClick={(event) => { event.stopPropagation(); openGeneratedInvoice(record); }}>{record.id}</button></td>
-                        <td>{paymentMethod}</td>
-                        <td>{amount}</td>
-                        <td><span className="simple-status generated-invoice-status"><i />{record.status}</span></td>
-                        <td className="action-cell"><div className="invoice-download-actions"><button type="button" disabled={Boolean(downloading)} onClick={(event) => { event.stopPropagation(); downloadPendingSignature(record, 'pdf'); }}>{downloading === `${record.id}-pdf` ? '生成中…' : 'PDF'}</button><button type="button" disabled={Boolean(downloading)} onClick={(event) => { event.stopPropagation(); downloadPendingSignature(record, 'docx'); }}>{downloading === `${record.id}-docx` ? '生成中…' : 'DOCX'}</button></div></td>
-                      </tr>
-                    );
-                  })}
-                  {visiblePendingSignature.length === 0 ? <tr><td colSpan={6} className="request-project-empty">{canCreateInvoice ? '暂无待签署 Invoice，点击右上角生成后即可在此提交给达人签署。' : '暂无待签署 Invoice。'}</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
-            <div className="table-footer">
-              <span>共 {visiblePendingSignature.length} 条</span>
-              <Pagination
-                ariaLabel="待签署 Invoice 列表分页"
-                page={currentSignaturePage}
-                pageSize={signaturePageSize}
-                total={visiblePendingSignature.length}
-                onPageChange={setSignaturePage}
-                onPageSizeChange={(nextPageSize) => {
-                  setSignaturePageSize(nextPageSize);
-                  setSignaturePage(1);
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <PayoutTable
-            payouts={visiblePayouts}
-            onSelect={openReviewInvoice}
-            emptyText="当前筛选条件下没有 Invoice 记录"
-            statusFor={(payout) => payout.invoiceReviewStatus}
-            actionLabelFor={(payout) => canActOnInvoice(payout) ? '审核' : '查看详情'}
-            primaryActionFor={canActOnInvoice}
-          />
-        )}
+        <PayoutTable
+          payouts={visiblePayouts}
+          onSelect={openReviewInvoice}
+          emptyText="当前筛选条件下没有 Invoice 记录"
+          statusFor={(payout) => tab === 'approved' ? payout.status : payout.invoiceReviewStatus}
+          statusLabelFor={getInvoiceRowStatus}
+          actionLabelFor={(payout) => canActOnInvoice(payout)
+            ? payout.invoiceReviewStatus === '待签署' ? '处理签署' : '审核'
+            : '查看详情'}
+          primaryActionFor={canActOnInvoice}
+        />
       </section>
     </div>
   );

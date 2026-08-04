@@ -17,6 +17,39 @@ export type ProjectReviewStatus =
   | 'approved'
   | 'changes_required';
 
+export type RequestApprovalStatus =
+  | 'PENDING_PM'
+  | 'PENDING_PROJECT_OWNER'
+  | 'PENDING_OWNER'
+  | 'PENDING_FINANCE'
+  | 'APPROVED'
+  | 'RETURNED_TO_MEDIA_REVIEW';
+
+export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
+
+export type RequestApprovalEvent = {
+  round: number;
+  stage: RequestApprovalStage;
+  action: 'APPROVE' | 'RETURN';
+  actorAccount: string;
+  actorName: string;
+  actorRole: string;
+  fromStatus: RequestApprovalStatus;
+  toStatus: RequestApprovalStatus;
+  reason?: string;
+  occurredAt: string;
+};
+
+export type RequestApprovalState = {
+  status: RequestApprovalStatus;
+  round: number;
+  history: RequestApprovalEvent[];
+  submittedAt: string;
+  returnedFromStage?: RequestApprovalStage;
+  returnReason?: string;
+  updatedAt: string;
+};
+
 export type ProjectEngagement = {
   engagementId: EngagementId;
   projectId: ProjectId;
@@ -48,6 +81,7 @@ export type PaymentListRecord = {
   paymentListCode: string;
   projectId: ProjectId;
   status: 'draft' | 'submitted' | 'approved';
+  version?: number;
   items: PaymentListItem[];
   createdAt: string;
   updatedAt: string;

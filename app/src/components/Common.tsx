@@ -268,6 +268,7 @@ const STATUS_COLORS: Record<PayoutStatus, string> = {
   信息异常: '#ef4444',
   飞书审批中: '#a855f7',
   付款处理中: '#ec4899',
+  付款失败: '#ef4444',
   已付款: '#22c55e',
   已退回: '#ef4444',
 };
