@@ -5027,34 +5027,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.payout-provider-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid #e2e5eb;
-  border-radius: 7px;
-  background: #e5e8ed;
-}
-
-.payout-provider-summary > span {
-  display: grid;
-  gap: 5px;
-  background: #fafbfc;
-  padding: 11px 13px;
-}
-
-.payout-provider-summary small {
-  color: #9a9fab;
-  font-size: 9px;
-}
-
-.payout-provider-summary strong {
-  color: #343941;
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .payout-account-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -9005,10 +8977,6 @@ button:disabled {
   .payout-provider-tabs,
   .payout-account-cards {
     grid-template-columns: 1fr;
-  }
-
-  .payout-provider-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .payout-account-actions {

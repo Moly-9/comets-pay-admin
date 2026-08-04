@@ -576,33 +576,6 @@ const PAYOUT_PROVIDERS: Array<{
   { value: 'PayMax', label: 'PayerMax', icon: CircleDollarSign },
 ];
 
-const getPayoutAccountCompleteness = (account: CreatorPayoutAccount) => {
-  if (account.provider === 'PayPal') {
-    return [account.nickname, account.paypalUsername, account.paypalEmail]
-      .filter((value) => value.trim()).length / 3;
-  }
-
-  if (account.provider === 'PayMax') {
-    return [
-      account.nickname,
-      account.beneficiaryName,
-      account.payermaxAccountId,
-      account.countryCode,
-      account.currency,
-    ].filter((value) => value.trim()).length / 5;
-  }
-
-  const schema = generateLocalAirwallexFormSchema(account);
-  const requiredFields = schema.fields.filter((item) => item.enabled && item.required);
-  const missingPaths = new Set(
-    validateAirwallexFormSchema(account, schema).map((issue) => issue.path),
-  );
-  const completedRequiredFields = requiredFields.filter((item) => !missingPaths.has(item.path)).length;
-  return (
-    completedRequiredFields + (account.nickname.trim() ? 1 : 0)
-  ) / Math.max(requiredFields.length + 1, 1);
-};
-
 export function CreatorPayoutAccounts({
   accounts,
   editing = false,
@@ -627,15 +600,6 @@ export function CreatorPayoutAccounts({
     ?? null
   );
   const usableAccountCount = accounts.filter(isPayoutAccountVerified).length;
-  const activeUsableCount = activeAccounts.filter(isPayoutAccountVerified).length;
-  const completeness = activeAccounts.length
-    ? Math.round(
-      activeAccounts.reduce(
-        (total, account) => total + getPayoutAccountCompleteness(account),
-        0,
-      ) / activeAccounts.length * 100,
-    )
-    : 0;
   const activeProviderConfig = (
     PAYOUT_PROVIDERS.find((provider) => provider.value === activeProvider)
     ?? PAYOUT_PROVIDERS[0]
@@ -709,13 +673,6 @@ export function CreatorPayoutAccounts({
               </button>
             );
           })}
-        </div>
-
-        <div className="payout-provider-summary" aria-label="当前渠道账户摘要">
-          <span><small>当前渠道</small><strong>{activeProviderConfig.label}</strong></span>
-          <span><small>账户总数</small><strong>{activeAccounts.length}</strong></span>
-          <span><small>可用账户</small><strong>{activeUsableCount}</strong></span>
-          <span><small>档案完整度</small><strong>{completeness}%</strong></span>
         </div>
 
         <div className="payout-account-cards" id="payout-provider-panel" role="tabpanel">

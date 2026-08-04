@@ -421,3 +421,52 @@ final result: passed
 3. Post-fix desktop, mobile, state-change, and console checks found no actionable P0, P1, or P2 differences.
 
 final result: passed
+
+---
+
+# Design QA — 收款账户摘要栏移除
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-4d641a99-ab48-470f-9f32-95eed74b3766.png`
+- Implementation URL: `http://127.0.0.1:5175/`
+- Browser-rendered implementation: `/tmp/comets-pay-payout-summary-removed-final.png`
+- Combined comparison input: `/tmp/comets-pay-payout-summary-removed-comparison.png`
+- Desktop viewport: `1265 × 712` CSS px; device pixel ratio: `1`
+- Source pixels: `989 × 413`
+- Implementation focused region: `970 × 324` CSS px and pixels
+- Density normalization: none; both captures are 1x.
+- State: `达人档案 → 新建达人档案 → 收款账户`，Airwallex 渠道选中并显示一个默认草稿账户。
+
+## Comparison evidence
+
+- 合并对比图同时展示了带红框的源图和删除摘要栏后的浏览器实拍。
+- 源图红框中的“当前渠道 / 账户总数 / 可用账户 / 档案完整度”整行已删除。
+- 渠道标签后直接展示账户卡片，卡片下方直接进入新增账户操作，不存在残留占位或异常空白。
+- 本次需求只涉及一个聚焦区域，因此合并对比图已经同时承担全视图和细节对比，无需额外局部裁切。
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed；保留现有 Noto Sans SC 字体、渠道标签、账户卡片和按钮层级。
+- Spacing and layout rhythm: passed；摘要栏移除后，渠道、账户卡片和新增操作之间的间距连续且稳定。
+- Colors and visual tokens: passed；未改变现有粉紫选中态、中性色边框、状态色或背景色。
+- Image and icon fidelity: passed；继续使用现有 Lucide 图标，没有引入占位图或手绘图形。
+- Copy and content: passed；只删除用户指定的四项摘要，渠道、账户状态和操作文案均保留。
+
+## Interaction and runtime checks
+
+- DOM 中 `.payout-provider-summary` 数量为 `0`。
+- 三个付款渠道标签仍存在；当前 Airwallex 草稿账户卡片数量为 `1`。
+- 页面无横向溢出：`scrollWidth - clientWidth = 0`。
+- 浏览器控制台 warnings/errors：无。
+- `npm test -- --run`：34 项通过。
+- `npm run build`：通过。
+
+## Findings and comparison history
+
+1. Initial P2：红框内四项摘要占用较多垂直空间，且属于用户明确不需要的信息。
+   - Fix：删除摘要计算、摘要 JSX 和桌面/响应式 CSS。
+   - Post-fix evidence：`/tmp/comets-pay-payout-summary-removed-comparison.png`。
+2. Post-fix comparison：未发现可执行的 P0、P1 或 P2 问题。
+
+final result: passed
