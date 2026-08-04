@@ -401,22 +401,6 @@ function ProjectInlineFilterPanel({
   );
 }
 
-export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project) => ({
-  id: project.id,
-  projectId: project.id as ProjectId,
-  projectCode: project.id,
-  name: project.name,
-  brand: project.brand,
-  media: project.media,
-  pm: project.pm,
-  creators: project.creators,
-  invoiceCount: project.creators,
-  budget: project.budget,
-  status: project.projectStatus,
-  reviewStatus: project.projectStatus === '已完成' ? 'approved' : 'submitted',
-  paymentOrder: project.paymentOrder,
-}));
-
 const PROJECT_PM_ACCENTS = ['#ff7d64', '#7568e6', '#20a874'] as const;
 const PROJECT_PM_OPTIONS = PM_USERS.map((user, index) => ({
   value: user.name,
@@ -1316,6 +1300,20 @@ const createSeedCreator = ({
   };
 };
 
+const PROTOTYPE_PAYPAL_CREATOR_SEEDS = [
+  { id: 'creator-noah', initials: 'NW', accent: '#0ea5e9', name: 'Noah Williams', handle: '@noahplays', region: '英国', platform: 'YouTube · Twitch' },
+  { id: 'creator-ava', initials: 'AT', accent: '#e11d48', name: 'Ava Thompson', handle: '@avathompson', region: '加拿大', platform: 'Instagram · TikTok' },
+  { id: 'creator-diego', initials: 'DS', accent: '#16a34a', name: 'Diego Santos', handle: '@diegogames', region: '葡萄牙', platform: 'YouTube' },
+  { id: 'creator-claire', initials: 'CM', accent: '#9333ea', name: 'Claire Moreau', handle: '@clairecreates', region: '法国', platform: 'Instagram' },
+  { id: 'creator-jisoo', initials: 'JP', accent: '#db2777', name: 'Jisoo Park', handle: '@jisoo.pixel', region: '韩国', platform: 'TikTok · YouTube' },
+  { id: 'creator-ethan', initials: 'EB', accent: '#2563eb', name: 'Ethan Brooks', handle: '@ethanreviews', region: '美国', platform: 'YouTube' },
+  { id: 'creator-mai', initials: 'MN', accent: '#f97316', name: 'Mai Nguyen', handle: '@mai.levelup', region: '越南', platform: 'TikTok' },
+  { id: 'creator-amelia', initials: 'AK', accent: '#0891b2', name: 'Amelia Kowalski', handle: '@ameliaarcade', region: '波兰', platform: 'YouTube · Instagram' },
+  { id: 'creator-rafael', initials: 'RO', accent: '#65a30d', name: 'Rafael Oliveira', handle: '@rafaelquest', region: '巴西', platform: 'Twitch · TikTok' },
+  { id: 'creator-sara', initials: 'SN', accent: '#7c3aed', name: 'Sara Nielsen', handle: '@saranorth', region: '丹麦', platform: 'Instagram' },
+  { id: 'creator-aaron', initials: 'AL', accent: '#ea580c', name: 'Aaron Lim', handle: '@aaronlevel', region: '新加坡', platform: 'YouTube · TikTok' },
+] as const;
+
 export const INITIAL_CREATORS: CreatorProfile[] = [
   createSeedCreator({
     id: 'creator-mina', initials: 'MK', accent: '#f59e0b', name: 'Mina Kato', handle: '@MinaKato', region: '日本', platform: 'Instagram · TikTok', projects: 4,
@@ -1387,7 +1385,63 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
     contact: createInvoiceContact('Marc Olivier', 'marc.olivier@creator.example', '+33 6 00 00 2957', 'Paris, Ile-de-France, France'),
     paypal: { username: 'marcframes', email: '', nickname: 'PayPal 主账户', status: 'DRAFT' },
   }),
+  ...PROTOTYPE_PAYPAL_CREATOR_SEEDS.map((creator) => createSeedCreator({
+    ...creator,
+    projects: 0,
+    contact: createInvoiceContact(
+      creator.name,
+      `${creator.id.replace('creator-', '')}@creator.example`,
+      '+0 000 000 0000',
+      `Prototype profile, ${creator.region}`,
+    ),
+    paypal: {
+      username: creator.handle.replace(/^@/, ''),
+      email: `${creator.id.replace('creator-', '')}@creator.example`,
+      nickname: 'PayPal 演示账户',
+      status: 'VERIFIED',
+    },
+  })),
 ];
+
+const PROJECT_FIXTURE_TIMESTAMP = '2026-08-01T09:00:00.000Z';
+
+const createProjectCreatorProfiles = (
+  project: (typeof PROJECT_FIXTURES)[number],
+  projectIndex: number,
+): NonNullable<ProjectSummary['creatorProfiles']> => (
+  Array.from({ length: project.creators }, (_, creatorIndex) => {
+    const creator = INITIAL_CREATORS[(projectIndex * 5 + creatorIndex) % INITIAL_CREATORS.length];
+    return {
+      creatorId: creator.id as CreatorId,
+      projectId: project.id as ProjectId,
+      engagementId: `col_fixture_${String(projectIndex + 1).padStart(2, '0')}_${String(creatorIndex + 1).padStart(2, '0')}` as EngagementId,
+      status: 'active',
+      createdAt: PROJECT_FIXTURE_TIMESTAMP,
+      updatedAt: PROJECT_FIXTURE_TIMESTAMP,
+      name: creator.name,
+      handle: creator.handle,
+      platform: creator.platform,
+    };
+  })
+);
+
+export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project, projectIndex) => ({
+  id: project.id,
+  projectId: project.id as ProjectId,
+  projectCode: project.id,
+  name: project.name,
+  brand: project.brand,
+  media: project.media,
+  pm: project.pm,
+  creators: project.creators,
+  creatorProfiles: createProjectCreatorProfiles(project, projectIndex),
+  requestReason: `用于结算「${project.name}」的达人合作、内容制作及授权费用。`,
+  invoiceCount: 0,
+  budget: project.budget,
+  status: project.projectStatus,
+  reviewStatus: project.projectStatus === '已完成' ? 'approved' : 'submitted',
+  paymentOrder: '待生成',
+}));
 
 function ProjectCreatorPicker({
   creators,

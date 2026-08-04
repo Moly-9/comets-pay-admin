@@ -512,9 +512,9 @@ function resolveProjectCreatorReferences(
   project: ProjectSummary,
   creatorArchive: CreatorProfile[],
 ): ProjectCreatorReference[] {
-  const archiveByHandle = new Map(creatorArchive.map((creator) => [creator.handle, creator]));
+  const archiveById = new Map(creatorArchive.map((creator) => [creator.id, creator]));
   return (project.creatorProfiles ?? []).map((reference) => {
-    const currentProfile = archiveByHandle.get(reference.handle);
+    const currentProfile = archiveById.get(reference.creatorId);
     return currentProfile
       ? {
           creatorId: currentProfile.id as CreatorId,
@@ -531,11 +531,21 @@ function projectCreatorRows(
   project: ProjectSummary,
   creatorArchive: CreatorProfile[],
 ): ProjectCreator[] {
-  return resolveProjectCreatorReferences(project, creatorArchive).map((creator) => ({
+  const deliverables = [
+    'Dedicated Video 1 条',
+    'TikTok 短视频 2 条',
+    'Instagram Reels 1 条',
+    '直播合作 1 场',
+    'Integrated Video 1 条',
+    '图文内容 2 组',
+  ];
+  const activeStatuses = ['脚本确认中', '待发布', '待验收', '已交付'];
+
+  return resolveProjectCreatorReferences(project, creatorArchive).map((creator, index) => ({
     name: creator.handle || creator.name,
     platform: creator.platform,
-    deliverable: '待补充合作内容',
-    status: '待确认',
+    deliverable: deliverables[index % deliverables.length],
+    status: project.status === '已完成' ? '已完成' : activeStatuses[index % activeStatuses.length],
   }));
 }
 
