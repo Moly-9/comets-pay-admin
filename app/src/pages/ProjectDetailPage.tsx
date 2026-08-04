@@ -401,7 +401,7 @@ const PROJECT_RESOURCE_RECORDS: Record<string, ProjectResourceRecords> = {
 
 const PROJECT_DETAILS: Record<string, ProjectDetail> = {
   'PRJ-260718': {
-    media: '媒介演示用户 A',
+    media: '赖丽红',
     requestReason: '支付直播达人首期合作费用、内容制作费用及项目投流预算。',
     createdAt: '2026-07-18 09:20',
     updatedAt: '今天 09:36',
@@ -422,7 +422,7 @@ const PROJECT_DETAILS: Record<string, ProjectDetail> = {
     ],
   },
   'PRJ-260714': {
-    media: '媒介演示用户 B',
+    media: '张诗雨',
     requestReason: '支付新品开箱项目的达人内容制作、授权及样品拍摄费用。',
     createdAt: '2026-07-14 11:10',
     updatedAt: '昨天 16:20',
@@ -443,7 +443,7 @@ const PROJECT_DETAILS: Record<string, ProjectDetail> = {
     ],
   },
   'PRJ-260702': {
-    media: '媒介演示用户 C',
+    media: '龙哲心',
     requestReason: '结算七月联名内容合作费用及达人素材授权费用。',
     createdAt: '2026-07-02 10:35',
     updatedAt: '2026-07-17 18:05',
@@ -464,7 +464,7 @@ const PROJECT_DETAILS: Record<string, ProjectDetail> = {
     ],
   },
   'PRJ-260625': {
-    media: '媒介演示用户 A',
+    media: '赖丽红',
     requestReason: '结算日本市场测评项目全部达人合作与内容授权费用。',
     createdAt: '2026-06-25 14:00',
     updatedAt: '2026-07-16 14:32',

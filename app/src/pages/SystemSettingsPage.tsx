@@ -190,7 +190,21 @@ const LOGIN_SESSION_POLICY_COPY: Record<LoginSessionPolicy, { label: string; des
   },
 };
 
-const INITIAL_SYSTEM_ACCOUNTS: SystemAccount[] = DEMO_SYSTEM_USERS.map((user, index) => ({
+const INITIAL_SYSTEM_ACCOUNTS: SystemAccount[] = [
+  { id: 'USR-001', name: '赖丽红', email: 'lailihong@cometspay.co', initials: 'LH', accent: '#f97316', role: 'media', permissions: [...ROLE_PERMISSION_IDS.media], status: '已启用', lastLogin: '今天 09:36' },
+  { id: 'USR-002', name: '张诗雨', email: 'zhangshiyu@cometspay.co', initials: 'SY', accent: '#ef6d57', role: 'media', permissions: [...ROLE_PERMISSION_IDS.media], status: '已启用', lastLogin: '今天 08:48' },
+  { id: 'USR-003', name: '龙哲心', email: 'longzhexin@cometspay.co', initials: 'ZX', accent: '#f59e0b', role: 'media', permissions: [...ROLE_PERMISSION_IDS.media], status: '已启用', lastLogin: '昨天 17:24' },
+  { id: 'USR-010', name: '张咏诗', email: 'zhangyongshi@cometspay.co', initials: 'ZY', accent: '#0f9f8f', role: 'pm', permissions: [...ROLE_PERMISSION_IDS.pm], status: '已启用', lastLogin: '今天 10:06' },
+  { id: 'USR-011', name: '霍舜华', email: 'huoshunhua@cometspay.co', initials: 'HS', accent: '#168aad', role: 'pm', permissions: [...ROLE_PERMISSION_IDS.pm], status: '已启用', lastLogin: '今天 09:18' },
+  { id: 'USR-012', name: '陈旸媛', email: 'chenyangyuan@cometspay.co', initials: 'CY', accent: '#0e7490', role: 'pm', permissions: [...ROLE_PERMISSION_IDS.pm], status: '已启用', lastLogin: '昨天 18:36' },
+  { id: 'USR-004', name: CURRENT_USER.name, email: CURRENT_USER.email, initials: CURRENT_USER.initials, accent: '#7c5ce7', role: 'finance', permissions: [...ROLE_PERMISSION_IDS.finance], status: '已启用', lastLogin: '刚刚' },
+  { id: 'USR-005', name: '李梦', email: 'limeng@cometspay.co', initials: 'LM', accent: '#8b5cf6', role: 'finance', permissions: [...ROLE_PERMISSION_IDS.finance], status: '已启用', lastLogin: '今天 09:12' },
+  { id: 'USR-006', name: '吴雪霓', email: 'wuxueni@cometspay.co', initials: 'WX', accent: '#6366f1', role: 'finance', permissions: [...ROLE_PERMISSION_IDS.finance], status: '已启用', lastLogin: '昨天 18:42' },
+  { id: 'USR-007', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', accent: '#2f7ee6', role: 'project', permissions: [...ROLE_PERMISSION_IDS.project], status: '已启用', lastLogin: '今天 08:54' },
+  { id: 'USR-013', name: 'jeff', email: 'jeff@cometspay.co', initials: 'J', accent: '#27805a', role: 'admin', permissions: [...ROLE_PERMISSION_IDS.admin], status: '已启用', lastLogin: '尚未登录' },
+  { id: 'USR-008', name: 'heather', email: 'heather@cometspay.co', initials: 'H', accent: '#d49a16', role: 'owner', permissions: [...ROLE_PERMISSION_IDS.owner], status: '已启用', lastLogin: '2026-07-24 16:20' },
+  { id: 'USR-009', name: 'theo', email: 'theo@cometspay.co', initials: 'T', accent: '#b7791f', role: 'owner', permissions: [...ROLE_PERMISSION_IDS.owner], status: '已启用', lastLogin: '2026-07-23 11:08' },
+  ...DEMO_SYSTEM_USERS.map((user, index) => ({
     id: `DEMO-${String(index + 1).padStart(3, '0')}`,
     name: user.name,
     email: user.email,
@@ -200,7 +214,8 @@ const INITIAL_SYSTEM_ACCOUNTS: SystemAccount[] = DEMO_SYSTEM_USERS.map((user, in
     permissions: [...ROLE_PERMISSION_IDS[user.roleKey]],
     status: '已启用' as const,
     lastLogin: '体验账号',
-  }));
+  })),
+];
 
 const APPROVAL_SCOPE_OPTIONS = [
   { value: 'all' as const, label: '全部请款项目', description: '覆盖系统内所有提交审核的请款项目' },

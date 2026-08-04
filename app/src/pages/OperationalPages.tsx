@@ -2135,9 +2135,9 @@ export function InvoicePage({
 }
 
 const BASE_BATCHES = [
-  { id: 'BAT-20260716-007', provider: 'Airwallex', count: 12, amount: 'USD 28,420', creator: '财务演示用户 A', time: '2026-07-16 16:42', status: '付款处理中' },
-  { id: 'BAT-20260715-006', provider: 'PayMax', count: 8, amount: 'EUR 16,880', creator: '财务演示用户 B', time: '2026-07-15 11:20', status: '已完成' },
-  { id: 'BAT-20260712-005', provider: 'PayPal', count: 23, amount: 'USD 41,260', creator: '财务演示用户 C', time: '2026-07-12 09:05', status: '部分失败' },
+  { id: 'BAT-20260716-007', provider: 'Airwallex', count: 12, amount: 'USD 28,420', creator: '奚文慧', time: '2026-07-16 16:42', status: '付款处理中' },
+  { id: 'BAT-20260715-006', provider: 'PayMax', count: 8, amount: 'EUR 16,880', creator: '李梦', time: '2026-07-15 11:20', status: '已完成' },
+  { id: 'BAT-20260712-005', provider: 'PayPal', count: 23, amount: 'USD 41,260', creator: '吴雪霓', time: '2026-07-12 09:05', status: '部分失败' },
 ];
 
 export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }: { createdBatch: CreatedBatch; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
@@ -2170,7 +2170,7 @@ export function OrganizationPage({
   const [company, setCompany] = useState('Muse Commerce Limited');
   const [country, setCountry] = useState('Hong Kong SAR China');
   const [contact, setContact] = useState<string>(CURRENT_USER.name);
-  const [email, setEmail] = useState('finance@comets.example');
+  const [email, setEmail] = useState('finance@musepay.co');
   const [address, setAddress] = useState('Unit 18, 16/F, Harbour Centre, Hong Kong');
   return (
     <div className="page-stack">

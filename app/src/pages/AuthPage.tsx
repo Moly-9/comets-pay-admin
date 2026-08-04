@@ -16,7 +16,7 @@ type AuthMode = 'login' | 'register' | 'reset' | 'feishu';
 const MODE_COPY: Record<Exclude<AuthMode, 'feishu'>, { title: string; subtitle: string }> = {
   login: {
     title: '账号登录',
-    subtitle: '首次使用请先注册账号\n请使用@comets.example飞书邮箱注册后再登录',
+    subtitle: '首次使用请先注册账号\n请使用@cometsgame.com飞书邮箱注册后再登录',
   },
   register: {
     title: '创建账号',

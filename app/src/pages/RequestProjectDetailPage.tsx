@@ -112,8 +112,8 @@ const REQUEST_CREATOR_NAMES: Record<string, string[]> = {
 const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
   'PRJ-260718': {
     brand: 'Solara Beauty',
-    submitter: '媒介演示用户 A',
-    approver: '财务演示用户 A',
+    submitter: '赖丽红',
+    approver: '奚文慧',
     submittedAt: '2026-07-18 09:36',
     updatedAt: '今天 10:12',
     reason: '结算夏日直播计划首期达人合作、内容制作及素材授权费用。',
@@ -127,7 +127,7 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     ],
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已提交', time: '07-18 09:36', state: 'complete' },
-      { label: 'PM 审批', description: 'PM 演示用户 A已确认项目资料与请款范围', time: '07-18 10:05', state: 'complete' },
+      { label: 'PM 审批', description: '张咏诗已确认项目资料与请款范围', time: '07-18 10:05', state: 'complete' },
       { label: '项目负责人审批', description: '项目资料与预算已通过', time: '07-18 11:10', state: 'complete' },
       { label: '老板审批', description: 'heather 已完成最终业务审批', time: '07-19 09:20', state: 'complete' },
       { label: '财务审批', description: '正在核对收款主体与金额', time: '今天 10:12', state: 'current' },
@@ -136,8 +136,8 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
   },
   'PRJ-260716': {
     brand: 'Nova Lab',
-    submitter: '媒介演示用户 B',
-    approver: 'PM 演示用户 B',
+    submitter: '张诗雨',
+    approver: '霍舜华',
     submittedAt: '2026-07-16 14:20',
     updatedAt: '昨天 16:20',
     reason: '支付新品开箱项目的达人内容制作、样品拍摄与广告授权费用。',
@@ -151,7 +151,7 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     ],
     progress: [
       { label: '请款提交', description: '项目资料已提交', time: '07-16 14:20', state: 'complete' },
-      { label: 'PM 审批', description: '等待PM 演示用户 B确认项目资料与请款范围', time: '待审批', state: 'current' },
+      { label: 'PM 审批', description: '等待霍舜华确认项目资料与请款范围', time: '待审批', state: 'current' },
       { label: '项目负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
       { label: '老板审批', description: '项目负责人审批通过后进入', time: '待开始', state: 'pending' },
       { label: '财务审批', description: '老板审批通过后进入', time: '待开始', state: 'pending' },
@@ -160,8 +160,8 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
   },
   'PRJ-260711': {
     brand: 'Mellow Home',
-    submitter: '媒介演示用户 C',
-    approver: 'PM 演示用户 C',
+    submitter: '龙哲心',
+    approver: '陈旸媛',
     submittedAt: '2026-07-11 10:15',
     updatedAt: '2026-07-18 17:40',
     reason: '结算七月联名内容合作费用及达人素材授权费用。',
@@ -175,7 +175,7 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     ],
     progress: [
       { label: '请款提交', description: '发现 1 份 PayPal 收款资料不完整，等待媒介补充', time: '07-18 17:40', state: 'current' },
-      { label: 'PM 审批', description: '资料补齐后由PM 演示用户 C审批', time: '待开始', state: 'pending' },
+      { label: 'PM 审批', description: '资料补齐后由陈旸媛审批', time: '待开始', state: 'pending' },
       { label: '项目负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
       { label: '老板审批', description: '项目负责人审批通过后进入', time: '待开始', state: 'pending' },
       { label: '财务审批', description: '老板审批通过后进入', time: '待开始', state: 'pending' },
@@ -184,8 +184,8 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
   },
   'PRJ-260625': {
     brand: 'Aster Mobile',
-    submitter: '媒介演示用户 A',
-    approver: '财务演示用户 A',
+    submitter: '赖丽红',
+    approver: '奚文慧',
     submittedAt: '2026-06-25 14:00',
     updatedAt: '2026-07-16 15:00',
     reason: '结算日本市场测评项目全部达人合作与内容授权费用。',
@@ -199,7 +199,7 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     ],
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已提交', time: '06-25 14:00', state: 'complete' },
-      { label: 'PM 审批', description: 'PM 演示用户 A已确认项目资料与请款范围', time: '06-25 16:10', state: 'complete' },
+      { label: 'PM 审批', description: '张咏诗已确认项目资料与请款范围', time: '06-25 16:10', state: 'complete' },
       { label: '项目负责人审批', description: '项目与请款金额已通过', time: '06-26 10:20', state: 'complete' },
       { label: '老板审批', description: 'theo 已完成最终业务审批', time: '06-27 11:30', state: 'complete' },
       { label: '财务审批', description: '收款主体与金额已通过', time: '06-28 16:45', state: 'complete' },
