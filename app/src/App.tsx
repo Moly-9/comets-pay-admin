@@ -23,6 +23,7 @@ import { canAccessPage, getDefaultPageForRole, hasPermission } from './permissio
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
 import { ContractsPage } from './pages/ContractsPage';
+import { ContractBuilderPage } from './pages/ContractBuilderPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PaymentWorkbenchPage } from './pages/PaymentWorkbenchPage';
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
@@ -243,12 +244,12 @@ export default function App() {
     return record;
   }, [contracts, registerProjectMutation]);
 
-  const generateContract = useCallback((model: ContractGenerationModel) => {
+  const generateContract = useCallback((model: ContractGenerationModel, pdfBlob: Blob) => {
     const version = contracts.filter((contract) => (
       contract.engagementId === model.engagementId
       && contract.lifecycle === 'GENERATED_DRAFT'
     )).length + 1;
-    const record = createGeneratedContractDraft(model, version);
+    const record = createGeneratedContractDraft(model, version, URL.createObjectURL(pdfBlob));
     setContracts((current) => [record, ...current]);
     registerProjectMutation({
       projectId: model.projectId,
@@ -1288,7 +1289,7 @@ export default function App() {
           }}
           onCreateContract={(engagementId) => {
             setContractGenerationEngagementId(engagementId);
-            setActivePage('contracts');
+            setActivePage('contract-create');
           }}
           onCreateInvoice={(engagementId) => {
             setInvoiceCreationEngagementId(engagementId);
@@ -1336,10 +1337,34 @@ export default function App() {
           focusedContractId={focusedContractId}
           onFocusCleared={() => setFocusedContractId(null)}
           onUploadContract={uploadContract}
-          onGenerateContract={generateContract}
+          onCreateContract={() => {
+            setContractGenerationEngagementId(null);
+            setActivePage('contract-create');
+          }}
           onUpdateContract={updateContract}
-          initialGenerationEngagementId={contractGenerationEngagementId}
-          onGenerationContextConsumed={() => setContractGenerationEngagementId(null)}
+        />
+      );
+      break;
+    case 'contract-create':
+      pageContent = (
+        <ContractBuilderPage
+          projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
+          creators={creators}
+          initialEngagementId={contractGenerationEngagementId}
+          onGenerated={(model, pdfBlob) => {
+            const record = generateContract(model, pdfBlob);
+            notify('合同草稿已生成', `${record.id} 已关联 ${model.projectName} / ${model.creatorName}，等待线下签署文件回传。`);
+            return record;
+          }}
+          onCancel={() => {
+            setContractGenerationEngagementId(null);
+            setActivePage('contracts');
+          }}
+          onOpenContractManagement={(contractId) => {
+            setContractGenerationEngagementId(null);
+            setFocusedContractId(contractId);
+            setActivePage('contracts');
+          }}
         />
       );
       break;

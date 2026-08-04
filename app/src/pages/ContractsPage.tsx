@@ -1,19 +1,16 @@
 import { FilePlus2, Search, Upload } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, PageHeading } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
-import { ContractGenerationWizard } from '../components/ContractGenerationWizard';
 import {
   formatContractMoney,
   getContractReadiness,
   type ContractRecord,
-  type ContractGenerationModel,
   type ContractUploadInput,
 } from '../contracts';
 import type { CreatorProfile } from '../types';
 import { ContractDetailPage } from './ContractDetailPage';
 import type { ProjectSummary } from './ProjectDetailPage';
-import type { EngagementId } from '../businessWorkflow';
 
 type Notify = (title: string, message: string) => void;
 type ContractFilter = 'all' | 'ready' | 'attention' | 'template';
@@ -26,10 +23,8 @@ export function ContractsPage({
   focusedContractId,
   onFocusCleared,
   onUploadContract,
-  onGenerateContract,
+  onCreateContract,
   onUpdateContract,
-  initialGenerationEngagementId,
-  onGenerationContextConsumed,
   notify,
 }: {
   contracts: ContractRecord[];
@@ -39,20 +34,14 @@ export function ContractsPage({
   focusedContractId: string | null;
   onFocusCleared: () => void;
   onUploadContract: (input: ContractUploadInput) => ContractRecord;
-  onGenerateContract?: (model: ContractGenerationModel) => ContractRecord;
+  onCreateContract?: () => void;
   onUpdateContract: (contract: ContractRecord) => void;
-  initialGenerationEngagementId?: EngagementId | null;
-  onGenerationContextConsumed?: () => void;
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ContractFilter>('all');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(focusedContractId);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [generationOpen, setGenerationOpen] = useState(false);
-  useEffect(() => {
-    if (initialGenerationEngagementId) setGenerationOpen(true);
-  }, [initialGenerationEngagementId]);
   const selectedContract = selectedContractId
     ? contracts.find((contract) => contract.id === selectedContractId)
     : null;
@@ -105,8 +94,8 @@ export function ContractsPage({
         subtitle="生成合同草稿、上传线下签署文件，并确认合同是否可进入 Invoice 校验。"
         actions={canUpload ? (
           <div className="page-heading-actions">
-            {onGenerateContract
-              ? <Button variant="secondary" icon={<FilePlus2 size={17} />} onClick={() => setGenerationOpen(true)}>生成合同</Button>
+            {onCreateContract
+              ? <Button variant="secondary" icon={<FilePlus2 size={17} />} onClick={onCreateContract}>生成合同</Button>
               : null}
             <Button icon={<Upload size={17} />} onClick={() => setUploadOpen(true)}>上传合同</Button>
           </div>
@@ -229,22 +218,6 @@ export function ContractsPage({
             setUploadOpen(false);
             openContract(contract.id);
             notify('合同已保存', `${input.sourceDocuments.length} 份文件已关联 ${input.projectName} / ${input.creatorName}，等待字段人工确认。`);
-          }}
-        />
-      ) : null}
-      {generationOpen && onGenerateContract ? (
-        <ContractGenerationWizard
-          projects={projects}
-          creators={creators}
-          onClose={() => {
-            setGenerationOpen(false);
-            onGenerationContextConsumed?.();
-          }}
-          initialEngagementId={initialGenerationEngagementId}
-          onSave={(model) => {
-            const contract = onGenerateContract(model);
-            notify('合同草稿已生成', `${contract.id} 已关联 ${model.projectName} / ${model.creatorName}，等待线下签署文件回传。`);
-            return contract;
           }}
         />
       ) : null}

@@ -7,6 +7,7 @@ import {
   type EngagementId,
   type ProjectId,
 } from './businessWorkflow';
+import type { CreatorPaymentDetails } from './types';
 
 export type ContractStatus =
   | '参考模板'
@@ -55,20 +56,32 @@ export type ContractGenerationModel = {
   ioNumber: string;
   advertiser: string;
   publisher: string;
+  publisherAddress: string;
   platform: string;
   channelName: string;
   channelUrl: string;
   effectiveDate: string;
   campaignStart: string;
   campaignEnd: string;
+  purposeItems: string[];
+  promotedProduct: string;
+  hashtag: string;
+  contentFormat: string;
+  releaseStart: string;
+  releaseEnd: string;
+  language: string;
+  contentLength: string;
+  licensePeriod: string;
+  licensePrice: string;
   currency: string;
   totalFee: string;
-  invoiceIssuePeriod: string;
-  paymentTerm: string;
+  invoiceIssueWorkingDays: number;
+  paymentWorkingDays: 45 | 60;
   paymentMethod: ContractPaymentMethod;
   feeBearer: ContractFeeBearer;
-  deliverables: string;
-  additionalTerms: string;
+  payoutAccountId: string;
+  payoutProvider: 'Airwallex' | 'PayPal';
+  paymentSnapshot: CreatorPaymentDetails;
 };
 
 export type ContractRecord = {
@@ -396,10 +409,13 @@ const blankFieldIssues = (model: ContractGenerationModel): ContractIssue[] => {
   const fields = [
     ['publisher', 'Publisher', model.publisher],
     ['campaign', 'Campaign Period', model.campaignStart && model.campaignEnd],
+    ['purpose', 'Campaign Purpose', model.purposeItems.some(Boolean)],
+    ['format', 'Content Format', model.contentFormat],
     ['amount', 'Project Total Fees', model.totalFee],
     ['currency', 'Currency', model.currency],
-    ['payment-term', 'Payment Term', model.paymentTerm],
+    ['payment-term', 'Payment Term', model.paymentWorkingDays],
     ['payment-method', 'Payment Method', model.paymentMethod],
+    ['payout-account', 'Payout Account', model.payoutAccountId],
   ];
   return fields
     .filter(([, , value]) => !value)
@@ -415,18 +431,30 @@ const blankFieldIssues = (model: ContractGenerationModel): ContractIssue[] => {
 export const createGeneratedContractDraft = (
   model: ContractGenerationModel,
   version = 1,
+  documentUrl = '',
 ): ContractRecord => {
   const totalFee = model.totalFee.trim() ? Number(model.totalFee) : null;
+  const licensePrice = model.licensePrice.trim() ? Number(model.licensePrice) : null;
+  const rawAccount = model.payoutProvider === 'PayPal'
+    ? model.paymentSnapshot.paypalEmail
+    : model.paymentSnapshot.iban || model.paymentSnapshot.accountNumber;
+  const accountName = model.payoutProvider === 'PayPal'
+    ? model.paymentSnapshot.paypalUsername
+    : model.paymentSnapshot.accountName;
+  const accountFingerprint = rawAccount
+    ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}`
+    : '';
   const fileBaseName = `${model.contractNumber || 'contract'}-${model.creatorHandle.replace(/^@/, '') || 'creator'}-v${version}`;
   return {
     contractId: createPrototypeId('contract') as ContractId,
     id: model.contractNumber,
     ioId: model.ioNumber || '待补充',
     name: `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,
-    templateFamily: '2026 KOL 社交媒体推广服务合同',
-    sourceName: `${fileBaseName}.docx`,
-    documentUrl: '',
-    documentNote: '合同由系统生成并下载至本地，等待媒介线下补充、签署后回传。',
+    templateFamily: '欧美单次商单合作模板 v1',
+    sourceName: `${fileBaseName}.pdf`,
+    documentUrl,
+    documentNote: '合同由系统在浏览器本地生成，等待双方线下签署后回传。',
+    pageCount: 17,
     isTemplate: false,
     project: model.projectName,
     brand: model.brandName,
@@ -440,19 +468,23 @@ export const createGeneratedContractDraft = (
     campaignEnd: model.campaignEnd,
     currency: model.currency,
     totalFee: Number.isFinite(totalFee) ? totalFee : null,
-    licensePrice: null,
-    licenseIncludedInTotal: null,
-    invoiceWithinWorkingDays: normalizeDays(model.invoiceIssuePeriod),
-    paymentWithinWorkingDays: normalizeDays(model.paymentTerm),
+    licensePrice: Number.isFinite(licensePrice) ? licensePrice : null,
+    licenseIncludedInTotal: model.licensePrice.trim() ? false : null,
+    invoiceWithinWorkingDays: model.invoiceIssueWorkingDays,
+    paymentWithinWorkingDays: model.paymentWorkingDays,
     feeBearer: model.feeBearer,
     paymentMethod: model.paymentMethod,
-    accountName: '',
-    accountFingerprint: '',
+    accountName,
+    accountFingerprint,
     signed: false,
     status: '待回传',
     updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
-    deliverables: model.deliverables
-      .split(/\r?\n/)
+    deliverables: [
+      ...model.purposeItems,
+      model.promotedProduct ? `Promoted product / campaign: ${model.promotedProduct}` : '',
+      model.contentFormat ? `Format: ${model.contentFormat}` : '',
+      model.contentLength ? `Length: ${model.contentLength}` : '',
+    ]
       .map((value) => value.trim())
       .filter(Boolean)
       .map((description, index) => ({

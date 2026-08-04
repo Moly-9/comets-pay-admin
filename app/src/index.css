@@ -8950,6 +8950,270 @@ button:disabled {
   color: #4d64e8;
 }
 
+/* Contract generation */
+.contract-builder-page {
+  max-width: 1660px;
+}
+
+.contract-builder-layout {
+  display: grid;
+  grid-template-columns: minmax(380px, 0.88fr) minmax(400px, 1.12fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.contract-builder-form,
+.contract-template-preview {
+  min-width: 0;
+  border: 1px solid rgba(225, 228, 235, 0.96);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(40, 44, 56, 0.06);
+}
+
+.contract-builder-form {
+  overflow: hidden;
+}
+
+.contract-builder-form .invoice-builder-section {
+  padding: 22px 24px;
+}
+
+.contract-builder-form .invoice-builder-section > header {
+  margin-bottom: 17px;
+}
+
+.contract-builder-form .invoice-builder-section > header > span {
+  border-radius: 8px;
+  background: #f3eef7;
+  color: #765d82;
+}
+
+.contract-builder-form .invoice-builder-section h2 {
+  font-size: 14px;
+}
+
+.contract-builder-form .invoice-builder-footer {
+  position: sticky;
+  z-index: 3;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+}
+
+.contract-purpose-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.contract-purpose-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.contract-purpose-row button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #9a655f;
+}
+
+.contract-purpose-row button:hover:not(:disabled),
+.contract-purpose-row button:focus-visible {
+  border-color: #f0d7d3;
+  background: #fff4f2;
+  color: #bd5045;
+}
+
+.contract-purpose-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+.contract-purpose-editor > small {
+  min-height: 13px;
+  color: #d44f42;
+  font-size: 9.5px;
+}
+
+.contract-account-empty {
+  border: 1px dashed #d9dce3;
+  border-radius: 8px;
+  background: #f8f9fb;
+  padding: 16px;
+  color: #757b87;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.contract-template-preview {
+  position: sticky;
+  top: 84px;
+  overflow: hidden;
+}
+
+.contract-template-preview-head {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid #e4e6eb;
+  padding: 10px 14px 10px 17px;
+}
+
+.contract-template-preview-head > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.contract-template-preview-head strong {
+  color: #2d3037;
+  font-size: 12px;
+}
+
+.contract-template-preview-head span {
+  color: #8a909b;
+  font-size: 9.5px;
+}
+
+.contract-preview-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.contract-preview-controls button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dfe2e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #565c68;
+}
+
+.contract-preview-controls button:hover:not(:disabled),
+.contract-preview-controls button:focus-visible {
+  border-color: #bdabc9;
+  background: #f8f5fa;
+  color: #71537d;
+}
+
+.contract-preview-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.contract-preview-controls > span {
+  min-width: 44px;
+  color: #454a54;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.contract-preview-controls > i {
+  width: 1px;
+  height: 18px;
+  background: #e4e6eb;
+  margin: 0 3px;
+}
+
+.contract-template-viewport {
+  display: flex;
+  height: calc(100vh - 174px);
+  min-height: 560px;
+  overflow: auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  background: #eef0f3;
+  padding: 20px 16px 32px;
+  scroll-behavior: smooth;
+}
+
+.contract-template-loading,
+.contract-template-load-error {
+  display: grid;
+  width: 100%;
+  min-height: 180px;
+  place-items: center;
+  color: #747b87;
+  font-size: 11px;
+}
+
+.contract-template-load-error {
+  color: #a64c43;
+}
+
+.contract-template-page {
+  position: relative;
+  flex: none;
+  container-type: inline-size;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(38, 43, 54, 0.13);
+  transition: width 160ms ease;
+}
+
+.contract-template-page canvas,
+.contract-template-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.contract-template-overlay {
+  pointer-events: none;
+}
+
+.contract-template-clear,
+.contract-template-value {
+  position: absolute;
+  display: block;
+}
+
+.contract-template-clear {
+  background: #fff;
+}
+
+.contract-template-value {
+  overflow: hidden;
+  color: #15171b;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.contract-template-value-active {
+  outline: 1.5px solid #c8798d;
+  outline-offset: 2px;
+  background: rgba(255, 244, 247, 0.72);
+}
+
+.contract-template-page-number {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  bottom: -16px;
+  color: #848a95;
+  font-size: 8.5px;
+}
+
 @media (max-width: 1260px) {
   .invoice-builder-layout {
     grid-template-columns: 1fr;
@@ -8962,6 +9226,18 @@ button:disabled {
   .invoice-paper {
     max-width: 720px;
     margin: 0 auto;
+  }
+
+  .contract-builder-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-template-preview {
+    position: static;
+  }
+
+  .contract-template-viewport {
+    height: min(76vh, 900px);
   }
 }
 
@@ -8982,6 +9258,19 @@ button:disabled {
 
   .invoice-form-grid .full-width {
     grid-column: auto;
+  }
+
+  .contract-template-preview-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .contract-preview-controls {
+    width: 100%;
+  }
+
+  .contract-preview-controls > i {
+    margin-left: auto;
   }
 
   .invoice-line-row {
@@ -9014,6 +9303,10 @@ button:disabled {
     padding: 19px 15px;
   }
 
+  .contract-builder-form .invoice-builder-section {
+    padding: 19px 15px;
+  }
+
   .invoice-builder-footer {
     padding: 15px;
   }
@@ -9035,6 +9328,15 @@ button:disabled {
   .invoice-paper {
     padding: 24px 15px 28px;
     font-size: 8.5px;
+  }
+
+  .contract-template-viewport {
+    min-height: 460px;
+    padding: 14px 8px 28px;
+  }
+
+  .contract-template-page {
+    width: 100% !important;
   }
 
   .invoice-paper h2 {
