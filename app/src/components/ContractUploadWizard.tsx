@@ -7,7 +7,7 @@ import {
   type SelectedContractFile,
   validateContractFile,
 } from '../contractParserClient';
-import { recognizeContractFields } from '../contractRecognition';
+import { createPrototypeRecognitionFields } from '../contractRecognitionPrototype';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
   CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS,
@@ -77,25 +77,6 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
     && contract.projectId === selectedProjectInternalId
     && contract.creatorId === creatorId
   ));
-  const beneficiaryReferences = useMemo(() => selectedCreator?.payoutAccounts.map((account) => {
-    if (account.provider === 'PayPal') {
-      return {
-        label: `PayPal · ${account.paypalEmail}`,
-        matchTokens: [account.paypalEmail, account.paypalUsername],
-      };
-    }
-    if (account.provider === 'PayMax') {
-      return {
-        label: `PayerMax · ${account.beneficiaryName || account.nickname}`,
-        matchTokens: [account.beneficiaryName, account.payermaxAccountId],
-      };
-    }
-    const accountNumber = account.bankDetails.iban || account.bankDetails.accountNumber;
-    return {
-      label: `${account.bankDetails.accountName || account.nickname} · •••• ${accountNumber.replace(/\s/g, '').slice(-4)}`,
-      matchTokens: [account.bankDetails.accountName, accountNumber.slice(-4)],
-    };
-  }) ?? [], [selectedCreator]);
   const projectOptions = projects.map((project) => ({
     value: project.id,
     label: project.name,
@@ -116,8 +97,24 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
       setFields([]);
       return;
     }
-    setFields(recognizeContractFields(documents, { systemContractNumber, beneficiaryReferences }));
-  }, [beneficiaryReferences, documents, systemContractNumber]);
+    setFields(createPrototypeRecognitionFields({
+      documents,
+      systemContractNumber,
+      projectName: selectedProject?.name ?? 'Creator Campaign 2026',
+      brandName: selectedProject?.brand ?? 'COMETS Demo Brand',
+      creatorName: selectedCreator?.name ?? 'Demo Creator',
+      creatorHandle: selectedCreator?.handle ?? '@demo.creator',
+      creatorPlatform: selectedCreator?.platform ?? 'YouTube',
+    }));
+  }, [
+    documents,
+    selectedCreator?.handle,
+    selectedCreator?.name,
+    selectedCreator?.platform,
+    selectedProject?.brand,
+    selectedProject?.name,
+    systemContractNumber,
+  ]);
 
   const parseSelection = async (files: SelectedContractFile[]) => {
     setError('');
@@ -360,7 +357,7 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
             <span><FileText size={18} /></span>
             <div>
               <h3 id="contract-upload-recognition-title">识别结果</h3>
-              <p>解析完成后在此预览字段状态，保存后进入合同详情逐项确认。</p>
+              <p>上传后展示完整的原型演示字段，保存后同步到合同详情逐项确认。</p>
             </div>
             {fields.length ? <em>{fields.length} 项</em> : null}
           </header>
@@ -375,7 +372,7 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
                   <p>{field.rawValue || '待补充'}</p>
                   <small>
                     {field.source
-                      ? `${CONTRACT_DOCUMENT_TYPE_LABELS[field.source.documentType]}${field.source.pageNumber ? ` · 第 ${field.source.pageNumber} 页` : ` · ${field.source.section}`}`
+                      ? `${field.source.documentId === 'system-contract' ? '系统字段' : CONTRACT_DOCUMENT_TYPE_LABELS[field.source.documentType]}${field.source.pageNumber ? ` · 第 ${field.source.pageNumber} 页` : ` · ${field.source.section}`}`
                       : '未找到可靠来源'}
                   </small>
                   {field.status === 'conflict' ? <em><AlertTriangle size={13} />发现 {field.candidates.length} 个候选值，保存后需人工核对</em> : null}
@@ -386,8 +383,8 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
             <div className="contract-recognition-empty">
               <FileText size={22} />
               <div>
-                <strong>{parsing ? '正在生成识别结果' : '等待合同文件'}</strong>
-                <span>{parsing ? '解析完成后会自动展示字段与来源状态' : '上传文件后无需切换页面，结果会在当前表单中展开'}</span>
+                <strong>{parsing ? '正在准备演示识别结果' : '等待合同文件'}</strong>
+                <span>{parsing ? '文件解析完成后会展示完整字段与来源' : '上传文件后无需切换页面，演示结果会在当前表单中展开'}</span>
               </div>
             </div>
           )}
