@@ -58,6 +58,62 @@ final result: passed
 
 ---
 
+# Design QA — 收款账户三渠道布局
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-214f2cd8-cc16-4e9a-b119-3e41fd6af5f3.png`
+- Implementation URL: `http://127.0.0.1:5175/`
+- Browser-rendered implementation: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/comets-pay-payout-accounts-cropped.png`
+- Side-by-side comparison: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/comets-pay-payout-accounts-comparison.png`
+- Desktop viewport: `1534 × 900` CSS px; device pixel ratio: `1`
+- Mobile viewport: `390 × 844` CSS px
+- Source pixels: `1534 × 459`
+- Implementation region: `1060 × 459` CSS px and pixels
+- Density normalization: none; both comparison captures are 1x. The implementation is narrower because the existing creator modal has a fixed maximum width.
+- State: Airwallex selected with three visible Airwallex cards. The source uses three verified fixture accounts; the implementation uses three new draft accounts to preserve the requested product state.
+
+## Comparison evidence
+
+- The source and implementation were opened in one side-by-side comparison image.
+- Both use the same four-level structure: three provider tabs, four summary metrics, a three-column account-card row, and right-aligned add-account actions.
+- Card height, section rhythm, compact typography, borders, icon placement, selected state, default star, and action density are visually aligned.
+- The source green accents were intentionally not copied. The implementation retains the existing COMETS Pay pink-purple palette because the request explicitly required no color change.
+- Fixture counts and statuses differ intentionally because a new creator must start with one unverified Airwallex draft account.
+- A separate focused crop was not needed because both 1x captures keep typography, spacing, icons, status chips, and action labels readable in the full-view comparison.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC stack, compact weights, line heights, and label hierarchy are preserved without clipping or unintended wrapping.
+- Spacing and layout rhythm: passed; provider tabs, summary cells, account cards, and footer actions follow the source hierarchy and proportions. Account-card radii are 8px.
+- Colors and visual tokens: passed; existing COMETS Pay colors are retained as requested and status colors continue to use the established semantic tokens.
+- Image and icon fidelity: passed; the region contains no raster imagery. Existing Lucide icons are used consistently and remain sharp at 1x.
+- Copy and content: passed; the UI uses `Airwallex`, `PayPal`, and user-facing `PayerMax`; internal `PayMax` model naming is not exposed.
+
+## Interaction and responsive checks
+
+- New creator starts with one default Airwallex draft account.
+- Airwallex, PayPal, and PayerMax provider tabs switch correctly.
+- Empty provider state appears without fabricating account data.
+- All three add-account actions create and select the correct draft account.
+- PayerMax renders its editable account fields.
+- Account-card selection and the set-default menu work.
+- Desktop `1534 × 900` and mobile `390 × 844` have no document-level horizontal overflow.
+- Mobile provider tabs, cards, summary cells, and actions collapse without text overlap.
+- Browser console warnings and errors: none.
+- `npm test -- --run`: 34 tests passed.
+- `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Pass 1 found no actionable P0, P1, or P2 mismatch.
+2. Intentional differences are the preserved COMETS Pay palette, narrower existing modal container, and draft fixture states.
+3. Post-interaction desktop and mobile verification found no clipping, state error, or console issue.
+
+final result: passed
+
+---
+
 # Design QA — 登录方式上下顺序调整
 
 ## Reference and environment

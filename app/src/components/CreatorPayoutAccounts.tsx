@@ -3,8 +3,10 @@ import {
   Braces,
   Building2,
   CheckCircle2,
+  Circle,
   CircleDollarSign,
   Landmark,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Search,
@@ -14,13 +16,18 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  AIRWALLEX_COUNTRIES,
+  AIRWALLEX_CURRENCIES,
   createEmptyAirwallexAccount,
+  createEmptyPayMaxAccount,
   createEmptyPayPalAccount,
   getDefaultPayoutAccount,
   getPayoutAccountIdentifier,
   getPayoutAccountStatusMeta,
   getPayoutAccountSummary,
+  isPayoutAccountVerified,
   invalidateAirwallexVerification,
+  normalizePayMaxStatus,
   normalizePayPalStatus,
 } from '../payoutAccounts';
 import {
@@ -38,6 +45,7 @@ import {
 import type {
   AirwallexPayoutAccount,
   CreatorPayoutAccount,
+  PayMaxPayoutAccount,
   PayPalPayoutAccount,
 } from '../types';
 import { Button, SelectField } from './Common';
@@ -414,6 +422,56 @@ function PayPalAccountForm({
   );
 }
 
+function PayMaxAccountForm({
+  account,
+  onChange,
+}: {
+  account: PayMaxPayoutAccount;
+  onChange: (account: PayMaxPayoutAccount) => void;
+}) {
+  const commit = (next: PayMaxPayoutAccount) => onChange(normalizePayMaxStatus(next));
+  const countryOptions = AIRWALLEX_COUNTRIES.map((country) => ({
+    value: country.value,
+    label: `${country.label} · ${country.value}`,
+  }));
+  const currencyOptions = AIRWALLEX_CURRENCIES.map((currency) => ({
+    value: currency,
+    label: currency,
+  }));
+
+  return (
+    <div className="creator-payment-editor payout-account-form">
+      <StatusPanel account={account} />
+      <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="PayerMax 收款账号与 Airwallex、PayPal 资料独立维护">
+        <div className="form-grid creator-payment-form-grid">
+          <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：PayerMax 主账户" required />
+          <TextField label="收款人名称" alias="beneficiaryName" value={account.beneficiaryName} onChange={(value) => commit({ ...account, beneficiaryName: value })} placeholder="个人姓名或公司法定名称" required />
+          <TextField label="PayerMax 收款账号" alias="payermaxAccountId" value={account.payermaxAccountId} onChange={(value) => commit({ ...account, payermaxAccountId: value })} placeholder="PayerMax 返回的收款账号" required />
+          <TextField label="联系邮箱" alias="email · 选填" value={account.email} onChange={(value) => commit({ ...account, email: value })} placeholder="creator@example.com" type="email" />
+          <SelectFormField
+            label="收款国家 / 地区"
+            alias="countryCode"
+            value={account.countryCode}
+            options={countryOptions}
+            placeholder="选择国家 / 地区"
+            onChange={(value) => commit({ ...account, countryCode: value })}
+            required
+          />
+          <SelectFormField
+            label="收款币种"
+            alias="currency"
+            value={account.currency}
+            options={currencyOptions}
+            placeholder="选择币种"
+            onChange={(value) => commit({ ...account, currency: value })}
+            required
+          />
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) {
   const entityName = account.entityType === 'COMPANY'
     ? account.companyName
@@ -488,6 +546,63 @@ function PayPalAccountView({ account }: { account: PayPalPayoutAccount }) {
   );
 }
 
+function PayMaxAccountView({ account }: { account: PayMaxPayoutAccount }) {
+  return (
+    <div className="creator-profile-content payout-account-view">
+      <StatusPanel account={account} />
+      <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="与 Airwallex 和 PayPal 收款账户独立维护">
+        <DetailGrid items={[
+          { label: '账户别名', alias: 'nickname', value: account.nickname },
+          { label: '收款人名称', alias: 'beneficiaryName', value: account.beneficiaryName },
+          { label: 'PayerMax 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId, mask: true },
+          { label: '国家 / 地区', alias: 'countryCode', value: account.countryCode },
+          { label: '收款币种', alias: 'currency', value: account.currency },
+          { label: '联系邮箱', alias: 'email', value: account.email },
+        ]} />
+      </Section>
+    </div>
+  );
+}
+
+type PayoutProvider = CreatorPayoutAccount['provider'];
+
+const PAYOUT_PROVIDERS: Array<{
+  value: PayoutProvider;
+  label: string;
+  icon: typeof Landmark;
+}> = [
+  { value: 'Airwallex', label: 'Airwallex', icon: Landmark },
+  { value: 'PayPal', label: 'PayPal', icon: Wallet },
+  { value: 'PayMax', label: 'PayerMax', icon: CircleDollarSign },
+];
+
+const getPayoutAccountCompleteness = (account: CreatorPayoutAccount) => {
+  if (account.provider === 'PayPal') {
+    return [account.nickname, account.paypalUsername, account.paypalEmail]
+      .filter((value) => value.trim()).length / 3;
+  }
+
+  if (account.provider === 'PayMax') {
+    return [
+      account.nickname,
+      account.beneficiaryName,
+      account.payermaxAccountId,
+      account.countryCode,
+      account.currency,
+    ].filter((value) => value.trim()).length / 5;
+  }
+
+  const schema = generateLocalAirwallexFormSchema(account);
+  const requiredFields = schema.fields.filter((item) => item.enabled && item.required);
+  const missingPaths = new Set(
+    validateAirwallexFormSchema(account, schema).map((issue) => issue.path),
+  );
+  const completedRequiredFields = requiredFields.filter((item) => !missingPaths.has(item.path)).length;
+  return (
+    completedRequiredFields + (account.nickname.trim() ? 1 : 0)
+  ) / Math.max(requiredFields.length + 1, 1);
+};
+
 export function CreatorPayoutAccounts({
   accounts,
   editing = false,
@@ -496,88 +611,208 @@ export function CreatorPayoutAccounts({
   onChange,
 }: CreatorPayoutAccountsProps) {
   const defaultAccount = useMemo(() => getDefaultPayoutAccount(accounts), [accounts]);
+  const [activeProvider, setActiveProvider] = useState<PayoutProvider>(
+    defaultAccount?.provider ?? 'Airwallex',
+  );
   const [selectedId, setSelectedId] = useState(defaultAccount?.id ?? '');
-  const selectedAccount = accounts.find((account) => account.id === selectedId) ?? defaultAccount;
+  const [openMenuId, setOpenMenuId] = useState('');
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => account.provider === activeProvider),
+    [accounts, activeProvider],
+  );
+  const selectedAccount = (
+    activeAccounts.find((account) => account.id === selectedId)
+    ?? activeAccounts.find((account) => account.isDefault)
+    ?? activeAccounts[0]
+    ?? null
+  );
+  const usableAccountCount = accounts.filter(isPayoutAccountVerified).length;
+  const activeUsableCount = activeAccounts.filter(isPayoutAccountVerified).length;
+  const completeness = activeAccounts.length
+    ? Math.round(
+      activeAccounts.reduce(
+        (total, account) => total + getPayoutAccountCompleteness(account),
+        0,
+      ) / activeAccounts.length * 100,
+    )
+    : 0;
+  const activeProviderConfig = (
+    PAYOUT_PROVIDERS.find((provider) => provider.value === activeProvider)
+    ?? PAYOUT_PROVIDERS[0]
+  );
+  const ActiveProviderIcon = activeProviderConfig.icon;
 
   useEffect(() => {
-    if (selectedAccount) return;
-    setSelectedId(defaultAccount?.id ?? '');
-  }, [defaultAccount?.id, selectedAccount]);
+    if (selectedAccount?.id === selectedId) return;
+    setSelectedId(selectedAccount?.id ?? '');
+  }, [selectedAccount?.id, selectedId]);
 
   const replaceAccount = (updated: CreatorPayoutAccount) => {
     onChange?.(accounts.map((account) => account.id === updated.id ? updated : account));
   };
 
-  const addAirwallex = () => {
-    const next = createEmptyAirwallexAccount(creatorName, creatorEmail);
-    const normalized = accounts.length === 0
-      ? next
-      : { ...next, isDefault: false };
+  const addAccount = (provider: PayoutProvider) => {
+    const next = provider === 'Airwallex'
+      ? createEmptyAirwallexAccount(creatorName, creatorEmail)
+      : provider === 'PayPal'
+        ? createEmptyPayPalAccount(creatorName, creatorEmail)
+        : createEmptyPayMaxAccount(creatorName, creatorEmail);
+    const normalized = { ...next, isDefault: accounts.length === 0 };
     onChange?.([...accounts, normalized]);
+    setActiveProvider(provider);
     setSelectedId(normalized.id);
+    setOpenMenuId('');
   };
 
-  const addPayPal = () => {
-    const next = createEmptyPayPalAccount(creatorName, creatorEmail);
-    const normalized = accounts.length === 0
-      ? { ...next, isDefault: true }
-      : next;
-    onChange?.([...accounts, normalized]);
-    setSelectedId(normalized.id);
-  };
-
-  const setDefault = () => {
-    if (!selectedAccount) return;
-    onChange?.(accounts.map((account) => ({ ...account, isDefault: account.id === selectedAccount.id })));
+  const setDefault = (target: CreatorPayoutAccount) => {
+    onChange?.(accounts.map((account) => ({ ...account, isDefault: account.id === target.id })));
+    setOpenMenuId('');
   };
 
   return (
     <div className="payout-accounts">
-      <div className="payout-account-toolbar">
-        <div className="payout-account-tabs" role="tablist" aria-label="达人收款账户">
-          {accounts.map((account) => {
-            const status = getPayoutAccountStatusMeta(account.status, account.provider);
+      <div className="payout-account-availability" aria-label={`${usableAccountCount} 个可用收款账户`}>
+        <Circle size={6} fill="currentColor" aria-hidden="true" />
+        <strong>{usableAccountCount} 个可用</strong>
+      </div>
+
+      <div className="payout-account-overview">
+        <div className="payout-provider-tabs" role="tablist" aria-label="收款渠道">
+          {PAYOUT_PROVIDERS.map((provider) => {
+            const providerAccounts = accounts.filter((account) => account.provider === provider.value);
+            const providerUsableCount = providerAccounts.filter(isPayoutAccountVerified).length;
             return (
               <button
-                className={`payout-account-tab ${selectedAccount?.id === account.id ? 'payout-account-tab-active' : ''}`}
+                className={`payout-provider-tab ${activeProvider === provider.value ? 'payout-provider-tab-active' : ''}`}
                 type="button"
                 role="tab"
-                aria-selected={selectedAccount?.id === account.id}
-                key={account.id}
-                onClick={() => setSelectedId(account.id)}
+                aria-selected={activeProvider === provider.value}
+                aria-controls="payout-provider-panel"
+                key={provider.value}
+                onClick={() => {
+                  const nextAccount = (
+                    providerAccounts.find((account) => account.isDefault)
+                    ?? providerAccounts[0]
+                    ?? null
+                  );
+                  setActiveProvider(provider.value);
+                  setSelectedId(nextAccount?.id ?? '');
+                  setOpenMenuId('');
+                }}
               >
-                <span className="payout-account-tab-icon">{account.provider === 'Airwallex' ? <Landmark size={17} /> : <Wallet size={17} />}</span>
-                <span><strong>{account.nickname}</strong><small>{getPayoutAccountSummary(account)} · {getPayoutAccountIdentifier(account)}</small></span>
-                <em className={`payout-account-mini-status payout-account-mini-status-${status.tone}`}>{status.label}</em>
-                {account.isDefault ? <Star className="payout-account-default-star" size={14} fill="currentColor" aria-label="默认账户" /> : null}
+                <strong>{provider.label}</strong>
+                <small>
+                  {providerAccounts.length
+                    ? `${providerAccounts.length} 个账户 · ${providerUsableCount} 个可用`
+                    : '0 个账户 · 暂未开设'}
+                </small>
               </button>
             );
           })}
         </div>
+
+        <div className="payout-provider-summary" aria-label="当前渠道账户摘要">
+          <span><small>当前渠道</small><strong>{activeProviderConfig.label}</strong></span>
+          <span><small>账户总数</small><strong>{activeAccounts.length}</strong></span>
+          <span><small>可用账户</small><strong>{activeUsableCount}</strong></span>
+          <span><small>档案完整度</small><strong>{completeness}%</strong></span>
+        </div>
+
+        <div className="payout-account-cards" id="payout-provider-panel" role="tabpanel">
+          {activeAccounts.map((account) => {
+            const status = getPayoutAccountStatusMeta(account.status, account.provider);
+            const provider = PAYOUT_PROVIDERS.find((item) => item.value === account.provider);
+            const ProviderIcon = provider?.icon ?? Landmark;
+            return (
+              <article
+                className={`payout-account-card ${selectedAccount?.id === account.id ? 'payout-account-card-active' : ''}`}
+                key={account.id}
+              >
+                <button
+                  className="payout-account-card-main"
+                  type="button"
+                  aria-pressed={selectedAccount?.id === account.id}
+                  onClick={() => {
+                    setSelectedId(account.id);
+                    setOpenMenuId('');
+                  }}
+                >
+                  <span className="payout-account-card-icon"><ProviderIcon size={18} /></span>
+                  <span className="payout-account-card-copy">
+                    <strong>{account.nickname}</strong>
+                    <small>{getPayoutAccountSummary(account)} · {getPayoutAccountIdentifier(account)}</small>
+                    <em className={`payout-account-mini-status payout-account-mini-status-${status.tone}`}>
+                      <Circle size={5} fill="currentColor" aria-hidden="true" />
+                      {status.label}
+                    </em>
+                  </span>
+                </button>
+                {account.isDefault ? <Star className="payout-account-default-star" size={15} fill="currentColor" aria-label="默认账户" /> : null}
+                {editing ? (
+                  <button
+                    className="payout-account-card-menu-button"
+                    type="button"
+                    title="账户操作"
+                    aria-label={`${account.nickname}账户操作`}
+                    aria-expanded={openMenuId === account.id}
+                    onClick={() => {
+                      setSelectedId(account.id);
+                      setOpenMenuId((current) => current === account.id ? '' : account.id);
+                    }}
+                  >
+                    <MoreHorizontal size={17} />
+                  </button>
+                ) : null}
+                {editing && openMenuId === account.id ? (
+                  <div className="payout-account-card-menu">
+                    <button type="button" disabled={account.isDefault} onClick={() => setDefault(account)}>
+                      <Star size={14} />
+                      {account.isDefault ? '当前默认账户' : '设为默认账户'}
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+          {activeAccounts.length === 0 ? (
+            <div className="payout-provider-empty">
+              <ActiveProviderIcon size={22} />
+              <span>
+                <strong>尚未开设该渠道账户</strong>
+                <small>可在下方新建账户，三种渠道资料相互独立。</small>
+              </span>
+            </div>
+          ) : null}
+        </div>
+
         {editing ? (
           <div className="payout-account-actions">
-            {selectedAccount && !selectedAccount.isDefault ? <Button variant="ghost" icon={<Star size={15} />} onClick={setDefault}>设为默认</Button> : null}
-            <Button variant="secondary" icon={<Plus size={15} />} onClick={addAirwallex}>Airwallex 账户</Button>
-            <Button variant="secondary" icon={<Plus size={15} />} onClick={addPayPal}>PayPal 账户</Button>
+            {PAYOUT_PROVIDERS.map((provider) => (
+              <Button
+                variant="secondary"
+                icon={<Plus size={15} />}
+                key={provider.value}
+                onClick={() => addAccount(provider.value)}
+              >
+                {provider.label} 账户
+              </Button>
+            ))}
           </div>
         ) : null}
       </div>
 
-      {!selectedAccount ? (
-        <div className="payout-account-empty">
-          <Landmark size={24} />
-          <strong>尚未建立收款账户</strong>
-          <span>新增 Airwallex 或 PayPal 账户后，才能进入付款资料校验。</span>
-          {editing ? <Button icon={<Plus size={15} />} onClick={addAirwallex}>新增 Airwallex 账户</Button> : null}
-        </div>
-      ) : selectedAccount.provider === 'Airwallex' ? (
+      {selectedAccount?.provider === 'Airwallex' ? (
         editing
           ? <AirwallexAccountForm account={selectedAccount} onChange={replaceAccount} />
           : <AirwallexAccountView account={selectedAccount} />
-      ) : selectedAccount.provider === 'PayPal' ? (
+      ) : selectedAccount?.provider === 'PayPal' ? (
         editing
           ? <PayPalAccountForm account={selectedAccount} onChange={replaceAccount} />
           : <PayPalAccountView account={selectedAccount} />
+      ) : selectedAccount?.provider === 'PayMax' ? (
+        editing
+          ? <PayMaxAccountForm account={selectedAccount} onChange={replaceAccount} />
+          : <PayMaxAccountView account={selectedAccount} />
       ) : null}
     </div>
   );

@@ -1862,7 +1862,7 @@ export function CreatorsPage({
                   <small>修改银行信息后状态会回到“待 Airwallex 校验”；接入 API 后，再由 Validate 与 Verify Account 结果更新状态。</small>
                 </span>
               </div>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="一个达人可以维护多个 Airwallex 或 PayPal 账户，并指定默认付款账户">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户，并指定一个默认账户用于新的付款">
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing
@@ -1881,7 +1881,7 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
                 <CreatorContactDetailsGrid contact={activeProfile.contact} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="默认账户决定批量付款与单笔付款的预选资料">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax，默认账户决定付款时的预选资料">
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
                   creatorName={activeProfile.name}
