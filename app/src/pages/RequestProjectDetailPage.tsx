@@ -16,9 +16,11 @@ import type {
 } from '../projectResources';
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
+import type { ProjectId } from '../businessWorkflow';
 
 export type RequestProjectSummary = {
   id: string;
+  projectId?: ProjectId;
   project: string;
   brand: string;
   media: string;

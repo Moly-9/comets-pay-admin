@@ -22,6 +22,666 @@
   --shadow-soft: 0 12px 36px rgba(30, 25, 45, 0.055);
 }
 
+/* Contract generation */
+.contract-generation-modal .modal-body {
+  padding: 0;
+}
+
+.contract-generation-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  background: #f7f8fa;
+}
+
+.contract-generation-form section {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.contract-generation-form section > header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--soft-line);
+}
+
+.contract-generation-form section > header > svg {
+  color: #7a53c4;
+}
+
+.contract-generation-form h3,
+.contract-generation-form p {
+  margin: 0;
+}
+
+.contract-generation-form h3 {
+  font-size: 15px;
+}
+
+.contract-generation-form p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.contract-generation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  padding: 16px;
+}
+
+.contract-generation-grid label,
+.contract-generation-grid .invoice-form-control {
+  min-width: 0;
+}
+
+.contract-generation-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.contract-generation-grid label > span,
+.contract-generation-grid .invoice-form-control > span {
+  color: #555d69;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.contract-generation-grid input,
+.contract-generation-grid textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #dfe3e9;
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: #fff;
+  outline: none;
+}
+
+.contract-generation-grid textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.contract-generation-grid input:focus,
+.contract-generation-grid textarea:focus {
+  border-color: #9b73d6;
+  box-shadow: 0 0 0 3px rgba(155, 115, 214, 0.12);
+}
+
+.contract-generation-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.contract-generation-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 20px;
+  padding: 18px;
+  border: 1px solid #bfe4d2;
+  border-radius: 8px;
+  background: #f1faf6;
+  color: #22684b;
+}
+
+.contract-generation-success strong,
+.contract-generation-success p {
+  margin: 0;
+}
+
+.contract-generation-success p {
+  margin-top: 4px;
+  color: #527063;
+  font-size: 13px;
+}
+
+/* Invoice contract coverage */
+.invoice-contract-coverage {
+  margin-top: 14px;
+  border-top: 1px solid var(--soft-line);
+  padding-top: 14px;
+}
+
+.invoice-contract-coverage-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.invoice-contract-coverage-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.invoice-contract-coverage-head strong {
+  font-size: 13px;
+}
+
+.invoice-contract-coverage-head span,
+.invoice-contract-coverage > p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.invoice-contract-coverage-head em {
+  color: #6d4bb0;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.invoice-contract-options {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.invoice-contract-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.invoice-contract-options label:has(input:checked) {
+  border-color: #bba3dc;
+  background: #f8f5fc;
+}
+
+.invoice-contract-options input {
+  width: 16px;
+  height: 16px;
+}
+
+.invoice-contract-options span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.invoice-contract-options strong,
+.invoice-contract-options small {
+  overflow-wrap: anywhere;
+}
+
+.invoice-contract-options small {
+  color: var(--muted);
+}
+
+.invoice-contract-conflict {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-left: 3px solid #cf633e;
+  background: #fff4ef;
+  color: #93472d;
+  font-size: 12px;
+}
+
+/* Project workflow resources */
+.project-workflow-card {
+  overflow: visible;
+}
+
+.project-workflow-resources {
+  display: grid;
+  gap: 18px;
+}
+
+.project-workflow-statusbar {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--soft-line);
+  border-bottom: 1px solid var(--soft-line);
+  padding: 10px 0;
+}
+
+.project-workflow-statusbar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.project-workflow-statusbar span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-workflow-statusbar strong {
+  font-size: 14px;
+}
+
+.project-workflow-status-actions,
+.project-engagement-resource-title > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.project-engagement-list {
+  display: grid;
+  gap: 22px;
+}
+
+.project-engagement-resource {
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 20px;
+}
+
+.project-engagement-resource:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.project-engagement-resource > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.project-engagement-resource > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.project-engagement-resource > header strong {
+  font-size: 15px;
+}
+
+.project-engagement-resource > header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-engagement-resource > header code {
+  max-width: 46%;
+  overflow: hidden;
+  color: #7c8490;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-engagement-resource-group {
+  border-top: 1px solid var(--soft-line);
+  padding: 10px 0;
+}
+
+.project-engagement-resource-title {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-engagement-resource-title > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.project-engagement-resource-title em {
+  display: inline-grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eff1f4;
+  color: #59616d;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.project-linked-resource-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(100px, auto) minmax(86px, auto) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  border-top: 1px solid #f0f1f4;
+  padding: 8px 0;
+}
+
+.project-linked-resource-row > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.project-linked-resource-row strong,
+.project-linked-resource-row span {
+  overflow-wrap: anywhere;
+}
+
+.project-linked-resource-row > div:first-child span,
+.project-linked-resource-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-linked-resource-row > em {
+  color: #39745c;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.project-linked-resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.project-linked-resource-actions button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: #5f477f;
+  font-size: 11px;
+}
+
+.project-linked-resource-actions button.danger {
+  color: #b34d45;
+}
+
+.project-resource-empty-line {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-payment-list {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.project-payment-list > header,
+.project-payment-list > header > div {
+  display: flex;
+  align-items: center;
+}
+
+.project-payment-list > header {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.project-payment-list > header > div {
+  gap: 10px;
+}
+
+.project-payment-list > header > div > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 6px;
+  background: #eef8f5;
+  color: #237c68;
+}
+
+.project-payment-list h3,
+.project-payment-list p {
+  margin: 0;
+}
+
+.project-payment-list h3 {
+  font-size: 14px;
+}
+
+.project-payment-list header p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-payment-list-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--soft-line);
+  border-bottom: 1px solid var(--soft-line);
+  font-size: 12px;
+}
+
+.project-payment-list-meta span {
+  color: var(--muted);
+}
+
+.project-payment-rows {
+  display: grid;
+}
+
+.project-payment-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) 76px 100px 112px minmax(130px, 1fr) 32px;
+  align-items: end;
+  gap: 8px;
+  border-bottom: 1px solid var(--soft-line);
+  padding: 10px 0;
+}
+
+.project-payment-row > div,
+.project-payment-row label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.project-payment-row span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.project-payment-row input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #dfe3e9;
+  border-radius: 5px;
+  padding: 6px 8px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.project-payment-row input:disabled {
+  border-color: transparent;
+  padding-left: 0;
+  background: transparent;
+}
+
+.project-payment-row > button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #b34d45;
+}
+
+.project-payment-add {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.project-audit-log {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.project-audit-log summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-audit-log > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--soft-line);
+  padding: 8px 0;
+  font-size: 11px;
+}
+
+.project-audit-log span {
+  color: var(--muted);
+}
+
+.project-link-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.project-link-dialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.project-invoice-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.project-invoice-edit-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.project-invoice-edit-grid span {
+  color: #555d69;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-invoice-edit-grid input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #dfe3e9;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.project-invoice-edit-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 820px) {
+  .contract-generation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-linked-resource-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .project-linked-resource-row > em,
+  .project-linked-resource-actions {
+    grid-column: 2;
+  }
+
+  .project-linked-resource-meta {
+    grid-column: 1;
+  }
+
+  .project-payment-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .project-payment-row > div,
+  .project-payment-row > button {
+    grid-column: 1 / -1;
+  }
+
+  .project-payment-row > button {
+    justify-self: end;
+  }
+}
+
+@media (max-width: 560px) {
+  .contract-generation-form {
+    padding: 10px;
+  }
+
+  .contract-generation-grid,
+  .project-invoice-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-generation-grid .full-width,
+  .project-invoice-edit-grid .full-width {
+    grid-column: 1;
+  }
+
+  .project-workflow-statusbar,
+  .project-engagement-resource > header,
+  .project-engagement-resource-title,
+  .project-payment-list > header,
+  .project-payment-list-meta,
+  .invoice-contract-coverage-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .project-engagement-resource > header code {
+    max-width: 100%;
+  }
+
+  .project-linked-resource-row {
+    grid-template-columns: 1fr;
+  }
+
+  .project-linked-resource-row > em,
+  .project-linked-resource-actions,
+  .project-linked-resource-meta {
+    grid-column: 1;
+  }
+
+  .project-linked-resource-actions {
+    justify-content: flex-start;
+  }
+
+  .project-payment-add {
+    grid-template-columns: 1fr;
+  }
+
+  .project-audit-log > div {
+    flex-direction: column;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

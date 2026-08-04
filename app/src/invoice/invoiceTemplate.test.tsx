@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import type { InvoiceDocumentModel } from '../types';
 import { generateInvoiceDocx, generateInvoicePdf } from './generateInvoice';
 
@@ -17,9 +18,9 @@ const model: InvoiceDocumentModel = {
   },
   creatorHandle: '@creator',
   creatorName: 'Creator Name',
-  creatorId: 'creator-id',
-  engagementId: 'engagement-id',
-  projectId: 'project-id',
+  creatorId: 'creator-id' as CreatorId,
+  engagementId: 'engagement-id' as EngagementId,
+  projectId: 'project-id' as ProjectId,
   projectName: PROJECT_NAME,
   from: {
     legalName: 'Creator Legal Name',

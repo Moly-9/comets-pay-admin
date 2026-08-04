@@ -1,4 +1,5 @@
 import type { ContractRecord, ContractStatus } from '../contracts';
+import type { ProjectId } from '../businessWorkflow';
 import type {
   InvoiceCurrency,
   InvoiceDocumentModel,
@@ -169,7 +170,7 @@ export const buildProjectInvoice = ({
     },
     creatorHandle: creator.startsWith('@') ? creator : `@${creator.replace(/\s+/g, '')}`,
     creatorName: normalizedCreatorName(creator),
-    projectId: project.id,
+    projectId: project.id as ProjectId,
     projectName: project.name,
     from: {
       legalName: normalizedCreatorName(creator),

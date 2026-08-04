@@ -1,4 +1,5 @@
 import { invoicePaymentForCreator } from '../payoutAccounts';
+import type { ProjectId } from '../businessWorkflow';
 import type {
   CreatorInvoiceContact,
   CreatorProfile,
@@ -53,7 +54,7 @@ export const buildInvoiceReviewModel = (
     billTo: { ...billTo },
     creatorHandle: payout.handle,
     creatorName: creator?.name ?? fallbackName,
-    projectId: payout.projectId,
+    projectId: payout.projectId as ProjectId,
     projectName: payout.project,
     from: { ...from },
     currency: payout.currency,

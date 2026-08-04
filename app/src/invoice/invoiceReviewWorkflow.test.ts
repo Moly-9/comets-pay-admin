@@ -100,10 +100,12 @@ describe('Invoice review workflow', () => {
   it('links a signed generated Invoice only through sourcePayoutId', () => {
     const record: GeneratedInvoiceRecord = {
       id: 'INV-GENERATED',
+      invoiceId: 'inv_local_test' as never,
       sourcePayoutId: payout.id,
       status: '待签署' as const,
       generatedAt: '2026-08-04 10:00',
       snapshot: {} as never,
+      validationStatus: 'valid' as const,
     };
     const linked = markGeneratedInvoiceSigned(payout, record, actor, '2026-08-04T03:00:00.000Z');
     expect(linked.invoice).toBe('INV-GENERATED');

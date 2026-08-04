@@ -70,6 +70,18 @@ import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage
 import { ProjectDetailPage, type ProjectSummary } from './ProjectDetailPage';
 import { RequestProjectCreatePage } from './RequestProjectCreatePage';
 import { RequestProjectDetailPage, type RequestProjectSummary } from './RequestProjectDetailPage';
+import {
+  canEditProject,
+  type CreatorId,
+  createPrototypeCode,
+  createPrototypeId,
+  nowIso,
+  type EngagementId,
+  type InvoiceId,
+  type PaymentListRecord,
+  type ProjectId,
+  type WorkflowAuditEvent,
+} from '../businessWorkflow';
 
 type Notify = (title: string, message: string) => void;
 type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
@@ -391,6 +403,8 @@ function ProjectInlineFilterPanel({
 
 export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project) => ({
   id: project.id,
+  projectId: project.id as ProjectId,
+  projectCode: project.id,
   name: project.name,
   brand: project.brand,
   media: project.media,
@@ -399,6 +413,7 @@ export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project)
   invoiceCount: project.creators,
   budget: project.budget,
   status: project.projectStatus,
+  reviewStatus: project.projectStatus === '已完成' ? 'approved' : 'submitted',
   paymentOrder: project.paymentOrder,
 }));
 
@@ -416,7 +431,28 @@ export function ProjectsPage({
   currentUser,
   projects,
   contracts,
+  generatedInvoices,
+  paymentLists,
+  auditEvents,
   onOpenContract,
+  onOpenInvoice,
+  onCreateContract,
+  onCreateInvoice,
+  onLinkContract,
+  onUnlinkContract,
+  onDeleteContract,
+  onLinkInvoice,
+  onUnlinkInvoice,
+  onDeleteInvoice,
+  onUpdateInvoice,
+  onCreatePaymentList,
+  onDeletePaymentList,
+  onAddPaymentInvoice,
+  onRemovePaymentInvoice,
+  onUpdatePaymentItem,
+  onSubmitProjectReview,
+  onReturnProjectReview,
+  onApproveProjectReview,
   onProjectsChange,
   canCreateProject,
 }: {
@@ -425,7 +461,28 @@ export function ProjectsPage({
   currentUser: SystemUser;
   projects: ProjectSummary[];
   contracts: ContractRecord[];
+  generatedInvoices: GeneratedInvoiceRecord[];
+  paymentLists: PaymentListRecord[];
+  auditEvents: WorkflowAuditEvent[];
   onOpenContract: (contractId: string) => void;
+  onOpenInvoice: (invoiceId: InvoiceId) => void;
+  onCreateContract: (engagementId: EngagementId) => void;
+  onCreateInvoice: (engagementId: EngagementId) => void;
+  onLinkContract: (contractId: string, engagementId: EngagementId) => void;
+  onUnlinkContract: (contractId: string) => void;
+  onDeleteContract: (contractId: string) => void;
+  onLinkInvoice: (invoiceId: InvoiceId, engagementId: EngagementId) => void;
+  onUnlinkInvoice: (invoiceId: InvoiceId) => void;
+  onDeleteInvoice: (invoiceId: InvoiceId) => void;
+  onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
+  onCreatePaymentList: (project: ProjectSummary) => void;
+  onDeletePaymentList: (project: ProjectSummary) => void;
+  onAddPaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
+  onRemovePaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
+  onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
+  onSubmitProjectReview: (project: ProjectSummary) => void;
+  onReturnProjectReview: (project: ProjectSummary) => void;
+  onApproveProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
 }) {
@@ -596,17 +653,25 @@ export function ProjectsPage({
     if (!name.trim() || !selectedPM || selectedCreatorHandles.length === 0) return;
     const selectedCreatorProfiles = creators.filter((creator) => selectedCreatorHandles.includes(creator.handle));
     if (selectedCreatorProfiles.length === 0) return;
-    const projectId = `PRJ-${Date.now().toString().slice(-6)}`;
+    const projectId = createPrototypeId('project') as ProjectId;
+    const projectCode = createPrototypeCode('PRJ');
+    const createdAt = nowIso();
     onProjectsChange((current) => [{
-      id: projectId,
+      id: projectCode,
+      projectId,
+      projectCode,
       name: name.trim(),
       brand: brand.trim() || '待补充品牌',
       media: currentUser.name,
       pm: selectedPM,
       creators: selectedCreatorProfiles.length,
       creatorProfiles: selectedCreatorProfiles.map((creator) => ({
-        creatorId: creator.id,
-        engagementId: `ENG-${projectId}-${creator.id}`,
+        creatorId: creator.id as CreatorId,
+        projectId,
+        engagementId: createPrototypeId('engagement') as EngagementId,
+        status: 'active',
+        createdAt,
+        updatedAt: createdAt,
         name: creator.name,
         handle: creator.handle,
         platform: creator.platform,
@@ -615,6 +680,8 @@ export function ProjectsPage({
       invoiceCount: 0,
       budget: 'USD 0',
       status: '草稿',
+      reviewStatus: 'draft',
+      reviewUpdatedAt: createdAt,
     }, ...current]);
     localStorage.removeItem(draftStorageKey);
     resetProjectForm();
@@ -623,6 +690,24 @@ export function ProjectsPage({
   };
 
   const updateProjectCreators = (projectId: string, creatorHandles: string[]) => {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project || !canEditProject(currentUser, project.reviewStatus ?? 'draft')) {
+      notify('项目资料已锁定', '当前账号或项目状态不允许修改达人名单。');
+      return;
+    }
+    const nextCreatorIds = new Set(
+      creators.filter((creator) => creatorHandles.includes(creator.handle)).map((creator) => creator.id),
+    );
+    const removedReferences = (project.creatorProfiles ?? []).filter((reference) => !nextCreatorIds.has(reference.creatorId));
+    const blockedRemoval = removedReferences.find((reference) => (
+      contracts.some((contract) => contract.engagementId === reference.engagementId)
+      || generatedInvoices.some((invoice) => invoice.snapshot.engagementId === reference.engagementId)
+      || paymentLists.some((list) => list.items.some((item) => item.engagementId === reference.engagementId))
+    ));
+    if (blockedRemoval) {
+      notify('无法移除达人', `${blockedRemoval.name} 仍有关联合同、Invoice 或付款清单，请先处理这些资料。`);
+      return;
+    }
     const selectedHandleSet = new Set(creatorHandles);
     const selectedCreatorProfiles = creators.filter((creator) => selectedHandleSet.has(creator.handle));
     onProjectsChange((current) => current.map((project) => (
@@ -631,9 +716,13 @@ export function ProjectsPage({
             ...project,
             creators: selectedCreatorProfiles.length,
             creatorProfiles: selectedCreatorProfiles.map((creator) => ({
-              creatorId: creator.id,
+              creatorId: creator.id as CreatorId,
               engagementId: project.creatorProfiles?.find((item) => item.creatorId === creator.id)?.engagementId
-                ?? `ENG-${project.id}-${creator.id}`,
+                ?? createPrototypeId('engagement') as EngagementId,
+              projectId: (project.projectId ?? project.id) as ProjectId,
+              status: 'active',
+              createdAt: project.creatorProfiles?.find((item) => item.creatorId === creator.id)?.createdAt ?? nowIso(),
+              updatedAt: nowIso(),
               name: creator.name,
               handle: creator.handle,
               platform: creator.platform,
@@ -648,9 +737,31 @@ export function ProjectsPage({
       <ProjectDetailPage
         project={selectedProject}
         creatorArchive={creators}
+        currentUser={currentUser}
         notify={notify}
         contracts={contracts}
+        invoices={generatedInvoices}
+        paymentList={paymentLists.find((list) => list.projectId === (selectedProject.projectId ?? selectedProject.id)) ?? null}
+        auditEvents={auditEvents.filter((event) => event.projectId === (selectedProject.projectId ?? selectedProject.id))}
         onOpenContract={onOpenContract}
+        onOpenInvoice={onOpenInvoice}
+        onCreateContract={onCreateContract}
+        onCreateInvoice={onCreateInvoice}
+        onLinkContract={onLinkContract}
+        onUnlinkContract={onUnlinkContract}
+        onDeleteContract={onDeleteContract}
+        onLinkInvoice={onLinkInvoice}
+        onUnlinkInvoice={onUnlinkInvoice}
+        onDeleteInvoice={onDeleteInvoice}
+        onUpdateInvoice={onUpdateInvoice}
+        onCreatePaymentList={() => onCreatePaymentList(selectedProject)}
+        onDeletePaymentList={() => onDeletePaymentList(selectedProject)}
+        onAddPaymentInvoice={(invoiceId) => onAddPaymentInvoice(selectedProject, invoiceId)}
+        onRemovePaymentInvoice={(invoiceId) => onRemovePaymentInvoice(selectedProject, invoiceId)}
+        onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
+        onSubmitReview={() => onSubmitProjectReview(selectedProject)}
+        onReturnReview={() => onReturnProjectReview(selectedProject)}
+        onApproveReview={() => onApproveProjectReview(selectedProject)}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {
           setSelectedProjectId(null);

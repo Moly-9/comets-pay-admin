@@ -21,19 +21,37 @@ import type {
   ProjectResourceRecords,
   ProjectResourceViewerState,
 } from '../projectResources';
-import type { CreatorProfile } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import {
+  canEditProject,
+  type CreatorId,
+  type InvoiceId,
+  type PaymentListRecord,
+  type EngagementId,
+  type ProjectId,
+  type ProjectReviewStatus,
+  type WorkflowAuditEvent,
+} from '../businessWorkflow';
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
+import { ProjectResourceManager } from '../components/ProjectResourceManager';
+import type { SystemUser } from '../data';
 
 export type ProjectSummary = {
   id: string;
+  projectId?: ProjectId;
+  projectCode?: string;
   name: string;
   brand: string;
   media: string;
   pm: string;
   creators: number;
   creatorProfiles?: Array<{
-    creatorId: string;
-    engagementId: string;
+    creatorId: CreatorId;
+    engagementId: EngagementId;
+    projectId?: ProjectId;
+    status?: 'active' | 'removed';
+    createdAt?: string;
+    updatedAt?: string;
     name: string;
     handle: string;
     platform: string;
@@ -43,6 +61,10 @@ export type ProjectSummary = {
   paymentOrder?: string;
   budget: string;
   status: string;
+  reviewStatus?: ProjectReviewStatus;
+  submittedAt?: string;
+  returnedAt?: string;
+  reviewUpdatedAt?: string;
 };
 
 type ProjectCreator = {
@@ -495,7 +517,7 @@ function resolveProjectCreatorReferences(
     const currentProfile = archiveByHandle.get(reference.handle);
     return currentProfile
       ? {
-          creatorId: currentProfile.id,
+          creatorId: currentProfile.id as CreatorId,
           engagementId: reference.engagementId,
           name: currentProfile.name,
           handle: currentProfile.handle,
@@ -921,18 +943,62 @@ export function ProjectResourceViewer({
 export function ProjectDetailPage({
   project,
   creatorArchive,
+  currentUser,
   onBack,
   onUpdateCreators,
   contracts = [],
+  invoices,
+  paymentList,
+  auditEvents,
   onOpenContract,
+  onOpenInvoice,
+  onCreateContract,
+  onCreateInvoice,
+  onLinkContract,
+  onUnlinkContract,
+  onDeleteContract,
+  onLinkInvoice,
+  onUnlinkInvoice,
+  onDeleteInvoice,
+  onUpdateInvoice,
+  onCreatePaymentList,
+  onDeletePaymentList,
+  onAddPaymentInvoice,
+  onRemovePaymentInvoice,
+  onUpdatePaymentItem,
+  onSubmitReview,
+  onReturnReview,
+  onApproveReview,
   notify,
 }: {
   project: ProjectSummary;
   creatorArchive: CreatorProfile[];
+  currentUser: SystemUser;
   onBack: () => void;
   onUpdateCreators: (creatorHandles: string[]) => void;
   contracts?: ContractRecord[];
+  invoices: GeneratedInvoiceRecord[];
+  paymentList: PaymentListRecord | null;
+  auditEvents: WorkflowAuditEvent[];
   onOpenContract?: (contractId: string) => void;
+  onOpenInvoice: (invoiceId: InvoiceId) => void;
+  onCreateContract: (engagementId: EngagementId) => void;
+  onCreateInvoice: (engagementId: EngagementId) => void;
+  onLinkContract: (contractId: string, engagementId: EngagementId) => void;
+  onUnlinkContract: (contractId: string) => void;
+  onDeleteContract: (contractId: string) => void;
+  onLinkInvoice: (invoiceId: InvoiceId, engagementId: EngagementId) => void;
+  onUnlinkInvoice: (invoiceId: InvoiceId) => void;
+  onDeleteInvoice: (invoiceId: InvoiceId) => void;
+  onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
+  onCreatePaymentList: () => void;
+  onDeletePaymentList: () => void;
+  onAddPaymentInvoice: (invoiceId: InvoiceId) => void;
+  onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
+  onUpdatePaymentItem: (invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
+  onSubmitReview: () => void;
+  onReturnReview: () => void;
+  onApproveReview: () => void;
   notify: Notify;
 }) {
   const [viewer, setViewer] = useState<ProjectResourceViewerState | null>(null);
@@ -941,9 +1007,12 @@ export function ProjectDetailPage({
     kind: Extract<ProjectResourceKind, 'contract' | 'invoice'>;
     recordId: string;
   } | null>(null);
+  const canEdit = canEditProject(currentUser, project.reviewStatus ?? 'draft');
   const detail = getProjectDetail(project, creatorArchive);
   const records = getProjectResourceRecords(project, creatorArchive);
-  const linkedContracts = contracts.filter((contract) => contract.projectId === project.id);
+  const linkedContracts = contracts.filter((contract) => (
+    contract.projectId === (project.projectId ?? project.id)
+  ));
   const resources = PROJECT_RESOURCE_CONFIG.map((resource) => ({
     ...resource,
     data: resource.kind === 'contract' && linkedContracts.length > 0
@@ -1018,69 +1087,46 @@ export function ProjectDetailPage({
             </dl>
           </section>
 
-          <section className="project-detail-card">
+          <section className="project-detail-card project-workflow-card">
             <header className="project-detail-card-header">
-              <div><h2>合同、Invoice 与付款清单</h2><p>逐项查看项目请款链路中的全部关联资料。</p></div>
+              <div><h2>合同、Invoice 与付款清单</h2><p>所有资料按 Engagement ID 关联并同步主模块。</p></div>
             </header>
-            <div className="project-resource-list">
-              {resources.map((resource) => {
-                const ResourceIcon = resource.icon;
-                return (
-                  <article
-                    className={`project-resource-row project-resource-row-${resource.kind}`}
-                    key={resource.label}
-                  >
-                    <span
-                      className={`project-resource-icon project-resource-icon-${resource.kind}`}
-                      aria-hidden="true"
-                    >
-                      <ResourceIcon size={20} />
-                    </span>
-                    <div className="project-resource-copy">
-                      <div className="project-resource-heading">
-                        <h3 className="project-resource-label">{resource.label}</h3>
-                        <span className="project-resource-count">
-                          {resource.count > 0 ? `${resource.count} 条可查看` : '暂无记录'}
-                        </span>
-                      </div>
-                      <strong>{resource.data.id}</strong>
-                      <span className="project-resource-meta">{resource.data.meta}</span>
-                    </div>
-                    <span className="project-resource-status"><i />{resource.data.status}</span>
-                    <button
-                      className="text-link"
-                      type="button"
-                      aria-label={`${resource.action}：${project.name}`}
-                      data-testid={`open-project-${resource.kind}`}
-                      onClick={() => {
-                        if (resource.kind === 'contract' && linkedContracts.length === 1 && onOpenContract) {
-                          onOpenContract(linkedContracts[0].id);
-                          return;
-                        }
-                        setViewer({ kind: resource.kind, recordId: null });
-                      }}
-                    >
-                      {resource.action}
-                    </button>
-                    {resource.kind === 'contract' && linkedContracts.length > 1 && onOpenContract ? (
-                      <div className="project-linked-contracts">
-                        {linkedContracts.map((contract) => (
-                          <button type="button" key={contract.id} onClick={() => onOpenContract(contract.id)}>
-                            {contract.id} · {contract.creatorHandle || contract.publisher}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
+            <ProjectResourceManager
+              project={project}
+              creators={creatorArchive}
+              contracts={contracts}
+              invoices={invoices}
+              paymentList={paymentList}
+              auditEvents={auditEvents}
+              currentUser={currentUser}
+              onOpenContract={(contractId) => onOpenContract?.(contractId)}
+              onOpenInvoice={onOpenInvoice}
+              onCreateContract={onCreateContract}
+              onCreateInvoice={onCreateInvoice}
+              onLinkContract={onLinkContract}
+              onUnlinkContract={onUnlinkContract}
+              onDeleteContract={onDeleteContract}
+              onLinkInvoice={onLinkInvoice}
+              onUnlinkInvoice={onUnlinkInvoice}
+              onDeleteInvoice={onDeleteInvoice}
+              onUpdateInvoice={onUpdateInvoice}
+              onCreatePaymentList={onCreatePaymentList}
+              onDeletePaymentList={onDeletePaymentList}
+              onAddPaymentInvoice={onAddPaymentInvoice}
+              onRemovePaymentInvoice={onRemovePaymentInvoice}
+              onUpdatePaymentItem={onUpdatePaymentItem}
+              onSubmitReview={onSubmitReview}
+              onReturnReview={onReturnReview}
+              onApproveReview={onApproveReview}
+            />
           </section>
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
               <div><h2>达人名单</h2><p>展示当前项目中已关联的达人与交付状态。</p></div>
-              <button className="text-link" type="button" onClick={() => setCreatorManagerOpen(true)}>查看全部 {project.creators} 位</button>
+              {canEdit
+                ? <button className="text-link" type="button" onClick={() => setCreatorManagerOpen(true)}>编辑全部 {project.creators} 位</button>
+                : <span>共 {project.creators} 位</span>}
             </header>
             {detail.creators.length > 0 ? (
               <div className="table-scroll">
@@ -1090,10 +1136,17 @@ export function ProjectDetailPage({
                 </table>
               </div>
             ) : (
-              <button className="project-detail-empty project-detail-empty-action" type="button" onClick={() => setCreatorManagerOpen(true)}>
-                <Users size={20} />
-                <span><strong>尚未添加达人</strong><small>点击从达人档案筛选项目达人</small></span>
-              </button>
+              canEdit ? (
+                <button className="project-detail-empty project-detail-empty-action" type="button" onClick={() => setCreatorManagerOpen(true)}>
+                  <Users size={20} />
+                  <span><strong>尚未添加达人</strong><small>点击从达人档案筛选项目达人</small></span>
+                </button>
+              ) : (
+                <div className="project-detail-empty">
+                  <Users size={20} />
+                  <span><strong>尚未添加达人</strong><small>当前项目为只读状态</small></span>
+                </div>
+              )
             )}
           </section>
         </div>
@@ -1125,7 +1178,7 @@ export function ProjectDetailPage({
           onClose={() => setViewer(null)}
         />
       ) : null}
-      {creatorManagerOpen ? (
+      {creatorManagerOpen && canEdit ? (
         <ProjectCreatorManagerModal
           project={project}
           creatorArchive={creatorArchive}

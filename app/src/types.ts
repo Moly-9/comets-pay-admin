@@ -1,3 +1,11 @@
+import type {
+  ContractId,
+  CreatorId,
+  EngagementId,
+  InvoiceId,
+  ProjectId,
+} from './businessWorkflow';
+
 export type NavPage =
   | 'dashboard'
   | 'payment-workbench'
@@ -220,6 +228,24 @@ export type InvoiceLineItem = {
 
 export type InvoicePaymentMethod = 'bank' | 'paypal';
 
+export type InvoiceDocumentModel = {
+  invoiceNumber: string;
+  invoiceDate: string;
+  billTo: InvoiceEntity;
+  creatorHandle: string;
+  creatorName: string;
+  creatorId?: CreatorId;
+  engagementId?: EngagementId;
+  projectId: ProjectId;
+  projectName: string;
+  contractIds?: ContractId[];
+  from: CreatorInvoiceContact;
+  currency: InvoiceCurrency;
+  items: InvoiceLineItem[];
+  paymentMethod: InvoicePaymentMethod;
+  payment: CreatorPaymentDetails;
+};
+
 export type InvoiceReviewStatus =
   | '待签署'
   | '待媒介审核'
@@ -242,29 +268,14 @@ export type InvoiceReviewEvent = {
   occurredAt: string;
 };
 
-export type InvoiceDocumentModel = {
-  invoiceNumber: string;
-  invoiceDate: string;
-  billTo: InvoiceEntity;
-  creatorHandle: string;
-  creatorName: string;
-  creatorId?: string;
-  engagementId?: string;
-  projectId: string;
-  projectName: string;
-  from: CreatorInvoiceContact;
-  currency: InvoiceCurrency;
-  items: InvoiceLineItem[];
-  paymentMethod: InvoicePaymentMethod;
-  payment: CreatorPaymentDetails;
-};
-
 export type GeneratedInvoiceRecord = {
   id: string;
+  invoiceId: InvoiceId;
   sourcePayoutId: string;
   status: InvoiceReviewStatus;
   generatedAt: string;
   snapshot: InvoiceDocumentModel;
+  validationStatus: 'valid' | 'needs_review';
 };
 
 export type PayoutStatus =
@@ -287,7 +298,7 @@ export type Payout = {
   contract: string;
   invoice: string;
   provider: Exclude<Provider, '手动打款'>;
-  currency: 'USD' | 'EUR';
+  currency: InvoiceCurrency;
   amount: number;
   account: string;
   status: PayoutStatus;
