@@ -11996,6 +11996,11 @@ button:disabled {
   white-space: nowrap;
 }
 
+.contract-source-file strong {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .contract-source-file small {
   color: #777d8c;
   font-size: 9.5px;
@@ -12048,6 +12053,12 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.contract-recognition-field > div > strong {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .contract-recognition-field p {
