@@ -67,6 +67,10 @@ export type AirwallexFormSchemaCondition = {
 export type AirwallexFormSchemaResponse = {
   condition: AirwallexFormSchemaCondition;
   fields: AirwallexFormSchemaField[];
+  meta?: {
+    source: 'airwallex' | 'mock' | 'local';
+    simulated?: boolean;
+  };
 };
 
 type CountryProfile = {
@@ -195,6 +199,39 @@ export const getAirwallexCountryProfile = (countryCode: string) => (
   AIRWALLEX_SCHEMA_COUNTRIES.find((country) => country.value === countryCode)
 );
 
+export const AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH =
+  'beneficiary.bank_details.local_clearing_system';
+
+/**
+ * Form Schema only provides eligible clearing systems, not a payable fee quote.
+ * The local prototype keeps a typical low-cost network first in each country
+ * profile and annotates that option without presenting it as a guaranteed fee.
+ */
+export const prioritizeAirwallexLocalClearingOptions = (
+  countryCode: string,
+  options: AirwallexFormSchemaOption[],
+): AirwallexFormSchemaOption[] => {
+  const preferredOrder = getAirwallexCountryProfile(countryCode)?.localClearingSystems ?? [];
+  const orderByValue = new Map(preferredOrder.map((value, index) => [value, index]));
+  const recommendedValue = preferredOrder[0];
+
+  return options
+    .map((option, index) => ({
+      option,
+      index,
+      priority: orderByValue.get(option.value) ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((left, right) => left.priority - right.priority || left.index - right.index)
+    .map(({ option }) => {
+      if (!recommendedValue || option.value !== recommendedValue) return option;
+      return {
+        ...option,
+        label: `${option.label.replace(/\s*·\s*低费优先$/, '')} · 低费优先`,
+        description: '本地成本顺序推荐；实际手续费以付款报价为准',
+      };
+    });
+};
+
 export const buildAirwallexSchemaCondition = (
   account: AirwallexPayoutAccount,
 ): AirwallexFormSchemaCondition => ({
@@ -270,7 +307,7 @@ const buildConditionFields = (
   }),
   makeField({
     key: 'local_clearing_system',
-    path: 'beneficiary.bank_details.local_clearing_system',
+    path: AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH,
     label: '本地清算方式',
     type: 'SELECT',
     required: account.transferMethod === 'LOCAL',
@@ -591,6 +628,7 @@ export const generateLocalAirwallexFormSchema = (
   return {
     condition: buildAirwallexSchemaCondition(account),
     fields,
+    meta: { source: 'local', simulated: true },
   };
 };
 
@@ -809,9 +847,10 @@ export const getAirwallexSchemaGroup = (
 ): 'condition' | 'identity' | 'address' | 'bank' => {
   if (
     path === 'transfer_method'
+    || path === 'beneficiary.entity_type'
     || path === 'beneficiary.bank_details.bank_country_code'
     || path === 'beneficiary.bank_details.account_currency'
-    || path === 'beneficiary.bank_details.local_clearing_system'
+    || path === AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH
   ) return 'condition';
   if (path.startsWith('beneficiary.address.')) return 'address';
   if (path.startsWith('beneficiary.bank_details.')) return 'bank';

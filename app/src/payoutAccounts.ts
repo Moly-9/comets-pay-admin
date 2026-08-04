@@ -399,8 +399,12 @@ export const payoutAccountToInvoicePayment = (
     iban: account.bankDetails.iban,
     beneficiaryType: account.entityType,
     bankName: account.bankDetails.bankName,
-    bankStreetAddress: account.bankDetails.bankStreetAddress,
+    bankStreetAddress: account.bankDetails.bankStreetAddress
+      || account.schemaValues['profile_supplement.beneficiary_bank_address']
+      || '',
+    bankCity: account.schemaValues['beneficiary.bank_details.bank_city'] || '',
     bankState: account.bankDetails.bankState,
+    bankPostalCode: account.schemaValues['beneficiary.bank_details.bank_postcode'] || '',
     intermediaryBankCode: account.bankDetails.intermediaryBankSwiftCode,
   };
 };

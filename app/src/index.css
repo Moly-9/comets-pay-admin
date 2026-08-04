@@ -5472,6 +5472,68 @@ button:disabled {
   border-top: 1px solid #eceff3;
 }
 
+.airwallex-card-context {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid #eceff3;
+  background: #fff;
+  padding: 10px 18px;
+}
+
+.airwallex-card-context > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.airwallex-card-context strong {
+  color: #353943;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.airwallex-card-context small {
+  color: #898f9b;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.airwallex-card-context em {
+  flex: none;
+  border-radius: 999px;
+  background: #f2eff7;
+  padding: 4px 8px;
+  color: #765f83;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.airwallex-signature-boundary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #eceff3;
+  background: #fff;
+  padding: 10px 18px;
+}
+
+.airwallex-signature-boundary span {
+  color: #4f545e;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.airwallex-signature-boundary small {
+  color: #8a909b;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .date-range-static {
   padding: 0 12px;
   color: #676d79;
@@ -9043,6 +9105,16 @@ button:disabled {
 
   .dynamic-schema-meta em,
   .dynamic-schema-meta b {
+    white-space: normal;
+  }
+
+  .airwallex-card-context,
+  .airwallex-signature-boundary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .airwallex-card-context em {
     white-space: normal;
   }
 }

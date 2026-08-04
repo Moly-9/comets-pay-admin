@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG,
+  getAirwallexBankPaymentFallbackFields,
   getAirwallexSupplementalFields,
 } from './airwallexSupplementalFields';
 import type {
@@ -96,5 +97,52 @@ describe('Airwallex supplemental field difference', () => {
     expect(AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG.every((field) => (
       field.label.trim() && field.sourceLabel.trim() && field.placeholder.trim()
     ))).toBe(true);
+  });
+
+  it('adds only the missing Invoice bank-payment concepts', () => {
+    const fields = getAirwallexBankPaymentFallbackFields(schema([
+      'beneficiary.first_name',
+      'beneficiary.bank_details.account_name',
+      'beneficiary.bank_details.account_number',
+      'beneficiary.bank_details.bank_name',
+    ]));
+    const keys = fields.map((field) => field.key);
+
+    expect(keys).not.toContain('legal_name');
+    expect(keys).not.toContain('account_name');
+    expect(keys).not.toContain('account_number');
+    expect(keys).not.toContain('bank_name');
+    expect(keys).toEqual([
+      'beneficiary_bank_address',
+      'swift_code',
+      'iban',
+    ]);
+    expect(fields.find((field) => field.key === 'beneficiary_bank_address')?.path)
+      .toBe('profile_supplement.beneficiary_bank_address');
+  });
+
+  it('treats structured bank address fields as the bank-address concept', () => {
+    const fields = getAirwallexBankPaymentFallbackFields(schema([
+      'beneficiary.first_name',
+      'beneficiary.bank_details.account_name',
+      'beneficiary.bank_details.account_number',
+      'beneficiary.bank_details.bank_name',
+      'beneficiary.bank_details.bank_city',
+      'beneficiary.bank_details.swift_code',
+      'beneficiary.bank_details.iban',
+    ]));
+
+    expect(fields).toEqual([]);
+  });
+
+  it('does not duplicate IBAN when a SWIFT schema combines it with account number', () => {
+    const response = schema([
+      'beneficiary.bank_details.account_number',
+    ]);
+    response.fields[0].field.label = '银行账号 / IBAN';
+    response.fields[0].field.description = '输入银行账号或 IBAN';
+
+    expect(getAirwallexBankPaymentFallbackFields(response).map((field) => field.key))
+      .not.toContain('iban');
   });
 });

@@ -273,12 +273,61 @@ export const AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG: AirwallexSupplementalField[] 
   },
 ];
 
+const BANK_PAYMENT_FALLBACK_KEYS = [
+  'legal_name',
+  'account_name',
+  'account_number',
+  'bank_name',
+  'bank_street_address',
+  'swift_code',
+  'iban',
+] as const;
+
+const supplementalFieldByKey = new Map(
+  AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG.map((field) => [field.key, field]),
+);
+
+/**
+ * Minimum bank-payment concepts used by the Invoice payment block.
+ * They are shown only when the active Airwallex Form Schema does not already
+ * provide the same concept. Supplemental values remain optional and are not
+ * included in the Airwallex beneficiary payload.
+ */
+export const AIRWALLEX_BANK_PAYMENT_FALLBACK_FIELDS =
+  BANK_PAYMENT_FALLBACK_KEYS.flatMap<AirwallexSupplementalField>((key) => {
+    const field = supplementalFieldByKey.get(key);
+    if (!field) return [];
+    if (key !== 'bank_street_address') return [field];
+    return [{
+      ...field,
+      key: 'beneficiary_bank_address',
+      label: '收款银行地址',
+      sourceLabel: 'Beneficiary Bank Address',
+      path: 'profile_supplement.beneficiary_bank_address',
+      aliases: [
+        field.path,
+        ...field.aliases,
+        'beneficiary.bank_details.bank_city',
+        'beneficiary.bank_details.bank_state',
+        'beneficiary.bank_details.bank_postcode',
+        'beneficiary.bank_details.bank_postal_code',
+      ],
+      placeholder: '收款银行完整地址',
+    }];
+  });
+
 const normalizePath = (path: string) => path.trim().toLowerCase();
 
 const fieldPaths = (field: AirwallexFormSchemaField) => [
   field.path,
   field.field.key,
 ].map(normalizePath);
+
+const fieldText = (field: AirwallexFormSchemaField) => [
+  field.field.label,
+  field.field.description,
+  field.field.placeholder,
+].join(' ');
 
 export const isAirwallexSupplementCovered = (
   supplement: AirwallexSupplementalField,
@@ -289,13 +338,23 @@ export const isAirwallexSupplementCovered = (
     ...supplement.aliases,
   ].map(normalizePath));
 
-  return schemaFields.some((field) => (
-    fieldPaths(field).some((path) => aliases.has(path))
-  ));
+  return schemaFields.some((field) => {
+    if (fieldPaths(field).some((path) => aliases.has(path))) return true;
+
+    // Some SWIFT schemas reuse account_number for a combined
+    // "bank account number / IBAN" field instead of returning an iban path.
+    return supplement.key === 'iban' && /\biban\b/i.test(fieldText(field));
+  });
 };
 
 export const getAirwallexSupplementalFields = (
   schema: AirwallexFormSchemaResponse,
 ) => AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG.filter(
+  (field) => !isAirwallexSupplementCovered(field, schema.fields),
+);
+
+export const getAirwallexBankPaymentFallbackFields = (
+  schema: AirwallexFormSchemaResponse,
+) => AIRWALLEX_BANK_PAYMENT_FALLBACK_FIELDS.filter(
   (field) => !isAirwallexSupplementCovered(field, schema.fields),
 );

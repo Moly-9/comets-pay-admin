@@ -6,8 +6,10 @@ import {
   createEmptyPayPalAccount,
   getPayoutAccountForProvider,
   normalizePayMaxStatus,
+  payoutAccountToInvoicePayment,
   shouldSynchronizeAirwallexAccount,
 } from './payoutAccounts';
+import { setAirwallexFormValue } from './airwallexFormSchema';
 
 describe('creator payout channels', () => {
   it('creates independent Airwallex, PayPal and PayerMax account models', () => {
@@ -54,5 +56,16 @@ describe('creator payout channels', () => {
     if (cloned[0].provider === 'Airwallex') {
       expect(cloned[0].bankDetails).not.toBe(airwallex.bankDetails);
     }
+  });
+
+  it('carries a supplemental bank address into the Invoice payment snapshot', () => {
+    const account = setAirwallexFormValue(
+      createEmptyAirwallexAccount(),
+      'profile_supplement.beneficiary_bank_address',
+      '1 Finance Street, Hong Kong',
+    );
+
+    expect(payoutAccountToInvoicePayment(account).bankStreetAddress)
+      .toBe('1 Finance Street, Hong Kong');
   });
 });
