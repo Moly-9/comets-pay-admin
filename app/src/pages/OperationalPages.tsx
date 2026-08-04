@@ -36,10 +36,6 @@ import {
 } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark } from '../components/Common';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
-import {
-  AirwallexIntegrationError,
-  synchronizeAirwallexBeneficiary,
-} from '../airwallexBeneficiaryApi';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { Pagination } from '../components/Pagination';
@@ -49,10 +45,10 @@ import { downloadBlob, formatInvoiceMoney, invoiceFilename, invoiceTotal } from 
 import {
   clonePayoutAccounts,
   createAirwallexPayoutAccount,
+  createEmptyAirwallexAccount,
   createPayPalPayoutAccount,
   getDefaultPayoutAccount,
   getPayoutAccountStatusMeta,
-  shouldSynchronizeAirwallexAccount,
 } from '../payoutAccounts';
 import type {
   AirwallexTransferMethod,
@@ -1582,7 +1578,6 @@ export function CreatorsPage({
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
-  const [savingCreator, setSavingCreator] = useState(false);
   const selected = creators.find((creator) => creator.id === selectedId) ?? null;
   const normalizedSearch = search.trim().toLowerCase();
   const filteredCreators = creators.filter((creator) => (
@@ -1613,7 +1608,6 @@ export function CreatorsPage({
     setCreating(false);
     setDraft(null);
     setFormErrors([]);
-    setSavingCreator(false);
   };
 
   const closeProfile = () => {
@@ -1622,7 +1616,6 @@ export function CreatorsPage({
     setCreating(false);
     setDraft(null);
     setFormErrors([]);
-    setSavingCreator(false);
   };
 
   const startEditing = () => {
@@ -1636,7 +1629,6 @@ export function CreatorsPage({
     setEditing(true);
     setCreating(false);
     setFormErrors([]);
-    setSavingCreator(false);
   };
 
   const startCreating = () => {
@@ -1653,12 +1645,11 @@ export function CreatorsPage({
       projects: 0,
       socialAccounts: [createSocialAccount(`social-${id}-1`)],
       contact: createInvoiceContact('', '', '', ''),
-      payoutAccounts: [],
+      payoutAccounts: [createEmptyAirwallexAccount()],
     });
     setEditing(true);
     setCreating(true);
     setFormErrors([]);
-    setSavingCreator(false);
   };
 
   const cancelEditing = () => {
@@ -1669,7 +1660,6 @@ export function CreatorsPage({
     setDraft(null);
     setEditing(false);
     setFormErrors([]);
-    setSavingCreator(false);
   };
 
   const updateDraftProfile = (
@@ -1697,7 +1687,7 @@ export function CreatorsPage({
     setDraft((current) => current ? { ...current, contact: { ...current.contact, [field]: value } } : current);
   };
 
-  const saveCreatorDetails = async () => {
+  const saveCreatorDetails = () => {
     if (!draft) return;
     const nextErrors: string[] = [];
     if (!draft.name.trim()) nextErrors.push('达人名称');
@@ -1715,26 +1705,6 @@ export function CreatorsPage({
     if (!draft.contact.email.trim() || !/^\S+@\S+\.\S+$/.test(draft.contact.email)) nextErrors.push('有效联系邮箱');
     if (nextErrors.length > 0) {
       setFormErrors(nextErrors);
-      return;
-    }
-
-    setSavingCreator(true);
-    let synchronizedAccounts = draft.payoutAccounts;
-    try {
-      for (const account of synchronizedAccounts) {
-        if (!shouldSynchronizeAirwallexAccount(account)) continue;
-        const synchronized = await synchronizeAirwallexBeneficiary(account);
-        synchronizedAccounts = synchronizedAccounts.map((candidate) => (
-          candidate.id === synchronized.id ? synchronized : candidate
-        ));
-        setDraft((current) => current ? { ...current, payoutAccounts: synchronizedAccounts } : current);
-      }
-    } catch (error) {
-      const message = error instanceof AirwallexIntegrationError
-        ? error.message
-        : 'Airwallex 收款账户处理失败，请稍后重试';
-      setFormErrors([message]);
-      setSavingCreator(false);
       return;
     }
 
@@ -1759,7 +1729,6 @@ export function CreatorsPage({
       region: draft.region.trim(),
       platform: platformSummary,
       socialAccounts: normalizedSocialAccounts,
-      payoutAccounts: synchronizedAccounts,
     };
     onSaveCreator(updated);
     setSelectedId(updated.id);
@@ -1767,7 +1736,6 @@ export function CreatorsPage({
     setEditing(false);
     setCreating(false);
     setFormErrors([]);
-    setSavingCreator(false);
     const defaultAccount = getDefaultPayoutAccount(updated.payoutAccounts);
     const status = getPayoutAccountStatusMeta(defaultAccount?.status ?? 'DRAFT', defaultAccount?.provider);
     notify(
@@ -1846,12 +1814,7 @@ export function CreatorsPage({
           className={editing ? 'creator-profile-editor-modal' : undefined}
           onClose={closeProfile}
           footer={editing ? (
-            <>
-              <Button variant="ghost" disabled={savingCreator} onClick={cancelEditing}>取消</Button>
-              <Button disabled={savingCreator} onClick={saveCreatorDetails}>
-                {savingCreator ? '正在校验 Airwallex…' : creating ? '建立达人档案' : '保存达人档案'}
-              </Button>
-            </>
+            <><Button variant="ghost" onClick={cancelEditing}>取消</Button><Button onClick={saveCreatorDetails}>{creating ? '建立达人档案' : '保存达人档案'}</Button></>
           ) : (
             <>
               <Button variant="secondary" onClick={closeProfile}>关闭</Button>
@@ -1895,11 +1858,11 @@ export function CreatorsPage({
               <div className="creator-payment-note">
                 <ShieldCheck size={16} />
                 <span>
-                  <strong>Airwallex 账户保存前会完成 Schema 与 Beneficiary 校验</strong>
-                  <small>校验通过后创建或更新 Beneficiary，并保存返回的 beneficiary_id；PayPal 与 PayerMax 账户不会触发 Airwallex 校验。</small>
+                  <strong>保存档案不等于账户已验证</strong>
+                  <small>修改银行信息后状态会回到“待 Airwallex 校验”；接入 API 后，再由 Validate 与 Verify Account 结果更新状态。</small>
                 </span>
               </div>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax 三种付款渠道，可分别新建并维护多个账户">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="一个达人可以维护多个 Airwallex 或 PayPal 账户，并指定默认付款账户">
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing

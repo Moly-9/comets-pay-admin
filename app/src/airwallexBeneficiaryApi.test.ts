@@ -65,6 +65,7 @@ const remoteSchema: AirwallexFormSchemaResponse = {
     transfer_method: 'LOCAL',
     local_clearing_system: 'ACH',
     entity_type: 'PERSONAL',
+    country_code: 'US',
   },
   fields: [
     field('beneficiary.bank_details.bank_country_code'),

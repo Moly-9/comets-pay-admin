@@ -61,15 +61,12 @@ export type AirwallexFormSchemaCondition = {
   transfer_method: AirwallexTransferMethod;
   local_clearing_system?: string;
   entity_type: AirwallexEntityType;
+  country_code: string;
 };
 
 export type AirwallexFormSchemaResponse = {
   condition: AirwallexFormSchemaCondition;
   fields: AirwallexFormSchemaField[];
-  meta?: {
-    source: 'airwallex' | 'mock' | 'local';
-    simulated?: boolean;
-  };
 };
 
 type CountryProfile = {
@@ -209,6 +206,7 @@ export const buildAirwallexSchemaCondition = (
     ? { local_clearing_system: account.bankDetails.localClearingSystem }
     : {}),
   entity_type: account.entityType,
+  country_code: account.address.countryCode,
 });
 
 export const getAirwallexSchemaConditionKey = (account: AirwallexPayoutAccount) => {
@@ -220,6 +218,7 @@ export const getAirwallexSchemaConditionKey = (account: AirwallexPayoutAccount) 
     condition.transfer_method,
     condition.local_clearing_system ?? '',
     condition.entity_type,
+    condition.country_code,
   ].join('|');
 };
 
@@ -228,9 +227,20 @@ const buildConditionFields = (
   country: CountryProfile | undefined,
 ): AirwallexFormSchemaField[] => [
   makeField({
+    key: 'entity_type',
+    path: 'beneficiary.entity_type',
+    label: '收款主体类型',
+    type: 'RADIO',
+    required: true,
+    refresh: true,
+    defaultValue: 'PERSONAL',
+    options: AIRWALLEX_ENTITY_OPTIONS,
+    pattern: '^(COMPANY|PERSONAL)$',
+  }),
+  makeField({
     key: 'bank_country_code',
     path: 'beneficiary.bank_details.bank_country_code',
-    label: '收款国家 / 地区',
+    label: '银行国家 / 地区',
     type: 'SELECT',
     required: true,
     refresh: true,
@@ -246,17 +256,6 @@ const buildConditionFields = (
     refresh: true,
     options: currencyOptions,
     pattern: '^[A-Z]{3}$',
-  }),
-  makeField({
-    key: 'entity_type',
-    path: 'beneficiary.entity_type',
-    label: '收款人类型',
-    type: 'RADIO',
-    required: true,
-    refresh: true,
-    defaultValue: 'PERSONAL',
-    options: AIRWALLEX_ENTITY_OPTIONS,
-    pattern: '^(COMPANY|PERSONAL)$',
   }),
   makeField({
     key: 'transfer_method',
@@ -282,6 +281,16 @@ const buildConditionFields = (
     pattern: country?.localClearingSystems.length
       ? `^(${country.localClearingSystems.join('|')})$`
       : undefined,
+  }),
+  makeField({
+    key: 'country_code',
+    path: 'beneficiary.address.country_code',
+    label: '收款人地址国家 / 地区',
+    type: 'SELECT',
+    required: true,
+    refresh: true,
+    options: countryOptions,
+    pattern: '^[A-Z]{2}$',
   }),
 ];
 
@@ -329,14 +338,40 @@ const buildIdentityFields = (account: AirwallexPayoutAccount): AirwallexFormSche
     ]
 );
 
-const buildContactFields = (): AirwallexFormSchemaField[] => [
+const buildAddressFields = (
+  country: CountryProfile | undefined,
+): AirwallexFormSchemaField[] => [
+  makeField({
+    key: 'street_address',
+    path: 'beneficiary.address.street_address',
+    label: '街道地址',
+    required: true,
+    example: '2-7-1 Marunouchi',
+    pattern: '^.{1,200}$',
+  }),
+  makeField({
+    key: 'city',
+    path: 'beneficiary.address.city',
+    label: '城市',
+    required: true,
+    example: 'Tokyo',
+    pattern: '^.{1,100}$',
+  }),
   makeField({
     key: 'state',
     path: 'beneficiary.address.state',
-    label: 'Current address',
-    description: '当前居住地址，选填；真实提交仍以 Airwallex 返回的场景字段为准',
-    example: 'Tokyo, Japan',
-    pattern: '^.{1,200}$',
+    label: '州 / 省',
+    required: Boolean(country?.stateRequired),
+    example: 'Tokyo',
+    pattern: '^.{1,100}$',
+  }),
+  makeField({
+    key: 'postcode',
+    path: 'beneficiary.address.postcode',
+    label: '邮政编码',
+    required: true,
+    example: '100-8388',
+    pattern: '^.{1,50}$',
   }),
   makeField({
     key: 'personal_email',
@@ -538,7 +573,7 @@ export const generateLocalAirwallexFormSchema = (
   const fields = [
     ...buildConditionFields(account, country),
     ...buildIdentityFields(account),
-    ...buildContactFields(),
+    ...buildAddressFields(country),
     makeField({
       key: 'account_name',
       path: 'beneficiary.bank_details.account_name',
@@ -556,7 +591,6 @@ export const generateLocalAirwallexFormSchema = (
   return {
     condition: buildAirwallexSchemaCondition(account),
     fields,
-    meta: { source: 'local', simulated: true },
   };
 };
 
@@ -775,7 +809,6 @@ export const getAirwallexSchemaGroup = (
 ): 'condition' | 'identity' | 'address' | 'bank' => {
   if (
     path === 'transfer_method'
-    || path === 'beneficiary.entity_type'
     || path === 'beneficiary.bank_details.bank_country_code'
     || path === 'beneficiary.bank_details.account_currency'
     || path === 'beneficiary.bank_details.local_clearing_system'

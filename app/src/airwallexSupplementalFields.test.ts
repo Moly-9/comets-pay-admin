@@ -38,6 +38,7 @@ const schema = (paths: string[]): AirwallexFormSchemaResponse => ({
     transfer_method: 'LOCAL',
     local_clearing_system: 'ACH',
     entity_type: 'PERSONAL',
+    country_code: 'US',
   },
   fields: paths.map((path) => schemaField(path)),
 });
