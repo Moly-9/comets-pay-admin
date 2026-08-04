@@ -1,5 +1,5 @@
-import { AlertTriangle, Check, FileText, Search, Upload, UserRound } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertTriangle, Check, FileText, LoaderCircle, Upload, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createSelectedContractFiles,
   MAX_CONTRACT_FILE_COUNT,
@@ -17,7 +17,7 @@ import {
 import type { ContractUploadInput } from '../contracts';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile } from '../types';
-import { Button, Modal } from './Common';
+import { Button, Modal, SelectField } from './Common';
 
 type Props = {
   projects: ProjectSummary[];
@@ -43,8 +43,6 @@ const FIELD_STATUS_LABELS = {
 const createSystemContractNumber = () => `CON-UPL-${Date.now().toString().slice(-7)}`;
 
 export function ContractUploadWizard({ projects, creators, onClose, onSave }: Props) {
-  const [step, setStep] = useState(1);
-  const [search, setSearch] = useState('');
   const [projectId, setProjectId] = useState('');
   const [creatorId, setCreatorId] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<SelectedContractFile[]>([]);
@@ -54,9 +52,6 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
-  const visibleProjects = projects.filter((project) => (
-    `${project.name}${project.id}${project.brand}`.toLowerCase().includes(search.trim().toLowerCase())
-  ));
   const projectCreators = useMemo(() => {
     if (!selectedProject) return [];
     const references = selectedProject.creatorProfiles ?? [];
@@ -84,6 +79,27 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
       matchTokens: [account.bankDetails.accountName, accountNumber.slice(-4)],
     };
   }) ?? [], [selectedCreator]);
+  const projectOptions = projects.map((project) => ({
+    value: project.id,
+    label: project.name,
+    description: `${project.id} · ${project.brand} · ${project.creators} 位达人`,
+  }));
+  const creatorOptions = projectCreators.map((creator) => ({
+    value: creator.id,
+    label: creator.name,
+    description: `${creator.handle} · ${creator.platform}`,
+  }));
+  const conflictCount = fields.filter((field) => field.status === 'conflict').length;
+  const missingCount = fields.filter((field) => field.status === 'missing').length;
+  const canSave = Boolean(selectedProject && selectedCreator && documents.length && !parsing);
+
+  useEffect(() => {
+    if (!documents.length) {
+      setFields([]);
+      return;
+    }
+    setFields(recognizeContractFields(documents, { systemContractNumber, beneficiaryReferences }));
+  }, [beneficiaryReferences, documents, systemContractNumber]);
 
   const parseSelection = async (files: SelectedContractFile[]) => {
     setError('');
@@ -92,8 +108,6 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
       const parsed = await parseContractFiles(files);
       setSelectedFiles(files);
       setDocuments(parsed);
-      setFields(recognizeContractFields(parsed, { systemContractNumber, beneficiaryReferences }));
-      setStep(4);
     } catch (reason) {
       setDocuments([]);
       setFields([]);
@@ -125,7 +139,6 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
     ));
     setSelectedFiles(nextSelected);
     setDocuments(nextDocuments);
-    setFields(recognizeContractFields(nextDocuments, { systemContractNumber, beneficiaryReferences }));
   };
 
   const save = () => {
@@ -157,77 +170,120 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
     <Modal
       title="上传合同"
       onClose={onClose}
-      width="920px"
+      width="1080px"
+      className="contract-upload-modal"
       footer={(
         <>
-          {step > 1 && step < 5 && !parsing ? <Button variant="ghost" onClick={() => setStep((current) => current - 1)}>上一步</Button> : null}
-          {step === 1 ? <Button disabled={!projectId} onClick={() => setStep(2)}>下一步</Button> : null}
-          {step === 2 ? <Button disabled={!creatorId} onClick={() => setStep(3)}>下一步</Button> : null}
-          {step === 4 ? <Button disabled={!documents.length} onClick={() => setStep(5)}>保存前确认</Button> : null}
-          {step === 5 ? <Button onClick={save}>保存待确认合同</Button> : null}
+          <div className="contract-upload-footer-status" aria-live="polite">
+            <span>{documents.length ? `${documents.length} 份文件已解析` : '尚未选择合同文件'}</span>
+            <small>{documents.length ? `${fields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成关联信息并上传文件后可保存'}</small>
+          </div>
+          <Button variant="ghost" onClick={onClose}>取消</Button>
+          <Button type="submit" form="contract-upload-form" disabled={!canSave}>保存待确认合同</Button>
         </>
       )}
     >
-      <ol className="contract-upload-steps" aria-label="合同上传步骤">
-        {['选择项目', '选择达人', '上传文件', '查看识别', '保存合同'].map((label, index) => (
-          <li className={step === index + 1 ? 'active' : step > index + 1 ? 'complete' : ''} key={label}>
-            <span>{step > index + 1 ? <Check size={14} /> : index + 1}</span><em>{label}</em>
-          </li>
-        ))}
-      </ol>
-
-      {step === 1 ? (
-        <div className="contract-upload-pane">
-          <label className="search-control">
-            <Search size={16} />
-            <input aria-label="搜索项目" placeholder="搜索项目名称、编号或客户" value={search} onChange={(event) => setSearch(event.target.value)} />
-          </label>
-          <div className="contract-upload-options">
-            {visibleProjects.map((project) => (
-              <button className={projectId === project.id ? 'selected' : ''} type="button" key={project.id} onClick={() => { setProjectId(project.id); setCreatorId(''); }}>
-                <FileText size={18} /><span><strong>{project.name}</strong><small>{project.id} · {project.brand} · {project.creators} 位达人</small></span>
-              </button>
-            ))}
+      <form
+        id="contract-upload-form"
+        className="contract-upload-form"
+        aria-busy={parsing}
+        onSubmit={(event) => {
+          event.preventDefault();
+          save();
+        }}
+      >
+        <section className="contract-upload-form-section" aria-labelledby="contract-upload-association-title">
+          <header className="contract-upload-section-head">
+            <span><UserRound size={18} /></span>
+            <div>
+              <h3 id="contract-upload-association-title">关联信息</h3>
+              <p>选择合同所属项目与合作达人，系统将按内部关联关系保存。</p>
+            </div>
+            <em>必填</em>
+          </header>
+          <div className="contract-upload-field-grid">
+            <div className="contract-upload-field">
+              <span>关联项目 *</span>
+              <SelectField
+                ariaLabel="关联项目"
+                variant="form"
+                value={projectId}
+                placeholder="选择项目"
+                options={projectOptions}
+                onChange={(value) => {
+                  setProjectId(value);
+                  setCreatorId('');
+                }}
+              />
+              <small>用于合同、IO 与后续 Invoice 的系统关联</small>
+            </div>
+            <div className="contract-upload-field">
+              <span>合作达人 *</span>
+              <SelectField
+                ariaLabel="合作达人"
+                variant="form"
+                value={creatorId}
+                placeholder={selectedProject ? '选择该项目达人' : '请先选择项目'}
+                options={creatorOptions}
+                disabled={!selectedProject}
+                onChange={setCreatorId}
+              />
+              <small>{selectedProject ? `仅显示 ${selectedProject.name} 已关联的达人` : '选择项目后加载关联达人'}</small>
+            </div>
           </div>
-        </div>
-      ) : null}
+          {selectedProject && projectCreators.length === 0 ? (
+            <p className="contract-upload-empty">该项目没有可验证的达人关联，请先维护项目合作达人。</p>
+          ) : null}
+          {selectedProject && selectedCreator ? (
+            <div className="contract-upload-association-summary">
+              <FileText size={16} />
+              <div>
+                <strong>{selectedProject.name}</strong>
+                <span>{selectedProject.id} · {selectedProject.brand}</span>
+              </div>
+              <div>
+                <strong>{selectedCreator.name}</strong>
+                <span>{selectedCreator.handle} · {selectedCreator.platform}</span>
+              </div>
+            </div>
+          ) : null}
+        </section>
 
-      {step === 2 ? (
-        <div className="contract-upload-pane">
-          <p className="contract-upload-context">{selectedProject?.name} · 仅显示该项目已关联的达人</p>
-          <div className="contract-upload-options">
-            {projectCreators.map((creator) => (
-              <button className={creatorId === creator.id ? 'selected' : ''} type="button" key={creator.id} onClick={() => setCreatorId(creator.id)}>
-                <UserRound size={18} /><span><strong>{creator.name}</strong><small>{creator.handle} · {creator.platform}</small></span>
-              </button>
-            ))}
-            {projectCreators.length === 0 ? <p className="contract-upload-empty">该项目没有可验证的达人关联，请先维护项目合作达人。</p> : null}
+        <section className="contract-upload-form-section" aria-labelledby="contract-upload-files-title">
+          <header className="contract-upload-section-head">
+            <span><Upload size={18} /></span>
+            <div>
+              <h3 id="contract-upload-files-title">合同文件</h3>
+              <p>支持文字型 PDF 与标准 DOCX，可一次选择主协议、IO 和签署页。</p>
+            </div>
+            {documents.length ? <em>{documents.length} 份</em> : null}
+          </header>
+          <div className="contract-upload-file-grid">
+            <label className={`contract-file-drop${!selectedCreator ? ' disabled' : ''}`}>
+              {parsing ? <LoaderCircle className="contract-upload-spinner" size={24} /> : <Upload size={24} />}
+              <strong>{parsing ? '正在浏览器本地解析…' : selectedCreator ? '点击选择合同文件' : '请先完成项目与达人关联'}</strong>
+              <small>最多 {MAX_CONTRACT_FILE_COUNT} 份，单份不超过 30 MB</small>
+              <span>{selectedFiles.length ? '重新选择文件' : '选择 PDF / DOCX'}</span>
+              <input
+                className="contract-file-input"
+                type="file"
+                aria-label="选择合同文件"
+                multiple
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                disabled={!selectedCreator || parsing}
+                onChange={(event) => selectFiles(event.target.files)}
+              />
+            </label>
+            <div className="contract-upload-file-notes">
+              <strong>本地解析说明</strong>
+              <p><Check size={14} />文件仅在当前浏览器处理，不上传外部服务</p>
+              <p><Check size={14} />按文件保留页码、章节与原文来源</p>
+              <p><AlertTriangle size={14} />扫描件、加密或损坏文件需要人工处理</p>
+            </div>
           </div>
-        </div>
-      ) : null}
-
-      {step === 3 ? (
-        <div className="contract-upload-pane">
-          <label className="contract-file-drop">
-            <Upload size={24} />
-            <strong>{parsing ? '正在浏览器本地解析…' : '选择 PDF 或 DOCX 合同文件'}</strong>
-            <small>可同时选择 Standard Terms、IO、签署页等，最多 10 份，单份不超过 30 MB。</small>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              disabled={parsing}
-              onChange={(event) => selectFiles(event.target.files)}
-            />
-          </label>
-          <p className="contract-upload-context">文件只在当前浏览器本地解析，不会上传；扫描件暂不支持自动识别。</p>
           {error ? <p className="contract-upload-error" role="alert">{error}</p> : null}
-        </div>
-      ) : null}
-
-      {step === 4 ? (
-        <div className="contract-upload-pane contract-recognition-review">
-          <div className="contract-source-file-list">
+          {documents.length ? (
+            <div className="contract-source-file-list" aria-label="已解析合同文件">
             {documents.map((document) => (
               <article className={`contract-source-file contract-source-file-${document.parseStatus}`} key={document.id}>
                 <FileText size={18} />
@@ -245,35 +301,63 @@ export function ContractUploadWizard({ projects, creators, onClose, onSave }: Pr
                 </select>
               </article>
             ))}
-          </div>
-          <div className="contract-recognition-field-list">
-            {fields.map((field) => (
-              <article className={`contract-recognition-field contract-recognition-field-${field.status}`} key={field.fieldKey}>
-                <div>
-                  <strong>{field.label}</strong>
-                  <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
-                </div>
-                <p>{field.rawValue || '待补充'}</p>
-                <small>
-                  {field.source
-                    ? `${CONTRACT_DOCUMENT_TYPE_LABELS[field.source.documentType]}${field.source.pageNumber ? ` · 第 ${field.source.pageNumber} 页` : ` · ${field.source.section}`}`
-                    : '未找到可靠来源'}
-                </small>
-                {field.status === 'conflict' ? <em><AlertTriangle size={13} />发现 {field.candidates.length} 个候选值，保存后需人工核对</em> : null}
-              </article>
-            ))}
-          </div>
-        </div>
-      ) : null}
+            </div>
+          ) : null}
+        </section>
 
-      {step === 5 ? (
-        <div className="contract-upload-summary">
-          <Check size={28} />
-          <h3>将保存为待确认合同</h3>
-          <p>{systemContractNumber} · {selectedProject?.name} · {selectedCreator?.name}</p>
-          <small>识别值不会自动覆盖正式合同资料。请在合同详情逐项编辑并确认，全部确认后再统一应用。</small>
-        </div>
-      ) : null}
+        <section className="contract-upload-form-section" aria-labelledby="contract-upload-recognition-title">
+          <header className="contract-upload-section-head">
+            <span><FileText size={18} /></span>
+            <div>
+              <h3 id="contract-upload-recognition-title">识别结果</h3>
+              <p>解析完成后在此预览字段状态，保存后进入合同详情逐项确认。</p>
+            </div>
+            {fields.length ? <em>{fields.length} 项</em> : null}
+          </header>
+          {fields.length ? (
+            <div className="contract-recognition-field-list">
+              {fields.map((field) => (
+                <article className={`contract-recognition-field contract-recognition-field-${field.status}`} key={field.fieldKey}>
+                  <div>
+                    <strong>{field.label}</strong>
+                    <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
+                  </div>
+                  <p>{field.rawValue || '待补充'}</p>
+                  <small>
+                    {field.source
+                      ? `${CONTRACT_DOCUMENT_TYPE_LABELS[field.source.documentType]}${field.source.pageNumber ? ` · 第 ${field.source.pageNumber} 页` : ` · ${field.source.section}`}`
+                      : '未找到可靠来源'}
+                  </small>
+                  {field.status === 'conflict' ? <em><AlertTriangle size={13} />发现 {field.candidates.length} 个候选值，保存后需人工核对</em> : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="contract-recognition-empty">
+              <FileText size={22} />
+              <div>
+                <strong>{parsing ? '正在生成识别结果' : '等待合同文件'}</strong>
+                <span>{parsing ? '解析完成后会自动展示字段与来源状态' : '上传文件后无需切换页面，结果会在当前表单中展开'}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="contract-upload-form-section contract-upload-save-section" aria-labelledby="contract-upload-save-title">
+          <header className="contract-upload-section-head">
+            <span><Check size={18} /></span>
+            <div>
+              <h3 id="contract-upload-save-title">保存信息</h3>
+              <p>合同将以待确认状态保存，不会自动覆盖正式合同或达人收款资料。</p>
+            </div>
+          </header>
+          <div className="contract-upload-save-grid">
+            <div><span>系统合同编号</span><strong>{systemContractNumber}</strong></div>
+            <div><span>保存状态</span><strong>待人工确认</strong></div>
+            <p><AlertTriangle size={15} />金额、主体、日期与收款账户仍需在合同详情中逐项核对后才能应用。</p>
+          </div>
+        </section>
+      </form>
     </Modal>
   );
 }
