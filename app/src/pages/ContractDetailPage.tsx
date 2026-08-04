@@ -17,7 +17,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, PageHeading } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import {
-  confirmRecognitionField,
+  canConfirmRecognitionFields,
+  confirmRecognitionFields,
   editRecognitionField,
 } from '../contractRecognition';
 import {
@@ -89,14 +90,12 @@ function RecognitionFieldList({
   fields,
   fieldKeys,
   onChange,
-  onConfirm,
   onSelectCandidate,
   onOpenSource,
 }: {
   fields: ContractRecognitionField[];
   fieldKeys: ContractFieldKey[];
   onChange: (fieldKey: ContractFieldKey, value: string) => void;
-  onConfirm: (fieldKey: ContractFieldKey) => void;
   onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
   onOpenSource: (source: ContractSourceLocation) => void;
 }) {
@@ -141,15 +140,6 @@ function RecognitionFieldList({
             </div>
             <div className="contract-recognition-actions">
               <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
-              {field.status !== 'confirmed' && field.rawValue.trim() ? (
-                <button
-                  className="contract-recognition-confirm"
-                  type="button"
-                  onClick={() => onConfirm(field.fieldKey)}
-                >
-                  确认
-                </button>
-              ) : null}
             </div>
           </article>
         );
@@ -197,6 +187,19 @@ export function ContractDetailPage({
   const hasRecognition = draftFields.length > 0;
   const confirmedCount = draftFields.filter((field) => field.status === 'confirmed').length;
   const allConfirmed = hasRecognition && confirmedCount === draftFields.length;
+  const recognitionPageState = (fieldKeys: readonly ContractFieldKey[]) => {
+    const pageFields = fieldKeys
+      .map((fieldKey) => draftFields.find((field) => field.fieldKey === fieldKey))
+      .filter((field): field is ContractRecognitionField => Boolean(field));
+    return {
+      confirmedCount: pageFields.filter((field) => field.status === 'confirmed').length,
+      fieldCount: pageFields.length,
+      allConfirmed: pageFields.length > 0 && pageFields.every((field) => field.status === 'confirmed'),
+      canConfirm: canConfirmRecognitionFields(draftFields, fieldKeys),
+    };
+  };
+  const summaryPageState = recognitionPageState(SUMMARY_FIELD_KEYS);
+  const paymentPageState = recognitionPageState(PAYMENT_FIELD_KEYS);
   const tabs: Array<{ id: ContractDetailTab; label: string }> = [
     { id: 'summary', label: '合同摘要' },
     { id: 'io', label: 'IO与履约' },
@@ -215,17 +218,19 @@ export function ContractDetailPage({
     )));
   };
 
-  const confirmField = (fieldKey: ContractFieldKey) => {
-    const next = draftFields.map((field) => (
-      field.fieldKey === fieldKey ? confirmRecognitionField(field) : field
-    ));
+  const confirmPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
+    if (!canConfirmRecognitionFields(draftFields, fieldKeys)) {
+      notify('本页仍有待处理字段', `${pageLabel}存在待补充或需核对字段，请处理后再确认。`);
+      return;
+    }
+    const next = confirmRecognitionFields(draftFields, fieldKeys);
     setDraftFields(next);
     onUpdateContract?.({
       ...contract,
       recognitionResults: next,
       extractionStage: next.every((field) => field.status === 'confirmed') ? 'confirmed' : 'review',
     });
-    notify('字段已确认', next.find((field) => field.fieldKey === fieldKey)?.label ?? fieldKey);
+    notify('本页字段已确认', `${pageLabel}的字段信息已统一确认。`);
   };
 
   const selectCandidate = (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => {
@@ -252,7 +257,7 @@ export function ContractDetailPage({
     const candidate = { ...contract, recognitionResults: draftFields };
     const applied = applyConfirmedRecognitionToContract(candidate);
     if (!applied) {
-      notify('仍有字段未确认', `已确认 ${confirmedCount}/${draftFields.length} 项，请逐项补充并确认。`);
+      notify('仍有字段未确认', `已确认 ${confirmedCount}/${draftFields.length} 项，请完成各页字段确认。`);
       return;
     }
     onUpdateContract?.(applied);
@@ -373,14 +378,27 @@ export function ContractDetailPage({
               <>
                 <div className="contract-section-heading">
                   <FileSearch size={18} />
-                  <span><strong>结构化合同信息</strong><small>{hasRecognition ? `已确认 ${confirmedCount}/${draftFields.length} 项` : '每个字段保留合同来源位置'}</small></span>
+                  <span>
+                    <strong>结构化合同信息</strong>
+                    <small>{hasRecognition ? `本页已确认 ${summaryPageState.confirmedCount}/${summaryPageState.fieldCount} 项` : '每个字段保留合同来源位置'}</small>
+                  </span>
+                  {hasRecognition && onUpdateContract ? (
+                    <button
+                      className="contract-page-confirm"
+                      type="button"
+                      disabled={!summaryPageState.canConfirm || summaryPageState.allConfirmed}
+                      onClick={() => confirmPage(SUMMARY_FIELD_KEYS, '合同摘要')}
+                    >
+                      <CheckCircle2 size={14} />
+                      {summaryPageState.allConfirmed ? '本页已确认' : '确认本页'}
+                    </button>
+                  ) : null}
                 </div>
                 {hasRecognition ? (
                   <RecognitionFieldList
                     fields={draftFields}
                     fieldKeys={SUMMARY_FIELD_KEYS}
                     onChange={updateField}
-                    onConfirm={confirmField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
                   />
@@ -412,14 +430,27 @@ export function ContractDetailPage({
               <>
                 <div className="contract-section-heading">
                   <ReceiptText size={18} />
-                  <span><strong>付款与Invoice规则</strong><small>账户识别值仅用于与达人档案人工比对</small></span>
+                  <span>
+                    <strong>付款与Invoice规则</strong>
+                    <small>{hasRecognition ? `本页已确认 ${paymentPageState.confirmedCount}/${paymentPageState.fieldCount} 项` : '账户识别值仅用于与达人档案人工比对'}</small>
+                  </span>
+                  {hasRecognition && onUpdateContract ? (
+                    <button
+                      className="contract-page-confirm"
+                      type="button"
+                      disabled={!paymentPageState.canConfirm || paymentPageState.allConfirmed}
+                      onClick={() => confirmPage(PAYMENT_FIELD_KEYS, '付款与Invoice')}
+                    >
+                      <CheckCircle2 size={14} />
+                      {paymentPageState.allConfirmed ? '本页已确认' : '确认本页'}
+                    </button>
+                  ) : null}
                 </div>
                 {hasRecognition ? (
                   <RecognitionFieldList
                     fields={draftFields}
                     fieldKeys={PAYMENT_FIELD_KEYS}
                     onChange={updateField}
-                    onConfirm={confirmField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
                   />

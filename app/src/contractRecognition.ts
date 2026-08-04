@@ -499,6 +499,25 @@ export const confirmRecognitionField = (
     : field
 );
 
+export const canConfirmRecognitionFields = (
+  fields: ContractRecognitionField[],
+  fieldKeys: readonly ContractFieldKey[],
+) => fieldKeys.length > 0 && fieldKeys.every((fieldKey) => {
+  const field = fields.find((item) => item.fieldKey === fieldKey);
+  return Boolean(field?.rawValue.trim()) && field?.status !== 'conflict';
+});
+
+export const confirmRecognitionFields = (
+  fields: ContractRecognitionField[],
+  fieldKeys: readonly ContractFieldKey[],
+): ContractRecognitionField[] => {
+  if (!canConfirmRecognitionFields(fields, fieldKeys)) return fields;
+  const targetKeys = new Set(fieldKeys);
+  return fields.map((field) => (
+    targetKeys.has(field.fieldKey) ? confirmRecognitionField(field) : field
+  ));
+};
+
 export const allRecognitionFieldsConfirmed = (fields: ContractRecognitionField[]) => (
   fields.length > 0 && fields.every((field) => field.status === 'confirmed')
 );

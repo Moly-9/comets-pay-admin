@@ -10204,7 +10204,7 @@ button:disabled {
 
 .contract-reader-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.32fr) minmax(360px, 0.78fr);
+  grid-template-columns: minmax(0, 1.22fr) minmax(440px, 0.88fr);
   align-items: start;
   gap: 18px;
 }
@@ -12955,9 +12955,9 @@ button:disabled {
 
 .contract-recognition-detail {
   display: grid;
-  grid-template-columns: 118px minmax(0, 1fr) 54px;
+  grid-template-columns: 112px minmax(0, 1fr) 48px;
   align-items: start;
-  gap: 12px;
+  gap: 10px;
   min-height: 54px;
   padding: 11px 2px;
   border-bottom: 1px solid var(--soft-line);
@@ -12984,9 +12984,10 @@ button:disabled {
 .contract-recognition-value input {
   width: 100%;
   min-width: 0;
-  height: 21px;
-  padding: 0;
+  height: 25px;
+  padding: 0 0 3px;
   border: 0;
+  border-bottom: 1px solid #d9dde5;
   border-radius: 0;
   background: transparent;
   color: #252933;
@@ -13004,11 +13005,12 @@ button:disabled {
 }
 
 .contract-recognition-value input:hover {
+  border-bottom-color: #aeb6c5;
   background: #fafbfc;
 }
 
 .contract-recognition-value input:focus {
-  border-bottom: 1px solid #6b79a5;
+  border-bottom: 2px solid #6b79a5;
   outline: 0;
   background: #fff;
 }
@@ -13045,38 +13047,40 @@ button:disabled {
   line-height: 1.5;
 }
 
-.contract-recognition-confirm {
+.contract-page-confirm {
   display: inline-flex;
-  width: 36px;
-  height: 22px;
+  min-width: 82px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  border: 1px solid #d8dce4;
+  gap: 5px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid #cfd4de;
   border-radius: 4px;
   background: #fff;
-  color: #596273;
-  font-size: 10px;
+  color: #3f4d68;
+  font-size: 10.5px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
 
-.contract-recognition-confirm:hover:not(:disabled) {
-  border-color: #9aa8c1;
-  background: #f7f8fa;
-  color: #334d7c;
+.contract-page-confirm:hover:not(:disabled) {
+  border-color: #a994b8;
+  background: #faf7fc;
+  color: #664f75;
 }
 
-.contract-recognition-confirm:focus-visible {
+.contract-page-confirm:focus-visible {
   outline: 2px solid #9db1d7;
   outline-offset: 2px;
 }
 
-.contract-recognition-confirm:disabled {
-  border-color: transparent;
-  background: #f1f2f5;
-  color: #a6abb5;
+.contract-page-confirm:disabled {
+  border-color: #e0e3e9;
+  background: #f6f7f9;
+  color: #9298a5;
   cursor: not-allowed;
 }
 

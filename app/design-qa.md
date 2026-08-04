@@ -470,3 +470,73 @@ final result: passed
 2. Post-fix comparison：未发现可执行的 P0、P1 或 P2 问题。
 
 final result: passed
+
+---
+
+# Contract Page Confirmation Design QA
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-0b434dd5-bf3e-4843-8102-be723e64e368.png`
+- Browser-rendered implementation: `app/design-qa-contract-confirm-final-viewport.jpg`
+- Focused implementation panel: `app/design-qa-contract-confirm-final-panel.jpg`
+- Side-by-side comparison: `app/design-qa-contract-confirm-comparison.png`
+- Browser viewport: `1425 x 900` CSS px
+- Source pixels: `484 x 687`
+- Implementation panel: `506 x 759` CSS px and pixels
+- Device scale factor: `1`
+- Density normalization: none; both captures are 1x and aligned at their top edge
+- State: uploaded prototype contract, Contract Summary tab, 0/8 fields confirmed
+
+## Full-View Comparison
+
+The contract reader retains the existing two-column desktop layout. The inspector remains visually
+secondary to the source document and has enough width for the new page-level action, status badges,
+field values, and source links without horizontal overflow.
+
+## Focused Comparison
+
+The focused side-by-side comparison confirms the requested changes:
+
+- The eight row-level confirmation buttons are removed.
+- One compact `确认本页` button occupies the section heading's right side.
+- Every editable field has a persistent light-gray underline.
+- Field status remains visible at row level without competing with the page action.
+- Existing tabs, labels, source links, type scale, and restrained gray-purple palette are preserved.
+
+## Findings
+
+No actionable P0, P1, or P2 visual differences remain.
+
+- P3: The implementation panel is slightly taller than the annotated source because the persistent
+  editable underline and longer prototype source labels add vertical rhythm. All eight rows remain
+  readable in the inspector and the added height does not obscure controls.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: existing Noto Sans SC/system hierarchy preserved; field values remain compact
+  and use zero letter spacing.
+- Spacing and layout rhythm: page action is aligned to the section heading; row spacing and separators
+  remain consistent.
+- Colors and visual tokens: existing neutral borders, muted labels, blue source links, and low-saturation
+  purple accents are unchanged.
+- Image and icon fidelity: no image assets were introduced; the existing Lucide status/action icon style
+  is preserved.
+- Copy and content: `确认本页` and `本页已确认` clearly describe the new confirmation scope.
+
+## Interaction Verification
+
+- Contract Summary confirms all 8 fields with one action.
+- Payment and Invoice confirms all 6 fields independently.
+- Editing a confirmed field returns the page to a pending-confirmation state.
+- An incomplete or unresolved-conflict page cannot be partially confirmed.
+- Row-level `确认` button count is `0`.
+- Page and inspector horizontal overflow is absent.
+- Browser console warning/error count is `0`.
+
+## Comparison History
+
+1. Initial implementation: page action and underlines worked, but the inspector was narrower than the
+   reference and caused avoidable source-label wrapping.
+2. Fix: increased the inspector minimum width and tightened the field grid columns/gaps.
+3. Post-fix evidence: `app/design-qa-contract-confirm-comparison.png`; no P0/P1/P2 findings remain.
+
+final result: passed

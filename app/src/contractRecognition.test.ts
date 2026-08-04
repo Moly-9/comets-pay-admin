@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canConfirmRecognitionFields,
   confirmRecognitionField,
+  confirmRecognitionFields,
   editRecognitionField,
   normalizeCampaignPeriod,
   normalizeMoney,
@@ -144,6 +146,30 @@ describe('contract field recognition', () => {
       editedValue: 'Zoë Dupont',
       status: 'confirmed',
     });
+  });
+
+  it('confirms a complete field group atomically and leaves fields outside the page unchanged', () => {
+    const publisher = editRecognitionField(field([], 'publisher'), 'Zoë Dupont');
+    const advertiser = editRecognitionField(field([], 'advertiser'), 'COMETS INTERNATIONAL LIMITED');
+    const paymentMethod = editRecognitionField(field([], 'paymentMethod'), 'Bank Transfer');
+    const fields = [publisher, advertiser, paymentMethod];
+
+    expect(canConfirmRecognitionFields(fields, ['publisher', 'advertiser'])).toBe(true);
+    const confirmed = confirmRecognitionFields(fields, ['publisher', 'advertiser']);
+
+    expect(confirmed.find((item) => item.fieldKey === 'publisher')?.status).toBe('confirmed');
+    expect(confirmed.find((item) => item.fieldKey === 'advertiser')?.status).toBe('confirmed');
+    expect(confirmed.find((item) => item.fieldKey === 'paymentMethod')?.status).toBe('detected');
+  });
+
+  it('does not partially confirm a page with missing or conflicting fields', () => {
+    const publisher = editRecognitionField(field([], 'publisher'), 'Zoë Dupont');
+    const advertiser = field([], 'advertiser');
+    const fields = [publisher, advertiser];
+
+    expect(canConfirmRecognitionFields(fields, ['publisher', 'advertiser'])).toBe(false);
+    expect(confirmRecognitionFields(fields, ['publisher', 'advertiser'])).toBe(fields);
+    expect(fields[0].status).toBe('detected');
   });
 
   it('marks a contract beneficiary mismatch against the creator profile without replacing the value', () => {
