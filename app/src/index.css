@@ -22,6 +22,689 @@
   --shadow-soft: 0 12px 36px rgba(30, 25, 45, 0.055);
 }
 
+/* Project resource aggregation and record dialogs */
+.project-resource-summary-list {
+  display: grid;
+  gap: 10px;
+}
+
+.project-resource-summary-row {
+  --resource-accent: #3474b9;
+  --resource-border: #d5e5f7;
+  --resource-soft: #f0f7ff;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  min-height: 86px;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid var(--resource-border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 13px;
+}
+
+.project-resource-summary-invoice {
+  --resource-accent: #7656b7;
+  --resource-border: #e2d8f8;
+  --resource-soft: #f5f0ff;
+}
+
+.project-resource-summary-payment {
+  --resource-accent: #c86526;
+  --resource-border: #efdacb;
+  --resource-soft: #fff3e9;
+}
+
+.project-resource-summary-icon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--resource-border);
+  border-radius: 10px;
+  background: var(--resource-soft);
+  color: var(--resource-accent);
+}
+
+.project-resource-summary-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.project-resource-summary-copy > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-resource-summary-copy > div strong {
+  color: var(--resource-accent);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.project-resource-summary-copy em {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  border: 1px solid var(--resource-border);
+  border-radius: 999px;
+  background: var(--resource-soft);
+  padding: 2px 8px;
+  color: var(--resource-accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.project-resource-summary-copy h3,
+.project-resource-summary-copy p {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-resource-summary-copy h3 {
+  color: #292c33;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.project-resource-summary-copy p {
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.project-workflow-card .project-resource-summary-copy p {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.project-resource-summary-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #606774;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.project-resource-summary-status i {
+  width: 3px;
+  height: 13px;
+  border-radius: 3px;
+  background: #7a8fae;
+}
+
+.project-resource-summary-open {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: #252830;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.project-resource-summary-open:hover,
+.project-resource-summary-open:focus-visible {
+  color: var(--resource-accent);
+}
+
+.project-resource-modal {
+  max-height: min(860px, calc(100vh - 40px));
+}
+
+.project-resource-modal .modal-content {
+  padding: 20px;
+}
+
+.project-resource-browser {
+  display: grid;
+  gap: 15px;
+}
+
+.project-resource-browser-heading {
+  display: flex;
+  min-height: 64px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-radius: 12px;
+  background: #f7f8fa;
+  padding: 14px 16px;
+}
+
+.project-resource-browser-heading strong {
+  color: #252830;
+  font-size: 14px;
+}
+
+.project-resource-browser-heading p {
+  margin: 5px 0 0;
+  color: #858b97;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.project-resource-browser-heading > span {
+  color: #969ca8;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.project-resource-browser-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-contract-record-list,
+.project-invoice-record-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #e4e7ed;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.project-contract-record,
+.project-invoice-record {
+  display: grid;
+  grid-template-columns:
+    40px
+    minmax(145px, 1.1fr)
+    minmax(130px, 0.9fr)
+    minmax(120px, 0.8fr)
+    minmax(145px, 1fr)
+    auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #eceef2;
+  padding: 13px 14px 10px;
+}
+
+.project-invoice-record {
+  grid-template-columns:
+    40px
+    minmax(155px, 1fr)
+    minmax(210px, 1.35fr)
+    minmax(135px, 0.8fr)
+    auto;
+}
+
+.project-contract-record:first-child,
+.project-invoice-record:first-child {
+  border-top: 0;
+}
+
+.project-contract-record:hover,
+.project-invoice-record:hover {
+  background: #fbfbfc;
+}
+
+.project-contract-record-icon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e1e5eb;
+  border-radius: 10px;
+  background: #f7f9fb;
+  color: #66707f;
+}
+
+.project-contract-record-main,
+.project-contract-record-person,
+.project-contract-record-io,
+.project-contract-record-invoice,
+.project-invoice-record-contracts,
+.project-invoice-record-amount {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.project-contract-record-main strong,
+.project-contract-record-person strong,
+.project-contract-record-io strong,
+.project-contract-record-invoice strong,
+.project-invoice-record-contracts strong,
+.project-invoice-record-amount strong {
+  overflow: hidden;
+  color: #2c3038;
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-contract-record-main > span,
+.project-contract-record-main small,
+.project-contract-record-person > span,
+.project-contract-record-person small,
+.project-contract-record-io > span,
+.project-contract-record-io small,
+.project-contract-record-invoice > span,
+.project-contract-record-invoice small,
+.project-invoice-record-contracts > span,
+.project-invoice-record-contracts small,
+.project-invoice-record-amount > span,
+.project-invoice-record-amount small {
+  overflow: hidden;
+  color: #858b97;
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-contract-record-invoice.relation-covered strong {
+  color: #39745c;
+}
+
+.project-contract-record-invoice.relation-not-covered strong {
+  color: #a46025;
+}
+
+.project-contract-record-invoice.relation-missing strong {
+  color: #757c88;
+}
+
+.project-contract-record-state {
+  justify-self: end;
+}
+
+.project-contract-record-actions {
+  display: flex;
+  grid-column: 2 / -1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  border-top: 1px solid #f0f1f4;
+  padding-top: 8px;
+}
+
+.project-contract-record-actions .button {
+  min-height: 29px;
+  padding: 0 10px;
+  font-size: 10.5px;
+}
+
+.project-contract-record-actions > button:not(.button) {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 7px;
+  color: #5f477f;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.project-contract-record-actions > button:not(.button):hover,
+.project-contract-record-actions > button:not(.button):focus-visible {
+  background: #f3eff9;
+}
+
+.project-contract-record-actions > button.danger {
+  color: #b34d45;
+}
+
+.project-contract-record-actions > button.danger:hover,
+.project-contract-record-actions > button.danger:focus-visible {
+  background: #fff0ee;
+}
+
+.project-resource-browser-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed #dde1e8;
+  border-radius: 13px;
+  background: #fafbfc;
+  padding: 28px;
+  color: #6b7380;
+  text-align: center;
+}
+
+.project-resource-browser-empty strong {
+  color: #343740;
+  font-size: 13px;
+}
+
+.project-resource-browser-empty p {
+  max-width: 440px;
+  margin: 0;
+  color: #8b909b;
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.project-resource-picker-list {
+  display: grid;
+  max-height: 360px;
+  overflow-y: auto;
+  gap: 7px;
+}
+
+.project-resource-picker-list > button {
+  display: grid;
+  min-height: 54px;
+  gap: 3px;
+  border: 1px solid #e0e4ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.project-resource-picker-list > button:hover,
+.project-resource-picker-list > button:focus-visible {
+  border-color: #b9a6d5;
+  background: #faf8fc;
+}
+
+.project-resource-picker-list > button.is-selected {
+  border-color: #7656b7;
+  background: #f6f2fb;
+  box-shadow: inset 3px 0 0 #7656b7;
+}
+
+.project-resource-picker-list > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.project-resource-picker-list strong {
+  color: #30343c;
+  font-size: 12px;
+}
+
+.project-resource-picker-list small,
+.project-resource-picker-list > span {
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.project-resource-picker-list > span {
+  border: 1px dashed #dfe3e9;
+  border-radius: 8px;
+  padding: 18px;
+  text-align: center;
+}
+
+.project-invoice-contract-selector {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #e0e4ea;
+  border-radius: 9px;
+  padding: 12px;
+}
+
+.project-invoice-contract-selector legend {
+  padding: 0 5px;
+  color: #343943;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.project-invoice-contract-selector > p {
+  margin: 0 0 10px;
+  color: #858b97;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.project-invoice-contract-selector > div {
+  display: grid;
+  gap: 7px;
+}
+
+.project-invoice-contract-selector > div > label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  border: 1px solid #e7e9ee;
+  border-radius: 7px;
+  background: #fafbfc;
+  padding: 9px 10px;
+}
+
+.project-invoice-contract-selector input {
+  min-height: 0;
+  margin-top: 2px;
+}
+
+.project-invoice-contract-selector label > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.project-invoice-contract-selector label strong {
+  color: #31353d;
+  font-size: 11.5px;
+}
+
+.project-invoice-contract-selector label small {
+  color: #858b97;
+  font-size: 10.5px;
+}
+
+@media (max-width: 900px) {
+  .project-contract-record {
+    grid-template-columns: 40px minmax(150px, 1fr) minmax(140px, 0.9fr) minmax(145px, 1fr) auto;
+  }
+
+  .project-contract-record-io {
+    grid-column: 2 / 3;
+  }
+
+  .project-contract-record-invoice {
+    grid-column: 3 / 5;
+  }
+
+  .project-contract-record-state {
+    grid-column: 5;
+    grid-row: 2;
+  }
+
+  .project-invoice-record {
+    grid-template-columns: 40px minmax(145px, 1fr) minmax(190px, 1.25fr) auto;
+  }
+
+  .project-invoice-record-amount {
+    grid-column: 2 / 3;
+  }
+
+  .project-invoice-record > .project-record-status {
+    grid-column: 4;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 680px) {
+  .project-resource-summary-row {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .project-resource-summary-status {
+    grid-column: 2;
+  }
+
+  .project-resource-summary-open {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .project-resource-summary-copy h3,
+  .project-resource-summary-copy p {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .project-resource-modal {
+    max-height: calc(100vh - 16px);
+    border-radius: 12px;
+  }
+
+  .project-resource-modal .modal-header {
+    min-height: 54px;
+    padding: 0 14px;
+  }
+
+  .project-resource-modal .modal-header h2 {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-resource-modal .modal-content {
+    padding: 12px;
+  }
+
+  .project-resource-modal .modal-footer {
+    min-height: 56px;
+    padding: 0 14px;
+  }
+
+  .project-resource-browser-heading {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .project-resource-browser-heading > span {
+    white-space: normal;
+  }
+
+  .project-resource-browser-toolbar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .project-resource-browser-toolbar .button {
+    width: 100%;
+  }
+
+  .project-contract-record,
+  .project-invoice-record {
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+    padding: 12px;
+  }
+
+  .project-contract-record-main {
+    grid-column: 2;
+  }
+
+  .project-contract-record-person,
+  .project-contract-record-io,
+  .project-contract-record-invoice,
+  .project-contract-record-state,
+  .project-invoice-record-contracts,
+  .project-invoice-record-amount,
+  .project-invoice-record > .project-record-status {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+
+  .project-contract-record-person,
+  .project-contract-record-io,
+  .project-contract-record-invoice,
+  .project-invoice-record-contracts,
+  .project-invoice-record-amount {
+    border-top: 1px solid #f0f1f4;
+    padding-top: 8px;
+  }
+
+  .project-contract-record-main strong,
+  .project-contract-record-person strong,
+  .project-contract-record-io strong,
+  .project-contract-record-invoice strong,
+  .project-invoice-record-contracts strong,
+  .project-invoice-record-amount strong,
+  .project-contract-record-main > span,
+  .project-contract-record-main small,
+  .project-contract-record-person small,
+  .project-contract-record-io small,
+  .project-contract-record-invoice small,
+  .project-invoice-record-contracts small,
+  .project-invoice-record-amount small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .project-contract-record-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 430px) {
+  .project-resource-summary-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px;
+    padding: 11px;
+  }
+
+  .project-resource-summary-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .project-resource-summary-status,
+  .project-resource-summary-open {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  .project-resource-summary-open {
+    min-height: 28px;
+    padding: 0;
+  }
+
+  .project-contract-record-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-contract-record-actions .button,
+  .project-contract-record-actions > button:not(.button) {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* Contract generation */
 .contract-generation-modal .modal-body {
   padding: 0;
