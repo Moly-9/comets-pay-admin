@@ -24,6 +24,10 @@ import {
   invoiceAccountSummary,
 } from '../invoice/invoiceReview';
 import {
+  getAvailableInvoiceReviewActions,
+  type InvoiceReviewAction,
+} from '../invoice/invoiceReviewWorkflow';
+import {
   downloadBlob,
   formatInvoiceMoney,
   invoiceFilename,
@@ -32,6 +36,7 @@ import {
 import type {
   GeneratedInvoiceRecord,
   InvoiceDocumentModel,
+  InvoiceReviewStatus,
   Payout,
 } from '../types';
 
@@ -58,23 +63,44 @@ type InvoiceReviewCheck = {
   note: string;
 };
 
-const timelineIndex = (status: Payout['status']) => {
-  if (status === '飞书审批中') return 1;
-  if (status === '待财务复核' || status === '信息异常' || status === '已退回') return 2;
-  if (status === '等待付款' || status === '付款处理中') return 3;
-  if (status === '已付款') return 4;
-  return 0;
+const timelineIndex = (status: InvoiceReviewStatus) => {
+  if (status === '待签署') return 1;
+  if (status === '待媒介审核' || status === '待修改') return 2;
+  if (status === '待财务审核' || status === '已退回') return 3;
+  return 4;
 };
 
-const ACTION_LABEL: Partial<Record<Payout['status'], string>> = {
-  待财务复核: '通过财务复核',
-  信息异常: '标记资料已修复',
-  已退回: '重新发起审核',
+const ACTION_LABEL: Record<InvoiceReviewAction, string> = {
+  MARK_SIGNED: '标记签署完成并提交媒介审核',
+  APPROVE_MEDIA: '审核通过并提交财务',
+  RETURN_MEDIA: '退回修改',
+  APPROVE_FINANCE: '财务审核通过',
+  RETURN_FINANCE: '退回',
+  RESUBMIT: '重新提交媒介审核',
 };
+
+const formatReviewTime = (value: string) => new Intl.DateTimeFormat('zh-CN', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  hour12: false,
+}).format(new Date(value));
 
 const sameText = (left: string, right: string) => (
   left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
 );
+
+const maskedAccountSummary = (value: string) => {
+  if (!value) return '待补充';
+  if (value.includes('@')) return value;
+  const normalized = value.replace(/\s/g, '');
+  return `•••• ${normalized.slice(-4)}`;
+};
+
+const sameAccount = (left: string, right: string) => {
+  if (!left || !right || right === '待补充') return false;
+  if (left.includes('@') || right.includes('@')) return sameText(left, right);
+  return left.replace(/\s/g, '').slice(-4) === right.replace(/\s/g, '').slice(-4);
+};
 
 function buildReviewChecks(
   source: InvoiceDetailSource,
@@ -203,9 +229,9 @@ function buildReviewChecks(
     {
       id: 'account',
       label: '收款账户',
-      contractValue: payout.account,
+      contractValue: maskedAccountSummary(payout.account),
       invoiceValue: accountSummary,
-      passed: !accountIssue && payout.account === accountSummary,
+      passed: !accountIssue && sameAccount(payout.account, accountSummary),
       note: accountIssue ? payout.issue ?? '收款账户需复核' : 'Invoice账户与已验证账户一致',
     },
     {
@@ -237,20 +263,26 @@ export function InvoiceDetailPage({
   model,
   onBack,
   backLabel = '返回Invoice列表',
-  onAdvance,
-  onReturn,
-  canReview,
-  canExecutePayout,
+  onMarkSigned,
+  onReviewAction,
+  canManageInvoice,
+  canReviewMedia,
+  canReviewFinance,
   notify,
 }: {
   source: InvoiceDetailSource;
   model: InvoiceDocumentModel;
   onBack: () => void;
   backLabel?: string;
-  onAdvance: (payout: Payout) => void;
-  onReturn: (payout: Payout, reason: string) => void;
-  canReview: boolean;
-  canExecutePayout: boolean;
+  onMarkSigned: (record: GeneratedInvoiceRecord) => void;
+  onReviewAction: (
+    payout: Payout,
+    action: Exclude<InvoiceReviewAction, 'MARK_SIGNED'>,
+    reason?: string,
+  ) => void;
+  canManageInvoice: boolean;
+  canReviewMedia: boolean;
+  canReviewFinance: boolean;
   notify: Notify;
 }) {
   const [activeTab, setActiveTab] = useState<InvoiceDetailTab>('summary');
@@ -259,11 +291,12 @@ export function InvoiceDetailPage({
   const [returnReason, setReturnReason] = useState('');
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
   const payout = source.kind === 'payout' ? source.payout : null;
-  const status = source.kind === 'payout'
-    ? source.payout.status
+  const invoiceReviewStatus = source.kind === 'payout'
+    ? source.payout.invoiceReviewStatus
     : source.kind === 'generated'
       ? source.record.status
-      : source.status;
+      : null;
+  const status = invoiceReviewStatus ?? (source.kind === 'project' ? source.status : '');
   const provider = source.kind === 'payout'
     ? source.payout.provider
     : source.kind === 'project'
@@ -272,11 +305,19 @@ export function InvoiceDetailPage({
   const checks = useMemo(() => buildReviewChecks(source, model), [model, source]);
   const passedCount = checks.filter((check) => check.passed).length;
   const allPassed = checks.length > 0 && passedCount === checks.length;
-  const canAdvance = payout
-    ? ['等待付款', '付款处理中'].includes(payout.status)
-      ? canExecutePayout
-      : canReview
-    : false;
+  const availableActions = invoiceReviewStatus
+    ? getAvailableInvoiceReviewActions(invoiceReviewStatus, {
+        manage: canManageInvoice,
+        mediaReview: canReviewMedia,
+        financeReview: canReviewFinance,
+      })
+    : [];
+  const returnAction = availableActions.find((action) => (
+    action === 'RETURN_MEDIA' || action === 'RETURN_FINANCE'
+  ));
+  const primaryAction = availableActions.find((action) => (
+    action !== 'RETURN_MEDIA' && action !== 'RETURN_FINANCE'
+  ));
   const projectTimelineIndex = source.kind === 'project'
     ? /已完成|已付款/.test(source.status)
       ? 4
@@ -288,9 +329,9 @@ export function InvoiceDetailPage({
             ? 2
             : 1
     : 0;
-  const currentIndex = payout ? timelineIndex(payout.status) : projectTimelineIndex;
-  const steps = payout
-    ? ['Invoice 已审核', '飞书 OA 审批', '财务复核', '渠道打款', '状态回写']
+  const currentIndex = invoiceReviewStatus ? timelineIndex(invoiceReviewStatus) : projectTimelineIndex;
+  const steps = invoiceReviewStatus
+    ? ['Invoice 已生成', '达人签署', '媒介 / 项目负责人审核', '财务审核', '进入付款']
     : source.kind === 'project'
       ? ['Invoice 已关联', '合同一一匹配', '项目审批', '财务复核', '渠道付款']
       : ['Invoice 已生成', '达人签署', '项目关联', '财务复核', '进入付款'];
@@ -322,10 +363,21 @@ export function InvoiceDetailPage({
   };
 
   const submitReturn = () => {
-    if (!payout || !normalizedReturnReason) return;
-    onReturn(payout, normalizedReturnReason);
+    if (!payout || !returnAction || !normalizedReturnReason) return;
+    onReviewAction(payout, returnAction, normalizedReturnReason);
     setReturnDialogOpen(false);
     setReturnReason('');
+  };
+
+  const runPrimaryAction = () => {
+    if (!primaryAction) return;
+    if (primaryAction === 'MARK_SIGNED' && source.kind === 'generated') {
+      onMarkSigned(source.record);
+      return;
+    }
+    if (payout && primaryAction !== 'MARK_SIGNED') {
+      onReviewAction(payout, primaryAction);
+    }
   };
 
   return (
@@ -351,7 +403,7 @@ export function InvoiceDetailPage({
       <div className="contract-metric-grid">
         <article>
           <span>审核状态</span>
-          <strong className={allPassed ? 'contract-ready-text' : 'contract-attention-text'}>{status}</strong>
+          <strong className={invoiceReviewStatus === '已通过' ? 'contract-ready-text' : 'contract-attention-text'}>{status}</strong>
           <small>{source.kind === 'generated' ? '等待达人签署后进入审核' : `${passedCount}/${checks.length}项资料校验通过`}</small>
         </article>
         <article>
@@ -477,13 +529,13 @@ export function InvoiceDetailPage({
                 </div>
                 <div className="invoice-detail-timeline">
                   {steps.map((step, index) => {
-                    const complete = payout
-                      ? index < currentIndex || payout.status === '已付款'
+                    const complete = invoiceReviewStatus
+                      ? index < currentIndex || (invoiceReviewStatus === '已通过' && payout?.status === '已付款')
                       : source.kind === 'project'
                         ? index < currentIndex || /已完成|已付款/.test(source.status)
                         : index === 0;
-                    const current = payout
-                      ? index === currentIndex && payout.status !== '已付款'
+                    const current = invoiceReviewStatus
+                      ? index === currentIndex && !(invoiceReviewStatus === '已通过' && payout?.status === '已付款')
                       : source.kind === 'project'
                         ? index === currentIndex && !/已完成|已付款/.test(source.status)
                         : index === 1;
@@ -495,6 +547,22 @@ export function InvoiceDetailPage({
                     );
                   })}
                 </div>
+                {payout?.invoiceReviewHistory?.length ? (
+                  <div className="invoice-review-history-list">
+                    {[...payout.invoiceReviewHistory].reverse().map((event, index) => (
+                      <article key={`${event.occurredAt}-${event.action}-${index}`}>
+                        <span>{event.stage === 'MEDIA' ? '媒介审核' : event.stage === 'FINANCE' ? '财务审核' : '签署提交'}</span>
+                        <div>
+                          <strong>{event.action}：{event.fromStatus} → {event.toStatus}</strong>
+                          <small>{event.actorName} · {event.actorRole} · {formatReviewTime(event.occurredAt)}</small>
+                          {event.reason ? <p>{event.reason}</p> : null}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="invoice-review-history-empty">暂无人工审核操作记录。</p>
+                )}
               </>
             ) : null}
           </div>
@@ -510,8 +578,15 @@ export function InvoiceDetailPage({
                   {downloading === 'docx' ? '生成中…' : '下载DOCX'}
                 </Button>
               ) : null}
-              {payout?.status === '待财务复核' && canReview ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>退回审核</Button> : null}
-              {payout && ACTION_LABEL[payout.status] && canAdvance ? <Button onClick={() => onAdvance(payout)}>{ACTION_LABEL[payout.status]}</Button> : null}
+              {returnAction ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>{ACTION_LABEL[returnAction]}</Button> : null}
+              {primaryAction ? (
+                <Button
+                  disabled={(primaryAction === 'APPROVE_MEDIA' || primaryAction === 'APPROVE_FINANCE') && !allPassed}
+                  onClick={runPrimaryAction}
+                >
+                  {ACTION_LABEL[primaryAction]}
+                </Button>
+              ) : null}
             </span>
           </footer>
         </section>
@@ -519,7 +594,7 @@ export function InvoiceDetailPage({
 
       {returnDialogOpen ? (
         <Modal
-          title="退回审核"
+          title={returnAction === 'RETURN_MEDIA' ? '退回修改' : '财务审核退回'}
           width="520px"
           onClose={() => setReturnDialogOpen(false)}
           footer={(
@@ -547,7 +622,7 @@ export function InvoiceDetailPage({
                 value={returnReason}
                 onChange={(event) => setReturnReason(event.target.value)}
               />
-              <small>原因会同步给项目负责人，并记录在当前Invoice审核记录中。</small>
+              <small>原因会同步给相关人员，并记录审核阶段、操作人和时间。</small>
             </label>
           </div>
         </Modal>

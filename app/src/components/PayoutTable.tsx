@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Avatar, Button, StatusMark } from './Common';
 import { Pagination } from './Pagination';
 import { formatAmount } from '../data';
-import type { Payout } from '../types';
+import type { InvoiceReviewStatus, Payout, PayoutStatus } from '../types';
 
 const ACTION_LABELS: Record<Payout['status'], string> = {
-  待财务复核: '审核',
+  未进入付款: '查看详情',
   等待付款: '执行打款',
   信息异常: '查看原因',
   飞书审批中: '查看',
@@ -19,11 +19,17 @@ export function PayoutTable({
   onSelect,
   emptyText = '当前筛选条件下没有付款记录',
   statusLabels,
+  statusFor,
+  actionLabelFor,
+  primaryActionFor,
 }: {
   payouts: Payout[];
   onSelect: (payout: Payout) => void;
   emptyText?: string;
   statusLabels?: Partial<Record<Payout['status'], string>>;
+  statusFor?: (payout: Payout) => PayoutStatus | InvoiceReviewStatus;
+  actionLabelFor?: (payout: Payout) => string;
+  primaryActionFor?: (payout: Payout) => boolean;
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -46,7 +52,9 @@ export function PayoutTable({
             </tr>
           </thead>
           <tbody>
-            {visiblePayouts.length ? visiblePayouts.map((payout) => (
+            {visiblePayouts.length ? visiblePayouts.map((payout) => {
+              const displayStatus = statusFor?.(payout) ?? payout.status;
+              return (
               <tr key={payout.id} onClick={() => onSelect(payout)}>
                 <td>
                   <div className="creator-cell">
@@ -56,22 +64,23 @@ export function PayoutTable({
                 </td>
                 <td className="mono-cell">{payout.invoice}</td>
                 <td>{payout.provider}</td>
-                <td><StatusMark status={payout.status} label={statusLabels?.[payout.status]} /></td>
+                <td><StatusMark status={displayStatus} label={statusLabels?.[payout.status]} /></td>
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
                   <Button
-                    variant={payout.status === '待财务复核' ? 'primary' : 'secondary'}
+                    variant={primaryActionFor?.(payout) ? 'primary' : 'secondary'}
                     className="table-action"
                     onClick={(event) => {
                       event.stopPropagation();
                       onSelect(payout);
                     }}
                   >
-                    {ACTION_LABELS[payout.status]}
+                    {actionLabelFor?.(payout) ?? ACTION_LABELS[payout.status]}
                   </Button>
                 </td>
               </tr>
-            )) : (
+              );
+            }) : (
               <tr>
                 <td colSpan={6}>
                   <div className="empty-table">{emptyText}</div>

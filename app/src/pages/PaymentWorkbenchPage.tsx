@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination } from '../components/Pagination';
 import { getProjectFixture } from '../data';
+import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import type { Payout } from '../types';
 
 type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
@@ -22,7 +23,7 @@ const TAB_SUMMARY_LABELS: Record<WorkbenchTab, string> = {
 };
 
 const TAB_STATUSES: Record<WorkbenchTab, Payout['status'][]> = {
-  review: ['待财务复核'],
+  review: ['飞书审批中'],
   payment: ['等待付款', '付款处理中'],
   paid: ['已付款'],
   returned: ['已退回'],
@@ -203,7 +204,9 @@ export function PaymentWorkbenchPage({
   const [endDate, setEndDate] = useState('');
 
   const filtered = useMemo(() => {
-    const tabFiltered = payouts.filter((payout) => TAB_STATUSES[activeTab].includes(payout.status));
+    const tabFiltered = payouts.filter((payout) => (
+      isInvoiceApprovedForPayment(payout) && TAB_STATUSES[activeTab].includes(payout.status)
+    ));
     return provider === '全部渠道'
       ? tabFiltered
       : tabFiltered.filter((payout) => payout.provider === provider);
@@ -238,7 +241,9 @@ export function PaymentWorkbenchPage({
     ...counts,
     [tab.id]: new Set(
       payouts
-        .filter((payout) => TAB_STATUSES[tab.id].includes(payout.status))
+        .filter((payout) => (
+          isInvoiceApprovedForPayment(payout) && TAB_STATUSES[tab.id].includes(payout.status)
+        ))
         .map((payout) => payout.projectId),
     ).size,
   }), {

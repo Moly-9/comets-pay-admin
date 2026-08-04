@@ -41,6 +41,10 @@ import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../da
 import { Pagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
+import {
+  isInvoiceApprovedForPayment,
+  type InvoiceReviewAction,
+} from '../invoice/invoiceReviewWorkflow';
 import { downloadBlob, formatInvoiceMoney, invoiceFilename, invoiceTotal } from '../invoice/invoiceUtils';
 import {
   clonePayoutAccounts,
@@ -1970,11 +1974,7 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
   return <div className="page-stack"><PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} /><section className="content-card"><div className="content-toolbar"><SearchBar value="" onChange={() => undefined} placeholder="搜索达人或项目" /><span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span></div><div className="table-scroll"><table className="data-table operational-table"><thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead><tbody>{COLLABORATIONS.map((item) => <tr key={`${item.creator}${item.project}`}><td><strong>{item.creator}</strong></td><td>{item.project}</td><td>{item.deliverable}</td><td>{item.invoice}</td><td><ProjectStatus status={item.payment} /></td><td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td></tr>)}</tbody></table></div></section></div>;
 }
 
-export type InvoicePageTab = 'signature' | 'review' | 'approved' | 'returned';
-
-const INVOICE_REVIEW_STATUS_LABELS: Partial<Record<Payout['status'], string>> = {
-  待财务复核: '待媒介审核',
-};
+export type InvoicePageTab = 'signature' | 'review' | 'revision' | 'approved' | 'returned';
 
 export function InvoicePage({
   payouts,
@@ -1985,12 +1985,13 @@ export function InvoicePage({
   onTabChange,
   onCreateInvoice,
   canCreateInvoice,
-  canReview,
-  canExecutePayout,
+  canManageInvoice,
+  canReviewMedia,
+  canReviewFinance,
   focusedInvoiceId,
   onFocusCleared,
-  onAdvance,
-  onReturn,
+  onMarkSigned,
+  onReviewAction,
   notify,
 }: {
   payouts: Payout[];
@@ -2001,12 +2002,17 @@ export function InvoicePage({
   onTabChange: (tab: InvoicePageTab) => void;
   onCreateInvoice: () => void;
   canCreateInvoice: boolean;
-  canReview: boolean;
-  canExecutePayout: boolean;
+  canManageInvoice: boolean;
+  canReviewMedia: boolean;
+  canReviewFinance: boolean;
   focusedInvoiceId: string | null;
   onFocusCleared: () => void;
-  onAdvance: (payout: Payout) => void;
-  onReturn: (payout: Payout, reason: string) => void;
+  onMarkSigned: (record: GeneratedInvoiceRecord) => void;
+  onReviewAction: (
+    payout: Payout,
+    action: Exclude<InvoiceReviewAction, 'MARK_SIGNED'>,
+    reason?: string,
+  ) => void;
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
@@ -2014,9 +2020,15 @@ export function InvoicePage({
   const [signaturePage, setSignaturePage] = useState(1);
   const [signaturePageSize, setSignaturePageSize] = useState(10);
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
-  const effectiveSourceKey = selectedSourceKey ?? (focusedInvoiceId ? `payout:${focusedInvoiceId}` : null);
+  const effectiveSourceKey = selectedSourceKey ?? (
+    focusedInvoiceId
+      ? focusedInvoiceId.startsWith('generated:') || focusedInvoiceId.startsWith('payout:')
+        ? focusedInvoiceId
+        : `payout:${focusedInvoiceId}`
+      : null
+  );
   const selectedPayout = effectiveSourceKey?.startsWith('payout:')
-    ? payouts.find((payout) => payout.invoice === effectiveSourceKey.slice('payout:'.length)) ?? null
+    ? payouts.find((payout) => payout.id === effectiveSourceKey.slice('payout:'.length)) ?? null
     : null;
   const selectedGenerated = effectiveSourceKey?.startsWith('generated:')
     ? generatedInvoices.find((record) => record.id === effectiveSourceKey.slice('generated:'.length)) ?? null
@@ -2027,19 +2039,26 @@ export function InvoicePage({
       ? { kind: 'generated', record: selectedGenerated }
       : null;
   const selectedModel = selectedPayout
-    ? buildInvoiceReviewModel(selectedPayout, creators, invoiceEntity)
+    ? selectedPayout.invoiceSnapshot ?? buildInvoiceReviewModel(selectedPayout, creators, invoiceEntity)
     : selectedGenerated?.snapshot ?? null;
   const groupedPayouts = useMemo(() => {
     const groups = {
       review: [] as Payout[],
+      revision: [] as Payout[],
       approved: [] as Payout[],
       returned: [] as Payout[],
     };
 
     payouts.forEach((payout) => {
-      if (payout.status === '待财务复核') groups.review.push(payout);
-      else if (payout.status === '已退回' || payout.status === '信息异常') groups.returned.push(payout);
-      else groups.approved.push(payout);
+      if (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待财务审核') {
+        groups.review.push(payout);
+      } else if (payout.invoiceReviewStatus === '待修改') {
+        groups.revision.push(payout);
+      } else if (payout.invoiceReviewStatus === '已退回') {
+        groups.returned.push(payout);
+      } else if (payout.invoiceReviewStatus === '已通过') {
+        groups.approved.push(payout);
+      }
     });
 
     return groups;
@@ -2091,7 +2110,7 @@ export function InvoicePage({
   };
 
   const openReviewInvoice = (payout: Payout) => {
-    setSelectedSourceKey(`payout:${payout.invoice}`);
+    setSelectedSourceKey(`payout:${payout.id}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -2106,16 +2125,28 @@ export function InvoicePage({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const markSignedAndOpenReview = (record: GeneratedInvoiceRecord) => {
+    setSelectedSourceKey(`payout:${record.sourcePayoutId}`);
+    onMarkSigned(record);
+  };
+
+  const canActOnInvoice = (payout: Payout) => (
+    (payout.invoiceReviewStatus === '待媒介审核' && canReviewMedia)
+    || (payout.invoiceReviewStatus === '待财务审核' && canReviewFinance)
+    || ((payout.invoiceReviewStatus === '待修改' || payout.invoiceReviewStatus === '已退回') && canManageInvoice)
+  );
+
   if (selectedSource && selectedModel) {
     return (
       <InvoiceDetailPage
         source={selectedSource}
         model={selectedModel}
         notify={notify}
-        onAdvance={onAdvance}
-        onReturn={onReturn}
-        canReview={canReview}
-        canExecutePayout={canExecutePayout}
+        onMarkSigned={markSignedAndOpenReview}
+        onReviewAction={onReviewAction}
+        canManageInvoice={canManageInvoice}
+        canReviewMedia={canReviewMedia}
+        canReviewFinance={canReviewFinance}
         onBack={closeInvoiceDetail}
       />
     );
@@ -2132,6 +2163,7 @@ export function InvoicePage({
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{pendingSignatureInvoices.length}</span></button>
           <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedPayouts.review.length}</span></button>
+          <button className={`tab-button ${tab === 'revision' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('revision')}>待修改 <span>{groupedPayouts.revision.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedPayouts.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedPayouts.returned.length}</span></button>
         </div>
@@ -2186,7 +2218,9 @@ export function InvoicePage({
             payouts={visiblePayouts}
             onSelect={openReviewInvoice}
             emptyText="当前筛选条件下没有 Invoice 记录"
-            statusLabels={tab === 'review' ? INVOICE_REVIEW_STATUS_LABELS : undefined}
+            statusFor={(payout) => payout.invoiceReviewStatus}
+            actionLabelFor={(payout) => canActOnInvoice(payout) ? '审核' : '查看详情'}
+            primaryActionFor={canActOnInvoice}
           />
         )}
       </section>
@@ -2208,7 +2242,14 @@ export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }
 
 export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
   const [tab, setTab] = useState<'all' | 'processing' | 'paid'>('all');
-  const visible = payouts.filter((payout) => tab === 'processing' ? payout.status === '付款处理中' || payout.status === '等待付款' : tab === 'paid' ? payout.status === '已付款' : true);
+  const visible = payouts.filter((payout) => (
+    isInvoiceApprovedForPayment(payout)
+    && (tab === 'processing'
+      ? payout.status === '付款处理中' || payout.status === '等待付款'
+      : tab === 'paid'
+        ? payout.status === '已付款'
+        : true)
+  ));
   return <div className="page-stack"><PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" /><section className="summary-surface"><article className="summary-card summary-card-peach"><span className="summary-illustration"><WalletCards size={26} /></span><div><strong>USD 128,640</strong><span>本月付款总额 · 86 笔</span></div></article><article className="summary-card summary-card-lilac"><span className="summary-illustration"><Check size={26} /></span><div><strong>98.6%</strong><span>渠道付款成功率</span></div></article></section><section className="content-card"><div className="tabs-row"><button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button><button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button><button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button></div><div className="content-toolbar compact-toolbar"><div className="date-range-static">2026-07-01 <span>—</span> 2026-07-31</div><Button variant="secondary" icon={<Download size={16} />}>导出流水</Button></div><PayoutTable payouts={visible} onSelect={onSelectPayout} /></section></div>;
 }
 

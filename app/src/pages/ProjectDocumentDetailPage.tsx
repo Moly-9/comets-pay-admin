@@ -234,10 +234,11 @@ export function ProjectDocumentDetailPage({
       model={model}
       backLabel={`返回${project.name} · Invoice 列表`}
       notify={notify}
-      onAdvance={() => undefined}
-      onReturn={() => undefined}
-      canReview={false}
-      canExecutePayout={false}
+      onMarkSigned={() => undefined}
+      onReviewAction={() => undefined}
+      canManageInvoice={false}
+      canReviewMedia={false}
+      canReviewFinance={false}
       onBack={onBack}
     />
   );

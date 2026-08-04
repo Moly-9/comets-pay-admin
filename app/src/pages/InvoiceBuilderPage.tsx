@@ -228,6 +228,10 @@ export function InvoiceBuilderPage({
       window.requestAnimationFrame(() => document.querySelector('.invoice-builder-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
       return;
     }
+    if (!selectedPayout) {
+      setGenerationError('关联付款记录已失效，请重新选择项目。');
+      return;
+    }
     setGenerating(true);
     try {
       const snapshot: InvoiceDocumentModel = {
@@ -241,6 +245,7 @@ export function InvoiceBuilderPage({
       const { pdfBlob, docxBlob } = await generateInvoiceFiles(snapshot);
       const record: GeneratedInvoiceRecord = {
         id: snapshot.invoiceNumber,
+        sourcePayoutId: selectedPayout.id,
         status: '待签署',
         generatedAt: new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(new Date()),
         snapshot,

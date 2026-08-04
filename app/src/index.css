@@ -10942,6 +10942,60 @@ button:disabled {
   color: #d35e43;
 }
 
+.invoice-review-history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid #eceef2;
+  padding-top: 12px;
+}
+
+.invoice-review-history-list article {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 10px;
+}
+
+.invoice-review-history-list article > span {
+  color: #6f58a3;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.invoice-review-history-list article > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.invoice-review-history-list strong {
+  overflow-wrap: anywhere;
+  font-size: 10.5px;
+}
+
+.invoice-review-history-list small {
+  color: #858b96;
+  font-size: 9px;
+}
+
+.invoice-review-history-list p,
+.invoice-review-history-empty {
+  margin: 0;
+  color: #5f6570;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.invoice-review-history-empty {
+  margin-top: 10px;
+  border-top: 1px solid #eceef2;
+  padding-top: 12px;
+}
+
 .invoice-review-actions {
   display: flex;
   min-height: 66px;

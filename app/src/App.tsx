@@ -20,6 +20,14 @@ import { PaymentWorkbenchPage } from './pages/PaymentWorkbenchPage';
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
 import {
+  applyInvoiceReviewAction,
+  getAvailableInvoiceReviewActions,
+  isInvoiceApprovedForPayment,
+  isPayoutEligibleForBatch,
+  markGeneratedInvoiceSigned,
+  type InvoiceReviewAction,
+} from './invoice/invoiceReviewWorkflow';
+import {
   BatchesPage,
   ChannelsPage,
   CollaborationsPage,
@@ -40,9 +48,8 @@ import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceEntity, NavPage, Pa
 type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
 
 const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
-  待财务复核: '等待付款',
   等待付款: '付款处理中',
-  信息异常: '待财务复核',
+  信息异常: '等待付款',
   付款处理中: '已付款',
   已退回: '飞书审批中',
 };
@@ -123,13 +130,16 @@ export default function App() {
   };
 
   const advancePayout = (payout: Payout) => {
+    if (!isInvoiceApprovedForPayment(payout)) {
+      notify('Invoice 尚未通过', '完成媒介与财务审核后才能推进付款。');
+      return;
+    }
     const nextStatus = NEXT_STATUS[payout.status];
     if (!nextStatus) return;
-    const clearsReviewFeedback = nextStatus === '待财务复核' || payout.status === '已退回';
     const updated: Payout = {
       ...payout,
       status: nextStatus,
-      issue: clearsReviewFeedback ? undefined : payout.issue,
+      issue: payout.status === '信息异常' ? undefined : payout.issue,
       returnReason: payout.status === '已退回' ? undefined : payout.returnReason,
       paidAt: nextStatus === '已付款' ? '2026-07-17 刚刚' : payout.paidAt,
     };
@@ -145,15 +155,83 @@ export default function App() {
     notify('已退回审核', '退回原因已同步给项目负责人。');
   };
 
+  const updateInvoiceReview = (
+    payout: Payout,
+    action: Exclude<InvoiceReviewAction, 'MARK_SIGNED'>,
+    reason?: string,
+  ) => {
+    const allowedActions = getAvailableInvoiceReviewActions(payout.invoiceReviewStatus, {
+      manage: hasPermission(currentUser, 'invoice_manage'),
+      mediaReview: hasPermission(currentUser, 'invoice_media_review'),
+      financeReview: hasPermission(currentUser, 'invoice_finance_review'),
+    });
+    if (!allowedActions.includes(action)) {
+      notify('暂无审核权限', `${currentUser.role}不能处理“${payout.invoiceReviewStatus}”阶段。`);
+      return;
+    }
+    try {
+      const updated = applyInvoiceReviewAction(
+        payout,
+        action,
+        { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        reason,
+      );
+      setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+      setGeneratedInvoices((current) => current.map((record) => (
+        record.sourcePayoutId === payout.id
+          ? { ...record, status: updated.invoiceReviewStatus }
+          : record
+      )));
+      notify('Invoice 审核状态已更新', `${payout.invoice} 已进入“${updated.invoiceReviewStatus}”。`);
+    } catch (error) {
+      notify('状态更新失败', error instanceof Error ? error.message : '当前 Invoice 无法执行该操作。');
+    }
+  };
+
+  const markInvoiceSigned = (record: GeneratedInvoiceRecord) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能提交签署完成的 Invoice。`);
+      return;
+    }
+    const linkedPayout = payouts.find((payout) => payout.id === record.sourcePayoutId);
+    if (!linkedPayout) {
+      notify('无法提交审核', '未找到生成 Invoice 时关联的付款记录，请重新生成。');
+      return;
+    }
+
+    try {
+      const updatedPayout = markGeneratedInvoiceSigned(
+        linkedPayout,
+        record,
+        { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+      );
+      setPayouts((current) => current.map((payout) => (
+        payout.id === linkedPayout.id ? updatedPayout : payout
+      )));
+      setGeneratedInvoices((current) => current.map((invoice) => (
+        invoice.id === record.id
+          ? { ...invoice, status: updatedPayout.invoiceReviewStatus }
+          : invoice
+      )));
+      setInvoiceTab('review');
+      setFocusedInvoiceId(linkedPayout.id);
+      notify('已提交媒介审核', `${record.id} 已标记签署完成，当前状态为“待媒介审核”。`);
+    } catch (error) {
+      notify('提交失败', error instanceof Error ? error.message : '当前 Invoice 无法提交审核。');
+    }
+  };
+
   const openInvoiceFromPayout = (payout: Payout) => {
     setInvoiceTab(
-      payout.status === '待财务复核'
+      payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待财务审核'
         ? 'review'
-        : payout.status === '已退回' || payout.status === '信息异常'
+        : payout.invoiceReviewStatus === '待修改'
+          ? 'revision'
+          : payout.invoiceReviewStatus === '已退回'
           ? 'returned'
           : 'approved',
     );
-    setFocusedInvoiceId(payout.invoice);
+    setFocusedInvoiceId(payout.id);
     setSelectedPayout(null);
     setActivePage('invoice');
   };
@@ -165,6 +243,11 @@ export default function App() {
   };
 
   const createBatch = (selected: Payout[], provider: Provider) => {
+    const ineligible = selected.filter((payout) => !isPayoutEligibleForBatch(payout));
+    if (ineligible.length > 0) {
+      notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
+      return;
+    }
     setPayouts((current) => current.map((payout) => selected.some((item) => item.id === payout.id)
       ? { ...payout, status: '等待付款', issue: undefined }
       : payout));
@@ -193,6 +276,8 @@ export default function App() {
   }
 
   const canReviewRequests = hasPermission(currentUser, 'request_review');
+  const canReviewInvoiceMedia = hasPermission(currentUser, 'invoice_media_review');
+  const canReviewInvoiceFinance = hasPermission(currentUser, 'invoice_finance_review');
   const canExecutePayouts = hasPermission(currentUser, 'payout_execute');
   const canGenerateInvoices = hasPermission(currentUser, 'invoice_manage');
   const canManageCreators = hasPermission(currentUser, 'creator_records_manage');
@@ -263,12 +348,13 @@ export default function App() {
           onTabChange={setInvoiceTab}
           onCreateInvoice={() => setActivePage('invoice-create')}
           canCreateInvoice={canGenerateInvoices}
-          canReview={canReviewRequests}
-          canExecutePayout={canExecutePayouts}
+          canManageInvoice={canGenerateInvoices}
+          canReviewMedia={canReviewInvoiceMedia}
+          canReviewFinance={canReviewInvoiceFinance}
           focusedInvoiceId={focusedInvoiceId}
           onFocusCleared={() => setFocusedInvoiceId(null)}
-          onAdvance={advancePayout}
-          onReturn={returnPayout}
+          onMarkSigned={markInvoiceSigned}
+          onReviewAction={updateInvoiceReview}
           notify={notify}
         />
       );
@@ -292,7 +378,7 @@ export default function App() {
     case 'new-batch':
       pageContent = (
         <BatchWizardPage
-          payouts={payouts.filter((payout) => ['待财务复核', '等待付款', '信息异常', '飞书审批中'].includes(payout.status)).slice(0, 4)}
+          payouts={payouts.filter(isPayoutEligibleForBatch).slice(0, 4)}
           creators={creators}
           onCancel={() => setActivePage('batches')}
           onDraft={() => notify('草稿已保存', '付款选择与渠道配置已保存在当前浏览器。')}

@@ -173,12 +173,12 @@ export function DashboardPage({
     const paidContracts = uploadedContracts.filter((contract) => paidProjects.has(contract.project)).length;
 
     const invoiceStatusById = new Map<string, string>();
-    payouts.forEach((payout) => invoiceStatusById.set(payout.invoice, payout.status));
+    payouts.forEach((payout) => invoiceStatusById.set(payout.invoice, payout.invoiceReviewStatus));
     generatedInvoices.forEach((record) => {
       if (!invoiceStatusById.has(record.id)) invoiceStatusById.set(record.id, record.status);
     });
-    const ongoingInvoices = Array.from(invoiceStatusById.values()).filter((status) => status !== '已付款').length;
-    const paidInvoices = Array.from(invoiceStatusById.values()).filter((status) => status === '已付款').length;
+    const ongoingInvoices = Array.from(invoiceStatusById.values()).filter((status) => status !== '已通过').length;
+    const paidInvoices = payouts.filter((payout) => payout.status === '已付款').length;
 
     return {
       requests: {

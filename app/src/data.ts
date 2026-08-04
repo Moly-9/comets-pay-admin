@@ -368,6 +368,32 @@ export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
   address: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong, China',
 };
 
+const returnedInvoiceReviewFixture = (
+  stage: 'MEDIA' | 'FINANCE',
+  reason: string,
+  occurredAt: string,
+): Pick<Payout, 'invoiceReviewStatus' | 'invoiceReviewHistory' | 'invoiceReviewReturn'> => {
+  const actor = stage === 'MEDIA'
+    ? { account: 'lailihong', name: '赖丽红', role: '媒介账号' }
+    : { account: 'xiwenhui', name: '奚文慧', role: '财务账号' };
+  const toStatus = stage === 'MEDIA' ? '待修改' : '已退回';
+  return {
+    invoiceReviewStatus: toStatus,
+    invoiceReviewReturn: { stage, reason, actorName: actor.name, occurredAt },
+    invoiceReviewHistory: [{
+      stage,
+      action: '退回',
+      actorAccount: actor.account,
+      actorName: actor.name,
+      actorRole: actor.role,
+      fromStatus: stage === 'MEDIA' ? '待媒介审核' : '待财务审核',
+      toStatus,
+      reason,
+      occurredAt,
+    }],
+  };
+};
+
 export const INITIAL_PAYOUTS: Payout[] = [
   {
     id: 'pay-001',
@@ -383,7 +409,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 3240,
     account: '0000000001',
-    status: '待财务复核',
+    status: '未进入付款',
+    invoiceReviewStatus: '待媒介审核',
     accent: '#f59e0b',
   },
   {
@@ -400,8 +427,11 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 1480,
     account: 'yuki.tanaka@example.com',
-    status: '待财务复核',
+    status: '未进入付款',
+    ...returnedInvoiceReviewFixture('MEDIA', '请补充签署页并重新提交', '2026-08-03T03:20:00.000Z'),
     accent: '#ec4899',
+    issue: '媒介审核退回：请补充签署页并重新提交',
+    returnReason: '请补充签署页并重新提交',
   },
   {
     id: 'pay-009',
@@ -417,7 +447,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'EUR',
     amount: 2160,
     account: '0000000002',
-    status: '待财务复核',
+    status: '未进入付款',
+    invoiceReviewStatus: '待财务审核',
     accent: '#f97316',
   },
   {
@@ -434,7 +465,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 3750,
     account: '0000000003',
-    status: '待财务复核',
+    status: '未进入付款',
+    invoiceReviewStatus: '待财务审核',
     accent: '#06b6d4',
   },
   {
@@ -452,6 +484,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1850,
     account: 'ES00 DEMO 0000 0000 0000 0000',
     status: '等待付款',
+    invoiceReviewStatus: '已通过',
     accent: '#3b82f6',
   },
   {
@@ -469,6 +502,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1320,
     account: 'hannah.lee@example.com',
     status: '等待付款',
+    invoiceReviewStatus: '已通过',
     accent: '#8b5cf6',
   },
   {
@@ -486,6 +520,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 920,
     account: '0000000004',
     status: '信息异常',
+    invoiceReviewStatus: '已通过',
     accent: '#ef4444',
     issue: '泰国本地转账路由代码尚未通过校验',
   },
@@ -504,6 +539,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2980,
     account: 'IT00 DEMO 0000 0000 0000 0000',
     status: '付款处理中',
+    invoiceReviewStatus: '已通过',
     accent: '#6366f1',
   },
   {
@@ -520,7 +556,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 2440,
     account: '000000005',
-    status: '已退回',
+    status: '未进入付款',
+    ...returnedInvoiceReviewFixture('FINANCE', 'Invoice 缺少达人签字页', '2026-08-02T08:42:00.000Z'),
     accent: '#ef4444',
     issue: '财务退回：Invoice 缺少达人签字页',
     returnReason: 'Invoice 缺少达人签字页',
@@ -540,6 +577,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 5600,
     account: '0000000006',
     status: '飞书审批中',
+    invoiceReviewStatus: '已通过',
     accent: '#a855f7',
   },
   {
@@ -557,6 +595,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 4100,
     account: '0000000007',
     status: '已付款',
+    invoiceReviewStatus: '已通过',
     accent: '#22c55e',
     paidAt: '2026-07-16 14:32',
   },
@@ -575,6 +614,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2680,
     account: '000000000008',
     status: '已付款',
+    invoiceReviewStatus: '已通过',
     accent: '#22c55e',
     paidAt: '2026-07-15 09:18',
   },
@@ -592,7 +632,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 1260,
     account: '待补充 PayPal 邮箱',
-    status: '已退回',
+    status: '未进入付款',
+    ...returnedInvoiceReviewFixture('FINANCE', 'Invoice 收款主体与合同不一致', '2026-08-01T07:18:00.000Z'),
     accent: '#ef4444',
     issue: '财务退回：Invoice 收款主体与合同不一致',
     returnReason: 'Invoice 收款主体与合同不一致',
@@ -611,7 +652,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 1980,
     account: '0000000001',
-    status: '待财务复核',
+    status: '未进入付款',
+    invoiceReviewStatus: '待媒介审核',
     accent: '#f59e0b',
   },
   {
@@ -628,7 +670,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 1740,
     account: 'yuki.tanaka@example.com',
-    status: '待财务复核',
+    status: '未进入付款',
+    invoiceReviewStatus: '待财务审核',
     accent: '#ec4899',
   },
   {
@@ -646,6 +689,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2360,
     account: '0000000002',
     status: '等待付款',
+    invoiceReviewStatus: '已通过',
     accent: '#f97316',
   },
   {
@@ -663,6 +707,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2890,
     account: '0000000003',
     status: '付款处理中',
+    invoiceReviewStatus: '已通过',
     accent: '#06b6d4',
   },
   {
@@ -680,6 +725,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 3150,
     account: '0000000007',
     status: '已付款',
+    invoiceReviewStatus: '已通过',
     accent: '#22c55e',
     paidAt: '2026-07-25 16:20',
   },
@@ -698,6 +744,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1460,
     account: 'hannah.lee@example.com',
     status: '已付款',
+    invoiceReviewStatus: '已通过',
     accent: '#22c55e',
     paidAt: '2026-07-26 10:08',
   },
@@ -715,7 +762,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 1320,
     account: 'marc.frames@example.com',
-    status: '已退回',
+    status: '未进入付款',
+    ...returnedInvoiceReviewFixture('FINANCE', '合同金额与 Invoice 金额不一致', '2026-08-01T09:06:00.000Z'),
     accent: '#ef4444',
     issue: '财务退回：合同金额与 Invoice 金额不一致',
     returnReason: '合同金额与 Invoice 金额不一致',
@@ -734,7 +782,8 @@ export const INITIAL_PAYOUTS: Payout[] = [
     currency: 'USD',
     amount: 2180,
     account: '000000005',
-    status: '已退回',
+    status: '未进入付款',
+    ...returnedInvoiceReviewFixture('FINANCE', '收款账号开户名与合同签约主体不一致', '2026-08-01T10:35:00.000Z'),
     accent: '#ef4444',
     issue: '财务退回：收款账号开户名与合同签约主体不一致',
     returnReason: '收款账号开户名与合同签约主体不一致',

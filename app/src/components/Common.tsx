@@ -2,7 +2,8 @@ import { Check, ChevronDown, Info, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes, CSSProperties, KeyboardEvent, PropsWithChildren, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { PayoutStatus, ToastState } from '../types';
+import { INVOICE_REVIEW_STATUS_META } from '../invoice/invoiceReviewWorkflow';
+import type { InvoiceReviewStatus, PayoutStatus, ToastState } from '../types';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -262,7 +263,7 @@ export function NoticeBanner({ children, onClose }: PropsWithChildren<{ onClose?
 }
 
 const STATUS_COLORS: Record<PayoutStatus, string> = {
-  待财务复核: '#f59e0b',
+  未进入付款: '#9ca3af',
   等待付款: '#3b82f6',
   信息异常: '#ef4444',
   飞书审批中: '#a855f7',
@@ -271,10 +272,19 @@ const STATUS_COLORS: Record<PayoutStatus, string> = {
   已退回: '#ef4444',
 };
 
-export function StatusMark({ status, label }: { status: PayoutStatus; label?: string }) {
+export function StatusMark({
+  status,
+  label,
+}: {
+  status: PayoutStatus | InvoiceReviewStatus;
+  label?: string;
+}) {
+  const color = status in INVOICE_REVIEW_STATUS_META
+    ? INVOICE_REVIEW_STATUS_META[status as InvoiceReviewStatus].color
+    : STATUS_COLORS[status as PayoutStatus];
   return (
     <span className="status-mark">
-      <span className="status-tick" style={{ backgroundColor: STATUS_COLORS[status] }} />
+      <span className="status-tick" style={{ backgroundColor: color }} />
       {label ?? status}
     </span>
   );

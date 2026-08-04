@@ -220,6 +220,28 @@ export type InvoiceLineItem = {
 
 export type InvoicePaymentMethod = 'bank' | 'paypal';
 
+export type InvoiceReviewStatus =
+  | '待签署'
+  | '待媒介审核'
+  | '待财务审核'
+  | '待修改'
+  | '已通过'
+  | '已退回';
+
+export type InvoiceReviewStage = 'SIGNATURE' | 'MEDIA' | 'FINANCE';
+
+export type InvoiceReviewEvent = {
+  stage: InvoiceReviewStage;
+  action: '签署完成' | '审核通过' | '退回' | '重新提交';
+  actorAccount: string;
+  actorName: string;
+  actorRole: string;
+  fromStatus: InvoiceReviewStatus;
+  toStatus: InvoiceReviewStatus;
+  reason?: string;
+  occurredAt: string;
+};
+
 export type InvoiceDocumentModel = {
   invoiceNumber: string;
   invoiceDate: string;
@@ -239,13 +261,14 @@ export type InvoiceDocumentModel = {
 
 export type GeneratedInvoiceRecord = {
   id: string;
-  status: '待签署';
+  sourcePayoutId: string;
+  status: InvoiceReviewStatus;
   generatedAt: string;
   snapshot: InvoiceDocumentModel;
 };
 
 export type PayoutStatus =
-  | '待财务复核'
+  | '未进入付款'
   | '等待付款'
   | '信息异常'
   | '飞书审批中'
@@ -268,6 +291,15 @@ export type Payout = {
   amount: number;
   account: string;
   status: PayoutStatus;
+  invoiceReviewStatus: InvoiceReviewStatus;
+  invoiceReviewHistory?: InvoiceReviewEvent[];
+  invoiceReviewReturn?: {
+    stage: Exclude<InvoiceReviewStage, 'SIGNATURE'>;
+    reason: string;
+    actorName: string;
+    occurredAt: string;
+  };
+  invoiceSnapshot?: InvoiceDocumentModel;
   accent: string;
   issue?: string;
   returnReason?: string;

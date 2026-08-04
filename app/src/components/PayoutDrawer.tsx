@@ -74,7 +74,7 @@ const getApprovalActor = (account: string): ApprovalActor => (
 
 const timelineIndex = (status: Payout['status']) => {
   if (status === '飞书审批中') return 1;
-  if (status === '待财务复核' || status === '信息异常' || status === '已退回') return 4;
+  if (status === '信息异常' || status === '已退回') return 4;
   if (status === '等待付款' || status === '付款处理中') return 5;
   if (status === '已付款') return 7;
   return 0;
@@ -83,15 +83,14 @@ const timelineIndex = (status: Payout['status']) => {
 const currentStateLabel = (status: Payout['status']) => {
   if (status === '信息异常') return '需处理';
   if (status === '已退回') return '已退回';
+  if (status === '未进入付款') return '待准入';
   if (status === '飞书审批中') return '审批中';
-  if (status === '待财务复核') return '待审核';
   if (status === '等待付款') return '待打款';
   if (status === '付款处理中') return '处理中';
   return '当前步骤';
 };
 
 const ACTION_LABEL: Partial<Record<Payout['status'], string>> = {
-  待财务复核: '通过财务复核',
   等待付款: '执行打款',
   信息异常: '标记资料已修复',
   付款处理中: '模拟状态回写成功',
@@ -147,9 +146,8 @@ export function PayoutDrawer({
   ];
   const actionLabel = ACTION_LABEL[payout.status];
   const normalizedReturnReason = returnReason.trim();
-  const canAdvance = ['等待付款', '付款处理中'].includes(payout.status)
-    ? canExecutePayout
-    : canReview;
+  const canAdvance = ['等待付款', '付款处理中', '信息异常'].includes(payout.status)
+    && canExecutePayout;
 
   const openReturnDialog = () => {
     setReturnReason('');
@@ -234,7 +232,6 @@ export function PayoutDrawer({
         </div>
 
           <footer className="drawer-footer">
-            {payout.status === '待财务复核' && canReview ? <Button variant="secondary" onClick={openReturnDialog}>退回审核</Button> : null}
             {actionLabel && canAdvance ? <Button onClick={() => onAdvance(payout)}>{actionLabel}</Button> : null}
             {payout.status === '飞书审批中' ? <Button disabled>等待飞书审批</Button> : null}
             {payout.status === '已付款' ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
