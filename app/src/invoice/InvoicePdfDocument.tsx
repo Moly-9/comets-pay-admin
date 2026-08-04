@@ -121,7 +121,7 @@ export function InvoicePdfDocument({ model }: { model: InvoiceDocumentModel }) {
   const chunks = itemChunks(model.items);
   const total = invoiceTotal(model);
   return (
-    <Document title={model.invoiceNumber} author="COMETS Pay" subject={`Invoice for ${model.projectName}`}>
+    <Document title={model.invoiceNumber} author="COMETS Pay" subject={`Invoice ${model.invoiceNumber}`}>
       {chunks.map((items, pageIndex) => {
         const lastPage = pageIndex === chunks.length - 1;
         return (
@@ -151,7 +151,6 @@ export function InvoicePdfDocument({ model }: { model: InvoiceDocumentModel }) {
                 <Text style={styles.sectionLabel}>Invoice</Text>
                 <View style={styles.infoLine}><Text style={styles.infoLineLabel}>Date of Invoice:</Text><Text>{formatInvoiceDate(model.invoiceDate)}</Text></View>
                 <View style={styles.infoLine}><Text style={styles.infoLineLabel}>Currency:</Text><Text>[{model.currency}]</Text></View>
-                <View style={styles.infoLine}><Text style={styles.infoLineLabel}>Project:</Text><Text style={hasCjk(model.projectName) ? styles.cjk : {}}>{model.projectName}</Text></View>
               </View>
             </View>
 

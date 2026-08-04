@@ -50,7 +50,6 @@ export function InvoiceDocumentView({
           <strong>Invoice</strong>
           <p><b>Date of Invoice:</b> {formatInvoiceDate(model.invoiceDate) || '—'}</p>
           <p><b>Currency:</b> [{model.currency}]</p>
-          <p><b>Project:</b> {model.projectName || '—'}</p>
         </section>
       </div>
       <div className="invoice-paper-table-wrap">

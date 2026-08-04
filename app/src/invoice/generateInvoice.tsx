@@ -154,7 +154,6 @@ export async function generateInvoiceDocx(model: InvoiceDocumentModel) {
           new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: 'Invoice', bold: true, size: 22, font: DOCX_FONT })] }),
           paragraph('Date of Invoice', formatInvoiceDate(model.invoiceDate)),
           paragraph('Currency', `[${model.currency}]`),
-          paragraph('Project', model.projectName),
         ],
       }),
     ] })],
@@ -163,7 +162,7 @@ export async function generateInvoiceDocx(model: InvoiceDocumentModel) {
   const document = new DocxDocument({
     creator: 'COMETS Pay',
     title: model.invoiceNumber,
-    description: `Invoice for ${model.projectName}`,
+    description: `Invoice ${model.invoiceNumber}`,
     styles: {
       default: {
         document: {
