@@ -48,7 +48,9 @@ import {
   createEmptyAirwallexAccount,
   createPayPalPayoutAccount,
   getDefaultPayoutAccount,
+  getPayoutAccountSummary,
   getPayoutAccountStatusMeta,
+  isPayoutAccountVerified,
 } from '../payoutAccounts';
 import type {
   AirwallexTransferMethod,
@@ -1456,9 +1458,12 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
               <strong>{account.platform || '平台待补充'}</strong>
               <small>{account.handle || '账号待补充'}</small>
             </div>
+            <span className="creator-social-verification">
+              <Clock3 size={13} />
+              认证状态待同步
+            </span>
             {account.profileUrl ? (
               <a href={account.profileUrl} target="_blank" rel="noreferrer" aria-label={`打开 ${account.platform} 主页`}>
-                查看主页
                 <ExternalLink size={14} />
               </a>
             ) : (
@@ -1747,6 +1752,23 @@ export function CreatorsPage({
   const activeProfile = editing && draft ? draft : selected;
   const activeDefaultAccount = activeProfile ? getDefaultPayoutAccount(activeProfile.payoutAccounts) : null;
   const activeStatus = getPayoutAccountStatusMeta(activeDefaultAccount?.status ?? 'DRAFT', activeDefaultAccount?.provider);
+  const activePayoutAccounts = activeProfile?.payoutAccounts.filter((account) => account.status !== 'DISABLED') ?? [];
+  const activePayoutProviders = [...new Set(activePayoutAccounts.map((account) => account.provider))];
+  const activeUsableAccountCount = activePayoutAccounts.filter(isPayoutAccountVerified).length;
+  const activeDefaultAccountSummary = activeDefaultAccount
+    ? `${activeDefaultAccount.provider === 'Airwallex' ? 'Airwallex · ' : ''}${getPayoutAccountSummary(activeDefaultAccount)}`
+    : '';
+  const activeSocialPlatforms = [
+    ...new Set(
+      activeProfile?.socialAccounts
+        .map((account) => account.platform.trim())
+        .filter(Boolean) ?? [],
+    ),
+  ];
+  const completedContactFields = activeProfile
+    ? Object.values(activeProfile.contact).filter((value) => value.trim()).length
+    : 0;
+  const contactIsComplete = completedContactFields === INVOICE_CONTACT_FIELDS.length;
   return (
     <div className="page-stack">
       <PageHeading
@@ -1822,13 +1844,26 @@ export function CreatorsPage({
             </>
           )}
         >
-          <div className="profile-summary">
+          <div className="profile-summary creator-profile-summary">
             <Avatar initials={activeProfile.initials} accent={activeProfile.accent} size="lg" />
-            <div><h3>{activeProfile.name || '新达人'}</h3><p>{[activeProfile.handle, activeProfile.region, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p></div>
-            <span className={`verified-badge verified-badge-${activeStatus.tone}`}>
-              {activeStatus.tone === 'success' ? <ShieldCheck size={15} /> : activeStatus.tone === 'danger' || activeStatus.tone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
-              {activeStatus.label}
-            </span>
+            <div className="creator-profile-summary-copy">
+              <div>
+                <h3>{activeProfile.name || '新达人'}</h3>
+                <p>{[activeProfile.handle, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p>
+              </div>
+              <dl className="creator-profile-summary-meta">
+                <div><dt>档案编号</dt><dd>{activeProfile.id}</dd></div>
+                <div><dt>地区</dt><dd>{activeProfile.region || '待补充'}</dd></div>
+                <div><dt>合作项目</dt><dd>{activeProfile.projects} 个</dd></div>
+              </dl>
+            </div>
+            <div className="creator-profile-summary-status">
+              <small>默认收款账户</small>
+              <span className={`verified-badge verified-badge-${activeStatus.tone}`}>
+                {activeStatus.tone === 'success' ? <ShieldCheck size={15} /> : activeStatus.tone === 'danger' || activeStatus.tone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
+                {activeStatus.label}
+              </span>
+            </div>
           </div>
           {editing && draft ? (
             <div className="creator-payment-editor">
@@ -1874,8 +1909,33 @@ export function CreatorsPage({
             </div>
           ) : (
             <div className="creator-profile-content">
-              <div className="profile-details"><div><span>社媒账号</span><strong>{activeProfile.socialAccounts.length} 个 · {activeProfile.platform || '平台待补充'}</strong></div><div><span>合作项目</span><strong>{activeProfile.projects} 个</strong></div><div><span>真实姓名</span><strong>{activeProfile.contact.legalName || '待补充'}</strong></div><div><span>联系邮箱</span><strong>{activeProfile.contact.email || '待补充'}</strong></div></div>
-              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人在各社媒平台填写的公开账号">
+              <section className="creator-profile-overview" aria-label="达人档案概览">
+                <article>
+                  <span>社媒账号</span>
+                  <strong>{activeProfile.socialAccounts.length} 个</strong>
+                  <small>{activeSocialPlatforms.join(' · ') || '平台待补充'}</small>
+                </article>
+                <article>
+                  <span>Invoice 联系资料</span>
+                  <strong>{contactIsComplete ? '已完善' : '待补充'}</strong>
+                  <small>{completedContactFields}/{INVOICE_CONTACT_FIELDS.length} 项已填写</small>
+                </article>
+                <article>
+                  <span>收款渠道</span>
+                  <strong>{activePayoutProviders.join(' · ') || '待添加'}</strong>
+                  <small>{activePayoutAccounts.length} 个账户 · {activeUsableAccountCount} 个可用</small>
+                </article>
+                <article>
+                  <span>默认付款账户</span>
+                  <strong>{activeDefaultAccount?.nickname || '待设置'}</strong>
+                  <small>
+                    {activeDefaultAccount
+                      ? activeDefaultAccountSummary
+                      : '暂无可用于付款的账户'}
+                  </small>
+                </article>
+              </section>
+              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="平台账号与主页来自达人档案；认证结论需由 C 端认证流程同步">
                 <CreatorSocialAccountDetails accounts={activeProfile.socialAccounts} />
               </CreatorPaymentSection>
               <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
