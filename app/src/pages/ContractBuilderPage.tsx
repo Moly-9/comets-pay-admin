@@ -3,14 +3,24 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   Download,
+  Eye,
   FileSignature,
   Plus,
+  Save,
   Trash2,
   UserRound,
   WalletCards,
   WandSparkles,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import {
   createPrototypeCode,
   type CreatorId,
@@ -28,8 +38,12 @@ import {
   validateContractGenerationModel,
 } from '../contractGenerationModel';
 import type {
+  ContractGeneratedFiles,
   ContractGenerationModel,
+  ContractQualityIssue,
+  ContractQualityReport,
   ContractRecord,
+  ContractTemplateFieldKey,
 } from '../contracts';
 import {
   getPayoutAccountIdentifier,
@@ -37,22 +51,39 @@ import {
 } from '../payoutAccounts';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import type { CreatorProfile } from '../types';
-import type { ContractTemplateFieldKey } from '../contractTemplate';
+import { createContractQualityReport } from '../contractTemplate';
 import type { ProjectSummary } from './ProjectDetailPage';
 
 type GeneratedFiles = {
   record: ContractRecord;
-  pdfBlob: Blob;
-  docxBlob: Blob;
+  files: ContractGeneratedFiles;
 } | null;
 
 type Props = {
   projects: ProjectSummary[];
   creators: CreatorProfile[];
   initialEngagementId?: EngagementId | null;
-  onGenerated: (model: ContractGenerationModel, pdfBlob: Blob) => ContractRecord;
+  existingDraft?: ContractRecord | null;
+  onGenerated: (model: ContractGenerationModel, files: ContractGeneratedFiles) => ContractRecord;
   onCancel: () => void;
   onOpenContractManagement: (contractId: string) => void;
+};
+
+type PreviewState = {
+  pdfBlob: Blob;
+  pdfUrl: string;
+  pageCount: number;
+  anchors: ContractGeneratedFiles['anchors'];
+  qualityReport: ContractQualityReport;
+} | null;
+
+const EMPTY_QUALITY_REPORT: ContractQualityReport = {
+  completedFields: 0,
+  totalFields: 0,
+  missingRequired: 0,
+  overflowRisks: 0,
+  issues: [],
+  hasBlockers: false,
 };
 
 const CURRENCY_OPTIONS = [
@@ -121,41 +152,59 @@ export function ContractBuilderPage({
   projects,
   creators,
   initialEngagementId,
+  existingDraft,
   onGenerated,
   onCancel,
   onOpenContractManagement,
 }: Props) {
+  const draftModel = existingDraft?.generationSnapshot;
   const initialContext = findInitialContext(projects, initialEngagementId);
-  const initialCreator = creators.find((creator) => creator.id === initialContext?.reference.creatorId) ?? null;
+  const initialCreator = creators.find((creator) => (
+    creator.id === (draftModel?.creatorId ?? initialContext?.reference.creatorId)
+  )) ?? null;
   const initialAccount = defaultContractPayoutAccount(initialCreator);
-  const [creatorId, setCreatorId] = useState(initialCreator?.id ?? '');
-  const [engagementId, setEngagementId] = useState(initialEngagementId ?? '');
-  const [contractNumber] = useState(() => createPrototypeCode('CON'));
-  const [projectName, setProjectName] = useState(initialContext?.project.name ?? '');
-  const [effectiveDate, setEffectiveDate] = useState('');
-  const [campaignStart, setCampaignStart] = useState('');
-  const [campaignEnd, setCampaignEnd] = useState('');
-  const [purposeItems, setPurposeItems] = useState<string[]>(['', '']);
-  const [promotedProduct, setPromotedProduct] = useState(initialContext?.project.brand ?? '');
-  const [hashtag, setHashtag] = useState('');
-  const [contentFormat, setContentFormat] = useState('');
-  const [releaseStart, setReleaseStart] = useState('');
-  const [releaseEnd, setReleaseEnd] = useState('');
-  const [language, setLanguage] = useState('');
-  const [contentLength, setContentLength] = useState('');
-  const [licensePeriod, setLicensePeriod] = useState('');
-  const [licensePrice, setLicensePrice] = useState('');
-  const [currency, setCurrency] = useState('USD');
-  const [totalFee, setTotalFee] = useState('');
-  const [invoiceIssueWorkingDays, setInvoiceIssueWorkingDays] = useState(3);
-  const [paymentWorkingDays, setPaymentWorkingDays] = useState<45 | 60>(45);
-  const [feeBearer, setFeeBearer] = useState<ContractGenerationModel['feeBearer']>('ADVERTISER');
-  const [payoutAccountId, setPayoutAccountId] = useState(initialAccount?.id ?? '');
+  const [creatorId, setCreatorId] = useState(draftModel?.creatorId ?? initialCreator?.id ?? '');
+  const [engagementId, setEngagementId] = useState(draftModel?.engagementId ?? initialEngagementId ?? '');
+  const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
+  const [projectName, setProjectName] = useState(draftModel?.projectName ?? initialContext?.project.name ?? '');
+  const [effectiveDate, setEffectiveDate] = useState(draftModel?.effectiveDate ?? '');
+  const [campaignStart, setCampaignStart] = useState(draftModel?.campaignStart ?? '');
+  const [campaignEnd, setCampaignEnd] = useState(draftModel?.campaignEnd ?? '');
+  const [purposeItems, setPurposeItems] = useState<string[]>(draftModel?.purposeItems.length ? draftModel.purposeItems : ['', '']);
+  const [promotedProduct, setPromotedProduct] = useState(draftModel?.promotedProduct ?? initialContext?.project.brand ?? '');
+  const [hashtag, setHashtag] = useState(draftModel?.hashtag ?? '');
+  const [contentFormat, setContentFormat] = useState(draftModel?.contentFormat ?? '');
+  const [releaseStart, setReleaseStart] = useState(draftModel?.releaseStart ?? '');
+  const [releaseEnd, setReleaseEnd] = useState(draftModel?.releaseEnd ?? '');
+  const [language, setLanguage] = useState(draftModel?.language ?? '');
+  const [contentLength, setContentLength] = useState(draftModel?.contentLength ?? '');
+  const [licensePeriod, setLicensePeriod] = useState(draftModel?.licensePeriod ?? '');
+  const [licensePrice, setLicensePrice] = useState(draftModel?.licensePrice ?? '');
+  const [currency, setCurrency] = useState(draftModel?.currency ?? 'USD');
+  const [totalFee, setTotalFee] = useState(draftModel?.totalFee ?? '');
+  const [invoiceIssueWorkingDays, setInvoiceIssueWorkingDays] = useState(draftModel?.invoiceIssueWorkingDays ?? 3);
+  const [paymentWorkingDays, setPaymentWorkingDays] = useState<45 | 60>(draftModel?.paymentWorkingDays ?? 45);
+  const [feeBearer, setFeeBearer] = useState<ContractGenerationModel['feeBearer']>(draftModel?.feeBearer ?? 'ADVERTISER');
+  const [payoutAccountId, setPayoutAccountId] = useState(draftModel?.payoutAccountId ?? initialAccount?.id ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generationError, setGenerationError] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedFiles>(null);
   const [activeField, setActiveField] = useState<ContractTemplateFieldKey | null>(null);
+  const [highlightRequest, setHighlightRequest] = useState<{
+    fieldKey: ContractTemplateFieldKey;
+    nonce: number;
+  } | null>(null);
+  const [preview, setPreview] = useState<PreviewState>(null);
+  const [previewFiles, setPreviewFiles] = useState<ContractGeneratedFiles | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewStale, setPreviewStale] = useState(false);
+  const [formShare, setFormShare] = useState(40);
+  const [resizing, setResizing] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const previewGenerationRef = useRef(0);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
   const creatorEngagements = useMemo(() => projects.flatMap((project) => (
@@ -175,7 +224,10 @@ export function ContractBuilderPage({
   const platform = selectedContext?.reference.platform || socialAccount?.platform || selectedCreator?.platform || '';
   const channelName = selectedContext?.reference.handle || socialAccount?.handle || selectedCreator?.handle || '';
   const channelUrl = socialAccount?.profileUrl ?? '';
-  const paymentSnapshot = contractPayoutSnapshot(selectedAccount);
+  const paymentSnapshot = useMemo(
+    () => contractPayoutSnapshot(selectedAccount),
+    [selectedAccount],
+  );
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
 
@@ -269,10 +321,65 @@ export function ContractBuilderPage({
     totalFee,
   ]);
 
-  const resetOutput = () => {
-    setGenerated(null);
-    setGenerationError('');
+  const qualityReport = useMemo(
+    () => createContractQualityReport(model),
+    [model],
+  );
+
+  const signalField = (fieldKey: ContractTemplateFieldKey) => {
+    setActiveField(fieldKey);
+    setHighlightRequest({ fieldKey, nonce: performance.now() });
   };
+
+  const resetOutput = () => {
+    setGenerationError('');
+    setPreviewFiles(null);
+    if (generated) setPreviewStale(true);
+    if (activeField) signalField(activeField);
+  };
+
+  const replacePreview = (
+    pdfBlob: Blob,
+    pageCount: number,
+    anchors: ContractGeneratedFiles['anchors'],
+    report: ContractQualityReport,
+  ) => {
+    const nextUrl = URL.createObjectURL(pdfBlob);
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = nextUrl;
+    setPreview({
+      pdfBlob,
+      pdfUrl: nextUrl,
+      pageCount,
+      anchors,
+      qualityReport: report,
+    });
+  };
+
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
+
+  useEffect(() => {
+    const generation = previewGenerationRef.current + 1;
+    previewGenerationRef.current = generation;
+    setPreviewLoading(true);
+    const timer = window.setTimeout(() => {
+      void import('../contractGeneration')
+        .then(({ generateContractPreview }) => generateContractPreview(model, 'DRAFT'))
+        .then((result) => {
+          if (previewGenerationRef.current !== generation) return;
+          replacePreview(result.pdfBlob, result.pageCount, result.anchors, result.qualityReport);
+          setPreviewLoading(false);
+        })
+        .catch((reason) => {
+          if (previewGenerationRef.current !== generation) return;
+          setPreviewLoading(false);
+          setGenerationError(reason instanceof Error ? reason.message : '合同预览生成失败，请重试。');
+        });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [model]);
 
   const selectCreator = (id: string) => {
     const creator = creators.find((item) => item.id === id) ?? null;
@@ -295,24 +402,59 @@ export function ContractBuilderPage({
     resetOutput();
   };
 
-  const generate = async () => {
-    const nextErrors = validateContractGenerationModel(model);
+  const focusField = (fieldKey: ContractTemplateFieldKey, formKey?: string) => {
+    signalField(fieldKey);
+    const key = formKey ?? (
+      fieldKey === 'campaignPeriod'
+        ? 'campaignStart'
+        : fieldKey === 'releasePeriod'
+          ? 'releaseStart'
+          : fieldKey === 'payoutAccount'
+            ? 'payoutAccountId'
+            : fieldKey
+    );
+    window.requestAnimationFrame(() => {
+      const field = document.querySelector<HTMLElement>(`[data-contract-field="${key}"]`);
+      field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      field?.querySelector<HTMLElement>('input, textarea, button')?.focus({ preventScroll: true });
+    });
+  };
+
+  const focusIssue = (issue: ContractQualityIssue) => {
+    focusField(issue.fieldKey);
+  };
+
+  const generate = async (
+    variant: ContractGeneratedFiles['variant'],
+    action: 'PREVIEW' | 'SAVE',
+  ) => {
+    const nextErrors = variant === 'FORMAL' ? validateContractGenerationModel(model) : {};
     setErrors(nextErrors);
     setGenerationError('');
-    if (Object.keys(nextErrors).length) {
+    const currentReport = createContractQualityReport(model);
+    if (variant === 'FORMAL' && (Object.keys(nextErrors).length || currentReport.hasBlockers)) {
       const firstKey = Object.keys(nextErrors)[0];
-      setActiveField(fieldKeyForError(firstKey));
-      window.requestAnimationFrame(() => (
-        document.querySelector(`[data-contract-field="${firstKey}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      ));
+      const firstIssue = currentReport.issues.find((issue) => issue.severity === 'BLOCKER');
+      if (firstKey) {
+        const fieldKey = fieldKeyForError(firstKey);
+        if (fieldKey) focusField(fieldKey, firstKey);
+      } else if (firstIssue) {
+        focusIssue(firstIssue);
+      }
       return;
     }
     setGenerating(true);
     try {
       const { generateContractFiles } = await import('../contractGeneration');
-      const files = await generateContractFiles(model);
-      const record = onGenerated(model, files.pdfBlob);
-      setGenerated({ record, ...files });
+      const files = await generateContractFiles(model, { variant });
+      setPreviewFiles(files);
+      replacePreview(files.pdfBlob, files.pageCount, files.anchors, files.qualityReport);
+      setPreviewLoading(false);
+      setPreviewStale(false);
+      if (action === 'SAVE') {
+        const record = onGenerated(model, files);
+        setGenerated({ record, files });
+      }
     } catch (reason) {
       const fieldId = reason instanceof Error && 'fieldId' in reason ? String(reason.fieldId) : '';
       setGenerationError(
@@ -326,10 +468,12 @@ export function ContractBuilderPage({
   };
 
   const download = (extension: 'pdf' | 'docx') => {
-    if (!generated) return;
+    const files = previewFiles ?? (!previewStale ? generated?.files : null);
+    const blob = extension === 'pdf' ? files?.pdfBlob ?? preview?.pdfBlob : files?.docxBlob;
+    if (!blob) return;
     downloadBlob(
-      extension === 'pdf' ? generated.pdfBlob : generated.docxBlob,
-      contractGenerationFilename(model, generated.record.generationVersion ?? 1, extension),
+      blob,
+      contractGenerationFilename(model, generated?.record.generationVersion ?? 1, extension),
     );
   };
 
@@ -337,35 +481,72 @@ export function ContractBuilderPage({
     onFocus: () => setActiveField(field),
   });
 
+  const resizeFromPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizing || !workspaceRef.current) return;
+    const bounds = workspaceRef.current.getBoundingClientRect();
+    const share = (event.clientX - bounds.left) / bounds.width * 100;
+    setFormShare(Math.min(55, Math.max(34, share)));
+  };
+
+  const resizeFromKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    setFormShare((value) => Math.min(55, Math.max(34, value + (event.key === 'ArrowRight' ? 1 : -1))));
+  };
+
+  const layoutStyle = {
+    '--contract-form-share': `${formShare}%`,
+  } as CSSProperties;
+
   return (
     <div className="page-stack contract-builder-page">
-      <PageHeading
-        title="生成合同"
-        subtitle="从项目、达人档案和已验证收款账户带入资料，填写商业字段后生成 PDF 与可编辑 DOCX。"
-        actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={onCancel}>返回合同管理</Button>}
-      />
-      <NoticeBanner>当前为纯前端原型。合同与账户快照只保留在本次浏览器会话，不会上传到外部服务。</NoticeBanner>
-      {Object.keys(errors).length ? (
-        <div className="invoice-builder-error" role="alert">
-          <strong>还有 {Object.keys(errors).length} 项资料需要完善</strong>
-          <span>{Object.values(errors)[0]}</span>
-        </div>
-      ) : null}
-      {generationError ? <div className="invoice-builder-error" role="alert"><strong>合同生成失败</strong><span>{generationError}</span></div> : null}
-      {generated ? (
-        <section className="invoice-generation-success" data-testid="contract-generation-success">
-          <span><CheckCircle2 size={22} /></span>
-          <div><strong>{generated.record.id} 已生成</strong><p>PDF 与 DOCX 使用同一份合同和账户快照，签名及签署日期保持空白。</p></div>
-          <div className="invoice-generation-actions">
-            <Button variant="secondary" icon={<Download size={16} />} onClick={() => download('pdf')}>下载 PDF</Button>
-            <Button variant="secondary" icon={<Download size={16} />} onClick={() => download('docx')}>下载 DOCX</Button>
-            <Button onClick={() => onOpenContractManagement(generated.record.id)}>查看合同记录</Button>
+      <div className="contract-builder-top">
+        <PageHeading
+          title="生成合同"
+          subtitle="从项目、达人档案和已验证收款账户带入资料，填写商业字段后生成 PDF 与可编辑 DOCX。"
+          actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} title="返回合同管理" onClick={onCancel}>返回合同管理</Button>}
+        />
+        <NoticeBanner>当前为纯前端原型。合同与账户快照只保留在本次浏览器会话，不会上传到外部服务。</NoticeBanner>
+        {Object.keys(errors).length ? (
+          <div className="invoice-builder-error" role="alert">
+            <strong>还有 {Object.keys(errors).length} 项资料需要完善</strong>
+            <span>{Object.values(errors)[0]}</span>
           </div>
-        </section>
-      ) : null}
+        ) : null}
+        {generationError ? <div className="invoice-builder-error" role="alert"><strong>合同生成失败</strong><span>{generationError}</span></div> : null}
+        {generated ? (
+          <section className={`invoice-generation-success ${previewStale ? 'is-stale' : ''}`} data-testid="contract-generation-success">
+            <span><CheckCircle2 size={22} /></span>
+            <div>
+              <strong>{previewStale ? '草稿预览已过期' : `${generated.record.id} 已${generated.files.variant === 'FORMAL' ? '正式生成' : '保存草稿'}`}</strong>
+              <p>{previewStale ? '表单已修改，请重新生成预览或保存。' : 'PDF 与 DOCX 使用同一份合同和账户快照，签名及签署日期保持空白。'}</p>
+            </div>
+            {!previewStale ? (
+              <div className="invoice-generation-actions">
+                <Button variant="secondary" icon={<Download size={16} />} onClick={() => download('pdf')}>下载 PDF</Button>
+                <Button variant="secondary" icon={<Download size={16} />} onClick={() => download('docx')}>下载 DOCX</Button>
+                <Button onClick={() => onOpenContractManagement(generated.record.id)}>查看合同记录</Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
 
-      <div className="contract-builder-layout">
-        <section className="contract-builder-form">
+      <div className="contract-builder-mobile-tabs" role="tablist" aria-label="合同生成区域">
+        <button type="button" role="tab" aria-selected={mobileTab === 'form'} className={mobileTab === 'form' ? 'is-active' : ''} onClick={() => setMobileTab('form')}>合同信息</button>
+        <button type="button" role="tab" aria-selected={mobileTab === 'preview'} className={mobileTab === 'preview' ? 'is-active' : ''} onClick={() => setMobileTab('preview')}>合同预览</button>
+      </div>
+
+      <div
+        className={`contract-builder-layout ${resizing ? 'is-resizing' : ''}`}
+        ref={workspaceRef}
+        style={layoutStyle}
+        onPointerMove={resizeFromPointer}
+        onPointerUp={() => setResizing(false)}
+        onPointerCancel={() => setResizing(false)}
+      >
+        <section className={`contract-builder-form ${mobileTab !== 'form' ? 'is-mobile-hidden' : ''}`}>
+          <div className="contract-builder-form-scroll">
           <div className="invoice-builder-section">
             <header><span><UserRound size={19} /></span><div><h2>1. 达人与项目</h2><p>项目仅用于系统关联；达人主体、频道和地址来自达人档案。</p></div></header>
             <div className="invoice-form-grid">
@@ -467,15 +648,62 @@ export function ContractBuilderPage({
             </div>
           </div>
 
-          <div className="invoice-builder-footer">
-            <Button variant="ghost" onClick={onCancel}>取消</Button>
-            <Button icon={<WandSparkles size={17} />} disabled={generating} onClick={() => void generate()}>
-              {generating ? '正在生成…' : '生成 PDF + DOCX'}
-            </Button>
           </div>
         </section>
-        <ContractTemplatePreview model={model} activeField={activeField} />
+        <div
+          className="contract-builder-resizer"
+          role="separator"
+          aria-label="调整合同信息与预览宽度"
+          aria-orientation="vertical"
+          aria-valuemin={34}
+          aria-valuemax={55}
+          aria-valuenow={Math.round(formShare)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setResizing(true);
+          }}
+          onKeyDown={resizeFromKeyboard}
+        >
+          <span />
+        </div>
+        <div className={`contract-builder-preview-pane ${mobileTab !== 'preview' ? 'is-mobile-hidden' : ''}`}>
+          <ContractTemplatePreview
+            pdfUrl={preview?.pdfUrl ?? null}
+            pageCount={preview?.pageCount ?? 17}
+            anchors={preview?.anchors ?? []}
+            qualityReport={qualityReport ?? EMPTY_QUALITY_REPORT}
+            highlightRequest={highlightRequest}
+            loading={previewLoading}
+            canDownloadPdf={Boolean(previewFiles?.pdfBlob || generated?.files.pdfBlob || preview?.pdfBlob)}
+            canDownloadDocx={Boolean(previewFiles?.docxBlob || (!previewStale && generated?.files.docxBlob))}
+            onDownloadPdf={() => download('pdf')}
+            onDownloadDocx={() => download('docx')}
+            onIssueSelect={focusIssue}
+          />
+        </div>
       </div>
+      <footer className="contract-builder-actions">
+        <div>
+          <Button variant="ghost" onClick={onCancel}>取消</Button>
+          <Button variant="secondary" icon={<Save size={16} />} disabled={generating} onClick={() => void generate('DRAFT', 'SAVE')}>
+            保存草稿
+          </Button>
+        </div>
+        <div>
+          <Button variant="secondary" icon={<Eye size={16} />} disabled={generating} onClick={() => void generate('DRAFT', 'PREVIEW')}>
+            生成预览
+          </Button>
+          <Button
+            icon={<WandSparkles size={17} />}
+            disabled={generating || qualityReport.hasBlockers}
+            title={qualityReport.hasBlockers ? '请先处理合同质量阻断项' : undefined}
+            onClick={() => void generate('FORMAL', 'SAVE')}
+          >
+            {generating ? '正在生成…' : '生成正式合同'}
+          </Button>
+        </div>
+      </footer>
     </div>
   );
 }

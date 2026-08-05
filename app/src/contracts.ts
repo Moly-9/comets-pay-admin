@@ -21,6 +21,78 @@ export type ContractStatus =
 
 export type ContractFeeBearer = 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
 export type ContractPaymentMethod = 'BANK' | 'PAYPAL' | 'AIRWALLEX' | '';
+export type ContractDocumentVariant = 'DRAFT' | 'FORMAL';
+
+export type ContractTemplateFieldKey =
+  | 'publisher'
+  | 'publisherAddress'
+  | 'channelUrl'
+  | 'platform'
+  | 'invoiceIssueWorkingDays'
+  | 'payoutAccount'
+  | 'feeBearer'
+  | 'effectiveDate'
+  | 'campaignPeriod'
+  | 'projectName'
+  | 'channelName'
+  | 'purposeItems'
+  | 'promotedProduct'
+  | 'hashtag'
+  | 'contentFormat'
+  | 'releasePeriod'
+  | 'language'
+  | 'contentLength'
+  | 'licensePeriod'
+  | 'licensePrice'
+  | 'totalFee'
+  | 'paymentWorkingDays'
+  | 'signature';
+
+export type ContractQualityIssueKind =
+  | 'REQUIRED_MISSING'
+  | 'PLACEHOLDER_UNRESOLVED'
+  | 'FORMAT_INVALID'
+  | 'OVERFLOW_RISK'
+  | 'CONTENT_CLIPPED'
+  | 'CONTENT_OVERLAP'
+  | 'SIGNATURE_INCOMPLETE';
+
+export type ContractQualityIssue = {
+  id: string;
+  kind: ContractQualityIssueKind;
+  severity: 'BLOCKER' | 'WARNING';
+  fieldKey: ContractTemplateFieldKey;
+  pageNumber: number;
+  message: string;
+};
+
+export type ContractQualityReport = {
+  completedFields: number;
+  totalFields: number;
+  missingRequired: number;
+  overflowRisks: number;
+  issues: ContractQualityIssue[];
+  hasBlockers: boolean;
+};
+
+export type ContractFieldAnchor = {
+  id: string;
+  fieldKey: ContractTemplateFieldKey;
+  pageNumber: number;
+  x: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+export type ContractGeneratedFiles = {
+  variant: ContractDocumentVariant;
+  pdfBlob: Blob;
+  docxBlob: Blob;
+  pageCount: number;
+  anchors: ContractFieldAnchor[];
+  qualityReport: ContractQualityReport;
+};
 
 export type ContractIssue = {
   id: string;
@@ -126,6 +198,8 @@ export type ContractRecord = {
   engagementId?: EngagementId;
   lifecycle?: ContractLifecycle;
   generationSnapshot?: ContractGenerationModel;
+  generationVariant?: ContractDocumentVariant;
+  qualityReport?: ContractQualityReport;
   generationVersion?: number;
   generatedFileBaseName?: string;
   uploadedFromDraftId?: ContractId;
@@ -432,6 +506,12 @@ export const createGeneratedContractDraft = (
   model: ContractGenerationModel,
   version = 1,
   documentUrl = '',
+  options: {
+    existingContractId?: ContractId;
+    generationVariant?: ContractDocumentVariant;
+    qualityReport?: ContractQualityReport;
+    pageCount?: number;
+  } = {},
 ): ContractRecord => {
   const totalFee = model.totalFee.trim() ? Number(model.totalFee) : null;
   const licensePrice = model.licensePrice.trim() ? Number(model.licensePrice) : null;
@@ -446,7 +526,7 @@ export const createGeneratedContractDraft = (
     : '';
   const fileBaseName = `${model.contractNumber || 'contract'}-${model.creatorHandle.replace(/^@/, '') || 'creator'}-v${version}`;
   return {
-    contractId: createPrototypeId('contract') as ContractId,
+    contractId: options.existingContractId ?? createPrototypeId('contract') as ContractId,
     id: model.contractNumber,
     ioId: model.ioNumber || '待补充',
     name: `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,
@@ -454,7 +534,7 @@ export const createGeneratedContractDraft = (
     sourceName: `${fileBaseName}.pdf`,
     documentUrl,
     documentNote: '合同由系统在浏览器本地生成，等待双方线下签署后回传。',
-    pageCount: 17,
+    pageCount: options.pageCount ?? 17,
     isTemplate: false,
     project: model.projectName,
     brand: model.brandName,
@@ -500,6 +580,8 @@ export const createGeneratedContractDraft = (
     engagementId: model.engagementId,
     lifecycle: 'GENERATED_DRAFT',
     generationSnapshot: { ...model },
+    generationVariant: options.generationVariant ?? 'DRAFT',
+    qualityReport: options.qualityReport,
     generationVersion: version,
     generatedFileBaseName: fileBaseName,
   };
@@ -602,6 +684,8 @@ export const completeGeneratedContractUpload = (
     id: draft.id,
     name: draft.name,
     generationSnapshot: draft.generationSnapshot,
+    generationVariant: draft.generationVariant,
+    qualityReport: draft.qualityReport,
     generationVersion: draft.generationVersion,
     generatedFileBaseName: draft.generatedFileBaseName,
     uploadedFromDraftId: draft.contractId,

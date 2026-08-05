@@ -1,14 +1,21 @@
 import fontkit from '@pdf-lib/fontkit';
-import latinFontUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-400-normal.woff?url';
-import latinExtFontUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-ext-400-normal.woff?url';
-import chineseFontUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff?url';
+import regularLatinUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-400-normal.woff?url';
+import regularLatinExtUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-ext-400-normal.woff?url';
+import regularChineseUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff?url';
+import boldLatinUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-700-normal.woff?url';
+import boldLatinExtUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-ext-700-normal.woff?url';
+import boldChineseUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-700-normal.woff?url';
 import {
   AlignmentType,
   BorderStyle,
   Document as DocxDocument,
+  Footer,
+  Header,
   PageBreak,
-  Packer,
+  PageNumber,
   Paragraph,
+  Packer,
+  ShadingType,
   Table,
   TableCell,
   TableRow,
@@ -21,46 +28,112 @@ import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
   PDFDocument,
+  degrees,
   rgb,
   type PDFFont,
   type PDFPage,
 } from 'pdf-lib';
-import type { ContractGenerationModel } from './contracts';
+import type {
+  ContractDocumentVariant,
+  ContractFieldAnchor,
+  ContractGeneratedFiles,
+  ContractGenerationModel,
+  ContractQualityIssue,
+  ContractQualityReport,
+  ContractTemplateFieldKey,
+} from './contracts';
 import {
-  CONTRACT_TEMPLATE_FIELD_BINDINGS,
-  CONTRACT_TEMPLATE_PAGE_COUNT,
+  CONTRACT_TEMPLATE_BASE_PAGE_COUNT,
+  CONTRACT_TEMPLATE_DEFINITION,
+  CONTRACT_TEMPLATE_HEIGHT,
+  CONTRACT_TEMPLATE_MARGIN,
   CONTRACT_TEMPLATE_URL,
-  CONTRACT_TEMPLATE_YELLOW_RECTS,
-  type ContractTemplateFieldBinding,
+  CONTRACT_TEMPLATE_WIDTH,
+  createContractQualityReport,
+  formatContractDate,
+  formatContractMoneyValue,
+  placeholderToken,
+  replaceContractPlaceholders,
 } from './contractTemplate';
 export { contractGenerationFilename } from './contractGenerationFilename';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-type EmbeddedFonts = {
+type FontSet = {
   latin: PDFFont;
   latinExt: PDFFont;
   chinese: PDFFont;
+};
+
+type EmbeddedFonts = {
+  regular: FontSet;
+  bold: FontSet;
 };
 
 export type ContractFontBytes = {
   latin: ArrayBuffer;
   latinExt: ArrayBuffer;
   chinese: ArrayBuffer;
+  boldLatin?: ArrayBuffer;
+  boldLatinExt?: ArrayBuffer;
+  boldChinese?: ArrayBuffer;
+};
+
+type ParagraphStyle = 'body' | 'title' | 'heading' | 'subheading' | 'small';
+
+type ResolvedParagraph = {
+  type: 'paragraph';
+  text: string;
+  style?: ParagraphStyle;
+  fieldKey?: ContractTemplateFieldKey;
+  align?: 'left' | 'center' | 'justify';
+};
+
+type ResolvedTableRow = {
+  label: string;
+  value: string;
+  fieldKey?: ContractTemplateFieldKey;
+  optional?: boolean;
+};
+
+type ResolvedTable = {
+  type: 'table';
+  rows: ResolvedTableRow[];
+};
+
+type ResolvedSignature = {
+  type: 'signature';
+  publisher: string;
+  publisherAddress: string;
+};
+
+type ResolvedBlock = ResolvedParagraph | ResolvedTable | ResolvedSignature;
+
+type ResolvedLogicalPage = {
+  sourcePage: number;
+  blocks: ResolvedBlock[];
+};
+
+type PreparedContractDocument = {
+  pages: ResolvedLogicalPage[];
+  qualityReport: ContractQualityReport;
+};
+
+type PdfBuildResult = {
+  pdfBlob: Blob;
+  pageCount: number;
+  anchors: ContractFieldAnchor[];
+  qualityReport: ContractQualityReport;
 };
 
 const TEMPLATE_FETCH_ERROR = '合同模板读取失败，请刷新页面后重试。';
+const A4_DXA_WIDTH = 11906;
+const A4_DXA_HEIGHT = 16838;
+const A4_DXA_MARGIN = 1247;
+const DOCX_CONTENT_WIDTH = A4_DXA_WIDTH - A4_DXA_MARGIN * 2;
+const DOCX_LABEL_WIDTH = 2450;
+const DOCX_VALUE_WIDTH = DOCX_CONTENT_WIDTH - DOCX_LABEL_WIDTH;
 const DOCX_BORDER = { style: BorderStyle.SINGLE, size: 4, color: 'D8DCE4' };
-
-export class ContractTemplateFitError extends Error {
-  fieldId: string;
-
-  constructor(fieldId: string) {
-    super('字段内容过长，无法放入合同模板，请缩短后重试。');
-    this.name = 'ContractTemplateFitError';
-    this.fieldId = fieldId;
-  }
-}
 
 const loadBytes = async (url: string) => {
   const response = await fetch(url);
@@ -68,25 +141,352 @@ const loadBytes = async (url: string) => {
   return response.arrayBuffer();
 };
 
-const isCjk = (character: string) => {
-  const codePoint = character.codePointAt(0) ?? 0;
-  return codePoint >= 0x2e80;
-};
-
-const isBasicLatin = (character: string) => (character.codePointAt(0) ?? 0) <= 0x7f;
-
-const fontForCharacter = (character: string, fonts: EmbeddedFonts) => (
-  isCjk(character) ? fonts.chinese : isBasicLatin(character) ? fonts.latin : fonts.latinExt
+const normalizePdfText = (value: string) => (
+  value
+    .replace(/[\u0000-\u001f\u007f-\u009f\uE000-\uF8FF\uFFFD]/g, ' ')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\uFF1A/g, ':')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 );
 
-const textWidth = (value: string, size: number, fonts: EmbeddedFonts) => (
+const joinPdfTextRow = (items: Array<{ x: number; width: number; text: string }>) => {
+  let result = '';
+  let right = 0;
+  items
+    .sort((left, next) => left.x - next.x)
+    .forEach((item) => {
+      const text = normalizePdfText(item.text);
+      if (!text) return;
+      const gap = item.x - right;
+      const needsSpace = Boolean(
+        result
+        && gap > 1.5
+        && !/[\s(/-]$/.test(result)
+        && !/^[,.;:)\]}]/.test(text),
+      );
+      result += `${needsSpace ? ' ' : ''}${text}`;
+      right = Math.max(right, item.x + item.width);
+    });
+  return normalizePdfText(result);
+};
+
+export const extractContractTemplatePageLines = async (bytes: ArrayBuffer) => {
+  const loadingTask = getDocument({ data: new Uint8Array(bytes.slice(0)) });
+  const document = await loadingTask.promise;
+  const pages: string[][] = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const rows = new Map<number, Array<{ x: number; width: number; text: string }>>();
+    content.items.forEach((item) => {
+      if (!('str' in item)) return;
+      const y = Math.round(item.transform[5] * 2) / 2;
+      const row = rows.get(y) ?? [];
+      row.push({ x: item.transform[4], width: item.width, text: item.str });
+      rows.set(y, row);
+    });
+    pages.push(
+      [...rows.entries()]
+        .sort(([left], [right]) => right - left)
+        .map(([, row]) => joinPdfTextRow(row))
+        .filter(Boolean),
+    );
+  }
+  await document.destroy();
+  return pages;
+};
+
+const isHeading = (value: string) => (
+  /^(?:\d+(?:\.\d+)*\.?\s+[A-Z]|Insertion Order$|EXECUTED|Schedule|Appendix)/i.test(value)
+);
+
+const stripTemplateArtifacts = (
+  value: string,
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+  pageNumber: number,
+) => {
+  let result = value
+    .replace(/_+/g, ' ')
+    .replace(/\[\s*please fill[^\]]*\]/gi, variant === 'DRAFT' ? '待填写' : '')
+    .replace(/please fill in REAL NAME or Company NAME/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/\[REAL NAME or Company Name\]/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/please fill in the promoted channel link/gi, model.channelUrl || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/https:\/\/www\.youtube\.com\/x+/gi, model.channelUrl || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/\bXXX\b/gi, variant === 'DRAFT' ? '待填写' : '')
+    .replace(/\[Date\]/gi, variant === 'DRAFT' ? '待填写' : '')
+    .replace(/example only/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (pageNumber === 6) {
+    const bearer = model.feeBearer === 'ADVERTISER' ? 'ii' : model.feeBearer === 'PUBLISHER' ? 'iii' : model.feeBearer === 'SHARED' ? 'i' : '';
+    result = result.replace(/\(\s*\)/, bearer ? `(${bearer})` : variant === 'DRAFT' ? '(待填写)' : '()');
+  }
+  if (pageNumber === 16) {
+    result = result.replace(/\[60\/45\]/g, model.paymentWorkingDays ? `[${model.paymentWorkingDays}]` : variant === 'DRAFT' ? '[待填写]' : '');
+  }
+  return result;
+};
+
+const sourcePageBlocks = (
+  pageNumber: number,
+  lines: string[],
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+): ResolvedBlock[] => lines
+  .map((line) => stripTemplateArtifacts(line, model, variant, pageNumber))
+  .filter(Boolean)
+  .map((text) => ({
+    type: 'paragraph' as const,
+    text,
+    style: isHeading(text) ? 'subheading' as const : 'body' as const,
+  }));
+
+const standardTermsOpening = (
+  lines: string[],
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+): ResolvedBlock[] => {
+  const definitionsIndex = lines.findIndex((line) => /^1\s*\.\s*Definitions/i.test(line));
+  const fixedTerms = definitionsIndex >= 0 ? lines.slice(definitionsIndex) : lines.slice(9);
+  return [
+    {
+      type: 'paragraph',
+      style: 'title',
+      align: 'center',
+      text: 'Standard Terms And Conditions For Digital Marketing Services',
+    },
+    {
+      type: 'paragraph',
+      style: 'body',
+      fieldKey: 'publisher',
+      align: 'justify',
+      text: replaceContractPlaceholders(
+        `This Standard Terms And Conditions (the "Standard Terms") constitute an integrated part of all Insertion Orders (the "IO") between Comets International Limited ("Advertiser") and ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher"). Publisher is required to have their own accounts on ${placeholderToken('platform')}. The Standard Terms and IO are collectively referred to herein as the "Agreement". In the event of a contradiction between the provisions of these Standard Terms and the IO, the provisions of the IO shall prevail.`,
+        model,
+        variant,
+      ),
+    },
+    ...sourcePageBlocks(1, fixedTerms, model, variant),
+  ];
+};
+
+const paymentPage = (
+  lines: string[],
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+): ResolvedBlock[] => {
+  const paymentIndex = lines.findIndex((line) => /3\.3\s*Payments/i.test(line));
+  const fixed = paymentIndex >= 0 ? lines.slice(0, paymentIndex + 1) : lines.slice(0, 10);
+  const bank = model.payoutProvider === 'Airwallex';
+  return [
+    ...sourcePageBlocks(5, fixed, model, variant),
+    {
+      type: 'paragraph',
+      style: 'subheading',
+      text: replaceContractPlaceholders(
+        `Publisher shall issue a valid Invoice within ${placeholderToken('invoice_issue_days')} after completing the agreed services.`,
+        model,
+        variant,
+      ),
+    },
+    {
+      type: 'table',
+      rows: bank ? [
+        { label: 'Payment Method', value: 'Bank transfer', fieldKey: 'payoutAccount' },
+        { label: 'Account Name', value: replaceContractPlaceholders(placeholderToken('payout_account_name'), model, variant), fieldKey: 'payoutAccount' },
+        { label: 'Account Number / IBAN', value: replaceContractPlaceholders(placeholderToken('payout_account_locator'), model, variant), fieldKey: 'payoutAccount' },
+        { label: 'Beneficiary Bank', value: replaceContractPlaceholders(placeholderToken('bank_name'), model, variant), fieldKey: 'payoutAccount' },
+        { label: 'Bank Address', value: replaceContractPlaceholders(placeholderToken('bank_address'), model, variant), fieldKey: 'payoutAccount', optional: true },
+        { label: 'SWIFT Code', value: replaceContractPlaceholders(placeholderToken('swift_code'), model, variant), fieldKey: 'payoutAccount', optional: true },
+        { label: 'IBAN', value: replaceContractPlaceholders(placeholderToken('iban'), model, variant), fieldKey: 'payoutAccount', optional: true },
+        { label: 'Remittance Information', value: model.paymentSnapshot.transferRemarks, fieldKey: 'payoutAccount', optional: true },
+      ] : [
+        { label: 'Payment Method', value: 'PayPal', fieldKey: 'payoutAccount' },
+        { label: 'PayPal Name', value: replaceContractPlaceholders(placeholderToken('payout_account_name'), model, variant), fieldKey: 'payoutAccount' },
+        { label: 'PayPal Email', value: replaceContractPlaceholders(placeholderToken('paypal_email'), model, variant), fieldKey: 'payoutAccount' },
+        { label: 'Remittance Information', value: model.paymentSnapshot.transferRemarks, fieldKey: 'payoutAccount', optional: true },
+      ],
+    },
+  ];
+};
+
+const insertionOrderPage = (
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+): ResolvedBlock[] => [
+  {
+    type: 'table',
+    rows: [
+      { label: 'Advertiser', value: 'Comets International Limited', fieldKey: 'signature' },
+      { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
+      { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' },
+      { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
+    ],
+  },
+  { type: 'paragraph', style: 'title', align: 'center', text: 'Insertion Order' },
+  {
+    type: 'paragraph',
+    style: 'body',
+    fieldKey: 'effectiveDate',
+    align: 'justify',
+    text: replaceContractPlaceholders(
+      `This Insertion Order ("this IO") relates to the services provided under the Standard Terms And Conditions For Digital Marketing Services entered into by ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher") and Comets International Limited ("Advertiser") with effect as of ${placeholderToken('effective_date')} ("the Agreement").`,
+      model,
+      variant,
+    ),
+  },
+  {
+    type: 'paragraph',
+    style: 'body',
+    text: 'All defined terms in this IO have the same meaning as in the Agreement unless this IO expressly states otherwise. If there is any conflict between this IO and the Agreement, this IO will take precedence.',
+  },
+  {
+    type: 'paragraph',
+    style: 'heading',
+    fieldKey: 'campaignPeriod',
+    text: replaceContractPlaceholders(
+      `1. Campaign Period: ${placeholderToken('campaign_start')} to ${placeholderToken('campaign_end')}`,
+      model,
+      variant,
+    ),
+  },
+  { type: 'paragraph', style: 'heading', text: '2. Campaign Details' },
+  {
+    type: 'table',
+    rows: [
+      { label: 'Project Name', value: replaceContractPlaceholders(placeholderToken('project_name'), model, variant), fieldKey: 'projectName' },
+      { label: 'Service Provider Name', value: replaceContractPlaceholders(placeholderToken('channel_name'), model, variant), fieldKey: 'channelName' },
+      { label: 'Start Date', value: replaceContractPlaceholders(placeholderToken('campaign_start'), model, variant), fieldKey: 'campaignPeriod' },
+      { label: 'End Date', value: replaceContractPlaceholders(placeholderToken('campaign_end'), model, variant), fieldKey: 'campaignPeriod' },
+    ],
+  },
+];
+
+const campaignDetailsPage = (
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+): ResolvedBlock[] => {
+  const purpose = model.purposeItems.length
+    ? ['The content will help to promote:', ...model.purposeItems.map((item, index) => `${index + 1}. ${item}`)].join('\n')
+    : variant === 'DRAFT' ? '待填写' : '';
+  const deliverables = [
+    '1. Provide a written script of initial ideas before producing the content.',
+    `2. Publish a ${model.contentFormat || (variant === 'DRAFT' ? '待填写' : '')} about ${model.promotedProduct || (variant === 'DRAFT' ? '待填写' : '')}.`,
+    '3. Include the approved campaign name, CTA and tracking link supplied by the Advertiser.',
+    `4. Include ${model.hashtag || (variant === 'DRAFT' ? '待填写' : '')} in the description.`,
+    '5. Provide publication evidence and analytics screenshots where applicable.',
+    '6. Complete reasonable revisions and remove unfavourable branding content where contractually required.',
+  ].join('\n');
+  return [
+    { type: 'paragraph', style: 'title', align: 'center', text: 'Campaign Details' },
+    {
+      type: 'table',
+      rows: [
+        { label: 'Purpose', value: purpose, fieldKey: 'purposeItems' },
+        { label: 'Services / Deliverables', value: deliverables, fieldKey: 'contentFormat' },
+        { label: 'Format', value: replaceContractPlaceholders(placeholderToken('content_format'), model, variant), fieldKey: 'contentFormat' },
+        { label: 'Release Date', value: replaceContractPlaceholders(`${placeholderToken('release_start')} to ${placeholderToken('release_end')}`, model, variant), fieldKey: 'releasePeriod' },
+        { label: 'Language', value: replaceContractPlaceholders(placeholderToken('language'), model, variant), fieldKey: 'language' },
+        { label: 'Publishing Platform', value: replaceContractPlaceholders(placeholderToken('platform'), model, variant), fieldKey: 'platform' },
+        { label: 'Channel Link', value: replaceContractPlaceholders(placeholderToken('channel_url'), model, variant), fieldKey: 'channelUrl' },
+        { label: 'Length of Content', value: replaceContractPlaceholders(placeholderToken('content_length'), model, variant), fieldKey: 'contentLength' },
+        { label: 'License Period', value: replaceContractPlaceholders(placeholderToken('license_period'), model, variant), fieldKey: 'licensePeriod', optional: true },
+        { label: 'License Price', value: replaceContractPlaceholders(placeholderToken('license_price'), model, variant), fieldKey: 'licensePrice', optional: true },
+        { label: 'Project Total Fees', value: replaceContractPlaceholders(placeholderToken('contract_amount'), model, variant), fieldKey: 'totalFee' },
+      ],
+    },
+  ];
+};
+
+const signaturePage = (
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+): ResolvedBlock[] => [
+  { type: 'paragraph', style: 'title', align: 'center', text: 'Execution' },
+  {
+    type: 'paragraph',
+    style: 'body',
+    text: 'The parties acknowledge that the Agreement may be executed in counterparts and by electronic signature. Handwritten signatures and signature dates are intentionally left blank for the signing workflow.',
+  },
+  {
+    type: 'signature',
+    publisher: model.publisher || (variant === 'DRAFT' ? '待填写' : ''),
+    publisherAddress: model.publisherAddress || (variant === 'DRAFT' ? '待填写' : ''),
+  },
+];
+
+const prepareContractDocument = async (
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant,
+  templateBytes: ArrayBuffer,
+) => {
+  const pageLines = await extractContractTemplatePageLines(templateBytes);
+  const pages: ResolvedLogicalPage[] = Array.from(
+    { length: CONTRACT_TEMPLATE_BASE_PAGE_COUNT },
+    (_, index) => {
+      const sourcePage = index + 1;
+      const lines = pageLines[index] ?? [];
+      let blocks: ResolvedBlock[];
+      if (sourcePage === 1) blocks = standardTermsOpening(lines, model, variant);
+      else if (sourcePage === 5) blocks = paymentPage(lines, model, variant);
+      else if (sourcePage === 14) blocks = insertionOrderPage(model, variant);
+      else if (sourcePage === 15) blocks = campaignDetailsPage(model, variant);
+      else if (sourcePage === 17) blocks = signaturePage(model, variant);
+      else blocks = sourcePageBlocks(sourcePage, lines, model, variant);
+      return { sourcePage, blocks };
+    },
+  );
+  const unresolved = pages.flatMap((page) => page.blocks.flatMap((block) => {
+    const values = block.type === 'paragraph'
+      ? [block.text]
+      : block.type === 'table'
+        ? block.rows.flatMap((row) => [row.label, row.value])
+        : [block.publisher, block.publisherAddress];
+    return values.some((value) => /\{\{[^}]+\}\}/.test(value))
+      ? [{
+          id: `unresolved-page-${page.sourcePage}`,
+          kind: 'PLACEHOLDER_UNRESOLVED' as const,
+          severity: 'BLOCKER' as const,
+          fieldKey: 'projectName' as const,
+          pageNumber: page.sourcePage,
+          message: `第 ${page.sourcePage} 页仍包含未替换的模板字段`,
+        }]
+      : [];
+  }));
+  return {
+    pages,
+    qualityReport: createContractQualityReport(model, unresolved),
+  } satisfies PreparedContractDocument;
+};
+
+const isCjk = (character: string) => (character.codePointAt(0) ?? 0) >= 0x2e80;
+const isBasicLatin = (character: string) => (character.codePointAt(0) ?? 0) <= 0x7f;
+
+const fontForCharacter = (character: string, fonts: EmbeddedFonts, bold: boolean) => {
+  const set = bold ? fonts.bold : fonts.regular;
+  return isCjk(character) ? set.chinese : isBasicLatin(character) ? set.latin : set.latinExt;
+};
+
+const textWidth = (value: string, size: number, fonts: EmbeddedFonts, bold = false) => (
   Array.from(value).reduce(
-    (total, character) => total + fontForCharacter(character, fonts).widthOfTextAtSize(character, size),
+    (total, character) => total + fontForCharacter(character, fonts, bold).widthOfTextAtSize(character, size),
     0,
   )
 );
 
-const wrapText = (value: string, width: number, size: number, fonts: EmbeddedFonts) => {
+const wrapText = (
+  value: string,
+  width: number,
+  size: number,
+  fonts: EmbeddedFonts,
+  bold = false,
+) => {
   const lines: string[] = [];
   value.split(/\r?\n/).forEach((sourceLine) => {
     if (!sourceLine) {
@@ -96,9 +496,15 @@ const wrapText = (value: string, width: number, size: number, fonts: EmbeddedFon
     let line = '';
     Array.from(sourceLine).forEach((character) => {
       const next = `${line}${character}`;
-      if (line && textWidth(next, size, fonts) > width) {
-        lines.push(line.trimEnd());
-        line = character.trimStart();
+      if (line && textWidth(next, size, fonts, bold) > width) {
+        const breakAt = line.lastIndexOf(' ');
+        if (breakAt > 0) {
+          lines.push(line.slice(0, breakAt).trimEnd());
+          line = `${line.slice(breakAt + 1)}${character}`.trimStart();
+        } else {
+          lines.push(line.trimEnd());
+          line = character.trimStart();
+        }
       } else {
         line = next;
       }
@@ -115,18 +521,20 @@ const drawMixedLine = (
   y: number,
   size: number,
   fonts: EmbeddedFonts,
+  bold = false,
+  color = rgb(0.125, 0.141, 0.169),
 ) => {
   let cursor = x;
   let run = '';
   let currentFont: PDFFont | null = null;
   const flush = () => {
     if (!run || !currentFont) return;
-    page.drawText(run, { x: cursor, y, size, font: currentFont, color: rgb(0.08, 0.09, 0.11) });
+    page.drawText(run, { x: cursor, y, size, font: currentFont, color });
     cursor += currentFont.widthOfTextAtSize(run, size);
     run = '';
   };
   Array.from(value).forEach((character) => {
-    const font = fontForCharacter(character, fonts);
+    const font = fontForCharacter(character, fonts, bold);
     if (currentFont && font !== currentFont) flush();
     currentFont = font;
     run += character;
@@ -134,182 +542,333 @@ const drawMixedLine = (
   flush();
 };
 
-const drawBinding = (
-  page: PDFPage,
-  binding: ContractTemplateFieldBinding,
-  value: string,
-  fonts: EmbeddedFonts,
-) => {
-  if (!value.trim()) return;
-  const maxLines = binding.maxLines ?? 1;
-  let size = binding.fontSize;
-  let lines = wrapText(value, binding.width, size, fonts);
-  while (
-    size > 4.5
-    && (
-      lines.length > maxLines
-      || lines.length * size * 1.25 > binding.height
-    )
-  ) {
-    size -= 0.25;
-    lines = wrapText(value, binding.width, size, fonts);
-  }
-  if (lines.length > maxLines || lines.length * size * 1.25 > binding.height) {
-    throw new ContractTemplateFitError(binding.id);
-  }
-  lines.forEach((line, index) => {
-    const baseline = page.getHeight() - binding.top - size - index * size * 1.25;
-    drawMixedLine(page, line, binding.x, baseline, size, fonts);
-  });
+const loadEmbeddedFonts = async (
+  pdf: PDFDocument,
+  fontBytes?: ContractFontBytes,
+): Promise<EmbeddedFonts> => {
+  const bytes = fontBytes ?? {
+    latin: await loadBytes(regularLatinUrl),
+    latinExt: await loadBytes(regularLatinExtUrl),
+    chinese: await loadBytes(regularChineseUrl),
+    boldLatin: await loadBytes(boldLatinUrl),
+    boldLatinExt: await loadBytes(boldLatinExtUrl),
+    boldChinese: await loadBytes(boldChineseUrl),
+  };
+  const regular = await Promise.all([
+    pdf.embedFont(bytes.latin, { subset: true }),
+    pdf.embedFont(bytes.latinExt, { subset: true }),
+    pdf.embedFont(bytes.chinese, { subset: true }),
+  ]);
+  const bold = await Promise.all([
+    pdf.embedFont(bytes.boldLatin ?? bytes.latin, { subset: true }),
+    pdf.embedFont(bytes.boldLatinExt ?? bytes.latinExt, { subset: true }),
+    pdf.embedFont(bytes.boldChinese ?? bytes.chinese, { subset: true }),
+  ]);
+  return {
+    regular: { latin: regular[0], latinExt: regular[1], chinese: regular[2] },
+    bold: { latin: bold[0], latinExt: bold[1], chinese: bold[2] },
+  };
 };
 
-export const generateContractPdf = async (
+const paragraphTokens = (style: ParagraphStyle = 'body') => {
+  if (style === 'title') return { size: 18, lineHeight: 22.5, before: 6, after: 13, bold: true };
+  if (style === 'heading') return { size: 14, lineHeight: 17.5, before: 8, after: 8, bold: true };
+  if (style === 'subheading') return { size: 11, lineHeight: 14, before: 6, after: 6, bold: true };
+  if (style === 'small') return { size: 9.5, lineHeight: 12, before: 0, after: 4, bold: false };
+  return { size: 10.5, lineHeight: 13.125, before: 0, after: 6, bold: false };
+};
+
+const buildContractPdf = async (
+  prepared: PreparedContractDocument,
+  variant: ContractDocumentVariant,
   model: ContractGenerationModel,
-  sourceBytes?: ArrayBuffer,
   fontBytes?: ContractFontBytes,
-) => {
-  const templateBytes = sourceBytes ?? await loadBytes(CONTRACT_TEMPLATE_URL);
-  const pdf = await PDFDocument.load(templateBytes);
+): Promise<PdfBuildResult> => {
+  const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const loadedFontBytes = fontBytes ?? {
-    latin: await loadBytes(latinFontUrl),
-    latinExt: await loadBytes(latinExtFontUrl),
-    chinese: await loadBytes(chineseFontUrl),
+  const fonts = await loadEmbeddedFonts(pdf, fontBytes);
+  const anchors: ContractFieldAnchor[] = [];
+  let page: PDFPage;
+  let cursorY = 0;
+  let anchorIndex = 0;
+
+  const newPage = () => {
+    page = pdf.addPage([CONTRACT_TEMPLATE_WIDTH, CONTRACT_TEMPLATE_HEIGHT]);
+    cursorY = CONTRACT_TEMPLATE_HEIGHT - CONTRACT_TEMPLATE_MARGIN;
+    return page;
   };
-  const [latin, latinExt, chinese] = await Promise.all([
-    pdf.embedFont(loadedFontBytes.latin, { subset: true }),
-    pdf.embedFont(loadedFontBytes.latinExt, { subset: true }),
-    pdf.embedFont(loadedFontBytes.chinese, { subset: true }),
-  ]);
-  const fonts = { latin, latinExt, chinese };
-  const pages = pdf.getPages();
-  CONTRACT_TEMPLATE_YELLOW_RECTS.forEach((rect) => {
-    const page = pages[rect.page - 1];
-    if (!page) return;
-    page.drawRectangle({
-      x: rect.x - 0.5,
-      y: page.getHeight() - rect.top - rect.height - 0.5,
-      width: rect.width + 1,
-      height: rect.height + 1,
-      color: rgb(1, 1, 1),
+
+  const ensureSpace = (height: number) => {
+    if (cursorY - height < CONTRACT_TEMPLATE_MARGIN) newPage();
+  };
+
+  const addAnchor = (
+    fieldKey: ContractTemplateFieldKey | undefined,
+    x: number,
+    top: number,
+    width: number,
+    height: number,
+  ) => {
+    if (!fieldKey) return;
+    anchorIndex += 1;
+    anchors.push({
+      id: `${fieldKey}-${anchorIndex}`,
+      fieldKey,
+      pageNumber: pdf.getPageCount(),
+      x,
+      top,
+      width,
+      height,
+    });
+  };
+
+  const drawParagraph = (block: ResolvedParagraph) => {
+    const tokens = paragraphTokens(block.style);
+    const width = CONTRACT_TEMPLATE_WIDTH - CONTRACT_TEMPLATE_MARGIN * 2;
+    const lines = wrapText(block.text, width, tokens.size, fonts, tokens.bold);
+    cursorY -= tokens.before;
+    let chunkTop = CONTRACT_TEMPLATE_HEIGHT - cursorY;
+    let chunkHeight = 0;
+    lines.forEach((line) => {
+      if (cursorY - tokens.lineHeight < CONTRACT_TEMPLATE_MARGIN) {
+        if (chunkHeight) addAnchor(block.fieldKey, CONTRACT_TEMPLATE_MARGIN, chunkTop, width, chunkHeight);
+        newPage();
+        chunkTop = CONTRACT_TEMPLATE_HEIGHT - cursorY;
+        chunkHeight = 0;
+      }
+      const lineWidth = textWidth(line, tokens.size, fonts, tokens.bold);
+      const x = block.align === 'center'
+        ? Math.max(CONTRACT_TEMPLATE_MARGIN, (CONTRACT_TEMPLATE_WIDTH - lineWidth) / 2)
+        : CONTRACT_TEMPLATE_MARGIN;
+      cursorY -= tokens.lineHeight;
+      drawMixedLine(page, line, x, cursorY + (tokens.lineHeight - tokens.size) * 0.55, tokens.size, fonts, tokens.bold);
+      chunkHeight += tokens.lineHeight;
+    });
+    if (chunkHeight) addAnchor(block.fieldKey, CONTRACT_TEMPLATE_MARGIN, chunkTop, width, chunkHeight);
+    cursorY -= tokens.after;
+  };
+
+  const drawTable = (block: ResolvedTable) => {
+    const x = CONTRACT_TEMPLATE_MARGIN;
+    const totalWidth = CONTRACT_TEMPLATE_WIDTH - CONTRACT_TEMPLATE_MARGIN * 2;
+    const labelWidth = 132;
+    const valueWidth = totalWidth - labelWidth;
+    const size = 10.5;
+    const lineHeight = 13.125;
+    const paddingX = 7;
+    const paddingY = 6;
+    block.rows.forEach((row) => {
+      const labelLines = wrapText(row.label, labelWidth - paddingX * 2, size, fonts, true);
+      const displayValue = row.value || (variant === 'DRAFT' && !row.optional ? '待填写' : '');
+      const valueLines = wrapText(displayValue, valueWidth - paddingX * 2, size, fonts);
+      const lineCount = Math.max(1, labelLines.length, valueLines.length);
+      const height = lineCount * lineHeight + paddingY * 2;
+      ensureSpace(height + 1);
+      const bottom = cursorY - height;
+      page.drawRectangle({
+        x,
+        y: bottom,
+        width: labelWidth,
+        height,
+        color: rgb(0.969, 0.973, 0.98),
+        borderColor: rgb(0.847, 0.863, 0.894),
+        borderWidth: 0.5,
+      });
+      page.drawRectangle({
+        x: x + labelWidth,
+        y: bottom,
+        width: valueWidth,
+        height,
+        borderColor: rgb(0.847, 0.863, 0.894),
+        borderWidth: 0.5,
+      });
+      labelLines.forEach((line, index) => {
+        drawMixedLine(page, line, x + paddingX, cursorY - paddingY - size - index * lineHeight, size, fonts, true);
+      });
+      valueLines.forEach((line, index) => {
+        drawMixedLine(
+          page,
+          line,
+          x + labelWidth + paddingX,
+          cursorY - paddingY - size - index * lineHeight,
+          size,
+          fonts,
+          false,
+          displayValue === '待填写' ? rgb(0.48, 0.5, 0.54) : rgb(0.125, 0.141, 0.169),
+        );
+      });
+      addAnchor(row.fieldKey, x + labelWidth, CONTRACT_TEMPLATE_HEIGHT - cursorY, valueWidth, height);
+      cursorY = bottom;
+    });
+    cursorY -= 10;
+  };
+
+  const drawSignature = (block: ResolvedSignature) => {
+    const totalWidth = CONTRACT_TEMPLATE_WIDTH - CONTRACT_TEMPLATE_MARGIN * 2;
+    const gap = 20;
+    const columnWidth = (totalWidth - gap) / 2;
+    ensureSpace(260);
+    const top = cursorY;
+    const parties = [
+      {
+        x: CONTRACT_TEMPLATE_MARGIN,
+        party: 'For and on behalf of Comets International Limited',
+        name: 'Comets International Limited',
+        title: 'Influencer Manager',
+        address: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong',
+      },
+      {
+        x: CONTRACT_TEMPLATE_MARGIN + columnWidth + gap,
+        party: `For and on behalf of ${block.publisher}`,
+        name: block.publisher,
+        title: '',
+        address: block.publisherAddress,
+      },
+    ];
+    parties.forEach((party, partyIndex) => {
+      const partyLines = wrapText(party.party, columnWidth, 10.5, fonts, true);
+      partyLines.forEach((line, index) => drawMixedLine(page, line, party.x, top - 14 - index * 13.125, 10.5, fonts, true));
+      const details = [
+        ['Name', party.name],
+        ['Title', party.title],
+        ['Address', party.address],
+      ];
+      let detailY = top - 54;
+      details.forEach(([label, value]) => {
+        drawMixedLine(page, `${label}:`, party.x, detailY, 10.5, fonts, true);
+        const lines = wrapText(value, columnWidth - 54, 10.5, fonts);
+        lines.forEach((line, index) => drawMixedLine(page, line, party.x + 54, detailY - index * 13.125, 10.5, fonts));
+        detailY -= Math.max(28, lines.length * 13.125 + 8);
+      });
+      ['Signature', 'Date'].forEach((label) => {
+        drawMixedLine(page, `${label}:`, party.x, detailY, 10.5, fonts, true);
+        page.drawLine({
+          start: { x: party.x + 62, y: detailY - 2 },
+          end: { x: party.x + columnWidth, y: detailY - 2 },
+          thickness: 0.65,
+          color: rgb(0.36, 0.38, 0.42),
+        });
+        detailY -= 36;
+      });
+      addAnchor(
+        partyIndex ? 'publisher' : 'signature',
+        party.x,
+        CONTRACT_TEMPLATE_HEIGHT - top,
+        columnWidth,
+        top - detailY,
+      );
+    });
+    cursorY -= 260;
+  };
+
+  prepared.pages.forEach((logicalPage) => {
+    newPage();
+    logicalPage.blocks.forEach((block) => {
+      if (block.type === 'paragraph') drawParagraph(block);
+      else if (block.type === 'table') drawTable(block);
+      else drawSignature(block);
     });
   });
-  CONTRACT_TEMPLATE_FIELD_BINDINGS.forEach((binding) => {
-    const page = pages[binding.page - 1];
-    if (page) drawBinding(page, binding, binding.value(model), fonts);
+
+  pdf.getPages().forEach((pdfPage, index) => {
+    if (variant === 'DRAFT') {
+      pdfPage.drawText('DRAFT', {
+        x: 145,
+        y: 330,
+        size: 52,
+        font: fonts.bold.latin,
+        color: rgb(0.72, 0.74, 0.78),
+        opacity: 0.18,
+        rotate: degrees(32),
+      });
+      pdfPage.drawText('草稿', {
+        x: 310,
+        y: 435,
+        size: 34,
+        font: fonts.bold.chinese,
+        color: rgb(0.72, 0.74, 0.78),
+        opacity: 0.18,
+        rotate: degrees(32),
+      });
+    }
+    const pageNumber = `${index + 1} / ${pdf.getPageCount()}`;
+    const pageNumberWidth = fonts.regular.latin.widthOfTextAtSize(pageNumber, 8.5);
+    pdfPage.drawText(pageNumber, {
+      x: (CONTRACT_TEMPLATE_WIDTH - pageNumberWidth) / 2,
+      y: 24,
+      size: 8.5,
+      font: fonts.regular.latin,
+      color: rgb(0.46, 0.49, 0.54),
+    });
   });
+
   pdf.setTitle(`${model.contractNumber} ${model.projectName}`);
   pdf.setAuthor('COMETS Pay');
-  pdf.setSubject('Generated contract draft');
+  pdf.setSubject(variant === 'DRAFT' ? 'Generated contract draft' : 'Generated contract');
   pdf.setCreator('COMETS Pay local prototype');
   const bytes = await pdf.save();
-  return new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {
-    type: 'application/pdf',
-  });
+  const pdfBlob = new Blob(
+    [bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer],
+    { type: 'application/pdf' },
+  );
+  return {
+    pdfBlob,
+    pageCount: pdf.getPageCount(),
+    anchors,
+    qualityReport: prepared.qualityReport,
+  };
 };
 
-const normalizePdfText = (value: string) => (
-  value
-    .replace(/\u0001/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-);
-
-export const extractContractTemplatePageLines = async (bytes: ArrayBuffer) => {
-  const loadingTask = getDocument({ data: new Uint8Array(bytes.slice(0)) });
-  const document = await loadingTask.promise;
-  const pages: string[][] = [];
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-    const page = await document.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const rows = new Map<number, Array<{ x: number; text: string }>>();
-    content.items.forEach((item) => {
-      if (!('str' in item)) return;
-      const textItem = item;
-      const y = Math.round(textItem.transform[5] * 2) / 2;
-      const row = rows.get(y) ?? [];
-      row.push({ x: textItem.transform[4], text: normalizePdfText(textItem.str) });
-      rows.set(y, row);
-    });
-    pages.push(
-      [...rows.entries()]
-        .sort(([left], [right]) => right - left)
-        .map(([, row]) => normalizePdfText(
-          row
-            .sort((left, right) => left.x - right.x)
-            .map((item) => item.text)
-            .filter(Boolean)
-            .join(' '),
-        ))
-        .filter(Boolean),
-    );
-  }
-  await document.destroy();
-  return pages;
-};
-
-const replaceTemplateValues = (
-  pageNumber: number,
+const docxRun = (
   value: string,
-  model: ContractGenerationModel,
-) => {
-  let result = value;
-  if ([1, 13, 14, 17].includes(pageNumber)) {
-    result = result
-      .replace(/_*\[?\s*please fill in REAL NAME or Company NAME?\s*\]?_*/gi, model.publisher)
-      .replace(/\[REAL NAME or Company Name\]/gi, model.publisher)
-      .replace(/_*\[?\s*please fill in the promoted channel link\s*\]?_*/gi, model.channelUrl)
-      .replace(/https:\/\/www\.youtube\.com\/x+/gi, model.channelUrl);
-  }
-  if (pageNumber === 1) {
-    result = result.replace(/\[\s*please fill in channel platform e\.g\., YouTube\s*\]/gi, model.platform);
-  }
-  if (pageNumber === 5) {
-    result = result.replace(/\[\s*3 working days\s*\]/gi, `[${model.invoiceIssueWorkingDays} working days]`);
-  }
-  if (pageNumber === 6) {
-    const feeChoice = model.feeBearer === 'SHARED' ? 'i' : model.feeBearer === 'ADVERTISER' ? 'ii' : 'iii';
-    result = result.replace(/\(\s*\)/, `(${feeChoice})`);
-  }
-  if (pageNumber === 16) {
-    result = result.replace(/\[60\/45\]/g, `[${model.paymentWorkingDays}]`);
-  }
-  return result;
-};
-
-const docxText = (value: string, bold = false, size = 16) => new TextRun({
+  options: { bold?: boolean; size?: number; color?: string } = {},
+) => new TextRun({
   text: value,
-  bold,
-  size,
+  bold: options.bold,
+  size: Math.round((options.size ?? 10.5) * 2),
+  color: options.color ?? '20242B',
   font: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Microsoft YaHei' },
 });
 
-const paragraph = (
-  value: string,
-  options: { bold?: boolean; center?: boolean; before?: number; after?: number; size?: number } = {},
-) => new Paragraph({
-  alignment: options.center ? AlignmentType.CENTER : AlignmentType.JUSTIFIED,
-  spacing: {
-    before: options.before ?? 0,
-    after: options.after ?? 54,
-    line: 210,
-  },
-  children: [docxText(value, options.bold, options.size ?? 16)],
-});
+const docxParagraph = (block: ResolvedParagraph) => {
+  const tokens = paragraphTokens(block.style);
+  return new Paragraph({
+    alignment: block.align === 'center'
+      ? AlignmentType.CENTER
+      : block.align === 'justify'
+        ? AlignmentType.JUSTIFIED
+        : AlignmentType.LEFT,
+    spacing: {
+      before: Math.round(tokens.before * 20),
+      after: Math.round(tokens.after * 20),
+      line: Math.round((tokens.lineHeight / tokens.size) * 240),
+    },
+    keepNext: block.style === 'title' || block.style === 'heading',
+    children: [docxRun(block.text, { bold: tokens.bold, size: tokens.size })],
+  });
+};
 
-const docxCell = (value: string, width: number, bold = false) => new TableCell({
+const docxCellParagraphs = (value: string, bold = false) => (
+  (value || '').split(/\r?\n/).map((line) => new Paragraph({
+    spacing: { before: 0, after: 40, line: 300 },
+    children: [docxRun(line, { bold })],
+  }))
+);
+
+const docxCell = (value: string, width: number, bold = false, fill?: string) => new TableCell({
   width: { size: width, type: WidthType.DXA },
   verticalAlign: VerticalAlign.CENTER,
-  margins: { top: 65, bottom: 65, left: 90, right: 90 },
-  children: [new Paragraph({
-    spacing: { before: 0, after: 0, line: 195 },
-    children: [docxText(value, bold, 15)],
-  })],
+  margins: { top: 100, bottom: 100, left: 120, right: 120 },
+  shading: fill ? { type: ShadingType.CLEAR, fill, color: 'auto' } : undefined,
+  children: docxCellParagraphs(value, bold),
 });
 
-const table = (rows: Array<[string, string]>, widths: [number, number] = [2400, 6500]) => new Table({
-  width: { size: widths[0] + widths[1], type: WidthType.DXA },
-  columnWidths: widths,
+const docxTable = (
+  rows: ResolvedTableRow[],
+  variant: ContractDocumentVariant,
+) => new Table({
+  width: { size: DOCX_CONTENT_WIDTH, type: WidthType.DXA },
+  columnWidths: [DOCX_LABEL_WIDTH, DOCX_VALUE_WIDTH],
   borders: {
     top: DOCX_BORDER,
     bottom: DOCX_BORDER,
@@ -318,168 +877,208 @@ const table = (rows: Array<[string, string]>, widths: [number, number] = [2400, 
     insideHorizontal: DOCX_BORDER,
     insideVertical: DOCX_BORDER,
   },
-  rows: rows.map(([label, value]) => new TableRow({
-    children: [docxCell(label, widths[0], true), docxCell(value, widths[1])],
+  rows: rows.map((row) => new TableRow({
+    cantSplit: true,
+    children: [
+      docxCell(row.label, DOCX_LABEL_WIDTH, true, 'F7F8FA'),
+      docxCell(row.value || (variant === 'DRAFT' && !row.optional ? '待填写' : ''), DOCX_VALUE_WIDTH),
+    ],
   })),
 });
 
-const paymentBankAddress = (model: ContractGenerationModel) => [
-  model.paymentSnapshot.bankStreetAddress,
-  model.paymentSnapshot.bankCity,
-  model.paymentSnapshot.bankState,
-  model.paymentSnapshot.bankPostalCode,
-  model.paymentSnapshot.bankCountry,
-].filter(Boolean).join(', ');
-
-const standardTermsOpeningPage = (
-  lines: string[],
-  model: ContractGenerationModel,
-): FileChild[] => {
-  const definitionsIndex = lines.findIndex((line) => /^1\s*\.\s*Definitions/i.test(line));
-  const fixedTerms = definitionsIndex >= 0 ? lines.slice(definitionsIndex) : lines.slice(9);
-  return [
-    paragraph('Standard Terms And Conditions For Digital Marketing Services', {
-      bold: true,
-      center: true,
-      after: 100,
-      size: 18,
-    }),
-    paragraph(
-      `This Standard Terms And Conditions (the "Standard Terms") constitute an integrated part of all Insertion Orders (the "IO") between Comets International Limited ("Advertiser") and ${model.publisher} on behalf of (${model.channelUrl}) ("Publisher"). Publisher is required to have their own accounts on ${model.platform}. The Standard Terms and IO are collectively referred to herein as the "Agreement". In the event of a contradiction between the provisions of these Standard Terms and the IO, the provisions of the IO shall prevail.`,
-      { after: 90 },
-    ),
-    ...fixedTerms.map((line) => paragraph(line, {
-      bold: /^1\s*\.\s*Definitions/i.test(line),
-    })),
-  ];
+const docxSignature = (block: ResolvedSignature) => {
+  const signatureCell = (
+    party: string,
+    name: string,
+    title: string,
+    address: string,
+    width: number,
+  ) => new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.TOP,
+    margins: { top: 140, bottom: 140, left: 140, right: 140 },
+    children: [
+      new Paragraph({ spacing: { after: 160 }, children: [docxRun(party, { bold: true })] }),
+      ...[
+        ['Name', name],
+        ['Title', title],
+        ['Address', address],
+      ].map(([label, value]) => new Paragraph({
+        spacing: { after: 120, line: 300 },
+        children: [docxRun(`${label}: `, { bold: true }), docxRun(value)],
+      })),
+      new Paragraph({
+        spacing: { before: 260, after: 180 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 5, color: '666A73' } },
+        children: [docxRun('Signature: ', { bold: true })],
+      }),
+      new Paragraph({
+        spacing: { before: 140, after: 80 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 5, color: '666A73' } },
+        children: [docxRun('Date: ', { bold: true })],
+      }),
+    ],
+  });
+  const width = Math.floor(DOCX_CONTENT_WIDTH / 2);
+  return new Table({
+    width: { size: DOCX_CONTENT_WIDTH, type: WidthType.DXA },
+    columnWidths: [width, DOCX_CONTENT_WIDTH - width],
+    borders: {
+      top: DOCX_BORDER,
+      bottom: DOCX_BORDER,
+      left: DOCX_BORDER,
+      right: DOCX_BORDER,
+      insideHorizontal: DOCX_BORDER,
+      insideVertical: DOCX_BORDER,
+    },
+    rows: [new TableRow({
+      cantSplit: true,
+      children: [
+        signatureCell(
+          'For and on behalf of Comets International Limited',
+          'Comets International Limited',
+          'Influencer Manager',
+          'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong',
+          width,
+        ),
+        signatureCell(
+          `For and on behalf of ${block.publisher}`,
+          block.publisher,
+          '',
+          block.publisherAddress,
+          DOCX_CONTENT_WIDTH - width,
+        ),
+      ],
+    })],
+  });
 };
 
-const paymentPage = (lines: string[], model: ContractGenerationModel): FileChild[] => {
-  const fixed = lines.slice(0, Math.max(0, lines.findIndex((line) => /3\.3\s*Payments/i.test(line)) + 1));
-  const bank = model.payoutProvider === 'Airwallex';
-  return [
-    ...fixed.map((line) => paragraph(replaceTemplateValues(5, line, model))),
-    table([
-      ['Account Name', bank ? model.paymentSnapshot.accountName : ''],
-      ['Account Number', bank ? model.paymentSnapshot.accountNumber : ''],
-      ['Beneficiary Bank Name', bank ? model.paymentSnapshot.bankName : ''],
-      ['Beneficiary bank address', bank ? paymentBankAddress(model) : ''],
-      ['Swift Code', bank ? model.paymentSnapshot.swiftCode : ''],
-      ['IBAN', bank ? model.paymentSnapshot.iban : ''],
-      ['Remittance Information (optional)', bank ? model.paymentSnapshot.transferRemarks : ''],
-    ]),
-    paragraph('Or', { before: 90, after: 90 }),
-    table([
-      ['Paypal UserName', bank ? '' : model.paymentSnapshot.paypalUsername],
-      ['Paypal Email Address', bank ? '' : model.paymentSnapshot.paypalEmail],
-      ['Transfer Note (optional)', ''],
-      ['Remittance Information (optional)', bank ? '' : model.paymentSnapshot.transferRemarks],
-    ]),
-  ];
-};
-
-const insertionOrderPage = (model: ContractGenerationModel): FileChild[] => [
-  table([
-    ['Signature / Name / Title', ''],
-    ['Signature / Name / Title', model.publisher],
-    ['Address', 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong'],
-    ['Publisher Address', model.publisherAddress],
-  ], [4450, 4450]),
-  paragraph('Insertion Order', { bold: true, center: true, before: 200, after: 150, size: 20 }),
-  paragraph(
-    `This Insertion Order ("this IO") relates to the services to be provided under the Standard Terms And Conditions For Digital Marketing Services entered into by and between ${model.publisher} on behalf of (${model.channelUrl}) ("Publisher") and Comets International Limited ("Advertiser") with effect as of ${model.effectiveDate} ("the Agreement").`,
-  ),
-  paragraph('All defined terms in this IO have the same meaning as in the Agreement unless this IO expressly states otherwise. If there is any conflict between this IO and the Agreement, this IO will take precedence.'),
-  paragraph(`1. Campaign Period: ${model.campaignStart} to ${model.campaignEnd}.`, { bold: true, before: 120 }),
-  paragraph('2. Campaign Details:', { bold: true, before: 80 }),
-  table([
-    ['Project Name', model.projectName],
-    ['Service Provider Name', model.channelName],
-    ['Start Date', model.campaignStart],
-    ['End Date', model.campaignEnd],
-  ]),
-];
-
-const campaignDetailsPage = (model: ContractGenerationModel): FileChild[] => [
-  table([
-    ['Purpose', ['The video will help to promote:', ...model.purposeItems.map((item, index) => `${index + 1}. ${item}`)].join('\n')],
-    ['Services / Deliverables', [
-      '1. Provide a written script of initial ideas before making the video/streaming.',
-      `2. Post a ${model.contentFormat} about ${model.promotedProduct}.`,
-      '3. Include the correct campaign name, CTA and tracklink supplied by the Brand.',
-      `4. Include hashtag #${model.hashtag.replace(/^#/, '')} in the description.`,
-      '5. Provide analytics screenshots within 2 days of streaming where applicable.',
-      '6. Work with the Brand to remove unfavourable branding where required.',
-    ].join('\n')],
-    ['Format', model.contentFormat],
-    ['Release Date', `${model.releaseStart} to ${model.releaseEnd}`],
-    ['Language', model.language],
-    ['Publishing Platform', model.platform],
-    ['Channel Link', model.channelUrl],
-    ['Length of Video', model.contentLength],
-    ['License Period', model.licensePeriod],
-    ['License Price', model.licensePrice ? `${model.currency} ${model.licensePrice}` : ''],
-    ['Project Total Fees', `${model.currency} ${model.totalFee}`],
-  ]),
-];
-
-const signaturePage = (model: ContractGenerationModel): FileChild[] => [
-  table([
-    ['For and on behalf of Comets International Limited', `For and on behalf of ${model.publisher}`],
-    ['Signature: _________________________\nDate:', 'Signature: _________________________\nDate:'],
-  ], [4450, 4450]),
-];
-
-const pageChildren = (
-  pageNumber: number,
-  lines: string[],
+const buildContractDocx = async (
+  prepared: PreparedContractDocument,
+  variant: ContractDocumentVariant,
   model: ContractGenerationModel,
-): FileChild[] => {
-  if (pageNumber === 1) return standardTermsOpeningPage(lines, model);
-  if (pageNumber === 5) return paymentPage(lines, model);
-  if (pageNumber === 14) return insertionOrderPage(model);
-  if (pageNumber === 15) return campaignDetailsPage(model);
-  if (pageNumber === 17) return signaturePage(model);
-  return lines.map((line) => paragraph(replaceTemplateValues(pageNumber, line, model), {
-    bold: /^(\d+\.|Insertion Order|EXECUTED)/i.test(line),
-  }));
-};
-
-export const generateContractDocx = async (
-  model: ContractGenerationModel,
-  sourceBytes?: ArrayBuffer,
 ) => {
-  const templateBytes = sourceBytes ?? await loadBytes(CONTRACT_TEMPLATE_URL);
-  const pageLines = await extractContractTemplatePageLines(templateBytes);
-  const children = pageLines.flatMap((lines, index) => {
-    const pageNumber = index + 1;
-    const content = pageChildren(pageNumber, lines, model);
-    return pageNumber < CONTRACT_TEMPLATE_PAGE_COUNT
-      ? [...content, new Paragraph({ children: [new PageBreak()] })]
-      : content;
+  const children: FileChild[] = [];
+  prepared.pages.forEach((page, pageIndex) => {
+    page.blocks.forEach((block) => {
+      if (block.type === 'paragraph') children.push(docxParagraph(block));
+      else if (block.type === 'table') children.push(docxTable(block.rows, variant));
+      else children.push(docxSignature(block));
+    });
+    if (pageIndex < prepared.pages.length - 1) {
+      children.push(new Paragraph({ children: [new PageBreak()] }));
+    }
+  });
+
+  const header = variant === 'DRAFT'
+    ? new Header({
+        children: [new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 0 },
+          children: [docxRun('DRAFT / 草稿', { bold: true, size: 22, color: 'C3C7CE' })],
+        })],
+      })
+    : new Header({ children: [new Paragraph({ children: [] })] });
+  const footer = new Footer({
+    children: [new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        docxRun('Page ', { size: 8.5, color: '767D89' }),
+        new TextRun({ children: [PageNumber.CURRENT], size: 17, color: '767D89', font: 'Arial' }),
+      ],
+    })],
   });
   const document = new DocxDocument({
     creator: 'COMETS Pay',
     title: `${model.contractNumber} ${model.projectName}`,
-    description: 'COMETS Pay local editable contract draft',
+    description: variant === 'DRAFT'
+      ? 'COMETS Pay local editable contract draft'
+      : 'COMETS Pay local editable contract',
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Microsoft YaHei' },
+            size: 21,
+            color: '20242B',
+          },
+          paragraph: {
+            spacing: { after: 120, line: 300 },
+          },
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {
-          size: { width: 11906, height: 16838 },
-          margin: { top: 420, right: 540, bottom: 420, left: 540 },
+          size: { width: A4_DXA_WIDTH, height: A4_DXA_HEIGHT },
+          margin: {
+            top: A4_DXA_MARGIN,
+            right: A4_DXA_MARGIN,
+            bottom: A4_DXA_MARGIN,
+            left: A4_DXA_MARGIN,
+            header: 600,
+            footer: 600,
+          },
         },
       },
+      headers: { default: header },
+      footers: { default: footer },
       children,
     }],
   });
   return Packer.toBlob(document);
 };
 
-export const generateContractFiles = async (model: ContractGenerationModel) => {
-  const sourceBytes = await loadBytes(CONTRACT_TEMPLATE_URL);
-  const [pdfBlob, docxBlob] = await Promise.all([
-    generateContractPdf(model, sourceBytes.slice(0)),
-    generateContractDocx(model, sourceBytes.slice(0)),
-  ]);
-  return { pdfBlob, docxBlob };
+export const generateContractPdf = async (
+  model: ContractGenerationModel,
+  sourceBytes?: ArrayBuffer,
+  fontBytes?: ContractFontBytes,
+  variant: ContractDocumentVariant = 'FORMAL',
+) => {
+  const templateBytes = sourceBytes ?? await loadBytes(CONTRACT_TEMPLATE_URL);
+  const prepared = await prepareContractDocument(model, variant, templateBytes);
+  return (await buildContractPdf(prepared, variant, model, fontBytes)).pdfBlob;
 };
+
+export const generateContractDocx = async (
+  model: ContractGenerationModel,
+  sourceBytes?: ArrayBuffer,
+  variant: ContractDocumentVariant = 'FORMAL',
+) => {
+  const templateBytes = sourceBytes ?? await loadBytes(CONTRACT_TEMPLATE_URL);
+  const prepared = await prepareContractDocument(model, variant, templateBytes);
+  return buildContractDocx(prepared, variant, model);
+};
+
+export const generateContractPreview = async (
+  model: ContractGenerationModel,
+  variant: ContractDocumentVariant = 'DRAFT',
+) => {
+  const templateBytes = await loadBytes(CONTRACT_TEMPLATE_URL);
+  const prepared = await prepareContractDocument(model, variant, templateBytes);
+  return buildContractPdf(prepared, variant, model);
+};
+
+export const generateContractFiles = async (
+  model: ContractGenerationModel,
+  options: { variant?: ContractDocumentVariant } = {},
+): Promise<ContractGeneratedFiles> => {
+  const variant = options.variant ?? 'FORMAL';
+  const templateBytes = await loadBytes(CONTRACT_TEMPLATE_URL);
+  const prepared = await prepareContractDocument(model, variant, templateBytes);
+  const [pdfResult, docxBlob] = await Promise.all([
+    buildContractPdf(prepared, variant, model),
+    buildContractDocx(prepared, variant, model),
+  ]);
+  return {
+    variant,
+    pdfBlob: pdfResult.pdfBlob,
+    docxBlob,
+    pageCount: pdfResult.pageCount,
+    anchors: pdfResult.anchors,
+    qualityReport: pdfResult.qualityReport,
+  };
+};
+
+export const CONTRACT_GENERATION_STYLE = CONTRACT_TEMPLATE_DEFINITION;

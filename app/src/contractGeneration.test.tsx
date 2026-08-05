@@ -1,20 +1,22 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
-import { GlobalWorkerOptions } from 'pdfjs-dist';
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import {
+  extractContractTemplatePageLines,
   generateContractDocx,
   generateContractPdf,
   type ContractFontBytes,
 } from './contractGeneration';
 import type { ContractGenerationModel } from './contracts';
 import {
-  bindingsForField,
-  CONTRACT_TEMPLATE_FIELD_BINDINGS,
+  CONTRACT_PLACEHOLDER_DEFINITIONS,
+  createContractQualityReport,
+  replaceContractPlaceholders,
 } from './contractTemplate';
 
 const toArrayBuffer = (buffer: Buffer) => (
@@ -88,6 +90,8 @@ const readTemplate = async () => (
   toArrayBuffer(await readFile(resolve('public/contracts/single-campaign-contract-template-v1.pdf')))
 );
 
+const renderFixtureDir = process.env.CONTRACT_RENDER_FIXTURE_DIR;
+
 const readFonts = async (): Promise<ContractFontBytes> => {
   const root = resolve('node_modules/@fontsource/noto-sans-sc/files');
   const [latin, latinExt, chinese] = await Promise.all([
@@ -102,48 +106,128 @@ const readFonts = async (): Promise<ContractFontBytes> => {
   };
 };
 
+const pdfText = async (blob: Blob) => {
+  const task = getDocument({ data: new Uint8Array(await blob.arrayBuffer()) });
+  const document = await task.promise;
+  const pages: string[] = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item) => ('str' in item ? item.str : '')).join(' '));
+  }
+  await task.destroy();
+  return pages.join('\n');
+};
+
 describe('contract generation', () => {
-  it('keeps repeated publisher and campaign values synchronized across template pages', () => {
-    expect(bindingsForField('publisher').map((binding) => binding.value(model))).toEqual([
-      model.publisher,
-      model.publisher,
-      model.publisher,
-      model.publisher,
-      model.publisher,
-    ]);
-    expect(bindingsForField('campaignPeriod').map((binding) => binding.value(model))).toEqual([
-      'Aug 10, 2026 to Aug 31, 2026',
-      'Aug 10, 2026',
-      'Aug 31, 2026',
-    ]);
-    expect(CONTRACT_TEMPLATE_FIELD_BINDINGS.find((binding) => binding.id === 'p6-fee')?.value(model)).toBe('ii');
+  it('reconstructs source rows without private-use glyphs or word-fragment spacing', async () => {
+    const pages = await extractContractTemplatePageLines(await readTemplate());
+    const text = pages.flat().join('\n');
+
+    expect(pages).toHaveLength(17);
+    expect(pages.flat().some((line) => (
+      /[\u0000-\u001f\u007f-\u009f\uE000-\uF8FF\uFFFD]/.test(line)
+    ))).toBe(false);
+    expect(text).toContain('Associated Company means a company');
+    expect(text).not.toContain('Associated Compan y');
   });
 
-  it('creates a filled 17-page PDF from the original template', async () => {
-    const pdfBlob = await generateContractPdf(model, await readTemplate(), await readFonts());
-    const generatedPdf = await PDFDocument.load(await pdfBlob.arrayBuffer());
+  it('replaces registered placeholders without changing unrelated text', () => {
+    const template = 'Publisher {{publisher_name}} / Project {{project_name}} / {{publisher_name}}';
+    const result = replaceContractPlaceholders(template, model, 'FORMAL');
 
-    expect(pdfBlob.type).toBe('application/pdf');
-    expect(generatedPdf.getPageCount()).toBe(17);
-    expect(generatedPdf.getTitle()).toContain(model.contractNumber);
-  }, 30_000);
+    expect(result).toBe(`Publisher ${model.publisher} / Project ${model.projectName} / ${model.publisher}`);
+    expect(result).not.toMatch(/\{\{[^}]+\}\}/);
+    expect(CONTRACT_PLACEHOLDER_DEFINITIONS.every((definition) => definition.kind)).toBe(true);
+  });
 
-  it('creates an editable DOCX with full text, structured tables, and blank signature dates', async () => {
-    const docxBlob = await generateContractDocx(model, await readTemplate());
-    const archive = await JSZip.loadAsync(await docxBlob.arrayBuffer());
-    const documentXml = await archive.file('word/document.xml')?.async('string');
+  it('calculates dynamic completion, blocking fields, formats, and overflow warnings', () => {
+    const complete = createContractQualityReport(model);
+    const incomplete = createContractQualityReport({
+      ...model,
+      publisherAddress: '',
+      totalFee: '-1',
+      campaignStart: '2026-09-01',
+      campaignEnd: '2026-08-31',
+      contentLength: 'x'.repeat(320),
+    });
 
-    expect(docxBlob.type).toContain('officedocument.wordprocessingml.document');
+    expect(complete.hasBlockers).toBe(false);
+    expect(complete.completedFields).toBe(complete.totalFields);
+    expect(incomplete.completedFields).toBeLessThan(incomplete.totalFields);
+    expect(incomplete.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'REQUIRED_MISSING', fieldKey: 'publisherAddress' }),
+      expect.objectContaining({ kind: 'FORMAT_INVALID', fieldKey: 'totalFee' }),
+      expect.objectContaining({ kind: 'FORMAT_INVALID', fieldKey: 'campaignPeriod' }),
+      expect.objectContaining({ kind: 'OVERFLOW_RISK', fieldKey: 'contentLength' }),
+    ]));
+  });
+
+  it('creates A4 draft and formal PDFs with dynamic pages and variant-specific watermarks', async () => {
+    const [template, fonts] = await Promise.all([readTemplate(), readFonts()]);
+    const draftBlob = await generateContractPdf(model, template, fonts, 'DRAFT');
+    const formalBlob = await generateContractPdf(model, template, fonts, 'FORMAL');
+    const [draftPdf, formalPdf, draftText, formalText] = await Promise.all([
+      PDFDocument.load(await draftBlob.arrayBuffer()),
+      PDFDocument.load(await formalBlob.arrayBuffer()),
+      pdfText(draftBlob),
+      pdfText(formalBlob),
+    ]);
+
+    expect(draftBlob.type).toBe('application/pdf');
+    expect(formalPdf.getPageCount()).toBeGreaterThanOrEqual(17);
+    expect(draftPdf.getPageCount()).toBe(formalPdf.getPageCount());
+    expect(formalPdf.getPage(0).getSize()).toMatchObject({ width: 595.92, height: 841.92 });
+    expect(formalPdf.getTitle()).toContain(model.contractNumber);
+    expect(draftText).toContain('DRAFT');
+    expect(formalText).not.toContain('DRAFT');
+    expect(formalText).toContain('Standard Terms And Conditions');
+    expect(formalText).toContain(model.publisher);
+    expect(formalText).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
+    if (renderFixtureDir) {
+      await mkdir(renderFixtureDir, { recursive: true });
+      await writeFile(resolve(renderFixtureDir, 'synthetic-contract-formal.pdf'), Buffer.from(await formalBlob.arrayBuffer()));
+    }
+  }, 60_000);
+
+  it('creates editable DOCX files with A4 styles, growable tables, and blank bordered signature lines', async () => {
+    const template = await readTemplate();
+    const [draftBlob, formalBlob] = await Promise.all([
+      generateContractDocx(model, template, 'DRAFT'),
+      generateContractDocx(model, template, 'FORMAL'),
+    ]);
+    const [draftArchive, formalArchive] = await Promise.all([
+      JSZip.loadAsync(await draftBlob.arrayBuffer()),
+      JSZip.loadAsync(await formalBlob.arrayBuffer()),
+    ]);
+    const documentXml = await formalArchive.file('word/document.xml')?.async('string') ?? '';
+    const stylesXml = await formalArchive.file('word/styles.xml')?.async('string') ?? '';
+    const draftHeaders = await Promise.all(
+      Object.keys(draftArchive.files)
+        .filter((name) => /^word\/header\d+\.xml$/.test(name))
+        .map((name) => draftArchive.file(name)?.async('string') ?? ''),
+    );
+    const formalHeaders = await Promise.all(
+      Object.keys(formalArchive.files)
+        .filter((name) => /^word\/header\d+\.xml$/.test(name))
+        .map((name) => formalArchive.file(name)?.async('string') ?? ''),
+    );
+
+    expect(formalBlob.type).toContain('officedocument.wordprocessingml.document');
     expect(documentXml).toContain('Standard Terms And Conditions');
     expect(documentXml).toContain(model.publisher);
     expect(documentXml).toContain(model.projectName);
-    expect(documentXml).toContain(model.channelUrl);
-    expect(documentXml).toContain(`accounts on ${model.platform}`);
-    expect(documentXml).toContain('[45]');
-    expect(documentXml).not.toContain('[60/45]');
-    expect(documentXml).not.toMatch(/please fill|xxx|example only/i);
-    expect(documentXml).toContain('Signature: _________________________');
-    expect(documentXml).toContain('Date:');
-    expect(documentXml).not.toContain('w:pict');
-  }, 30_000);
+    expect(documentXml).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
+    expect(documentXml).not.toContain('________________');
+    expect(documentXml).toContain('w:pBdr');
+    expect(documentXml).toContain('w:cantSplit');
+    expect(documentXml).toContain('w:pgSz');
+    expect(stylesXml).toContain('w:sz w:val="21"');
+    expect(draftHeaders.join(' ')).toContain('DRAFT / 草稿');
+    expect(formalHeaders.join(' ')).not.toContain('DRAFT / 草稿');
+    if (renderFixtureDir) {
+      await mkdir(renderFixtureDir, { recursive: true });
+      await writeFile(resolve(renderFixtureDir, 'synthetic-contract-formal.docx'), Buffer.from(await formalBlob.arrayBuffer()));
+    }
+  }, 60_000);
 });

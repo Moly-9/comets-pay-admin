@@ -7,6 +7,7 @@ import {
   createGeneratedContractDraft,
   createUploadedContract,
   INITIAL_CONTRACTS,
+  type ContractGeneratedFiles,
   type ContractGenerationModel,
   type ContractRecord,
   type ContractUploadInput,
@@ -244,20 +245,31 @@ export default function App() {
     return record;
   }, [contracts, registerProjectMutation]);
 
-  const generateContract = useCallback((model: ContractGenerationModel, pdfBlob: Blob) => {
-    const version = contracts.filter((contract) => (
+  const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
+    const existing = contracts.find((contract) => (
       contract.engagementId === model.engagementId
       && contract.lifecycle === 'GENERATED_DRAFT'
-    )).length + 1;
-    const record = createGeneratedContractDraft(model, version, URL.createObjectURL(pdfBlob));
-    setContracts((current) => [record, ...current]);
+    ));
+    const version = (existing?.generationVersion ?? 0) + 1;
+    const documentUrl = URL.createObjectURL(files.pdfBlob);
+    const record = createGeneratedContractDraft(model, version, documentUrl, {
+      existingContractId: existing?.contractId,
+      generationVariant: files.variant,
+      qualityReport: files.qualityReport,
+      pageCount: files.pageCount,
+    });
+    if (existing) record.id = existing.id;
+    setContracts((current) => existing
+      ? current.map((contract) => contract.contractId === existing.contractId ? record : contract)
+      : [record, ...current]);
+    if (existing?.documentUrl.startsWith('blob:')) URL.revokeObjectURL(existing.documentUrl);
     registerProjectMutation({
       projectId: model.projectId,
       engagementId: model.engagementId,
       entityType: 'contract',
       entityId: record.contractId ?? record.id,
-      action: 'create',
-      summary: `已生成合同草稿 ${record.id}`,
+      action: existing ? 'update' : 'create',
+      summary: `${existing ? '已更新' : '已生成'}合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
   }, [contracts, registerProjectMutation]);
@@ -1351,9 +1363,16 @@ export default function App() {
           projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
           creators={creators}
           initialEngagementId={contractGenerationEngagementId}
-          onGenerated={(model, pdfBlob) => {
-            const record = generateContract(model, pdfBlob);
-            notify('合同草稿已生成', `${record.id} 已关联 ${model.projectName} / ${model.creatorName}，等待线下签署文件回传。`);
+          existingDraft={contracts.find((contract) => (
+            contract.engagementId === contractGenerationEngagementId
+            && contract.lifecycle === 'GENERATED_DRAFT'
+          ))}
+          onGenerated={(model, files) => {
+            const record = generateContract(model, files);
+            notify(
+              files.variant === 'FORMAL' ? '正式合同已生成' : '合同草稿已保存',
+              `${record.id} 已关联 ${model.projectName} / ${model.creatorName}，等待线下签署文件回传。`,
+            );
             return record;
           }}
           onCancel={() => {

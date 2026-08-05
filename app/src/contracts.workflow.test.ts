@@ -70,6 +70,22 @@ const generationModel: ContractGenerationModel = {
 };
 
 describe('generated contract upload workflow', () => {
+  it('keeps the contract identity when the same collaboration draft is regenerated', () => {
+    const initialDraft = createGeneratedContractDraft(generationModel, 1);
+    const updatedDraft = createGeneratedContractDraft(
+      { ...generationModel, totalFee: '3600' },
+      2,
+      'blob:synthetic-contract-v2',
+      { existingContractId: initialDraft.contractId },
+    );
+
+    expect(updatedDraft.contractId).toBe(initialDraft.contractId);
+    expect(updatedDraft.engagementId).toBe(initialDraft.engagementId);
+    expect(updatedDraft.generationVersion).toBe(2);
+    expect(updatedDraft.totalFee).toBe(3600);
+    expect(updatedDraft.documentUrl).toBe('blob:synthetic-contract-v2');
+  });
+
   it('reuses the draft identity and keeps its generation snapshot and version', () => {
     const draft = createGeneratedContractDraft(generationModel, 3);
     expect(draft.pageCount).toBe(17);

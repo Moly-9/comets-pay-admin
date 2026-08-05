@@ -1,3 +1,61 @@
+# Design QA — 生成合同页面整页滚动
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-1604ad1e-ba2e-4928-9c24-4273b3de67f7.png`
+- Existing product reference: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-invoice-layout-reference.png`
+- Implementation URL: `http://127.0.0.1:5178/`
+- Before screenshot: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-before.png`
+- Desktop implementation: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-1682.png`
+- Scrolled implementation: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-scrolled-1682.png`
+- Responsive captures: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-861.png` and `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-390.png`
+- Combined comparison input: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-comparison.png`
+- Source and desktop implementation pixels: `1682 × 862`; CSS viewport `1682 × 862`; device density `1`
+- Responsive CSS viewports: `861 × 900`, `860 × 900`, and `390 × 844`
+- State: blank contract-generation form with the first page of the local 17-page draft preview.
+
+## Comparison evidence
+
+- The combined comparison places the existing “生成 Invoice” page and the revised “生成合同” page side by side at the same viewport.
+- Both pages now use a natural document flow: the form determines the page height, the browser owns vertical scrolling, and the preview remains visible as a desktop sticky panel.
+- The contract-specific `40% / 60%` adjustable split, quality summary, PDF toolbar, and A4 preview are intentional differences retained from the approved contract workflow.
+- The scrolled implementation is the focused interaction evidence: after the document scrolls `720px`, the left form moves with the page, its internal `scrollTop` remains `0`, and the preview stays at the application content offset.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC hierarchy, compact field labels, toolbar copy, and contract-page text are unchanged.
+- Spacing and layout rhythm: passed; the heading, notice, double-column workspace, form sections, preview toolbar, and final action area now follow the same long-page rhythm as the Invoice builder.
+- Colors and visual tokens: passed; no palette, semantic status color, border, radius, or elevation token was changed.
+- Image and icon fidelity: passed; existing COMETS branding, Lucide controls, and generated PDF canvas are retained. No new visual asset or icon approximation was introduced.
+- Copy and content: passed; no field, validation, contract text, or action label changed.
+
+## Interaction and responsive checks
+
+- Desktop document height is `3077px` in an `862px` viewport, proving the page can scroll naturally.
+- After scrolling `720px`, page `scrollY = 720`, left form `scrollTop = 0`, and sticky preview top is `96.59px`.
+- At the document bottom, the action bar is fully visible between `753.73px` and `820.42px`; it is no longer held in a fixed viewport grid.
+- At `861px`, the form and preview remain in two columns and document `scrollWidth = clientWidth = 846px`.
+- At `860px`, the responsive “合同信息 / 合同预览” tabs activate as designed.
+- At `390px`, document `scrollWidth = clientWidth = 375px`; the form uses the full content width and page scrolling leaves the form’s internal `scrollTop` at `0`.
+- Splitter keyboard adjustment, preview page controls, issue-to-field positioning, and full-screen preview remain available from the prior implementation.
+- Browser console warnings and errors: none.
+- `npm test -- --run`: 19 test files and 90 tests passed.
+- `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: the contract builder forced the workspace into a viewport-height grid. The left form and PDF preview scrolled independently, so users could not move through the page like the existing Invoice builder.
+   - Fix: removed the viewport height and hidden-overflow constraints, allowed form content to determine document height, and moved the action area back into normal document flow.
+   - Post-fix evidence: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-1682.png`.
+2. Initial P2: removing all height constraints could have made the 17-page preview disappear while users completed the long form.
+   - Fix: retained a bounded PDF page viewport inside a sticky desktop preview panel, while keeping the form and application page on a single vertical scroll axis.
+   - Post-fix evidence: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-scroll-scrolled-1682.png`.
+3. Post-fix desktop, responsive, scroll, action-area, and console checks found no actionable P0, P1, or P2 findings.
+
+final result: passed
+
+---
+
 # Design QA — 项目达人名单筛选弹窗
 
 ## Reference and environment
