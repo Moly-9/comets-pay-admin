@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import {
+  contractPayoutSnapshot,
   defaultContractPayoutAccount,
   eligibleContractPayoutAccounts,
   validateContractGenerationModel,
@@ -149,6 +150,146 @@ describe('contract generation model', () => {
       campaignEnd: expect.any(String),
       releaseEnd: expect.any(String),
       payoutAccountId: expect.any(String),
+    });
+  });
+
+  it('allows every project, content, and commercial field to remain blank', () => {
+    const model = validModel();
+    Object.assign(model, {
+      projectName: '',
+      brandName: '',
+      effectiveDate: '',
+      campaignStart: '',
+      campaignEnd: '',
+      purposeItems: [],
+      promotedProduct: '',
+      hashtag: '',
+      contentFormat: '',
+      releaseStart: '',
+      releaseEnd: '',
+      language: '',
+      contentLength: '',
+      licensePeriod: '',
+      licensePrice: '',
+      currency: '',
+      totalFee: '',
+      feeBearer: '',
+    });
+
+    expect(validateContractGenerationModel(model)).toEqual({});
+  });
+
+  it('collapses unselected creator and payout validation to their selectors', () => {
+    const withoutCreator = validModel();
+    Object.assign(withoutCreator, {
+      creatorId: '',
+      publisher: '',
+      publisherAddress: '',
+      platform: '',
+      channelName: '',
+      channelUrl: '',
+    });
+    const creatorErrors = validateContractGenerationModel(withoutCreator);
+
+    expect(creatorErrors.creator).toBe('请选择合作达人');
+    expect(creatorErrors).not.toHaveProperty('publisher');
+    expect(creatorErrors).not.toHaveProperty('publisherAddress');
+    expect(creatorErrors).not.toHaveProperty('channelName');
+
+    const withoutAccount = validModel();
+    Object.assign(withoutAccount, {
+      payoutAccountId: '',
+      paymentSnapshot: {
+        ...withoutAccount.paymentSnapshot,
+        accountName: '',
+        accountNumber: '',
+        iban: '',
+        bankName: '',
+      },
+    });
+    expect(validateContractGenerationModel(withoutAccount).payoutAccountId).toContain('已验证');
+  });
+
+  it('blocks selected creators whose legal or channel profile is incomplete', () => {
+    const model = validModel();
+    Object.assign(model, {
+      publisher: '',
+      publisherAddress: '',
+      platform: '',
+      channelName: '',
+      channelUrl: '',
+    });
+
+    expect(validateContractGenerationModel(model)).toMatchObject({
+      publisher: expect.any(String),
+      publisherAddress: expect.any(String),
+      platform: expect.any(String),
+      channelName: expect.any(String),
+      channelUrl: expect.any(String),
+    });
+  });
+
+  it('validates selected Airwallex and PayPal account snapshots', () => {
+    const missingBank = validModel();
+    missingBank.paymentSnapshot.bankName = '';
+    expect(validateContractGenerationModel(missingBank).payoutAccountId).toContain('Beneficiary Bank');
+
+    const missingLocator = validModel();
+    missingLocator.paymentSnapshot.accountNumber = '';
+    missingLocator.paymentSnapshot.iban = '';
+    expect(validateContractGenerationModel(missingLocator).payoutAccountId).toContain('Account Number 或 IBAN');
+
+    const paypal = validModel();
+    Object.assign(paypal, {
+      payoutAccountId: 'paypal-validated',
+      payoutProvider: 'PayPal',
+      paymentMethod: 'PAYPAL',
+      paymentSnapshot: {
+        ...paypal.paymentSnapshot,
+        accountName: '',
+        accountNumber: '',
+        bankName: '',
+        paypalUsername: 'Sample Creator',
+        paypalEmail: 'invalid-email',
+      },
+    });
+    expect(validateContractGenerationModel(paypal).payoutAccountId).toContain('邮箱无效');
+    paypal.paymentSnapshot.paypalEmail = 'creator@example.invalid';
+    expect(validateContractGenerationModel(paypal)).toEqual({});
+  });
+
+  it('refreshes the read-only payment snapshot when the selected account changes', () => {
+    const profile = creator();
+    const airwallex = profile.payoutAccounts.find((account) => account.id === 'airwallex-verified') ?? null;
+    const paypal = profile.payoutAccounts.find((account) => account.id === 'paypal-validated') ?? null;
+
+    expect(contractPayoutSnapshot(airwallex)).toMatchObject({
+      accountName: 'Sample Creator Limited',
+      accountNumber: '0000001234',
+      bankName: 'Sample Bank',
+    });
+    expect(contractPayoutSnapshot(paypal)).toMatchObject({
+      paypalUsername: 'Sample Creator',
+      paypalEmail: 'creator@example.invalid',
+    });
+  });
+
+  it('still blocks invalid values when optional fields are filled', () => {
+    const model = validModel();
+    Object.assign(model, {
+      totalFee: '-1',
+      licensePrice: '-10',
+      campaignStart: '2026-09-01',
+      campaignEnd: '2026-08-31',
+      releaseStart: '2026-08-12',
+      releaseEnd: '',
+    });
+
+    expect(validateContractGenerationModel(model)).toMatchObject({
+      totalFee: expect.any(String),
+      licensePrice: expect.any(String),
+      campaignEnd: expect.any(String),
+      releaseEnd: expect.any(String),
     });
   });
 

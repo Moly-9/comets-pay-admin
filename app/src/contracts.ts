@@ -481,14 +481,13 @@ export type ContractUploadInput = {
 
 const blankFieldIssues = (model: ContractGenerationModel): ContractIssue[] => {
   const fields = [
+    ['creator', '合作达人', model.creatorId],
+    ['project', '关联项目', model.projectId],
     ['publisher', 'Publisher', model.publisher],
-    ['campaign', 'Campaign Period', model.campaignStart && model.campaignEnd],
-    ['purpose', 'Campaign Purpose', model.purposeItems.some(Boolean)],
-    ['format', 'Content Format', model.contentFormat],
-    ['amount', 'Project Total Fees', model.totalFee],
-    ['currency', 'Currency', model.currency],
-    ['payment-term', 'Payment Term', model.paymentWorkingDays],
-    ['payment-method', 'Payment Method', model.paymentMethod],
+    ['publisher-address', 'Publisher Address', model.publisherAddress],
+    ['platform', 'Publishing Platform', model.platform],
+    ['channel-name', 'Channel Name', model.channelName],
+    ['channel-link', 'Channel Link', model.channelUrl],
     ['payout-account', 'Payout Account', model.payoutAccountId],
   ];
   return fields

@@ -86,6 +86,28 @@ const model: ContractGenerationModel = {
   },
 };
 
+const optionalFieldsBlankModel = (): ContractGenerationModel => ({
+  ...model,
+  projectName: '',
+  brandName: '',
+  effectiveDate: '',
+  campaignStart: '',
+  campaignEnd: '',
+  purposeItems: [],
+  promotedProduct: '',
+  hashtag: '',
+  contentFormat: '',
+  releaseStart: '',
+  releaseEnd: '',
+  language: '',
+  contentLength: '',
+  licensePeriod: '',
+  licensePrice: '',
+  currency: '',
+  totalFee: '',
+  feeBearer: '',
+});
+
 const readTemplate = async () => (
   toArrayBuffer(await readFile(resolve('public/contracts/single-campaign-contract-template-v1.pdf')))
 );
@@ -163,15 +185,60 @@ describe('contract generation', () => {
     ]));
   });
 
+  it('keeps optional blank fields empty without creating quality blockers', () => {
+    const optionalFieldsBlank = optionalFieldsBlankModel();
+    const report = createContractQualityReport(optionalFieldsBlank);
+    const rendered = replaceContractPlaceholders(
+      '{{project_name}}|{{effective_date}}|{{campaign_purpose}}|{{contract_amount}}|{{fee_bearer}}',
+      optionalFieldsBlank,
+      'DRAFT',
+    );
+
+    expect(report.hasBlockers).toBe(false);
+    expect(report.missingRequired).toBe(0);
+    expect(rendered).toBe('||||');
+    expect(rendered).not.toContain('待填写');
+  });
+
+  it('reports one selector issue before validating derived creator or payout fields', () => {
+    const missingSelections: ContractGenerationModel = {
+      ...model,
+      creatorId: '' as CreatorId,
+      projectId: '' as ProjectId,
+      publisher: '',
+      publisherAddress: '',
+      platform: '',
+      channelName: '',
+      channelUrl: '',
+      payoutAccountId: '',
+      paymentSnapshot: {
+        ...model.paymentSnapshot,
+        accountName: '',
+        accountNumber: '',
+        iban: '',
+        bankName: '',
+      },
+    };
+    const report = createContractQualityReport(missingSelections);
+
+    expect(report.issues.filter((issue) => issue.kind === 'REQUIRED_MISSING')).toEqual([
+      expect.objectContaining({ id: 'missing-creator-selection' }),
+      expect.objectContaining({ id: 'missing-project-selection' }),
+      expect.objectContaining({ id: 'missing-payout-account-selection' }),
+    ]);
+  });
+
   it('creates A4 draft and formal PDFs with dynamic pages and variant-specific watermarks', async () => {
     const [template, fonts] = await Promise.all([readTemplate(), readFonts()]);
     const draftBlob = await generateContractPdf(model, template, fonts, 'DRAFT');
     const formalBlob = await generateContractPdf(model, template, fonts, 'FORMAL');
-    const [draftPdf, formalPdf, draftText, formalText] = await Promise.all([
+    const optionalBlankBlob = await generateContractPdf(optionalFieldsBlankModel(), template, fonts, 'FORMAL');
+    const [draftPdf, formalPdf, draftText, formalText, optionalBlankText] = await Promise.all([
       PDFDocument.load(await draftBlob.arrayBuffer()),
       PDFDocument.load(await formalBlob.arrayBuffer()),
       pdfText(draftBlob),
       pdfText(formalBlob),
+      pdfText(optionalBlankBlob),
     ]);
 
     expect(draftBlob.type).toBe('application/pdf');
@@ -184,6 +251,7 @@ describe('contract generation', () => {
     expect(formalText).toContain('Standard Terms And Conditions');
     expect(formalText).toContain(model.publisher);
     expect(formalText).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
+    expect(optionalBlankText).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
     if (renderFixtureDir) {
       await mkdir(renderFixtureDir, { recursive: true });
       await writeFile(resolve(renderFixtureDir, 'synthetic-contract-formal.pdf'), Buffer.from(await formalBlob.arrayBuffer()));
@@ -192,15 +260,18 @@ describe('contract generation', () => {
 
   it('creates editable DOCX files with A4 styles, growable tables, and blank bordered signature lines', async () => {
     const template = await readTemplate();
-    const [draftBlob, formalBlob] = await Promise.all([
+    const [draftBlob, formalBlob, optionalBlankBlob] = await Promise.all([
       generateContractDocx(model, template, 'DRAFT'),
       generateContractDocx(model, template, 'FORMAL'),
+      generateContractDocx(optionalFieldsBlankModel(), template, 'FORMAL'),
     ]);
     const [draftArchive, formalArchive] = await Promise.all([
       JSZip.loadAsync(await draftBlob.arrayBuffer()),
       JSZip.loadAsync(await formalBlob.arrayBuffer()),
     ]);
     const documentXml = await formalArchive.file('word/document.xml')?.async('string') ?? '';
+    const optionalBlankArchive = await JSZip.loadAsync(await optionalBlankBlob.arrayBuffer());
+    const optionalBlankXml = await optionalBlankArchive.file('word/document.xml')?.async('string') ?? '';
     const stylesXml = await formalArchive.file('word/styles.xml')?.async('string') ?? '';
     const draftHeaders = await Promise.all(
       Object.keys(draftArchive.files)
@@ -219,6 +290,7 @@ describe('contract generation', () => {
     expect(documentXml).toContain(model.projectName);
     expect(documentXml).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(documentXml).not.toContain('________________');
+    expect(optionalBlankXml).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
     expect(documentXml).toContain('w:pBdr');
     expect(documentXml).toContain('w:cantSplit');
     expect(documentXml).toContain('w:pgSz');

@@ -219,7 +219,7 @@ export function ContractBuilderPage({
     account.platform.toLowerCase() === selectedContext?.reference.platform.toLowerCase()
     || account.handle.toLowerCase() === selectedContext?.reference.handle.toLowerCase()
   )) ?? selectedCreator?.socialAccounts[0];
-  const publisher = selectedCreator?.contact.legalName || selectedCreator?.name || '';
+  const publisher = selectedCreator?.contact.legalName ?? '';
   const publisherAddress = selectedCreator?.contact.address ?? '';
   const platform = selectedContext?.reference.platform || socialAccount?.platform || selectedCreator?.platform || '';
   const channelName = selectedContext?.reference.handle || socialAccount?.handle || selectedCreator?.handle || '';
@@ -421,7 +421,14 @@ export function ContractBuilderPage({
   };
 
   const focusIssue = (issue: ContractQualityIssue) => {
-    focusField(issue.fieldKey);
+    const formKey = issue.id === 'missing-creator-selection'
+      ? 'creator'
+      : issue.id === 'missing-project-selection'
+        ? 'project'
+        : issue.id === 'missing-payout-account-selection'
+          ? 'payoutAccountId'
+          : undefined;
+    focusField(issue.fieldKey, formKey);
   };
 
   const generate = async (
@@ -503,7 +510,7 @@ export function ContractBuilderPage({
       <div className="contract-builder-top">
         <PageHeading
           title="生成合同"
-          subtitle="从项目、达人档案和已验证收款账户带入资料，填写商业字段后生成 PDF 与可编辑 DOCX。"
+          subtitle="从项目、达人档案和已验证收款账户带入资料，可按需补充商业字段后生成 PDF 与可编辑 DOCX。"
           actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} title="返回合同管理" onClick={onCancel}>返回合同管理</Button>}
         />
         <NoticeBanner>当前为纯前端原型。合同与账户快照只保留在本次浏览器会话，不会上传到外部服务。</NoticeBanner>
@@ -560,23 +567,23 @@ export function ContractBuilderPage({
                 <SelectField ariaLabel="合同关联项目" variant="form" value={engagementId} placeholder={creatorId ? '选择关联项目' : '请先选择达人'} options={projectOptions} disabled={!creatorId} onChange={selectProject} />
                 <small>{errors.project}</small>
               </div>
-              <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher / 法定名称</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>
-              <label className={errors.channelName ? 'has-error' : ''} data-contract-field="channelName" {...fieldProps('channelName')}><span>频道名称</span><input value={channelName} readOnly /><small>{errors.channelName}</small></label>
-              <label data-contract-field="platform" {...fieldProps('platform')}><span>发布平台</span><input value={platform} readOnly /><small>{errors.platform}</small></label>
-              <label className={`full-width ${errors.channelUrl ? 'has-error' : ''}`} data-contract-field="channelUrl" {...fieldProps('channelUrl')}><span>频道链接</span><input value={channelUrl} readOnly /><small>{errors.channelUrl}</small></label>
-              <label className={`full-width ${errors.publisherAddress ? 'has-error' : ''}`} data-contract-field="publisherAddress" {...fieldProps('publisherAddress')}><span>Publisher 地址</span><textarea value={publisherAddress} readOnly /><small>{errors.publisherAddress}</small></label>
+              <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher / 法定名称 *</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>
+              <label className={errors.channelName ? 'has-error' : ''} data-contract-field="channelName" {...fieldProps('channelName')}><span>频道名称 *</span><input value={channelName} readOnly /><small>{errors.channelName}</small></label>
+              <label className={errors.platform ? 'has-error' : ''} data-contract-field="platform" {...fieldProps('platform')}><span>发布平台 *</span><input value={platform} readOnly /><small>{errors.platform}</small></label>
+              <label className={`full-width ${errors.channelUrl ? 'has-error' : ''}`} data-contract-field="channelUrl" {...fieldProps('channelUrl')}><span>频道链接 *</span><input value={channelUrl} readOnly /><small>{errors.channelUrl}</small></label>
+              <label className={`full-width ${errors.publisherAddress ? 'has-error' : ''}`} data-contract-field="publisherAddress" {...fieldProps('publisherAddress')}><span>Publisher 地址 *</span><textarea value={publisherAddress} readOnly /><small>{errors.publisherAddress}</small></label>
             </div>
           </div>
 
           <div className="invoice-builder-section">
-            <header><span><BriefcaseBusiness size={19} /></span><div><h2>2. 项目与内容条款</h2><p>这里只填写模板黄色占位对应的活动、发布和授权字段。</p></div></header>
+            <header><span><BriefcaseBusiness size={19} /></span><div><h2>2. 项目与内容条款</h2><p>以下字段均为非必填，填写后写入合同模板。</p></div></header>
             <div className="invoice-form-grid">
-              <label className="full-width" data-contract-field="projectName" {...fieldProps('projectName')}><span>Project Name *</span><input value={projectName} onChange={(event) => { setProjectName(event.target.value); resetOutput(); }} /></label>
-              <label className={errors.effectiveDate ? 'has-error' : ''} data-contract-field="effectiveDate" {...fieldProps('effectiveDate')}><span>生效日期 *</span><input type="date" value={effectiveDate} onChange={(event) => { setEffectiveDate(event.target.value); resetOutput(); }} /><small>{errors.effectiveDate}</small></label>
-              <label className={errors.campaignStart ? 'has-error' : ''} data-contract-field="campaignStart" {...fieldProps('campaignPeriod')}><span>Campaign Start *</span><input type="date" value={campaignStart} onChange={(event) => { setCampaignStart(event.target.value); resetOutput(); }} /><small>{errors.campaignStart}</small></label>
-              <label className={errors.campaignEnd ? 'has-error' : ''} data-contract-field="campaignEnd" {...fieldProps('campaignPeriod')}><span>Campaign End *</span><input type="date" value={campaignEnd} onChange={(event) => { setCampaignEnd(event.target.value); resetOutput(); }} /><small>{errors.campaignEnd}</small></label>
+              <label className="full-width" data-contract-field="projectName" {...fieldProps('projectName')}><span>Project Name</span><input value={projectName} onChange={(event) => { setProjectName(event.target.value); resetOutput(); }} /></label>
+              <label className={errors.effectiveDate ? 'has-error' : ''} data-contract-field="effectiveDate" {...fieldProps('effectiveDate')}><span>生效日期</span><input type="date" value={effectiveDate} onChange={(event) => { setEffectiveDate(event.target.value); resetOutput(); }} /><small>{errors.effectiveDate}</small></label>
+              <label className={errors.campaignStart ? 'has-error' : ''} data-contract-field="campaignStart" {...fieldProps('campaignPeriod')}><span>Campaign Start</span><input type="date" value={campaignStart} onChange={(event) => { setCampaignStart(event.target.value); resetOutput(); }} /><small>{errors.campaignStart}</small></label>
+              <label className={errors.campaignEnd ? 'has-error' : ''} data-contract-field="campaignEnd" {...fieldProps('campaignPeriod')}><span>Campaign End</span><input type="date" value={campaignEnd} onChange={(event) => { setCampaignEnd(event.target.value); resetOutput(); }} /><small>{errors.campaignEnd}</small></label>
               <div className={`contract-purpose-editor full-width ${errors.purposeItems ? 'has-error' : ''}`} data-contract-field="purposeItems" onFocus={() => setActiveField('purposeItems')}>
-                <div className="invoice-line-header"><strong>推广目的 *</strong>{purposeItems.length < 3 ? <Button variant="secondary" icon={<Plus size={14} />} onClick={() => setPurposeItems((current) => [...current, ''])}>新增一项</Button> : null}</div>
+                <div className="invoice-line-header"><strong>推广目的</strong>{purposeItems.length < 3 ? <Button variant="secondary" icon={<Plus size={14} />} onClick={() => setPurposeItems((current) => [...current, ''])}>新增一项</Button> : null}</div>
                 {purposeItems.map((item, index) => (
                   <div className="contract-purpose-row" key={index}>
                     <input
@@ -594,30 +601,30 @@ export function ContractBuilderPage({
                 ))}
                 <small>{errors.purposeItems}</small>
               </div>
-              <label className={errors.promotedProduct ? 'has-error' : ''} data-contract-field="promotedProduct" {...fieldProps('promotedProduct')}><span>推广产品 / 活动名称 *</span><input value={promotedProduct} onChange={(event) => { setPromotedProduct(event.target.value); resetOutput(); }} /><small>{errors.promotedProduct}</small></label>
-              <label className={errors.hashtag ? 'has-error' : ''} data-contract-field="hashtag" {...fieldProps('hashtag')}><span>Hashtag *</span><input value={hashtag} placeholder="#campaign" onChange={(event) => { setHashtag(event.target.value); resetOutput(); }} /><small>{errors.hashtag}</small></label>
+              <label className={errors.promotedProduct ? 'has-error' : ''} data-contract-field="promotedProduct" {...fieldProps('promotedProduct')}><span>推广产品 / 活动名称</span><input value={promotedProduct} onChange={(event) => { setPromotedProduct(event.target.value); resetOutput(); }} /><small>{errors.promotedProduct}</small></label>
+              <label className={errors.hashtag ? 'has-error' : ''} data-contract-field="hashtag" {...fieldProps('hashtag')}><span>Hashtag</span><input value={hashtag} placeholder="#campaign" onChange={(event) => { setHashtag(event.target.value); resetOutput(); }} /><small>{errors.hashtag}</small></label>
               <div className={`invoice-form-control ${errors.contentFormat ? 'has-error' : ''}`} data-contract-field="contentFormat" onFocus={() => setActiveField('contentFormat')}>
-                <span>内容形式 *</span>
+                <span>内容形式</span>
                 <SelectField ariaLabel="合同内容形式" variant="form" value={contentFormat} placeholder="选择视频或直播形式" options={CONTENT_FORMAT_OPTIONS} onChange={(value) => { setContentFormat(value); resetOutput(); }} />
                 <small>{errors.contentFormat}</small>
               </div>
-              <label className={errors.language ? 'has-error' : ''} data-contract-field="language" {...fieldProps('language')}><span>内容语言 *</span><input value={language} placeholder="French" onChange={(event) => { setLanguage(event.target.value); resetOutput(); }} /><small>{errors.language}</small></label>
-              <label className={errors.releaseStart ? 'has-error' : ''} data-contract-field="releaseStart" {...fieldProps('releasePeriod')}><span>发布开始日期 *</span><input type="date" value={releaseStart} onChange={(event) => { setReleaseStart(event.target.value); resetOutput(); }} /><small>{errors.releaseStart}</small></label>
-              <label className={errors.releaseEnd ? 'has-error' : ''} data-contract-field="releaseEnd" {...fieldProps('releasePeriod')}><span>发布结束日期 *</span><input type="date" value={releaseEnd} onChange={(event) => { setReleaseEnd(event.target.value); resetOutput(); }} /><small>{errors.releaseEnd}</small></label>
-              <label className={`full-width ${errors.contentLength ? 'has-error' : ''}`} data-contract-field="contentLength" {...fieldProps('contentLength')}><span>内容时长要求 *</span><textarea maxLength={320} value={contentLength} placeholder="例如：Dedicated video at least 10 minutes" onChange={(event) => { setContentLength(event.target.value); resetOutput(); }} /><small>{errors.contentLength}</small></label>
-              <label data-contract-field="licensePeriod" {...fieldProps('licensePeriod')}><span>License Period（可选）</span><input value={licensePeriod} onChange={(event) => { setLicensePeriod(event.target.value); resetOutput(); }} /></label>
-              <label className={errors.licensePrice ? 'has-error' : ''} data-contract-field="licensePrice" {...fieldProps('licensePrice')}><span>License Price（可选）</span><input type="number" min="0" step="0.01" value={licensePrice} onChange={(event) => { setLicensePrice(event.target.value); resetOutput(); }} /><small>{errors.licensePrice}</small></label>
+              <label className={errors.language ? 'has-error' : ''} data-contract-field="language" {...fieldProps('language')}><span>内容语言</span><input value={language} placeholder="French" onChange={(event) => { setLanguage(event.target.value); resetOutput(); }} /><small>{errors.language}</small></label>
+              <label className={errors.releaseStart ? 'has-error' : ''} data-contract-field="releaseStart" {...fieldProps('releasePeriod')}><span>发布开始日期</span><input type="date" value={releaseStart} onChange={(event) => { setReleaseStart(event.target.value); resetOutput(); }} /><small>{errors.releaseStart}</small></label>
+              <label className={errors.releaseEnd ? 'has-error' : ''} data-contract-field="releaseEnd" {...fieldProps('releasePeriod')}><span>发布结束日期</span><input type="date" value={releaseEnd} onChange={(event) => { setReleaseEnd(event.target.value); resetOutput(); }} /><small>{errors.releaseEnd}</small></label>
+              <label className={`full-width ${errors.contentLength ? 'has-error' : ''}`} data-contract-field="contentLength" {...fieldProps('contentLength')}><span>内容时长要求</span><textarea maxLength={320} value={contentLength} placeholder="例如：Dedicated video at least 10 minutes" onChange={(event) => { setContentLength(event.target.value); resetOutput(); }} /><small>{errors.contentLength}</small></label>
+              <label data-contract-field="licensePeriod" {...fieldProps('licensePeriod')}><span>License Period</span><input value={licensePeriod} onChange={(event) => { setLicensePeriod(event.target.value); resetOutput(); }} /></label>
+              <label className={errors.licensePrice ? 'has-error' : ''} data-contract-field="licensePrice" {...fieldProps('licensePrice')}><span>License Price</span><input type="number" min="0" step="0.01" value={licensePrice} onChange={(event) => { setLicensePrice(event.target.value); resetOutput(); }} /><small>{errors.licensePrice}</small></label>
             </div>
           </div>
 
           <div className="invoice-builder-section">
-            <header><span><FileSignature size={19} /></span><div><h2>3. 商务条款</h2><p>金额与付款期限将同步写入 IO 和 Standard Terms。</p></div></header>
+            <header><span><FileSignature size={19} /></span><div><h2>3. 商务条款</h2><p>以下字段均为非必填；保留默认值或填写后将写入合同模板。</p></div></header>
             <div className="invoice-form-grid">
-              <div className="invoice-form-control" data-contract-field="currency" onFocus={() => setActiveField('totalFee')}><span>币种 *</span><SelectField ariaLabel="合同币种" variant="form" value={currency} options={CURRENCY_OPTIONS} onChange={(value) => { setCurrency(value); resetOutput(); }} /></div>
-              <label className={errors.totalFee ? 'has-error' : ''} data-contract-field="totalFee" {...fieldProps('totalFee')}><span>Project Total Fees *</span><input type="number" min="0" step="0.01" value={totalFee} onChange={(event) => { setTotalFee(event.target.value); resetOutput(); }} /><small>{errors.totalFee}</small></label>
-              <label className={errors.invoiceIssueWorkingDays ? 'has-error' : ''} data-contract-field="invoiceIssueWorkingDays" {...fieldProps('invoiceIssueWorkingDays')}><span>Invoice 开具期限 *</span><input type="number" min="1" max="30" value={invoiceIssueWorkingDays} onChange={(event) => { setInvoiceIssueWorkingDays(Number(event.target.value)); resetOutput(); }} /><small>{errors.invoiceIssueWorkingDays}</small></label>
-              <div className="invoice-form-control" data-contract-field="paymentWorkingDays" onFocus={() => setActiveField('paymentWorkingDays')}><span>付款期限 *</span><SelectField ariaLabel="合同付款期限" variant="form" value={String(paymentWorkingDays)} options={PAYMENT_DAYS_OPTIONS} onChange={(value) => { setPaymentWorkingDays(Number(value) as 45 | 60); resetOutput(); }} /></div>
-              <div className={`invoice-form-control full-width ${errors.feeBearer ? 'has-error' : ''}`} data-contract-field="feeBearer" onFocus={() => setActiveField('feeBearer')}><span>转账手续费承担方 *</span><SelectField ariaLabel="合同手续费承担方" variant="form" value={feeBearer} options={FEE_BEARER_OPTIONS} onChange={(value) => { setFeeBearer(value as ContractGenerationModel['feeBearer']); resetOutput(); }} /><small>{errors.feeBearer}</small></div>
+              <div className={`invoice-form-control ${errors.currency ? 'has-error' : ''}`} data-contract-field="currency" onFocus={() => setActiveField('totalFee')}><span>币种</span><SelectField ariaLabel="合同币种" variant="form" value={currency} options={CURRENCY_OPTIONS} onChange={(value) => { setCurrency(value); resetOutput(); }} /><small>{errors.currency}</small></div>
+              <label className={errors.totalFee ? 'has-error' : ''} data-contract-field="totalFee" {...fieldProps('totalFee')}><span>Project Total Fees</span><input type="number" min="0" step="0.01" value={totalFee} onChange={(event) => { setTotalFee(event.target.value); resetOutput(); }} /><small>{errors.totalFee}</small></label>
+              <label className={errors.invoiceIssueWorkingDays ? 'has-error' : ''} data-contract-field="invoiceIssueWorkingDays" {...fieldProps('invoiceIssueWorkingDays')}><span>Invoice 开具期限</span><input type="number" min="1" max="30" value={invoiceIssueWorkingDays} onChange={(event) => { setInvoiceIssueWorkingDays(Number(event.target.value)); resetOutput(); }} /><small>{errors.invoiceIssueWorkingDays}</small></label>
+              <div className="invoice-form-control" data-contract-field="paymentWorkingDays" onFocus={() => setActiveField('paymentWorkingDays')}><span>付款期限</span><SelectField ariaLabel="合同付款期限" variant="form" value={String(paymentWorkingDays)} options={PAYMENT_DAYS_OPTIONS} onChange={(value) => { setPaymentWorkingDays(Number(value) as 45 | 60); resetOutput(); }} /></div>
+              <div className={`invoice-form-control full-width ${errors.feeBearer ? 'has-error' : ''}`} data-contract-field="feeBearer" onFocus={() => setActiveField('feeBearer')}><span>转账手续费承担方</span><SelectField ariaLabel="合同手续费承担方" variant="form" value={feeBearer} options={FEE_BEARER_OPTIONS} onChange={(value) => { setFeeBearer(value as ContractGenerationModel['feeBearer']); resetOutput(); }} /><small>{errors.feeBearer}</small></div>
             </div>
           </div>
 
@@ -631,16 +638,16 @@ export function ContractBuilderPage({
               </div>
               {selectedAccount?.provider === 'Airwallex' ? (
                 <>
-                  <label><span>Account Name</span><input value={paymentSnapshot.accountName} readOnly /></label>
-                  <label><span>Account Number</span><input value={paymentSnapshot.accountNumber} readOnly /></label>
-                  <label><span>IBAN</span><input value={paymentSnapshot.iban} readOnly /></label>
+                  <label><span>Account Name *</span><input value={paymentSnapshot.accountName} readOnly /></label>
+                  <label><span>Account Number *（与 IBAN 至少一项）</span><input value={paymentSnapshot.accountNumber} readOnly /></label>
+                  <label><span>IBAN *（与账号至少一项）</span><input value={paymentSnapshot.iban} readOnly /></label>
                   <label><span>SWIFT Code</span><input value={paymentSnapshot.swiftCode} readOnly /></label>
-                  <label className="full-width"><span>Beneficiary Bank</span><input value={paymentSnapshot.bankName} readOnly /></label>
+                  <label className="full-width"><span>Beneficiary Bank *</span><input value={paymentSnapshot.bankName} readOnly /></label>
                 </>
               ) : selectedAccount?.provider === 'PayPal' ? (
                 <>
-                  <label><span>PayPal Name</span><input value={paymentSnapshot.paypalUsername} readOnly /></label>
-                  <label><span>PayPal Email</span><input value={paymentSnapshot.paypalEmail} readOnly /></label>
+                  <label><span>PayPal Name *</span><input value={paymentSnapshot.paypalUsername} readOnly /></label>
+                  <label><span>PayPal Email *</span><input value={paymentSnapshot.paypalEmail} readOnly /></label>
                 </>
               ) : (
                 <div className="contract-account-empty full-width">达人档案没有可用于合同的已验证 Airwallex 或 PayPal 账户。</div>

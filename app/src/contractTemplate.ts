@@ -50,7 +50,7 @@ export type ContractPlaceholderDefinition = {
   label: string;
   fieldKey: ContractTemplateFieldKey;
   kind: ContractPlaceholderKind;
-  required: boolean;
+  required: boolean | ((model: ContractGenerationModel) => boolean);
   pageHint: number;
   value: (model: ContractGenerationModel) => string;
   overflowAt?: number;
@@ -70,6 +70,7 @@ export const formatContractDate = (value: string) => {
 
 export const formatContractMoneyValue = (currency: string, value: string) => {
   if (!value.trim()) return '';
+  if (!currency.trim()) return value.trim();
   const amount = Number(value);
   if (!Number.isFinite(amount)) return `${currency} ${value}`.trim();
   return new Intl.NumberFormat('en-US', {
@@ -95,37 +96,48 @@ const payoutAccountLocator = (model: ContractGenerationModel) => (
     : model.paymentSnapshot.iban || model.paymentSnapshot.accountNumber
 );
 
+const hasCreator = (model: ContractGenerationModel) => Boolean(model.creatorId);
+const hasPayoutAccount = (model: ContractGenerationModel) => Boolean(model.payoutAccountId);
+const isRequired = (
+  definition: ContractPlaceholderDefinition,
+  model: ContractGenerationModel,
+) => (
+  typeof definition.required === 'function'
+    ? definition.required(model)
+    : definition.required
+);
+
 export const CONTRACT_PLACEHOLDER_DEFINITIONS: ContractPlaceholderDefinition[] = [
-  { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: true, pageHint: 1, overflowAt: 72, value: (model) => model.publisher },
-  { token: 'publisher_address', label: 'Publisher Address', fieldKey: 'publisherAddress', kind: 'longText', required: true, pageHint: 14, overflowAt: 180, value: (model) => model.publisherAddress },
-  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'text', required: true, pageHint: 1, overflowAt: 160, value: (model) => model.channelUrl },
-  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: true, pageHint: 1, overflowAt: 80, value: (model) => model.platform },
-  { token: 'effective_date', label: 'Effective Date', fieldKey: 'effectiveDate', kind: 'date', required: true, pageHint: 14, value: (model) => formatContractDate(model.effectiveDate) },
-  { token: 'campaign_start', label: 'Campaign Start', fieldKey: 'campaignPeriod', kind: 'date', required: true, pageHint: 14, value: (model) => formatContractDate(model.campaignStart) },
-  { token: 'campaign_end', label: 'Campaign End', fieldKey: 'campaignPeriod', kind: 'date', required: true, pageHint: 14, value: (model) => formatContractDate(model.campaignEnd) },
-  { token: 'project_name', label: 'Project Name', fieldKey: 'projectName', kind: 'longText', required: true, pageHint: 14, overflowAt: 120, value: (model) => model.projectName },
-  { token: 'channel_name', label: 'Channel Name', fieldKey: 'channelName', kind: 'text', required: true, pageHint: 14, overflowAt: 90, value: (model) => model.channelName },
-  { token: 'campaign_purpose', label: 'Campaign Purpose', fieldKey: 'purposeItems', kind: 'longText', required: true, pageHint: 15, overflowAt: 280, value: (model) => model.purposeItems.join('\n') },
-  { token: 'promoted_product', label: 'Promoted Product', fieldKey: 'promotedProduct', kind: 'longText', required: true, pageHint: 15, overflowAt: 120, value: (model) => model.promotedProduct },
-  { token: 'hashtag', label: 'Hashtag', fieldKey: 'hashtag', kind: 'text', required: true, pageHint: 15, overflowAt: 70, value: (model) => model.hashtag },
-  { token: 'content_format', label: 'Content Format', fieldKey: 'contentFormat', kind: 'text', required: true, pageHint: 15, value: (model) => model.contentFormat },
-  { token: 'release_start', label: 'Release Start', fieldKey: 'releasePeriod', kind: 'date', required: true, pageHint: 15, value: (model) => formatContractDate(model.releaseStart) },
-  { token: 'release_end', label: 'Release End', fieldKey: 'releasePeriod', kind: 'date', required: true, pageHint: 15, value: (model) => formatContractDate(model.releaseEnd) },
-  { token: 'language', label: 'Language', fieldKey: 'language', kind: 'text', required: true, pageHint: 15, value: (model) => model.language },
-  { token: 'content_length', label: 'Content Length', fieldKey: 'contentLength', kind: 'longText', required: true, pageHint: 15, overflowAt: 280, value: (model) => model.contentLength },
+  { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 72, value: (model) => model.publisher },
+  { token: 'publisher_address', label: 'Publisher Address', fieldKey: 'publisherAddress', kind: 'longText', required: hasCreator, pageHint: 14, overflowAt: 180, value: (model) => model.publisherAddress },
+  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 160, value: (model) => model.channelUrl },
+  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 80, value: (model) => model.platform },
+  { token: 'effective_date', label: 'Effective Date', fieldKey: 'effectiveDate', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.effectiveDate) },
+  { token: 'campaign_start', label: 'Campaign Start', fieldKey: 'campaignPeriod', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.campaignStart) },
+  { token: 'campaign_end', label: 'Campaign End', fieldKey: 'campaignPeriod', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.campaignEnd) },
+  { token: 'project_name', label: 'Project Name', fieldKey: 'projectName', kind: 'longText', required: false, pageHint: 14, overflowAt: 120, value: (model) => model.projectName },
+  { token: 'channel_name', label: 'Channel Name', fieldKey: 'channelName', kind: 'text', required: hasCreator, pageHint: 14, overflowAt: 90, value: (model) => model.channelName },
+  { token: 'campaign_purpose', label: 'Campaign Purpose', fieldKey: 'purposeItems', kind: 'longText', required: false, pageHint: 15, overflowAt: 280, value: (model) => model.purposeItems.join('\n') },
+  { token: 'promoted_product', label: 'Promoted Product', fieldKey: 'promotedProduct', kind: 'longText', required: false, pageHint: 15, overflowAt: 120, value: (model) => model.promotedProduct },
+  { token: 'hashtag', label: 'Hashtag', fieldKey: 'hashtag', kind: 'text', required: false, pageHint: 15, overflowAt: 70, value: (model) => model.hashtag },
+  { token: 'content_format', label: 'Content Format', fieldKey: 'contentFormat', kind: 'text', required: false, pageHint: 15, value: (model) => model.contentFormat },
+  { token: 'release_start', label: 'Release Start', fieldKey: 'releasePeriod', kind: 'date', required: false, pageHint: 15, value: (model) => formatContractDate(model.releaseStart) },
+  { token: 'release_end', label: 'Release End', fieldKey: 'releasePeriod', kind: 'date', required: false, pageHint: 15, value: (model) => formatContractDate(model.releaseEnd) },
+  { token: 'language', label: 'Language', fieldKey: 'language', kind: 'text', required: false, pageHint: 15, value: (model) => model.language },
+  { token: 'content_length', label: 'Content Length', fieldKey: 'contentLength', kind: 'longText', required: false, pageHint: 15, overflowAt: 280, value: (model) => model.contentLength },
   { token: 'license_period', label: 'License Period', fieldKey: 'licensePeriod', kind: 'text', required: false, pageHint: 15, value: (model) => model.licensePeriod },
   { token: 'license_price', label: 'License Price', fieldKey: 'licensePrice', kind: 'money', required: false, pageHint: 15, value: (model) => formatContractMoneyValue(model.currency, model.licensePrice) },
-  { token: 'contract_amount', label: 'Project Total Fees', fieldKey: 'totalFee', kind: 'money', required: true, pageHint: 15, value: (model) => formatContractMoneyValue(model.currency, model.totalFee) },
-  { token: 'invoice_issue_days', label: 'Invoice Issue Period', fieldKey: 'invoiceIssueWorkingDays', kind: 'text', required: true, pageHint: 5, value: (model) => `${model.invoiceIssueWorkingDays} working days` },
-  { token: 'payment_days', label: 'Payment Term', fieldKey: 'paymentWorkingDays', kind: 'text', required: true, pageHint: 16, value: (model) => `${model.paymentWorkingDays} working days` },
-  { token: 'fee_bearer', label: 'Transfer Fee Bearer', fieldKey: 'feeBearer', kind: 'text', required: true, pageHint: 6, value: (model) => model.feeBearer === 'ADVERTISER' ? 'Advertiser' : model.feeBearer === 'PUBLISHER' ? 'Publisher' : model.feeBearer === 'SHARED' ? 'Shared' : '' },
-  { token: 'payout_account_name', label: 'Payout Account Name', fieldKey: 'payoutAccount', kind: 'payment', required: true, pageHint: 5, overflowAt: 100, value: (model) => model.payoutProvider === 'PayPal' ? model.paymentSnapshot.paypalUsername : model.paymentSnapshot.accountName },
-  { token: 'payout_account_locator', label: 'Payout Account', fieldKey: 'payoutAccount', kind: 'payment', required: true, pageHint: 5, overflowAt: 120, value: payoutAccountLocator },
-  { token: 'bank_name', label: 'Beneficiary Bank', fieldKey: 'payoutAccount', kind: 'payment', required: true, pageHint: 5, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.bankName },
+  { token: 'contract_amount', label: 'Project Total Fees', fieldKey: 'totalFee', kind: 'money', required: false, pageHint: 15, value: (model) => formatContractMoneyValue(model.currency, model.totalFee) },
+  { token: 'invoice_issue_days', label: 'Invoice Issue Period', fieldKey: 'invoiceIssueWorkingDays', kind: 'text', required: false, pageHint: 5, value: (model) => model.invoiceIssueWorkingDays > 0 ? `${model.invoiceIssueWorkingDays} working days` : '' },
+  { token: 'payment_days', label: 'Payment Term', fieldKey: 'paymentWorkingDays', kind: 'text', required: false, pageHint: 16, value: (model) => model.paymentWorkingDays ? `${model.paymentWorkingDays} working days` : '' },
+  { token: 'fee_bearer', label: 'Transfer Fee Bearer', fieldKey: 'feeBearer', kind: 'text', required: false, pageHint: 6, value: (model) => model.feeBearer === 'ADVERTISER' ? 'Advertiser' : model.feeBearer === 'PUBLISHER' ? 'Publisher' : model.feeBearer === 'SHARED' ? 'Shared' : '' },
+  { token: 'payout_account_name', label: 'Payout Account Name', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, overflowAt: 100, value: (model) => model.payoutProvider === 'PayPal' ? model.paymentSnapshot.paypalUsername : model.paymentSnapshot.accountName },
+  { token: 'payout_account_locator', label: 'Account Number / IBAN', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, overflowAt: 120, applicable: (model) => model.payoutProvider === 'Airwallex', value: payoutAccountLocator },
+  { token: 'bank_name', label: 'Beneficiary Bank', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.bankName },
   { token: 'bank_address', label: 'Beneficiary Bank Address', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 180, applicable: (model) => model.payoutProvider === 'Airwallex', value: bankAddress },
   { token: 'swift_code', label: 'SWIFT Code', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.swiftCode },
   { token: 'iban', label: 'IBAN', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 80, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.iban },
-  { token: 'paypal_email', label: 'PayPal Email', fieldKey: 'payoutAccount', kind: 'payment', required: true, pageHint: 5, applicable: (model) => model.payoutProvider === 'PayPal', value: (model) => model.paymentSnapshot.paypalEmail },
+  { token: 'paypal_email', label: 'PayPal Email', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, applicable: (model) => model.payoutProvider === 'PayPal', value: (model) => model.paymentSnapshot.paypalEmail },
 ];
 
 export const placeholderToken = (token: string) => `{{${token}}}`;
@@ -137,7 +149,7 @@ export const resolveContractPlaceholder = (
 ) => {
   const value = definition.value(model).trim();
   if (value) return value;
-  return variant === 'DRAFT' && definition.required ? '待填写' : '';
+  return variant === 'DRAFT' && isRequired(definition, model) ? '待填写' : '';
 };
 
 export const replaceContractPlaceholders = (
@@ -163,9 +175,39 @@ export const createContractQualityReport = (
     definition.applicable?.(model) ?? true
   ));
   const issues: ContractQualityIssue[] = [];
+  if (!model.creatorId) {
+    issues.push({
+      id: 'missing-creator-selection',
+      kind: 'REQUIRED_MISSING',
+      severity: 'BLOCKER',
+      fieldKey: 'publisher',
+      pageNumber: 1,
+      message: '请选择合作达人',
+    });
+  }
+  if (!model.projectId) {
+    issues.push({
+      id: 'missing-project-selection',
+      kind: 'REQUIRED_MISSING',
+      severity: 'BLOCKER',
+      fieldKey: 'projectName',
+      pageNumber: 14,
+      message: '请选择关联项目',
+    });
+  }
+  if (!model.payoutAccountId) {
+    issues.push({
+      id: 'missing-payout-account-selection',
+      kind: 'REQUIRED_MISSING',
+      severity: 'BLOCKER',
+      fieldKey: 'payoutAccount',
+      pageNumber: 5,
+      message: '请选择达人已验证的收款账户',
+    });
+  }
   applicable.forEach((definition) => {
     const value = definition.value(model).trim();
-    if (definition.required && !value) {
+    if (isRequired(definition, model) && !value) {
       issues.push({
         id: `missing-${definition.token}`,
         kind: 'REQUIRED_MISSING',
@@ -207,6 +249,41 @@ export const createContractQualityReport = (
       message: 'License Price 不能小于 0',
     });
   }
+  if ((model.totalFee || model.licensePrice) && !model.currency) {
+    issues.push({
+      id: 'format-currency',
+      kind: 'FORMAT_INVALID',
+      severity: 'BLOCKER',
+      fieldKey: 'totalFee',
+      pageNumber: 15,
+      message: '填写金额时必须选择币种',
+    });
+  }
+  if (
+    model.payoutAccountId
+    && model.payoutProvider === 'PayPal'
+    && model.paymentSnapshot.paypalEmail
+    && !/^\S+@\S+\.\S+$/.test(model.paymentSnapshot.paypalEmail.trim())
+  ) {
+    issues.push({
+      id: 'format-paypal-email',
+      kind: 'FORMAT_INVALID',
+      severity: 'BLOCKER',
+      fieldKey: 'payoutAccount',
+      pageNumber: 5,
+      message: 'PayPal Email 格式无效',
+    });
+  }
+  if (Boolean(model.campaignStart) !== Boolean(model.campaignEnd)) {
+    issues.push({
+      id: 'format-campaign-period-incomplete',
+      kind: 'FORMAT_INVALID',
+      severity: 'BLOCKER',
+      fieldKey: 'campaignPeriod',
+      pageNumber: 14,
+      message: 'Campaign 日期需同时填写开始和结束日期',
+    });
+  }
   if (isDateAfter(model.campaignStart, model.campaignEnd)) {
     issues.push({
       id: 'format-campaign-period',
@@ -215,6 +292,16 @@ export const createContractQualityReport = (
       fieldKey: 'campaignPeriod',
       pageNumber: 14,
       message: 'Campaign 结束日期不能早于开始日期',
+    });
+  }
+  if (Boolean(model.releaseStart) !== Boolean(model.releaseEnd)) {
+    issues.push({
+      id: 'format-release-period-incomplete',
+      kind: 'FORMAT_INVALID',
+      severity: 'BLOCKER',
+      fieldKey: 'releasePeriod',
+      pageNumber: 15,
+      message: '发布日期需同时填写开始和结束日期',
     });
   }
   if (isDateAfter(model.releaseStart, model.releaseEnd)) {
@@ -227,17 +314,6 @@ export const createContractQualityReport = (
       message: '发布结束日期不能早于开始日期',
     });
   }
-  if (model.publisher && !model.publisherAddress) {
-    issues.push({
-      id: 'signature-publisher-address',
-      kind: 'SIGNATURE_INCOMPLETE',
-      severity: 'BLOCKER',
-      fieldKey: 'signature',
-      pageNumber: 17,
-      message: 'Publisher 打印主体缺少地址',
-    });
-  }
-
   issues.push(...additionalIssues);
   const completedFields = applicable.filter((definition) => definition.value(model).trim()).length;
   const missingRequired = issues.filter((issue) => issue.kind === 'REQUIRED_MISSING').length;
