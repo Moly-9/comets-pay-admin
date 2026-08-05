@@ -76,7 +76,7 @@ const NAV_ENTRIES: NavEntry[] = [
 
 const selectedPage = (page: NavPage) => {
   if (page === 'new-batch') return 'batches';
-  if (page === 'invoice-create') return 'invoice';
+  if (page === 'invoice-create' || page === 'invoice-batch-create' || page === 'invoice-edit') return 'invoice';
   if (page === 'contract-create') return 'contracts';
   return page;
 };

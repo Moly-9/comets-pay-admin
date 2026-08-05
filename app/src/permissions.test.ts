@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_SYSTEM_USERS } from './data';
-import { hasPermission } from './permissions';
+import { canAccessPage, hasPermission } from './permissions';
 
 const userFor = (role: 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project') => {
   const user = DEMO_SYSTEM_USERS.find((candidate) => candidate.roleKey === role);
@@ -26,5 +26,14 @@ describe('Invoice review permissions', () => {
     expect(hasPermission(userFor('admin'), 'invoice_finance_review')).toBe(true);
     expect(hasPermission(userFor('owner'), 'invoice_media_review')).toBe(true);
     expect(hasPermission(userFor('owner'), 'invoice_finance_review')).toBe(true);
+  });
+
+  it('limits Invoice batch generation to Invoice managers', () => {
+    expect(canAccessPage(userFor('media'), 'invoice-batch-create')).toBe(true);
+    expect(canAccessPage(userFor('admin'), 'invoice-batch-create')).toBe(true);
+    expect(canAccessPage(userFor('owner'), 'invoice-batch-create')).toBe(true);
+    expect(canAccessPage(userFor('pm'), 'invoice-batch-create')).toBe(false);
+    expect(canAccessPage(userFor('project'), 'invoice-batch-create')).toBe(false);
+    expect(canAccessPage(userFor('finance'), 'invoice-batch-create')).toBe(false);
   });
 });

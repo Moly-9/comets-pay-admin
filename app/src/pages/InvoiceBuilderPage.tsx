@@ -16,7 +16,6 @@ import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
   createPrototypeId,
   hasInvoiceForEngagement,
-  validateContractCoverage,
   type CreatorId,
   type ContractId,
   type EngagementId,
@@ -33,6 +32,11 @@ import {
   normalizeLineItem,
   todayInputValue,
 } from '../invoice/invoiceUtils';
+import {
+  payoutSnapshotForContract,
+  payoutSnapshotKey,
+  validateInvoiceDocumentModel,
+} from '../invoice/invoiceDraft';
 import {
   invoiceDocumentChanged,
   maskInvoiceAccountValue,
@@ -125,18 +129,6 @@ const createBlankLine = (index: number): InvoiceLineItem => ({
   quantity: 1,
   lineTotal: 0,
 });
-
-const payoutSnapshotForContract = (contract: ContractRecord) => (
-  contract.paymentSnapshot ?? contract.generationSnapshot?.paymentSnapshot ?? null
-);
-
-const payoutSnapshotKey = (snapshot: DocumentPayoutSnapshot) => (
-  [
-    snapshot.payoutAccountId ?? '',
-    snapshot.payoutAccountVersion ?? 'legacy-v1',
-    snapshot.accountFingerprint ?? '',
-  ].join(':')
-);
 
 export function InvoiceBuilderPage({
   creators,
@@ -249,7 +241,6 @@ export function InvoiceBuilderPage({
   const selectedContractPayoutSnapshots = selectedContracts
     .map(payoutSnapshotForContract)
     .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
-  const selectedContractPayoutKeys = new Set(selectedContractPayoutSnapshots.map(payoutSnapshotKey));
   const contractPayoutLocked = selectedContractPayoutSnapshots.length > 0;
   const engagementInvoiceReferences = generatedInvoices.map((record) => ({
     invoiceId: record.invoiceId,
@@ -451,61 +442,10 @@ export function InvoiceBuilderPage({
   };
 
   const validate = () => {
-    const nextErrors: Record<string, string> = {};
+    const nextErrors = validateInvoiceDocumentModel(model, selectedContracts);
     if (!creatorId) nextErrors.creator = '请选择达人';
     if (!engagementId) nextErrors.project = '请选择该达人关联的项目';
     if (existingInvoice) nextErrors.project = `该项目达人已有 Invoice ${existingInvoice.id}，请先解除旧关联。`;
-    if (!invoiceNumber.trim()) nextErrors.invoiceNumber = 'Invoice 编号不能为空';
-    if (!invoiceDate) nextErrors.invoiceDate = '请选择 Invoice 日期';
-    if (!billTo.name.trim()) nextErrors.billToName = '请填写 Bill To 公司名称';
-    if (!billTo.address.trim()) nextErrors.billToAddress = '请填写 Bill To 地址';
-    if (!from.legalName.trim()) nextErrors.legalName = '请填写真实姓名';
-    if (!from.address.trim()) nextErrors.address = '请填写联系地址';
-    if (!from.phone.trim()) nextErrors.phone = '请填写联系电话';
-    if (!from.email.trim() || !/^\S+@\S+\.\S+$/.test(from.email)) nextErrors.email = '请填写有效联系邮箱';
-    if (!model.payoutAccountId) {
-      nextErrors.payoutAccountId = '必须选择达人档案中的已验证收款账户';
-    }
-    if (selectedContractPayoutKeys.size > 1) {
-      nextErrors.payoutAccountId = '所选合同冻结了不同的收款账户版本，不能合并生成同一张 Invoice';
-    } else if (
-      selectedContractPayoutSnapshots[0]
-      && payoutSnapshotKey(selectedContractPayoutSnapshots[0]) !== payoutSnapshotKey(model.payment)
-    ) {
-      nextErrors.payoutAccountId = 'Invoice 收款账户与合同冻结版本不一致，请重新选择合同或账户';
-    }
-    items.forEach((item, index) => {
-      if (!item.description.trim()) nextErrors[`item-${item.id}-description`] = `第 ${index + 1} 项缺少费用描述`;
-      if (!(item.unitPrice > 0)) nextErrors[`item-${item.id}-unitPrice`] = `第 ${index + 1} 项单价必须大于 0`;
-      if (!(item.quantity > 0)) nextErrors[`item-${item.id}-quantity`] = `第 ${index + 1} 项数量必须大于 0`;
-    });
-    if (paymentMethod === 'bank') {
-      if (!payment.accountName.trim()) nextErrors.accountName = '请填写银行账户名';
-      if (!payment.accountNumber.trim() && !payment.iban.trim()) nextErrors.accountNumber = '银行账号与 IBAN 至少填写一项';
-    } else {
-      if (!payment.paypalUsername.trim()) nextErrors.paypalUsername = '请填写 PayPal Name';
-      if (!payment.paypalEmail.trim() || !/^\S+@\S+\.\S+$/.test(payment.paypalEmail)) nextErrors.paypalEmail = '请填写有效 PayPal Email';
-    }
-    const coverageIssues = validateContractCoverage(
-      selectedContracts.map((contract) => ({
-        contractId: contract.contractId!,
-        advertiser: contract.advertiser,
-        publisher: contract.publisher,
-        currency: contract.currency,
-        totalFee: contract.totalFee,
-        paymentMethod: contract.paymentMethod === 'PAYPAL' ? 'PAYPAL' : 'BANK',
-      })),
-      {
-        billTo: billTo.name,
-        publisher: from.legalName,
-        currency,
-        amount: invoiceTotal(model),
-        paymentMethod: paymentMethod === 'paypal' ? 'PAYPAL' : 'BANK',
-      },
-    );
-    coverageIssues.forEach((issue) => {
-      nextErrors[`contract-${issue.field}`] = issue.message;
-    });
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };

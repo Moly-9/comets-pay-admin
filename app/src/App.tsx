@@ -32,6 +32,7 @@ import { ContractBuilderPage } from './pages/ContractBuilderPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PaymentWorkbenchPage } from './pages/PaymentWorkbenchPage';
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
+import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
 import {
   applyInvoiceDocumentEdit,
@@ -173,6 +174,7 @@ export default function App() {
     context: InvoiceEditContext;
   } | null>(null);
   const [invoiceEditorDirty, setInvoiceEditorDirty] = useState(false);
+  const [invoiceBatchDirty, setInvoiceBatchDirty] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [createdBatch, setCreatedBatch] = useState<CreatedBatch>(null);
@@ -307,15 +309,18 @@ export default function App() {
       return;
     }
     if (
-      activePage === 'invoice-edit'
-      && invoiceEditorDirty
-      && !window.confirm('当前 Invoice 修改尚未保存，确定切换页面吗？')
+      (
+        (activePage === 'invoice-edit' && invoiceEditorDirty)
+        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
+      )
+      && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
     ) {
       return;
     }
     setActivePage(page);
     setInvoiceEditTarget(null);
     setInvoiceEditorDirty(false);
+    setInvoiceBatchDirty(false);
     setFocusedInvoiceId(null);
     setFocusedContractId(null);
     setFocusedProjectId(null);
@@ -329,8 +334,10 @@ export default function App() {
       : [updated, ...current]);
   };
 
-  const addGeneratedInvoice = (record: GeneratedInvoiceRecord) => {
-    if (!payouts.some((payout) => payout.id === record.sourcePayoutId)) {
+  const payoutFromGeneratedInvoice = (
+    record: GeneratedInvoiceRecord,
+    existing?: Payout,
+  ): Payout => {
       const creator = creators.find((item) => item.id === record.snapshot.creatorId);
       const project = projects.find((item) => getProjectId(item) === record.snapshot.projectId);
       const rawAccount = record.snapshot.paymentMethod === 'paypal'
@@ -342,7 +349,8 @@ export default function App() {
         )))
         .map((contract) => contract.feeBearer)
         .filter(Boolean))];
-      setPayouts((current) => [{
+      return {
+        ...existing,
         id: record.sourcePayoutId,
         creator: record.snapshot.creatorName,
         handle: record.snapshot.creatorHandle,
@@ -370,24 +378,54 @@ export default function App() {
         invoiceSignatureRound: 0,
         invoiceSnapshot: record.snapshot,
         accent: creator?.accent ?? '#64748b',
-      }, ...current]);
-    }
-    setGeneratedInvoices((current) => [
-      { ...record, version: record.version ?? 1 },
-      ...current.filter((item) => item.id !== record.id),
-    ]);
-    if (record.snapshot.projectId && record.snapshot.engagementId) {
-      registerProjectMutation({
-        projectId: record.snapshot.projectId as ProjectId,
-        engagementId: record.snapshot.engagementId as EngagementId,
-        entityType: 'invoice',
-        entityId: record.invoiceId,
-        action: 'create',
-        summary: `已生成 Invoice ${record.id}`,
+      };
+  };
+
+  const addGeneratedInvoices = (records: GeneratedInvoiceRecord[]) => {
+    if (!records.length) return;
+    const normalized = records.map((record) => ({ ...record, version: record.version ?? 1 }));
+    setPayouts((current) => {
+      const bySourcePayoutId = new Map(normalized.map((record) => [record.sourcePayoutId, record]));
+      const updated = current.map((payout) => {
+        const record = bySourcePayoutId.get(payout.id);
+        if (!record) return payout;
+        bySourcePayoutId.delete(payout.id);
+        return payoutFromGeneratedInvoice(record, payout);
       });
-    }
+      const additions = [...bySourcePayoutId.values()].map((record) => (
+        payoutFromGeneratedInvoice(record)
+      ));
+      return [...additions, ...updated];
+    });
+    setGeneratedInvoices((current) => [
+      ...normalized,
+      ...current.filter((item) => !normalized.some((record) => (
+        record.invoiceId === item.invoiceId || record.id === item.id
+      ))),
+    ]);
+    normalized.forEach((record) => {
+      if (record.snapshot.projectId && record.snapshot.engagementId) {
+        registerProjectMutation({
+          projectId: record.snapshot.projectId as ProjectId,
+          engagementId: record.snapshot.engagementId as EngagementId,
+          entityType: 'invoice',
+          entityId: record.invoiceId,
+          action: 'create',
+          summary: `已生成 Invoice ${record.id}`,
+        });
+      }
+    });
     setInvoiceTab('signature');
-    notify('Invoice 已生成', `${record.id} 的 PDF 与 DOCX 已准备完成，签名区域保持为空。`);
+    notify(
+      records.length === 1 ? 'Invoice 已生成' : '批量 Invoice 已生成',
+      records.length === 1
+        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，签名区域保持为空。`
+        : `${records.length} 张 Invoice 已进入待签署，PDF 与 DOCX 文件已准备完成。`,
+    );
+  };
+
+  const addGeneratedInvoice = (record: GeneratedInvoiceRecord) => {
+    addGeneratedInvoices([record]);
   };
 
   const findEngagement = (engagementId: EngagementId) => {
@@ -1653,6 +1691,7 @@ export default function App() {
           tab={invoiceTab}
           onTabChange={setInvoiceTab}
           onCreateInvoice={() => setActivePage('invoice-create')}
+          onCreateBatchInvoice={() => setActivePage('invoice-batch-create')}
           canCreateInvoice={canGenerateInvoices}
           canManageInvoice={canGenerateInvoices}
           canReviewMedia={canReviewInvoiceMedia}
@@ -1739,6 +1778,29 @@ export default function App() {
             setActivePage('invoice');
           }}
           initialEngagementId={invoiceCreationEngagementId}
+        />
+      );
+      break;
+    case 'invoice-batch-create':
+      pageContent = (
+        <InvoiceBatchBuilderPage
+          creators={creators}
+          payouts={payouts}
+          projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
+          contracts={contracts}
+          invoiceEntity={invoiceEntity}
+          generatedInvoices={generatedInvoices}
+          onGenerated={addGeneratedInvoices}
+          onDirtyChange={setInvoiceBatchDirty}
+          onCancel={() => {
+            setInvoiceBatchDirty(false);
+            setActivePage('invoice');
+          }}
+          onOpenInvoiceManagement={() => {
+            setInvoiceBatchDirty(false);
+            setInvoiceTab('signature');
+            setActivePage('invoice');
+          }}
         />
       );
       break;

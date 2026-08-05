@@ -17,6 +17,7 @@ export type NavPage =
   | 'collaborations'
   | 'invoice'
   | 'invoice-create'
+  | 'invoice-batch-create'
   | 'invoice-edit'
   | 'batches'
   | 'new-batch'
@@ -340,6 +341,55 @@ export type GeneratedInvoiceRecord = {
   validationStatus: 'valid' | 'needs_review';
   version?: number;
   revisions?: GeneratedInvoiceRevision[];
+};
+
+export type InvoiceBatchMode = 'SHARED_DESCRIPTION' | 'XLSX_IMPORT';
+
+export type InvoiceBatchRowStatus =
+  | 'READY'
+  | 'NEEDS_INPUT'
+  | 'CONFLICT'
+  | 'GENERATING'
+  | 'GENERATED'
+  | 'FAILED';
+
+export type InvoiceBatchGeneratedFiles = {
+  record: GeneratedInvoiceRecord;
+  pdfBlob: Blob;
+  docxBlob: Blob;
+};
+
+export type InvoiceBatchRow = {
+  projectId: ProjectId;
+  engagementId: EngagementId;
+  creatorId: CreatorId;
+  creatorName: string;
+  creatorHandle: string;
+  sourcePayoutId: string;
+  lineItemId: string;
+  invoiceDate: string;
+  description: string;
+  unitPrice: number;
+  quantity: number;
+  currency: InvoiceCurrency | '';
+  payoutAccountId: string;
+  payoutAccountLocked: boolean;
+  contractIds: ContractId[];
+  availableContractIds: ContractId[];
+  status: InvoiceBatchRowStatus;
+  issues: string[];
+  generated?: InvoiceBatchGeneratedFiles;
+};
+
+export type InvoiceBatchDraft = {
+  batchId: string;
+  schemaVersion: '1.0';
+  mode: InvoiceBatchMode;
+  projectId: ProjectId | '';
+  invoiceDate: string;
+  selectedEngagementIds: EngagementId[];
+  sharedDescription: string;
+  rows: InvoiceBatchRow[];
 };
 
 export type InvoiceEditContext =

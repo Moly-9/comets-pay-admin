@@ -1,0 +1,189 @@
+import { describe, expect, it } from 'vitest';
+import {
+  type ContractId,
+  type CreatorId,
+  type EngagementId,
+  type ProjectId,
+} from '../businessWorkflow';
+import { INITIAL_INVOICE_ENTITY } from '../data';
+import {
+  eligibleInvoicePayoutAccounts,
+  getPayoutAccountId,
+  payoutAccountToInvoicePayment,
+} from '../payoutAccounts';
+import { INITIAL_CREATORS, INITIAL_PROJECTS } from '../pages/OperationalPages';
+import { PROJECT_DEMO_CONTRACTS } from '../prototypeResourceFixtures';
+import type { CreatorProfile } from '../types';
+import {
+  buildInvoiceDocumentForBatchRow,
+  createGeneratedInvoiceRecord,
+  createInvoiceBatchRow,
+  updateAndValidateInvoiceBatchRow,
+  validateInvoiceBatchRow,
+  type InvoiceBatchContext,
+} from './invoiceBatch';
+
+const eligibleCreator = INITIAL_CREATORS.find((creator) => (
+  eligibleInvoicePayoutAccounts(creator).length > 0
+))!;
+const baseAccount = eligibleInvoicePayoutAccounts(eligibleCreator)[0]!;
+
+const createContext = ({
+  creator = eligibleCreator,
+  engagementId = 'engagement_batch_test_1' as EngagementId,
+}: {
+  creator?: CreatorProfile;
+  engagementId?: EngagementId;
+} = {}): InvoiceBatchContext => {
+  const projectId = 'project_batch_test' as ProjectId;
+  return {
+    project: {
+      ...INITIAL_PROJECTS[0],
+      id: projectId,
+      projectId,
+      projectCode: 'PRJ-BATCH-TEST',
+      name: '批量 Invoice 测试项目',
+      creatorProfiles: [{
+        creatorId: creator.id as CreatorId,
+        engagementId,
+        projectId,
+        status: 'active',
+        name: creator.name,
+        handle: creator.handle,
+        platform: creator.platform,
+      }],
+    },
+    creators: [creator],
+    payouts: [],
+    contracts: [],
+    generatedInvoices: [],
+    invoiceEntity: INITIAL_INVOICE_ENTITY,
+  };
+};
+
+const creatorWithAccounts = (accounts: CreatorProfile['payoutAccounts']): CreatorProfile => ({
+  ...eligibleCreator,
+  id: 'creator_batch_test',
+  payoutAccounts: accounts.map((account) => ({
+    ...account,
+    creatorId: 'creator_batch_test',
+  })),
+});
+
+describe('Invoice batch rows', () => {
+  it('builds one line item and calculates Price x Amount', () => {
+    const creator = creatorWithAccounts([{
+      ...baseAccount,
+      isDefault: true,
+    }]);
+    const context = createContext({ creator });
+    const engagementId = context.project.creatorProfiles![0].engagementId;
+    const initial = createInvoiceBatchRow({
+      ...context,
+      engagementId,
+      invoiceDate: '2026-08-06',
+      description: 'Dedicated Video',
+    });
+    const row = updateAndValidateInvoiceBatchRow(initial, {
+      unitPrice: 250,
+      quantity: 3,
+      currency: 'USD',
+    }, context);
+    const model = buildInvoiceDocumentForBatchRow(row, context, 'INV-20260806-001');
+
+    expect(row.status).toBe('READY');
+    expect(model.items).toEqual([expect.objectContaining({
+      description: 'Dedicated Video',
+      unitPrice: 250,
+      quantity: 3,
+      lineTotal: 750,
+    })]);
+    expect(model.payoutAccountId).toBe(getPayoutAccountId(creator.payoutAccounts[0]));
+  });
+
+  it('requires manual selection when multiple eligible accounts have no default', () => {
+    const secondAccount = {
+      ...baseAccount,
+      id: `${baseAccount.id}-second`,
+      payoutAccountId: `${getPayoutAccountId(baseAccount)}-second`,
+      nickname: '第二个已验证账户',
+      isDefault: false,
+    };
+    const creator = creatorWithAccounts([
+      { ...baseAccount, isDefault: false },
+      secondAccount,
+    ]);
+    const context = createContext({ creator });
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      description: 'Integrated Video',
+    });
+
+    expect(row.payoutAccountId).toBe('');
+    expect(row.status).toBe('NEEDS_INPUT');
+    expect(row.issues).toContain('请选择唯一、已验证且资料完整的收款账户');
+  });
+
+  it('uses the unique confirmed contract and its frozen account', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: false }]);
+    const context = createContext({ creator });
+    const engagementId = context.project.creatorProfiles![0].engagementId;
+    const payment = payoutAccountToInvoicePayment(creator.payoutAccounts[0], creator.id);
+    context.contracts = [{
+      ...PROJECT_DEMO_CONTRACTS[0],
+      contractId: 'contract_batch_test' as ContractId,
+      id: 'CON-BATCH-TEST',
+      projectId: context.project.projectId,
+      creatorId: creator.id as CreatorId,
+      engagementId,
+      lifecycle: 'CONFIRMED',
+      advertiser: INITIAL_INVOICE_ENTITY.name,
+      publisher: creator.contact.legalName,
+      currency: 'USD',
+      totalFee: 500,
+      paymentMethod: creator.payoutAccounts[0].provider === 'PayPal' ? 'PAYPAL' : 'BANK',
+      payoutAccountId: payment.payoutAccountId,
+      paymentSnapshot: payment,
+    }];
+    const initial = createInvoiceBatchRow({
+      ...context,
+      engagementId,
+      invoiceDate: '2026-08-06',
+      description: 'Creator Service',
+    });
+    const row = updateAndValidateInvoiceBatchRow(initial, {
+      unitPrice: 500,
+      quantity: 1,
+    }, context);
+
+    expect(row.contractIds).toEqual(['contract_batch_test']);
+    expect(row.payoutAccountLocked).toBe(true);
+    expect(row.payoutAccountId).toBe(getPayoutAccountId(creator.payoutAccounts[0]));
+    expect(row.status).toBe('READY');
+  });
+
+  it('blocks an engagement that already has an Invoice', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const engagementId = context.project.creatorProfiles![0].engagementId;
+    let row = createInvoiceBatchRow({
+      ...context,
+      engagementId,
+      invoiceDate: '2026-08-06',
+      description: 'Creator Service',
+    });
+    row = updateAndValidateInvoiceBatchRow(row, {
+      unitPrice: 100,
+      quantity: 1,
+      currency: 'USD',
+    }, context);
+    const snapshot = buildInvoiceDocumentForBatchRow(row, context, 'INV-20260806-001');
+    context.generatedInvoices = [createGeneratedInvoiceRecord(row, snapshot)];
+
+    const duplicate = validateInvoiceBatchRow({ ...row, generated: undefined }, context);
+    expect(duplicate.status).toBe('CONFLICT');
+    expect(duplicate.issues).toContain('该项目达人已有有效 Invoice，不能重复生成');
+  });
+});

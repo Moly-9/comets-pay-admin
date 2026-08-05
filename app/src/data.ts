@@ -845,6 +845,7 @@ export const PAGE_TITLES = {
   collaborations: '合作名单',
   invoice: 'Invoice 管理',
   'invoice-create': '生成 Invoice',
+  'invoice-batch-create': '批量生成 Invoice',
   'invoice-edit': '修改 Invoice',
   batches: '付款批次',
   'new-batch': '新建付款批次',

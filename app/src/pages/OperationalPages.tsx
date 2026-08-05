@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileCheck2,
   FileText,
+  Files,
   Link2,
   MoreHorizontal,
   Pencil,
@@ -2245,6 +2246,7 @@ export function InvoicePage({
   tab,
   onTabChange,
   onCreateInvoice,
+  onCreateBatchInvoice,
   canCreateInvoice,
   canManageInvoice,
   canReviewMedia,
@@ -2268,6 +2270,7 @@ export function InvoicePage({
   tab: InvoicePageTab;
   onTabChange: (tab: InvoicePageTab) => void;
   onCreateInvoice: () => void;
+  onCreateBatchInvoice: () => void;
   canCreateInvoice: boolean;
   canManageInvoice: boolean;
   canReviewMedia: boolean;
@@ -2398,7 +2401,12 @@ export function InvoicePage({
       <PageHeading
         title="Invoice 管理"
         subtitle="生成、下载并审核达人 Invoice，核对合同主体与收款信息。"
-        actions={canCreateInvoice ? <Button icon={<Plus size={17} />} onClick={onCreateInvoice}>生成 Invoice</Button> : undefined}
+        actions={canCreateInvoice ? (
+          <>
+            <Button variant="secondary" icon={<Files size={17} />} onClick={onCreateBatchInvoice}>批量生成 Invoice</Button>
+            <Button icon={<Plus size={17} />} onClick={onCreateInvoice}>生成 Invoice</Button>
+          </>
+        ) : undefined}
       />
       <section className="content-card">
         <div className="tabs-row">
