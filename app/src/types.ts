@@ -17,6 +17,7 @@ export type NavPage =
   | 'collaborations'
   | 'invoice'
   | 'invoice-create'
+  | 'invoice-edit'
   | 'batches'
   | 'new-batch'
   | 'transactions'
@@ -276,7 +277,7 @@ export type InvoiceReviewEvent = {
     | '签署完成'
     | '达人反馈'
     | '回复达人反馈'
-    | '重新发送'
+    | '修改 Invoice'
     | '审核通过'
     | '复核通过并重新提交'
     | '提交请款'
@@ -304,6 +305,23 @@ export type GeneratedInvoiceRecord = {
   snapshot: InvoiceDocumentModel;
   validationStatus: 'valid' | 'needs_review';
   version?: number;
+  revisions?: GeneratedInvoiceRevision[];
+};
+
+export type InvoiceEditContext =
+  | 'CREATOR_FEEDBACK'
+  | 'MEDIA_RECHECK'
+  | 'PAYMENT_FAILURE_CONTENT';
+
+export type GeneratedInvoiceRevision = {
+  version: number;
+  snapshot: InvoiceDocumentModel;
+  changedFields: string[];
+  reason: string;
+  actorAccount: string;
+  actorName: string;
+  actorRole: string;
+  occurredAt: string;
 };
 
 export type PayoutStatus =
@@ -331,7 +349,7 @@ export type PaymentFailureReturn = {
   actorAccount: string;
   actorName: string;
   occurredAt: string;
-  restartStage: 'SIGNATURE' | 'MEDIA_RECHECK';
+  restartStage: 'SIGNATURE' | 'PAYMENT_LIST_RESUBMISSION';
 };
 
 export type Payout = {

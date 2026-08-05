@@ -10,7 +10,7 @@ import {
   WalletCards,
   WandSparkles,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
@@ -33,6 +33,7 @@ import {
   normalizeLineItem,
   todayInputValue,
 } from '../invoice/invoiceUtils';
+import { invoiceDocumentChanged } from '../invoice/invoiceReviewWorkflow';
 import { invoicePaymentForCreator } from '../payoutAccounts';
 import type {
   CreatorInvoiceContact,
@@ -41,6 +42,7 @@ import type {
   GeneratedInvoiceRecord,
   InvoiceCurrency,
   InvoiceDocumentModel,
+  InvoiceEditContext,
   InvoiceEntity,
   InvoiceLineItem,
   InvoicePaymentMethod,
@@ -55,7 +57,11 @@ type InvoiceBuilderPageProps = {
   contracts: ContractRecord[];
   invoiceEntity: InvoiceEntity;
   generatedInvoices: GeneratedInvoiceRecord[];
-  onGenerated: (record: GeneratedInvoiceRecord) => void;
+  onGenerated?: (record: GeneratedInvoiceRecord) => void;
+  editRecord?: GeneratedInvoiceRecord;
+  editContext?: InvoiceEditContext;
+  onEdited?: (snapshot: InvoiceDocumentModel) => GeneratedInvoiceRecord;
+  onDirtyChange?: (dirty: boolean) => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
   initialEngagementId?: EngagementId | null;
@@ -122,27 +128,57 @@ export function InvoiceBuilderPage({
   invoiceEntity,
   generatedInvoices,
   onGenerated,
+  editRecord,
+  editContext,
+  onEdited,
+  onDirtyChange,
   onCancel,
   onOpenInvoiceManagement,
   initialEngagementId,
 }: InvoiceBuilderPageProps) {
+  const isEditing = Boolean(editRecord && editContext);
+  const editSnapshot = editRecord?.snapshot;
   const initialContext = projects
     .flatMap((project) => (project.creatorProfiles ?? []).map((reference) => ({ project, reference })))
-    .find((item) => item.reference.engagementId === initialEngagementId);
-  const initialCreator = creators.find((creator) => creator.id === initialContext?.reference.creatorId);
-  const [creatorId, setCreatorId] = useState(initialCreator?.id ?? '');
-  const [engagementId, setEngagementId] = useState(initialEngagementId ?? '');
-  const [contractIds, setContractIds] = useState<ContractId[]>([]);
-  const [invoiceNumber, setInvoiceNumber] = useState(() => nextInvoiceNumber(generatedInvoices));
+    .find((item) => item.reference.engagementId === (editSnapshot?.engagementId ?? initialEngagementId));
+  const initialCreator = creators.find((creator) => (
+    creator.id === (editSnapshot?.creatorId ?? initialContext?.reference.creatorId)
+  ));
+  const [creatorId, setCreatorId] = useState(initialCreator?.id ?? editSnapshot?.creatorId ?? '');
+  const [engagementId, setEngagementId] = useState(editSnapshot?.engagementId ?? initialEngagementId ?? '');
+  const [contractIds, setContractIds] = useState<ContractId[]>(() => (
+    editSnapshot?.contractIds ? [...editSnapshot.contractIds] : []
+  ));
+  const [invoiceNumber, setInvoiceNumber] = useState(() => (
+    editSnapshot?.invoiceNumber ?? nextInvoiceNumber(generatedInvoices)
+  ));
   const [prototypePayoutId] = useState(() => createPrototypeId('payout'));
-  const [invoiceDate, setInvoiceDate] = useState(() => todayInputValue());
-  const [billTo, setBillTo] = useState<InvoiceEntity>({ ...invoiceEntity });
-  const [from, setFrom] = useState<CreatorInvoiceContact>(initialCreator ? { ...initialCreator.contact } : { ...EMPTY_CONTACT });
-  const [currency, setCurrency] = useState<InvoiceCurrency>('USD');
-  const [items, setItems] = useState<InvoiceLineItem[]>([createBlankLine(0)]);
-  const [paymentMethod, setPaymentMethod] = useState<InvoicePaymentMethod>('bank');
+  const [invoiceDate, setInvoiceDate] = useState(() => editSnapshot?.invoiceDate ?? todayInputValue());
+  const [billTo, setBillTo] = useState<InvoiceEntity>(
+    editSnapshot ? { ...editSnapshot.billTo } : { ...invoiceEntity },
+  );
+  const [from, setFrom] = useState<CreatorInvoiceContact>(
+    editSnapshot
+      ? { ...editSnapshot.from }
+      : initialCreator
+        ? { ...initialCreator.contact }
+        : { ...EMPTY_CONTACT },
+  );
+  const [currency, setCurrency] = useState<InvoiceCurrency>(editSnapshot?.currency ?? 'USD');
+  const [items, setItems] = useState<InvoiceLineItem[]>(() => (
+    editSnapshot
+      ? editSnapshot.items.map((item) => ({ ...item }))
+      : [createBlankLine(0)]
+  ));
+  const [paymentMethod, setPaymentMethod] = useState<InvoicePaymentMethod>(
+    editSnapshot?.paymentMethod ?? 'bank',
+  );
   const [payment, setPayment] = useState<CreatorPaymentDetails>(
-    initialCreator ? invoicePaymentForCreator(initialCreator, 'Airwallex') : { ...EMPTY_PAYMENT },
+    editSnapshot
+      ? { ...editSnapshot.payment }
+      : initialCreator
+        ? invoicePaymentForCreator(initialCreator, 'Airwallex')
+        : { ...EMPTY_PAYMENT },
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
@@ -175,6 +211,7 @@ export function InvoiceBuilderPage({
   const existingInvoice = hasInvoiceForEngagement(
     engagementInvoiceReferences,
     engagementId as EngagementId | '',
+    editRecord?.invoiceId,
   )
     ? generatedInvoices.find((record) => record.snapshot.engagementId === engagementId)
     : undefined;
@@ -193,19 +230,40 @@ export function InvoiceBuilderPage({
     invoiceNumber,
     invoiceDate,
     billTo,
-    creatorHandle: selectedCreator?.handle ?? '',
-    creatorName: selectedCreator?.name ?? '',
-    creatorId: selectedCreator?.id as CreatorId | undefined,
+    creatorHandle: isEditing ? editSnapshot?.creatorHandle ?? '' : selectedCreator?.handle ?? '',
+    creatorName: isEditing ? editSnapshot?.creatorName ?? '' : selectedCreator?.name ?? '',
+    creatorId: isEditing
+      ? editSnapshot?.creatorId
+      : selectedCreator?.id as CreatorId | undefined,
     engagementId: engagementId ? engagementId as EngagementId : undefined,
-    projectId: selectedProject ? (selectedProject.projectId ?? selectedProject.id) as ProjectId : '' as ProjectId,
-    projectName: selectedProject?.name ?? '',
+    projectId: isEditing
+      ? editSnapshot?.projectId ?? '' as ProjectId
+      : selectedProject
+        ? (selectedProject.projectId ?? selectedProject.id) as ProjectId
+        : '' as ProjectId,
+    projectName: isEditing ? editSnapshot?.projectName ?? '' : selectedProject?.name ?? '',
     contractIds,
     from,
     currency,
     items: items.map(normalizeLineItem),
     paymentMethod,
     payment,
-  }), [billTo, contractIds, currency, engagementId, from, invoiceDate, invoiceNumber, items, payment, paymentMethod, selectedCreator, selectedProject]);
+  }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, selectedCreator, selectedProject]);
+  const isDirty = Boolean(editSnapshot && invoiceDocumentChanged(editSnapshot, model));
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!isEditing || !isDirty) return undefined;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [isDirty, isEditing]);
 
   const selectCreator = (id: string) => {
     const creator = creators.find((item) => item.id === id);
@@ -332,6 +390,10 @@ export function InvoiceBuilderPage({
 
   const generate = async () => {
     setGenerationError('');
+    if (isEditing && !isDirty) {
+      setGenerationError('尚未修改任何 Invoice 字段，无法保存新版本。');
+      return;
+    }
     if (!validate()) {
       window.requestAnimationFrame(() => document.querySelector('.invoice-builder-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
       return;
@@ -347,18 +409,21 @@ export function InvoiceBuilderPage({
       };
       const { generateInvoiceFiles } = await import('../invoice/generateInvoice');
       const { pdfBlob, docxBlob } = await generateInvoiceFiles(snapshot);
-      const record: GeneratedInvoiceRecord = {
-        id: snapshot.invoiceNumber,
-        invoiceId: createPrototypeId('invoice') as InvoiceId,
-        sourcePayoutId: selectedPayout?.id ?? prototypePayoutId,
-        status: '待签署',
-        generatedAt: new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(new Date()),
-        snapshot,
-        validationStatus: 'valid',
-      };
-      onGenerated(record);
+      const record = isEditing
+        ? onEdited?.(snapshot)
+        : {
+            id: snapshot.invoiceNumber,
+            invoiceId: createPrototypeId('invoice') as InvoiceId,
+            sourcePayoutId: selectedPayout?.id ?? prototypePayoutId,
+            status: '待签署' as const,
+            generatedAt: new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(new Date()),
+            snapshot,
+            validationStatus: 'valid' as const,
+          };
+      if (!record) throw new Error(isEditing ? '修改记录保存失败。' : 'Invoice 生成回调未配置。');
+      if (!isEditing) onGenerated?.(record);
       setGeneratedFiles({ record, pdfBlob, docxBlob });
-      setInvoiceNumber(nextInvoiceNumber([record, ...generatedInvoices]));
+      if (!isEditing) setInvoiceNumber(nextInvoiceNumber([record, ...generatedInvoices]));
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '文件生成失败，请稍后重试');
     } finally {
@@ -366,14 +431,33 @@ export function InvoiceBuilderPage({
     }
   };
 
+  const cancel = () => {
+    if (isEditing && isDirty && !window.confirm('当前修改尚未保存，确定离开修改页吗？')) return;
+    onCancel();
+  };
+
+  const saveLabel = editContext === 'CREATOR_FEEDBACK'
+    ? '保存并重新发送达人'
+    : editContext === 'MEDIA_RECHECK'
+      ? '保存修改并重新签署'
+      : editContext === 'PAYMENT_FAILURE_CONTENT'
+        ? '保存并重新发起签署'
+        : '生成 PDF + DOCX';
+
   return (
     <div className="page-stack invoice-builder-page">
       <PageHeading
-        title="生成 Invoice"
-        subtitle="从达人档案与项目费用中自动带入资料，确认后同时生成 PDF 与 DOCX。"
-        actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={onCancel}>返回 Invoice 管理</Button>}
+        title={isEditing ? '修改 Invoice' : '生成 Invoice'}
+        subtitle={isEditing
+          ? '保留稳定关联并生成新文件版本；保存后原签署失效，重新进入待签署。'
+          : '从达人档案与项目费用中自动带入资料，确认后同时生成 PDF 与 DOCX。'}
+        actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={cancel}>{isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}</Button>}
       />
-      <NoticeBanner>生成文件会保留空白签名区；当前为前端原型，生成记录仅在本次会话内保留。</NoticeBanner>
+      <NoticeBanner>
+        {isEditing
+          ? `正在修改 ${editRecord?.id} · v${editRecord?.version ?? 1}。达人、项目、Invoice 编号及内部 ID 已锁定；版本历史仅在当前浏览器会话保留。`
+          : '生成文件会保留空白签名区；当前为前端原型，生成记录仅在本次会话内保留。'}
+      </NoticeBanner>
       {Object.keys(errors).length > 0 ? (
         <div className="invoice-builder-error" role="alert"><strong>还有 {Object.keys(errors).length} 项资料需要完善</strong><span>{Object.values(errors)[0]}</span></div>
       ) : null}
@@ -397,15 +481,27 @@ export function InvoiceBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`}>
                 <span>合作达人 *</span>
-                <SelectField ariaLabel="合作达人" variant="form" value={creatorId} placeholder="从达人档案选择" options={creatorOptions} onChange={selectCreator} />
+                <SelectField ariaLabel="合作达人" variant="form" value={creatorId} placeholder="从达人档案选择" options={creatorOptions} onChange={selectCreator} disabled={isEditing} />
                 {errors.creator ? <small>{errors.creator}</small> : null}
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>
                 <span>关联项目 *</span>
-                <SelectField ariaLabel="关联项目" variant="form" value={engagementId} placeholder={creatorId ? '选择关联项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId} />
+                <SelectField ariaLabel="关联项目" variant="form" value={engagementId} placeholder={creatorId ? '选择关联项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>
+            {isEditing && editRecord ? (
+              <div className="invoice-form-grid">
+                <label>
+                  <span>Invoice ID（锁定）</span>
+                  <input value={editRecord.invoiceId} readOnly />
+                </label>
+                <label>
+                  <span>Source Payout ID（锁定）</span>
+                  <input value={editRecord.sourcePayoutId} readOnly />
+                </label>
+              </div>
+            ) : null}
             {engagementId ? (
               <div className="invoice-contract-coverage">
                 <div className="invoice-contract-coverage-head">
@@ -510,8 +606,8 @@ export function InvoiceBuilderPage({
           </div>
 
           <div className="invoice-builder-footer">
-            <Button variant="ghost" onClick={onCancel}>取消</Button>
-            <Button icon={<WandSparkles size={17} />} disabled={generating} onClick={generate}>{generating ? '正在生成…' : '生成 PDF + DOCX'}</Button>
+            <Button variant="ghost" onClick={cancel}>取消</Button>
+            <Button icon={<WandSparkles size={17} />} disabled={generating || (isEditing && !isDirty)} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
           </div>
         </section>
 

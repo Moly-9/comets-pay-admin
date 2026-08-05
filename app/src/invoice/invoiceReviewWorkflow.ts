@@ -1,5 +1,7 @@
 import type {
   GeneratedInvoiceRecord,
+  InvoiceDocumentModel,
+  InvoiceEditContext,
   InvoiceReviewEvent,
   InvoiceReviewStage,
   InvoiceReviewStatus,
@@ -11,10 +13,8 @@ import type {
 export type InvoiceReviewAction =
   | 'MARK_SIGNED'
   | 'RECORD_CREATOR_FEEDBACK'
-  | 'RESEND_FOR_SIGNATURE'
   | 'APPROVE_MEDIA'
-  | 'RETURN_TO_CREATOR'
-  | 'RESTART_AFTER_PAYMENT_FAILURE';
+  | 'RETURN_TO_CREATOR';
 
 export type InvoiceReviewActor = {
   account: string;
@@ -83,12 +83,6 @@ const STATIC_TRANSITIONS: Partial<Record<InvoiceReviewAction, Transition>> = {
     stage: 'SIGNATURE',
     label: '达人反馈',
     reasonRequired: true,
-  },
-  RESEND_FOR_SIGNATURE: {
-    from: ['达人反馈'],
-    to: '待签署',
-    stage: 'SIGNATURE',
-    label: '重新发送',
   },
   APPROVE_MEDIA: {
     from: ['待媒介审核', '待媒介复核'],
@@ -171,13 +165,13 @@ export const getAvailableInvoiceReviewActions = (
     return capabilities.manage ? ['MARK_SIGNED', 'RECORD_CREATOR_FEEDBACK'] : [];
   }
   if (status === '达人反馈') {
-    return capabilities.manage ? ['RESEND_FOR_SIGNATURE'] : [];
+    return [];
   }
   if (status === '待媒介审核' || status === '待媒介复核') {
     return capabilities.mediaReview ? ['APPROVE_MEDIA', 'RETURN_TO_CREATOR'] : [];
   }
   if (status === '已退回') {
-    return capabilities.manage ? ['RESTART_AFTER_PAYMENT_FAILURE'] : [];
+    return [];
   }
   return [];
 };
@@ -192,22 +186,12 @@ export const getInvoiceDetailReviewActions = (
 );
 
 const resolveTransition = (
-  payout: Pick<Payout, 'invoiceReviewStatus' | 'paymentFailureReturn'>,
+  payout: Pick<Payout, 'invoiceReviewStatus'>,
   action: InvoiceReviewAction,
 ): Transition => {
-  if (action !== 'RESTART_AFTER_PAYMENT_FAILURE') {
-    const transition = STATIC_TRANSITIONS[action];
-    if (!transition) throw new Error('当前 Invoice 操作未配置。');
-    return transition;
-  }
-  const issueType = payout.paymentFailureReturn?.issueType;
-  if (!issueType) throw new Error('付款失败尚未由财务分类，不能重新发起流程。');
-  return {
-    from: ['已退回'],
-    to: issueType === 'INVOICE_CONTENT' ? '待签署' : '待媒介复核',
-    stage: 'PAYMENT',
-    label: '重新提交',
-  };
+  const transition = STATIC_TRANSITIONS[action];
+  if (!transition) throw new Error('当前 Invoice 操作未配置。');
+  return transition;
 };
 
 export const createInvoiceReviewEvent = (
@@ -250,26 +234,17 @@ export const applyInvoiceReviewAction = (
   reason?: string,
   occurredAt = new Date().toISOString(),
 ): Payout => {
-  const eventReason = action === 'RESEND_FOR_SIGNATURE' && payout.creatorFeedback
-    ? `已处理达人反馈：${payout.creatorFeedback.reason}`
-    : reason;
-  const event = createInvoiceReviewEvent(payout, action, actor, eventReason, occurredAt);
+  const event = createInvoiceReviewEvent(payout, action, actor, reason, occurredAt);
   const isCreatorFeedback = action === 'RECORD_CREATOR_FEEDBACK';
   const isSigned = action === 'MARK_SIGNED';
-  const invalidatesSignature = action === 'RETURN_TO_CREATOR'
-    || (
-      action === 'RESTART_AFTER_PAYMENT_FAILURE'
-      && payout.paymentFailureReturn?.issueType === 'INVOICE_CONTENT'
-    );
-  const isResend = action === 'RESEND_FOR_SIGNATURE';
-  const clearsPaymentFailure = action === 'RESTART_AFTER_PAYMENT_FAILURE';
+  const invalidatesSignature = action === 'RETURN_TO_CREATOR';
 
   return {
     ...payout,
     status: '未进入付款',
     invoiceReviewStatus: event.toStatus,
     invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
-    invoiceVersion: isResend || invalidatesSignature
+    invoiceVersion: invalidatesSignature
       ? (payout.invoiceVersion ?? 1) + 1
       : payout.invoiceVersion ?? 1,
     invoiceSignatureRound: isSigned
@@ -278,9 +253,7 @@ export const applyInvoiceReviewAction = (
     invoiceSignedAt: isSigned ? occurredAt : invalidatesSignature ? undefined : payout.invoiceSignedAt,
     creatorFeedback: isCreatorFeedback
       ? { reason: event.reason ?? '', actorName: actor.name, occurredAt }
-      : isResend
-        ? undefined
-        : payout.creatorFeedback,
+      : payout.creatorFeedback,
     invoiceReviewReturn: action === 'RETURN_TO_CREATOR'
       ? {
           stage: 'MEDIA',
@@ -288,18 +261,216 @@ export const applyInvoiceReviewAction = (
           actorName: actor.name,
           occurredAt,
         }
-      : isResend || clearsPaymentFailure
-        ? undefined
-        : payout.invoiceReviewReturn,
+      : payout.invoiceReviewReturn,
     issue: isCreatorFeedback
       ? `达人反馈：${event.reason}`
       : action === 'RETURN_TO_CREATOR'
         ? `媒介退回达人修改：${event.reason}`
         : undefined,
     returnReason: action === 'RETURN_TO_CREATOR' ? event.reason : undefined,
-    paymentFailureReturn: clearsPaymentFailure ? undefined : payout.paymentFailureReturn,
-    paymentFailure: clearsPaymentFailure ? undefined : payout.paymentFailure,
+    paymentFailureReturn: payout.paymentFailureReturn,
+    paymentFailure: payout.paymentFailure,
   };
+};
+
+export const getInvoiceEditContext = (
+  payout: Pick<Payout, 'invoiceReviewStatus' | 'paymentFailureReturn'>,
+  capabilities: InvoiceReviewCapabilities,
+): InvoiceEditContext | null => {
+  if (payout.invoiceReviewStatus === '达人反馈' && capabilities.manage) {
+    return 'CREATOR_FEEDBACK';
+  }
+  if (payout.invoiceReviewStatus === '待媒介复核' && capabilities.mediaReview) {
+    return 'MEDIA_RECHECK';
+  }
+  if (
+    payout.invoiceReviewStatus === '已退回'
+    && payout.paymentFailureReturn?.issueType === 'INVOICE_CONTENT'
+    && capabilities.manage
+  ) {
+    return 'PAYMENT_FAILURE_CONTENT';
+  }
+  return null;
+};
+
+const cloneInvoiceSnapshot = (snapshot: InvoiceDocumentModel): InvoiceDocumentModel => ({
+  ...snapshot,
+  billTo: { ...snapshot.billTo },
+  from: { ...snapshot.from },
+  contractIds: snapshot.contractIds ? [...snapshot.contractIds] : undefined,
+  items: snapshot.items.map((item) => ({ ...item })),
+  payment: { ...snapshot.payment },
+});
+
+const EDITABLE_INVOICE_FIELDS: Array<keyof InvoiceDocumentModel> = [
+  'invoiceDate',
+  'billTo',
+  'contractIds',
+  'from',
+  'currency',
+  'items',
+  'paymentMethod',
+  'payment',
+];
+
+export const invoiceDocumentChangedFields = (
+  previous: InvoiceDocumentModel,
+  next: InvoiceDocumentModel,
+) => EDITABLE_INVOICE_FIELDS.filter((field) => (
+  JSON.stringify(
+    field === 'contractIds' ? previous.contractIds ?? [] : previous[field],
+  ) !== JSON.stringify(
+    field === 'contractIds' ? next.contractIds ?? [] : next[field],
+  )
+));
+
+export const invoiceDocumentChanged = (
+  previous: InvoiceDocumentModel,
+  next: InvoiceDocumentModel,
+) => invoiceDocumentChangedFields(previous, next).length > 0;
+
+export const maskInvoiceAccountValue = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) return '待补充';
+  if (normalized.includes('@')) {
+    const [localPart, domain = ''] = normalized.split('@');
+    return `${localPart.slice(0, 1) || '*'}***@${domain}`;
+  }
+  const compact = normalized.replace(/\s/g, '');
+  return `•••• ${compact.slice(-4)}`;
+};
+
+const assertStableInvoiceIdentity = (
+  record: GeneratedInvoiceRecord,
+  payout: Payout,
+  snapshot: InvoiceDocumentModel,
+) => {
+  if (record.sourcePayoutId !== payout.id) {
+    throw new Error('生成记录与付款记录的稳定关联不一致。');
+  }
+  const previous = record.snapshot;
+  if (
+    snapshot.invoiceNumber !== previous.invoiceNumber
+    || snapshot.creatorId !== previous.creatorId
+    || snapshot.creatorName !== previous.creatorName
+    || snapshot.creatorHandle !== previous.creatorHandle
+    || snapshot.engagementId !== previous.engagementId
+    || snapshot.projectId !== previous.projectId
+    || snapshot.projectName !== previous.projectName
+  ) {
+    throw new Error('Invoice 编号、达人、项目和稳定 ID 不允许在修改页变更。');
+  }
+};
+
+const assertInvoiceEditContext = (payout: Payout, context: InvoiceEditContext) => {
+  const expected = payout.invoiceReviewStatus === '达人反馈'
+    ? 'CREATOR_FEEDBACK'
+    : payout.invoiceReviewStatus === '待媒介复核'
+      ? 'MEDIA_RECHECK'
+      : payout.invoiceReviewStatus === '已退回'
+        && payout.paymentFailureReturn?.issueType === 'INVOICE_CONTENT'
+        ? 'PAYMENT_FAILURE_CONTENT'
+        : null;
+  if (expected !== context) {
+    throw new Error('当前 Invoice 状态与修改入口不一致，不能保存。');
+  }
+};
+
+export const applyInvoiceDocumentEdit = ({
+  record,
+  payout,
+  snapshot,
+  context,
+  actor,
+  reason,
+  occurredAt = new Date().toISOString(),
+}: {
+  record: GeneratedInvoiceRecord;
+  payout: Payout;
+  snapshot: InvoiceDocumentModel;
+  context: InvoiceEditContext;
+  actor: InvoiceReviewActor;
+  reason?: string;
+  occurredAt?: string;
+}): { record: GeneratedInvoiceRecord; payout: Payout } => {
+  assertStableInvoiceIdentity(record, payout, snapshot);
+  assertInvoiceEditContext(payout, context);
+  const changedFields = invoiceDocumentChangedFields(record.snapshot, snapshot);
+  if (!changedFields.length) {
+    throw new Error('尚未修改任何 Invoice 字段。');
+  }
+
+  const previousVersion = record.version ?? payout.invoiceVersion ?? 1;
+  const nextVersion = previousVersion + 1;
+  const normalizedReason = reason?.trim()
+    || (
+      context === 'CREATOR_FEEDBACK'
+        ? `根据达人反馈修改：${payout.creatorFeedback?.reason ?? '已处理反馈'}`
+        : context === 'PAYMENT_FAILURE_CONTENT'
+          ? `处理付款失败退回：${payout.paymentFailureReturn?.reason ?? 'Invoice 内容问题'}`
+          : `处理媒介复核：${payout.invoiceReviewReturn?.reason ?? '已修改 Invoice'}`
+    );
+  const nextSnapshot = cloneInvoiceSnapshot(snapshot);
+  const nextRecord: GeneratedInvoiceRecord = {
+    ...record,
+    status: '待签署',
+    snapshot: nextSnapshot,
+    validationStatus: 'valid',
+    version: nextVersion,
+    revisions: [
+      ...(record.revisions ?? []),
+      {
+        version: previousVersion,
+        snapshot: cloneInvoiceSnapshot(record.snapshot),
+        changedFields,
+        reason: normalizedReason,
+        actorAccount: actor.account,
+        actorName: actor.name,
+        actorRole: actor.role,
+        occurredAt,
+      },
+    ],
+  };
+  const accountValue = nextSnapshot.paymentMethod === 'paypal'
+    ? nextSnapshot.payment.paypalEmail || nextSnapshot.payment.paypalUsername
+    : nextSnapshot.payment.iban || nextSnapshot.payment.accountNumber;
+  const account = maskInvoiceAccountValue(accountValue);
+  const event: InvoiceReviewEvent = {
+    stage: 'SIGNATURE',
+    action: '修改 Invoice',
+    actorAccount: actor.account,
+    actorName: actor.name,
+    actorRole: actor.role,
+    fromStatus: payout.invoiceReviewStatus,
+    toStatus: '待签署',
+    reason: `${normalizedReason}；版本 v${previousVersion} → v${nextVersion}`,
+    occurredAt,
+  };
+  const nextPayout: Payout = {
+    ...payout,
+    invoice: record.id,
+    provider: nextSnapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
+    currency: nextSnapshot.currency,
+    amount: nextSnapshot.items.reduce((total, item) => total + item.lineTotal, 0),
+    account,
+    deliverable: nextSnapshot.items.map((item) => item.description).filter(Boolean).join('；'),
+    contract: nextSnapshot.contractIds?.join('、') || '未关联合同',
+    status: '未进入付款',
+    invoiceReviewStatus: '待签署',
+    invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
+    invoiceVersion: nextVersion,
+    invoiceSignedAt: undefined,
+    creatorFeedback: undefined,
+    invoiceReviewReturn: undefined,
+    paymentFailure: context === 'PAYMENT_FAILURE_CONTENT' ? undefined : payout.paymentFailure,
+    paymentFailureReturn: context === 'PAYMENT_FAILURE_CONTENT'
+      ? undefined
+      : payout.paymentFailureReturn,
+    invoiceSnapshot: nextSnapshot,
+    issue: undefined,
+    returnReason: undefined,
+  };
+  return { record: nextRecord, payout: nextPayout };
 };
 
 export const replyToCreatorFeedback = (
@@ -435,5 +606,26 @@ export const isPayoutEligibleForBatch = (
 ) => isInvoiceApprovedForPayment(payout) && payout.status === '等待付款';
 
 export const paymentFailureRestartStage = (issueType: PaymentFailureIssueType) => (
-  issueType === 'INVOICE_CONTENT' ? 'SIGNATURE' : 'MEDIA_RECHECK'
+  issueType === 'INVOICE_CONTENT' ? 'SIGNATURE' : 'PAYMENT_LIST_RESUBMISSION'
 );
+
+export type PaymentListResubmissionState = 'NOT_RETURNED' | 'ELIGIBLE' | 'INVALID';
+
+export const getPaymentListResubmissionState = (
+  payouts: Array<Payout | undefined>,
+): PaymentListResubmissionState => {
+  const hasPaymentListReturn = payouts.some((payout) => (
+    payout?.invoiceReviewStatus === '已退回'
+    && payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
+  ));
+  if (!hasPaymentListReturn) return 'NOT_RETURNED';
+  return payouts.every((payout) => (
+    Boolean(payout)
+    && (
+      payout?.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
+      || payout?.invoiceReviewStatus === '已通过'
+    )
+  ))
+    ? 'ELIGIBLE'
+    : 'INVALID';
+};

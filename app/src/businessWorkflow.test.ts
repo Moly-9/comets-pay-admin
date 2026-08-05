@@ -3,6 +3,7 @@ import {
   canEditProject,
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
+  refreshPaymentListItemSnapshot,
   removePaymentListItem,
   upsertPaymentListItem,
   validateContractCoverage,
@@ -113,6 +114,33 @@ describe('project payment list', () => {
     const withItem = upsertPaymentListItem(record, item);
     expect(upsertPaymentListItem(withItem, item).items).toHaveLength(1);
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
+  });
+
+  it('refreshes an Invoice snapshot while preserving explicit payment-list overrides', () => {
+    const withItem = upsertPaymentListItem(record, {
+      ...item,
+      overrides: { amount: 280, accountSummary: '人工确认尾号 9000' },
+    });
+    const refreshed = refreshPaymentListItemSnapshot(withItem, {
+      ...item,
+      snapshot: {
+        ...item.snapshot,
+        currency: 'EUR',
+        amount: 320,
+        accountSummary: 'Test account ending 0002',
+      },
+    }, '2026-08-05T00:00:00.000Z');
+
+    expect(refreshed.items[0]?.snapshot).toMatchObject({
+      currency: 'EUR',
+      amount: 320,
+      accountSummary: 'Test account ending 0002',
+    });
+    expect(refreshed.items[0]?.overrides).toEqual({
+      amount: 280,
+      accountSummary: '人工确认尾号 9000',
+    });
+    expect(refreshed.updatedAt).toBe('2026-08-05T00:00:00.000Z');
   });
 });
 

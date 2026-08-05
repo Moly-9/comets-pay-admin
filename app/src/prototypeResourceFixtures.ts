@@ -22,6 +22,13 @@ import type {
 const DEMO_PROJECT_CODE = 'PRJ-301164';
 const DEMO_TIMESTAMP = '2026-08-01T09:00:00.000Z';
 
+const demoInvoiceReviewStatus = (index: number): Payout['invoiceReviewStatus'] => {
+  if (index === 0) return '达人反馈';
+  if (index === 1) return '待媒介复核';
+  if (index === 2 || index === 3) return '已退回';
+  return '已通过';
+};
+
 const DEMO_INVOICE_AMOUNTS = [
   4800,
   3200,
@@ -297,7 +304,7 @@ export const PROJECT_DEMO_INVOICES: GeneratedInvoiceRecord[] = demoReferences.ma
     id: snapshot.invoiceNumber,
     invoiceId: `invoice_fixture_301164_${String(index + 1).padStart(2, '0')}` as InvoiceId,
     sourcePayoutId: `payout_fixture_301164_${String(index + 1).padStart(2, '0')}`,
-    status: '已通过',
+    status: demoInvoiceReviewStatus(index),
     generatedAt: DEMO_TIMESTAMP,
     snapshot,
     validationStatus: 'valid',
@@ -316,6 +323,69 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
     ? invoice.snapshot.payment.paypalEmail || invoice.snapshot.payment.paypalUsername
     : accountFingerprintForCreator(creator);
 
+  const reviewStatus = demoInvoiceReviewStatus(index);
+  const reviewFixture: Partial<Payout> = index === 0
+    ? {
+        creatorFeedback: {
+          reason: '请将 Invoice 联系地址更新为最新的合成测试地址。',
+          actorName: '原型达人',
+          occurredAt: '2026-08-04T09:00:00.000Z',
+        },
+        issue: '达人反馈：请更新联系地址。',
+      }
+    : index === 1
+      ? {
+          invoiceSignedAt: '2026-08-04T10:00:00.000Z',
+          invoiceReviewReturn: {
+            stage: 'PM',
+            reason: '请复核费用说明后重新提交。',
+            actorName: '原型 PM',
+            occurredAt: '2026-08-04T11:00:00.000Z',
+          },
+          issue: '项目审批退回：请复核费用说明后重新提交。',
+          returnReason: '请复核费用说明后重新提交。',
+        }
+      : index === 2
+        ? {
+            invoiceSignedAt: '2026-08-03T10:00:00.000Z',
+            paymentFailure: {
+              provider: 'Airwallex',
+              errorCode: 'SYNTHETIC_INVOICE_MISMATCH',
+              providerResponse: 'Synthetic Invoice amount mismatch.',
+              occurredAt: '2026-08-04T12:00:00.000Z',
+            },
+            paymentFailureReturn: {
+              issueType: 'INVOICE_CONTENT',
+              reason: 'Invoice 内容需要修正后重新签署。',
+              actorAccount: 'finance.prototype',
+              actorName: '原型财务',
+              occurredAt: '2026-08-04T12:30:00.000Z',
+              restartStage: 'SIGNATURE',
+            },
+            issue: '付款失败已退回：Invoice 内容需要修正。',
+            returnReason: 'Invoice 内容需要修正后重新签署。',
+          }
+        : index === 3
+          ? {
+              invoiceSignedAt: '2026-08-03T11:00:00.000Z',
+              paymentFailure: {
+                provider: 'Airwallex',
+                errorCode: 'SYNTHETIC_PAYMENT_LIST_STALE',
+                providerResponse: 'Synthetic payment-list snapshot is stale.',
+                occurredAt: '2026-08-04T13:00:00.000Z',
+              },
+              paymentFailureReturn: {
+                issueType: 'PAYMENT_LIST',
+                reason: '付款清单账户快照需要更新。',
+                actorAccount: 'finance.prototype',
+                actorName: '原型财务',
+                occurredAt: '2026-08-04T13:30:00.000Z',
+                restartStage: 'PAYMENT_LIST_RESUBMISSION',
+              },
+              issue: '付款失败已退回：付款清单账户快照需要更新。',
+              returnReason: '付款清单账户快照需要更新。',
+            }
+          : {};
   return {
     id: invoice.sourcePayoutId,
     creator: creator.name,
@@ -330,13 +400,14 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
     currency: invoice.snapshot.currency,
     amount: DEMO_INVOICE_AMOUNTS[index],
     account: accountValue,
-    status: '已付款',
-    invoiceReviewStatus: '已通过',
+    status: reviewStatus === '已通过' ? '已付款' : reviewStatus === '已退回' ? '已退回' : '未进入付款',
+    invoiceReviewStatus: reviewStatus,
     invoiceVersion: 1,
-    invoiceSignedAt: '2026-07-31T10:00:00.000Z',
+    invoiceSignedAt: reviewStatus === '已通过' ? '2026-07-31T10:00:00.000Z' : undefined,
     invoiceSnapshot: invoice.snapshot,
     accent: creator.accent,
-    paidAt: '2026-08-01 16:00',
+    paidAt: reviewStatus === '已通过' ? '2026-08-01 16:00' : undefined,
+    ...reviewFixture,
   };
 });
 

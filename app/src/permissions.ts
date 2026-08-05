@@ -90,6 +90,7 @@ const PAGE_PERMISSION_RULES: Partial<Record<NavPage, PermissionId[]>> = {
   'contract-create': ['contract_manage'],
   invoice: ['invoice_view', 'request_material_view'],
   'invoice-create': ['invoice_manage'],
+  'invoice-edit': ['invoice_manage', 'invoice_media_review'],
   creators: ['creator_records_view'],
   collaborations: ['creator_records_view'],
   'payment-workbench': ['payment_view'],

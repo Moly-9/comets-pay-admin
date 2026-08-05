@@ -30,14 +30,18 @@ import { PaymentWorkbenchPage } from './pages/PaymentWorkbenchPage';
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
 import {
+  applyInvoiceDocumentEdit,
   applyInvoiceReviewAction,
   getAvailableInvoiceReviewActions,
+  getInvoiceEditContext,
   getInvoicePageTab,
+  getPaymentListResubmissionState,
   invalidateSignedInvoice,
   invoiceStatusForRequestApproval,
   isInvoiceApprovedForPayment,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
+  maskInvoiceAccountValue,
   paymentFailureRestartStage,
   replyToCreatorFeedback,
   sensitiveInvoiceSnapshotChanged,
@@ -62,6 +66,8 @@ import {
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
+  InvoiceDocumentModel,
+  InvoiceEditContext,
   InvoiceEntity,
   NavPage,
   PaymentFailureIssueType,
@@ -77,6 +83,7 @@ import {
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
   nowIso,
+  refreshPaymentListItemSnapshot,
   removePaymentListItem,
   upsertPaymentListItem,
   validateProjectSubmission,
@@ -130,7 +137,7 @@ const getProjectId = (project: ProjectSummary) => (
 const invoicePaymentListItem = (invoice: GeneratedInvoiceRecord): PaymentListItem => {
   const payment = invoice.snapshot.payment;
   const account = invoice.snapshot.paymentMethod === 'paypal'
-    ? payment.paypalEmail || payment.paypalUsername || '待补充 PayPal'
+    ? payment.paypalEmail || payment.paypalUsername
     : (payment.iban || payment.accountNumber).replace(/\s/g, '');
   return {
     id: createPrototypeId('item'),
@@ -142,9 +149,11 @@ const invoicePaymentListItem = (invoice: GeneratedInvoiceRecord): PaymentListIte
       currency: invoice.snapshot.currency,
       amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
       provider: invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
-      accountSummary: invoice.snapshot.paymentMethod === 'paypal'
-        ? account
-        : account ? `账户尾号 ${account.slice(-4)}` : '待补充银行账户',
+      accountSummary: account
+        ? maskInvoiceAccountValue(account)
+        : invoice.snapshot.paymentMethod === 'paypal'
+          ? '待补充 PayPal'
+          : '待补充银行账户',
     },
     overrides: {},
   };
@@ -178,6 +187,11 @@ export default function App() {
   const [focusedRequestId, setFocusedRequestId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
+  const [invoiceEditTarget, setInvoiceEditTarget] = useState<{
+    invoiceId: InvoiceId;
+    context: InvoiceEditContext;
+  } | null>(null);
+  const [invoiceEditorDirty, setInvoiceEditorDirty] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [createdBatch, setCreatedBatch] = useState<CreatedBatch>(null);
@@ -311,7 +325,16 @@ export default function App() {
       notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
       return;
     }
+    if (
+      activePage === 'invoice-edit'
+      && invoiceEditorDirty
+      && !window.confirm('当前 Invoice 修改尚未保存，确定切换页面吗？')
+    ) {
+      return;
+    }
     setActivePage(page);
+    setInvoiceEditTarget(null);
+    setInvoiceEditorDirty(false);
     setFocusedInvoiceId(null);
     setFocusedContractId(null);
     setFocusedProjectId(null);
@@ -572,6 +595,120 @@ export default function App() {
     }
   };
 
+  const openInvoiceEditor = (payout: Payout, context: InvoiceEditContext) => {
+    const record = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+    if (!record) {
+      notify('无法修改 Invoice', '未找到通过 sourcePayoutId 关联的可维护生成记录。');
+      return;
+    }
+    const allowedContext = getInvoiceEditContext(payout, {
+      manage: hasPermission(currentUser, 'invoice_manage'),
+      mediaReview: hasPermission(currentUser, 'invoice_media_review'),
+      financeReview: hasPermission(currentUser, 'invoice_finance_review'),
+    });
+    if (allowedContext !== context) {
+      notify('无法修改 Invoice', '当前状态或角色不允许从该入口修改 Invoice。');
+      return;
+    }
+    setInvoiceEditTarget({ invoiceId: record.invoiceId, context });
+    setInvoiceEditorDirty(false);
+    setActivePage('invoice-edit');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const saveInvoiceEdit = (snapshot: InvoiceDocumentModel) => {
+    if (!invoiceEditTarget) throw new Error('Invoice 修改上下文已失效，请返回详情后重试。');
+    const record = generatedInvoices.find((invoice) => invoice.invoiceId === invoiceEditTarget.invoiceId);
+    if (!record) throw new Error('未找到需要修改的 Invoice 生成记录。');
+    const payout = payouts.find((item) => item.id === record.sourcePayoutId);
+    if (!payout) throw new Error('未找到 Invoice 通过 sourcePayoutId 关联的付款记录。');
+    const allowedContext = getInvoiceEditContext(payout, {
+      manage: hasPermission(currentUser, 'invoice_manage'),
+      mediaReview: hasPermission(currentUser, 'invoice_media_review'),
+      financeReview: hasPermission(currentUser, 'invoice_finance_review'),
+    });
+    if (allowedContext !== invoiceEditTarget.context) {
+      throw new Error('当前状态或权限已变化，不能保存本次修改。');
+    }
+
+    const result = applyInvoiceDocumentEdit({
+      record,
+      payout,
+      snapshot,
+      context: invoiceEditTarget.context,
+      actor: {
+        account: currentUser.account,
+        name: currentUser.name,
+        role: currentUser.role,
+      },
+    });
+    const projectId = result.record.snapshot.projectId as ProjectId;
+    const refreshedPaymentItem = invoicePaymentListItem(result.record);
+    setGeneratedInvoices((current) => current.map((invoice) => (
+      invoice.invoiceId === result.record.invoiceId ? result.record : invoice
+    )));
+    setPayouts((current) => current.map((item) => (
+      item.id === result.payout.id ? result.payout : item
+    )));
+    setPaymentLists((current) => current.map((list) => (
+      list.projectId === projectId
+        ? {
+            ...refreshPaymentListItemSnapshot(list, refreshedPaymentItem),
+            status: 'draft',
+          }
+        : list
+    )));
+    setProjects((current) => current.map((project) => (
+      getProjectId(project) === projectId
+        ? {
+            ...project,
+            reviewStatus: 'returned',
+            status: '待重新签署',
+            reviewUpdatedAt: nowIso(),
+          }
+        : project
+    )));
+    setRequestProjects((current) => current.map((request) => (
+      request.projectId === projectId
+        ? {
+            ...request,
+            status: '待重新签署',
+            filter: 'pending',
+            approval: request.approval
+              ? {
+                  ...request.approval,
+                  status: 'RETURNED_TO_MEDIA_REVIEW',
+                  returnReason: 'Invoice 文件内容已生成新版本，原签署失效。',
+                  updatedAt: nowIso(),
+                }
+              : request.approval,
+          }
+        : request
+    )));
+    setWorkflowAuditEvents((current) => [
+      createAuditEvent({
+        projectId,
+        engagementId: result.record.snapshot.engagementId as EngagementId | undefined,
+        entityType: 'invoice',
+        entityId: result.record.invoiceId,
+        action: 'update',
+        actor: `${currentUser.name}（${currentUser.role}）`,
+        summary: `已生成 Invoice ${result.record.id} v${result.record.version ?? 1}，原签署失效并回到待签署`,
+      }),
+      ...current,
+    ]);
+    setInvoiceEditTarget(null);
+    setInvoiceEditorDirty(false);
+    setFocusedInvoiceId(`generated:${result.record.id}`);
+    setInvoiceTab('signature');
+    setActivePage('invoice');
+    notify(
+      'Invoice 新版本已生成',
+      `${result.record.id} 已更新为 v${result.record.version ?? 1}，等待达人重新签署。`,
+    );
+    return result.record;
+  };
+
   const createPaymentList = (project: ProjectSummary) => {
     const projectId = getProjectId(project);
     if (paymentLists.some((list) => list.projectId === projectId)) return;
@@ -697,9 +834,18 @@ export default function App() {
     const linkedPayouts = projectInvoices.map((invoice) => (
       payouts.find((payout) => payout.id === invoice.sourcePayoutId)
     ));
+    const paymentListResubmissionState = getPaymentListResubmissionState(linkedPayouts);
+    const isPaymentListResubmission = paymentListResubmissionState === 'ELIGIBLE';
+    if (paymentListResubmissionState === 'INVALID') {
+      notify('暂不能重新提交付款清单', '本轮 Invoice 状态不一致，请核对项目稳定关联和付款失败分类。');
+      return;
+    }
     if (
       linkedPayouts.some((payout) => !payout)
-      || linkedPayouts.some((payout) => payout?.invoiceReviewStatus !== '待发起请款')
+      || (
+        !isPaymentListResubmission
+        && linkedPayouts.some((payout) => payout?.invoiceReviewStatus !== '待发起请款')
+      )
     ) {
       notify('暂不能发起请款', '项目内全部 Invoice 必须先完成达人签署和媒介审核。');
       return;
@@ -730,13 +876,21 @@ export default function App() {
     const previousRequest = requestProjects.find((item) => item.projectId === projectId);
     const approval = createRequestApprovalState(submittedAt, previousRequest?.approval);
     const approvalInvoiceStatus = invoiceStatusForRequestApproval('PENDING_PM');
+    const nextPaymentListVersion = isPaymentListResubmission
+      ? (list?.version ?? 1) + 1
+      : list?.version ?? 1;
     const invoiceIds = projectInvoices.map((invoice) => invoice.invoiceId);
     const sourcePayoutIds = new Set(projectInvoices.map((invoice) => invoice.sourcePayoutId));
     setProjects((current) => current.map((item) => getProjectId(item) === projectId
       ? { ...item, reviewStatus: 'submitted', submittedAt, reviewUpdatedAt: submittedAt, status: '待审批' }
       : item));
     setPaymentLists((current) => current.map((item) => item.projectId === projectId
-      ? { ...item, status: 'submitted', updatedAt: submittedAt }
+      ? {
+          ...item,
+          status: 'submitted',
+          version: nextPaymentListVersion,
+          updatedAt: submittedAt,
+        }
       : item));
     setPayouts((current) => current.map((payout) => sourcePayoutIds.has(payout.id)
       ? {
@@ -744,7 +898,7 @@ export default function App() {
           status: '未进入付款',
           invoiceReviewStatus: approvalInvoiceStatus,
           requestApprovalRound: approval.round,
-          paymentListVersion: list?.version ?? 1,
+          paymentListVersion: nextPaymentListVersion,
           invoiceReviewHistory: [
             ...(payout.invoiceReviewHistory ?? []),
             {
@@ -761,6 +915,12 @@ export default function App() {
           ],
           issue: undefined,
           returnReason: undefined,
+          paymentFailure: payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
+            ? undefined
+            : payout.paymentFailure,
+          paymentFailureReturn: payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
+            ? undefined
+            : payout.paymentFailureReturn,
         }
       : payout));
     setGeneratedInvoices((current) => current.map((invoice) => (
@@ -815,8 +975,15 @@ export default function App() {
       request,
       ...current.filter((item) => item.id !== request.id && item.projectId !== projectId),
     ]);
-    appendReviewAudit(project, 'submit', `已提交第 ${approval.round} 轮项目请款审批并锁定项目资料`);
-    notify('已提交项目请款', `${project.name} 已进入第 ${approval.round} 轮 PM 审批。`);
+    appendReviewAudit(
+      project,
+      'submit',
+      `${isPaymentListResubmission ? '已重新提交付款清单并创建' : '已提交'}第 ${approval.round} 轮项目请款审批`,
+    );
+    notify(
+      isPaymentListResubmission ? '付款清单已重新提交' : '已提交项目请款',
+      `${project.name} 已进入第 ${approval.round} 轮 PM 审批。Invoice 签署版本保持不变。`,
+    );
   };
 
   const handleRequestApproval = (
@@ -1069,12 +1236,44 @@ export default function App() {
     setGeneratedInvoices((current) => current.map((invoice) => invoice.sourcePayoutId === payout.id
       ? { ...invoice, status: '已退回' }
       : invoice));
+    if (issueType === 'PAYMENT_LIST') {
+      const project = projects.find((item) => item.id === payout.projectId);
+      const projectId = project ? getProjectId(project) : null;
+      setProjects((current) => current.map((item) => item.id === payout.projectId
+        ? {
+            ...item,
+            reviewStatus: 'returned',
+            status: '付款清单待修改',
+            reviewUpdatedAt: occurredAt,
+          }
+        : item));
+      if (projectId) {
+        setPaymentLists((current) => current.map((list) => list.projectId === projectId
+          ? { ...list, status: 'draft', updatedAt: occurredAt }
+          : list));
+        setRequestProjects((current) => current.map((request) => request.projectId === projectId
+          ? {
+              ...request,
+              status: '付款清单待修改',
+              filter: 'pending',
+              approval: request.approval
+                ? {
+                    ...request.approval,
+                    status: 'RETURNED_TO_MEDIA_REVIEW',
+                    returnReason: normalizedReason,
+                    updatedAt: occurredAt,
+                  }
+                : request.approval,
+            }
+          : request));
+      }
+    }
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify(
       '已退回媒介',
       issueType === 'INVOICE_CONTENT'
-        ? '该 Invoice 重新发起后将从达人签署开始。'
-        : '该 Invoice 重新发起后将从媒介复核开始，无需达人重新签署。',
+        ? '请在 Invoice 详情进入修改页，生成新版后从达人签署开始。'
+        : 'Invoice 保持已退回，请在项目付款清单修正并重新提交后进入 PM 审批。',
     );
   };
 
@@ -1099,41 +1298,12 @@ export default function App() {
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
         reason,
       );
-      const isPaymentRestart = action === 'RESTART_AFTER_PAYMENT_FAILURE';
-      const restartIssueType = payout.paymentFailureReturn?.issueType;
-      const restartProject = isPaymentRestart
-        ? projects.find((item) => item.id === payout.projectId)
-        : undefined;
-      const restartProjectId = restartProject ? getProjectId(restartProject) : undefined;
-      const nextPaymentListVersion = restartProjectId
-        ? (paymentLists.find((list) => list.projectId === restartProjectId)?.version ?? 1) + 1
-        : undefined;
-      const relatedPayoutIds = new Set(
-        payouts.filter((item) => item.projectId === payout.projectId).map((item) => item.id),
-      );
-      setPayouts((current) => current.map((item) => {
-        if (item.id === payout.id) {
-          return isPaymentRestart
-            ? { ...updated, paymentListVersion: nextPaymentListVersion ?? item.paymentListVersion }
-            : updated;
-        }
-        if (!isPaymentRestart || !relatedPayoutIds.has(item.id)) return item;
-        return {
-          ...item,
-          status: '未进入付款',
-          invoiceReviewStatus: restartIssueType === 'PAYMENT_LIST' ? '待媒介复核' : '待发起请款',
-          paymentListVersion: nextPaymentListVersion ?? item.paymentListVersion,
-          issue: restartIssueType === 'PAYMENT_LIST' ? '付款清单问题待媒介复核' : undefined,
-        };
-      }));
+      setPayouts((current) => current.map((item) => (
+        item.id === payout.id ? updated : item
+      )));
       setGeneratedInvoices((current) => current.map((record) => (
         record.sourcePayoutId === payout.id
           ? { ...record, status: updated.invoiceReviewStatus }
-          : isPaymentRestart && relatedPayoutIds.has(record.sourcePayoutId)
-            ? {
-                ...record,
-                status: restartIssueType === 'PAYMENT_LIST' ? '待媒介复核' : '待发起请款',
-              }
           : record
       )));
       setInvoiceTab(getInvoicePageTab(updated.invoiceReviewStatus));
@@ -1151,41 +1321,6 @@ export default function App() {
               status: allProjectInvoicesReady ? '待发起请款' : 'Invoice审核中',
             }
           : project));
-      }
-      if (isPaymentRestart) {
-        setProjects((current) => current.map((item) => item.id === payout.projectId
-          ? {
-              ...item,
-              reviewStatus: 'returned',
-              status: updated.invoiceReviewStatus === '待签署' ? '待重新签署' : '待媒介复核',
-              reviewUpdatedAt: nowIso(),
-            }
-          : item));
-        if (restartProjectId) {
-          setPaymentLists((current) => current.map((list) => list.projectId === restartProjectId
-            ? {
-                ...list,
-                status: 'draft',
-                version: nextPaymentListVersion,
-                updatedAt: nowIso(),
-              }
-            : list));
-          setRequestProjects((current) => current.map((request) => request.projectId === restartProjectId
-            ? {
-                ...request,
-                status: updated.invoiceReviewStatus === '待签署' ? '待重新签署' : '待媒介复核',
-                filter: 'pending',
-                approval: request.approval
-                  ? {
-                      ...request.approval,
-                      status: 'RETURNED_TO_MEDIA_REVIEW',
-                      returnReason: payout.paymentFailureReturn?.reason,
-                      updatedAt: nowIso(),
-                    }
-                  : request.approval,
-              }
-            : request));
-        }
       }
       notify('Invoice 审核状态已更新', `${payout.invoice} 已进入“${updated.invoiceReviewStatus}”。`);
     } catch (error) {
@@ -1469,6 +1604,7 @@ export default function App() {
           onMarkSigned={markInvoiceSigned}
           onReviewAction={updateInvoiceReview}
           onReplyFeedback={replyInvoiceFeedback}
+          onEditInvoice={openInvoiceEditor}
           onOpenProject={openProjectFromInvoice}
           onOpenRequest={openRequestFromInvoice}
           onOpenPayment={setSelectedPayout}
@@ -1477,6 +1613,51 @@ export default function App() {
         />
       );
       break;
+    case 'invoice-edit': {
+      const editRecord = invoiceEditTarget
+        ? generatedInvoices.find((record) => record.invoiceId === invoiceEditTarget.invoiceId)
+        : undefined;
+      const editPayout = editRecord
+        ? payouts.find((payout) => payout.id === editRecord.sourcePayoutId)
+        : undefined;
+      if (!invoiceEditTarget || !editRecord || !editPayout) {
+        pageContent = (
+          <section className="content-card">
+            <h2>Invoice 修改上下文已失效</h2>
+            <p>未找到稳定关联的 Invoice 与付款记录，请返回 Invoice 管理重新打开。</p>
+            <button type="button" className="text-link" onClick={() => {
+              setInvoiceEditTarget(null);
+              setInvoiceEditorDirty(false);
+              setActivePage('invoice');
+            }}>返回 Invoice 管理</button>
+          </section>
+        );
+        break;
+      }
+      pageContent = (
+        <InvoiceBuilderPage
+          creators={creators}
+          payouts={payouts}
+          projects={projects}
+          contracts={contracts}
+          invoiceEntity={invoiceEntity}
+          generatedInvoices={generatedInvoices}
+          editRecord={editRecord}
+          editContext={invoiceEditTarget.context}
+          onEdited={saveInvoiceEdit}
+          onDirtyChange={setInvoiceEditorDirty}
+          onCancel={() => {
+            setInvoiceEditTarget(null);
+            setInvoiceEditorDirty(false);
+            setFocusedInvoiceId(`generated:${editRecord.id}`);
+            setInvoiceTab(getInvoicePageTab(editPayout.invoiceReviewStatus));
+            setActivePage('invoice');
+          }}
+          onOpenInvoiceManagement={() => undefined}
+        />
+      );
+      break;
+    }
     case 'invoice-create':
       pageContent = (
         <InvoiceBuilderPage

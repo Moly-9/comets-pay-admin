@@ -212,6 +212,25 @@ export const removePaymentListItem = (
   updatedAt: nowIso(),
 });
 
+export const refreshPaymentListItemSnapshot = (
+  list: PaymentListRecord,
+  refreshedItem: PaymentListItem,
+  updatedAt = nowIso(),
+): PaymentListRecord => ({
+  ...list,
+  items: list.items.map((item) => (
+    item.invoiceId === refreshedItem.invoiceId
+      ? {
+          ...item,
+          engagementId: refreshedItem.engagementId,
+          snapshot: { ...refreshedItem.snapshot },
+          overrides: { ...item.overrides },
+        }
+      : item
+  )),
+  updatedAt,
+});
+
 export type ContractCoverageInput = {
   contractId: ContractId;
   advertiser: string;

@@ -9214,7 +9214,7 @@ button:disabled {
   font-size: 8.5px;
 }
 
-@media (max-width: 1260px) {
+@media (max-width: 1380px) {
   .invoice-builder-layout {
     grid-template-columns: 1fr;
   }

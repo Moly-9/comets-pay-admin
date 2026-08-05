@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { GeneratedInvoiceRecord, Payout } from '../types';
 import {
+  applyInvoiceDocumentEdit,
   applyInvoiceReviewAction,
   createInvoiceReviewEvent,
   getAvailableInvoiceReviewActions,
   getApprovedInvoicePaymentStatus,
   getInvoiceDetailNavigationTarget,
   getInvoiceDetailReviewActions,
+  getInvoiceEditContext,
   getInvoicePageTab,
   getInvoiceRowStatus,
+  getPaymentListResubmissionState,
   invalidateSignedInvoice,
   isInvoiceApprovedForPayment,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
+  maskInvoiceAccountValue,
   replyToCreatorFeedback,
 } from './invoiceReviewWorkflow';
 
@@ -35,8 +39,66 @@ const payout: Payout = {
   accent: '#999999',
 };
 
+const snapshot = {
+  invoiceNumber: 'INV-TEST',
+  invoiceDate: '2026-08-05',
+  billTo: { name: 'Synthetic Advertiser', address: 'Synthetic address' },
+  creatorHandle: '@synthetic',
+  creatorName: 'Synthetic Creator',
+  creatorId: 'crt_test',
+  engagementId: 'col_test',
+  projectId: 'prj_test',
+  projectName: 'Synthetic Project',
+  contractIds: [],
+  from: {
+    legalName: 'Synthetic Creator',
+    address: 'Synthetic address',
+    phone: '+1 000 000 0000',
+    email: 'creator@example.test',
+  },
+  currency: 'USD' as const,
+  items: [{
+    id: 'item-test',
+    description: 'Synthetic service',
+    unitPrice: 100,
+    quantity: 1,
+    lineTotal: 100,
+  }],
+  paymentMethod: 'bank' as const,
+  payment: {
+    bankCountry: 'US',
+    accountName: 'Synthetic Creator',
+    accountType: 'Checking',
+    swiftCode: 'TESTUS00',
+    accountNumber: '0000000000',
+    iban: '',
+    beneficiaryType: 'PERSONAL',
+    bankName: 'Synthetic Bank',
+    bankStreetAddress: 'Synthetic address',
+    bankCity: 'Test City',
+    bankState: 'CA',
+    bankPostalCode: '00000',
+    intermediaryBankCountry: '',
+    intermediaryBankCode: '',
+    transferRemarks: '',
+    paypalUsername: '',
+    paypalEmail: '',
+  },
+} as unknown as GeneratedInvoiceRecord['snapshot'];
+
+const generatedRecord: GeneratedInvoiceRecord = {
+  id: 'INV-TEST',
+  invoiceId: 'inv_local_test' as never,
+  sourcePayoutId: payout.id,
+  status: '待签署',
+  generatedAt: '2026-08-05 10:00',
+  snapshot,
+  validationStatus: 'valid',
+  version: 1,
+};
+
 describe('Invoice review workflow', () => {
-  it('handles creator feedback, resend, signature and first media approval', () => {
+  it('handles creator feedback, edited resend, signature and first media approval', () => {
     const feedback = applyInvoiceReviewAction(
       payout,
       'RECORD_CREATOR_FEEDBACK',
@@ -46,11 +108,18 @@ describe('Invoice review workflow', () => {
     expect(feedback.invoiceReviewStatus).toBe('达人反馈');
     expect(getInvoiceRowStatus(feedback)).toBe('达人反馈');
 
-    const resent = applyInvoiceReviewAction(feedback, 'RESEND_FOR_SIGNATURE', actor);
-    expect(resent.invoiceReviewStatus).toBe('待签署');
-    expect(resent.invoiceVersion).toBe(2);
+    const edited = applyInvoiceDocumentEdit({
+      record: generatedRecord,
+      payout: { ...feedback, invoiceSnapshot: snapshot },
+      snapshot: { ...snapshot, invoiceDate: '2026-08-06' },
+      context: 'CREATOR_FEEDBACK',
+      actor,
+    });
+    expect(edited.payout.invoiceReviewStatus).toBe('待签署');
+    expect(edited.payout.invoiceVersion).toBe(2);
+    expect(edited.record.revisions).toHaveLength(1);
 
-    const signed = applyInvoiceReviewAction(resent, 'MARK_SIGNED', actor);
+    const signed = applyInvoiceReviewAction(edited.payout, 'MARK_SIGNED', actor);
     expect(signed.invoiceReviewStatus).toBe('待媒介审核');
     expect(signed.invoiceSignatureRound).toBe(1);
     expect(getInvoiceRowStatus(signed)).toBe('待审核');
@@ -86,7 +155,7 @@ describe('Invoice review workflow', () => {
     expect(returned.invoiceVersion).toBe(2);
   });
 
-  it('restarts payment failures from the finance-selected stage', () => {
+  it('only allows Invoice-content failures to enter the edit flow', () => {
     const invoiceContentReturn: Payout = {
       ...payout,
       status: '已退回',
@@ -105,20 +174,26 @@ describe('Invoice review workflow', () => {
       paymentFailureReturn: {
         ...invoiceContentReturn.paymentFailureReturn!,
         issueType: 'PAYMENT_LIST',
-        restartStage: 'MEDIA_RECHECK',
+        restartStage: 'PAYMENT_LIST_RESUBMISSION',
       },
     };
 
-    expect(applyInvoiceReviewAction(
-      invoiceContentReturn,
-      'RESTART_AFTER_PAYMENT_FAILURE',
-      actor,
-    ).invoiceReviewStatus).toBe('待签署');
-    expect(applyInvoiceReviewAction(
+    const manage = { manage: true, mediaReview: false, financeReview: false };
+    expect(getInvoiceEditContext(invoiceContentReturn, manage)).toBe('PAYMENT_FAILURE_CONTENT');
+    expect(getInvoiceEditContext(paymentListReturn, manage)).toBeNull();
+    expect(getInvoiceDetailReviewActions('已退回', manage)).toEqual([]);
+    expect(getPaymentListResubmissionState([paymentListReturn])).toBe('ELIGIBLE');
+    expect(getPaymentListResubmissionState([
       paymentListReturn,
-      'RESTART_AFTER_PAYMENT_FAILURE',
-      actor,
-    ).invoiceReviewStatus).toBe('待媒介复核');
+      { ...payout, status: '等待付款', invoiceReviewStatus: '已通过' },
+    ])).toBe('ELIGIBLE');
+    expect(getPaymentListResubmissionState([
+      paymentListReturn,
+      { ...payout, invoiceReviewStatus: '待媒介审核' },
+    ])).toBe('INVALID');
+    expect(getPaymentListResubmissionState([
+      { ...payout, invoiceReviewStatus: '待发起请款' },
+    ])).toBe('NOT_RETURNED');
   });
 
   it('invalidates a recheck signature after sensitive fields change', () => {
@@ -141,11 +216,6 @@ describe('Invoice review workflow', () => {
       actor,
       '   ',
     )).toThrow();
-    expect(() => applyInvoiceReviewAction(
-      { ...payout, status: '已退回', invoiceReviewStatus: '已退回' },
-      'RESTART_AFTER_PAYMENT_FAILURE',
-      actor,
-    )).toThrow(/尚未由财务分类/);
   });
 
   it('exposes media and manage actions only at their responsible stages', () => {
@@ -167,9 +237,128 @@ describe('Invoice review workflow', () => {
     ]);
     expect(getAvailableInvoiceReviewActions('待财务审核', readOnly)).toEqual([]);
     expect(getInvoiceDetailReviewActions('待签署', manage)).toEqual([]);
-    expect(getInvoiceDetailReviewActions('达人反馈', manage)).toEqual([
-      'RESEND_FOR_SIGNATURE',
-    ]);
+    expect(getInvoiceDetailReviewActions('达人反馈', manage)).toEqual([]);
+  });
+
+  it('applies a document edit atomically while preserving stable identity', () => {
+    const returned: Payout = {
+      ...payout,
+      status: '已退回',
+      invoiceReviewStatus: '已退回',
+      invoiceSignedAt: '2026-08-04T01:00:00.000Z',
+      invoiceSnapshot: snapshot,
+      paymentFailure: {
+        provider: 'Airwallex',
+        errorCode: 'SYNTHETIC_FAILURE',
+        providerResponse: 'Synthetic failure response',
+        occurredAt: '2026-08-04T02:00:00.000Z',
+      },
+      paymentFailureReturn: {
+        issueType: 'INVOICE_CONTENT',
+        reason: 'Invoice 金额错误',
+        actorAccount: 'finance',
+        actorName: '财务',
+        occurredAt: '2026-08-04T03:00:00.000Z',
+        restartStage: 'SIGNATURE',
+      },
+    };
+    const result = applyInvoiceDocumentEdit({
+      record: generatedRecord,
+      payout: returned,
+      snapshot: {
+        ...snapshot,
+        currency: 'EUR',
+        items: [{ ...snapshot.items[0]!, unitPrice: 120, lineTotal: 120 }],
+      },
+      context: 'PAYMENT_FAILURE_CONTENT',
+      actor,
+      occurredAt: '2026-08-05T01:00:00.000Z',
+    });
+
+    expect(result.record.invoiceId).toBe(generatedRecord.invoiceId);
+    expect(result.record.sourcePayoutId).toBe(generatedRecord.sourcePayoutId);
+    expect(result.record.version).toBe(2);
+    expect(result.record.revisions?.[0]).toMatchObject({
+      version: 1,
+      changedFields: ['currency', 'items'],
+    });
+    expect(result.payout).toMatchObject({
+      invoiceReviewStatus: '待签署',
+      status: '未进入付款',
+      currency: 'EUR',
+      amount: 120,
+      invoiceVersion: 2,
+    });
+    expect(result.payout.invoiceSignedAt).toBeUndefined();
+    expect(result.payout.paymentFailure).toBeUndefined();
+    expect(result.payout.paymentFailureReturn).toBeUndefined();
+  });
+
+  it('stores only masked bank and PayPal account summaries outside the document snapshot', () => {
+    expect(maskInvoiceAccountValue('0000 1111 2222 3456')).toBe('•••• 3456');
+    expect(maskInvoiceAccountValue('creator@example.test')).toBe('c***@example.test');
+    expect(maskInvoiceAccountValue('')).toBe('待补充');
+
+    const feedbackPayout: Payout = {
+      ...payout,
+      invoiceReviewStatus: '达人反馈',
+      creatorFeedback: {
+        reason: '请更新付款方式',
+        actorName: '原型达人',
+        occurredAt: '2026-08-05T00:00:00.000Z',
+      },
+    };
+    const paypalSnapshot = {
+      ...snapshot,
+      paymentMethod: 'paypal' as const,
+      payment: {
+        ...snapshot.payment,
+        paypalUsername: 'synthetic.creator',
+        paypalEmail: 'creator@example.test',
+      },
+    };
+    const result = applyInvoiceDocumentEdit({
+      record: generatedRecord,
+      payout: feedbackPayout,
+      snapshot: paypalSnapshot,
+      context: 'CREATOR_FEEDBACK',
+      actor,
+    });
+    expect(result.payout.account).toBe('c***@example.test');
+    expect(result.record.snapshot.payment.paypalEmail).toBe('creator@example.test');
+  });
+
+  it('rejects unchanged edits, mismatched contexts and changed stable IDs', () => {
+    const feedback = {
+      ...payout,
+      invoiceReviewStatus: '达人反馈' as const,
+      creatorFeedback: {
+        reason: '请修改日期',
+        actorName: '媒介',
+        occurredAt: '2026-08-05T00:00:00.000Z',
+      },
+    };
+    expect(() => applyInvoiceDocumentEdit({
+      record: generatedRecord,
+      payout: feedback,
+      snapshot,
+      context: 'CREATOR_FEEDBACK',
+      actor,
+    })).toThrow(/尚未修改/);
+    expect(() => applyInvoiceDocumentEdit({
+      record: generatedRecord,
+      payout: feedback,
+      snapshot: { ...snapshot, invoiceDate: '2026-08-06' },
+      context: 'MEDIA_RECHECK',
+      actor,
+    })).toThrow(/入口不一致/);
+    expect(() => applyInvoiceDocumentEdit({
+      record: generatedRecord,
+      payout: feedback,
+      snapshot: { ...snapshot, projectId: 'prj_other' as never, invoiceDate: '2026-08-06' },
+      context: 'CREATOR_FEEDBACK',
+      actor,
+    })).toThrow(/稳定 ID/);
   });
 
   it('records feedback replies without changing the lifecycle state', () => {

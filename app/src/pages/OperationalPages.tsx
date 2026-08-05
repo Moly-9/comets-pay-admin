@@ -65,6 +65,7 @@ import type {
   CreatorProfile,
   CreatorSocialAccount,
   GeneratedInvoiceRecord,
+  InvoiceEditContext,
   InvoiceEntity,
   Payout,
   PayoutAccountStatus,
@@ -2224,6 +2225,7 @@ export function InvoicePage({
   onMarkSigned,
   onReviewAction,
   onReplyFeedback,
+  onEditInvoice,
   onOpenProject,
   onOpenRequest,
   onOpenPayment,
@@ -2250,6 +2252,7 @@ export function InvoicePage({
     reason?: string,
   ) => void;
   onReplyFeedback: (payout: Payout, message: string) => void;
+  onEditInvoice: (payout: Payout, context: InvoiceEditContext) => void;
   onOpenProject: (payout: Payout) => void;
   onOpenRequest: (payout: Payout) => void;
   onOpenPayment: (payout: Payout) => void;
@@ -2332,7 +2335,11 @@ export function InvoicePage({
       (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
       && canReviewMedia
     )
-    || (payout.invoiceReviewStatus === '已退回' && canManageInvoice)
+    || (
+      payout.invoiceReviewStatus === '已退回'
+      && payout.paymentFailureReturn?.issueType === 'INVOICE_CONTENT'
+      && canManageInvoice
+    )
   );
 
   if (selectedSource && selectedModel) {
@@ -2344,6 +2351,7 @@ export function InvoicePage({
         onMarkSigned={markSignedAndOpenReview}
         onReviewAction={onReviewAction}
         onReplyFeedback={onReplyFeedback}
+        onEditInvoice={onEditInvoice}
         onOpenProject={onOpenProject}
         onOpenRequest={onOpenRequest}
         onOpenPayment={onOpenPayment}
@@ -2391,7 +2399,7 @@ export function InvoicePage({
               : payout.invoiceReviewStatus === '待媒介复核'
                 ? '复核'
                 : payout.invoiceReviewStatus === '已退回'
-                  ? '重新发起'
+                  ? '修改并重新发起'
                   : '审核'
             : '查看详情'}
           primaryActionFor={canActOnInvoice}

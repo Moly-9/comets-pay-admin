@@ -218,8 +218,8 @@ export function PayoutDrawer({
                     }</strong>
                     {payout.paymentFailureReturn.reason} · 下一步{
                       payout.paymentFailureReturn.restartStage === 'SIGNATURE'
-                        ? '重新签署'
-                        : '媒介复核'
+                        ? '修改 Invoice 后重新签署'
+                        : '重新提交项目付款清单'
                     }
                   </span>
                 </div>
@@ -326,9 +326,9 @@ export function PayoutDrawer({
 
             <div className="return-review-warning"><AlertTriangle size={17} /><span>{
               issueType === 'INVOICE_CONTENT'
-                ? '确认后进入“已退回”，重新发起时必须从达人签署开始。'
+                ? '确认后进入“已退回”，必须先修改 Invoice 并从达人签署开始。'
                 : issueType === 'PAYMENT_LIST'
-                  ? '确认后进入“已退回”，重新发起时从媒介复核开始，无需重新签署。'
+                  ? '确认后进入“已退回”，只能在项目付款清单修正并重新提交后从 PM 审批开始，无需重新签署。'
                   : '确认后，该笔付款将进入“已退回”，且不能直接重试付款。'
             }</span></div>
           </div>

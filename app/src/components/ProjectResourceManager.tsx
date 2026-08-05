@@ -455,7 +455,9 @@ export function ProjectResourceManager({
         </div>
         <div className="project-workflow-status-actions">
           {canEdit && reviewStatus !== 'submitted' && reviewStatus !== 'approved' ? (
-            <Button icon={<ShieldCheck size={16} />} onClick={onSubmitReview}>提交请款审核</Button>
+            <Button icon={<ShieldCheck size={16} />} onClick={onSubmitReview}>
+              {project.status === '付款清单待修改' ? '重新提交付款清单' : '提交请款审核'}
+            </Button>
           ) : null}
         </div>
       </div>
