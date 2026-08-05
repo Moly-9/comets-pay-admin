@@ -17,6 +17,7 @@ import {
 } from 'docx';
 import type { InvoiceDocumentModel } from '../types';
 import notoSansScDocxFont from '../assets/fonts/NotoSansSC-Regular.ttf?url';
+import { assertDocumentPayoutSnapshotReady } from '../payoutAccounts';
 import { InvoicePdfDocument } from './InvoicePdfDocument';
 import { bankAddress, formatInvoiceDate, formatInvoiceMoney, invoiceTotal } from './invoiceUtils';
 
@@ -96,6 +97,10 @@ const paymentParagraphs = (model: InvoiceDocumentModel) => {
 };
 
 export async function generateInvoiceDocx(model: InvoiceDocumentModel) {
+  assertDocumentPayoutSnapshotReady(
+    model.payment,
+    model.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
+  );
   const docxFontData = await loadDocxFont();
   const descriptionWidth = 4400;
   const priceWidth = 1770;
@@ -218,6 +223,10 @@ export async function generateInvoiceDocx(model: InvoiceDocumentModel) {
 }
 
 export async function generateInvoicePdf(model: InvoiceDocumentModel) {
+  assertDocumentPayoutSnapshotReady(
+    model.payment,
+    model.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
+  );
   return pdf(<InvoicePdfDocument model={model} />).toBlob();
 }
 

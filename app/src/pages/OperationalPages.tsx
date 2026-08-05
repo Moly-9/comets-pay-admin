@@ -59,7 +59,7 @@ import {
   getPayoutAccountVersion,
   getPayoutAccountSummary,
   getPayoutAccountStatusMeta,
-  isPayoutAccountVerified,
+  isPayoutAccountUsableForDocuments,
   prepareCreatorPayoutAccountsForSave,
 } from '../payoutAccounts';
 import type {
@@ -2019,7 +2019,7 @@ export function CreatorsPage({
   const activeStatus = getPayoutAccountStatusMeta(activeDefaultAccount?.status ?? 'DRAFT', activeDefaultAccount?.provider);
   const activePayoutAccounts = activeProfile?.payoutAccounts.filter((account) => account.status !== 'DISABLED') ?? [];
   const activePayoutProviders = [...new Set(activePayoutAccounts.map((account) => account.provider))];
-  const activeUsableAccountCount = activePayoutAccounts.filter(isPayoutAccountVerified).length;
+  const activeUsableAccountCount = activePayoutAccounts.filter(isPayoutAccountUsableForDocuments).length;
   const activeDefaultAccountSummary = activeDefaultAccount
     ? `${activeDefaultAccount.provider === 'Airwallex' ? 'Airwallex · ' : ''}${getPayoutAccountSummary(activeDefaultAccount)}`
     : '';

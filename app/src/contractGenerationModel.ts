@@ -5,7 +5,8 @@ import type {
 } from './contracts';
 import {
   getDefaultPayoutAccount,
-  isPayoutAccountVerified,
+  getDocumentPayoutSnapshotIssues,
+  isPayoutAccountUsableForDocuments,
   payoutAccountToInvoicePayment,
 } from './payoutAccounts';
 import type { CreatorPayoutAccount, CreatorProfile } from './types';
@@ -85,7 +86,7 @@ export const formatContractPublishingChannelLinks = (
 export const eligibleContractPayoutAccounts = (creator: CreatorProfile | null | undefined) => (
   creator?.payoutAccounts.filter((account) => (
     account.status !== 'DISABLED'
-    && isPayoutAccountVerified(account)
+    && isPayoutAccountUsableForDocuments(account)
     && (account.provider === 'Airwallex' || account.provider === 'PayPal')
   )) ?? []
 );
@@ -212,20 +213,13 @@ export const validateContractGenerationModel = (
   if (model.contentLength.length > 320) {
     errors.contentLength = '内容时长说明不能超过 320 个字符';
   }
-  if (model.payoutAccountId && model.payoutProvider === 'PayPal') {
-    if (!model.paymentSnapshot.paypalUsername.trim()) {
-      errors.payoutAccountId = 'PayPal 账户缺少 PayPal Name';
-    } else if (!/^\S+@\S+\.\S+$/.test(model.paymentSnapshot.paypalEmail.trim())) {
-      errors.payoutAccountId = 'PayPal 账户邮箱无效';
-    }
-  } else if (model.payoutAccountId) {
-    if (!model.paymentSnapshot.accountName.trim()) {
-      errors.payoutAccountId = '银行账户缺少 Account Name';
-    } else if (!model.paymentSnapshot.bankName.trim()) {
-      errors.payoutAccountId = '银行账户缺少 Beneficiary Bank';
-    }
-    if (!model.paymentSnapshot.accountNumber.trim() && !model.paymentSnapshot.iban.trim()) {
-      errors.payoutAccountId = '银行账户缺少 Account Number 或 IBAN';
+  if (model.payoutAccountId) {
+    const payoutIssues = getDocumentPayoutSnapshotIssues(
+      model.paymentSnapshot,
+      model.payoutProvider,
+    );
+    if (payoutIssues.length) {
+      errors.payoutAccountId = payoutIssues[0].message;
     }
   }
   return errors;

@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertDocumentPayoutSnapshotReady,
   clonePayoutAccounts,
   createEmptyAirwallexAccount,
   createEmptyPayMaxAccount,
   createEmptyPayPalAccount,
+  eligibleInvoicePayoutAccounts,
+  getPayoutAccountDocumentIssues,
   getPayoutAccountForProvider,
+  isPayoutAccountDocumentReady,
   normalizePayMaxStatus,
   payoutAccountToInvoicePayment,
   prepareCreatorPayoutAccountsForSave,
   shouldSynchronizeAirwallexAccount,
 } from './payoutAccounts';
 import { setAirwallexFormValue } from './airwallexFormSchema';
+import type { CreatorProfile } from './types';
 
 describe('creator payout channels', () => {
   it('creates independent Airwallex, PayPal and PayerMax account models', () => {
@@ -68,6 +73,14 @@ describe('creator payout channels', () => {
 
     expect(payoutAccountToInvoicePayment(account).bankStreetAddress)
       .toBe('1 Finance Street, Hong Kong');
+
+    const schemaAliasAccount = setAirwallexFormValue(
+      createEmptyAirwallexAccount(),
+      'beneficiary.bank_details.bank_address',
+      '2 Schema Street, Singapore',
+    );
+    expect(payoutAccountToInvoicePayment(schemaAliasAccount).bankStreetAddress)
+      .toBe('2 Schema Street, Singapore');
   });
 
   it('creates a new version when verified account fields change and archives the old version', () => {
@@ -128,5 +141,88 @@ describe('creator payout channels', () => {
       transferRemarks: 'Campaign IO-001',
       paypalEmail: 'mina@example.com',
     });
+  });
+
+  it('requires document bank fields while keeping LOCAL-only SWIFT and IBAN conditional', () => {
+    const local = {
+      ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-1'),
+      status: 'VERIFIED' as const,
+      bankDetails: {
+        ...createEmptyAirwallexAccount().bankDetails,
+        bankCountryCode: 'US',
+        accountCurrency: 'USD',
+        accountName: 'Mina Kato',
+        accountNumber: '0000000001',
+        bankName: 'Sample Bank',
+        bankStreetAddress: '1 Finance Street',
+      },
+    };
+
+    expect(getPayoutAccountDocumentIssues(local)).toEqual([]);
+    expect(isPayoutAccountDocumentReady(local)).toBe(true);
+
+    const missingAddress = {
+      ...local,
+      bankDetails: { ...local.bankDetails, bankStreetAddress: '' },
+    };
+    expect(getPayoutAccountDocumentIssues(missingAddress)).toEqual([
+      expect.objectContaining({ fieldKey: 'bankAddress' }),
+    ]);
+    expect(eligibleInvoicePayoutAccounts({
+      payoutAccounts: [
+        { ...missingAddress, id: 'incomplete-bank', payoutAccountId: 'incomplete-bank' },
+        { ...local, id: 'ready-bank', payoutAccountId: 'ready-bank' },
+      ],
+    } as CreatorProfile).map((account) => account.id)).toEqual(['ready-bank']);
+
+    const swift = {
+      ...local,
+      transferMethod: 'SWIFT' as const,
+      bankDetails: { ...local.bankDetails, swiftCode: '' },
+    };
+    expect(getPayoutAccountDocumentIssues(swift)).toEqual([
+      expect.objectContaining({ fieldKey: 'swiftCode' }),
+    ]);
+  });
+
+  it('requires IBAN for an IBAN-based LOCAL corridor', () => {
+    const account = {
+      ...createEmptyAirwallexAccount('Alex Ruiz', 'alex@example.com', 'creator-2'),
+      transferMethod: 'LOCAL' as const,
+      bankDetails: {
+        ...createEmptyAirwallexAccount().bankDetails,
+        bankCountryCode: 'ES',
+        accountCurrency: 'EUR',
+        accountName: 'Alex Ruiz',
+        accountNumber: '0000000002',
+        bankName: 'Sample Bank',
+        bankStreetAddress: '2 Finance Street',
+        iban: '',
+      },
+    };
+
+    expect(getPayoutAccountDocumentIssues(account)).toContainEqual(
+      expect.objectContaining({ fieldKey: 'iban' }),
+    );
+  });
+
+  it('requires PayPal identity fields but keeps Transfer Note optional', () => {
+    const paypal = createEmptyPayPalAccount('', '', 'creator-3');
+    expect(getPayoutAccountDocumentIssues(paypal).map((issue) => issue.fieldKey)).toEqual([
+      'paypalUsername',
+      'paypalEmail',
+    ]);
+
+    const complete = {
+      ...paypal,
+      paypalUsername: 'creator.paypal',
+      paypalEmail: 'creator@example.com',
+      transferNote: '',
+    };
+    expect(getPayoutAccountDocumentIssues(complete)).toEqual([]);
+    expect(() => assertDocumentPayoutSnapshotReady(
+      payoutAccountToInvoicePayment(complete),
+      'PayPal',
+    )).not.toThrow();
   });
 });

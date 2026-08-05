@@ -80,6 +80,125 @@ const EMPTY_INVOICE_PAYMENT: CreatorPaymentDetails = {
   paypalEmail: '',
 };
 
+export type DocumentPayoutFieldKey =
+  | 'accountName'
+  | 'accountNumber'
+  | 'bankName'
+  | 'bankAddress'
+  | 'swiftCode'
+  | 'iban'
+  | 'paypalUsername'
+  | 'paypalEmail'
+  | 'provider';
+
+export type DocumentPayoutIssue = {
+  fieldKey: DocumentPayoutFieldKey;
+  label: string;
+  message: string;
+};
+
+type DocumentPayoutValidationInput = {
+  provider?: CreatorPayoutAccount['provider'];
+  transferMethod?: AirwallexTransferMethod | 'PAYPAL';
+  requiresIban?: boolean;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  bankAddress: string;
+  swiftCode: string;
+  iban: string;
+  paypalUsername: string;
+  paypalEmail: string;
+};
+
+const validEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
+
+const validateDocumentPayoutValues = ({
+  provider,
+  transferMethod,
+  requiresIban = false,
+  accountName,
+  accountNumber,
+  bankName,
+  bankAddress,
+  swiftCode,
+  iban,
+  paypalUsername,
+  paypalEmail,
+}: DocumentPayoutValidationInput): DocumentPayoutIssue[] => {
+  if (provider === 'PayPal') {
+    const issues: DocumentPayoutIssue[] = [];
+    if (!paypalUsername.trim()) {
+      issues.push({
+        fieldKey: 'paypalUsername',
+        label: 'PayPal Username',
+        message: 'PayPal Username 为合同和 Invoice 必填项',
+      });
+    }
+    if (!validEmail(paypalEmail)) {
+      issues.push({
+        fieldKey: 'paypalEmail',
+        label: 'PayPal Email Address',
+        message: 'PayPal Email Address 必须填写有效邮箱',
+      });
+    }
+    return issues;
+  }
+
+  if (provider !== 'Airwallex') {
+    return [{
+      fieldKey: 'provider',
+      label: '付款渠道',
+      message: '该付款渠道暂不能生成合同或 Invoice 收款快照',
+    }];
+  }
+
+  const issues: DocumentPayoutIssue[] = [];
+  if (!accountName.trim()) {
+    issues.push({
+      fieldKey: 'accountName',
+      label: 'Account Name',
+      message: 'Account Name 为合同和 Invoice 必填项',
+    });
+  }
+  if (!accountNumber.trim() && !iban.trim()) {
+    issues.push({
+      fieldKey: 'accountNumber',
+      label: 'Account Number / IBAN',
+      message: 'Account Number 或 IBAN 至少填写一项',
+    });
+  }
+  if (!bankName.trim()) {
+    issues.push({
+      fieldKey: 'bankName',
+      label: 'Beneficiary Bank Name',
+      message: 'Beneficiary Bank Name 为合同和 Invoice 必填项',
+    });
+  }
+  if (!bankAddress.trim()) {
+    issues.push({
+      fieldKey: 'bankAddress',
+      label: 'Beneficiary Bank Address',
+      message: 'Beneficiary Bank Address 为合同和 Invoice 必填项',
+    });
+  }
+  if (transferMethod === 'SWIFT' && !swiftCode.trim()) {
+    issues.push({
+      fieldKey: 'swiftCode',
+      label: 'SWIFT Code',
+      message: 'SWIFT Code 在 SWIFT 路径下为合同和 Invoice 必填项',
+    });
+  }
+  if (requiresIban && !iban.trim()) {
+    issues.push({
+      fieldKey: 'iban',
+      label: 'IBAN',
+      message: 'IBAN 在当前国家或地区的付款路径下为必填项',
+    });
+  }
+  return issues;
+};
+
 const fingerprintHash = (value: string) => {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
@@ -385,11 +504,73 @@ export const isPayoutAccountVerified = (account: CreatorPayoutAccount) => (
   account.status === 'VALIDATED' || account.status === 'VERIFIED'
 );
 
+const airwallexBankAddress = (account: AirwallexPayoutAccount) => (
+  account.bankDetails.bankStreetAddress.trim()
+  || account.schemaValues['beneficiary.bank_details.bank_address']?.trim()
+  || account.schemaValues['beneficiary.bank_details.bank_address_line_1']?.trim()
+  || account.schemaValues['profile_supplement.beneficiary_bank_address']?.trim()
+  || ''
+);
+
+export const getPayoutAccountDocumentIssues = (
+  account: CreatorPayoutAccount,
+): DocumentPayoutIssue[] => {
+  if (account.provider === 'PayPal') {
+    return validateDocumentPayoutValues({
+      provider: account.provider,
+      transferMethod: 'PAYPAL',
+      accountName: '',
+      accountNumber: '',
+      bankName: '',
+      bankAddress: '',
+      swiftCode: '',
+      iban: '',
+      paypalUsername: account.paypalUsername,
+      paypalEmail: account.paypalEmail,
+    });
+  }
+  if (account.provider === 'PayMax') {
+    return validateDocumentPayoutValues({
+      provider: account.provider,
+      accountName: '',
+      accountNumber: '',
+      bankName: '',
+      bankAddress: '',
+      swiftCode: '',
+      iban: '',
+      paypalUsername: '',
+      paypalEmail: '',
+    });
+  }
+  const country = getAirwallexCountryProfile(account.bankDetails.bankCountryCode);
+  return validateDocumentPayoutValues({
+    provider: account.provider,
+    transferMethod: account.transferMethod,
+    requiresIban: account.transferMethod === 'LOCAL' && Boolean(country?.ibanPreferred),
+    accountName: account.bankDetails.accountName,
+    accountNumber: account.bankDetails.accountNumber,
+    bankName: account.bankDetails.bankName,
+    bankAddress: airwallexBankAddress(account),
+    swiftCode: account.bankDetails.swiftCode,
+    iban: account.bankDetails.iban,
+    paypalUsername: '',
+    paypalEmail: '',
+  });
+};
+
+export const isPayoutAccountDocumentReady = (account: CreatorPayoutAccount) => (
+  getPayoutAccountDocumentIssues(account).length === 0
+);
+
+export const isPayoutAccountUsableForDocuments = (account: CreatorPayoutAccount) => (
+  isPayoutAccountVerified(account) && isPayoutAccountDocumentReady(account)
+);
+
 export const eligibleInvoicePayoutAccounts = (
   creator: CreatorProfile | null | undefined,
 ) => creator?.payoutAccounts.filter((account) => (
   account.status !== 'DISABLED'
-  && isPayoutAccountVerified(account)
+  && isPayoutAccountUsableForDocuments(account)
   && (account.provider === 'Airwallex' || account.provider === 'PayPal')
 )) ?? [];
 
@@ -603,9 +784,7 @@ export const createDocumentPayoutSnapshot = (
     iban: account.bankDetails.iban,
     beneficiaryType: account.entityType,
     bankName: account.bankDetails.bankName,
-    bankStreetAddress: account.bankDetails.bankStreetAddress
-      || account.schemaValues['profile_supplement.beneficiary_bank_address']
-      || '',
+    bankStreetAddress: airwallexBankAddress(account),
     bankCity: account.schemaValues['beneficiary.bank_details.bank_city'] || '',
     bankState: account.bankDetails.bankState,
     bankPostalCode: account.schemaValues['beneficiary.bank_details.bank_postcode'] || '',
@@ -615,6 +794,40 @@ export const createDocumentPayoutSnapshot = (
 };
 
 export const payoutAccountToInvoicePayment = createDocumentPayoutSnapshot;
+
+const snapshotCountryCode = (snapshot: DocumentPayoutSnapshot) => {
+  const [schemaType, countryCode = ''] = (snapshot.schemaKey ?? '').split(':');
+  return schemaType === 'BANK_ACCOUNT' ? countryCode : '';
+};
+
+export const getDocumentPayoutSnapshotIssues = (
+  snapshot: DocumentPayoutSnapshot,
+  provider = snapshot.payoutProvider,
+): DocumentPayoutIssue[] => {
+  const country = getAirwallexCountryProfile(snapshotCountryCode(snapshot));
+  return validateDocumentPayoutValues({
+    provider,
+    transferMethod: snapshot.transferMethod,
+    requiresIban: snapshot.transferMethod === 'LOCAL' && Boolean(country?.ibanPreferred),
+    accountName: snapshot.accountName,
+    accountNumber: snapshot.accountNumber,
+    bankName: snapshot.bankName,
+    bankAddress: snapshot.bankStreetAddress,
+    swiftCode: snapshot.swiftCode,
+    iban: snapshot.iban,
+    paypalUsername: snapshot.paypalUsername,
+    paypalEmail: snapshot.paypalEmail,
+  });
+};
+
+export const assertDocumentPayoutSnapshotReady = (
+  snapshot: DocumentPayoutSnapshot,
+  provider = snapshot.payoutProvider,
+) => {
+  const issues = getDocumentPayoutSnapshotIssues(snapshot, provider);
+  if (!issues.length) return;
+  throw new Error(`收款账户不能用于合同或 Invoice：${issues.map((issue) => issue.message).join('；')}`);
+};
 
 export const invoicePaymentForCreator = (
   creator: CreatorProfile | null | undefined,

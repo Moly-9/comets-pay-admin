@@ -23,10 +23,11 @@ import {
   createEmptyPayMaxAccount,
   createEmptyPayPalAccount,
   getDefaultPayoutAccount,
+  getPayoutAccountDocumentIssues,
   getPayoutAccountIdentifier,
   getPayoutAccountStatusMeta,
   getPayoutAccountSummary,
-  isPayoutAccountVerified,
+  isPayoutAccountUsableForDocuments,
   invalidateAirwallexVerification,
   normalizePayMaxStatus,
   normalizePayPalStatus,
@@ -208,11 +209,13 @@ function SchemaFieldControl({
   item,
   account,
   issue,
+  required = false,
   onChange,
 }: {
   item: AirwallexFormSchemaField;
   account: AirwallexPayoutAccount;
   issue?: string;
+  required?: boolean;
   onChange: (value: string) => void;
 }) {
   const { field } = item;
@@ -248,6 +251,7 @@ function SchemaFieldControl({
     : field.key === 'date_of_birth'
       ? 'date'
       : 'text';
+  const effectiveRequired = item.required || required;
   const help = issue
     || field.description
     || field.tip
@@ -255,7 +259,7 @@ function SchemaFieldControl({
 
   return (
     <div className={`schema-field-control ${isFullWidth ? 'full-width' : ''} ${issue ? 'schema-field-control-error' : ''}`}>
-      <FieldLabel label={label} alias={alias} required={item.required} />
+      <FieldLabel label={label} alias={alias} required={effectiveRequired} />
       {isChoice ? (
         <div className={`schema-choice-group ${field.type === 'TRANSFER_METHOD' ? 'schema-choice-group-wide' : ''}`} role="radiogroup" aria-label={label}>
           {options.map((option) => (
@@ -457,6 +461,25 @@ function StatusPanel({ account }: { account: CreatorPayoutAccount }) {
   );
 }
 
+function DocumentReadinessPanel({ account }: { account: CreatorPayoutAccount }) {
+  const issues = getPayoutAccountDocumentIssues(account);
+  const ready = issues.length === 0;
+  return (
+    <div className={`payout-account-status-panel payout-account-status-${ready ? 'success' : 'warning'}`}>
+      {ready ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+      <span>
+        <strong>{ready ? '合同 / Invoice 字段完整' : '合同 / Invoice 字段待完善'}</strong>
+        <small>
+          {ready
+            ? '该渠道需要的收款字段已完整；正式单据仍只允许选择已验证账户。'
+            : issues.map((issue) => issue.label).join('、')}
+        </small>
+      </span>
+      <code>{ready ? 'document-ready' : `${issues.length} required`}</code>
+    </div>
+  );
+}
+
 function AirwallexAccountForm({
   account,
   onChange,
@@ -472,6 +495,8 @@ function AirwallexAccountForm({
   const [beneficiaryError, setBeneficiaryError] = useState('');
   const conditionKey = getAirwallexSchemaConditionKey(account);
   const issues = useMemo(() => validateAirwallexFormSchema(account, schema), [account, schema]);
+  const documentIssues = useMemo(() => getPayoutAccountDocumentIssues(account), [account]);
+  const bankAddressDocumentIssue = documentIssues.find((issue) => issue.fieldKey === 'bankAddress');
   const issuesByPath = useMemo(
     () => new Map(issues.map((issue) => [issue.path, issue.message])),
     [issues],
@@ -529,15 +554,19 @@ function AirwallexAccountForm({
   };
 
   const renderFields = (fields: AirwallexFormSchemaField[]) => (
-    fields.map((item) => (
-      <SchemaFieldControl
-        item={item}
-        account={account}
-        issue={issuesByPath.get(item.path)}
-        onChange={(value) => updateSchemaField(item, value)}
-        key={item.path}
-      />
-    ))
+    fields.map((item) => {
+      const documentRequired = item.path === 'beneficiary.bank_details.bank_street_address';
+      return (
+        <SchemaFieldControl
+          item={item}
+          account={account}
+          issue={issuesByPath.get(item.path) ?? (documentRequired ? bankAddressDocumentIssue?.message : undefined)}
+          required={documentRequired}
+          onChange={(value) => updateSchemaField(item, value)}
+          key={item.path}
+        />
+      );
+    })
   );
 
   const saveBeneficiary = async () => {
@@ -556,6 +585,7 @@ function AirwallexAccountForm({
   return (
     <div className="creator-payment-editor payout-account-form" aria-busy={schemaStatus === 'loading'}>
       <StatusPanel account={account} />
+      <DocumentReadinessPanel account={account} />
       <div className="dynamic-schema-note">
         {schemaStatus === 'loading'
           ? <LoaderCircle className="airwallex-schema-spinner" size={18} />
@@ -626,7 +656,7 @@ function AirwallexAccountForm({
             <strong>Paid by Bank</strong>
             <small>主体、地址和银行字段随付款场景动态变化</small>
           </span>
-          <em>{requiredPaymentFields.length} 项必填 · {paymentFields.length} 项字段</em>
+          <em>{requiredPaymentFields.length} 项 Schema 必填 · {paymentFields.length} 项字段</em>
         </div>
         <div className="form-grid creator-payment-form-grid">
           {renderFields(paymentFields)}
@@ -638,18 +668,20 @@ function AirwallexAccountForm({
       </Section>
 
       {fallbackFields.length ? (
-        <Section icon={<Plus size={19} />} title="补充付款资料" description="仅补充当前 Schema 未覆盖的 Invoice 银行字段；同义字段不会重复，全部为选填">
+        <Section icon={<Plus size={19} />} title="合同 / Invoice 补充资料" description="补充当前 Schema 未覆盖的单据字段；银行地址为单据必填，SWIFT 与 IBAN 按付款路径决定">
           <div className="form-grid creator-payment-form-grid airwallex-supplemental-grid">
             {fallbackFields.map((field) => {
               const display = DOCUMENT_PAYOUT_FIELD_LABELS[field.path];
+              const documentRequired = field.key === 'beneficiary_bank_address';
               return (
                 <TextField
                   label={display?.label ?? field.label}
-                  alias={`${display?.alias ?? field.sourceLabel} · 选填`}
+                  alias={`${display?.alias ?? field.sourceLabel} · ${documentRequired ? '合同 / Invoice 必填' : '当前路径选填'}`}
                   value={getAirwallexFormValue(account, field.path)}
                   onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
                   placeholder={field.placeholder}
                   type={field.type}
+                  required={documentRequired}
                   fullWidth={field.key === 'beneficiary_bank_address'}
                   key={field.key}
                 />
@@ -691,6 +723,7 @@ function PayPalAccountForm({
   return (
     <div className="creator-payment-editor payout-account-form">
       <StatusPanel account={account} />
+      <DocumentReadinessPanel account={account} />
       <Section icon={<Wallet size={19} />} title="PayPal 账户" description="PayPal 与 Airwallex 银行字段独立维护">
         <div className="form-grid creator-payment-form-grid">
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：主 PayPal 账户" required />
@@ -723,6 +756,7 @@ function PayMaxAccountForm({
   return (
     <div className="creator-payment-editor payout-account-form">
       <StatusPanel account={account} />
+      <DocumentReadinessPanel account={account} />
       <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="PayerMax 收款账号与 Airwallex、PayPal 资料独立维护">
         <div className="form-grid creator-payment-form-grid">
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：PayerMax 主账户" required />
@@ -779,6 +813,7 @@ function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) 
   return (
     <div className="creator-profile-content payout-account-view">
       <StatusPanel account={account} />
+      <DocumentReadinessPanel account={account} />
       <Section icon={<ShieldCheck size={19} />} title="收款主体" description="Airwallex Beneficiary 身份和结构化地址">
         <DetailGrid items={[
           { label: '主体类型', alias: 'entity_type', value: account.entityType },
@@ -825,6 +860,7 @@ function PayPalAccountView({ account }: { account: PayPalPayoutAccount }) {
   return (
     <div className="creator-profile-content payout-account-view">
       <StatusPanel account={account} />
+      <DocumentReadinessPanel account={account} />
       <Section icon={<Wallet size={19} />} title="PayPal 账户" description="与 Airwallex 银行收款账户独立维护">
         <DetailGrid items={[
           { label: '账户别名', alias: 'nickname', value: account.nickname },
@@ -841,6 +877,7 @@ function PayMaxAccountView({ account }: { account: PayMaxPayoutAccount }) {
   return (
     <div className="creator-profile-content payout-account-view">
       <StatusPanel account={account} />
+      <DocumentReadinessPanel account={account} />
       <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="与 Airwallex 和 PayPal 收款账户独立维护">
         <DetailGrid items={[
           { label: '账户别名', alias: 'nickname', value: account.nickname },
@@ -891,7 +928,7 @@ export function CreatorPayoutAccounts({
     ?? activeAccounts[0]
     ?? null
   );
-  const usableAccountCount = accounts.filter(isPayoutAccountVerified).length;
+  const usableAccountCount = accounts.filter(isPayoutAccountUsableForDocuments).length;
   const activeProviderConfig = (
     PAYOUT_PROVIDERS.find((provider) => provider.value === activeProvider)
     ?? PAYOUT_PROVIDERS[0]
@@ -936,7 +973,7 @@ export function CreatorPayoutAccounts({
         <div className="payout-provider-tabs" role="tablist" aria-label="收款渠道">
           {PAYOUT_PROVIDERS.map((provider) => {
             const providerAccounts = accounts.filter((account) => account.provider === provider.value);
-            const providerUsableCount = providerAccounts.filter(isPayoutAccountVerified).length;
+            const providerUsableCount = providerAccounts.filter(isPayoutAccountUsableForDocuments).length;
             return (
               <button
                 className={`payout-provider-tab ${activeProvider === provider.value ? 'payout-provider-tab-active' : ''}`}

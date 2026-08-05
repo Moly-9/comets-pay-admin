@@ -117,4 +117,25 @@ describe('Invoice template project visibility', () => {
       info: expect.not.objectContaining({ Subject: expect.stringContaining(PROJECT_NAME) }),
     }));
   });
+
+  it('blocks file generation when the selected payout snapshot is incomplete', async () => {
+    const incompleteBankModel: InvoiceDocumentModel = {
+      ...model,
+      paymentMethod: 'bank',
+      payment: {
+        ...model.payment,
+        payoutProvider: 'Airwallex',
+        transferMethod: 'LOCAL',
+        accountName: 'Creator Legal Name',
+        accountNumber: '0000000001',
+        bankName: 'Sample Bank',
+        bankStreetAddress: '',
+        paypalUsername: '',
+        paypalEmail: '',
+      },
+    };
+
+    await expect(generateInvoicePdf(incompleteBankModel))
+      .rejects.toThrow('Beneficiary Bank Address');
+  });
 });

@@ -61,6 +61,7 @@ const creator = (): CreatorProfile => ({
         accountName: 'Sample Creator Limited',
         accountNumber: '0000001234',
         bankName: 'Sample Bank',
+        bankStreetAddress: '1 Example Bank Road',
       },
     }),
     createPayPalPayoutAccount({
@@ -124,7 +125,7 @@ const validModel = (): ContractGenerationModel => ({
     iban: '',
     beneficiaryType: 'COMPANY',
     bankName: 'Sample Bank',
-    bankStreetAddress: '',
+    bankStreetAddress: '1 Example Bank Road',
     bankCity: '',
     bankState: '',
     bankPostalCode: '',
@@ -319,6 +320,11 @@ describe('contract generation model', () => {
     missingLocator.paymentSnapshot.iban = '';
     expect(validateContractGenerationModel(missingLocator).payoutAccountId).toContain('Account Number 或 IBAN');
 
+    const missingBankAddress = validModel();
+    missingBankAddress.paymentSnapshot.bankStreetAddress = '';
+    expect(validateContractGenerationModel(missingBankAddress).payoutAccountId)
+      .toContain('Beneficiary Bank Address');
+
     const paypal = validModel();
     Object.assign(paypal, {
       payoutAccountId: 'paypal-validated',
@@ -333,7 +339,7 @@ describe('contract generation model', () => {
         paypalEmail: 'invalid-email',
       },
     });
-    expect(validateContractGenerationModel(paypal).payoutAccountId).toContain('邮箱无效');
+    expect(validateContractGenerationModel(paypal).payoutAccountId).toContain('PayPal Email Address');
     paypal.paymentSnapshot.paypalEmail = 'creator@example.invalid';
     expect(validateContractGenerationModel(paypal)).toEqual({});
   });
