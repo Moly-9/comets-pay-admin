@@ -69,6 +69,37 @@ type CreatorPayoutAccountsProps = {
   onChange?: (accounts: CreatorPayoutAccount[]) => void;
 };
 
+const DOCUMENT_PAYOUT_FIELD_LABELS: Record<string, { label: string; alias: string }> = {
+  'beneficiary.bank_details.account_name': {
+    label: 'Account Name',
+    alias: '账户名称',
+  },
+  'beneficiary.bank_details.account_number': {
+    label: 'Account Number',
+    alias: '银行账号',
+  },
+  'beneficiary.bank_details.bank_name': {
+    label: 'Beneficiary Bank Name',
+    alias: '收款银行名称',
+  },
+  'beneficiary.bank_details.bank_street_address': {
+    label: 'Beneficiary Bank Address',
+    alias: '收款银行地址',
+  },
+  'profile_supplement.beneficiary_bank_address': {
+    label: 'Beneficiary Bank Address',
+    alias: '收款银行地址',
+  },
+  'beneficiary.bank_details.swift_code': {
+    label: 'SWIFT Code',
+    alias: 'SWIFT / BIC',
+  },
+  'beneficiary.bank_details.iban': {
+    label: 'IBAN',
+    alias: '国际银行账号',
+  },
+};
+
 function Section({
   icon,
   title,
@@ -185,6 +216,7 @@ function SchemaFieldControl({
   onChange: (value: string) => void;
 }) {
   const { field } = item;
+  const documentFieldLabel = DOCUMENT_PAYOUT_FIELD_LABELS[item.path];
   const label = {
     'beneficiary.bank_details.bank_country_code': '收款国家 / 地区',
     'beneficiary.bank_details.account_currency': '收款币种',
@@ -192,7 +224,10 @@ function SchemaFieldControl({
     transfer_method: '转账方式',
     [AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH]: '本地清算方式',
     'beneficiary.address.country_code': '收款人所在国家 / 地区',
-  }[item.path] ?? field.label;
+  }[item.path] ?? documentFieldLabel?.label ?? field.label;
+  const alias = documentFieldLabel
+    ? `${documentFieldLabel.alias} · ${item.path}`
+    : item.path;
   const value = getAirwallexFormValue(account, item.path) || field.default;
   const options = item.path === AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH
     ? prioritizeAirwallexLocalClearingOptions(
@@ -220,7 +255,7 @@ function SchemaFieldControl({
 
   return (
     <div className={`schema-field-control ${isFullWidth ? 'full-width' : ''} ${issue ? 'schema-field-control-error' : ''}`}>
-      <FieldLabel label={label} alias={item.path} required={item.required} />
+      <FieldLabel label={label} alias={alias} required={item.required} />
       {isChoice ? (
         <div className={`schema-choice-group ${field.type === 'TRANSFER_METHOD' ? 'schema-choice-group-wide' : ''}`} role="radiogroup" aria-label={label}>
           {options.map((option) => (
@@ -605,18 +640,21 @@ function AirwallexAccountForm({
       {fallbackFields.length ? (
         <Section icon={<Plus size={19} />} title="补充付款资料" description="仅补充当前 Schema 未覆盖的 Invoice 银行字段；同义字段不会重复，全部为选填">
           <div className="form-grid creator-payment-form-grid airwallex-supplemental-grid">
-            {fallbackFields.map((field) => (
-              <TextField
-                label={field.label}
-                alias={`${field.sourceLabel} · 选填`}
-                value={getAirwallexFormValue(account, field.path)}
-                onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
-                placeholder={field.placeholder}
-                type={field.type}
-                fullWidth={field.key === 'beneficiary_bank_address'}
-                key={field.key}
-              />
-            ))}
+            {fallbackFields.map((field) => {
+              const display = DOCUMENT_PAYOUT_FIELD_LABELS[field.path];
+              return (
+                <TextField
+                  label={display?.label ?? field.label}
+                  alias={`${display?.alias ?? field.sourceLabel} · 选填`}
+                  value={getAirwallexFormValue(account, field.path)}
+                  onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
+                  placeholder={field.placeholder}
+                  type={field.type}
+                  fullWidth={field.key === 'beneficiary_bank_address'}
+                  key={field.key}
+                />
+              );
+            })}
           </div>
         </Section>
       ) : null}
@@ -656,9 +694,9 @@ function PayPalAccountForm({
       <Section icon={<Wallet size={19} />} title="PayPal 账户" description="PayPal 与 Airwallex 银行字段独立维护">
         <div className="form-grid creator-payment-form-grid">
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：主 PayPal 账户" required />
-          <TextField label="PayPal 用户名" alias="paypalUsername" value={account.paypalUsername} onChange={(value) => commit({ ...account, paypalUsername: value })} placeholder="账户显示名称" required />
-          <TextField label="PayPal 邮箱" alias="paypalEmail" value={account.paypalEmail} onChange={(value) => commit({ ...account, paypalEmail: value })} placeholder="收款邮箱" type="email" required />
-          <TextField label="转账备注" alias="transferNote · 选填" value={account.transferNote ?? ''} onChange={(value) => commit({ ...account, transferNote: value })} placeholder="写入 PayPal item note" />
+          <TextField label="PayPal Username" alias="PayPal 用户名 · paypalUsername" value={account.paypalUsername} onChange={(value) => commit({ ...account, paypalUsername: value })} placeholder="账户显示名称" required />
+          <TextField label="PayPal Email Address" alias="PayPal 邮箱 · paypalEmail" value={account.paypalEmail} onChange={(value) => commit({ ...account, paypalEmail: value })} placeholder="收款邮箱" type="email" required />
+          <TextField label="Transfer Note" alias="转账备注 · transferNote · 选填" value={account.transferNote ?? ''} onChange={(value) => commit({ ...account, transferNote: value })} placeholder="写入 PayPal item note" />
         </div>
       </Section>
     </div>
@@ -759,15 +797,15 @@ function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) 
       </Section>
       <Section icon={<Landmark size={19} />} title="Airwallex 付款信息" description="银行账号默认掩码展示；字段是否必填由当前 Form Schema 决定">
         <DetailGrid items={[
-          { label: '账户名称', alias: 'account_name', value: account.bankDetails.accountName },
+          { label: 'Account Name', alias: '账户名称 · account_name', value: account.bankDetails.accountName },
           { label: '账户类型', alias: 'bank_account_category', value: account.bankDetails.bankAccountCategory },
-          { label: '银行账号', alias: 'account_number', value: account.bankDetails.accountNumber, mask: true },
-          { label: 'IBAN', alias: 'iban', value: account.bankDetails.iban, mask: true },
+          { label: 'Account Number', alias: '银行账号 · account_number', value: account.bankDetails.accountNumber, mask: true },
+          { label: 'IBAN', alias: '国际银行账号 · iban', value: account.bankDetails.iban, mask: true },
           { label: '本地路由', alias: 'account_routing_type / value', value: routing, wide: true },
-          { label: '银行名称', alias: 'bank_name', value: account.bankDetails.bankName },
-          { label: '收款银行地址', alias: 'Beneficiary Bank Address', value: bankAddress, wide: true },
+          { label: 'Beneficiary Bank Name', alias: '收款银行名称 · bank_name', value: account.bankDetails.bankName },
+          { label: 'Beneficiary Bank Address', alias: '收款银行地址', value: bankAddress, wide: true },
           { label: '分行名称', alias: 'bank_branch', value: account.bankDetails.bankBranch },
-          { label: 'SWIFT / BIC', alias: 'swift_code', value: account.bankDetails.swiftCode },
+          { label: 'SWIFT Code', alias: 'SWIFT / BIC · swift_code', value: account.bankDetails.swiftCode },
           { label: '中间行', alias: 'intermediary_bank_name / swift_code', value: [account.bankDetails.intermediaryBankName, account.bankDetails.intermediaryBankSwiftCode].filter(Boolean).join(' · '), wide: true },
         ]} />
       </Section>
@@ -790,9 +828,9 @@ function PayPalAccountView({ account }: { account: PayPalPayoutAccount }) {
       <Section icon={<Wallet size={19} />} title="PayPal 账户" description="与 Airwallex 银行收款账户独立维护">
         <DetailGrid items={[
           { label: '账户别名', alias: 'nickname', value: account.nickname },
-          { label: 'PayPal 用户名', alias: 'paypalUsername', value: account.paypalUsername },
-          { label: 'PayPal 邮箱', alias: 'paypalEmail', value: account.paypalEmail, wide: true },
-          { label: '转账备注', alias: 'transferNote', value: account.transferNote ?? '', wide: true },
+          { label: 'PayPal Username', alias: 'PayPal 用户名 · paypalUsername', value: account.paypalUsername },
+          { label: 'PayPal Email Address', alias: 'PayPal 邮箱 · paypalEmail', value: account.paypalEmail, wide: true },
+          { label: 'Transfer Note', alias: '转账备注 · transferNote · 选填', value: account.transferNote ?? '', wide: true },
         ]} />
       </Section>
     </div>
