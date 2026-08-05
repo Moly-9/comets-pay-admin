@@ -196,6 +196,11 @@ if (
   throw new Error('INV-240705 修改请求 fixture 缺少稳定的付款、项目、达人或合作关系');
 }
 
+const editRequestPayment = invoicePaymentForCreator(
+  editRequestCreator,
+  editRequestPayout.provider,
+);
+
 export const INVOICE_EDIT_REQUEST_INVOICES: GeneratedInvoiceRecord[] = [{
   id: editRequestPayout.invoice,
   invoiceId: 'invoice_fixture_edit_pay_013' as InvoiceId,
@@ -222,8 +227,12 @@ export const INVOICE_EDIT_REQUEST_INVOICES: GeneratedInvoiceRecord[] = [{
       quantity: 1,
       lineTotal: editRequestPayout.amount,
     }],
+    payoutAccountId: editRequestPayment.payoutAccountId,
+    payoutAccountVersion: editRequestPayment.payoutAccountVersion,
+    payoutProvider: editRequestPayment.payoutProvider,
+    payoutAccountFingerprint: editRequestPayment.accountFingerprint,
     paymentMethod: editRequestPayout.provider === 'PayPal' ? 'paypal' : 'bank',
-    payment: invoicePaymentForCreator(editRequestCreator, editRequestPayout.provider),
+    payment: editRequestPayment,
   },
   validationStatus: 'valid',
   version: 1,
@@ -282,6 +291,11 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     paymentMethod: provider === 'PayPal' ? 'PAYPAL' : 'BANK',
     accountName: payment.accountName || creator.contact.legalName || creator.name,
     accountFingerprint: accountFingerprintForCreator(creator),
+    payoutAccountId: payment.payoutAccountId,
+    payoutAccountVersion: payment.payoutAccountVersion,
+    payoutProvider: payment.payoutProvider === 'PayPal' ? 'PayPal' : 'Airwallex',
+    payoutAccountFingerprint: payment.accountFingerprint,
+    paymentSnapshot: { ...payment },
     signed: true,
     status: '已生效',
     updated: '2026-08-01',
@@ -321,6 +335,7 @@ const createInvoiceModel = (
   const provider = providerForCreator(creator);
   const payoutAccount = getDefaultPayoutAccount(creator.payoutAccounts);
   const amount = DEMO_INVOICE_AMOUNTS[index];
+  const payment = invoicePaymentForCreator(creator, provider);
 
   return {
     invoiceNumber: `INV-301164-${String(index + 1).padStart(2, '0')}`,
@@ -342,9 +357,12 @@ const createInvoiceModel = (
       quantity: 1,
       lineTotal: amount,
     }],
-    payoutAccountId: payoutAccount?.id,
+    payoutAccountId: payment.payoutAccountId ?? payoutAccount?.id,
+    payoutAccountVersion: payment.payoutAccountVersion,
+    payoutProvider: payment.payoutProvider,
+    payoutAccountFingerprint: payment.accountFingerprint,
     paymentMethod: provider === 'PayPal' ? 'paypal' : 'bank',
-    payment: invoicePaymentForCreator(creator, provider),
+    payment,
   };
 };
 
@@ -452,7 +470,14 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
     currency: invoice.snapshot.currency,
     amount: DEMO_INVOICE_AMOUNTS[index],
     account: accountValue,
+    creatorId: invoice.snapshot.creatorId,
     payoutAccountId: invoice.snapshot.payoutAccountId,
+    payoutAccountVersion: invoice.snapshot.payoutAccountVersion,
+    payoutAccountFingerprint: invoice.snapshot.payoutAccountFingerprint,
+    externalBeneficiaryId: invoice.snapshot.payment.externalBeneficiaryId,
+    transferMethod: invoice.snapshot.payment.transferMethod,
+    localClearingSystem: invoice.snapshot.payment.localClearingSystem,
+    feeBearer: firstContract?.feeBearer ?? '',
     status: reviewStatus === '已通过' ? '已付款' : reviewStatus === '已退回' ? '已退回' : '未进入付款',
     invoiceReviewStatus: reviewStatus,
     invoiceVersion: 1,

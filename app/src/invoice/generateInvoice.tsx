@@ -80,6 +80,7 @@ const paymentParagraphs = (model: InvoiceDocumentModel) => {
       new Paragraph({ spacing: { before: 0, after: 100 }, children: [new TextRun({ text: 'Paid by Paypal', bold: true, size: 21, font: DOCX_FONT })] }),
       paragraph('Paypal Name', model.payment.paypalUsername),
       paragraph('Paypal Email', model.payment.paypalEmail),
+      paragraph('Transfer Note (optional)', model.payment.transferRemarks || '-'),
     ];
   }
   return [

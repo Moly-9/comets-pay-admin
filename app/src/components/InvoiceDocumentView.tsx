@@ -27,6 +27,7 @@ export function InvoiceDocumentView({
     : [
       ['Paypal Name', model.payment.paypalUsername],
       ['Paypal Email', model.payment.paypalEmail],
+      ['Transfer Note (optional)', model.payment.transferRemarks || '-'],
     ];
 
   return (

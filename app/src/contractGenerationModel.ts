@@ -111,8 +111,11 @@ export const contractPaymentMethodForAccount = (
       : ''
 );
 
-export const contractPayoutSnapshot = (account: CreatorPayoutAccount | null) => (
-  payoutAccountToInvoicePayment(account)
+export const contractPayoutSnapshot = (
+  account: CreatorPayoutAccount | null,
+  creatorId?: string,
+) => (
+  payoutAccountToInvoicePayment(account, creatorId)
 );
 
 const isDateAfter = (start: string, end: string) => (

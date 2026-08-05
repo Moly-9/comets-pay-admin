@@ -5,6 +5,7 @@ import {
   Link2,
   Pencil,
   ReceiptText,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   Unlink,
@@ -72,6 +73,7 @@ type Props = {
     field: 'currency' | 'amount' | 'provider' | 'accountSummary',
     value: string | number,
   ) => void;
+  onRevalidatePaymentItem?: (invoiceId: InvoiceId) => void;
   onSubmitReview: () => void;
 };
 
@@ -260,6 +262,7 @@ export function ProjectResourceManager({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onRevalidatePaymentItem,
   onSubmitReview,
 }: Props) {
   const reviewStatus = project.reviewStatus ?? 'draft';
@@ -740,6 +743,16 @@ export function ProjectResourceManager({
                       <div>
                         <strong>{item.snapshot.creatorName}</strong>
                         <span>{item.snapshot.invoiceNumber}</span>
+                        <small className={item.requiresRevalidation ? 'project-payment-validation is-warning' : 'project-payment-validation'}>
+                          {item.requiresRevalidation
+                            ? item.validationIssues?.[0] ?? '账户快照需要重新校验'
+                            : `${item.snapshot.payoutAccountVersion ?? 'legacy-v1'} · 账户快照已冻结`}
+                        </small>
+                        {canEdit && item.requiresRevalidation ? (
+                          <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem?.(item.invoiceId)}>
+                            <RefreshCw size={12} />重新校验
+                          </button>
+                        ) : null}
                       </div>
                       <label>
                         <span>币种</span>

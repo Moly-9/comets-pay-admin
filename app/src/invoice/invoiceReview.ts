@@ -65,6 +65,10 @@ export const buildInvoiceReviewModel = (
       quantity: 1,
       lineTotal: payout.amount,
     }],
+    payoutAccountId: payment.payoutAccountId,
+    payoutAccountVersion: payment.payoutAccountVersion,
+    payoutProvider: payment.payoutProvider,
+    payoutAccountFingerprint: payment.accountFingerprint,
     paymentMethod,
     payment: { ...payment },
   };

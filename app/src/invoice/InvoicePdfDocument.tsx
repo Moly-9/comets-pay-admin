@@ -97,6 +97,7 @@ function PaymentInformation({ model }: { model: InvoiceDocumentModel }) {
   const paypalLines = [
     ['Paypal Name', model.payment.paypalUsername],
     ['Paypal Email', model.payment.paypalEmail],
+    ['Transfer Note (optional)', model.payment.transferRemarks || '-'],
   ];
   const lines = model.paymentMethod === 'bank' ? bankLines : paypalLines;
   return (

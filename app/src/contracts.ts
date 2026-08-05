@@ -7,7 +7,10 @@ import {
   type EngagementId,
   type ProjectId,
 } from './businessWorkflow';
-import type { CreatorPaymentDetails } from './types';
+import type {
+  DocumentPayoutSnapshot,
+  PayoutAccountVersion,
+} from './types';
 
 export type ContractStatus =
   | '参考模板'
@@ -159,8 +162,10 @@ export type ContractGenerationModel = {
   paymentMethod: ContractPaymentMethod;
   feeBearer: ContractFeeBearer;
   payoutAccountId: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  payoutAccountFingerprint?: string;
   payoutProvider: 'Airwallex' | 'PayPal';
-  paymentSnapshot: CreatorPaymentDetails;
+  paymentSnapshot: DocumentPayoutSnapshot;
 };
 
 export type ContractRecord = {
@@ -194,6 +199,11 @@ export type ContractRecord = {
   paymentMethod: ContractPaymentMethod;
   accountName: string;
   accountFingerprint: string;
+  payoutAccountId?: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  payoutProvider?: 'Airwallex' | 'PayPal';
+  payoutAccountFingerprint?: string;
+  paymentSnapshot?: DocumentPayoutSnapshot;
   signed: boolean;
   status: ContractStatus;
   updated: string;
@@ -562,6 +572,11 @@ export const createGeneratedContractDraft = (
     paymentMethod: model.paymentMethod,
     accountName,
     accountFingerprint,
+    payoutAccountId: model.payoutAccountId || undefined,
+    payoutAccountVersion: model.payoutAccountVersion ?? model.paymentSnapshot.payoutAccountVersion,
+    payoutProvider: model.payoutAccountId ? model.payoutProvider : undefined,
+    payoutAccountFingerprint: model.payoutAccountFingerprint ?? model.paymentSnapshot.accountFingerprint,
+    paymentSnapshot: { ...model.paymentSnapshot },
     signed: false,
     status: '待回传',
     updated: new Intl.DateTimeFormat('en-CA').format(new Date()),

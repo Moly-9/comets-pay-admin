@@ -651,6 +651,8 @@ export function InvoiceDetailPage({
                   <div><dt>账户名称</dt><dd>{model.paymentMethod === 'bank' ? model.payment.accountName || '待补充' : model.payment.paypalUsername || '待补充'}</dd></div>
                   <div><dt>收款账户</dt><dd>{invoiceAccountSummary(model)}</dd></div>
                   <div><dt>付款渠道</dt><dd>{provider}</dd></div>
+                  <div><dt>账户版本</dt><dd>{model.payoutAccountVersion ?? model.payment.payoutAccountVersion ?? 'legacy-v1'}</dd></div>
+                  {model.paymentMethod === 'paypal' ? <div><dt>Transfer Note</dt><dd>{model.payment.transferRemarks || '未填写'}</dd></div> : null}
                   <div><dt>账户校验</dt><dd>{checks.find((check) => check.id === 'account')?.passed ? '已通过' : '待复核'}</dd></div>
                 </dl>
                 <div className="contract-payment-rule">

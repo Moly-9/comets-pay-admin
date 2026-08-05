@@ -976,6 +976,7 @@ export function ProjectDetailPage({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onRevalidatePaymentItem,
   onSubmitReview,
   notify,
 }: {
@@ -1004,6 +1005,7 @@ export function ProjectDetailPage({
   onAddPaymentInvoice: (invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
+  onRevalidatePaymentItem: (invoiceId: InvoiceId) => void;
   onSubmitReview: () => void;
   notify: Notify;
 }) {
@@ -1121,6 +1123,7 @@ export function ProjectDetailPage({
               onAddPaymentInvoice={onAddPaymentInvoice}
               onRemovePaymentInvoice={onRemovePaymentInvoice}
               onUpdatePaymentItem={onUpdatePaymentItem}
+              onRevalidatePaymentItem={onRevalidatePaymentItem}
               onSubmitReview={onSubmitReview}
             />
           </section>

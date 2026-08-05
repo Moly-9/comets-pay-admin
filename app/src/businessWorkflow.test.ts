@@ -3,12 +3,15 @@ import {
   canEditProject,
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
+  payoutWithPaymentListSnapshot,
   refreshPaymentListItemSnapshot,
+  revalidatePaymentListItem,
   removePaymentListItem,
   upsertPaymentListItem,
   validateContractCoverage,
   validateProjectSubmission,
   type ContractId,
+  type CreatorId,
   type EngagementId,
   type InvoiceId,
   type PaymentListRecord,
@@ -141,6 +144,95 @@ describe('project payment list', () => {
       accountSummary: '人工确认尾号 9000',
     });
     expect(refreshed.updatedAt).toBe('2026-08-05T00:00:00.000Z');
+  });
+
+  it('requires revalidation when refresh changes the frozen payout-account version', () => {
+    const previous = {
+      ...item,
+      snapshot: {
+        ...item.snapshot,
+        payoutAccountId: 'account-1',
+        payoutAccountVersion: 'v1' as const,
+        accountFingerprint: 'fp_1',
+        creatorId: 'creator-1' as CreatorId,
+        externalBeneficiaryId: 'beneficiary-1',
+        transferMethod: 'LOCAL' as const,
+        localClearingSystem: 'ACH',
+        feeBearer: 'ADVERTISER' as const,
+        schemaKey: 'BANK_ACCOUNT:US:USD:PERSONAL:LOCAL:ACH',
+        validationStatus: 'VERIFIED' as const,
+      },
+    };
+    const refreshed = refreshPaymentListItemSnapshot(
+      upsertPaymentListItem(record, previous),
+      {
+        ...previous,
+        snapshot: {
+          ...previous.snapshot,
+          payoutAccountVersion: 'v2',
+          accountFingerprint: 'fp_2',
+        },
+      },
+    );
+
+    expect(refreshed.items[0]).toMatchObject({
+      requiresRevalidation: true,
+      validationIssues: ['Invoice 账户版本已变化，付款清单必须重新校验'],
+      overrides: {},
+    });
+    expect(revalidatePaymentListItem(
+      refreshed.items[0]!,
+      '2026-08-05T12:00:00.000Z',
+    )).toMatchObject({
+      requiresRevalidation: false,
+      validationIssues: [],
+      lastValidatedAt: '2026-08-05T12:00:00.000Z',
+    });
+  });
+
+  it('builds batch input from the payment-list snapshot while preserving overrides', () => {
+    const paymentItem = {
+      ...item,
+      snapshot: {
+        ...item.snapshot,
+        creatorId: 'creator-1' as CreatorId,
+        payoutAccountId: 'account-1',
+        payoutAccountVersion: 'v3' as const,
+        accountFingerprint: 'fp_3',
+        externalBeneficiaryId: 'beneficiary-1',
+        transferMethod: 'LOCAL' as const,
+        localClearingSystem: 'ACH',
+        feeBearer: 'ADVERTISER' as const,
+      },
+      overrides: { amount: 280, currency: 'EUR' },
+    };
+    const payout = payoutWithPaymentListSnapshot({
+      id: 'payout-1',
+      creator: 'Synthetic Creator',
+      handle: '@synthetic',
+      initials: 'SC',
+      projectId: 'project-1',
+      project: 'Synthetic Project',
+      contract: 'CON-001',
+      invoice: 'INV-001',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 300,
+      account: 'old account',
+      status: '等待付款',
+      invoiceReviewStatus: '已通过',
+      accent: '#64748b',
+    }, paymentItem);
+
+    expect(payout).toMatchObject({
+      creatorId: 'creator-1',
+      currency: 'EUR',
+      amount: 280,
+      payoutAccountId: 'account-1',
+      payoutAccountVersion: 'v3',
+      externalBeneficiaryId: 'beneficiary-1',
+      feeBearer: 'ADVERTISER',
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import {
   getPayoutAccountForProvider,
   normalizePayMaxStatus,
   payoutAccountToInvoicePayment,
+  prepareCreatorPayoutAccountsForSave,
   shouldSynchronizeAirwallexAccount,
 } from './payoutAccounts';
 import { setAirwallexFormValue } from './airwallexFormSchema';
@@ -67,5 +68,65 @@ describe('creator payout channels', () => {
 
     expect(payoutAccountToInvoicePayment(account).bankStreetAddress)
       .toBe('1 Finance Street, Hong Kong');
+  });
+
+  it('creates a new version when verified account fields change and archives the old version', () => {
+    const previous = {
+      ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-1'),
+      status: 'VERIFIED' as const,
+      beneficiaryId: 'beneficiary_mock_1',
+      bankDetails: {
+        ...createEmptyAirwallexAccount().bankDetails,
+        accountName: 'Mina Kato',
+        accountNumber: '0000000001',
+        bankName: 'Sample Bank',
+      },
+    };
+    const candidate = {
+      ...previous,
+      status: 'READY_FOR_VALIDATION' as const,
+      bankDetails: { ...previous.bankDetails, accountNumber: '0000000002' },
+    };
+
+    const result = prepareCreatorPayoutAccountsForSave('creator-1', [previous], [candidate]);
+
+    expect(result.accounts[0]).toMatchObject({
+      creatorId: 'creator-1',
+      payoutAccountId: previous.id,
+      payoutAccountVersion: 'v2',
+    });
+    expect(result.archived[0]).toMatchObject({
+      payoutAccountId: previous.id,
+      payoutAccountVersion: 'v1',
+      beneficiaryId: 'beneficiary_mock_1',
+    });
+    expect(result.accounts[0]?.accountFingerprint).not.toBe(result.archived[0]?.accountFingerprint);
+  });
+
+  it('keeps draft edits in the same account version', () => {
+    const previous = createEmptyPayPalAccount('Mina Kato', 'mina@example.com', 'creator-1');
+    const candidate = { ...previous, transferNote: 'Invoice 2026-08' };
+    const result = prepareCreatorPayoutAccountsForSave('creator-1', [previous], [candidate]);
+
+    expect(result.accounts[0]?.payoutAccountVersion).toBe('v1');
+    expect(result.archived).toEqual([]);
+  });
+
+  it('maps PayPal Transfer Note and account identity into the unified document snapshot', () => {
+    const paypal = {
+      ...createEmptyPayPalAccount('Mina Kato', 'mina@example.com', 'creator-1'),
+      status: 'VERIFIED' as const,
+      transferNote: 'Campaign IO-001',
+    };
+
+    expect(payoutAccountToInvoicePayment(paypal, 'creator-1')).toMatchObject({
+      creatorId: 'creator-1',
+      payoutAccountId: paypal.id,
+      payoutAccountVersion: 'v1',
+      payoutProvider: 'PayPal',
+      transferMethod: 'PAYPAL',
+      transferRemarks: 'Campaign IO-001',
+      paypalEmail: 'mina@example.com',
+    });
   });
 });

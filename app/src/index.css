@@ -1183,6 +1183,48 @@
   font-size: 10px;
 }
 
+.project-payment-validation {
+  color: #2f7a55;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.project-payment-validation.is-warning {
+  color: #a05b26;
+}
+
+.project-payment-revalidate {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #7f4b24;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.airwallex-beneficiary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--soft-line);
+  padding-top: 16px;
+}
+
+.airwallex-beneficiary-actions > span {
+  display: grid;
+  gap: 3px;
+}
+
+.airwallex-beneficiary-actions small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .project-payment-row input {
   width: 100%;
   min-height: 34px;
@@ -3412,6 +3454,11 @@ button:disabled {
   border-color: #cbd0da;
 }
 
+.provider-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .provider-selected {
   border-color: #ff9d86;
   background: #fffaf8;
@@ -3451,6 +3498,12 @@ button:disabled {
 .provider-option small {
   color: #8a909b;
   font-size: 10.5px;
+}
+
+.batch-funding-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .validation-summary {
@@ -7945,6 +7998,7 @@ button:disabled {
   }
 
   .channel-panel .panel-title-row,
+  .channel-panel .batch-funding-controls,
   .channel-panel .validation-summary,
   .channel-panel .inline-alert {
     grid-column: 1 / -1;

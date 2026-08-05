@@ -506,6 +506,16 @@ export function ContractDetailPage({
                     <div><dt>付款方式</dt><dd>{PAYMENT_METHOD_LABELS[contract.paymentMethod]}</dd></div>
                     <div><dt>转账费用</dt><dd>{FEE_BEARER_LABELS[contract.feeBearer]}</dd></div>
                     <div><dt>合同账户快照</dt><dd>{contract.accountName ? `${contract.accountName} · ${contract.accountFingerprint}` : '待补充'}</dd></div>
+                    <div>
+                      <dt>账户渠道 / 版本</dt>
+                      <dd>
+                        {contract.payoutProvider
+                          ? `${contract.payoutProvider} · ${contract.payoutAccountVersion ?? 'legacy-v1'}`
+                          : contract.accountName || contract.accountFingerprint
+                            ? `渠道待补充 · ${contract.payoutAccountVersion ?? 'legacy-v1'}`
+                            : '待补充'}
+                      </dd>
+                    </div>
                   </dl>
                 )}
                 <div className="contract-payment-rule">

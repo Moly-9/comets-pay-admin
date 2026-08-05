@@ -1,76 +1,78 @@
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Search, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Avatar, Button, PageHeading, StatusMark } from '../components/Common';
-import { formatAmount } from '../data';
 import {
-  getPayoutAccountForProvider,
-  getPayoutAccountIdentifier,
-  getPayoutAccountStatusMeta,
-} from '../payoutAccounts';
-import type { CreatorProfile, Payout, Provider } from '../types';
+  createMockBatchSubmission,
+  validatePayoutForBatch,
+  type ExecutableBatchProvider,
+  type MockBatchSubmission,
+} from '../batchTransfers';
+import { Avatar, Button, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { formatAmount } from '../data';
+import type { InvoiceCurrency, Payout } from '../types';
 
 const STEPS = ['选择付款', '校验资料', '选择渠道', '确认提交'];
-const PROVIDERS: Array<{ id: Provider; title: string; description: string }> = [
-  { id: 'Airwallex', title: 'Airwallex', description: '按国家与币种选择 LOCAL 或 SWIFT' },
-  { id: 'PayMax', title: 'PayMax', description: '俄罗斯、泰国及本地银行模板' },
-  { id: 'PayPal', title: 'PayPal', description: '使用 PayPal 邮箱收款' },
-  { id: '手动打款', title: '手动打款', description: '导出付款资料，由财务线下执行' },
+const PROVIDERS: Array<{
+  id: ExecutableBatchProvider | 'PayMax';
+  title: string;
+  description: string;
+  disabled?: boolean;
+}> = [
+  { id: 'Airwallex', title: 'Airwallex', description: 'LOCAL 与 SWIFT 按冻结快照执行' },
+  { id: 'PayPal', title: 'PayPal', description: 'PayPal 独立成批，不进入 Airwallex' },
+  { id: 'PayMax', title: 'PayerMax', description: '渠道保留，当前阶段不可执行', disabled: true },
 ];
+
+const SOURCE_CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'HKD'].map((currency) => ({
+  value: currency,
+  label: currency,
+}));
+
+const FUNDING_ACCOUNTS: Record<ExecutableBatchProvider, Array<{ value: string; label: string; description: string }>> = {
+  Airwallex: [
+    { value: 'mock-awx-operating', label: 'Airwallex 运营资金账户', description: '模拟资金账户，不连接真实余额' },
+    { value: 'mock-awx-reserve', label: 'Airwallex 备用资金账户', description: '模拟备用账户' },
+  ],
+  PayPal: [
+    { value: 'mock-paypal-balance', label: 'PayPal Business Balance', description: '模拟 PayPal 资金账户' },
+  ],
+};
 
 export function BatchWizardPage({
   payouts,
-  creators,
   onCancel,
   onSubmit,
   onDraft,
 }: {
   payouts: Payout[];
-  creators: CreatorProfile[];
   onCancel: () => void;
-  onSubmit: (payouts: Payout[], provider: Provider) => void;
+  onSubmit: (submission: MockBatchSubmission) => void;
   onDraft: () => void;
 }) {
   const [selected, setSelected] = useState(() => new Set(payouts.map((payout) => payout.id)));
-  const [provider, setProvider] = useState<Provider>('Airwallex');
+  const [provider, setProvider] = useState<ExecutableBatchProvider>('Airwallex');
   const [mode, setMode] = useState<'batch' | 'single'>('batch');
   const [search, setSearch] = useState('');
+  const [sourceCurrency, setSourceCurrency] = useState<InvoiceCurrency>('USD');
+  const [fundingAccountId, setFundingAccountId] = useState(FUNDING_ACCOUNTS.Airwallex[0].value);
+  const [submissionError, setSubmissionError] = useState('');
 
   const visiblePayouts = payouts.filter((payout) =>
     `${payout.creator}${payout.project}${payout.invoice}`.toLowerCase().includes(search.toLowerCase()),
   );
   const selectedPayouts = payouts.filter((payout) => selected.has(payout.id));
   const getAccountCheck = (payout: Payout) => {
-    if (provider === 'PayMax' || provider === '手动打款') {
-      return {
-        account: null,
-        eligible: true,
-        label: provider === 'PayMax' ? '使用 PayMax 付款资料' : '导出后人工复核',
-        description: payout.account,
-      };
-    }
-    const creator = creators.find((item) => item.handle === payout.handle);
-    const account = creator ? getPayoutAccountForProvider(creator.payoutAccounts, provider) : null;
-    if (!account || account.provider !== provider) {
-      return {
-        account: null,
-        eligible: false,
-        label: `缺少 ${provider} 收款账户`,
-        description: '请先在达人档案中新增对应渠道账户',
-      };
-    }
-    const status = getPayoutAccountStatusMeta(account.status, account.provider);
+    const issues = validatePayoutForBatch(payout, provider);
     return {
-      account,
-      eligible: account.status === 'VALIDATED' || account.status === 'VERIFIED',
-      label: status.label,
-      description: `${account.nickname} · ${getPayoutAccountIdentifier(account)}`,
+      eligible: issues.length === 0,
+      label: issues[0] ?? '冻结快照校验通过',
+      description: `${payout.provider} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${payout.account}`,
     };
   };
   const selectedChecks = selectedPayouts.map((payout) => getAccountCheck(payout));
   const issueCount = selectedChecks.filter((check) => !check.eligible).length;
   const hasIssue = issueCount > 0;
   const passedCount = selectedPayouts.length - issueCount;
-  const canSubmit = selectedPayouts.length > 0 && !hasIssue;
+  const canSubmit = selectedPayouts.length > 0 && !hasIssue && Boolean(fundingAccountId);
   const totals = useMemo(() => selectedPayouts.reduce<Record<string, number>>((result, payout) => ({
     ...result,
     [payout.currency]: (result[payout.currency] ?? 0) + payout.amount,
@@ -100,6 +102,27 @@ export function BatchWizardPage({
         const firstSelected = payouts.find((payout) => current.has(payout.id));
         return firstSelected ? new Set([firstSelected.id]) : new Set();
       });
+    }
+  };
+
+  const changeProvider = (nextProvider: ExecutableBatchProvider) => {
+    setProvider(nextProvider);
+    setFundingAccountId(FUNDING_ACCOUNTS[nextProvider][0].value);
+    setSubmissionError('');
+  };
+
+  const submit = () => {
+    try {
+      const submission = createMockBatchSubmission({
+        payouts: selectedPayouts,
+        provider,
+        fundingAccountId,
+        sourceCurrency,
+      });
+      setSubmissionError('');
+      onSubmit(submission);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : '批次校验失败');
     }
   };
 
@@ -165,24 +188,53 @@ export function BatchWizardPage({
           </div>
           <div className="provider-list">
             {PROVIDERS.map((option) => (
-              <button className={`provider-option ${provider === option.id ? 'provider-selected' : ''}`} key={option.id} type="button" onClick={() => setProvider(option.id)}>
+              <button
+                className={`provider-option ${provider === option.id ? 'provider-selected' : ''}`}
+                key={option.id}
+                type="button"
+                disabled={option.disabled}
+                onClick={() => !option.disabled && changeProvider(option.id as ExecutableBatchProvider)}
+              >
                 <span className="provider-radio"><i /></span>
                 <span><strong>{option.title}</strong><small>{option.description}</small></span>
                 <ChevronRight size={17} />
               </button>
             ))}
           </div>
+          <div className="batch-funding-controls">
+            <div className="invoice-form-control">
+              <span>资金账户 *</span>
+              <SelectField
+                ariaLabel="批次资金账户"
+                variant="form"
+                value={fundingAccountId}
+                options={FUNDING_ACCOUNTS[provider]}
+                onChange={setFundingAccountId}
+              />
+            </div>
+            <div className="invoice-form-control">
+              <span>source_currency *</span>
+              <SelectField
+                ariaLabel="批次资金源币种"
+                variant="form"
+                value={sourceCurrency}
+                options={SOURCE_CURRENCY_OPTIONS}
+                onChange={(value) => setSourceCurrency(value as InvoiceCurrency)}
+              />
+            </div>
+          </div>
           <div className="validation-summary">
             <div><ShieldCheck size={20} /><span><strong>{mode === 'batch' ? '批次资料校验' : '单笔资料校验'}</strong><small>{passedCount} / {selectedPayouts.length} 笔通过</small></span></div>
             <StatusMark status={hasIssue ? '信息异常' : '等待付款'} />
           </div>
-          {hasIssue ? <div className="inline-alert"><AlertTriangle size={17} />请先在达人档案处理 {issueCount} 笔账户资料，才能提交付款。</div> : null}
+          {hasIssue ? <div className="inline-alert"><AlertTriangle size={17} />请先处理 {issueCount} 笔冻结快照，才能提交付款。</div> : null}
+          {submissionError ? <div className="inline-alert"><AlertTriangle size={17} />{submissionError}</div> : null}
         </aside>
       </div>
 
       <footer className="batch-summary-bar">
         <div><span>已选 {selectedPayouts.length} 笔</span><strong>{Object.entries(totals).map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ') || '—'}</strong></div>
-        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} onClick={() => onSubmit(selectedPayouts, provider)}>创建并提交</Button></div>
+        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} onClick={submit}>创建并提交</Button></div>
       </footer>
 
     </div>

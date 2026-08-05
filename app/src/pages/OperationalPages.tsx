@@ -55,9 +55,12 @@ import {
   createEmptyAirwallexAccount,
   createPayPalPayoutAccount,
   getDefaultPayoutAccount,
+  getPayoutAccountId,
+  getPayoutAccountVersion,
   getPayoutAccountSummary,
   getPayoutAccountStatusMeta,
   isPayoutAccountVerified,
+  prepareCreatorPayoutAccountsForSave,
 } from '../payoutAccounts';
 import type {
   AirwallexTransferMethod,
@@ -441,6 +444,7 @@ export function ProjectsPage({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onRevalidatePaymentItem,
   onSubmitProjectReview,
   onProjectsChange,
   canCreateProject,
@@ -471,6 +475,7 @@ export function ProjectsPage({
   onAddPaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
+  onRevalidatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onSubmitProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
@@ -750,6 +755,7 @@ export function ProjectsPage({
         onAddPaymentInvoice={(invoiceId) => onAddPaymentInvoice(selectedProject, invoiceId)}
         onRemovePaymentInvoice={(invoiceId) => onRemovePaymentInvoice(selectedProject, invoiceId)}
         onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
+        onRevalidatePaymentItem={(invoiceId) => onRevalidatePaymentItem(selectedProject, invoiceId)}
         onSubmitReview={() => onSubmitProjectReview(selectedProject)}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {
@@ -1293,6 +1299,7 @@ const createSeedCreator = ({
     const isValidated = !['DRAFT', 'READY_FOR_VALIDATION'].includes(status);
     payoutAccounts.push(createAirwallexPayoutAccount({
       id: `awx-${creator.id}`,
+      creatorId: creator.id,
       nickname: `${bank.countryName} ${bank.currency} 主账户`,
       isDefault: !paypalIsDefault,
       status,
@@ -1349,6 +1356,7 @@ const createSeedCreator = ({
   if (paypal) {
     payoutAccounts.push(createPayPalPayoutAccount({
       id: `paypal-${creator.id}`,
+      creatorId: creator.id,
       nickname: paypal.nickname ?? (bank ? 'PayPal 备用账户' : 'PayPal 主账户'),
       isDefault: paypalIsDefault,
       status: paypal.status ?? 'READY_FOR_VALIDATION',
@@ -1869,6 +1877,7 @@ export function CreatorsPage({
       socialAccounts: selected.socialAccounts.map((account) => ({ ...account })),
       contact: { ...selected.contact },
       payoutAccounts: clonePayoutAccounts(selected.payoutAccounts),
+      payoutAccountHistory: clonePayoutAccounts(selected.payoutAccountHistory ?? []),
     });
     setEditing(true);
     setCreating(false);
@@ -1876,7 +1885,7 @@ export function CreatorsPage({
   };
 
   const startCreating = () => {
-    const id = `creator-${Date.now()}`;
+    const id = createPrototypeId('creator');
     setSelectedId(null);
     setDraft({
       id,
@@ -1889,7 +1898,8 @@ export function CreatorsPage({
       projects: 0,
       socialAccounts: [createSocialAccount(`social-${id}-1`)],
       contact: createInvoiceContact('', '', '', ''),
-      payoutAccounts: [createEmptyAirwallexAccount()],
+      payoutAccounts: [createEmptyAirwallexAccount('', '', id)],
+      payoutAccountHistory: [],
     });
     setEditing(true);
     setCreating(true);
@@ -1965,6 +1975,20 @@ export function CreatorsPage({
       };
     });
     const platformSummary = [...new Set(normalizedSocialAccounts.map((account) => account.platform))].join(' · ');
+    const preparedAccounts = prepareCreatorPayoutAccountsForSave(
+      draft.id,
+      selected?.payoutAccounts ?? [],
+      draft.payoutAccounts,
+    );
+    const payoutAccountHistory = [
+      ...(selected?.payoutAccountHistory ?? []),
+      ...preparedAccounts.archived,
+    ].filter((account, index, history) => (
+      history.findIndex((candidate) => (
+        getPayoutAccountId(candidate) === getPayoutAccountId(account)
+        && getPayoutAccountVersion(candidate) === getPayoutAccountVersion(account)
+      )) === index
+    ));
     const updated: CreatorProfile = {
       ...draft,
       initials,
@@ -1973,6 +1997,8 @@ export function CreatorsPage({
       region: draft.region.trim(),
       platform: platformSummary,
       socialAccounts: normalizedSocialAccounts,
+      payoutAccounts: preparedAccounts.accounts,
+      payoutAccountHistory,
     };
     onSaveCreator(updated);
     setSelectedId(updated.id);
@@ -2140,6 +2166,7 @@ export function CreatorsPage({
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing
+                  creatorId={draft.id}
                   creatorName={draft.name}
                   creatorEmail={draft.contact.email}
                   onChange={(payoutAccounts) => setDraft((current) => current ? { ...current, payoutAccounts } : current)}
@@ -2183,6 +2210,7 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax，默认账户决定付款时的预选资料">
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
+                  creatorId={activeProfile.id}
                   creatorName={activeProfile.name}
                   creatorEmail={activeProfile.contact.email}
                 />

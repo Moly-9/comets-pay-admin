@@ -51,6 +51,7 @@ import type {
 } from '../contracts';
 import {
   getPayoutAccountIdentifier,
+  getPayoutAccountId,
   getPayoutAccountSummary,
 } from '../payoutAccounts';
 import { downloadBlob } from '../invoice/invoiceUtils';
@@ -190,7 +191,9 @@ export function ContractBuilderPage({
   const [invoiceIssueWorkingDays, setInvoiceIssueWorkingDays] = useState(draftModel?.invoiceIssueWorkingDays ?? 3);
   const [paymentWorkingDays, setPaymentWorkingDays] = useState<45 | 60>(draftModel?.paymentWorkingDays ?? 45);
   const [feeBearer, setFeeBearer] = useState<ContractGenerationModel['feeBearer']>(draftModel?.feeBearer ?? 'ADVERTISER');
-  const [payoutAccountId, setPayoutAccountId] = useState(draftModel?.payoutAccountId ?? initialAccount?.id ?? '');
+  const [payoutAccountId, setPayoutAccountId] = useState(
+    draftModel?.payoutAccountId ?? (initialAccount ? getPayoutAccountId(initialAccount) : ''),
+  );
   const [publishingChannels, setPublishingChannels] = useState<ContractPublishingChannel[]>(
     initialPublishingChannels,
   );
@@ -222,7 +225,9 @@ export function ContractBuilderPage({
   )), [creatorId, projects]);
   const selectedContext = creatorEngagements.find((item) => item.reference.engagementId === engagementId) ?? null;
   const eligibleAccounts = eligibleContractPayoutAccounts(selectedCreator);
-  const selectedAccount = eligibleAccounts.find((account) => account.id === payoutAccountId) ?? null;
+  const selectedAccount = eligibleAccounts.find((account) => (
+    account.id === payoutAccountId || getPayoutAccountId(account) === payoutAccountId
+  )) ?? null;
   const primarySocialAccount = selectedCreator?.socialAccounts.find((account) => (
     account.platform.toLowerCase() === selectedContext?.reference.platform.toLowerCase()
     || account.handle.toLowerCase() === selectedContext?.reference.handle.toLowerCase()
@@ -238,8 +243,8 @@ export function ContractBuilderPage({
   const channelName = selectedContext?.reference.handle || primarySocialAccount?.handle || selectedCreator?.handle || '';
   const channelUrl = formatContractPublishingChannelLinks(publishingChannelValues);
   const paymentSnapshot = useMemo(
-    () => contractPayoutSnapshot(selectedAccount),
-    [selectedAccount],
+    () => contractPayoutSnapshot(selectedAccount, selectedCreator?.id),
+    [selectedAccount, selectedCreator?.id],
   );
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
@@ -255,7 +260,7 @@ export function ContractBuilderPage({
     description: `${project.projectCode ?? project.id} · ${project.brand}`,
   }));
   const payoutOptions = eligibleAccounts.map((account) => ({
-    value: account.id,
+    value: getPayoutAccountId(account),
     label: `${account.nickname}${account.isDefault ? ' · 默认' : ''}`,
     description: `${getPayoutAccountSummary(account)} · ${getPayoutAccountIdentifier(account)}`,
   }));
@@ -297,7 +302,9 @@ export function ContractBuilderPage({
     paymentWorkingDays,
     paymentMethod,
     feeBearer,
-    payoutAccountId,
+    payoutAccountId: paymentSnapshot.payoutAccountId ?? payoutAccountId,
+    payoutAccountVersion: paymentSnapshot.payoutAccountVersion,
+    payoutAccountFingerprint: paymentSnapshot.accountFingerprint,
     payoutProvider,
     paymentSnapshot,
   }), [
@@ -321,6 +328,9 @@ export function ContractBuilderPage({
     paymentSnapshot,
     paymentWorkingDays,
     payoutAccountId,
+    paymentSnapshot.accountFingerprint,
+    paymentSnapshot.payoutAccountId,
+    paymentSnapshot.payoutAccountVersion,
     payoutProvider,
     platform,
     publishingChannels,

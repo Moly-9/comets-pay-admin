@@ -21,6 +21,10 @@ import {
   type SystemUser,
 } from './data';
 import { canAccessPage, getDefaultPageForRole, hasPermission } from './permissions';
+import {
+  executeMockBatchSubmission,
+  type MockBatchSubmission,
+} from './batchTransfers';
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -41,7 +45,6 @@ import {
   isInvoiceApprovedForPayment,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
-  maskInvoiceAccountValue,
   paymentFailureRestartStage,
   replyToCreatorFeedback,
   sensitiveInvoiceSnapshotChanged,
@@ -72,7 +75,6 @@ import type {
   NavPage,
   PaymentFailureIssueType,
   Payout,
-  Provider,
   ToastState,
 } from './types';
 import {
@@ -81,8 +83,11 @@ import {
   createPrototypeCode,
   createPrototypeId,
   hasInvoiceForEngagement,
+  invoicePaymentListItem,
   nextReviewStatusAfterMutation,
   nowIso,
+  payoutWithPaymentListSnapshot,
+  revalidatePaymentListItem,
   refreshPaymentListItemSnapshot,
   removePaymentListItem,
   upsertPaymentListItem,
@@ -121,10 +126,10 @@ const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   付款处理中: '已付款',
 };
 
-const batchAmountLabel = (payouts: Payout[]) => {
-  const totals = payouts.reduce<Record<string, number>>((result, payout) => ({
+const batchAmountLabel = (items: MockBatchSubmission['items']) => {
+  const totals = items.reduce<Record<string, number>>((result, item) => ({
     ...result,
-    [payout.currency]: (result[payout.currency] ?? 0) + payout.amount,
+    [item.transferCurrency]: (result[item.transferCurrency] ?? 0) + item.transferAmount,
   }), {});
   return Object.entries(totals)
     .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
@@ -134,31 +139,6 @@ const batchAmountLabel = (payouts: Payout[]) => {
 const getProjectId = (project: ProjectSummary) => (
   (project.projectId ?? project.id) as ProjectId
 );
-
-const invoicePaymentListItem = (invoice: GeneratedInvoiceRecord): PaymentListItem => {
-  const payment = invoice.snapshot.payment;
-  const account = invoice.snapshot.paymentMethod === 'paypal'
-    ? payment.paypalEmail || payment.paypalUsername
-    : (payment.iban || payment.accountNumber).replace(/\s/g, '');
-  return {
-    id: createPrototypeId('item'),
-    engagementId: invoice.snapshot.engagementId as EngagementId,
-    invoiceId: invoice.invoiceId,
-    snapshot: {
-      invoiceNumber: invoice.id,
-      creatorName: invoice.snapshot.creatorName,
-      currency: invoice.snapshot.currency,
-      amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
-      provider: invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
-      accountSummary: account
-        ? maskInvoiceAccountValue(account)
-        : invoice.snapshot.paymentMethod === 'paypal'
-          ? '待补充 PayPal'
-          : '待补充银行账户',
-    },
-    overrides: {},
-  };
-};
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -356,6 +336,12 @@ export default function App() {
       const rawAccount = record.snapshot.paymentMethod === 'paypal'
         ? record.snapshot.payment.paypalEmail
         : record.snapshot.payment.iban || record.snapshot.payment.accountNumber;
+      const feeBearers = [...new Set(contracts
+        .filter((contract) => record.snapshot.contractIds?.some((contractId) => (
+          contract.contractId === contractId || contract.id === contractId
+        )))
+        .map((contract) => contract.feeBearer)
+        .filter(Boolean))];
       setPayouts((current) => [{
         id: record.sourcePayoutId,
         creator: record.snapshot.creatorName,
@@ -370,6 +356,14 @@ export default function App() {
         currency: record.snapshot.currency,
         amount: record.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
         account: rawAccount ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}` : '待补充',
+        creatorId: record.snapshot.creatorId,
+        payoutAccountId: record.snapshot.payoutAccountId ?? record.snapshot.payment.payoutAccountId,
+        payoutAccountVersion: record.snapshot.payoutAccountVersion ?? record.snapshot.payment.payoutAccountVersion,
+        payoutAccountFingerprint: record.snapshot.payoutAccountFingerprint ?? record.snapshot.payment.accountFingerprint,
+        externalBeneficiaryId: record.snapshot.payment.externalBeneficiaryId,
+        transferMethod: record.snapshot.payment.transferMethod,
+        localClearingSystem: record.snapshot.payment.localClearingSystem,
+        feeBearer: feeBearers.length === 1 ? feeBearers[0] : '',
         status: '未进入付款',
         invoiceReviewStatus: '待签署',
         invoiceVersion: record.version ?? 1,
@@ -644,7 +638,7 @@ export default function App() {
       },
     });
     const projectId = result.record.snapshot.projectId as ProjectId;
-    const refreshedPaymentItem = invoicePaymentListItem(result.record);
+    const refreshedPaymentItem = invoicePaymentListItem(result.record, contracts);
     setGeneratedInvoices((current) => current.map((invoice) => (
       invoice.invoiceId === result.record.invoiceId ? result.record : invoice
     )));
@@ -722,7 +716,7 @@ export default function App() {
       paymentListCode: createPrototypeCode('PAY'),
       projectId,
       status: 'draft',
-      items: invoices.map(invoicePaymentListItem),
+      items: invoices.map((invoice) => invoicePaymentListItem(invoice, contracts)),
       createdAt,
       updatedAt: createdAt,
     };
@@ -755,7 +749,7 @@ export default function App() {
     const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
     if (!invoice?.snapshot.engagementId || invoice.snapshot.projectId !== projectId) return;
     setPaymentLists((current) => current.map((list) => (
-      list.projectId === projectId ? upsertPaymentListItem(list, invoicePaymentListItem(invoice)) : list
+      list.projectId === projectId ? upsertPaymentListItem(list, invoicePaymentListItem(invoice, contracts)) : list
     )));
     registerProjectMutation({
       projectId,
@@ -806,6 +800,43 @@ export default function App() {
     });
   };
 
+  const revalidatePaymentItem = (
+    project: ProjectSummary,
+    invoiceId: InvoiceId,
+  ) => {
+    const projectId = getProjectId(project);
+    const currentItem = paymentLists
+      .find((list) => list.projectId === projectId)
+      ?.items.find((item) => item.invoiceId === invoiceId);
+    if (!currentItem) {
+      notify('无法重新校验', '未找到付款清单中的稳定 invoiceId 关联。');
+      return;
+    }
+    const validated = revalidatePaymentListItem(currentItem);
+    const validationIssues = validated.validationIssues ?? [];
+    setPaymentLists((current) => current.map((list) => {
+      if (list.projectId !== projectId) return list;
+      return {
+        ...list,
+        updatedAt: nowIso(),
+        items: list.items.map((item) => item.invoiceId === invoiceId ? validated : item),
+      };
+    }));
+    registerProjectMutation({
+      projectId,
+      entityType: 'payment-list',
+      entityId: invoiceId,
+      action: 'update',
+      summary: validationIssues.length
+        ? `付款清单重新校验未通过：${validationIssues[0]}`
+        : '付款清单账户版本已重新校验',
+    });
+    notify(
+      validationIssues.length ? '付款清单校验未通过' : '付款清单已重新校验',
+      validationIssues[0] ?? '账户 ID、版本、Beneficiary、付款场景和费用规则均已通过。',
+    );
+  };
+
   const appendReviewAudit = (
     project: ProjectSummary,
     action: 'submit' | 'return' | 'approve',
@@ -832,6 +863,7 @@ export default function App() {
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
     ));
     const list = paymentLists.find((item) => item.projectId === projectId);
+    const invalidPaymentItems = list?.items.filter((item) => item.requiresRevalidation) ?? [];
     const linkedPayouts = projectInvoices.map((invoice) => (
       payouts.find((payout) => payout.id === invoice.sourcePayoutId)
     ));
@@ -849,6 +881,13 @@ export default function App() {
       )
     ) {
       notify('暂不能发起请款', '项目内全部 Invoice 必须先完成达人签署和媒介审核。');
+      return;
+    }
+    if (invalidPaymentItems.length > 0) {
+      notify(
+        '付款清单需要重新校验',
+        `${invalidPaymentItems.length} 笔账户快照未通过校验：${invalidPaymentItems[0].validationIssues?.[0] ?? '请检查账户版本与付款资料。'}`,
+      );
       return;
     }
     const submissionIssues = validateProjectSubmission({
@@ -1423,23 +1462,30 @@ export default function App() {
     setActivePage('requests');
   };
 
-  const createBatch = (selected: Payout[], provider: Provider) => {
+  const createBatch = (submission: MockBatchSubmission) => {
+    const selected = payouts.filter((payout) => (
+      submission.items.some((item) => item.payoutId === payout.id)
+    ));
     const ineligible = selected.filter((payout) => !isPayoutEligibleForBatch(payout));
     if (ineligible.length > 0) {
       notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
       return;
     }
+    const execution = executeMockBatchSubmission(submission);
     setPayouts((current) => current.map((payout) => selected.some((item) => item.id === payout.id)
-      ? { ...payout, status: '等待付款', issue: undefined }
+      ? { ...payout, status: '付款处理中', issue: undefined }
       : payout));
     setCreatedBatch({
-      id: 'BAT-20260717-008',
+      id: execution.batchCode,
       count: selected.length,
-      amount: batchAmountLabel(selected),
-      provider,
+      amount: batchAmountLabel(execution.items),
+      provider: execution.provider,
     });
     setActivePage('batches');
-    notify('付款批次已创建', `${selected.length} 笔付款已提交至 ${provider} 执行队列。`);
+    notify(
+      '模拟付款批次已提交',
+      `${selected.length} 笔 ${execution.provider} 付款已完成 create → add_items → quote → submit 契约模拟。`,
+    );
   };
 
   const authenticate = (account: string, password: string) => {
@@ -1463,6 +1509,16 @@ export default function App() {
   const canManageCreators = hasPermission(currentUser, 'creator_records_manage');
   const canUploadContracts = hasPermission(currentUser, 'contract_manage');
   const canManageProjects = hasPermission(currentUser, 'project_manage');
+  const batchReadyPayouts = payouts
+    .filter(isPayoutEligibleForBatch)
+    .map((payout) => {
+      const invoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
+      const paymentItem = invoice
+        ? paymentLists.flatMap((list) => list.items).find((item) => item.invoiceId === invoice.invoiceId)
+        : undefined;
+      return paymentItem ? payoutWithPaymentListSnapshot(payout, paymentItem) : payout;
+    })
+    .slice(0, 4);
 
   let pageContent;
   switch (activePage) {
@@ -1508,6 +1564,7 @@ export default function App() {
           onAddPaymentInvoice={addPaymentInvoice}
           onRemovePaymentInvoice={removePaymentInvoice}
           onUpdatePaymentItem={updatePaymentItem}
+          onRevalidatePaymentItem={revalidatePaymentItem}
           onSubmitProjectReview={submitProjectReview}
           onProjectsChange={setProjects}
           canCreateProject={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}
@@ -1691,8 +1748,7 @@ export default function App() {
     case 'new-batch':
       pageContent = (
         <BatchWizardPage
-          payouts={payouts.filter(isPayoutEligibleForBatch).slice(0, 4)}
-          creators={creators}
+          payouts={batchReadyPayouts}
           onCancel={() => setActivePage('batches')}
           onDraft={() => notify('草稿已保存', '付款选择与渠道配置已保存在当前浏览器。')}
           onSubmit={createBatch}

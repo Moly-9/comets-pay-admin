@@ -44,6 +44,17 @@ export type PayoutAccountStatus =
   | 'INVALID'
   | 'DISABLED';
 
+export type PayoutAccountVersion = `v${number}` | 'legacy-v1';
+
+export type PayoutAccountIdentity = {
+  creatorId?: string;
+  payoutAccountId?: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  providerAccountScope?: string;
+  schemaKey?: string;
+  accountFingerprint?: string;
+};
+
 export type AirwallexVerificationCode =
   | 'VERIFIED'
   | 'INVALID'
@@ -89,7 +100,7 @@ export type AirwallexBankDetails = {
   intermediaryBankSwiftCode: string;
 };
 
-export type AirwallexPayoutAccount = {
+export type AirwallexPayoutAccount = PayoutAccountIdentity & {
   id: string;
   provider: 'Airwallex';
   nickname: string;
@@ -123,7 +134,7 @@ export type AirwallexPayoutAccount = {
   statusBeforeDisabled?: Exclude<PayoutAccountStatus, 'DISABLED'>;
 };
 
-export type PayPalPayoutAccount = {
+export type PayPalPayoutAccount = PayoutAccountIdentity & {
   id: string;
   provider: 'PayPal';
   nickname: string;
@@ -131,6 +142,7 @@ export type PayPalPayoutAccount = {
   status: PayoutAccountStatus;
   paypalUsername: string;
   paypalEmail: string;
+  transferNote?: string;
   linkedProjectIds?: string[];
   invoiceIds?: string[];
   paymentBatchIds?: string[];
@@ -140,7 +152,7 @@ export type PayPalPayoutAccount = {
   statusBeforeDisabled?: Exclude<PayoutAccountStatus, 'DISABLED'>;
 };
 
-export type PayMaxPayoutAccount = {
+export type PayMaxPayoutAccount = PayoutAccountIdentity & {
   id: string;
   provider: 'PayMax';
   nickname: string;
@@ -187,6 +199,23 @@ export type CreatorPaymentDetails = {
   paypalEmail: string;
 };
 
+export type DocumentPayoutSnapshot = CreatorPaymentDetails & {
+  creatorId?: string;
+  payoutAccountId?: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  payoutProvider?: Exclude<Provider, '手动打款'>;
+  providerAccountScope?: string;
+  externalBeneficiaryId?: string;
+  accountFingerprint?: string;
+  transferMethod?: AirwallexTransferMethod | 'PAYPAL';
+  localClearingSystem?: string;
+  accountCurrency?: string;
+  schemaKey?: string;
+  validationStatus?: PayoutAccountStatus;
+  validatedAt?: string;
+  verifiedAt?: string;
+};
+
 export type CreatorInvoiceContact = {
   legalName: string;
   address: string;
@@ -213,6 +242,7 @@ export type CreatorProfile = {
   socialAccounts: CreatorSocialAccount[];
   contact: CreatorInvoiceContact;
   payoutAccounts: CreatorPayoutAccount[];
+  payoutAccountHistory?: CreatorPayoutAccount[];
 };
 
 export type InvoiceEntity = {
@@ -245,8 +275,11 @@ export type InvoiceDocumentModel = {
   currency: InvoiceCurrency;
   items: InvoiceLineItem[];
   payoutAccountId?: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  payoutProvider?: Exclude<Provider, '手动打款'>;
+  payoutAccountFingerprint?: string;
   paymentMethod: InvoicePaymentMethod;
-  payment: CreatorPaymentDetails;
+  payment: DocumentPayoutSnapshot;
 };
 
 export type InvoiceReviewStatus =
@@ -367,7 +400,16 @@ export type Payout = {
   currency: InvoiceCurrency;
   amount: number;
   account: string;
+  creatorId?: CreatorId;
   payoutAccountId?: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  payoutAccountFingerprint?: string;
+  externalBeneficiaryId?: string;
+  transferMethod?: AirwallexTransferMethod | 'PAYPAL';
+  localClearingSystem?: string;
+  feeBearer?: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
+  paymentListRequiresRevalidation?: boolean;
+  paymentListValidationIssues?: string[];
   status: PayoutStatus;
   invoiceReviewStatus: InvoiceReviewStatus;
   invoiceReviewHistory?: InvoiceReviewEvent[];

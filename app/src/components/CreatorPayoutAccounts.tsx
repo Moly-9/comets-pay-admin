@@ -49,6 +49,7 @@ import {
 import {
   getAirwallexBeneficiaryFormSchema,
   getAirwallexDynamicOptions,
+  synchronizeAirwallexBeneficiary,
 } from '../airwallexBeneficiaryApi';
 import { getAirwallexBankPaymentFallbackFields } from '../airwallexSupplementalFields';
 import type {
@@ -62,6 +63,7 @@ import { Button, SelectField } from './Common';
 type CreatorPayoutAccountsProps = {
   accounts: CreatorPayoutAccount[];
   editing?: boolean;
+  creatorId: string;
   creatorName: string;
   creatorEmail: string;
   onChange?: (accounts: CreatorPayoutAccount[]) => void;
@@ -431,6 +433,8 @@ function AirwallexAccountForm({
   const [schema, setSchema] = useState(fallbackSchema);
   const [schemaStatus, setSchemaStatus] = useState<'loading' | 'remote' | 'mock' | 'fallback'>('loading');
   const [schemaError, setSchemaError] = useState('');
+  const [beneficiaryStatus, setBeneficiaryStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [beneficiaryError, setBeneficiaryError] = useState('');
   const conditionKey = getAirwallexSchemaConditionKey(account);
   const issues = useMemo(() => validateAirwallexFormSchema(account, schema), [account, schema]);
   const issuesByPath = useMemo(
@@ -500,6 +504,19 @@ function AirwallexAccountForm({
       />
     ))
   );
+
+  const saveBeneficiary = async () => {
+    setBeneficiaryStatus('saving');
+    setBeneficiaryError('');
+    try {
+      const saved = await synchronizeAirwallexBeneficiary(account);
+      onChange(saved);
+      setBeneficiaryStatus('saved');
+    } catch (error) {
+      setBeneficiaryStatus('error');
+      setBeneficiaryError(error instanceof Error ? error.message : 'Beneficiary 模拟提交失败');
+    }
+  };
 
   return (
     <div className="creator-payment-editor payout-account-form" aria-busy={schemaStatus === 'loading'}>
@@ -603,6 +620,24 @@ function AirwallexAccountForm({
           </div>
         </Section>
       ) : null}
+      <div className="airwallex-beneficiary-actions">
+        <span>
+          <strong>{account.beneficiaryId ? '更新 Beneficiary' : '创建 Beneficiary'}</strong>
+          <small>
+            {beneficiaryStatus === 'saved'
+              ? `已回写 ${account.beneficiaryId || 'beneficiary_id'}`
+              : '先按当前 Schema 校验，再通过本地 mock gateway 保存'}
+          </small>
+        </span>
+        <Button
+          icon={beneficiaryStatus === 'saving' ? <LoaderCircle className="airwallex-schema-spinner" size={16} /> : <ShieldCheck size={16} />}
+          disabled={beneficiaryStatus === 'saving' || issues.length > 0}
+          onClick={saveBeneficiary}
+        >
+          {beneficiaryStatus === 'saving' ? '正在校验并保存' : '校验并保存 Beneficiary'}
+        </Button>
+      </div>
+      {beneficiaryError ? <div className="inline-alert"><AlertCircle size={16} />{beneficiaryError}</div> : null}
     </div>
   );
 }
@@ -623,6 +658,7 @@ function PayPalAccountForm({
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：主 PayPal 账户" required />
           <TextField label="PayPal 用户名" alias="paypalUsername" value={account.paypalUsername} onChange={(value) => commit({ ...account, paypalUsername: value })} placeholder="账户显示名称" required />
           <TextField label="PayPal 邮箱" alias="paypalEmail" value={account.paypalEmail} onChange={(value) => commit({ ...account, paypalEmail: value })} placeholder="收款邮箱" type="email" required />
+          <TextField label="转账备注" alias="transferNote · 选填" value={account.transferNote ?? ''} onChange={(value) => commit({ ...account, transferNote: value })} placeholder="写入 PayPal item note" />
         </div>
       </Section>
     </div>
@@ -756,6 +792,7 @@ function PayPalAccountView({ account }: { account: PayPalPayoutAccount }) {
           { label: '账户别名', alias: 'nickname', value: account.nickname },
           { label: 'PayPal 用户名', alias: 'paypalUsername', value: account.paypalUsername },
           { label: 'PayPal 邮箱', alias: 'paypalEmail', value: account.paypalEmail, wide: true },
+          { label: '转账备注', alias: 'transferNote', value: account.transferNote ?? '', wide: true },
         ]} />
       </Section>
     </div>
@@ -795,6 +832,7 @@ const PAYOUT_PROVIDERS: Array<{
 export function CreatorPayoutAccounts({
   accounts,
   editing = false,
+  creatorId,
   creatorName,
   creatorEmail,
   onChange,
@@ -833,10 +871,10 @@ export function CreatorPayoutAccounts({
 
   const addAccount = (provider: PayoutProvider) => {
     const next = provider === 'Airwallex'
-      ? createEmptyAirwallexAccount(creatorName, creatorEmail)
+      ? createEmptyAirwallexAccount(creatorName, creatorEmail, creatorId)
       : provider === 'PayPal'
-        ? createEmptyPayPalAccount(creatorName, creatorEmail)
-        : createEmptyPayMaxAccount(creatorName, creatorEmail);
+        ? createEmptyPayPalAccount(creatorName, creatorEmail, creatorId)
+        : createEmptyPayMaxAccount(creatorName, creatorEmail, creatorId);
     const normalized = { ...next, isDefault: accounts.length === 0 };
     onChange?.([...accounts, normalized]);
     setActiveProvider(provider);

@@ -67,10 +67,33 @@ describe('InvoiceBuilderPage edit mode', () => {
   });
 
   it('shows stable payout-account selection for an Invoice content payment failure', () => {
-    const record = PROJECT_DEMO_INVOICES[2]!;
+    const sourceRecord = PROJECT_DEMO_INVOICES[2]!;
+    const stablePayoutAccountId = 'stable-awx-creator-nika';
+    const record = {
+      ...sourceRecord,
+      snapshot: {
+        ...sourceRecord.snapshot,
+        payoutAccountId: stablePayoutAccountId,
+        payment: {
+          ...sourceRecord.snapshot.payment,
+          payoutAccountId: stablePayoutAccountId,
+        },
+      },
+    };
+    const creatorsWithDistinctAccountIds = INITIAL_CREATORS.map((creator) => (
+      creator.id === record.snapshot.creatorId
+        ? {
+            ...creator,
+            payoutAccounts: creator.payoutAccounts.map((account) => ({
+              ...account,
+              payoutAccountId: `stable-${account.id}`,
+            })),
+          }
+        : creator
+    ));
     const html = renderToStaticMarkup(
       <InvoiceBuilderPage
-        creators={INITIAL_CREATORS}
+        creators={creatorsWithDistinctAccountIds}
         payouts={PROJECT_DEMO_PAYOUTS}
         projects={INITIAL_PROJECTS}
         contracts={PROJECT_DEMO_CONTRACTS}

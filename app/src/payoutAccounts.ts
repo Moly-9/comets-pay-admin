@@ -6,9 +6,11 @@ import type {
   CreatorPaymentDetails,
   CreatorPayoutAccount,
   CreatorProfile,
+  DocumentPayoutSnapshot,
   PayMaxPayoutAccount,
   PayPalPayoutAccount,
   PayoutAccountStatus,
+  PayoutAccountVersion,
   Provider,
 } from './types';
 import {
@@ -18,6 +20,7 @@ import {
   getAirwallexCountryProfile,
   validateAirwallexFormSchema,
 } from './airwallexFormSchema';
+import { createPrototypeId } from './businessWorkflow';
 
 export const AIRWALLEX_COUNTRIES = AIRWALLEX_SCHEMA_COUNTRIES;
 export const AIRWALLEX_CURRENCIES = AIRWALLEX_SCHEMA_CURRENCIES;
@@ -77,6 +80,140 @@ const EMPTY_INVOICE_PAYMENT: CreatorPaymentDetails = {
   paypalEmail: '',
 };
 
+const fingerprintHash = (value: string) => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+const orderedRecord = (record: Record<string, string>) => (
+  Object.fromEntries(Object.entries(record).sort(([left], [right]) => left.localeCompare(right)))
+);
+
+const schemaKeyForAccount = (account: CreatorPayoutAccount) => {
+  if (account.provider === 'PayPal') return 'PAYPAL';
+  if (account.provider === 'PayMax') {
+    return ['PAYERMAX', account.countryCode, account.currency].filter(Boolean).join(':');
+  }
+  return [
+    'BANK_ACCOUNT',
+    account.bankDetails.bankCountryCode,
+    account.bankDetails.accountCurrency,
+    account.entityType,
+    account.transferMethod,
+    account.transferMethod === 'LOCAL' ? account.bankDetails.localClearingSystem : '',
+  ].filter(Boolean).join(':');
+};
+
+const payoutAccountFingerprintSource = (account: CreatorPayoutAccount) => {
+  if (account.provider === 'PayPal') {
+    return JSON.stringify({
+      provider: account.provider,
+      username: account.paypalUsername.trim(),
+      email: account.paypalEmail.trim().toLowerCase(),
+      transferNote: account.transferNote?.trim() ?? '',
+    });
+  }
+  if (account.provider === 'PayMax') {
+    return JSON.stringify({
+      provider: account.provider,
+      beneficiaryName: account.beneficiaryName.trim(),
+      payermaxAccountId: account.payermaxAccountId.trim(),
+      countryCode: account.countryCode.trim(),
+      currency: account.currency.trim(),
+    });
+  }
+  return JSON.stringify({
+    provider: account.provider,
+    entityType: account.entityType,
+    transferMethod: account.transferMethod,
+    beneficiaryId: account.beneficiaryId,
+    address: account.address,
+    bankDetails: account.bankDetails,
+    schemaValues: orderedRecord(account.schemaValues),
+  });
+};
+
+export const getPayoutAccountId = (account: CreatorPayoutAccount) => (
+  account.payoutAccountId || account.id
+);
+
+export const getPayoutAccountVersion = (account: CreatorPayoutAccount): PayoutAccountVersion => (
+  account.payoutAccountVersion || 'legacy-v1'
+);
+
+export const getPayoutAccountFingerprint = (account: CreatorPayoutAccount) => (
+  account.accountFingerprint || `fp_${fingerprintHash(payoutAccountFingerprintSource(account))}`
+);
+
+const nextPayoutAccountVersion = (version: PayoutAccountVersion): PayoutAccountVersion => {
+  const current = version === 'legacy-v1' ? 1 : Number(version.slice(1));
+  return `v${Number.isFinite(current) ? current + 1 : 2}`;
+};
+
+export const prepareCreatorPayoutAccountsForSave = (
+  creatorId: string,
+  previousAccounts: CreatorPayoutAccount[],
+  nextAccounts: CreatorPayoutAccount[],
+) => {
+  const archived: CreatorPayoutAccount[] = [];
+  const accounts = nextAccounts.map((candidate) => {
+    const previous = previousAccounts.find((account) => (
+      getPayoutAccountId(account) === getPayoutAccountId(candidate)
+      || account.id === candidate.id
+    ));
+    const identity = {
+      creatorId,
+      payoutAccountId: previous ? getPayoutAccountId(previous) : getPayoutAccountId(candidate),
+      providerAccountScope: candidate.providerAccountScope || previous?.providerAccountScope || 'mock:default',
+      schemaKey: candidate.schemaKey || schemaKeyForAccount(candidate),
+    };
+    if (!previous) {
+      return {
+        ...candidate,
+        ...identity,
+        payoutAccountVersion: candidate.payoutAccountVersion || 'v1',
+        accountFingerprint: `fp_${fingerprintHash(payoutAccountFingerprintSource(candidate))}`,
+      } as CreatorPayoutAccount;
+    }
+    const changed = payoutAccountFingerprintSource(previous) !== payoutAccountFingerprintSource(candidate);
+    if (!changed) {
+      return {
+        ...candidate,
+        ...identity,
+        payoutAccountVersion: getPayoutAccountVersion(previous),
+        accountFingerprint: getPayoutAccountFingerprint(previous),
+      } as CreatorPayoutAccount;
+    }
+    if (!isPayoutAccountVerified(previous)) {
+      return {
+        ...candidate,
+        ...identity,
+        payoutAccountVersion: getPayoutAccountVersion(previous),
+        accountFingerprint: `fp_${fingerprintHash(payoutAccountFingerprintSource(candidate))}`,
+      } as CreatorPayoutAccount;
+    }
+    archived.push({
+      ...previous,
+      creatorId,
+      payoutAccountId: getPayoutAccountId(previous),
+      payoutAccountVersion: getPayoutAccountVersion(previous),
+      providerAccountScope: previous.providerAccountScope || 'mock:default',
+      accountFingerprint: getPayoutAccountFingerprint(previous),
+    } as CreatorPayoutAccount);
+    return {
+      ...candidate,
+      ...identity,
+      payoutAccountVersion: nextPayoutAccountVersion(getPayoutAccountVersion(previous)),
+      accountFingerprint: `fp_${fingerprintHash(payoutAccountFingerprintSource(candidate))}`,
+    } as CreatorPayoutAccount;
+  });
+  return { accounts, archived };
+};
+
 type AirwallexAccountSeed = Partial<Omit<AirwallexPayoutAccount, 'provider' | 'address' | 'bankDetails'>> & {
   id: string;
   address?: Partial<BeneficiaryAddress>;
@@ -94,6 +231,9 @@ export const createAirwallexPayoutAccount = ({
   ...account
 }: AirwallexAccountSeed): AirwallexPayoutAccount => ({
   id,
+  payoutAccountId: id,
+  payoutAccountVersion: 'legacy-v1',
+  providerAccountScope: 'mock:default',
   provider: 'Airwallex',
   nickname: 'Airwallex 银行账户',
   isDefault: false,
@@ -123,14 +263,21 @@ export const createPayPalPayoutAccount = ({
   status = 'DRAFT',
   paypalUsername = '',
   paypalEmail = '',
+  transferNote = '',
+  ...account
 }: Partial<PayPalPayoutAccount> & { id: string }): PayPalPayoutAccount => ({
   id,
+  payoutAccountId: id,
+  payoutAccountVersion: 'legacy-v1',
+  providerAccountScope: 'mock:default',
   provider: 'PayPal',
   nickname,
   isDefault,
   status,
   paypalUsername,
   paypalEmail,
+  transferNote,
+  ...account,
 });
 
 export const createPayMaxPayoutAccount = ({
@@ -143,8 +290,12 @@ export const createPayMaxPayoutAccount = ({
   countryCode = '',
   currency = '',
   email = '',
+  ...account
 }: Partial<PayMaxPayoutAccount> & { id: string }): PayMaxPayoutAccount => ({
   id,
+  payoutAccountId: id,
+  payoutAccountVersion: 'legacy-v1',
+  providerAccountScope: 'mock:default',
   provider: 'PayMax',
   nickname,
   isDefault,
@@ -154,17 +305,21 @@ export const createPayMaxPayoutAccount = ({
   countryCode,
   currency,
   email,
+  ...account,
 });
 
 export const createEmptyAirwallexAccount = (
   creatorName = '',
   notificationEmail = '',
+  creatorId = '',
 ): AirwallexPayoutAccount => {
   const nameParts = creatorName.trim().split(/\s+/).filter(Boolean);
   const firstName = nameParts[0] ?? '';
   const lastName = nameParts.slice(1).join(' ');
   return createAirwallexPayoutAccount({
-    id: `awx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: createPrototypeId('payout-account'),
+    creatorId,
+    payoutAccountVersion: 'v1',
     nickname: '新的 Airwallex 账户',
     isDefault: true,
     firstName,
@@ -185,8 +340,11 @@ export const createEmptyAirwallexAccount = (
 export const createEmptyPayPalAccount = (
   creatorName = '',
   email = '',
+  creatorId = '',
 ): PayPalPayoutAccount => createPayPalPayoutAccount({
-  id: `paypal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  id: createPrototypeId('payout-account'),
+  creatorId,
+  payoutAccountVersion: 'v1',
   nickname: '新的 PayPal 账户',
   status: creatorName.trim() && /^\S+@\S+\.\S+$/.test(email) ? 'READY_FOR_VALIDATION' : 'DRAFT',
   paypalUsername: creatorName,
@@ -196,8 +354,11 @@ export const createEmptyPayPalAccount = (
 export const createEmptyPayMaxAccount = (
   creatorName = '',
   email = '',
+  creatorId = '',
 ): PayMaxPayoutAccount => createPayMaxPayoutAccount({
-  id: `payermax-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  id: createPrototypeId('payout-account'),
+  creatorId,
+  payoutAccountVersion: 'v1',
   nickname: '新的 PayerMax 账户',
   beneficiaryName: creatorName,
   email,
@@ -378,27 +539,62 @@ export const getPayoutAccountSummary = (account: CreatorPayoutAccount) => (
     : `${account.bankDetails.accountCurrency || '待选币种'} · ${account.transferMethod}${account.transferMethod === 'LOCAL' && account.bankDetails.localClearingSystem ? ` · ${account.bankDetails.localClearingSystem}` : ''}`
 );
 
-export const payoutAccountToInvoicePayment = (
+export const createDocumentPayoutSnapshot = (
   account: CreatorPayoutAccount | null,
-): CreatorPaymentDetails => {
+  creatorId?: string,
+): DocumentPayoutSnapshot => {
   if (!account) return { ...EMPTY_INVOICE_PAYMENT };
+  const identity: Pick<
+    DocumentPayoutSnapshot,
+    | 'creatorId'
+    | 'payoutAccountId'
+    | 'payoutAccountVersion'
+    | 'payoutProvider'
+    | 'providerAccountScope'
+    | 'accountFingerprint'
+    | 'schemaKey'
+    | 'validationStatus'
+  > = {
+    creatorId: creatorId || account.creatorId,
+    payoutAccountId: getPayoutAccountId(account),
+    payoutAccountVersion: getPayoutAccountVersion(account),
+    payoutProvider: account.provider,
+    providerAccountScope: account.providerAccountScope || 'mock:default',
+    accountFingerprint: getPayoutAccountFingerprint(account),
+    schemaKey: account.schemaKey || schemaKeyForAccount(account),
+    validationStatus: account.status,
+  };
   if (account.provider === 'PayPal') {
     return {
       ...EMPTY_INVOICE_PAYMENT,
+      ...identity,
       paypalUsername: account.paypalUsername,
       paypalEmail: account.paypalEmail,
+      transferRemarks: account.transferNote ?? '',
+      transferMethod: 'PAYPAL',
     };
   }
   if (account.provider === 'PayMax') {
     return {
       ...EMPTY_INVOICE_PAYMENT,
+      ...identity,
       accountName: account.beneficiaryName,
       accountNumber: account.payermaxAccountId,
       bankCountry: account.countryCode,
+      accountCurrency: account.currency,
     };
   }
   return {
     ...EMPTY_INVOICE_PAYMENT,
+    ...identity,
+    externalBeneficiaryId: account.beneficiaryId || undefined,
+    transferMethod: account.transferMethod,
+    localClearingSystem: account.transferMethod === 'LOCAL'
+      ? account.bankDetails.localClearingSystem
+      : undefined,
+    accountCurrency: account.bankDetails.accountCurrency,
+    validatedAt: account.validatedAt || undefined,
+    verifiedAt: account.verifiedAt || undefined,
     bankCountry: account.bankDetails.bankCountryName,
     accountName: account.bankDetails.accountName,
     accountType: account.bankDetails.bankAccountCategory,
@@ -413,13 +609,17 @@ export const payoutAccountToInvoicePayment = (
     bankCity: account.schemaValues['beneficiary.bank_details.bank_city'] || '',
     bankState: account.bankDetails.bankState,
     bankPostalCode: account.schemaValues['beneficiary.bank_details.bank_postcode'] || '',
+    intermediaryBankCountry: account.schemaValues['beneficiary.bank_details.intermediary_bank_country_code'] || '',
     intermediaryBankCode: account.bankDetails.intermediaryBankSwiftCode,
   };
 };
 
+export const payoutAccountToInvoicePayment = createDocumentPayoutSnapshot;
+
 export const invoicePaymentForCreator = (
   creator: CreatorProfile | null | undefined,
   provider?: Provider,
-) => payoutAccountToInvoicePayment(
+) => createDocumentPayoutSnapshot(
   creator ? getPayoutAccountForProvider(creator.payoutAccounts, provider) : null,
+  creator?.id,
 );
