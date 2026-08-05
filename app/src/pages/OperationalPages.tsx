@@ -1400,7 +1400,8 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
   createSeedCreator({
     id: 'creator-nika', initials: 'NK', accent: '#ef4444', name: 'Nika Petrova', handle: '@nika.spark', region: '泰国', platform: 'TikTok', projects: 3,
     contact: createInvoiceContact('Nika Petrova', 'nika.petrova@creator.example', '+66 80 000 9731', 'Bang Rak, Bangkok, Thailand'),
-    bank: { countryCode: 'TH', countryName: 'Thailand', currency: 'THB', accountNumber: '0000000004', bankName: 'Bangkok Bank', clearingSystem: 'PromptPay', routingType1: 'bank_code', routingValue1: '', streetAddress: '333 Silom Road', city: 'Bangkok', state: 'Bangkok', postcode: '10500', status: 'DRAFT' },
+    bank: { countryCode: 'TH', countryName: 'Thailand', currency: 'THB', accountNumber: '0000000004', bankName: 'Bangkok Bank', clearingSystem: 'PromptPay', routingType1: 'bank_code', routingValue1: '000', streetAddress: '333 Silom Road', city: 'Bangkok', state: 'Bangkok', postcode: '10500', status: 'VERIFIED' },
+    paypal: { username: 'nika.spark.prototype', email: 'nika.spark@example.test', nickname: 'PayPal USD 备用账户', status: 'VERIFIED' },
   }),
   createSeedCreator({
     id: 'creator-luna', initials: 'LJ', accent: '#a855f7', name: 'Luna Jones', handle: '@Luna_J', region: '美国', platform: 'Instagram', projects: 5,

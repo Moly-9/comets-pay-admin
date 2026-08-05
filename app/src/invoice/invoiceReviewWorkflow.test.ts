@@ -64,6 +64,7 @@ const snapshot = {
     quantity: 1,
     lineTotal: 100,
   }],
+  payoutAccountId: 'awx-synthetic',
   paymentMethod: 'bank' as const,
   payment: {
     bankCountry: 'US',
@@ -269,6 +270,15 @@ describe('Invoice review workflow', () => {
         ...snapshot,
         currency: 'EUR',
         items: [{ ...snapshot.items[0]!, unitPrice: 120, lineTotal: 120 }],
+        payoutAccountId: 'paypal-synthetic',
+        paymentMethod: 'paypal',
+        payment: {
+          ...snapshot.payment,
+          accountName: '',
+          accountNumber: '',
+          paypalUsername: 'synthetic.creator',
+          paypalEmail: 'creator@example.test',
+        },
       },
       context: 'PAYMENT_FAILURE_CONTENT',
       actor,
@@ -280,13 +290,15 @@ describe('Invoice review workflow', () => {
     expect(result.record.version).toBe(2);
     expect(result.record.revisions?.[0]).toMatchObject({
       version: 1,
-      changedFields: ['currency', 'items'],
+      changedFields: ['currency', 'items', 'payoutAccountId', 'paymentMethod', 'payment'],
     });
     expect(result.payout).toMatchObject({
       invoiceReviewStatus: '待签署',
       status: '未进入付款',
       currency: 'EUR',
       amount: 120,
+      provider: 'PayPal',
+      payoutAccountId: 'paypal-synthetic',
       invoiceVersion: 2,
     });
     expect(result.payout.invoiceSignedAt).toBeUndefined();
@@ -310,6 +322,7 @@ describe('Invoice review workflow', () => {
     };
     const paypalSnapshot = {
       ...snapshot,
+      payoutAccountId: 'paypal-synthetic',
       paymentMethod: 'paypal' as const,
       payment: {
         ...snapshot.payment,

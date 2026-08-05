@@ -244,6 +244,7 @@ export type InvoiceDocumentModel = {
   from: CreatorInvoiceContact;
   currency: InvoiceCurrency;
   items: InvoiceLineItem[];
+  payoutAccountId?: string;
   paymentMethod: InvoicePaymentMethod;
   payment: CreatorPaymentDetails;
 };
@@ -366,6 +367,7 @@ export type Payout = {
   currency: InvoiceCurrency;
   amount: number;
   account: string;
+  payoutAccountId?: string;
   status: PayoutStatus;
   invoiceReviewStatus: InvoiceReviewStatus;
   invoiceReviewHistory?: InvoiceReviewEvent[];

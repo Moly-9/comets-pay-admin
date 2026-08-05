@@ -319,6 +319,7 @@ const createInvoiceModel = (
   index: number,
 ): InvoiceDocumentModel => {
   const provider = providerForCreator(creator);
+  const payoutAccount = getDefaultPayoutAccount(creator.payoutAccounts);
   const amount = DEMO_INVOICE_AMOUNTS[index];
 
   return {
@@ -341,6 +342,7 @@ const createInvoiceModel = (
       quantity: 1,
       lineTotal: amount,
     }],
+    payoutAccountId: payoutAccount?.id,
     paymentMethod: provider === 'PayPal' ? 'paypal' : 'bank',
     payment: invoicePaymentForCreator(creator, provider),
   };
@@ -400,20 +402,20 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
             invoiceSignedAt: '2026-08-03T10:00:00.000Z',
             paymentFailure: {
               provider: 'Airwallex',
-              errorCode: 'SYNTHETIC_INVOICE_MISMATCH',
-              providerResponse: 'Synthetic Invoice amount mismatch.',
+              errorCode: 'SYNTHETIC_PAYOUT_ACCOUNT_REJECTED',
+              providerResponse: 'Synthetic beneficiary account was rejected.',
               occurredAt: '2026-08-04T12:00:00.000Z',
             },
             paymentFailureReturn: {
               issueType: 'INVOICE_CONTENT',
-              reason: 'Invoice 内容需要修正后重新签署。',
+              reason: 'Invoice 收款账户不可用，请选择新的已验证账户后重新签署。',
               actorAccount: 'finance.prototype',
               actorName: '原型财务',
               occurredAt: '2026-08-04T12:30:00.000Z',
               restartStage: 'SIGNATURE',
             },
-            issue: '付款失败已退回：Invoice 内容需要修正。',
-            returnReason: 'Invoice 内容需要修正后重新签署。',
+            issue: '付款失败已退回：Invoice 收款账户不可用。',
+            returnReason: 'Invoice 收款账户不可用，请选择新的已验证账户后重新签署。',
           }
         : index === 3
           ? {
@@ -450,6 +452,7 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
     currency: invoice.snapshot.currency,
     amount: DEMO_INVOICE_AMOUNTS[index],
     account: accountValue,
+    payoutAccountId: invoice.snapshot.payoutAccountId,
     status: reviewStatus === '已通过' ? '已付款' : reviewStatus === '已退回' ? '已退回' : '未进入付款',
     invoiceReviewStatus: reviewStatus,
     invoiceVersion: 1,

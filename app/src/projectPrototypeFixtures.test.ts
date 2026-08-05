@@ -7,6 +7,7 @@ import {
   PROJECT_DEMO_TOTAL,
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
+import { eligibleInvoicePayoutAccounts } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
 describe('project prototype fixtures', () => {
@@ -75,5 +76,19 @@ describe('project prototype fixtures', () => {
     expect(payout?.invoice).toBe(record.id);
     expect(payout?.projectId).toBe(project?.id);
     expect(engagement?.creatorId).toBe(record.snapshot.creatorId);
+  });
+
+  it('provides two verified payout accounts for the payment-failure edit prototype', () => {
+    const record = PROJECT_DEMO_INVOICES[2]!;
+    const payout = PROJECT_DEMO_PAYOUTS.find((item) => item.id === record.sourcePayoutId);
+    const creator = INITIAL_CREATORS.find((item) => item.id === record.snapshot.creatorId);
+
+    expect(payout?.paymentFailureReturn?.issueType).toBe('INVOICE_CONTENT');
+    expect(payout?.paymentFailureReturn?.reason).toContain('收款账户不可用');
+    expect(record.snapshot.payoutAccountId).toBe('awx-creator-nika');
+    expect(eligibleInvoicePayoutAccounts(creator).map((account) => account.id)).toEqual([
+      'awx-creator-nika',
+      'paypal-creator-nika',
+    ]);
   });
 });

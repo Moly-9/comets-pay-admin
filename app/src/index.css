@@ -8599,6 +8599,18 @@ button:disabled {
   font-size: 9.5px;
 }
 
+.invoice-form-control .invoice-payout-account-note {
+  margin: 0;
+  color: #717784;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.invoice-form-grid textarea[readonly] {
+  background: #f6f7f9;
+  color: #6f7582;
+}
+
 .invoice-form-grid .has-error input,
 .invoice-form-grid .has-error textarea,
 .invoice-form-control.has-error .custom-select-trigger,

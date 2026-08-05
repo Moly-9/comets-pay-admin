@@ -33,8 +33,18 @@ import {
   normalizeLineItem,
   todayInputValue,
 } from '../invoice/invoiceUtils';
-import { invoiceDocumentChanged } from '../invoice/invoiceReviewWorkflow';
-import { invoicePaymentForCreator } from '../payoutAccounts';
+import {
+  invoiceDocumentChanged,
+  maskInvoiceAccountValue,
+} from '../invoice/invoiceReviewWorkflow';
+import {
+  eligibleInvoicePayoutAccounts,
+  getPayoutAccountIdentifier,
+  getPayoutAccountStatusMeta,
+  getPayoutAccountSummary,
+  invoicePaymentForCreator,
+  payoutAccountToInvoicePayment,
+} from '../payoutAccounts';
 import type {
   CreatorInvoiceContact,
   CreatorPaymentDetails,
@@ -180,12 +190,24 @@ export function InvoiceBuilderPage({
         ? invoicePaymentForCreator(initialCreator, 'Airwallex')
         : { ...EMPTY_PAYMENT },
   );
+  const [payoutAccountId, setPayoutAccountId] = useState(editSnapshot?.payoutAccountId ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
+  const eligiblePayoutAccounts = eligibleInvoicePayoutAccounts(selectedCreator);
+  const payoutAccountOptions = eligiblePayoutAccounts.map((account) => ({
+    value: account.id,
+    label: `${account.nickname}${account.isDefault ? ' · 默认' : ''}`,
+    description: [
+      getPayoutAccountSummary(account),
+      maskInvoiceAccountValue(getPayoutAccountIdentifier(account)),
+      getPayoutAccountStatusMeta(account.status, account.provider).label,
+    ].join(' · '),
+  }));
+  const requiresPayoutAccountSelection = editContext === 'PAYMENT_FAILURE_CONTENT';
   const creatorEngagements = useMemo(() => projects.flatMap((project) => (
     (project.creatorProfiles ?? [])
       .filter((reference) => reference.creatorId === creatorId && reference.status !== 'removed')
@@ -246,9 +268,10 @@ export function InvoiceBuilderPage({
     from,
     currency,
     items: items.map(normalizeLineItem),
+    payoutAccountId: payoutAccountId || undefined,
     paymentMethod,
     payment,
-  }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, selectedCreator, selectedProject]);
+  }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, payoutAccountId, selectedCreator, selectedProject]);
   const isDirty = Boolean(editSnapshot && invoiceDocumentChanged(editSnapshot, model));
 
   useEffect(() => {
@@ -271,6 +294,7 @@ export function InvoiceBuilderPage({
     setEngagementId('');
     setContractIds([]);
     setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
+    setPayoutAccountId('');
     setPayment(invoicePaymentForCreator(creator, paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex'));
     setItems([createBlankLine(0)]);
     setErrors({});
@@ -286,9 +310,15 @@ export function InvoiceBuilderPage({
     setEngagementId(id);
     setContractIds([]);
     if (payout) {
+      const account = eligibleInvoicePayoutAccounts(creator).find((candidate) => (
+        candidate.provider === payout.provider
+      )) ?? null;
       setCurrency(payout.currency);
       setPaymentMethod(payout.provider === 'PayPal' ? 'paypal' : 'bank');
-      setPayment(invoicePaymentForCreator(creator, payout.provider));
+      setPayoutAccountId(account?.id ?? '');
+      setPayment(account
+        ? payoutAccountToInvoicePayment(account)
+        : invoicePaymentForCreator(creator, payout.provider));
       setItems([normalizeLineItem({
         id: `line-${payout.id}`,
         description: payout.deliverable || `${context?.project.name ?? payout.project} 达人合作服务费`,
@@ -317,7 +347,10 @@ export function InvoiceBuilderPage({
       }
       if (first.advertiser) setBillTo((current) => ({ ...current, name: first.advertiser }));
       if (first.publisher) setFrom((current) => ({ ...current, legalName: first.publisher }));
-      if (first.paymentMethod) setPaymentMethod(first.paymentMethod === 'PAYPAL' ? 'paypal' : 'bank');
+      if (first.paymentMethod) {
+        setPaymentMethod(first.paymentMethod === 'PAYPAL' ? 'paypal' : 'bank');
+        setPayoutAccountId('');
+      }
       setItems(nextContracts.map((contract, index) => normalizeLineItem({
         id: `line-contract-${contract.contractId ?? index}`,
         description: `${contract.project} · ${contract.ioId || contract.id}`,
@@ -327,6 +360,40 @@ export function InvoiceBuilderPage({
     } else if (!selectedPayout) {
       setItems([createBlankLine(0)]);
     }
+    setGeneratedFiles(null);
+  };
+
+  const selectPayoutAccount = (id: string) => {
+    const account = eligiblePayoutAccounts.find((candidate) => candidate.id === id);
+    if (!account) return;
+    setPayoutAccountId(account.id);
+    setPaymentMethod(account.provider === 'PayPal' ? 'paypal' : 'bank');
+    setPayment(payoutAccountToInvoicePayment(account));
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.payoutAccountId;
+      return next;
+    });
+    setGeneratedFiles(null);
+  };
+
+  const selectPaymentMethod = (value: InvoicePaymentMethod) => {
+    const provider = value === 'paypal' ? 'PayPal' : 'Airwallex';
+    const account = eligiblePayoutAccounts.find((candidate) => candidate.provider === provider) ?? null;
+    setPaymentMethod(value);
+    setPayoutAccountId(account?.id ?? '');
+    setPayment(account
+      ? payoutAccountToInvoicePayment(account)
+      : invoicePaymentForCreator(selectedCreator, provider));
+    setGeneratedFiles(null);
+  };
+
+  const changePaymentValue = (
+    field: keyof CreatorPaymentDetails,
+    value: string,
+  ) => {
+    setPayoutAccountId('');
+    setPayment((current) => updatePaymentValue(current, field, value));
     setGeneratedFiles(null);
   };
 
@@ -352,6 +419,9 @@ export function InvoiceBuilderPage({
     if (!from.address.trim()) nextErrors.address = '请填写联系地址';
     if (!from.phone.trim()) nextErrors.phone = '请填写联系电话';
     if (!from.email.trim() || !/^\S+@\S+\.\S+$/.test(from.email)) nextErrors.email = '请填写有效联系邮箱';
+    if (requiresPayoutAccountSelection && !payoutAccountId) {
+      nextErrors.payoutAccountId = '付款失败重新发起时必须选择达人档案中的已验证账户';
+    }
     items.forEach((item, index) => {
       if (!item.description.trim()) nextErrors[`item-${item.id}-description`] = `第 ${index + 1} 项缺少费用描述`;
       if (!(item.unitPrice > 0)) nextErrors[`item-${item.id}-unitPrice`] = `第 ${index + 1} 项单价必须大于 0`;
@@ -580,26 +650,60 @@ export function InvoiceBuilderPage({
           </div>
 
           <div className="invoice-builder-section">
-            <header><span><WalletCards size={19} /></span><div><h2>4. 收款方式</h2><p>根据项目渠道自动选择，仍可切换并编辑本次快照。</p></div></header>
+            <header>
+              <span><WalletCards size={19} /></span>
+              <div>
+                <h2>4. 收款方式</h2>
+                <p>
+                  {requiresPayoutAccountSelection
+                    ? '付款失败重新发起时，必须从达人档案中重新选择已验证账户。'
+                    : '根据项目渠道自动选择，仍可切换并编辑本次快照。'}
+                </p>
+              </div>
+            </header>
             <div className="invoice-form-grid">
-              <div className="invoice-form-control full-width"><span>付款方式 *</span><SelectField ariaLabel="付款方式" variant="form" value={paymentMethod} options={PAYMENT_OPTIONS} onChange={(value) => {
-                setPaymentMethod(value);
-                setPayment(invoicePaymentForCreator(selectedCreator, value === 'paypal' ? 'PayPal' : 'Airwallex'));
-                setGeneratedFiles(null);
-              }} /></div>
+              {requiresPayoutAccountSelection ? (
+                <div className={`invoice-form-control full-width ${errors.payoutAccountId ? 'has-error' : ''}`}>
+                  <span>付款账户 *</span>
+                  <SelectField
+                    ariaLabel="付款账户"
+                    variant="form"
+                    value={payoutAccountId}
+                    placeholder={selectedCreator ? '请选择已验证付款账户' : '未找到关联达人'}
+                    options={payoutAccountOptions}
+                    disabled={!selectedCreator || !payoutAccountOptions.length}
+                    onChange={selectPayoutAccount}
+                  />
+                  <small>{errors.payoutAccountId}</small>
+                  <p className="invoice-payout-account-note">
+                    选择达人档案中的已验证账户后，将同步更新付款方式和 Invoice 账户快照。
+                  </p>
+                </div>
+              ) : null}
+              <div className="invoice-form-control full-width">
+                <span>付款方式 *</span>
+                <SelectField
+                  ariaLabel="付款方式"
+                  variant="form"
+                  value={paymentMethod}
+                  options={PAYMENT_OPTIONS}
+                  disabled={requiresPayoutAccountSelection}
+                  onChange={selectPaymentMethod}
+                />
+              </div>
               {paymentMethod === 'bank' ? (
                 <>
-                  <label className={errors.accountName ? 'has-error' : ''}><span>Account Name *</span><input value={payment.accountName} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'accountName', event.target.value))} /><small>{errors.accountName}</small></label>
-                  <label className={errors.accountNumber ? 'has-error' : ''}><span>Account Number（与 IBAN 二选一）</span><input value={payment.accountNumber} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'accountNumber', event.target.value))} /><small>{errors.accountNumber}</small></label>
-                  <label><span>IBAN（与 Account Number 二选一）</span><input value={payment.iban} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'iban', event.target.value))} /></label>
-                  <label><span>Beneficiary Bank Name（可选）</span><input value={payment.bankName} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'bankName', event.target.value))} /></label>
-                  <label><span>Swift Code（SWIFT 路径时填写）</span><input value={payment.swiftCode} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'swiftCode', event.target.value))} /></label>
-                  <label className="full-width"><span>Beneficiary Bank Address（Schema 要求时填写）</span><textarea value={payment.bankStreetAddress} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'bankStreetAddress', event.target.value))} /></label>
+                  <label className={errors.accountName ? 'has-error' : ''}><span>Account Name *</span><input value={payment.accountName} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('accountName', event.target.value)} /><small>{errors.accountName}</small></label>
+                  <label className={errors.accountNumber ? 'has-error' : ''}><span>Account Number（与 IBAN 二选一）</span><input value={payment.accountNumber} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('accountNumber', event.target.value)} /><small>{errors.accountNumber}</small></label>
+                  <label><span>IBAN（与 Account Number 二选一）</span><input value={payment.iban} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('iban', event.target.value)} /></label>
+                  <label><span>Beneficiary Bank Name（可选）</span><input value={payment.bankName} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('bankName', event.target.value)} /></label>
+                  <label><span>Swift Code（SWIFT 路径时填写）</span><input value={payment.swiftCode} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('swiftCode', event.target.value)} /></label>
+                  <label className="full-width"><span>Beneficiary Bank Address（Schema 要求时填写）</span><textarea value={payment.bankStreetAddress} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('bankStreetAddress', event.target.value)} /></label>
                 </>
               ) : (
                 <>
-                  <label className={errors.paypalUsername ? 'has-error' : ''}><span>Paypal Name *</span><input value={payment.paypalUsername} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'paypalUsername', event.target.value))} /><small>{errors.paypalUsername}</small></label>
-                  <label className={errors.paypalEmail ? 'has-error' : ''}><span>Paypal Email *</span><input type="email" value={payment.paypalEmail} onChange={(event) => setPayment((current) => updatePaymentValue(current, 'paypalEmail', event.target.value))} /><small>{errors.paypalEmail}</small></label>
+                  <label className={errors.paypalUsername ? 'has-error' : ''}><span>Paypal Name *</span><input value={payment.paypalUsername} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('paypalUsername', event.target.value)} /><small>{errors.paypalUsername}</small></label>
+                  <label className={errors.paypalEmail ? 'has-error' : ''}><span>Paypal Email *</span><input type="email" value={payment.paypalEmail} readOnly={requiresPayoutAccountSelection} onChange={(event) => changePaymentValue('paypalEmail', event.target.value)} /><small>{errors.paypalEmail}</small></label>
                 </>
               )}
             </div>

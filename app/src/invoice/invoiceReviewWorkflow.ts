@@ -309,6 +309,7 @@ const EDITABLE_INVOICE_FIELDS: Array<keyof InvoiceDocumentModel> = [
   'from',
   'currency',
   'items',
+  'payoutAccountId',
   'paymentMethod',
   'payment',
 ];
@@ -453,6 +454,7 @@ export const applyInvoiceDocumentEdit = ({
     currency: nextSnapshot.currency,
     amount: nextSnapshot.items.reduce((total, item) => total + item.lineTotal, 0),
     account,
+    payoutAccountId: nextSnapshot.payoutAccountId,
     deliverable: nextSnapshot.items.map((item) => item.description).filter(Boolean).join('；'),
     contract: nextSnapshot.contractIds?.join('、') || '未关联合同',
     status: '未进入付款',
@@ -580,6 +582,7 @@ export const sensitiveInvoiceSnapshotChanged = (
     from: record.snapshot.from,
     currency: record.snapshot.currency,
     items: record.snapshot.items,
+    payoutAccountId: record.snapshot.payoutAccountId,
     paymentMethod: record.snapshot.paymentMethod,
     payment: record.snapshot.payment,
     contractIds: record.snapshot.contractIds,

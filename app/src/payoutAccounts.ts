@@ -224,6 +224,14 @@ export const isPayoutAccountVerified = (account: CreatorPayoutAccount) => (
   account.status === 'VALIDATED' || account.status === 'VERIFIED'
 );
 
+export const eligibleInvoicePayoutAccounts = (
+  creator: CreatorProfile | null | undefined,
+) => creator?.payoutAccounts.filter((account) => (
+  account.status !== 'DISABLED'
+  && isPayoutAccountVerified(account)
+  && (account.provider === 'Airwallex' || account.provider === 'PayPal')
+)) ?? [];
+
 export const hasPayoutAccountHistory = (account: CreatorPayoutAccount) => Boolean(
   account.hasPaymentHistory
   || account.linkedProjectIds?.length

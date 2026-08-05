@@ -65,4 +65,29 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).toContain('value="2440"');
     expect(html).toContain('保存修改并重新签署');
   });
+
+  it('shows stable payout-account selection for an Invoice content payment failure', () => {
+    const record = PROJECT_DEMO_INVOICES[2]!;
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="PAYMENT_FAILURE_CONTENT"
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('付款账户 *');
+    expect(html).toContain('aria-label="付款账户"');
+    expect(html).toContain('Thailand THB 主账户 · 默认');
+    expect(html).toContain('选择达人档案中的已验证账户后');
+    expect(html).toContain('保存并重新发起签署');
+  });
 });
