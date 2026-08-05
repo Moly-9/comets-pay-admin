@@ -628,13 +628,17 @@ export function InvoiceBuilderPage({
               <div className="invoice-contract-coverage">
                 <div className="invoice-contract-coverage-head">
                   <div>
-                    <strong>关联合同（非必填）</strong>
+                    <strong id="invoice-contract-coverage-label">关联合同（非必填）</strong>
                     <span>仅显示该项目达人已上传并确认的合同；多份合同按合计金额校验。</span>
                   </div>
                   <em>{contractIds.length ? `已选 ${contractIds.length} 份` : '未关联合同（非必填）'}</em>
                 </div>
                 {selectableContracts.length ? (
-                  <div className="invoice-contract-options">
+                  <div
+                    className="invoice-contract-options"
+                    role="group"
+                    aria-labelledby="invoice-contract-coverage-label"
+                  >
                     {selectableContracts.map((contract) => (
                       <label key={contract.contractId}>
                         <input

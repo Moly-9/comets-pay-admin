@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { GeneratedInvoiceRecord, InvoiceEditContext, Payout } from '../types';
-import { InvoiceDetailPage } from './InvoiceDetailPage';
+import {
+  getInvoiceTimelineState,
+  InvoiceDetailPage,
+  InvoiceFeedbackDeliveryNotice,
+} from './InvoiceDetailPage';
 
 const model = {
   invoiceNumber: 'INV-SYNTHETIC',
@@ -101,6 +105,11 @@ describe('InvoiceDetailPage edit actions', () => {
     }, { manage: true, media: false });
     expect(feedbackHtml).toContain('查看反馈');
     expect(feedbackHtml).toContain('修改并重新发送达人');
+    expect(feedbackHtml).toContain('达人尚未完成签署');
+    expect(getInvoiceTimelineState('达人反馈')).toEqual({
+      currentIndex: 1,
+      currentStepText: '达人反馈 · 待重新签署',
+    });
 
     const recheckHtml = renderDetail(basePayout, { manage: false, media: true });
     expect(recheckHtml).toContain('修改 Invoice');
@@ -135,5 +144,18 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(paymentListHtml).toContain('等待项目付款清单重新提交');
     expect(paymentListHtml).not.toContain('修改并重新发起');
     expect(paymentListHtml).not.toContain('复核通过并重新提交');
+  });
+
+  it('explains the prototype delivery channels for feedback replies', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceFeedbackDeliveryNotice email="creator@example.test" />,
+    );
+
+    expect(html).toContain('达人端站内信');
+    expect(html).toContain('邮件（站外信）');
+    expect(html).toContain('c***@example.test');
+    expect(html).toContain('当前仅模拟发送');
+    expect(html).toContain('失败原因和重试结果');
+    expect(html).toContain('操作审计');
   });
 });

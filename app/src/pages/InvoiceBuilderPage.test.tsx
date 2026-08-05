@@ -38,6 +38,9 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).toContain('Source Payout ID（锁定）');
     expect(html).toContain('保存并重新发送达人');
     expect(html).toMatch(/<button[^>]*disabled[^>]*>.*保存并重新发送达人/s);
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-labelledby="invoice-contract-coverage-label"');
+    expect(html).toContain('已选 2 份');
   });
 
   it('opens the INV-240705 media recheck request with editable prototype data', () => {

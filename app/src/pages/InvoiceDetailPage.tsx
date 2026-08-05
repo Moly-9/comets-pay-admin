@@ -9,7 +9,9 @@ import {
   FileSearch,
   FileText,
   History,
+  Info,
   Landmark,
+  Mail,
   MessageSquareText,
   ReceiptText,
   Send,
@@ -73,7 +75,8 @@ type InvoiceReviewCheck = {
 
 const timelineIndex = (status: InvoiceReviewStatus) => {
   if (status === '待签署') return 1;
-  if (status === '达人反馈' || status === '待媒介审核' || status === '待媒介复核') return 2;
+  if (status === '达人反馈') return 1;
+  if (status === '待媒介审核' || status === '待媒介复核') return 2;
   if (
     status === '待发起请款'
     || status === '待PM审核'
@@ -83,6 +86,11 @@ const timelineIndex = (status: InvoiceReviewStatus) => {
   ) return 3;
   return 4;
 };
+
+export const getInvoiceTimelineState = (status: InvoiceReviewStatus) => ({
+  currentIndex: timelineIndex(status),
+  currentStepText: status === '达人反馈' ? '达人反馈 · 待重新签署' : '当前步骤',
+});
 
 const ACTION_LABEL: Record<InvoiceReviewAction, string> = {
   MARK_SIGNED: '标记达人签署完成',
@@ -96,6 +104,49 @@ const formatReviewTime = (value: string) => new Intl.DateTimeFormat('zh-CN', {
   timeStyle: 'short',
   hour12: false,
 }).format(new Date(value));
+
+const maskFeedbackEmail = (value: string) => {
+  const [localPart, domain] = value.trim().split('@');
+  if (!localPart || !domain) return '达人档案邮箱待补充';
+  return `${localPart.slice(0, 1)}***@${domain}`;
+};
+
+export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
+  return (
+    <div className="invoice-feedback-delivery" role="note" aria-label="回复发送渠道说明">
+      <div className="invoice-feedback-delivery-title">
+        <Send size={16} />
+        <span>
+          <strong>回复发送渠道</strong>
+          <small>提交后将通过两个渠道同步触达达人</small>
+        </span>
+      </div>
+      <ul>
+        <li>
+          <MessageSquareText size={16} />
+          <span>
+            <strong>达人端站内信</strong>
+            <small>发送至达人端的 Invoice 消息中心</small>
+          </span>
+        </li>
+        <li>
+          <Mail size={16} />
+          <span>
+            <strong>邮件（站外信）</strong>
+            <small>发送至达人档案邮箱：{maskFeedbackEmail(email)}</small>
+          </span>
+        </li>
+      </ul>
+      <p>
+        <Info size={15} />
+        <span>
+          <strong>原型说明：</strong>
+          当前仅模拟发送并保留回复记录，不会真实触发站内信或邮件。正式接入后需分别记录双渠道发送状态、失败原因和重试结果，并保留操作审计。
+        </span>
+      </p>
+    </div>
+  );
+}
 
 const sameText = (left: string, right: string) => (
   left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
@@ -387,7 +438,10 @@ export function InvoiceDetailPage({
             ? 2
             : 1
     : 0;
-  const currentIndex = invoiceReviewStatus ? timelineIndex(invoiceReviewStatus) : projectTimelineIndex;
+  const invoiceTimelineState = invoiceReviewStatus
+    ? getInvoiceTimelineState(invoiceReviewStatus)
+    : null;
+  const currentIndex = invoiceTimelineState?.currentIndex ?? projectTimelineIndex;
   const requestApprovalRound = payout?.requestApprovalRound
     ?? Math.max(0, ...(payout?.invoiceReviewHistory ?? []).map((event) => event.approvalRound ?? 0));
   const paymentListVersion = payout?.paymentListVersion
@@ -508,7 +562,7 @@ export function InvoiceDetailPage({
   const statusHint = invoiceReviewStatus === '待签署'
     ? '等待达人完成签署，当前无可执行操作'
     : invoiceReviewStatus === '达人反馈'
-      ? '查看达人反馈，可回复或修改后重新发送'
+      ? '达人尚未完成签署；查看反馈，回复或修改后重新发送'
       : navigationTarget === 'PROJECT'
         ? '项目内全部 Invoice 就绪后统一发起请款'
         : navigationTarget === 'REQUEST'
@@ -702,10 +756,15 @@ export function InvoiceDetailPage({
                       : source.kind === 'project'
                         ? index === currentIndex && !/已完成|已付款/.test(source.status)
                         : index === 1;
+                    const stepState = complete
+                      ? '已完成'
+                      : current
+                        ? invoiceTimelineState?.currentStepText ?? '当前步骤'
+                        : '待处理';
                     return (
                       <div className={`${complete ? 'is-complete' : ''} ${current ? 'is-current' : ''}`} key={step}>
                         <span>{complete ? <Check size={14} /> : index + 1}</span>
-                        <div><strong>{step}</strong><small>{complete ? '已完成' : current ? '当前步骤' : '待处理'}</small></div>
+                        <div><strong>{step}</strong><small>{stepState}</small></div>
                       </div>
                     );
                   })}
@@ -845,17 +904,19 @@ export function InvoiceDetailPage({
               </article>
             ))}
             {canManageInvoice ? (
-              <label className="return-review-field invoice-feedback-reply">
-                <span>回复内容 <em className="required-mark" aria-hidden="true">*</em><small>{replyMessage.length}/300</small></span>
-                <textarea
-                  maxLength={300}
-                  aria-label="回复达人反馈"
-                  placeholder="请输入对达人反馈的回复"
-                  value={replyMessage}
-                  onChange={(event) => setReplyMessage(event.target.value)}
-                />
-                <small>回复只记录在当前前端原型中，不会真实发送给达人。</small>
-              </label>
+              <>
+                <label className="return-review-field invoice-feedback-reply">
+                  <span>回复内容 <em className="required-mark" aria-hidden="true">*</em><small>{replyMessage.length}/300</small></span>
+                  <textarea
+                    maxLength={300}
+                    aria-label="回复达人反馈"
+                    placeholder="请输入对达人反馈的回复"
+                    value={replyMessage}
+                    onChange={(event) => setReplyMessage(event.target.value)}
+                  />
+                </label>
+                <InvoiceFeedbackDeliveryNotice email={model.from.email} />
+              </>
             ) : (
               <p className="invoice-review-history-empty">当前角色仅可查看反馈。</p>
             )}
