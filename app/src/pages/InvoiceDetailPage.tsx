@@ -10,21 +10,26 @@ import {
   FileText,
   History,
   Landmark,
+  MessageSquareText,
   ReceiptText,
+  Send,
   ShieldCheck,
   UserRound,
   WalletCards,
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button, Modal, PageHeading } from '../components/Common';
+import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
   getInvoiceContractReference,
   invoiceAccountSummary,
 } from '../invoice/invoiceReview';
 import {
-  getAvailableInvoiceReviewActions,
+  getApprovedInvoicePaymentStatus,
+  getInvoiceDetailNavigationTarget,
+  getInvoiceDetailReviewActions,
+  getInvoiceRowStatus,
   type InvoiceReviewAction,
 } from '../invoice/invoiceReviewWorkflow';
 import {
@@ -271,9 +276,14 @@ export function InvoiceDetailPage({
   backLabel = '返回Invoice列表',
   onMarkSigned,
   onReviewAction,
+  onReplyFeedback,
+  onOpenProject,
+  onOpenRequest,
+  onOpenPayment,
   canManageInvoice,
   canReviewMedia,
   canReviewFinance,
+  canExecutePayout = false,
   notify,
 }: {
   source: InvoiceDetailSource;
@@ -286,15 +296,23 @@ export function InvoiceDetailPage({
     action: InvoiceReviewAction,
     reason?: string,
   ) => void;
+  onReplyFeedback?: (payout: Payout, message: string) => void;
+  onOpenProject?: (payout: Payout) => void;
+  onOpenRequest?: (payout: Payout) => void;
+  onOpenPayment?: (payout: Payout) => void;
   canManageInvoice: boolean;
   canReviewMedia: boolean;
   canReviewFinance: boolean;
+  canExecutePayout?: boolean;
   notify: Notify;
 }) {
   const [activeTab, setActiveTab] = useState<InvoiceDetailTab>('summary');
   const [downloading, setDownloading] = useState<'pdf' | 'docx' | ''>('');
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [resendDialogOpen, setResendDialogOpen] = useState(false);
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
   const payout = source.kind === 'payout'
     ? source.payout
@@ -304,9 +322,19 @@ export function InvoiceDetailPage({
   const invoiceReviewStatus = source.kind === 'payout'
     ? source.payout.invoiceReviewStatus
     : source.kind === 'generated'
-      ? source.record.status
+      ? source.payout?.invoiceReviewStatus ?? source.record.status
       : null;
-  const status = invoiceReviewStatus ?? (source.kind === 'project' ? source.status : '');
+  const displayStatus = invoiceReviewStatus
+    ? getInvoiceRowStatus({
+        invoiceReviewStatus,
+        status: payout?.status ?? '未进入付款',
+      })
+    : source.kind === 'project'
+      ? source.status
+      : '';
+  const displayStatusKey = invoiceReviewStatus === '已通过' && payout
+    ? getApprovedInvoicePaymentStatus(payout)
+    : invoiceReviewStatus ?? '未进入付款';
   const provider = source.kind === 'payout'
     ? source.payout.provider
     : source.kind === 'generated' && source.payout
@@ -318,7 +346,7 @@ export function InvoiceDetailPage({
   const passedCount = checks.filter((check) => check.passed).length;
   const allPassed = checks.length > 0 && passedCount === checks.length;
   const availableActions = invoiceReviewStatus
-    ? getAvailableInvoiceReviewActions(invoiceReviewStatus, {
+    ? getInvoiceDetailReviewActions(invoiceReviewStatus, {
         manage: canManageInvoice,
         mediaReview: canReviewMedia,
         financeReview: canReviewFinance,
@@ -328,8 +356,16 @@ export function InvoiceDetailPage({
     action === 'RETURN_TO_CREATOR' || action === 'RECORD_CREATOR_FEEDBACK'
   ));
   const primaryAction = availableActions.find((action) => (
-    action !== 'RETURN_TO_CREATOR' && action !== 'RECORD_CREATOR_FEEDBACK'
+    action !== 'RETURN_TO_CREATOR'
+    && action !== 'RECORD_CREATOR_FEEDBACK'
+    && !(invoiceReviewStatus === '达人反馈' && action === 'RESEND_FOR_SIGNATURE')
   ));
+  const canResendFeedback = invoiceReviewStatus === '达人反馈'
+    && Boolean(payout?.creatorFeedback)
+    && availableActions.includes('RESEND_FOR_SIGNATURE');
+  const navigationTarget = invoiceReviewStatus
+    ? getInvoiceDetailNavigationTarget(invoiceReviewStatus)
+    : null;
   const projectTimelineIndex = source.kind === 'project'
     ? /已完成|已付款/.test(source.status)
       ? 4
@@ -369,6 +405,7 @@ export function InvoiceDetailPage({
     { id: 'history', label: '审核记录' },
   ];
   const normalizedReturnReason = returnReason.trim();
+  const normalizedReplyMessage = replyMessage.trim();
 
   const copyInvoiceId = async () => {
     await navigator.clipboard.writeText(model.invoiceNumber);
@@ -412,6 +449,71 @@ export function InvoiceDetailPage({
     }
   };
 
+  const submitFeedbackReply = () => {
+    if (!payout || !normalizedReplyMessage || !onReplyFeedback) return;
+    onReplyFeedback(payout, normalizedReplyMessage);
+    setReplyMessage('');
+  };
+
+  const confirmFeedbackResend = () => {
+    if (!payout || !canResendFeedback) return;
+    onReviewAction(payout, 'RESEND_FOR_SIGNATURE');
+    setResendDialogOpen(false);
+    setFeedbackDialogOpen(false);
+  };
+
+  const closeFeedbackDialog = () => {
+    setFeedbackDialogOpen(false);
+    setReplyMessage('');
+  };
+
+  const openFeedbackDialog = () => {
+    if (!payout?.creatorFeedback) {
+      notify('反馈内容缺失', '当前记录缺少达人反馈正文，请先核对原始记录。');
+      return;
+    }
+    setFeedbackDialogOpen(true);
+  };
+
+  const runNavigationAction = () => {
+    if (!payout || !navigationTarget) return;
+    if (navigationTarget === 'PROJECT') {
+      onOpenProject?.(payout);
+      return;
+    }
+    if (navigationTarget === 'REQUEST') {
+      onOpenRequest?.(payout);
+      return;
+    }
+    onOpenPayment?.(payout);
+  };
+
+  const navigationActionLabel = navigationTarget === 'PROJECT'
+    ? canManageInvoice ? '前往项目发起请款' : '查看关联项目'
+    : navigationTarget === 'REQUEST'
+      ? '查看 / 处理请款审批'
+      : navigationTarget === 'PAYMENT' && payout
+        ? payout.status === '付款失败'
+          ? canExecutePayout ? '处理付款失败' : '查看失败信息'
+          : payout.status === '已付款'
+            ? '查看付款记录'
+            : payout.status === '付款处理中'
+              ? '查看付款进度'
+              : canExecutePayout ? '处理付款' : '查看付款详情'
+        : '';
+
+  const statusHint = invoiceReviewStatus === '待签署'
+    ? '等待达人完成签署，当前无可执行操作'
+    : invoiceReviewStatus === '达人反馈'
+      ? '查看达人反馈，可回复或修改后重新发送'
+      : navigationTarget === 'PROJECT'
+        ? '项目内全部 Invoice 就绪后统一发起请款'
+        : navigationTarget === 'REQUEST'
+          ? '项目审批操作统一在请款项目详情完成'
+          : navigationTarget === 'PAYMENT'
+            ? '付款操作统一在付款详情完成'
+            : `${passedCount}/${checks.length}项资料校验通过`;
+
   return (
     <div className="page-stack contract-detail-page invoice-detail-page">
       <button className="project-back-button" type="button" onClick={onBack}>
@@ -434,9 +536,11 @@ export function InvoiceDetailPage({
 
       <div className="contract-metric-grid">
         <article>
-          <span>审核状态</span>
-          <strong className={invoiceReviewStatus === '已通过' ? 'contract-ready-text' : 'contract-attention-text'}>{status}</strong>
-          <small>{source.kind === 'generated' ? '等待达人签署后进入审核' : `${passedCount}/${checks.length}项资料校验通过`}</small>
+          <span>当前状态</span>
+          <strong className="invoice-detail-current-status">
+            <StatusMark status={displayStatusKey} label={displayStatus} />
+          </strong>
+          <small>{statusHint}</small>
         </article>
         <article>
           <span>Invoice金额</span>
@@ -640,13 +744,31 @@ export function InvoiceDetailPage({
           <footer className="invoice-review-actions">
             <div>
               <FileCheck2 size={16} />
-              <span>{allPassed ? '关键资料已匹配' : `${checks.length - passedCount}项需要处理`}</span>
+              <span>{
+                invoiceReviewStatus === '待签署'
+                  ? '等待达人签署'
+                  : allPassed
+                    ? '关键资料已匹配'
+                    : `${checks.length - passedCount}项需要处理`
+              }</span>
             </div>
             <span>
               {source.kind !== 'payout' ? (
                 <Button variant="secondary" disabled={Boolean(downloading)} onClick={() => downloadInvoice('docx')}>
                   {downloading === 'docx' ? '生成中…' : '下载DOCX'}
                 </Button>
+              ) : null}
+              {invoiceReviewStatus === '达人反馈' ? (
+                <Button
+                  variant="secondary"
+                  icon={<MessageSquareText size={16} />}
+                  onClick={openFeedbackDialog}
+                >
+                  查看反馈
+                </Button>
+              ) : null}
+              {canResendFeedback ? (
+                <Button onClick={() => setResendDialogOpen(true)}>修改并重新发送达人</Button>
               ) : null}
               {returnAction ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>{ACTION_LABEL[returnAction]}</Button> : null}
               {primaryAction ? (
@@ -656,13 +778,105 @@ export function InvoiceDetailPage({
                 >
                   {primaryAction === 'APPROVE_MEDIA' && payout?.invoiceReviewStatus === '待媒介复核'
                     ? '复核通过并重新提交'
-                    : ACTION_LABEL[primaryAction]}
+                  : ACTION_LABEL[primaryAction]}
                 </Button>
+              ) : null}
+              {navigationTarget && payout ? (
+                <Button onClick={runNavigationAction}>{navigationActionLabel}</Button>
               ) : null}
             </span>
           </footer>
         </section>
       </div>
+
+      {feedbackDialogOpen && payout?.creatorFeedback ? (
+        <Modal
+          title="达人反馈"
+          width="560px"
+          onClose={closeFeedbackDialog}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={closeFeedbackDialog}>关闭</Button>
+              {canManageInvoice ? (
+                <Button
+                  icon={<Send size={16} />}
+                  disabled={!normalizedReplyMessage}
+                  onClick={submitFeedbackReply}
+                >
+                  回复反馈
+                </Button>
+              ) : null}
+            </>
+          )}
+        >
+          <div className="invoice-feedback-thread">
+            <article className="invoice-feedback-message invoice-feedback-message-creator">
+              <span><UserRound size={18} /></span>
+              <div>
+                <strong>{payout.creatorFeedback.actorName} · 达人反馈</strong>
+                <small>{formatReviewTime(payout.creatorFeedback.occurredAt)}</small>
+                <p>{payout.creatorFeedback.reason}</p>
+              </div>
+            </article>
+            {(payout.creatorFeedback.replies ?? []).map((reply, index) => (
+              <article
+                className="invoice-feedback-message invoice-feedback-message-reply"
+                key={`${reply.occurredAt}-${reply.actorAccount}-${index}`}
+              >
+                <span><MessageSquareText size={18} /></span>
+                <div>
+                  <strong>{reply.actorName} · {reply.actorRole}</strong>
+                  <small>{formatReviewTime(reply.occurredAt)}</small>
+                  <p>{reply.message}</p>
+                </div>
+              </article>
+            ))}
+            {canManageInvoice ? (
+              <label className="return-review-field invoice-feedback-reply">
+                <span>回复内容 <em className="required-mark" aria-hidden="true">*</em><small>{replyMessage.length}/300</small></span>
+                <textarea
+                  maxLength={300}
+                  aria-label="回复达人反馈"
+                  placeholder="请输入对达人反馈的回复"
+                  value={replyMessage}
+                  onChange={(event) => setReplyMessage(event.target.value)}
+                />
+                <small>回复只记录在当前前端原型中，不会真实发送给达人。</small>
+              </label>
+            ) : (
+              <p className="invoice-review-history-empty">当前角色仅可查看反馈。</p>
+            )}
+          </div>
+        </Modal>
+      ) : null}
+
+      {resendDialogOpen && payout?.creatorFeedback ? (
+        <Modal
+          title="修改并重新发送达人"
+          width="520px"
+          onClose={() => setResendDialogOpen(false)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setResendDialogOpen(false)}>取消</Button>
+              <Button onClick={confirmFeedbackResend}>确认已修改并重新发送</Button>
+            </>
+          )}
+        >
+          <div className="return-review-dialog">
+            <div className="return-review-summary">
+              <span><Send size={19} /></span>
+              <div>
+                <strong>确认已处理达人反馈</strong>
+                <p>{payout.creator} · {model.invoiceNumber}</p>
+              </div>
+            </div>
+            <div className="return-review-warning">
+              <AlertTriangle size={17} />
+              <span>确认后将生成新的 Invoice 版本，清除当前待处理反馈，并回到“待签署”。</span>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {returnDialogOpen ? (
         <Modal

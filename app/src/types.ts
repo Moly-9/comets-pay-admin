@@ -275,6 +275,7 @@ export type InvoiceReviewEvent = {
   action:
     | '签署完成'
     | '达人反馈'
+    | '回复达人反馈'
     | '重新发送'
     | '审核通过'
     | '复核通过并重新提交'
@@ -359,6 +360,13 @@ export type Payout = {
     reason: string;
     actorName: string;
     occurredAt: string;
+    replies?: Array<{
+      message: string;
+      actorAccount: string;
+      actorName: string;
+      actorRole: string;
+      occurredAt: string;
+    }>;
   };
   invoiceReviewReturn?: {
     stage: Exclude<InvoiceReviewStage, 'SIGNATURE'>;

@@ -443,6 +443,8 @@ export function ProjectsPage({
   onSubmitProjectReview,
   onProjectsChange,
   canCreateProject,
+  focusedProjectId,
+  onFocusCleared,
 }: {
   notify: Notify;
   creators: CreatorProfile[];
@@ -471,6 +473,8 @@ export function ProjectsPage({
   onSubmitProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
+  focusedProjectId: string | null;
+  onFocusCleared: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyProjectListFilters);
@@ -481,7 +485,7 @@ export function ProjectsPage({
   const [requestReason, setRequestReason] = useState('');
   const [selectedCreatorHandles, setSelectedCreatorHandles] = useState<string[]>([]);
   const [closeGuardOpen, setCloseGuardOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(focusedProjectId);
   const selectedProject = selectedProjectId ? projects.find((project) => project.id === selectedProjectId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const relatedProjects = projects.filter((project) => {
@@ -749,6 +753,7 @@ export function ProjectsPage({
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {
           setSelectedProjectId(null);
+          onFocusCleared();
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
@@ -937,6 +942,8 @@ export function RequestsPage({
   onRequestCreated,
   onApprovalAction,
   canCreateRequest,
+  focusedRequestId,
+  onFocusCleared,
 }: {
   notify: Notify;
   contracts: ContractRecord[];
@@ -949,12 +956,14 @@ export function RequestsPage({
     reason?: string,
   ) => void;
   canCreateRequest: boolean;
+  focusedRequestId: string | null;
+  onFocusCleared: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyProjectListFilters);
   const [creating, setCreating] = useState(false);
   const [showApprovalNotice, setShowApprovalNotice] = useState(true);
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedRequestId);
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const relatedRequests = requests.filter((request) => {
@@ -1084,6 +1093,7 @@ export function RequestsPage({
         notify={notify}
         onBack={() => {
           setSelectedRequestId(null);
+          onFocusCleared();
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
@@ -2213,6 +2223,11 @@ export function InvoicePage({
   onFocusCleared,
   onMarkSigned,
   onReviewAction,
+  onReplyFeedback,
+  onOpenProject,
+  onOpenRequest,
+  onOpenPayment,
+  canExecutePayout,
   notify,
 }: {
   payouts: Payout[];
@@ -2234,6 +2249,11 @@ export function InvoicePage({
     action: InvoiceReviewAction,
     reason?: string,
   ) => void;
+  onReplyFeedback: (payout: Payout, message: string) => void;
+  onOpenProject: (payout: Payout) => void;
+  onOpenRequest: (payout: Payout) => void;
+  onOpenPayment: (payout: Payout) => void;
+  canExecutePayout: boolean;
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
@@ -2307,8 +2327,7 @@ export function InvoicePage({
   };
 
   const canActOnInvoice = (payout: Payout) => (
-    (payout.invoiceReviewStatus === '待签署' && canManageInvoice)
-    || (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
+    (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
     || (
       (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
       && canReviewMedia
@@ -2324,9 +2343,14 @@ export function InvoicePage({
         notify={notify}
         onMarkSigned={markSignedAndOpenReview}
         onReviewAction={onReviewAction}
+        onReplyFeedback={onReplyFeedback}
+        onOpenProject={onOpenProject}
+        onOpenRequest={onOpenRequest}
+        onOpenPayment={onOpenPayment}
         canManageInvoice={canManageInvoice}
         canReviewMedia={canReviewMedia}
         canReviewFinance={canReviewFinance}
+        canExecutePayout={canExecutePayout}
         onBack={closeInvoiceDetail}
       />
     );
@@ -2362,7 +2386,13 @@ export function InvoicePage({
           )}
           statusLabelFor={getInvoiceRowStatus}
           actionLabelFor={(payout) => canActOnInvoice(payout)
-            ? payout.invoiceReviewStatus === '待签署' ? '处理签署' : '审核'
+            ? payout.invoiceReviewStatus === '达人反馈'
+              ? '处理反馈'
+              : payout.invoiceReviewStatus === '待媒介复核'
+                ? '复核'
+                : payout.invoiceReviewStatus === '已退回'
+                  ? '重新发起'
+                  : '审核'
             : '查看详情'}
           primaryActionFor={canActOnInvoice}
         />

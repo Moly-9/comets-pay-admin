@@ -5,12 +5,15 @@ import {
   createInvoiceReviewEvent,
   getAvailableInvoiceReviewActions,
   getApprovedInvoicePaymentStatus,
+  getInvoiceDetailNavigationTarget,
+  getInvoiceDetailReviewActions,
   getInvoicePageTab,
   getInvoiceRowStatus,
   invalidateSignedInvoice,
   isInvoiceApprovedForPayment,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
+  replyToCreatorFeedback,
 } from './invoiceReviewWorkflow';
 
 const actor = { account: 'reviewer', name: '审核人', role: '测试角色' };
@@ -163,6 +166,51 @@ describe('Invoice review workflow', () => {
       'RECORD_CREATOR_FEEDBACK',
     ]);
     expect(getAvailableInvoiceReviewActions('待财务审核', readOnly)).toEqual([]);
+    expect(getInvoiceDetailReviewActions('待签署', manage)).toEqual([]);
+    expect(getInvoiceDetailReviewActions('达人反馈', manage)).toEqual([
+      'RESEND_FOR_SIGNATURE',
+    ]);
+  });
+
+  it('records feedback replies without changing the lifecycle state', () => {
+    const feedback = applyInvoiceReviewAction(
+      payout,
+      'RECORD_CREATOR_FEEDBACK',
+      actor,
+      '请修改地址',
+    );
+    const replied = replyToCreatorFeedback(
+      feedback,
+      { account: 'media', name: '媒介', role: '媒介账号' },
+      '已收到，修改后重新发送。',
+      '2026-08-04T04:00:00.000Z',
+    );
+
+    expect(replied.invoiceReviewStatus).toBe('达人反馈');
+    expect(replied.creatorFeedback?.replies).toEqual([{
+      message: '已收到，修改后重新发送。',
+      actorAccount: 'media',
+      actorName: '媒介',
+      actorRole: '媒介账号',
+      occurredAt: '2026-08-04T04:00:00.000Z',
+    }]);
+    expect(replied.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('回复达人反馈');
+    expect(() => replyToCreatorFeedback(payout, actor, '回复')).toThrow(/没有可回复/);
+    expect(() => replyToCreatorFeedback(feedback, actor, '   ')).toThrow(/不能为空/);
+  });
+
+  it('routes project approval and payment actions to their canonical detail pages', () => {
+    expect(getInvoiceDetailNavigationTarget('待签署')).toBeNull();
+    expect(getInvoiceDetailNavigationTarget('达人反馈')).toBeNull();
+    expect(getInvoiceDetailNavigationTarget('待媒介审核')).toBeNull();
+    expect(getInvoiceDetailNavigationTarget('待媒介复核')).toBeNull();
+    expect(getInvoiceDetailNavigationTarget('待发起请款')).toBe('PROJECT');
+    expect(getInvoiceDetailNavigationTarget('待PM审核')).toBe('REQUEST');
+    expect(getInvoiceDetailNavigationTarget('待项目负责人审核')).toBe('REQUEST');
+    expect(getInvoiceDetailNavigationTarget('待老板审核')).toBe('REQUEST');
+    expect(getInvoiceDetailNavigationTarget('待财务审核')).toBe('REQUEST');
+    expect(getInvoiceDetailNavigationTarget('已通过')).toBe('PAYMENT');
+    expect(getInvoiceDetailNavigationTarget('已退回')).toBeNull();
   });
 
   it('links a signed generated Invoice only through sourcePayoutId', () => {
@@ -217,5 +265,27 @@ describe('Invoice review workflow', () => {
       invoiceReviewStatus: '已通过',
       status: '信息异常',
     })).toBe('等待付款');
+  });
+
+  it('uses one display label set for Invoice lists and details', () => {
+    const expectedLabels = {
+      待签署: '待签署',
+      达人反馈: '达人反馈',
+      待媒介审核: '待审核',
+      待媒介复核: '待复核',
+      待发起请款: '待发起请款',
+      待PM审核: '待 PM 审批',
+      待项目负责人审核: '待项目负责人审批',
+      待老板审核: '待老板审批',
+      待财务审核: '待财务审批',
+      已退回: '已退回',
+    } as const;
+
+    Object.entries(expectedLabels).forEach(([invoiceReviewStatus, label]) => {
+      expect(getInvoiceRowStatus({
+        ...payout,
+        invoiceReviewStatus: invoiceReviewStatus as Payout['invoiceReviewStatus'],
+      })).toBe(label);
+    });
   });
 });

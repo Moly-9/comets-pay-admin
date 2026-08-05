@@ -39,6 +39,7 @@ import {
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   paymentFailureRestartStage,
+  replyToCreatorFeedback,
   sensitiveInvoiceSnapshotChanged,
   type InvoiceReviewAction,
   type InvoicePageTab,
@@ -173,6 +174,8 @@ export default function App() {
   const [invoiceTab, setInvoiceTab] = useState<InvoicePageTab>('signature');
   const [focusedInvoiceId, setFocusedInvoiceId] = useState<string | null>(null);
   const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
+  const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
+  const [focusedRequestId, setFocusedRequestId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
@@ -311,6 +314,8 @@ export default function App() {
     setActivePage(page);
     setFocusedInvoiceId(null);
     setFocusedContractId(null);
+    setFocusedProjectId(null);
+    setFocusedRequestId(null);
     setSelectedPayout(null);
   };
 
@@ -1188,6 +1193,24 @@ export default function App() {
     }
   };
 
+  const replyInvoiceFeedback = (payout: Payout, message: string) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能回复达人反馈。`);
+      return;
+    }
+    try {
+      const updated = replyToCreatorFeedback(
+        payout,
+        { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        message,
+      );
+      setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+      notify('回复已记录', `已回复 ${payout.creator} 对 ${payout.invoice} 的反馈。`);
+    } catch (error) {
+      notify('回复失败', error instanceof Error ? error.message : '当前反馈无法回复。');
+    }
+  };
+
   const markInvoiceSigned = (record: GeneratedInvoiceRecord) => {
     if (!hasPermission(currentUser, 'invoice_manage')) {
       notify('暂无操作权限', `${currentUser.role}不能提交签署完成的 Invoice。`);
@@ -1232,6 +1255,36 @@ export default function App() {
     setFocusedContractId(contract.id);
     setSelectedPayout(null);
     setActivePage('contracts');
+  };
+
+  const openProjectFromInvoice = (payout: Payout) => {
+    const project = projects.find((item) => getProjectId(item) === payout.projectId);
+    if (!project) {
+      notify('未找到关联项目', '该 Invoice 缺少可用的稳定 projectId 关联。');
+      return;
+    }
+    setFocusedProjectId(project.id);
+    setFocusedInvoiceId(null);
+    setActivePage('projects');
+  };
+
+  const openRequestFromInvoice = (payout: Payout) => {
+    const invoice = generatedInvoices.find((item) => item.sourcePayoutId === payout.id);
+    const directRequest = invoice
+      ? requestProjects.find((request) => request.invoiceIds?.includes(invoice.invoiceId))
+      : undefined;
+    const projectRequests = requestProjects.filter((request) => request.projectId === payout.projectId);
+    const linkedRequest = directRequest ?? (projectRequests.length === 1 ? projectRequests[0] : undefined);
+    if (!linkedRequest) {
+      notify(
+        projectRequests.length > 1 ? '请款关联不明确' : '未找到关联请款',
+        '无法通过稳定 invoiceId / projectId 唯一定位请款记录。',
+      );
+      return;
+    }
+    setFocusedRequestId(linkedRequest.id);
+    setFocusedInvoiceId(null);
+    setActivePage('requests');
   };
 
   const createBatch = (selected: Payout[], provider: Provider) => {
@@ -1322,6 +1375,8 @@ export default function App() {
           onSubmitProjectReview={submitProjectReview}
           onProjectsChange={setProjects}
           canCreateProject={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}
+          focusedProjectId={focusedProjectId}
+          onFocusCleared={() => setFocusedProjectId(null)}
         />
       );
       break;
@@ -1335,6 +1390,8 @@ export default function App() {
           onRequestCreated={(request) => setRequestProjects((current) => [request, ...current])}
           onApprovalAction={handleRequestApproval}
           canCreateRequest={false}
+          focusedRequestId={focusedRequestId}
+          onFocusCleared={() => setFocusedRequestId(null)}
         />
       );
       break;
@@ -1411,6 +1468,11 @@ export default function App() {
           onFocusCleared={() => setFocusedInvoiceId(null)}
           onMarkSigned={markInvoiceSigned}
           onReviewAction={updateInvoiceReview}
+          onReplyFeedback={replyInvoiceFeedback}
+          onOpenProject={openProjectFromInvoice}
+          onOpenRequest={openRequestFromInvoice}
+          onOpenPayment={setSelectedPayout}
+          canExecutePayout={canExecutePayouts}
           notify={notify}
         />
       );

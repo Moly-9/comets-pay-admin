@@ -13207,6 +13207,75 @@ button:disabled {
   font-size: 10.5px;
 }
 
+.invoice-detail-current-status .status-mark {
+  color: #262a31;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.invoice-detail-current-status .status-tick {
+  height: 16px;
+}
+
+.invoice-feedback-thread {
+  display: grid;
+  gap: 10px;
+}
+
+.invoice-feedback-message {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 12px;
+}
+
+.invoice-feedback-message > span {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff0ea;
+  color: #d35e43;
+}
+
+.invoice-feedback-message-reply > span {
+  background: #f2effb;
+  color: #6f58a3;
+}
+
+.invoice-feedback-message > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.invoice-feedback-message strong {
+  font-size: 12px;
+}
+
+.invoice-feedback-message small {
+  color: #858b96;
+  font-size: 10px;
+}
+
+.invoice-feedback-message p {
+  margin: 2px 0 0;
+  color: #4f5560;
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.invoice-feedback-reply {
+  margin-top: 2px;
+  border-top: 1px solid #eceef2;
+  padding-top: 12px;
+}
+
 .attachment-list button:not(:disabled):hover,
 .attachment-list button:not(:disabled):focus-visible {
   border-color: #bfaed2;

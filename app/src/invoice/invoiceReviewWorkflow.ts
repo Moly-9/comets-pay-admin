@@ -29,6 +29,7 @@ export type InvoiceReviewCapabilities = {
 };
 
 export type InvoicePageTab = 'signature' | 'media-review' | 'approval' | 'approved' | 'returned';
+export type InvoiceDetailNavigationTarget = 'PROJECT' | 'REQUEST' | 'PAYMENT';
 export type ApprovedInvoicePaymentStatus = Extract<
   PayoutStatus,
   '等待付款' | '付款处理中' | '已付款' | '付款失败'
@@ -122,6 +123,22 @@ export const getInvoicePageTab = (status: InvoiceReviewStatus): InvoicePageTab =
   return 'approved';
 };
 
+export const getInvoiceDetailNavigationTarget = (
+  status: InvoiceReviewStatus,
+): InvoiceDetailNavigationTarget | null => {
+  if (status === '待发起请款') return 'PROJECT';
+  if (
+    status === '待PM审核'
+    || status === '待项目负责人审核'
+    || status === '待老板审核'
+    || status === '待财务审核'
+  ) {
+    return 'REQUEST';
+  }
+  if (status === '已通过') return 'PAYMENT';
+  return null;
+};
+
 export const getApprovedInvoicePaymentStatus = (
   payout: Pick<Payout, 'status'>,
 ): ApprovedInvoicePaymentStatus => {
@@ -164,6 +181,15 @@ export const getAvailableInvoiceReviewActions = (
   }
   return [];
 };
+
+export const getInvoiceDetailReviewActions = (
+  status: InvoiceReviewStatus,
+  capabilities: InvoiceReviewCapabilities,
+) => (
+  status === '待签署'
+    ? []
+    : getAvailableInvoiceReviewActions(status, capabilities)
+);
 
 const resolveTransition = (
   payout: Pick<Payout, 'invoiceReviewStatus' | 'paymentFailureReturn'>,
@@ -224,7 +250,10 @@ export const applyInvoiceReviewAction = (
   reason?: string,
   occurredAt = new Date().toISOString(),
 ): Payout => {
-  const event = createInvoiceReviewEvent(payout, action, actor, reason, occurredAt);
+  const eventReason = action === 'RESEND_FOR_SIGNATURE' && payout.creatorFeedback
+    ? `已处理达人反馈：${payout.creatorFeedback.reason}`
+    : reason;
+  const event = createInvoiceReviewEvent(payout, action, actor, eventReason, occurredAt);
   const isCreatorFeedback = action === 'RECORD_CREATOR_FEEDBACK';
   const isSigned = action === 'MARK_SIGNED';
   const invalidatesSignature = action === 'RETURN_TO_CREATOR'
@@ -270,6 +299,49 @@ export const applyInvoiceReviewAction = (
     returnReason: action === 'RETURN_TO_CREATOR' ? event.reason : undefined,
     paymentFailureReturn: clearsPaymentFailure ? undefined : payout.paymentFailureReturn,
     paymentFailure: clearsPaymentFailure ? undefined : payout.paymentFailure,
+  };
+};
+
+export const replyToCreatorFeedback = (
+  payout: Payout,
+  actor: InvoiceReviewActor,
+  message: string,
+  occurredAt = new Date().toISOString(),
+): Payout => {
+  if (payout.invoiceReviewStatus !== '达人反馈' || !payout.creatorFeedback) {
+    throw new Error('当前 Invoice 没有可回复的达人反馈。');
+  }
+  const normalizedMessage = message.trim();
+  if (!normalizedMessage) {
+    throw new Error('回复内容不能为空。');
+  }
+  const event: InvoiceReviewEvent = {
+    stage: 'SIGNATURE',
+    action: '回复达人反馈',
+    actorAccount: actor.account,
+    actorName: actor.name,
+    actorRole: actor.role,
+    fromStatus: '达人反馈',
+    toStatus: '达人反馈',
+    reason: normalizedMessage,
+    occurredAt,
+  };
+  return {
+    ...payout,
+    creatorFeedback: {
+      ...payout.creatorFeedback,
+      replies: [
+        ...(payout.creatorFeedback.replies ?? []),
+        {
+          message: normalizedMessage,
+          actorAccount: actor.account,
+          actorName: actor.name,
+          actorRole: actor.role,
+          occurredAt,
+        },
+      ],
+    },
+    invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
   };
 };
 
