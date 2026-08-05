@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import {
+  contractPublishingChannelsForCreator,
   contractPayoutSnapshot,
   defaultContractPayoutAccount,
   eligibleContractPayoutAccounts,
+  formatContractPublishingChannelLinks,
+  formatContractPublishingPlatforms,
+  resolveContractPublishingChannels,
   validateContractGenerationModel,
 } from './contractGenerationModel';
 import type { ContractGenerationModel } from './contracts';
@@ -85,6 +89,11 @@ const validModel = (): ContractGenerationModel => ({
   platform: 'YouTube',
   channelName: 'Sample Studio',
   channelUrl: 'https://example.invalid/sample',
+  publishingChannels: [{
+    socialAccountId: 'social-synthetic',
+    platform: 'YouTube',
+    channelUrl: 'https://example.invalid/sample',
+  }],
   effectiveDate: '2026-08-05',
   campaignStart: '2026-08-10',
   campaignEnd: '2026-08-31',
@@ -128,6 +137,71 @@ const validModel = (): ContractGenerationModel => ({
 });
 
 describe('contract generation model', () => {
+  it('builds editable contract channels from every creator social account without mutating the profile', () => {
+    const profile = creator();
+    profile.socialAccounts.push({
+      id: 'social-instagram',
+      platform: 'Instagram',
+      handle: '@sample',
+      profileUrl: 'https://instagram.com/sample',
+    });
+
+    const channels = contractPublishingChannelsForCreator(profile);
+    channels[1].channelUrl = 'https://instagram.com/sample-contract';
+
+    expect(channels).toEqual([
+      {
+        socialAccountId: 'social-synthetic',
+        platform: 'YouTube',
+        channelUrl: 'https://example.invalid/sample',
+      },
+      {
+        socialAccountId: 'social-instagram',
+        platform: 'Instagram',
+        channelUrl: 'https://instagram.com/sample-contract',
+      },
+    ]);
+    expect(profile.socialAccounts[1].profileUrl).toBe('https://instagram.com/sample');
+    expect(formatContractPublishingPlatforms({
+      publishingChannels: channels,
+      platform: '',
+      channelUrl: '',
+    })).toBe('YouTube · Instagram');
+    expect(formatContractPublishingChannelLinks({
+      publishingChannels: channels,
+      platform: '',
+      channelUrl: '',
+    })).toBe([
+      'YouTube: https://example.invalid/sample',
+      'Instagram: https://instagram.com/sample-contract',
+    ].join('\n'));
+  });
+
+  it('restores legacy single-channel drafts and refreshes all rows when the creator changes', () => {
+    const legacy = resolveContractPublishingChannels({
+      platform: 'YouTube',
+      channelUrl: 'https://example.invalid/legacy',
+    });
+    const nextCreator = creator();
+    nextCreator.socialAccounts = [{
+      id: 'social-next',
+      platform: 'TikTok',
+      handle: '@next',
+      profileUrl: 'https://www.tiktok.com/@next',
+    }];
+
+    expect(legacy).toEqual([{
+      socialAccountId: '',
+      platform: 'YouTube',
+      channelUrl: 'https://example.invalid/legacy',
+    }]);
+    expect(contractPublishingChannelsForCreator(nextCreator)).toEqual([{
+      socialAccountId: 'social-next',
+      platform: 'TikTok',
+      channelUrl: 'https://www.tiktok.com/@next',
+    }]);
+  });
+
   it('only exposes verified Airwallex and PayPal accounts and selects the verified default', () => {
     const profile = creator();
 
@@ -188,6 +262,7 @@ describe('contract generation model', () => {
       platform: '',
       channelName: '',
       channelUrl: '',
+      publishingChannels: [],
     });
     const creatorErrors = validateContractGenerationModel(withoutCreator);
 
@@ -218,6 +293,11 @@ describe('contract generation model', () => {
       platform: '',
       channelName: '',
       channelUrl: '',
+      publishingChannels: [{
+        socialAccountId: 'social-synthetic',
+        platform: '',
+        channelUrl: '',
+      }],
     });
 
     expect(validateContractGenerationModel(model)).toMatchObject({
@@ -256,6 +336,30 @@ describe('contract generation model', () => {
     expect(validateContractGenerationModel(paypal).payoutAccountId).toContain('邮箱无效');
     paypal.paymentSnapshot.paypalEmail = 'creator@example.invalid';
     expect(validateContractGenerationModel(paypal)).toEqual({});
+  });
+
+  it('blocks incomplete or invalid publishing-channel rows', () => {
+    const missing = validModel();
+    missing.publishingChannels = [
+      {
+        socialAccountId: 'social-youtube',
+        platform: 'YouTube',
+        channelUrl: '',
+      },
+      {
+        socialAccountId: 'social-instagram',
+        platform: '',
+        channelUrl: 'not-a-url',
+      },
+    ];
+
+    expect(validateContractGenerationModel(missing)).toMatchObject({
+      platform: '第 2 个频道缺少发布平台',
+      channelUrl: '第 1 个频道缺少频道链接',
+    });
+
+    missing.publishingChannels[0].channelUrl = 'https://youtube.com/@sample';
+    expect(validateContractGenerationModel(missing).channelUrl).toBe('第 2 个频道链接格式无效');
   });
 
   it('refreshes the read-only payment snapshot when the selected account changes', () => {

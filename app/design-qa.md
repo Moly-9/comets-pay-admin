@@ -1,3 +1,52 @@
+# Design QA — 生成合同多平台频道编辑
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-0a0e13f2-2674-49dc-a0d5-14a9d4e91930.png`
+- Implementation URL: `http://127.0.0.1:5173/`
+- Desktop implementation: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-publishing-channels-1440.png`
+- Combined comparison input: `/Users/aria/.codex/worktrees/fc9a/支付系统管理端/app/design-qa-contract-publishing-channels-comparison.png`
+- CSS viewport: `1440 × 1000`; implementation screenshot: `1425 × 990`; source screenshot: `1566 × 694`
+- State: the contract builder has selected Mina Kato. Her Instagram and TikTok profile URLs are loaded from the creator profile as two editable contract-snapshot rows.
+
+## Comparison evidence
+
+- The combined comparison places the annotated source state and the revised contract builder side by side.
+- The original single platform and single link controls are replaced by one compact bordered publishing-channel group.
+- Each creator social account is represented by one row with aligned “发布平台” and “频道链接” columns, preserving the requested platform-to-link relationship.
+- The surrounding creator, project, publisher, address, quality summary, toolbar, and A4 preview layouts remain unchanged.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC field labels, helper text, input type, and heading hierarchy are retained.
+- Spacing and layout rhythm: passed; the new group follows the existing compact form density and uses a stable one-third/two-thirds platform/link allocation.
+- Colors and visual tokens: passed; existing neutral background, gray border, coral focus, and error tokens are reused.
+- Image and icon fidelity: passed; no new image asset or icon was introduced.
+- Copy and content: passed; the helper text clearly states that values come from the creator profile and only modify the current contract snapshot.
+
+## Interaction and runtime checks
+
+- Selecting Mina Kato loads `Instagram → https://www.instagram.com/MinaKato` and `TikTok → https://www.tiktok.com/@MinaKato` as two separate rows.
+- Both platform names and both links are enabled inputs. Editing the second row updates only the contract model and automatically positions the preview at the channel field page.
+- Unit coverage verifies that an edited contract row does not mutate `CreatorProfile.socialAccounts`.
+- Empty platform, empty link, non-HTTP(S) URL, creator switching, legacy single-channel draft recovery, and PDF/DOCX multi-platform output are covered.
+- The channel group has no horizontal overflow at the verified desktop viewport.
+- Browser warning and error log: none.
+- `npm test`: 19 test files and 107 tests passed.
+- `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: the form selected one matching or first social account, so multi-platform creators lost every additional platform-to-link relationship.
+   - Fix: introduced a stable `socialAccountId`-backed `publishingChannels` snapshot and initialized every creator social account as its own form row.
+2. Initial P2: the first grid implementation reserved too little usable width for long channel URLs.
+   - Fix: changed the row tracks to `minmax(100px, 1fr) / minmax(0, 2fr)` and rechecked the final desktop capture.
+3. Post-fix visual, interaction, document-generation, validation, and console checks found no actionable P0, P1, or P2 findings.
+
+final result: passed
+
+---
+
 # Design QA — 生成合同页面整页滚动
 
 ## Reference and environment

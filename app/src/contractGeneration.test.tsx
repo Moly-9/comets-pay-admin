@@ -44,6 +44,18 @@ const model: ContractGenerationModel = {
   platform: 'YouTube',
   channelName: 'Sample Studio',
   channelUrl: 'https://example.invalid/sample-studio',
+  publishingChannels: [
+    {
+      socialAccountId: 'social-youtube',
+      platform: 'YouTube',
+      channelUrl: 'https://example.invalid/sample-studio',
+    },
+    {
+      socialAccountId: 'social-instagram',
+      platform: 'Instagram',
+      channelUrl: 'https://instagram.com/sample-studio',
+    },
+  ],
   effectiveDate: '2026-08-05',
   campaignStart: '2026-08-10',
   campaignEnd: '2026-08-31',
@@ -250,6 +262,10 @@ describe('contract generation', () => {
     expect(formalText).not.toContain('DRAFT');
     expect(formalText).toContain('Standard Terms And Conditions');
     expect(formalText).toContain(model.publisher);
+    expect(formalText).toContain('YouTube');
+    expect(formalText).toContain('https://example.invalid/sample-studio');
+    expect(formalText).toContain('Instagram');
+    expect(formalText).toContain('https://instagram.com/sample-studio');
     expect(formalText).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(optionalBlankText).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
     if (renderFixtureDir) {
@@ -288,6 +304,8 @@ describe('contract generation', () => {
     expect(documentXml).toContain('Standard Terms And Conditions');
     expect(documentXml).toContain(model.publisher);
     expect(documentXml).toContain(model.projectName);
+    expect(documentXml).toContain('YouTube: https://example.invalid/sample-studio');
+    expect(documentXml).toContain('Instagram: https://instagram.com/sample-studio');
     expect(documentXml).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(documentXml).not.toContain('________________');
     expect(optionalBlankXml).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);

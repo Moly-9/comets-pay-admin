@@ -5,6 +5,11 @@ import type {
   ContractQualityReport,
   ContractTemplateFieldKey,
 } from './contracts';
+import {
+  formatContractPublishingChannelLinks,
+  formatContractPublishingPlatforms,
+  resolveContractPublishingChannels,
+} from './contractGenerationModel';
 
 export const CONTRACT_TEMPLATE_URL = '/contracts/single-campaign-contract-template-v1.pdf';
 export const CONTRACT_TEMPLATE_BASE_PAGE_COUNT = 17;
@@ -110,8 +115,8 @@ const isRequired = (
 export const CONTRACT_PLACEHOLDER_DEFINITIONS: ContractPlaceholderDefinition[] = [
   { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 72, value: (model) => model.publisher },
   { token: 'publisher_address', label: 'Publisher Address', fieldKey: 'publisherAddress', kind: 'longText', required: hasCreator, pageHint: 14, overflowAt: 180, value: (model) => model.publisherAddress },
-  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 160, value: (model) => model.channelUrl },
-  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 80, value: (model) => model.platform },
+  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'longText', required: hasCreator, pageHint: 1, overflowAt: 240, value: formatContractPublishingChannelLinks },
+  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 120, value: formatContractPublishingPlatforms },
   { token: 'effective_date', label: 'Effective Date', fieldKey: 'effectiveDate', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.effectiveDate) },
   { token: 'campaign_start', label: 'Campaign Start', fieldKey: 'campaignPeriod', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.campaignStart) },
   { token: 'campaign_end', label: 'Campaign End', fieldKey: 'campaignPeriod', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.campaignEnd) },
@@ -204,6 +209,52 @@ export const createContractQualityReport = (
       pageNumber: 5,
       message: '请选择达人已验证的收款账户',
     });
+  }
+  if (model.creatorId) {
+    const publishingChannels = resolveContractPublishingChannels(model);
+    const missingPlatformIndex = publishingChannels.findIndex((channel) => !channel.platform.trim());
+    const missingUrlIndex = publishingChannels.findIndex((channel) => !channel.channelUrl.trim());
+    const invalidUrlIndex = publishingChannels.findIndex((channel) => {
+      const value = channel.channelUrl.trim();
+      if (!value) return false;
+      try {
+        const url = new URL(value);
+        return url.protocol !== 'http:' && url.protocol !== 'https:';
+      } catch {
+        return true;
+      }
+    });
+    if (!publishingChannels.length || missingPlatformIndex >= 0) {
+      issues.push({
+        id: 'missing-publishing-platform',
+        kind: 'REQUIRED_MISSING',
+        severity: 'BLOCKER',
+        fieldKey: 'platform',
+        pageNumber: 1,
+        message: missingPlatformIndex >= 0
+          ? `第 ${missingPlatformIndex + 1} 个频道缺少发布平台`
+          : '至少需要一个发布平台',
+      });
+    }
+    if (missingUrlIndex >= 0) {
+      issues.push({
+        id: 'missing-channel-url',
+        kind: 'REQUIRED_MISSING',
+        severity: 'BLOCKER',
+        fieldKey: 'channelUrl',
+        pageNumber: 1,
+        message: `第 ${missingUrlIndex + 1} 个频道缺少频道链接`,
+      });
+    } else if (invalidUrlIndex >= 0) {
+      issues.push({
+        id: 'format-channel-url',
+        kind: 'FORMAT_INVALID',
+        severity: 'BLOCKER',
+        fieldKey: 'channelUrl',
+        pageNumber: 1,
+        message: `第 ${invalidUrlIndex + 1} 个频道链接格式无效`,
+      });
+    }
   }
   applicable.forEach((definition) => {
     const value = definition.value(model).trim();

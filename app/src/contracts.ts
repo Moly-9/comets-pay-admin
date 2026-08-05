@@ -109,6 +109,12 @@ export type ContractDeliverable = {
   source: string;
 };
 
+export type ContractPublishingChannel = {
+  socialAccountId: string;
+  platform: string;
+  channelUrl: string;
+};
+
 export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed' | 'applied';
 export type ContractLifecycle =
   | 'GENERATED_DRAFT'
@@ -132,6 +138,7 @@ export type ContractGenerationModel = {
   platform: string;
   channelName: string;
   channelUrl: string;
+  publishingChannels: ContractPublishingChannel[];
   effectiveDate: string;
   campaignStart: string;
   campaignEnd: string;
@@ -578,7 +585,11 @@ export const createGeneratedContractDraft = (
     creatorHandle: model.creatorHandle,
     engagementId: model.engagementId,
     lifecycle: 'GENERATED_DRAFT',
-    generationSnapshot: { ...model },
+    generationSnapshot: {
+      ...model,
+      publishingChannels: model.publishingChannels.map((channel) => ({ ...channel })),
+      paymentSnapshot: { ...model.paymentSnapshot },
+    },
     generationVariant: options.generationVariant ?? 'DRAFT',
     qualityReport: options.qualityReport,
     generationVersion: version,

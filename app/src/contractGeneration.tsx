@@ -42,6 +42,7 @@ import type {
   ContractQualityReport,
   ContractTemplateFieldKey,
 } from './contracts';
+import { formatContractPublishingChannelLinks } from './contractGenerationModel';
 import {
   CONTRACT_TEMPLATE_BASE_PAGE_COUNT,
   CONTRACT_TEMPLATE_DEFINITION,
@@ -211,13 +212,14 @@ const stripTemplateArtifacts = (
   variant: ContractDocumentVariant,
   pageNumber: number,
 ) => {
+  const channelLinks = formatContractPublishingChannelLinks(model);
   let result = value
     .replace(/_+/g, ' ')
     .replace(/\[\s*please fill[^\]]*\]/gi, variant === 'DRAFT' ? '待填写' : '')
     .replace(/please fill in REAL NAME or Company NAME/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/\[REAL NAME or Company Name\]/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
-    .replace(/please fill in the promoted channel link/gi, model.channelUrl || (variant === 'DRAFT' ? '待填写' : ''))
-    .replace(/https:\/\/www\.youtube\.com\/x+/gi, model.channelUrl || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/please fill in the promoted channel link/gi, channelLinks || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/https:\/\/www\.youtube\.com\/x+/gi, channelLinks || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/\bXXX\b/gi, variant === 'DRAFT' ? '待填写' : '')
     .replace(/\[Date\]/gi, variant === 'DRAFT' ? '待填写' : '')
     .replace(/example only/gi, '')

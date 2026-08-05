@@ -31,15 +31,19 @@ import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Co
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
 import { contractGenerationFilename } from '../contractGenerationFilename';
 import {
+  contractPublishingChannelsForCreator,
   contractPaymentMethodForAccount,
   contractPayoutSnapshot,
   defaultContractPayoutAccount,
   eligibleContractPayoutAccounts,
+  formatContractPublishingChannelLinks,
+  formatContractPublishingPlatforms,
   validateContractGenerationModel,
 } from '../contractGenerationModel';
 import type {
   ContractGeneratedFiles,
   ContractGenerationModel,
+  ContractPublishingChannel,
   ContractQualityIssue,
   ContractQualityReport,
   ContractRecord,
@@ -163,6 +167,7 @@ export function ContractBuilderPage({
     creator.id === (draftModel?.creatorId ?? initialContext?.reference.creatorId)
   )) ?? null;
   const initialAccount = defaultContractPayoutAccount(initialCreator);
+  const initialPublishingChannels = contractPublishingChannelsForCreator(initialCreator, draftModel);
   const [creatorId, setCreatorId] = useState(draftModel?.creatorId ?? initialCreator?.id ?? '');
   const [engagementId, setEngagementId] = useState(draftModel?.engagementId ?? initialEngagementId ?? '');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
@@ -186,6 +191,9 @@ export function ContractBuilderPage({
   const [paymentWorkingDays, setPaymentWorkingDays] = useState<45 | 60>(draftModel?.paymentWorkingDays ?? 45);
   const [feeBearer, setFeeBearer] = useState<ContractGenerationModel['feeBearer']>(draftModel?.feeBearer ?? 'ADVERTISER');
   const [payoutAccountId, setPayoutAccountId] = useState(draftModel?.payoutAccountId ?? initialAccount?.id ?? '');
+  const [publishingChannels, setPublishingChannels] = useState<ContractPublishingChannel[]>(
+    initialPublishingChannels,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generationError, setGenerationError] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -215,15 +223,20 @@ export function ContractBuilderPage({
   const selectedContext = creatorEngagements.find((item) => item.reference.engagementId === engagementId) ?? null;
   const eligibleAccounts = eligibleContractPayoutAccounts(selectedCreator);
   const selectedAccount = eligibleAccounts.find((account) => account.id === payoutAccountId) ?? null;
-  const socialAccount = selectedCreator?.socialAccounts.find((account) => (
+  const primarySocialAccount = selectedCreator?.socialAccounts.find((account) => (
     account.platform.toLowerCase() === selectedContext?.reference.platform.toLowerCase()
     || account.handle.toLowerCase() === selectedContext?.reference.handle.toLowerCase()
   )) ?? selectedCreator?.socialAccounts[0];
   const publisher = selectedCreator?.contact.legalName ?? '';
   const publisherAddress = selectedCreator?.contact.address ?? '';
-  const platform = selectedContext?.reference.platform || socialAccount?.platform || selectedCreator?.platform || '';
-  const channelName = selectedContext?.reference.handle || socialAccount?.handle || selectedCreator?.handle || '';
-  const channelUrl = socialAccount?.profileUrl ?? '';
+  const publishingChannelValues = {
+    publishingChannels,
+    platform: '',
+    channelUrl: '',
+  };
+  const platform = formatContractPublishingPlatforms(publishingChannelValues);
+  const channelName = selectedContext?.reference.handle || primarySocialAccount?.handle || selectedCreator?.handle || '';
+  const channelUrl = formatContractPublishingChannelLinks(publishingChannelValues);
   const paymentSnapshot = useMemo(
     () => contractPayoutSnapshot(selectedAccount),
     [selectedAccount],
@@ -264,6 +277,7 @@ export function ContractBuilderPage({
     platform,
     channelName,
     channelUrl,
+    publishingChannels,
     effectiveDate,
     campaignStart,
     campaignEnd,
@@ -309,6 +323,7 @@ export function ContractBuilderPage({
     payoutAccountId,
     payoutProvider,
     platform,
+    publishingChannels,
     projectName,
     promotedProduct,
     publisher,
@@ -389,7 +404,25 @@ export function ContractBuilderPage({
     setProjectName('');
     setPromotedProduct('');
     setPayoutAccountId(account?.id ?? '');
+    setPublishingChannels(contractPublishingChannelsForCreator(creator));
     setErrors({});
+    resetOutput();
+  };
+
+  const updatePublishingChannel = (
+    index: number,
+    key: 'platform' | 'channelUrl',
+    value: string,
+  ) => {
+    setPublishingChannels((current) => current.map((channel, channelIndex) => (
+      channelIndex === index ? { ...channel, [key]: value } : channel
+    )));
+    setErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
     resetOutput();
   };
 
@@ -569,8 +602,52 @@ export function ContractBuilderPage({
               </div>
               <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher / 法定名称 *</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>
               <label className={errors.channelName ? 'has-error' : ''} data-contract-field="channelName" {...fieldProps('channelName')}><span>频道名称 *</span><input value={channelName} readOnly /><small>{errors.channelName}</small></label>
-              <label className={errors.platform ? 'has-error' : ''} data-contract-field="platform" {...fieldProps('platform')}><span>发布平台 *</span><input value={platform} readOnly /><small>{errors.platform}</small></label>
-              <label className={`full-width ${errors.channelUrl ? 'has-error' : ''}`} data-contract-field="channelUrl" {...fieldProps('channelUrl')}><span>频道链接 *</span><input value={channelUrl} readOnly /><small>{errors.channelUrl}</small></label>
+              <div
+                className={`contract-publishing-channels full-width ${errors.platform || errors.channelUrl ? 'has-error' : ''}`}
+                data-contract-field="platform"
+                onFocus={() => setActiveField('platform')}
+              >
+                <div className="contract-publishing-channels-head">
+                  <strong>发布频道 *</strong>
+                  <span>从达人档案带入，可仅修改本次合同快照</span>
+                </div>
+                <div className="contract-publishing-channels-grid" data-contract-field="channelUrl">
+                  <span>发布平台 *</span>
+                  <span>频道链接 *</span>
+                  {(publishingChannels.length ? publishingChannels : [{
+                    socialAccountId: '',
+                    platform: '',
+                    channelUrl: '',
+                  }]).map((channel, index) => (
+                    <div className="contract-publishing-channel-row" key={channel.socialAccountId || 'empty-channel'}>
+                      <label>
+                        <span className="sr-only">{`发布平台 ${index + 1}`}</span>
+                        <input
+                          aria-label={`发布平台 ${index + 1}`}
+                          value={channel.platform}
+                          placeholder="例如：YouTube"
+                          disabled={!selectedCreator}
+                          onFocus={() => setActiveField('platform')}
+                          onChange={(event) => updatePublishingChannel(index, 'platform', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span className="sr-only">{`频道链接 ${index + 1}`}</span>
+                        <input
+                          type="url"
+                          aria-label={`频道链接 ${index + 1}`}
+                          value={channel.channelUrl}
+                          placeholder="https://"
+                          disabled={!selectedCreator}
+                          onFocus={() => setActiveField('channelUrl')}
+                          onChange={(event) => updatePublishingChannel(index, 'channelUrl', event.target.value)}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <small>{errors.platform || errors.channelUrl}</small>
+              </div>
               <label className={`full-width ${errors.publisherAddress ? 'has-error' : ''}`} data-contract-field="publisherAddress" {...fieldProps('publisherAddress')}><span>Publisher 地址 *</span><textarea value={publisherAddress} readOnly /><small>{errors.publisherAddress}</small></label>
             </div>
           </div>

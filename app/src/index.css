@@ -9426,6 +9426,72 @@ button:disabled {
   overflow: visible;
 }
 
+.contract-publishing-channels {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  background: #fafafb;
+  padding: 13px;
+}
+
+.contract-publishing-channels.has-error {
+  border-color: #e56c5f;
+  background: #fffafa;
+}
+
+.contract-publishing-channels-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contract-publishing-channels-head strong {
+  color: #34373f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.contract-publishing-channels-head span {
+  color: #858b98;
+  font-size: 10px;
+  text-align: right;
+}
+
+.contract-publishing-channels-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr);
+  gap: 7px 10px;
+}
+
+.contract-publishing-channels-grid > span {
+  color: #6f7582;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.contract-publishing-channel-row {
+  display: grid;
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr);
+  gap: 10px;
+}
+
+.contract-publishing-channel-row label {
+  min-width: 0;
+}
+
+.contract-publishing-channels > small {
+  min-height: 0;
+  color: #d44f42;
+  font-size: 9.5px;
+}
+
 .contract-builder-resizer {
   position: relative;
   z-index: 5;
@@ -9796,6 +9862,36 @@ button:disabled {
 
   .contract-builder-form {
     border-radius: 8px;
+  }
+
+  .contract-publishing-channels-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .contract-publishing-channels-head span {
+    text-align: left;
+  }
+
+  .contract-publishing-channels-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contract-publishing-channels-grid > span {
+    display: none;
+  }
+
+  .contract-publishing-channel-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    border-top: 1px solid #e3e5e9;
+    padding-top: 10px;
+  }
+
+  .contract-publishing-channel-row:first-of-type {
+    border-top: 0;
+    padding-top: 0;
   }
 
   .contract-builder-preview-pane {

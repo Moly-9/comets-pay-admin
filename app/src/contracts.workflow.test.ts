@@ -27,6 +27,11 @@ const generationModel: ContractGenerationModel = {
   platform: 'YouTube',
   channelName: 'Sample Studio',
   channelUrl: 'https://example.invalid/sample-studio',
+  publishingChannels: [{
+    socialAccountId: 'social-youtube',
+    platform: 'YouTube',
+    channelUrl: 'https://example.invalid/sample-studio',
+  }],
   effectiveDate: '2026-08-05',
   campaignStart: '2026-08-10',
   campaignEnd: '2026-08-31',
