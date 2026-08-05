@@ -42,6 +42,7 @@ import { Pagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
+  getApprovedInvoicePaymentStatus,
   getInvoicePageTab,
   getInvoiceRowStatus,
   isInvoiceApprovedForPayment,
@@ -2354,7 +2355,11 @@ export function InvoicePage({
           payouts={visiblePayouts}
           onSelect={openReviewInvoice}
           emptyText="当前筛选条件下没有 Invoice 记录"
-          statusFor={(payout) => tab === 'approved' ? payout.status : payout.invoiceReviewStatus}
+          statusFor={(payout) => (
+            tab === 'approved'
+              ? getApprovedInvoicePaymentStatus(payout)
+              : payout.invoiceReviewStatus
+          )}
           statusLabelFor={getInvoiceRowStatus}
           actionLabelFor={(payout) => canActOnInvoice(payout)
             ? payout.invoiceReviewStatus === '待签署' ? '处理签署' : '审核'

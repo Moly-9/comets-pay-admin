@@ -4,6 +4,7 @@ import {
   applyInvoiceReviewAction,
   createInvoiceReviewEvent,
   getAvailableInvoiceReviewActions,
+  getApprovedInvoicePaymentStatus,
   getInvoicePageTab,
   getInvoiceRowStatus,
   invalidateSignedInvoice,
@@ -195,10 +196,26 @@ describe('Invoice review workflow', () => {
       invoiceReviewStatus: '已通过',
       status: '等待付款',
     })).toBe(true);
+    const expectedStatuses = [
+      ['等待付款', '等待付款'],
+      ['付款处理中', '付款处理中'],
+      ['已付款', '已付款'],
+      ['付款失败', '付款失败待财务处理'],
+    ] as const;
+    expectedStatuses.forEach(([status, label]) => {
+      const approvedPayout = { ...payout, invoiceReviewStatus: '已通过' as const, status };
+      expect(getApprovedInvoicePaymentStatus(approvedPayout)).toBe(status);
+      expect(getInvoiceRowStatus(approvedPayout)).toBe(label);
+    });
+
+    expect(getApprovedInvoicePaymentStatus({
+      ...payout,
+      status: '飞书审批中',
+    })).toBe('等待付款');
     expect(getInvoiceRowStatus({
       ...payout,
       invoiceReviewStatus: '已通过',
-      status: '付款失败',
-    })).toBe('付款失败 · 待财务处理');
+      status: '信息异常',
+    })).toBe('等待付款');
   });
 });

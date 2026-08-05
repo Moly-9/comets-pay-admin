@@ -5,6 +5,7 @@ import type {
   InvoiceReviewStatus,
   PaymentFailureIssueType,
   Payout,
+  PayoutStatus,
 } from '../types';
 
 export type InvoiceReviewAction =
@@ -28,6 +29,20 @@ export type InvoiceReviewCapabilities = {
 };
 
 export type InvoicePageTab = 'signature' | 'media-review' | 'approval' | 'approved' | 'returned';
+export type ApprovedInvoicePaymentStatus = Extract<
+  PayoutStatus,
+  '等待付款' | '付款处理中' | '已付款' | '付款失败'
+>;
+
+export const APPROVED_INVOICE_PAYMENT_STATUS_LABEL: Record<
+  ApprovedInvoicePaymentStatus,
+  string
+> = {
+  等待付款: '等待付款',
+  付款处理中: '付款处理中',
+  已付款: '已付款',
+  付款失败: '付款失败待财务处理',
+};
 
 export const INVOICE_REVIEW_STATUS_META: Record<
   InvoiceReviewStatus,
@@ -107,13 +122,26 @@ export const getInvoicePageTab = (status: InvoiceReviewStatus): InvoicePageTab =
   return 'approved';
 };
 
+export const getApprovedInvoicePaymentStatus = (
+  payout: Pick<Payout, 'status'>,
+): ApprovedInvoicePaymentStatus => {
+  if (
+    payout.status === '付款处理中'
+    || payout.status === '已付款'
+    || payout.status === '付款失败'
+  ) {
+    return payout.status;
+  }
+  return '等待付款';
+};
+
 export const getInvoiceRowStatus = (payout: Pick<Payout, 'invoiceReviewStatus' | 'status'>) => {
   if (payout.invoiceReviewStatus === '待签署') return '待签署';
   if (payout.invoiceReviewStatus === '达人反馈') return '达人反馈';
   if (payout.invoiceReviewStatus === '待媒介审核') return '待审核';
   if (payout.invoiceReviewStatus === '待媒介复核') return '待复核';
   if (payout.invoiceReviewStatus === '已通过') {
-    return payout.status === '付款失败' ? '付款失败 · 待财务处理' : payout.status;
+    return APPROVED_INVOICE_PAYMENT_STATUS_LABEL[getApprovedInvoicePaymentStatus(payout)];
   }
   return INVOICE_REVIEW_STATUS_META[payout.invoiceReviewStatus].label;
 };
