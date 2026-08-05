@@ -1,5 +1,5 @@
 import type { ContractRecord } from './contracts';
-import { INITIAL_INVOICE_ENTITY } from './data';
+import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from './data';
 import {
   getDefaultPayoutAccount,
   invoicePaymentForCreator,
@@ -178,6 +178,56 @@ const creatorForReference = (creatorId: CreatorId): CreatorProfile => {
   if (!creator) throw new Error(`原型达人 ${creatorId} 不存在`);
   return creator;
 };
+
+const EDIT_REQUEST_TIMESTAMP = '2026-08-02T08:42:00.000Z';
+const editRequestPayout = INITIAL_PAYOUTS.find((payout) => payout.id === 'pay-013');
+const editRequestProject = INITIAL_PROJECTS.find((project) => project.id === 'PRJ-260727-04');
+const editRequestCreator = creatorForReference('creator-emily' as CreatorId);
+const editRequestEngagement = editRequestProject?.creatorProfiles?.find((reference) => (
+  reference.creatorId === editRequestCreator.id
+));
+
+if (
+  !editRequestPayout
+  || !editRequestProject
+  || !editRequestEngagement
+  || editRequestPayout.projectId !== editRequestProject.id
+) {
+  throw new Error('INV-240705 修改请求 fixture 缺少稳定的付款、项目、达人或合作关系');
+}
+
+export const INVOICE_EDIT_REQUEST_INVOICES: GeneratedInvoiceRecord[] = [{
+  id: editRequestPayout.invoice,
+  invoiceId: 'invoice_fixture_edit_pay_013' as InvoiceId,
+  sourcePayoutId: editRequestPayout.id,
+  status: editRequestPayout.invoiceReviewStatus,
+  generatedAt: EDIT_REQUEST_TIMESTAMP,
+  snapshot: {
+    invoiceNumber: editRequestPayout.invoice,
+    invoiceDate: '2026-07-05',
+    billTo: { ...INITIAL_INVOICE_ENTITY },
+    creatorHandle: editRequestCreator.handle,
+    creatorName: editRequestCreator.name,
+    creatorId: editRequestCreator.id as CreatorId,
+    engagementId: editRequestEngagement.engagementId,
+    projectId: editRequestProject.projectId as ProjectId,
+    projectName: editRequestProject.name,
+    contractIds: [],
+    from: { ...editRequestCreator.contact },
+    currency: editRequestPayout.currency,
+    items: [{
+      id: 'invoice_line_fixture_edit_pay_013',
+      description: editRequestPayout.deliverable || '达人内容合作服务费',
+      unitPrice: editRequestPayout.amount,
+      quantity: 1,
+      lineTotal: editRequestPayout.amount,
+    }],
+    paymentMethod: editRequestPayout.provider === 'PayPal' ? 'paypal' : 'bank',
+    payment: invoicePaymentForCreator(editRequestCreator, editRequestPayout.provider),
+  },
+  validationStatus: 'valid',
+  version: 1,
+}];
 
 const providerForCreator = (creator: CreatorProfile): Exclude<Provider, '手动打款'> => {
   const account = getDefaultPayoutAccount(creator.payoutAccounts);

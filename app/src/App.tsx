@@ -99,6 +99,7 @@ import {
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import {
+  INVOICE_EDIT_REQUEST_INVOICES,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INVOICES,
   PROJECT_DEMO_PAYOUTS,
@@ -175,7 +176,7 @@ export default function App() {
   ]);
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    PROJECT_DEMO_INVOICES
+    [...INVOICE_EDIT_REQUEST_INVOICES, ...PROJECT_DEMO_INVOICES]
   ));
   const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>([]);
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);

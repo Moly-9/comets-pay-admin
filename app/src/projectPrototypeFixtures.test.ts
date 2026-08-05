@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INVOICE_EDIT_REQUEST_INVOICES,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INVOICES,
   PROJECT_DEMO_PAYOUTS,
   PROJECT_DEMO_TOTAL,
 } from './prototypeResourceFixtures';
+import { INITIAL_PAYOUTS } from './data';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
 describe('project prototype fixtures', () => {
@@ -55,5 +57,23 @@ describe('project prototype fixtures', () => {
         expect(contract?.lifecycle).toBe('CONFIRMED');
       });
     });
+  });
+
+  it('provides a stable editable snapshot for the INV-240705 modification request', () => {
+    const record = INVOICE_EDIT_REQUEST_INVOICES[0]!;
+    const payout = INITIAL_PAYOUTS.find((item) => item.id === record.sourcePayoutId);
+    const project = INITIAL_PROJECTS.find((item) => item.projectId === record.snapshot.projectId);
+    const engagement = project?.creatorProfiles?.find((reference) => (
+      reference.engagementId === record.snapshot.engagementId
+    ));
+
+    expect(INVOICE_EDIT_REQUEST_INVOICES).toHaveLength(1);
+    expect(record.id).toBe('INV-240705');
+    expect(record.sourcePayoutId).toBe('pay-013');
+    expect(record.status).toBe('待媒介复核');
+    expect(record.snapshot.items[0]?.lineTotal).toBe(2440);
+    expect(payout?.invoice).toBe(record.id);
+    expect(payout?.projectId).toBe(project?.id);
+    expect(engagement?.creatorId).toBe(record.snapshot.creatorId);
   });
 });
