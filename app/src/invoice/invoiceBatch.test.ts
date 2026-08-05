@@ -101,6 +101,41 @@ describe('Invoice batch rows', () => {
     expect(model.payoutAccountId).toBe(getPayoutAccountId(creator.payoutAccounts[0]));
   });
 
+  it('defaults every batch row to USD', () => {
+    const creator = creatorWithAccounts([{
+      ...baseAccount,
+      isDefault: true,
+    }]);
+    const context = createContext({ creator });
+    context.payouts = [{
+      id: 'payout_non_usd',
+      creator: creator.name,
+      handle: creator.handle,
+      initials: creator.initials,
+      projectId: context.project.projectId ?? context.project.id,
+      project: context.project.name,
+      deliverable: 'Prototype deliverable',
+      contract: '未关联合同',
+      invoice: '待生成',
+      provider: 'Airwallex',
+      currency: 'EUR',
+      amount: 300,
+      account: '0000000000',
+      status: '未进入付款',
+      invoiceReviewStatus: '待签署',
+      accent: creator.accent,
+    }];
+
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      description: 'Dedicated Video',
+    });
+
+    expect(row.currency).toBe('USD');
+  });
+
   it('requires manual selection when multiple eligible accounts have no default', () => {
     const secondAccount = {
       ...baseAccount,

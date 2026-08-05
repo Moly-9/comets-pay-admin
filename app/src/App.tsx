@@ -1786,7 +1786,11 @@ export default function App() {
         <InvoiceBatchBuilderPage
           creators={creators}
           payouts={payouts}
-          projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
+          projects={projects.filter((project) => (
+            currentUser.roleKey === 'admin'
+            || currentUser.roleKey === 'owner'
+            || project.media === currentUser.name
+          ))}
           contracts={contracts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}

@@ -1,15 +1,19 @@
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   Check,
   CheckCircle2,
   Download,
   FileSpreadsheet,
   FileText,
+  ListChecks,
   PackageCheck,
+  ReceiptText,
   RefreshCw,
+  Search,
   Upload,
+  Users,
+  WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -21,7 +25,6 @@ import {
 import { Button, PageHeading, SelectField } from '../components/Common';
 import type { ContractRecord } from '../contracts';
 import {
-  INVOICE_BATCH_CURRENCIES,
   INVOICE_BATCH_MAX_FILE_SIZE,
   INVOICE_BATCH_MAX_ROWS,
   INVOICE_BATCH_SCHEMA_VERSION,
@@ -34,8 +37,13 @@ import {
   type InvoiceBatchContext,
 } from '../invoice/invoiceBatch';
 import { createInvoiceBatchArchive } from '../invoice/invoiceBatchArchive';
-import { payoutSnapshotForContract } from '../invoice/invoiceDraft';
-import { maskInvoiceAccountValue } from '../invoice/invoiceReviewWorkflow';
+import {
+  INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL,
+  INVOICE_BATCH_PROTOTYPE_CURRENCY,
+  filterInvoiceBatchCreatorReferences,
+  selectableInvoiceBatchEngagementIds,
+  withInvoiceBatchPrototypeAccounts,
+} from '../invoice/invoiceBatchPrototype';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -47,18 +55,11 @@ import {
   exportInvoiceBatchWorkbook,
   importInvoiceBatchWorkbook,
 } from '../invoice/invoiceBatchWorkbook';
-import {
-  eligibleInvoicePayoutAccounts,
-  getPayoutAccountId,
-  getPayoutAccountIdentifier,
-  getPayoutAccountSummary,
-} from '../payoutAccounts';
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
   InvoiceBatchMode,
   InvoiceBatchRow,
-  InvoiceCurrency,
   InvoiceEntity,
   Payout,
 } from '../types';
@@ -78,8 +79,6 @@ type InvoiceBatchBuilderPageProps = {
   onOpenInvoiceManagement: () => void;
 };
 
-const STEPS = ['选择方式', '选择项目与达人', '填写或导入', '校验批次', '生成结果'] as const;
-
 const STATUS_META = {
   READY: { label: '可生成', tone: 'success' },
   NEEDS_INPUT: { label: '需补充', tone: 'warning' },
@@ -97,40 +96,16 @@ const rowTotal = (row: Pick<InvoiceBatchRow, 'unitPrice' | 'quantity'>) => (
   Math.round(row.unitPrice * row.quantity * 100) / 100
 );
 
-const formatAccountOption = (creator: CreatorProfile, accountId: string) => {
-  const account = eligibleInvoicePayoutAccounts(creator)
-    .find((candidate) => getPayoutAccountId(candidate) === accountId);
-  if (!account) return '待选择';
-  return `${getPayoutAccountSummary(account)} · ${maskInvoiceAccountValue(getPayoutAccountIdentifier(account))}`;
-};
-
-function BatchProgress({ step }: { step: number }) {
-  return (
-    <ol className="invoice-batch-progress" aria-label="批量生成进度">
-      {STEPS.map((label, index) => {
-        const number = index + 1;
-        const state = number < step ? 'complete' : number === step ? 'current' : 'pending';
-        return (
-          <li className={`invoice-batch-step is-${state}`} key={label} aria-current={state === 'current' ? 'step' : undefined}>
-            <span>{state === 'complete' ? <Check size={14} /> : number}</span>
-            <strong>{label}</strong>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 function BatchRowTable({
   rows,
   context,
-  editable,
+  mode,
   onlyProblems,
   onChange,
 }: {
   rows: InvoiceBatchRow[];
   context: InvoiceBatchContext;
-  editable: boolean;
+  mode: InvoiceBatchMode;
   onlyProblems: boolean;
   onChange: (engagementId: EngagementId, patch: Partial<InvoiceBatchRow>) => void;
 }) {
@@ -156,10 +131,12 @@ function BatchRowTable({
         </thead>
         <tbody>
           {visibleRows.map((row) => {
-            const creator = context.creators.find((item) => item.id === row.creatorId);
-            const accountOptions = eligibleInvoicePayoutAccounts(creator);
-            const availableContracts = availableContractsForEngagement(row.engagementId, context.contracts);
+            const availableContracts = availableContractsForEngagement(
+              row.engagementId,
+              context.contracts,
+            );
             const meta = STATUS_META[row.status];
+            const rowLocked = row.status === 'GENERATED' || row.status === 'GENERATING';
             return (
               <tr
                 key={row.engagementId}
@@ -175,8 +152,12 @@ function BatchRowTable({
                   <input
                     aria-label={`${row.creatorName} Description`}
                     value={row.description}
-                    disabled={!editable || row.status === 'GENERATED'}
-                    onChange={(event) => onChange(row.engagementId, { description: event.target.value })}
+                    readOnly={mode === 'SHARED_DESCRIPTION'}
+                    disabled={rowLocked}
+                    onChange={(event) => onChange(
+                      row.engagementId,
+                      { description: event.target.value },
+                    )}
                   />
                 </td>
                 <td data-label="Price">
@@ -186,8 +167,11 @@ function BatchRowTable({
                     min="0.01"
                     step="0.01"
                     value={row.unitPrice || ''}
-                    disabled={!editable || row.status === 'GENERATED'}
-                    onChange={(event) => onChange(row.engagementId, { unitPrice: Number(event.target.value) })}
+                    disabled={rowLocked}
+                    onChange={(event) => onChange(
+                      row.engagementId,
+                      { unitPrice: Number(event.target.value) },
+                    )}
                   />
                 </td>
                 <td data-label="Amount">
@@ -197,44 +181,27 @@ function BatchRowTable({
                     min="0.01"
                     step="0.01"
                     value={row.quantity || ''}
-                    disabled={!editable || row.status === 'GENERATED'}
-                    onChange={(event) => onChange(row.engagementId, { quantity: Number(event.target.value) })}
+                    disabled={rowLocked}
+                    onChange={(event) => onChange(
+                      row.engagementId,
+                      { quantity: Number(event.target.value) },
+                    )}
                   />
                 </td>
-                <td data-label="Total"><strong>{row.currency ? formatInvoiceMoney(row.currency, rowTotal(row)) : '-'}</strong></td>
+                <td data-label="Total">
+                  <strong>{formatInvoiceMoney(INVOICE_BATCH_PROTOTYPE_CURRENCY, rowTotal(row))}</strong>
+                </td>
                 <td data-label="币种">
-                  <select
-                    aria-label={`${row.creatorName} 币种`}
-                    value={row.currency}
-                    disabled={!editable || row.status === 'GENERATED'}
-                    onChange={(event) => onChange(row.engagementId, {
-                      currency: event.target.value as InvoiceCurrency,
-                    })}
-                  >
-                    <option value="">待选择</option>
-                    {INVOICE_BATCH_CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
-                  </select>
+                  <span className="invoice-batch-fixed-value">
+                    <strong>{INVOICE_BATCH_PROTOTYPE_CURRENCY}</strong>
+                    <small>固定币种</small>
+                  </span>
                 </td>
                 <td data-label="收款账户">
-                  {row.payoutAccountLocked ? (
-                    <span className="invoice-batch-locked-value">
-                      {creator ? formatAccountOption(creator, row.payoutAccountId) : '合同账户待核对'}
-                    </span>
-                  ) : (
-                    <select
-                      aria-label={`${row.creatorName} 收款账户`}
-                      value={row.payoutAccountId}
-                      disabled={!editable || row.status === 'GENERATED'}
-                      onChange={(event) => onChange(row.engagementId, { payoutAccountId: event.target.value })}
-                    >
-                      <option value="">待选择</option>
-                      {accountOptions.map((account) => (
-                        <option key={getPayoutAccountId(account)} value={getPayoutAccountId(account)}>
-                          {account.nickname}{account.isDefault ? ' · 默认' : ''} · {getPayoutAccountSummary(account)}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  <span className="invoice-batch-fixed-value">
+                    <strong>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL}</strong>
+                    <small>Airwallex · 默认账户</small>
+                  </span>
                 </td>
                 <td data-label="合同">
                   {availableContracts.length === 0 ? (
@@ -245,21 +212,19 @@ function BatchRowTable({
                     <select
                       aria-label={`${row.creatorName} 合同`}
                       value={row.contractIds[0] ?? ''}
-                      disabled={!editable || row.status === 'GENERATED'}
-                      onChange={(event) => {
-                        const contractId = event.target.value as ContractId;
-                        const contract = availableContracts.find((item) => item.contractId === contractId);
-                        const snapshot = contract ? payoutSnapshotForContract(contract) : null;
-                        onChange(row.engagementId, {
-                          contractIds: contractId ? [contractId] : [],
-                          payoutAccountId: snapshot?.payoutAccountId ?? row.payoutAccountId,
-                          payoutAccountLocked: Boolean(snapshot?.payoutAccountId),
-                        });
-                      }}
+                      disabled={rowLocked}
+                      onChange={(event) => onChange(row.engagementId, {
+                        contractIds: event.target.value
+                          ? [event.target.value as ContractId]
+                          : [],
+                        payoutAccountLocked: false,
+                      })}
                     >
                       <option value="">待选择</option>
                       {availableContracts.map((contract) => (
-                        <option key={contract.contractId} value={contract.contractId}>{contract.id}</option>
+                        <option key={contract.contractId} value={contract.contractId}>
+                          {contract.id}
+                        </option>
                       ))}
                     </select>
                   )}
@@ -267,7 +232,9 @@ function BatchRowTable({
                 <td data-label="状态">
                   <span className={`invoice-batch-status tone-${meta.tone}`}>{meta.label}</span>
                   {row.issues.length ? (
-                    <span className="invoice-batch-row-issue" title={row.issues.join('；')}>{row.issues[0]}</span>
+                    <span className="invoice-batch-row-issue" title={row.issues.join('；')}>
+                      {row.issues[0]}
+                    </span>
                   ) : null}
                 </td>
               </tr>
@@ -275,7 +242,11 @@ function BatchRowTable({
           })}
         </tbody>
       </table>
-      {!visibleRows.length ? <div className="invoice-batch-empty">当前没有需要处理的问题行</div> : null}
+      {!visibleRows.length ? (
+        <div className="invoice-batch-empty">
+          {onlyProblems ? '当前没有需要处理的问题行' : '请先选择项目达人'}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -292,10 +263,10 @@ export function InvoiceBatchBuilderPage({
   onCancel,
   onOpenInvoiceManagement,
 }: InvoiceBatchBuilderPageProps) {
-  const [step, setStep] = useState(1);
   const [mode, setMode] = useState<InvoiceBatchMode>('SHARED_DESCRIPTION');
   const [projectId, setProjectId] = useState('');
   const [selectedEngagementIds, setSelectedEngagementIds] = useState<EngagementId[]>([]);
+  const [creatorSearch, setCreatorSearch] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayInputValue());
   const [sharedDescription, setSharedDescription] = useState('');
   const [rows, setRows] = useState<InvoiceBatchRow[]>([]);
@@ -308,65 +279,124 @@ export function InvoiceBatchBuilderPage({
   const [generationError, setGenerationError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const prototypeCreators = useMemo(
+    () => withInvoiceBatchPrototypeAccounts(creators),
+    [creators],
+  );
   const selectedProject = projects.find((project) => projectIdFor(project) === projectId) ?? null;
   const context = useMemo<InvoiceBatchContext | null>(() => selectedProject ? ({
     project: selectedProject,
-    creators,
+    creators: prototypeCreators,
     payouts,
     contracts,
     generatedInvoices,
     invoiceEntity,
-  }) : null, [contracts, creators, generatedInvoices, invoiceEntity, payouts, selectedProject]);
-  const projectReferences = selectedProject?.creatorProfiles?.filter((reference) => reference.status !== 'removed') ?? [];
-  const isDirty = Boolean(projectId || rows.length || sharedDescription.trim() || selectedEngagementIds.length);
+  }) : null, [
+    contracts,
+    generatedInvoices,
+    invoiceEntity,
+    payouts,
+    prototypeCreators,
+    selectedProject,
+  ]);
+  const projectReferences = selectedProject?.creatorProfiles
+    ?.filter((reference) => reference.status !== 'removed') ?? [];
+  const filteredProjectReferences = useMemo(
+    () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch),
+    [creatorSearch, projectReferences],
+  );
+  const selectableEngagementIds = useMemo(
+    () => selectableInvoiceBatchEngagementIds(
+      projectReferences,
+      generatedInvoices,
+      INVOICE_BATCH_MAX_ROWS,
+    ),
+    [generatedInvoices, projectReferences],
+  );
+  const lockedEngagementIds = rows
+    .filter((row) => row.status === 'GENERATED' || row.status === 'GENERATING')
+    .map((row) => row.engagementId);
+  const allSelectableSelected = Boolean(selectableEngagementIds.length)
+    && selectableEngagementIds.every((id) => selectedEngagementIds.includes(id));
+  const hasPendingRows = rows.some((row) => row.status !== 'GENERATED');
+  const isDirty = Boolean(rows.length || selectedEngagementIds.length || sharedDescription.trim());
 
   useEffect(() => {
-    onDirtyChange(isDirty && step < 5);
-  }, [isDirty, onDirtyChange, step]);
+    onDirtyChange(isDirty && hasPendingRows);
+  }, [hasPendingRows, isDirty, onDirtyChange]);
 
   useEffect(() => {
-    if (!isDirty || step >= 5) return undefined;
+    if (!isDirty || !hasPendingRows) return undefined;
     const guard = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
-  }, [isDirty, step]);
+  }, [hasPendingRows, isDirty]);
 
   const projectOptions = projects.map((project) => ({
     value: projectIdFor(project),
     label: project.name,
-    description: `${project.projectCode ?? project.id} · ${project.creatorProfiles?.filter((item) => item.status !== 'removed').length ?? 0} 位达人`,
+    description: `${project.projectCode ?? project.id} · ${
+      project.creatorProfiles?.filter((item) => item.status !== 'removed').length ?? 0
+    } 位达人`,
   }));
 
   const setProject = (value: string) => {
     setProjectId(value);
     setSelectedEngagementIds([]);
+    setCreatorSearch('');
     setRows([]);
     setImportIssues([]);
+    setGenerationError('');
+    setGenerationProgress({ current: 0, total: 0 });
+  };
+
+  const applySelection = (nextIds: EngagementId[]) => {
+    setSelectedEngagementIds(nextIds);
+    if (!context) {
+      setRows([]);
+      return;
+    }
+    setRows((current) => nextIds.map((engagementId) => (
+      current.find((row) => row.engagementId === engagementId)
+      ?? createInvoiceBatchRow({
+        ...context,
+        engagementId,
+        invoiceDate,
+        description: mode === 'SHARED_DESCRIPTION' ? sharedDescription : '',
+      })
+    )));
   };
 
   const toggleEngagement = (engagementId: EngagementId) => {
-    setSelectedEngagementIds((current) => (
-      current.includes(engagementId)
-        ? current.filter((id) => id !== engagementId)
-        : current.length < INVOICE_BATCH_MAX_ROWS
-          ? [...current, engagementId]
-          : current
-    ));
+    if (lockedEngagementIds.includes(engagementId)) return;
+    const existing = generatedInvoices.some(
+      (record) => record.snapshot.engagementId === engagementId,
+    );
+    if (existing) return;
+    const nextIds = selectedEngagementIds.includes(engagementId)
+      ? selectedEngagementIds.filter((id) => id !== engagementId)
+      : selectedEngagementIds.length < INVOICE_BATCH_MAX_ROWS
+        ? [...selectedEngagementIds, engagementId]
+        : selectedEngagementIds;
+    applySelection(nextIds);
   };
 
-  const prepareRows = () => {
-    if (!context || !selectedEngagementIds.length) return;
-    const nextRows = selectedEngagementIds.map((engagementId) => createInvoiceBatchRow({
-      ...context,
-      engagementId,
-      invoiceDate,
-      description: mode === 'SHARED_DESCRIPTION' ? sharedDescription : '',
-    }));
-    setRows(nextRows);
-    setStep(3);
+  const toggleSelectAll = () => {
+    const nextIds = allSelectableSelected
+      ? lockedEngagementIds
+      : [...new Set([...lockedEngagementIds, ...selectableEngagementIds])];
+    applySelection(nextIds.slice(0, INVOICE_BATCH_MAX_ROWS));
+  };
+
+  const changeMode = (nextMode: InvoiceBatchMode) => {
+    setMode(nextMode);
+    setImportIssues([]);
+    if (nextMode === 'SHARED_DESCRIPTION' && sharedDescription.trim()) {
+      updateAllRows({ description: sharedDescription });
+    }
   };
 
   const updateRow = (engagementId: EngagementId, patch: Partial<InvoiceBatchRow>) => {
@@ -381,18 +411,23 @@ export function InvoiceBatchBuilderPage({
   const updateAllRows = (patch: Partial<InvoiceBatchRow>) => {
     if (!context) return;
     setRows((current) => current.map((row) => (
-      row.status === 'GENERATED' ? row : updateAndValidateInvoiceBatchRow(row, patch, context)
+      row.status === 'GENERATED'
+        ? row
+        : updateAndValidateInvoiceBatchRow(row, patch, context)
     )));
   };
 
   const exportTemplate = async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !rows.length) return;
     const blob = await exportInvoiceBatchWorkbook({
       batchId,
       projectId: projectId as ProjectId,
       invoiceDate,
     }, rows);
-    downloadBlob(blob, `COMETS-Invoice-Batch-${selectedProject.projectCode ?? selectedProject.id}.xlsx`);
+    downloadBlob(
+      blob,
+      `COMETS-Invoice-Batch-${selectedProject.projectCode ?? selectedProject.id}.xlsx`,
+    );
   };
 
   const importTemplate = async (file: File) => {
@@ -425,7 +460,10 @@ export function InvoiceBatchBuilderPage({
             return {
               ...row,
               status: 'CONFLICT',
-              issues: [...new Set([...row.issues, '模板中的达人稳定 ID 与当前合作关系不一致'])],
+              issues: [...new Set([
+                ...row.issues,
+                '模板中的达人稳定 ID 与当前合作关系不一致',
+              ])],
             };
           }
           return updateAndValidateInvoiceBatchRow(row, {
@@ -437,17 +475,15 @@ export function InvoiceBatchBuilderPage({
       }
       setImportIssues([...new Set(extraIssues)]);
     } catch (error) {
-      setImportIssues([error instanceof Error ? `模板解析失败：${error.message}` : '模板损坏或无法解析']);
+      setImportIssues([
+        error instanceof Error
+          ? `模板解析失败：${error.message}`
+          : '模板损坏或无法解析',
+      ]);
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  };
-
-  const validateBatch = () => {
-    if (!context) return;
-    setRows((current) => current.map((row) => validateInvoiceBatchRow(row, context)));
-    setStep(4);
   };
 
   const generateBatch = async () => {
@@ -455,6 +491,7 @@ export function InvoiceBatchBuilderPage({
     setGenerationError('');
     let workingRows = rows.map((row) => validateInvoiceBatchRow(row, context));
     const candidates = workingRows.filter((row) => row.status === 'READY');
+    setRows(workingRows);
     if (!candidates.length) {
       setGenerationError('当前没有可生成的 Invoice，请先处理问题行。');
       return;
@@ -480,7 +517,12 @@ export function InvoiceBatchBuilderPage({
         successfulRecords.push(record);
         workingRows = workingRows.map((row) => (
           row.engagementId === candidate.engagementId
-            ? { ...row, status: 'GENERATED', issues: [], generated: { record, pdfBlob, docxBlob } }
+            ? {
+              ...row,
+              status: 'GENERATED',
+              issues: [],
+              generated: { record, pdfBlob, docxBlob },
+            }
             : row
         ));
       } catch (error) {
@@ -497,7 +539,6 @@ export function InvoiceBatchBuilderPage({
 
     if (successfulRecords.length) onGenerated(successfulRecords);
     setGenerating(false);
-    setStep(5);
   };
 
   const downloadZip = async () => {
@@ -511,192 +552,426 @@ export function InvoiceBatchBuilderPage({
         docxBlob: row.generated.docxBlob,
       }] : []
     )));
-    downloadBlob(blob, `COMETS-Invoice-Batch-${selectedProject?.projectCode ?? 'result'}.zip`);
+    downloadBlob(
+      blob,
+      `COMETS-Invoice-Batch-${selectedProject?.projectCode ?? 'result'}.zip`,
+    );
   };
 
   const leave = () => {
-    if (isDirty && step < 5 && !window.confirm('当前批量生成内容尚未完成，确定离开吗？')) return;
+    if (
+      isDirty
+      && hasPendingRows
+      && !window.confirm('当前批量生成内容尚未完成，确定离开吗？')
+    ) return;
     onDirtyChange(false);
     onCancel();
   };
 
   const readyRows = rows.filter((row) => row.status === 'READY');
-  const problemRows = rows.filter((row) => ['NEEDS_INPUT', 'CONFLICT', 'FAILED'].includes(row.status));
+  const problemRows = rows.filter((row) => (
+    ['NEEDS_INPUT', 'CONFLICT', 'FAILED'].includes(row.status)
+  ));
   const generatedRows = rows.filter((row) => row.status === 'GENERATED');
-  const totals = rows
-    .filter((row) => ['READY', 'GENERATED'].includes(row.status) && row.currency)
-    .reduce<Record<string, number>>((result, row) => ({
-      ...result,
-      [row.currency]: (result[row.currency] ?? 0) + rowTotal(row),
-    }), {});
+  const batchTotal = rows
+    .filter((row) => ['READY', 'GENERATED'].includes(row.status))
+    .reduce((result, row) => result + rowTotal(row), 0);
 
   return (
-    <div className="page-stack invoice-batch-page" data-batch-id={batchId} data-project-id={projectId}>
+    <div
+      className="page-stack invoice-batch-page"
+      data-batch-id={batchId}
+      data-project-id={projectId}
+    >
       <PageHeading
         title="批量生成 Invoice"
-        subtitle="一个项目内批量准备达人 Invoice，逐行校验后生成独立文件与待签署记录。"
-        actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={leave}>返回</Button>}
+        subtitle="在同一份长表单内选择项目达人、填写费用并完成批量校验与生成。"
+        actions={(
+          <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={leave}>
+            返回
+          </Button>
+        )}
       />
-      <BatchProgress step={step} />
 
-      {step === 1 ? (
-        <section className="content-card invoice-batch-stage">
-          <header className="invoice-batch-stage-header">
-            <div><span>01</span><h2>选择费用内容的填写方式</h2></div>
+      <section className="invoice-builder-form invoice-batch-form">
+        <div className="invoice-builder-section">
+          <header>
+            <span><FileText size={18} /></span>
+            <div>
+              <h2>批量填写方式</h2>
+              <p>选择统一费用说明，或通过系统 XLSX 模板分别填写每位达人。</p>
+            </div>
           </header>
-          <div className="invoice-batch-mode-grid">
-            <button className={`invoice-batch-mode ${mode === 'SHARED_DESCRIPTION' ? 'is-selected' : ''}`} type="button" onClick={() => setMode('SHARED_DESCRIPTION')}>
-              <span><FileText size={22} /></span>
-              <strong>统一 Description</strong>
-              <p>所有达人使用相同费用说明，逐人填写 Price 与 Amount。</p>
-              {mode === 'SHARED_DESCRIPTION' ? <CheckCircle2 size={19} /> : null}
+          <div className="invoice-batch-mode-segment" role="radiogroup" aria-label="批量填写方式">
+            <button
+              type="button"
+              className={mode === 'SHARED_DESCRIPTION' ? 'is-selected' : ''}
+              role="radio"
+              aria-checked={mode === 'SHARED_DESCRIPTION'}
+              onClick={() => changeMode('SHARED_DESCRIPTION')}
+            >
+              <FileText size={18} />
+              <span><strong>统一 Description</strong><small>所有达人使用相同费用说明</small></span>
+              {mode === 'SHARED_DESCRIPTION' ? <CheckCircle2 size={18} /> : null}
             </button>
-            <button className={`invoice-batch-mode ${mode === 'XLSX_IMPORT' ? 'is-selected' : ''}`} type="button" onClick={() => setMode('XLSX_IMPORT')}>
-              <span><FileSpreadsheet size={22} /></span>
-              <strong>分别填写 Description</strong>
-              <p>下载带稳定 ID 的 XLSX，线下填写后上传识别。</p>
-              {mode === 'XLSX_IMPORT' ? <CheckCircle2 size={19} /> : null}
+            <button
+              type="button"
+              className={mode === 'XLSX_IMPORT' ? 'is-selected' : ''}
+              role="radio"
+              aria-checked={mode === 'XLSX_IMPORT'}
+              onClick={() => changeMode('XLSX_IMPORT')}
+            >
+              <FileSpreadsheet size={18} />
+              <span><strong>分别填写 Description</strong><small>下载并导入逐人费用模板</small></span>
+              {mode === 'XLSX_IMPORT' ? <CheckCircle2 size={18} /> : null}
             </button>
           </div>
-          <footer className="invoice-batch-footer">
-            <Button icon={<ArrowRight size={16} />} onClick={() => setStep(2)}>下一步</Button>
-          </footer>
-        </section>
-      ) : null}
+        </div>
 
-      {step === 2 ? (
-        <section className="content-card invoice-batch-stage">
-          <header className="invoice-batch-stage-header">
-            <div><span>02</span><h2>选择一个项目及其达人</h2></div>
-            <small>单批最多 {INVOICE_BATCH_MAX_ROWS} 位</small>
+        <div className="invoice-builder-section">
+          <header>
+            <span><Users size={18} /></span>
+            <div>
+              <h2>选择项目与达人</h2>
+              <p>单批限定一个项目，最多选择 {INVOICE_BATCH_MAX_ROWS} 位达人。</p>
+            </div>
           </header>
-          <div className="invoice-batch-project-select">
-            <span>项目 *</span>
-            <SelectField ariaLabel="批量 Invoice 项目" variant="form" value={projectId} options={projectOptions} placeholder="选择可编辑项目" onChange={setProject} />
+          <div className="invoice-form-grid invoice-batch-project-grid">
+            <div className="invoice-form-control full-width">
+              <span>关联项目 *</span>
+              <SelectField
+                ariaLabel="批量 Invoice 项目"
+                variant="form"
+                value={projectId}
+                options={projectOptions}
+                placeholder="选择可编辑项目"
+                onChange={setProject}
+              />
+              <small />
+            </div>
           </div>
+
           {selectedProject ? (
-            <>
-              <div className="invoice-batch-selection-toolbar">
-                <strong>选择达人 <span>{selectedEngagementIds.length}/{Math.min(projectReferences.length, INVOICE_BATCH_MAX_ROWS)}</span></strong>
-                <button type="button" className="text-link" onClick={() => {
-                  const ids = projectReferences.slice(0, INVOICE_BATCH_MAX_ROWS).map((item) => item.engagementId);
-                  setSelectedEngagementIds(selectedEngagementIds.length === ids.length ? [] : ids);
-                }}>{selectedEngagementIds.length === Math.min(projectReferences.length, INVOICE_BATCH_MAX_ROWS) ? '取消全选' : '全选'}</button>
+            <div className="invoice-batch-creator-picker">
+              <div className="invoice-batch-creator-toolbar">
+                <div>
+                  <strong>项目达人</strong>
+                  <span aria-live="polite">
+                    已选 {selectedEngagementIds.length}/{Math.min(
+                      selectableEngagementIds.length,
+                      INVOICE_BATCH_MAX_ROWS,
+                    )}
+                  </span>
+                </div>
+                <label className="invoice-batch-search">
+                  <Search size={15} aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={creatorSearch}
+                    placeholder="搜索达人姓名、Handle 或平台"
+                    aria-label="搜索项目内达人"
+                    onChange={(event) => setCreatorSearch(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="invoice-batch-select-all"
+                  type="button"
+                  disabled={!selectableEngagementIds.length}
+                  onClick={toggleSelectAll}
+                >
+                  <Check size={15} />
+                  {allSelectableSelected ? '取消全选' : '全选项目内达人'}
+                </button>
               </div>
+
               <div className="invoice-batch-creator-grid">
-                {projectReferences.map((reference) => {
-                  const creator = creators.find((item) => item.id === reference.creatorId);
-                  const existing = generatedInvoices.find((invoice) => invoice.snapshot.engagementId === reference.engagementId);
+                {filteredProjectReferences.map((reference) => {
+                  const existing = generatedInvoices.find(
+                    (invoice) => invoice.snapshot.engagementId === reference.engagementId,
+                  );
                   const selected = selectedEngagementIds.includes(reference.engagementId);
+                  const locked = lockedEngagementIds.includes(reference.engagementId);
+                  const disabled = Boolean(existing) || (
+                    !selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS
+                  );
                   return (
-                    <label className={`invoice-batch-creator ${selected ? 'is-selected' : ''}`} key={reference.engagementId}>
-                      <input type="checkbox" checked={selected} disabled={!selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS} onChange={() => toggleEngagement(reference.engagementId)} />
+                    <label
+                      className={[
+                        'invoice-batch-creator',
+                        selected ? 'is-selected' : '',
+                        disabled ? 'is-disabled' : '',
+                      ].filter(Boolean).join(' ')}
+                      key={reference.engagementId}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={disabled || locked}
+                        onChange={() => toggleEngagement(reference.engagementId)}
+                      />
                       <span className="invoice-batch-creator-check"><Check size={13} /></span>
-                      <span><strong>{reference.name}</strong><small>{reference.handle} · {reference.platform}</small></span>
-                      {existing ? <em>已有 {existing.id}</em> : creator && eligibleInvoicePayoutAccounts(creator).length ? <em className="is-ready">账户可用</em> : <em>账户待补充</em>}
+                      <span>
+                        <strong>{reference.name}</strong>
+                        <small>{reference.handle} · {reference.platform}</small>
+                      </span>
+                      {existing ? (
+                        <em>已有 {existing.id}</em>
+                      ) : (
+                        <em className="is-ready">默认空中云汇</em>
+                      )}
                     </label>
                   );
                 })}
               </div>
-            </>
-          ) : null}
-          <footer className="invoice-batch-footer">
-            <Button variant="secondary" onClick={() => setStep(1)}>上一步</Button>
-            <Button icon={<ArrowRight size={16} />} disabled={!selectedProject || !selectedEngagementIds.length} onClick={prepareRows}>准备批次</Button>
-          </footer>
-        </section>
-      ) : null}
+              {!filteredProjectReferences.length ? (
+                <div className="invoice-batch-search-empty">没有匹配的项目达人</div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="invoice-batch-empty-state">
+              <Users size={22} />
+              <strong>先选择项目</strong>
+              <span>选择后可搜索、全选或逐个勾选项目内达人。</span>
+            </div>
+          )}
+        </div>
 
-      {step === 3 ? (
-        <section className="content-card invoice-batch-stage">
-          <header className="invoice-batch-stage-header">
-            <div><span>03</span><h2>{mode === 'SHARED_DESCRIPTION' ? '填写统一费用说明与逐人金额' : '下载并上传费用模板'}</h2></div>
-            <small>{selectedProject?.name}</small>
+        <div className="invoice-builder-section">
+          <header>
+            <span><ReceiptText size={18} /></span>
+            <div>
+              <h2>Invoice 公共信息</h2>
+              <p>币种与收款渠道为本期前端原型固定数据，实际接入后应以服务端快照为准。</p>
+            </div>
           </header>
-          <div className="invoice-batch-common-fields">
-            <label><span>Invoice 日期 *</span><input type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); updateAllRows({ invoiceDate: event.target.value }); }} /></label>
+          <div className="invoice-form-grid invoice-batch-common-grid">
+            <label>
+              <span>Invoice 日期 *</span>
+              <input
+                type="date"
+                value={invoiceDate}
+                onChange={(event) => {
+                  setInvoiceDate(event.target.value);
+                  updateAllRows({ invoiceDate: event.target.value });
+                }}
+              />
+              <small />
+            </label>
+            <div className="invoice-form-control">
+              <span>币种</span>
+              <div className="invoice-batch-readonly-control">
+                <strong>{INVOICE_BATCH_PROTOTYPE_CURRENCY}</strong>
+                <small>批量原型统一使用美元</small>
+              </div>
+              <small />
+            </div>
+            <div className="invoice-form-control full-width">
+              <span>默认收款账户</span>
+              <div className="invoice-batch-readonly-control">
+                <WalletCards size={16} />
+                <strong>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL}</strong>
+                <small>Airwallex · USD · 已验证原型账户</small>
+              </div>
+              <small />
+            </div>
             {mode === 'SHARED_DESCRIPTION' ? (
-              <label className="is-wide"><span>统一 Description *</span><input value={sharedDescription} placeholder="例如：YouTube Dedicated Video 合作服务费" onChange={(event) => { setSharedDescription(event.target.value); updateAllRows({ description: event.target.value }); }} /></label>
+              <label className="full-width">
+                <span>统一 Description *</span>
+                <textarea
+                  value={sharedDescription}
+                  placeholder="例如：YouTube Dedicated Video 合作服务费"
+                  onChange={(event) => {
+                    setSharedDescription(event.target.value);
+                    updateAllRows({ description: event.target.value });
+                  }}
+                />
+                <small />
+              </label>
             ) : (
-              <div className="invoice-batch-import-actions">
-                <Button variant="secondary" icon={<Download size={16} />} onClick={exportTemplate}>下载 XLSX 模板</Button>
-                <Button icon={<Upload size={16} />} disabled={importing} onClick={() => fileInputRef.current?.click()}>{importing ? '正在解析' : '上传已填写模板'}</Button>
-                <input ref={fileInputRef} hidden type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void importTemplate(file);
-                }} />
+              <div className="invoice-form-control full-width">
+                <span>逐人费用模板</span>
+                <div className="invoice-batch-import-panel">
+                  <div>
+                    <FileSpreadsheet size={21} />
+                    <span>
+                      <strong>下载当前已选达人的 XLSX 模板</strong>
+                      <small>填写 Description、Price 与 Amount 后上传，稳定 ID 列不可修改。</small>
+                    </span>
+                  </div>
+                  <div>
+                    <Button
+                      variant="secondary"
+                      icon={<Download size={16} />}
+                      disabled={!rows.length}
+                      onClick={() => void exportTemplate()}
+                    >
+                      下载模板
+                    </Button>
+                    <Button
+                      icon={<Upload size={16} />}
+                      disabled={importing || !rows.length}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {importing ? '正在解析' : '上传模板'}
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      hidden
+                      type="file"
+                      accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void importTemplate(file);
+                      }}
+                    />
+                  </div>
+                </div>
+                <small />
               </div>
             )}
           </div>
           {importIssues.length ? (
-            <div className="invoice-batch-alert" role="alert"><AlertTriangle size={18} /><div><strong>模板有 {importIssues.length} 项需要处理</strong><span>{importIssues.slice(0, 3).join('；')}</span></div></div>
+            <div className="invoice-batch-alert" role="alert">
+              <AlertTriangle size={18} />
+              <div>
+                <strong>模板有 {importIssues.length} 项需要处理</strong>
+                <span>{importIssues.slice(0, 3).join('；')}</span>
+              </div>
+            </div>
           ) : null}
-          <BatchRowTable rows={rows} context={context!} editable onlyProblems={false} onChange={updateRow} />
-          <footer className="invoice-batch-footer">
-            <Button variant="secondary" onClick={() => setStep(2)}>上一步</Button>
-            <Button icon={<CheckCircle2 size={16} />} onClick={validateBatch}>校验批次</Button>
-          </footer>
-        </section>
-      ) : null}
+        </div>
 
-      {step === 4 ? (
-        <section className="content-card invoice-batch-stage">
-          <header className="invoice-batch-stage-header">
-            <div><span>04</span><h2>确认可生成记录</h2></div>
-            <label className="invoice-batch-problem-filter"><input type="checkbox" checked={onlyProblems} onChange={(event) => setOnlyProblems(event.target.checked)} />只看问题行</label>
+        <div className="invoice-builder-section">
+          <header className="invoice-batch-section-heading">
+            <span><ListChecks size={18} /></span>
+            <div>
+              <h2>逐人费用与校验</h2>
+              <p>填写每位达人的 Price 和 Amount，系统实时计算 Total 并校验关联资料。</p>
+            </div>
+            <label className="invoice-batch-problem-filter">
+              <input
+                type="checkbox"
+                checked={onlyProblems}
+                onChange={(event) => setOnlyProblems(event.target.checked)}
+              />
+              只看问题行
+            </label>
           </header>
+
           <div className="invoice-batch-summary">
+            <div><span>已选择</span><strong>{rows.length}</strong></div>
             <div><span>可生成</span><strong>{readyRows.length}</strong></div>
             <div><span>需处理</span><strong>{problemRows.length}</strong></div>
-            <div className="is-wide"><span>批次总额</span><strong>{Object.entries(totals).map(([currency, amount]) => formatInvoiceMoney(currency, amount)).join(' + ') || '-'}</strong></div>
+            <div className="is-wide">
+              <span>批次总额</span>
+              <strong>{batchTotal ? formatInvoiceMoney('USD', batchTotal) : '-'}</strong>
+            </div>
           </div>
-          {generationError ? <div className="invoice-batch-alert" role="alert"><AlertTriangle size={18} /><div><strong>无法开始生成</strong><span>{generationError}</span></div></div> : null}
-          <BatchRowTable rows={rows} context={context!} editable onlyProblems={onlyProblems} onChange={updateRow} />
-          <footer className="invoice-batch-footer is-sticky">
-            <Button variant="secondary" onClick={() => setStep(3)}>返回修改</Button>
-            <Button icon={generating ? <RefreshCw className="is-spinning" size={16} /> : <PackageCheck size={16} />} disabled={generating || !readyRows.length} onClick={() => void generateBatch()}>
-              {generating ? `正在生成 ${generationProgress.current}/${generationProgress.total}` : `生成 ${readyRows.length} 张 Invoice`}
-            </Button>
-          </footer>
-        </section>
-      ) : null}
 
-      {step === 5 ? (
-        <section className="content-card invoice-batch-stage">
-          <header className="invoice-batch-stage-header">
-            <div><span><PackageCheck size={19} /></span><h2>批量生成完成</h2></div>
-            <small>{generatedRows.length} 张成功 · {problemRows.length} 张待处理</small>
-          </header>
-          <div className="invoice-batch-result-summary">
-            <CheckCircle2 size={28} />
-            <div><strong>成功记录已进入“待签署”</strong><span>每张 Invoice 保留独立编号、项目达人关联和生成快照。</span></div>
-            {generatedRows.length ? <Button icon={<Download size={16} />} onClick={() => void downloadZip()}>下载整批 ZIP</Button> : null}
-          </div>
-          <div className="invoice-batch-results">
-            {rows.map((row) => (
-              <div className="invoice-batch-result-row" key={row.engagementId}>
-                <span><strong>{row.creatorName}</strong><small>{row.creatorHandle}</small></span>
-                {row.generated ? (
-                  <>
-                    <code>{row.generated.record.id}</code>
-                    <strong>{formatInvoiceMoney(row.generated.record.snapshot.currency, rowTotal(row))}</strong>
-                    <div>
-                      <button type="button" onClick={() => downloadBlob(row.generated!.pdfBlob, invoiceFilename(row.generated!.record.snapshot, 'pdf'))}>PDF</button>
-                      <button type="button" onClick={() => downloadBlob(row.generated!.docxBlob, invoiceFilename(row.generated!.record.snapshot, 'docx'))}>DOCX</button>
-                    </div>
-                  </>
-                ) : (
-                  <span className="invoice-batch-result-failed"><AlertTriangle size={15} />{row.issues[0] ?? '待补充后重试'}</span>
-                )}
+          {generationError ? (
+            <div className="invoice-batch-alert" role="alert">
+              <AlertTriangle size={18} />
+              <div><strong>无法开始生成</strong><span>{generationError}</span></div>
+            </div>
+          ) : null}
+
+          {context ? (
+            <BatchRowTable
+              rows={rows}
+              context={context}
+              mode={mode}
+              onlyProblems={onlyProblems}
+              onChange={updateRow}
+            />
+          ) : (
+            <div className="invoice-batch-empty">请先选择项目和达人</div>
+          )}
+        </div>
+
+        {generatedRows.length ? (
+          <div className="invoice-builder-section invoice-batch-result-section">
+            <header>
+              <span><PackageCheck size={18} /></span>
+              <div>
+                <h2>生成结果</h2>
+                <p>成功记录已进入“待签署”，失败行可在上方修正后再次生成。</p>
               </div>
-            ))}
+            </header>
+            <div className="invoice-batch-result-summary">
+              <CheckCircle2 size={26} />
+              <div>
+                <strong>已成功生成 {generatedRows.length} 张 Invoice</strong>
+                <span>每张记录保留独立编号、稳定项目达人关联和生成快照。</span>
+              </div>
+              <Button icon={<Download size={16} />} onClick={() => void downloadZip()}>
+                下载整批 ZIP
+              </Button>
+            </div>
+            <div className="invoice-batch-results">
+              {rows.map((row) => (
+                <div className="invoice-batch-result-row" key={row.engagementId}>
+                  <span><strong>{row.creatorName}</strong><small>{row.creatorHandle}</small></span>
+                  {row.generated ? (
+                    <>
+                      <code>{row.generated.record.id}</code>
+                      <strong>{formatInvoiceMoney('USD', rowTotal(row))}</strong>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => downloadBlob(
+                            row.generated!.pdfBlob,
+                            invoiceFilename(row.generated!.record.snapshot, 'pdf'),
+                          )}
+                        >
+                          PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => downloadBlob(
+                            row.generated!.docxBlob,
+                            invoiceFilename(row.generated!.record.snapshot, 'docx'),
+                          )}
+                        >
+                          DOCX
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="invoice-batch-result-failed">
+                      <AlertTriangle size={15} />
+                      {row.issues[0] ?? '待补充后重试'}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-          <footer className="invoice-batch-footer">
-            {problemRows.length ? <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={() => setStep(4)}>修正失败记录</Button> : null}
-            <Button onClick={() => { onDirtyChange(false); onOpenInvoiceManagement(); }}>返回 Invoice 管理</Button>
-          </footer>
-        </section>
-      ) : null}
+        ) : null}
+
+        <footer className="invoice-builder-footer invoice-batch-footer">
+          <Button variant="secondary" onClick={leave}>取消</Button>
+          {generatedRows.length ? (
+            <Button variant="secondary" onClick={onOpenInvoiceManagement}>
+              查看 Invoice 管理
+            </Button>
+          ) : null}
+          <Button
+            icon={generating
+              ? <RefreshCw className="is-spinning" size={16} />
+              : <PackageCheck size={16} />}
+            disabled={generating || !readyRows.length}
+            onClick={() => void generateBatch()}
+          >
+            {generating
+              ? `正在生成 ${generationProgress.current}/${generationProgress.total}`
+              : readyRows.length
+                ? `批量生成 ${readyRows.length} 张 Invoice`
+                : generatedRows.length && !problemRows.length
+                  ? '已全部生成'
+                  : '批量生成 Invoice'}
+          </Button>
+        </footer>
+      </section>
 
       <span className="sr-only">模板版本 {INVOICE_BATCH_SCHEMA_VERSION}</span>
     </div>

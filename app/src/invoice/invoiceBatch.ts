@@ -110,11 +110,9 @@ export const createInvoiceBatchRow = ({
       ))
     : null;
   const defaultAccounts = eligibleAccounts.filter((account) => account.isDefault);
-  const selectedAccount = contractAccount
-    ?? (defaultAccounts.length === 1 ? defaultAccounts[0] : null);
-  const contractCurrency = availableContracts.length === 1
-    ? supportedCurrency(availableContracts[0].currency)
-    : '';
+  const selectedAccount = defaultAccounts.length === 1
+    ? defaultAccounts[0]
+    : contractAccount;
 
   const row: InvoiceBatchRow = {
     projectId,
@@ -128,9 +126,9 @@ export const createInvoiceBatchRow = ({
     description,
     unitPrice: 0,
     quantity: 1,
-    currency: contractCurrency || supportedCurrency(payout?.currency),
+    currency: 'USD',
     payoutAccountId: selectedAccount ? getPayoutAccountId(selectedAccount) : '',
-    payoutAccountLocked: Boolean(contractSnapshot?.payoutAccountId),
+    payoutAccountLocked: Boolean(contractAccount && selectedAccount === contractAccount),
     contractIds,
     availableContractIds: availableContracts.map((contract) => contract.contractId),
     status: 'NEEDS_INPUT',
