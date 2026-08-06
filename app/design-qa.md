@@ -34,7 +34,6 @@
 - `npm run build`: passed.
 
 final result: passed
-
 ---
 
 # Design QA — 生成合同多平台频道编辑
@@ -952,5 +951,78 @@ final result: passed
 2. Initial P2: the existing `760px` breakpoint stacked the options vertically.
    - Fix: kept the mode selector as a two-column grid at narrow widths and added controlled wrapping and check-icon positioning.
 3. Post-fix desktop, responsive, pointer-state, geometry, overflow, console, and build checks found no actionable P0, P1, or P2 issue.
+
+final result: passed
+
+---
+
+# 我的项目页面 Design QA
+
+## Comparison Target
+
+- Source visual truth:
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-7be68911-d9e6-4f20-a936-33bd76e13c7b.png` (指标卡)
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-2ec21155-0812-4317-bca5-73ac2bbe174b.png` (筛选器)
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-4a29f76b-4d97-462d-a74c-bc7481bd79cf.png` (状态竖线)
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-7d3635df-dbc9-4c50-8611-0bce99d66d81.png` (资源卡)
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-a14941f2-2f4b-4097-bfac-20599ec9356c.png` (达人空状态)
+- Browser-rendered implementation:
+  - `/tmp/codex-comets-my-projects-list-clean.jpg`
+  - `/tmp/codex-comets-my-projects-form-clean.jpg`
+  - `/tmp/codex-comets-my-projects-draft-detail-clean.jpg`
+  - `/tmp/codex-comets-my-projects-detail.png`
+- Comparison composites:
+  - `/tmp/codex-comets-my-projects-list-comparison.png`
+  - `/tmp/codex-comets-my-projects-detail-comparison.png`
+- Browser viewport: `1265 x 712` CSS px, device scale factor 1.
+- Implementation screenshot pixels: `1265 x 712`.
+- Source pixels: indicators `1464 x 226`, filters `1413 x 520`, status `190 x 454`, resource cards `970 x 446`, creator empty state `982 x 201`.
+- Density normalization: all inputs are 1x captures. Because the source images are component crops rather than full-page screenshots, comparisons use matching visible regions instead of stretching them to the full browser frame.
+- State: admin demo account, current 20-record fixture set; list default state, filtered state, valid create form, draft detail, and submitted detail.
+
+## Full-view Comparison Evidence
+
+- List composition follows the reference hierarchy: heading/action, three horizontally aligned metrics, a dense filter surface, and the project table.
+- The metrics intentionally show the current fixture values `7 / 3 / 20` rather than copying stale reference numbers.
+- The filter panel wraps to two rows at the available content width, matching the reference grouping without horizontal overflow.
+- Project detail keeps the existing product shell and uses the requested contract, Invoice, and payment-list resource card treatment.
+
+## Focused Region Comparison Evidence
+
+- Metrics: low-saturation peach, white, and lilac surfaces; label/value/supporting-copy hierarchy matches the target.
+- Filters: labels sit above controls, amount inputs remain grouped under budget, result count remains visible, and all controls retain keyboard focus states.
+- Status: labels remain the existing business status strings; only the leading vertical semantic color changes, with no enclosing border.
+- Resource cards: icon, colored label/count, primary value, supporting copy, status line, and trailing action align with the reference.
+- Create form: the old compact modal interaction is restored; creator selection is collapsible, selected creators are chips, and linked Invoice/contract data appears below.
+- Images/assets: the references contain no photographic or illustrative assets. Existing COMETS Pay branding and the repository's Lucide icon system are preserved; no placeholder imagery or custom SVG/CSS illustration was introduced.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual differences remain.
+- Typography: existing Noto Sans SC stack, weights, line height, and wrapping remain consistent with the application; metric and compact-card type is not oversized.
+- Spacing/layout: cards, filters, table, modal, and detail resources preserve the current system rhythm and do not overlap at the tested viewport.
+- Colors/tokens: reference peach, lilac, blue, and orange accents are mapped to existing subdued tokens; state meaning is not color-only because text labels remain.
+- Copy/content: headings and field labels match the requested business meaning. Dynamic values come from the current fixtures rather than copied screenshot values.
+- Accessibility: filters have accessible names, the creator picker exposes expanded/selected states, disabled create state is explicit, and draft-only actions are removed from submitted records.
+
+## Interaction Verification
+
+- Project search reduced the list from 20 to the single matching `燕云十六声` record.
+- Project/customer/PM/currency/budget/status filter logic is covered by unit tests.
+- Selecting `原神-欧美KOC-6.7版本` surfaces all creators and puts the creator with one usable Invoice first.
+- Selecting Ava Thompson automatically links `INV-260727-04-24` and enables `创建项目`; clicking it creates a draft and opens its detail.
+- Draft detail shows `添加达人`; submitted detail does not expose that action.
+- Submitted detail renders project media, created time, resource cards, and creator list.
+- Browser console errors/warnings checked after the flow: none from the application.
+
+## Comparison History
+
+- Pass 1: source fragments and implementation captures were compared together at the same browser viewport. No P0/P1/P2 design mismatch was found.
+- Intentional differences: metric numbers use current fixture data, and resource-card content reflects each selected record's actual contract/Invoice/payment-list counts.
+- No visual fix iteration was required after the final clean-state capture.
+
+## Follow-up Polish
+
+- P3: a future backend version should replace browser-session creation timestamps and records with server-generated values and durable persistence.
 
 final result: passed

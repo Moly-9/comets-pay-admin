@@ -56,6 +56,7 @@ export type RequestProjectSummary = {
   paymentListId?: PaymentListId;
   paymentListIds?: PaymentListId[];
   approval?: RequestApprovalState;
+  createdAt?: string;
   project: string;
   brand: string;
   media: string;

@@ -1370,6 +1370,7 @@ export default function App() {
       paymentListId: lists[0]?.paymentListId,
       paymentListIds: lists.map((list) => list.paymentListId),
       approval,
+      createdAt: approval.submittedAt,
       project: project.name,
       brand: project.brand,
       media: project.media,

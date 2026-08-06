@@ -10,9 +10,14 @@ import type {
   PaymentRequestProjectId,
 } from './businessWorkflow';
 import {
+  canAddCreatorToPaymentRequest,
+  createEmptyPaymentRequestListFilters,
   createPaymentRequestListItem,
+  filterPaymentRequestList,
+  paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
+  type PaymentRequestListItem,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
@@ -227,5 +232,74 @@ describe('media payment request submission validation', () => {
     expect(item.snapshot.transactionReference).toBe('REQ-20260807-ABC123-01');
     expect(item.requiresRevalidation).toBe(false);
     expect(item.validationIssues).toEqual([]);
+  });
+});
+
+describe('media payment request list presentation', () => {
+  const requests: PaymentRequestListItem[] = [
+    {
+      id: 'request-1',
+      requestCode: 'REQ-20260807-000001',
+      lifecycle: 'SUBMITTED',
+      cooperationProjectName: 'Creator Launch Campaign',
+      project: 'Creator Launch Campaign',
+      brand: 'Example Brand',
+      pm: 'PM A',
+      amount: 'USD 1,200',
+      status: '待审批',
+    },
+    {
+      id: 'request-2',
+      requestCode: 'REQ-20260807-000002',
+      lifecycle: 'SUBMITTED',
+      cooperationProjectName: 'Streaming Campaign',
+      project: 'Streaming Campaign',
+      brand: 'Example Brand',
+      pm: 'PM B',
+      amount: 'USD 2,400',
+      status: '财务审批中',
+    },
+    {
+      id: 'request-3',
+      requestCode: 'REQ-20260807-000003',
+      lifecycle: 'APPROVED',
+      cooperationProjectName: 'Review Campaign',
+      project: 'Review Campaign',
+      brand: 'Other Brand',
+      pm: 'PM A',
+      amount: 'EUR 900',
+      status: '待打款',
+    },
+  ];
+
+  it('calculates review, payment and total metrics from the visible records', () => {
+    expect(paymentRequestListMetrics(requests)).toEqual({
+      waitingReview: 1,
+      reviewing: 1,
+      reviewTotal: 2,
+      waitingPayment: 1,
+      total: 3,
+    });
+  });
+
+  it('filters by project search, customer, PM, amount and the existing status value', () => {
+    const filters = {
+      ...createEmptyPaymentRequestListFilters(),
+      customers: ['Example Brand'],
+      pms: ['PM B'],
+      currency: 'USD',
+      minBudget: '2000',
+      maxBudget: '3000',
+      statuses: ['财务审批中'],
+    };
+    const result = filterPaymentRequestList({ requests, search: 'streaming', filters });
+    expect(result.invalidBudgetRange).toBe(false);
+    expect(result.visible.map((request) => request.id)).toEqual(['request-2']);
+  });
+
+  it('only allows adding creators while the request remains a draft', () => {
+    expect(canAddCreatorToPaymentRequest({ id: 'draft', lifecycle: 'DRAFT' })).toBe(true);
+    expect(canAddCreatorToPaymentRequest({ id: 'returned', lifecycle: 'RETURNED' })).toBe(false);
+    expect(canAddCreatorToPaymentRequest({ id: 'submitted', lifecycle: 'SUBMITTED' })).toBe(false);
   });
 });

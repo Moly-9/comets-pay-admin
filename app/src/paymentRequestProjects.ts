@@ -29,6 +29,82 @@ export type PaymentRequestProjectLike = {
   invoiceIds?: InvoiceId[];
 };
 
+export type PaymentRequestListItem = PaymentRequestProjectLike & {
+  cooperationProjectName?: string;
+  project: string;
+  brand: string;
+  pm: string;
+  amount: string;
+  status: string;
+};
+
+export type PaymentRequestListFilters = {
+  customers: string[];
+  pms: string[];
+  currency: string;
+  minBudget: string;
+  maxBudget: string;
+  statuses: string[];
+};
+
+export const createEmptyPaymentRequestListFilters = (): PaymentRequestListFilters => ({
+  customers: [],
+  pms: [],
+  currency: 'all',
+  minBudget: '',
+  maxBudget: '',
+  statuses: [],
+});
+
+export const paymentRequestAmount = (value: string) => ({
+  currency: value.match(/\b[A-Z]{3}\b/)?.[0] ?? '',
+  amount: Number(value.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0] ?? 0),
+});
+
+export const paymentRequestListMetrics = (requests: PaymentRequestListItem[]) => {
+  const waitingReview = requests.filter((request) => request.status === '待审批').length;
+  const reviewing = requests.filter((request) => request.status.includes('审批中')).length;
+  return {
+    waitingReview,
+    reviewing,
+    reviewTotal: waitingReview + reviewing,
+    waitingPayment: requests.filter((request) => request.status === '待打款').length,
+    total: requests.length,
+  };
+};
+
+export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
+  requests,
+  search,
+  filters,
+}: {
+  requests: T[];
+  search: string;
+  filters: PaymentRequestListFilters;
+}) => {
+  const query = search.trim().toLowerCase();
+  const minBudget = filters.minBudget ? Number(filters.minBudget) : null;
+  const maxBudget = filters.maxBudget ? Number(filters.maxBudget) : null;
+  const invalidBudgetRange = minBudget !== null && maxBudget !== null && minBudget > maxBudget;
+  const visible = requests.filter((request) => {
+    const budget = paymentRequestAmount(request.amount);
+    const searchable = `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.project}`.toLowerCase();
+    const matchesSearch = !query || searchable.includes(query);
+    const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
+    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm);
+    const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
+    const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
+    const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;
+    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(request.status);
+    return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
+  });
+  return { visible, invalidBudgetRange };
+};
+
+export const canAddCreatorToPaymentRequest = (request: PaymentRequestProjectLike) => (
+  request.lifecycle === 'DRAFT'
+);
+
 export type CooperationProjectLike = {
   id: string;
   projectId?: ProjectId;

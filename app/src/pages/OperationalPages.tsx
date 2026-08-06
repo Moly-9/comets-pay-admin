@@ -245,17 +245,21 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '待打款': 'payment',
   '等待付款': 'payment',
   '已完成': 'complete',
+  '已归档': 'complete',
+  '已通过': 'complete',
+  '已关联': 'complete',
   '草稿': 'draft',
+  '未关联': 'draft',
   '已退回': 'draft',
   '暂停': 'draft',
 };
 
-function ProjectStatus({ status }: { status: string }) {
+export function ProjectStatus({ status }: { status: string }) {
   const tone = PROJECT_STATUS_TONES[status] ?? 'default';
   return <span className={`simple-status project-status project-status-${tone}`} data-project-status={status}><i aria-hidden="true" />{status}</span>;
 }
 
-type ProjectListFilters = {
+export type ProjectListFilters = {
   customers: string[];
   pms: string[];
   currency: string;
@@ -264,7 +268,7 @@ type ProjectListFilters = {
   statuses: string[];
 };
 
-const createEmptyProjectListFilters = (): ProjectListFilters => ({
+export const createEmptyProjectListFilters = (): ProjectListFilters => ({
   customers: [],
   pms: [],
   currency: 'all',
@@ -285,7 +289,7 @@ type ProjectFilterSelectOption = {
   leading?: ReactNode;
 };
 
-function ProjectInlineFilterPanel({
+export function ProjectInlineFilterPanel({
   search,
   filters,
   customerOptions,
@@ -953,6 +957,7 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     status: project.requestStatus,
     filter: project.requestFilter,
     approval: createFixtureRequestApproval(project.requestStatus, project.pm),
+    createdAt: `2026-07-${String(10 + (projectIndex % 18)).padStart(2, '0')}T${String(8 + (projectIndex % 9)).padStart(2, '0')}:30:00.000Z`,
   })),
 ];
 
