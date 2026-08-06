@@ -8,6 +8,7 @@ import {
 import { INITIAL_INVOICE_ENTITY } from '../data';
 import {
   eligibleInvoicePayoutAccounts,
+  createPayPalPayoutAccount,
   getPayoutAccountId,
   payoutAccountToInvoicePayment,
 } from '../payoutAccounts';
@@ -134,6 +135,45 @@ describe('Invoice batch rows', () => {
     });
 
     expect(row.currency).toBe('USD');
+  });
+
+  it('switches Payment Information by stable payout account ID', () => {
+    const bankAccount = { ...baseAccount, isDefault: true };
+    const paypalAccount = createPayPalPayoutAccount({
+      id: 'paypal-batch-test',
+      creatorId: 'creator_batch_test',
+      payoutAccountId: 'paypal-batch-test',
+      payoutAccountVersion: 'v1',
+      nickname: 'PayPal 备用账户',
+      isDefault: false,
+      status: 'VERIFIED',
+      paypalUsername: 'Creator Batch Test',
+      paypalEmail: 'batch@example.invalid',
+    });
+    const creator = creatorWithAccounts([bankAccount, paypalAccount]);
+    const context = createContext({ creator });
+    const initial = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      description: 'Creator Service',
+    });
+    const selectedPayPal = updateAndValidateInvoiceBatchRow(initial, {
+      unitPrice: 120,
+      quantity: 1,
+      payoutAccountId: 'paypal-batch-test',
+    }, context);
+    const model = buildInvoiceDocumentForBatchRow(
+      selectedPayPal,
+      context,
+      'INV-20260806-002',
+    );
+
+    expect(initial.payoutAccountId).toBe(getPayoutAccountId(bankAccount));
+    expect(selectedPayPal.status).toBe('READY');
+    expect(model.payoutAccountId).toBe('paypal-batch-test');
+    expect(model.paymentMethod).toBe('paypal');
+    expect(model.payment.paypalEmail).toBe('batch@example.invalid');
   });
 
   it('requires manual selection when multiple eligible accounts have no default', () => {

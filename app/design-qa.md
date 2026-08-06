@@ -45,8 +45,6 @@
 
 final result: passed
 
----
-
 # Design QA — 生成合同页面整页滚动
 
 ## Reference and environment
@@ -716,5 +714,65 @@ final result: passed
    - Fix: the progress panel now matches the issue-card structure with a distinct semantic color, and the
      recognition blocker is derived from live confirmation progress.
 3. Post-fix combined comparisons found no actionable P0, P1, or P2 differences.
+
+final result: passed
+
+---
+
+# Invoice Batch Payment Information And Preview Design QA
+
+## Reference and environment
+
+- Source visual truth:
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-51d9013a-cdd5-4813-a299-c4d3df2bc523.png`
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-7d06ce10-b986-4e85-b74f-2d2aa57846bc.png`
+- Source pixels: `1450 x 517` and `1395 x 433`.
+- Implementation URL: `http://127.0.0.1:5174/`.
+- Desktop implementation screenshots:
+  - `app/design-qa-invoice-batch-table-1450.png`
+  - `app/design-qa-invoice-batch-footer-1450.png`
+  - `app/design-qa-invoice-batch-preview-1450.png`
+- Responsive implementation screenshots:
+  - `app/design-qa-invoice-batch-mobile-390.png`
+  - `app/design-qa-invoice-batch-mobile-footer-390.png`
+- Combined comparison input: `app/design-qa-invoice-batch-comparison.png`.
+- Desktop CSS viewport: `1450 x 900`; captured pixels: `1435 x 891`. Responsive CSS viewport: `390 x 844`; captured content pixels: `375 x 812`. Device density: `1`.
+- Normalization: source and implementation remain at native 1x density; the comparison places each source/implementation pair in equal `800px` columns without cropping.
+- State: project `燕云十六声` with selected creators, shared Description, USD price/quantity rows, prototype Airwallex selected as `Paid by Bank`, and Camila Costa's row-level Invoice preview open.
+
+## Full-view and focused comparison
+
+- The combined comparison shows the source table/footer and source common-information section beside the corresponding browser-rendered implementation.
+- The footer now keeps `取消` and `批量生成 Invoice` adjacent at the lower right. The implementation retains the application sidebar, so its usable content frame is narrower than the source crop; the table therefore keeps its intentional desktop horizontal scroll rather than compressing controls.
+- The common-information section preserves the existing Invoice form hierarchy while changing the business label to `收款方式`, showing `Paid by Bank`, and adding a visible prototype-data notice.
+- The focused preview capture confirms that the eye action opens a large Invoice document with the current Description, amount, and Payment Information snapshot.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC hierarchy, compact table labels, helper copy, control weights, and Invoice document type are retained without clipping.
+- Spacing and layout rhythm: passed; common information, summary metrics, row controls, status, preview, and the right-aligned footer follow the existing long-form rhythm. Mobile rows become single bordered panels with stable field groups.
+- Colors and visual tokens: passed; neutral surfaces, coral focus, semantic row status colors, and black primary action styling match the existing COMETS Pay system.
+- Image quality and asset fidelity: passed; no raster product asset was added. The preview control uses the existing Lucide `Eye` icon, and the Invoice preview is the shared document renderer rather than an approximation.
+- Copy and content: passed; `收款方式`, `Payment Information`, `Paid by Bank`, the explicit fake-data notice, and the large-preview explanation all match their actual prototype behavior.
+
+## Interaction and runtime checks
+
+- Selecting project `燕云十六声` exposes search, select-all, and 16 project creators. All selected rows receive USD and a synthetic default Airwallex account.
+- `Payment Information` is a native row-level select. Airwallex renders `Paid by Bank`; creators with additional synthetic accounts can switch to PayPal or another bank option by stable payout-account ID.
+- Clicking the preview icon opens a large Invoice and displays `USD 5.00`, the current Description, and `Paid by Bank` without consuming a formal Invoice number.
+- After one browser-local prototype Invoice was generated, clicking Camila Costa opened her creator profile and positioned the `Payment Information` section.
+- At the responsive target, document `scrollWidth` equals `clientWidth` (`375px`); row fields, preview, and adjacent footer actions do not overlap.
+- Browser console warnings/errors: none.
+- Invoice-focused tests: `11/11` passed.
+- Full test suite: `27` files and `156` tests passed.
+- TypeScript check and `npm run build`: passed; the project has no separate `typecheck` script, and build runs `tsc` before Vite.
+
+## Findings and comparison history
+
+1. Earlier P0 verification blocker: the prior local tab had become an `ERR_CONNECTION_REFUSED` page, so no implementation screenshot existed.
+   - Fix: restored the local-only Vite service, opened a fresh in-app browser tab, repeated the complete interaction, and captured desktop, preview, creator-profile, and responsive states.
+2. Earlier P1 product mismatch: the restored 03:00 version still labeled the field as `收款账户` and separated the two final actions.
+   - Fix: reinstated `Payment Information`, `Paid by Bank`, the explicit fake-data notice, row preview, creator-profile link, and the adjacent lower-right action group.
+3. Post-fix combined comparison, browser interactions, responsive capture, console inspection, tests, and build found no actionable P0, P1, or P2 issue.
 
 final result: passed
