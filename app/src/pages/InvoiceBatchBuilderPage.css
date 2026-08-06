@@ -21,28 +21,23 @@
 .invoice-batch-mode-segment {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid #d8dce4;
-  border-radius: 10px;
-  background: #f7f8fa;
+  gap: 12px;
 }
 
 .invoice-batch-mode-segment > button {
+  position: relative;
   display: grid;
   min-height: 76px;
   grid-template-columns: 22px minmax(0, 1fr) 20px;
   align-items: center;
   gap: 11px;
-  border: 0;
-  background: transparent;
+  border: 1px solid #d8dce4;
+  border-radius: 10px;
+  background: #f7f8fa;
   padding: 13px 15px;
   color: #747b87;
   text-align: left;
   cursor: pointer;
-}
-
-.invoice-batch-mode-segment > button + button {
-  border-left: 1px solid #d8dce4;
 }
 
 .invoice-batch-mode-segment > button:hover {
@@ -51,16 +46,16 @@
 }
 
 .invoice-batch-mode-segment > button:focus-visible {
-  position: relative;
   z-index: 1;
   outline: 3px solid rgba(255, 157, 135, 0.18);
-  outline-offset: -3px;
+  outline-offset: 2px;
 }
 
 .invoice-batch-mode-segment > button.is-selected {
+  border-color: #eea08e;
   background: #fff8f5;
   color: #b94f3a;
-  box-shadow: inset 0 0 0 1px #eea08e;
+  box-shadow: 0 0 0 1px rgba(238, 160, 142, 0.18);
 }
 
 .invoice-batch-mode-segment > button > span {
@@ -1138,14 +1133,8 @@
 }
 
 @media (max-width: 760px) {
-  .invoice-batch-mode-segment,
   .invoice-batch-creator-grid {
     grid-template-columns: 1fr;
-  }
-
-  .invoice-batch-mode-segment > button + button {
-    border-top: 1px solid #d8dce4;
-    border-left: 0;
   }
 
   .invoice-batch-creator-toolbar {
@@ -1290,7 +1279,23 @@
   }
 
   .invoice-batch-mode-segment > button {
-    min-height: 70px;
+    min-height: 82px;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 8px;
+    padding: 11px 12px;
+  }
+
+  .invoice-batch-mode-segment > button > svg:last-child {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+  }
+
+  .invoice-batch-mode-segment strong,
+  .invoice-batch-mode-segment small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .invoice-batch-creator {

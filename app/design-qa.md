@@ -869,3 +869,49 @@ final result: passed
 3. Post-fix combined comparison, browser interactions, responsive capture, console inspection, tests, and build found no actionable P0, P1, or P2 issue.
 
 final result: passed
+
+---
+
+# Invoice Batch Separate Mode Cards Design QA
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6ea04c64-1831-4a75-998f-b73e224a04df.png` plus the user's explicit requirement that the two cards remain side by side but become independent cards.
+- Implementation URL: `http://127.0.0.1:5174/`.
+- Desktop implementation: `app/design-qa-invoice-batch-mode-cards-desktop.png`.
+- Responsive implementation: `app/design-qa-invoice-batch-mode-cards-mobile.png`.
+- Side-by-side comparison: `app/design-qa-invoice-batch-mode-cards-comparison.png`.
+- Source pixels: `1295 x 225`; focused implementation pixels: `820 x 215`; desktop CSS viewport: `1280 x 720`; responsive CSS viewport: `390 x 844`; device density: `1`.
+- State: `统一 Description` selected, followed by a verified switch to `分别填写 Description` and back.
+
+## Comparison evidence
+
+- The combined comparison places the supplied connected segmented control beside the revised browser-rendered component.
+- The revised control keeps two equal-width columns but removes the shared outer border and center divider. Each option now owns a complete border, `10px` radius, background, focus ring, and selected treatment, separated by a visible `12px` grid gap.
+- A focused comparison is sufficient because the request is limited to this single control and all typography, copy, icons, and surrounding section spacing remain unchanged.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; title, helper copy, font family, weight, size, and wrapping preserve the existing COMETS Pay form hierarchy.
+- Spacing and layout rhythm: passed; both cards remain left/right, equal width, vertically aligned, and visibly independent on desktop and at `390px`.
+- Colors and visual tokens: passed; selected coral border/background and neutral inactive card colors reuse the existing batch-form tokens.
+- Image and icon fidelity: passed; no raster asset was required, and the existing Lucide file/check icons remain unchanged.
+- Copy and content: passed; mode labels and descriptions are unchanged.
+
+## Interaction and runtime checks
+
+- Clicking `分别填写 Description` moves `aria-checked=true` and `is-selected` exclusively to the second card; switching back restores the first-card state.
+- Desktop computed geometry shows two `373.08px` cards with independent four-sided borders, `10px` radii, and a visible inter-card gap.
+- At `390px`, both cards remain side by side at `150.5px` each; long copy wraps within the card and document `scrollWidth` equals `clientWidth` (`375px`).
+- Browser console warnings/errors after the final interaction: none.
+- `npm run build`: passed, including TypeScript compilation.
+
+## Findings and comparison history
+
+1. Initial P1: the two modes were rendered as one connected segmented container, which visually contradicted the requested two-card selection model.
+   - Fix: moved border, radius, and background ownership from the group onto each option and added an explicit grid gap.
+2. Initial P2: the existing `760px` breakpoint stacked the options vertically.
+   - Fix: kept the mode selector as a two-column grid at narrow widths and added controlled wrapping and check-icon positioning.
+3. Post-fix desktop, responsive, pointer-state, geometry, overflow, console, and build checks found no actionable P0, P1, or P2 issue.
+
+final result: passed
