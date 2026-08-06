@@ -3,6 +3,7 @@ import {
   ALL_PROJECT_PROTOTYPE_INVOICES,
   ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
   ALL_PROJECT_PROTOTYPE_PAYOUTS,
+  AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
   INVOICE_EDIT_REQUEST_INVOICES,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INVOICES,
@@ -93,6 +94,22 @@ describe('project prototype fixtures', () => {
       expect(invoice.snapshot.payoutAccountId).toBeTruthy();
       expect(eligibleAccountIds).toContain(invoice.snapshot.payoutAccountId);
     });
+  });
+
+  it('keeps one synthetic ready Invoice available for creating a new media request project', () => {
+    const invoice = ALL_PROJECT_PROTOTYPE_INVOICES.find((candidate) => (
+      candidate.invoiceId === AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
+    ));
+    const matches = ALL_PROJECT_PROTOTYPE_INVOICES.filter((candidate) => (
+      candidate.snapshot.projectId === invoice?.snapshot.projectId
+      && candidate.snapshot.creatorId === invoice?.snapshot.creatorId
+    ));
+
+    expect(invoice?.status).toBe('待发起请款');
+    expect(invoice?.snapshot.projectId).toBe(INITIAL_PROJECTS.find((project) => (
+      project.id === 'PRJ-260727-04'
+    ))?.projectId);
+    expect(matches).toHaveLength(1);
   });
 
   it('maps approval and payment-failure states without unlocking Invoice-content failures', () => {

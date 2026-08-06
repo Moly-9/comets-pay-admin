@@ -39,6 +39,7 @@ import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMa
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
+import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
 import { Pagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
@@ -74,10 +75,10 @@ import type {
 } from '../types';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import { ProjectDetailPage, type ProjectSummary } from './ProjectDetailPage';
-import { RequestProjectCreatePage } from './RequestProjectCreatePage';
 import { RequestProjectDetailPage, type RequestProjectSummary } from './RequestProjectDetailPage';
 import {
   canEditProject,
+  type CooperationProjectId,
   type CreatorId,
   createPrototypeCode,
   createPrototypeId,
@@ -87,6 +88,7 @@ import {
   type PaymentListEditableField,
   type PaymentListId,
   type PaymentListRecord,
+  type PaymentRequestProjectId,
   type ProjectId,
   type RequestApprovalState,
   type RequestApprovalStatus,
@@ -931,8 +933,14 @@ const createFixtureRequestApproval = (
 };
 
 export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
-  ...PROJECT_FIXTURES.map((project) => ({
+  ...PROJECT_FIXTURES.map((project, projectIndex) => ({
     id: project.id,
+    paymentRequestProjectId: `request_fixture_${String(projectIndex + 1).padStart(3, '0')}` as PaymentRequestProjectId,
+    requestCode: `REQ-202607-${String(projectIndex + 1).padStart(6, '0')}`,
+    cooperationProjectId: project.id as CooperationProjectId,
+    cooperationProjectCode: project.id,
+    cooperationProjectName: project.name,
+    lifecycle: project.requestStatus === '已完成' ? 'COMPLETED' as const : 'SUBMITTED' as const,
     projectId: project.id as ProjectId,
     project: project.name,
     brand: project.brand,
@@ -950,37 +958,31 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
 
 export function RequestsPage({
   notify,
-  contracts,
   currentUser,
   requests,
-  onRequestCreated,
   onApprovalAction,
-  canCreateRequest,
   focusedRequestId,
   onFocusCleared,
 }: {
   notify: Notify;
-  contracts: ContractRecord[];
   currentUser: SystemUser;
   requests: RequestProjectSummary[];
-  onRequestCreated: (request: RequestProjectSummary) => void;
   onApprovalAction: (
     request: RequestProjectSummary,
     action: RequestApprovalAction,
     reason?: string,
   ) => void;
-  canCreateRequest: boolean;
   focusedRequestId: string | null;
   onFocusCleared: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyProjectListFilters);
-  const [creating, setCreating] = useState(false);
   const [showApprovalNotice, setShowApprovalNotice] = useState(true);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedRequestId);
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const relatedRequests = requests.filter((request) => {
+    if (!request.approval || request.lifecycle === 'DRAFT') return false;
     if (currentUser.roleKey === 'media') return request.media === currentScopeName;
     if (currentUser.roleKey === 'pm') return request.pm === currentScopeName;
     return true;
@@ -1055,7 +1057,7 @@ export function RequestsPage({
     && requestMinBudget > requestMaxBudget;
   const visibleRequests = relatedRequests.filter((request) => {
     const budget = parseProjectBudget(request.amount);
-    const matchesSearch = !requestQuery || `${request.project}${request.id}`.toLowerCase().includes(requestQuery);
+    const matchesSearch = !requestQuery || `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.cooperationProjectCode ?? ''}`.toLowerCase().includes(requestQuery);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
     const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm);
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
@@ -1074,29 +1076,6 @@ export function RequestsPage({
     setSelectedRequestId(requestId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  if (creating) {
-    return (
-      <RequestProjectCreatePage
-        contracts={contracts}
-        currentUser={currentUser}
-        notify={notify}
-        onCancel={() => setCreating(false)}
-        onCreated={(request) => {
-          onRequestCreated(request);
-          setCreating(false);
-          setSelectedRequestId(request.id);
-          notify(
-            '付款项目已提交审批',
-            request.contracts > 0
-              ? `${request.id} 已关联合同与Invoice，付款清单 ${request.paymentOrder} 已生成。`
-              : `${request.id} 未关联合同，已根据Invoice生成付款清单 ${request.paymentOrder} 并提交审批。`,
-          );
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-      />
-    );
-  }
 
   if (selectedRequest) {
     return (
@@ -1119,7 +1098,6 @@ export function RequestsPage({
       <PageHeading
         title="请款项目"
         subtitle="系统请款项目列表，仅展示与当前账号关联项目。"
-        actions={canCreateRequest ? <Button icon={<Plus size={17} />} onClick={() => setCreating(true)}>新建付款项目</Button> : undefined}
       />
       <div className="metrics-grid">
         <MetricCard
@@ -1162,11 +1140,12 @@ export function RequestsPage({
         />
         <div className="table-scroll">
           <table className="data-table operational-table request-project-table">
-            <thead><tr><th>项目</th><th>媒介</th><th>负责 PM</th><th>请款金额</th><th>合同</th><th>invoice</th><th>付款单</th><th>项目状态</th><th className="action-cell">操作</th></tr></thead>
+            <thead><tr><th>项目编号</th><th>关联项目</th><th>媒介</th><th>负责 PM</th><th>请款金额</th><th>合同</th><th>invoice</th><th>付款单</th><th>项目状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {visibleRequests.map((request) => (
                 <tr className="clickable-table-row" key={request.id} onClick={() => openRequest(request.id)}>
-                  <td><button className="request-project-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}><strong>{request.project}</strong><small className="cell-subtext">{request.id}</small></button></td>
+                  <td><button className="request-project-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}><strong>{request.requestCode ?? request.id}</strong></button></td>
+                  <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                   <td>{request.media}</td>
                   <td>{request.pm}</td>
                   <td>{request.amount}</td>
@@ -1177,7 +1156,7 @@ export function RequestsPage({
                   <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</button></td>
                 </tr>
               ))}
-              {visibleRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={9}>暂无符合条件的请款项目</td></tr> : null}
+              {visibleRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={10}>暂无符合条件的请款项目</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -1534,6 +1513,12 @@ export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project,
   id: project.id,
   projectId: project.id as ProjectId,
   projectCode: project.id,
+  cooperationProjectId: project.id as CooperationProjectId,
+  cooperationProjectCode: project.id,
+  externalProjectId: `feishu-project-${String(projectIndex + 1).padStart(3, '0')}`,
+  externalSystem: 'FEISHU',
+  syncStatus: 'SYNCED',
+  syncedAt: '2026-08-07T02:00:00.000Z',
   name: project.name,
   brand: project.brand,
   media: project.media,
@@ -1553,6 +1538,21 @@ export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project,
         : 'submitted',
   paymentOrder: '待生成',
 }));
+
+export const MOCK_FEISHU_COOPERATION_PROJECT_SOURCE = createMockFeishuCooperationProjectSource(
+  PROJECT_FIXTURES.map((project, projectIndex) => ({
+    externalProjectId: `feishu-project-${String(projectIndex + 1).padStart(3, '0')}`,
+    projectCode: project.id,
+    name: project.name,
+    status: project.projectStatus === '已完成' ? 'ARCHIVED' as const : 'ACTIVE' as const,
+    ownerName: project.media,
+    updatedAt: '2026-08-07T01:00:00.000Z',
+  })),
+  Object.fromEntries(INITIAL_PROJECTS.map((project) => [
+    project.externalProjectId,
+    project.cooperationProjectId,
+  ]).filter((entry): entry is [string, CooperationProjectId] => Boolean(entry[0] && entry[1]))),
+);
 
 function ProjectCreatorPicker({
   creators,

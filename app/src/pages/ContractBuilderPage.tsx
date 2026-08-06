@@ -257,7 +257,7 @@ export function ContractBuilderPage({
   const projectOptions = creatorEngagements.map(({ project, reference }) => ({
     value: reference.engagementId,
     label: project.name,
-    description: `${project.projectCode ?? project.id} · ${project.brand}`,
+    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
   }));
   const payoutOptions = eligibleAccounts.map((account) => ({
     value: getPayoutAccountId(account),
@@ -267,7 +267,18 @@ export function ContractBuilderPage({
 
   const model = useMemo<ContractGenerationModel>(() => ({
     templateId: 'CON-TPL-2026-KOL',
-    projectId: (selectedContext?.project.projectId ?? selectedContext?.project.id ?? '') as ProjectId,
+    projectId: (
+      selectedContext?.project.cooperationProjectId
+      ?? selectedContext?.project.projectId
+      ?? selectedContext?.project.id
+      ?? ''
+    ) as ProjectId,
+    cooperationProjectId: (
+      selectedContext?.project.cooperationProjectId
+      ?? selectedContext?.project.projectId
+      ?? selectedContext?.project.id
+      ?? ''
+    ) as ProjectId,
     projectName,
     brandName: selectedContext?.project.brand ?? '',
     creatorId: (selectedCreator?.id ?? '') as CreatorId,
@@ -606,8 +617,8 @@ export function ContractBuilderPage({
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`} data-contract-field="project">
-                <span>关联项目 *</span>
-                <SelectField ariaLabel="合同关联项目" variant="form" value={engagementId} placeholder={creatorId ? '选择关联项目' : '请先选择达人'} options={projectOptions} disabled={!creatorId} onChange={selectProject} />
+                <span>合作项目 *</span>
+                <SelectField ariaLabel="合同合作项目" variant="form" value={engagementId} placeholder={creatorId ? '选择合作项目' : '请先选择达人'} options={projectOptions} disabled={!creatorId} onChange={selectProject} />
                 <small>{errors.project}</small>
               </div>
               <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher / 法定名称 *</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>

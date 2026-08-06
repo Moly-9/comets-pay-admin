@@ -24,6 +24,7 @@ import type {
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import {
   canEditProject,
+  type CooperationProjectId,
   type CreatorId,
   type InvoiceId,
   type PaymentListEditableField,
@@ -42,6 +43,12 @@ export type ProjectSummary = {
   id: string;
   projectId?: ProjectId;
   projectCode?: string;
+  cooperationProjectId?: CooperationProjectId;
+  cooperationProjectCode?: string;
+  externalProjectId?: string;
+  externalSystem?: 'FEISHU';
+  syncStatus?: 'SYNCED' | 'STALE' | 'FAILED';
+  syncedAt?: string;
   name: string;
   brand: string;
   media: string;

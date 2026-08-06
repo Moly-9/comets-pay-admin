@@ -227,7 +227,7 @@ export function InvoiceBuilderPage({
   const selectedPayout = selectedCreator && selectedProject
     ? payouts.find((payout) => (
         payout.creatorId === selectedCreator.id
-        && payout.projectId === (selectedProject.projectId ?? selectedProject.id)
+        && payout.projectId === (selectedProject.cooperationProjectId ?? selectedProject.projectId ?? selectedProject.id)
       )) ?? null
     : null;
   const selectableContracts = contracts.filter((contract) => (
@@ -261,7 +261,7 @@ export function InvoiceBuilderPage({
   const projectOptions = creatorEngagements.map(({ project, reference }) => ({
     value: reference.engagementId,
     label: project.name,
-    description: `${project.projectCode ?? project.id} · ${project.brand}`,
+    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
   }));
 
   const model = useMemo<InvoiceDocumentModel>(() => ({
@@ -277,7 +277,12 @@ export function InvoiceBuilderPage({
     projectId: isEditing
       ? editSnapshot?.projectId ?? '' as ProjectId
       : selectedProject
-        ? (selectedProject.projectId ?? selectedProject.id) as ProjectId
+        ? (selectedProject.cooperationProjectId ?? selectedProject.projectId ?? selectedProject.id) as ProjectId
+        : '' as ProjectId,
+    cooperationProjectId: isEditing
+      ? editSnapshot?.cooperationProjectId ?? editSnapshot?.projectId
+      : selectedProject
+        ? (selectedProject.cooperationProjectId ?? selectedProject.projectId ?? selectedProject.id) as ProjectId
         : '' as ProjectId,
     projectName: isEditing ? editSnapshot?.projectName ?? '' : selectedProject?.name ?? '',
     contractIds,
@@ -332,7 +337,7 @@ export function InvoiceBuilderPage({
     const payout = context && creator
       ? payouts.find((item) => (
           item.creatorId === creator.id
-          && item.projectId === (context.project.projectId ?? context.project.id)
+          && item.projectId === (context.project.cooperationProjectId ?? context.project.projectId ?? context.project.id)
         ))
       : null;
     setEngagementId(id);
@@ -539,7 +544,7 @@ export function InvoiceBuilderPage({
       <div className="invoice-builder-layout">
         <section className="invoice-builder-form">
           <div className="invoice-builder-section">
-            <header><span><UserRound size={19} /></span><div><h2>1. 达人与项目</h2><p>项目列表来自“我的项目”中稳定的达人合作关系。</p></div></header>
+            <header><span><UserRound size={19} /></span><div><h2>1. 达人与合作项目</h2><p>合作项目来自飞书同步映射，并通过稳定合作关系关联达人。</p></div></header>
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`}>
                 <span>合作达人 *</span>
@@ -547,8 +552,8 @@ export function InvoiceBuilderPage({
                 {errors.creator ? <small>{errors.creator}</small> : null}
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>
-                <span>关联项目 *</span>
-                <SelectField ariaLabel="关联项目" variant="form" value={engagementId} placeholder={creatorId ? '选择关联项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
+                <span>合作项目 *</span>
+                <SelectField ariaLabel="合作项目" variant="form" value={engagementId} placeholder={creatorId ? '选择合作项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>

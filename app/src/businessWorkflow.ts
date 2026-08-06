@@ -12,7 +12,10 @@ import type {
 declare const entityIdBrand: unique symbol;
 
 export type EntityId<T extends string> = string & { readonly [entityIdBrand]: T };
-export type ProjectId = EntityId<'project'>;
+export type CooperationProjectId = EntityId<'cooperation-project'>;
+export type PaymentRequestProjectId = EntityId<'payment-request-project'>;
+/** @deprecated Use CooperationProjectId for contracts, invoices and collaborations. */
+export type ProjectId = CooperationProjectId;
 export type CreatorId = EntityId<'creator'>;
 export type EngagementId = EntityId<'engagement'>;
 export type ContractId = EntityId<'contract'>;
@@ -61,7 +64,7 @@ export type RequestApprovalState = {
 
 export type ProjectEngagement = {
   engagementId: EngagementId;
-  projectId: ProjectId;
+  cooperationProjectId: CooperationProjectId;
   creatorId: CreatorId;
   status: 'active' | 'removed';
   createdAt: string;
@@ -152,6 +155,7 @@ export type PaymentListRecord = {
   paymentListId: PaymentListId;
   paymentListCode: string;
   projectId: ProjectId;
+  paymentRequestProjectId?: PaymentRequestProjectId;
   provider: PaymentListProvider;
   status: PaymentListStatus;
   version?: number;
@@ -191,6 +195,7 @@ export type WorkflowAuditAction =
 export type WorkflowAuditEvent = {
   id: string;
   projectId: ProjectId;
+  paymentRequestProjectId?: PaymentRequestProjectId;
   engagementId?: EngagementId;
   entityType: 'project' | 'contract' | 'invoice' | 'payment-list';
   entityId: string;
@@ -202,6 +207,8 @@ export type WorkflowAuditEvent = {
 
 const PROTOTYPE_ID_PREFIXES = {
   project: 'prj',
+  'cooperation-project': 'cpr',
+  'request-project': 'req',
   creator: 'crt',
   engagement: 'col',
   contract: 'con',

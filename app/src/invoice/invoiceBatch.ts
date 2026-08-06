@@ -80,7 +80,7 @@ export const updateInvoiceBatchLineItem = (
 }) : item);
 
 const projectIdFor = (project: ProjectSummary) => (
-  (project.projectId ?? project.id) as ProjectId
+  (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
 );
 
 const supportedCurrency = (value?: string): InvoiceCurrency | '' => (
@@ -203,6 +203,7 @@ export const buildInvoiceDocumentForBatchRow = (
     creatorId: creator.id as CreatorId,
     engagementId: row.engagementId,
     projectId: row.projectId,
+    cooperationProjectId: row.projectId,
     projectName: context.project.name,
     contractIds: [...row.contractIds],
     from: { ...creator.contact },

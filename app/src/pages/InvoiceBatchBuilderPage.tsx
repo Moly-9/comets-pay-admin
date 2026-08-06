@@ -108,7 +108,7 @@ const STATUS_META = {
 } as const;
 
 const projectIdFor = (project: ProjectSummary) => (
-  (project.projectId ?? project.id) as ProjectId
+  (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
 );
 
 const rowTotal = (row: Pick<InvoiceBatchRow, 'items'>) => (
@@ -706,9 +706,9 @@ export function InvoiceBatchBuilderPage({
   const projectOptions = projects.map((project) => ({
     value: projectIdFor(project),
     label: project.name,
-    description: `${project.projectCode ?? project.id} · ${
+    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${
       project.creatorProfiles?.filter((item) => item.status !== 'removed').length ?? 0
-    } 位达人`,
+    } 位达人 · 飞书合作项目`,
   }));
 
   const setProject = (value: string) => {
@@ -1009,7 +1009,7 @@ export function InvoiceBatchBuilderPage({
     >
       <PageHeading
         title="批量生成 Invoice"
-        subtitle="在同一份长表单内选择项目达人、填写费用并完成批量校验与生成。"
+        subtitle="在同一份长表单内选择合作项目达人、填写费用并完成批量校验与生成。"
         actions={(
           <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={leave}>
             返回
@@ -1056,13 +1056,13 @@ export function InvoiceBatchBuilderPage({
           <header>
             <span><Users size={18} /></span>
             <div>
-              <h2>选择项目与达人</h2>
+              <h2>选择合作项目与达人</h2>
               <p>单批限定一个项目，最多选择 {INVOICE_BATCH_MAX_ROWS} 位达人。</p>
             </div>
           </header>
           <div className="invoice-form-grid invoice-batch-project-grid">
             <div className="invoice-form-control full-width">
-              <span>关联项目 *</span>
+              <span>合作项目 *</span>
               <SelectField
                 ariaLabel="批量 Invoice 项目"
                 variant="form"

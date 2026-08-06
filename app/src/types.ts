@@ -1,4 +1,5 @@
 import type {
+  CooperationProjectId,
   ContractId,
   CreatorId,
   EngagementId,
@@ -270,6 +271,7 @@ export type InvoiceDocumentModel = {
   creatorId?: CreatorId;
   engagementId?: EngagementId;
   projectId: ProjectId;
+  cooperationProjectId?: CooperationProjectId;
   projectName: string;
   contractIds?: ContractId[];
   from: CreatorInvoiceContact;

@@ -1,0 +1,231 @@
+import { describe, expect, it } from 'vitest';
+import type { ContractRecord } from './contracts';
+import type {
+  ContractId,
+  CooperationProjectId,
+  CreatorId,
+  EngagementId,
+  InvoiceId,
+  PaymentListRecord,
+  PaymentRequestProjectId,
+} from './businessWorkflow';
+import {
+  createPaymentRequestListItem,
+  paymentRequestSubmissionIssues,
+  resolveCreatorDocuments,
+  type PaymentRequestCreatorLink,
+} from './paymentRequestProjects';
+import type { GeneratedInvoiceRecord } from './types';
+
+const cooperationProjectId = 'cooperation_project_001' as CooperationProjectId;
+const otherProjectId = 'cooperation_project_002' as CooperationProjectId;
+const creatorId = 'creator_001' as CreatorId;
+const otherCreatorId = 'creator_002' as CreatorId;
+const engagementId = 'engagement_001' as EngagementId;
+
+const invoice = (overrides: Partial<GeneratedInvoiceRecord> = {}): GeneratedInvoiceRecord => ({
+  id: 'INV-20260807-000001',
+  invoiceId: 'invoice_001' as InvoiceId,
+  sourcePayoutId: 'payout_001',
+  status: '待发起请款',
+  generatedAt: '2026-08-07T02:00:00.000Z',
+  validationStatus: 'valid',
+  snapshot: {
+    cooperationProjectId,
+    projectId: cooperationProjectId,
+    projectName: 'Synthetic Creator Campaign',
+    creatorId,
+    creatorName: 'Synthetic Creator',
+    creatorHandle: '@synthetic.creator',
+    engagementId,
+    invoiceNumber: 'INV-20260807-000001',
+    invoiceDate: '2026-08-07',
+    billTo: { name: 'Example Advertiser', address: 'Example Address' },
+    from: { legalName: 'Synthetic Creator', phone: '', email: 'creator@example.test', address: 'Example Address' },
+    currency: 'USD',
+    items: [{ id: 'line-1', description: 'Creator service', unitPrice: 100, quantity: 1, lineTotal: 100 }],
+    paymentMethod: 'paypal',
+    payment: {
+      bankCountry: '', accountName: 'Synthetic Creator', accountType: '', swiftCode: '', accountNumber: '', iban: '',
+      beneficiaryType: '', bankName: '', bankStreetAddress: '', bankCity: '', bankState: '', bankPostalCode: '',
+      intermediaryBankCountry: '', intermediaryBankCode: '', transferRemarks: '', paypalUsername: 'synthetic.creator',
+      paypalEmail: 'creator@example.test', payoutProvider: 'PayPal',
+    },
+  },
+  ...overrides,
+});
+
+const contract = (id: string, projectId = cooperationProjectId, contractCreatorId = creatorId): ContractRecord => ({
+  id,
+  contractId: id.toLowerCase() as ContractId,
+  ioId: 'IO-SYNTHETIC',
+  name: 'Synthetic contract',
+  templateFamily: 'Synthetic',
+  sourceName: 'synthetic.pdf',
+  documentUrl: '',
+  isTemplate: false,
+  project: 'Synthetic Creator Campaign',
+  brand: 'Example Brand',
+  advertiser: 'Example Advertiser',
+  publisher: 'Synthetic Creator',
+  channelName: '@synthetic.creator',
+  channelLink: 'https://example.test/channel',
+  platform: 'YouTube',
+  effectiveDate: '2026-08-01',
+  campaignStart: '2026-08-01',
+  campaignEnd: '2026-08-31',
+  currency: 'USD',
+  totalFee: 100,
+  licensePrice: null,
+  licenseIncludedInTotal: null,
+  invoiceWithinWorkingDays: 3,
+  paymentWithinWorkingDays: 45,
+  feeBearer: 'ADVERTISER',
+  paymentMethod: 'PAYPAL',
+  accountName: 'Synthetic Creator',
+  accountFingerprint: 'test-fingerprint',
+  signed: true,
+  status: '已归档',
+  updated: '2026-08-07',
+  deliverables: [],
+  issues: [],
+  projectId,
+  cooperationProjectId: projectId,
+  creatorId: contractCreatorId,
+  engagementId,
+  lifecycle: 'CONFIRMED',
+});
+
+describe('media payment request document resolution', () => {
+  it('filters contracts and the unique invoice by cooperation project and creator ids', () => {
+    const result = resolveCreatorDocuments({
+      cooperationProjectId,
+      creatorId,
+      contracts: [
+        contract('CON-VALID'),
+        contract('CON-OTHER-PROJECT', otherProjectId),
+        contract('CON-OTHER-CREATOR', cooperationProjectId, otherCreatorId),
+      ],
+      invoices: [
+        invoice(),
+        invoice({
+          id: 'INV-OTHER-PROJECT',
+          invoiceId: 'invoice_other_project' as InvoiceId,
+          snapshot: { ...invoice().snapshot, cooperationProjectId: otherProjectId, projectId: otherProjectId },
+        }),
+      ],
+      requests: [],
+    });
+    expect(result.status).toBe('READY');
+    expect(result.contracts.map((item) => item.id)).toEqual(['CON-VALID']);
+    expect(result.invoice?.id).toBe('INV-20260807-000001');
+  });
+
+  it('blocks zero, multiple and already-used invoices without guessing', () => {
+    const missing = resolveCreatorDocuments({ cooperationProjectId, creatorId, contracts: [], invoices: [], requests: [] });
+    expect(missing.status).toBe('MISSING_INVOICE');
+
+    const multiple = resolveCreatorDocuments({
+      cooperationProjectId,
+      creatorId,
+      contracts: [],
+      invoices: [invoice(), invoice({ id: 'INV-SECOND', invoiceId: 'invoice_002' as InvoiceId })],
+      requests: [],
+    });
+    expect(multiple.status).toBe('MULTIPLE_INVOICES');
+
+    const used = resolveCreatorDocuments({
+      cooperationProjectId,
+      creatorId,
+      contracts: [],
+      invoices: [invoice()],
+      requests: [{
+        id: 'REQ-USED',
+        requestCode: 'REQ-USED',
+        creatorLinks: [{ creatorId, engagementId, contractIds: [], invoiceId: 'invoice_001' as InvoiceId }],
+      }],
+    });
+    expect(used.status).toBe('INVOICE_IN_USE');
+    expect(used.invoiceOwner?.requestCode).toBe('REQ-USED');
+  });
+});
+
+describe('media payment request submission validation', () => {
+  const link: PaymentRequestCreatorLink = {
+    creatorId,
+    engagementId,
+    contractIds: [],
+    invoiceId: 'invoice_001' as InvoiceId,
+  };
+  const paymentRequestProjectId = 'request_project_001' as PaymentRequestProjectId;
+  const paymentList = (): PaymentListRecord => ({
+    paymentListId: 'payment_list_001' as PaymentListRecord['paymentListId'],
+    paymentListCode: 'PAY-20260807-000001',
+    paymentRequestProjectId,
+    projectId: cooperationProjectId,
+    provider: 'PayPal',
+    status: 'generated',
+    items: [{
+      id: 'item-1',
+      engagementId,
+      invoiceId: link.invoiceId,
+      snapshot: {
+        invoiceNumber: 'INV-20260807-000001', creatorName: 'Synthetic Creator', currency: 'USD', receiveCurrency: 'USD', amount: 100,
+        provider: 'PayPal', accountSummary: 'verified@example.test', paymentReason: '', transactionReference: '', description: '',
+      },
+      overrides: {},
+    }],
+    createdAt: '2026-08-07T02:00:00.000Z',
+    updatedAt: '2026-08-07T02:00:00.000Z',
+  });
+
+  it('requires a request-specific payment list and a request-ready invoice', () => {
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link], invoices: [invoice()], paymentLists: [], paymentRequestProjectId,
+    })).toContain('INV-20260807-000001 尚未生成付款清单');
+
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice({ status: '待签署' })],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+    })).toContain('INV-20260807-000001 尚未完成签署和媒介审核');
+
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link], invoices: [invoice()], paymentLists: [paymentList()], paymentRequestProjectId,
+    })).toEqual([]);
+  });
+
+  it('creates a validated request-specific payment row when the contract is optional', () => {
+    const source = invoice({
+      snapshot: {
+        ...invoice().snapshot,
+        payoutAccountId: 'paypal-synthetic',
+        payoutAccountVersion: 'v1',
+        payoutProvider: 'PayPal',
+        payoutAccountFingerprint: 'paypal-fingerprint',
+        payment: {
+          ...invoice().snapshot.payment,
+          payoutAccountId: 'paypal-synthetic',
+          payoutAccountVersion: 'v1',
+          payoutProvider: 'PayPal',
+          accountFingerprint: 'paypal-fingerprint',
+          validationStatus: 'VERIFIED',
+          transferMethod: 'PAYPAL',
+          accountCurrency: 'USD',
+        },
+      },
+    });
+    const item = createPaymentRequestListItem({
+      invoice: source,
+      contracts: [],
+      requestCode: 'REQ-20260807-ABC123',
+      lineNumber: 1,
+    });
+
+    expect(item.snapshot.feeBearer).toBe('ADVERTISER');
+    expect(item.snapshot.transactionReference).toBe('REQ-20260807-ABC123-01');
+    expect(item.requiresRevalidation).toBe(false);
+    expect(item.validationIssues).toEqual([]);
+  });
+});

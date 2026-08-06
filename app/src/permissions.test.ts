@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_SYSTEM_USERS } from './data';
-import { canAccessPage, hasPermission } from './permissions';
+import { canAccessPage, getDefaultPageForRole, hasPermission } from './permissions';
 
 const userFor = (role: 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project') => {
   const user = DEMO_SYSTEM_USERS.find((candidate) => candidate.roleKey === role);
@@ -35,5 +35,14 @@ describe('Invoice review permissions', () => {
     expect(canAccessPage(userFor('pm'), 'invoice-batch-create')).toBe(false);
     expect(canAccessPage(userFor('project'), 'invoice-batch-create')).toBe(false);
     expect(canAccessPage(userFor('finance'), 'invoice-batch-create')).toBe(false);
+  });
+
+  it('keeps personal payment projects with media while approval roles open the review workbench', () => {
+    expect(canAccessPage(userFor('media'), 'projects')).toBe(true);
+    expect(canAccessPage(userFor('pm'), 'projects')).toBe(false);
+    expect(canAccessPage(userFor('project'), 'projects')).toBe(false);
+    expect(getDefaultPageForRole('media')).toBe('projects');
+    expect(getDefaultPageForRole('pm')).toBe('requests');
+    expect(getDefaultPageForRole('project')).toBe('requests');
   });
 });

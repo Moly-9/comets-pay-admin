@@ -31,6 +31,7 @@ import type {
 
 const DEMO_PROJECT_CODE = 'PRJ-301164';
 const DEMO_TIMESTAMP = '2026-08-01T09:00:00.000Z';
+export const AVAILABLE_PAYMENT_REQUEST_INVOICE_ID = 'invoice_fixture_04_24' as InvoiceId;
 
 const demoInvoiceReviewStatus = (index: number): Payout['invoiceReviewStatus'] => {
   if (index === 0) return '达人反馈';
@@ -610,13 +611,16 @@ const createPrototypeInvoice = (
   const projectPart = String(projectIndex + 1).padStart(2, '0');
   const creatorPart = String(creatorIndex + 1).padStart(2, '0');
   const invoiceNumber = `INV-${project.id.replace(/^PRJ-/, '')}-${creatorPart}`;
+  const invoiceId = `invoice_fixture_${projectPart}_${creatorPart}` as InvoiceId;
   const generatedAt = `2026-08-${String((projectIndex % 5) + 1).padStart(2, '0')}T09:00:00.000Z`;
 
   return {
     id: invoiceNumber,
-    invoiceId: `invoice_fixture_${projectPart}_${creatorPart}` as InvoiceId,
+    invoiceId,
     sourcePayoutId: `payout_fixture_${projectPart}_${creatorPart}`,
-    status: invoiceReviewState(requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus)),
+    status: invoiceId === AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
+      ? '待发起请款'
+      : invoiceReviewState(requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus)),
     generatedAt,
     validationStatus: 'valid',
     version: 1,
@@ -670,6 +674,7 @@ export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INV
   const project = INITIAL_PROJECTS[projectIndex];
   const creator = creatorForReference(invoice.snapshot.creatorId as CreatorId);
   const listStatus = requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus);
+  const isAvailableRequestDemo = invoice.invoiceId === AVAILABLE_PAYMENT_REQUEST_INVOICE_ID;
   const rawAccount = invoice.snapshot.paymentMethod === 'paypal'
     ? invoice.snapshot.payment.paypalEmail || invoice.snapshot.payment.paypalUsername
     : invoice.snapshot.payment.iban || invoice.snapshot.payment.accountNumber;
@@ -695,8 +700,8 @@ export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INV
     transferMethod: invoice.snapshot.payment.transferMethod,
     localClearingSystem: invoice.snapshot.payment.localClearingSystem,
     feeBearer: 'ADVERTISER',
-    status: payoutStatus(listStatus),
-    invoiceReviewStatus: invoiceReviewState(listStatus),
+    status: isAvailableRequestDemo ? '未进入付款' : payoutStatus(listStatus),
+    invoiceReviewStatus: isAvailableRequestDemo ? '待发起请款' : invoiceReviewState(listStatus),
     invoiceVersion: 1,
     invoiceSignedAt: ['approved', 'paid'].includes(listStatus) ? '2026-08-02T10:00:00.000Z' : undefined,
     invoiceSnapshot: invoice.snapshot,

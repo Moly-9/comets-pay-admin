@@ -59,12 +59,13 @@ import {
   INITIAL_CREATORS,
   INITIAL_PROJECTS,
   INITIAL_REQUEST_PROJECTS,
+  MOCK_FEISHU_COOPERATION_PROJECT_SOURCE,
   NotificationsPage,
   OrganizationPage,
-  ProjectsPage,
   RequestsPage,
   TransactionsPage,
 } from './pages/OperationalPages';
+import { MediaPaymentProjectsPage } from './pages/MediaPaymentProjectsPage';
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
@@ -100,10 +101,18 @@ import {
   type InvoiceId,
   type PaymentListEditableField,
   type PaymentListRecord,
+  type PaymentRequestProjectId,
   type ProjectId,
   type WorkflowAuditAction,
   type WorkflowAuditEvent,
 } from './businessWorkflow';
+import {
+  contractCooperationProjectId,
+  createPaymentRequestListItem,
+  invoiceCooperationProjectId,
+  paymentRequestAmountLabel,
+  paymentRequestSubmissionIssues,
+} from './paymentRequestProjects';
 import { downloadBlob } from './invoice/invoiceUtils';
 import {
   createDocumentPayoutSnapshot,
@@ -122,6 +131,7 @@ import {
   ALL_PROJECT_PROTOTYPE_INVOICES,
   ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
   ALL_PROJECT_PROTOTYPE_PAYOUTS,
+  AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
   PROJECT_DEMO_CONTRACTS,
 } from './prototypeResourceFixtures';
 import {
@@ -152,8 +162,46 @@ const batchAmountLabel = (items: MockBatchSubmission['items']) => {
 };
 
 const getProjectId = (project: ProjectSummary) => (
-  (project.projectId ?? project.id) as ProjectId
+  (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
 );
+
+const canManageCooperationProjectFor = (user: SystemUser, project: ProjectSummary) => (
+  user.roleKey === 'admin'
+  || user.roleKey === 'owner'
+  || (user.roleKey === 'media' && project.media === (user.scopeName ?? user.name))
+);
+
+const INITIAL_REQUEST_PROJECTS_WITH_LINKS: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((request) => {
+  const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
+  const requestInvoices = ALL_PROJECT_PROTOTYPE_INVOICES.filter((invoice) => (
+    invoiceCooperationProjectId(invoice) === cooperationProjectId
+    && invoice.invoiceId !== AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
+  ));
+  const creatorLinks = requestInvoices.flatMap((invoice) => {
+    if (!invoice.snapshot.creatorId || !invoice.snapshot.engagementId) return [];
+    const contractIds = [...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS]
+      .filter((contract) => (
+        contractCooperationProjectId(contract) === cooperationProjectId
+        && contract.creatorId === invoice.snapshot.creatorId
+      ))
+      .map((contract) => contract.contractId)
+      .filter((contractId): contractId is ContractId => Boolean(contractId));
+    return [{
+      creatorId: invoice.snapshot.creatorId,
+      engagementId: invoice.snapshot.engagementId,
+      contractIds,
+      invoiceId: invoice.invoiceId,
+    }];
+  });
+  return {
+    ...request,
+    creatorLinks,
+    invoiceIds: creatorLinks.map((link) => link.invoiceId),
+    amount: paymentRequestAmountLabel(creatorLinks, requestInvoices),
+    contracts: creatorLinks.reduce((count, link) => count + link.contractIds.length, 0),
+    invoices: creatorLinks.length,
+  };
+});
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -168,16 +216,39 @@ export default function App() {
   const [contracts, setContracts] = useState<ContractRecord[]>(() => [
     ...INITIAL_CONTRACTS,
     ...PROJECT_DEMO_CONTRACTS,
-  ]);
+  ].map((contract) => ({
+    ...contract,
+    cooperationProjectId: (contract.cooperationProjectId ?? contract.projectId) as ContractRecord['cooperationProjectId'],
+  })));
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    [...ALL_PROJECT_PROTOTYPE_INVOICES]
+    ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => ({
+      ...invoice,
+      snapshot: {
+        ...invoice.snapshot,
+        cooperationProjectId: invoice.snapshot.cooperationProjectId ?? invoice.snapshot.projectId,
+      },
+    }))
   ));
   const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(() => (
-    ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS
+    ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.map((list) => {
+      const request = INITIAL_REQUEST_PROJECTS_WITH_LINKS.find((candidate) => (
+        candidate.cooperationProjectId === list.projectId
+      ));
+      const invoiceIds = new Set(request?.creatorLinks?.map((link) => link.invoiceId) ?? []);
+      return {
+        ...list,
+        paymentRequestProjectId: request?.paymentRequestProjectId,
+        items: list.items.filter((item) => invoiceIds.has(item.invoiceId)),
+        versions: list.versions?.map((version) => ({
+          ...version,
+          items: version.items.filter((item) => invoiceIds.has(item.invoiceId)),
+        })),
+      };
+    })
   ));
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
-  const [requestProjects, setRequestProjects] = useState(INITIAL_REQUEST_PROJECTS);
+  const [requestProjects, setRequestProjects] = useState(INITIAL_REQUEST_PROJECTS_WITH_LINKS);
   const [invoiceTab, setInvoiceTab] = useState<InvoicePageTab>('signature');
   const [focusedInvoiceId, setFocusedInvoiceId] = useState<string | null>(null);
   const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
@@ -198,6 +269,24 @@ export default function App() {
 
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.listProjects()
+      .then((result) => {
+        if (!active) return;
+        const identities = new Map(result.projects.map((project) => [project.cooperationProjectId, project]));
+        setProjects((current) => current.map((project) => ({
+          ...project,
+          ...(identities.get(getProjectId(project)) ?? {}),
+        })));
+      })
+      .catch(() => {
+        if (!active) return;
+        setProjects((current) => current.map((project) => ({ ...project, syncStatus: 'FAILED' })));
+      });
+    return () => { active = false; };
   }, []);
 
   const registerProjectMutation = useCallback(({
@@ -292,9 +381,10 @@ export default function App() {
   }, [contracts, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
-    const project = projects.find((item) => getProjectId(item) === updated.projectId);
-    if (project && !canEditProject(currentUser, project.reviewStatus ?? 'draft')) {
-      notify('项目资料已锁定', '当前账号不能修改已提交或已通过项目的合同。');
+    const cooperationProjectId = updated.cooperationProjectId ?? updated.projectId;
+    const project = projects.find((item) => getProjectId(item) === cooperationProjectId);
+    if (project && !canManageCooperationProjectFor(currentUser, project)) {
+      notify('合作项目不可编辑', '当前账号不能修改其他媒介负责的合作项目合同。');
       return;
     }
     setContracts((current) => current.map((contract) => contract.id === updated.id ? updated : contract));
@@ -358,7 +448,8 @@ export default function App() {
     existing?: Payout,
   ): Payout => {
       const creator = creators.find((item) => item.id === record.snapshot.creatorId);
-      const project = projects.find((item) => getProjectId(item) === record.snapshot.projectId);
+      const cooperationProjectId = record.snapshot.cooperationProjectId ?? record.snapshot.projectId;
+      const project = projects.find((item) => getProjectId(item) === cooperationProjectId);
       const rawAccount = record.snapshot.paymentMethod === 'paypal'
         ? record.snapshot.payment.paypalEmail
         : record.snapshot.payment.iban || record.snapshot.payment.accountNumber;
@@ -374,7 +465,7 @@ export default function App() {
         creator: record.snapshot.creatorName,
         handle: record.snapshot.creatorHandle,
         initials: creator?.initials ?? record.snapshot.creatorName.slice(0, 2).toUpperCase(),
-        projectId: project?.id ?? String(record.snapshot.projectId),
+        projectId: String(cooperationProjectId),
         project: project?.name ?? record.snapshot.projectName,
         deliverable: record.snapshot.items.map((item) => item.description).filter(Boolean).join('；'),
         contract: record.snapshot.contractIds?.join('、') || '未关联合同',
@@ -1322,6 +1413,160 @@ export default function App() {
     );
   };
 
+  const generateMediaRequestPaymentLists = (request: RequestProjectSummary) => {
+    if (!request.paymentRequestProjectId || !request.cooperationProjectId || !request.creatorLinks?.length) {
+      notify('无法生成付款清单', '请款项目缺少稳定项目 ID 或达人 Invoice 关联。');
+      return;
+    }
+    try {
+      const createdAt = nowIso();
+      const entries = request.creatorLinks.map((link, index) => {
+        const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === link.invoiceId);
+        if (!invoice) throw new Error(`未找到 Invoice ${link.invoiceId}`);
+        return createPaymentRequestListItem({
+          invoice,
+          contracts,
+          contractIds: link.contractIds,
+          requestCode: request.requestCode ?? request.id,
+          lineNumber: index + 1,
+        });
+      });
+      const groups = entries.reduce<Record<string, typeof entries>>((result, item) => {
+        const provider = item.snapshot.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
+        result[provider] = [...(result[provider] ?? []), item];
+        return result;
+      }, {});
+      const lists: PaymentListRecord[] = Object.entries(groups).map(([provider, items]) => ({
+        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
+        paymentListCode: createPrototypeCode('PAY'),
+        projectId: request.cooperationProjectId as ProjectId,
+        paymentRequestProjectId: request.paymentRequestProjectId,
+        provider: provider as PaymentListRecord['provider'],
+        status: 'generated',
+        version: 1,
+        generatedAt: createdAt,
+        generatedBy: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        items,
+        createdAt,
+        updatedAt: createdAt,
+      }));
+      setPaymentLists((current) => [
+        ...lists,
+        ...current.filter((list) => list.paymentRequestProjectId !== request.paymentRequestProjectId),
+      ]);
+      setRequestProjects((current) => current.map((candidate) => candidate.id === request.id
+        ? {
+            ...candidate,
+            paymentListId: lists[0]?.paymentListId,
+            paymentListIds: lists.map((list) => list.paymentListId),
+            paymentOrder: lists.map((list) => list.paymentListCode).join('、'),
+            generatedDetail: candidate.generatedDetail
+              ? {
+                  ...candidate.generatedDetail,
+                  paymentListId: lists.map((list) => list.paymentListCode).join('、'),
+                  paymentListStatus: '已生成',
+                }
+              : candidate.generatedDetail,
+          }
+        : candidate));
+      notify('付款清单已生成', `${lists.length} 份渠道清单仅包含当前请款项目的 ${entries.length} 份 Invoice。`);
+    } catch (error) {
+      notify('无法生成付款清单', error instanceof Error ? error.message : 'Invoice 账户快照校验失败。');
+    }
+  };
+
+  const submitMediaPaymentRequest = (request: RequestProjectSummary) => {
+    const creatorLinks = request.creatorLinks ?? [];
+    const issues = paymentRequestSubmissionIssues({
+      creatorLinks,
+      invoices: generatedInvoices,
+      paymentLists,
+      paymentRequestProjectId: request.paymentRequestProjectId,
+    });
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
+      issues.unshift('项目必填资料不完整，请检查关联项目、PM 和请款原因');
+    }
+    const duplicateInvoice = creatorLinks.find((link) => requestProjects.some((candidate) => (
+      candidate.paymentRequestProjectId !== request.paymentRequestProjectId
+      && candidate.creatorLinks?.some((candidateLink) => candidateLink.invoiceId === link.invoiceId)
+    )));
+    if (duplicateInvoice) issues.push(`Invoice ${duplicateInvoice.invoiceId} 已关联其他请款项目`);
+    if (issues.length) {
+      notify('暂不能提交申请', issues[0]);
+      return;
+    }
+
+    const invoiceIds = creatorLinks.map((link) => link.invoiceId);
+    const requestLists = paymentLists.filter((list) => (
+      list.paymentRequestProjectId === request.paymentRequestProjectId
+    ));
+    const listedInvoiceIds = new Set(requestLists.flatMap((list) => list.items.map((item) => item.invoiceId)));
+    if (!requestLists.length || invoiceIds.some((invoiceId) => !listedInvoiceIds.has(invoiceId))) {
+      notify('暂不能提交申请', '请先在项目详情生成当前请款项目专属的付款清单。');
+      return;
+    }
+
+    const submittedAt = nowIso();
+    const approval = createRequestApprovalState(submittedAt, request.approval);
+    const approvalInvoiceStatus = invoiceStatusForRequestApproval(approval.status as Exclude<typeof approval.status, 'RETURNED_TO_MEDIA_REVIEW'>);
+    const paymentListIds = requestLists.map((list) => list.paymentListId);
+    const paymentListCodes = requestLists.map((list) => list.paymentListCode);
+    const sourcePayoutIds = new Set(
+      generatedInvoices
+        .filter((invoice) => invoiceIds.includes(invoice.invoiceId))
+        .map((invoice) => invoice.sourcePayoutId),
+    );
+
+    setPaymentLists((current) => current.map((list) => list.paymentRequestProjectId === request.paymentRequestProjectId
+      ? { ...list, status: 'submitted', updatedAt: submittedAt }
+      : list));
+    setGeneratedInvoices((current) => current.map((invoice) => invoiceIds.includes(invoice.invoiceId)
+      ? { ...invoice, status: approvalInvoiceStatus }
+      : invoice));
+    setPayouts((current) => current.map((payout) => sourcePayoutIds.has(payout.id)
+      ? {
+          ...payout,
+          status: '未进入付款',
+          invoiceReviewStatus: approvalInvoiceStatus,
+          requestApprovalRound: approval.round,
+        }
+      : payout));
+    setRequestProjects((current) => current.map((candidate) => (
+      candidate.id === request.id
+        ? {
+            ...candidate,
+            lifecycle: 'SUBMITTED',
+            approval,
+            status: REQUEST_APPROVAL_STATUS_LABEL[approval.status],
+            invoiceIds,
+            paymentListId: paymentListIds[0],
+            paymentListIds,
+            paymentOrder: paymentListCodes.join('、'),
+            generatedDetail: candidate.generatedDetail
+              ? {
+                  ...candidate.generatedDetail,
+                  invoiceStatus: '已提交审批',
+                  paymentListId: paymentListCodes.join('、'),
+                  paymentListStatus: '已提交',
+                }
+              : candidate.generatedDetail,
+          }
+        : candidate
+    )));
+    setWorkflowAuditEvents((current) => [
+      createAuditEvent({
+        projectId: request.cooperationProjectId as ProjectId,
+        entityType: 'project',
+        entityId: request.paymentRequestProjectId as PaymentRequestProjectId,
+        action: 'submit',
+        actor: `${currentUser.name}（${currentUser.role}）`,
+        summary: `已提交请款项目 ${request.requestCode ?? request.id}`,
+      }),
+      ...current,
+    ]);
+    notify('申请已提交', `${request.requestCode ?? request.id} 已进入 PM 审批。`);
+  };
+
   const handleRequestApproval = (
     request: RequestProjectSummary,
     action: RequestApprovalAction,
@@ -1407,6 +1652,7 @@ export default function App() {
         ? {
             ...item,
             approval: nextApproval,
+            lifecycle: isApproved ? 'APPROVED' : isReturned ? 'RETURNED' : 'SUBMITTED',
             status: REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status],
             filter: isApproved ? 'processed' : 'pending',
             generatedDetail: item.generatedDetail
@@ -1418,7 +1664,7 @@ export default function App() {
               : item.generatedDetail,
           }
         : item));
-      if (request.projectId) {
+      if (request.projectId && !request.paymentRequestProjectId) {
         setProjects((current) => current.map((project) => getProjectId(project) === request.projectId
           ? {
               ...project,
@@ -1432,7 +1678,13 @@ export default function App() {
                   : REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status],
             }
           : project));
-        setPaymentLists((current) => current.map((list) => list.projectId === request.projectId
+      }
+      if (request.paymentRequestProjectId || request.projectId) {
+        setPaymentLists((current) => current.map((list) => (
+          request.paymentRequestProjectId
+            ? list.paymentRequestProjectId === request.paymentRequestProjectId
+            : list.projectId === request.projectId
+        )
           ? {
               ...list,
               status: isApproved ? 'approved' : isReturned ? 'draft' : 'submitted',
@@ -1742,12 +1994,15 @@ export default function App() {
   };
 
   const openProjectFromInvoice = (payout: Payout) => {
-    const project = projects.find((item) => getProjectId(item) === payout.projectId);
-    if (!project) {
-      notify('未找到关联项目', '该 Invoice 缺少可用的稳定 projectId 关联。');
+    const invoice = generatedInvoices.find((item) => item.sourcePayoutId === payout.id);
+    const request = invoice
+      ? requestProjects.find((item) => item.creatorLinks?.some((link) => link.invoiceId === invoice.invoiceId))
+      : undefined;
+    if (!request) {
+      notify('未找到我的项目', '该 Invoice 尚未关联媒介请款项目，请先在“我的项目”中创建项目。');
       return;
     }
-    setFocusedProjectId(project.id);
+    setFocusedProjectId(request.id);
     setFocusedInvoiceId(null);
     setActivePage('projects');
   };
@@ -1818,6 +2073,9 @@ export default function App() {
   const canManageCreators = hasPermission(currentUser, 'creator_records_manage');
   const canUploadContracts = hasPermission(currentUser, 'contract_manage');
   const canManageProjects = hasPermission(currentUser, 'project_manage');
+  const manageableCooperationProjects = projects.filter((project) => (
+    canManageCooperationProjectFor(currentUser, project)
+  ));
   const batchReadyPayouts = payouts
     .filter(isPayoutEligibleForBatch)
     .map((payout) => {
@@ -1833,51 +2091,29 @@ export default function App() {
   switch (activePage) {
     case 'projects':
       pageContent = (
-        <ProjectsPage
+        <MediaPaymentProjectsPage
           notify={notify}
-          creators={creators}
           currentUser={currentUser}
-          projects={projects}
+          cooperationProjects={projects}
+          creators={creators}
           contracts={contracts}
-          generatedInvoices={generatedInvoices}
+          invoices={generatedInvoices}
           paymentLists={paymentLists}
-          auditEvents={workflowAuditEvents}
-          onOpenContract={(contractId) => {
-            setFocusedContractId(contractId);
-            setActivePage('contracts');
-          }}
-          onOpenInvoice={(invoiceId) => {
-            const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
-            if (!invoice) return;
-            setFocusedInvoiceId(`generated:${invoice.id}`);
-            setInvoiceTab('signature');
-            setActivePage('invoice');
-          }}
-          onCreateInvoice={(engagementId) => {
-            setInvoiceCreationEngagementId(engagementId);
-            setActivePage('invoice-create');
-          }}
-          onLinkContract={linkContractToEngagement}
-          onUnlinkContract={unlinkContract}
-          onDeleteContract={deleteContract}
-          onLinkInvoice={linkInvoiceToEngagement}
-          onUnlinkInvoice={unlinkInvoice}
-          onDeleteInvoice={deleteInvoice}
-          onCreatePaymentList={createPaymentList}
-          onDeletePaymentList={deletePaymentList}
-          onAddPaymentInvoice={addPaymentInvoice}
-          onRemovePaymentInvoice={removePaymentInvoice}
-          onUpdatePaymentItem={updatePaymentItem}
-          onChangePaymentAccount={changePaymentAccount}
-          onRevalidatePaymentItem={revalidatePaymentItem}
-          onGeneratePaymentOrder={generatePaymentOrder}
-          onEditPaymentOrder={editPaymentOrder}
-          onExportPaymentList={exportPaymentList}
-          onSubmitProjectReview={submitProjectReview}
-          onProjectsChange={setProjects}
-          canCreateProject={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}
+          requests={requestProjects}
+          canCreate={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}
           focusedProjectId={focusedProjectId}
           onFocusCleared={() => setFocusedProjectId(null)}
+          onCreated={(request) => setRequestProjects((current) => [request, ...current])}
+          onUpdated={(request) => {
+            setRequestProjects((current) => current.map((candidate) => (
+              candidate.paymentRequestProjectId === request.paymentRequestProjectId ? request : candidate
+            )));
+            setPaymentLists((current) => current.filter((list) => (
+              list.paymentRequestProjectId !== request.paymentRequestProjectId
+            )));
+          }}
+          onGeneratePaymentList={generateMediaRequestPaymentLists}
+          onSubmitRequest={submitMediaPaymentRequest}
         />
       );
       break;
@@ -1885,12 +2121,9 @@ export default function App() {
       pageContent = (
         <RequestsPage
           notify={notify}
-          contracts={contracts}
           currentUser={currentUser}
           requests={requestProjects}
-          onRequestCreated={(request) => setRequestProjects((current) => [request, ...current])}
           onApprovalAction={handleRequestApproval}
-          canCreateRequest={false}
           focusedRequestId={focusedRequestId}
           onFocusCleared={() => setFocusedRequestId(null)}
         />
@@ -1901,7 +2134,7 @@ export default function App() {
         <ContractsPage
           notify={notify}
           contracts={contracts}
-          projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
+          projects={manageableCooperationProjects}
           creators={creators}
           canUpload={canUploadContracts}
           focusedContractId={focusedContractId}
@@ -1918,7 +2151,7 @@ export default function App() {
     case 'contract-create':
       pageContent = (
         <ContractBuilderPage
-          projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
+          projects={manageableCooperationProjects}
           creators={creators}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
@@ -2038,7 +2271,7 @@ export default function App() {
         <InvoiceBuilderPage
           creators={creators}
           payouts={payouts}
-          projects={projects.filter((project) => canEditProject(currentUser, project.reviewStatus ?? 'draft'))}
+          projects={manageableCooperationProjects}
           contracts={contracts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}
@@ -2064,11 +2297,7 @@ export default function App() {
         <InvoiceBatchBuilderPage
           creators={creators}
           payouts={payouts}
-          projects={projects.filter((project) => (
-            currentUser.roleKey === 'admin'
-            || currentUser.roleKey === 'owner'
-            || project.media === currentUser.name
-          ))}
+          projects={manageableCooperationProjects}
           contracts={contracts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}

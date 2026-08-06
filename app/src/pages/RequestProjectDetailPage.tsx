@@ -19,7 +19,12 @@ import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
 import type { SystemUser } from '../data';
 import type {
+  ContractId,
+  CooperationProjectId,
+  CreatorId,
+  EngagementId,
   InvoiceId,
+  PaymentRequestProjectId,
   PaymentListId,
   ProjectId,
   RequestApprovalState,
@@ -34,6 +39,18 @@ import {
 
 export type RequestProjectSummary = {
   id: string;
+  paymentRequestProjectId?: PaymentRequestProjectId;
+  requestCode?: string;
+  cooperationProjectId?: CooperationProjectId;
+  cooperationProjectCode?: string;
+  cooperationProjectName?: string;
+  lifecycle?: 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'COMPLETED';
+  creatorLinks?: Array<{
+    creatorId: CreatorId;
+    engagementId: EngagementId;
+    contractIds: ContractId[];
+    invoiceId: InvoiceId;
+  }>;
   projectId?: ProjectId;
   invoiceIds?: InvoiceId[];
   paymentListId?: PaymentListId;
@@ -526,7 +543,11 @@ export function RequestProjectDetailPage({
   const normalizedReturnReason = returnReason.trim();
   const payees = getRequestPayees(request, detail);
   const records = getRequestProjectResourceRecords(request, detail, payees);
-  const projectContext = { id: request.id, name: request.project, brand: detail.brand };
+  const projectContext = {
+    id: request.requestCode ?? request.id,
+    name: request.cooperationProjectName ?? request.project,
+    brand: detail.brand,
+  };
   const resources = [
     {
       kind: 'contract' as const,
@@ -585,8 +606,8 @@ export function RequestProjectDetailPage({
       </button>
 
       <PageHeading
-        title={request.project}
-        subtitle={`${request.id} · 项目媒介 ${request.media} · 负责 PM ${request.pm}`}
+        title={request.requestCode ?? request.id}
+        subtitle={`关联项目 ${request.cooperationProjectName ?? request.project} · 项目媒介 ${request.media} · 负责 PM ${request.pm}`}
         actions={<span className="project-detail-status"><i />{currentApprovalLabel}</span>}
       />
 
@@ -604,7 +625,8 @@ export function RequestProjectDetailPage({
               <span>更新于 {detail.updatedAt}</span>
             </header>
             <dl className="project-info-grid">
-              <div><dt>项目编号</dt><dd>{request.id}</dd></div>
+              <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
+              <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
               <div><dt>品牌 / 客户</dt><dd>{detail.brand}</dd></div>
               <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
               <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>

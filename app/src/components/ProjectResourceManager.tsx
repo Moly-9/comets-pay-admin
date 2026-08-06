@@ -94,7 +94,7 @@ type Props = {
 };
 
 const projectInternalId = (project: ProjectSummary) => (
-  (project.projectId ?? project.id) as ProjectId
+  (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
 );
 
 const contractStableId = (contract: ContractRecord) => contract.contractId ?? contract.id;

@@ -2,6 +2,7 @@ import { allRecognitionFieldsConfirmed, normalizeDays, normalizeMoney } from './
 import type { ContractRecognitionField, ContractSourceDocument } from './contractRecognitionTypes';
 import {
   createPrototypeId,
+  type CooperationProjectId,
   type ContractId,
   type CreatorId,
   type EngagementId,
@@ -127,6 +128,7 @@ export type ContractLifecycle =
 export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
   projectId: ProjectId;
+  cooperationProjectId?: CooperationProjectId;
   projectName: string;
   brandName: string;
   creatorId: CreatorId;
@@ -210,6 +212,7 @@ export type ContractRecord = {
   deliverables: ContractDeliverable[];
   issues: ContractIssue[];
   projectId?: ProjectId | string;
+  cooperationProjectId?: CooperationProjectId;
   creatorId?: CreatorId;
   creatorHandle?: string;
   engagementId?: EngagementId;
@@ -484,6 +487,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
 export type ContractUploadInput = {
   systemContractNumber: string;
   projectId: ProjectId;
+  cooperationProjectId?: CooperationProjectId;
   projectName: string;
   customer: string;
   creatorId: CreatorId;
@@ -596,6 +600,7 @@ export const createGeneratedContractDraft = (
       })),
     issues: blankFieldIssues(model),
     projectId: model.projectId,
+    cooperationProjectId: model.cooperationProjectId ?? model.projectId,
     creatorId: model.creatorId,
     creatorHandle: model.creatorHandle,
     engagementId: model.engagementId,
@@ -615,6 +620,7 @@ export const createGeneratedContractDraft = (
 export const createUploadedContract = ({
   systemContractNumber,
   projectId,
+  cooperationProjectId,
   projectName,
   customer,
   creatorId,
@@ -683,6 +689,7 @@ export const createUploadedContract = ({
       },
     ],
     projectId,
+    cooperationProjectId: cooperationProjectId ?? projectId,
     creatorId,
     creatorHandle,
     engagementId,

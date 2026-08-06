@@ -24,6 +24,7 @@ import {
   type ProjectId,
 } from '../businessWorkflow';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
+import { contractCooperationProjectId, cooperationProjectIdFor } from '../paymentRequestProjects';
 import type { CreatorProfile } from '../types';
 import { Button, Modal, SelectField } from './Common';
 
@@ -59,7 +60,7 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
   const [draftContractId, setDraftContractId] = useState('');
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
-  const selectedProject = projects.find((project) => project.id === projectId) ?? null;
+  const selectedProject = projects.find((project) => cooperationProjectIdFor(project) === projectId) ?? null;
   const projectCreators = useMemo(() => {
     if (!selectedProject) return [];
     const references = selectedProject.creatorProfiles ?? [];
@@ -69,18 +70,18 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
   }, [creators, selectedProject]);
   const selectedCreator = projectCreators.find((creator) => creator.id === creatorId) ?? null;
   const selectedProjectInternalId = selectedProject
-    ? (selectedProject.projectId ?? selectedProject.id) as ProjectId
+    ? cooperationProjectIdFor(selectedProject) as ProjectId
     : null;
   const draftCandidates = contracts.filter((contract) => (
     contract.lifecycle === 'GENERATED_DRAFT'
     && Boolean(contract.contractId)
-    && contract.projectId === selectedProjectInternalId
+    && contractCooperationProjectId(contract) === selectedProjectInternalId
     && contract.creatorId === creatorId
   ));
   const projectOptions = projects.map((project) => ({
-    value: project.id,
+    value: cooperationProjectIdFor(project),
     label: project.name,
-    description: `${project.id} · ${project.brand} · ${project.creators} 位达人`,
+    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · ${project.creators} 位达人`,
   }));
   const creatorOptions = projectCreators.map((creator) => ({
     value: creator.id,
@@ -173,7 +174,12 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
     });
     onSave({
       systemContractNumber: selectedDraft?.id ?? systemContractNumber,
-      projectId: (selectedProject.projectId ?? selectedProject.id) as ProjectId,
+      projectId: cooperationProjectIdFor(selectedProject) as ProjectId,
+      cooperationProjectId: (
+        selectedProject.cooperationProjectId
+        ?? selectedProject.projectId
+        ?? selectedProject.id
+      ) as ProjectId,
       projectName: selectedProject.name,
       customer: selectedProject.brand,
       creatorId: selectedCreator.id as CreatorId,
@@ -224,12 +230,12 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
           </header>
           <div className="contract-upload-field-grid">
             <div className="contract-upload-field">
-              <span>关联项目 *</span>
+              <span>合作项目 *</span>
               <SelectField
-                ariaLabel="关联项目"
+                ariaLabel="合作项目"
                 variant="form"
                 value={projectId}
-                placeholder="选择项目"
+                placeholder="选择飞书合作项目"
                 options={projectOptions}
                 onChange={(value) => {
                   setProjectId(value);

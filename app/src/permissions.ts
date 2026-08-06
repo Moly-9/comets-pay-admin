@@ -38,8 +38,8 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'invoice_manage', group: '业务资料', label: '生成与管理 Invoice', description: '生成 Invoice 文件并维护 Invoice 业务资料。' },
   { id: 'invoice_media_review', group: '业务资料', label: '执行 Invoice 媒介审核', description: '在媒介审核阶段通过或退回 Invoice。' },
   { id: 'invoice_finance_review', group: '财务与付款', label: '执行 Invoice 财务审核', description: '在财务审核阶段通过或退回 Invoice。' },
-  { id: 'request_project_view', group: '业务资料', label: '查看请款项目', description: '查看项目基本信息与请款进度。' },
-  { id: 'project_manage', group: '业务资料', label: '新建与维护项目', description: '新建项目并维护项目、达人、PM 与预算资料。' },
+  { id: 'request_project_view', group: '业务资料', label: '查看我的项目', description: '查看当前媒介创建的请款草稿与提交进度。' },
+  { id: 'project_manage', group: '业务资料', label: '新建与维护请款项目', description: '关联飞书合作项目、达人、合同与唯一 Invoice。' },
   { id: 'request_list_view', group: '业务资料', label: '查看请款清单', description: '查看已提交的请款明细与状态。' },
   { id: 'request_create', group: '业务资料', label: '新建并提交请款项目', description: '关联合同与 Invoice，生成付款清单并提交审批。' },
   { id: 'request_material_view', group: '财务与付款', label: '查看请款审核资料', description: '查看合同、Invoice 与请款单信息。' },
@@ -66,7 +66,7 @@ export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
     'request_project_view',
     'project_manage',
   ],
-  pm: ['request_project_view', 'request_list_view', 'request_material_view', 'request_review'],
+  pm: ['request_list_view', 'request_material_view', 'request_review'],
   finance: ['request_material_view', 'request_review', 'invoice_finance_review', 'payout_execute', 'payment_view'],
   admin: [...ALL_PERMISSION_IDS],
   owner: [...ALL_PERMISSION_IDS],
@@ -74,8 +74,6 @@ export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
     'creator_records_view',
     'contract_view',
     'invoice_view',
-    'request_project_view',
-    'project_manage',
     'request_list_view',
     'request_material_view',
     'request_review',
@@ -118,7 +116,8 @@ export const canAccessPage = (user: SystemUser, page: NavPage) => {
 };
 
 export const getDefaultPageForRole = (role: SystemRoleKey): NavPage => {
-  if (role === 'media' || role === 'pm' || role === 'project') return 'projects';
+  if (role === 'media') return 'projects';
+  if (role === 'pm' || role === 'project') return 'requests';
   if (role === 'finance') return 'payment-workbench';
   return 'dashboard';
 };
