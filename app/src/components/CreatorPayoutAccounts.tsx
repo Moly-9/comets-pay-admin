@@ -209,13 +209,11 @@ function SchemaFieldControl({
   item,
   account,
   issue,
-  required = false,
   onChange,
 }: {
   item: AirwallexFormSchemaField;
   account: AirwallexPayoutAccount;
   issue?: string;
-  required?: boolean;
   onChange: (value: string) => void;
 }) {
   const { field } = item;
@@ -251,7 +249,6 @@ function SchemaFieldControl({
     : field.key === 'date_of_birth'
       ? 'date'
       : 'text';
-  const effectiveRequired = item.required || required;
   const help = issue
     || field.description
     || field.tip
@@ -259,7 +256,7 @@ function SchemaFieldControl({
 
   return (
     <div className={`schema-field-control ${isFullWidth ? 'full-width' : ''} ${issue ? 'schema-field-control-error' : ''}`}>
-      <FieldLabel label={label} alias={alias} required={effectiveRequired} />
+      <FieldLabel label={label} alias={alias} required={item.required} />
       {isChoice ? (
         <div className={`schema-choice-group ${field.type === 'TRANSFER_METHOD' ? 'schema-choice-group-wide' : ''}`} role="radiogroup" aria-label={label}>
           {options.map((option) => (
@@ -495,8 +492,6 @@ function AirwallexAccountForm({
   const [beneficiaryError, setBeneficiaryError] = useState('');
   const conditionKey = getAirwallexSchemaConditionKey(account);
   const issues = useMemo(() => validateAirwallexFormSchema(account, schema), [account, schema]);
-  const documentIssues = useMemo(() => getPayoutAccountDocumentIssues(account), [account]);
-  const bankAddressDocumentIssue = documentIssues.find((issue) => issue.fieldKey === 'bankAddress');
   const issuesByPath = useMemo(
     () => new Map(issues.map((issue) => [issue.path, issue.message])),
     [issues],
@@ -554,19 +549,15 @@ function AirwallexAccountForm({
   };
 
   const renderFields = (fields: AirwallexFormSchemaField[]) => (
-    fields.map((item) => {
-      const documentRequired = item.path === 'beneficiary.bank_details.bank_street_address';
-      return (
-        <SchemaFieldControl
-          item={item}
-          account={account}
-          issue={issuesByPath.get(item.path) ?? (documentRequired ? bankAddressDocumentIssue?.message : undefined)}
-          required={documentRequired}
-          onChange={(value) => updateSchemaField(item, value)}
-          key={item.path}
-        />
-      );
-    })
+    fields.map((item) => (
+      <SchemaFieldControl
+        item={item}
+        account={account}
+        issue={issuesByPath.get(item.path)}
+        onChange={(value) => updateSchemaField(item, value)}
+        key={item.path}
+      />
+    ))
   );
 
   const saveBeneficiary = async () => {
@@ -668,20 +659,18 @@ function AirwallexAccountForm({
       </Section>
 
       {fallbackFields.length ? (
-        <Section icon={<Plus size={19} />} title="合同 / Invoice 补充资料" description="补充当前 Schema 未覆盖的单据字段；银行地址为单据必填，SWIFT 与 IBAN 按付款路径决定">
+        <Section icon={<Plus size={19} />} title="合同 / Invoice 补充资料" description="补充当前 Schema 未覆盖的单据字段；以下字段不参与当前 Airwallex Schema 必填校验">
           <div className="form-grid creator-payment-form-grid airwallex-supplemental-grid">
             {fallbackFields.map((field) => {
               const display = DOCUMENT_PAYOUT_FIELD_LABELS[field.path];
-              const documentRequired = field.key === 'beneficiary_bank_address';
               return (
                 <TextField
                   label={display?.label ?? field.label}
-                  alias={`${display?.alias ?? field.sourceLabel} · ${documentRequired ? '合同 / Invoice 必填' : '当前路径选填'}`}
+                  alias={`${display?.alias ?? field.sourceLabel} · 选填`}
                   value={getAirwallexFormValue(account, field.path)}
                   onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
                   placeholder={field.placeholder}
                   type={field.type}
-                  required={documentRequired}
                   fullWidth={field.key === 'beneficiary_bank_address'}
                   key={field.key}
                 />

@@ -158,42 +158,42 @@ const validateDocumentPayoutValues = ({
     issues.push({
       fieldKey: 'accountName',
       label: 'Account Name',
-      message: 'Account Name 为合同和 Invoice 必填项',
+      message: 'Account Name 为 Airwallex 付款信息必填项',
     });
   }
   if (!accountNumber.trim() && !iban.trim()) {
     issues.push({
       fieldKey: 'accountNumber',
       label: 'Account Number / IBAN',
-      message: 'Account Number 或 IBAN 至少填写一项',
+      message: 'Account Number 或 IBAN 为 Airwallex 付款信息必填项，至少填写一项',
     });
   }
   if (!bankName.trim()) {
     issues.push({
       fieldKey: 'bankName',
       label: 'Beneficiary Bank Name',
-      message: 'Beneficiary Bank Name 为合同和 Invoice 必填项',
+      message: 'Beneficiary Bank Name 为 Airwallex 付款信息必填项',
     });
   }
   if (!bankAddress.trim()) {
     issues.push({
       fieldKey: 'bankAddress',
       label: 'Beneficiary Bank Address',
-      message: 'Beneficiary Bank Address 为合同和 Invoice 必填项',
+      message: 'Beneficiary Bank Address 为 Airwallex 付款信息必填项',
     });
   }
   if (transferMethod === 'SWIFT' && !swiftCode.trim()) {
     issues.push({
       fieldKey: 'swiftCode',
       label: 'SWIFT Code',
-      message: 'SWIFT Code 在 SWIFT 路径下为合同和 Invoice 必填项',
+      message: 'SWIFT Code 为当前 SWIFT Form Schema 必填项',
     });
   }
   if (requiresIban && !iban.trim()) {
     issues.push({
       fieldKey: 'iban',
       label: 'IBAN',
-      message: 'IBAN 在当前国家或地区的付款路径下为必填项',
+      message: 'IBAN 为当前国家或地区的 Form Schema 必填项',
     });
   }
   return issues;
