@@ -267,10 +267,11 @@ describe('project resource aggregation', () => {
           crossCreatorLinkedContract,
         ]}
         invoices={[invoiceOne, crossProjectLinkedInvoice, crossCreatorLinkedInvoice]}
-        paymentList={{
+        paymentLists={[{
           paymentListId: 'payment-list-one' as PaymentListId,
           paymentListCode: 'PAY-20260805-TEST01',
           projectId,
+          provider: 'Airwallex',
           status: 'draft',
           items: [{
             id: 'payment-item-one',
@@ -292,7 +293,7 @@ describe('project resource aggregation', () => {
           }],
           createdAt: '2026-08-05T00:00:00.000Z',
           updatedAt: '2026-08-05T00:00:00.000Z',
-        }}
+        }]}
         auditEvents={[]}
         currentUser={admin}
         onOpenContract={vi.fn()}
@@ -311,7 +312,6 @@ describe('project resource aggregation', () => {
         onAddPaymentInvoice={vi.fn()}
         onRemovePaymentInvoice={vi.fn()}
         onUpdatePaymentItem={vi.fn()}
-        onChangePaymentAccount={vi.fn()}
         onGeneratePaymentOrder={vi.fn(() => null)}
         onEditPaymentOrder={vi.fn()}
         onExportPaymentList={vi.fn()}
@@ -324,7 +324,8 @@ describe('project resource aggregation', () => {
     expect(html).toContain('覆盖 2 位达人 · 1 份已被 Invoice 覆盖');
     expect(html).toContain('1 份 Invoice');
     expect(html).toContain('项目金额 USD 500');
-    expect(html).toContain('PAY-20260805-TEST01');
+    expect(html).toContain('1 份渠道付款清单');
+    expect(html).toContain('Airwallex · 共 1 笔达人付款');
     expect(html).not.toContain('CON-CROSS-PROJECT-LINKED');
     expect(html).not.toContain('CON-CROSS-CREATOR-LINKED');
     expect(html).not.toContain(engagementOneId);
@@ -336,6 +337,13 @@ describe('project resource aggregation', () => {
     expect(source).toContain('title="确认移除付款行"');
     expect(source).toContain('仅从当前付款清单移除这笔付款行，Invoice 源记录会保留。');
     expect(source).toContain('setRemovePaymentInvoiceId(null)');
+  });
+
+  it('shows the Invoice payout snapshot instead of selecting the account again', () => {
+    const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('Invoice 冻结收款账户');
+    expect(source).not.toContain('达人暂无可用收款账户');
+    expect(source).not.toContain('onChangePaymentAccount');
   });
 });
 

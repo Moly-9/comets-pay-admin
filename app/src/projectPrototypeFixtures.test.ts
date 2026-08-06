@@ -11,7 +11,7 @@ import {
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
 import { invoicePaymentListItem, paymentListItemValue } from './businessWorkflow';
-import { eligibleInvoicePayoutAccounts } from './payoutAccounts';
+import { eligibleInvoicePayoutAccounts, getPayoutAccountId } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
 describe('project prototype fixtures', () => {
@@ -37,7 +37,10 @@ describe('project prototype fixtures', () => {
     expect(INITIAL_PROJECTS).toHaveLength(20);
     expect(engagements).toHaveLength(237);
     expect(ALL_PROJECT_PROTOTYPE_INVOICES).toHaveLength(237);
-    expect(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS).toHaveLength(20);
+    expect(new Set(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.map((list) => list.projectId)).size).toBe(20);
+    expect(new Set(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.map((list) => (
+      `${list.projectId}:${list.provider}`
+    ))).size).toBe(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.length);
     expect(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.flatMap((list) => list.items)).toHaveLength(237);
     expect(new Set(ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => invoice.snapshot.engagementId)).size).toBe(237);
 
@@ -45,52 +48,69 @@ describe('project prototype fixtures', () => {
       const invoice = ALL_PROJECT_PROTOTYPE_INVOICES.find((candidate) => (
         candidate.snapshot.engagementId === engagement.engagementId
       ));
-      const list = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.find((candidate) => (
+      const lists = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((candidate) => (
         candidate.projectId === engagement.projectId
       ));
       expect(invoice?.snapshot.creatorId).toBe(engagement.creatorId);
       expect(invoice?.snapshot.projectId).toBe(engagement.projectId);
       expect(payouts.get(invoice!.sourcePayoutId)?.invoice).toBe(invoice?.id);
-      expect(list?.items.filter((item) => item.engagementId === engagement.engagementId)).toHaveLength(1);
+      expect(lists.flatMap((list) => list.items).filter((item) => (
+        item.engagementId === engagement.engagementId
+      ))).toHaveLength(1);
     });
   });
 
   it('allocates every project budget exactly and keeps description blank in every payment row', () => {
     INITIAL_PROJECTS.forEach((project) => {
       const expected = Number(project.budget.replace(/[^0-9.]/g, ''));
-      const list = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.find((candidate) => (
+      const lists = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((candidate) => (
         candidate.projectId === project.projectId
       ));
-      const total = list?.items.reduce((sum, item) => (
+      const items = lists.flatMap((list) => list.items);
+      const total = items.reduce((sum, item) => (
         sum + Number(paymentListItemValue(item, 'amount'))
       ), 0);
       expect(total).toBeCloseTo(expected, 2);
-      expect(list?.items.every((item) => paymentListItemValue(item, 'description') === '')).toBe(true);
-      expect(list?.items.every((item) => (
+      expect(items.every((item) => paymentListItemValue(item, 'description') === '')).toBe(true);
+      expect(items.every((item) => (
         item.snapshot.provider !== 'Airwallex' || Boolean(item.snapshot.externalBeneficiaryId)
+      ))).toBe(true);
+      expect(lists.every((list) => (
+        list.items.every((item) => item.snapshot.provider === list.provider)
       ))).toBe(true);
     });
   });
 
+  it('backs every Invoice payout snapshot with the creator\'s eligible stable account', () => {
+    ALL_PROJECT_PROTOTYPE_INVOICES.forEach((invoice) => {
+      const creator = INITIAL_CREATORS.find((candidate) => candidate.id === invoice.snapshot.creatorId);
+      const eligibleAccountIds = eligibleInvoicePayoutAccounts(creator).map(getPayoutAccountId);
+      expect(invoice.snapshot.payoutAccountId).toBeTruthy();
+      expect(eligibleAccountIds).toContain(invoice.snapshot.payoutAccountId);
+    });
+  });
+
   it('maps approval and payment-failure states without unlocking Invoice-content failures', () => {
-    const list = (projectId: string) => ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.find((candidate) => (
+    const lists = (projectId: string) => ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((candidate) => (
       candidate.projectId === projectId
     ));
-    expect(list('PRJ-260727-05')?.status).toBe('draft');
-    expect(list('PRJ-260727-06')?.status).toBe('approved');
-    expect(list('PRJ-260727-07')?.status).toBe('paid');
-    expect(list('PRJ-260801-07')?.status).toBe('submitted');
-    expect(list('PRJ-260801-08')).toMatchObject({ status: 'draft', draftFromVersion: 1 });
-    expect(list('PRJ-260801-08')?.items.every((item) => (
+    expect(lists('PRJ-260727-05').every((list) => list.status === 'draft')).toBe(true);
+    expect(lists('PRJ-260727-06').every((list) => list.status === 'approved')).toBe(true);
+    expect(lists('PRJ-260727-07').every((list) => list.status === 'paid')).toBe(true);
+    expect(lists('PRJ-260801-07').every((list) => list.status === 'submitted')).toBe(true);
+    expect(lists('PRJ-260801-08').every((list) => (
+      list.status === 'draft' && list.draftFromVersion === 1
+    ))).toBe(true);
+    expect(lists('PRJ-260801-08').flatMap((list) => list.items).every((item) => (
       paymentListItemValue(item, 'transactionReference') === ''
     ))).toBe(true);
-    expect(list('PRJ-260801-08')?.versions?.[0]?.items.every((item) => (
+    expect(lists('PRJ-260801-08').flatMap((list) => list.versions?.[0]?.items ?? []).every((item) => (
       Boolean(paymentListItemValue(item, 'transactionReference'))
     ))).toBe(true);
-    expect(list('PRJ-260727-05')?.items.every((item) => (
+    expect(lists('PRJ-260727-05').flatMap((list) => list.items).every((item) => (
       paymentListItemValue(item, 'transactionReference') === ''
     ))).toBe(true);
-    expect(list('PRJ-260727-02')?.items.every((item) => (
+    expect(lists('PRJ-260727-02').flatMap((list) => list.items).every((item) => (
       Boolean(paymentListItemValue(item, 'transactionReference'))
     ))).toBe(true);
   });

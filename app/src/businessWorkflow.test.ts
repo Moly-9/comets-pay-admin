@@ -127,6 +127,7 @@ describe('project payment list', () => {
     paymentListId: 'payment-list-1' as PaymentListRecord['paymentListId'],
     paymentListCode: 'PAY-20260804-TEST01',
     projectId: 'project-1' as ProjectId,
+    provider: 'Airwallex',
     status: 'draft',
     items: [],
     createdAt: '2026-08-04T00:00:00.000Z',
@@ -165,6 +166,19 @@ describe('project payment list', () => {
     const withItem = upsertPaymentListItem(record, item);
     expect(upsertPaymentListItem(withItem, item).items).toHaveLength(1);
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
+  });
+
+  it('rejects an Invoice from a different payment provider', () => {
+    const paypalItem = {
+      ...item,
+      invoiceId: 'invoice-paypal' as InvoiceId,
+      snapshot: { ...item.snapshot, provider: 'PayPal' },
+    };
+    expect(upsertPaymentListItem(record, paypalItem).items).toEqual([]);
+    expect(validatePaymentListGeneration({ ...record, items: [paypalItem] }, [paypalItem.invoiceId]))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'MIXED_PROVIDER', invoiceId: paypalItem.invoiceId }),
+      ]));
   });
 
   it('requires a transaction reference before generating a locked payment version', () => {

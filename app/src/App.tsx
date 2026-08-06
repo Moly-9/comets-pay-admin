@@ -79,7 +79,6 @@ import type {
   ToastState,
 } from './types';
 import {
-  applyPaymentListPayoutSnapshot,
   beginPaymentListEdit,
   canEditProject,
   createAuditEvent,
@@ -88,6 +87,7 @@ import {
   hasInvoiceForEngagement,
   generatePaymentListVersion,
   invoicePaymentListItem,
+  invoicePaymentListProvider,
   nextReviewStatusAfterMutation,
   nowIso,
   payoutWithPaymentListSnapshot,
@@ -108,7 +108,6 @@ import {
 } from './businessWorkflow';
 import { downloadBlob } from './invoice/invoiceUtils';
 import {
-  createDocumentPayoutSnapshot,
   getPayoutAccountFingerprint,
   getPayoutAccountId,
   getPayoutAccountVersion,
@@ -704,14 +703,51 @@ export default function App() {
     setPayouts((current) => current.map((item) => (
       item.id === result.payout.id ? result.payout : item
     )));
-    setPaymentLists((current) => current.map((list) => (
-      list.projectId === projectId
-        ? {
-            ...refreshPaymentListItemSnapshot(list, refreshedPaymentItem),
-            status: 'draft',
-          }
-        : list
-    )));
+    setPaymentLists((current) => {
+      const sourceList = current.find((list) => (
+        list.projectId === projectId
+        && list.items.some((item) => item.invoiceId === result.record.invoiceId)
+      ));
+      if (!sourceList) return current;
+      const nextProvider = invoicePaymentListProvider(result.record);
+      if (sourceList.provider === nextProvider) {
+        return current.map((list) => list.paymentListId === sourceList.paymentListId
+          ? { ...refreshPaymentListItemSnapshot(list, refreshedPaymentItem), status: 'draft' }
+          : list);
+      }
+      const previousItem = sourceList.items.find((item) => item.invoiceId === result.record.invoiceId);
+      const movedItem: PaymentListItem = {
+        ...refreshedPaymentItem,
+        overrides: { ...(previousItem?.overrides ?? {}) },
+        requiresRevalidation: true,
+        validationIssues: ['Invoice 支付渠道或账户已变化，请重新校验'],
+      };
+      const targetList = current.find((list) => (
+        list.projectId === projectId && list.provider === nextProvider
+      ));
+      const withoutSource = current.flatMap((list) => {
+        if (list.paymentListId !== sourceList.paymentListId) return [list];
+        const updated = removePaymentListItem(list, result.record.invoiceId);
+        return updated.items.length ? [{ ...updated, status: 'draft' as const }] : [];
+      });
+      if (targetList) {
+        return withoutSource.map((list) => list.paymentListId === targetList.paymentListId
+          ? { ...upsertPaymentListItem(list, movedItem), status: 'draft' }
+          : list);
+      }
+      const providerCode = nextProvider === 'Airwallex' ? 'AWX' : 'PPL';
+      const createdAt = nowIso();
+      return [{
+        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
+        paymentListCode: `${createPrototypeCode('PAY')}-${providerCode}`,
+        projectId,
+        provider: nextProvider,
+        status: 'draft',
+        items: [movedItem],
+        createdAt,
+        updatedAt: createdAt,
+      }, ...withoutSource];
+    });
     setProjects((current) => current.map((project) => (
       getProjectId(project) === projectId
         ? {
@@ -775,33 +811,54 @@ export default function App() {
       notify('项目资料已锁定', '当前账号不能创建该项目的付款清单。');
       return;
     }
-    if (paymentLists.some((list) => list.projectId === projectId)) return;
     const invoices = generatedInvoices.filter((invoice) => (
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
     ));
     const createdAt = nowIso();
-    const list: PaymentListRecord = {
-      paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-      paymentListCode: createPrototypeCode('PAY'),
-      projectId,
-      status: 'draft',
-      items: invoices.map((invoice) => invoicePaymentListItem(invoice, contracts)),
-      createdAt,
-      updatedAt: createdAt,
-    };
-    setPaymentLists((current) => [list, ...current]);
-    registerProjectMutation({
+    const existingProviders = new Set(
+      paymentLists.filter((list) => list.projectId === projectId).map((list) => list.provider),
+    );
+    const providers = Array.from(new Set(invoices.map(invoicePaymentListProvider)));
+    const lists = providers.flatMap((provider) => {
+      if (existingProviders.has(provider)) return [];
+      const providerCode = provider === 'Airwallex' ? 'AWX' : 'PPL';
+      return [{
+        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
+        paymentListCode: `${createPrototypeCode('PAY')}-${providerCode}`,
+        projectId,
+        provider,
+        status: 'draft' as const,
+        items: invoices
+          .filter((invoice) => invoicePaymentListProvider(invoice) === provider)
+          .map((invoice) => invoicePaymentListItem(invoice, contracts)),
+        createdAt,
+        updatedAt: createdAt,
+      }];
+    });
+    if (!lists.length) {
+      notify(
+        invoices.length ? '渠道付款清单已存在' : '尚无可加入付款清单的 Invoice',
+        invoices.length
+          ? '当前项目的 Invoice 已按支付渠道分配到对应付款清单。'
+          : '请先为项目达人生成包含付款账户的 Invoice。',
+      );
+      return;
+    }
+    setPaymentLists((current) => [...lists, ...current]);
+    lists.forEach((list) => registerProjectMutation({
       projectId,
       entityType: 'payment-list',
       entityId: list.paymentListId,
       action: 'create',
-      summary: `已创建付款清单草稿 ${list.paymentListCode}`,
-    });
+      summary: `已创建 ${list.provider} 付款清单草稿 ${list.paymentListCode}`,
+    }));
   };
 
-  const deletePaymentList = (project: ProjectSummary) => {
+  const deletePaymentList = (project: ProjectSummary, paymentListId: PaymentListRecord['paymentListId']) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((item) => item.projectId === projectId);
+    const list = paymentLists.find((item) => (
+      item.projectId === projectId && item.paymentListId === paymentListId
+    ));
     if (!list) return;
     if (!canMutatePaymentList(project, list)) {
       notify('付款单已锁定', '请先进入可编辑草稿状态，再删除付款清单。');
@@ -817,17 +874,27 @@ export default function App() {
     });
   };
 
-  const addPaymentInvoice = (project: ProjectSummary, invoiceId: InvoiceId) => {
+  const addPaymentInvoice = (
+    project: ProjectSummary,
+    paymentListId: PaymentListRecord['paymentListId'],
+    invoiceId: InvoiceId,
+  ) => {
     const projectId = getProjectId(project);
     const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
-    const list = paymentLists.find((item) => item.projectId === projectId);
+    const list = paymentLists.find((item) => (
+      item.projectId === projectId && item.paymentListId === paymentListId
+    ));
     if (!canMutatePaymentList(project, list)) {
       notify('付款单已锁定', '请先进入可编辑草稿状态，再添加付款行。');
       return;
     }
     if (!invoice?.snapshot.engagementId || invoice.snapshot.projectId !== projectId) return;
+    if (invoicePaymentListProvider(invoice) !== list?.provider) {
+      notify('支付渠道不一致', `该付款清单只能添加 ${list?.provider ?? '当前'} 渠道的 Invoice。`);
+      return;
+    }
     setPaymentLists((current) => current.map((list) => (
-      list.projectId === projectId
+      list.paymentListId === paymentListId
         ? { ...upsertPaymentListItem(list, invoicePaymentListItem(invoice, contracts)), status: 'draft' }
         : list
     )));
@@ -843,15 +910,18 @@ export default function App() {
 
   const removePaymentInvoice = (project: ProjectSummary, invoiceId: InvoiceId) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((item) => item.projectId === projectId);
+    const list = paymentLists.find((item) => (
+      item.projectId === projectId && item.items.some((candidate) => candidate.invoiceId === invoiceId)
+    ));
     if (!canMutatePaymentList(project, list)) {
       notify('付款单已锁定', '请先进入可编辑草稿状态，再移除付款行。');
       return;
     }
-    setPaymentLists((current) => current.map((list) => (
-      list.projectId === projectId
-        ? { ...removePaymentListItem(list, invoiceId), status: 'draft' }
-        : list
+    const targetPaymentListId = list!.paymentListId;
+    setPaymentLists((current) => current.map((candidate) => (
+      candidate.paymentListId === targetPaymentListId
+        ? { ...removePaymentListItem(candidate, invoiceId), status: 'draft' }
+        : candidate
     )));
     registerProjectMutation({
       projectId,
@@ -869,17 +939,20 @@ export default function App() {
     value: string | number,
   ) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((item) => item.projectId === projectId);
+    const list = paymentLists.find((item) => (
+      item.projectId === projectId && item.items.some((candidate) => candidate.invoiceId === invoiceId)
+    ));
     if (!canMutatePaymentList(project, list)) {
       notify('付款单已锁定', '请先进入可编辑草稿状态，再修改付款字段。');
       return;
     }
-    setPaymentLists((current) => current.map((list) => list.projectId === projectId
+    const targetPaymentListId = list!.paymentListId;
+    setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === targetPaymentListId
       ? {
-          ...list,
+          ...candidate,
           status: 'draft',
           updatedAt: nowIso(),
-          items: list.items.map((item) => item.invoiceId === invoiceId
+          items: candidate.items.map((item) => item.invoiceId === invoiceId
             ? {
                 ...item,
                 overrides: { ...item.overrides, [field]: value },
@@ -888,7 +961,7 @@ export default function App() {
               }
             : item),
         }
-      : list));
+      : candidate));
     registerProjectMutation({
       projectId,
       entityType: 'payment-list',
@@ -898,63 +971,20 @@ export default function App() {
     });
   };
 
-  const changePaymentAccount = (
-    project: ProjectSummary,
-    invoiceId: InvoiceId,
-    payoutAccountId: string,
-  ) => {
-    const projectId = getProjectId(project);
-    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
-    if (!canMutatePaymentList(project, list)) {
-      notify('付款单已锁定', '请先进入可编辑草稿状态，再更换收款账户。');
-      return;
-    }
-    const item = paymentLists
-      .find((list) => list.projectId === projectId)
-      ?.items.find((candidate) => candidate.invoiceId === invoiceId);
-    const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
-    const account = creator?.payoutAccounts.find((candidate) => (
-      getPayoutAccountId(candidate) === payoutAccountId
-    ));
-    if (!item || !creator || !account) {
-      notify('无法更换收款账户', '未找到该达人通过稳定 payoutAccountId 关联的可用收款账户。');
-      return;
-    }
-    const updated = applyPaymentListPayoutSnapshot(
-      item,
-      createDocumentPayoutSnapshot(account, creator.id),
-    );
-    setPaymentLists((current) => current.map((list) => list.projectId === projectId
-      ? {
-          ...list,
-          status: 'draft',
-          updatedAt: nowIso(),
-          items: list.items.map((candidate) => candidate.invoiceId === invoiceId ? updated : candidate),
-        }
-      : list));
-    registerProjectMutation({
-      projectId,
-      engagementId: item.engagementId,
-      entityType: 'payment-list',
-      entityId: invoiceId,
-      action: 'update',
-      summary: `已为 ${item.snapshot.invoiceNumber} 更换 ${account.provider} 收款账户，等待重新校验`,
-    });
-  };
-
   const revalidatePaymentItem = (
     project: ProjectSummary,
     invoiceId: InvoiceId,
   ) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    const list = paymentLists.find((candidate) => (
+      candidate.projectId === projectId
+      && candidate.items.some((item) => item.invoiceId === invoiceId)
+    ));
     if (!canMutatePaymentList(project, list)) {
       notify('付款单已锁定', '请先进入可编辑草稿状态，再重新校验付款行。');
       return;
     }
-    const currentItem = paymentLists
-      .find((list) => list.projectId === projectId)
-      ?.items.find((item) => item.invoiceId === invoiceId);
+    const currentItem = list?.items.find((item) => item.invoiceId === invoiceId);
     if (!currentItem) {
       notify('无法重新校验', '未找到付款清单中的稳定 invoiceId 关联。');
       return;
@@ -978,12 +1008,13 @@ export default function App() {
         : null,
     );
     const validationIssues = validated.validationIssues ?? [];
-    setPaymentLists((current) => current.map((list) => {
-      if (list.projectId !== projectId) return list;
+    const targetPaymentListId = list!.paymentListId;
+    setPaymentLists((current) => current.map((candidate) => {
+      if (candidate.paymentListId !== targetPaymentListId) return candidate;
       return {
-        ...list,
+        ...candidate,
         updatedAt: nowIso(),
-        items: list.items.map((item) => item.invoiceId === invoiceId ? validated : item),
+        items: candidate.items.map((item) => item.invoiceId === invoiceId ? validated : item),
       };
     }));
     registerProjectMutation({
@@ -1001,9 +1032,14 @@ export default function App() {
     );
   };
 
-  const generatePaymentOrder = (project: ProjectSummary) => {
+  const generatePaymentOrder = (
+    project: ProjectSummary,
+    paymentListId: PaymentListRecord['paymentListId'],
+  ) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    const list = paymentLists.find((candidate) => (
+      candidate.projectId === projectId && candidate.paymentListId === paymentListId
+    ));
     if (!list) {
       notify('无法生成付款单', '当前项目尚未创建付款清单。');
       return null;
@@ -1013,7 +1049,11 @@ export default function App() {
       return null;
     }
     const expectedInvoiceIds = generatedInvoices
-      .filter((invoice) => invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId)
+      .filter((invoice) => (
+        invoice.snapshot.projectId === projectId
+        && invoice.snapshot.engagementId
+        && invoicePaymentListProvider(invoice) === list.provider
+      ))
       .map((invoice) => invoice.invoiceId);
     const result = generatePaymentListVersion({
       list,
@@ -1045,9 +1085,14 @@ export default function App() {
     return null;
   };
 
-  const editPaymentOrder = (project: ProjectSummary) => {
+  const editPaymentOrder = (
+    project: ProjectSummary,
+    paymentListId: PaymentListRecord['paymentListId'],
+  ) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    const list = paymentLists.find((candidate) => (
+      candidate.projectId === projectId && candidate.paymentListId === paymentListId
+    ));
     if (!list) return;
     const privileged = currentUser.roleKey === 'admin' || currentUser.roleKey === 'owner';
     const historicalStatus = ['submitted', 'approved', 'paid'].includes(list.status);
@@ -1061,9 +1106,17 @@ export default function App() {
     }
     if (list.status !== 'generated' && !historicalStatus) return;
     const updated = beginPaymentListEdit(list);
-    setPaymentLists((current) => current.map((candidate) => (
-      candidate.paymentListId === list.paymentListId ? updated : candidate
-    )));
+    setPaymentLists((current) => current.map((candidate) => {
+      if (candidate.paymentListId === list.paymentListId) return updated;
+      if (
+        historicalStatus
+        && candidate.projectId === projectId
+        && ['submitted', 'approved', 'paid'].includes(candidate.status)
+      ) {
+        return { ...candidate, status: 'generated', updatedAt: nowIso() };
+      }
+      return candidate;
+    }));
     if (historicalStatus) {
       setRequestProjects((current) => current.map((request) => request.projectId === projectId
         ? {
@@ -1098,11 +1151,20 @@ export default function App() {
     );
   };
 
-  const exportPaymentList = async (project: ProjectSummary) => {
+  const exportPaymentList = async (
+    project: ProjectSummary,
+    paymentListId: PaymentListRecord['paymentListId'],
+  ) => {
     const projectId = getProjectId(project);
-    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    const list = paymentLists.find((candidate) => (
+      candidate.projectId === projectId && candidate.paymentListId === paymentListId
+    ));
     if (!list) {
       notify('无法导出付款清单', '当前项目尚未生成付款清单。');
+      return;
+    }
+    if (list.provider !== 'Airwallex') {
+      notify('当前渠道没有可用模板', '现有 Excel 模板仅用于 Airwallex；PayPal 付款清单不会导出为 Airwallex 格式。');
       return;
     }
     try {
@@ -1153,8 +1215,10 @@ export default function App() {
     const projectInvoices = generatedInvoices.filter((invoice) => (
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
     ));
-    const list = paymentLists.find((item) => item.projectId === projectId);
-    const invalidPaymentItems = list?.items.filter((item) => item.requiresRevalidation) ?? [];
+    const lists = paymentLists.filter((item) => item.projectId === projectId);
+    const invalidPaymentItems = lists.flatMap((list) => (
+      list.items.filter((item) => item.requiresRevalidation)
+    ));
     const linkedPayouts = projectInvoices.map((invoice) => (
       payouts.find((payout) => payout.id === invoice.sourcePayoutId)
     ));
@@ -1164,8 +1228,12 @@ export default function App() {
       notify('暂不能重新提交付款清单', '本轮 Invoice 状态不一致，请核对项目稳定关联和付款失败分类。');
       return;
     }
-    if (!list || list.status !== 'generated') {
-      notify('请先生成付款单', '付款清单必须完成校验并生成锁定版本后，才能提交请款审核。');
+    const paymentListsNotReady = isPaymentListResubmission
+      ? !lists.some((list) => list.status === 'generated')
+        || lists.some((list) => list.status === 'draft')
+      : lists.some((list) => list.status !== 'generated');
+    if (!lists.length || paymentListsNotReady) {
+      notify('请先生成全部渠道付款单', '每个支付渠道的付款清单都必须完成校验并生成锁定版本后，才能提交请款审核。');
       return;
     }
     if (
@@ -1192,7 +1260,7 @@ export default function App() {
         engagementId: invoice.snapshot.engagementId as EngagementId | undefined,
         validationStatus: invoice.validationStatus,
       })),
-      paymentListInvoiceIds: list?.items.map((item) => item.invoiceId) ?? null,
+      paymentListInvoiceIds: lists.flatMap((list) => list.items.map((item) => item.invoiceId)),
     });
     if (submissionIssues.length) {
       notify(
@@ -1202,7 +1270,7 @@ export default function App() {
           : submissionIssues.includes('INVOICE_COUNT')
             ? '每位项目达人必须有且仅有一份 Invoice。'
             : submissionIssues.includes('PAYMENT_LIST_MISSING')
-              ? '付款清单必须包含项目内全部 Invoice。'
+              ? '全部渠道付款清单合计必须包含项目内全部 Invoice。'
               : '存在需要重新校验的 Invoice。',
       );
       return;
@@ -1211,7 +1279,9 @@ export default function App() {
     const previousRequest = requestProjects.find((item) => item.projectId === projectId);
     const approval = createRequestApprovalState(submittedAt, previousRequest?.approval);
     const approvalInvoiceStatus = invoiceStatusForRequestApproval('PENDING_PM');
-    const nextPaymentListVersion = list.version ?? 1;
+    const paymentListVersionByInvoice = new Map(
+      lists.flatMap((list) => list.items.map((item) => [item.invoiceId, list.version ?? 1] as const)),
+    );
     const invoiceIds = projectInvoices.map((invoice) => invoice.invoiceId);
     const sourcePayoutIds = new Set(projectInvoices.map((invoice) => invoice.sourcePayoutId));
     setProjects((current) => current.map((item) => getProjectId(item) === projectId
@@ -1221,7 +1291,6 @@ export default function App() {
       ? {
           ...item,
           status: 'submitted',
-          version: nextPaymentListVersion,
           updatedAt: submittedAt,
         }
       : item));
@@ -1231,7 +1300,12 @@ export default function App() {
           status: '未进入付款',
           invoiceReviewStatus: approvalInvoiceStatus,
           requestApprovalRound: approval.round,
-          paymentListVersion: nextPaymentListVersion,
+          paymentListVersion: projectInvoices
+            .find((invoice) => invoice.sourcePayoutId === payout.id)
+            ? paymentListVersionByInvoice.get(
+                projectInvoices.find((invoice) => invoice.sourcePayoutId === payout.id)!.invoiceId,
+              ) ?? 1
+            : payout.paymentListVersion,
           invoiceReviewHistory: [
             ...(payout.invoiceReviewHistory ?? []),
             {
@@ -1262,7 +1336,7 @@ export default function App() {
         : invoice
     )));
     const requestId = previousRequest?.id ?? createPrototypeCode('REQ');
-    const requestAmount = list!.items.reduce<Record<string, number>>((result, item) => {
+    const requestAmount = lists.flatMap((list) => list.items).reduce<Record<string, number>>((result, item) => {
       const currency = String(item.overrides.currency ?? item.snapshot.currency);
       const amount = Number(item.overrides.amount ?? item.snapshot.amount);
       return { ...result, [currency]: (result[currency] ?? 0) + amount };
@@ -1274,7 +1348,8 @@ export default function App() {
       id: requestId,
       projectId,
       invoiceIds,
-      paymentListId: list!.paymentListId,
+      paymentListId: lists[0]?.paymentListId,
+      paymentListIds: lists.map((list) => list.paymentListId),
       approval,
       project: project.name,
       brand: project.brand,
@@ -1283,7 +1358,7 @@ export default function App() {
       amount: amountLabel,
       contracts: contracts.filter((contract) => contract.projectId === projectId && contract.lifecycle !== 'GENERATED_DRAFT').length,
       invoices: projectInvoices.length,
-      paymentOrder: list!.paymentListCode,
+      paymentOrder: lists.map((list) => list.paymentListCode).join('、'),
       status: REQUEST_APPROVAL_STATUS_LABEL[approval.status],
       filter: 'pending',
       generatedDetail: {
@@ -1296,10 +1371,10 @@ export default function App() {
         invoiceId: projectInvoices.map((invoice) => invoice.id).join('、'),
         invoiceAmount: amountLabel,
         invoiceStatus: '已校验',
-        paymentListId: list!.paymentListCode,
+        paymentListId: lists.map((list) => list.paymentListCode).join('、'),
         paymentListStatus: '已提交',
         payee: `${references.length} 位项目达人`,
-        provider: Array.from(new Set(list!.items.map((item) => item.snapshot.provider))).join('、'),
+        provider: lists.map((list) => list.provider).join('、'),
         beneficiaryId: '按付款清单账户快照',
         feePolicy: '按合同及付款清单执行',
       },
@@ -1595,6 +1670,7 @@ export default function App() {
         : item));
       if (projectId) {
         setPaymentLists((current) => current.map((list) => list.projectId === projectId
+          && list.provider === (payout.provider === 'PayPal' ? 'PayPal' : 'Airwallex')
           ? { ...list, status: 'draft', updatedAt: occurredAt }
           : list));
         setRequestProjects((current) => current.map((request) => request.projectId === projectId
@@ -1870,7 +1946,6 @@ export default function App() {
           onAddPaymentInvoice={addPaymentInvoice}
           onRemovePaymentInvoice={removePaymentInvoice}
           onUpdatePaymentItem={updatePaymentItem}
-          onChangePaymentAccount={changePaymentAccount}
           onRevalidatePaymentItem={revalidatePaymentItem}
           onGeneratePaymentOrder={generatePaymentOrder}
           onEditPaymentOrder={editPaymentOrder}

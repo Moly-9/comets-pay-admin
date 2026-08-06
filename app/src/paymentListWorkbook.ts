@@ -163,6 +163,7 @@ export const buildAirwallexPaymentListRows = ({
 }): AirwallexPaymentListRow[] => {
   const issues = [
     !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
+    paymentList.provider !== 'Airwallex' ? `${paymentList.provider} 付款清单不能使用 Airwallex 模板导出` : '',
     paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
     paymentList.status === 'submitted' ? '付款清单审批中，暂不能导出' : '',
   ].filter(Boolean);

@@ -16,7 +16,7 @@ import type {
   PaymentListRecord,
   ProjectId,
 } from './businessWorkflow';
-import { invoicePaymentListItem } from './businessWorkflow';
+import { invoicePaymentListItem, invoicePaymentListProvider } from './businessWorkflow';
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
@@ -711,7 +711,7 @@ const cloneFixtureItems = (items: PaymentListItem[]) => items.map((item) => ({
   validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
 }));
 
-export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_PROJECTS.map(
+export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_PROJECTS.flatMap(
   (project, projectIndex) => {
     const projectInvoices = ALL_PROJECT_PROTOTYPE_INVOICES.filter((invoice) => (
       invoice.snapshot.projectId === project.projectId
@@ -719,65 +719,76 @@ export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_
     const status = requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus);
     const hasHistory = status !== 'draft' || project.id === 'PRJ-260801-08';
     const generatedAt = `2026-08-${String((projectIndex % 5) + 1).padStart(2, '0')}T12:00:00.000Z`;
-    const items = projectInvoices.map((invoice, invoiceIndex) => {
-      const item = invoicePaymentListItem(invoice, PROJECT_DEMO_CONTRACTS);
-      const historical = status !== 'draft';
-      return {
-        ...item,
-        id: `payment_item_fixture_${String(projectIndex + 1).padStart(2, '0')}_${String(invoiceIndex + 1).padStart(2, '0')}`,
-        snapshot: {
-          ...item.snapshot,
-          feeBearer: item.snapshot.feeBearer || 'ADVERTISER',
-          externalBeneficiaryId: item.snapshot.externalBeneficiaryId
-            || (item.snapshot.provider === 'Airwallex'
-              ? `bene_fixture_${String(item.snapshot.creatorId).replace(/^creator-/, '')}`
-              : undefined),
-          transactionReference: historical ? `${project.id}-${String(invoiceIndex + 1).padStart(2, '0')}` : '',
-          description: '',
-        },
-        requiresRevalidation: historical ? false : true,
-        validationIssues: historical ? [] : ['交易附言未填写'],
-        lastValidatedAt: historical ? generatedAt : undefined,
-      };
-    });
     const actor = {
       account: 'prototype.fixture',
       name: '原型数据生成器',
       role: '系统原型',
     };
-    const historicalItems = project.id === 'PRJ-260801-08'
-      ? items.map((item, invoiceIndex) => ({
+    return (['Airwallex', 'PayPal'] as const).flatMap((provider) => {
+      const providerInvoices = projectInvoices.filter((invoice) => (
+        invoicePaymentListProvider(invoice) === provider
+      ));
+      if (!providerInvoices.length) return [];
+      const providerCode = provider === 'Airwallex' ? 'AWX' : 'PPL';
+      const items = providerInvoices.map((invoice, invoiceIndex) => {
+        const item = invoicePaymentListItem(invoice, PROJECT_DEMO_CONTRACTS);
+        const historical = status !== 'draft';
+        return {
           ...item,
+          id: `payment_item_fixture_${String(projectIndex + 1).padStart(2, '0')}_${providerCode.toLowerCase()}_${String(invoiceIndex + 1).padStart(2, '0')}`,
           snapshot: {
             ...item.snapshot,
-            transactionReference: `${project.id}-${String(invoiceIndex + 1).padStart(2, '0')}`,
+            feeBearer: item.snapshot.feeBearer || 'ADVERTISER',
+            externalBeneficiaryId: item.snapshot.externalBeneficiaryId
+              || (item.snapshot.provider === 'Airwallex'
+                ? `bene_fixture_${String(item.snapshot.creatorId).replace(/^creator-/, '')}`
+                : undefined),
+            transactionReference: historical
+              ? `${project.id}-${providerCode}-${String(invoiceIndex + 1).padStart(2, '0')}`
+              : '',
+            description: '',
           },
-          requiresRevalidation: false,
-          validationIssues: [],
-          lastValidatedAt: generatedAt,
-        }))
-      : items;
-    const versionSnapshot = hasHistory ? [{
-      version: 1,
-      generatedAt,
-      generatedBy: actor,
-      items: cloneFixtureItems(historicalItems),
-    }] : undefined;
-    return {
-      paymentListId: `payment_list_fixture_${String(projectIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
-      paymentListCode: project.paymentOrder && project.paymentOrder !== '待生成'
+          requiresRevalidation: historical ? false : true,
+          validationIssues: historical ? [] : ['交易附言未填写'],
+          lastValidatedAt: historical ? generatedAt : undefined,
+        };
+      });
+      const historicalItems = project.id === 'PRJ-260801-08'
+        ? items.map((item, invoiceIndex) => ({
+            ...item,
+            snapshot: {
+              ...item.snapshot,
+              transactionReference: `${project.id}-${providerCode}-${String(invoiceIndex + 1).padStart(2, '0')}`,
+            },
+            requiresRevalidation: false,
+            validationIssues: [],
+            lastValidatedAt: generatedAt,
+          }))
+        : items;
+      const versionSnapshot = hasHistory ? [{
+        version: 1,
+        generatedAt,
+        generatedBy: actor,
+        items: cloneFixtureItems(historicalItems),
+      }] : undefined;
+      const basePaymentCode = project.paymentOrder && project.paymentOrder !== '待生成'
         ? project.paymentOrder
-        : `PAY-${project.id.replace(/^PRJ-/, '')}-01`,
-      projectId: project.projectId as ProjectId,
-      status,
-      version: hasHistory ? 1 : 0,
-      generatedAt: hasHistory ? generatedAt : undefined,
-      generatedBy: hasHistory ? actor : undefined,
-      versions: versionSnapshot,
-      draftFromVersion: project.id === 'PRJ-260801-08' ? 1 : undefined,
-      items,
-      createdAt: DEMO_TIMESTAMP,
-      updatedAt: project.id === 'PRJ-260801-08' ? '2026-08-01T10:35:00.000Z' : generatedAt,
-    };
+        : `PAY-${project.id.replace(/^PRJ-/, '')}-01`;
+      return [{
+        paymentListId: `payment_list_fixture_${String(projectIndex + 1).padStart(2, '0')}_${providerCode.toLowerCase()}` as PaymentListRecord['paymentListId'],
+        paymentListCode: `${basePaymentCode}-${providerCode}`,
+        projectId: project.projectId as ProjectId,
+        provider,
+        status,
+        version: hasHistory ? 1 : 0,
+        generatedAt: hasHistory ? generatedAt : undefined,
+        generatedBy: hasHistory ? actor : undefined,
+        versions: versionSnapshot,
+        draftFromVersion: project.id === 'PRJ-260801-08' ? 1 : undefined,
+        items,
+        createdAt: DEMO_TIMESTAMP,
+        updatedAt: project.id === 'PRJ-260801-08' ? '2026-08-01T10:35:00.000Z' : generatedAt,
+      }];
+    });
   },
 );

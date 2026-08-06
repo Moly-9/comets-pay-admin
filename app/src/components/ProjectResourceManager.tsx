@@ -18,12 +18,14 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   canEditProject,
   getPaymentListAccess,
+  invoicePaymentListProvider,
   paymentListItemValue,
   projectReviewStatusLabel,
   type ContractId,
   type EngagementId,
   type InvoiceId,
   type PaymentListEditableField,
+  type PaymentListId,
   type PaymentListRecord,
   type ProjectId,
   type WorkflowAuditEvent,
@@ -37,11 +39,6 @@ import type { SystemUser } from '../data';
 import { formatInvoiceMoney, invoiceTotal, normalizeLineItem } from '../invoice/invoiceUtils';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency } from '../types';
-import {
-  eligibleInvoicePayoutAccounts,
-  getPayoutAccountId,
-  getPayoutAccountIdentifier,
-} from '../payoutAccounts';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
@@ -60,7 +57,7 @@ type Props = {
   creators: CreatorProfile[];
   contracts: ContractRecord[];
   invoices: GeneratedInvoiceRecord[];
-  paymentList: PaymentListRecord | null;
+  paymentLists: PaymentListRecord[];
   auditEvents: WorkflowAuditEvent[];
   currentUser: SystemUser;
   onOpenContract: (contractId: string) => void;
@@ -75,19 +72,18 @@ type Props = {
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
   onCreatePaymentList: () => void;
-  onDeletePaymentList: () => void;
-  onAddPaymentInvoice: (invoiceId: InvoiceId) => void;
+  onDeletePaymentList: (paymentListId: PaymentListId) => void;
+  onAddPaymentInvoice: (paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (
     invoiceId: InvoiceId,
     field: PaymentListEditableField,
     value: string | number,
   ) => void;
-  onChangePaymentAccount: (invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem?: (invoiceId: InvoiceId) => void;
-  onGeneratePaymentOrder: () => InvoiceId | null;
-  onEditPaymentOrder: () => void;
-  onExportPaymentList: () => Promise<void>;
+  onGeneratePaymentOrder: (paymentListId: PaymentListId) => InvoiceId | null;
+  onEditPaymentOrder: (paymentListId: PaymentListId) => void;
+  onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   onSubmitReview: () => void;
 };
 
@@ -270,7 +266,7 @@ export function ProjectResourceManager({
   creators,
   contracts,
   invoices,
-  paymentList,
+  paymentLists,
   auditEvents,
   currentUser,
   onOpenContract,
@@ -289,7 +285,6 @@ export function ProjectResourceManager({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
-  onChangePaymentAccount,
   onRevalidatePaymentItem,
   onGeneratePaymentOrder,
   onEditPaymentOrder,
@@ -306,9 +301,14 @@ export function ProjectResourceManager({
   const [editingInvoice, setEditingInvoice] = useState<GeneratedInvoiceRecord | null>(null);
   const [paymentInvoiceId, setPaymentInvoiceId] = useState('');
   const [removePaymentInvoiceId, setRemovePaymentInvoiceId] = useState<InvoiceId | null>(null);
+  const [selectedPaymentListId, setSelectedPaymentListId] = useState<PaymentListId | ''>('');
 
   const references = (project.creatorProfiles ?? []).filter((reference) => reference.status !== 'removed');
   const projectId = projectInternalId(project);
+  const projectPaymentLists = paymentLists.filter((list) => list.projectId === projectId);
+  const paymentList = projectPaymentLists.find((list) => list.paymentListId === selectedPaymentListId)
+    ?? projectPaymentLists[0]
+    ?? null;
   const referenceByEngagement = new Map(
     references.map((reference) => [reference.engagementId, reference]),
   );
@@ -357,7 +357,8 @@ export function ProjectResourceManager({
   }, [removePaymentInvoiceId]);
 
   const generatePaymentOrder = () => {
-    const blockingInvoiceId = onGeneratePaymentOrder();
+    if (!paymentList) return;
+    const blockingInvoiceId = onGeneratePaymentOrder(paymentList.paymentListId);
     if (!blockingInvoiceId) return;
     window.setTimeout(() => {
       const row = document.getElementById(`payment-row-${blockingInvoiceId}`);
@@ -379,8 +380,12 @@ export function ProjectResourceManager({
   ), [contracts, invoices, linkDialog, project, references]);
 
   const paymentCandidateInvoices = linkedInvoices.filter((invoice) => (
-    !paymentList?.items.some((item) => item.invoiceId === invoice.invoiceId)
+    paymentList
+    && invoicePaymentListProvider(invoice) === paymentList.provider
+    && !projectPaymentLists.some((list) => list.items.some((item) => item.invoiceId === invoice.invoiceId))
   ));
+  const missingPaymentListProviders = Array.from(new Set(linkedInvoices.map(invoicePaymentListProvider)))
+    .filter((provider) => !projectPaymentLists.some((list) => list.provider === provider));
 
   const createOptions = references.map((reference) => {
     const creator = referenceLabel(reference, creators);
@@ -497,12 +502,18 @@ export function ProjectResourceManager({
       kind: 'payment' as const,
       icon: WalletCards,
       label: '付款清单',
-      count: paymentList?.items.length ?? 0,
-      title: paymentList?.paymentListCode ?? '付款清单尚未生成',
-      description: paymentList
-        ? `${paymentList.items.length} 笔达人付款明细 · 来源为项目已关联 Invoice`
-        : '每个项目最多一份，生成后汇总全部达人付款行',
-      status: paymentListStatusLabel(paymentList),
+      count: projectPaymentLists.reduce((total, list) => total + list.items.length, 0),
+      title: projectPaymentLists.length
+        ? `${projectPaymentLists.length} 份渠道付款清单`
+        : '付款清单尚未生成',
+      description: projectPaymentLists.length
+        ? `${projectPaymentLists.map((list) => list.provider).join('、')} · 共 ${projectPaymentLists.reduce((total, list) => total + list.items.length, 0)} 笔达人付款`
+        : '系统将按 Invoice 的支付渠道分别生成付款清单',
+      status: !projectPaymentLists.length
+        ? '未生成'
+        : new Set(projectPaymentLists.map((list) => list.status)).size === 1
+          ? paymentListStatusLabel(projectPaymentLists[0])
+          : '需处理',
       action: '查看清单',
     },
   ];
@@ -776,10 +787,10 @@ export function ProjectResourceManager({
                 <Button onClick={generatePaymentOrder}>生成付款单</Button>
               ) : null}
               {paymentList?.status === 'generated' && canReopenPaymentList ? (
-                <Button variant="secondary" icon={<Pencil size={15} />} onClick={onEditPaymentOrder}>编辑付款单</Button>
+                <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => onEditPaymentOrder(paymentList.paymentListId)}>编辑付款单</Button>
               ) : null}
               {paymentListHistorical && paymentAccess.canCreateVersion ? (
-                <Button variant="secondary" icon={<FilePlus2 size={15} />} onClick={onEditPaymentOrder}>创建新版本</Button>
+                <Button variant="secondary" icon={<FilePlus2 size={15} />} onClick={() => onEditPaymentOrder(paymentList!.paymentListId)}>创建新版本</Button>
               ) : null}
               <Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>
             </>
@@ -788,23 +799,49 @@ export function ProjectResourceManager({
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading">
               <div>
-                <strong>项目付款清单</strong>
-                <p>每个项目最多一份，付款行来自本项目已关联且尚未入单的 Invoice。</p>
+                <strong>按支付渠道拆分的付款清单</strong>
+                <p>付款行继承 Invoice 冻结账户；同一清单只包含一个支付渠道。</p>
               </div>
               <span>{paymentList?.paymentListCode ?? projectCode}</span>
             </div>
 
-            {(canEdit || paymentList) ? (
+            {projectPaymentLists.length ? (
+              <div className="project-payment-channel-tabs" role="tablist" aria-label="支付渠道付款清单">
+                {projectPaymentLists.map((list) => (
+                  <button
+                    aria-selected={list.paymentListId === paymentList?.paymentListId}
+                    className={list.paymentListId === paymentList?.paymentListId ? 'is-active' : ''}
+                    key={list.paymentListId}
+                    role="tab"
+                    type="button"
+                    onClick={() => {
+                      setSelectedPaymentListId(list.paymentListId);
+                      setPaymentInvoiceId('');
+                    }}
+                  >
+                    <strong>{list.provider}</strong>
+                    <span>{list.items.length} 笔 · {paymentListStatusLabel(list)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {(canEdit || projectPaymentLists.length) ? (
               <div className="project-resource-browser-toolbar project-payment-toolbar">
                 {canEdit ? (
                   paymentList ? (
-                    <Button variant="danger" icon={<Trash2 size={15} />} disabled={!paymentFieldsEditable} onClick={() => {
-                      if (window.confirm(`确认删除付款清单 ${paymentList.paymentListCode}？Invoice 不会被删除。`)) {
-                        onDeletePaymentList();
-                      }
-                    }}>删除清单</Button>
+                    <div className="project-payment-toolbar-actions">
+                      <Button variant="danger" icon={<Trash2 size={15} />} disabled={!paymentFieldsEditable} onClick={() => {
+                        if (window.confirm(`确认删除付款清单 ${paymentList.paymentListCode}？Invoice 不会被删除。`)) {
+                          onDeletePaymentList(paymentList.paymentListId);
+                        }
+                      }}>删除清单</Button>
+                      {missingPaymentListProviders.length ? (
+                        <Button variant="secondary" icon={<FilePlus2 size={15} />} onClick={onCreatePaymentList}>补齐渠道清单</Button>
+                      ) : null}
+                    </div>
                   ) : (
-                    <Button icon={<FilePlus2 size={15} />} onClick={onCreatePaymentList}>生成付款清单</Button>
+                    <Button icon={<FilePlus2 size={15} />} disabled={!linkedInvoices.length} onClick={onCreatePaymentList}>按渠道生成付款清单</Button>
                   )
                 ) : <span />}
                 {paymentList ? (
@@ -815,9 +852,12 @@ export function ProjectResourceManager({
                       !paymentList.items.length
                       || paymentList.status === 'draft'
                       || paymentList.status === 'submitted'
+                      || paymentList.provider !== 'Airwallex'
                     }
-                    onClick={() => { void onExportPaymentList(); }}
-                  >{['approved', 'paid'].includes(paymentList.status) ? '导出 Excel' : '导出预览'}</Button>
+                    onClick={() => { void onExportPaymentList(paymentList.paymentListId); }}
+                  >{paymentList.provider === 'Airwallex'
+                    ? ['approved', 'paid'].includes(paymentList.status) ? '导出 Excel' : '导出预览'
+                    : 'PayPal 暂无模板'}</Button>
                 ) : null}
               </div>
             ) : null}
@@ -825,7 +865,7 @@ export function ProjectResourceManager({
             {paymentList ? (
               <>
                 <div className="project-payment-list-meta">
-                  <strong>{paymentList.paymentListCode}</strong>
+                  <strong>{paymentList.paymentListCode} · {paymentList.provider}</strong>
                   <span>
                     {paymentList.items.length} 笔付款 · {paymentListStatusLabel(paymentList)}
                     {paymentList.version ? ` · v${paymentList.version}` : ''}
@@ -834,20 +874,11 @@ export function ProjectResourceManager({
                 </div>
                 <NoticeBanner>
                   {paymentList.status === 'draft'
-                    ? '描述保持选填；交易附言必须逐行填写。生成付款单后将保存当前版本并立即锁定。'
-                    : '当前付款单内容已锁定。Excel 在浏览器本地生成并包含完整付款资料，页面只展示脱敏账户。'}
+                    ? '收款账户继承并冻结自 Invoice，不在付款清单中更换。描述保持选填；交易附言生成前必填。'
+                    : '当前付款单内容已锁定。页面只展示 Invoice 冻结的脱敏账户快照。'}
                 </NoticeBanner>
                 <div className="project-payment-rows">
                   {paymentList.items.map((item) => {
-                    const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
-                    const accountOptions = eligibleInvoicePayoutAccounts(creator)
-                      .map((account) => ({
-                        value: getPayoutAccountId(account),
-                        label: account.nickname,
-                        description: account.provider === 'Airwallex'
-                          ? `${account.provider} · ${account.bankDetails.accountCurrency} · ${account.transferMethod} · ${getPayoutAccountIdentifier(account)}`
-                          : `${account.provider} · ${getPayoutAccountIdentifier(account)}`,
-                      }));
                     return (
                       <article className="project-payment-row" id={`payment-row-${item.invoiceId}`} key={item.invoiceId}>
                         <header className="project-payment-row-header">
@@ -879,18 +910,13 @@ export function ProjectResourceManager({
                         </div>
 
                         <div className="project-payment-fields">
-                          <label className="project-payment-account-field">
-                            <span>{item.snapshot.provider} 收款账户</span>
-                            <SelectField
-                              ariaLabel={`${item.snapshot.creatorName} ${item.snapshot.provider} 收款账户`}
-                              variant="form"
-                              value={item.snapshot.payoutAccountId ?? ''}
-                              options={accountOptions}
-                              placeholder={accountOptions.length ? '选择达人收款账户' : '达人暂无可用收款账户'}
-                              disabled={!paymentFieldsEditable || !accountOptions.length}
-                              onChange={(value) => onChangePaymentAccount(item.invoiceId, value)}
-                            />
-                          </label>
+                          <div className="project-payment-account-field">
+                            <span>Invoice 冻结收款账户</span>
+                            <div className="project-payment-account-snapshot">
+                              <strong>{item.snapshot.provider} · {item.snapshot.accountSummary}</strong>
+                              <small>账户 ID {item.snapshot.payoutAccountId ?? '缺失'} · {item.snapshot.payoutAccountVersion ?? 'legacy-v1'}</small>
+                            </div>
+                          </div>
                           <label>
                             <span>支付币种</span>
                             <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'currency', event.target.value.toUpperCase())} />
@@ -961,7 +987,8 @@ export function ProjectResourceManager({
                       variant="secondary"
                       disabled={!paymentInvoiceId}
                       onClick={() => {
-                        onAddPaymentInvoice(paymentInvoiceId as InvoiceId);
+                        if (!paymentList) return;
+                        onAddPaymentInvoice(paymentList.paymentListId, paymentInvoiceId as InvoiceId);
                         setPaymentInvoiceId('');
                       }}
                     >添加付款行</Button>
@@ -972,7 +999,7 @@ export function ProjectResourceManager({
               <div className="project-resource-browser-empty">
                 <WalletCards size={23} />
                 <strong>付款清单尚未生成</strong>
-                <p>先为每位项目达人关联并校验 Invoice，再生成项目级唯一付款清单。</p>
+                <p>先为每位项目达人关联并校验 Invoice，系统会按支付渠道分别生成付款清单。</p>
               </div>
             )}
           </div>

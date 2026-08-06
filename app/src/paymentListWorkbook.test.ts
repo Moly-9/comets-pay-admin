@@ -129,6 +129,7 @@ const paymentList = (items = [
   paymentListId: 'payment-list-workbook' as PaymentListRecord['paymentListId'],
   paymentListCode: 'PAY-20260806-TEST01',
   projectId,
+  provider: 'Airwallex',
   status: 'generated',
   items,
   createdAt: '2026-08-06T00:00:00.000Z',
@@ -196,6 +197,13 @@ describe('Airwallex payment-list workbook', () => {
   it('blocks export before a draft has been generated and locked', () => {
     expect(() => buildAirwallexPaymentListRows({
       paymentList: { ...paymentList(), status: 'draft' },
+      creators: [creator],
+    })).toThrow(PaymentListWorkbookError);
+  });
+
+  it('does not export a PayPal list with the Airwallex template', () => {
+    expect(() => buildAirwallexPaymentListRows({
+      paymentList: { ...paymentList(), provider: 'PayPal' },
       creators: [creator],
     })).toThrow(PaymentListWorkbookError);
   });

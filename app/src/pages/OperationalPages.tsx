@@ -85,6 +85,7 @@ import {
   type EngagementId,
   type InvoiceId,
   type PaymentListEditableField,
+  type PaymentListId,
   type PaymentListRecord,
   type ProjectId,
   type RequestApprovalState,
@@ -444,7 +445,6 @@ export function ProjectsPage({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
-  onChangePaymentAccount,
   onRevalidatePaymentItem,
   onGeneratePaymentOrder,
   onEditPaymentOrder,
@@ -475,15 +475,14 @@ export function ProjectsPage({
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
   onCreatePaymentList: (project: ProjectSummary) => void;
-  onDeletePaymentList: (project: ProjectSummary) => void;
-  onAddPaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
+  onDeletePaymentList: (project: ProjectSummary, paymentListId: PaymentListId) => void;
+  onAddPaymentInvoice: (project: ProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
-  onChangePaymentAccount: (project: ProjectSummary, invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId) => void;
-  onGeneratePaymentOrder: (project: ProjectSummary) => InvoiceId | null;
-  onEditPaymentOrder: (project: ProjectSummary) => void;
-  onExportPaymentList: (project: ProjectSummary) => Promise<void>;
+  onGeneratePaymentOrder: (project: ProjectSummary, paymentListId: PaymentListId) => InvoiceId | null;
+  onEditPaymentOrder: (project: ProjectSummary, paymentListId: PaymentListId) => void;
+  onExportPaymentList: (project: ProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onSubmitProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
@@ -745,7 +744,7 @@ export function ProjectsPage({
         notify={notify}
         contracts={contracts}
         invoices={generatedInvoices}
-        paymentList={paymentLists.find((list) => list.projectId === (selectedProject.projectId ?? selectedProject.id)) ?? null}
+        paymentLists={paymentLists.filter((list) => list.projectId === (selectedProject.projectId ?? selectedProject.id))}
         auditEvents={auditEvents.filter((event) => event.projectId === (selectedProject.projectId ?? selectedProject.id))}
         onOpenContract={onOpenContract}
         onOpenInvoice={onOpenInvoice}
@@ -759,15 +758,14 @@ export function ProjectsPage({
         onDeleteInvoice={onDeleteInvoice}
         onUpdateInvoice={onUpdateInvoice}
         onCreatePaymentList={() => onCreatePaymentList(selectedProject)}
-        onDeletePaymentList={() => onDeletePaymentList(selectedProject)}
-        onAddPaymentInvoice={(invoiceId) => onAddPaymentInvoice(selectedProject, invoiceId)}
+        onDeletePaymentList={(paymentListId) => onDeletePaymentList(selectedProject, paymentListId)}
+        onAddPaymentInvoice={(paymentListId, invoiceId) => onAddPaymentInvoice(selectedProject, paymentListId, invoiceId)}
         onRemovePaymentInvoice={(invoiceId) => onRemovePaymentInvoice(selectedProject, invoiceId)}
         onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
-        onChangePaymentAccount={(invoiceId, payoutAccountId) => onChangePaymentAccount(selectedProject, invoiceId, payoutAccountId)}
         onRevalidatePaymentItem={(invoiceId) => onRevalidatePaymentItem(selectedProject, invoiceId)}
-        onGeneratePaymentOrder={() => onGeneratePaymentOrder(selectedProject)}
-        onEditPaymentOrder={() => onEditPaymentOrder(selectedProject)}
-        onExportPaymentList={() => onExportPaymentList(selectedProject)}
+        onGeneratePaymentOrder={(paymentListId) => onGeneratePaymentOrder(selectedProject, paymentListId)}
+        onEditPaymentOrder={(paymentListId) => onEditPaymentOrder(selectedProject, paymentListId)}
+        onExportPaymentList={(paymentListId) => onExportPaymentList(selectedProject, paymentListId)}
         onSubmitReview={() => onSubmitProjectReview(selectedProject)}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {
@@ -1437,13 +1435,13 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
   createSeedCreator({
     id: 'creator-camila', initials: 'CC', accent: '#f97316', name: 'Camila Costa', handle: '@camila.beauty', region: '巴西', platform: 'Instagram · TikTok', projects: 6,
     contact: createInvoiceContact('Camila Costa', 'camila.costa@creator.example', '+55 11 90000 4206', 'Jardins, Sao Paulo, Brazil'),
-    bank: { countryCode: 'BR', countryName: 'Brazil', currency: 'BRL', accountNumber: '0000000002', bankName: 'Itau Unibanco', clearingSystem: 'PIX', routingType1: 'bank_code', routingValue1: '341', routingType2: 'branch_code', routingValue2: '0156', streetAddress: 'Avenida Paulista 1294', city: 'Sao Paulo', state: 'Sao Paulo', postcode: '01310-100', status: 'REVIEW_REQUIRED' },
+    bank: { countryCode: 'BR', countryName: 'Brazil', currency: 'BRL', accountNumber: '0000000002', bankName: 'Itau Unibanco', clearingSystem: 'PIX', routingType1: 'bank_code', routingValue1: '341', routingType2: 'branch_code', routingValue2: '0156', streetAddress: 'Avenida Paulista 1294', city: 'Sao Paulo', state: 'Sao Paulo', postcode: '01310-100', status: 'VERIFIED' },
     paypal: { username: 'camila.beauty', email: 'camila.costa@example.com' },
   }),
   createSeedCreator({
     id: 'creator-oliver', initials: 'OC', accent: '#06b6d4', name: 'Oliver Chen', handle: '@oliver.tech', region: '新加坡', platform: 'YouTube', projects: 2,
     contact: createInvoiceContact('Oliver Chen', 'oliver.chen@creator.example', '+65 8000 5319', 'Tanjong Pagar, Singapore'),
-    bank: { countryCode: 'SG', countryName: 'Singapore', currency: 'SGD', accountNumber: '0000000003', bankName: 'DBS Bank', clearingSystem: 'FAST', routingType1: 'bank_code', routingValue1: '7171', routingType2: 'branch_code', routingValue2: '006', streetAddress: '12 Marina Boulevard', city: 'Singapore', state: 'Singapore', postcode: '018982', status: 'CANNOT_VERIFY' },
+    bank: { countryCode: 'SG', countryName: 'Singapore', currency: 'SGD', accountNumber: '0000000003', bankName: 'DBS Bank', clearingSystem: 'FAST', routingType1: 'bank_code', routingValue1: '7171', routingType2: 'branch_code', routingValue2: '006', streetAddress: '12 Marina Boulevard', city: 'Singapore', state: 'Singapore', postcode: '018982', status: 'VERIFIED' },
   }),
   createSeedCreator({
     id: 'creator-hannah', initials: 'HL', accent: '#8b5cf6', name: 'Hannah Lee', handle: '@hannah.home', region: '韩国', platform: 'Instagram', projects: 4,
@@ -1458,7 +1456,7 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
   createSeedCreator({
     id: 'creator-emily', initials: 'EW', accent: '#14b8a6', name: 'Emily Wong', handle: '@emily.travel', region: '中国香港', platform: 'YouTube · Instagram', projects: 3,
     contact: createInvoiceContact('Emily Wong', 'emily.wong@creator.example', '+852 6000 8621', 'Wan Chai, Hong Kong, China'),
-    bank: { countryCode: 'HK', countryName: 'Hong Kong SAR China', currency: 'HKD', accountNumber: '000000005', bankName: 'HSBC Hong Kong', clearingSystem: 'FPS', routingType1: 'bank_code', routingValue1: '004', routingType2: 'branch_code', routingValue2: '621', streetAddress: '1 Queen\'s Road Central', city: 'Hong Kong', state: 'Hong Kong', postcode: '000000', status: 'READY_FOR_VALIDATION' },
+    bank: { countryCode: 'HK', countryName: 'Hong Kong SAR China', currency: 'HKD', accountNumber: '000000005', bankName: 'HSBC Hong Kong', clearingSystem: 'FPS', routingType1: 'bank_code', routingValue1: '004', routingType2: 'branch_code', routingValue2: '621', streetAddress: '1 Queen\'s Road Central', city: 'Hong Kong', state: 'Hong Kong', postcode: '000000', status: 'VERIFIED' },
   }),
   createSeedCreator({
     id: 'creator-kenji', initials: 'KM', accent: '#22c55e', name: 'Kenji Mori', handle: '@kenji.moves', region: '日本', platform: 'YouTube', projects: 7,
@@ -1473,7 +1471,7 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
   createSeedCreator({
     id: 'creator-marc', initials: 'MO', accent: '#64748b', name: 'Marc Olivier', handle: '@marcframes', region: '法国', platform: 'Instagram', projects: 1,
     contact: createInvoiceContact('Marc Olivier', 'marc.olivier@creator.example', '+33 6 00 00 2957', 'Paris, Ile-de-France, France'),
-    paypal: { username: 'marcframes', email: '', nickname: 'PayPal 主账户', status: 'DRAFT' },
+    paypal: { username: 'marcframes', email: 'marc.olivier@creator.example', nickname: 'PayPal 主账户', status: 'VERIFIED' },
   }),
   ...PROTOTYPE_PAYPAL_CREATOR_SEEDS.map((creator) => createSeedCreator({
     ...creator,

@@ -37,6 +37,7 @@ export type RequestProjectSummary = {
   projectId?: ProjectId;
   invoiceIds?: InvoiceId[];
   paymentListId?: PaymentListId;
+  paymentListIds?: PaymentListId[];
   approval?: RequestApprovalState;
   project: string;
   brand: string;

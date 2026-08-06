@@ -115,6 +115,7 @@ export type PaymentListItem = {
 };
 
 export type PaymentListStatus = 'draft' | 'generated' | 'submitted' | 'approved' | 'paid';
+export type PaymentListProvider = 'Airwallex' | 'PayPal';
 
 export type PaymentListActor = {
   account: string;
@@ -133,6 +134,7 @@ export type PaymentListRecord = {
   paymentListId: PaymentListId;
   paymentListCode: string;
   projectId: ProjectId;
+  provider: PaymentListProvider;
   status: PaymentListStatus;
   version?: number;
   generatedAt?: string;
@@ -146,6 +148,7 @@ export type PaymentListRecord = {
 
 export type PaymentListGenerationIssueCode =
   | 'NO_ITEMS'
+  | 'MIXED_PROVIDER'
   | 'MISSING_INVOICE'
   | 'UNKNOWN_INVOICE'
   | 'DUPLICATE_INVOICE'
@@ -290,9 +293,22 @@ export const upsertPaymentListItem = (
   list: PaymentListRecord,
   item: PaymentListItem,
 ): PaymentListRecord => {
-  if (list.items.some((current) => current.invoiceId === item.invoiceId)) return list;
+  if (
+    list.items.some((current) => current.invoiceId === item.invoiceId)
+    || item.snapshot.provider !== list.provider
+  ) return list;
   return { ...list, items: [...list.items, item], updatedAt: nowIso() };
 };
+
+export const invoicePaymentListProvider = (
+  invoice: GeneratedInvoiceRecord,
+): PaymentListProvider => (
+  invoice.snapshot.payoutProvider === 'PayPal'
+  || invoice.snapshot.payment.payoutProvider === 'PayPal'
+  || invoice.snapshot.paymentMethod === 'paypal'
+    ? 'PayPal'
+    : 'Airwallex'
+);
 
 export const removePaymentListItem = (
   list: PaymentListRecord,
@@ -406,6 +422,16 @@ export const validatePaymentListGeneration = (
 
   if (!list.items.length) {
     issues.push({ code: 'NO_ITEMS', message: '付款清单至少需要一笔 Invoice。' });
+  }
+  const mismatchedProviderItem = list.items.find((item) => (
+    item.snapshot.provider !== list.provider
+  ));
+  if (mismatchedProviderItem) {
+    issues.push({
+      code: 'MIXED_PROVIDER',
+      invoiceId: mismatchedProviderItem.invoiceId,
+      message: `同一付款清单只能包含 ${list.provider} 渠道的 Invoice。`,
+    });
   }
   expectedInvoiceIds.forEach((invoiceId) => {
     if (!itemCounts.has(invoiceId)) {

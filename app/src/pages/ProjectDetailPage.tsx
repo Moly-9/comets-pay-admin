@@ -27,6 +27,7 @@ import {
   type CreatorId,
   type InvoiceId,
   type PaymentListEditableField,
+  type PaymentListId,
   type PaymentListRecord,
   type EngagementId,
   type ProjectId,
@@ -959,7 +960,7 @@ export function ProjectDetailPage({
   onUpdateCreators,
   contracts = [],
   invoices,
-  paymentList,
+  paymentLists,
   auditEvents,
   onOpenContract,
   onOpenInvoice,
@@ -977,7 +978,6 @@ export function ProjectDetailPage({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
-  onChangePaymentAccount,
   onRevalidatePaymentItem,
   onGeneratePaymentOrder,
   onEditPaymentOrder,
@@ -992,7 +992,7 @@ export function ProjectDetailPage({
   onUpdateCreators: (creatorHandles: string[]) => void;
   contracts?: ContractRecord[];
   invoices: GeneratedInvoiceRecord[];
-  paymentList: PaymentListRecord | null;
+  paymentLists: PaymentListRecord[];
   auditEvents: WorkflowAuditEvent[];
   onOpenContract?: (contractId: string) => void;
   onOpenInvoice: (invoiceId: InvoiceId) => void;
@@ -1006,15 +1006,14 @@ export function ProjectDetailPage({
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
   onCreatePaymentList: () => void;
-  onDeletePaymentList: () => void;
-  onAddPaymentInvoice: (invoiceId: InvoiceId) => void;
+  onDeletePaymentList: (paymentListId: PaymentListId) => void;
+  onAddPaymentInvoice: (paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
-  onChangePaymentAccount: (invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (invoiceId: InvoiceId) => void;
-  onGeneratePaymentOrder: () => InvoiceId | null;
-  onEditPaymentOrder: () => void;
-  onExportPaymentList: () => Promise<void>;
+  onGeneratePaymentOrder: (paymentListId: PaymentListId) => InvoiceId | null;
+  onEditPaymentOrder: (paymentListId: PaymentListId) => void;
+  onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   onSubmitReview: () => void;
   notify: Notify;
 }) {
@@ -1113,7 +1112,7 @@ export function ProjectDetailPage({
               creators={creatorArchive}
               contracts={contracts}
               invoices={invoices}
-              paymentList={paymentList}
+              paymentLists={paymentLists}
               auditEvents={auditEvents}
               currentUser={currentUser}
               onOpenContract={(contractId) => onOpenContract?.(contractId)}
@@ -1132,7 +1131,6 @@ export function ProjectDetailPage({
               onAddPaymentInvoice={onAddPaymentInvoice}
               onRemovePaymentInvoice={onRemovePaymentInvoice}
               onUpdatePaymentItem={onUpdatePaymentItem}
-              onChangePaymentAccount={onChangePaymentAccount}
               onRevalidatePaymentItem={onRevalidatePaymentItem}
               onGeneratePaymentOrder={onGeneratePaymentOrder}
               onEditPaymentOrder={onEditPaymentOrder}
