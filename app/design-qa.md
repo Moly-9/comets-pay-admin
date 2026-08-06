@@ -45,6 +45,50 @@
 
 final result: passed
 
+---
+
+# Invoice Batch Payment Information Cascader Design QA
+
+## Reference and environment
+
+- Current-state reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-2bba2ecc-9c04-4327-b1be-b082588a6493.png`.
+- Cascader visual reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-b889af2a-8c74-4d8f-b44f-025cd6a5d5da.png`.
+- Implementation URL: `http://127.0.0.1:5174/`.
+- Desktop implementation: `app/design-qa-invoice-batch-cascader-desktop.jpg`.
+- Responsive implementation: `app/design-qa-invoice-batch-cascader-mobile-390.jpg`.
+- Desktop captured pixels: `1265 x 712`; responsive CSS viewport: `390 x 844`; responsive captured content pixels: `375 x 812`; device density: `1`.
+- State: one project creator selected, synthetic Airwallex and PayPal accounts available, and the two-level Payment Information cascader open.
+
+## Comparison evidence
+
+- The target reference and final desktop screenshot were inspected together at native density.
+- The native browser select is replaced by a white, elevated two-column panel. The left column contains `Paid by Bank` and `Paid by PayPal`; the right column contains the corresponding masked prototype accounts.
+- The panel is rendered through a portal and positioned with a fixed `6px` gap above or below the trigger, so it does not cover the edited row control and is not clipped by the table scroller.
+- Existing COMETS Pay typography, neutral borders, compact table density, coral focus treatment, and account summary hierarchy are preserved.
+
+## Interaction and responsive checks
+
+- Both payment methods remain visible at level one even when a method has no usable account; level two then displays an explicit empty state.
+- Selecting the synthetic PayPal account updates the stable `payoutAccountId`, row summary, validation result, and Invoice preview Payment Information.
+- Keyboard navigation covers open/close, method movement, method-to-account movement, account movement, selection, and Escape.
+- At `390px`, the trigger rectangle ends at `570.86px` and the menu starts at `576.86px`; overlap is false. The menu remains between `12px` and `378px`, and document scroll width remains within the viewport.
+- Browser console warnings/errors: none.
+- Invoice-focused tests: `15/15` passed.
+- Full test suite: `27` files and `157` tests passed.
+- TypeScript check and `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: the native select opened over the table control and presented payment methods and accounts as a flat list.
+   - Fix: introduced a portal-based two-level cascader with collision-aware placement and separate method/account columns.
+2. Initial P2: the prototype data guaranteed only an Airwallex bank account, so `Paid by PayPal` could not be demonstrated consistently for every creator.
+   - Fix: injected one deterministic, verified, synthetic PayPal account per creator while retaining the default synthetic Airwallex account.
+3. Post-fix desktop, responsive, pointer, keyboard, preview, console, test, and build checks found no actionable P0, P1, or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA — 生成合同页面整页滚动
 
 ## Reference and environment

@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Download,
   FileSpreadsheet,
   FileText,
@@ -16,7 +18,9 @@ import {
   Users,
   WalletCards,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
   createPrototypeId,
   type ContractId,
@@ -66,6 +70,7 @@ import {
 } from '../invoice/invoiceBatchWorkbook';
 import type {
   CreatorProfile,
+  CreatorPayoutAccount,
   GeneratedInvoiceRecord,
   InvoiceBatchMode,
   InvoiceBatchRow,
@@ -110,6 +115,266 @@ const rowTotal = (row: Pick<InvoiceBatchRow, 'unitPrice' | 'quantity'>) => (
 const paymentInformationLabel = (provider: 'Airwallex' | 'PayPal' | 'PayMax') => (
   provider === 'PayPal' ? 'Paid by PayPal' : 'Paid by Bank'
 );
+
+type PaymentInformationGroup = 'BANK' | 'PAYPAL';
+
+const PAYMENT_INFORMATION_GROUPS: Array<{
+  key: PaymentInformationGroup;
+  label: string;
+}> = [
+  { key: 'BANK', label: 'Paid by Bank' },
+  { key: 'PAYPAL', label: 'Paid by PayPal' },
+];
+
+const paymentInformationGroupFor = (
+  account: CreatorPayoutAccount | undefined,
+): PaymentInformationGroup => account?.provider === 'PayPal' ? 'PAYPAL' : 'BANK';
+
+function PaymentInformationCascader({
+  accounts,
+  value,
+  disabled,
+  ariaLabel,
+  onChange,
+}: {
+  accounts: CreatorPayoutAccount[];
+  value: string;
+  disabled: boolean;
+  ariaLabel: string;
+  onChange: (payoutAccountId: string) => void;
+}) {
+  const selectedAccount = accounts.find((account) => getPayoutAccountId(account) === value);
+  const [open, setOpen] = useState(false);
+  const [activeGroup, setActiveGroup] = useState<PaymentInformationGroup>(() => (
+    paymentInformationGroupFor(selectedAccount)
+  ));
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const groupRefs = useRef<Record<PaymentInformationGroup, HTMLButtonElement | null>>({
+    BANK: null,
+    PAYPAL: null,
+  });
+  const accountRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const menuId = useId();
+  const groupedAccounts = useMemo<Record<PaymentInformationGroup, CreatorPayoutAccount[]>>(() => ({
+    BANK: accounts.filter((account) => account.provider !== 'PayPal'),
+    PAYPAL: accounts.filter((account) => account.provider === 'PayPal'),
+  }), [accounts]);
+  const activeAccounts = groupedAccounts[activeGroup];
+
+  const updateMenuPosition = () => {
+    const triggerRect = triggerRef.current?.getBoundingClientRect();
+    if (!triggerRect) return;
+    const viewportGap = 12;
+    const menuGap = 6;
+    const width = Math.min(430, window.innerWidth - viewportGap * 2);
+    const measuredHeight = menuRef.current?.getBoundingClientRect().height;
+    const estimatedHeight = Math.min(286, Math.max(142, activeAccounts.length * 54 + 18));
+    const height = measuredHeight || estimatedHeight;
+    const roomBelow = window.innerHeight - triggerRect.bottom - viewportGap;
+    const placeAbove = roomBelow < height + menuGap && triggerRect.top > roomBelow;
+    const left = Math.min(
+      Math.max(viewportGap, triggerRect.left),
+      Math.max(viewportGap, window.innerWidth - width - viewportGap),
+    );
+    const top = placeAbove
+      ? Math.max(viewportGap, triggerRect.top - height - menuGap)
+      : Math.min(window.innerHeight - height - viewportGap, triggerRect.bottom + menuGap);
+    setMenuStyle({ left, top, width });
+  };
+
+  const closeAndFocusTrigger = () => {
+    setOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  const focusFirstAccount = (group: PaymentInformationGroup) => {
+    setActiveGroup(group);
+    window.requestAnimationFrame(() => accountRefs.current[0]?.focus());
+  };
+
+  useEffect(() => {
+    if (!open) setActiveGroup(paymentInformationGroupFor(selectedAccount));
+  }, [open, selectedAccount]);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const animationFrame = window.requestAnimationFrame(updateMenuPosition);
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [activeAccounts.length, open]);
+
+  const handleGroupKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    groupIndex: number,
+  ) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const nextIndex = (groupIndex + direction + PAYMENT_INFORMATION_GROUPS.length)
+        % PAYMENT_INFORMATION_GROUPS.length;
+      const nextGroup = PAYMENT_INFORMATION_GROUPS[nextIndex].key;
+      setActiveGroup(nextGroup);
+      groupRefs.current[nextGroup]?.focus();
+    } else if (event.key === 'ArrowRight' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (activeAccounts.length) focusFirstAccount(activeGroup);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeAndFocusTrigger();
+    } else if (event.key === 'Tab') {
+      setOpen(false);
+    }
+  };
+
+  const handleAccountKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    accountIndex: number,
+  ) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const nextIndex = (accountIndex + direction + activeAccounts.length) % activeAccounts.length;
+      accountRefs.current[nextIndex]?.focus();
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      groupRefs.current[activeGroup]?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeAndFocusTrigger();
+    } else if (event.key === 'Tab') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        className={`invoice-batch-payment-trigger${open ? ' is-open' : ''}`}
+        type="button"
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-haspopup="tree"
+        aria-expanded={open}
+        aria-controls={menuId}
+        disabled={disabled}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!open) {
+              setOpen(true);
+              window.requestAnimationFrame(() => groupRefs.current[activeGroup]?.focus());
+            }
+          } else if (event.key === 'Escape' && open) {
+            event.preventDefault();
+            setOpen(false);
+          }
+        }}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={selectedAccount ? '' : 'is-placeholder'}>
+          {selectedAccount
+            ? `${paymentInformationLabel(selectedAccount.provider)} · ${selectedAccount.nickname}`
+            : '待选择'}
+        </span>
+        <ChevronDown size={15} aria-hidden="true" />
+      </button>
+
+      {open ? createPortal(
+        <div
+          ref={menuRef}
+          id={menuId}
+          className="invoice-batch-payment-cascader"
+          style={menuStyle}
+          role="tree"
+          aria-label={`${ariaLabel} 选择器`}
+        >
+          <div className="invoice-batch-payment-methods" role="group" aria-label="付款方式">
+            {PAYMENT_INFORMATION_GROUPS.map((group, groupIndex) => {
+              const active = group.key === activeGroup;
+              return (
+                <button
+                  key={group.key}
+                  ref={(node) => { groupRefs.current[group.key] = node; }}
+                  className={active ? 'is-active' : ''}
+                  type="button"
+                  role="treeitem"
+                  aria-expanded={active}
+                  tabIndex={-1}
+                  onPointerEnter={() => setActiveGroup(group.key)}
+                  onFocus={() => setActiveGroup(group.key)}
+                  onClick={() => focusFirstAccount(group.key)}
+                  onKeyDown={(event) => handleGroupKeyDown(event, groupIndex)}
+                >
+                  <span>{group.label}</span>
+                  <ChevronRight size={14} aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+          <div className="invoice-batch-payment-accounts" role="group" aria-label="付款账户">
+            {activeAccounts.length ? activeAccounts.map((account, accountIndex) => {
+              const accountId = getPayoutAccountId(account);
+              const selected = accountId === value;
+              return (
+                <button
+                  key={accountId}
+                  ref={(node) => { accountRefs.current[accountIndex] = node; }}
+                  className={selected ? 'is-selected' : ''}
+                  type="button"
+                  role="treeitem"
+                  aria-selected={selected}
+                  tabIndex={-1}
+                  onClick={() => {
+                    onChange(accountId);
+                    closeAndFocusTrigger();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onChange(accountId);
+                      closeAndFocusTrigger();
+                      return;
+                    }
+                    handleAccountKeyDown(event, accountIndex);
+                  }}
+                >
+                  <span>
+                    <strong>{account.nickname}</strong>
+                    <small>{getPayoutAccountSummary(account)} · {getPayoutAccountIdentifier(account)}</small>
+                  </span>
+                  {selected ? <Check size={15} aria-hidden="true" /> : null}
+                </button>
+              );
+            }) : (
+              <div className="invoice-batch-payment-empty">暂无可用账户</div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+    </>
+  );
+}
 
 function BatchRowTable({
   rows,
@@ -229,22 +494,16 @@ function BatchRowTable({
                   </span>
                 </td>
                 <td data-label="Payment Information">
-                  <select
-                    aria-label={`${row.creatorName} Payment Information`}
+                  <PaymentInformationCascader
+                    ariaLabel={`${row.creatorName} Payment Information`}
                     value={row.payoutAccountId}
                     disabled={rowLocked || row.payoutAccountLocked}
-                    onChange={(event) => onChange(row.engagementId, {
-                      payoutAccountId: event.target.value,
+                    accounts={payoutAccounts}
+                    onChange={(payoutAccountId) => onChange(row.engagementId, {
+                      payoutAccountId,
                       payoutAccountLocked: false,
                     })}
-                  >
-                    <option value="">待选择</option>
-                    {payoutAccounts.map((account) => (
-                      <option key={getPayoutAccountId(account)} value={getPayoutAccountId(account)}>
-                        {paymentInformationLabel(account.provider)} · {account.nickname}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   {selectedAccount ? (
                     <small className="invoice-batch-payment-meta">
                       {getPayoutAccountSummary(selectedAccount)} · {getPayoutAccountIdentifier(selectedAccount)}

@@ -1,30 +1,42 @@
 import type { EngagementId } from '../businessWorkflow';
-import { createAirwallexPayoutAccount } from '../payoutAccounts';
+import {
+  createAirwallexPayoutAccount,
+  createPayPalPayoutAccount,
+} from '../payoutAccounts';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 
 export const INVOICE_BATCH_PROTOTYPE_CURRENCY = 'USD' as const;
 export const INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL = '默认空中云汇';
+export const INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL = 'PayPal USD 原型账户';
 
 type ProjectCreatorReference = NonNullable<ProjectSummary['creatorProfiles']>[number];
 
 const prototypeAccountId = (creatorId: string) => `awx-batch-${creatorId}`;
+const prototypePayPalAccountId = (creatorId: string) => `paypal-batch-${creatorId}`;
 
-const prototypeAccountNumber = (creatorId: string) => {
+const prototypeAccountSuffix = (creatorId: string) => {
   const suffix = [...creatorId].reduce(
     (result, character) => (result * 31 + character.charCodeAt(0)) % 10000,
     0,
   );
-  return `000000${String(suffix).padStart(4, '0')}`;
+  return String(suffix).padStart(4, '0');
 };
+
+const prototypeAccountNumber = (creatorId: string) => `000000${prototypeAccountSuffix(creatorId)}`;
 
 export const withInvoiceBatchPrototypeAccounts = (
   creators: CreatorProfile[],
 ): CreatorProfile[] => creators.map((creator) => {
   const [firstName = '', ...lastNameParts] = creator.contact.legalName.trim().split(/\s+/);
   const payoutAccountId = prototypeAccountId(creator.id);
+  const paypalAccountId = prototypePayPalAccountId(creator.id);
+  const accountSuffix = prototypeAccountSuffix(creator.id);
   const payoutAccounts = creator.payoutAccounts
-    .filter((account) => account.payoutAccountId !== payoutAccountId && account.id !== payoutAccountId)
+    .filter((account) => (
+      ![payoutAccountId, paypalAccountId].includes(account.payoutAccountId ?? '')
+      && ![payoutAccountId, paypalAccountId].includes(account.id)
+    ))
     .map((account) => ({ ...account, isDefault: false }));
 
   return {
@@ -70,6 +82,19 @@ export const withInvoiceBatchPrototypeAccounts = (
         nameMatchResult: 'FULL_MATCH',
         validatedAt: '2026-08-06 09:00',
         verifiedAt: '2026-08-06 09:01',
+      }),
+      createPayPalPayoutAccount({
+        id: paypalAccountId,
+        creatorId: creator.id,
+        payoutAccountId: paypalAccountId,
+        payoutAccountVersion: 'v1',
+        providerAccountScope: 'prototype:batch-invoice',
+        nickname: INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
+        isDefault: false,
+        status: 'VERIFIED',
+        paypalUsername: `prototype_creator_${accountSuffix}`,
+        paypalEmail: `invoice.prototype+${accountSuffix}@example.test`,
+        transferNote: 'USD prototype payment information',
       }),
       ...payoutAccounts,
     ],

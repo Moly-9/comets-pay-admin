@@ -5,6 +5,7 @@ import type { GeneratedInvoiceRecord } from '../types';
 import {
   INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL,
   INVOICE_BATCH_PROTOTYPE_CURRENCY,
+  INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
   filterInvoiceBatchCreatorReferences,
   selectableInvoiceBatchEngagementIds,
   withInvoiceBatchPrototypeAccounts,
@@ -28,6 +29,35 @@ describe('Invoice batch prototype defaults', () => {
           ? defaultAccount.bankDetails.accountCurrency
           : '',
       ).toBe(INVOICE_BATCH_PROTOTYPE_CURRENCY);
+    });
+  });
+
+  it('provides stable Bank and PayPal prototype choices without duplicating injected accounts', () => {
+    const creators = withInvoiceBatchPrototypeAccounts(INITIAL_CREATORS);
+    const creatorsAfterSecondInjection = withInvoiceBatchPrototypeAccounts(creators);
+
+    creatorsAfterSecondInjection.forEach((creator) => {
+      const eligibleAccounts = eligibleInvoicePayoutAccounts(creator);
+      const prototypeBankAccounts = eligibleAccounts.filter((account) => (
+        account.payoutAccountId === `awx-batch-${creator.id}`
+      ));
+      const prototypePayPalAccounts = eligibleAccounts.filter((account) => (
+        account.payoutAccountId === `paypal-batch-${creator.id}`
+      ));
+
+      expect(prototypeBankAccounts).toHaveLength(1);
+      expect(prototypePayPalAccounts).toHaveLength(1);
+      expect(prototypePayPalAccounts[0]).toMatchObject({
+        provider: 'PayPal',
+        nickname: INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
+        isDefault: false,
+        status: 'VERIFIED',
+      });
+      expect(
+        prototypePayPalAccounts[0].provider === 'PayPal'
+          ? prototypePayPalAccounts[0].paypalEmail
+          : '',
+      ).toMatch(/@example\.test$/);
     });
   });
 
