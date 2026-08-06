@@ -575,15 +575,19 @@
 
   .project-resource-modal .modal-header {
     min-height: 54px;
-    padding: 0 14px;
+    gap: 10px;
+    padding: 10px 14px;
   }
 
   .project-resource-modal .modal-header h2 {
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
     font-size: 15px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.35;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .project-resource-modal .modal-content {
@@ -1192,23 +1196,71 @@
 
 .project-payment-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.1fr) 76px 100px 112px minmax(130px, 1fr) 32px;
-  align-items: end;
-  gap: 8px;
+  gap: 12px;
   border-bottom: 1px solid var(--soft-line);
-  padding: 10px 0;
+  padding: 16px 0;
 }
 
-.project-payment-row > div,
-.project-payment-row label {
+.project-payment-row-header,
+.project-payment-row-header > div,
+.project-payment-row-actions,
+.project-payment-validation-row,
+.project-payment-row-meta {
+  display: flex;
+  align-items: center;
+}
+
+.project-payment-row-header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-payment-row-header > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.project-payment-row-actions {
+  gap: 8px;
+}
+
+.project-payment-row-actions > button:not(.project-payment-revalidate) {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #b34d45;
+}
+
+.project-payment-validation-row {
+  gap: 6px;
+  color: #2f7a55;
+}
+
+.project-payment-fields {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.7fr) repeat(3, minmax(100px, 0.65fr));
+  gap: 10px;
+}
+
+.project-payment-fields label {
   display: grid;
   min-width: 0;
   gap: 4px;
 }
 
-.project-payment-row span {
+.project-payment-fields label > span,
+.project-payment-row-header span,
+.project-payment-row-meta span {
   color: var(--muted);
   font-size: 10px;
+}
+
+.project-payment-account-field,
+.project-payment-description-field {
+  grid-column: span 2;
 }
 
 .project-payment-validation {
@@ -1253,7 +1305,7 @@
   font-size: 11px;
 }
 
-.project-payment-row input {
+.project-payment-fields input {
   width: 100%;
   min-height: 34px;
   border: 1px solid #dfe3e9;
@@ -1263,20 +1315,21 @@
   font-size: 12px;
 }
 
-.project-payment-row input:disabled {
+.project-payment-fields input:disabled {
   border-color: transparent;
   padding-left: 0;
   background: transparent;
 }
 
-.project-payment-row > button {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  color: #b34d45;
+.project-payment-row-meta {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  border-top: 1px dashed var(--soft-line);
+  padding-top: 9px;
+}
+
+.project-payment-toolbar {
+  justify-content: space-between;
 }
 
 .project-payment-add {
@@ -1369,17 +1422,16 @@
   }
 
   .project-payment-row {
+    padding: 14px 0;
+  }
+
+  .project-payment-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
   }
 
-  .project-payment-row > div,
-  .project-payment-row > button {
+  .project-payment-account-field,
+  .project-payment-description-field {
     grid-column: 1 / -1;
-  }
-
-  .project-payment-row > button {
-    justify-self: end;
   }
 }
 
@@ -1428,6 +1480,19 @@
 
   .project-payment-add {
     grid-template-columns: 1fr;
+  }
+
+  .project-payment-row-header {
+    align-items: flex-start;
+  }
+
+  .project-payment-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .project-payment-account-field,
+  .project-payment-description-field {
+    grid-column: 1;
   }
 
   .project-audit-log > div {

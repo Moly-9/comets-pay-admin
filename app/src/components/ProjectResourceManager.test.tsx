@@ -279,9 +279,13 @@ describe('project resource aggregation', () => {
               invoiceNumber: invoiceOne.id,
               creatorName: 'Creator One',
               currency: 'USD',
+              receiveCurrency: 'USD',
               amount: 500,
               provider: 'Airwallex',
               accountSummary: '账户尾号 0001',
+              paymentReason: '影音服务',
+              transactionReference: invoiceOne.id,
+              description: 'Synthetic payment',
             },
             overrides: {},
           }],
@@ -306,6 +310,8 @@ describe('project resource aggregation', () => {
         onAddPaymentInvoice={vi.fn()}
         onRemovePaymentInvoice={vi.fn()}
         onUpdatePaymentItem={vi.fn()}
+        onChangePaymentAccount={vi.fn()}
+        onExportPaymentList={vi.fn()}
         onSubmitReview={vi.fn()}
       />,
     );

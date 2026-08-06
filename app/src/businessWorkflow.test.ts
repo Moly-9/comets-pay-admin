@@ -106,9 +106,13 @@ describe('project payment list', () => {
       invoiceNumber: 'INV-TEST',
       creatorName: 'Synthetic Creator',
       currency: 'USD',
+      receiveCurrency: 'USD',
       amount: 300,
       provider: 'Airwallex',
       accountSummary: 'Test account ending 0001',
+      paymentReason: '影音服务',
+      transactionReference: 'INV-TEST',
+      description: 'Synthetic payment',
     },
     overrides: {},
   };
@@ -122,7 +126,7 @@ describe('project payment list', () => {
   it('refreshes an Invoice snapshot while preserving explicit payment-list overrides', () => {
     const withItem = upsertPaymentListItem(record, {
       ...item,
-      overrides: { amount: 280, accountSummary: '人工确认尾号 9000' },
+      overrides: { amount: 280, description: '人工确认付款说明' },
     });
     const refreshed = refreshPaymentListItemSnapshot(withItem, {
       ...item,
@@ -139,10 +143,7 @@ describe('project payment list', () => {
       amount: 320,
       accountSummary: 'Test account ending 0002',
     });
-    expect(refreshed.items[0]?.overrides).toEqual({
-      amount: 280,
-      accountSummary: '人工确认尾号 9000',
-    });
+    expect(refreshed.items[0]?.overrides).toEqual({ amount: 280, description: '人工确认付款说明' });
     expect(refreshed.updatedAt).toBe('2026-08-05T00:00:00.000Z');
   });
 

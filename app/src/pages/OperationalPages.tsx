@@ -86,6 +86,7 @@ import {
   nowIso,
   type EngagementId,
   type InvoiceId,
+  type PaymentListEditableField,
   type PaymentListRecord,
   type ProjectId,
   type RequestApprovalState,
@@ -445,7 +446,9 @@ export function ProjectsPage({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onChangePaymentAccount,
   onRevalidatePaymentItem,
+  onExportPaymentList,
   onSubmitProjectReview,
   onProjectsChange,
   canCreateProject,
@@ -475,8 +478,10 @@ export function ProjectsPage({
   onDeletePaymentList: (project: ProjectSummary) => void;
   onAddPaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
-  onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
+  onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
+  onChangePaymentAccount: (project: ProjectSummary, invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId) => void;
+  onExportPaymentList: (project: ProjectSummary) => Promise<void>;
   onSubmitProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
   canCreateProject: boolean;
@@ -756,7 +761,9 @@ export function ProjectsPage({
         onAddPaymentInvoice={(invoiceId) => onAddPaymentInvoice(selectedProject, invoiceId)}
         onRemovePaymentInvoice={(invoiceId) => onRemovePaymentInvoice(selectedProject, invoiceId)}
         onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
+        onChangePaymentAccount={(invoiceId, payoutAccountId) => onChangePaymentAccount(selectedProject, invoiceId, payoutAccountId)}
         onRevalidatePaymentItem={(invoiceId) => onRevalidatePaymentItem(selectedProject, invoiceId)}
+        onExportPaymentList={() => onExportPaymentList(selectedProject)}
         onSubmitReview={() => onSubmitProjectReview(selectedProject)}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
         onBack={() => {

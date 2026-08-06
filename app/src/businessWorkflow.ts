@@ -1,6 +1,7 @@
 import type { SystemUser } from './data';
 import type {
   AirwallexTransferMethod,
+  DocumentPayoutSnapshot,
   GeneratedInvoiceRecord,
   InvoiceCurrency,
   Payout,
@@ -71,9 +72,13 @@ export type PaymentListItemSnapshot = {
   invoiceNumber: string;
   creatorName: string;
   currency: string;
+  receiveCurrency: string;
   amount: number;
   provider: string;
   accountSummary: string;
+  paymentReason: string;
+  transactionReference: string;
+  description: string;
   creatorId?: CreatorId;
   contractIds?: ContractId[];
   payoutAccountId?: string;
@@ -89,12 +94,21 @@ export type PaymentListItemSnapshot = {
   transferNote?: string;
 };
 
+export type PaymentListEditableField =
+  | 'currency'
+  | 'receiveCurrency'
+  | 'amount'
+  | 'feeBearer'
+  | 'paymentReason'
+  | 'transactionReference'
+  | 'description';
+
 export type PaymentListItem = {
   id: string;
   engagementId: EngagementId;
   invoiceId: InvoiceId;
   snapshot: PaymentListItemSnapshot;
-  overrides: Partial<Pick<PaymentListItemSnapshot, 'currency' | 'amount' | 'provider' | 'accountSummary'>>;
+  overrides: Partial<Pick<PaymentListItemSnapshot, PaymentListEditableField>>;
   requiresRevalidation?: boolean;
   validationIssues?: string[];
   lastValidatedAt?: string;
@@ -288,14 +302,19 @@ const maskPaymentAccount = (value: string) => {
 
 const paymentListItemValidationIssues = (item: PaymentListItem) => {
   const snapshot = item.snapshot;
-  const provider = String(paymentListItemValue(item, 'provider'));
+  const provider = snapshot.provider;
   const currency = String(paymentListItemValue(item, 'currency'));
+  const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency'));
   const amount = Number(paymentListItemValue(item, 'amount'));
+  const feeBearer = String(paymentListItemValue(item, 'feeBearer'));
+  const paymentReason = String(paymentListItemValue(item, 'paymentReason'));
+  const transactionReference = String(paymentListItemValue(item, 'transactionReference'));
   return [
     !snapshot.creatorId ? 'Invoice 缺少 creatorId' : '',
     !snapshot.payoutAccountId ? 'Invoice 缺少 payoutAccountId' : '',
     !snapshot.accountFingerprint ? 'Invoice 缺少账户快照指纹' : '',
-    !currency ? '付款清单缺少币种' : '',
+    !currency ? '付款清单缺少支付币种' : '',
+    !receiveCurrency ? '付款清单缺少收款币种' : '',
     !(amount > 0) ? '付款清单金额必须大于 0' : '',
     !['Airwallex', 'PayPal'].includes(provider) ? `付款渠道 ${provider || '未填写'} 当前不可执行` : '',
     provider === 'Airwallex' && !snapshot.externalBeneficiaryId ? 'Airwallex 账户缺少 beneficiary_id' : '',
@@ -304,7 +323,9 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
       ? 'LOCAL 账户缺少本地清算方式'
       : '',
     provider === 'Airwallex' && !snapshot.schemaKey ? 'Airwallex 账户缺少 Form Schema 场景' : '',
-    !snapshot.feeBearer ? '关联合同的手续费承担方缺失或不一致' : '',
+    !feeBearer ? '手续费承担方未确认' : '',
+    !paymentReason ? '付款原因未填写' : '',
+    !transactionReference ? '交易附言未填写' : '',
     !snapshot.validationStatus ? '账户快照缺少校验状态' : '',
     snapshot.validationStatus && !['VALIDATED', 'VERIFIED'].includes(snapshot.validationStatus)
       ? '账户快照未通过验证'
@@ -312,16 +333,85 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
   ].filter(Boolean);
 };
 
+export type PaymentListAccountState = {
+  payoutAccountId: string;
+  payoutAccountVersion: PayoutAccountVersion;
+  accountFingerprint: string;
+  provider: string;
+  externalBeneficiaryId?: string;
+  validationStatus: PayoutAccountStatus;
+};
+
 export const revalidatePaymentListItem = (
   item: PaymentListItem,
   validatedAt = nowIso(),
+  currentAccount?: PaymentListAccountState | null,
 ): PaymentListItem => {
-  const validationIssues = paymentListItemValidationIssues(item);
+  const validationIssues = [
+    ...paymentListItemValidationIssues(item),
+    ...(currentAccount === null ? ['达人档案中未找到付款清单关联的收款账户'] : []),
+    ...(currentAccount && currentAccount.payoutAccountId !== item.snapshot.payoutAccountId
+      ? ['收款账户 ID 与付款清单快照不一致']
+      : []),
+    ...(currentAccount && currentAccount.payoutAccountVersion !== item.snapshot.payoutAccountVersion
+      ? ['收款账户版本已变化']
+      : []),
+    ...(currentAccount && currentAccount.accountFingerprint !== item.snapshot.accountFingerprint
+      ? ['收款账户资料已变化']
+      : []),
+    ...(currentAccount && currentAccount.provider !== item.snapshot.provider
+      ? ['收款账户渠道与付款清单不一致']
+      : []),
+    ...(currentAccount && currentAccount.externalBeneficiaryId !== item.snapshot.externalBeneficiaryId
+      ? ['Airwallex beneficiary_id 已变化']
+      : []),
+    ...(currentAccount && !['VALIDATED', 'VERIFIED'].includes(currentAccount.validationStatus)
+      ? ['达人档案中的收款账户未通过验证']
+      : []),
+  ];
   return {
     ...item,
     requiresRevalidation: validationIssues.length > 0,
     validationIssues,
     lastValidatedAt: validatedAt,
+  };
+};
+
+export const applyPaymentListPayoutSnapshot = (
+  item: PaymentListItem,
+  payment: DocumentPayoutSnapshot,
+): PaymentListItem => {
+  const provider = payment.payoutProvider
+    ?? (payment.transferMethod === 'PAYPAL' ? 'PayPal' : 'Airwallex');
+  const rawAccount = provider === 'PayPal'
+    ? payment.paypalEmail || payment.paypalUsername
+    : payment.iban || payment.accountNumber;
+  const { receiveCurrency: _receiveCurrency, ...overrides } = item.overrides;
+  return {
+    ...item,
+    snapshot: {
+      ...item.snapshot,
+      provider,
+      accountSummary: rawAccount
+        ? maskPaymentAccount(rawAccount)
+        : provider === 'PayPal'
+          ? '待补充 PayPal'
+          : '待补充银行账户',
+      receiveCurrency: payment.accountCurrency || item.snapshot.currency,
+      payoutAccountId: payment.payoutAccountId,
+      payoutAccountVersion: payment.payoutAccountVersion ?? 'legacy-v1',
+      externalBeneficiaryId: payment.externalBeneficiaryId,
+      providerAccountScope: payment.providerAccountScope,
+      transferMethod: payment.transferMethod,
+      localClearingSystem: payment.localClearingSystem,
+      accountFingerprint: payment.accountFingerprint,
+      schemaKey: payment.schemaKey,
+      validationStatus: payment.validationStatus,
+      transferNote: payment.transferRemarks,
+    },
+    overrides,
+    requiresRevalidation: true,
+    validationIssues: ['收款账户已更新，请重新校验付款清单'],
   };
 };
 
@@ -357,6 +447,7 @@ export const invoicePaymentListItem = (
       invoiceNumber: invoice.id,
       creatorName: invoice.snapshot.creatorName,
       currency: invoice.snapshot.currency,
+      receiveCurrency: payment.accountCurrency || invoice.snapshot.currency,
       amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
       provider,
       accountSummary: rawAccount
@@ -364,6 +455,10 @@ export const invoicePaymentListItem = (
         : invoice.snapshot.paymentMethod === 'paypal'
           ? '待补充 PayPal'
           : '待补充银行账户',
+      paymentReason: '影音服务',
+      transactionReference: invoice.id,
+      description: payment.transferRemarks
+        || invoice.snapshot.items.map((lineItem) => lineItem.description).filter(Boolean).join(' / '),
       creatorId: invoice.snapshot.creatorId,
       contractIds: invoice.snapshot.contractIds ? [...invoice.snapshot.contractIds] : [],
       payoutAccountId,
@@ -387,7 +482,7 @@ export const payoutWithPaymentListSnapshot = (
   payout: Payout,
   item: PaymentListItem,
 ): Payout => {
-  const provider = String(paymentListItemValue(item, 'provider'));
+  const provider = item.snapshot.provider;
   const currency = String(paymentListItemValue(item, 'currency'));
   return {
     ...payout,
@@ -397,14 +492,14 @@ export const payoutWithPaymentListSnapshot = (
       : payout.provider,
     currency: currency as InvoiceCurrency,
     amount: Number(paymentListItemValue(item, 'amount')),
-    account: String(paymentListItemValue(item, 'accountSummary')),
+    account: item.snapshot.accountSummary,
     payoutAccountId: item.snapshot.payoutAccountId,
     payoutAccountVersion: item.snapshot.payoutAccountVersion ?? 'legacy-v1',
     payoutAccountFingerprint: item.snapshot.accountFingerprint,
     externalBeneficiaryId: item.snapshot.externalBeneficiaryId,
     transferMethod: item.snapshot.transferMethod,
     localClearingSystem: item.snapshot.localClearingSystem,
-    feeBearer: item.snapshot.feeBearer,
+    feeBearer: paymentListItemValue(item, 'feeBearer'),
     paymentListRequiresRevalidation: item.requiresRevalidation,
     paymentListValidationIssues: [...(item.validationIssues ?? [])],
   };

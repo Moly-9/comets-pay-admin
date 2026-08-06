@@ -79,6 +79,7 @@ import type {
   ToastState,
 } from './types';
 import {
+  applyPaymentListPayoutSnapshot,
   canEditProject,
   createAuditEvent,
   createPrototypeCode,
@@ -97,11 +98,24 @@ import {
   type ContractId,
   type InvoiceId,
   type PaymentListItem,
+  type PaymentListEditableField,
   type PaymentListRecord,
   type ProjectId,
   type WorkflowAuditAction,
   type WorkflowAuditEvent,
 } from './businessWorkflow';
+import { downloadBlob } from './invoice/invoiceUtils';
+import {
+  createDocumentPayoutSnapshot,
+  getPayoutAccountFingerprint,
+  getPayoutAccountId,
+  getPayoutAccountVersion,
+} from './payoutAccounts';
+import {
+  exportAirwallexPaymentListWorkbook,
+  paymentListWorkbookFilename,
+  PaymentListWorkbookError,
+} from './paymentListWorkbook';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import {
@@ -790,7 +804,9 @@ export default function App() {
     const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
     if (!invoice?.snapshot.engagementId || invoice.snapshot.projectId !== projectId) return;
     setPaymentLists((current) => current.map((list) => (
-      list.projectId === projectId ? upsertPaymentListItem(list, invoicePaymentListItem(invoice, contracts)) : list
+      list.projectId === projectId
+        ? { ...upsertPaymentListItem(list, invoicePaymentListItem(invoice, contracts)), status: 'draft' }
+        : list
     )));
     registerProjectMutation({
       projectId,
@@ -805,7 +821,9 @@ export default function App() {
   const removePaymentInvoice = (project: ProjectSummary, invoiceId: InvoiceId) => {
     const projectId = getProjectId(project);
     setPaymentLists((current) => current.map((list) => (
-      list.projectId === projectId ? removePaymentListItem(list, invoiceId) : list
+      list.projectId === projectId
+        ? { ...removePaymentListItem(list, invoiceId), status: 'draft' }
+        : list
     )));
     registerProjectMutation({
       projectId,
@@ -819,16 +837,22 @@ export default function App() {
   const updatePaymentItem = (
     project: ProjectSummary,
     invoiceId: InvoiceId,
-    field: 'currency' | 'amount' | 'provider' | 'accountSummary',
+    field: PaymentListEditableField,
     value: string | number,
   ) => {
     const projectId = getProjectId(project);
     setPaymentLists((current) => current.map((list) => list.projectId === projectId
       ? {
           ...list,
+          status: 'draft',
           updatedAt: nowIso(),
           items: list.items.map((item) => item.invoiceId === invoiceId
-            ? { ...item, overrides: { ...item.overrides, [field]: value } }
+            ? {
+                ...item,
+                overrides: { ...item.overrides, [field]: value },
+                requiresRevalidation: true,
+                validationIssues: ['付款清单字段已修改，请重新校验'],
+              }
             : item),
         }
       : list));
@@ -838,6 +862,46 @@ export default function App() {
       entityId: invoiceId,
       action: 'update',
       summary: '已修改付款清单字段并保留 Invoice 原始快照',
+    });
+  };
+
+  const changePaymentAccount = (
+    project: ProjectSummary,
+    invoiceId: InvoiceId,
+    payoutAccountId: string,
+  ) => {
+    const projectId = getProjectId(project);
+    const item = paymentLists
+      .find((list) => list.projectId === projectId)
+      ?.items.find((candidate) => candidate.invoiceId === invoiceId);
+    const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
+    const account = creator?.payoutAccounts.find((candidate) => (
+      candidate.provider === 'Airwallex'
+      && getPayoutAccountId(candidate) === payoutAccountId
+    ));
+    if (!item || !creator || !account) {
+      notify('无法更换收款账户', '未找到该达人通过稳定 payoutAccountId 关联的 Airwallex 账户。');
+      return;
+    }
+    const updated = applyPaymentListPayoutSnapshot(
+      item,
+      createDocumentPayoutSnapshot(account, creator.id),
+    );
+    setPaymentLists((current) => current.map((list) => list.projectId === projectId
+      ? {
+          ...list,
+          status: 'draft',
+          updatedAt: nowIso(),
+          items: list.items.map((candidate) => candidate.invoiceId === invoiceId ? updated : candidate),
+        }
+      : list));
+    registerProjectMutation({
+      projectId,
+      engagementId: item.engagementId,
+      entityType: 'payment-list',
+      entityId: invoiceId,
+      action: 'update',
+      summary: `已为 ${item.snapshot.invoiceNumber} 更换 Airwallex 收款账户，等待重新校验`,
     });
   };
 
@@ -853,7 +917,24 @@ export default function App() {
       notify('无法重新校验', '未找到付款清单中的稳定 invoiceId 关联。');
       return;
     }
-    const validated = revalidatePaymentListItem(currentItem);
+    const creator = creators.find((candidate) => candidate.id === currentItem.snapshot.creatorId);
+    const account = creator?.payoutAccounts.find((candidate) => (
+      getPayoutAccountId(candidate) === currentItem.snapshot.payoutAccountId
+    ));
+    const validated = revalidatePaymentListItem(
+      currentItem,
+      nowIso(),
+      account
+        ? {
+            payoutAccountId: getPayoutAccountId(account),
+            payoutAccountVersion: getPayoutAccountVersion(account),
+            accountFingerprint: getPayoutAccountFingerprint(account),
+            provider: account.provider,
+            externalBeneficiaryId: account.provider === 'Airwallex' ? account.beneficiaryId : undefined,
+            validationStatus: account.status,
+          }
+        : null,
+    );
     const validationIssues = validated.validationIssues ?? [];
     setPaymentLists((current) => current.map((list) => {
       if (list.projectId !== projectId) return list;
@@ -876,6 +957,36 @@ export default function App() {
       validationIssues.length ? '付款清单校验未通过' : '付款清单已重新校验',
       validationIssues[0] ?? '账户 ID、版本、Beneficiary、付款场景和费用规则均已通过。',
     );
+  };
+
+  const exportPaymentList = async (project: ProjectSummary) => {
+    const projectId = getProjectId(project);
+    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    if (!list) {
+      notify('无法导出付款清单', '当前项目尚未生成付款清单。');
+      return;
+    }
+    try {
+      const blob = await exportAirwallexPaymentListWorkbook({
+        paymentList: list,
+        creators,
+      });
+      downloadBlob(
+        blob,
+        paymentListWorkbookFilename(project.projectCode ?? project.id, list),
+      );
+      notify(
+        list.status === 'approved' ? '付款清单已导出' : '付款清单预览已导出',
+        'Excel 由浏览器本地生成，包含付款资料，请按敏感文件管理。',
+      );
+    } catch (error) {
+      const message = error instanceof PaymentListWorkbookError
+        ? error.issues[0]
+        : error instanceof Error
+          ? error.message
+          : '付款清单导出失败';
+      notify('无法导出付款清单', message);
+    }
   };
 
   const appendReviewAudit = (
@@ -1047,7 +1158,7 @@ export default function App() {
         paymentListId: list!.paymentListCode,
         paymentListStatus: '已提交',
         payee: `${references.length} 位项目达人`,
-        provider: Array.from(new Set(list!.items.map((item) => String(item.overrides.provider ?? item.snapshot.provider)))).join('、'),
+        provider: Array.from(new Set(list!.items.map((item) => item.snapshot.provider))).join('、'),
         beneficiaryId: '按付款清单账户快照',
         feePolicy: '按合同及付款清单执行',
       },
@@ -1605,7 +1716,9 @@ export default function App() {
           onAddPaymentInvoice={addPaymentInvoice}
           onRemovePaymentInvoice={removePaymentInvoice}
           onUpdatePaymentItem={updatePaymentItem}
+          onChangePaymentAccount={changePaymentAccount}
           onRevalidatePaymentItem={revalidatePaymentItem}
+          onExportPaymentList={exportPaymentList}
           onSubmitProjectReview={submitProjectReview}
           onProjectsChange={setProjects}
           canCreateProject={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}

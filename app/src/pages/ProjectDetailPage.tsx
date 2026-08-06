@@ -26,6 +26,7 @@ import {
   canEditProject,
   type CreatorId,
   type InvoiceId,
+  type PaymentListEditableField,
   type PaymentListRecord,
   type EngagementId,
   type ProjectId,
@@ -976,7 +977,9 @@ export function ProjectDetailPage({
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onChangePaymentAccount,
   onRevalidatePaymentItem,
+  onExportPaymentList,
   onSubmitReview,
   notify,
 }: {
@@ -1004,8 +1007,10 @@ export function ProjectDetailPage({
   onDeletePaymentList: () => void;
   onAddPaymentInvoice: (invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
-  onUpdatePaymentItem: (invoiceId: InvoiceId, field: 'currency' | 'amount' | 'provider' | 'accountSummary', value: string | number) => void;
+  onUpdatePaymentItem: (invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
+  onChangePaymentAccount: (invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (invoiceId: InvoiceId) => void;
+  onExportPaymentList: () => Promise<void>;
   onSubmitReview: () => void;
   notify: Notify;
 }) {
@@ -1123,7 +1128,9 @@ export function ProjectDetailPage({
               onAddPaymentInvoice={onAddPaymentInvoice}
               onRemovePaymentInvoice={onRemovePaymentInvoice}
               onUpdatePaymentItem={onUpdatePaymentItem}
+              onChangePaymentAccount={onChangePaymentAccount}
               onRevalidatePaymentItem={onRevalidatePaymentItem}
+              onExportPaymentList={onExportPaymentList}
               onSubmitReview={onSubmitReview}
             />
           </section>
