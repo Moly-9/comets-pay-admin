@@ -37,6 +37,7 @@ type SelectFieldProps<T extends string> = {
   variant?: 'toolbar' | 'form' | 'compact';
   disabled?: boolean;
   leadingIcon?: ReactNode;
+  menuStrategy?: 'absolute' | 'fixed';
 };
 
 export function SelectField<T extends string = string>({
@@ -49,11 +50,14 @@ export function SelectField<T extends string = string>({
   variant = 'toolbar',
   disabled = false,
   leadingIcon,
+  menuStrategy = 'absolute',
 }: SelectFieldProps<T>) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom');
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const pendingFocusIndex = useRef<number | null>(null);
   const listboxId = useId();
@@ -75,8 +79,35 @@ export function SelectField<T extends string = string>({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const estimatedMenuHeight = Math.min(options.length * 49 + 12, 340);
-    const roomBelow = window.innerHeight - rect.bottom;
-    setPlacement(roomBelow < estimatedMenuHeight + 16 && rect.top > roomBelow ? 'top' : 'bottom');
+    const viewportMargin = 12;
+    const menuGap = 7;
+    const roomBelow = window.innerHeight - rect.bottom - viewportMargin - menuGap;
+    const roomAbove = rect.top - viewportMargin - menuGap;
+    const nextPlacement = roomBelow < estimatedMenuHeight && roomAbove > roomBelow ? 'top' : 'bottom';
+    setPlacement(nextPlacement);
+
+    if (menuStrategy !== 'fixed') {
+      setMenuStyle(undefined);
+      return;
+    }
+
+    const availableWidth = Math.max(0, window.innerWidth - viewportMargin * 2);
+    const minimumWidth = variant === 'compact' ? 132 : 196;
+    const width = Math.min(Math.max(rect.width, minimumWidth), availableWidth);
+    const preferredLeft = variant === 'compact' ? rect.right - width : rect.left;
+    const left = Math.min(
+      Math.max(preferredLeft, viewportMargin),
+      Math.max(viewportMargin, window.innerWidth - viewportMargin - width),
+    );
+    const availableHeight = nextPlacement === 'top' ? roomAbove : roomBelow;
+
+    setMenuStyle({
+      bottom: nextPlacement === 'top' ? window.innerHeight - rect.top + menuGap : undefined,
+      left,
+      maxHeight: Math.max(72, Math.min(340, availableHeight)),
+      top: nextPlacement === 'bottom' ? rect.bottom + menuGap : undefined,
+      width,
+    });
   };
 
   const openAndFocus = (index: number) => {
@@ -103,7 +134,8 @@ export function SelectField<T extends string = string>({
   useEffect(() => {
     if (!open) return undefined;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
     window.addEventListener('resize', updatePlacement);
     window.addEventListener('scroll', updatePlacement, true);
@@ -147,14 +179,66 @@ export function SelectField<T extends string = string>({
     }
   };
 
+  const menu = open ? (
+    <div
+      ref={menuRef}
+      id={listboxId}
+      className={`custom-select-menu custom-select-menu-${variant}${placement === 'top' ? ' custom-select-menu-top' : ''}${menuStrategy === 'fixed' ? ' custom-select-menu-fixed' : ''}`}
+      role="listbox"
+      aria-label={ariaLabel}
+      style={menuStrategy === 'fixed' ? menuStyle : undefined}
+    >
+      {options.map((option, index) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            ref={(node) => { optionRefs.current[index] = node; }}
+            className={`custom-select-option${option.leading ? ' custom-select-option-with-leading' : ''}${selected ? ' custom-select-option-selected' : ''}`}
+            type="button"
+            role="option"
+            aria-selected={selected}
+            disabled={option.disabled}
+            tabIndex={-1}
+            onPointerDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onChange(option.value);
+                closeAndFocusTrigger();
+                return;
+              }
+              handleOptionKeyDown(event, index);
+            }}
+            onClick={() => {
+              onChange(option.value);
+              closeAndFocusTrigger();
+            }}
+          >
+            {option.leading ? <span className="custom-select-option-leading" aria-hidden="true">{option.leading}</span> : null}
+            <span className="custom-select-option-copy">
+              <span className="custom-select-option-label">{option.label}</span>
+              {option.description ? <span className="custom-select-option-description">{option.description}</span> : null}
+            </span>
+            <span className="custom-select-option-check" aria-hidden="true">
+              {selected ? <Check size={15} strokeWidth={2.6} /> : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
   return (
     <div
       ref={rootRef}
       className={`custom-select custom-select-${variant}${open ? ' custom-select-open' : ''} ${className}`.trim()}
       onBlur={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        const nextTarget = event.relatedTarget as Node | null;
+        if (event.currentTarget.contains(nextTarget) || menuRef.current?.contains(nextTarget)) return;
         window.setTimeout(() => {
-          if (!rootRef.current?.contains(document.activeElement)) setOpen(false);
+          const activeElement = document.activeElement;
+          if (!rootRef.current?.contains(activeElement) && !menuRef.current?.contains(activeElement)) setOpen(false);
         }, 0);
       }}
     >
@@ -184,54 +268,9 @@ export function SelectField<T extends string = string>({
         </span>
         <ChevronDown className="custom-select-chevron" size={16} strokeWidth={2.2} aria-hidden="true" />
       </button>
-
-      {open ? (
-        <div
-          id={listboxId}
-          className={`custom-select-menu${placement === 'top' ? ' custom-select-menu-top' : ''}`}
-          role="listbox"
-          aria-label={ariaLabel}
-        >
-          {options.map((option, index) => {
-            const selected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                ref={(node) => { optionRefs.current[index] = node; }}
-                className={`custom-select-option${option.leading ? ' custom-select-option-with-leading' : ''}${selected ? ' custom-select-option-selected' : ''}`}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                disabled={option.disabled}
-                tabIndex={-1}
-                onPointerDown={(event) => event.preventDefault()}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onChange(option.value);
-                    closeAndFocusTrigger();
-                    return;
-                  }
-                  handleOptionKeyDown(event, index);
-                }}
-                onClick={() => {
-                  onChange(option.value);
-                  closeAndFocusTrigger();
-                }}
-              >
-                {option.leading ? <span className="custom-select-option-leading" aria-hidden="true">{option.leading}</span> : null}
-                <span className="custom-select-option-copy">
-                  <span className="custom-select-option-label">{option.label}</span>
-                  {option.description ? <span className="custom-select-option-description">{option.description}</span> : null}
-                </span>
-                <span className="custom-select-option-check" aria-hidden="true">
-                  {selected ? <Check size={15} strokeWidth={2.6} /> : null}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {menuStrategy === 'fixed' && menu && typeof document !== 'undefined'
+        ? createPortal(menu, document.body)
+        : menu}
     </div>
   );
 }
