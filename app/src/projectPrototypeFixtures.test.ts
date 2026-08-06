@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ALL_PROJECT_PROTOTYPE_INVOICES,
+  ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
+  ALL_PROJECT_PROTOTYPE_PAYOUTS,
   INVOICE_EDIT_REQUEST_INVOICES,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INVOICES,
@@ -7,6 +10,7 @@ import {
   PROJECT_DEMO_TOTAL,
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
+import { invoicePaymentListItem, paymentListItemValue } from './businessWorkflow';
 import { eligibleInvoicePayoutAccounts } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
@@ -22,6 +26,80 @@ describe('project prototype fixtures', () => {
       expect(references.every((reference) => creatorIds.has(reference.creatorId))).toBe(true);
       expect(references.every((reference) => reference.projectId === project.projectId)).toBe(true);
     });
+  });
+
+  it('covers all 20 projects and 237 engagements with stable Invoice, Payout, and payment rows', () => {
+    const engagements = INITIAL_PROJECTS.flatMap((project) => project.creatorProfiles ?? []);
+    const payouts = new Map(
+      [...INITIAL_PAYOUTS, ...ALL_PROJECT_PROTOTYPE_PAYOUTS].map((payout) => [payout.id, payout]),
+    );
+
+    expect(INITIAL_PROJECTS).toHaveLength(20);
+    expect(engagements).toHaveLength(237);
+    expect(ALL_PROJECT_PROTOTYPE_INVOICES).toHaveLength(237);
+    expect(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS).toHaveLength(20);
+    expect(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.flatMap((list) => list.items)).toHaveLength(237);
+    expect(new Set(ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => invoice.snapshot.engagementId)).size).toBe(237);
+
+    engagements.forEach((engagement) => {
+      const invoice = ALL_PROJECT_PROTOTYPE_INVOICES.find((candidate) => (
+        candidate.snapshot.engagementId === engagement.engagementId
+      ));
+      const list = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.find((candidate) => (
+        candidate.projectId === engagement.projectId
+      ));
+      expect(invoice?.snapshot.creatorId).toBe(engagement.creatorId);
+      expect(invoice?.snapshot.projectId).toBe(engagement.projectId);
+      expect(payouts.get(invoice!.sourcePayoutId)?.invoice).toBe(invoice?.id);
+      expect(list?.items.filter((item) => item.engagementId === engagement.engagementId)).toHaveLength(1);
+    });
+  });
+
+  it('allocates every project budget exactly and keeps description blank in every payment row', () => {
+    INITIAL_PROJECTS.forEach((project) => {
+      const expected = Number(project.budget.replace(/[^0-9.]/g, ''));
+      const list = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.find((candidate) => (
+        candidate.projectId === project.projectId
+      ));
+      const total = list?.items.reduce((sum, item) => (
+        sum + Number(paymentListItemValue(item, 'amount'))
+      ), 0);
+      expect(total).toBeCloseTo(expected, 2);
+      expect(list?.items.every((item) => paymentListItemValue(item, 'description') === '')).toBe(true);
+      expect(list?.items.every((item) => (
+        item.snapshot.provider !== 'Airwallex' || Boolean(item.snapshot.externalBeneficiaryId)
+      ))).toBe(true);
+    });
+  });
+
+  it('maps approval and payment-failure states without unlocking Invoice-content failures', () => {
+    const list = (projectId: string) => ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.find((candidate) => (
+      candidate.projectId === projectId
+    ));
+    expect(list('PRJ-260727-05')?.status).toBe('draft');
+    expect(list('PRJ-260727-06')?.status).toBe('approved');
+    expect(list('PRJ-260727-07')?.status).toBe('paid');
+    expect(list('PRJ-260801-07')?.status).toBe('submitted');
+    expect(list('PRJ-260801-08')).toMatchObject({ status: 'draft', draftFromVersion: 1 });
+    expect(list('PRJ-260801-08')?.items.every((item) => (
+      paymentListItemValue(item, 'transactionReference') === ''
+    ))).toBe(true);
+    expect(list('PRJ-260801-08')?.versions?.[0]?.items.every((item) => (
+      Boolean(paymentListItemValue(item, 'transactionReference'))
+    ))).toBe(true);
+    expect(list('PRJ-260727-05')?.items.every((item) => (
+      paymentListItemValue(item, 'transactionReference') === ''
+    ))).toBe(true);
+    expect(list('PRJ-260727-02')?.items.every((item) => (
+      Boolean(paymentListItemValue(item, 'transactionReference'))
+    ))).toBe(true);
+  });
+
+  it('keeps new payment-list transaction reference and description empty by default', () => {
+    const item = invoicePaymentListItem(ALL_PROJECT_PROTOTYPE_INVOICES[0]!, PROJECT_DEMO_CONTRACTS);
+    expect(item.snapshot.transactionReference).toBe('');
+    expect(item.snapshot.description).toBe('');
+    expect(item.validationIssues).toContain('交易附言未填写');
   });
 
   it('provides cross-module creator, contract, and Invoice fixtures for the primary project', () => {

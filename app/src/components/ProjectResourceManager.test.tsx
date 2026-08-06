@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   getContractInvoiceRelation,
@@ -311,6 +312,8 @@ describe('project resource aggregation', () => {
         onRemovePaymentInvoice={vi.fn()}
         onUpdatePaymentItem={vi.fn()}
         onChangePaymentAccount={vi.fn()}
+        onGeneratePaymentOrder={vi.fn(() => null)}
+        onEditPaymentOrder={vi.fn()}
         onExportPaymentList={vi.fn()}
         onSubmitReview={vi.fn()}
       />,
@@ -325,6 +328,14 @@ describe('project resource aggregation', () => {
     expect(html).not.toContain('CON-CROSS-PROJECT-LINKED');
     expect(html).not.toContain('CON-CROSS-CREATOR-LINKED');
     expect(html).not.toContain(engagementOneId);
+  });
+
+  it('uses the system modal flow instead of a native confirm for removing a payment row', () => {
+    const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain('window.confirm(`确认从付款清单移除');
+    expect(source).toContain('title="确认移除付款行"');
+    expect(source).toContain('仅从当前付款清单移除这笔付款行，Invoice 源记录会保留。');
+    expect(source).toContain('setRemovePaymentInvoiceId(null)');
   });
 });
 

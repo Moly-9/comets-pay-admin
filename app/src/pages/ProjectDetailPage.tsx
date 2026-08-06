@@ -979,6 +979,8 @@ export function ProjectDetailPage({
   onUpdatePaymentItem,
   onChangePaymentAccount,
   onRevalidatePaymentItem,
+  onGeneratePaymentOrder,
+  onEditPaymentOrder,
   onExportPaymentList,
   onSubmitReview,
   notify,
@@ -1010,6 +1012,8 @@ export function ProjectDetailPage({
   onUpdatePaymentItem: (invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
   onChangePaymentAccount: (invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (invoiceId: InvoiceId) => void;
+  onGeneratePaymentOrder: () => InvoiceId | null;
+  onEditPaymentOrder: () => void;
   onExportPaymentList: () => Promise<void>;
   onSubmitReview: () => void;
   notify: Notify;
@@ -1130,6 +1134,8 @@ export function ProjectDetailPage({
               onUpdatePaymentItem={onUpdatePaymentItem}
               onChangePaymentAccount={onChangePaymentAccount}
               onRevalidatePaymentItem={onRevalidatePaymentItem}
+              onGeneratePaymentOrder={onGeneratePaymentOrder}
+              onEditPaymentOrder={onEditPaymentOrder}
               onExportPaymentList={onExportPaymentList}
               onSubmitReview={onSubmitReview}
             />

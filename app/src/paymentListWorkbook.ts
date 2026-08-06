@@ -163,6 +163,7 @@ export const buildAirwallexPaymentListRows = ({
 }): AirwallexPaymentListRow[] => {
   const issues = [
     !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
+    paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
     paymentList.status === 'submitted' ? '付款清单审批中，暂不能导出' : '',
   ].filter(Boolean);
   const resolved = paymentList.items.map((item) => {
@@ -290,4 +291,4 @@ const safeFilenamePart = (value: string) => (
 export const paymentListWorkbookFilename = (
   projectCode: string,
   paymentList: PaymentListRecord,
-) => `${paymentList.status === 'approved' ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}.xlsx`;
+) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}.xlsx`;

@@ -446,6 +446,8 @@ export function ProjectsPage({
   onUpdatePaymentItem,
   onChangePaymentAccount,
   onRevalidatePaymentItem,
+  onGeneratePaymentOrder,
+  onEditPaymentOrder,
   onExportPaymentList,
   onSubmitProjectReview,
   onProjectsChange,
@@ -479,6 +481,8 @@ export function ProjectsPage({
   onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
   onChangePaymentAccount: (project: ProjectSummary, invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId) => void;
+  onGeneratePaymentOrder: (project: ProjectSummary) => InvoiceId | null;
+  onEditPaymentOrder: (project: ProjectSummary) => void;
   onExportPaymentList: (project: ProjectSummary) => Promise<void>;
   onSubmitProjectReview: (project: ProjectSummary) => void;
   onProjectsChange: (updater: (current: ProjectSummary[]) => ProjectSummary[]) => void;
@@ -761,6 +765,8 @@ export function ProjectsPage({
         onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
         onChangePaymentAccount={(invoiceId, payoutAccountId) => onChangePaymentAccount(selectedProject, invoiceId, payoutAccountId)}
         onRevalidatePaymentItem={(invoiceId) => onRevalidatePaymentItem(selectedProject, invoiceId)}
+        onGeneratePaymentOrder={() => onGeneratePaymentOrder(selectedProject)}
+        onEditPaymentOrder={() => onEditPaymentOrder(selectedProject)}
         onExportPaymentList={() => onExportPaymentList(selectedProject)}
         onSubmitReview={() => onSubmitProjectReview(selectedProject)}
         onUpdateCreators={(creatorHandles) => updateProjectCreators(selectedProject.id, creatorHandles)}
@@ -1523,7 +1529,13 @@ export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project,
   invoiceCount: project.invoiceCount ?? 0,
   budget: project.budget,
   status: project.projectStatus,
-  reviewStatus: project.projectStatus === '已完成' ? 'approved' : 'submitted',
+  reviewStatus: project.requestStatus === '待补资料'
+    ? 'draft'
+    : project.requestStatus === '已退回'
+      ? 'returned'
+      : project.requestStatus === '已完成'
+        ? 'approved'
+        : 'submitted',
   paymentOrder: '待生成',
 }));
 

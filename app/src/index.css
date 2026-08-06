@@ -1190,6 +1190,86 @@
   color: var(--muted);
 }
 
+.project-payment-lock-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.project-payment-remove-modal {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(20, 24, 40, 0.2);
+}
+
+.project-payment-remove-modal .modal-header {
+  min-height: 58px;
+}
+
+.project-payment-remove-modal .modal-header h2 {
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.project-payment-remove-modal .modal-content {
+  padding: 22px;
+}
+
+.project-payment-remove-modal .modal-footer {
+  min-height: 62px;
+}
+
+.project-payment-remove-confirmation {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.project-payment-remove-confirmation > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #fecaca;
+  border-radius: 50%;
+  background: #fff1f2;
+  color: #c83f49;
+}
+
+.project-payment-remove-confirmation > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.project-payment-remove-confirmation strong,
+.project-payment-remove-confirmation p,
+.project-payment-remove-confirmation small {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.project-payment-remove-confirmation strong {
+  color: #242832;
+  font-size: 14px;
+}
+
+.project-payment-remove-confirmation p {
+  color: #555d69;
+  font-size: 13px;
+}
+
+.project-payment-remove-confirmation small {
+  color: #7a828f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .project-payment-rows {
   display: grid;
 }
@@ -1493,6 +1573,21 @@
   .project-payment-account-field,
   .project-payment-description-field {
     grid-column: 1;
+  }
+
+  .project-resource-modal .modal-footer {
+    flex-wrap: wrap;
+    padding-block: 10px;
+  }
+
+  .project-payment-lock-state {
+    width: 100%;
+  }
+
+  .project-payment-remove-modal .modal-header,
+  .project-payment-remove-modal .modal-content,
+  .project-payment-remove-modal .modal-footer {
+    padding-inline: 16px;
   }
 
   .project-audit-log > div {

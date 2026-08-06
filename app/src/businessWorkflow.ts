@@ -114,15 +114,47 @@ export type PaymentListItem = {
   lastValidatedAt?: string;
 };
 
+export type PaymentListStatus = 'draft' | 'generated' | 'submitted' | 'approved' | 'paid';
+
+export type PaymentListActor = {
+  account: string;
+  name: string;
+  role: string;
+};
+
+export type PaymentListVersionSnapshot = {
+  version: number;
+  generatedAt: string;
+  generatedBy: PaymentListActor;
+  items: PaymentListItem[];
+};
+
 export type PaymentListRecord = {
   paymentListId: PaymentListId;
   paymentListCode: string;
   projectId: ProjectId;
-  status: 'draft' | 'submitted' | 'approved';
+  status: PaymentListStatus;
   version?: number;
+  generatedAt?: string;
+  generatedBy?: PaymentListActor;
+  versions?: PaymentListVersionSnapshot[];
+  draftFromVersion?: number;
   items: PaymentListItem[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type PaymentListGenerationIssueCode =
+  | 'NO_ITEMS'
+  | 'MISSING_INVOICE'
+  | 'UNKNOWN_INVOICE'
+  | 'DUPLICATE_INVOICE'
+  | 'INVALID_ITEM';
+
+export type PaymentListGenerationIssue = {
+  code: PaymentListGenerationIssueCode;
+  message: string;
+  invoiceId?: InvoiceId;
 };
 
 export type WorkflowAuditAction =
@@ -209,6 +241,25 @@ export const nextReviewStatusAfterMutation = (
     ? 'changes_required'
     : reviewStatus
 );
+
+export const getPaymentListAccess = (
+  user: Pick<SystemUser, 'roleKey'>,
+  reviewStatus: ProjectReviewStatus,
+  paymentListStatus: PaymentListStatus | null,
+) => {
+  const privileged = user.roleKey === 'admin' || user.roleKey === 'owner';
+  const projectEditable = canEditProject(user, reviewStatus);
+  const historical = Boolean(
+    paymentListStatus && ['submitted', 'approved', 'paid'].includes(paymentListStatus),
+  );
+  return {
+    privileged,
+    historical,
+    canEditFields: projectEditable && paymentListStatus === 'draft',
+    canReopen: projectEditable && paymentListStatus === 'generated',
+    canCreateVersion: privileged && historical,
+  };
+};
 
 export const createAuditEvent = ({
   projectId,
@@ -333,6 +384,120 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
   ].filter(Boolean);
 };
 
+const clonePaymentListItems = (items: PaymentListItem[]) => items.map((item) => ({
+  ...item,
+  snapshot: {
+    ...item.snapshot,
+    contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
+  },
+  overrides: { ...item.overrides },
+  validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
+}));
+
+export const validatePaymentListGeneration = (
+  list: PaymentListRecord,
+  expectedInvoiceIds: InvoiceId[],
+): PaymentListGenerationIssue[] => {
+  const issues: PaymentListGenerationIssue[] = [];
+  const itemCounts = list.items.reduce<Map<InvoiceId, number>>((counts, item) => {
+    counts.set(item.invoiceId, (counts.get(item.invoiceId) ?? 0) + 1);
+    return counts;
+  }, new Map());
+
+  if (!list.items.length) {
+    issues.push({ code: 'NO_ITEMS', message: '付款清单至少需要一笔 Invoice。' });
+  }
+  expectedInvoiceIds.forEach((invoiceId) => {
+    if (!itemCounts.has(invoiceId)) {
+      issues.push({
+        code: 'MISSING_INVOICE',
+        invoiceId,
+        message: `付款清单未覆盖项目 Invoice ${invoiceId}。`,
+      });
+    }
+  });
+  list.items.forEach((item) => {
+    if (!expectedInvoiceIds.includes(item.invoiceId)) {
+      issues.push({
+        code: 'UNKNOWN_INVOICE',
+        invoiceId: item.invoiceId,
+        message: `${item.snapshot.invoiceNumber} 不属于当前项目，不能进入付款单。`,
+      });
+    }
+    if ((itemCounts.get(item.invoiceId) ?? 0) > 1) {
+      issues.push({
+        code: 'DUPLICATE_INVOICE',
+        invoiceId: item.invoiceId,
+        message: `${item.snapshot.invoiceNumber} 在付款清单中重复出现。`,
+      });
+    }
+    const itemIssues = [
+      ...(item.requiresRevalidation ? item.validationIssues ?? ['付款行需要重新校验'] : []),
+      ...paymentListItemValidationIssues(item),
+    ];
+    [...new Set(itemIssues)].forEach((message) => issues.push({
+      code: 'INVALID_ITEM',
+      invoiceId: item.invoiceId,
+      message: `${item.snapshot.invoiceNumber}：${message}`,
+    }));
+  });
+
+  return issues.filter((issue, index, all) => (
+    all.findIndex((candidate) => (
+      candidate.code === issue.code
+      && candidate.invoiceId === issue.invoiceId
+      && candidate.message === issue.message
+    )) === index
+  ));
+};
+
+export const generatePaymentListVersion = ({
+  list,
+  expectedInvoiceIds,
+  actor,
+  generatedAt = nowIso(),
+}: {
+  list: PaymentListRecord;
+  expectedInvoiceIds: InvoiceId[];
+  actor: PaymentListActor;
+  generatedAt?: string;
+}): { record: PaymentListRecord; issues: PaymentListGenerationIssue[] } => {
+  const issues = validatePaymentListGeneration(list, expectedInvoiceIds);
+  if (issues.length) return { record: list, issues };
+
+  const version = (list.version ?? 0) + 1;
+  const snapshot: PaymentListVersionSnapshot = {
+    version,
+    generatedAt,
+    generatedBy: { ...actor },
+    items: clonePaymentListItems(list.items),
+  };
+  return {
+    issues: [],
+    record: {
+      ...list,
+      status: 'generated',
+      version,
+      generatedAt,
+      generatedBy: { ...actor },
+      draftFromVersion: undefined,
+      items: clonePaymentListItems(list.items),
+      versions: [...(list.versions ?? []), snapshot],
+      updatedAt: generatedAt,
+    },
+  };
+};
+
+export const beginPaymentListEdit = (
+  list: PaymentListRecord,
+  editedAt = nowIso(),
+): PaymentListRecord => ({
+  ...list,
+  status: 'draft',
+  draftFromVersion: list.version,
+  updatedAt: editedAt,
+});
+
 export type PaymentListAccountState = {
   payoutAccountId: string;
   payoutAccountVersion: PayoutAccountVersion;
@@ -456,9 +621,8 @@ export const invoicePaymentListItem = (
           ? '待补充 PayPal'
           : '待补充银行账户',
       paymentReason: '影音服务',
-      transactionReference: invoice.id,
-      description: payment.transferRemarks
-        || invoice.snapshot.items.map((lineItem) => lineItem.description).filter(Boolean).join(' / '),
+      transactionReference: '',
+      description: '',
       creatorId: invoice.snapshot.creatorId,
       contractIds: invoice.snapshot.contractIds ? [...invoice.snapshot.contractIds] : [],
       payoutAccountId,

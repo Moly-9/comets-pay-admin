@@ -1,9 +1,11 @@
 import {
   Eye,
   Download,
+  AlertTriangle,
   FilePlus2,
   FileText,
   Link2,
+  LockKeyhole,
   Pencil,
   ReceiptText,
   RefreshCw,
@@ -12,9 +14,10 @@ import {
   Unlink,
   WalletCards,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   canEditProject,
+  getPaymentListAccess,
   paymentListItemValue,
   projectReviewStatusLabel,
   type ContractId,
@@ -82,6 +85,8 @@ type Props = {
   ) => void;
   onChangePaymentAccount: (invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem?: (invoiceId: InvoiceId) => void;
+  onGeneratePaymentOrder: () => InvoiceId | null;
+  onEditPaymentOrder: () => void;
   onExportPaymentList: () => Promise<void>;
   onSubmitReview: () => void;
 };
@@ -123,8 +128,10 @@ const contractStatusLabel = (contract: ContractRecord) => {
 
 const paymentListStatusLabel = (paymentList: PaymentListRecord | null) => {
   if (!paymentList) return '未生成';
-  if (paymentList.status === 'approved') return '已完成';
+  if (paymentList.status === 'paid') return '已付款';
+  if (paymentList.status === 'approved') return '已批准';
   if (paymentList.status === 'submitted') return '已提交';
+  if (paymentList.status === 'generated') return '已生成';
   return '草稿';
 };
 
@@ -284,6 +291,8 @@ export function ProjectResourceManager({
   onUpdatePaymentItem,
   onChangePaymentAccount,
   onRevalidatePaymentItem,
+  onGeneratePaymentOrder,
+  onEditPaymentOrder,
   onExportPaymentList,
   onSubmitReview,
 }: Props) {
@@ -296,6 +305,7 @@ export function ProjectResourceManager({
   const [linkId, setLinkId] = useState('');
   const [editingInvoice, setEditingInvoice] = useState<GeneratedInvoiceRecord | null>(null);
   const [paymentInvoiceId, setPaymentInvoiceId] = useState('');
+  const [removePaymentInvoiceId, setRemovePaymentInvoiceId] = useState<InvoiceId | null>(null);
 
   const references = (project.creatorProfiles ?? []).filter((reference) => reference.status !== 'removed');
   const projectId = projectInternalId(project);
@@ -329,6 +339,32 @@ export function ProjectResourceManager({
   const contractCreatorCount = new Set(linkedContracts.map((contract) => contract.engagementId)).size;
   const invoiceCreatorCount = new Set(linkedInvoices.map((invoice) => invoice.snapshot.engagementId)).size;
   const projectCode = project.projectCode ?? project.id;
+  const paymentAccess = getPaymentListAccess(currentUser, reviewStatus, paymentList?.status ?? null);
+  const paymentFieldsEditable = paymentAccess.canEditFields;
+  const paymentListHistorical = paymentAccess.historical;
+  const canReopenPaymentList = paymentAccess.canReopen || paymentAccess.canCreateVersion;
+  const removePaymentItem = paymentList?.items.find((item) => (
+    item.invoiceId === removePaymentInvoiceId
+  )) ?? null;
+
+  useEffect(() => {
+    if (!removePaymentInvoiceId) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRemovePaymentInvoiceId(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [removePaymentInvoiceId]);
+
+  const generatePaymentOrder = () => {
+    const blockingInvoiceId = onGeneratePaymentOrder();
+    if (!blockingInvoiceId) return;
+    window.setTimeout(() => {
+      const row = document.getElementById(`payment-row-${blockingInvoiceId}`);
+      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row?.querySelector<HTMLInputElement>('[data-payment-required="true"]')?.focus();
+    }, 0);
+  };
 
   const linkOptions = useMemo(() => (
     linkDialog
@@ -728,7 +764,26 @@ export function ProjectResourceManager({
           width="1040px"
           className="project-resource-modal"
           onClose={() => setResourceDialog(null)}
-          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+          footer={(
+            <>
+              {paymentList && paymentList.status !== 'draft' ? (
+                <span className="project-payment-lock-state">
+                  <LockKeyhole size={15} />
+                  {paymentListStatusLabel(paymentList)} · v{paymentList.version ?? 1}
+                </span>
+              ) : null}
+              {paymentList?.status === 'draft' && canEdit ? (
+                <Button onClick={generatePaymentOrder}>生成付款单</Button>
+              ) : null}
+              {paymentList?.status === 'generated' && canReopenPaymentList ? (
+                <Button variant="secondary" icon={<Pencil size={15} />} onClick={onEditPaymentOrder}>编辑付款单</Button>
+              ) : null}
+              {paymentListHistorical && paymentAccess.canCreateVersion ? (
+                <Button variant="secondary" icon={<FilePlus2 size={15} />} onClick={onEditPaymentOrder}>创建新版本</Button>
+              ) : null}
+              <Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>
+            </>
+          )}
         >
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading">
@@ -743,7 +798,7 @@ export function ProjectResourceManager({
               <div className="project-resource-browser-toolbar project-payment-toolbar">
                 {canEdit ? (
                   paymentList ? (
-                    <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => {
+                    <Button variant="danger" icon={<Trash2 size={15} />} disabled={!paymentFieldsEditable} onClick={() => {
                       if (window.confirm(`确认删除付款清单 ${paymentList.paymentListCode}？Invoice 不会被删除。`)) {
                         onDeletePaymentList();
                       }
@@ -756,9 +811,13 @@ export function ProjectResourceManager({
                   <Button
                     variant="secondary"
                     icon={<Download size={15} />}
-                    disabled={!paymentList.items.length || paymentList.status === 'submitted'}
+                    disabled={
+                      !paymentList.items.length
+                      || paymentList.status === 'draft'
+                      || paymentList.status === 'submitted'
+                    }
                     onClick={() => { void onExportPaymentList(); }}
-                  >{paymentList.status === 'approved' ? '导出 Excel' : '导出预览'}</Button>
+                  >{['approved', 'paid'].includes(paymentList.status) ? '导出 Excel' : '导出预览'}</Button>
                 ) : null}
               </div>
             ) : null}
@@ -767,39 +826,44 @@ export function ProjectResourceManager({
               <>
                 <div className="project-payment-list-meta">
                   <strong>{paymentList.paymentListCode}</strong>
-                  <span>{paymentList.items.length} 笔付款 · {paymentListStatusLabel(paymentList)}</span>
+                  <span>
+                    {paymentList.items.length} 笔付款 · {paymentListStatusLabel(paymentList)}
+                    {paymentList.version ? ` · v${paymentList.version}` : ''}
+                    {paymentList.generatedAt ? ` · ${new Date(paymentList.generatedAt).toLocaleString('zh-CN')}` : ''}
+                  </span>
                 </div>
                 <NoticeBanner>
-                  Excel 会包含完整付款资料并在浏览器本地生成。页面仅展示脱敏账户；审批中的付款清单不可导出。
+                  {paymentList.status === 'draft'
+                    ? '描述保持选填；交易附言必须逐行填写。生成付款单后将保存当前版本并立即锁定。'
+                    : '当前付款单内容已锁定。Excel 在浏览器本地生成并包含完整付款资料，页面只展示脱敏账户。'}
                 </NoticeBanner>
                 <div className="project-payment-rows">
                   {paymentList.items.map((item) => {
                     const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
                     const accountOptions = eligibleInvoicePayoutAccounts(creator)
-                      .filter((account) => account.provider === 'Airwallex')
                       .map((account) => ({
                         value: getPayoutAccountId(account),
                         label: account.nickname,
-                        description: `${account.bankDetails.accountCurrency} · ${account.transferMethod} · ${getPayoutAccountIdentifier(account)}`,
+                        description: account.provider === 'Airwallex'
+                          ? `${account.provider} · ${account.bankDetails.accountCurrency} · ${account.transferMethod} · ${getPayoutAccountIdentifier(account)}`
+                          : `${account.provider} · ${getPayoutAccountIdentifier(account)}`,
                       }));
                     return (
-                      <article className="project-payment-row" key={item.invoiceId}>
+                      <article className="project-payment-row" id={`payment-row-${item.invoiceId}`} key={item.invoiceId}>
                         <header className="project-payment-row-header">
                           <div>
                             <strong>{item.snapshot.creatorName}</strong>
                             <span>{item.snapshot.invoiceNumber} · {item.snapshot.provider}</span>
                           </div>
                           <div className="project-payment-row-actions">
-                            {canEdit && item.requiresRevalidation ? (
+                            {paymentFieldsEditable && item.requiresRevalidation ? (
                               <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem?.(item.invoiceId)}>
                                 <RefreshCw size={12} />重新校验
                               </button>
                             ) : null}
-                            {canEdit ? (
+                            {paymentFieldsEditable ? (
                               <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => {
-                                if (window.confirm(`确认从付款清单移除 ${item.snapshot.invoiceNumber}？Invoice 源记录会保留。`)) {
-                                  onRemovePaymentInvoice(item.invoiceId);
-                                }
+                                setRemovePaymentInvoiceId(item.invoiceId);
                               }}><Trash2 size={15} /></button>
                             ) : null}
                           </div>
@@ -816,28 +880,28 @@ export function ProjectResourceManager({
 
                         <div className="project-payment-fields">
                           <label className="project-payment-account-field">
-                            <span>Airwallex 收款账户</span>
+                            <span>{item.snapshot.provider} 收款账户</span>
                             <SelectField
-                              ariaLabel={`${item.snapshot.creatorName} Airwallex 收款账户`}
+                              ariaLabel={`${item.snapshot.creatorName} ${item.snapshot.provider} 收款账户`}
                               variant="form"
                               value={item.snapshot.payoutAccountId ?? ''}
                               options={accountOptions}
-                              placeholder={accountOptions.length ? '选择达人收款账户' : '达人暂无可用 Airwallex 账户'}
-                              disabled={!canEdit || !accountOptions.length}
+                              placeholder={accountOptions.length ? '选择达人收款账户' : '达人暂无可用收款账户'}
+                              disabled={!paymentFieldsEditable || !accountOptions.length}
                               onChange={(value) => onChangePaymentAccount(item.invoiceId, value)}
                             />
                           </label>
                           <label>
                             <span>支付币种</span>
-                            <input disabled={!canEdit} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'currency', event.target.value.toUpperCase())} />
+                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'currency', event.target.value.toUpperCase())} />
                           </label>
                           <label>
                             <span>收款币种</span>
-                            <input disabled={!canEdit} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} />
+                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} />
                           </label>
                           <label>
                             <span>金额</span>
-                            <input disabled={!canEdit} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'amount', Number(event.target.value))} />
+                            <input disabled={!paymentFieldsEditable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'amount', Number(event.target.value))} />
                           </label>
                           <label>
                             <span>费用承担</span>
@@ -847,27 +911,29 @@ export function ProjectResourceManager({
                               value={paymentListItemValue(item, 'feeBearer') ?? ''}
                               options={PAYMENT_FEE_OPTIONS}
                               placeholder="逐行确认费用承担方"
-                              disabled={!canEdit}
+                              disabled={!paymentFieldsEditable}
                               onChange={(value) => onUpdatePaymentItem(item.invoiceId, 'feeBearer', value)}
                             />
                           </label>
                           <label>
                             <span>付款原因</span>
-                            <input disabled={!canEdit} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'paymentReason', event.target.value)} />
+                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'paymentReason', event.target.value)} />
                           </label>
                           <label>
                             <span>交易附言</span>
-                            <input disabled={!canEdit} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'transactionReference', event.target.value)} />
+                            <input data-payment-required="true" disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'transactionReference', event.target.value)} />
                           </label>
                           <label className="project-payment-description-field">
                             <span>描述（选填）</span>
-                            <input disabled={!canEdit} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'description', event.target.value)} />
+                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'description', event.target.value)} />
                           </label>
                         </div>
 
                         <footer className="project-payment-row-meta">
                           <span>账户 {item.snapshot.accountSummary}</span>
-                          <span>{beneficiarySummary(item.snapshot.externalBeneficiaryId)}</span>
+                          <span>{item.snapshot.provider === 'Airwallex'
+                            ? beneficiarySummary(item.snapshot.externalBeneficiaryId)
+                            : `账户 ID ${item.snapshot.payoutAccountId ?? '待补充'}`}</span>
                           <span>{item.snapshot.transferMethod ?? '待确认方式'}{item.snapshot.localClearingSystem ? ` · ${item.snapshot.localClearingSystem}` : ''}</span>
                           <span>{item.snapshot.contractIds?.length ? `${item.snapshot.contractIds.length} 份合同` : '未关联合同'}</span>
                         </footer>
@@ -876,7 +942,7 @@ export function ProjectResourceManager({
                   })}
                   {!paymentList.items.length ? <p className="project-resource-empty-line">清单尚无付款行，请从已关联 Invoice 添加。</p> : null}
                 </div>
-                {canEdit ? (
+                {paymentFieldsEditable ? (
                   <div className="project-payment-add">
                     <SelectField
                       ariaLabel="添加付款 Invoice"
@@ -909,6 +975,36 @@ export function ProjectResourceManager({
                 <p>先为每位项目达人关联并校验 Invoice，再生成项目级唯一付款清单。</p>
               </div>
             )}
+          </div>
+        </Modal>
+      ) : null}
+
+      {removePaymentItem ? (
+        <Modal
+          title="确认移除付款行"
+          width="440px"
+          className="project-payment-remove-modal"
+          onClose={() => setRemovePaymentInvoiceId(null)}
+          footer={(
+            <>
+              <Button variant="secondary" autoFocus onClick={() => setRemovePaymentInvoiceId(null)}>取消</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  onRemovePaymentInvoice(removePaymentItem.invoiceId);
+                  setRemovePaymentInvoiceId(null);
+                }}
+              >确认移除</Button>
+            </>
+          )}
+        >
+          <div className="project-payment-remove-confirmation">
+            <span><AlertTriangle size={22} /></span>
+            <div>
+              <strong>{removePaymentItem.snapshot.invoiceNumber}</strong>
+              <p>对应达人：{removePaymentItem.snapshot.creatorName}</p>
+              <small>仅从当前付款清单移除这笔付款行，Invoice 源记录会保留。</small>
+            </div>
           </div>
         </Modal>
       ) : null}

@@ -80,11 +80,13 @@ import type {
 } from './types';
 import {
   applyPaymentListPayoutSnapshot,
+  beginPaymentListEdit,
   canEditProject,
   createAuditEvent,
   createPrototypeCode,
   createPrototypeId,
   hasInvoiceForEngagement,
+  generatePaymentListVersion,
   invoicePaymentListItem,
   nextReviewStatusAfterMutation,
   nowIso,
@@ -119,10 +121,10 @@ import {
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import {
-  INVOICE_EDIT_REQUEST_INVOICES,
+  ALL_PROJECT_PROTOTYPE_INVOICES,
+  ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
+  ALL_PROJECT_PROTOTYPE_PAYOUTS,
   PROJECT_DEMO_CONTRACTS,
-  PROJECT_DEMO_INVOICES,
-  PROJECT_DEMO_PAYOUTS,
 } from './prototypeResourceFixtures';
 import {
   applyRequestApprovalAction,
@@ -161,7 +163,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
   const [payouts, setPayouts] = useState<Payout[]>(() => [
     ...INITIAL_PAYOUTS,
-    ...PROJECT_DEMO_PAYOUTS,
+    ...ALL_PROJECT_PROTOTYPE_PAYOUTS,
   ]);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
@@ -171,9 +173,11 @@ export default function App() {
   ]);
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    [...INVOICE_EDIT_REQUEST_INVOICES, ...PROJECT_DEMO_INVOICES]
+    [...ALL_PROJECT_PROTOTYPE_INVOICES]
   ));
-  const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>([]);
+  const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(() => (
+    ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS
+  ));
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
   const [requestProjects, setRequestProjects] = useState(INITIAL_REQUEST_PROJECTS);
   const [invoiceTab, setInvoiceTab] = useState<InvoicePageTab>('signature');
@@ -759,8 +763,18 @@ export default function App() {
     return result.record;
   };
 
+  const canMutatePaymentList = (project: ProjectSummary, list: PaymentListRecord | undefined) => (
+    Boolean(list)
+    && list?.status === 'draft'
+    && canEditProject(currentUser, project.reviewStatus ?? 'draft')
+  );
+
   const createPaymentList = (project: ProjectSummary) => {
     const projectId = getProjectId(project);
+    if (!canEditProject(currentUser, project.reviewStatus ?? 'draft')) {
+      notify('项目资料已锁定', '当前账号不能创建该项目的付款清单。');
+      return;
+    }
     if (paymentLists.some((list) => list.projectId === projectId)) return;
     const invoices = generatedInvoices.filter((invoice) => (
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
@@ -781,7 +795,7 @@ export default function App() {
       entityType: 'payment-list',
       entityId: list.paymentListId,
       action: 'create',
-      summary: `已生成付款清单 ${list.paymentListCode}`,
+      summary: `已创建付款清单草稿 ${list.paymentListCode}`,
     });
   };
 
@@ -789,6 +803,10 @@ export default function App() {
     const projectId = getProjectId(project);
     const list = paymentLists.find((item) => item.projectId === projectId);
     if (!list) return;
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再删除付款清单。');
+      return;
+    }
     setPaymentLists((current) => current.filter((item) => item.paymentListId !== list.paymentListId));
     registerProjectMutation({
       projectId,
@@ -802,6 +820,11 @@ export default function App() {
   const addPaymentInvoice = (project: ProjectSummary, invoiceId: InvoiceId) => {
     const projectId = getProjectId(project);
     const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
+    const list = paymentLists.find((item) => item.projectId === projectId);
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再添加付款行。');
+      return;
+    }
     if (!invoice?.snapshot.engagementId || invoice.snapshot.projectId !== projectId) return;
     setPaymentLists((current) => current.map((list) => (
       list.projectId === projectId
@@ -820,6 +843,11 @@ export default function App() {
 
   const removePaymentInvoice = (project: ProjectSummary, invoiceId: InvoiceId) => {
     const projectId = getProjectId(project);
+    const list = paymentLists.find((item) => item.projectId === projectId);
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再移除付款行。');
+      return;
+    }
     setPaymentLists((current) => current.map((list) => (
       list.projectId === projectId
         ? { ...removePaymentListItem(list, invoiceId), status: 'draft' }
@@ -841,6 +869,11 @@ export default function App() {
     value: string | number,
   ) => {
     const projectId = getProjectId(project);
+    const list = paymentLists.find((item) => item.projectId === projectId);
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再修改付款字段。');
+      return;
+    }
     setPaymentLists((current) => current.map((list) => list.projectId === projectId
       ? {
           ...list,
@@ -871,16 +904,20 @@ export default function App() {
     payoutAccountId: string,
   ) => {
     const projectId = getProjectId(project);
+    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再更换收款账户。');
+      return;
+    }
     const item = paymentLists
       .find((list) => list.projectId === projectId)
       ?.items.find((candidate) => candidate.invoiceId === invoiceId);
     const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
     const account = creator?.payoutAccounts.find((candidate) => (
-      candidate.provider === 'Airwallex'
-      && getPayoutAccountId(candidate) === payoutAccountId
+      getPayoutAccountId(candidate) === payoutAccountId
     ));
     if (!item || !creator || !account) {
-      notify('无法更换收款账户', '未找到该达人通过稳定 payoutAccountId 关联的 Airwallex 账户。');
+      notify('无法更换收款账户', '未找到该达人通过稳定 payoutAccountId 关联的可用收款账户。');
       return;
     }
     const updated = applyPaymentListPayoutSnapshot(
@@ -901,7 +938,7 @@ export default function App() {
       entityType: 'payment-list',
       entityId: invoiceId,
       action: 'update',
-      summary: `已为 ${item.snapshot.invoiceNumber} 更换 Airwallex 收款账户，等待重新校验`,
+      summary: `已为 ${item.snapshot.invoiceNumber} 更换 ${account.provider} 收款账户，等待重新校验`,
     });
   };
 
@@ -910,6 +947,11 @@ export default function App() {
     invoiceId: InvoiceId,
   ) => {
     const projectId = getProjectId(project);
+    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再重新校验付款行。');
+      return;
+    }
     const currentItem = paymentLists
       .find((list) => list.projectId === projectId)
       ?.items.find((item) => item.invoiceId === invoiceId);
@@ -959,6 +1001,103 @@ export default function App() {
     );
   };
 
+  const generatePaymentOrder = (project: ProjectSummary) => {
+    const projectId = getProjectId(project);
+    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    if (!list) {
+      notify('无法生成付款单', '当前项目尚未创建付款清单。');
+      return null;
+    }
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入编辑态，再生成新的付款单版本。');
+      return null;
+    }
+    const expectedInvoiceIds = generatedInvoices
+      .filter((invoice) => invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId)
+      .map((invoice) => invoice.invoiceId);
+    const result = generatePaymentListVersion({
+      list,
+      expectedInvoiceIds,
+      actor: {
+        account: currentUser.account,
+        name: currentUser.name,
+        role: currentUser.role,
+      },
+    });
+    if (result.issues.length) {
+      notify('付款单生成失败', result.issues[0].message);
+      return result.issues[0].invoiceId ?? null;
+    }
+    setPaymentLists((current) => current.map((candidate) => (
+      candidate.paymentListId === list.paymentListId ? result.record : candidate
+    )));
+    registerProjectMutation({
+      projectId,
+      entityType: 'payment-list',
+      entityId: list.paymentListId,
+      action: 'update',
+      summary: `已生成付款单 ${list.paymentListCode} v${result.record.version ?? 1} 并锁定当前内容`,
+    });
+    notify(
+      '付款单已生成',
+      `${list.paymentListCode} v${result.record.version ?? 1} 已保存，提交请款前可重新进入编辑态。`,
+    );
+    return null;
+  };
+
+  const editPaymentOrder = (project: ProjectSummary) => {
+    const projectId = getProjectId(project);
+    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    if (!list) return;
+    const privileged = currentUser.roleKey === 'admin' || currentUser.roleKey === 'owner';
+    const historicalStatus = ['submitted', 'approved', 'paid'].includes(list.status);
+    if (historicalStatus && !privileged) {
+      notify('付款单已锁定', '提交请款后的付款单只有在审批退回或付款清单问题退回后才能修改。');
+      return;
+    }
+    if (list.status === 'generated' && !canEditProject(currentUser, project.reviewStatus ?? 'draft')) {
+      notify('付款单已锁定', '当前账号不能重新编辑该项目的付款单。');
+      return;
+    }
+    if (list.status !== 'generated' && !historicalStatus) return;
+    const updated = beginPaymentListEdit(list);
+    setPaymentLists((current) => current.map((candidate) => (
+      candidate.paymentListId === list.paymentListId ? updated : candidate
+    )));
+    if (historicalStatus) {
+      setRequestProjects((current) => current.map((request) => request.projectId === projectId
+        ? {
+            ...request,
+            status: '资料已变更',
+            filter: 'pending',
+            approval: request.approval
+              ? {
+                  ...request.approval,
+                  status: 'RETURNED_TO_MEDIA_REVIEW',
+                  returnReason: '管理员或老板已创建付款单新版本，原审批结果失效。',
+                  updatedAt: nowIso(),
+                }
+              : request.approval,
+          }
+        : request));
+    }
+    registerProjectMutation({
+      projectId,
+      entityType: 'payment-list',
+      entityId: list.paymentListId,
+      action: 'update',
+      summary: historicalStatus
+        ? `已从付款单 v${list.version ?? 1} 创建特权修改草稿，历史版本保持不变`
+        : `已重新编辑付款单 v${list.version ?? 1}`,
+    });
+    notify(
+      historicalStatus ? '新版本草稿已创建' : '付款单已恢复编辑',
+      historicalStatus
+        ? '原审批与付款快照已保留；完成修改后需要重新生成付款单。'
+        : '修改完成后请重新生成付款单，生成前不会覆盖当前历史版本。',
+    );
+  };
+
   const exportPaymentList = async (project: ProjectSummary) => {
     const projectId = getProjectId(project);
     const list = paymentLists.find((candidate) => candidate.projectId === projectId);
@@ -976,7 +1115,7 @@ export default function App() {
         paymentListWorkbookFilename(project.projectCode ?? project.id, list),
       );
       notify(
-        list.status === 'approved' ? '付款清单已导出' : '付款清单预览已导出',
+        ['approved', 'paid'].includes(list.status) ? '付款清单已导出' : '付款清单预览已导出',
         'Excel 由浏览器本地生成，包含付款资料，请按敏感文件管理。',
       );
     } catch (error) {
@@ -1025,6 +1164,10 @@ export default function App() {
       notify('暂不能重新提交付款清单', '本轮 Invoice 状态不一致，请核对项目稳定关联和付款失败分类。');
       return;
     }
+    if (!list || list.status !== 'generated') {
+      notify('请先生成付款单', '付款清单必须完成校验并生成锁定版本后，才能提交请款审核。');
+      return;
+    }
     if (
       linkedPayouts.some((payout) => !payout)
       || (
@@ -1068,9 +1211,7 @@ export default function App() {
     const previousRequest = requestProjects.find((item) => item.projectId === projectId);
     const approval = createRequestApprovalState(submittedAt, previousRequest?.approval);
     const approvalInvoiceStatus = invoiceStatusForRequestApproval('PENDING_PM');
-    const nextPaymentListVersion = isPaymentListResubmission
-      ? (list?.version ?? 1) + 1
-      : list?.version ?? 1;
+    const nextPaymentListVersion = list.version ?? 1;
     const invoiceIds = projectInvoices.map((invoice) => invoice.invoiceId);
     const sourcePayoutIds = new Set(projectInvoices.map((invoice) => invoice.sourcePayoutId));
     setProjects((current) => current.map((item) => getProjectId(item) === projectId
@@ -1330,7 +1471,20 @@ export default function App() {
       issue: payout.status === '信息异常' ? undefined : payout.issue,
       paidAt: nextStatus === '已付款' ? '2026-07-17 刚刚' : payout.paidAt,
     };
+    const allProjectPaymentsCompleted = nextStatus === '已付款'
+      && payouts
+        .filter((item) => item.projectId === payout.projectId)
+        .every((item) => item.id === payout.id || item.status === '已付款');
     setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+    if (allProjectPaymentsCompleted) {
+      const project = projects.find((item) => item.id === payout.projectId);
+      if (project) {
+        const projectId = getProjectId(project);
+        setPaymentLists((current) => current.map((list) => list.projectId === projectId
+          ? { ...list, status: 'paid', updatedAt: nowIso() }
+          : list));
+      }
+    }
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify('付款状态已更新', `${payout.creator} 已进入“${nextStatus}”。`);
   };
@@ -1718,6 +1872,8 @@ export default function App() {
           onUpdatePaymentItem={updatePaymentItem}
           onChangePaymentAccount={changePaymentAccount}
           onRevalidatePaymentItem={revalidatePaymentItem}
+          onGeneratePaymentOrder={generatePaymentOrder}
+          onEditPaymentOrder={editPaymentOrder}
           onExportPaymentList={exportPaymentList}
           onSubmitProjectReview={submitProjectReview}
           onProjectsChange={setProjects}

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  beginPaymentListEdit,
   canEditProject,
+  generatePaymentListVersion,
+  getPaymentListAccess,
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
   payoutWithPaymentListSnapshot,
@@ -9,6 +12,7 @@ import {
   removePaymentListItem,
   upsertPaymentListItem,
   validateContractCoverage,
+  validatePaymentListGeneration,
   validateProjectSubmission,
   type ContractId,
   type CreatorId,
@@ -39,6 +43,36 @@ describe('project workflow permissions', () => {
     expect(nextReviewStatusAfterMutation(roles.admin, 'submitted')).toBe('changes_required');
     expect(nextReviewStatusAfterMutation(roles.owner, 'approved')).toBe('changes_required');
     expect(nextReviewStatusAfterMutation(roles.media, 'draft')).toBe('draft');
+  });
+
+  it('enforces payment-list draft, generated, historical, and read-only role access', () => {
+    expect(getPaymentListAccess(roles.media, 'draft', 'draft')).toMatchObject({
+      canEditFields: true,
+      canReopen: false,
+      canCreateVersion: false,
+    });
+    expect(getPaymentListAccess(roles.media, 'draft', 'generated')).toMatchObject({
+      canEditFields: false,
+      canReopen: true,
+      canCreateVersion: false,
+    });
+    expect(getPaymentListAccess(roles.media, 'submitted', 'submitted')).toMatchObject({
+      canEditFields: false,
+      canReopen: false,
+      canCreateVersion: false,
+    });
+    expect(getPaymentListAccess(roles.admin, 'approved', 'paid')).toMatchObject({
+      canEditFields: false,
+      canReopen: false,
+      canCreateVersion: true,
+    });
+    expect(getPaymentListAccess(roles.owner, 'submitted', 'approved')).toMatchObject({
+      canCreateVersion: true,
+    });
+    expect(getPaymentListAccess(roles.pm, 'draft', 'draft')).toMatchObject({
+      canEditFields: false,
+      canCreateVersion: false,
+    });
   });
 });
 
@@ -113,6 +147,16 @@ describe('project payment list', () => {
       paymentReason: '影音服务',
       transactionReference: 'INV-TEST',
       description: 'Synthetic payment',
+      creatorId: 'creator-1' as CreatorId,
+      payoutAccountId: 'account-1',
+      payoutAccountVersion: 'v1' as const,
+      externalBeneficiaryId: 'beneficiary-1',
+      transferMethod: 'LOCAL' as const,
+      localClearingSystem: 'ACH',
+      feeBearer: 'ADVERTISER' as const,
+      accountFingerprint: 'fp_1',
+      schemaKey: 'BANK_ACCOUNT:US:USD:PERSONAL:LOCAL:ACH',
+      validationStatus: 'VERIFIED' as const,
     },
     overrides: {},
   };
@@ -121,6 +165,60 @@ describe('project payment list', () => {
     const withItem = upsertPaymentListItem(record, item);
     expect(upsertPaymentListItem(withItem, item).items).toHaveLength(1);
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
+  });
+
+  it('requires a transaction reference before generating a locked payment version', () => {
+    const draft = {
+      ...record,
+      items: [{
+        ...item,
+        snapshot: { ...item.snapshot, transactionReference: '', description: '' },
+      }],
+    };
+    expect(validatePaymentListGeneration(draft, [invoiceId])).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'INVALID_ITEM',
+        invoiceId,
+        message: expect.stringContaining('交易附言未填写'),
+      }),
+    ]));
+  });
+
+  it('locks generated content and preserves immutable version history while editing again', () => {
+    const actor = { account: 'admin.test', name: 'Admin Test', role: '管理员账号' };
+    const first = generatePaymentListVersion({
+      list: { ...record, items: [item] },
+      expectedInvoiceIds: [invoiceId],
+      actor,
+      generatedAt: '2026-08-06T08:00:00.000Z',
+    });
+    expect(first.issues).toEqual([]);
+    expect(first.record).toMatchObject({
+      status: 'generated',
+      version: 1,
+      generatedAt: '2026-08-06T08:00:00.000Z',
+    });
+    expect(first.record.versions).toHaveLength(1);
+
+    const edited = beginPaymentListEdit(first.record, '2026-08-06T09:00:00.000Z');
+    const second = generatePaymentListVersion({
+      list: {
+        ...edited,
+        items: edited.items.map((current) => ({
+          ...current,
+          overrides: { ...current.overrides, description: 'Second version note' },
+        })),
+      },
+      expectedInvoiceIds: [invoiceId],
+      actor,
+      generatedAt: '2026-08-06T10:00:00.000Z',
+    });
+
+    expect(edited).toMatchObject({ status: 'draft', draftFromVersion: 1 });
+    expect(second.record).toMatchObject({ status: 'generated', version: 2 });
+    expect(second.record.versions).toHaveLength(2);
+    expect(second.record.versions?.[0]?.items[0]?.overrides.description).toBeUndefined();
+    expect(second.record.versions?.[1]?.items[0]?.overrides.description).toBe('Second version note');
   });
 
   it('refreshes an Invoice snapshot while preserving explicit payment-list overrides', () => {

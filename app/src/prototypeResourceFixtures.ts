@@ -1,6 +1,8 @@
 import type { ContractRecord } from './contracts';
-import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from './data';
+import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS, PROJECT_FIXTURES } from './data';
 import {
+  createDocumentPayoutSnapshot,
+  eligibleInvoicePayoutAccounts,
   getDefaultPayoutAccount,
   invoicePaymentForCreator,
 } from './payoutAccounts';
@@ -8,9 +10,13 @@ import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 import type {
   ContractId,
   CreatorId,
+  EngagementId,
   InvoiceId,
+  PaymentListItem,
+  PaymentListRecord,
   ProjectId,
 } from './businessWorkflow';
+import { invoicePaymentListItem } from './businessWorkflow';
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
@@ -495,4 +501,283 @@ export const PROJECT_DEMO_TOTAL = PROJECT_DEMO_INVOICES.reduce(
     0,
   ),
   0,
+);
+
+const projectBudget = (budget: string) => {
+  const [currency = 'USD'] = budget.trim().split(/\s+/);
+  const amount = Number(budget.replace(/[^0-9.]/g, ''));
+  return { currency, amount };
+};
+
+const distributeProjectBudget = (amount: number, count: number) => {
+  if (!count) return [];
+  const totalCents = Math.round(amount * 100);
+  const baseCents = Math.floor(totalCents / count);
+  return Array.from({ length: count }, (_, index) => (
+    (index === count - 1
+      ? totalCents - baseCents * (count - 1)
+      : baseCents) / 100
+  ));
+};
+
+const prototypePaymentAccount = (creator: CreatorProfile) => (
+  eligibleInvoicePayoutAccounts(creator).find((account) => account.provider === 'Airwallex')
+  ?? eligibleInvoicePayoutAccounts(creator).find((account) => account.provider === 'PayPal')
+  ?? getDefaultPayoutAccount(creator.payoutAccounts)
+);
+
+const requestStatusPaymentListState = (
+  projectId: string,
+  requestStatus: string,
+): PaymentListRecord['status'] => {
+  if (requestStatus === '待补资料') return 'draft';
+  if (requestStatus === '已退回') {
+    return projectId === 'PRJ-260801-08' ? 'draft' : 'submitted';
+  }
+  if (requestStatus === '待打款') return 'approved';
+  if (requestStatus === '已完成') return 'paid';
+  return 'submitted';
+};
+
+const invoiceReviewState = (
+  paymentListStatus: PaymentListRecord['status'],
+): Payout['invoiceReviewStatus'] => {
+  if (paymentListStatus === 'draft') return '待媒介审核';
+  if (paymentListStatus === 'submitted') return '待PM审核';
+  return '已通过';
+};
+
+const payoutStatus = (
+  paymentListStatus: PaymentListRecord['status'],
+): Payout['status'] => {
+  if (paymentListStatus === 'approved') return '等待付款';
+  if (paymentListStatus === 'paid') return '已付款';
+  return '未进入付款';
+};
+
+const preservedInvoiceByEngagement = new Map<EngagementId, GeneratedInvoiceRecord>([
+  ...PROJECT_DEMO_INVOICES,
+  ...INVOICE_EDIT_REQUEST_INVOICES,
+].flatMap((invoice) => (
+  invoice.snapshot.engagementId
+    ? [[invoice.snapshot.engagementId as EngagementId, invoice] as const]
+    : []
+)));
+
+const prototypeInvoiceAmounts = new Map<EngagementId, number>();
+INITIAL_PROJECTS.forEach((project) => {
+  const references = project.creatorProfiles ?? [];
+  const { amount } = projectBudget(project.budget);
+  const fixedTotal = references.reduce((total, reference) => {
+    const preserved = preservedInvoiceByEngagement.get(reference.engagementId);
+    return total + (preserved
+      ? preserved.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0)
+      : 0);
+  }, 0);
+  const generatedReferences = references.filter((reference) => (
+    !preservedInvoiceByEngagement.has(reference.engagementId)
+  ));
+  const distributed = distributeProjectBudget(amount - fixedTotal, generatedReferences.length);
+  references.forEach((reference) => {
+    const preserved = preservedInvoiceByEngagement.get(reference.engagementId);
+    if (preserved) {
+      prototypeInvoiceAmounts.set(
+        reference.engagementId,
+        preserved.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0),
+      );
+      return;
+    }
+    const index = generatedReferences.findIndex((item) => item.engagementId === reference.engagementId);
+    prototypeInvoiceAmounts.set(reference.engagementId, distributed[index] ?? 0);
+  });
+});
+
+const createPrototypeInvoice = (
+  project: (typeof INITIAL_PROJECTS)[number],
+  reference: NonNullable<(typeof INITIAL_PROJECTS)[number]['creatorProfiles']>[number],
+  projectIndex: number,
+  creatorIndex: number,
+): GeneratedInvoiceRecord => {
+  const creator = creatorForReference(reference.creatorId);
+  const account = prototypePaymentAccount(creator);
+  const payment = createDocumentPayoutSnapshot(account, creator.id);
+  const provider = account?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
+  const amount = prototypeInvoiceAmounts.get(reference.engagementId) ?? 0;
+  const projectPart = String(projectIndex + 1).padStart(2, '0');
+  const creatorPart = String(creatorIndex + 1).padStart(2, '0');
+  const invoiceNumber = `INV-${project.id.replace(/^PRJ-/, '')}-${creatorPart}`;
+  const generatedAt = `2026-08-${String((projectIndex % 5) + 1).padStart(2, '0')}T09:00:00.000Z`;
+
+  return {
+    id: invoiceNumber,
+    invoiceId: `invoice_fixture_${projectPart}_${creatorPart}` as InvoiceId,
+    sourcePayoutId: `payout_fixture_${projectPart}_${creatorPart}`,
+    status: invoiceReviewState(requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus)),
+    generatedAt,
+    validationStatus: 'valid',
+    version: 1,
+    snapshot: {
+      invoiceNumber,
+      invoiceDate: generatedAt.slice(0, 10),
+      billTo: { ...INITIAL_INVOICE_ENTITY },
+      creatorHandle: creator.handle,
+      creatorName: creator.name,
+      creatorId: reference.creatorId,
+      engagementId: reference.engagementId,
+      projectId: project.projectId as ProjectId,
+      projectName: project.name,
+      contractIds: [],
+      from: { ...creator.contact },
+      currency: projectBudget(project.budget).currency as InvoiceDocumentModel['currency'],
+      items: [{
+        id: `invoice_line_fixture_${projectPart}_${creatorPart}`,
+        description: `${project.brand} 创作者内容合作服务`,
+        unitPrice: amount,
+        quantity: 1,
+        lineTotal: amount,
+      }],
+      payoutAccountId: payment.payoutAccountId,
+      payoutAccountVersion: payment.payoutAccountVersion,
+      payoutProvider: provider,
+      payoutAccountFingerprint: payment.accountFingerprint,
+      paymentMethod: provider === 'PayPal' ? 'paypal' : 'bank',
+      payment,
+    },
+  };
+};
+
+export const ALL_PROJECT_PROTOTYPE_INVOICES: GeneratedInvoiceRecord[] = INITIAL_PROJECTS.flatMap(
+  (project, projectIndex) => (project.creatorProfiles ?? []).map((reference, creatorIndex) => (
+    preservedInvoiceByEngagement.get(reference.engagementId)
+    ?? createPrototypeInvoice(project, reference, projectIndex, creatorIndex)
+  )),
+);
+
+const initialPayoutIds = new Set(INITIAL_PAYOUTS.map((payout) => payout.id));
+const preservedDemoPayoutBySourceId = new Map(
+  PROJECT_DEMO_PAYOUTS.map((payout) => [payout.id, payout]),
+);
+
+export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INVOICES.flatMap((invoice) => {
+  const preserved = preservedDemoPayoutBySourceId.get(invoice.sourcePayoutId);
+  if (preserved) return [preserved];
+  if (initialPayoutIds.has(invoice.sourcePayoutId)) return [];
+  const projectIndex = INITIAL_PROJECTS.findIndex((project) => project.projectId === invoice.snapshot.projectId);
+  const project = INITIAL_PROJECTS[projectIndex];
+  const creator = creatorForReference(invoice.snapshot.creatorId as CreatorId);
+  const listStatus = requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus);
+  const rawAccount = invoice.snapshot.paymentMethod === 'paypal'
+    ? invoice.snapshot.payment.paypalEmail || invoice.snapshot.payment.paypalUsername
+    : invoice.snapshot.payment.iban || invoice.snapshot.payment.accountNumber;
+  return [{
+    id: invoice.sourcePayoutId,
+    creator: creator.name,
+    handle: creator.handle,
+    initials: creator.initials,
+    projectId: project.id,
+    project: project.name,
+    deliverable: invoice.snapshot.items[0]?.description ?? '创作者内容合作服务',
+    contract: '未关联合同（非必填）',
+    invoice: invoice.id,
+    provider: invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
+    currency: invoice.snapshot.currency,
+    amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
+    account: rawAccount ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}` : '待补充',
+    creatorId: invoice.snapshot.creatorId,
+    payoutAccountId: invoice.snapshot.payoutAccountId,
+    payoutAccountVersion: invoice.snapshot.payoutAccountVersion,
+    payoutAccountFingerprint: invoice.snapshot.payoutAccountFingerprint,
+    externalBeneficiaryId: invoice.snapshot.payment.externalBeneficiaryId,
+    transferMethod: invoice.snapshot.payment.transferMethod,
+    localClearingSystem: invoice.snapshot.payment.localClearingSystem,
+    feeBearer: 'ADVERTISER',
+    status: payoutStatus(listStatus),
+    invoiceReviewStatus: invoiceReviewState(listStatus),
+    invoiceVersion: 1,
+    invoiceSignedAt: ['approved', 'paid'].includes(listStatus) ? '2026-08-02T10:00:00.000Z' : undefined,
+    invoiceSnapshot: invoice.snapshot,
+    accent: creator.accent,
+    paidAt: listStatus === 'paid' ? '2026-08-05 16:00' : undefined,
+  }];
+});
+
+const cloneFixtureItems = (items: PaymentListItem[]) => items.map((item) => ({
+  ...item,
+  snapshot: {
+    ...item.snapshot,
+    contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
+  },
+  overrides: { ...item.overrides },
+  validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
+}));
+
+export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_PROJECTS.map(
+  (project, projectIndex) => {
+    const projectInvoices = ALL_PROJECT_PROTOTYPE_INVOICES.filter((invoice) => (
+      invoice.snapshot.projectId === project.projectId
+    ));
+    const status = requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus);
+    const hasHistory = status !== 'draft' || project.id === 'PRJ-260801-08';
+    const generatedAt = `2026-08-${String((projectIndex % 5) + 1).padStart(2, '0')}T12:00:00.000Z`;
+    const items = projectInvoices.map((invoice, invoiceIndex) => {
+      const item = invoicePaymentListItem(invoice, PROJECT_DEMO_CONTRACTS);
+      const historical = status !== 'draft';
+      return {
+        ...item,
+        id: `payment_item_fixture_${String(projectIndex + 1).padStart(2, '0')}_${String(invoiceIndex + 1).padStart(2, '0')}`,
+        snapshot: {
+          ...item.snapshot,
+          feeBearer: item.snapshot.feeBearer || 'ADVERTISER',
+          externalBeneficiaryId: item.snapshot.externalBeneficiaryId
+            || (item.snapshot.provider === 'Airwallex'
+              ? `bene_fixture_${String(item.snapshot.creatorId).replace(/^creator-/, '')}`
+              : undefined),
+          transactionReference: historical ? `${project.id}-${String(invoiceIndex + 1).padStart(2, '0')}` : '',
+          description: '',
+        },
+        requiresRevalidation: historical ? false : true,
+        validationIssues: historical ? [] : ['交易附言未填写'],
+        lastValidatedAt: historical ? generatedAt : undefined,
+      };
+    });
+    const actor = {
+      account: 'prototype.fixture',
+      name: '原型数据生成器',
+      role: '系统原型',
+    };
+    const historicalItems = project.id === 'PRJ-260801-08'
+      ? items.map((item, invoiceIndex) => ({
+          ...item,
+          snapshot: {
+            ...item.snapshot,
+            transactionReference: `${project.id}-${String(invoiceIndex + 1).padStart(2, '0')}`,
+          },
+          requiresRevalidation: false,
+          validationIssues: [],
+          lastValidatedAt: generatedAt,
+        }))
+      : items;
+    const versionSnapshot = hasHistory ? [{
+      version: 1,
+      generatedAt,
+      generatedBy: actor,
+      items: cloneFixtureItems(historicalItems),
+    }] : undefined;
+    return {
+      paymentListId: `payment_list_fixture_${String(projectIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
+      paymentListCode: project.paymentOrder && project.paymentOrder !== '待生成'
+        ? project.paymentOrder
+        : `PAY-${project.id.replace(/^PRJ-/, '')}-01`,
+      projectId: project.projectId as ProjectId,
+      status,
+      version: hasHistory ? 1 : 0,
+      generatedAt: hasHistory ? generatedAt : undefined,
+      generatedBy: hasHistory ? actor : undefined,
+      versions: versionSnapshot,
+      draftFromVersion: project.id === 'PRJ-260801-08' ? 1 : undefined,
+      items,
+      createdAt: DEMO_TIMESTAMP,
+      updatedAt: project.id === 'PRJ-260801-08' ? '2026-08-01T10:35:00.000Z' : generatedAt,
+    };
+  },
 );

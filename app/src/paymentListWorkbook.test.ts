@@ -129,7 +129,7 @@ const paymentList = (items = [
   paymentListId: 'payment-list-workbook' as PaymentListRecord['paymentListId'],
   paymentListCode: 'PAY-20260806-TEST01',
   projectId,
-  status: 'draft',
+  status: 'generated',
   items,
   createdAt: '2026-08-06T00:00:00.000Z',
   updatedAt: '2026-08-06T00:00:00.000Z',
@@ -193,11 +193,21 @@ describe('Airwallex payment-list workbook', () => {
     })).toThrow(PaymentListWorkbookError);
   });
 
+  it('blocks export before a draft has been generated and locked', () => {
+    expect(() => buildAirwallexPaymentListRows({
+      paymentList: { ...paymentList(), status: 'draft' },
+      creators: [creator],
+    })).toThrow(PaymentListWorkbookError);
+  });
+
   it('uses a DRAFT prefix until the payment list is approved', () => {
     expect(paymentListWorkbookFilename('PRJ-TEST', paymentList())).toBe(
       'DRAFT-COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01.xlsx',
     );
     expect(paymentListWorkbookFilename('PRJ-TEST', { ...paymentList(), status: 'approved' })).toBe(
+      'COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01.xlsx',
+    );
+    expect(paymentListWorkbookFilename('PRJ-TEST', { ...paymentList(), status: 'paid' })).toBe(
       'COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01.xlsx',
     );
   });
