@@ -1625,9 +1625,21 @@ function ProjectCreatorPicker({
   );
 }
 
-function CreatorPaymentSection({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
+function CreatorPaymentSection({
+  icon,
+  title,
+  description,
+  children,
+  sectionId,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+  sectionId?: string;
+}) {
   return (
-    <section className="creator-payment-section">
+    <section className="creator-payment-section" id={sectionId}>
       <header className="creator-payment-section-head">
         <span>{icon}</span>
         <div><h3>{title}</h3><p>{description}</p></div>
@@ -1817,16 +1829,19 @@ export function CreatorsPage({
   creators,
   onSaveCreator,
   canEdit,
+  initialCreatorId,
 }: {
   notify: Notify;
   creators: CreatorProfile[];
   onSaveCreator: (creator: CreatorProfile) => void;
   canEdit: boolean;
+  initialCreatorId?: string | null;
 }) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialCreatorId ?? null);
+  const [focusPaymentInformation, setFocusPaymentInformation] = useState(Boolean(initialCreatorId));
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
@@ -2035,6 +2050,18 @@ export function CreatorsPage({
     ? Object.values(activeProfile.contact).filter((value) => value.trim()).length
     : 0;
   const contactIsComplete = completedContactFields === INVOICE_CONTACT_FIELDS.length;
+
+  useEffect(() => {
+    if (!activeProfile || !focusPaymentInformation || editing) return undefined;
+    const animationFrame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`creator-payment-information-${activeProfile.id}`)
+        ?.scrollIntoView({ block: 'start' });
+      setFocusPaymentInformation(false);
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeProfile, editing, focusPaymentInformation]);
+
   return (
     <div className="page-stack">
       <PageHeading
@@ -2208,7 +2235,12 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
                 <CreatorContactDetailsGrid contact={activeProfile.contact} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax，默认账户决定付款时的预选资料">
+              <CreatorPaymentSection
+                icon={<WalletCards size={19} />}
+                title="Payment Information"
+                description="支持 Airwallex、PayPal 和 PayerMax，默认账户决定 Invoice 的预选付款信息"
+                sectionId={`creator-payment-information-${activeProfile.id}`}
+              >
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
                   creatorId={activeProfile.id}
