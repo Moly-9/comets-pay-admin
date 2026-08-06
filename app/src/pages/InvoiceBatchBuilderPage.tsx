@@ -8,7 +8,6 @@ import {
   FileText,
   ListChecks,
   PackageCheck,
-  Eye,
   ReceiptText,
   RefreshCw,
   Search,
@@ -20,12 +19,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createPrototypeId,
   type ContractId,
-  type CreatorId,
   type EngagementId,
   type ProjectId,
 } from '../businessWorkflow';
-import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
-import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { Button, PageHeading, SelectField } from '../components/Common';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_FILE_SIZE,
@@ -48,12 +45,6 @@ import {
   withInvoiceBatchPrototypeAccounts,
 } from '../invoice/invoiceBatchPrototype';
 import {
-  eligibleInvoicePayoutAccounts,
-  getPayoutAccountId,
-  getPayoutAccountIdentifier,
-  getPayoutAccountSummary,
-} from '../payoutAccounts';
-import {
   downloadBlob,
   formatInvoiceMoney,
   invoiceFilename,
@@ -69,7 +60,6 @@ import type {
   GeneratedInvoiceRecord,
   InvoiceBatchMode,
   InvoiceBatchRow,
-  InvoiceDocumentModel,
   InvoiceEntity,
   Payout,
 } from '../types';
@@ -87,7 +77,6 @@ type InvoiceBatchBuilderPageProps = {
   onDirtyChange: (dirty: boolean) => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
-  onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
 };
 
 const STATUS_META = {
@@ -107,26 +96,18 @@ const rowTotal = (row: Pick<InvoiceBatchRow, 'unitPrice' | 'quantity'>) => (
   Math.round(row.unitPrice * row.quantity * 100) / 100
 );
 
-const paymentInformationLabel = (provider: 'Airwallex' | 'PayPal' | 'PayMax') => (
-  provider === 'PayPal' ? 'Paid by PayPal' : 'Paid by Bank'
-);
-
 function BatchRowTable({
   rows,
   context,
   mode,
   onlyProblems,
   onChange,
-  onOpenCreatorPaymentInformation,
-  onPreview,
 }: {
   rows: InvoiceBatchRow[];
   context: InvoiceBatchContext;
   mode: InvoiceBatchMode;
   onlyProblems: boolean;
   onChange: (engagementId: EngagementId, patch: Partial<InvoiceBatchRow>) => void;
-  onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
-  onPreview: (row: InvoiceBatchRow) => void;
 }) {
   const visibleRows = onlyProblems
     ? rows.filter((row) => !['READY', 'GENERATED'].includes(row.status))
@@ -143,10 +124,9 @@ function BatchRowTable({
             <th>Amount</th>
             <th>Total</th>
             <th>币种</th>
-            <th>Payment Information</th>
+            <th>收款账户</th>
             <th>合同</th>
             <th>状态</th>
-            <th className="invoice-batch-preview-heading">预览</th>
           </tr>
         </thead>
         <tbody>
@@ -157,11 +137,6 @@ function BatchRowTable({
             );
             const meta = STATUS_META[row.status];
             const rowLocked = row.status === 'GENERATED' || row.status === 'GENERATING';
-            const creator = context.creators.find((item) => item.id === row.creatorId);
-            const payoutAccounts = eligibleInvoicePayoutAccounts(creator);
-            const selectedAccount = payoutAccounts.find((account) => (
-              getPayoutAccountId(account) === row.payoutAccountId
-            ));
             return (
               <tr
                 key={row.engagementId}
@@ -170,13 +145,7 @@ function BatchRowTable({
                 data-creator-id={row.creatorId}
               >
                 <td data-label="达人">
-                  <button
-                    className="invoice-batch-creator-link"
-                    type="button"
-                    onClick={() => onOpenCreatorPaymentInformation(row.creatorId)}
-                  >
-                    {row.creatorName}
-                  </button>
+                  <strong>{row.creatorName}</strong>
                   <small>{row.creatorHandle}</small>
                 </td>
                 <td data-label="Description">
@@ -228,28 +197,11 @@ function BatchRowTable({
                     <small>固定币种</small>
                   </span>
                 </td>
-                <td data-label="Payment Information">
-                  <select
-                    aria-label={`${row.creatorName} Payment Information`}
-                    value={row.payoutAccountId}
-                    disabled={rowLocked || row.payoutAccountLocked}
-                    onChange={(event) => onChange(row.engagementId, {
-                      payoutAccountId: event.target.value,
-                      payoutAccountLocked: false,
-                    })}
-                  >
-                    <option value="">待选择</option>
-                    {payoutAccounts.map((account) => (
-                      <option key={getPayoutAccountId(account)} value={getPayoutAccountId(account)}>
-                        {paymentInformationLabel(account.provider)} · {account.nickname}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedAccount ? (
-                    <small className="invoice-batch-payment-meta">
-                      {getPayoutAccountSummary(selectedAccount)} · {getPayoutAccountIdentifier(selectedAccount)}
-                    </small>
-                  ) : null}
+                <td data-label="收款账户">
+                  <span className="invoice-batch-fixed-value">
+                    <strong>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL}</strong>
+                    <small>Airwallex · 默认账户</small>
+                  </span>
                 </td>
                 <td data-label="合同">
                   {availableContracts.length === 0 ? (
@@ -285,17 +237,6 @@ function BatchRowTable({
                     </span>
                   ) : null}
                 </td>
-                <td data-label="预览" className="invoice-batch-preview-cell">
-                  <button
-                    type="button"
-                    className="invoice-batch-preview-button"
-                    aria-label={`预览 ${row.creatorName} 的 Invoice`}
-                    title="预览 Invoice"
-                    onClick={() => onPreview(row)}
-                  >
-                    <Eye size={16} />
-                  </button>
-                </td>
               </tr>
             );
           })}
@@ -321,7 +262,6 @@ export function InvoiceBatchBuilderPage({
   onDirtyChange,
   onCancel,
   onOpenInvoiceManagement,
-  onOpenCreatorPaymentInformation,
 }: InvoiceBatchBuilderPageProps) {
   const [mode, setMode] = useState<InvoiceBatchMode>('SHARED_DESCRIPTION');
   const [projectId, setProjectId] = useState('');
@@ -337,10 +277,6 @@ export function InvoiceBatchBuilderPage({
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
   const [generationError, setGenerationError] = useState('');
-  const [preview, setPreview] = useState<{
-    creatorName: string;
-    model: InvoiceDocumentModel;
-  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const prototypeCreators = useMemo(
@@ -632,20 +568,6 @@ export function InvoiceBatchBuilderPage({
     onCancel();
   };
 
-  const openPreview = (row: InvoiceBatchRow) => {
-    if (!context) return;
-    try {
-      const model = row.generated?.record.snapshot ?? buildInvoiceDocumentForBatchRow(
-        row,
-        context,
-        `INV-PREVIEW-${row.creatorId}`,
-      );
-      setPreview({ creatorName: row.creatorName, model });
-    } catch (error) {
-      setGenerationError(error instanceof Error ? `无法预览：${error.message}` : '当前行无法预览');
-    }
-  };
-
   const readyRows = rows.filter((row) => row.status === 'READY');
   const problemRows = rows.filter((row) => (
     ['NEEDS_INPUT', 'CONFLICT', 'FAILED'].includes(row.status)
@@ -819,15 +741,9 @@ export function InvoiceBatchBuilderPage({
             <span><ReceiptText size={18} /></span>
             <div>
               <h2>Invoice 公共信息</h2>
-              <p>当前继续使用预置假数据，用于完整展示批量生成与 Invoice 预览流程。</p>
+              <p>币种与收款渠道为本期前端原型固定数据，实际接入后应以服务端快照为准。</p>
             </div>
           </header>
-          <div className="invoice-batch-prototype-notice">
-            <NoticeBanner>
-              <strong>原型数据提示：</strong>
-              以下 Payment Information 均为预置假数据，仅用于界面和流程展示；正式系统将根据达人档案带入已验证的具体付款信息。
-            </NoticeBanner>
-          </div>
           <div className="invoice-form-grid invoice-batch-common-grid">
             <label>
               <span>Invoice 日期 *</span>
@@ -850,13 +766,13 @@ export function InvoiceBatchBuilderPage({
               <small />
             </div>
             <div className="invoice-form-control full-width">
-              <span>收款方式</span>
+              <span>默认收款账户</span>
               <div className="invoice-batch-readonly-control">
                 <WalletCards size={16} />
-                <strong>Paid by Bank</strong>
-                <small>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL} · Airwallex · USD</small>
+                <strong>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL}</strong>
+                <small>Airwallex · USD · 已验证原型账户</small>
               </div>
-              <small>当前展示为预置假账户，默认使用空中云汇 Paid by Bank。</small>
+              <small />
             </div>
             {mode === 'SHARED_DESCRIPTION' ? (
               <label className="full-width">
@@ -966,8 +882,6 @@ export function InvoiceBatchBuilderPage({
               mode={mode}
               onlyProblems={onlyProblems}
               onChange={updateRow}
-              onOpenCreatorPaymentInformation={onOpenCreatorPaymentInformation}
-              onPreview={openPreview}
             />
           ) : (
             <div className="invoice-batch-empty">请先选择项目和达人</div>
@@ -1035,12 +949,12 @@ export function InvoiceBatchBuilderPage({
         ) : null}
 
         <footer className="invoice-builder-footer invoice-batch-footer">
+          <Button variant="secondary" onClick={leave}>取消</Button>
           {generatedRows.length ? (
             <Button variant="secondary" onClick={onOpenInvoiceManagement}>
               查看 Invoice 管理
             </Button>
           ) : null}
-          <Button variant="secondary" onClick={leave}>取消</Button>
           <Button
             icon={generating
               ? <RefreshCw className="is-spinning" size={16} />
@@ -1058,27 +972,6 @@ export function InvoiceBatchBuilderPage({
           </Button>
         </footer>
       </section>
-
-      {preview ? (
-        <Modal
-          title={`${preview.creatorName} · Invoice 预览`}
-          width="980px"
-          className="invoice-batch-preview-modal"
-          onClose={() => setPreview(null)}
-          footer={<Button variant="secondary" onClick={() => setPreview(null)}>关闭</Button>}
-        >
-          <div className="invoice-batch-preview-meta">
-            <span>即时预览</span>
-            <small>展示当前未保存的 Description、金额与 Payment Information，不消耗正式 Invoice 编号。</small>
-          </div>
-          <div className="invoice-batch-preview-canvas">
-            <InvoiceDocumentView
-              model={preview.model}
-              ariaLabel={`${preview.creatorName} Invoice 大图预览`}
-            />
-          </div>
-        </Modal>
-      ) : null}
 
       <span className="sr-only">模板版本 {INVOICE_BATCH_SCHEMA_VERSION}</span>
     </div>

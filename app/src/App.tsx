@@ -181,7 +181,6 @@ export default function App() {
   const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
   const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
   const [focusedRequestId, setFocusedRequestId] = useState<string | null>(null);
-  const [focusedCreatorId, setFocusedCreatorId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceEditTarget, setInvoiceEditTarget] = useState<{
@@ -321,7 +320,7 @@ export default function App() {
   const navigate = (page: NavPage) => {
     if (!canAccessPage(currentUser, page)) {
       notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
-      return false;
+      return;
     }
     if (
       (
@@ -330,7 +329,7 @@ export default function App() {
       )
       && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
     ) {
-      return false;
+      return;
     }
     setActivePage(page);
     setInvoiceEditTarget(null);
@@ -340,9 +339,7 @@ export default function App() {
     setFocusedContractId(null);
     setFocusedProjectId(null);
     setFocusedRequestId(null);
-    if (page !== 'creators') setFocusedCreatorId(null);
     setSelectedPayout(null);
-    return true;
   };
 
   const saveCreator = (updated: CreatorProfile) => {
@@ -1792,15 +1789,7 @@ export default function App() {
       );
       break;
     case 'creators':
-      pageContent = (
-        <CreatorsPage
-          notify={notify}
-          creators={creators}
-          onSaveCreator={saveCreator}
-          canEdit={canManageCreators}
-          initialCreatorId={focusedCreatorId}
-        />
-      );
+      pageContent = <CreatorsPage notify={notify} creators={creators} onSaveCreator={saveCreator} canEdit={canManageCreators} />;
       break;
     case 'collaborations':
       pageContent = <CollaborationsPage notify={notify} canImport={canManageCreators} />;
@@ -1928,9 +1917,6 @@ export default function App() {
             setInvoiceBatchDirty(false);
             setInvoiceTab('signature');
             setActivePage('invoice');
-          }}
-          onOpenCreatorPaymentInformation={(creatorId) => {
-            if (navigate('creators')) setFocusedCreatorId(creatorId);
           }}
         />
       );

@@ -45,6 +45,8 @@
 
 final result: passed
 
+---
+
 # Design QA — 生成合同页面整页滚动
 
 ## Reference and environment
@@ -716,48 +718,3 @@ final result: passed
 3. Post-fix combined comparisons found no actionable P0, P1, or P2 differences.
 
 final result: passed
-
----
-
-# Invoice Batch Payment Information And Preview Design QA
-
-## Reference and environment
-
-- Source visual truth:
-  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d31e8977-9ada-4d7d-8f90-8f9ff52b5096.png`
-  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-26feb23d-91db-4424-b207-980b9ed230d3.png`
-- Source pixels: `1450 x 517` and `1395 x 433`.
-- Intended implementation URL: `http://127.0.0.1:5174/`.
-- Intended desktop viewport: approximately `1450 x 900` CSS px; responsive target: `390 x 844` CSS px.
-- Implementation screenshot: unavailable. The selected Codex in-app browser rejected local-page reload under its URL security policy, so no browser-rendered evidence or density comparison could be captured.
-- State to verify: one project with selected creators, populated Description/Price/Amount rows, Airwallex selected as `Paid by Bank`, and the row-level Invoice preview modal open.
-
-## Full-view and focused comparison
-
-- Blocked: the source screenshots were opened at native resolution, but the corresponding browser-rendered implementation could not be opened and combined with them.
-- Code inspection indicates the requested layout and component relationships are present, but code inspection is not accepted as visual evidence.
-
-## Required fidelity surfaces
-
-- Fonts and typography: blocked pending browser capture; implementation reuses the existing batch-page and Invoice-document typography.
-- Spacing and layout rhythm: blocked pending browser capture; the footer is right-aligned and the cancel/generate actions are adjacent in source CSS.
-- Colors and visual tokens: blocked pending browser capture; existing neutral, coral-focus, success, warning, and danger tokens are reused.
-- Image quality and asset fidelity: blocked pending browser capture; no raster assets were introduced and the preview icon uses the existing Lucide library.
-- Copy and content: source review passed at code level for `收款方式`, `Payment Information`, `Paid by Bank`, the prototype disclaimer, and the large-preview labels, but remains visually unverified.
-
-## Interaction and runtime checks
-
-- Automated tests verify account selection by stable payout-account ID and ensure the selected snapshot reaches the Invoice model.
-- Automated template coverage verifies that an Airwallex snapshot renders `Paid by Bank`.
-- TypeScript check passed.
-- `npm test`: 26 test files and 147 tests passed.
-- `npm run build`: passed; Vite reported only the existing large-chunk advisory.
-- Browser primary interactions, responsive overflow, and console errors: blocked by the in-app browser local URL policy.
-
-## Findings and comparison history
-
-1. P0 verification blocker: no implementation screenshot is available, so the required side-by-side and focused comparisons cannot be completed.
-   - Resolution needed: reload `http://127.0.0.1:5174/` in the Codex in-app browser, then capture desktop, preview-modal, creator-profile, and `390px` states.
-2. No code-level P0/P1/P2 issue remains after TypeScript, unit, workflow, template, and production-build checks.
-
-final result: blocked

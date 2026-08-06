@@ -76,26 +76,6 @@ describe('Invoice template project visibility', () => {
     expect(html).not.toContain(PROJECT_NAME);
   });
 
-  it('renders Airwallex Payment Information as Paid by Bank', () => {
-    const html = renderToStaticMarkup(<InvoiceDocumentView model={{
-      ...model,
-      paymentMethod: 'bank',
-      payment: {
-        ...model.payment,
-        accountName: 'Creator Legal Name',
-        accountNumber: '0000001234',
-        bankName: 'Airwallex Prototype Bank',
-        bankStreetAddress: '100 Prototype Avenue',
-        paypalUsername: '',
-        paypalEmail: '',
-      },
-    }} />);
-
-    expect(html).toContain('Payment information (choose one)');
-    expect(html).toContain('Paid by Bank');
-    expect(html).not.toContain('Paid by Paypal');
-  });
-
   it('does not write project details into the generated DOCX', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Uint8Array([0])));
 
