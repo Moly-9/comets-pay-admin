@@ -94,6 +94,10 @@
   max-width: 720px;
 }
 
+.invoice-batch-prototype-notice {
+  margin-bottom: 18px;
+}
+
 .invoice-batch-creator-picker {
   margin-top: 18px;
   border-top: 1px solid var(--batch-line);

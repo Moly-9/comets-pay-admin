@@ -24,7 +24,7 @@ import {
   type EngagementId,
   type ProjectId,
 } from '../businessWorkflow';
-import { Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import type { ContractRecord } from '../contracts';
 import {
@@ -819,9 +819,15 @@ export function InvoiceBatchBuilderPage({
             <span><ReceiptText size={18} /></span>
             <div>
               <h2>Invoice 公共信息</h2>
-              <p>当前仅用于原型展示；正式系统将根据达人档案带入具体 Payment Information。</p>
+              <p>当前继续使用预置假数据，用于完整展示批量生成与 Invoice 预览流程。</p>
             </div>
           </header>
+          <div className="invoice-batch-prototype-notice">
+            <NoticeBanner>
+              <strong>原型数据提示：</strong>
+              以下 Payment Information 均为预置假数据，仅用于界面和流程展示；正式系统将根据达人档案带入已验证的具体付款信息。
+            </NoticeBanner>
+          </div>
           <div className="invoice-form-grid invoice-batch-common-grid">
             <label>
               <span>Invoice 日期 *</span>
@@ -850,7 +856,7 @@ export function InvoiceBatchBuilderPage({
                 <strong>Paid by Bank</strong>
                 <small>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL} · Airwallex · USD</small>
               </div>
-              <small>原型默认使用空中云汇；正式系统以达人档案中已验证的付款信息为准。</small>
+              <small>当前展示为预置假账户，默认使用空中云汇 Paid by Bank。</small>
             </div>
             {mode === 'SHARED_DESCRIPTION' ? (
               <label className="full-width">
