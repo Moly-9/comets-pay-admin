@@ -17,6 +17,7 @@ import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
+  InvoiceBatchLineItem,
   InvoiceBatchRow,
   InvoiceCurrency,
   InvoiceDocumentModel,
@@ -39,6 +40,44 @@ export type InvoiceBatchContext = {
   generatedInvoices: GeneratedInvoiceRecord[];
   invoiceEntity: InvoiceEntity;
 };
+
+export type InvoiceBatchLineItemSeed = Pick<
+  InvoiceBatchLineItem,
+  'templateKey' | 'description'
+>;
+
+const createBatchLineItem = (
+  seed: InvoiceBatchLineItemSeed,
+  current?: InvoiceBatchLineItem,
+): InvoiceBatchLineItem => ({
+  ...normalizeLineItem({
+    id: current?.id ?? createPrototypeId('item'),
+    description: seed.description,
+    unitPrice: current?.unitPrice ?? 0,
+    quantity: current?.quantity ?? 1,
+  }),
+  templateKey: seed.templateKey,
+});
+
+export const synchronizeInvoiceBatchLineItems = (
+  current: InvoiceBatchLineItem[],
+  seeds: InvoiceBatchLineItemSeed[],
+) => seeds.map((seed) => createBatchLineItem(
+  seed,
+  current.find((item) => item.templateKey === seed.templateKey),
+));
+
+export const updateInvoiceBatchLineItem = (
+  items: InvoiceBatchLineItem[],
+  lineItemId: string,
+  patch: Partial<Pick<InvoiceBatchLineItem, 'description' | 'unitPrice' | 'quantity'>>,
+) => items.map((item) => item.id === lineItemId ? ({
+  ...item,
+  ...normalizeLineItem({
+    ...item,
+    ...patch,
+  }),
+}) : item);
 
 const projectIdFor = (project: ProjectSummary) => (
   (project.projectId ?? project.id) as ProjectId
@@ -82,11 +121,11 @@ export const createInvoiceBatchRow = ({
   generatedInvoices,
   invoiceEntity,
   invoiceDate,
-  description,
+  lineItems,
 }: InvoiceBatchContext & {
   engagementId: EngagementId;
   invoiceDate: string;
-  description: string;
+  lineItems: InvoiceBatchLineItemSeed[];
 }) => {
   const projectId = projectIdFor(project);
   const reference = project.creatorProfiles?.find((item) => item.engagementId === engagementId);
@@ -121,11 +160,8 @@ export const createInvoiceBatchRow = ({
     creatorName: creator.name,
     creatorHandle: creator.handle,
     sourcePayoutId: payout?.id ?? createPrototypeId('payout'),
-    lineItemId: createPrototypeId('item'),
     invoiceDate,
-    description,
-    unitPrice: 0,
-    quantity: 1,
+    items: synchronizeInvoiceBatchLineItems([], lineItems),
     currency: 'USD',
     payoutAccountId: selectedAccount ? getPayoutAccountId(selectedAccount) : '',
     payoutAccountLocked: Boolean(contractAccount && selectedAccount === contractAccount),
@@ -171,12 +207,7 @@ export const buildInvoiceDocumentForBatchRow = (
     contractIds: [...row.contractIds],
     from: { ...creator.contact },
     currency: row.currency,
-    items: [normalizeLineItem({
-      id: row.lineItemId,
-      description: row.description,
-      unitPrice: row.unitPrice,
-      quantity: row.quantity,
-    })],
+    items: row.items.map(({ templateKey: _templateKey, ...item }) => normalizeLineItem(item)),
     payoutAccountId: getPayoutAccountId(account),
     payoutAccountVersion: payment.payoutAccountVersion,
     payoutProvider: account.provider,
@@ -259,17 +290,31 @@ export const validateInvoiceBatchRow = (
   }
 
   if (!row.currency) issues.push('缺少支持的 Invoice 币种');
-  if (!row.description.trim()) issues.push('Description 不能为空');
-  if (!(Number.isFinite(row.unitPrice) && row.unitPrice > 0)) issues.push('Price 必须大于 0');
-  if (!(Number.isFinite(row.quantity) && row.quantity > 0)) issues.push('Amount 必须大于 0');
+  if (!row.items.length) issues.push('至少需要 1 条费用明细');
+  row.items.forEach((item, index) => {
+    const prefix = row.items.length > 1 ? `第 ${index + 1} 条 ` : '';
+    if (!item.description.trim()) issues.push(`${prefix}Description 不能为空`);
+    if (!(Number.isFinite(item.unitPrice) && item.unitPrice > 0)) {
+      issues.push(`${prefix}Price 必须大于 0`);
+    }
+    if (!(Number.isFinite(item.quantity) && item.quantity > 0)) {
+      issues.push(`${prefix}Amount 必须大于 0`);
+    }
+  });
+
+  const lineItemsReady = Boolean(row.items.length) && row.items.every((item) => (
+    item.description.trim()
+    && Number.isFinite(item.unitPrice)
+    && item.unitPrice > 0
+    && Number.isFinite(item.quantity)
+    && item.quantity > 0
+  ));
 
   if (
     creator
     && account
     && row.currency
-    && row.description.trim()
-    && row.unitPrice > 0
-    && row.quantity > 0
+    && lineItemsReady
   ) {
     const model = buildInvoiceDocumentForBatchRow(
       row,
@@ -299,9 +344,7 @@ export const updateAndValidateInvoiceBatchRow = (
   patch: Partial<Pick<
     InvoiceBatchRow,
     | 'invoiceDate'
-    | 'description'
-    | 'unitPrice'
-    | 'quantity'
+    | 'items'
     | 'currency'
     | 'payoutAccountId'
     | 'contractIds'

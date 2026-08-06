@@ -5,7 +5,11 @@ import { INITIAL_INVOICE_ENTITY } from '../data';
 import { eligibleInvoicePayoutAccounts } from '../payoutAccounts';
 import { INITIAL_CREATORS } from '../pages/OperationalPages';
 import type { InvoiceBatchRow } from '../types';
-import { createInvoiceBatchRow, type InvoiceBatchContext } from './invoiceBatch';
+import {
+  createInvoiceBatchRow,
+  updateInvoiceBatchLineItem,
+  type InvoiceBatchContext,
+} from './invoiceBatch';
 import {
   exportInvoiceBatchWorkbook,
   importInvoiceBatchWorkbook,
@@ -48,7 +52,7 @@ const createRows = (): InvoiceBatchRow[] => {
     ...context,
     engagementId,
     invoiceDate: '2026-08-06',
-    description: 'First Description',
+    lineItems: [{ templateKey: 'template_workbook_1', description: 'First Description' }],
   });
   return [
     first,
@@ -59,13 +63,19 @@ const createRows = (): InvoiceBatchRow[] => {
       creatorName: 'Second Creator',
       creatorHandle: '@second',
       sourcePayoutId: 'payout_workbook_2',
-      lineItemId: 'item_workbook_2',
-      description: 'Second Description',
+      items: [{
+        ...first.items[0],
+        id: 'item_workbook_2',
+        templateKey: 'template_workbook_2',
+        description: 'Second Description',
+      }],
     },
   ].map((row, index) => ({
     ...row,
-    unitPrice: 100 + index * 50,
-    quantity: index + 1,
+    items: updateInvoiceBatchLineItem(row.items, row.items[0].id, {
+      unitPrice: 100 + index * 50,
+      quantity: index + 1,
+    }),
   }));
 };
 
@@ -91,9 +101,9 @@ describe('Invoice batch XLSX', () => {
     expect(result.issues).toEqual([]);
     expect(result.values.map((value) => value.engagementId)).toEqual(rows.map((row) => row.engagementId));
     expect(result.values[0]).toMatchObject({
-      description: rows[0].description,
-      unitPrice: rows[0].unitPrice,
-      quantity: rows[0].quantity,
+      description: rows[0].items[0].description,
+      unitPrice: rows[0].items[0].unitPrice,
+      quantity: rows[0].items[0].quantity,
     });
   });
 
@@ -177,7 +187,43 @@ describe('Invoice batch XLSX', () => {
 
     expect(result.issues).toContain('第 2 行 Price 必须大于 0');
     expect(result.values).toHaveLength(2);
-    expect(result.values[1].unitPrice).toBe(rows[1].unitPrice);
+    expect(result.values[1].unitPrice).toBe(rows[1].items[0].unitPrice);
+  });
+
+  it('keeps XLSX import mode limited to the first Invoice line item', async () => {
+    const rows = createRows();
+    rows[0] = {
+      ...rows[0],
+      items: [
+        ...rows[0].items,
+        {
+          ...rows[0].items[0],
+          id: 'item_workbook_extra',
+          templateKey: 'template_workbook_extra',
+          description: 'Not exported in XLSX v1',
+          unitPrice: 999,
+          quantity: 1,
+          lineTotal: 999,
+        },
+      ],
+    };
+    const blob = await exportInvoiceBatchWorkbook({
+      batchId: 'batch_workbook',
+      projectId,
+      invoiceDate: '2026-08-06',
+    }, rows);
+    const result = await importInvoiceBatchWorkbook(await blob.arrayBuffer(), {
+      batchId: 'batch_workbook',
+      projectId,
+      rows: expectedRows(rows),
+    });
+
+    expect(result.values[0]).toMatchObject({
+      description: rows[0].items[0].description,
+      unitPrice: rows[0].items[0].unitPrice,
+      quantity: rows[0].items[0].quantity,
+    });
+    expect(result.values[0].description).not.toBe('Not exported in XLSX v1');
   });
 
   it('throws for a damaged XLSX file', async () => {

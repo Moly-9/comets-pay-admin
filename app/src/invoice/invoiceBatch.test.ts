@@ -19,6 +19,8 @@ import {
   buildInvoiceDocumentForBatchRow,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
+  synchronizeInvoiceBatchLineItems,
+  updateInvoiceBatchLineItem,
   updateAndValidateInvoiceBatchRow,
   validateInvoiceBatchRow,
   type InvoiceBatchContext,
@@ -28,6 +30,20 @@ const eligibleCreator = INITIAL_CREATORS.find((creator) => (
   eligibleInvoicePayoutAccounts(creator).length > 0
 ))!;
 const baseAccount = eligibleInvoicePayoutAccounts(eligibleCreator)[0]!;
+
+const lineItemSeeds = (...descriptions: string[]) => descriptions.map((description, index) => ({
+  templateKey: `template_batch_${index + 1}`,
+  description,
+}));
+
+const updateLineItemAmounts = (
+  row: ReturnType<typeof createInvoiceBatchRow>,
+  amounts: Array<{ unitPrice: number; quantity: number }>,
+) => amounts.reduce((items, amount, index) => updateInvoiceBatchLineItem(
+  items,
+  items[index].id,
+  amount,
+), row.items);
 
 const createContext = ({
   creator = eligibleCreator,
@@ -72,7 +88,7 @@ const creatorWithAccounts = (accounts: CreatorProfile['payoutAccounts']): Creato
 });
 
 describe('Invoice batch rows', () => {
-  it('builds one line item and calculates Price x Amount', () => {
+  it('builds multiple line items and calculates Price x Amount for the Invoice total', () => {
     const creator = creatorWithAccounts([{
       ...baseAccount,
       isDefault: true,
@@ -83,23 +99,82 @@ describe('Invoice batch rows', () => {
       ...context,
       engagementId,
       invoiceDate: '2026-08-06',
-      description: 'Dedicated Video',
+      lineItems: lineItemSeeds('Dedicated Video', 'Usage License'),
     });
     const row = updateAndValidateInvoiceBatchRow(initial, {
-      unitPrice: 250,
-      quantity: 3,
+      items: updateLineItemAmounts(initial, [
+        { unitPrice: 250, quantity: 3 },
+        { unitPrice: 80, quantity: 2 },
+      ]),
       currency: 'USD',
     }, context);
     const model = buildInvoiceDocumentForBatchRow(row, context, 'INV-20260806-001');
 
     expect(row.status).toBe('READY');
-    expect(model.items).toEqual([expect.objectContaining({
-      description: 'Dedicated Video',
-      unitPrice: 250,
-      quantity: 3,
-      lineTotal: 750,
-    })]);
+    expect(model.items).toEqual([
+      expect.objectContaining({
+        description: 'Dedicated Video',
+        unitPrice: 250,
+        quantity: 3,
+        lineTotal: 750,
+      }),
+      expect.objectContaining({
+        description: 'Usage License',
+        unitPrice: 80,
+        quantity: 2,
+        lineTotal: 160,
+      }),
+    ]);
+    expect(model.items.reduce((total, item) => total + item.lineTotal, 0)).toBe(910);
     expect(model.payoutAccountId).toBe(getPayoutAccountId(creator.payoutAccounts[0]));
+  });
+
+  it('keeps remaining amounts associated with stable template keys after removing a middle Description', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Video', 'Story', 'License'),
+    });
+    const pricedItems = updateLineItemAmounts(row, [
+      { unitPrice: 100, quantity: 1 },
+      { unitPrice: 200, quantity: 2 },
+      { unitPrice: 300, quantity: 3 },
+    ]);
+    const synchronized = synchronizeInvoiceBatchLineItems(
+      pricedItems,
+      lineItemSeeds('Video', 'License').map((item, index) => ({
+        ...item,
+        templateKey: index === 0 ? 'template_batch_1' : 'template_batch_3',
+      })),
+    );
+
+    expect(synchronized.map((item) => item.description)).toEqual(['Video', 'License']);
+    expect(synchronized.map((item) => item.unitPrice)).toEqual([100, 300]);
+    expect(synchronized.map((item) => item.quantity)).toEqual([1, 3]);
+  });
+
+  it('identifies the exact invalid Description, Price and Amount in a multi-item row', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Valid item', ''),
+    });
+    const validated = updateAndValidateInvoiceBatchRow(row, {
+      items: updateLineItemAmounts(row, [
+        { unitPrice: 100, quantity: 1 },
+        { unitPrice: 0, quantity: 0 },
+      ]),
+    }, context);
+
+    expect(validated.issues).toContain('第 2 条 Description 不能为空');
+    expect(validated.issues).toContain('第 2 条 Price 必须大于 0');
+    expect(validated.issues).toContain('第 2 条 Amount 必须大于 0');
   });
 
   it('defaults every batch row to USD', () => {
@@ -131,7 +206,7 @@ describe('Invoice batch rows', () => {
       ...context,
       engagementId: context.project.creatorProfiles![0].engagementId,
       invoiceDate: '2026-08-06',
-      description: 'Dedicated Video',
+      lineItems: lineItemSeeds('Dedicated Video'),
     });
 
     expect(row.currency).toBe('USD');
@@ -156,11 +231,10 @@ describe('Invoice batch rows', () => {
       ...context,
       engagementId: context.project.creatorProfiles![0].engagementId,
       invoiceDate: '2026-08-06',
-      description: 'Creator Service',
+      lineItems: lineItemSeeds('Creator Service'),
     });
     const selectedPayPal = updateAndValidateInvoiceBatchRow(initial, {
-      unitPrice: 120,
-      quantity: 1,
+      items: updateLineItemAmounts(initial, [{ unitPrice: 120, quantity: 1 }]),
       payoutAccountId: 'paypal-batch-test',
     }, context);
     const model = buildInvoiceDocumentForBatchRow(
@@ -193,7 +267,7 @@ describe('Invoice batch rows', () => {
       ...context,
       engagementId: context.project.creatorProfiles![0].engagementId,
       invoiceDate: '2026-08-06',
-      description: 'Integrated Video',
+      lineItems: lineItemSeeds('Integrated Video'),
     });
 
     expect(row.payoutAccountId).toBe('');
@@ -226,11 +300,10 @@ describe('Invoice batch rows', () => {
       ...context,
       engagementId,
       invoiceDate: '2026-08-06',
-      description: 'Creator Service',
+      lineItems: lineItemSeeds('Creator Service'),
     });
     const row = updateAndValidateInvoiceBatchRow(initial, {
-      unitPrice: 500,
-      quantity: 1,
+      items: updateLineItemAmounts(initial, [{ unitPrice: 500, quantity: 1 }]),
     }, context);
 
     expect(row.contractIds).toEqual(['contract_batch_test']);
@@ -247,11 +320,10 @@ describe('Invoice batch rows', () => {
       ...context,
       engagementId,
       invoiceDate: '2026-08-06',
-      description: 'Creator Service',
+      lineItems: lineItemSeeds('Creator Service'),
     });
     row = updateAndValidateInvoiceBatchRow(row, {
-      unitPrice: 100,
-      quantity: 1,
+      items: updateLineItemAmounts(row, [{ unitPrice: 100, quantity: 1 }]),
       currency: 'USD',
     }, context);
     const snapshot = buildInvoiceDocumentForBatchRow(row, context, 'INV-20260806-001');

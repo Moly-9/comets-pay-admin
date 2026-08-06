@@ -47,6 +47,55 @@ final result: passed
 
 ---
 
+# Design QA — Invoice 批量生成多条 Description
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9011640c-b3c6-4b2c-8df5-289053dcfb08.png` and `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-b98a378a-f73f-4eec-8957-68a7aefc5d62.png`.
+- Implementation URL: `http://127.0.0.1:5174/`.
+- Browser-rendered implementation: `app/design-qa-invoice-batch-descriptions-desktop.png`.
+- Side-by-side comparison: `app/design-qa-invoice-batch-descriptions-comparison.png`.
+- Source pixels: `1295 x 532`; implementation pixels and CSS viewport: `1265 x 712`; device density: `1`.
+- State: unified Description mode with three entries created, the middle entry removed, and the remaining first and third values preserved.
+
+## Comparison evidence
+
+- The source and browser-rendered implementation were opened together in the combined comparison image.
+- The duplicated public `收款方式` block marked in the source has been removed; the prototype Payment Information notice, Invoice date, currency, and Description controls remain aligned.
+- The former single textarea is replaced by a compact repeated field group that follows the existing single-Invoice line-item treatment, including a right-aligned add action and per-row delete icon.
+- The first Description remains required and cannot be deleted; later entries can be removed independently.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC hierarchy, field-label weight, helper text, and input text sizing are retained.
+- Spacing and layout rhythm: passed; the repeated rows use the existing form width, divider rhythm, compact vertical spacing, and stable delete-action column.
+- Colors and visual tokens: passed; neutral inputs, gray dividers, coral interaction accents, and the blue prototype notice continue to use existing tokens.
+- Image and icon fidelity: passed; no raster asset was required, and the existing Lucide plus/trash controls are used consistently.
+- Copy and content: passed; the UI explains that all selected creators share the Description list while Price and Amount remain per-creator values.
+
+## Interaction and runtime checks
+
+- Added three Description rows, entered `Dedicated Video`, `Usage License`, and `Social Cutdown`, then removed the middle row. The surviving values remained `Dedicated Video` and `Social Cutdown`.
+- Stable `templateKey` synchronization is covered by unit tests so deleting a middle Description does not move another line's Price or Amount onto the wrong item.
+- Multi-item document construction is covered for the Invoice preview, PDF, and DOCX model, including the aggregate total.
+- The browser DOM contains no public `收款方式` field in Invoice public information; the per-creator `Payment Information` table column remains present.
+- Browser console warnings/errors after the final interaction: none; only Vite debug and React development information entries were present.
+- Focused Invoice batch tests: `15/15` passed.
+- Full test suite: `28` files and `161` tests passed.
+- TypeScript production compilation and `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: unified mode stored one Description and one Price/Amount pair, so one Invoice could not express several fee lines.
+   - Fix: introduced stable batch line items and synchronized every selected creator row by `templateKey`.
+2. Initial P2: the public payment-method card duplicated the per-creator Payment Information choice and occupied the area called out in the reference.
+   - Fix: removed only that public card while preserving the prototype-data notice and the row-level cascader.
+3. Post-fix visual, add/remove, stable association, document construction, console, test, and build checks found no actionable P0, P1, or P2 findings.
+
+final result: passed
+
+---
+
 # Invoice Batch Payment Information Cascader Design QA
 
 ## Reference and environment

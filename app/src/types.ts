@@ -359,6 +359,10 @@ export type InvoiceBatchGeneratedFiles = {
   docxBlob: Blob;
 };
 
+export type InvoiceBatchLineItem = InvoiceLineItem & {
+  templateKey: string;
+};
+
 export type InvoiceBatchRow = {
   projectId: ProjectId;
   engagementId: EngagementId;
@@ -366,11 +370,8 @@ export type InvoiceBatchRow = {
   creatorName: string;
   creatorHandle: string;
   sourcePayoutId: string;
-  lineItemId: string;
   invoiceDate: string;
-  description: string;
-  unitPrice: number;
-  quantity: number;
+  items: InvoiceBatchLineItem[];
   currency: InvoiceCurrency | '';
   payoutAccountId: string;
   payoutAccountLocked: boolean;
@@ -388,7 +389,7 @@ export type InvoiceBatchDraft = {
   projectId: ProjectId | '';
   invoiceDate: string;
   selectedEngagementIds: EngagementId[];
-  sharedDescription: string;
+  sharedDescriptions: Array<Pick<InvoiceBatchLineItem, 'templateKey' | 'description'>>;
   rows: InvoiceBatchRow[];
 };
 

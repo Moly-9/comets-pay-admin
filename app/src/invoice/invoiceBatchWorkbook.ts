@@ -86,6 +86,7 @@ export const exportInvoiceBatchWorkbook = async (
   sheet.getRow(1).alignment = { vertical: 'middle' };
 
   rows.forEach((row, index) => {
+    const lineItem = row.items[0];
     const worksheetRow = sheet.addRow({
       batchId: draft.batchId,
       projectId: draft.projectId,
@@ -94,9 +95,9 @@ export const exportInvoiceBatchWorkbook = async (
       creatorName: row.creatorName,
       creatorHandle: row.creatorHandle,
       currency: row.currency,
-      description: row.description,
-      unitPrice: row.unitPrice || '',
-      quantity: row.quantity || 1,
+      description: lineItem?.description ?? '',
+      unitPrice: lineItem?.unitPrice || '',
+      quantity: lineItem?.quantity || 1,
       account: row.payoutAccountId ? '系统已匹配' : '待系统内选择',
       contract: row.contractIds.length ? '系统已匹配' : '未关联或待选择',
     });

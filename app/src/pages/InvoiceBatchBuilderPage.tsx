@@ -10,13 +10,14 @@ import {
   FileText,
   ListChecks,
   PackageCheck,
+  Plus,
   Eye,
   ReceiptText,
   RefreshCw,
   Search,
   Upload,
   Users,
-  WalletCards,
+  Trash2,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
@@ -39,13 +40,15 @@ import {
   buildInvoiceDocumentForBatchRow,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
+  synchronizeInvoiceBatchLineItems,
+  updateInvoiceBatchLineItem,
   updateAndValidateInvoiceBatchRow,
   validateInvoiceBatchRow,
   type InvoiceBatchContext,
+  type InvoiceBatchLineItemSeed,
 } from '../invoice/invoiceBatch';
 import { createInvoiceBatchArchive } from '../invoice/invoiceBatchArchive';
 import {
-  INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL,
   INVOICE_BATCH_PROTOTYPE_CURRENCY,
   filterInvoiceBatchCreatorReferences,
   selectableInvoiceBatchEngagementIds,
@@ -108,9 +111,16 @@ const projectIdFor = (project: ProjectSummary) => (
   (project.projectId ?? project.id) as ProjectId
 );
 
-const rowTotal = (row: Pick<InvoiceBatchRow, 'unitPrice' | 'quantity'>) => (
-  Math.round(row.unitPrice * row.quantity * 100) / 100
+const rowTotal = (row: Pick<InvoiceBatchRow, 'items'>) => (
+  Math.round(row.items.reduce((total, item) => (
+    total + item.unitPrice * item.quantity
+  ), 0) * 100) / 100
 );
+
+const createSharedDescription = (): InvoiceBatchLineItemSeed => ({
+  templateKey: createPrototypeId('item'),
+  description: '',
+});
 
 const paymentInformationLabel = (provider: 'Airwallex' | 'PayPal' | 'PayMax') => (
   provider === 'PayPal' ? 'Paid by PayPal' : 'Paid by Bank'
@@ -445,47 +455,76 @@ function BatchRowTable({
                   <small>{row.creatorHandle}</small>
                 </td>
                 <td data-label="Description">
-                  <input
-                    aria-label={`${row.creatorName} Description`}
-                    value={row.description}
-                    readOnly={mode === 'SHARED_DESCRIPTION'}
-                    disabled={rowLocked}
-                    onChange={(event) => onChange(
-                      row.engagementId,
-                      { description: event.target.value },
-                    )}
-                  />
+                  <div className="invoice-batch-line-stack">
+                    {row.items.map((item, itemIndex) => (
+                      <input
+                        key={item.id}
+                        aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Description`}
+                        value={item.description}
+                        readOnly={mode === 'SHARED_DESCRIPTION'}
+                        disabled={rowLocked}
+                        onChange={(event) => onChange(row.engagementId, {
+                          items: updateInvoiceBatchLineItem(row.items, item.id, {
+                            description: event.target.value,
+                          }),
+                        })}
+                      />
+                    ))}
+                  </div>
                 </td>
                 <td data-label="Price">
-                  <input
-                    aria-label={`${row.creatorName} Price`}
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={row.unitPrice || ''}
-                    disabled={rowLocked}
-                    onChange={(event) => onChange(
-                      row.engagementId,
-                      { unitPrice: Number(event.target.value) },
-                    )}
-                  />
+                  <div className="invoice-batch-line-stack">
+                    {row.items.map((item, itemIndex) => (
+                      <input
+                        key={item.id}
+                        aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Price`}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={item.unitPrice || ''}
+                        disabled={rowLocked}
+                        onChange={(event) => onChange(row.engagementId, {
+                          items: updateInvoiceBatchLineItem(row.items, item.id, {
+                            unitPrice: Number(event.target.value),
+                          }),
+                        })}
+                      />
+                    ))}
+                  </div>
                 </td>
                 <td data-label="Amount">
-                  <input
-                    aria-label={`${row.creatorName} Amount`}
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={row.quantity || ''}
-                    disabled={rowLocked}
-                    onChange={(event) => onChange(
-                      row.engagementId,
-                      { quantity: Number(event.target.value) },
-                    )}
-                  />
+                  <div className="invoice-batch-line-stack">
+                    {row.items.map((item, itemIndex) => (
+                      <input
+                        key={item.id}
+                        aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Amount`}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={item.quantity || ''}
+                        disabled={rowLocked}
+                        onChange={(event) => onChange(row.engagementId, {
+                          items: updateInvoiceBatchLineItem(row.items, item.id, {
+                            quantity: Number(event.target.value),
+                          }),
+                        })}
+                      />
+                    ))}
+                  </div>
                 </td>
                 <td data-label="Total">
-                  <strong>{formatInvoiceMoney(INVOICE_BATCH_PROTOTYPE_CURRENCY, rowTotal(row))}</strong>
+                  <div className="invoice-batch-line-stack invoice-batch-line-totals">
+                    {row.items.map((item) => (
+                      <strong key={item.id}>
+                        {formatInvoiceMoney(INVOICE_BATCH_PROTOTYPE_CURRENCY, item.lineTotal)}
+                      </strong>
+                    ))}
+                  </div>
+                  {row.items.length > 1 ? (
+                    <small className="invoice-batch-row-total">
+                      合计 {formatInvoiceMoney(INVOICE_BATCH_PROTOTYPE_CURRENCY, rowTotal(row))}
+                    </small>
+                  ) : null}
                 </td>
                 <td data-label="币种">
                   <span className="invoice-batch-fixed-value">
@@ -587,7 +626,9 @@ export function InvoiceBatchBuilderPage({
   const [selectedEngagementIds, setSelectedEngagementIds] = useState<EngagementId[]>([]);
   const [creatorSearch, setCreatorSearch] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayInputValue());
-  const [sharedDescription, setSharedDescription] = useState('');
+  const [sharedDescriptions, setSharedDescriptions] = useState<InvoiceBatchLineItemSeed[]>(
+    () => [createSharedDescription()],
+  );
   const [rows, setRows] = useState<InvoiceBatchRow[]>([]);
   const [batchId] = useState(() => createPrototypeId('batch'));
   const [onlyProblems, setOnlyProblems] = useState(false);
@@ -642,7 +683,11 @@ export function InvoiceBatchBuilderPage({
   const allSelectableSelected = Boolean(selectableEngagementIds.length)
     && selectableEngagementIds.every((id) => selectedEngagementIds.includes(id));
   const hasPendingRows = rows.some((row) => row.status !== 'GENERATED');
-  const isDirty = Boolean(rows.length || selectedEngagementIds.length || sharedDescription.trim());
+  const isDirty = Boolean(
+    rows.length
+    || selectedEngagementIds.length
+    || sharedDescriptions.some((item) => item.description.trim()),
+  );
 
   useEffect(() => {
     onDirtyChange(isDirty && hasPendingRows);
@@ -688,7 +733,9 @@ export function InvoiceBatchBuilderPage({
         ...context,
         engagementId,
         invoiceDate,
-        description: mode === 'SHARED_DESCRIPTION' ? sharedDescription : '',
+        lineItems: mode === 'SHARED_DESCRIPTION'
+          ? sharedDescriptions
+          : [createSharedDescription()],
       })
     )));
   };
@@ -715,11 +762,49 @@ export function InvoiceBatchBuilderPage({
   };
 
   const changeMode = (nextMode: InvoiceBatchMode) => {
+    if (nextMode === mode) return;
+    if (
+      nextMode === 'XLSX_IMPORT'
+      && rows.some((row) => row.status !== 'GENERATED' && row.items.length > 1)
+      && !window.confirm('分别填写模式首期每张 Invoice 只支持 1 条费用明细，切换后将仅保留每位达人的第 1 条，确定继续吗？')
+    ) return;
     setMode(nextMode);
     setImportIssues([]);
-    if (nextMode === 'SHARED_DESCRIPTION' && sharedDescription.trim()) {
-      updateAllRows({ description: sharedDescription });
-    }
+    if (!context) return;
+    setRows((current) => current.map((row) => {
+      if (row.status === 'GENERATED') return row;
+      const items = nextMode === 'SHARED_DESCRIPTION'
+        ? synchronizeInvoiceBatchLineItems(row.items, sharedDescriptions)
+        : row.items.slice(0, 1);
+      return updateAndValidateInvoiceBatchRow(row, { items }, context);
+    }));
+  };
+
+  const applySharedDescriptions = (nextDescriptions: InvoiceBatchLineItemSeed[]) => {
+    setSharedDescriptions(nextDescriptions);
+    if (!context) return;
+    setRows((current) => current.map((row) => (
+      row.status === 'GENERATED'
+        ? row
+        : updateAndValidateInvoiceBatchRow(row, {
+          items: synchronizeInvoiceBatchLineItems(row.items, nextDescriptions),
+        }, context)
+    )));
+  };
+
+  const updateSharedDescription = (templateKey: string, description: string) => {
+    applySharedDescriptions(sharedDescriptions.map((item) => (
+      item.templateKey === templateKey ? { ...item, description } : item
+    )));
+  };
+
+  const addSharedDescription = () => {
+    applySharedDescriptions([...sharedDescriptions, createSharedDescription()]);
+  };
+
+  const removeSharedDescription = (templateKey: string) => {
+    if (sharedDescriptions.length === 1) return;
+    applySharedDescriptions(sharedDescriptions.filter((item) => item.templateKey !== templateKey));
   };
 
   const updateRow = (engagementId: EngagementId, patch: Partial<InvoiceBatchRow>) => {
@@ -790,9 +875,11 @@ export function InvoiceBatchBuilderPage({
             };
           }
           return updateAndValidateInvoiceBatchRow(row, {
-            description: value.description,
-            unitPrice: value.unitPrice,
-            quantity: value.quantity,
+            items: row.items[0] ? updateInvoiceBatchLineItem(row.items, row.items[0].id, {
+              description: value.description,
+              unitPrice: value.unitPrice,
+              quantity: value.quantity,
+            }).slice(0, 1) : row.items,
           }, context);
         }));
       }
@@ -1108,28 +1195,53 @@ export function InvoiceBatchBuilderPage({
               </div>
               <small />
             </div>
-            <div className="invoice-form-control full-width">
-              <span>收款方式</span>
-              <div className="invoice-batch-readonly-control">
-                <WalletCards size={16} />
-                <strong>Paid by Bank</strong>
-                <small>{INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL} · Airwallex · USD</small>
-              </div>
-              <small>当前展示为预置假账户，默认使用空中云汇 Paid by Bank。</small>
-            </div>
             {mode === 'SHARED_DESCRIPTION' ? (
-              <label className="full-width">
-                <span>统一 Description *</span>
-                <textarea
-                  value={sharedDescription}
-                  placeholder="例如：YouTube Dedicated Video 合作服务费"
-                  onChange={(event) => {
-                    setSharedDescription(event.target.value);
-                    updateAllRows({ description: event.target.value });
-                  }}
-                />
-                <small />
-              </label>
+              <div className="invoice-form-control full-width invoice-batch-description-items">
+                <div className="invoice-line-header">
+                  <span>
+                    <strong>统一 Description *</strong>
+                    <small>所有达人共用相同明细，Price 与 Amount 在下方逐人填写。</small>
+                  </span>
+                  <Button
+                    variant="secondary"
+                    icon={<Plus size={15} />}
+                    onClick={addSharedDescription}
+                  >
+                    新增 Description
+                  </Button>
+                </div>
+                <div className="invoice-batch-description-list">
+                  {sharedDescriptions.map((item, index) => (
+                    <div className="invoice-batch-description-row" key={item.templateKey}>
+                      <label>
+                        <span>DESCRIPTION {index + 1}</span>
+                        <input
+                          value={item.description}
+                          placeholder={index === 0
+                            ? '例如：YouTube Dedicated Video 合作服务费'
+                            : '填写下一条统一费用说明'}
+                          aria-label={`第 ${index + 1} 条统一 Description`}
+                          onChange={(event) => updateSharedDescription(
+                            item.templateKey,
+                            event.target.value,
+                          )}
+                        />
+                        <small />
+                      </label>
+                      <button
+                        className="invoice-line-remove"
+                        type="button"
+                        aria-label={`删除第 ${index + 1} 条统一 Description`}
+                        title={index === 0 ? '第一条 Description 必须保留' : '删除 Description'}
+                        disabled={index === 0}
+                        onClick={() => removeSharedDescription(item.templateKey)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="invoice-form-control full-width">
                 <span>逐人费用模板</span>
