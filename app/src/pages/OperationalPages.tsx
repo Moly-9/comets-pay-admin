@@ -431,7 +431,6 @@ export function ProjectsPage({
   auditEvents,
   onOpenContract,
   onOpenInvoice,
-  onCreateContract,
   onCreateInvoice,
   onLinkContract,
   onUnlinkContract,
@@ -439,12 +438,12 @@ export function ProjectsPage({
   onLinkInvoice,
   onUnlinkInvoice,
   onDeleteInvoice,
-  onUpdateInvoice,
   onCreatePaymentList,
   onDeletePaymentList,
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onChangePaymentAccount,
   onRevalidatePaymentItem,
   onGeneratePaymentOrder,
   onEditPaymentOrder,
@@ -465,7 +464,6 @@ export function ProjectsPage({
   auditEvents: WorkflowAuditEvent[];
   onOpenContract: (contractId: string) => void;
   onOpenInvoice: (invoiceId: InvoiceId) => void;
-  onCreateContract: (engagementId: EngagementId) => void;
   onCreateInvoice: (engagementId: EngagementId) => void;
   onLinkContract: (contractId: string, engagementId: EngagementId) => void;
   onUnlinkContract: (contractId: string) => void;
@@ -473,12 +471,12 @@ export function ProjectsPage({
   onLinkInvoice: (invoiceId: InvoiceId, engagementId: EngagementId) => void;
   onUnlinkInvoice: (invoiceId: InvoiceId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
-  onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
   onCreatePaymentList: (project: ProjectSummary) => void;
   onDeletePaymentList: (project: ProjectSummary, paymentListId: PaymentListId) => void;
   onAddPaymentInvoice: (project: ProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
+  onChangePaymentAccount: (project: ProjectSummary, invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (project: ProjectSummary, invoiceId: InvoiceId) => void;
   onGeneratePaymentOrder: (project: ProjectSummary, paymentListId: PaymentListId) => InvoiceId | null;
   onEditPaymentOrder: (project: ProjectSummary, paymentListId: PaymentListId) => void;
@@ -748,7 +746,6 @@ export function ProjectsPage({
         auditEvents={auditEvents.filter((event) => event.projectId === (selectedProject.projectId ?? selectedProject.id))}
         onOpenContract={onOpenContract}
         onOpenInvoice={onOpenInvoice}
-        onCreateContract={onCreateContract}
         onCreateInvoice={onCreateInvoice}
         onLinkContract={onLinkContract}
         onUnlinkContract={onUnlinkContract}
@@ -756,12 +753,12 @@ export function ProjectsPage({
         onLinkInvoice={onLinkInvoice}
         onUnlinkInvoice={onUnlinkInvoice}
         onDeleteInvoice={onDeleteInvoice}
-        onUpdateInvoice={onUpdateInvoice}
         onCreatePaymentList={() => onCreatePaymentList(selectedProject)}
         onDeletePaymentList={(paymentListId) => onDeletePaymentList(selectedProject, paymentListId)}
         onAddPaymentInvoice={(paymentListId, invoiceId) => onAddPaymentInvoice(selectedProject, paymentListId, invoiceId)}
         onRemovePaymentInvoice={(invoiceId) => onRemovePaymentInvoice(selectedProject, invoiceId)}
         onUpdatePaymentItem={(invoiceId, field, value) => onUpdatePaymentItem(selectedProject, invoiceId, field, value)}
+        onChangePaymentAccount={(invoiceId, payoutAccountId) => onChangePaymentAccount(selectedProject, invoiceId, payoutAccountId)}
         onRevalidatePaymentItem={(invoiceId) => onRevalidatePaymentItem(selectedProject, invoiceId)}
         onGeneratePaymentOrder={(paymentListId) => onGeneratePaymentOrder(selectedProject, paymentListId)}
         onEditPaymentOrder={(paymentListId) => onEditPaymentOrder(selectedProject, paymentListId)}
@@ -1301,10 +1298,30 @@ const createSeedCreator = ({
   ...creator
 }: CreatorSeed): CreatorProfile => {
   const [firstName = '', ...lastNameParts] = creator.contact.legalName.trim().split(/\s+/);
-  const paypalIsDefault = Boolean(paypal && (defaultPayoutProvider === 'PayPal' || !bank));
+  const stableAccountSuffix = Array.from(creator.id).reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) % 100_000_000,
+    0,
+  ).toString().padStart(8, '0');
+  const resolvedBank = bank ?? (paypal ? {
+    countryCode: 'US',
+    countryName: 'United States',
+    currency: 'USD',
+    accountNumber: `90${stableAccountSuffix}`,
+    bankName: 'Prototype Commerce Bank',
+    clearingSystem: 'ACH',
+    routingType1: 'aba',
+    routingValue1: '000000000',
+    streetAddress: '100 Prototype Avenue',
+    city: 'New York',
+    state: 'New York',
+    postcode: '10001',
+    status: 'VERIFIED' as const,
+  } : undefined);
+  const paypalIsDefault = Boolean(paypal && defaultPayoutProvider === 'PayPal');
   const payoutAccounts: CreatorProfile['payoutAccounts'] = [];
 
-  if (bank) {
+  if (resolvedBank) {
+    const bank = resolvedBank;
     const status = bank.status ?? 'VERIFIED';
     const isValidated = !['DRAFT', 'READY_FOR_VALIDATION'].includes(status);
     payoutAccounts.push(createAirwallexPayoutAccount({
@@ -1367,7 +1384,7 @@ const createSeedCreator = ({
     payoutAccounts.push(createPayPalPayoutAccount({
       id: `paypal-${creator.id}`,
       creatorId: creator.id,
-      nickname: paypal.nickname ?? (bank ? 'PayPal 备用账户' : 'PayPal 主账户'),
+      nickname: paypal.nickname ?? (resolvedBank ? 'PayPal 备用账户' : 'PayPal 主账户'),
       isDefault: paypalIsDefault,
       status: paypal.status ?? 'READY_FOR_VALIDATION',
       paypalUsername: paypal.username,

@@ -208,6 +208,57 @@ describe('Airwallex payment-list workbook', () => {
     })).toThrow(PaymentListWorkbookError);
   });
 
+  it('blocks a non-Airwallex row override even when the project list targets Airwallex', () => {
+    const source = paymentItem('INV-PAYPAL-OVERRIDE', swiftAccount, 'ADVERTISER');
+    const overridden = {
+      ...source,
+      accountOverride: {
+        provider: 'PayPal',
+        accountSummary: '脱敏 PayPal 账户',
+        receiveCurrency: 'USD',
+        payoutAccountId: 'paypal-account-test',
+        payoutAccountVersion: 'v1' as const,
+        accountFingerprint: 'paypal-fingerprint-test',
+        transferMethod: 'PAYPAL' as const,
+        validationStatus: 'VERIFIED' as const,
+      },
+    };
+    expect(() => buildAirwallexPaymentListRows({
+      paymentList: paymentList([overridden]),
+      creators: [creator],
+    })).toThrow(PaymentListWorkbookError);
+    expect(source.snapshot.provider).toBe('Airwallex');
+  });
+
+  it('exports from an Airwallex account override without changing the Invoice snapshot', () => {
+    const source = paymentItem('INV-AWX-OVERRIDE', swiftAccount, 'ADVERTISER');
+    const overridden = {
+      ...source,
+      accountOverride: {
+        provider: 'Airwallex',
+        accountSummary: '•••• 0002',
+        receiveCurrency: 'USD',
+        payoutAccountId: localAccount.id,
+        payoutAccountVersion: getPayoutAccountVersion(localAccount),
+        externalBeneficiaryId: localAccount.beneficiaryId,
+        transferMethod: localAccount.transferMethod,
+        localClearingSystem: localAccount.bankDetails.localClearingSystem,
+        accountFingerprint: getPayoutAccountFingerprint(localAccount),
+        schemaKey: 'BANK_ACCOUNT:US:USD:PERSONAL:LOCAL:ACH',
+        validationStatus: localAccount.status,
+      },
+    };
+    const rows = buildAirwallexPaymentListRows({
+      paymentList: paymentList([overridden]),
+      creators: [creator],
+    });
+    expect(rows[0]).toMatchObject({
+      paymentMethod: '本地支付',
+      accountNumber: localAccount.bankDetails.accountNumber,
+    });
+    expect(source.snapshot.payoutAccountId).toBe(swiftAccount.id);
+  });
+
   it('uses a DRAFT prefix until the payment list is approved', () => {
     expect(paymentListWorkbookFilename('PRJ-TEST', paymentList())).toBe(
       'DRAFT-COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01.xlsx',

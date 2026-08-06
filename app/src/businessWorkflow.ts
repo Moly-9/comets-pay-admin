@@ -103,11 +103,29 @@ export type PaymentListEditableField =
   | 'transactionReference'
   | 'description';
 
+export type PaymentListAccountSnapshot = Pick<
+  PaymentListItemSnapshot,
+  | 'provider'
+  | 'accountSummary'
+  | 'receiveCurrency'
+  | 'payoutAccountId'
+  | 'payoutAccountVersion'
+  | 'externalBeneficiaryId'
+  | 'providerAccountScope'
+  | 'transferMethod'
+  | 'localClearingSystem'
+  | 'accountFingerprint'
+  | 'schemaKey'
+  | 'validationStatus'
+  | 'transferNote'
+>;
+
 export type PaymentListItem = {
   id: string;
   engagementId: EngagementId;
   invoiceId: InvoiceId;
   snapshot: PaymentListItemSnapshot;
+  accountOverride?: PaymentListAccountSnapshot;
   overrides: Partial<Pick<PaymentListItemSnapshot, PaymentListEditableField>>;
   requiresRevalidation?: boolean;
   validationIssues?: string[];
@@ -148,7 +166,7 @@ export type PaymentListRecord = {
 
 export type PaymentListGenerationIssueCode =
   | 'NO_ITEMS'
-  | 'MIXED_PROVIDER'
+  | 'UNSUPPORTED_PROVIDER'
   | 'MISSING_INVOICE'
   | 'UNKNOWN_INVOICE'
   | 'DUPLICATE_INVOICE'
@@ -284,19 +302,27 @@ export const createAuditEvent = ({
   summary,
 });
 
+export const paymentListEffectiveAccount = (
+  item: PaymentListItem,
+): PaymentListItemSnapshot => ({
+  ...item.snapshot,
+  ...(item.accountOverride ?? {}),
+});
+
 export const paymentListItemValue = <K extends keyof PaymentListItemSnapshot>(
   item: PaymentListItem,
   key: K,
-) => ((item.overrides as Partial<PaymentListItemSnapshot>)[key] ?? item.snapshot[key]) as PaymentListItemSnapshot[K];
+) => (
+  (item.overrides as Partial<PaymentListItemSnapshot>)[key]
+  ?? (item.accountOverride as Partial<PaymentListItemSnapshot> | undefined)?.[key]
+  ?? item.snapshot[key]
+) as PaymentListItemSnapshot[K];
 
 export const upsertPaymentListItem = (
   list: PaymentListRecord,
   item: PaymentListItem,
 ): PaymentListRecord => {
-  if (
-    list.items.some((current) => current.invoiceId === item.invoiceId)
-    || item.snapshot.provider !== list.provider
-  ) return list;
+  if (list.items.some((current) => current.invoiceId === item.invoiceId)) return list;
   return { ...list, items: [...list.items, item], updatedAt: nowIso() };
 };
 
@@ -328,22 +354,28 @@ export const refreshPaymentListItemSnapshot = (
   items: list.items.map((item) => (
     item.invoiceId === refreshedItem.invoiceId
       ? (() => {
-          const previousAccountKey = [
-            item.snapshot.payoutAccountId ?? '',
-            item.snapshot.payoutAccountVersion ?? 'legacy-v1',
-            item.snapshot.accountFingerprint ?? '',
-          ].join(':');
-          const nextAccountKey = [
-            refreshedItem.snapshot.payoutAccountId ?? '',
-            refreshedItem.snapshot.payoutAccountVersion ?? 'legacy-v1',
-            refreshedItem.snapshot.accountFingerprint ?? '',
-          ].join(':');
-          const accountVersionChanged = previousAccountKey !== nextAccountKey;
-          return {
+          const previousEffectiveAccount = paymentListEffectiveAccount(item);
+          const nextItem = {
             ...item,
             engagementId: refreshedItem.engagementId,
             snapshot: { ...refreshedItem.snapshot },
+            accountOverride: item.accountOverride ? { ...item.accountOverride } : undefined,
             overrides: { ...item.overrides },
+          };
+          const nextEffectiveAccount = paymentListEffectiveAccount(nextItem);
+          const previousAccountKey = [
+            previousEffectiveAccount.payoutAccountId ?? '',
+            previousEffectiveAccount.payoutAccountVersion ?? 'legacy-v1',
+            previousEffectiveAccount.accountFingerprint ?? '',
+          ].join(':');
+          const nextAccountKey = [
+            nextEffectiveAccount.payoutAccountId ?? '',
+            nextEffectiveAccount.payoutAccountVersion ?? 'legacy-v1',
+            nextEffectiveAccount.accountFingerprint ?? '',
+          ].join(':');
+          const accountVersionChanged = previousAccountKey !== nextAccountKey;
+          return {
+            ...nextItem,
             requiresRevalidation: accountVersionChanged || refreshedItem.requiresRevalidation,
             validationIssues: [
               ...(accountVersionChanged ? ['Invoice 账户版本已变化，付款清单必须重新校验'] : []),
@@ -368,7 +400,7 @@ const maskPaymentAccount = (value: string) => {
 };
 
 const paymentListItemValidationIssues = (item: PaymentListItem) => {
-  const snapshot = item.snapshot;
+  const snapshot = paymentListEffectiveAccount(item);
   const provider = snapshot.provider;
   const currency = String(paymentListItemValue(item, 'currency'));
   const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency'));
@@ -383,7 +415,7 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
     !currency ? '付款清单缺少支付币种' : '',
     !receiveCurrency ? '付款清单缺少收款币种' : '',
     !(amount > 0) ? '付款清单金额必须大于 0' : '',
-    !['Airwallex', 'PayPal'].includes(provider) ? `付款渠道 ${provider || '未填写'} 当前不可执行` : '',
+    !provider ? '付款渠道未填写' : '',
     provider === 'Airwallex' && !snapshot.externalBeneficiaryId ? 'Airwallex 账户缺少 beneficiary_id' : '',
     provider === 'Airwallex' && !snapshot.transferMethod ? 'Airwallex 账户缺少转账方式' : '',
     provider === 'Airwallex' && snapshot.transferMethod === 'LOCAL' && !snapshot.localClearingSystem
@@ -406,6 +438,7 @@ const clonePaymentListItems = (items: PaymentListItem[]) => items.map((item) => 
     ...item.snapshot,
     contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
   },
+  accountOverride: item.accountOverride ? { ...item.accountOverride } : undefined,
   overrides: { ...item.overrides },
   validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
 }));
@@ -423,16 +456,16 @@ export const validatePaymentListGeneration = (
   if (!list.items.length) {
     issues.push({ code: 'NO_ITEMS', message: '付款清单至少需要一笔 Invoice。' });
   }
-  const mismatchedProviderItem = list.items.find((item) => (
-    item.snapshot.provider !== list.provider
-  ));
-  if (mismatchedProviderItem) {
-    issues.push({
-      code: 'MIXED_PROVIDER',
-      invoiceId: mismatchedProviderItem.invoiceId,
-      message: `同一付款清单只能包含 ${list.provider} 渠道的 Invoice。`,
-    });
-  }
+  list.items.forEach((item) => {
+    const effectiveAccount = paymentListEffectiveAccount(item);
+    if (effectiveAccount.provider !== 'Airwallex') {
+      issues.push({
+        code: 'UNSUPPORTED_PROVIDER',
+        invoiceId: item.invoiceId,
+        message: `${item.snapshot.creatorName} 当前选择 ${effectiveAccount.provider || '未指定渠道'}，付款单仅支持 Airwallex。`,
+      });
+    }
+  });
   expectedInvoiceIds.forEach((invoiceId) => {
     if (!itemCounts.has(invoiceId)) {
       issues.push({
@@ -538,22 +571,23 @@ export const revalidatePaymentListItem = (
   validatedAt = nowIso(),
   currentAccount?: PaymentListAccountState | null,
 ): PaymentListItem => {
+  const effectiveAccount = paymentListEffectiveAccount(item);
   const validationIssues = [
     ...paymentListItemValidationIssues(item),
     ...(currentAccount === null ? ['达人档案中未找到付款清单关联的收款账户'] : []),
-    ...(currentAccount && currentAccount.payoutAccountId !== item.snapshot.payoutAccountId
+    ...(currentAccount && currentAccount.payoutAccountId !== effectiveAccount.payoutAccountId
       ? ['收款账户 ID 与付款清单快照不一致']
       : []),
-    ...(currentAccount && currentAccount.payoutAccountVersion !== item.snapshot.payoutAccountVersion
+    ...(currentAccount && currentAccount.payoutAccountVersion !== effectiveAccount.payoutAccountVersion
       ? ['收款账户版本已变化']
       : []),
-    ...(currentAccount && currentAccount.accountFingerprint !== item.snapshot.accountFingerprint
+    ...(currentAccount && currentAccount.accountFingerprint !== effectiveAccount.accountFingerprint
       ? ['收款账户资料已变化']
       : []),
-    ...(currentAccount && currentAccount.provider !== item.snapshot.provider
+    ...(currentAccount && currentAccount.provider !== effectiveAccount.provider
       ? ['收款账户渠道与付款清单不一致']
       : []),
-    ...(currentAccount && currentAccount.externalBeneficiaryId !== item.snapshot.externalBeneficiaryId
+    ...(currentAccount && currentAccount.externalBeneficiaryId !== effectiveAccount.externalBeneficiaryId
       ? ['Airwallex beneficiary_id 已变化']
       : []),
     ...(currentAccount && !['VALIDATED', 'VERIFIED'].includes(currentAccount.validationStatus)
@@ -580,8 +614,7 @@ export const applyPaymentListPayoutSnapshot = (
   const { receiveCurrency: _receiveCurrency, ...overrides } = item.overrides;
   return {
     ...item,
-    snapshot: {
-      ...item.snapshot,
+    accountOverride: {
       provider,
       accountSummary: rawAccount
         ? maskPaymentAccount(rawAccount)
@@ -672,7 +705,8 @@ export const payoutWithPaymentListSnapshot = (
   payout: Payout,
   item: PaymentListItem,
 ): Payout => {
-  const provider = item.snapshot.provider;
+  const effectiveAccount = paymentListEffectiveAccount(item);
+  const provider = effectiveAccount.provider;
   const currency = String(paymentListItemValue(item, 'currency'));
   return {
     ...payout,
@@ -682,13 +716,13 @@ export const payoutWithPaymentListSnapshot = (
       : payout.provider,
     currency: currency as InvoiceCurrency,
     amount: Number(paymentListItemValue(item, 'amount')),
-    account: item.snapshot.accountSummary,
-    payoutAccountId: item.snapshot.payoutAccountId,
-    payoutAccountVersion: item.snapshot.payoutAccountVersion ?? 'legacy-v1',
-    payoutAccountFingerprint: item.snapshot.accountFingerprint,
-    externalBeneficiaryId: item.snapshot.externalBeneficiaryId,
-    transferMethod: item.snapshot.transferMethod,
-    localClearingSystem: item.snapshot.localClearingSystem,
+    account: effectiveAccount.accountSummary,
+    payoutAccountId: effectiveAccount.payoutAccountId,
+    payoutAccountVersion: effectiveAccount.payoutAccountVersion ?? 'legacy-v1',
+    payoutAccountFingerprint: effectiveAccount.accountFingerprint,
+    externalBeneficiaryId: effectiveAccount.externalBeneficiaryId,
+    transferMethod: effectiveAccount.transferMethod,
+    localClearingSystem: effectiveAccount.localClearingSystem,
     feeBearer: paymentListItemValue(item, 'feeBearer'),
     paymentListRequiresRevalidation: item.requiresRevalidation,
     paymentListValidationIssues: [...(item.validationIssues ?? [])],

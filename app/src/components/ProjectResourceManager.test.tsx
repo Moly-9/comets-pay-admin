@@ -4,10 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   getContractInvoiceRelation,
   getProjectLinkOptions,
-  isContractInvoiceSelectable,
-  prepareInvoiceForProjectUpdate,
   ProjectResourceManager,
-  toggleInvoiceContractId,
 } from './ProjectResourceManager';
 import type {
   ContractId,
@@ -298,7 +295,6 @@ describe('project resource aggregation', () => {
         currentUser={admin}
         onOpenContract={vi.fn()}
         onOpenInvoice={vi.fn()}
-        onCreateContract={vi.fn()}
         onCreateInvoice={vi.fn()}
         onLinkContract={vi.fn()}
         onUnlinkContract={vi.fn()}
@@ -306,12 +302,12 @@ describe('project resource aggregation', () => {
         onLinkInvoice={vi.fn()}
         onUnlinkInvoice={vi.fn()}
         onDeleteInvoice={vi.fn()}
-        onUpdateInvoice={vi.fn()}
         onCreatePaymentList={vi.fn()}
         onDeletePaymentList={vi.fn()}
         onAddPaymentInvoice={vi.fn()}
         onRemovePaymentInvoice={vi.fn()}
         onUpdatePaymentItem={vi.fn()}
+        onChangePaymentAccount={vi.fn()}
         onGeneratePaymentOrder={vi.fn(() => null)}
         onEditPaymentOrder={vi.fn()}
         onExportPaymentList={vi.fn()}
@@ -324,8 +320,8 @@ describe('project resource aggregation', () => {
     expect(html).toContain('覆盖 2 位达人 · 1 份已被 Invoice 覆盖');
     expect(html).toContain('1 份 Invoice');
     expect(html).toContain('项目金额 USD 500');
-    expect(html).toContain('1 份渠道付款清单');
-    expect(html).toContain('Airwallex · 共 1 笔达人付款');
+    expect(html).toContain('PAY-20260805-TEST01');
+    expect(html).toContain('1 笔达人付款');
     expect(html).not.toContain('CON-CROSS-PROJECT-LINKED');
     expect(html).not.toContain('CON-CROSS-CREATOR-LINKED');
     expect(html).not.toContain(engagementOneId);
@@ -339,11 +335,26 @@ describe('project resource aggregation', () => {
     expect(source).toContain('setRemovePaymentInvoiceId(null)');
   });
 
-  it('shows the Invoice payout snapshot instead of selecting the account again', () => {
+  it('keeps account selection on each payment row and removes channel tabs', () => {
     const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('Invoice 冻结收款账户');
-    expect(source).not.toContain('达人暂无可用收款账户');
-    expect(source).not.toContain('onChangePaymentAccount');
+    expect(source).toContain('默认继承 Invoice 冻结账户');
+    expect(source).toContain('onChangePaymentAccount(item.invoiceId, value)');
+    expect(source).toContain('data-payment-provider-warning="true"');
+    expect(source).toContain('maskInvoiceAccountValue(getPayoutAccountIdentifier(account))');
+    expect(source).toContain('`Beneficiary ${beneficiarySummary(');
+    expect(source).not.toContain('project-payment-channel-tabs');
+    expect(source).not.toContain('补齐渠道清单');
+  });
+
+  it('removes contract generation and Invoice editing only from project details', () => {
+    const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
+    const contractsPage = readFileSync(new URL('../pages/ContractsPage.tsx', import.meta.url), 'utf8');
+    const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain("openCreateDialog('contract')");
+    expect(source).not.toContain('openInvoiceEditor');
+    expect(source).not.toContain('编辑 Invoice ·');
+    expect(contractsPage).toContain('>生成合同</Button>');
+    expect(app).toContain('const openInvoiceEditor =');
   });
 });
 
@@ -354,27 +365,6 @@ describe('contract and Invoice relationships', () => {
     expect(getContractInvoiceRelation(contractThree, [invoiceOne]).state).toBe('missing');
   });
 
-  it('allows only confirmed contracts to be newly selected by an Invoice', () => {
-    expect(isContractInvoiceSelectable(contractOne)).toBe(true);
-    expect(isContractInvoiceSelectable({
-      ...contractTwo,
-      signed: false,
-      lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
-    })).toBe(false);
-  });
-
-  it('updates contract coverage explicitly and marks the Invoice for revalidation', () => {
-    const added = toggleInvoiceContractId(invoiceOne.snapshot.contractIds, contractTwoId);
-    expect(added).toEqual([contractOneId, contractTwoId]);
-    expect(toggleInvoiceContractId(added, contractOneId)).toEqual([contractTwoId]);
-
-    const updated = prepareInvoiceForProjectUpdate({
-      ...invoiceOne,
-      snapshot: { ...invoiceOne.snapshot, contractIds: added },
-    });
-    expect(updated.snapshot.contractIds).toEqual([contractOneId, contractTwoId]);
-    expect(updated.validationStatus).toBe('needs_review');
-  });
 });
 
 describe('project resource link candidates', () => {

@@ -6,6 +6,7 @@ import {
   getPaymentListAccess,
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
+  paymentListEffectiveAccount,
   payoutWithPaymentListSnapshot,
   refreshPaymentListItemSnapshot,
   revalidatePaymentListItem,
@@ -168,16 +169,31 @@ describe('project payment list', () => {
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
   });
 
-  it('rejects an Invoice from a different payment provider', () => {
+  it('allows a payment-list account override but blocks non-Airwallex generation', () => {
     const paypalItem = {
       ...item,
       invoiceId: 'invoice-paypal' as InvoiceId,
-      snapshot: { ...item.snapshot, provider: 'PayPal' },
+      accountOverride: {
+        provider: 'PayPal',
+        accountSummary: '脱敏 PayPal 账户',
+        receiveCurrency: 'USD',
+        payoutAccountId: 'paypal-account-1',
+        payoutAccountVersion: 'v1' as const,
+        accountFingerprint: 'paypal-fp-1',
+        transferMethod: 'PAYPAL' as const,
+        validationStatus: 'VERIFIED' as const,
+      },
     };
-    expect(upsertPaymentListItem(record, paypalItem).items).toEqual([]);
+    expect(upsertPaymentListItem(record, paypalItem).items).toHaveLength(1);
+    expect(paypalItem.snapshot.provider).toBe('Airwallex');
+    expect(paymentListEffectiveAccount(paypalItem).provider).toBe('PayPal');
     expect(validatePaymentListGeneration({ ...record, items: [paypalItem] }, [paypalItem.invoiceId]))
       .toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: 'MIXED_PROVIDER', invoiceId: paypalItem.invoiceId }),
+        expect.objectContaining({
+          code: 'UNSUPPORTED_PROVIDER',
+          invoiceId: paypalItem.invoiceId,
+          message: expect.stringContaining('Synthetic Creator 当前选择 PayPal'),
+        }),
       ]));
   });
 

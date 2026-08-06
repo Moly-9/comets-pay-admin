@@ -41,14 +41,12 @@ import {
   getInvoiceEditContext,
   getInvoicePageTab,
   getPaymentListResubmissionState,
-  invalidateSignedInvoice,
   invoiceStatusForRequestApproval,
   isInvoiceApprovedForPayment,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   paymentFailureRestartStage,
   replyToCreatorFeedback,
-  sensitiveInvoiceSnapshotChanged,
   type InvoiceReviewAction,
   type InvoicePageTab,
 } from './invoice/invoiceReviewWorkflow';
@@ -79,6 +77,7 @@ import type {
   ToastState,
 } from './types';
 import {
+  applyPaymentListPayoutSnapshot,
   beginPaymentListEdit,
   canEditProject,
   createAuditEvent,
@@ -87,9 +86,9 @@ import {
   hasInvoiceForEngagement,
   generatePaymentListVersion,
   invoicePaymentListItem,
-  invoicePaymentListProvider,
   nextReviewStatusAfterMutation,
   nowIso,
+  paymentListEffectiveAccount,
   payoutWithPaymentListSnapshot,
   revalidatePaymentListItem,
   refreshPaymentListItemSnapshot,
@@ -99,7 +98,6 @@ import {
   type EngagementId,
   type ContractId,
   type InvoiceId,
-  type PaymentListItem,
   type PaymentListEditableField,
   type PaymentListRecord,
   type ProjectId,
@@ -108,6 +106,7 @@ import {
 } from './businessWorkflow';
 import { downloadBlob } from './invoice/invoiceUtils';
 import {
+  createDocumentPayoutSnapshot,
   getPayoutAccountFingerprint,
   getPayoutAccountId,
   getPayoutAccountVersion,
@@ -598,56 +597,6 @@ export default function App() {
     });
   };
 
-  const updateGeneratedInvoice = (updated: GeneratedInvoiceRecord) => {
-    const previous = generatedInvoices.find((invoice) => invoice.invoiceId === updated.invoiceId);
-    const linkedPayout = previous
-      ? payouts.find((payout) => payout.id === previous.sourcePayoutId)
-      : undefined;
-    const invalidatesSignature = Boolean(
-      previous
-      && linkedPayout
-      && linkedPayout.invoiceReviewStatus === '待媒介复核'
-      && sensitiveInvoiceSnapshotChanged(previous, updated),
-    );
-    const nextPayout = invalidatesSignature && linkedPayout
-      ? invalidateSignedInvoice(
-          { ...linkedPayout, invoiceSnapshot: updated.snapshot },
-          { account: currentUser.account, name: currentUser.name, role: currentUser.role },
-        )
-      : linkedPayout
-        ? { ...linkedPayout, invoiceSnapshot: updated.snapshot }
-        : undefined;
-    setGeneratedInvoices((current) => current.map((invoice) => (
-      invoice.invoiceId === updated.invoiceId
-        ? {
-            ...updated,
-            version: invalidatesSignature ? (invoice.version ?? 1) + 1 : invoice.version,
-            status: nextPayout?.invoiceReviewStatus ?? updated.status,
-          }
-        : invoice
-    )));
-    if (nextPayout) {
-      setPayouts((current) => current.map((payout) => (
-        payout.id === nextPayout.id ? nextPayout : payout
-      )));
-    }
-    if (updated.snapshot.projectId) {
-      registerProjectMutation({
-        projectId: updated.snapshot.projectId as ProjectId,
-        engagementId: updated.snapshot.engagementId as EngagementId | undefined,
-        entityType: 'invoice',
-        entityId: updated.invoiceId,
-        action: 'update',
-        summary: invalidatesSignature
-          ? `已更新 Invoice ${updated.id} 的签署敏感字段，原签署失效`
-          : `已更新 Invoice ${updated.id}，等待重新校验`,
-      });
-    }
-    if (invalidatesSignature) {
-      notify('需重新签署', '已修改主体、金额、币种、付款方式、收款账户、费用明细或合同关联，原签署已失效。');
-    }
-  };
-
   const openInvoiceEditor = (payout: Payout, context: InvoiceEditContext) => {
     const record = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
     if (!record) {
@@ -703,51 +652,11 @@ export default function App() {
     setPayouts((current) => current.map((item) => (
       item.id === result.payout.id ? result.payout : item
     )));
-    setPaymentLists((current) => {
-      const sourceList = current.find((list) => (
-        list.projectId === projectId
-        && list.items.some((item) => item.invoiceId === result.record.invoiceId)
-      ));
-      if (!sourceList) return current;
-      const nextProvider = invoicePaymentListProvider(result.record);
-      if (sourceList.provider === nextProvider) {
-        return current.map((list) => list.paymentListId === sourceList.paymentListId
-          ? { ...refreshPaymentListItemSnapshot(list, refreshedPaymentItem), status: 'draft' }
-          : list);
-      }
-      const previousItem = sourceList.items.find((item) => item.invoiceId === result.record.invoiceId);
-      const movedItem: PaymentListItem = {
-        ...refreshedPaymentItem,
-        overrides: { ...(previousItem?.overrides ?? {}) },
-        requiresRevalidation: true,
-        validationIssues: ['Invoice 支付渠道或账户已变化，请重新校验'],
-      };
-      const targetList = current.find((list) => (
-        list.projectId === projectId && list.provider === nextProvider
-      ));
-      const withoutSource = current.flatMap((list) => {
-        if (list.paymentListId !== sourceList.paymentListId) return [list];
-        const updated = removePaymentListItem(list, result.record.invoiceId);
-        return updated.items.length ? [{ ...updated, status: 'draft' as const }] : [];
-      });
-      if (targetList) {
-        return withoutSource.map((list) => list.paymentListId === targetList.paymentListId
-          ? { ...upsertPaymentListItem(list, movedItem), status: 'draft' }
-          : list);
-      }
-      const providerCode = nextProvider === 'Airwallex' ? 'AWX' : 'PPL';
-      const createdAt = nowIso();
-      return [{
-        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-        paymentListCode: `${createPrototypeCode('PAY')}-${providerCode}`,
-        projectId,
-        provider: nextProvider,
-        status: 'draft',
-        items: [movedItem],
-        createdAt,
-        updatedAt: createdAt,
-      }, ...withoutSource];
-    });
+    setPaymentLists((current) => current.map((list) => (
+      list.projectId === projectId && list.items.some((item) => item.invoiceId === result.record.invoiceId)
+        ? { ...refreshPaymentListItemSnapshot(list, refreshedPaymentItem), status: 'draft' }
+        : list
+    )));
     setProjects((current) => current.map((project) => (
       getProjectId(project) === projectId
         ? {
@@ -815,43 +724,35 @@ export default function App() {
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
     ));
     const createdAt = nowIso();
-    const existingProviders = new Set(
-      paymentLists.filter((list) => list.projectId === projectId).map((list) => list.provider),
-    );
-    const providers = Array.from(new Set(invoices.map(invoicePaymentListProvider)));
-    const lists = providers.flatMap((provider) => {
-      if (existingProviders.has(provider)) return [];
-      const providerCode = provider === 'Airwallex' ? 'AWX' : 'PPL';
-      return [{
-        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-        paymentListCode: `${createPrototypeCode('PAY')}-${providerCode}`,
-        projectId,
-        provider,
-        status: 'draft' as const,
-        items: invoices
-          .filter((invoice) => invoicePaymentListProvider(invoice) === provider)
-          .map((invoice) => invoicePaymentListItem(invoice, contracts)),
-        createdAt,
-        updatedAt: createdAt,
-      }];
-    });
-    if (!lists.length) {
+    if (paymentLists.some((list) => list.projectId === projectId)) {
       notify(
-        invoices.length ? '渠道付款清单已存在' : '尚无可加入付款清单的 Invoice',
-        invoices.length
-          ? '当前项目的 Invoice 已按支付渠道分配到对应付款清单。'
-          : '请先为项目达人生成包含付款账户的 Invoice。',
+        '付款清单已存在',
+        '每个项目保留一张当前付款清单。',
       );
       return;
     }
-    setPaymentLists((current) => [...lists, ...current]);
-    lists.forEach((list) => registerProjectMutation({
+    if (!invoices.length) {
+      notify('尚无可加入付款清单的 Invoice', '请先为项目达人生成包含付款账户的 Invoice。');
+      return;
+    }
+    const list: PaymentListRecord = {
+      paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
+      paymentListCode: createPrototypeCode('PAY'),
+      projectId,
+      provider: 'Airwallex',
+      status: 'draft',
+      items: invoices.map((invoice) => invoicePaymentListItem(invoice, contracts)),
+      createdAt,
+      updatedAt: createdAt,
+    };
+    setPaymentLists((current) => [list, ...current]);
+    registerProjectMutation({
       projectId,
       entityType: 'payment-list',
       entityId: list.paymentListId,
       action: 'create',
-      summary: `已创建 ${list.provider} 付款清单草稿 ${list.paymentListCode}`,
-    }));
+      summary: `已创建项目付款清单草稿 ${list.paymentListCode}`,
+    });
   };
 
   const deletePaymentList = (project: ProjectSummary, paymentListId: PaymentListRecord['paymentListId']) => {
@@ -889,10 +790,6 @@ export default function App() {
       return;
     }
     if (!invoice?.snapshot.engagementId || invoice.snapshot.projectId !== projectId) return;
-    if (invoicePaymentListProvider(invoice) !== list?.provider) {
-      notify('支付渠道不一致', `该付款清单只能添加 ${list?.provider ?? '当前'} 渠道的 Invoice。`);
-      return;
-    }
     setPaymentLists((current) => current.map((list) => (
       list.paymentListId === paymentListId
         ? { ...upsertPaymentListItem(list, invoicePaymentListItem(invoice, contracts)), status: 'draft' }
@@ -989,9 +886,10 @@ export default function App() {
       notify('无法重新校验', '未找到付款清单中的稳定 invoiceId 关联。');
       return;
     }
+    const effectiveAccount = paymentListEffectiveAccount(currentItem);
     const creator = creators.find((candidate) => candidate.id === currentItem.snapshot.creatorId);
     const account = creator?.payoutAccounts.find((candidate) => (
-      getPayoutAccountId(candidate) === currentItem.snapshot.payoutAccountId
+      getPayoutAccountId(candidate) === effectiveAccount.payoutAccountId
     ));
     const validated = revalidatePaymentListItem(
       currentItem,
@@ -1032,6 +930,49 @@ export default function App() {
     );
   };
 
+  const changePaymentAccount = (
+    project: ProjectSummary,
+    invoiceId: InvoiceId,
+    payoutAccountId: string,
+  ) => {
+    const projectId = getProjectId(project);
+    const list = paymentLists.find((candidate) => candidate.projectId === projectId);
+    if (!canMutatePaymentList(project, list)) {
+      notify('付款单已锁定', '请先进入可编辑草稿状态，再更换收款账户。');
+      return;
+    }
+    const item = list?.items.find((candidate) => candidate.invoiceId === invoiceId);
+    const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
+    const account = creator?.payoutAccounts.find((candidate) => (
+      getPayoutAccountId(candidate) === payoutAccountId
+    ));
+    if (!item || !creator || !account) {
+      notify('无法更换收款账户', '未找到该达人通过稳定 payoutAccountId 关联的可用收款账户。');
+      return;
+    }
+    const updated = applyPaymentListPayoutSnapshot(
+      item,
+      createDocumentPayoutSnapshot(account, creator.id),
+    );
+    const paymentListId = list!.paymentListId;
+    setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
+      ? {
+          ...candidate,
+          status: 'draft',
+          updatedAt: nowIso(),
+          items: candidate.items.map((currentItem) => currentItem.invoiceId === invoiceId ? updated : currentItem),
+        }
+      : candidate));
+    registerProjectMutation({
+      projectId,
+      engagementId: item.engagementId,
+      entityType: 'payment-list',
+      entityId: invoiceId,
+      action: 'update',
+      summary: `已为 ${item.snapshot.invoiceNumber} 选择 ${account.provider} 收款账户，Invoice 原始快照保持不变`,
+    });
+  };
+
   const generatePaymentOrder = (
     project: ProjectSummary,
     paymentListId: PaymentListRecord['paymentListId'],
@@ -1052,7 +993,6 @@ export default function App() {
       .filter((invoice) => (
         invoice.snapshot.projectId === projectId
         && invoice.snapshot.engagementId
-        && invoicePaymentListProvider(invoice) === list.provider
       ))
       .map((invoice) => invoice.invoiceId);
     const result = generatePaymentListVersion({
@@ -1107,15 +1047,7 @@ export default function App() {
     if (list.status !== 'generated' && !historicalStatus) return;
     const updated = beginPaymentListEdit(list);
     setPaymentLists((current) => current.map((candidate) => {
-      if (candidate.paymentListId === list.paymentListId) return updated;
-      if (
-        historicalStatus
-        && candidate.projectId === projectId
-        && ['submitted', 'approved', 'paid'].includes(candidate.status)
-      ) {
-        return { ...candidate, status: 'generated', updatedAt: nowIso() };
-      }
-      return candidate;
+      return candidate.paymentListId === list.paymentListId ? updated : candidate;
     }));
     if (historicalStatus) {
       setRequestProjects((current) => current.map((request) => request.projectId === projectId
@@ -1161,10 +1093,6 @@ export default function App() {
     ));
     if (!list) {
       notify('无法导出付款清单', '当前项目尚未生成付款清单。');
-      return;
-    }
-    if (list.provider !== 'Airwallex') {
-      notify('当前渠道没有可用模板', '现有 Excel 模板仅用于 Airwallex；PayPal 付款清单不会导出为 Airwallex 格式。');
       return;
     }
     try {
@@ -1233,7 +1161,7 @@ export default function App() {
         || lists.some((list) => list.status === 'draft')
       : lists.some((list) => list.status !== 'generated');
     if (!lists.length || paymentListsNotReady) {
-      notify('请先生成全部渠道付款单', '每个支付渠道的付款清单都必须完成校验并生成锁定版本后，才能提交请款审核。');
+      notify('请先生成付款单', '项目付款清单必须完成校验并生成锁定版本后，才能提交请款审核。');
       return;
     }
     if (
@@ -1270,7 +1198,7 @@ export default function App() {
           : submissionIssues.includes('INVOICE_COUNT')
             ? '每位项目达人必须有且仅有一份 Invoice。'
             : submissionIssues.includes('PAYMENT_LIST_MISSING')
-              ? '全部渠道付款清单合计必须包含项目内全部 Invoice。'
+              ? '项目付款清单必须包含项目内全部 Invoice。'
               : '存在需要重新校验的 Invoice。',
       );
       return;
@@ -1670,7 +1598,6 @@ export default function App() {
         : item));
       if (projectId) {
         setPaymentLists((current) => current.map((list) => list.projectId === projectId
-          && list.provider === (payout.provider === 'PayPal' ? 'PayPal' : 'Airwallex')
           ? { ...list, status: 'draft', updatedAt: occurredAt }
           : list));
         setRequestProjects((current) => current.map((request) => request.projectId === projectId
@@ -1926,10 +1853,6 @@ export default function App() {
             setInvoiceTab('signature');
             setActivePage('invoice');
           }}
-          onCreateContract={(engagementId) => {
-            setContractGenerationEngagementId(engagementId);
-            setActivePage('contract-create');
-          }}
           onCreateInvoice={(engagementId) => {
             setInvoiceCreationEngagementId(engagementId);
             setActivePage('invoice-create');
@@ -1940,12 +1863,12 @@ export default function App() {
           onLinkInvoice={linkInvoiceToEngagement}
           onUnlinkInvoice={unlinkInvoice}
           onDeleteInvoice={deleteInvoice}
-          onUpdateInvoice={updateGeneratedInvoice}
           onCreatePaymentList={createPaymentList}
           onDeletePaymentList={deletePaymentList}
           onAddPaymentInvoice={addPaymentInvoice}
           onRemovePaymentInvoice={removePaymentInvoice}
           onUpdatePaymentItem={updatePaymentItem}
+          onChangePaymentAccount={changePaymentAccount}
           onRevalidatePaymentItem={revalidatePaymentItem}
           onGeneratePaymentOrder={generatePaymentOrder}
           onEditPaymentOrder={editPaymentOrder}

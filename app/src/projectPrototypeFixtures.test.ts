@@ -10,7 +10,11 @@ import {
   PROJECT_DEMO_TOTAL,
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
-import { invoicePaymentListItem, paymentListItemValue } from './businessWorkflow';
+import {
+  invoicePaymentListItem,
+  paymentListEffectiveAccount,
+  paymentListItemValue,
+} from './businessWorkflow';
 import { eligibleInvoicePayoutAccounts, getPayoutAccountId } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
@@ -37,10 +41,8 @@ describe('project prototype fixtures', () => {
     expect(INITIAL_PROJECTS).toHaveLength(20);
     expect(engagements).toHaveLength(237);
     expect(ALL_PROJECT_PROTOTYPE_INVOICES).toHaveLength(237);
+    expect(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS).toHaveLength(20);
     expect(new Set(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.map((list) => list.projectId)).size).toBe(20);
-    expect(new Set(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.map((list) => (
-      `${list.projectId}:${list.provider}`
-    ))).size).toBe(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.length);
     expect(ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.flatMap((list) => list.items)).toHaveLength(237);
     expect(new Set(ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => invoice.snapshot.engagementId)).size).toBe(237);
 
@@ -51,6 +53,7 @@ describe('project prototype fixtures', () => {
       const lists = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((candidate) => (
         candidate.projectId === engagement.projectId
       ));
+      expect(lists).toHaveLength(1);
       expect(invoice?.snapshot.creatorId).toBe(engagement.creatorId);
       expect(invoice?.snapshot.projectId).toBe(engagement.projectId);
       expect(payouts.get(invoice!.sourcePayoutId)?.invoice).toBe(invoice?.id);
@@ -72,12 +75,14 @@ describe('project prototype fixtures', () => {
       ), 0);
       expect(total).toBeCloseTo(expected, 2);
       expect(items.every((item) => paymentListItemValue(item, 'description') === '')).toBe(true);
-      expect(items.every((item) => (
-        item.snapshot.provider !== 'Airwallex' || Boolean(item.snapshot.externalBeneficiaryId)
-      ))).toBe(true);
-      expect(lists.every((list) => (
-        list.items.every((item) => item.snapshot.provider === list.provider)
-      ))).toBe(true);
+      const invalidAccounts = items.flatMap((item) => {
+        const account = paymentListEffectiveAccount(item);
+        return account.provider === 'Airwallex' && account.externalBeneficiaryId
+          ? []
+          : [{ creator: item.snapshot.creatorName, provider: account.provider, accountId: account.payoutAccountId }];
+      });
+      expect(invalidAccounts).toEqual([]);
+      expect(lists.every((list) => list.provider === 'Airwallex')).toBe(true);
     });
   });
 

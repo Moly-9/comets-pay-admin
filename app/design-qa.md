@@ -1,3 +1,42 @@
+# Design QA — 项目详情操作精简与 Airwallex 付款限制
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-48d9cba1-215c-4948-b0c8-886a645757e1.png` and `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-77dbb577-2225-42fd-8a54-d4465d38ee47.png`.
+- Implementation URL: `http://127.0.0.1:5176/`.
+- Desktop CSS viewport: `1280 x 720`; responsive CSS viewport: `390 x 844`.
+- Verified project: `PRJ-260727-05`, containing 12 stable Engagements, 12 linked Invoices and one project-level payment list.
+
+## Project resource dialogs
+
+- The project contract dialog contains only `关联合同/IO 单` as its create/link action. `生成合同` remains available in the contract-management module.
+- Contract rows retain `查看`, `编辑`, `解除` and `删除`; contract editing still opens the contract detail flow.
+- Project Invoice rows contain `查看`, `解除` and `删除`, with no project-level `编辑` action or edit modal.
+- The Invoice-management module retains its existing generation and edit callback path.
+
+## Payment list interaction
+
+- The payment-list header no longer contains provider cards, channel tabs or a provider-specific generation action. A project presents one current payment list.
+- Every payment row contains an account selector sourced from that creator's stable, Invoice-eligible payout accounts.
+- Account choices show provider, currency where applicable, status, masked account identifier and a shortened beneficiary reference. The PayPal test account renders as `y***@example.com`, never as the full email.
+- Selecting Yuki Tanaka's PayPal backup account immediately displays the row warning `Yuki Tanaka 当前选择 PayPal，付款单仅支持 Airwallex。`.
+- Clicking `生成付款单` with that selection keeps the list in draft, creates no version, and focuses the unsupported-provider warning.
+- Switching back to Airwallex removes the provider blocker. The next generation attempt focuses the first blank transaction-reference field, confirming that the existing required-field validation continues after provider validation.
+
+## Responsive and runtime checks
+
+- At `390px`, the document client width and scroll width are both `375px`; no page-level horizontal overflow is present.
+- The Invoice dialog is `335px` wide within the responsive client area and has no internal horizontal overflow.
+- Payment rows and account triggers are `296px` wide, with equal client and scroll widths. Long account metadata truncates inside the custom select instead of resizing the dialog.
+- The sticky footer keeps `生成付款单` at the bottom-right action area without covering row fields.
+- Browser console contains only Vite/React development information; no application warning or error was produced during the final desktop and responsive flows.
+- `npm test -- --run`: 28 test files and 175 tests passed.
+- `npm run build`: passed.
+
+final result: passed
+
+---
+
 # Design QA — 生成合同多平台频道编辑
 
 ## Reference and environment

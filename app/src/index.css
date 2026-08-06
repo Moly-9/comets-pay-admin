@@ -1270,46 +1270,6 @@
   line-height: 1.55;
 }
 
-.project-payment-channel-tabs {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--soft-line);
-  padding-bottom: 10px;
-}
-
-.project-payment-channel-tabs button {
-  display: grid;
-  min-width: 150px;
-  gap: 3px;
-  border: 1px solid #dfe3e9;
-  border-radius: 6px;
-  padding: 9px 12px;
-  background: #fff;
-  color: #58606d;
-  text-align: left;
-}
-
-.project-payment-channel-tabs button.is-active {
-  border-color: #de6b57;
-  background: #fff7f4;
-  color: #9e3f31;
-}
-
-.project-payment-channel-tabs strong,
-.project-payment-channel-tabs span {
-  letter-spacing: 0;
-}
-
-.project-payment-channel-tabs strong {
-  font-size: 13px;
-}
-
-.project-payment-channel-tabs span {
-  color: var(--muted);
-  font-size: 10px;
-}
-
 .project-payment-rows {
   display: grid;
 }
@@ -1319,6 +1279,31 @@
   gap: 12px;
   border-bottom: 1px solid var(--soft-line);
   padding: 16px 0;
+}
+
+.project-payment-row.has-provider-warning {
+  border: 1px solid #e7b8a7;
+  border-radius: 6px;
+  margin: 10px 0;
+  padding: 14px;
+  background: #fffaf7;
+}
+
+.project-payment-provider-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  border-left: 3px solid #c85b3f;
+  padding: 8px 10px;
+  background: #fff1ec;
+  color: #9f3f2d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.project-payment-provider-warning:focus-visible {
+  outline: 2px solid #c85b3f;
+  outline-offset: 2px;
 }
 
 .project-payment-row-header,
@@ -1385,27 +1370,11 @@
   grid-column: span 2;
 }
 
-.project-payment-account-snapshot {
-  display: grid;
-  min-height: 52px;
-  align-content: center;
-  gap: 3px;
-  border: 1px solid #dfe3e9;
-  border-radius: 5px;
-  padding: 7px 10px;
-  background: #f8f9fb;
-}
-
-.project-payment-account-snapshot strong {
-  color: #303640;
-  font-size: 12px;
-  letter-spacing: 0;
-}
-
-.project-payment-account-snapshot small {
+.project-payment-account-origin {
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 10px;
+  line-height: 1.4;
 }
 
 .project-payment-validation {

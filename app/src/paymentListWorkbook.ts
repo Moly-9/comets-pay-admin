@@ -1,4 +1,5 @@
 import {
+  paymentListEffectiveAccount,
   paymentListItemValue,
   type PaymentListItem,
   type PaymentListRecord,
@@ -80,10 +81,11 @@ const accountForItem = (
   item: PaymentListItem,
   creators: CreatorProfile[],
 ): AirwallexPayoutAccount | null => {
+  const effectiveAccount = paymentListEffectiveAccount(item);
   const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
   const account = creator?.payoutAccounts.find((candidate) => (
     candidate.provider === 'Airwallex'
-    && getPayoutAccountId(candidate) === item.snapshot.payoutAccountId
+    && getPayoutAccountId(candidate) === effectiveAccount.payoutAccountId
   ));
   return account?.provider === 'Airwallex' ? account : null;
 };
@@ -105,6 +107,7 @@ const itemIssues = (
   item: PaymentListItem,
   account: AirwallexPayoutAccount | null,
 ) => {
+  const effectiveAccount = paymentListEffectiveAccount(item);
   const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
   const prefix = `${invoiceLabel}：`;
   const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency')).trim();
@@ -115,15 +118,15 @@ const itemIssues = (
   const transactionReference = String(paymentListItemValue(item, 'transactionReference')).trim();
   return [
     item.requiresRevalidation ? `${prefix}${item.validationIssues?.[0] ?? '付款行需要重新校验'}` : '',
-    item.snapshot.provider !== 'Airwallex' ? `${prefix}Airwallex 模板不能导出 ${item.snapshot.provider || '未指定'} 付款行` : '',
+    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板不能导出 ${effectiveAccount.provider || '未指定'} 付款行` : '',
     !account ? `${prefix}达人档案中未找到关联的 Airwallex 收款账户` : '',
-    account && getPayoutAccountVersion(account) !== item.snapshot.payoutAccountVersion
+    account && getPayoutAccountVersion(account) !== effectiveAccount.payoutAccountVersion
       ? `${prefix}收款账户版本已变化`
       : '',
-    account && getPayoutAccountFingerprint(account) !== item.snapshot.accountFingerprint
+    account && getPayoutAccountFingerprint(account) !== effectiveAccount.accountFingerprint
       ? `${prefix}收款账户资料已变化`
       : '',
-    account && account.beneficiaryId !== item.snapshot.externalBeneficiaryId
+    account && account.beneficiaryId !== effectiveAccount.externalBeneficiaryId
       ? `${prefix}beneficiary ID 与付款清单快照不一致`
       : '',
     account && !['VALIDATED', 'VERIFIED'].includes(account.status)

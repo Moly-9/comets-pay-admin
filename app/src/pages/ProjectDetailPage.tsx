@@ -964,7 +964,6 @@ export function ProjectDetailPage({
   auditEvents,
   onOpenContract,
   onOpenInvoice,
-  onCreateContract,
   onCreateInvoice,
   onLinkContract,
   onUnlinkContract,
@@ -972,12 +971,12 @@ export function ProjectDetailPage({
   onLinkInvoice,
   onUnlinkInvoice,
   onDeleteInvoice,
-  onUpdateInvoice,
   onCreatePaymentList,
   onDeletePaymentList,
   onAddPaymentInvoice,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
+  onChangePaymentAccount,
   onRevalidatePaymentItem,
   onGeneratePaymentOrder,
   onEditPaymentOrder,
@@ -996,7 +995,6 @@ export function ProjectDetailPage({
   auditEvents: WorkflowAuditEvent[];
   onOpenContract?: (contractId: string) => void;
   onOpenInvoice: (invoiceId: InvoiceId) => void;
-  onCreateContract: (engagementId: EngagementId) => void;
   onCreateInvoice: (engagementId: EngagementId) => void;
   onLinkContract: (contractId: string, engagementId: EngagementId) => void;
   onUnlinkContract: (contractId: string) => void;
@@ -1004,12 +1002,12 @@ export function ProjectDetailPage({
   onLinkInvoice: (invoiceId: InvoiceId, engagementId: EngagementId) => void;
   onUnlinkInvoice: (invoiceId: InvoiceId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
-  onUpdateInvoice: (invoice: GeneratedInvoiceRecord) => void;
   onCreatePaymentList: () => void;
   onDeletePaymentList: (paymentListId: PaymentListId) => void;
   onAddPaymentInvoice: (paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onRemovePaymentInvoice: (invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
+  onChangePaymentAccount: (invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (invoiceId: InvoiceId) => void;
   onGeneratePaymentOrder: (paymentListId: PaymentListId) => InvoiceId | null;
   onEditPaymentOrder: (paymentListId: PaymentListId) => void;
@@ -1117,7 +1115,6 @@ export function ProjectDetailPage({
               currentUser={currentUser}
               onOpenContract={(contractId) => onOpenContract?.(contractId)}
               onOpenInvoice={onOpenInvoice}
-              onCreateContract={onCreateContract}
               onCreateInvoice={onCreateInvoice}
               onLinkContract={onLinkContract}
               onUnlinkContract={onUnlinkContract}
@@ -1125,12 +1122,12 @@ export function ProjectDetailPage({
               onLinkInvoice={onLinkInvoice}
               onUnlinkInvoice={onUnlinkInvoice}
               onDeleteInvoice={onDeleteInvoice}
-              onUpdateInvoice={onUpdateInvoice}
               onCreatePaymentList={onCreatePaymentList}
               onDeletePaymentList={onDeletePaymentList}
               onAddPaymentInvoice={onAddPaymentInvoice}
               onRemovePaymentInvoice={onRemovePaymentInvoice}
               onUpdatePaymentItem={onUpdatePaymentItem}
+              onChangePaymentAccount={onChangePaymentAccount}
               onRevalidatePaymentItem={onRevalidatePaymentItem}
               onGeneratePaymentOrder={onGeneratePaymentOrder}
               onEditPaymentOrder={onEditPaymentOrder}
