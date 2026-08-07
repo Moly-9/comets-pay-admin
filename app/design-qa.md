@@ -1,3 +1,51 @@
+# Design QA - 达人请款名单数量层级与列宽
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9956a70a-2e0a-4ea9-b7c0-895253ec3226.png`.
+- Browser-rendered desktop implementation: `app/qa/creator-payment-table/implementation-desktop-final.png`.
+- Browser-rendered 390px implementation: `app/qa/creator-payment-table/implementation-mobile-table-390.png` and `app/qa/creator-payment-table/implementation-mobile-table-right-390.png`.
+- Combined focused comparison: `app/qa/creator-payment-table/comparison-source-left-implementation-right.png`.
+- Implementation URL: `http://127.0.0.1:5176/`.
+- Source pixels: `1488 x 399`; desktop CSS viewport: `1490 x 900`; rendered desktop capture: `1475 x 891`; responsive CSS viewport: `390 x 844`; rendered responsive capture: `375 x 812`; density: `1`.
+- Focused comparison normalization: source and implementation regions were each resized to `900px` wide, producing `900 x 197` and `900 x 343` regions in one `1816 x 343` comparison image.
+- State: media demo account, request project `REQ-202607-000001`, two creators, two Invoices and three contracts.
+
+## Comparison evidence
+
+- The supplied screenshot and final browser-rendered table were combined into one comparison image before review.
+- Both surfaces retain the same seven-column hierarchy, compact header band, two creator rows, right-aligned amounts and restrained status marker.
+- The implementation intentionally adds the requested document hierarchy: Invoice and contract quantities are the primary line, while stable document numbers remain smaller, clickable secondary lines.
+- Focused comparison was required because quantity weight, number size, column spacing and row density are the acceptance target; full-page evidence confirms the table remains aligned with the surrounding project-detail cards.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC remains unchanged, quantity labels use the row's primary weight, and document numbers are reduced to `10px` with readable line height and no negative letter spacing.
+- Spacing and layout rhythm: passed; desktop columns use balanced content-aware widths (`17 / 12.5 / 14 / 17.5 / 13 / 13 / 13%`), all seven columns fit without a desktop scrollbar at the reference viewport, and row separators remain aligned.
+- Colors and visual tokens: passed; existing neutral text, table background, border and semantic status colors are preserved.
+- Image and icon fidelity: passed; this table change requires no new visual asset, and existing creator avatars remain unchanged.
+- Copy and content: passed; Invoice and contract quantities, stable document numbers, payment channel, both amount columns and validation state remain complete and accurate.
+
+## Responsive, interaction and technical checks
+
+- At `390 x 844`, the table uses its existing contained horizontal scroll. The left creator/channel/document area and right amount/status area remain readable with no page-level horizontal overflow.
+- `INV-301164-01` opens the existing Invoice detail; `CON-20260801-A30101` locates the existing contract record.
+- Desktop table wrapper measured equal client and scroll widths (`832px`), confirming no unnecessary horizontal overflow. Creator-name text measured without truncation.
+- Browser console warning/error log: empty.
+- Focused request-project tests: 17 tests passed; full Vitest suite: 33 files and 227 tests passed; TypeScript production build passed with only the existing Vite chunk-size advisory.
+
+## Findings and comparison history
+
+1. Initial P2: the first implementation retained a desktop table minimum width larger than the scaled content area, so the last columns required horizontal scrolling.
+   - Fix: reduced only the desktop minimum width while retaining a larger mobile minimum width for deliberate horizontal scrolling.
+2. Initial P2: mechanically equal columns clipped the longer creator name even though the overall table fit.
+   - Fix: redistributed a small amount of width to the creator and contract columns while keeping the remaining five columns closely balanced.
+3. Post-fix desktop, 390px, click-target and console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - 新建达人本地清算方式下拉浮层
 
 ## Reference and environment

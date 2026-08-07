@@ -696,39 +696,45 @@ export function MediaPaymentProjectsPage({
                         </div>
                       </td>
                       <td>
-                        <div className="media-request-record-stack">
-                          {presentation.invoices.length ? presentation.invoices.map((invoice) => (
-                            invoice.missing ? (
-                              <span className="media-request-record-line media-request-record-error" key={invoice.invoiceId}>{invoice.invoiceNumber}</span>
-                            ) : (
-                              <button
-                                className="media-request-document-link media-request-record-line"
-                                type="button"
-                                key={invoice.invoiceId}
-                                onClick={() => resourceActions.onOpenInvoice(selectedRequest, invoice.invoiceId)}
-                              >
-                                {invoice.invoiceNumber}
-                              </button>
-                            )
-                          )) : <span className="media-request-record-empty">待补 Invoice</span>}
+                        <div className="media-request-document-summary">
+                          <strong>{presentation.invoices.length} 份 Invoice</strong>
+                          <div className="media-request-document-ids">
+                            {presentation.invoices.length ? presentation.invoices.map((invoice) => (
+                              invoice.missing ? (
+                                <span className="media-request-record-error" key={invoice.invoiceId}>{invoice.invoiceNumber}</span>
+                              ) : (
+                                <button
+                                  className="media-request-document-link"
+                                  type="button"
+                                  key={invoice.invoiceId}
+                                  onClick={() => resourceActions.onOpenInvoice(selectedRequest, invoice.invoiceId)}
+                                >
+                                  {invoice.invoiceNumber}
+                                </button>
+                              )
+                            )) : <span className="media-request-record-empty">待补 Invoice</span>}
+                          </div>
                         </div>
                       </td>
                       <td>
-                        <div className="media-request-record-stack">
-                          {presentation.contracts.length ? presentation.contracts.map((contract) => (
-                            contract.missing || !contract.relationshipValid ? (
-                              <span className="media-request-record-line media-request-record-error" key={contract.contractId}>{contract.contractNumber}</span>
-                            ) : (
-                              <button
-                                className="media-request-document-link media-request-record-line"
-                                type="button"
-                                key={contract.contractId}
-                                onClick={() => resourceActions.onOpenContract(selectedRequest, contract.contractId)}
-                              >
-                                {contract.contractNumber}
-                              </button>
-                            )
-                          )) : <span className="media-request-record-empty">—</span>}
+                        <div className="media-request-document-summary">
+                          <strong>{presentation.contracts.length} 份合同</strong>
+                          <div className="media-request-document-ids">
+                            {presentation.contracts.length ? presentation.contracts.map((contract) => (
+                              contract.missing || !contract.relationshipValid ? (
+                                <span className="media-request-record-error" key={contract.contractId}>{contract.contractNumber}</span>
+                              ) : (
+                                <button
+                                  className="media-request-document-link"
+                                  type="button"
+                                  key={contract.contractId}
+                                  onClick={() => resourceActions.onOpenContract(selectedRequest, contract.contractId)}
+                                >
+                                  {contract.contractNumber}
+                                </button>
+                              )
+                            )) : <span className="media-request-record-empty">—</span>}
+                          </div>
                         </div>
                       </td>
                       <td className="media-request-money-cell">
