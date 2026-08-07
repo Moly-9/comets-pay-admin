@@ -11,12 +11,14 @@ import type {
 } from './businessWorkflow';
 import {
   canAddCreatorToPaymentRequest,
+  addInvoiceToPaymentRequestSelection,
   createEmptyPaymentRequestListFilters,
   createPaymentRequestListItem,
   filterPaymentRequestList,
   normalizePaymentRequestCreatorLink,
   paymentRequestAmountLabel,
   paymentRequestInvoiceIds,
+  invoiceAmountLabel,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
@@ -105,6 +107,41 @@ const contract = (id: string, projectId = cooperationProjectId, contractCreatorI
 });
 
 describe('media payment request document resolution', () => {
+  it('shows the Invoice amount and auto-links only confirmed contracts from its stable snapshot ids', () => {
+    const validContract = contract('CON-VALID');
+    const pendingContract = { ...contract('CON-PENDING'), lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const };
+    const foreignContract = contract('CON-FOREIGN', cooperationProjectId, otherCreatorId);
+    const foreignEngagementContract = {
+      ...contract('CON-FOREIGN-ENGAGEMENT'),
+      engagementId: 'engagement-foreign' as EngagementId,
+    };
+    const sourceInvoice = invoice({
+      snapshot: {
+        ...invoice().snapshot,
+        contractIds: [
+          validContract.contractId!,
+          pendingContract.contractId!,
+          foreignContract.contractId!,
+          foreignEngagementContract.contractId!,
+        ],
+        items: [{ id: 'line-amount', description: 'Synthetic service', unitPrice: 625.25, quantity: 2, lineTotal: 1250.5 }],
+      },
+    });
+
+    const result = addInvoiceToPaymentRequestSelection({
+      invoice: sourceInvoice,
+      invoices: [sourceInvoice],
+      contracts: [validContract, pendingContract, foreignContract, foreignEngagementContract],
+      selectedInvoiceIds: [],
+      selectedContractIds: [],
+    });
+
+    expect(invoiceAmountLabel(sourceInvoice)).toBe('USD 1,250.50');
+    expect(result.invoiceIds).toEqual([sourceInvoice.invoiceId]);
+    expect(result.contractIds).toEqual([validContract.contractId]);
+    expect(result.autoLinkedContractIds).toEqual([validContract.contractId]);
+  });
+
   it('normalizes legacy single-invoice links and de-duplicates invoice ids', () => {
     const legacy = normalizePaymentRequestCreatorLink({
       creatorId,

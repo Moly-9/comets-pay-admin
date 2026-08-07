@@ -34,10 +34,12 @@ import {
   type ProjectId,
 } from '../businessWorkflow';
 import {
+  addInvoiceToPaymentRequestSelection,
   canAddCreatorToPaymentRequest,
   cooperationProjectIdFor,
   createEmptyPaymentRequestListFilters,
   filterPaymentRequestList,
+  invoiceAmountLabel,
   paymentRequestAmount,
   paymentRequestAmountLabel,
   paymentRequestInvoiceIds,
@@ -133,6 +135,8 @@ export function MediaPaymentProjectsPage({
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<CreatorId[]>([]);
   const [contractIdsByCreator, setContractIdsByCreator] = useState<Record<string, ContractId[]>>({});
   const [invoiceIdsByCreator, setInvoiceIdsByCreator] = useState<Record<string, InvoiceId[]>>({});
+  const [autoLinkedContractIdsByCreator, setAutoLinkedContractIdsByCreator] = useState<Record<string, ContractId[]>>({});
+  const [formSubmitAttempted, setFormSubmitAttempted] = useState(false);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
 
@@ -236,6 +240,8 @@ export function MediaPaymentProjectsPage({
     setSelectedCreatorIds([]);
     setContractIdsByCreator({});
     setInvoiceIdsByCreator({});
+    setAutoLinkedContractIdsByCreator({});
+    setFormSubmitAttempted(false);
     setEditingRequestId(null);
   };
 
@@ -265,6 +271,8 @@ export function MediaPaymentProjectsPage({
     setInvoiceIdsByCreator(Object.fromEntries(
       (request.creatorLinks ?? []).map((link) => [link.creatorId, [...link.invoiceIds]]),
     ));
+    setAutoLinkedContractIdsByCreator({});
+    setFormSubmitAttempted(false);
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
     setCreating(true);
@@ -275,6 +283,8 @@ export function MediaPaymentProjectsPage({
     setSelectedCreatorIds([]);
     setContractIdsByCreator({});
     setInvoiceIdsByCreator({});
+    setAutoLinkedContractIdsByCreator({});
+    setFormSubmitAttempted(false);
   };
 
   const toggleCreator = (creatorId: CreatorId) => {
@@ -301,33 +311,75 @@ export function MediaPaymentProjectsPage({
       }
       return {
         ...current,
-        [creatorId]: resolutions.get(creatorId)?.availableInvoices.map((invoice) => invoice.invoiceId) ?? [],
+        [creatorId]: [],
       };
+    });
+    setAutoLinkedContractIdsByCreator((current) => {
+      if (!current[creatorId]) return current;
+      const next = { ...current };
+      delete next[creatorId];
+      return next;
     });
   };
 
-  const toggleContract = (creatorId: CreatorId, contractId: ContractId) => {
+  const addContract = (creatorId: CreatorId, contractId: ContractId) => {
     setContractIdsByCreator((current) => {
       const selected = current[creatorId] ?? [];
       return {
         ...current,
-        [creatorId]: selected.includes(contractId)
-          ? selected.filter((id) => id !== contractId)
-          : [...selected, contractId],
+        [creatorId]: selected.includes(contractId) ? selected : [...selected, contractId],
       };
     });
   };
 
-  const toggleInvoice = (creatorId: CreatorId, invoiceId: InvoiceId) => {
-    setInvoiceIdsByCreator((current) => {
-      const selected = current[creatorId] ?? [];
-      return {
-        ...current,
-        [creatorId]: selected.includes(invoiceId)
-          ? selected.filter((id) => id !== invoiceId)
-          : [...selected, invoiceId],
-      };
+  const removeContract = (creatorId: CreatorId, contractId: ContractId) => {
+    setContractIdsByCreator((current) => ({
+      ...current,
+      [creatorId]: (current[creatorId] ?? []).filter((id) => id !== contractId),
+    }));
+    setAutoLinkedContractIdsByCreator((current) => ({
+      ...current,
+      [creatorId]: (current[creatorId] ?? []).filter((id) => id !== contractId),
+    }));
+  };
+
+  const addInvoice = (creatorId: CreatorId, invoiceId: InvoiceId) => {
+    const resolution = resolutions.get(creatorId);
+    const invoice = resolution?.availableInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+    if (!invoice || !resolution) return;
+    const result = addInvoiceToPaymentRequestSelection({
+      invoice,
+      invoices: resolution.invoices,
+      contracts: resolution.contracts,
+      selectedInvoiceIds: invoiceIdsByCreator[creatorId] ?? [],
+      selectedContractIds: contractIdsByCreator[creatorId] ?? [],
     });
+    setInvoiceIdsByCreator((current) => ({ ...current, [creatorId]: result.invoiceIds }));
+    setContractIdsByCreator((current) => ({ ...current, [creatorId]: result.contractIds }));
+    setAutoLinkedContractIdsByCreator((current) => ({
+      ...current,
+      [creatorId]: [...new Set([
+        ...(current[creatorId] ?? []),
+        ...result.autoLinkedContractIds,
+      ])],
+    }));
+  };
+
+  const removeInvoice = (creatorId: CreatorId, invoiceId: InvoiceId) => {
+    const resolution = resolutions.get(creatorId);
+    const remainingInvoiceIds = (invoiceIdsByCreator[creatorId] ?? []).filter((id) => id !== invoiceId);
+    const remainingCoveredContractIds = new Set(remainingInvoiceIds.flatMap((id) => (
+      resolution?.invoices.find((invoice) => invoice.invoiceId === id)?.snapshot.contractIds ?? []
+    )));
+    const previouslyAutoLinked = autoLinkedContractIdsByCreator[creatorId] ?? [];
+    const autoLinkedToKeep = previouslyAutoLinked.filter((contractId) => remainingCoveredContractIds.has(contractId));
+    const autoLinkedToRemove = new Set(previouslyAutoLinked.filter((contractId) => !remainingCoveredContractIds.has(contractId)));
+    setInvoiceIdsByCreator((current) => ({ ...current, [creatorId]: remainingInvoiceIds }));
+    setContractIdsByCreator((current) => ({
+      ...current,
+      [creatorId]: (current[creatorId] ?? []).filter((contractId) => !autoLinkedToRemove.has(contractId)),
+    }));
+    setAutoLinkedContractIdsByCreator((current) => ({ ...current, [creatorId]: autoLinkedToKeep }));
   };
 
   const validCreatorLinks = selectedCreators.flatMap<PaymentRequestCreatorLink>((creator) => {
@@ -345,15 +397,37 @@ export function MediaPaymentProjectsPage({
   });
   const creatorsReady = selectedCreators.length > 0
     && validCreatorLinks.length === selectedCreators.length;
+  const formIssues = [
+    !selectedProject ? '请选择关联项目' : '',
+    !pm ? '请选择项目 PM' : '',
+    !reason.trim() ? '请填写请款原因' : '',
+    !selectedCreators.length ? '请至少选择一位合作达人' : '',
+    ...selectedCreators.flatMap((creator) => {
+      const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
+      if (!selectedInvoiceIds.length) return [`请为 ${creator.name} 至少选择一份 Invoice`];
+      const resolution = resolutions.get(creator.id);
+      const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
+      if (selectedInvoices.length !== selectedInvoiceIds.length) return [`${creator.name} 的 Invoice 关联已失效，请重新选择`];
+      if (new Set(selectedInvoices.map((invoice) => invoice.snapshot.engagementId)).size > 1) {
+        return [`${creator.name} 的 Invoice 分属不同合作关系，不能合并到同一达人记录`];
+      }
+      return [];
+    }),
+  ].filter(Boolean);
   const canCreateRequest = Boolean(
     selectedProject
     && pm
     && reason.trim()
-    && creatorsReady,
+    && creatorsReady
+    && formIssues.length === 0,
   );
 
   const saveRequest = () => {
-    if (!selectedProject || !canCreateRequest) return;
+    setFormSubmitAttempted(true);
+    if (!selectedProject || !canCreateRequest) {
+      notify('请完善必填信息', formIssues[0] ?? '请检查达人和 Invoice 关联信息。');
+      return;
+    }
     const paymentRequestProjectId = editingRequest?.paymentRequestProjectId
       ?? createPrototypeId('request-project') as PaymentRequestProjectId;
     const requestCode = editingRequest?.requestCode ?? createPrototypeCode('REQ');
@@ -583,8 +657,8 @@ export function MediaPaymentProjectsPage({
         <Modal
           title={editingRequest ? `编辑项目 · ${requestCodeFor(editingRequest)}` : '新建项目'}
           onClose={closeForm}
-          width="760px"
-          footer={<><Button variant="ghost" onClick={closeForm}>取消</Button><Button disabled={!canCreateRequest} onClick={saveRequest}>{editingRequest ? '保存修改' : '创建项目'}</Button></>}
+          width="820px"
+          footer={<><Button variant="ghost" onClick={closeForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建项目'}</Button></>}
         >
           <div className="form-grid single-column project-create-form media-request-create-form">
             <div className="form-field">
@@ -625,7 +699,7 @@ export function MediaPaymentProjectsPage({
                     {selectedCreators.map((creator) => creatorSelectionEditable ? (
                       <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span><X size={13} aria-hidden="true" /></button>
                     ) : <span className="creator-selection-chip is-readonly" key={creator.id}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span></span>)}
-                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); }}>清除已选</button> : null}
+                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); }}>清除已选</button> : null}
                   </div>
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
@@ -646,30 +720,69 @@ export function MediaPaymentProjectsPage({
             </div>
             {selectedCreators.length ? (
               <section className="media-request-document-section">
-                <header><div><h3>达人单据关联</h3><p>合同选填；每位达人提交前至少关联一份 Invoice，合同和 Invoice 均可多选。</p></div><span>{selectedCreators.length} 位达人</span></header>
+                <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。Invoice 必填且可多选，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
                 {selectedCreators.map((creator) => {
                   const resolution = resolutions.get(creator.id);
                   const selectedContractIds = contractIdsByCreator[creator.id] ?? [];
+                  const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
+                  const autoLinkedContractIds = autoLinkedContractIdsByCreator[creator.id] ?? [];
+                  const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
+                  const selectedContracts = resolution?.contracts.filter((contract) => (
+                    contract.contractId && selectedContractIds.includes(contract.contractId)
+                  )) ?? [];
                   return (
                     <article className="media-request-document-row" key={creator.id}>
-                      <div className="media-request-document-creator"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></div>
-                      <div className={`media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
-                        <span><ReceiptText size={16} />Invoice <em>必填，可多选</em></span>
-                        {resolution?.invoices.length ? resolution.invoices.map((invoice) => {
-                          const owner = resolution.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
-                          const enabled = !owner;
-                          const selected = (invoiceIdsByCreator[creator.id] ?? []).includes(invoice.invoiceId);
-                          return <button type="button" disabled={!enabled} aria-pressed={selected} className={selected ? 'is-selected' : ''} key={invoice.invoiceId} onClick={() => toggleInvoice(creator.id as CreatorId, invoice.invoiceId)}><span>{selected ? <CheckCircle2 size={15} /> : <Circle size={15} />}{invoice.id}</span><small>{enabled ? `${invoice.status} · 可关联` : `已关联 ${owner?.requestCode ?? owner?.id}`}</small></button>;
-                        }) : <small className="media-request-empty-copy">{STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}</small>}
-                      </div>
-                      <div className="media-request-contracts">
-                        <span><FileText size={16} />合同 <em>选填，可多选</em></span>
-                        {resolution?.contracts.length ? resolution.contracts.map((contract) => {
-                          const contractId = contract.contractId;
-                          const enabled = Boolean(contractId && isConfirmedContract(contract));
-                          const selected = Boolean(contractId && selectedContractIds.includes(contractId));
-                          return <button type="button" disabled={!enabled} aria-pressed={selected} className={selected ? 'is-selected' : ''} key={contract.id} onClick={() => contractId && toggleContract(creator.id as CreatorId, contractId)}><span>{selected ? <CheckCircle2 size={15} /> : <Circle size={15} />}{contract.id}</span><small>{formatContractMoney(contract)} · {enabled ? '可关联' : '待确认'}</small></button>;
-                        }) : <small className="media-request-empty-copy">该合作项目下暂无此达人合同，可不关联。</small>}
+                      <div className="media-request-document-creator"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle} · {creator.platform}</small></span></div>
+                      <div className="media-request-document-fields">
+                        <div className={`media-request-document-field media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
+                          <span><ReceiptText size={16} />Invoice <em>必填，可多选</em></span>
+                          <SelectField<string>
+                            ariaLabel={`为 ${creator.name} 选择 Invoice`}
+                            variant="form"
+                            menuStrategy="fixed"
+                            value=""
+                            disabled={!resolution?.invoices.length}
+                            placeholder={selectedInvoiceIds.length ? `已选择 ${selectedInvoiceIds.length} 份 Invoice` : '请选择 Invoice'}
+                            options={(resolution?.invoices ?? []).map((invoice) => {
+                              const owner = resolution?.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
+                              const selected = selectedInvoiceIds.includes(invoice.invoiceId);
+                              return {
+                                value: invoice.invoiceId,
+                                label: `${invoice.id} · ${invoiceAmountLabel(invoice)}`,
+                                description: selected ? '已选择' : owner ? `已关联 ${owner.requestCode ?? owner.id}` : `${invoice.status} · 可关联`,
+                                disabled: selected || Boolean(owner),
+                                leading: selected ? <CheckCircle2 size={16} /> : <ReceiptText size={16} />,
+                              };
+                            })}
+                            onChange={(invoiceId) => addInvoice(creator.id as CreatorId, invoiceId as InvoiceId)}
+                          />
+                          {selectedInvoices.length ? <div className="media-request-selected-documents" aria-label={`${creator.name} 已选择的 Invoice`}>{selectedInvoices.map((invoice) => <div key={invoice.invoiceId}><span><strong>{invoice.id}</strong><small>{invoiceAmountLabel(invoice)} · {invoice.status}</small></span><button type="button" aria-label={`移除 ${invoice.id}`} onClick={() => removeInvoice(creator.id as CreatorId, invoice.invoiceId)}><X size={14} /></button></div>)}</div> : <small className="media-request-empty-copy">{STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}</small>}
+                        </div>
+                        <div className="media-request-document-field media-request-contracts">
+                          <span><FileText size={16} />合同 <em>选填，可多选</em></span>
+                          <SelectField<string>
+                            ariaLabel={`为 ${creator.name} 选择合同`}
+                            variant="form"
+                            menuStrategy="fixed"
+                            value=""
+                            disabled={!resolution?.contracts.length}
+                            placeholder={selectedContractIds.length ? `已选择 ${selectedContractIds.length} 份合同` : '请选择合同（选填）'}
+                            options={(resolution?.contracts ?? []).flatMap((contract) => {
+                              if (!contract.contractId) return [];
+                              const enabled = isConfirmedContract(contract);
+                              const selected = selectedContractIds.includes(contract.contractId);
+                              return [{
+                                value: contract.contractId,
+                                label: contract.id,
+                                description: selected ? '已选择' : `${formatContractMoney(contract)} · ${enabled ? '可关联' : `不可关联：${contract.status}`}`,
+                                disabled: selected || !enabled,
+                                leading: selected ? <CheckCircle2 size={16} /> : <FileText size={16} />,
+                              }];
+                            })}
+                            onChange={(contractId) => addContract(creator.id as CreatorId, contractId as ContractId)}
+                          />
+                          {selectedContracts.length ? <div className="media-request-selected-documents" aria-label={`${creator.name} 已选择的合同`}>{selectedContracts.map((contract) => <div key={contract.contractId}><span><strong>{contract.id}</strong><small>{formatContractMoney(contract)}{contract.contractId && autoLinkedContractIds.includes(contract.contractId) ? ' · Invoice 自动带入' : ' · 手动选择'}</small></span><button type="button" aria-label={`移除 ${contract.id}`} onClick={() => contract.contractId && removeContract(creator.id as CreatorId, contract.contractId)}><X size={14} /></button></div>)}</div> : <small className="media-request-empty-copy">该合作项目下暂无已选合同，可不关联。</small>}
+                        </div>
                       </div>
                     </article>
                   );
@@ -678,7 +791,7 @@ export function MediaPaymentProjectsPage({
             ) : null}
             {!cooperationProjectId ? <NoticeBanner>请先选择关联项目，再选择达人并核对合同与 Invoice。</NoticeBanner> : null}
             {cooperationProjectId && !selectedCreators.length ? <NoticeBanner>请至少选择一位合作达人。有唯一可用 Invoice 的达人已排在列表最前方。</NoticeBanner> : null}
-            {selectedCreators.length && !creatorsReady ? <div className="media-request-form-issues"><AlertTriangle size={17} /><div><strong>所选达人暂不能创建项目</strong>{selectedCreators.filter((creator) => resolutions.get(creator.id)?.status !== 'READY').map((creator) => <span key={creator.id}>{creator.name}：{STATUS_COPY[resolutions.get(creator.id)?.status ?? 'MISSING_INVOICE']}</span>)}</div></div> : null}
+            {formSubmitAttempted && formIssues.length ? <div className="media-request-form-issues" role="alert"><AlertTriangle size={17} /><div><strong>请完成以下必填项后创建项目</strong>{formIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div> : null}
           </div>
         </Modal>
       ) : null}

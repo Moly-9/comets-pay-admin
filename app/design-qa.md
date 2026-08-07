@@ -50,6 +50,58 @@ final result: passed
 
 ---
 
+# Design QA — 新建项目达人单据下拉表单
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-22a3e8a9-ff3f-4d54-8986-f2de8c9afba1.png`.
+- Implementation URL: `http://127.0.0.1:5173/`.
+- Browser-rendered form top: `app/design-qa-payment-request-form-top.png`.
+- Browser-rendered document association area: `app/design-qa-payment-request-documents.png`.
+- Source pixels: `844 x 841`; implementation capture and CSS viewport: `1265 x 712` / `1280 x 720`; device density: `1`.
+- State: `#301164` cooperation project with Mina Kato and Yuki Tanaka, each linked to one synthetic Invoice and its stable contract snapshot references.
+
+## Comparison evidence
+
+- The annotated source and the revised browser capture were opened together in one comparison input.
+- The source card/radio presentation is replaced by two aligned form fields per creator. Invoice and contract selection now use the existing custom select component, followed by compact removable value rows.
+- The surrounding modal header, creator identity, fixed footer, neutral form borders, typography and restrained pink accent remain consistent with the existing project form.
+- Focused inspection was used because Invoice amount, selected-document provenance and remove actions are not readable in a full-page capture.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC hierarchy, 12px field labels and compact secondary text remain consistent and do not overflow.
+- Spacing and layout rhythm: passed; creator identity sits above a stable two-column field grid with 18px inter-column spacing and clear row separation.
+- Colors and visual tokens: passed; neutral gray inputs and selected rows retain the existing low-saturation pink accent only for required/optional metadata.
+- Image and icon fidelity: passed; no raster asset is required and the existing Lucide Invoice, contract, select and remove icons are reused.
+- Copy and content: passed; Invoice requiredness, multi-select behavior, amounts, disabled reasons and automatic contract linking are explicit.
+
+## Interaction and runtime checks
+
+- `INV-301164-19 · USD 1,250` automatically selects `CON-20260801-A30101` and `CON-20260801-A30102`.
+- `INV-301164-20 · USD 980` automatically selects `CON-20260801-A30106`.
+- Automatic selection requires matching stable `creatorId`, `cooperationProjectId`, `engagementId` and contract snapshot ID, and excludes unconfirmed contracts.
+- Clicking `创建项目` successfully created `REQ-20260807-3TKNGE` as a local draft with `USD 2,230`, two creators, three contracts and two Invoices.
+- Missing required fields keep the create action available and return explicit field-level issues instead of an unexplained disabled button.
+- The existing `760px` breakpoint collapses only the Invoice/contract field grid to one column; the modal and selected rows keep fluid widths without fixed minimums.
+- Browser console error log: empty.
+- `npm test -- --run`: 31 test files and 201 tests passed.
+- `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: Invoice and contract candidates were card/radio controls, which made the repeated creator section visually heavy and hid the intended form hierarchy.
+   - Fix: converted both resource types to existing form-style custom selects while retaining multi-select through removable selected-value rows.
+2. Initial P1: the create action was disabled without explaining incomplete requirements.
+   - Fix: the action now validates on click, displays the exact missing items and proceeds when the required project, PM, reason, creators and Invoices are present.
+3. Initial P1: selecting an Invoice did not reliably express or apply its contract relationship.
+   - Fix: synthetic Invoice snapshots now reference confirmed contracts through stable IDs; selection automatically links only compatible contracts.
+4. Post-fix comparison, end-to-end creation, console, test and build checks found no actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA — 请款项目关联合同与达人筛选
 
 ## Reference and environment

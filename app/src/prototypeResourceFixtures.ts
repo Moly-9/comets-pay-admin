@@ -784,6 +784,7 @@ const createRequestInvoiceAssociationFixture = ({
   amount,
   description,
   generatedAt,
+  contractIds,
 }: {
   source: GeneratedInvoiceRecord;
   invoiceId: InvoiceId;
@@ -792,6 +793,7 @@ const createRequestInvoiceAssociationFixture = ({
   amount: number;
   description: string;
   generatedAt: string;
+  contractIds?: ContractId[];
 }): GeneratedInvoiceRecord => ({
   ...source,
   id: invoiceNumber,
@@ -806,6 +808,7 @@ const createRequestInvoiceAssociationFixture = ({
     ...source.snapshot,
     invoiceNumber,
     invoiceDate: generatedAt.slice(0, 10),
+    contractIds: contractIds ?? source.snapshot.contractIds,
     items: [{
       id: `invoice_line_${invoiceId}`,
       description,
@@ -839,6 +842,7 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     amount: 980,
     description: '追加短视频内容服务费（合成演示数据）',
     generatedAt: '2026-08-06T10:05:00.000Z',
+    contractIds: ['contract_fixture_301164_06' as ContractId],
   }),
 ];
 

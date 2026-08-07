@@ -179,6 +179,53 @@ export const selectableContractIds = (contracts: ContractRecord[]) => contracts
   .map((contract) => contract.contractId)
   .filter((contractId): contractId is ContractId => Boolean(contractId));
 
+export const invoiceAmountLabel = (invoice: GeneratedInvoiceRecord) => {
+  const amount = invoice.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0);
+  return `${invoice.snapshot.currency} ${amount.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+export const addInvoiceToPaymentRequestSelection = ({
+  invoice,
+  invoices,
+  contracts,
+  selectedInvoiceIds,
+  selectedContractIds,
+}: {
+  invoice: GeneratedInvoiceRecord;
+  invoices: GeneratedInvoiceRecord[];
+  contracts: ContractRecord[];
+  selectedInvoiceIds: InvoiceId[];
+  selectedContractIds: ContractId[];
+}) => {
+  const selectableIds = new Set(selectableContractIds(contracts));
+  const coveredContractIds = (invoice.snapshot.contractIds ?? []).filter((contractId) => {
+    if (!selectableIds.has(contractId)) return false;
+    const contract = contracts.find((candidate) => candidate.contractId === contractId);
+    return Boolean(
+      contract
+      && contract.creatorId === invoice.snapshot.creatorId
+      && contractCooperationProjectId(contract) === invoiceCooperationProjectId(invoice)
+      && contract.engagementId === invoice.snapshot.engagementId,
+    );
+  });
+  const selectedInvoices = [...new Set([...selectedInvoiceIds, invoice.invoiceId])];
+  const selectedContracts = [...new Set([...selectedContractIds, ...coveredContractIds])];
+  const remainingCoveredIds = new Set(selectedInvoices.flatMap((invoiceId) => (
+    invoices.find((candidate) => candidate.invoiceId === invoiceId)?.snapshot.contractIds ?? []
+  )));
+
+  return {
+    invoiceIds: selectedInvoices,
+    contractIds: selectedContracts,
+    autoLinkedContractIds: coveredContractIds.filter((contractId) => (
+      !selectedContractIds.includes(contractId) && remainingCoveredIds.has(contractId)
+    )),
+  };
+};
+
 export type CreatorDocumentResolution = {
   contracts: ContractRecord[];
   invoices: GeneratedInvoiceRecord[];
