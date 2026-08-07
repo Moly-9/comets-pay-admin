@@ -2041,6 +2041,7 @@ export function CreatorsPage({
     setCreating(false);
     setDraft(null);
     setFormErrors([]);
+    setCreatorCloseGuardOpen(false);
   };
 
   const startEditing = () => {
