@@ -93,8 +93,6 @@ final result: passed
 
 final result: passed
 
----
-
 # Design QA - 合同批量操作移至搜索栏旁
 
 ## Reference and Environment
@@ -1493,5 +1491,26 @@ final result: blocked
 1. Initial P1: the current three-dot menu exposed only `当前默认账户`, so the previously available account-level edit route was missing.
    - Fix: restored a native `编辑账户` menu action in the maintained React component and connected it to selected-account form focus.
 2. Post-fix desktop and mobile verification found no remaining actionable P0, P1, or P2 visual or interaction issue.
+
+final result: passed
+
+---
+
+# Design QA - 查看资料弹窗内容边距
+
+## Reference and Environment
+
+- Current issue reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d22fa6f4-d6a1-4361-8797-7efe404273fb.png`.
+- Spacing target reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e01fa8aa-28cc-4036-8473-b684af1f9528.png`.
+- Local implementation URL: `http://127.0.0.1:5173/`.
+- Desktop evidence: `app/design-qa-request-resource-contract-spacing-desktop.png`, `app/design-qa-request-resource-modal-spacing-desktop.png`, `app/design-qa-request-resource-payment-spacing-desktop.png`.
+- Mobile evidence: `app/design-qa-request-resource-modal-spacing-mobile.png` at `390 x 844`.
+
+## Findings
+
+- Contract, Invoice, and payment-list dialogs share the same maintained modal class and now use a 20px desktop content inset, matching the target dialog rhythm.
+- Header and footer dimensions remain unchanged; only the scrollable body content is inset, so title and close controls retain their existing alignment.
+- At 390px the existing responsive rule reduces the body inset to 12px. Summary panels, toolbars, payment fields, and footer controls remain within the viewport without visible overlap.
+- No business behavior, resource permissions, or modal actions changed.
 
 final result: passed
