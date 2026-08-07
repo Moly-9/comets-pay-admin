@@ -138,6 +138,8 @@ import {
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
   REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
+  REQUEST_INVOICE_ASSOCIATION_FIXTURES,
+  REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
 } from './prototypeResourceFixtures';
 import {
   applyRequestApprovalAction,
@@ -231,6 +233,7 @@ export default function App() {
   const [payouts, setPayouts] = useState<Payout[]>(() => [
     ...INITIAL_PAYOUTS,
     ...ALL_PROJECT_PROTOTYPE_PAYOUTS,
+    ...REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
   ]);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
@@ -244,7 +247,7 @@ export default function App() {
   })));
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => ({
+    [...ALL_PROJECT_PROTOTYPE_INVOICES, ...REQUEST_INVOICE_ASSOCIATION_FIXTURES].map((invoice) => ({
       ...invoice,
       snapshot: {
         ...invoice.snapshot,
@@ -2281,19 +2284,6 @@ export default function App() {
       setFocusedInvoiceId(`generated:${invoice.id}`);
       setInvoiceTab('signature');
       setActivePage('invoice');
-    },
-    onEditInvoice: (request, invoiceId) => {
-      if (!requestResourceEditable(request)) {
-        notify('Invoice 已锁定', '当前账号或项目状态不允许修改 Invoice。');
-        return;
-      }
-      const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
-      if (!invoice) return;
-      setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
-      setInvoiceEditTarget({ invoiceId, context: 'PROJECT_RESOURCE' });
-      setInvoiceEditorDirty(false);
-      setActivePage('invoice-edit');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     onGenerateContract: (request) => {
       setRequestResourceReturn({ requestId: request.id, resource: 'contract' });

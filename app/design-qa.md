@@ -1,3 +1,55 @@
+# Design QA — 请款项目关联 Invoice 与达人筛选
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-142b988f-0722-4b16-b148-57a8d3b5faf9.png`.
+- Implementation URL: `http://127.0.0.1:5183/`.
+- Main Invoice dialog: `app/design-qa-invoice-resource-desktop.png`.
+- Invoice-association dialog: `app/design-qa-invoice-association-desktop.png`.
+- Responsive association dialog: `app/design-qa-invoice-association-390.png`.
+- Source pixels: `1100 x 790`; desktop implementation pixels and CSS viewport: `1265 x 712`; responsive CSS viewport: `390 x 844`, rendered capture: `375 x 812`; density: `1`.
+- States: `REQ-202607-000001` with two unlinked synthetic Invoice candidates, and `REQ-202607-000004` before and after linking an Invoice whose creator was not yet in the request project.
+
+## Comparison evidence
+
+- The source and the browser-rendered main Invoice dialog were opened together in one comparison input. The implementation retains the same modal hierarchy, header panel, toolbar placement, compact flat rows, neutral palette, typography and fixed footer.
+- The source-highlighted `关联已有 Invoice` action remains in the same toolbar position. Invoice rows preserve `查看 / 解除 / 删除`; `编辑` is removed as requested.
+- The association dialog is a new state not pictured in the source. It reuses the same modal, custom select, candidate row, status tag and footer patterns rather than introducing a separate visual language.
+- Focused inspection was required for the association dialog because the filter, existing/new creator labels and disabled candidate reasons are not readable in the full main-dialog comparison.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC sizes, weights, line heights and wrapping remain unchanged.
+- Spacing and layout rhythm: passed; candidate rows, filter panel, 8px radii and footer spacing match the existing resource-dialog system.
+- Colors and visual tokens: passed; neutral borders/backgrounds and restrained green/purple creator-membership labels remain secondary to text labels.
+- Image and icon fidelity: passed; no raster asset is required, and the existing Lucide Invoice, link, view, unlink and delete icons are reused.
+- Copy and content: passed; candidate scope, automatic creator addition, Invoice amount, covered-contract count and ownership state are explicit.
+
+## Interaction and responsive checks
+
+- `REQ-202607-000001` exposes `INV-301164-19` and `INV-301164-20` as unlinked candidates from the same cooperation project. Filtering to Yuki Tanaka reduces the list from two records to one.
+- Linking `INV-301164-20` increases the project from 18 to 19 Invoices while keeping 18 creators; Yuki Tanaka correctly shows two Invoices.
+- `REQ-202607-000004` exposes `INV-260727-04-24` as `关联后新增达人`. Linking it increases the request project from 23 to 24 creators and creates the new creator link with one Invoice.
+- Candidate association uses stable `creatorId / engagementId / invoiceId`; records owned by another active request or using a conflicting engagement are disabled with a reason.
+- At the `390 x 844` override, the document, dialog, filter and candidate list have equal client and scroll widths; no horizontal overflow occurs and the footer remains usable.
+- Browser console warning/error log: empty.
+- `npm test`: 31 test files and 200 tests passed.
+- `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: Invoice candidates were restricted to creators already in the request project, so a cooperation-project Invoice could not add its creator.
+   - Fix: candidates now come from the full cooperation-project Invoice pool and merge by stable IDs, creating a new creator link with `contractIds: []` when needed.
+2. Initial P2: the Invoice association dialog had no creator filter, making a larger candidate pool difficult to scan.
+   - Fix: added a keyboard-accessible creator filter with per-creator candidate counts and clear existing/new creator labels.
+3. Initial P2: the main Invoice list exposed an edit action that the user explicitly removed from this workflow.
+   - Fix: removed only the project-resource edit entry while preserving source viewing, unlinking, deletion protection and global Invoice management.
+4. Post-fix desktop, responsive, filtering, automatic-creator-add, multi-Invoice, console, test and build checks found no actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA — 请款项目关联合同与达人筛选
 
 ## Reference and environment

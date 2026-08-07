@@ -479,7 +479,6 @@ export function MediaPaymentProjectsPage({
             onChangeLinks={(nextLinks, summary) => resourceActions.onChangeLinks(selectedRequest, nextLinks, summary)}
             onOpenContract={(contractId) => resourceActions.onOpenContract(selectedRequest, contractId)}
             onOpenInvoice={(invoiceId) => resourceActions.onOpenInvoice(selectedRequest, invoiceId)}
-            onEditInvoice={(invoiceId) => resourceActions.onEditInvoice(selectedRequest, invoiceId)}
             onGenerateContract={() => resourceActions.onGenerateContract(selectedRequest)}
             onGenerateInvoice={() => resourceActions.onGenerateInvoice(selectedRequest)}
             onUploadContract={(input) => resourceActions.onUploadContract(selectedRequest, input)}

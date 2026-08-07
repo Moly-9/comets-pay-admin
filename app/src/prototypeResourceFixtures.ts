@@ -776,6 +776,72 @@ export const ALL_PROJECT_PROTOTYPE_INVOICES: GeneratedInvoiceRecord[] = INITIAL_
   )),
 );
 
+const createRequestInvoiceAssociationFixture = ({
+  source,
+  invoiceId,
+  invoiceNumber,
+  sourcePayoutId,
+  amount,
+  description,
+  generatedAt,
+}: {
+  source: GeneratedInvoiceRecord;
+  invoiceId: InvoiceId;
+  invoiceNumber: string;
+  sourcePayoutId: string;
+  amount: number;
+  description: string;
+  generatedAt: string;
+}): GeneratedInvoiceRecord => ({
+  ...source,
+  id: invoiceNumber,
+  invoiceId,
+  sourcePayoutId,
+  status: '待发起请款',
+  generatedAt,
+  validationStatus: 'valid',
+  version: 1,
+  revisions: undefined,
+  snapshot: {
+    ...source.snapshot,
+    invoiceNumber,
+    invoiceDate: generatedAt.slice(0, 10),
+    items: [{
+      id: `invoice_line_${invoiceId}`,
+      description,
+      unitPrice: amount,
+      quantity: 1,
+      lineTotal: amount,
+    }],
+  },
+});
+
+const associationInvoiceSources = [PROJECT_DEMO_INVOICES[0], PROJECT_DEMO_INVOICES[4]];
+if (associationInvoiceSources.some((invoice) => !invoice)) {
+  throw new Error('关联 Invoice 原型 fixture 缺少稳定的合作项目 Invoice 来源');
+}
+
+export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
+  createRequestInvoiceAssociationFixture({
+    source: associationInvoiceSources[0]!,
+    invoiceId: 'invoice_fixture_association_301164_01' as InvoiceId,
+    invoiceNumber: 'INV-301164-19',
+    sourcePayoutId: 'payout_fixture_association_301164_01',
+    amount: 1250,
+    description: '二次发布素材授权服务费（合成演示数据）',
+    generatedAt: '2026-08-06T09:20:00.000Z',
+  }),
+  createRequestInvoiceAssociationFixture({
+    source: associationInvoiceSources[1]!,
+    invoiceId: 'invoice_fixture_association_301164_05' as InvoiceId,
+    invoiceNumber: 'INV-301164-20',
+    sourcePayoutId: 'payout_fixture_association_301164_05',
+    amount: 980,
+    description: '追加短视频内容服务费（合成演示数据）',
+    generatedAt: '2026-08-06T10:05:00.000Z',
+  }),
+];
+
 const initialPayoutIds = new Set(INITIAL_PAYOUTS.map((payout) => payout.id));
 const preservedDemoPayoutBySourceId = new Map(
   PROJECT_DEMO_PAYOUTS.map((payout) => [payout.id, payout]),
@@ -823,6 +889,35 @@ export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INV
     accent: creator.accent,
     paidAt: listStatus === 'paid' ? '2026-08-05 16:00' : undefined,
   }];
+});
+
+const demoPayoutByCreatorId = new Map(PROJECT_DEMO_PAYOUTS.flatMap((payout) => (
+  payout.creatorId ? [[payout.creatorId, payout] as const] : []
+)));
+
+export const REQUEST_INVOICE_ASSOCIATION_PAYOUTS: Payout[] = REQUEST_INVOICE_ASSOCIATION_FIXTURES.map((invoice) => {
+  const source = invoice.snapshot.creatorId
+    ? demoPayoutByCreatorId.get(invoice.snapshot.creatorId)
+    : undefined;
+  if (!source) throw new Error(`关联 Invoice ${invoice.id} 缺少达人付款快照`);
+  return {
+    ...source,
+    id: invoice.sourcePayoutId,
+    invoice: invoice.id,
+    deliverable: invoice.snapshot.items[0]?.description ?? '创作者内容合作服务',
+    amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
+    status: '未进入付款',
+    invoiceReviewStatus: '待发起请款',
+    invoiceVersion: 1,
+    invoiceSignedAt: invoice.generatedAt,
+    invoiceSnapshot: invoice.snapshot,
+    paidAt: undefined,
+    issue: undefined,
+    returnReason: undefined,
+    creatorFeedback: undefined,
+    invoiceReviewReturn: undefined,
+    paymentFailureReturn: undefined,
+  };
 });
 
 const cloneFixtureItems = (items: PaymentListItem[]) => items.map((item) => ({

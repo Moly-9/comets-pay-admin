@@ -9,7 +9,10 @@ import {
   canEditRequestProjectResources,
   contractAssociationCandidates,
   contractAssociationUnavailableReason,
+  invoiceAssociationCandidates,
+  invoiceAssociationUnavailableReason,
   mergeContractCandidateLinks,
+  mergeInvoiceCandidateLinks,
   requestLinkedContracts,
   requestLinkedInvoices,
 } from './RequestProjectResourceManager';
@@ -76,6 +79,31 @@ const invoice = (invoiceId: InvoiceId): GeneratedInvoiceRecord => ({
   id: `INV-${invoiceId}`,
 } as GeneratedInvoiceRecord);
 
+const associationInvoice = ({
+  invoiceId,
+  creatorId: ownerCreatorId,
+  engagementId: ownerEngagementId,
+  projectId = 'cooperation-project-one',
+}: {
+  invoiceId: InvoiceId;
+  creatorId: CreatorId;
+  engagementId: EngagementId;
+  projectId?: string;
+}): GeneratedInvoiceRecord => ({
+  invoiceId,
+  id: `INV-${invoiceId}`,
+  sourcePayoutId: `payout-${invoiceId}`,
+  status: '待发起请款',
+  generatedAt: '2026-08-06T09:00:00.000Z',
+  validationStatus: 'valid',
+  snapshot: {
+    creatorId: ownerCreatorId,
+    engagementId: ownerEngagementId,
+    projectId,
+    cooperationProjectId: projectId,
+  },
+} as GeneratedInvoiceRecord);
+
 const user = (roleKey: SystemUser['roleKey']): SystemUser => ({
   account: `${roleKey}.test`,
   name: `${roleKey} user`,
@@ -110,13 +138,14 @@ describe('request project resource aggregation', () => {
     ])).toHaveLength(2);
   });
 
-  it('uses a creator filter only for contract candidates and keeps unavailable contracts viewable', () => {
+  it('provides creator filters for both candidate dialogs and removes Invoice editing', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     expect(source).toContain('全部合同');
     expect(source).toContain('全部 Invoice');
     expect(source).toContain('全部付款明细');
     expect(source).toContain('ariaLabel="合同候选达人筛选"');
-    expect(source).toContain('Invoice 候选记录');
+    expect(source).toContain('ariaLabel="Invoice 候选达人筛选"');
+    expect(source).toContain('Invoice 候选范围不会受当前请款项目达人名单限制');
     expect(source).toContain('草稿尚未回传签署文件');
     expect(source).toContain('已上传，待人工确认');
     expect(source).toContain('合同尚未完成签署');
@@ -126,6 +155,97 @@ describe('request project resource aggregation', () => {
       source.indexOf("resourceDialog === 'invoice'"),
     );
     expect(contractDialogSource).not.toContain('>编辑</button>');
+    const invoiceDialogSource = source.slice(
+      source.indexOf("resourceDialog === 'invoice'"),
+      source.indexOf("resourceDialog === 'payment'"),
+    );
+    expect(invoiceDialogSource).not.toContain('>编辑</button>');
+  });
+});
+
+describe('Invoice association workflow', () => {
+  const secondCreatorId = 'creator-request-invoice-new' as CreatorId;
+  const secondEngagementId = 'engagement-request-invoice-new' as EngagementId;
+  const creators = [
+    { id: creatorId, name: 'Existing Creator' },
+    { id: secondCreatorId, name: 'New Creator' },
+  ] as unknown as CreatorProfile[];
+
+  it('returns every Invoice under the cooperation project, including creators outside the request', () => {
+    const existingCreatorInvoice = associationInvoice({ invoiceId: invoiceOneId, creatorId, engagementId });
+    const newCreatorInvoice = associationInvoice({
+      invoiceId: invoiceTwoId,
+      creatorId: secondCreatorId,
+      engagementId: secondEngagementId,
+    });
+    const otherProjectInvoice = associationInvoice({
+      invoiceId: 'invoice-request-other-project' as InvoiceId,
+      creatorId: secondCreatorId,
+      engagementId: secondEngagementId,
+      projectId: 'cooperation-project-two',
+    });
+
+    expect(invoiceAssociationCandidates(
+      [existingCreatorInvoice, newCreatorInvoice, otherProjectInvoice],
+      'cooperation-project-one',
+    )).toEqual([existingCreatorInvoice, newCreatorInvoice]);
+  });
+
+  it('adds a new Invoice owner with no contracts and keeps multiple Invoices for an existing creator', () => {
+    const existingCreatorInvoice = associationInvoice({
+      invoiceId: 'invoice-request-three' as InvoiceId,
+      creatorId,
+      engagementId,
+    });
+    const newCreatorInvoice = associationInvoice({
+      invoiceId: 'invoice-request-four' as InvoiceId,
+      creatorId: secondCreatorId,
+      engagementId: secondEngagementId,
+    });
+    const next = mergeInvoiceCandidateLinks(
+      request.creatorLinks ?? [],
+      [existingCreatorInvoice, newCreatorInvoice],
+    );
+
+    expect(next[0]?.invoiceIds).toEqual([
+      invoiceOneId,
+      invoiceTwoId,
+      'invoice-request-three',
+    ]);
+    expect(next[1]).toEqual({
+      creatorId: secondCreatorId,
+      engagementId: secondEngagementId,
+      contractIds: [],
+      invoiceIds: ['invoice-request-four'],
+    });
+  });
+
+  it('disables occupied Invoices and mismatched creator relationships', () => {
+    const occupied = associationInvoice({ invoiceId: invoiceOneId, creatorId, engagementId });
+    const occupiedRequest = {
+      ...request,
+      id: 'REQ-OCCUPIED',
+      requestCode: 'REQ-202608-000099',
+      paymentRequestProjectId: 'request-occupied',
+    } as RequestProjectSummary;
+    const mismatched = associationInvoice({
+      invoiceId: invoiceTwoId,
+      creatorId,
+      engagementId: secondEngagementId,
+    });
+
+    expect(invoiceAssociationUnavailableReason(
+      occupied,
+      [],
+      creators,
+      [occupiedRequest],
+    )).toBe('已关联 REQ-202608-000099');
+    expect(invoiceAssociationUnavailableReason(
+      mismatched,
+      request.creatorLinks ?? [],
+      creators,
+      [],
+    )).toBe('达人已通过其他合作关系加入当前请款项目');
   });
 });
 

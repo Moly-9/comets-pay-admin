@@ -11,6 +11,8 @@ import {
   PROJECT_DEMO_INVOICES,
   PROJECT_DEMO_PAYOUTS,
   PROJECT_DEMO_TOTAL,
+  REQUEST_INVOICE_ASSOCIATION_FIXTURES,
+  REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
 import {
@@ -195,6 +197,30 @@ describe('project prototype fixtures', () => {
     expect(fixture.cooperationProjectId).toBe(project?.cooperationProjectId);
     expect(reference).toBeDefined();
     expect(creator).toBeDefined();
+  });
+
+  it('provides unlinked cooperation-project Invoice candidates with stable creator and payout references', () => {
+    const invoiceIds = new Set(ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => invoice.invoiceId));
+    const payoutById = new Map(REQUEST_INVOICE_ASSOCIATION_PAYOUTS.map((payout) => [payout.id, payout]));
+
+    expect(REQUEST_INVOICE_ASSOCIATION_FIXTURES).toHaveLength(2);
+    expect(REQUEST_INVOICE_ASSOCIATION_PAYOUTS).toHaveLength(2);
+    REQUEST_INVOICE_ASSOCIATION_FIXTURES.forEach((invoice) => {
+      const project = INITIAL_PROJECTS.find((item) => item.projectId === invoice.snapshot.projectId);
+      const engagement = project?.creatorProfiles?.find((reference) => (
+        reference.creatorId === invoice.snapshot.creatorId
+        && reference.engagementId === invoice.snapshot.engagementId
+      ));
+      const payout = payoutById.get(invoice.sourcePayoutId);
+
+      expect(invoiceIds.has(invoice.invoiceId)).toBe(false);
+      expect(invoice.status).toBe('待发起请款');
+      expect(project?.id).toBe('PRJ-301164');
+      expect(engagement).toBeDefined();
+      expect(payout?.invoice).toBe(invoice.id);
+      expect(payout?.creatorId).toBe(invoice.snapshot.creatorId);
+      expect(payout?.invoiceSnapshot).toEqual(invoice.snapshot);
+    });
   });
 
   it('provides a stable editable snapshot for the INV-240705 modification request', () => {
