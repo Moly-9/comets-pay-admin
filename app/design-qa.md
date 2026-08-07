@@ -1,3 +1,48 @@
+# Design QA - 新建达人本地清算方式下拉浮层
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ca99edf8-e2b5-4587-b6f9-dc1f4a76df37.png`.
+- Browser-rendered implementation: `app/design-qa-local-clearing-select.png`.
+- Combined comparison evidence: `app/design-qa-local-clearing-comparison.png`.
+- Implementation URL: `http://127.0.0.1:5173/`.
+- Source pixels: `1046 x 770`, normalized to `967 x 712`; implementation capture: `1265 x 712`; CSS viewport: `1280 x 720`; density: `1`.
+- State: administrator account, new creator profile, Airwallex draft account, `US / USD / PERSONAL / LOCAL`, local clearing select expanded with `ACH` selected.
+
+## Comparison evidence
+
+- The supplied screenshot and browser-rendered implementation were combined into one comparison image before review.
+- The source shows the options clipped by the rounded `付款场景` section boundary. The implementation keeps the same field, typography, colors and selected state while allowing the menu to overlay the following section in full.
+- Focused comparison was required because the clipping boundary and second `FEDWIRE` option are the acceptance target; the rest of the creator form is intentionally unchanged.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC family, weights, line heights and labels are unchanged.
+- Spacing and layout rhythm: passed; trigger size, field spacing, menu radius and shadow remain on the existing custom-select tokens.
+- Colors and visual tokens: passed; the existing neutral surface and peach selected state are unchanged.
+- Image and icon fidelity: passed; this control requires no raster asset and continues to use the existing Lucide chevron and check icons.
+- Copy and content: passed; `ACH · 低费优先`, its explanation and `FEDWIRE` are fully visible without wording changes.
+
+## Interaction and technical checks
+
+- Opening the select renders the menu as a viewport-positioned portal, so the section's required `overflow: hidden` no longer clips it.
+- Both options are visible and selectable. Selecting `FEDWIRE` closes the listbox and updates the account summary and Schema condition to `LOCAL / FEDWIRE`.
+- The existing shared custom-select scroll listener continues to recalculate the fixed menu position, and its width remains clamped to the viewport.
+- Browser interactions surfaced no application warning or error.
+- Airwallex and payout regression tests: 3 files and 20 tests passed.
+- Full Vitest suite: 33 files and 212 tests passed.
+- TypeScript production build: passed; only the existing Vite chunk-size advisory remains.
+
+## Findings and comparison history
+
+1. Initial P1: the local-clearing menu was absolutely positioned inside `.creator-payment-section`, whose rounded card boundary uses `overflow: hidden`; options below the card edge were unusable.
+   - Fix: only this field now uses the existing fixed, portaled select strategy with automatic placement and scroll repositioning.
+2. Post-fix visual comparison and option-selection verification found no remaining actionable P0, P1 or P2 issue in the requested field.
+
+final result: passed
+
+---
+
 # Design QA — 请款项目关联 Invoice 与达人筛选
 
 ## Reference and environment

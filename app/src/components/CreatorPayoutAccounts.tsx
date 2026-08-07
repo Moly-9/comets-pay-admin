@@ -284,6 +284,7 @@ function SchemaFieldControl({
           value={value}
           options={options}
           placeholder={field.placeholder || `选择${label}`}
+          menuStrategy={item.path === AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH ? 'fixed' : 'absolute'}
           onChange={onChange}
         />
       ) : isDynamic && field.dynamic_options ? (
