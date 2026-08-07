@@ -1218,3 +1218,51 @@ final result: passed
 - Visual parity and responsive behavior remain unverified in-browser; this is a QA evidence blocker rather than a claimed UI defect.
 
 final result: blocked
+
+---
+
+# Design QA - 达人收款账户三点编辑入口
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-cb99db41-e561-42cd-86db-a16ad9de054e.png`.
+- Browser-rendered desktop implementation: `/tmp/comets-payout-account-edit-menu-open.png`.
+- Browser-rendered mobile implementation: `/tmp/comets-payout-account-edit-mobile.png`.
+- Focused implementation crop: `/tmp/comets-payout-account-edit-menu-open-crop.jpg`.
+- Side-by-side comparison: `/tmp/comets-payout-account-edit-menu-comparison.png`.
+- Source pixels: `956 x 376`.
+- Desktop CSS viewport override: `1534 x 900`; browser capture pixels: `1519 x 891`; device density: 1.
+- Focused implementation crop: `1040 x 380`, normalized to `956 x 350` and padded to `956 x 376` for equal-size comparison.
+- Mobile CSS viewport: `390 x 844`; state is the same account menu open on a new creator's default Airwallex draft account.
+
+## Comparison Evidence
+
+- The side-by-side comparison places the supplied source and browser-rendered implementation in the same image at equal `956 x 376` frames.
+- Provider tabs, selected treatment, account-card size, default star, ellipsis trigger, status chip, divider, and three add-account actions retain the supplied layout and COMETS Pay palette.
+- The supplied source shows the menu with only the disabled default-account row. The implementation intentionally adds `编辑账户` above that row because this is the requested recovered interaction.
+- The focused component comparison is readable at native UI scale, so a second detail crop was not required.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC stack, compact weights, line heights, truncation, and small helper-copy hierarchy are unchanged.
+- Spacing and layout rhythm: passed; provider tabs, card grid, 8px card radius, menu alignment, divider, and right-aligned add actions match the reference structure without overlap.
+- Colors and visual tokens: passed; no palette changes were introduced, and selected, default, disabled, and focus states continue to use existing tokens.
+- Image and icon fidelity: passed; this region has no raster assets. Existing Lucide `MoreHorizontal`, `Pencil`, and `Star` icons are used instead of custom artwork.
+- Copy and content: passed; existing provider/account labels remain unchanged, with only the requested `编辑账户` action added.
+
+## Interaction and Responsive Checks
+
+- Clicking the selected card's ellipsis opens an accessible `menu` containing `编辑账户` and the existing default-account action.
+- Clicking `编辑账户` closes the menu, keeps the selected account active, scrolls to its account form, and focuses `账户别名`.
+- At `390 x 844`, the menu remains inside the viewport, all three provider tabs and add actions stack cleanly, and document horizontal overflow is `0`.
+- Browser console errors after desktop and mobile flows: none.
+- Full Vitest suite: 33 files and 209 tests passed.
+- Production build: passed.
+
+## Comparison History
+
+1. Initial P1: the current three-dot menu exposed only `当前默认账户`, so the previously available account-level edit route was missing.
+   - Fix: restored a native `编辑账户` menu action in the maintained React component and connected it to selected-account form focus.
+2. Post-fix desktop and mobile verification found no remaining actionable P0, P1, or P2 visual or interaction issue.
+
+final result: passed

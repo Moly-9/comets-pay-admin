@@ -7,6 +7,7 @@ import {
   Landmark,
   LoaderCircle,
   MoreHorizontal,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -15,7 +16,7 @@ import {
   Wallet,
   WifiOff,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AIRWALLEX_COUNTRIES,
   AIRWALLEX_CURRENCIES,
@@ -875,6 +876,7 @@ export function CreatorPayoutAccounts({
   creatorEmail,
   onChange,
 }: CreatorPayoutAccountsProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const defaultAccount = useMemo(() => getDefaultPayoutAccount(accounts), [accounts]);
   const [activeProvider, setActiveProvider] = useState<PayoutProvider>(
     defaultAccount?.provider ?? 'Airwallex',
@@ -925,8 +927,20 @@ export function CreatorPayoutAccounts({
     setOpenMenuId('');
   };
 
+  const editAccount = (target: CreatorPayoutAccount) => {
+    setSelectedId(target.id);
+    setOpenMenuId('');
+    window.requestAnimationFrame(() => {
+      const form = rootRef.current?.querySelector<HTMLElement>('.payout-account-form');
+      form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.requestAnimationFrame(() => {
+        form?.querySelector<HTMLInputElement>('[aria-label="账户别名"]')?.focus({ preventScroll: true });
+      });
+    });
+  };
+
   return (
-    <div className="payout-accounts">
+    <div className="payout-accounts" ref={rootRef}>
       <div className="payout-account-availability" aria-label={`${usableAccountCount} 个可用收款账户`}>
         <Circle size={6} fill="currentColor" aria-hidden="true" />
         <strong>{usableAccountCount} 个可用</strong>
@@ -1003,6 +1017,7 @@ export function CreatorPayoutAccounts({
                     type="button"
                     title="账户操作"
                     aria-label={`${account.nickname}账户操作`}
+                    aria-haspopup="menu"
                     aria-expanded={openMenuId === account.id}
                     onClick={() => {
                       setSelectedId(account.id);
@@ -1013,8 +1028,12 @@ export function CreatorPayoutAccounts({
                   </button>
                 ) : null}
                 {editing && openMenuId === account.id ? (
-                  <div className="payout-account-card-menu">
-                    <button type="button" disabled={account.isDefault} onClick={() => setDefault(account)}>
+                  <div className="payout-account-card-menu" role="menu" aria-label={`${account.nickname}账户操作`}>
+                    <button type="button" role="menuitem" onClick={() => editAccount(account)}>
+                      <Pencil size={14} />
+                      编辑账户
+                    </button>
+                    <button type="button" role="menuitem" disabled={account.isDefault} onClick={() => setDefault(account)}>
                       <Star size={14} />
                       {account.isDefault ? '当前默认账户' : '设为默认账户'}
                     </button>
