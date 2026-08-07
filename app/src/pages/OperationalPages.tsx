@@ -36,6 +36,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
@@ -2466,22 +2467,12 @@ export function CreatorsPage({
           )}
         </Modal>
       ) : null}
-      {creatorCloseGuardOpen ? (
-        <Modal
-          title="保留未完成的达人档案？"
-          onClose={() => setCreatorCloseGuardOpen(false)}
-          width="520px"
-          footer={(
-            <>
-              <Button variant="ghost" onClick={discardCreatorDraft}>放弃并退出</Button>
-              <Button variant="secondary" onClick={saveCreatorDraft}>保存草稿并退出</Button>
-              <Button onClick={() => setCreatorCloseGuardOpen(false)}>继续编辑</Button>
-            </>
-          )}
-        >
-          <p className="project-draft-guard-copy">当前表单已有内容。草稿仅保存在当前账号的此浏览器中，不会创建达人档案或同步到其他设备。</p>
-        </Modal>
-      ) : null}
+      <CreatorDraftExitDialog
+        open={creatorCloseGuardOpen}
+        onDiscard={discardCreatorDraft}
+        onSave={saveCreatorDraft}
+        onContinue={() => setCreatorCloseGuardOpen(false)}
+      />
     </div>
   );
 }
