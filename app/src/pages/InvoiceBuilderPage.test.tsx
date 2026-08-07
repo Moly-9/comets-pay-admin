@@ -11,6 +11,27 @@ import {
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
 import { InvoiceBuilderPage } from './InvoiceBuilderPage';
 
+describe('InvoiceBuilderPage create mode', () => {
+  it('keeps every fee-detail input blank until the user enters it', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={[...INITIAL_PAYOUTS, ...PROJECT_DEMO_PAYOUTS]}
+        projects={INITIAL_PROJECTS}
+        contracts={[...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS]}
+        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        generatedInvoices={[]}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    expect(html).toMatch(/<span>DESCRIPTION<\/span><input[^>]*value=""/);
+    expect(html).toMatch(/<span>PRICE<\/span><input[^>]*value=""/);
+    expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
+  });
+});
+
 describe('InvoiceBuilderPage edit mode', () => {
   it('prefills and locks stable identity fields without enabling an unchanged save', () => {
     const record = PROJECT_DEMO_INVOICES[0]!;

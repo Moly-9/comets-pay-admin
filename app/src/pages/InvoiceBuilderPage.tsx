@@ -126,7 +126,7 @@ const createBlankLine = (index: number): InvoiceLineItem => ({
   id: `${createPrototypeId('item')}-${index}`,
   description: '',
   unitPrice: 0,
-  quantity: 1,
+  quantity: 0,
   lineTotal: 0,
 });
 
@@ -352,15 +352,8 @@ export function InvoiceBuilderPage({
       setPayment(account
         ? payoutAccountToInvoicePayment(account, creator?.id)
         : invoicePaymentForCreator(creator, payout.provider));
-      setItems([normalizeLineItem({
-        id: `line-${payout.id}`,
-        description: payout.deliverable || `${context?.project.name ?? payout.project} 达人合作服务费`,
-        unitPrice: payout.amount,
-        quantity: 1,
-      })]);
-    } else {
-      setItems([createBlankLine(0)]);
     }
+    setItems([createBlankLine(0)]);
     setErrors({});
     setGeneratedFiles(null);
   };
@@ -625,7 +618,7 @@ export function InvoiceBuilderPage({
                 <div className="invoice-line-row" key={item.id}>
                   <label className={`invoice-line-description ${errors[`item-${item.id}-description`] ? 'has-error' : ''}`}><span>DESCRIPTION</span><input value={item.description} placeholder="费用项目或合作交付" onChange={(event) => changeLine(item.id, 'description', event.target.value)} /><small>{errors[`item-${item.id}-description`]}</small></label>
                   <label className={errors[`item-${item.id}-unitPrice`] ? 'has-error' : ''}><span>PRICE</span><input type="number" min="0" step="0.01" value={item.unitPrice || ''} onChange={(event) => changeLine(item.id, 'unitPrice', event.target.value)} /><small>{errors[`item-${item.id}-unitPrice`]}</small></label>
-                  <label className={errors[`item-${item.id}-quantity`] ? 'has-error' : ''}><span>AMOUNT</span><input type="number" min="0.01" step="0.01" value={item.quantity} onChange={(event) => changeLine(item.id, 'quantity', event.target.value)} /><small>{errors[`item-${item.id}-quantity`]}</small></label>
+                  <label className={errors[`item-${item.id}-quantity`] ? 'has-error' : ''}><span>AMOUNT</span><input type="number" min="0.01" step="0.01" value={item.quantity || ''} onChange={(event) => changeLine(item.id, 'quantity', event.target.value)} /><small>{errors[`item-${item.id}-quantity`]}</small></label>
                   <div className="invoice-line-total"><span>TOTAL</span><strong>{formatInvoiceMoney(currency, item.lineTotal)}</strong></div>
                   <button className="invoice-line-remove" type="button" aria-label={`删除第 ${index + 1} 项费用`} disabled={items.length === 1} onClick={() => setItems((current) => current.filter((line) => line.id !== item.id))}><Trash2 size={16} /></button>
                 </div>
