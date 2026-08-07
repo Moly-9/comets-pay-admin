@@ -36,6 +36,7 @@ import {
   type ContractRecord,
 } from '../contracts';
 import type { SystemUser } from '../data';
+import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import { maskInvoiceAccountValue } from '../invoice/invoiceReviewWorkflow';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
@@ -589,11 +590,13 @@ export function ProjectResourceManager({
                                 onUnlinkContract(contractStableId(contract));
                               }
                             }}><Unlink size={14} />解除</button>
-                            <button className="danger" type="button" onClick={() => {
-                              if (window.confirm(`确认删除合同 ${contract.id}？源记录会同步从合同管理删除。`)) {
-                                onDeleteContract(contractStableId(contract));
-                              }
-                            }}><Trash2 size={14} />删除</button>
+                            {canDeleteContract(currentUser, contract) ? (
+                              <button className="danger" type="button" onClick={() => {
+                                if (window.confirm(`确认删除合同 ${contract.id}？源记录会同步从合同管理删除。`)) {
+                                  onDeleteContract(contractStableId(contract));
+                                }
+                              }}><Trash2 size={14} />删除</button>
+                            ) : null}
                           </>
                         ) : null}
                       </div>

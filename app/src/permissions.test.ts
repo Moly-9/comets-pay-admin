@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { INITIAL_CONTRACTS, type ContractRecord } from './contracts';
 import { DEMO_SYSTEM_USERS } from './data';
-import { canAccessPage, getDefaultPageForRole, hasPermission } from './permissions';
+import {
+  canAccessPage,
+  canDeleteContract,
+  canDeleteContractSelection,
+  getDefaultPageForRole,
+  hasPermission,
+} from './permissions';
 
 const userFor = (role: 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project') => {
   const user = DEMO_SYSTEM_USERS.find((candidate) => candidate.roleKey === role);
@@ -46,12 +53,31 @@ describe('Invoice review permissions', () => {
     expect(getDefaultPageForRole('project')).toBe('requests');
   });
 
-  it('limits contract deletion to privileged administrator roles', () => {
+  it('grants the coarse contract deletion capability only to administrators and media', () => {
     expect(hasPermission(userFor('admin'), 'contract_delete')).toBe(true);
-    expect(hasPermission(userFor('owner'), 'contract_delete')).toBe(true);
-    expect(hasPermission(userFor('media'), 'contract_delete')).toBe(false);
+    expect(hasPermission(userFor('media'), 'contract_delete')).toBe(true);
+    expect(hasPermission(userFor('owner'), 'contract_delete')).toBe(false);
     expect(hasPermission(userFor('pm'), 'contract_delete')).toBe(false);
     expect(hasPermission(userFor('finance'), 'contract_delete')).toBe(false);
     expect(hasPermission(userFor('project'), 'contract_delete')).toBe(false);
+  });
+
+  it('lets administrators delete every contract and media delete only their own uploads', () => {
+    const media = userFor('media');
+    const ownUpload: ContractRecord = { ...INITIAL_CONTRACTS[0], uploadedByAccount: media.account };
+    const anotherUpload: ContractRecord = { ...INITIAL_CONTRACTS[0], uploadedByAccount: 'another.media' };
+    const legacyContract: ContractRecord = { ...INITIAL_CONTRACTS[0], uploadedByAccount: undefined };
+
+    expect(canDeleteContract(userFor('admin'), ownUpload)).toBe(true);
+    expect(canDeleteContract(userFor('admin'), anotherUpload)).toBe(true);
+    expect(canDeleteContract(userFor('admin'), legacyContract)).toBe(true);
+    expect(canDeleteContract(media, ownUpload)).toBe(true);
+    expect(canDeleteContract(media, anotherUpload)).toBe(false);
+    expect(canDeleteContract(media, legacyContract)).toBe(false);
+    expect(canDeleteContract(userFor('owner'), ownUpload)).toBe(false);
+    expect(canDeleteContract(userFor('pm'), ownUpload)).toBe(false);
+    expect(canDeleteContractSelection(media, [ownUpload])).toBe(true);
+    expect(canDeleteContractSelection(media, [ownUpload, anotherUpload])).toBe(false);
+    expect(canDeleteContractSelection(userFor('admin'), [ownUpload, anotherUpload, legacyContract])).toBe(true);
   });
 });

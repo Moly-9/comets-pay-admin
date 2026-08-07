@@ -223,6 +223,7 @@ export type ContractRecord = {
   generationVersion?: number;
   generatedFileBaseName?: string;
   uploadedFromDraftId?: ContractId;
+  uploadedByAccount?: string;
   confirmedAt?: string;
   extractionStage?: ContractExtractionStage;
   recognitionResults?: ContractRecognitionField[];
@@ -617,19 +618,22 @@ export const createGeneratedContractDraft = (
   };
 };
 
-export const createUploadedContract = ({
-  systemContractNumber,
-  projectId,
-  cooperationProjectId,
-  projectName,
-  customer,
-  creatorId,
-  creatorHandle,
-  engagementId,
-  draftContractId,
-  recognitionResults,
-  sourceDocuments,
-}: ContractUploadInput): ContractRecord => {
+export const createUploadedContract = (
+  {
+    systemContractNumber,
+    projectId,
+    cooperationProjectId,
+    projectName,
+    customer,
+    creatorId,
+    creatorHandle,
+    engagementId,
+    draftContractId,
+    recognitionResults,
+    sourceDocuments,
+  }: ContractUploadInput,
+  uploadedByAccount?: string,
+): ContractRecord => {
   const today = new Intl.DateTimeFormat('en-CA').format(new Date());
   const primaryDocument = sourceDocuments[0];
   const displayName = primaryDocument?.fileName.replace(/\.(pdf|docx)$/i, '').trim();
@@ -695,6 +699,7 @@ export const createUploadedContract = ({
     engagementId,
     lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
     uploadedFromDraftId: draftContractId,
+    uploadedByAccount,
     extractionStage: 'review',
     recognitionResults,
     sourceDocuments,
@@ -704,12 +709,13 @@ export const createUploadedContract = ({
 export const completeGeneratedContractUpload = (
   draft: ContractRecord,
   input: ContractUploadInput,
+  uploadedByAccount?: string,
 ): ContractRecord => {
   const uploaded = createUploadedContract({
     ...input,
     systemContractNumber: draft.id,
     draftContractId: draft.contractId,
-  });
+  }, uploadedByAccount ?? draft.uploadedByAccount);
   return {
     ...uploaded,
     contractId: draft.contractId,

@@ -127,7 +127,7 @@ describe('generated contract upload workflow', () => {
       }],
     };
 
-    const uploaded = completeGeneratedContractUpload(draft, upload);
+    const uploaded = completeGeneratedContractUpload(draft, upload, 'media.contract.owner');
 
     expect(uploaded.contractId).toBe(draft.contractId);
     expect(uploaded.id).toBe(draft.id);
@@ -136,6 +136,7 @@ describe('generated contract upload workflow', () => {
     expect(uploaded.generationVersion).toBe(3);
     expect(uploaded.generationSnapshot).toEqual(generationModel);
     expect(uploaded.uploadedFromDraftId).toBe(draft.contractId);
+    expect(uploaded.uploadedByAccount).toBe('media.contract.owner');
     expect(uploaded.sourceName).toBe('synthetic-signed-contract.pdf');
   });
 });

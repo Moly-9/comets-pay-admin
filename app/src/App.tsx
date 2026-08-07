@@ -21,7 +21,13 @@ import {
   PAGE_TITLES,
   type SystemUser,
 } from './data';
-import { canAccessPage, getDefaultPageForRole, hasPermission } from './permissions';
+import {
+  canAccessPage,
+  canDeleteContract,
+  canDeleteContractSelection,
+  getDefaultPageForRole,
+  hasPermission,
+} from './permissions';
 import {
   executeMockBatchSubmission,
   type MockBatchSubmission,
@@ -404,8 +410,8 @@ export default function App() {
       ? contracts.find((contract) => contract.contractId === input.draftContractId)
       : null;
     const record = draft
-      ? completeGeneratedContractUpload(draft, input)
-      : createUploadedContract(input);
+      ? completeGeneratedContractUpload(draft, input, currentUser.account)
+      : createUploadedContract(input, currentUser.account);
     setContracts((current) => draft
       ? current.map((contract) => contract.contractId === draft.contractId ? record : contract)
       : [record, ...current]);
@@ -418,7 +424,7 @@ export default function App() {
       summary: draft ? `已回传合同 ${record.id}` : `已上传合同 ${record.id}`,
     });
     return record;
-  }, [contracts, registerProjectMutation]);
+  }, [contracts, currentUser.account, registerProjectMutation]);
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const existing = contracts.find((contract) => (
@@ -727,6 +733,10 @@ export default function App() {
 
   const deleteContract = (contractId: string) => {
     const contract = contracts.find((item) => item.contractId === contractId || item.id === contractId);
+    if (contract && !canDeleteContract(currentUser, contract)) {
+      notify('暂无操作权限', '管理员可删除全部合同，媒介只能删除本人上传的合同。');
+      return;
+    }
     if (!contract?.projectId) return;
     setContracts((current) => current.filter((item) => item !== contract));
     setGeneratedInvoices((current) => current.map((invoice) => (
@@ -752,13 +762,18 @@ export default function App() {
   };
 
   const deleteContractsFromList = (contractIds: string[]) => {
-    if (!hasPermission(currentUser, 'contract_delete')) {
-      notify('暂无操作权限', '只有管理员可以删除合同。');
-      return 0;
-    }
     const selectedIds = new Set(contractIds);
     const targets = contracts.filter((contract) => selectedIds.has(contract.contractId ?? contract.id));
     if (!targets.length) return 0;
+    if (!canDeleteContractSelection(currentUser, targets)) {
+      notify(
+        '暂无操作权限',
+        currentUser.roleKey === 'media'
+          ? '媒介只能删除本人上传的合同，请重新选择。'
+          : '只有管理员，或合同上传媒介本人可以删除合同。',
+      );
+      return 0;
+    }
 
     const deletedContractIds = new Set(targets.map((contract) => contract.contractId ?? contract.id));
     const affectedInvoiceIds = new Set(generatedInvoices
@@ -2375,6 +2390,10 @@ export default function App() {
     onUploadContract: (_request, input) => uploadContract(input),
     onDeleteContract: (request, contractId) => {
       const contract = contracts.find((candidate) => (candidate.contractId ?? candidate.id) === contractId);
+      if (!contract || !canDeleteContract(currentUser, contract)) {
+        notify('暂无操作权限', '管理员可删除全部合同，媒介只能删除本人上传的合同。');
+        return;
+      }
       const other = requestProjects.find((candidate) => (
         candidate.paymentRequestProjectId !== request.paymentRequestProjectId
         && candidate.creatorLinks?.some((link) => link.contractIds.includes(contractId))
@@ -2648,6 +2667,7 @@ export default function App() {
           creators={creators}
           canUpload={canUploadContracts}
           canDelete={canDeleteContracts}
+          canDeleteContract={(contract) => canDeleteContract(currentUser, contract)}
           focusedContractId={focusedContractId}
           onFocusCleared={() => {
             setFocusedContractId(null);

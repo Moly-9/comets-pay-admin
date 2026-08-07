@@ -10,6 +10,7 @@ const renderContractsPage = (canDelete: boolean) => renderToStaticMarkup(
     creators={[]}
     canUpload={false}
     canDelete={canDelete}
+    canDeleteContract={() => canDelete}
     focusedContractId={null}
     onFocusCleared={vi.fn()}
     onUploadContract={vi.fn()}

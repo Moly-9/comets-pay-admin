@@ -29,6 +29,7 @@ export function ContractsPage({
   creators,
   canUpload,
   canDelete,
+  canDeleteContract,
   focusedContractId,
   onFocusCleared,
   onUploadContract,
@@ -42,6 +43,7 @@ export function ContractsPage({
   creators: CreatorProfile[];
   canUpload: boolean;
   canDelete: boolean;
+  canDeleteContract: (contract: ContractRecord) => boolean;
   focusedContractId: string | null;
   onFocusCleared: () => void;
   onUploadContract: (input: ContractUploadInput) => ContractRecord;
@@ -90,6 +92,7 @@ export function ContractsPage({
   const visibleIds = useMemo(() => visible.map(contractSelectionId), [visible]);
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const selectedCanBeDeleted = selected.length > 0 && selected.every(canDeleteContract);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -211,7 +214,8 @@ export function ContractsPage({
                 variant="danger"
                 data-testid="contract-bulk-delete"
                 icon={<Trash2 size={15} />}
-                disabled={!selected.length}
+                disabled={!selectedCanBeDeleted}
+                title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
                 onClick={() => setDeleteConfirmOpen(true)}
               >
                 删除
