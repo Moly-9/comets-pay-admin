@@ -20,7 +20,8 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
@@ -105,20 +106,42 @@ const formatReviewTime = (value: string) => new Intl.DateTimeFormat('zh-CN', {
   hour12: false,
 }).format(new Date(value));
 
-const maskFeedbackEmail = (value: string) => {
+const deliveryEmailIsValid = (value: string) => {
+  const [localPart, domain] = value.trim().split('@');
+  return Boolean(localPart && domain?.includes('.'));
+};
+
+const maskDeliveryEmail = (value: string) => {
   const [localPart, domain] = value.trim().split('@');
   if (!localPart || !domain) return '达人档案邮箱待补充';
   return `${localPart.slice(0, 1)}***@${domain}`;
 };
 
-export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
+export const buildInvoiceSignatureReminderMessage = (model: InvoiceDocumentModel) => {
+  const creatorName = model.creatorName || model.from.legalName || '达人';
+  return `Hi ${creatorName}，Invoice ${model.invoiceNumber} 已准备好，请登录达人端系统，在 Invoice 中心查看并完成签署。如有疑问，可通过站内信反馈。`;
+};
+
+function InvoiceDeliveryNotice({
+  email,
+  purpose,
+}: {
+  email: string;
+  purpose: 'feedback' | 'signature';
+}) {
+  const signatureReminder = purpose === 'signature';
+  const hasEmail = deliveryEmailIsValid(email);
   return (
-    <div className="invoice-feedback-delivery" role="note" aria-label="回复发送渠道说明">
+    <div
+      className="invoice-feedback-delivery"
+      role="note"
+      aria-label={signatureReminder ? '签署提醒发送渠道说明' : '回复发送渠道说明'}
+    >
       <div className="invoice-feedback-delivery-title">
         <Send size={16} />
         <span>
-          <strong>回复发送渠道</strong>
-          <small>提交后将通过两个渠道同步触达达人</small>
+          <strong>{signatureReminder ? '通知发送渠道' : '回复发送渠道'}</strong>
+          <small>{signatureReminder ? '发送后将通过两个渠道同步提醒达人签署' : '提交后将通过两个渠道同步触达达人'}</small>
         </span>
       </div>
       <ul>
@@ -126,14 +149,14 @@ export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
           <MessageSquareText size={16} />
           <span>
             <strong>达人端站内信</strong>
-            <small>发送至达人端的 Invoice 消息中心</small>
+            <small>{signatureReminder ? '发送至达人端 Invoice 消息中心，并引导进入签署' : '发送至达人端的 Invoice 消息中心'}</small>
           </span>
         </li>
         <li>
           <Mail size={16} />
           <span>
             <strong>邮件（站外信）</strong>
-            <small>发送至达人档案邮箱：{maskFeedbackEmail(email)}</small>
+            <small>{hasEmail ? `发送至达人档案邮箱：${maskDeliveryEmail(email)}` : '未发送 · 达人档案邮箱待补充'}</small>
           </span>
         </li>
       </ul>
@@ -141,11 +164,19 @@ export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
         <Info size={15} />
         <span>
           <strong>原型说明：</strong>
-          当前仅模拟发送并保留回复记录，不会真实触发站内信或邮件。正式接入后需分别记录双渠道发送状态、失败原因和重试结果，并保留操作审计。
+          {signatureReminder ? '当前仅模拟发送并保留通知记录' : '当前仅模拟发送并保留回复记录'}，不会真实触发站内信或邮件。正式接入后需分别记录双渠道发送状态、失败原因和重试结果，并保留操作审计。
         </span>
       </p>
     </div>
   );
+}
+
+export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
+  return <InvoiceDeliveryNotice email={email} purpose="feedback" />;
+}
+
+export function InvoiceSignatureReminderDeliveryNotice({ email }: { email: string }) {
+  return <InvoiceDeliveryNotice email={email} purpose="signature" />;
 }
 
 const sameText = (left: string, right: string) => (
@@ -333,6 +364,7 @@ export function InvoiceDetailPage({
   onMarkSigned,
   onReviewAction,
   onReplyFeedback,
+  onSendSignatureReminder,
   onEditInvoice,
   onOpenProject,
   onOpenRequest,
@@ -354,6 +386,7 @@ export function InvoiceDetailPage({
     reason?: string,
   ) => void;
   onReplyFeedback?: (payout: Payout, message: string) => void;
+  onSendSignatureReminder?: (payout: Payout, message: string, email: string) => boolean;
   onEditInvoice?: (payout: Payout, context: InvoiceEditContext) => void;
   onOpenProject?: (payout: Payout) => void;
   onOpenRequest?: (payout: Payout) => void;
@@ -370,6 +403,9 @@ export function InvoiceDetailPage({
   const [returnReason, setReturnReason] = useState('');
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
+  const [signatureReminderDialogOpen, setSignatureReminderDialogOpen] = useState(false);
+  const [signatureReminderMessage, setSignatureReminderMessage] = useState('');
+  const signatureReminderTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
   const payout = source.kind === 'payout'
     ? source.payout
@@ -470,6 +506,10 @@ export function InvoiceDetailPage({
   ];
   const normalizedReturnReason = returnReason.trim();
   const normalizedReplyMessage = replyMessage.trim();
+  const normalizedSignatureReminderMessage = signatureReminderMessage.trim();
+  const canSendSignatureReminder = invoiceReviewStatus === '待签署'
+    && canManageInvoice
+    && Boolean(payout && onSendSignatureReminder);
 
   const copyInvoiceId = async () => {
     await navigator.clipboard.writeText(model.invoiceNumber);
@@ -524,6 +564,28 @@ export function InvoiceDetailPage({
     setReplyMessage('');
   };
 
+  const openSignatureReminderDialog = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    signatureReminderTriggerRef.current = event.currentTarget;
+    setSignatureReminderMessage(buildInvoiceSignatureReminderMessage(model));
+    setSignatureReminderDialogOpen(true);
+  };
+
+  const closeSignatureReminderDialog = () => {
+    setSignatureReminderDialogOpen(false);
+    setSignatureReminderMessage('');
+    window.requestAnimationFrame(() => signatureReminderTriggerRef.current?.focus());
+  };
+
+  const submitSignatureReminder = () => {
+    if (!payout || !onSendSignatureReminder || !normalizedSignatureReminderMessage) return;
+    const sent = onSendSignatureReminder(
+      payout,
+      normalizedSignatureReminderMessage,
+      model.from.email,
+    );
+    if (sent) closeSignatureReminderDialog();
+  };
+
   const openFeedbackDialog = () => {
     if (!payout?.creatorFeedback) {
       notify('反馈内容缺失', '当前记录缺少达人反馈正文，请先核对原始记录。');
@@ -560,7 +622,7 @@ export function InvoiceDetailPage({
         : '';
 
   const statusHint = invoiceReviewStatus === '待签署'
-    ? '等待达人完成签署，当前无可执行操作'
+    ? '等待达人完成签署，可通知达人登录系统签署'
     : invoiceReviewStatus === '达人反馈'
       ? '达人尚未完成签署；查看反馈，回复或修改后重新发送'
       : navigationTarget === 'PROJECT'
@@ -584,6 +646,11 @@ export function InvoiceDetailPage({
         actions={(
           <>
             <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyInvoiceId}>复制编号</Button>
+            {canSendSignatureReminder ? (
+              <Button variant="secondary" icon={<Send size={16} />} onClick={openSignatureReminderDialog}>
+                通知达人签署
+              </Button>
+            ) : null}
             <Button icon={<Download size={16} />} disabled={Boolean(downloading)} onClick={() => downloadInvoice('pdf')}>
               {downloading === 'pdf' ? '生成中…' : '下载PDF'}
             </Button>
@@ -774,7 +841,9 @@ export function InvoiceDetailPage({
                     {[...payout.invoiceReviewHistory].reverse().map((event, index) => (
                       <article key={`${event.occurredAt}-${event.action}-${index}`}>
                         <span>{
-                          event.stage === 'MEDIA'
+                          event.action === '通知达人签署'
+                            ? '签署提醒'
+                            : event.stage === 'MEDIA'
                             ? '媒介审核'
                             : event.stage === 'REQUEST'
                               ? '项目请款'
@@ -791,9 +860,18 @@ export function InvoiceDetailPage({
                                         : '签署提交'
                         }</span>
                         <div>
-                          <strong>{event.action}：{event.fromStatus} → {event.toStatus}</strong>
+                          <strong>{event.action === '通知达人签署' ? '已发送签署提醒 · 状态保持待签署' : `${event.action}：${event.fromStatus} → ${event.toStatus}`}</strong>
                           <small>{event.approvalRound ? `第 ${event.approvalRound} 轮 · ` : ''}{event.actorName} · {event.actorRole} · {formatReviewTime(event.occurredAt)}</small>
                           {event.reason ? <p>{event.reason}</p> : null}
+                          {event.notificationDeliveries?.length ? (
+                            <div className="invoice-notification-delivery-results">
+                              {event.notificationDeliveries.map((delivery) => (
+                                <span key={delivery.channel}>
+                                  {delivery.channel === 'IN_APP' ? '站内信' : '邮件'} · {delivery.status === 'SIMULATED_SENT' ? '模拟已发送' : '未发送'} · {delivery.recipientLabel}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       </article>
                     ))}
@@ -860,6 +938,49 @@ export function InvoiceDetailPage({
           </footer>
         </section>
       </div>
+
+      {signatureReminderDialogOpen && payout ? (
+        <Modal
+          title="通知达人签署"
+          width="560px"
+          onClose={closeSignatureReminderDialog}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={closeSignatureReminderDialog}>取消</Button>
+              <Button
+                icon={<Send size={16} />}
+                disabled={!normalizedSignatureReminderMessage}
+                onClick={submitSignatureReminder}
+              >
+                发送签署提醒
+              </Button>
+            </>
+          )}
+        >
+          <div className="invoice-feedback-thread">
+            <article className="invoice-feedback-message invoice-feedback-message-reply">
+              <span><UserRound size={18} /></span>
+              <div>
+                <strong>{model.creatorName || payout.creator} · 待签署</strong>
+                <small>{model.invoiceNumber} · {model.projectName || payout.project}</small>
+                <p>提醒达人登录达人端系统，在 Invoice 中心查看并完成当前 Invoice 签署。</p>
+              </div>
+            </article>
+            <label className="return-review-field invoice-feedback-reply">
+              <span>提醒内容 <em className="required-mark" aria-hidden="true">*</em><small>{signatureReminderMessage.length}/300</small></span>
+              <textarea
+                autoFocus
+                maxLength={300}
+                aria-label="签署提醒内容"
+                placeholder="请输入签署提醒内容"
+                value={signatureReminderMessage}
+                onChange={(event) => setSignatureReminderMessage(event.target.value)}
+              />
+            </label>
+            <InvoiceSignatureReminderDeliveryNotice email={model.from.email} />
+          </div>
+        </Modal>
+      ) : null}
 
       {feedbackDialogOpen && payout?.creatorFeedback ? (
         <Modal

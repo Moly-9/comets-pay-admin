@@ -17,6 +17,7 @@ import {
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   maskInvoiceAccountValue,
+  recordInvoiceSignatureReminder,
   replyToCreatorFeedback,
 } from './invoiceReviewWorkflow';
 
@@ -399,6 +400,66 @@ describe('Invoice review workflow', () => {
     expect(replied.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('回复达人反馈');
     expect(() => replyToCreatorFeedback(payout, actor, '回复')).toThrow(/没有可回复/);
     expect(() => replyToCreatorFeedback(feedback, actor, '   ')).toThrow(/不能为空/);
+  });
+
+  it('records repeatable signature reminders without changing signature state', () => {
+    const firstReminder = recordInvoiceSignatureReminder(
+      { ...payout, invoiceSignatureRound: 2 },
+      actor,
+      '  请登录达人端签署 Invoice。  ',
+      'creator@example.test',
+      '2026-08-07T01:00:00.000Z',
+    );
+
+    expect(firstReminder.invoiceReviewStatus).toBe('待签署');
+    expect(firstReminder.invoiceSignatureRound).toBe(2);
+    expect(firstReminder.invoiceSignedAt).toBeUndefined();
+    expect(firstReminder.invoiceReviewHistory?.slice(-1)[0]).toMatchObject({
+      action: '通知达人签署',
+      fromStatus: '待签署',
+      toStatus: '待签署',
+      reason: '请登录达人端签署 Invoice。',
+      occurredAt: '2026-08-07T01:00:00.000Z',
+      notificationDeliveries: [
+        {
+          channel: 'IN_APP',
+          status: 'SIMULATED_SENT',
+          recipientLabel: '达人端 Invoice 消息中心',
+        },
+        {
+          channel: 'EMAIL',
+          status: 'SIMULATED_SENT',
+          recipientLabel: 'c***@example.test',
+        },
+      ],
+    });
+
+    const secondReminder = recordInvoiceSignatureReminder(
+      firstReminder,
+      actor,
+      '再次提醒签署。',
+      '',
+      '2026-08-07T02:00:00.000Z',
+    );
+    expect(secondReminder.invoiceReviewHistory).toHaveLength(2);
+    expect(secondReminder.invoiceReviewHistory?.[1]?.notificationDeliveries?.[1]).toEqual({
+      channel: 'EMAIL',
+      status: 'SKIPPED_MISSING_RECIPIENT',
+      recipientLabel: '达人档案邮箱待补充',
+    });
+  });
+
+  it('rejects invalid signature reminder submissions', () => {
+    expect(() => recordInvoiceSignatureReminder(
+      { ...payout, invoiceReviewStatus: '待媒介审核' },
+      actor,
+      '提醒签署',
+      'creator@example.test',
+    )).toThrow(/待签署/);
+    expect(() => recordInvoiceSignatureReminder(payout, actor, '   ', ''))
+      .toThrow(/不能为空/);
+    expect(() => recordInvoiceSignatureReminder(payout, actor, 'x'.repeat(301), ''))
+      .toThrow(/300/);
   });
 
   it('routes project approval and payment actions to their canonical detail pages', () => {

@@ -308,10 +308,17 @@ export type InvoiceReviewStage =
   | 'FINANCE'
   | 'PAYMENT';
 
+export type InvoiceNotificationDelivery = {
+  channel: 'IN_APP' | 'EMAIL';
+  status: 'SIMULATED_SENT' | 'SKIPPED_MISSING_RECIPIENT';
+  recipientLabel: string;
+};
+
 export type InvoiceReviewEvent = {
   stage: InvoiceReviewStage;
   action:
     | '签署完成'
+    | '通知达人签署'
     | '达人反馈'
     | '回复达人反馈'
     | '修改 Invoice'
@@ -331,6 +338,7 @@ export type InvoiceReviewEvent = {
   reason?: string;
   occurredAt: string;
   approvalRound?: number;
+  notificationDeliveries?: InvoiceNotificationDelivery[];
 };
 
 export type GeneratedInvoiceRecord = {

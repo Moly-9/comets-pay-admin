@@ -357,9 +357,64 @@ export function Modal({
   width?: string;
   className?: string;
 }>) {
+  const panelRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusableSelector = [
+      'button:not(:disabled)',
+      'input:not(:disabled)',
+      'select:not(:disabled)',
+      'textarea:not(:disabled)',
+      '[href]',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+    const focusableElements = () => Array.from(
+      panelRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+    ).filter((element) => !element.hasAttribute('hidden'));
+    const animationFrame = window.requestAnimationFrame(() => {
+      if (!panelRef.current?.contains(document.activeElement)) {
+        focusableElements()[0]?.focus();
+      }
+    });
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const elements = focusableElements();
+      if (!elements.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panelRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+
   return createPortal(
     <div className="modal-backdrop" role="presentation" onMouseDown={onBackdropMouseDown ?? onClose}>
       <section
+        ref={panelRef}
         className={['modal-panel', className].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal="true"

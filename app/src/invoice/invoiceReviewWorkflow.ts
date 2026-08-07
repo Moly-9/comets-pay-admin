@@ -22,6 +22,17 @@ export type InvoiceReviewActor = {
   role: string;
 };
 
+const notificationEmailIsValid = (value: string) => {
+  const [localPart, domain] = value.trim().split('@');
+  return Boolean(localPart && domain?.includes('.'));
+};
+
+const maskNotificationEmail = (value: string) => {
+  const [localPart, domain] = value.trim().split('@');
+  if (!localPart || !domain) return '达人档案邮箱待补充';
+  return `${localPart.slice(0, 1)}***@${domain}`;
+};
+
 export type InvoiceReviewCapabilities = {
   manage: boolean;
   mediaReview: boolean;
@@ -523,6 +534,57 @@ export const replyToCreatorFeedback = (
         },
       ],
     },
+    invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
+  };
+};
+
+export const recordInvoiceSignatureReminder = (
+  payout: Payout,
+  actor: InvoiceReviewActor,
+  message: string,
+  email: string,
+  occurredAt = new Date().toISOString(),
+): Payout => {
+  if (payout.invoiceReviewStatus !== '待签署') {
+    throw new Error('只能向待签署 Invoice 发送签署提醒。');
+  }
+  const normalizedMessage = message.trim();
+  if (!normalizedMessage) {
+    throw new Error('提醒内容不能为空。');
+  }
+  if (normalizedMessage.length > 300) {
+    throw new Error('提醒内容不能超过 300 字。');
+  }
+
+  const hasValidEmail = notificationEmailIsValid(email);
+  const event: InvoiceReviewEvent = {
+    stage: 'SIGNATURE',
+    action: '通知达人签署',
+    actorAccount: actor.account,
+    actorName: actor.name,
+    actorRole: actor.role,
+    fromStatus: '待签署',
+    toStatus: '待签署',
+    reason: normalizedMessage,
+    occurredAt,
+    notificationDeliveries: [
+      {
+        channel: 'IN_APP',
+        status: 'SIMULATED_SENT',
+        recipientLabel: '达人端 Invoice 消息中心',
+      },
+      {
+        channel: 'EMAIL',
+        status: hasValidEmail ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
+        recipientLabel: hasValidEmail
+          ? maskNotificationEmail(email)
+          : '达人档案邮箱待补充',
+      },
+    ],
+  };
+
+  return {
+    ...payout,
     invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
   };
 };

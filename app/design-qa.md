@@ -1609,3 +1609,49 @@ final result: passed
 - Because no post-change browser-rendered screenshot could be captured, full-view comparison, focused comparison, responsive inspection, interaction verification, and console inspection remain blocked.
 
 final result: blocked
+
+---
+
+# Design QA - Invoice 待签署提醒
+
+## Reference and Environment
+
+- Source detail: `app/qa/invoice-signature-reminder/source-detail.png` (`1482 x 653`).
+- Source feedback modal: `app/qa/invoice-signature-reminder/source-feedback-modal.png` (`770 x 676`).
+- Browser implementation: `app/qa/invoice-signature-reminder/implementation-detail-desktop.png` and `implementation-modal-desktop.png` (`1265 x 712`).
+- Responsive implementation: `app/qa/invoice-signature-reminder/implementation-modal-390.png` (`375 x 812`) at a `390 x 844` CSS viewport.
+- Combined evidence: `comparison-detail-source-left-implementation-right.png` and `comparison-modal-source-left-implementation-right.png`.
+- Desktop CSS viewport: `1280 x 720`; device pixel ratio: `1`.
+- State: media demo account, waiting-signature Invoice `INV-240717`, signature-reminder dialog open with the default editable message.
+
+## Comparison Evidence
+
+- The full-view comparison preserves the existing Invoice detail hierarchy and places the new secondary reminder action immediately beside the primary PDF download action.
+- The focused modal comparison normalizes the source and implementation modal panels to `546 x 573`, with the source on the left and implementation on the right.
+- The implementation intentionally replaces feedback-specific copy with signature-reminder copy and uses an enabled send action because the default reminder is prefilled; modal structure, density and visual hierarchy remain consistent with the source.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC weights, line heights, field hierarchy and wrapping match the feedback-dialog pattern.
+- Spacing and layout rhythm: passed; the 560px panel, 8px summary/channel surfaces, textarea proportions, dividers and footer controls align with the source rhythm.
+- Colors and visual tokens: passed; existing neutral surfaces, purple communication icons, coral focus border and black primary action are reused.
+- Image and icon fidelity: passed; no raster asset is required, and existing Lucide user, message, mail, information, send and close icons remain sharp and consistent.
+- Copy and content: passed; recipient, Invoice, project, dual delivery channels and prototype-only boundary are explicit without implying a real notification service.
+
+## Interaction and Responsive Checks
+
+- The reminder entry is visible only for manageable waiting-signature records. Empty or whitespace-only content disables sending; the editable default stays within the 300-character limit.
+- Two consecutive sends create two independent audit entries with masked email and simulated channel results while status remains `待签署` and signature metadata is unchanged.
+- `Esc` closes the dialog, focus returns to the reminder trigger, and `Tab` / `Shift+Tab` remain trapped inside the dialog.
+- At `390 x 844`, the panel, textarea, channel rows and footer actions remain inside the viewport with no horizontal overflow.
+- Browser console warnings/errors: none.
+- Full Vitest suite: 33 files and 227 tests passed.
+- TypeScript production build: passed; only the existing Vite chunk-size advisory remains.
+
+## Findings and Comparison History
+
+1. Initial P2 accessibility finding: the shared modal did not respond to `Esc` or keep keyboard focus inside the dialog.
+   - Fix: added focus trapping, `Esc` close behavior and focus restoration to the maintained shared Modal component; the reminder trigger also explicitly restores focus after close.
+2. Post-fix desktop, focused-modal, responsive, repeat-send, audit-history, keyboard and console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed

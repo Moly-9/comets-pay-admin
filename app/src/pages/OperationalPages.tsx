@@ -2510,6 +2510,7 @@ export function InvoicePage({
   onMarkSigned,
   onReviewAction,
   onReplyFeedback,
+  onSendSignatureReminder,
   onEditInvoice,
   onOpenProject,
   onOpenRequest,
@@ -2538,6 +2539,7 @@ export function InvoicePage({
     reason?: string,
   ) => void;
   onReplyFeedback: (payout: Payout, message: string) => void;
+  onSendSignatureReminder: (payout: Payout, message: string, email: string) => boolean;
   onEditInvoice: (payout: Payout, context: InvoiceEditContext) => void;
   onOpenProject: (payout: Payout) => void;
   onOpenRequest: (payout: Payout) => void;
@@ -2637,6 +2639,7 @@ export function InvoicePage({
         onMarkSigned={markSignedAndOpenReview}
         onReviewAction={onReviewAction}
         onReplyFeedback={onReplyFeedback}
+        onSendSignatureReminder={onSendSignatureReminder}
         onEditInvoice={onEditInvoice}
         onOpenProject={onOpenProject}
         onOpenRequest={onOpenRequest}

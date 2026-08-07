@@ -53,6 +53,7 @@ import {
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   paymentFailureRestartStage,
+  recordInvoiceSignatureReminder,
   replyToCreatorFeedback,
   type InvoiceReviewAction,
   type InvoicePageTab,
@@ -2182,6 +2183,45 @@ export default function App() {
     }
   };
 
+  const sendInvoiceSignatureReminder = (
+    payout: Payout,
+    message: string,
+    email: string,
+  ) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能通知达人签署 Invoice。`);
+      return false;
+    }
+    const linkedPayout = payouts.find((item) => item.id === payout.id);
+    if (!linkedPayout) {
+      notify('通知发送失败', '未找到 Invoice 生成时关联的付款记录，请返回列表后重试。');
+      return false;
+    }
+    try {
+      const updated = recordInvoiceSignatureReminder(
+        linkedPayout,
+        { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        message,
+        email,
+      );
+      setPayouts((current) => current.map((item) => item.id === linkedPayout.id ? updated : item));
+      const latestEvent = updated.invoiceReviewHistory?.[updated.invoiceReviewHistory.length - 1];
+      const emailDelivery = latestEvent?.notificationDeliveries?.find((delivery) => (
+        delivery.channel === 'EMAIL'
+      ));
+      notify(
+        '签署提醒已记录',
+        emailDelivery?.status === 'SIMULATED_SENT'
+          ? '原型已模拟通过达人端站内信和邮件发送提醒。'
+          : '原型已模拟发送站内信；达人邮箱待补充，邮件未发送。',
+      );
+      return true;
+    } catch (error) {
+      notify('通知发送失败', error instanceof Error ? error.message : '当前 Invoice 无法发送签署提醒。');
+      return false;
+    }
+  };
+
   const markInvoiceSigned = (record: GeneratedInvoiceRecord) => {
     if (!hasPermission(currentUser, 'invoice_manage')) {
       notify('暂无操作权限', `${currentUser.role}不能提交签署完成的 Invoice。`);
@@ -2776,6 +2816,7 @@ export default function App() {
           onMarkSigned={markInvoiceSigned}
           onReviewAction={updateInvoiceReview}
           onReplyFeedback={replyInvoiceFeedback}
+          onSendSignatureReminder={sendInvoiceSignatureReminder}
           onEditInvoice={openInvoiceEditor}
           onOpenProject={openProjectFromInvoice}
           onOpenRequest={openRequestFromInvoice}

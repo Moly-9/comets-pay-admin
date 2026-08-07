@@ -2,9 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { GeneratedInvoiceRecord, InvoiceEditContext, Payout } from '../types';
 import {
+  buildInvoiceSignatureReminderMessage,
   getInvoiceTimelineState,
   InvoiceDetailPage,
   InvoiceFeedbackDeliveryNotice,
+  InvoiceSignatureReminderDeliveryNotice,
 } from './InvoiceDetailPage';
 
 const model = {
@@ -84,6 +86,7 @@ const renderDetail = (
     onMarkSigned={() => undefined}
     onReviewAction={() => undefined}
     onReplyFeedback={() => undefined}
+    onSendSignatureReminder={() => true}
     onEditInvoice={(_target: Payout, _context: InvoiceEditContext) => undefined}
     canManageInvoice={permissions.manage}
     canReviewMedia={permissions.media}
@@ -157,5 +160,34 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(html).toContain('当前仅模拟发送');
     expect(html).toContain('失败原因和重试结果');
     expect(html).toContain('操作审计');
+  });
+
+  it('shows the signature reminder only for manageable waiting-signature invoices', () => {
+    const waitingPayout: Payout = {
+      ...basePayout,
+      invoiceReviewStatus: '待签署',
+    };
+    const manageableHtml = renderDetail(waitingPayout, { manage: true, media: false });
+    expect(manageableHtml).toContain('通知达人签署');
+    expect(manageableHtml).toContain('可通知达人登录系统签署');
+
+    const readOnlyHtml = renderDetail(waitingPayout, { manage: false, media: false });
+    expect(readOnlyHtml).not.toContain('通知达人签署');
+    expect(renderDetail(basePayout, { manage: true, media: true }))
+      .not.toContain('通知达人签署');
+  });
+
+  it('builds the editable reminder copy and explains both simulated channels', () => {
+    expect(buildInvoiceSignatureReminderMessage(model)).toBe(
+      'Hi Synthetic Creator，Invoice INV-SYNTHETIC 已准备好，请登录达人端系统，在 Invoice 中心查看并完成签署。如有疑问，可通过站内信反馈。',
+    );
+
+    const deliveryHtml = renderToStaticMarkup(
+      <InvoiceSignatureReminderDeliveryNotice email="" />,
+    );
+    expect(deliveryHtml).toContain('通知发送渠道');
+    expect(deliveryHtml).toContain('达人端站内信');
+    expect(deliveryHtml).toContain('未发送 · 达人档案邮箱待补充');
+    expect(deliveryHtml).toContain('当前仅模拟发送并保留通知记录');
   });
 });
