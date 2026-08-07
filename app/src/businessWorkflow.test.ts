@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   beginPaymentListEdit,
   canEditProject,
+  clearPaymentListItems,
   createAuditEvent,
   generatePaymentListVersion,
   getPaymentListAccess,
@@ -187,6 +188,32 @@ describe('project payment list', () => {
     const withItem = upsertPaymentListItem(record, item);
     expect(upsertPaymentListItem(withItem, item).items).toHaveLength(1);
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
+  });
+
+  it('clears payment rows while preserving the list identity and generated history', () => {
+    const generated = {
+      ...record,
+      status: 'generated' as const,
+      version: 2,
+      items: [item],
+      versions: [{
+        version: 2,
+        generatedAt: '2026-08-07T10:00:00.000Z',
+        generatedBy: { account: 'admin.test', name: 'Admin', role: '管理员' },
+        items: [item],
+      }],
+    };
+    const cleared = clearPaymentListItems(generated, '2026-08-07T11:00:00.000Z');
+
+    expect(cleared).toMatchObject({
+      paymentListId: generated.paymentListId,
+      paymentListCode: generated.paymentListCode,
+      status: 'draft',
+      draftFromVersion: 2,
+      items: [],
+      updatedAt: '2026-08-07T11:00:00.000Z',
+    });
+    expect(cleared.versions).toEqual(generated.versions);
   });
 
   it('allows a payment-list account override but blocks non-Airwallex generation', () => {

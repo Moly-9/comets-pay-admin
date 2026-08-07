@@ -88,6 +88,7 @@ import {
   applyPaymentListPayoutSnapshot,
   beginPaymentListEdit,
   canEditProject,
+  clearPaymentListItems,
   createAuditEvent,
   createPrototypeCode,
   createPrototypeId,
@@ -2455,10 +2456,19 @@ export default function App() {
         invoiceIds: link.invoiceIds.filter((id) => id !== invoiceId),
       })), `已删除 Invoice ${invoiceId}`);
     },
-    onDeletePaymentList: (request, paymentListId) => {
-      if (!requestResourceEditable(request) || !requestListFor(request, paymentListId)) return;
-      setPaymentLists((current) => current.filter((list) => list.paymentListId !== paymentListId));
-      markRequestResourceChanged(request, `已删除付款清单 ${paymentListId}`);
+    onClearPaymentLists: (request) => {
+      const requestLists = paymentLists.filter((list) => (
+        list.paymentRequestProjectId === request.paymentRequestProjectId
+      ));
+      const clearedItemCount = requestLists.reduce((sum, list) => sum + list.items.length, 0);
+      if (!requestResourceEditable(request) || !clearedItemCount) return;
+      const clearedAt = nowIso();
+      setPaymentLists((current) => current.map((list) => (
+        list.paymentRequestProjectId === request.paymentRequestProjectId
+          ? clearPaymentListItems(list, clearedAt)
+          : list
+      )));
+      markRequestResourceChanged(request, `已清空付款清单，共移除 ${clearedItemCount} 笔付款行`);
     },
     onRemovePaymentInvoice: (request, paymentListId, invoiceId) => {
       const list = requestListFor(request, paymentListId);

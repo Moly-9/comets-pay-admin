@@ -357,6 +357,17 @@ export const removePaymentListItem = (
   updatedAt: nowIso(),
 });
 
+export const clearPaymentListItems = (
+  list: PaymentListRecord,
+  clearedAt = nowIso(),
+): PaymentListRecord => ({
+  ...list,
+  status: 'draft',
+  draftFromVersion: list.version,
+  items: [],
+  updatedAt: clearedAt,
+});
+
 export const refreshPaymentListItemSnapshot = (
   list: PaymentListRecord,
   refreshedItem: PaymentListItem,

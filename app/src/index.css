@@ -901,7 +901,45 @@
   font-size: 13px;
 }
 
-.request-payment-flat-rows { display: grid; gap: 12px; }
+.request-payment-flat-rows {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+}
+
+.request-payment-flat-rows .project-payment-row {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  gap: 14px;
+  border: 1px solid #e2e6ec;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.request-payment-flat-rows .project-payment-row.has-provider-warning {
+  border-color: #e7b8a7;
+}
+
+.request-payment-flat-rows .project-payment-fields input,
+.request-payment-flat-rows .project-payment-fields .custom-select-trigger {
+  border-color: #d7dce4;
+}
+
+.request-payment-flat-rows .project-payment-fields input:disabled,
+.request-payment-flat-rows .project-payment-fields .custom-select-trigger:disabled {
+  border-color: #dfe3e9;
+  background: #f7f8fa;
+  color: #555d69;
+  opacity: 1;
+}
+
+.request-payment-flat-rows .project-payment-fields input:disabled {
+  padding: 6px 8px;
+}
 
 .request-payment-row-footer {
   display: flex;
@@ -2172,6 +2210,10 @@
 
   .project-payment-fields {
     grid-template-columns: 1fr;
+  }
+
+  .request-payment-flat-rows .project-payment-row {
+    padding: 12px;
   }
 
   .project-payment-account-field,

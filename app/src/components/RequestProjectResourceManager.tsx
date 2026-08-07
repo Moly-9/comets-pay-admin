@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Download,
+  Eraser,
   Eye,
   FilePlus2,
   FileText,
@@ -74,7 +75,7 @@ type Props = {
   onDeleteContract: (contractId: ContractId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onGeneratePaymentLists: () => void;
-  onDeletePaymentList: (paymentListId: PaymentListId) => void;
+  onClearPaymentLists: () => void;
   onRemovePaymentInvoice: (paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (
     paymentListId: PaymentListId,
@@ -98,7 +99,7 @@ export type RequestProjectResourceActions = {
   onUploadContract: (request: RequestProjectSummary, input: ContractUploadInput) => ContractRecord;
   onDeleteContract: (request: RequestProjectSummary, contractId: ContractId) => void;
   onDeleteInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
-  onDeletePaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => void;
+  onClearPaymentLists: (request: RequestProjectSummary) => void;
   onRemovePaymentInvoice: (request: RequestProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (request: RequestProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId, field: PaymentListEditableField, value: string | number) => void;
   onChangePaymentAccount: (request: RequestProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId, payoutAccountId: string) => void;
@@ -297,7 +298,7 @@ export function RequestProjectResourceManager({
   onDeleteContract,
   onDeleteInvoice,
   onGeneratePaymentLists,
-  onDeletePaymentList,
+  onClearPaymentLists,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
   onChangePaymentAccount,
@@ -324,6 +325,7 @@ export function RequestProjectResourceManager({
     list.paymentRequestProjectId === request.paymentRequestProjectId
   ));
   const currentPaymentList = requestPaymentLists[0] ?? null;
+  const paymentItemCount = requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0);
   const paymentListEditing = currentPaymentList?.status === 'draft';
   const paymentListExportable = Boolean(
     currentPaymentList
@@ -331,7 +333,7 @@ export function RequestProjectResourceManager({
   );
 
   const generateOrRefreshPaymentList = () => {
-    if (currentPaymentList?.status === 'draft') {
+    if (currentPaymentList?.status === 'draft' && currentPaymentList.items.length) {
       onGeneratePaymentListVersion(currentPaymentList.paymentListId);
       return;
     }
@@ -525,13 +527,13 @@ export function RequestProjectResourceManager({
       {resourceDialog === 'payment' ? (
         <Modal title={`${request.requestCode ?? request.id} · 付款清单`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
-            <div className="project-resource-browser-heading"><div><strong>全部付款明细</strong><p>不按达人或渠道分组，每张 Invoice 保留独立付款行。</p></div><span>{requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0)} 笔</span></div>
+            <div className="project-resource-browser-heading"><div><strong>全部付款明细</strong><p>不按达人或渠道分组，每张 Invoice 保留独立付款行。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 {canEdit ? <Button icon={<RefreshCw size={15} />} disabled={!linkedInvoices.length} onClick={generateOrRefreshPaymentList}>生成 / 刷新清单</Button> : null}
                 {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
                 {canEdit && currentPaymentList ? <Button variant="secondary" icon={<Pencil size={15} />} disabled={paymentListEditing} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>{paymentListEditing ? '编辑中' : '编辑付款清单'}</Button> : null}
-                {canEdit && currentPaymentList ? <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setConfirmAction({ title: '删除付款清单', description: `将删除 ${currentPaymentList.paymentListCode}，Invoice 源记录不受影响。`, confirmLabel: '删除清单', danger: true, run: () => onDeletePaymentList(currentPaymentList.paymentListId) })}>删除清单</Button> : null}
+                {canEdit && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled={!paymentItemCount} onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
               </div>
             ) : null}
             <div className="project-payment-rows request-payment-flat-rows">
@@ -547,6 +549,7 @@ export function RequestProjectResourceManager({
                 return <article className="project-payment-row" id={`request-payment-row-${item.invoiceId}`} key={`${list.paymentListId}-${item.invoiceId}`}><header className="project-payment-row-header"><div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {list.provider}</span></div><div className="project-payment-row-actions">{editable && item.requiresRevalidation ? <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}><RefreshCw size={12} />重新校验</button> : null}{editable ? <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => setConfirmAction({ title: '移除付款明细', description: '仅从当前付款清单移除这笔明细，Invoice 和项目关联保留。', confirmLabel: '确认移除', run: () => onRemovePaymentInvoice(list.paymentListId, item.invoiceId) })}><Trash2 size={15} /></button> : null}</div></header><div className="project-payment-validation-row"><span className={item.requiresRevalidation ? 'project-payment-validation is-warning' : 'project-payment-validation'}>{item.requiresRevalidation ? item.validationIssues?.[0] ?? '需重新校验' : `${paymentListStatusLabel(list.status)} · ${effectiveAccount.provider}`}</span></div><div className="project-payment-fields"><label className="project-payment-account-field"><span>收款账户</span><SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label><label><span>支付币种</span><input disabled={!editable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value.toUpperCase())} /></label><label><span>收款币种</span><input disabled={!editable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} /></label><label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label><label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label><label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label><label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label><label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label></div><footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer></article>;
               }))}
               {!requestPaymentLists.length ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款清单尚未生成</strong><p>请先关联 Invoice，再生成当前请款项目专属清单。</p></div> : null}
+              {requestPaymentLists.length && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款清单已清空</strong><p>点击“生成 / 刷新清单”可按当前关联的 Invoice 重新生成付款行。</p></div> : null}
             </div>
           </div>
         </Modal>

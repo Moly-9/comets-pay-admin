@@ -1581,3 +1581,31 @@ final result: passed
 - No business behavior, resource permissions, or modal actions changed.
 
 final result: passed
+
+---
+
+# Design QA - 付款达人卡片与字段边框
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f3d5dab7-3bc0-4a81-841d-86174a338073.png`.
+- Source pixels: `1158 x 833`.
+- Intended implementation URL: `http://127.0.0.1:5173/`.
+- State: payment-list dialog with two creators, generated version, and locked payment fields.
+- Implementation screenshot: unavailable.
+
+## Implemented Scope
+
+- Each creator payment row now uses a full bordered card constrained to the same parent width as the `全部付款明细` summary panel.
+- Locked inputs and custom selects retain visible neutral borders and backgrounds instead of collapsing into borderless text.
+- `删除清单` is replaced by `清空清单`; clearing removes current payment rows while preserving payment-list identity, generated history, and Invoice source records.
+- The empty state explains that `生成 / 刷新清单` can rebuild payment rows from linked Invoices.
+
+## Verification and Blocker
+
+- Focused component and workflow tests passed; the full Vitest suite passed with 33 files and 217 tests.
+- TypeScript and the production build passed; only the existing Vite chunk-size advisory remains.
+- The in-app browser security policy blocked refreshing the local implementation URL after the code change. No alternate browser or lower-level workaround was used.
+- Because no post-change browser-rendered screenshot could be captured, full-view comparison, focused comparison, responsive inspection, interaction verification, and console inspection remain blocked.
+
+final result: blocked

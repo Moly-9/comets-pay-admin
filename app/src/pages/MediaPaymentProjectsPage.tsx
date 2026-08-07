@@ -657,7 +657,7 @@ export function MediaPaymentProjectsPage({
             onDeleteContract={(contractId) => resourceActions.onDeleteContract(selectedRequest, contractId)}
             onDeleteInvoice={(invoiceId) => resourceActions.onDeleteInvoice(selectedRequest, invoiceId)}
             onGeneratePaymentLists={() => onGeneratePaymentList(selectedRequest)}
-            onDeletePaymentList={(paymentListId) => resourceActions.onDeletePaymentList(selectedRequest, paymentListId)}
+            onClearPaymentLists={() => resourceActions.onClearPaymentLists(selectedRequest)}
             onRemovePaymentInvoice={(paymentListId, invoiceId) => resourceActions.onRemovePaymentInvoice(selectedRequest, paymentListId, invoiceId)}
             onUpdatePaymentItem={(paymentListId, invoiceId, field, value) => resourceActions.onUpdatePaymentItem(selectedRequest, paymentListId, invoiceId, field, value)}
             onChangePaymentAccount={(paymentListId, invoiceId, payoutAccountId) => resourceActions.onChangePaymentAccount(selectedRequest, paymentListId, invoiceId, payoutAccountId)}

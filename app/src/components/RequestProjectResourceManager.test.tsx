@@ -179,12 +179,16 @@ describe('request project resource aggregation', () => {
     expect(toolbarSource).toContain('生成 / 刷新清单');
     expect(toolbarSource).toContain('导出 Excel');
     expect(toolbarSource).toContain('编辑付款清单');
+    expect(toolbarSource).toContain('清空清单');
+    expect(toolbarSource).not.toContain('删除清单');
     expect(toolbarSource.indexOf('生成 / 刷新清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
     expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('编辑付款清单'));
     expect(paymentRowsSource).not.toContain('创建编辑版本');
     expect(paymentRowsSource).not.toContain('>导出</Button>');
     expect(source).toContain("currentPaymentList?.status === 'draft'");
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
+    expect(source).toContain('付款清单已清空');
+    expect(source).toContain('run: onClearPaymentLists');
   });
 });
 
