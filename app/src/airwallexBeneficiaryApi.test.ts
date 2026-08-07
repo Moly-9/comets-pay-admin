@@ -51,8 +51,6 @@ const account = () => createAirwallexPayoutAccount({
     accountRoutingType1: 'aba',
     accountRoutingValue1: '021000021',
     localClearingSystem: 'ACH',
-    bankName: 'Sample Bank',
-    bankStreetAddress: '1 Finance Street',
   },
   schemaValues: {
     'profile_supplement.trade_amount': '1000',
@@ -77,8 +75,6 @@ const remoteSchema: AirwallexFormSchemaResponse = {
     field('beneficiary.last_name'),
     field('beneficiary.bank_details.account_name'),
     field('beneficiary.bank_details.account_number'),
-    field('beneficiary.bank_details.bank_name'),
-    field('beneficiary.bank_details.bank_street_address'),
     field('beneficiary.bank_details.account_routing_type1'),
     field('beneficiary.bank_details.account_routing_value1'),
     field('beneficiary.bank_details.local_clearing_system'),
@@ -105,8 +101,6 @@ describe('Airwallex beneficiary proxy flow', () => {
           bank_country_code: 'US',
           account_currency: 'USD',
           account_number: '50001121',
-          bank_name: 'Sample Bank',
-          bank_street_address: '1 Finance Street',
         },
       },
     });
@@ -239,21 +233,6 @@ describe('Airwallex beneficiary proxy flow', () => {
     })).rejects.toMatchObject({
       name: 'AirwallexIntegrationError',
       fieldIssues: [{ path: 'beneficiary.bank_details.swift_code' }],
-    });
-    expect(request).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not create a beneficiary when a required core payment field is missing', async () => {
-    const request = vi.fn(async () => jsonResponse(remoteSchema)) as unknown as typeof fetch;
-    const missingBankAddress = account();
-    missingBankAddress.bankDetails.bankStreetAddress = '';
-
-    await expect(synchronizeAirwallexBeneficiary(missingBankAddress, {
-      request,
-      requestId: 'request-missing-address',
-    })).rejects.toMatchObject({
-      name: 'AirwallexIntegrationError',
-      fieldIssues: [{ path: 'beneficiary.bank_details.bank_street_address' }],
     });
     expect(request).toHaveBeenCalledTimes(1);
   });

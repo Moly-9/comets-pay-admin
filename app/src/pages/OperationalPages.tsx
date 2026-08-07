@@ -59,7 +59,9 @@ import {
   getDefaultPayoutAccount,
   getPayoutAccountId,
   getPayoutAccountVersion,
+  getPayoutAccountSummary,
   getPayoutAccountStatusMeta,
+  isPayoutAccountVerified,
   prepareCreatorPayoutAccountsForSave,
 } from '../payoutAccounts';
 import type {
@@ -1224,134 +1226,6 @@ const createSocialAccount = (
   profileUrl: profileUrl || defaultSocialProfileUrl(platform, handle),
 });
 
-const CREATOR_DRAFT_STORAGE_VERSION = 1;
-const DEFAULT_CREATOR_ACCOUNT_NICKNAME = '新的 Airwallex 账户';
-const DEFAULT_CREATOR_SCHEMA_VALUES: Record<string, string> = {
-  'beneficiary.entity_type': 'PERSONAL',
-  'beneficiary.address.country_code': 'US',
-  'beneficiary.bank_details.bank_country_code': 'US',
-  'beneficiary.bank_details.account_currency': 'USD',
-  'beneficiary.bank_details.bank_account_category': 'Checking',
-  'beneficiary.bank_details.account_routing_type1': 'aba',
-  'beneficiary.bank_details.local_clearing_system': 'ACH',
-  transfer_method: 'LOCAL',
-};
-
-type StoredCreatorDraft = {
-  version: typeof CREATOR_DRAFT_STORAGE_VERSION;
-  profile: CreatorProfile;
-  savedAt: string;
-};
-
-const creatorDraftStorageKey = (account: string) => (
-  `comets-pay.creator-draft.v1:${account}`
-);
-
-const hasText = (values: Array<string | undefined>) => (
-  values.some((value) => Boolean(value?.trim()))
-);
-
-export const hasCreatorDraftContent = (profile: CreatorProfile | null) => {
-  if (!profile) return false;
-  if (hasText([profile.name, profile.region])) return true;
-  if (
-    profile.socialAccounts.length !== 1
-    || profile.socialAccounts.some((account) => hasText([
-      account.platform,
-      account.handle,
-      account.profileUrl,
-    ]))
-  ) return true;
-  if (hasText(Object.values(profile.contact))) return true;
-  if (profile.payoutAccountHistory?.length) return true;
-  if (profile.payoutAccounts.length !== 1) return true;
-
-  const account = profile.payoutAccounts[0];
-  if (!account || account.provider !== 'Airwallex') return true;
-  if (
-    account.nickname !== DEFAULT_CREATOR_ACCOUNT_NICKNAME
-    || !account.isDefault
-    || account.status !== 'DRAFT'
-    || account.entityType !== 'PERSONAL'
-    || account.transferMethod !== 'LOCAL'
-    || hasText([
-      account.beneficiaryId,
-      account.firstName,
-      account.lastName,
-      account.companyName,
-      account.notificationEmail,
-      account.verificationCode,
-      account.nameMatchResult,
-      account.validatedAt,
-      account.verifiedAt,
-      account.address.streetAddress,
-      account.address.city,
-      account.address.state,
-      account.address.postcode,
-      account.bankDetails.accountName,
-      account.bankDetails.accountNumber,
-      account.bankDetails.iban,
-      account.bankDetails.accountRoutingValue1,
-      account.bankDetails.accountRoutingType2,
-      account.bankDetails.accountRoutingValue2,
-      account.bankDetails.bankName,
-      account.bankDetails.bankBranch,
-      account.bankDetails.bankStreetAddress,
-      account.bankDetails.bankState,
-      account.bankDetails.swiftCode,
-      account.bankDetails.intermediaryBankName,
-      account.bankDetails.intermediaryBankSwiftCode,
-    ])
-    || account.address.countryCode !== 'US'
-    || account.bankDetails.bankCountryCode !== 'US'
-    || account.bankDetails.bankCountryName !== 'United States'
-    || account.bankDetails.accountCurrency !== 'USD'
-    || account.bankDetails.bankAccountCategory !== 'Checking'
-    || account.bankDetails.accountRoutingType1 !== 'aba'
-    || account.bankDetails.localClearingSystem !== 'ACH'
-  ) return true;
-
-  return Object.entries(account.schemaValues ?? {}).some(([path, value]) => (
-    Boolean(value.trim()) && DEFAULT_CREATOR_SCHEMA_VALUES[path] !== value
-  ));
-};
-
-const isStoredCreatorDraft = (value: unknown): value is StoredCreatorDraft => {
-  if (!value || typeof value !== 'object') return false;
-  const stored = value as Partial<StoredCreatorDraft>;
-  const profile = stored.profile as Partial<CreatorProfile> | undefined;
-  const contact = profile?.contact as Partial<CreatorInvoiceContact> | undefined;
-  const validContact = Boolean(contact)
-    && [contact?.legalName, contact?.address, contact?.phone, contact?.email]
-      .every((field) => typeof field === 'string');
-  const validSocialAccounts = Array.isArray(profile?.socialAccounts)
-    && profile.socialAccounts.every((account) => (
-      account
-      && typeof account.id === 'string'
-      && typeof account.platform === 'string'
-      && typeof account.handle === 'string'
-      && typeof account.profileUrl === 'string'
-    ));
-  const validPayoutAccounts = Array.isArray(profile?.payoutAccounts)
-    && profile.payoutAccounts.length > 0
-    && profile.payoutAccounts.every((account) => {
-      if (!account || typeof account.id !== 'string') return false;
-      if (account.provider === 'Airwallex') {
-        return Boolean(account.address && account.bankDetails && account.schemaValues);
-      }
-      return account.provider === 'PayPal' || account.provider === 'PayMax';
-    });
-  return stored.version === CREATOR_DRAFT_STORAGE_VERSION
-    && typeof stored.savedAt === 'string'
-    && Boolean(profile)
-    && typeof profile?.id === 'string'
-    && typeof profile?.name === 'string'
-    && typeof profile?.region === 'string'
-    && validContact
-    && validSocialAccounts
-    && validPayoutAccounts;
-};
-
 const createSocialAccountsFromSummary = (
   creatorId: string,
   platformSummary: string,
@@ -1790,21 +1664,9 @@ function ProjectCreatorPicker({
   );
 }
 
-function CreatorPaymentSection({
-  icon,
-  title,
-  description,
-  children,
-  sectionId,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  children: ReactNode;
-  sectionId?: string;
-}) {
+function CreatorPaymentSection({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
   return (
-    <section className="creator-payment-section" id={sectionId}>
+    <section className="creator-payment-section">
       <header className="creator-payment-section-head">
         <span>{icon}</span>
         <div><h3>{title}</h3><p>{description}</p></div>
@@ -1883,9 +1745,12 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
               <strong>{account.platform || '平台待补充'}</strong>
               <small>{account.handle || '账号待补充'}</small>
             </div>
+            <span className="creator-social-verification">
+              <Clock3 size={13} />
+              认证状态待同步
+            </span>
             {account.profileUrl ? (
               <a href={account.profileUrl} target="_blank" rel="noreferrer" aria-label={`打开 ${account.platform} 主页`}>
-                查看主页
                 <ExternalLink size={14} />
               </a>
             ) : (
@@ -1991,26 +1856,20 @@ export function CreatorsPage({
   creators,
   onSaveCreator,
   canEdit,
-  currentUserAccount,
-  initialCreatorId,
 }: {
   notify: Notify;
   creators: CreatorProfile[];
   onSaveCreator: (creator: CreatorProfile) => void;
   canEdit: boolean;
-  currentUserAccount: string;
-  initialCreatorId?: string | null;
 }) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [selectedId, setSelectedId] = useState<string | null>(initialCreatorId ?? null);
-  const [focusPaymentInformation, setFocusPaymentInformation] = useState(Boolean(initialCreatorId));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
-  const [creatorCloseGuardOpen, setCreatorCloseGuardOpen] = useState(false);
   const selected = creators.find((creator) => creator.id === selectedId) ?? null;
   const normalizedSearch = search.trim().toLowerCase();
   const filteredCreators = creators.filter((creator) => (
@@ -2049,7 +1908,6 @@ export function CreatorsPage({
     setCreating(false);
     setDraft(null);
     setFormErrors([]);
-    setCreatorCloseGuardOpen(false);
   };
 
   const startEditing = () => {
@@ -2067,38 +1925,6 @@ export function CreatorsPage({
   };
 
   const startCreating = () => {
-    const storageKey = creatorDraftStorageKey(currentUserAccount);
-    try {
-      const savedDraft = localStorage.getItem(storageKey);
-      if (savedDraft) {
-        const stored = JSON.parse(savedDraft) as unknown;
-        if (isStoredCreatorDraft(stored) && !creators.some((creator) => creator.id === stored.profile.id)) {
-          setSelectedId(null);
-          setDraft({
-            ...stored.profile,
-            socialAccounts: stored.profile.socialAccounts.map((account) => ({ ...account })),
-            contact: { ...stored.profile.contact },
-            payoutAccounts: clonePayoutAccounts(stored.profile.payoutAccounts),
-            payoutAccountHistory: clonePayoutAccounts(stored.profile.payoutAccountHistory ?? []),
-          });
-          setEditing(true);
-          setCreating(true);
-          setFormErrors([]);
-          setCreatorCloseGuardOpen(false);
-          notify('达人草稿已恢复', '已恢复当前账号在此浏览器中未完成的达人档案。');
-          return;
-        }
-        localStorage.removeItem(storageKey);
-      }
-    } catch {
-      try {
-        localStorage.removeItem(storageKey);
-      } catch {
-        // Storage may be unavailable; a fresh in-memory draft can still be created.
-      }
-      notify('达人草稿未恢复', '本地草稿无法读取，已为你打开空白表单。');
-    }
-
     const id = createPrototypeId('creator');
     setSelectedId(null);
     setDraft({
@@ -2118,42 +1944,6 @@ export function CreatorsPage({
     setEditing(true);
     setCreating(true);
     setFormErrors([]);
-    setCreatorCloseGuardOpen(false);
-  };
-
-  const requestCloseCreatorModal = () => {
-    if (hasCreatorDraftContent(draft)) {
-      setCreatorCloseGuardOpen(true);
-      return;
-    }
-    closeProfile();
-  };
-
-  const discardCreatorDraft = () => {
-    try {
-      localStorage.removeItem(creatorDraftStorageKey(currentUserAccount));
-    } catch {
-      notify('无法放弃草稿', '浏览器本地存储暂时不可用，草稿未能安全清除。');
-      return;
-    }
-    closeProfile();
-  };
-
-  const saveCreatorDraft = () => {
-    if (!draft) return;
-    const stored: StoredCreatorDraft = {
-      version: CREATOR_DRAFT_STORAGE_VERSION,
-      profile: draft,
-      savedAt: new Date().toISOString(),
-    };
-    try {
-      localStorage.setItem(creatorDraftStorageKey(currentUserAccount), JSON.stringify(stored));
-    } catch {
-      notify('达人草稿保存失败', '浏览器本地存储暂时不可用，已保留当前编辑内容。');
-      return;
-    }
-    closeProfile();
-    notify('达人草稿已保存', '下次使用当前账号在此浏览器新建达人档案时会自动恢复。');
   };
 
   const cancelEditing = () => {
@@ -2251,11 +2041,6 @@ export function CreatorsPage({
       payoutAccountHistory,
     };
     onSaveCreator(updated);
-    try {
-      localStorage.removeItem(creatorDraftStorageKey(currentUserAccount));
-    } catch {
-      // Saving the creator must not fail because stale local draft cleanup is unavailable.
-    }
     setSelectedId(updated.id);
     setDraft(null);
     setEditing(false);
@@ -2272,17 +2057,23 @@ export function CreatorsPage({
   const activeProfile = editing && draft ? draft : selected;
   const activeDefaultAccount = activeProfile ? getDefaultPayoutAccount(activeProfile.payoutAccounts) : null;
   const activeStatus = getPayoutAccountStatusMeta(activeDefaultAccount?.status ?? 'DRAFT', activeDefaultAccount?.provider);
-
-  useEffect(() => {
-    if (!activeProfile || !focusPaymentInformation || editing) return undefined;
-    const animationFrame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(`creator-payment-information-${activeProfile.id}`)
-        ?.scrollIntoView({ block: 'start' });
-      setFocusPaymentInformation(false);
-    });
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeProfile, editing, focusPaymentInformation]);
+  const activePayoutAccounts = activeProfile?.payoutAccounts.filter((account) => account.status !== 'DISABLED') ?? [];
+  const activePayoutProviders = [...new Set(activePayoutAccounts.map((account) => account.provider))];
+  const activeUsableAccountCount = activePayoutAccounts.filter(isPayoutAccountVerified).length;
+  const activeDefaultAccountSummary = activeDefaultAccount
+    ? `${activeDefaultAccount.provider === 'Airwallex' ? 'Airwallex · ' : ''}${getPayoutAccountSummary(activeDefaultAccount)}`
+    : '';
+  const activeSocialPlatforms = [
+    ...new Set(
+      activeProfile?.socialAccounts
+        .map((account) => account.platform.trim())
+        .filter(Boolean) ?? [],
+    ),
+  ];
+  const completedContactFields = activeProfile
+    ? Object.values(activeProfile.contact).filter((value) => value.trim()).length
+    : 0;
+  const contactIsComplete = completedContactFields === INVOICE_CONTACT_FIELDS.length;
 
   return (
     <div className="page-stack">
@@ -2350,7 +2141,6 @@ export function CreatorsPage({
           width="1040px"
           className={editing ? 'creator-profile-editor-modal' : undefined}
           onClose={closeProfile}
-          onBackdropMouseDown={creating ? requestCloseCreatorModal : closeProfile}
           footer={editing ? (
             <><Button variant="ghost" onClick={cancelEditing}>取消</Button><Button onClick={saveCreatorDetails}>{creating ? '建立达人档案' : '保存达人档案'}</Button></>
           ) : (
@@ -2360,13 +2150,26 @@ export function CreatorsPage({
             </>
           )}
         >
-          <div className="profile-summary">
+          <div className="profile-summary creator-profile-summary">
             <Avatar initials={activeProfile.initials} accent={activeProfile.accent} size="lg" />
-            <div><h3>{activeProfile.name || '新达人'}</h3><p>{[activeProfile.handle, activeProfile.region, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p></div>
-            <span className={`verified-badge verified-badge-${activeStatus.tone}`}>
-              {activeStatus.tone === 'success' ? <ShieldCheck size={15} /> : activeStatus.tone === 'danger' || activeStatus.tone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
-              {activeStatus.label}
-            </span>
+            <div className="creator-profile-summary-copy">
+              <div>
+                <h3>{activeProfile.name || '新达人'}</h3>
+                <p>{[activeProfile.handle, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p>
+              </div>
+              <dl className="creator-profile-summary-meta">
+                <div><dt>档案编号</dt><dd>{activeProfile.id}</dd></div>
+                <div><dt>地区</dt><dd>{activeProfile.region || '待补充'}</dd></div>
+                <div><dt>合作项目</dt><dd>{activeProfile.projects} 个</dd></div>
+              </dl>
+            </div>
+            <div className="creator-profile-summary-status">
+              <small>默认收款账户</small>
+              <span className={`verified-badge verified-badge-${activeStatus.tone}`}>
+                {activeStatus.tone === 'success' ? <ShieldCheck size={15} /> : activeStatus.tone === 'danger' || activeStatus.tone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
+                {activeStatus.label}
+              </span>
+            </div>
           </div>
           {editing && draft ? (
             <div className="creator-payment-editor">
@@ -2413,19 +2216,39 @@ export function CreatorsPage({
             </div>
           ) : (
             <div className="creator-profile-content">
-              <div className="profile-details"><div><span>社媒账号</span><strong>{activeProfile.socialAccounts.length} 个 · {activeProfile.platform || '平台待补充'}</strong></div><div><span>合作项目</span><strong>{activeProfile.projects} 个</strong></div><div><span>真实姓名</span><strong>{activeProfile.contact.legalName || '待补充'}</strong></div><div><span>联系邮箱</span><strong>{activeProfile.contact.email || '待补充'}</strong></div></div>
-              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人在各社媒平台填写的公开账号">
+              <section className="creator-profile-overview" aria-label="达人档案概览">
+                <article>
+                  <span>社媒账号</span>
+                  <strong>{activeProfile.socialAccounts.length} 个</strong>
+                  <small>{activeSocialPlatforms.join(' · ') || '平台待补充'}</small>
+                </article>
+                <article>
+                  <span>Invoice 联系资料</span>
+                  <strong>{contactIsComplete ? '已完善' : '待补充'}</strong>
+                  <small>{completedContactFields}/{INVOICE_CONTACT_FIELDS.length} 项已填写</small>
+                </article>
+                <article>
+                  <span>收款渠道</span>
+                  <strong>{activePayoutProviders.join(' · ') || '待添加'}</strong>
+                  <small>{activePayoutAccounts.length} 个账户 · {activeUsableAccountCount} 个可用</small>
+                </article>
+                <article>
+                  <span>默认付款账户</span>
+                  <strong>{activeDefaultAccount?.nickname || '待设置'}</strong>
+                  <small>
+                    {activeDefaultAccount
+                      ? activeDefaultAccountSummary
+                      : '暂无可用于付款的账户'}
+                  </small>
+                </article>
+              </section>
+              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="平台账号与主页来自达人档案；认证结论需由 C 端认证流程同步">
                 <CreatorSocialAccountDetails accounts={activeProfile.socialAccounts} />
               </CreatorPaymentSection>
               <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
                 <CreatorContactDetailsGrid contact={activeProfile.contact} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection
-                icon={<WalletCards size={19} />}
-                title="收款账户"
-                description="默认账户决定批量付款与单笔付款的预选资料"
-                sectionId={`creator-payment-information-${activeProfile.id}`}
-              >
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax，默认账户决定付款时的预选资料">
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
                   creatorId={activeProfile.id}
@@ -2435,22 +2258,6 @@ export function CreatorsPage({
               </CreatorPaymentSection>
             </div>
           )}
-        </Modal>
-      ) : null}
-      {creatorCloseGuardOpen ? (
-        <Modal
-          title="保留未完成的达人档案？"
-          onClose={() => setCreatorCloseGuardOpen(false)}
-          width="520px"
-          footer={(
-            <>
-              <Button variant="ghost" onClick={discardCreatorDraft}>放弃并退出</Button>
-              <Button variant="secondary" onClick={saveCreatorDraft}>保存草稿并退出</Button>
-              <Button onClick={() => setCreatorCloseGuardOpen(false)}>继续编辑</Button>
-            </>
-          )}
-        >
-          <p className="project-draft-guard-copy">当前表单已有内容。草稿仅保存在当前账号的此浏览器中，不会创建达人档案或同步到其他设备。</p>
         </Modal>
       ) : null}
     </div>

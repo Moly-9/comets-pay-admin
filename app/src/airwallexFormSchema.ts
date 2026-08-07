@@ -459,7 +459,6 @@ const buildLocalBankFields = (
         key: 'bank_name',
         path: 'beneficiary.bank_details.bank_name',
         label: '银行名称',
-        required: true,
         description: '部分地区可由 IBAN 自动识别',
         example: 'Banco Bilbao Vizcaya Argentaria',
         pattern: '^.{1,200}$',
@@ -535,22 +534,14 @@ const buildLocalBankFields = (
   ];
 };
 
-const buildSwiftBankFields = (
-  country: CountryProfile | undefined,
-): AirwallexFormSchemaField[] => [
+const buildSwiftBankFields = (): AirwallexFormSchemaField[] => [
   makeField({
-    key: country?.ibanPreferred ? 'iban' : 'account_number',
-    path: country?.ibanPreferred
-      ? 'beneficiary.bank_details.iban'
-      : 'beneficiary.bank_details.account_number',
-    label: country?.ibanPreferred ? 'IBAN' : '银行账号',
+    key: 'account_number',
+    path: 'beneficiary.bank_details.account_number',
+    label: '银行账号 / IBAN',
     required: true,
-    description: country?.ibanPreferred
-      ? '当前目的地的 Form Schema 使用 IBAN'
-      : '当前目的地的 Form Schema 使用银行账号',
-    pattern: country?.ibanPreferred
-      ? '^[A-Z]{2}[0-9A-Z]{13,32}$'
-      : '^[0-9A-Za-z\\- ]{1,34}$',
+    description: '按当前目的地 Schema 输入银行账号或 IBAN',
+    pattern: '^[0-9A-Za-z\\- ]{1,34}$',
   }),
   makeField({
     key: 'swift_code',
@@ -579,6 +570,13 @@ const buildSwiftBankFields = (
     pattern: '^.{1,200}$',
   }),
   makeField({
+    key: 'bank_street_address',
+    path: 'beneficiary.bank_details.bank_street_address',
+    label: '银行街道地址',
+    description: '仅在 Form Schema 返回时采集',
+    pattern: '^.{1,200}$',
+  }),
+  makeField({
     key: 'bank_state',
     path: 'beneficiary.bank_details.bank_state',
     label: '银行州 / 省',
@@ -600,16 +598,6 @@ const buildSwiftBankFields = (
     pattern: '^[A-Z0-9]{8}([A-Z0-9]{3})?$',
   }),
 ];
-
-const buildRequiredBankAddressField = (): AirwallexFormSchemaField => makeField({
-  key: 'bank_street_address',
-  path: 'beneficiary.bank_details.bank_street_address',
-  label: '银行街道地址',
-  required: true,
-  description: '请输入收款银行的完整地址',
-  example: '1 Finance Street, New York, NY 10005',
-  pattern: '^[\\s\\S]{2,300}$',
-});
 
 /**
  * 无凭证原型使用的 Schema 适配器。
@@ -633,9 +621,8 @@ export const generateLocalAirwallexFormSchema = (
       pattern: '^[\\s\\S]{2,200}$',
     }),
     ...(account.transferMethod === 'SWIFT'
-      ? buildSwiftBankFields(country)
+      ? buildSwiftBankFields()
       : buildLocalBankFields(country)),
-    buildRequiredBankAddressField(),
   ];
 
   return {
@@ -674,11 +661,7 @@ const readKnownPath = (
     'beneficiary.bank_details.local_clearing_system': account.bankDetails.localClearingSystem,
     'beneficiary.bank_details.bank_name': account.bankDetails.bankName,
     'beneficiary.bank_details.bank_branch': account.bankDetails.bankBranch,
-    'beneficiary.bank_details.bank_street_address': account.bankDetails.bankStreetAddress
-      || account.schemaValues?.['beneficiary.bank_details.bank_address']
-      || account.schemaValues?.['beneficiary.bank_details.bank_address_line_1']
-      || account.schemaValues?.['profile_supplement.beneficiary_bank_address']
-      || '',
+    'beneficiary.bank_details.bank_street_address': account.bankDetails.bankStreetAddress,
     'beneficiary.bank_details.bank_state': account.bankDetails.bankState,
     'beneficiary.bank_details.swift_code': account.bankDetails.swiftCode,
     'beneficiary.bank_details.intermediary_bank_name': account.bankDetails.intermediaryBankName,

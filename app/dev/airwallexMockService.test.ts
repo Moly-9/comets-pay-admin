@@ -31,17 +31,9 @@ describe('Airwallex local mock service', () => {
         meta: { source: 'mock', simulated: true },
       },
     });
-    const fields = (response?.body as { fields: Array<{ path: string; required: boolean }> }).fields;
+    const fields = (response?.body as { fields: Array<{ path: string }> }).fields;
     expect(fields.map((field) => field.path)).toContain(
       'beneficiary.bank_details.local_clearing_system',
-    );
-    expect(fields.filter((field) => field.required).map((field) => field.path)).toEqual(
-      expect.arrayContaining([
-        'beneficiary.bank_details.account_name',
-        'beneficiary.bank_details.account_number',
-        'beneficiary.bank_details.bank_name',
-        'beneficiary.bank_details.bank_street_address',
-      ]),
     );
   });
 
