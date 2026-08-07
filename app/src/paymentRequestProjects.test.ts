@@ -17,6 +17,7 @@ import {
   filterPaymentRequestList,
   normalizePaymentRequestCreatorLink,
   paymentRequestAmountLabel,
+  paymentRequestCreatorPresentation,
   paymentRequestInvoiceIds,
   invoiceAmountLabel,
   paymentRequestListMetrics,
@@ -328,6 +329,213 @@ describe('media payment request submission validation', () => {
     expect(paymentRequestSubmissionIssues({
       creatorLinks: [link], invoices: [invoice()], paymentLists: [extraList], paymentRequestProjectId,
     })).toContain('付款清单包含当前请款项目未关联的 Invoice invoice_extra');
+  });
+});
+
+describe('media payment request creator table presentation', () => {
+  const link: PaymentRequestCreatorLink = {
+    creatorId,
+    engagementId,
+    contractIds: [],
+    invoiceIds: ['invoice_001' as InvoiceId],
+  };
+  const paymentRequestProjectId = 'request_project_presentation' as PaymentRequestProjectId;
+  const readyPaymentList = (): PaymentListRecord => ({
+    paymentListId: 'payment_list_presentation' as PaymentListRecord['paymentListId'],
+    paymentListCode: 'PAY-20260807-PRESENT',
+    paymentRequestProjectId,
+    projectId: cooperationProjectId,
+    provider: 'Airwallex',
+    status: 'generated',
+    items: [{
+      id: 'presentation-item-1',
+      engagementId,
+      invoiceId: link.invoiceIds[0],
+      snapshot: {
+        invoiceNumber: 'INV-20260807-000001',
+        creatorName: 'Synthetic Creator',
+        currency: 'USD',
+        receiveCurrency: 'USD',
+        amount: 100,
+        provider: 'Airwallex',
+        accountSummary: 'Airwallex · 1234',
+        paymentReason: '',
+        transactionReference: 'REQ-PRESENT-01',
+        description: '',
+        payoutAccountId: 'payout_account_001',
+        validationStatus: 'VERIFIED',
+      },
+      overrides: {},
+      requiresRevalidation: false,
+      validationIssues: [],
+    }],
+    createdAt: '2026-08-07T02:00:00.000Z',
+    updatedAt: '2026-08-07T02:00:00.000Z',
+  });
+
+  it('treats the contract as optional and presents a ready Airwallex request', () => {
+    const result = paymentRequestCreatorPresentation({
+      link,
+      invoices: [invoice()],
+      contracts: [],
+      paymentLists: [readyPaymentList()],
+      paymentRequestProjectId,
+      requestLifecycle: 'DRAFT',
+      requestStatus: '草稿',
+    });
+
+    expect(result.contracts).toEqual([]);
+    expect(result.invoices[0]).toMatchObject({
+      provider: 'Airwallex',
+      invoiceAmountLabel: 'USD 100',
+      requestAmountLabel: 'USD 100',
+      requestAmountSource: 'PAYMENT_LIST',
+      amountAdjusted: false,
+    });
+    expect(result.statuses).toEqual([{ label: '可提交', tone: 'success' }]);
+  });
+
+  it('distinguishes a missing Invoice from an optional missing contract', () => {
+    const result = paymentRequestCreatorPresentation({
+      link: { ...link, invoiceIds: [], contractIds: [] },
+      invoices: [],
+      contracts: [],
+      paymentLists: [],
+      paymentRequestProjectId,
+      requestLifecycle: 'DRAFT',
+    });
+
+    expect(result.invoices).toEqual([]);
+    expect(result.contracts).toEqual([]);
+    expect(result.statuses).toEqual([{ label: '待补 Invoice', tone: 'danger' }]);
+  });
+
+  it('surfaces an unready Invoice, a missing generated list, and an account issue separately', () => {
+    const unready = paymentRequestCreatorPresentation({
+      link,
+      invoices: [invoice({ status: '待签署' })],
+      contracts: [],
+      paymentLists: [],
+      paymentRequestProjectId,
+      requestLifecycle: 'DRAFT',
+    });
+    expect(unready.statuses.map((status) => status.label)).toEqual([
+      'Invoice 状态未就绪',
+      '付款清单待生成',
+    ]);
+
+    const invalidAccountList = readyPaymentList();
+    invalidAccountList.items[0] = {
+      ...invalidAccountList.items[0],
+      snapshot: {
+        ...invalidAccountList.items[0].snapshot,
+        payoutAccountId: '',
+      },
+    };
+    const invalidAccount = paymentRequestCreatorPresentation({
+      link,
+      invoices: [invoice()],
+      contracts: [],
+      paymentLists: [invalidAccountList],
+      paymentRequestProjectId,
+      requestLifecycle: 'DRAFT',
+    });
+    expect(invalidAccount.statuses).toEqual([{ label: '付款账户待核对', tone: 'danger' }]);
+  });
+
+  it('uses the payment-list account override and keeps Invoice and request amounts separate', () => {
+    const second = invoice({
+      id: 'INV-20260807-000002',
+      invoiceId: 'invoice_002' as InvoiceId,
+      snapshot: {
+        ...invoice().snapshot,
+        invoiceNumber: 'INV-20260807-000002',
+        currency: 'EUR',
+        items: [{ id: 'line-eur', description: 'Synthetic service', unitPrice: 50, quantity: 1, lineTotal: 50 }],
+      },
+    });
+    const list = readyPaymentList();
+    list.items[0] = {
+      ...list.items[0],
+      accountOverride: {
+        provider: 'PayPal',
+        accountSummary: 'synthetic@example.test',
+        receiveCurrency: 'USD',
+        payoutAccountId: 'paypal_account_001',
+        validationStatus: 'VERIFIED',
+      },
+      overrides: { amount: 120 },
+    };
+    list.items.push({
+      ...list.items[0],
+      id: 'presentation-item-2',
+      invoiceId: second.invoiceId,
+      snapshot: {
+        ...list.items[0].snapshot,
+        invoiceNumber: second.snapshot.invoiceNumber,
+        currency: 'EUR',
+        receiveCurrency: 'EUR',
+        amount: 50,
+      },
+      accountOverride: undefined,
+      overrides: {},
+    });
+    const result = paymentRequestCreatorPresentation({
+      link: { ...link, invoiceIds: [link.invoiceIds[0], second.invoiceId] },
+      invoices: [invoice(), second],
+      contracts: [],
+      paymentLists: [list],
+      paymentRequestProjectId,
+      requestLifecycle: 'DRAFT',
+    });
+
+    expect(result.invoices.map((row) => row.provider)).toEqual(['PayPal', 'Airwallex']);
+    expect(result.invoices[0]).toMatchObject({
+      invoiceAmountLabel: 'USD 100',
+      requestAmountLabel: 'USD 120',
+      amountAdjusted: true,
+    });
+    expect(result.invoiceTotalLabel).toBe('USD 100 + EUR 50');
+    expect(result.requestTotalLabel).toBe('USD 120 + EUR 50');
+    expect(result.statuses.map((status) => status.label)).toEqual([
+      '付款账户待核对',
+      '付款金额已调整',
+    ]);
+  });
+
+  it('resolves display numbers by stable ids and flags missing contract references', () => {
+    const validContract = contract('CON-PRESENTATION');
+    const result = paymentRequestCreatorPresentation({
+      link: {
+        ...link,
+        contractIds: [validContract.contractId!, 'missing_contract' as ContractId],
+      },
+      invoices: [invoice()],
+      contracts: [validContract],
+      paymentLists: [readyPaymentList()],
+      paymentRequestProjectId,
+      requestLifecycle: 'DRAFT',
+    });
+
+    expect(result.contracts.map((row) => row.contractNumber)).toEqual([
+      'CON-PRESENTATION',
+      '关联记录异常',
+    ]);
+    expect(result.statuses).toContainEqual({ label: '关联记录异常', tone: 'danger' });
+  });
+
+  it('shows the request approval state after the creator row is locked', () => {
+    const result = paymentRequestCreatorPresentation({
+      link,
+      invoices: [invoice({ status: '待签署' })],
+      contracts: [],
+      paymentLists: [],
+      paymentRequestProjectId,
+      requestLifecycle: 'SUBMITTED',
+      requestStatus: '财务审批中',
+    });
+
+    expect(result.statuses).toEqual([{ label: '财务审批中', tone: 'info' }]);
   });
 });
 

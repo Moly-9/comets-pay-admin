@@ -42,6 +42,7 @@ import {
   invoiceAmountLabel,
   paymentRequestAmount,
   paymentRequestAmountLabel,
+  paymentRequestCreatorPresentation,
   paymentRequestInvoiceIds,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
@@ -668,18 +669,98 @@ export function MediaPaymentProjectsPage({
           />
         </section>
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>展示当前请款项目已关联的达人及单据状态。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => openEditForm(selectedRequest, true)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
+          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、关联单据与实际请款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => openEditForm(selectedRequest, true)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
           {links.length ? (
             <div className="table-scroll">
               <table className="data-table project-creator-table media-request-creator-table">
-                <thead><tr><th>达人</th><th>平台</th><th>Invoice</th><th>合同</th><th>单据状态</th></tr></thead>
+                <thead><tr><th>达人</th><th>付款渠道</th><th>Invoice</th><th>合同</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th>校验状态</th></tr></thead>
                 <tbody>{links.map((link) => {
                   const creator = creators.find((item) => item.id === link.creatorId);
-                  const creatorInvoices = link.invoiceIds.flatMap((invoiceId) => {
-                    const invoice = invoices.find((item) => item.invoiceId === invoiceId);
-                    return invoice ? [invoice] : [];
+                  const presentation = paymentRequestCreatorPresentation({
+                    link,
+                    invoices,
+                    contracts,
+                    paymentLists,
+                    paymentRequestProjectId: selectedRequest.paymentRequestProjectId,
+                    requestLifecycle: selectedRequest.lifecycle,
+                    requestStatus: selectedRequest.status,
                   });
-                  return <tr key={link.creatorId}><td><div className="media-request-creator-cell"><Avatar initials={creator?.initials ?? '?'} accent={creator?.accent ?? '#718096'} size="sm" /><span><strong>{creator?.name ?? link.creatorId}</strong><small>{creator?.handle ?? '达人档案待核对'}</small></span></div></td><td>{creator?.platform ?? '待核对'}</td><td><strong>{creatorInvoices.length ? `${creatorInvoices.length} 份 Invoice` : '未关联'}</strong><small className="cell-subtext">{creatorInvoices.map((invoice) => invoice.id).join('、') || '记录缺失'}</small></td><td>{link.contractIds.length ? `${link.contractIds.length} 份` : '未关联（选填）'}</td><td><ProjectStatus status={creatorInvoices.length ? '已关联' : '待补资料'} /></td></tr>;
+                  return (
+                    <tr key={link.creatorId}>
+                      <td><div className="media-request-creator-cell"><Avatar initials={creator?.initials ?? '?'} accent={creator?.accent ?? '#718096'} size="sm" /><span><strong>{creator?.name ?? link.creatorId}</strong><small>{creator?.handle ?? '达人档案待核对'}</small></span></div></td>
+                      <td>
+                        <div className="media-request-record-stack">
+                          {presentation.invoices.length ? presentation.invoices.map((invoice) => (
+                            <span className="media-request-record-line media-request-channel" key={invoice.invoiceId}>{invoice.provider}</span>
+                          )) : <span className="media-request-record-empty">—</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="media-request-record-stack">
+                          {presentation.invoices.length ? presentation.invoices.map((invoice) => (
+                            invoice.missing ? (
+                              <span className="media-request-record-line media-request-record-error" key={invoice.invoiceId}>{invoice.invoiceNumber}</span>
+                            ) : (
+                              <button
+                                className="media-request-document-link media-request-record-line"
+                                type="button"
+                                key={invoice.invoiceId}
+                                onClick={() => resourceActions.onOpenInvoice(selectedRequest, invoice.invoiceId)}
+                              >
+                                {invoice.invoiceNumber}
+                              </button>
+                            )
+                          )) : <span className="media-request-record-empty">待补 Invoice</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="media-request-record-stack">
+                          {presentation.contracts.length ? presentation.contracts.map((contract) => (
+                            contract.missing || !contract.relationshipValid ? (
+                              <span className="media-request-record-line media-request-record-error" key={contract.contractId}>{contract.contractNumber}</span>
+                            ) : (
+                              <button
+                                className="media-request-document-link media-request-record-line"
+                                type="button"
+                                key={contract.contractId}
+                                onClick={() => resourceActions.onOpenContract(selectedRequest, contract.contractId)}
+                              >
+                                {contract.contractNumber}
+                              </button>
+                            )
+                          )) : <span className="media-request-record-empty">—</span>}
+                        </div>
+                      </td>
+                      <td className="media-request-money-cell">
+                        <div className="media-request-record-stack">
+                          {presentation.invoices.length ? presentation.invoices.map((invoice) => (
+                            <span className="media-request-record-line" key={invoice.invoiceId}>{invoice.invoiceAmountLabel}</span>
+                          )) : <span className="media-request-record-empty">—</span>}
+                          {presentation.invoices.length > 1 ? <small>合计 {presentation.invoiceTotalLabel}</small> : null}
+                        </div>
+                      </td>
+                      <td className="media-request-money-cell">
+                        <div className="media-request-record-stack">
+                          {presentation.invoices.length ? presentation.invoices.map((invoice) => (
+                            <span className="media-request-record-line media-request-request-amount" key={invoice.invoiceId}>
+                              <strong>{invoice.requestAmountLabel}</strong>
+                              <small>{invoice.requestAmountSource === 'PAYMENT_LIST' ? `付款清单${invoice.amountAdjusted ? ' · 已调整' : ''}` : '按 Invoice'}</small>
+                            </span>
+                          )) : <span className="media-request-record-empty">—</span>}
+                          {presentation.invoices.length > 1 ? <small>合计 {presentation.requestTotalLabel}</small> : null}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="media-request-validation-stack">
+                          {presentation.statuses.map((status) => (
+                            <span className="media-request-validation-status" data-tone={status.tone} key={status.label}>
+                              <i aria-hidden="true" />{status.label}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
                 })}</tbody>
               </table>
             </div>

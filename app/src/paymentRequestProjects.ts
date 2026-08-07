@@ -10,7 +10,12 @@ import type {
   PaymentRequestProjectId,
   ProjectId,
 } from './businessWorkflow';
-import { invoicePaymentListItem, revalidatePaymentListItem } from './businessWorkflow';
+import {
+  invoicePaymentListItem,
+  paymentListEffectiveAccount,
+  paymentListItemValue,
+  revalidatePaymentListItem,
+} from './businessWorkflow';
 import type { GeneratedInvoiceRecord, InvoiceReviewStatus } from './types';
 
 export type PaymentRequestCreatorLink = {
@@ -18,6 +23,47 @@ export type PaymentRequestCreatorLink = {
   engagementId: EngagementId;
   contractIds: ContractId[];
   invoiceIds: InvoiceId[];
+};
+
+export type PaymentRequestCreatorInvoicePresentation = {
+  invoiceId: InvoiceId;
+  invoiceNumber: string;
+  provider: string;
+  invoiceAmount: number | null;
+  invoiceCurrency: string;
+  invoiceAmountLabel: string;
+  requestAmount: number | null;
+  requestCurrency: string;
+  requestAmountLabel: string;
+  requestAmountSource: 'INVOICE' | 'PAYMENT_LIST';
+  amountAdjusted: boolean;
+  missing: boolean;
+  relationshipValid: boolean;
+  invoiceReady: boolean;
+  paymentListStatus?: PaymentListRecord['status'];
+  paymentItemMissing: boolean;
+  accountNeedsReview: boolean;
+  requiresRevalidation: boolean;
+};
+
+export type PaymentRequestCreatorContractPresentation = {
+  contractId: ContractId;
+  contractNumber: string;
+  missing: boolean;
+  relationshipValid: boolean;
+};
+
+export type PaymentRequestCreatorPresentationStatus = {
+  label: string;
+  tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+};
+
+export type PaymentRequestCreatorPresentation = {
+  invoices: PaymentRequestCreatorInvoicePresentation[];
+  contracts: PaymentRequestCreatorContractPresentation[];
+  invoiceTotalLabel: string;
+  requestTotalLabel: string;
+  statuses: PaymentRequestCreatorPresentationStatus[];
 };
 
 type LegacyPaymentRequestCreatorLink = Omit<PaymentRequestCreatorLink, 'invoiceIds'> & {
@@ -185,6 +231,194 @@ export const invoiceAmountLabel = (invoice: GeneratedInvoiceRecord) => {
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+};
+
+const formatRequestMoney = (currency: string, amount: number | null) => {
+  if (!currency || amount === null || !Number.isFinite(amount)) return '待核算';
+  return `${currency} ${amount.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+const summarizeRequestMoney = (
+  rows: PaymentRequestCreatorInvoicePresentation[],
+  amountKey: 'invoiceAmount' | 'requestAmount',
+  currencyKey: 'invoiceCurrency' | 'requestCurrency',
+) => {
+  const totals = rows.reduce<Record<string, number>>((result, row) => {
+    const amount = row[amountKey];
+    const currency = row[currencyKey];
+    if (!currency || amount === null || !Number.isFinite(amount)) return result;
+    result[currency] = (result[currency] ?? 0) + amount;
+    return result;
+  }, {});
+  return Object.entries(totals)
+    .map(([currency, amount]) => formatRequestMoney(currency, amount))
+    .join(' + ') || '待核算';
+};
+
+const ACCOUNT_ISSUE_PATTERN = /账户|beneficiary|beneficiary_id|收款|渠道/i;
+
+const lockedRequestStatus = (
+  lifecycle: PaymentRequestProjectLike['lifecycle'],
+  status: string | undefined,
+): PaymentRequestCreatorPresentationStatus | null => {
+  if (!lifecycle || lifecycle === 'DRAFT' || lifecycle === 'RETURNED') return null;
+  if (lifecycle === 'COMPLETED') return { label: status || '已完成', tone: 'success' };
+  if (lifecycle === 'APPROVED') return { label: status || '已通过', tone: 'info' };
+  return { label: status || '已提交', tone: 'info' };
+};
+
+export const paymentRequestCreatorPresentation = ({
+  link,
+  invoices,
+  contracts,
+  paymentLists,
+  paymentRequestProjectId,
+  requestLifecycle,
+  requestStatus,
+}: {
+  link: PaymentRequestCreatorLink;
+  invoices: GeneratedInvoiceRecord[];
+  contracts: ContractRecord[];
+  paymentLists: PaymentListRecord[];
+  paymentRequestProjectId?: PaymentRequestProjectId;
+  requestLifecycle?: PaymentRequestProjectLike['lifecycle'];
+  requestStatus?: string;
+}): PaymentRequestCreatorPresentation => {
+  const requestLists = paymentLists.filter((list) => (
+    !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId
+  ));
+  const invoiceRows = link.invoiceIds.map<PaymentRequestCreatorInvoicePresentation>((invoiceId) => {
+    const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
+    if (!invoice) {
+      return {
+        invoiceId,
+        invoiceNumber: '关联记录异常',
+        provider: '—',
+        invoiceAmount: null,
+        invoiceCurrency: '',
+        invoiceAmountLabel: '—',
+        requestAmount: null,
+        requestCurrency: '',
+        requestAmountLabel: '—',
+        requestAmountSource: 'INVOICE',
+        amountAdjusted: false,
+        missing: true,
+        relationshipValid: false,
+        invoiceReady: false,
+        paymentItemMissing: true,
+        accountNeedsReview: false,
+        requiresRevalidation: false,
+      };
+    }
+
+    const invoiceAmount = invoice.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const paymentList = requestLists.find((list) => (
+      list.items.some((item) => item.invoiceId === invoiceId)
+    ));
+    const paymentItem = paymentList?.items.find((item) => item.invoiceId === invoiceId);
+    const effectiveAccount = paymentItem ? paymentListEffectiveAccount(paymentItem) : null;
+    const provider = effectiveAccount?.provider
+      || invoice.snapshot.payoutProvider
+      || invoice.snapshot.payment.payoutProvider
+      || (invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex');
+    const requestAmount = paymentItem ? paymentListItemValue(paymentItem, 'amount') : invoiceAmount;
+    const requestCurrency = paymentItem
+      ? paymentListItemValue(paymentItem, 'currency')
+      : invoice.snapshot.currency;
+    const validationIssues = paymentItem?.validationIssues ?? [];
+    const accountNeedsReview = Boolean(paymentItem && (
+      !effectiveAccount?.payoutAccountId
+      || provider !== 'Airwallex'
+      || (effectiveAccount.validationStatus
+        && !['VALIDATED', 'VERIFIED'].includes(effectiveAccount.validationStatus))
+      || validationIssues.some((issue) => ACCOUNT_ISSUE_PATTERN.test(issue))
+    ));
+
+    return {
+      invoiceId,
+      invoiceNumber: invoice.snapshot.invoiceNumber || invoice.id,
+      provider,
+      invoiceAmount,
+      invoiceCurrency: invoice.snapshot.currency,
+      invoiceAmountLabel: formatRequestMoney(invoice.snapshot.currency, invoiceAmount),
+      requestAmount,
+      requestCurrency,
+      requestAmountLabel: formatRequestMoney(requestCurrency, requestAmount),
+      requestAmountSource: paymentItem ? 'PAYMENT_LIST' : 'INVOICE',
+      amountAdjusted: paymentItem?.overrides.amount !== undefined,
+      missing: false,
+      relationshipValid: (
+        invoice.snapshot.creatorId === link.creatorId
+        && invoice.snapshot.engagementId === link.engagementId
+      ),
+      invoiceReady: invoice.status === '待发起请款',
+      paymentListStatus: paymentList?.status,
+      paymentItemMissing: !paymentItem,
+      accountNeedsReview,
+      requiresRevalidation: Boolean(paymentItem?.requiresRevalidation || validationIssues.length),
+    };
+  });
+
+  const contractRows = link.contractIds.map<PaymentRequestCreatorContractPresentation>((contractId) => {
+    const record = contracts.find((contract) => contract.contractId === contractId);
+    return {
+      contractId,
+      contractNumber: record?.id ?? '关联记录异常',
+      missing: !record,
+      relationshipValid: Boolean(
+        record
+        && (!record.creatorId || record.creatorId === link.creatorId)
+        && (!record.engagementId || record.engagementId === link.engagementId)
+      ),
+    };
+  });
+
+  const lockedStatus = lockedRequestStatus(requestLifecycle, requestStatus);
+  const statuses: PaymentRequestCreatorPresentationStatus[] = [];
+  const addStatus = (status: PaymentRequestCreatorPresentationStatus) => {
+    if (!statuses.some((current) => current.label === status.label)) statuses.push(status);
+  };
+
+  if (lockedStatus) {
+    addStatus(lockedStatus);
+  } else {
+    if (!link.invoiceIds.length) addStatus({ label: '待补 Invoice', tone: 'danger' });
+    if (invoiceRows.some((row) => row.missing) || contractRows.some((row) => row.missing || !row.relationshipValid)) {
+      addStatus({ label: '关联记录异常', tone: 'danger' });
+    }
+    if (invoiceRows.some((row) => !row.missing && !row.relationshipValid)) {
+      addStatus({ label: '关联记录异常', tone: 'danger' });
+    }
+    if (invoiceRows.some((row) => !row.missing && !row.invoiceReady)) {
+      addStatus({ label: 'Invoice 状态未就绪', tone: 'warning' });
+    }
+    if (invoiceRows.some((row) => !row.missing && (
+      row.paymentItemMissing || row.paymentListStatus !== 'generated'
+    ))) {
+      addStatus({ label: '付款清单待生成', tone: 'warning' });
+    }
+    if (invoiceRows.some((row) => row.accountNeedsReview)) {
+      addStatus({ label: '付款账户待核对', tone: 'danger' });
+    }
+    if (invoiceRows.some((row) => row.requiresRevalidation)) {
+      addStatus({ label: '需重新校验', tone: 'warning' });
+    }
+    if (invoiceRows.some((row) => row.amountAdjusted)) {
+      addStatus({ label: '付款金额已调整', tone: 'info' });
+    }
+    if (!statuses.length) addStatus({ label: '可提交', tone: 'success' });
+  }
+
+  return {
+    invoices: invoiceRows,
+    contracts: contractRows,
+    invoiceTotalLabel: summarizeRequestMoney(invoiceRows, 'invoiceAmount', 'invoiceCurrency'),
+    requestTotalLabel: summarizeRequestMoney(invoiceRows, 'requestAmount', 'requestCurrency'),
+    statuses,
+  };
 };
 
 export const addInvoiceToPaymentRequestSelection = ({
