@@ -2186,6 +2186,7 @@ export default function App() {
           creators={creators}
           onSaveCreator={saveCreator}
           canEdit={canManageCreators}
+          currentUserAccount={currentUser.account}
           initialCreatorId={focusedCreatorId}
         />
       );

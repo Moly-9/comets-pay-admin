@@ -345,12 +345,20 @@ export function Modal({
   title,
   children,
   onClose,
+  onBackdropMouseDown,
   footer,
   width = '560px',
   className,
-}: PropsWithChildren<{ title: string; onClose: () => void; footer?: ReactNode; width?: string; className?: string }>) {
+}: PropsWithChildren<{
+  title: string;
+  onClose: () => void;
+  onBackdropMouseDown?: () => void;
+  footer?: ReactNode;
+  width?: string;
+  className?: string;
+}>) {
   return createPortal(
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={onBackdropMouseDown ?? onClose}>
       <section
         className={['modal-panel', className].filter(Boolean).join(' ')}
         role="dialog"
