@@ -12538,11 +12538,13 @@ button:disabled {
 }
 
 .contract-toolbar .page-search {
+  flex: 0 0 min(430px, 48%);
   width: min(430px, 48%);
 }
 
 .contract-toolbar {
   flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .contract-toolbar-controls,
@@ -12562,6 +12564,7 @@ button:disabled {
 .contract-bulk-actions {
   min-height: 28px;
   gap: 6px;
+  align-self: center;
 }
 
 .contract-bulk-actions .button {
@@ -13867,13 +13870,17 @@ button:disabled {
   }
 
   .contract-toolbar .page-search {
+    flex-basis: 100%;
     width: 100%;
   }
 
   .contract-toolbar-controls {
-    width: 100%;
     align-items: flex-end;
     margin-left: 0;
+  }
+
+  .contract-bulk-actions {
+    margin-right: auto;
   }
 
   .contract-toolbar .toolbar-chips {
@@ -13923,8 +13930,7 @@ button:disabled {
   }
 
   .contract-bulk-actions {
-    width: 100%;
-    justify-content: flex-end;
+    align-self: flex-start;
   }
 
   .contract-selection-count {

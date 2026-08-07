@@ -50,6 +50,49 @@ final result: passed
 
 ---
 
+# Design QA - 合同批量操作移至搜索栏旁
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-2669d63e-666f-44bf-9cea-1ab02ed12199.png`.
+- Browser-rendered desktop implementation: `app/design-qa-contract-toolbar-desktop-final.png`.
+- Browser-rendered responsive implementation: `app/design-qa-contract-toolbar-560-final.png`.
+- Source pixels: `1414 x 541`; desktop viewport and implementation screenshot: `1414 x 900`, device density 1.
+- State: administrator account, contract list, one contract selected so export and delete are enabled.
+
+## Comparison Evidence
+
+- The source and browser-rendered implementation were opened together in the same visual comparison input at original width.
+- The source target is already a focused crop of the contract-list toolbar, so a second focused crop was not needed.
+- The implementation keeps the search box first, places the compact export and delete actions immediately after it, and leaves the four filters at the far right with the selection count underneath.
+
+## Required Fidelity Surfaces
+
+- Typography and control density: passed; existing COMETS Pay button, filter, and search styles are unchanged.
+- Spacing and hierarchy: passed; the desktop gap between the search box and batch actions is 14px, and the filter group remains visually separate on the right.
+- Color and icon fidelity: passed; existing secondary/danger treatments and Lucide download/trash icons are retained.
+- Copy and behavior: passed; no labels, selection logic, export behavior, administrator permission, or delete confirmation behavior changed.
+- Responsive behavior: passed; at 560px the search box occupies its own row, actions and filters wrap below it, and document horizontal overflow is 0.
+
+## Interaction and Technical Checks
+
+- Selecting one contract changes the selection message to `已选择 1 项` and enables both batch actions.
+- Desktop element order is search, batch actions, filters; browser console warnings/errors: none.
+- Full Vitest suite: 33 files and 212 tests passed.
+- TypeScript production build: passed; only the existing Vite chunk-size warning remains.
+
+## Comparison History
+
+1. Initial P2: at approximately 900px, the inherited `space-between` rule left an excessive gap between search and batch actions.
+   - Fix: the contract toolbar now uses start alignment while the filter group retains right alignment.
+2. Initial P2: at 560px, all controls could compress the search input into an unreadably narrow field.
+   - Fix: below 860px the search box takes a full row and the remaining controls wrap beneath it.
+3. Post-fix desktop and responsive verification found no remaining actionable P0, P1, or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - 合同列表批量操作分层
 
 ## Reference and Environment

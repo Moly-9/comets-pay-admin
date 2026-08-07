@@ -196,6 +196,28 @@ export function ContractsPage({
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
+          <div className="contract-bulk-actions">
+            <Button
+              variant="secondary"
+              data-testid="contract-bulk-export"
+              icon={<Download size={15} />}
+              disabled={!selected.length || exporting}
+              onClick={() => { void exportSelectedContracts(); }}
+            >
+              {exporting ? '导出中...' : '导出'}
+            </Button>
+            {canDelete ? (
+              <Button
+                variant="danger"
+                data-testid="contract-bulk-delete"
+                icon={<Trash2 size={15} />}
+                disabled={!selected.length}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                删除
+              </Button>
+            ) : null}
+          </div>
           <div className="contract-toolbar-controls">
             <div className="toolbar-chips" aria-label="合同筛选">
               {([
@@ -215,31 +237,9 @@ export function ContractsPage({
                 </button>
               ))}
             </div>
-            <div className="contract-bulk-actions">
-              <span className="contract-selection-count" aria-live="polite">
-                {selected.length ? `已选择 ${selected.length} 项` : '请选择合同'}
-              </span>
-              <Button
-                variant="secondary"
-                data-testid="contract-bulk-export"
-                icon={<Download size={15} />}
-                disabled={!selected.length || exporting}
-                onClick={() => { void exportSelectedContracts(); }}
-              >
-                {exporting ? '导出中...' : '导出'}
-              </Button>
-              {canDelete ? (
-                <Button
-                  variant="danger"
-                  data-testid="contract-bulk-delete"
-                  icon={<Trash2 size={15} />}
-                  disabled={!selected.length}
-                  onClick={() => setDeleteConfirmOpen(true)}
-                >
-                  删除
-                </Button>
-              ) : null}
-            </div>
+            <span className="contract-selection-count" aria-live="polite">
+              {selected.length ? `已选择 ${selected.length} 项` : '请选择合同'}
+            </span>
           </div>
         </div>
 
