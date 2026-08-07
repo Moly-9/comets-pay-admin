@@ -707,6 +707,40 @@
 
 .request-resource-modal .modal-content { padding: 0; }
 
+.request-resource-candidate-filter {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid #e5e9f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px 10px 15px;
+}
+
+.request-resource-candidate-filter > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.request-resource-candidate-filter strong {
+  color: #29303c;
+  font-size: 12.5px;
+}
+
+.request-resource-candidate-filter small {
+  color: #7b8493;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.request-resource-candidate-filter > .custom-select {
+  width: min(310px, 42%);
+  flex: 0 0 auto;
+}
+
 .request-resource-flat-list,
 .request-resource-candidate-list {
   overflow: hidden;
@@ -795,6 +829,40 @@
 .request-resource-candidate small { margin-top: 3px; color: #7b8493; font-size: 12px; line-height: 1.45; }
 .request-resource-candidate.is-disabled > div:last-of-type strong { color: #a65c22; }
 
+.request-resource-candidate-creator > span {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  margin-top: 5px;
+  border-radius: 4px;
+  background: #f1edfa;
+  padding: 2px 6px;
+  color: #654c94;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.request-resource-candidate-creator > span.is-existing {
+  background: #eef5f1;
+  color: #47715e;
+}
+
+.request-resource-candidate-empty {
+  display: grid;
+  min-height: 170px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 24px;
+  color: #7b8493;
+  text-align: center;
+}
+
+.request-resource-candidate-empty strong {
+  color: #343b46;
+  font-size: 13px;
+}
+
 .request-payment-flat-rows { display: grid; gap: 12px; }
 
 .request-payment-row-footer {
@@ -849,6 +917,14 @@
 }
 
 @media (max-width: 640px) {
+  .request-resource-candidate-filter {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .request-resource-candidate-filter > .custom-select { width: 100%; }
+
   .request-resource-flat-row,
   .request-resource-candidate { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 13px; }
   .request-resource-flat-row > div,

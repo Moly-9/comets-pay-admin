@@ -89,7 +89,11 @@ type DemoContractSpec = {
   creatorIndex: number;
   amount: number;
   includeInInvoice: boolean;
+  linkedToInitialRequest?: boolean;
   title: string;
+  lifecycle?: ContractRecord['lifecycle'];
+  signed?: boolean;
+  status?: ContractRecord['status'];
 };
 
 const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
@@ -174,7 +178,47 @@ const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
     includeInInvoice: true,
     title: 'Instagram Reels 合作',
   },
+  {
+    contractId: 'contract_fixture_301164_10' as ContractId,
+    contractCode: 'CON-20260802-A30110',
+    ioNumber: 'IO-20260802-A30110',
+    creatorIndex: 8,
+    amount: 2600,
+    includeInInvoice: false,
+    linkedToInitialRequest: false,
+    title: '多平台内容授权补充协议',
+  },
+  {
+    contractId: 'contract_fixture_301164_11' as ContractId,
+    contractCode: 'CON-20260802-A30111',
+    ioNumber: 'IO-20260802-A30111',
+    creatorIndex: 9,
+    amount: 1800,
+    includeInInvoice: false,
+    linkedToInitialRequest: false,
+    title: '旅行内容合作草稿',
+    lifecycle: 'GENERATED_DRAFT',
+    signed: false,
+    status: '待回传',
+  },
+  {
+    contractId: 'contract_fixture_301164_12' as ContractId,
+    contractCode: 'CON-20260802-A30112',
+    ioNumber: 'IO-20260802-A30112',
+    creatorIndex: 10,
+    amount: 2400,
+    includeInInvoice: false,
+    linkedToInitialRequest: false,
+    title: 'YouTube 内容合作待确认稿',
+    lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
+    signed: true,
+    status: '待补字段',
+  },
 ];
+
+export const PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS = DEMO_CONTRACT_SPECS
+  .filter((spec) => spec.linkedToInitialRequest !== false)
+  .map((spec) => spec.contractId);
 
 const demoProject = INITIAL_PROJECTS.find((project) => project.id === DEMO_PROJECT_CODE);
 const demoReferences = demoProject?.creatorProfiles ?? [];
@@ -307,8 +351,8 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     payoutProvider: payment.payoutProvider === 'PayPal' ? 'PayPal' : 'Airwallex',
     payoutAccountFingerprint: payment.accountFingerprint,
     paymentSnapshot: { ...payment },
-    signed: true,
-    status: '已生效',
+    signed: spec.signed ?? true,
+    status: spec.status ?? '已生效',
     updated: '2026-08-01',
     deliverables: [{
       id: `deliverable_fixture_301164_${String(spec.creatorIndex + 1).padStart(2, '0')}`,
@@ -321,11 +365,82 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     creatorId: reference.creatorId,
     creatorHandle: creator.handle,
     engagementId: reference.engagementId,
-    lifecycle: 'CONFIRMED',
-    confirmedAt: DEMO_TIMESTAMP,
-    extractionStage: 'applied',
+    lifecycle: spec.lifecycle ?? 'CONFIRMED',
+    confirmedAt: (spec.lifecycle ?? 'CONFIRMED') === 'CONFIRMED' ? DEMO_TIMESTAMP : undefined,
+    extractionStage: spec.lifecycle === 'UPLOADED_PENDING_CONFIRMATION' ? 'review' : 'applied',
   };
 });
+
+const associationDemoProject = INITIAL_PROJECTS.find((project) => project.id === 'PRJ-260727-04');
+const associationDemoReference = associationDemoProject?.creatorProfiles?.[23];
+const associationDemoCreator = associationDemoReference
+  ? creatorForReference(associationDemoReference.creatorId)
+  : undefined;
+
+if (!associationDemoProject || !associationDemoReference || !associationDemoCreator) {
+  throw new Error('关联合同原型 fixture 缺少合作项目、达人或合作关系');
+}
+
+const associationDemoPayment = invoicePaymentForCreator(
+  associationDemoCreator,
+  providerForCreator(associationDemoCreator),
+);
+
+export const REQUEST_CONTRACT_ASSOCIATION_FIXTURES: ContractRecord[] = [{
+  contractId: 'contract_fixture_260727_04_24' as ContractId,
+  id: 'CON-20260803-GI-0424',
+  ioId: 'IO-20260803-GI-0424',
+  name: `${associationDemoCreator.name} · 6.7 版本 KOC 内容合作`,
+  templateFamily: '2026 KOL 社交媒体推广服务合同',
+  sourceName: 'CON-20260803-GI-0424.pdf',
+  documentUrl: '',
+  documentNote: '用于演示从合作项目合同池关联新达人，全部信息均为合成数据。',
+  pageCount: 16,
+  isTemplate: false,
+  project: associationDemoProject.name,
+  brand: associationDemoProject.brand,
+  advertiser: 'COMETS INTERNATIONAL LIMITED',
+  publisher: associationDemoCreator.contact.legalName || associationDemoCreator.name,
+  channelName: associationDemoCreator.handle,
+  channelLink: associationDemoCreator.socialAccounts[0]?.profileUrl ?? '',
+  platform: associationDemoCreator.platform,
+  effectiveDate: '2026-08-03',
+  campaignStart: '2026-08-03',
+  campaignEnd: '2026-09-15',
+  currency: 'USD',
+  totalFee: 1650,
+  licensePrice: null,
+  licenseIncludedInTotal: true,
+  invoiceWithinWorkingDays: 5,
+  paymentWithinWorkingDays: 45,
+  feeBearer: 'ADVERTISER',
+  paymentMethod: associationDemoPayment.payoutProvider === 'PayPal' ? 'PAYPAL' : 'BANK',
+  accountName: associationDemoPayment.accountName || associationDemoCreator.contact.legalName,
+  accountFingerprint: accountFingerprintForCreator(associationDemoCreator),
+  payoutAccountId: associationDemoPayment.payoutAccountId,
+  payoutAccountVersion: associationDemoPayment.payoutAccountVersion,
+  payoutProvider: associationDemoPayment.payoutProvider === 'PayPal' ? 'PayPal' : 'Airwallex',
+  payoutAccountFingerprint: associationDemoPayment.accountFingerprint,
+  paymentSnapshot: { ...associationDemoPayment },
+  signed: true,
+  status: '已生效',
+  updated: '2026-08-03',
+  deliverables: [{
+    id: 'deliverable_fixture_260727_04_24',
+    title: '6.7 版本 KOC 内容合作',
+    description: '短视频 1 条 + 社交媒体发布授权 30 天',
+    source: 'IO-20260803-GI-0424 · Services/Deliverables',
+  }],
+  issues: [],
+  projectId: associationDemoProject.projectId as ProjectId,
+  cooperationProjectId: associationDemoProject.cooperationProjectId,
+  creatorId: associationDemoReference.creatorId,
+  creatorHandle: associationDemoCreator.handle,
+  engagementId: associationDemoReference.engagementId,
+  lifecycle: 'CONFIRMED',
+  confirmedAt: '2026-08-03T09:30:00.000Z',
+  extractionStage: 'applied',
+}];
 
 const coveredContractIds = (creatorId: CreatorId) => (
   PROJECT_DEMO_CONTRACTS

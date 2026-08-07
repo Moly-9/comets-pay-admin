@@ -136,6 +136,8 @@ import {
   ALL_PROJECT_PROTOTYPE_PAYOUTS,
   AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
   PROJECT_DEMO_CONTRACTS,
+  PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
+  REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
 } from './prototypeResourceFixtures';
 import {
   applyRequestApprovalAction,
@@ -189,13 +191,22 @@ const INITIAL_REQUEST_PROJECTS_WITH_LINKS: RequestProjectSummary[] = INITIAL_REQ
   const creatorLinks = [...invoicesByCreator.values()].flatMap((creatorInvoices) => {
     const firstInvoice = creatorInvoices[0];
     if (!firstInvoice?.snapshot.creatorId || !firstInvoice.snapshot.engagementId) return [];
-    const contractIds = [...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS]
+    const invoiceContractIds = new Set([
+      ...creatorInvoices.flatMap((invoice) => invoice.snapshot.contractIds ?? []),
+      ...PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
+    ]);
+    const contractIds = [
+      ...INITIAL_CONTRACTS,
+      ...PROJECT_DEMO_CONTRACTS,
+      ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
+    ]
       .filter((contract) => (
-        contractCooperationProjectId(contract) === cooperationProjectId
+        contract.contractId
+        && invoiceContractIds.has(contract.contractId)
+        && contractCooperationProjectId(contract) === cooperationProjectId
         && contract.creatorId === firstInvoice.snapshot.creatorId
       ))
-      .map((contract) => contract.contractId)
-      .filter((contractId): contractId is ContractId => Boolean(contractId));
+      .map((contract) => contract.contractId as ContractId);
     return [{
       creatorId: firstInvoice.snapshot.creatorId,
       engagementId: firstInvoice.snapshot.engagementId,
@@ -226,6 +237,7 @@ export default function App() {
   const [contracts, setContracts] = useState<ContractRecord[]>(() => [
     ...INITIAL_CONTRACTS,
     ...PROJECT_DEMO_CONTRACTS,
+    ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
   ].map((contract) => ({
     ...contract,
     cooperationProjectId: (contract.cooperationProjectId ?? contract.projectId) as ContractRecord['cooperationProjectId'],

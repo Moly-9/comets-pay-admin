@@ -1,3 +1,58 @@
+# Design QA — 请款项目关联合同与达人筛选
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-153f11bc-f651-43a2-8e07-35565483c7ba.png`.
+- Implementation URL: `http://127.0.0.1:5183/`.
+- Main contract dialog: `app/design-qa-contract-resource-desktop.png` (`1120 x 680`).
+- Contract-association dialog: `app/design-qa-contract-association-desktop.png` (`920 x 576`).
+- Responsive association dialog: `app/design-qa-contract-association-390.png`.
+- Side-by-side comparison: `app/design-qa-contract-resource-comparison.png`.
+- Source pixels: `1106 x 769`; main implementation dialog: `1120 x 680`; default browser capture: `1265 x 712`; density: `1`.
+- Responsive viewport override: `390 x 844`; rendered capture: `375 x 812`; density: `1`.
+- States: `REQ-202607-000001` with three contract candidates, and `REQ-202607-000004` before and after linking a contract whose creator was not yet in the request project.
+
+## Comparison evidence
+
+- The native-size side-by-side comparison shows the same contract resource modal hierarchy, toolbar, row density, typography, neutral palette and compact row actions as the reference.
+- The `关联已有合同` action remains in the same toolbar position. Contract rows retain `查看 / 解除 / 删除`; the highlighted `编辑` action from the source is removed as requested.
+- The source and implementation both retain nine initially linked contracts; three additional synthetic contracts remain available only in the association workflow.
+- The association dialog is a new interaction state not shown in the source. It reuses the existing modal, heading panel, custom select, flat resource row, status and footer patterns.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC sizing, weights, line heights and wrapping are unchanged.
+- Spacing and layout rhythm: passed; filter, candidate rows and sticky modal footer use the existing compact resource-dialog spacing and 8px radii.
+- Colors and visual tokens: passed; neutral borders and backgrounds are retained, with restrained green membership and purple new-creator labels that do not replace text status.
+- Image and icon fidelity: passed; no image asset was required, and the existing Lucide contract, link, view, unlink and delete icons are reused.
+- Copy and content: passed; the dialog explains the cooperation-project candidate scope and the automatic creator-add behavior before selection.
+
+## Interaction and responsive checks
+
+- The main cooperation project exposes one confirmed candidate plus one draft and one pending-confirmation contract. Draft and pending records remain visible, disabled and provide explicit reasons plus contract-detail access.
+- Selecting Emily Wong in the creator filter reduces the visible candidates from three to her single draft contract.
+- The Invoice candidate dialog retains its existing request-project scope and has no new creator filter.
+- In `REQ-202607-000004`, the Ava Thompson fixture is shown as `关联后新增达人`. Linking it increases the request project from 23 to 24 creators and creates a stable link with one contract and zero Invoices.
+- The new creator's zero-Invoice state remains visible as `待补资料`; existing submission validation continues to require at least one Invoice before approval submission.
+- At the `390 x 844` override, document, dialog, filter and candidate-list `scrollWidth` equal their respective `clientWidth`; there is no horizontal overflow.
+- Browser console warning and error log: empty.
+- `npm test -- --run`: 31 test files and 196 tests passed.
+- `npm run build`: passed.
+
+## Findings and comparison history
+
+1. Initial P1: contract candidates were restricted to creators already present in the request project, and the commit path only iterated existing creator links.
+   - Fix: candidates now use the cooperation-project contract pool; confirmed selections merge by stable `creatorId / engagementId`, creating a new creator link with `invoiceIds: []` when needed.
+2. Initial P2: the association dialog had no creator filter, so a larger cooperation-project contract pool would be difficult to scan.
+   - Fix: added a keyboard-accessible creator select with candidate counts and clear existing/new creator labels.
+3. Initial P2: contract rows exposed an edit action after the user explicitly removed editing from this workflow.
+   - Fix: removed only the contract edit action while preserving view, unlink, deletion protection and source-detail navigation.
+4. Post-fix desktop, responsive, filtering, disabled-state, automatic-creator-add, console, test and build checks found no actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA — 项目详情操作精简与 Airwallex 付款限制
 
 ## Reference and environment

@@ -136,6 +136,69 @@ const requestLinksByCreator = (request: RequestProjectSummary) => new Map(
   (request.creatorLinks ?? []).map((link) => [link.creatorId, link]),
 );
 
+export const contractAssociationCandidates = (
+  contracts: ContractRecord[],
+  cooperationProjectId: string | undefined,
+) => cooperationProjectId ? contracts.filter((contract) => (
+  !contract.isTemplate
+  && contractCooperationProjectId(contract) === cooperationProjectId
+)) : [];
+
+const contractStateUnavailableReason = (contract: ContractRecord) => {
+  if (contract.lifecycle === 'GENERATED_DRAFT') return '草稿尚未回传签署文件';
+  if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '已上传，待人工确认';
+  if (!contract.signed) return '合同尚未完成签署';
+  return getContractReadiness(contract).label;
+};
+
+export const contractAssociationUnavailableReason = (
+  contract: ContractRecord,
+  links: PaymentRequestCreatorLink[],
+  creators: CreatorProfile[],
+) => {
+  if (!contract.contractId) return '合同缺少稳定合同 ID';
+  if (!contract.creatorId) return '合同缺少达人稳定 ID';
+  if (!creatorFor(contract.creatorId, creators)) return '合同关联的达人档案不存在';
+  if (!contract.engagementId) return '合同缺少合作关系 ID';
+  const existingLink = links.find((link) => link.creatorId === contract.creatorId);
+  if (existingLink && existingLink.engagementId !== contract.engagementId) {
+    return '达人已通过其他合作关系加入当前请款项目';
+  }
+  return isConfirmedContract(contract) ? '' : contractStateUnavailableReason(contract);
+};
+
+export const mergeContractCandidateLinks = (
+  links: PaymentRequestCreatorLink[],
+  contracts: ContractRecord[],
+) => {
+  const next = links.map((link) => ({
+    ...link,
+    contractIds: [...link.contractIds],
+    invoiceIds: [...link.invoiceIds],
+  }));
+  const linkIndexByCreator = new Map(next.map((link, index) => [link.creatorId, index]));
+
+  contracts.forEach((contract) => {
+    if (!contract.contractId || !contract.creatorId || !contract.engagementId) return;
+    const existingIndex = linkIndexByCreator.get(contract.creatorId);
+    if (existingIndex !== undefined) {
+      const existing = next[existingIndex];
+      if (!existing || existing.engagementId !== contract.engagementId) return;
+      existing.contractIds = [...new Set([...existing.contractIds, contract.contractId])];
+      return;
+    }
+    next.push({
+      creatorId: contract.creatorId,
+      engagementId: contract.engagementId,
+      contractIds: [contract.contractId],
+      invoiceIds: [],
+    });
+    linkIndexByCreator.set(contract.creatorId, next.length - 1);
+  });
+
+  return next;
+};
+
 export const requestLinkedContracts = (
   request: RequestProjectSummary,
   contracts: ContractRecord[],
@@ -150,13 +213,6 @@ export const requestLinkedInvoices = (
 ) => {
   const ids = new Set(paymentRequestInvoiceIds(request.creatorLinks ?? []));
   return invoices.filter((invoice) => ids.has(invoice.invoiceId));
-};
-
-const contractUnavailableReason = (contract: ContractRecord) => {
-  if (contract.lifecycle === 'GENERATED_DRAFT') return '草稿尚未回传签署文件';
-  if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '已上传，待人工确认';
-  if (!contract.signed) return '合同尚未完成签署';
-  return getContractReadiness(contract).label;
 };
 
 const PAYMENT_FEE_OPTIONS = [
@@ -195,6 +251,7 @@ export function RequestProjectResourceManager({
 }: Props) {
   const [resourceDialog, setResourceDialog] = useState<ResourceKind | null>(null);
   const [linkDialog, setLinkDialog] = useState<'contract' | 'invoice' | null>(null);
+  const [contractCreatorFilter, setContractCreatorFilter] = useState('ALL');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [selectedLinkedInvoiceIds, setSelectedLinkedInvoiceIds] = useState<InvoiceId[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -209,15 +266,7 @@ export function RequestProjectResourceManager({
     list.paymentRequestProjectId === request.paymentRequestProjectId
   ));
 
-  const contractCandidates = contracts.filter((contract) => {
-    const link = contract.creatorId ? linkByCreator.get(contract.creatorId) : undefined;
-    return Boolean(
-      !contract.isTemplate
-      && link
-      && contractCooperationProjectId(contract) === cooperationProjectId
-      && (!contract.engagementId || contract.engagementId === link?.engagementId),
-    );
-  });
+  const contractCandidates = contractAssociationCandidates(contracts, cooperationProjectId);
 
   const invoiceCandidates = invoices.filter((invoice) => {
     const creatorId = invoice.snapshot.creatorId;
@@ -231,6 +280,7 @@ export function RequestProjectResourceManager({
 
   const openLinkDialog = (kind: 'contract' | 'invoice') => {
     setSelectedCandidateIds([]);
+    if (kind === 'contract') setContractCreatorFilter('ALL');
     setResourceDialog(null);
     setLinkDialog(kind);
   };
@@ -243,21 +293,31 @@ export function RequestProjectResourceManager({
 
   const commitCandidates = () => {
     if (!linkDialog || !selectedCandidateIds.length) return;
+    if (linkDialog === 'contract') {
+      const additions = contractCandidates
+        .filter((contract) => selectedCandidateIds.includes(contractStableId(contract)))
+        .filter((contract) => !contractAssociationUnavailableReason(contract, links, creators));
+      const next = mergeContractCandidateLinks(links, additions);
+      const addedCreatorCount = next.length - links.length;
+      onChangeLinks(
+        next,
+        addedCreatorCount
+          ? `已关联合同，并新增 ${addedCreatorCount} 位合同所属达人`
+          : '已批量关联合同',
+      );
+      setLinkDialog(null);
+      setResourceDialog('contract');
+      setSelectedCandidateIds([]);
+      return;
+    }
     const next = links.map((link) => {
-      if (linkDialog === 'contract') {
-        const additions = contractCandidates
-          .filter((contract) => selectedCandidateIds.includes(contractStableId(contract)))
-          .filter((contract) => contract.creatorId === link.creatorId)
-          .map(contractStableId);
-        return { ...link, contractIds: [...new Set([...link.contractIds, ...additions])] };
-      }
       const additions = invoiceCandidates
         .filter((invoice) => selectedCandidateIds.includes(invoice.invoiceId))
         .filter((invoice) => invoice.snapshot.creatorId === link.creatorId)
         .map((invoice) => invoice.invoiceId);
       return { ...link, invoiceIds: [...new Set([...link.invoiceIds, ...additions])] };
     });
-    onChangeLinks(next, linkDialog === 'contract' ? '已批量关联合同' : '已批量关联 Invoice');
+    onChangeLinks(next, '已批量关联 Invoice');
     setLinkDialog(null);
     setResourceDialog(linkDialog);
     setSelectedCandidateIds([]);
@@ -283,6 +343,27 @@ export function RequestProjectResourceManager({
   const linkedContractIds = new Set(linkedContracts.map(contractStableId));
   const linkedInvoiceIds = new Set(linkedInvoices.map((invoice) => invoice.invoiceId));
   const availableContractCandidates = contractCandidates.filter((contract) => !linkedContractIds.has(contractStableId(contract)));
+  const contractCreatorOptions = [
+    {
+      value: 'ALL',
+      label: '全部达人',
+      description: `${availableContractCandidates.length} 份候选合同`,
+    },
+    ...[...new Set(availableContractCandidates.flatMap((contract) => (
+      contract.creatorId ? [contract.creatorId] : []
+    )))].map((creatorId) => {
+      const creator = creatorFor(creatorId, creators);
+      const count = availableContractCandidates.filter((contract) => contract.creatorId === creatorId).length;
+      return {
+        value: creatorId,
+        label: creator?.name ?? creatorId,
+        description: `${creator?.handle ?? '达人档案缺失'} · ${count} 份合同`,
+      };
+    }),
+  ];
+  const filteredContractCandidates = availableContractCandidates.filter((contract) => (
+    contractCreatorFilter === 'ALL' || contract.creatorId === contractCreatorFilter
+  ));
   const availableInvoiceCandidates = invoiceCandidates.filter((invoice) => !linkedInvoiceIds.has(invoice.invoiceId));
 
   return (
@@ -319,7 +400,7 @@ export function RequestProjectResourceManager({
               {linkedContracts.map((contract) => {
                 const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
                 const contractId = contractStableId(contract);
-                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>{canEdit ? <><button type="button" onClick={() => onOpenContract(contract.id)}><Pencil size={14} />编辑</button><button type="button" onClick={() => setConfirmAction({ title: '解除合同关联', description: `合同 ${contract.id} 源记录会保留，仅从当前请款项目移除。`, confirmLabel: '确认解除', run: () => unlinkContract(contractId) })}><Unlink size={14} />解除</button><button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；若被其他请款项目引用，系统会阻止操作。`, confirmLabel: '删除合同', danger: true, run: () => onDeleteContract(contractId) })}><Trash2 size={14} />删除</button></> : null}</div></article>;
+                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>{canEdit ? <><button type="button" onClick={() => setConfirmAction({ title: '解除合同关联', description: `合同 ${contract.id} 源记录会保留，仅从当前请款项目移除。`, confirmLabel: '确认解除', run: () => unlinkContract(contractId) })}><Unlink size={14} />解除</button><button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；若被其他请款项目引用，系统会阻止操作。`, confirmLabel: '删除合同', danger: true, run: () => onDeleteContract(contractId) })}><Trash2 size={14} />删除</button></> : null}</div></article>;
               })}
               {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可上传、生成或关联已有记录。</p></div> : null}
             </div>
@@ -369,19 +450,22 @@ export function RequestProjectResourceManager({
 
       {linkDialog ? (
         <Modal title={linkDialog === 'contract' ? '关联已有合同' : '关联已有 Invoice'} width="920px" className="project-resource-modal request-resource-link-modal" onClose={() => { setLinkDialog(null); setResourceDialog(linkDialog); }} footer={<><Button variant="secondary" onClick={() => { setLinkDialog(null); setResourceDialog(linkDialog); }}>取消</Button><Button disabled={!selectedCandidateIds.length} onClick={commitCandidates}>关联已选（{selectedCandidateIds.length}）</Button></>}>
-          <div className="project-resource-browser"><div className="project-resource-browser-heading"><div><strong>{linkDialog === 'contract' ? '合同候选' : 'Invoice 候选'}</strong><p>一次展示当前项目全部达人的候选记录，不设达人筛选。</p></div><span>{linkDialog === 'contract' ? availableContractCandidates.length : availableInvoiceCandidates.length} 条</span></div><div className="request-resource-candidate-list">
-            {linkDialog === 'contract' ? availableContractCandidates.map((contract) => {
+          <div className="project-resource-browser"><div className="project-resource-browser-heading"><div><strong>{linkDialog === 'contract' ? '合同候选' : 'Invoice 候选'}</strong><p>{linkDialog === 'contract' ? '展示当前合作项目下全部达人的合同；关联项目外达人合同时，会同步将该达人加入请款项目。' : '一次展示当前请款项目全部达人的 Invoice 候选记录。'}</p></div><span>{linkDialog === 'contract' ? filteredContractCandidates.length : availableInvoiceCandidates.length} 条</span></div>{linkDialog === 'contract' ? <div className="request-resource-candidate-filter"><div><strong>按达人筛选</strong><small>合同候选范围不会受当前请款项目达人名单限制</small></div><SelectField ariaLabel="合同候选达人筛选" variant="form" value={contractCreatorFilter} options={contractCreatorOptions} onChange={setContractCreatorFilter} /></div> : null}<div className="request-resource-candidate-list">
+            {linkDialog === 'contract' ? filteredContractCandidates.map((contract) => {
               const id = contractStableId(contract);
               const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
-              const enabled = isConfirmedContract(contract);
+              const currentLink = contract.creatorId ? linkByCreator.get(contract.creatorId) : undefined;
+              const unavailableReason = contractAssociationUnavailableReason(contract, links, creators);
+              const enabled = !unavailableReason;
               const selected = selectedCandidateIds.includes(id);
-              return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={id}><label><input type="checkbox" disabled={!enabled} checked={selected} onChange={() => toggleCandidate(id)} /><span><strong>{contract.id}</strong><small>{contract.name}</small></span></label><div><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><strong>{enabled ? '可关联' : '不可关联'}</strong><small>{enabled ? `${formatContractMoney(contract)} · ${getContractReadiness(contract).label}` : contractUnavailableReason(contract)}</small></div><button className="text-link" type="button" onClick={() => onOpenContract(contract.id)}>查看合同详情</button></article>;
+              return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={id}><label><input type="checkbox" aria-label={`选择合同 ${contract.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(id)} /><span><strong>{contract.id}</strong><small>{contract.name}</small></span></label><div className="request-resource-candidate-creator"><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>{enabled ? currentLink ? <span className="is-existing">已在请款项目</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? '可关联' : '不可关联'}</strong><small>{enabled ? `${formatContractMoney(contract)} · ${getContractReadiness(contract).label}` : unavailableReason}</small></div><button className="text-link" type="button" onClick={() => onOpenContract(contract.id)}>查看合同详情</button></article>;
             }) : availableInvoiceCandidates.map((invoice) => {
               const owner = requestOwningInvoice(requests as PaymentRequestProjectLike[], invoice.invoiceId, request.paymentRequestProjectId);
               const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
               const selected = selectedCandidateIds.includes(invoice.invoiceId);
               return <article className={`request-resource-candidate${owner ? ' is-disabled' : ''}`} key={invoice.invoiceId}><label><input type="checkbox" disabled={Boolean(owner)} checked={selected} onChange={() => toggleCandidate(invoice.invoiceId)} /><span><strong>{invoice.id}</strong><small>{invoice.status}</small></span></label><div><strong>{creator?.name ?? invoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small></div><div><strong>{owner ? '已占用' : formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{owner ? `已关联 ${owner.requestCode ?? owner.id}` : `${invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同`}</small></div><button className="text-link" type="button" onClick={() => onOpenInvoice(invoice.invoiceId)}>查看 Invoice</button></article>;
             })}
+            {linkDialog === 'contract' && !filteredContractCandidates.length ? <div className="request-resource-candidate-empty"><FileText size={22} /><strong>暂无符合条件的合同</strong><small>可切换达人查看该合作项目下的其他合同。</small></div> : null}
           </div></div>
         </Modal>
       ) : null}

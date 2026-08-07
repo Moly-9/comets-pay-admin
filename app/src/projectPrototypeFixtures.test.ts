@@ -6,6 +6,8 @@ import {
   AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
   INVOICE_EDIT_REQUEST_INVOICES,
   PROJECT_DEMO_CONTRACTS,
+  PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
+  REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
   PROJECT_DEMO_INVOICES,
   PROJECT_DEMO_PAYOUTS,
   PROJECT_DEMO_TOTAL,
@@ -155,7 +157,8 @@ describe('project prototype fixtures', () => {
     expect(project?.invoiceCount).toBe(18);
     expect(PROJECT_DEMO_INVOICES).toHaveLength(18);
     expect(PROJECT_DEMO_PAYOUTS).toHaveLength(18);
-    expect(PROJECT_DEMO_CONTRACTS).toHaveLength(9);
+    expect(PROJECT_DEMO_CONTRACTS).toHaveLength(12);
+    expect(PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS).toHaveLength(9);
     expect(PROJECT_DEMO_TOTAL).toBe(48000);
 
     PROJECT_DEMO_CONTRACTS.forEach((contract) => {
@@ -178,6 +181,20 @@ describe('project prototype fixtures', () => {
         expect(contract?.lifecycle).toBe('CONFIRMED');
       });
     });
+  });
+
+  it('provides a confirmed contract whose creator can be added to the request by stable IDs', () => {
+    const fixture = REQUEST_CONTRACT_ASSOCIATION_FIXTURES[0]!;
+    const project = INITIAL_PROJECTS.find((item) => item.projectId === fixture.projectId);
+    const reference = project?.creatorProfiles?.find((item) => (
+      item.creatorId === fixture.creatorId && item.engagementId === fixture.engagementId
+    ));
+    const creator = INITIAL_CREATORS.find((item) => item.id === fixture.creatorId);
+
+    expect(fixture.lifecycle).toBe('CONFIRMED');
+    expect(fixture.cooperationProjectId).toBe(project?.cooperationProjectId);
+    expect(reference).toBeDefined();
+    expect(creator).toBeDefined();
   });
 
   it('provides a stable editable snapshot for the INV-240705 modification request', () => {
