@@ -50,6 +50,54 @@ final result: passed
 
 ---
 
+# Design QA - 新建项目紧凑单据选择器与演示数据
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-92de26a3-f99d-4f4c-b36a-12059e1bc8fd.png`.
+- Browser-rendered implementation: `app/design-qa-media-request-picker.png`.
+- Implementation URL: `http://127.0.0.1:5173/`.
+- Source pixels: `631 x 265`; focused implementation pixels: `372 x 259`; CSS viewport: `1280 x 720`; device density: `1`.
+- State: Sara Nielsen 的 Invoice 选择器展开，显示一份已占用 Invoice、两份未占用合成 Invoice，并已选择 `INV-260727-04-25`。
+
+## Comparison Evidence
+
+- 参考图和浏览器渲染后的实现图已在同一个对比输入中打开。两者都使用紧凑的触发框、单列候选区、左侧单据图标、两行文字层级和右侧选择标记。
+- 实现保留新建项目原表单的双列结构，因此单个选择器宽度小于参考图的独立全宽示例；候选行高度、边框、圆角和文字密度保持一致。
+- Focused crop 足以清楚检查字段标题、触发框、金额、状态、禁用态和选中态，不需要额外全页细节图。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed; 现有 Noto Sans SC 字体、11-12px 字段层级、金额与状态次级文字均清晰且无溢出。
+- Spacing and layout rhythm: passed; 触发框约 50px、候选行约 46px，字段间距和达人行分隔比旧卡片方案更紧凑。
+- Colors and visual tokens: passed; 沿用系统中性灰边框、低饱和粉色选中态，并以文字说明禁用原因，不仅依赖颜色。
+- Image and icon fidelity: passed; 该表单不需要位图资源，复用现有 Lucide Invoice、合同、选择和展开图标。
+- Copy and content: passed; Invoice 金额、占用项目、待发起请款、当前选择及 Invoice 自动带入合同均有明确文案。
+
+## Interaction and Runtime Checks
+
+- `PRJ-260727-04` 下 Sara Nielsen 和 Sofia Martinez 均排在可创建达人前列，各有两份未占用 Invoice 和两份已确认合同。
+- 选择 `INV-260727-04-25` 后自动关联 `CON-20260807-GI-SN01`；选择 `INV-260727-04-27` 后自动关联 `CON-20260807-GI-SM01`。
+- 点击创建项目成功生成本地草稿 `REQ-20260807-WJR1MX`，包含 2 位达人、2 份 Invoice、2 份合同，总金额为 `USD 5,090`。
+- 合同、Invoice、付款快照均通过 `cooperationProjectId / creatorId / engagementId` 对齐；未使用姓名、Handle 或文件名建立关联。
+- 修复后新标签页控制台 warning/error 为空。
+- Full Vitest suite: 33 files and 212 tests passed.
+- Production build: passed.
+
+## Comparison History
+
+1. Initial P1: 达人可选但 Sara、Sofia 没有未占用的关联单据，无法完成原型创建流程。
+   - Fix: 为两位达人各增加两份脱敏合成 Invoice、两份已确认合同和匹配的付款快照。
+2. Initial P1: 达人单据区使用独立选择控件和已选卡片，重复内容占用过多纵向空间。
+   - Fix: 改为参考图的内嵌展开多选器，候选项直接展示金额、状态、占用原因和选中态。
+3. Initial P1: 选择 Invoice 后合同关系缺少直接、可验证的同步反馈。
+   - Fix: Invoice 选择继续按稳定 ID 自动勾选其覆盖的已确认合同，并在合同触发框显示已选数量。
+4. Post-fix visual comparison, multi-select, automatic contract linking, creation, console, test and build checks found no actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - 合同列表批量导出与管理员删除
 
 ## Reference and Environment

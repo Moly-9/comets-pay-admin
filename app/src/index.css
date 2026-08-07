@@ -186,8 +186,8 @@
 
 .media-request-document-row {
   display: grid;
-  gap: 13px;
-  padding: 16px 0 18px;
+  gap: 10px;
+  padding: 12px 0 14px;
   border-top: 1px solid #eceef2;
 }
 
@@ -214,14 +214,14 @@
 .media-request-document-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  padding-left: 39px;
+  gap: 12px;
+  padding-left: 37px;
 }
 
 .media-request-document-field {
   display: grid;
   align-content: start;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -230,7 +230,7 @@
   align-items: center;
   gap: 5px;
   color: #3f4652;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 650;
 }
 
@@ -246,82 +246,59 @@
   font-size: 12px;
 }
 
-.media-request-document-field .custom-select {
-  width: 100%;
+.media-request-resource-picker {
+  gap: 5px;
 }
 
-.media-request-document-field .custom-select-trigger {
-  min-height: 42px;
+.media-request-resource-picker .invoice-picker-trigger {
+  min-height: 50px;
   border-color: #dfe3e9;
   border-radius: 7px;
-  background: #fff;
+  padding: 7px 10px;
 }
 
-.media-request-document-field .custom-select-trigger:hover:not(:disabled) {
-  border-color: #aeb6c2;
+.media-request-resource-picker .invoice-picker-copy {
+  gap: 2px;
 }
 
-.media-request-selected-documents {
-  display: grid;
-  gap: 0;
-  border: 1px solid #eceef2;
+.media-request-resource-picker .invoice-picker-copy strong {
+  font-size: 11.5px;
+}
+
+.media-request-resource-picker .invoice-picker-copy small {
+  font-size: 10px;
+}
+
+.media-request-resource-picker .invoice-options {
+  max-height: 172px;
+  gap: 4px;
   border-radius: 7px;
-  background: #fafbfc;
-  overflow: hidden;
+  padding: 5px;
 }
 
-.media-request-selected-documents > div {
-  display: flex;
-  min-height: 47px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 8px 7px 10px;
-  border-top: 1px solid #eceef2;
+.media-request-resource-picker .invoice-option {
+  min-height: 46px;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 6px 8px;
 }
 
-.media-request-selected-documents > div:first-child { border-top: 0; }
-
-.media-request-selected-documents span {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
+.media-request-resource-picker .invoice-option-copy {
+  gap: 2px;
 }
 
-.media-request-selected-documents strong {
-  overflow: hidden;
-  color: #343944;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.media-request-resource-picker .invoice-option-copy strong {
+  font-size: 11px;
 }
 
-.media-request-selected-documents small {
-  color: #737b89;
-  font-size: 10.5px;
-  line-height: 1.4;
+.media-request-resource-picker .invoice-option-copy small {
+  font-size: 10px;
 }
 
-.media-request-selected-documents button {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: #858b96;
-  cursor: pointer;
+.media-request-resource-picker .invoice-option:disabled {
+  cursor: not-allowed;
+  opacity: .58;
 }
-
-.media-request-selected-documents button:hover {
-  background: #f0f1f4;
-  color: #3d424c;
-}
-
-.media-request-empty-copy { padding: 8px 0; }
 .media-request-link-list { display: grid; }
 
 .media-request-link-row {
@@ -12576,28 +12553,28 @@ button:disabled {
 
 .contract-toolbar-controls {
   min-width: 0;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
   margin-left: auto;
 }
 
 .contract-bulk-actions {
-  min-height: 34px;
-  gap: 8px;
-  border-left: 1px solid #e6e8ed;
-  padding-left: 12px;
+  min-height: 28px;
+  gap: 6px;
 }
 
 .contract-bulk-actions .button {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 11.5px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 10px;
 }
 
 .contract-selection-count {
-  min-width: 76px;
+  min-width: 70px;
   color: #858b97;
-  font-size: 11px;
+  font-size: 10px;
   text-align: right;
   white-space: nowrap;
 }
@@ -13894,7 +13871,7 @@ button:disabled {
 
   .contract-toolbar-controls {
     width: 100%;
-    justify-content: space-between;
+    align-items: flex-end;
     margin-left: 0;
   }
 
@@ -13947,10 +13924,6 @@ button:disabled {
   .contract-bulk-actions {
     width: 100%;
     justify-content: flex-end;
-    border-top: 1px solid #eceef2;
-    border-left: 0;
-    padding-top: 10px;
-    padding-left: 0;
   }
 
   .contract-selection-count {

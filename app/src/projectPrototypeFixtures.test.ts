@@ -185,26 +185,35 @@ describe('project prototype fixtures', () => {
     });
   });
 
-  it('provides a confirmed contract whose creator can be added to the request by stable IDs', () => {
-    const fixture = REQUEST_CONTRACT_ASSOCIATION_FIXTURES[0]!;
-    const project = INITIAL_PROJECTS.find((item) => item.projectId === fixture.projectId);
-    const reference = project?.creatorProfiles?.find((item) => (
-      item.creatorId === fixture.creatorId && item.engagementId === fixture.engagementId
-    ));
-    const creator = INITIAL_CREATORS.find((item) => item.id === fixture.creatorId);
+  it('provides confirmed contracts whose creators can be added to the request by stable IDs', () => {
+    expect(REQUEST_CONTRACT_ASSOCIATION_FIXTURES).toHaveLength(5);
+    REQUEST_CONTRACT_ASSOCIATION_FIXTURES.forEach((fixture) => {
+      const project = INITIAL_PROJECTS.find((item) => item.projectId === fixture.projectId);
+      const reference = project?.creatorProfiles?.find((item) => (
+        item.creatorId === fixture.creatorId && item.engagementId === fixture.engagementId
+      ));
+      const creator = INITIAL_CREATORS.find((item) => item.id === fixture.creatorId);
 
-    expect(fixture.lifecycle).toBe('CONFIRMED');
-    expect(fixture.cooperationProjectId).toBe(project?.cooperationProjectId);
-    expect(reference).toBeDefined();
-    expect(creator).toBeDefined();
+      expect(fixture.lifecycle).toBe('CONFIRMED');
+      expect(fixture.cooperationProjectId).toBe(project?.cooperationProjectId);
+      expect(reference).toBeDefined();
+      expect(creator).toBeDefined();
+    });
+
+    expect(REQUEST_CONTRACT_ASSOCIATION_FIXTURES.filter((fixture) => (
+      fixture.creatorId === 'creator-sara'
+    ))).toHaveLength(2);
+    expect(REQUEST_CONTRACT_ASSOCIATION_FIXTURES.filter((fixture) => (
+      fixture.creatorId === 'creator-sofia'
+    ))).toHaveLength(2);
   });
 
   it('provides unlinked cooperation-project Invoice candidates with stable creator and payout references', () => {
     const invoiceIds = new Set(ALL_PROJECT_PROTOTYPE_INVOICES.map((invoice) => invoice.invoiceId));
     const payoutById = new Map(REQUEST_INVOICE_ASSOCIATION_PAYOUTS.map((payout) => [payout.id, payout]));
 
-    expect(REQUEST_INVOICE_ASSOCIATION_FIXTURES).toHaveLength(2);
-    expect(REQUEST_INVOICE_ASSOCIATION_PAYOUTS).toHaveLength(2);
+    expect(REQUEST_INVOICE_ASSOCIATION_FIXTURES).toHaveLength(6);
+    expect(REQUEST_INVOICE_ASSOCIATION_PAYOUTS).toHaveLength(6);
     REQUEST_INVOICE_ASSOCIATION_FIXTURES.forEach((invoice) => {
       const project = INITIAL_PROJECTS.find((item) => item.projectId === invoice.snapshot.projectId);
       const engagement = project?.creatorProfiles?.find((reference) => (
@@ -215,12 +224,27 @@ describe('project prototype fixtures', () => {
 
       expect(invoiceIds.has(invoice.invoiceId)).toBe(false);
       expect(invoice.status).toBe('待发起请款');
-      expect(project?.id).toBe('PRJ-301164');
+      expect(['PRJ-301164', 'PRJ-260727-04']).toContain(project?.id);
       expect(engagement).toBeDefined();
       expect(payout?.invoice).toBe(invoice.id);
       expect(payout?.creatorId).toBe(invoice.snapshot.creatorId);
       expect(payout?.invoiceSnapshot).toEqual(invoice.snapshot);
+      invoice.snapshot.contractIds?.forEach((contractId) => {
+        const contract = [...PROJECT_DEMO_CONTRACTS, ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES]
+          .find((item) => item.contractId === contractId);
+        expect(contract?.lifecycle).toBe('CONFIRMED');
+        expect(contract?.projectId).toBe(invoice.snapshot.projectId);
+        expect(contract?.creatorId).toBe(invoice.snapshot.creatorId);
+        expect(contract?.engagementId).toBe(invoice.snapshot.engagementId);
+      });
     });
+
+    expect(REQUEST_INVOICE_ASSOCIATION_FIXTURES.filter((invoice) => (
+      invoice.snapshot.creatorId === 'creator-sara'
+    ))).toHaveLength(2);
+    expect(REQUEST_INVOICE_ASSOCIATION_FIXTURES.filter((invoice) => (
+      invoice.snapshot.creatorId === 'creator-sofia'
+    ))).toHaveLength(2);
   });
 
   it('provides a stable editable snapshot for the INV-240705 modification request', () => {

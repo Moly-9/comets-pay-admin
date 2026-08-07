@@ -65,6 +65,99 @@ const STATUS_COPY = {
   INVOICE_IN_USE: '可用 Invoice 均已关联其他请款项目',
 } as const;
 
+type RequestResourcePickerOption = {
+  value: string;
+  label: string;
+  description: string;
+  selected: boolean;
+  disabled?: boolean;
+};
+
+function RequestResourcePicker({
+  id,
+  kind,
+  creatorName,
+  open,
+  selectedCount,
+  options,
+  emptyCopy,
+  onOpenChange,
+  onToggle,
+}: {
+  id: string;
+  kind: 'invoice' | 'contract';
+  creatorName: string;
+  open: boolean;
+  selectedCount: number;
+  options: RequestResourcePickerOption[];
+  emptyCopy: string;
+  onOpenChange: (open: boolean) => void;
+  onToggle: (value: string, selected: boolean) => void;
+}) {
+  const isInvoice = kind === 'invoice';
+  const label = isInvoice ? 'Invoice' : '合同';
+  const ResourceIcon = isInvoice ? ReceiptText : FileText;
+  const helper = isInvoice
+    ? '关联已录入系统的 Invoice，可多选'
+    : '仅已确认合同可关联，可多选';
+  const selectedCopy = selectedCount
+    ? `已选择 ${selectedCount} 份${isInvoice ? ' Invoice' : '合同'}`
+    : helper;
+
+  return (
+    <div className="invoice-picker media-request-resource-picker">
+      <button
+        className={`invoice-picker-trigger ${open ? 'invoice-picker-trigger-open' : ''}`}
+        type="button"
+        aria-label={`为 ${creatorName} 从系统选择 ${label}`}
+        aria-expanded={open}
+        aria-controls={id}
+        disabled={!options.length}
+        onClick={() => onOpenChange(!open)}
+      >
+        <span className="invoice-picker-leading">
+          <ResourceIcon size={16} aria-hidden="true" />
+          <span className="invoice-picker-copy">
+            <strong>从系统选择 {label}</strong>
+            <small>{options.length ? selectedCopy : emptyCopy}</small>
+          </span>
+        </span>
+        <ChevronDown className="invoice-picker-chevron" size={16} aria-hidden="true" />
+      </button>
+      {open && options.length ? (
+        <div
+          id={id}
+          className="invoice-options"
+          role="listbox"
+          aria-label={`为 ${creatorName} 选择${label}`}
+          aria-multiselectable="true"
+        >
+          {options.map((option) => (
+            <button
+              className={`invoice-option ${option.selected ? 'invoice-option-selected' : ''}`}
+              type="button"
+              role="option"
+              aria-selected={option.selected}
+              disabled={option.disabled && !option.selected}
+              key={option.value}
+              onClick={() => onToggle(option.value, option.selected)}
+            >
+              <ResourceIcon className="invoice-option-icon" size={15} aria-hidden="true" />
+              <span className="invoice-option-copy">
+                <strong>{option.label}</strong>
+                <small>{option.description}</small>
+              </span>
+              {option.selected
+                ? <CheckCircle2 className="invoice-option-mark invoice-option-mark-selected" size={16} aria-hidden="true" />
+                : <Circle className="invoice-option-mark" size={16} aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const requestCodeFor = (request: RequestProjectSummary) => request.requestCode ?? request.id;
 
 const formatCreatedAt = (value?: string) => {
@@ -136,6 +229,7 @@ export function MediaPaymentProjectsPage({
   const [contractIdsByCreator, setContractIdsByCreator] = useState<Record<string, ContractId[]>>({});
   const [invoiceIdsByCreator, setInvoiceIdsByCreator] = useState<Record<string, InvoiceId[]>>({});
   const [autoLinkedContractIdsByCreator, setAutoLinkedContractIdsByCreator] = useState<Record<string, ContractId[]>>({});
+  const [openDocumentPicker, setOpenDocumentPicker] = useState<string | null>(null);
   const [formSubmitAttempted, setFormSubmitAttempted] = useState(false);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
@@ -241,6 +335,7 @@ export function MediaPaymentProjectsPage({
     setContractIdsByCreator({});
     setInvoiceIdsByCreator({});
     setAutoLinkedContractIdsByCreator({});
+    setOpenDocumentPicker(null);
     setFormSubmitAttempted(false);
     setEditingRequestId(null);
   };
@@ -272,6 +367,7 @@ export function MediaPaymentProjectsPage({
       (request.creatorLinks ?? []).map((link) => [link.creatorId, [...link.invoiceIds]]),
     ));
     setAutoLinkedContractIdsByCreator({});
+    setOpenDocumentPicker(null);
     setFormSubmitAttempted(false);
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
@@ -284,6 +380,7 @@ export function MediaPaymentProjectsPage({
     setContractIdsByCreator({});
     setInvoiceIdsByCreator({});
     setAutoLinkedContractIdsByCreator({});
+    setOpenDocumentPicker(null);
     setFormSubmitAttempted(false);
   };
 
@@ -293,6 +390,7 @@ export function MediaPaymentProjectsPage({
       return;
     }
     const removing = selectedCreatorIds.includes(creatorId);
+    if (removing && openDocumentPicker?.startsWith(`${creatorId}:`)) setOpenDocumentPicker(null);
     setSelectedCreatorIds((current) => removing
       ? current.filter((id) => id !== creatorId)
       : [...current, creatorId]);
@@ -689,7 +787,10 @@ export function MediaPaymentProjectsPage({
                   disabled={!creatorSelectionEditable || !cooperationProjectId}
                   aria-expanded={creatorPickerOpen}
                   aria-controls="media-request-creator-options"
-                  onClick={() => setCreatorPickerOpen((current) => !current)}
+                  onClick={() => {
+                    setOpenDocumentPicker(null);
+                    setCreatorPickerOpen((current) => !current);
+                  }}
                 >
                   <span className="invoice-picker-leading"><Users size={18} /><span className="invoice-picker-copy"><strong>{selectedCreatorIds.length ? `已选择 ${selectedCreatorIds.length} 位合作达人` : '从达人档案选择合作达人'}</strong><small>{cooperationProjectId ? '已将有唯一可用 Invoice 的达人排在前面' : '请先选择关联项目'}</small></span></span>
                   <ChevronDown className="invoice-picker-chevron" size={18} />
@@ -699,7 +800,7 @@ export function MediaPaymentProjectsPage({
                     {selectedCreators.map((creator) => creatorSelectionEditable ? (
                       <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span><X size={13} aria-hidden="true" /></button>
                     ) : <span className="creator-selection-chip is-readonly" key={creator.id}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span></span>)}
-                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); }}>清除已选</button> : null}
+                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); setOpenDocumentPicker(null); }}>清除已选</button> : null}
                   </div>
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
@@ -726,62 +827,79 @@ export function MediaPaymentProjectsPage({
                   const selectedContractIds = contractIdsByCreator[creator.id] ?? [];
                   const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
                   const autoLinkedContractIds = autoLinkedContractIdsByCreator[creator.id] ?? [];
-                  const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
-                  const selectedContracts = resolution?.contracts.filter((contract) => (
-                    contract.contractId && selectedContractIds.includes(contract.contractId)
-                  )) ?? [];
+                  const invoicePickerId = `media-request-invoices-${creator.id}`;
+                  const contractPickerId = `media-request-contracts-${creator.id}`;
+                  const invoicePickerKey = `${creator.id}:invoice`;
+                  const contractPickerKey = `${creator.id}:contract`;
+                  const invoiceOptions = (resolution?.invoices ?? []).map((invoice): RequestResourcePickerOption => {
+                    const owner = resolution?.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
+                    const selected = selectedInvoiceIds.includes(invoice.invoiceId);
+                    return {
+                      value: invoice.invoiceId,
+                      label: invoice.id,
+                      description: `${creator.handle} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : selected ? '已选择' : invoice.status}`,
+                      selected,
+                      disabled: Boolean(owner),
+                    };
+                  });
+                  const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {
+                    if (!contract.contractId) return [];
+                    const enabled = isConfirmedContract(contract);
+                    const selected = selectedContractIds.includes(contract.contractId);
+                    const selectedSource = autoLinkedContractIds.includes(contract.contractId)
+                      ? 'Invoice 自动带入'
+                      : '已选择';
+                    return [{
+                      value: contract.contractId,
+                      label: contract.id,
+                      description: `${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : `不可关联：${contract.status}`}`,
+                      selected,
+                      disabled: !enabled,
+                    }];
+                  });
                   return (
                     <article className="media-request-document-row" key={creator.id}>
                       <div className="media-request-document-creator"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle} · {creator.platform}</small></span></div>
                       <div className="media-request-document-fields">
                         <div className={`media-request-document-field media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
-                          <span><ReceiptText size={16} />Invoice <em>必填，可多选</em></span>
-                          <SelectField<string>
-                            ariaLabel={`为 ${creator.name} 选择 Invoice`}
-                            variant="form"
-                            menuStrategy="fixed"
-                            value=""
-                            disabled={!resolution?.invoices.length}
-                            placeholder={selectedInvoiceIds.length ? `已选择 ${selectedInvoiceIds.length} 份 Invoice` : '请选择 Invoice'}
-                            options={(resolution?.invoices ?? []).map((invoice) => {
-                              const owner = resolution?.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
-                              const selected = selectedInvoiceIds.includes(invoice.invoiceId);
-                              return {
-                                value: invoice.invoiceId,
-                                label: `${invoice.id} · ${invoiceAmountLabel(invoice)}`,
-                                description: selected ? '已选择' : owner ? `已关联 ${owner.requestCode ?? owner.id}` : `${invoice.status} · 可关联`,
-                                disabled: selected || Boolean(owner),
-                                leading: selected ? <CheckCircle2 size={16} /> : <ReceiptText size={16} />,
-                              };
-                            })}
-                            onChange={(invoiceId) => addInvoice(creator.id as CreatorId, invoiceId as InvoiceId)}
+                          <span>Invoice <em>必填，可多选</em></span>
+                          <RequestResourcePicker
+                            id={invoicePickerId}
+                            kind="invoice"
+                            creatorName={creator.name}
+                            open={openDocumentPicker === invoicePickerKey}
+                            selectedCount={selectedInvoiceIds.length}
+                            options={invoiceOptions}
+                            emptyCopy={STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}
+                            onOpenChange={(open) => {
+                              setCreatorPickerOpen(false);
+                              setOpenDocumentPicker(open ? invoicePickerKey : null);
+                            }}
+                            onToggle={(invoiceId, selected) => {
+                              if (selected) removeInvoice(creator.id as CreatorId, invoiceId as InvoiceId);
+                              else addInvoice(creator.id as CreatorId, invoiceId as InvoiceId);
+                            }}
                           />
-                          {selectedInvoices.length ? <div className="media-request-selected-documents" aria-label={`${creator.name} 已选择的 Invoice`}>{selectedInvoices.map((invoice) => <div key={invoice.invoiceId}><span><strong>{invoice.id}</strong><small>{invoiceAmountLabel(invoice)} · {invoice.status}</small></span><button type="button" aria-label={`移除 ${invoice.id}`} onClick={() => removeInvoice(creator.id as CreatorId, invoice.invoiceId)}><X size={14} /></button></div>)}</div> : <small className="media-request-empty-copy">{STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}</small>}
                         </div>
                         <div className="media-request-document-field media-request-contracts">
-                          <span><FileText size={16} />合同 <em>选填，可多选</em></span>
-                          <SelectField<string>
-                            ariaLabel={`为 ${creator.name} 选择合同`}
-                            variant="form"
-                            menuStrategy="fixed"
-                            value=""
-                            disabled={!resolution?.contracts.length}
-                            placeholder={selectedContractIds.length ? `已选择 ${selectedContractIds.length} 份合同` : '请选择合同（选填）'}
-                            options={(resolution?.contracts ?? []).flatMap((contract) => {
-                              if (!contract.contractId) return [];
-                              const enabled = isConfirmedContract(contract);
-                              const selected = selectedContractIds.includes(contract.contractId);
-                              return [{
-                                value: contract.contractId,
-                                label: contract.id,
-                                description: selected ? '已选择' : `${formatContractMoney(contract)} · ${enabled ? '可关联' : `不可关联：${contract.status}`}`,
-                                disabled: selected || !enabled,
-                                leading: selected ? <CheckCircle2 size={16} /> : <FileText size={16} />,
-                              }];
-                            })}
-                            onChange={(contractId) => addContract(creator.id as CreatorId, contractId as ContractId)}
+                          <span>合同 <em>选填，可多选</em></span>
+                          <RequestResourcePicker
+                            id={contractPickerId}
+                            kind="contract"
+                            creatorName={creator.name}
+                            open={openDocumentPicker === contractPickerKey}
+                            selectedCount={selectedContractIds.length}
+                            options={contractOptions}
+                            emptyCopy="该合作项目下暂无合同，可不关联"
+                            onOpenChange={(open) => {
+                              setCreatorPickerOpen(false);
+                              setOpenDocumentPicker(open ? contractPickerKey : null);
+                            }}
+                            onToggle={(contractId, selected) => {
+                              if (selected) removeContract(creator.id as CreatorId, contractId as ContractId);
+                              else addContract(creator.id as CreatorId, contractId as ContractId);
+                            }}
                           />
-                          {selectedContracts.length ? <div className="media-request-selected-documents" aria-label={`${creator.name} 已选择的合同`}>{selectedContracts.map((contract) => <div key={contract.contractId}><span><strong>{contract.id}</strong><small>{formatContractMoney(contract)}{contract.contractId && autoLinkedContractIds.includes(contract.contractId) ? ' · Invoice 自动带入' : ' · 手动选择'}</small></span><button type="button" aria-label={`移除 ${contract.id}`} onClick={() => contract.contractId && removeContract(creator.id as CreatorId, contract.contractId)}><X size={14} /></button></div>)}</div> : <small className="media-request-empty-copy">该合作项目下暂无已选合同，可不关联。</small>}
                         </div>
                       </div>
                     </article>

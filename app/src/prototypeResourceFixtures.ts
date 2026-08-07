@@ -372,75 +372,134 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
 });
 
 const associationDemoProject = INITIAL_PROJECTS.find((project) => project.id === 'PRJ-260727-04');
-const associationDemoReference = associationDemoProject?.creatorProfiles?.[23];
-const associationDemoCreator = associationDemoReference
-  ? creatorForReference(associationDemoReference.creatorId)
-  : undefined;
+if (!associationDemoProject) throw new Error('关联合同原型 fixture 缺少合作项目');
 
-if (!associationDemoProject || !associationDemoReference || !associationDemoCreator) {
-  throw new Error('关联合同原型 fixture 缺少合作项目、达人或合作关系');
-}
+type RequestContractAssociationSpec = {
+  creatorId: CreatorId;
+  contractId: ContractId;
+  contractCode: string;
+  ioNumber: string;
+  amount: number;
+  title: string;
+  description: string;
+  updated: string;
+};
 
-const associationDemoPayment = invoicePaymentForCreator(
-  associationDemoCreator,
-  providerForCreator(associationDemoCreator),
-);
-
-export const REQUEST_CONTRACT_ASSOCIATION_FIXTURES: ContractRecord[] = [{
-  contractId: 'contract_fixture_260727_04_24' as ContractId,
-  id: 'CON-20260803-GI-0424',
-  ioId: 'IO-20260803-GI-0424',
-  name: `${associationDemoCreator.name} · 6.7 版本 KOC 内容合作`,
-  templateFamily: '2026 KOL 社交媒体推广服务合同',
-  sourceName: 'CON-20260803-GI-0424.pdf',
-  documentUrl: '',
-  documentNote: '用于演示从合作项目合同池关联新达人，全部信息均为合成数据。',
-  pageCount: 16,
-  isTemplate: false,
-  project: associationDemoProject.name,
-  brand: associationDemoProject.brand,
-  advertiser: 'COMETS INTERNATIONAL LIMITED',
-  publisher: associationDemoCreator.contact.legalName || associationDemoCreator.name,
-  channelName: associationDemoCreator.handle,
-  channelLink: associationDemoCreator.socialAccounts[0]?.profileUrl ?? '',
-  platform: associationDemoCreator.platform,
-  effectiveDate: '2026-08-03',
-  campaignStart: '2026-08-03',
-  campaignEnd: '2026-09-15',
-  currency: 'USD',
-  totalFee: 1650,
-  licensePrice: null,
-  licenseIncludedInTotal: true,
-  invoiceWithinWorkingDays: 5,
-  paymentWithinWorkingDays: 45,
-  feeBearer: 'ADVERTISER',
-  paymentMethod: associationDemoPayment.payoutProvider === 'PayPal' ? 'PAYPAL' : 'BANK',
-  accountName: associationDemoPayment.accountName || associationDemoCreator.contact.legalName,
-  accountFingerprint: accountFingerprintForCreator(associationDemoCreator),
-  payoutAccountId: associationDemoPayment.payoutAccountId,
-  payoutAccountVersion: associationDemoPayment.payoutAccountVersion,
-  payoutProvider: associationDemoPayment.payoutProvider === 'PayPal' ? 'PayPal' : 'Airwallex',
-  payoutAccountFingerprint: associationDemoPayment.accountFingerprint,
-  paymentSnapshot: { ...associationDemoPayment },
-  signed: true,
-  status: '已生效',
-  updated: '2026-08-03',
-  deliverables: [{
-    id: 'deliverable_fixture_260727_04_24',
+const REQUEST_CONTRACT_ASSOCIATION_SPECS: RequestContractAssociationSpec[] = [
+  {
+    creatorId: 'creator-ava' as CreatorId,
+    contractId: 'contract_fixture_260727_04_24' as ContractId,
+    contractCode: 'CON-20260803-GI-0424',
+    ioNumber: 'IO-20260803-GI-0424',
+    amount: 1650,
     title: '6.7 版本 KOC 内容合作',
     description: '短视频 1 条 + 社交媒体发布授权 30 天',
-    source: 'IO-20260803-GI-0424 · Services/Deliverables',
-  }],
-  issues: [],
-  projectId: associationDemoProject.projectId as ProjectId,
-  cooperationProjectId: associationDemoProject.cooperationProjectId,
-  creatorId: associationDemoReference.creatorId,
-  creatorHandle: associationDemoCreator.handle,
-  engagementId: associationDemoReference.engagementId,
-  lifecycle: 'CONFIRMED',
-  confirmedAt: '2026-08-03T09:30:00.000Z',
-  extractionStage: 'applied',
-}];
+    updated: '2026-08-03',
+  },
+  {
+    creatorId: 'creator-sara' as CreatorId,
+    contractId: 'contract_fixture_260727_04_sara_01' as ContractId,
+    contractCode: 'CON-20260807-GI-SN01',
+    ioNumber: 'IO-20260807-GI-SN01',
+    amount: 3240,
+    title: 'Instagram Reels 内容合作',
+    description: 'Instagram Reels 2 条 + Story 3 条',
+    updated: '2026-08-07',
+  },
+  {
+    creatorId: 'creator-sara' as CreatorId,
+    contractId: 'contract_fixture_260727_04_sara_02' as ContractId,
+    contractCode: 'CON-20260807-GI-SN02',
+    ioNumber: 'IO-20260807-GI-SN02',
+    amount: 860,
+    title: '素材授权补充协议',
+    description: '已发布内容追加 30 天付费媒体授权',
+    updated: '2026-08-07',
+  },
+  {
+    creatorId: 'creator-sofia' as CreatorId,
+    contractId: 'contract_fixture_260727_04_sofia_01' as ContractId,
+    contractCode: 'CON-20260807-GI-SM01',
+    ioNumber: 'IO-20260807-GI-SM01',
+    amount: 1850,
+    title: 'TikTok 短视频内容合作',
+    description: 'TikTok 短视频 2 条 + CTA',
+    updated: '2026-08-07',
+  },
+  {
+    creatorId: 'creator-sofia' as CreatorId,
+    contractId: 'contract_fixture_260727_04_sofia_02' as ContractId,
+    contractCode: 'CON-20260807-GI-SM02',
+    ioNumber: 'IO-20260807-GI-SM02',
+    amount: 640,
+    title: '短视频授权补充协议',
+    description: 'TikTok 素材追加 14 天广告投放授权',
+    updated: '2026-08-07',
+  },
+];
+
+export const REQUEST_CONTRACT_ASSOCIATION_FIXTURES: ContractRecord[] = REQUEST_CONTRACT_ASSOCIATION_SPECS.map((spec) => {
+  const reference = associationDemoProject.creatorProfiles?.find((item) => item.creatorId === spec.creatorId);
+  if (!reference) throw new Error(`关联合同原型 fixture 缺少达人合作关系：${spec.creatorId}`);
+  const creator = creatorForReference(reference.creatorId);
+  const payment = invoicePaymentForCreator(creator, providerForCreator(creator));
+
+  return {
+    contractId: spec.contractId,
+    id: spec.contractCode,
+    ioId: spec.ioNumber,
+    name: `${creator.name} · ${spec.title}`,
+    templateFamily: '2026 KOL 社交媒体推广服务合同',
+    sourceName: `${spec.contractCode}.pdf`,
+    documentUrl: '',
+    documentNote: '用于前端原型的合作项目合同关联演示，全部信息均为合成数据。',
+    pageCount: 16,
+    isTemplate: false,
+    project: associationDemoProject.name,
+    brand: associationDemoProject.brand,
+    advertiser: 'COMETS INTERNATIONAL LIMITED',
+    publisher: creator.contact.legalName || creator.name,
+    channelName: creator.handle,
+    channelLink: creator.socialAccounts[0]?.profileUrl ?? '',
+    platform: creator.platform,
+    effectiveDate: spec.updated,
+    campaignStart: spec.updated,
+    campaignEnd: '2026-09-15',
+    currency: 'USD',
+    totalFee: spec.amount,
+    licensePrice: null,
+    licenseIncludedInTotal: true,
+    invoiceWithinWorkingDays: 5,
+    paymentWithinWorkingDays: 45,
+    feeBearer: 'ADVERTISER',
+    paymentMethod: payment.payoutProvider === 'PayPal' ? 'PAYPAL' : 'BANK',
+    accountName: payment.accountName || creator.contact.legalName || creator.name,
+    accountFingerprint: accountFingerprintForCreator(creator),
+    payoutAccountId: payment.payoutAccountId,
+    payoutAccountVersion: payment.payoutAccountVersion,
+    payoutProvider: payment.payoutProvider === 'PayPal' ? 'PayPal' : 'Airwallex',
+    payoutAccountFingerprint: payment.accountFingerprint,
+    paymentSnapshot: { ...payment },
+    signed: true,
+    status: '已生效',
+    updated: spec.updated,
+    deliverables: [{
+      id: `deliverable_${spec.contractId}`,
+      title: spec.title,
+      description: spec.description,
+      source: `${spec.ioNumber} · Services/Deliverables`,
+    }],
+    issues: [],
+    projectId: associationDemoProject.projectId as ProjectId,
+    cooperationProjectId: associationDemoProject.cooperationProjectId,
+    creatorId: reference.creatorId,
+    creatorHandle: creator.handle,
+    engagementId: reference.engagementId,
+    lifecycle: 'CONFIRMED',
+    confirmedAt: `${spec.updated}T09:30:00.000Z`,
+    extractionStage: 'applied',
+  };
+});
 
 const coveredContractIds = (creatorId: CreatorId) => (
   PROJECT_DEMO_CONTRACTS
@@ -819,14 +878,26 @@ const createRequestInvoiceAssociationFixture = ({
   },
 });
 
-const associationInvoiceSources = [PROJECT_DEMO_INVOICES[0], PROJECT_DEMO_INVOICES[4]];
-if (associationInvoiceSources.some((invoice) => !invoice)) {
+const associationInvoiceSourceFor = (projectId: ProjectId, creatorId: CreatorId) => (
+  ALL_PROJECT_PROTOTYPE_INVOICES.find((invoice) => (
+    invoice.snapshot.projectId === projectId
+    && invoice.snapshot.creatorId === creatorId
+  ))
+);
+
+const associationInvoiceSources = {
+  mina: PROJECT_DEMO_INVOICES[0],
+  yuki: PROJECT_DEMO_INVOICES[4],
+  sara: associationInvoiceSourceFor('PRJ-260727-04' as ProjectId, 'creator-sara' as CreatorId),
+  sofia: associationInvoiceSourceFor('PRJ-260727-04' as ProjectId, 'creator-sofia' as CreatorId),
+};
+if (Object.values(associationInvoiceSources).some((invoice) => !invoice)) {
   throw new Error('关联 Invoice 原型 fixture 缺少稳定的合作项目 Invoice 来源');
 }
 
 export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
   createRequestInvoiceAssociationFixture({
-    source: associationInvoiceSources[0]!,
+    source: associationInvoiceSources.mina!,
     invoiceId: 'invoice_fixture_association_301164_01' as InvoiceId,
     invoiceNumber: 'INV-301164-19',
     sourcePayoutId: 'payout_fixture_association_301164_01',
@@ -835,7 +906,7 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     generatedAt: '2026-08-06T09:20:00.000Z',
   }),
   createRequestInvoiceAssociationFixture({
-    source: associationInvoiceSources[1]!,
+    source: associationInvoiceSources.yuki!,
     invoiceId: 'invoice_fixture_association_301164_05' as InvoiceId,
     invoiceNumber: 'INV-301164-20',
     sourcePayoutId: 'payout_fixture_association_301164_05',
@@ -843,6 +914,46 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     description: '追加短视频内容服务费（合成演示数据）',
     generatedAt: '2026-08-06T10:05:00.000Z',
     contractIds: ['contract_fixture_301164_06' as ContractId],
+  }),
+  createRequestInvoiceAssociationFixture({
+    source: associationInvoiceSources.sara!,
+    invoiceId: 'invoice_fixture_association_260727_04_sara_01' as InvoiceId,
+    invoiceNumber: 'INV-260727-04-25',
+    sourcePayoutId: 'payout_fixture_association_260727_04_sara_01',
+    amount: 3240,
+    description: 'Instagram Reels 内容合作服务费（合成演示数据）',
+    generatedAt: '2026-08-07T09:15:00.000Z',
+    contractIds: ['contract_fixture_260727_04_sara_01' as ContractId],
+  }),
+  createRequestInvoiceAssociationFixture({
+    source: associationInvoiceSources.sara!,
+    invoiceId: 'invoice_fixture_association_260727_04_sara_02' as InvoiceId,
+    invoiceNumber: 'INV-260727-04-26',
+    sourcePayoutId: 'payout_fixture_association_260727_04_sara_02',
+    amount: 860,
+    description: '素材授权补充费用（合成演示数据）',
+    generatedAt: '2026-08-07T09:25:00.000Z',
+    contractIds: ['contract_fixture_260727_04_sara_02' as ContractId],
+  }),
+  createRequestInvoiceAssociationFixture({
+    source: associationInvoiceSources.sofia!,
+    invoiceId: 'invoice_fixture_association_260727_04_sofia_01' as InvoiceId,
+    invoiceNumber: 'INV-260727-04-27',
+    sourcePayoutId: 'payout_fixture_association_260727_04_sofia_01',
+    amount: 1850,
+    description: 'TikTok 短视频内容合作服务费（合成演示数据）',
+    generatedAt: '2026-08-07T09:35:00.000Z',
+    contractIds: ['contract_fixture_260727_04_sofia_01' as ContractId],
+  }),
+  createRequestInvoiceAssociationFixture({
+    source: associationInvoiceSources.sofia!,
+    invoiceId: 'invoice_fixture_association_260727_04_sofia_02' as InvoiceId,
+    invoiceNumber: 'INV-260727-04-28',
+    sourcePayoutId: 'payout_fixture_association_260727_04_sofia_02',
+    amount: 640,
+    description: '短视频授权补充费用（合成演示数据）',
+    generatedAt: '2026-08-07T09:45:00.000Z',
+    contractIds: ['contract_fixture_260727_04_sofia_02' as ContractId],
   }),
 ];
 
@@ -895,13 +1006,14 @@ export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INV
   }];
 });
 
-const demoPayoutByCreatorId = new Map(PROJECT_DEMO_PAYOUTS.flatMap((payout) => (
-  payout.creatorId ? [[payout.creatorId, payout] as const] : []
+const prototypePayoutByProjectCreator = new Map(ALL_PROJECT_PROTOTYPE_PAYOUTS.flatMap((payout) => (
+  payout.creatorId ? [[`${payout.projectId}:${payout.creatorId}`, payout] as const] : []
 )));
 
 export const REQUEST_INVOICE_ASSOCIATION_PAYOUTS: Payout[] = REQUEST_INVOICE_ASSOCIATION_FIXTURES.map((invoice) => {
-  const source = invoice.snapshot.creatorId
-    ? demoPayoutByCreatorId.get(invoice.snapshot.creatorId)
+  const project = INITIAL_PROJECTS.find((item) => item.projectId === invoice.snapshot.projectId);
+  const source = project && invoice.snapshot.creatorId
+    ? prototypePayoutByProjectCreator.get(`${project.id}:${invoice.snapshot.creatorId}`)
     : undefined;
   if (!source) throw new Error(`关联 Invoice ${invoice.id} 缺少达人付款快照`);
   return {
