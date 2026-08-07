@@ -674,6 +674,20 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
   };
 });
 
+export const ACTIVE_INVOICE_DEMO_INVOICES: GeneratedInvoiceRecord[] = [
+  PROJECT_DEMO_INVOICES[0],
+  PROJECT_DEMO_INVOICES[2],
+  INVOICE_EDIT_REQUEST_INVOICES[0],
+];
+
+const activeInvoiceDemoSourcePayoutIds = new Set(
+  ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => invoice.sourcePayoutId),
+);
+
+export const ACTIVE_INVOICE_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_PAYOUTS.filter((payout) => (
+  activeInvoiceDemoSourcePayoutIds.has(payout.id)
+));
+
 export const PROJECT_DEMO_TOTAL = PROJECT_DEMO_INVOICES.reduce(
   (total, invoice) => total + invoice.snapshot.items.reduce(
     (invoiceTotal, item) => invoiceTotal + item.lineTotal,

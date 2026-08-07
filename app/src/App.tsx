@@ -137,15 +137,13 @@ import {
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import {
-  ALL_PROJECT_PROTOTYPE_INVOICES,
+  ACTIVE_INVOICE_DEMO_INVOICES,
+  ACTIVE_INVOICE_DEMO_PAYOUTS,
   ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
-  ALL_PROJECT_PROTOTYPE_PAYOUTS,
   AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
   REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
-  REQUEST_INVOICE_ASSOCIATION_FIXTURES,
-  REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
 } from './prototypeResourceFixtures';
 import {
   applyRequestApprovalAction,
@@ -186,7 +184,7 @@ const canManageCooperationProjectFor = (user: SystemUser, project: ProjectSummar
 
 const INITIAL_REQUEST_PROJECTS_WITH_LINKS: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((request) => {
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
-  const requestInvoices = ALL_PROJECT_PROTOTYPE_INVOICES.filter((invoice) => (
+  const requestInvoices = ACTIVE_INVOICE_DEMO_INVOICES.filter((invoice) => (
     invoiceCooperationProjectId(invoice) === cooperationProjectId
     && invoice.invoiceId !== AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
   ));
@@ -238,8 +236,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
   const [payouts, setPayouts] = useState<Payout[]>(() => [
     ...INITIAL_PAYOUTS,
-    ...ALL_PROJECT_PROTOTYPE_PAYOUTS,
-    ...REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
+    ...ACTIVE_INVOICE_DEMO_PAYOUTS,
   ]);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
@@ -253,7 +250,7 @@ export default function App() {
   })));
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    [...ALL_PROJECT_PROTOTYPE_INVOICES, ...REQUEST_INVOICE_ASSOCIATION_FIXTURES].map((invoice) => ({
+    ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => ({
       ...invoice,
       snapshot: {
         ...invoice.snapshot,
@@ -262,7 +259,9 @@ export default function App() {
     }))
   ));
   const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(() => (
-    ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.map((list) => {
+    ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((list) => list.items.some((item) => (
+      ACTIVE_INVOICE_DEMO_INVOICES.some((invoice) => invoice.invoiceId === item.invoiceId)
+    ))).map((list) => {
       const request = INITIAL_REQUEST_PROJECTS_WITH_LINKS.find((candidate) => (
         candidate.cooperationProjectId === list.projectId
       ));

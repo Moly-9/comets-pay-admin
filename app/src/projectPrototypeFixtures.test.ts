@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACTIVE_INVOICE_DEMO_INVOICES,
+  ACTIVE_INVOICE_DEMO_PAYOUTS,
   ALL_PROJECT_PROTOTYPE_INVOICES,
   ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
   ALL_PROJECT_PROTOTYPE_PAYOUTS,
@@ -24,6 +26,31 @@ import { eligibleInvoicePayoutAccounts, getPayoutAccountId } from './payoutAccou
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
 describe('project prototype fixtures', () => {
+  it('seeds only three active Invoice chains and leaves the other engagements available', () => {
+    const activeEngagementIds = new Set(
+      ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => invoice.snapshot.engagementId),
+    );
+    const activePayoutsById = new Map(
+      [...INITIAL_PAYOUTS, ...ACTIVE_INVOICE_DEMO_PAYOUTS].map((payout) => [payout.id, payout]),
+    );
+    const alexDemoEngagement = INITIAL_PROJECTS
+      .find((project) => project.id === 'PRJ-260801-08')
+      ?.creatorProfiles?.find((reference) => reference.creatorId === 'creator-alex');
+
+    expect(ACTIVE_INVOICE_DEMO_INVOICES).toHaveLength(3);
+    expect(activeEngagementIds.size).toBe(3);
+    expect(ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => invoice.status)).toEqual([
+      '达人反馈',
+      '已退回',
+      '待媒介复核',
+    ]);
+    ACTIVE_INVOICE_DEMO_INVOICES.forEach((invoice) => {
+      expect(activePayoutsById.get(invoice.sourcePayoutId)?.invoice).toBe(invoice.id);
+    });
+    expect(alexDemoEngagement).toBeDefined();
+    expect(activeEngagementIds.has(alexDemoEngagement?.engagementId)).toBe(false);
+  });
+
   it('creates one stable creator engagement for every displayed project creator', () => {
     const creatorIds = new Set(INITIAL_CREATORS.map((creator) => creator.id));
 
