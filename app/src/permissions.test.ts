@@ -45,4 +45,13 @@ describe('Invoice review permissions', () => {
     expect(getDefaultPageForRole('pm')).toBe('requests');
     expect(getDefaultPageForRole('project')).toBe('requests');
   });
+
+  it('limits contract deletion to privileged administrator roles', () => {
+    expect(hasPermission(userFor('admin'), 'contract_delete')).toBe(true);
+    expect(hasPermission(userFor('owner'), 'contract_delete')).toBe(true);
+    expect(hasPermission(userFor('media'), 'contract_delete')).toBe(false);
+    expect(hasPermission(userFor('pm'), 'contract_delete')).toBe(false);
+    expect(hasPermission(userFor('finance'), 'contract_delete')).toBe(false);
+    expect(hasPermission(userFor('project'), 'contract_delete')).toBe(false);
+  });
 });

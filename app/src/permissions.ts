@@ -6,6 +6,7 @@ export type PermissionId =
   | 'creator_records_manage'
   | 'contract_view'
   | 'contract_manage'
+  | 'contract_delete'
   | 'invoice_view'
   | 'invoice_manage'
   | 'invoice_media_review'
@@ -34,6 +35,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'creator_records_manage', group: '业务资料', label: '管理网红档案与合作名单', description: '新增、编辑达人档案并导入合作名单。' },
   { id: 'contract_view', group: '业务资料', label: '查看合同模块', description: '查看项目合同及其关联状态。' },
   { id: 'contract_manage', group: '业务资料', label: '上传与管理合同', description: '上传合同并维护合同与项目的关联资料。' },
+  { id: 'contract_delete', group: '业务资料', label: '删除合同', description: '删除合同记录并使关联业务资料进入重新校验。' },
   { id: 'invoice_view', group: '业务资料', label: '查看 Invoice 模块', description: '查看并选择系统内的 Invoice。' },
   { id: 'invoice_manage', group: '业务资料', label: '生成与管理 Invoice', description: '生成 Invoice 文件并维护 Invoice 业务资料。' },
   { id: 'invoice_media_review', group: '业务资料', label: '执行 Invoice 媒介审核', description: '在媒介审核阶段通过或退回 Invoice。' },

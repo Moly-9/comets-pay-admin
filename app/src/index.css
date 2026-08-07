@@ -12564,8 +12564,113 @@ button:disabled {
   width: min(430px, 48%);
 }
 
+.contract-toolbar {
+  flex-wrap: wrap;
+}
+
+.contract-toolbar-controls,
+.contract-bulk-actions {
+  display: flex;
+  align-items: center;
+}
+
+.contract-toolbar-controls {
+  min-width: 0;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.contract-bulk-actions {
+  min-height: 34px;
+  gap: 8px;
+  border-left: 1px solid #e6e8ed;
+  padding-left: 12px;
+}
+
+.contract-bulk-actions .button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.contract-selection-count {
+  min-width: 76px;
+  color: #858b97;
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .contract-table {
-  min-width: 1040px;
+  min-width: 1090px;
+}
+
+.contract-table .contract-select-cell {
+  width: 46px;
+  padding-right: 8px;
+  padding-left: 12px;
+  text-align: center;
+}
+
+.contract-select-cell input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #ef7358;
+  cursor: pointer;
+}
+
+.contract-select-cell input:disabled {
+  cursor: not-allowed;
+}
+
+.contract-table tbody tr.is-selected td,
+.contract-table tbody tr.is-selected:hover td {
+  background: #fff8f5;
+}
+
+.contract-delete-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.contract-delete-confirmation > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: #fff1ee;
+  color: #d95845;
+}
+
+.contract-delete-confirmation > div {
+  display: grid;
+  gap: 7px;
+}
+
+.contract-delete-confirmation strong {
+  color: #2f3239;
+  font-size: 13px;
+}
+
+.contract-delete-confirmation p,
+.contract-delete-confirmation small {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.contract-delete-confirmation p {
+  color: #5f6570;
+  font-size: 12px;
+}
+
+.contract-delete-confirmation small {
+  color: #9297a2;
+  font-size: 10.5px;
 }
 
 .contract-name-link {
@@ -13708,38 +13813,41 @@ button:disabled {
   }
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1500px) {
   .contract-table {
     min-width: 0;
     table-layout: fixed;
   }
 
-  .contract-table th:nth-child(6),
-  .contract-table td:nth-child(6) {
+  .contract-table .contract-date-cell {
     display: none;
   }
 
   .contract-table th:nth-child(1) {
-    width: 28%;
+    width: 4%;
   }
 
   .contract-table th:nth-child(2) {
-    width: 12%;
+    width: 25%;
   }
 
   .contract-table th:nth-child(3) {
-    width: 20%;
+    width: 11%;
   }
 
   .contract-table th:nth-child(4) {
-    width: 12%;
+    width: 20%;
   }
 
   .contract-table th:nth-child(5) {
+    width: 12%;
+  }
+
+  .contract-table th:nth-child(6) {
     width: 18%;
   }
 
-  .contract-table th:nth-child(7) {
+  .contract-table th:nth-child(8) {
     width: 10%;
   }
 
@@ -13749,9 +13857,9 @@ button:disabled {
     padding-left: 8px;
   }
 
-  .contract-table td:nth-child(1),
   .contract-table td:nth-child(2),
-  .contract-table td:nth-child(3) {
+  .contract-table td:nth-child(3),
+  .contract-table td:nth-child(4) {
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -13784,6 +13892,17 @@ button:disabled {
     width: 100%;
   }
 
+  .contract-toolbar-controls {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+
+  .contract-toolbar .toolbar-chips {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
   .contract-pdf-frame {
     height: 620px;
   }
@@ -13807,6 +13926,36 @@ button:disabled {
 
   .payment-invoice-options {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .contract-table {
+    min-width: 760px;
+    table-layout: auto;
+  }
+
+  .contract-table .contract-select-cell {
+    width: 40px;
+  }
+
+  .contract-toolbar-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .contract-bulk-actions {
+    width: 100%;
+    justify-content: flex-end;
+    border-top: 1px solid #eceef2;
+    border-left: 0;
+    padding-top: 10px;
+    padding-left: 0;
+  }
+
+  .contract-selection-count {
+    margin-right: auto;
+    text-align: left;
   }
 }
 

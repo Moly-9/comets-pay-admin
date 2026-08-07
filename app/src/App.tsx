@@ -751,6 +751,83 @@ export default function App() {
     });
   };
 
+  const deleteContractsFromList = (contractIds: string[]) => {
+    if (!hasPermission(currentUser, 'contract_delete')) {
+      notify('暂无操作权限', '只有管理员可以删除合同。');
+      return 0;
+    }
+    const selectedIds = new Set(contractIds);
+    const targets = contracts.filter((contract) => selectedIds.has(contract.contractId ?? contract.id));
+    if (!targets.length) return 0;
+
+    const deletedContractIds = new Set(targets.map((contract) => contract.contractId ?? contract.id));
+    const affectedInvoiceIds = new Set(generatedInvoices
+      .filter((invoice) => invoice.snapshot.contractIds?.some((id) => deletedContractIds.has(id)))
+      .map((invoice) => invoice.invoiceId));
+    const deletionSummary = `已删除 ${targets.length} 份合同，关联资料需要重新校验`;
+
+    setContracts((current) => current.filter((contract) => !deletedContractIds.has(contract.contractId ?? contract.id)));
+    setGeneratedInvoices((current) => current.map((invoice) => {
+      const currentContractIds = invoice.snapshot.contractIds ?? [];
+      const remainingContractIds = currentContractIds.filter((id) => !deletedContractIds.has(id));
+      if (remainingContractIds.length === currentContractIds.length) return invoice;
+      return {
+        ...invoice,
+        validationStatus: 'needs_review',
+        snapshot: { ...invoice.snapshot, contractIds: remainingContractIds },
+      };
+    }));
+    if (affectedInvoiceIds.size) {
+      setPaymentLists((current) => current.map((list) => {
+        if (!list.items.some((item) => affectedInvoiceIds.has(item.invoiceId))) return list;
+        const editableList = list.status === 'draft' ? list : beginPaymentListEdit(list);
+        return {
+          ...editableList,
+          items: editableList.items.map((item) => affectedInvoiceIds.has(item.invoiceId)
+            ? {
+                ...item,
+                requiresRevalidation: true,
+                validationIssues: ['关联合同已删除，请重新校验 Invoice 与付款清单'],
+              }
+            : item),
+          updatedAt: nowIso(),
+        };
+      }));
+    }
+    setRequestProjects((current) => current.map((request) => {
+      let changed = false;
+      const creatorLinks = request.creatorLinks?.map((link) => {
+        const remainingContractIds = link.contractIds.filter((id) => !deletedContractIds.has(id));
+        if (remainingContractIds.length !== link.contractIds.length) changed = true;
+        return remainingContractIds.length === link.contractIds.length
+          ? link
+          : { ...link, contractIds: remainingContractIds };
+      });
+      if (!changed) return request;
+      const nextRequest = {
+        ...request,
+        creatorLinks,
+        contracts: creatorLinks?.reduce((count, link) => count + link.contractIds.length, 0) ?? 0,
+      };
+      return approvalInvalidatedRequest(nextRequest, deletionSummary);
+    }));
+
+    targets.forEach((contract) => {
+      if (contract.documentUrl.startsWith('blob:')) URL.revokeObjectURL(contract.documentUrl);
+      const projectId = contract.cooperationProjectId ?? contract.projectId;
+      if (!projectId) return;
+      registerProjectMutation({
+        projectId: projectId as ProjectId,
+        engagementId: contract.engagementId,
+        entityType: 'contract',
+        entityId: contract.contractId ?? contract.id,
+        action: 'delete',
+        summary: `已删除合同 ${contract.id}`,
+      });
+    });
+    return targets.length;
+  };
+
   const linkInvoiceToEngagement = (invoiceId: InvoiceId, engagementId: EngagementId) => {
     const context = findEngagement(engagementId);
     const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
@@ -2503,6 +2580,7 @@ export default function App() {
   const canGenerateInvoices = hasPermission(currentUser, 'invoice_manage');
   const canManageCreators = hasPermission(currentUser, 'creator_records_manage');
   const canUploadContracts = hasPermission(currentUser, 'contract_manage');
+  const canDeleteContracts = hasPermission(currentUser, 'contract_delete');
   const canManageProjects = hasPermission(currentUser, 'project_manage');
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
@@ -2569,6 +2647,7 @@ export default function App() {
           projects={manageableCooperationProjects}
           creators={creators}
           canUpload={canUploadContracts}
+          canDelete={canDeleteContracts}
           focusedContractId={focusedContractId}
           onFocusCleared={() => {
             setFocusedContractId(null);
@@ -2584,6 +2663,7 @@ export default function App() {
             setActivePage('contract-create');
           }}
           onUpdateContract={updateContract}
+          onDeleteContracts={deleteContractsFromList}
         />
       );
       break;

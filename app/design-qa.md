@@ -50,6 +50,57 @@ final result: passed
 
 ---
 
+# Design QA - 合同列表批量导出与管理员删除
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-81346401-abaa-48fb-b308-06770a6a238b.png`.
+- Browser-rendered administrator list: `/tmp/comets-contract-batch-admin.png`.
+- Browser-rendered selected state: `/tmp/comets-contract-batch-selected.png`.
+- Browser-rendered responsive state: `/tmp/comets-contract-batch-mobile.png`.
+- Source pixels: `1413 x 679`; desktop implementation pixels: `1398 x 672`; CSS viewport override: `1413 x 679`; density: `1`.
+- Responsive CSS viewport: `390 x 760`; rendered capture: `375 x 731`; density: `1`.
+- States: administrator with no selection and two selected contracts; finance viewer with one selected contract; responsive finance viewer at 390px.
+
+## Comparison Evidence
+
+- The supplied source and the browser-rendered administrator list were opened together in one comparison input. The implementation preserves the source search placement, compact filter chips, table typography, row density, neutral borders and payment-readiness labels.
+- The new checkbox column stays visually subordinate to contract content. Export and administrator-only delete actions sit at the upper right of the list, beside the existing filters, without changing the page-level create and upload actions.
+- Focused comparison used the selected desktop and responsive captures together. Selected rows use the existing low-saturation peach accent, the count is explicit, and the mobile table scrolls inside its own container instead of compressing text into overlapping columns.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC sizing, weights, line heights, ellipsis and secondary metadata remain unchanged.
+- Spacing and layout rhythm: passed; toolbar controls, 8px buttons, 15px checkboxes, table rows and confirmation modal align with the existing COMETS Pay component rhythm.
+- Colors and visual tokens: passed; neutral gray controls, restrained peach selection and existing danger-button styling preserve the current palette and do not use color as the only status signal.
+- Image and icon fidelity: passed; this list uses no raster assets, and existing Lucide `Download`, `Trash2` and `AlertTriangle` icons are reused.
+- Copy and content: passed; selection count, export progress, partial-export warning, delete scope, session-only persistence and revalidation impact are explicit.
+
+## Interaction and Responsive Checks
+
+- Administrator selection enabled both actions, showed a two-contract confirmation modal, deleted two records, reduced the count from 18 to 16 and cleared stale selection.
+- The delete operation removed stable contract IDs from related Invoice and request-project snapshots and marked affected Invoice and payment-list data for revalidation.
+- Finance viewer exposed one enabled export action after selection and no delete action. Unit tests also verify that media, PM, finance and project roles lack `contract_delete`.
+- Batch export created a ZIP containing `contracts.csv`, available source documents and `unavailable-files.csv` when a selected record had no readable document URL.
+- At `1413 x 679`, table client and scroll widths were both `773px`; at `860 x 760`, both were `787px`. At `390 x 760`, document client and scroll widths remained equal while the dense table used an independent horizontal scroller.
+- Browser console warning/error log: empty.
+- Full Vitest suite: 33 files and 210 tests passed.
+- Production build: passed after the final responsive and export edge-case fixes.
+
+## Comparison History
+
+1. Initial P2: the list retained a wide-table minimum at a 1413px viewport with the application sidebar, forcing horizontal scrolling for routine desktop use.
+   - Fix: moved the compact seven-column layout breakpoint to 1500px and hid only the update-date column; the complete primary workflow now fits without horizontal overflow.
+2. Initial P1: at 390px the fixed table tracks compressed contract, publisher, amount and readiness content into overlapping text.
+   - Fix: restored a readable mobile table minimum inside the existing scroll container; page-level overflow remains zero and checkboxes stay usable.
+3. Initial P2: selected demo records without a source URL were omitted from the ZIP without explanation.
+   - Fix: the archive now records these files in `unavailable-files.csv` and the completion toast reports partial availability.
+4. Post-fix desktop, administrator, finance, deletion, export, 860px, 390px and console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA — 新建项目达人单据下拉表单
 
 ## Reference and environment
