@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   beginPaymentListEdit,
   canEditProject,
+  createAuditEvent,
   generatePaymentListVersion,
   getPaymentListAccess,
   hasInvoiceForEngagement,
@@ -20,6 +21,7 @@ import {
   type EngagementId,
   type InvoiceId,
   type PaymentListRecord,
+  type PaymentRequestProjectId,
   type ProjectId,
 } from './businessWorkflow';
 
@@ -44,6 +46,24 @@ describe('project workflow permissions', () => {
     expect(nextReviewStatusAfterMutation(roles.admin, 'submitted')).toBe('changes_required');
     expect(nextReviewStatusAfterMutation(roles.owner, 'approved')).toBe('changes_required');
     expect(nextReviewStatusAfterMutation(roles.media, 'draft')).toBe('draft');
+  });
+
+  it('keeps request-project and creator identifiers in audit events', () => {
+    const paymentRequestProjectId = 'request_project_audit' as PaymentRequestProjectId;
+    const creatorId = 'creator_audit' as CreatorId;
+    const event = createAuditEvent({
+      projectId: 'project_audit' as ProjectId,
+      paymentRequestProjectId,
+      creatorId,
+      entityType: 'invoice',
+      entityId: 'invoice_audit',
+      action: 'update',
+      actor: 'Admin',
+      summary: 'Invoice updated',
+    });
+
+    expect(event.paymentRequestProjectId).toBe(paymentRequestProjectId);
+    expect(event.creatorId).toBe(creatorId);
   });
 
   it('enforces payment-list draft, generated, historical, and read-only role access', () => {

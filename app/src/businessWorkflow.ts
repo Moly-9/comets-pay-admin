@@ -196,6 +196,7 @@ export type WorkflowAuditEvent = {
   id: string;
   projectId: ProjectId;
   paymentRequestProjectId?: PaymentRequestProjectId;
+  creatorId?: CreatorId;
   engagementId?: EngagementId;
   entityType: 'project' | 'contract' | 'invoice' | 'payment-list';
   entityId: string;
@@ -291,6 +292,8 @@ export const getPaymentListAccess = (
 
 export const createAuditEvent = ({
   projectId,
+  paymentRequestProjectId,
+  creatorId,
   engagementId,
   entityType,
   entityId,
@@ -300,6 +303,8 @@ export const createAuditEvent = ({
 }: Omit<WorkflowAuditEvent, 'id' | 'occurredAt'>): WorkflowAuditEvent => ({
   id: createPrototypeId('audit'),
   projectId,
+  paymentRequestProjectId,
+  creatorId,
   engagementId,
   entityType,
   entityId,

@@ -49,7 +49,7 @@ export type RequestProjectSummary = {
     creatorId: CreatorId;
     engagementId: EngagementId;
     contractIds: ContractId[];
-    invoiceId: InvoiceId;
+    invoiceIds: InvoiceId[];
   }>;
   projectId?: ProjectId;
   invoiceIds?: InvoiceId[];

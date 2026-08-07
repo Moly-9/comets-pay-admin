@@ -17,8 +17,29 @@ export type PaymentRequestCreatorLink = {
   creatorId: CreatorId;
   engagementId: EngagementId;
   contractIds: ContractId[];
-  invoiceId: InvoiceId;
+  invoiceIds: InvoiceId[];
 };
+
+type LegacyPaymentRequestCreatorLink = Omit<PaymentRequestCreatorLink, 'invoiceIds'> & {
+  invoiceId?: InvoiceId;
+  invoiceIds?: InvoiceId[];
+};
+
+export const normalizePaymentRequestCreatorLink = (
+  link: LegacyPaymentRequestCreatorLink,
+): PaymentRequestCreatorLink => ({
+  creatorId: link.creatorId,
+  engagementId: link.engagementId,
+  contractIds: [...new Set(link.contractIds)],
+  invoiceIds: [...new Set([
+    ...(link.invoiceIds ?? []),
+    ...(link.invoiceId ? [link.invoiceId] : []),
+  ])],
+});
+
+export const paymentRequestInvoiceIds = (
+  links: PaymentRequestCreatorLink[],
+) => [...new Set(links.flatMap((link) => link.invoiceIds))];
 
 export type PaymentRequestProjectLike = {
   id: string;
@@ -148,7 +169,7 @@ export const requestOwningInvoice = (
 ) => requests.find((request) => (
   (!excludeRequestId || request.paymentRequestProjectId !== excludeRequestId)
   && (
-    request.creatorLinks?.some((link) => link.invoiceId === invoiceId)
+    request.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
     || request.invoiceIds?.includes(invoiceId)
   )
 ));
@@ -161,9 +182,12 @@ export const selectableContractIds = (contracts: ContractRecord[]) => contracts
 export type CreatorDocumentResolution = {
   contracts: ContractRecord[];
   invoices: GeneratedInvoiceRecord[];
-  invoice: GeneratedInvoiceRecord | null;
-  invoiceOwner: PaymentRequestProjectLike | null;
-  status: 'READY' | 'MISSING_INVOICE' | 'MULTIPLE_INVOICES' | 'INVOICE_IN_USE';
+  availableInvoices: GeneratedInvoiceRecord[];
+  invoiceOwners: Array<{
+    invoiceId: InvoiceId;
+    owner: PaymentRequestProjectLike;
+  }>;
+  status: 'READY' | 'MISSING_INVOICE' | 'INVOICE_IN_USE';
 };
 
 export const resolveCreatorDocuments = ({
@@ -184,19 +208,26 @@ export const resolveCreatorDocuments = ({
   const matchedContracts = contractsForCooperationCreator(contracts, cooperationProjectId, creatorId);
   const matchedInvoices = invoicesForCooperationCreator(invoices, cooperationProjectId, creatorId);
   if (matchedInvoices.length === 0) {
-    return { contracts: matchedContracts, invoices: [], invoice: null, invoiceOwner: null, status: 'MISSING_INVOICE' };
+    return {
+      contracts: matchedContracts,
+      invoices: [],
+      availableInvoices: [],
+      invoiceOwners: [],
+      status: 'MISSING_INVOICE',
+    };
   }
-  if (matchedInvoices.length > 1) {
-    return { contracts: matchedContracts, invoices: matchedInvoices, invoice: null, invoiceOwner: null, status: 'MULTIPLE_INVOICES' };
-  }
-  const invoice = matchedInvoices[0];
-  const invoiceOwner = requestOwningInvoice(requests, invoice.invoiceId, excludeRequestId) ?? null;
+  const invoiceOwners = matchedInvoices.flatMap((invoice) => {
+    const owner = requestOwningInvoice(requests, invoice.invoiceId, excludeRequestId);
+    return owner ? [{ invoiceId: invoice.invoiceId, owner }] : [];
+  });
+  const occupiedIds = new Set(invoiceOwners.map((item) => item.invoiceId));
+  const availableInvoices = matchedInvoices.filter((invoice) => !occupiedIds.has(invoice.invoiceId));
   return {
     contracts: matchedContracts,
     invoices: matchedInvoices,
-    invoice,
-    invoiceOwner,
-    status: invoiceOwner ? 'INVOICE_IN_USE' : 'READY',
+    availableInvoices,
+    invoiceOwners,
+    status: availableInvoices.length ? 'READY' : 'INVOICE_IN_USE',
   };
 };
 
@@ -215,27 +246,51 @@ export const paymentRequestSubmissionIssues = ({
 }) => {
   const issues: string[] = [];
   if (!creatorLinks.length) issues.push('请至少关联一位合作达人');
+  const expectedInvoiceIds = paymentRequestInvoiceIds(creatorLinks);
   creatorLinks.forEach((link) => {
-    const invoice = invoices.find((candidate) => candidate.invoiceId === link.invoiceId);
-    if (!invoice) {
+    if (!link.invoiceIds.length) {
       issues.push(`达人 ${link.creatorId} 缺少关联 Invoice`);
       return;
     }
-    if (!SUBMITTABLE_INVOICE_STATUSES.includes(invoice.status)) {
-      issues.push(`${invoice.id} 尚未完成签署和媒介审核`);
-    }
-    const paymentList = paymentLists
-      .filter((list) => !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId)
-      .find((list) => list.items.some((item) => item.invoiceId === link.invoiceId));
-    const paymentItem = paymentList?.items.find((item) => item.invoiceId === link.invoiceId);
-    if (!paymentItem) {
-      issues.push(`${invoice.id} 尚未生成付款清单`);
-    } else if (paymentList?.status !== 'generated') {
-      issues.push(`${invoice.id} 的付款清单尚未生成锁定版本`);
-    } else if (paymentItem.requiresRevalidation || paymentItem.validationIssues?.length) {
-      issues.push(`${invoice.id} 的付款账户快照需要重新校验`);
-    }
+    link.invoiceIds.forEach((invoiceId) => {
+      const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
+      if (!invoice) {
+        issues.push(`达人 ${link.creatorId} 的 Invoice ${invoiceId} 不存在`);
+        return;
+      }
+      if (
+        invoice.snapshot.creatorId !== link.creatorId
+        || invoice.snapshot.engagementId !== link.engagementId
+      ) {
+        issues.push(`${invoice.id} 与当前达人或合作关系不一致`);
+      }
+      if (!SUBMITTABLE_INVOICE_STATUSES.includes(invoice.status)) {
+        issues.push(`${invoice.id} 尚未完成签署和媒介审核`);
+      }
+      const paymentList = paymentLists
+        .filter((list) => !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId)
+        .find((list) => list.items.some((item) => item.invoiceId === invoiceId));
+      const paymentItem = paymentList?.items.find((item) => item.invoiceId === invoiceId);
+      if (!paymentItem) {
+        issues.push(`${invoice.id} 尚未生成付款清单`);
+      } else if (paymentList?.status !== 'generated') {
+        issues.push(`${invoice.id} 的付款清单尚未生成锁定版本`);
+      } else if (paymentItem.requiresRevalidation || paymentItem.validationIssues?.length) {
+        issues.push(`${invoice.id} 的付款账户快照需要重新校验`);
+      }
+    });
   });
+  const requestLists = paymentLists.filter((list) => (
+    !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId
+  ));
+  const listedInvoiceIds = requestLists.flatMap((list) => list.items.map((item) => item.invoiceId));
+  const listedCounts = listedInvoiceIds.reduce<Map<InvoiceId, number>>((counts, invoiceId) => (
+    counts.set(invoiceId, (counts.get(invoiceId) ?? 0) + 1)
+  ), new Map());
+  const duplicate = [...listedCounts].find(([, count]) => count > 1)?.[0];
+  const extra = listedInvoiceIds.find((invoiceId) => !expectedInvoiceIds.includes(invoiceId));
+  if (duplicate) issues.push(`Invoice ${duplicate} 在付款清单中重复出现`);
+  if (extra) issues.push(`付款清单包含当前请款项目未关联的 Invoice ${extra}`);
   return issues;
 };
 
@@ -243,8 +298,8 @@ export const paymentRequestAmountLabel = (
   links: PaymentRequestCreatorLink[],
   invoices: GeneratedInvoiceRecord[],
 ) => {
-  const totals = links.reduce<Record<string, number>>((result, link) => {
-    const invoice = invoices.find((candidate) => candidate.invoiceId === link.invoiceId);
+  const totals = paymentRequestInvoiceIds(links).reduce<Record<string, number>>((result, invoiceId) => {
+    const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
     if (!invoice) return result;
     const total = invoice.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0);
     result[invoice.snapshot.currency] = (result[invoice.snapshot.currency] ?? 0) + total;

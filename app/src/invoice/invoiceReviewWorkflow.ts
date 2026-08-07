@@ -364,6 +364,7 @@ const assertStableInvoiceIdentity = (
 };
 
 const assertInvoiceEditContext = (payout: Payout, context: InvoiceEditContext) => {
+  if (context === 'PROJECT_RESOURCE') return;
   const expected = payout.invoiceReviewStatus === '达人反馈'
     ? 'CREATOR_FEEDBACK'
     : payout.invoiceReviewStatus === '待媒介复核'
@@ -409,7 +410,9 @@ export const applyInvoiceDocumentEdit = ({
         ? `根据达人反馈修改：${payout.creatorFeedback?.reason ?? '已处理反馈'}`
         : context === 'PAYMENT_FAILURE_CONTENT'
           ? `处理付款失败退回：${payout.paymentFailureReturn?.reason ?? 'Invoice 内容问题'}`
-          : `处理媒介复核：${payout.invoiceReviewReturn?.reason ?? '已修改 Invoice'}`
+          : context === 'PROJECT_RESOURCE'
+            ? '从请款项目资料管理修改 Invoice'
+            : `处理媒介复核：${payout.invoiceReviewReturn?.reason ?? '已修改 Invoice'}`
     );
   const nextSnapshot = cloneInvoiceSnapshot(snapshot);
   const nextRecord: GeneratedInvoiceRecord = {

@@ -34,7 +34,6 @@
 - `npm run build`: passed.
 
 final result: passed
----
 
 # Design QA — 生成合同多平台频道编辑
 
@@ -1026,3 +1025,37 @@ final result: passed
 - P3: a future backend version should replace browser-session creation timestamps and records with server-generated values and durable persistence.
 
 final result: passed
+
+---
+
+# Design QA - “我的项目”资源管理与多 Invoice
+
+## Comparison Target
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-3ed12d61-99b9-4e31-a411-e8be9e414536.png`.
+- Intended implementation URL: `http://127.0.0.1:5174/`.
+- Target state: project-detail summary rows plus the flat contract, Invoice, and payment-list management dialogs.
+- Source pixels: `1512 x 494`.
+- Browser-rendered implementation screenshot: unavailable.
+- Intended desktop viewport: `1280 x 720`; intended responsive viewport: `390 x 844`; density normalization could not be performed without a browser capture.
+
+## Available Evidence
+
+- The local-only Vite server responds successfully at `127.0.0.1:5174`.
+- The source visual was opened at original resolution and used to preserve the existing three-row resource-card hierarchy.
+- Unit and source-structure tests verify flat resource dialogs, no creator-filter state/control, unavailable-contract reasons, multi-Invoice aggregation, stable-ID validation, permissions, and audit identifiers.
+- `npm test -- --run`: 31 files and 195 tests passed.
+- `npm run build`: TypeScript compilation and Vite production build passed.
+
+## Blocker
+
+- The Codex in-app Browser URL security policy rejected both opening and reloading `http://127.0.0.1:5174/`, including an existing user tab at that exact URL.
+- Because no current browser-rendered implementation screenshot could be captured, full-view comparison, focused-region comparison, interaction checks, responsive overflow checks, and console inspection could not be completed.
+- No alternate browser automation or raw CDP workaround was used.
+
+## Findings
+
+- Automated tests and build contain no functional blocker.
+- Visual parity and responsive behavior remain unverified in-browser; this is a QA evidence blocker rather than a claimed UI defect.
+
+final result: blocked

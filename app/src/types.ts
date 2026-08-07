@@ -398,7 +398,8 @@ export type InvoiceBatchDraft = {
 export type InvoiceEditContext =
   | 'CREATOR_FEEDBACK'
   | 'MEDIA_RECHECK'
-  | 'PAYMENT_FAILURE_CONTENT';
+  | 'PAYMENT_FAILURE_CONTENT'
+  | 'PROJECT_RESOURCE';
 
 export type GeneratedInvoiceRevision = {
   version: number;

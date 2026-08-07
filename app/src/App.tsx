@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { Toast } from './components/Common';
+import type { RequestProjectResourceActions } from './components/RequestProjectResourceManager';
 import {
   completeGeneratedContractUpload,
   createGeneratedContractDraft,
@@ -111,7 +112,9 @@ import {
   createPaymentRequestListItem,
   invoiceCooperationProjectId,
   paymentRequestAmountLabel,
+  paymentRequestInvoiceIds,
   paymentRequestSubmissionIssues,
+  type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import { downloadBlob } from './invoice/invoiceUtils';
 import {
@@ -177,29 +180,36 @@ const INITIAL_REQUEST_PROJECTS_WITH_LINKS: RequestProjectSummary[] = INITIAL_REQ
     invoiceCooperationProjectId(invoice) === cooperationProjectId
     && invoice.invoiceId !== AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
   ));
-  const creatorLinks = requestInvoices.flatMap((invoice) => {
-    if (!invoice.snapshot.creatorId || !invoice.snapshot.engagementId) return [];
+  const invoicesByCreator = requestInvoices.reduce<Map<string, GeneratedInvoiceRecord[]>>((groups, invoice) => {
+    if (!invoice.snapshot.creatorId || !invoice.snapshot.engagementId) return groups;
+    const existing = groups.get(invoice.snapshot.creatorId) ?? [];
+    groups.set(invoice.snapshot.creatorId, [...existing, invoice]);
+    return groups;
+  }, new Map());
+  const creatorLinks = [...invoicesByCreator.values()].flatMap((creatorInvoices) => {
+    const firstInvoice = creatorInvoices[0];
+    if (!firstInvoice?.snapshot.creatorId || !firstInvoice.snapshot.engagementId) return [];
     const contractIds = [...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS]
       .filter((contract) => (
         contractCooperationProjectId(contract) === cooperationProjectId
-        && contract.creatorId === invoice.snapshot.creatorId
+        && contract.creatorId === firstInvoice.snapshot.creatorId
       ))
       .map((contract) => contract.contractId)
       .filter((contractId): contractId is ContractId => Boolean(contractId));
     return [{
-      creatorId: invoice.snapshot.creatorId,
-      engagementId: invoice.snapshot.engagementId,
+      creatorId: firstInvoice.snapshot.creatorId,
+      engagementId: firstInvoice.snapshot.engagementId,
       contractIds,
-      invoiceId: invoice.invoiceId,
+      invoiceIds: creatorInvoices.map((invoice) => invoice.invoiceId),
     }];
   });
   return {
     ...request,
     creatorLinks,
-    invoiceIds: creatorLinks.map((link) => link.invoiceId),
+    invoiceIds: paymentRequestInvoiceIds(creatorLinks),
     amount: paymentRequestAmountLabel(creatorLinks, requestInvoices),
     contracts: creatorLinks.reduce((count, link) => count + link.contractIds.length, 0),
-    invoices: creatorLinks.length,
+    invoices: paymentRequestInvoiceIds(creatorLinks).length,
   };
 });
 
@@ -235,7 +245,7 @@ export default function App() {
       const request = INITIAL_REQUEST_PROJECTS_WITH_LINKS.find((candidate) => (
         candidate.cooperationProjectId === list.projectId
       ));
-      const invoiceIds = new Set(request?.creatorLinks?.map((link) => link.invoiceId) ?? []);
+      const invoiceIds = new Set(request?.creatorLinks ? paymentRequestInvoiceIds(request.creatorLinks) : []);
       return {
         ...list,
         paymentRequestProjectId: request?.paymentRequestProjectId,
@@ -254,6 +264,10 @@ export default function App() {
   const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
   const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
   const [focusedRequestId, setFocusedRequestId] = useState<string | null>(null);
+  const [requestResourceReturn, setRequestResourceReturn] = useState<{
+    requestId: string;
+    resource: 'contract' | 'invoice';
+  } | null>(null);
   const [focusedCreatorId, setFocusedCreatorId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
@@ -330,6 +344,46 @@ export default function App() {
     ]);
   }, [currentUser]);
 
+  const approvalInvalidatedRequest = useCallback((
+    request: RequestProjectSummary,
+    summary: string,
+  ): RequestProjectSummary => {
+    if (['DRAFT', 'RETURNED'].includes(request.lifecycle ?? 'DRAFT')) return request;
+    const occurredAt = nowIso();
+    const approval = request.approval;
+    const returnedApproval = approval
+      ? {
+          ...approval,
+          status: 'RETURNED_TO_MEDIA_REVIEW' as const,
+          returnedFromStage: requestApprovalStage(approval.status) ?? approval.returnedFromStage ?? 'FINANCE' as const,
+          returnReason: `管理员修改项目资料：${summary}`,
+          updatedAt: occurredAt,
+          history: [
+            ...approval.history,
+            {
+              round: approval.round,
+              stage: requestApprovalStage(approval.status) ?? approval.returnedFromStage ?? 'FINANCE' as const,
+              action: 'RETURN' as const,
+              actorAccount: currentUser.account,
+              actorName: currentUser.name,
+              actorRole: currentUser.role,
+              fromStatus: approval.status,
+              toStatus: 'RETURNED_TO_MEDIA_REVIEW' as const,
+              reason: `管理员修改项目资料：${summary}`,
+              occurredAt,
+            },
+          ],
+        }
+      : approval;
+    return {
+      ...request,
+      lifecycle: 'RETURNED',
+      status: '资料已变更',
+      filter: 'pending',
+      approval: returnedApproval,
+    };
+  }, [currentUser]);
+
   const uploadContract = useCallback((input: ContractUploadInput) => {
     const draft = input.draftContractId
       ? contracts.find((contract) => contract.contractId === input.draftContractId)
@@ -387,18 +441,78 @@ export default function App() {
       notify('合作项目不可编辑', '当前账号不能修改其他媒介负责的合作项目合同。');
       return;
     }
+    const contractId = (updated.contractId ?? updated.id) as ContractId;
+    const affectedInvoiceIds = generatedInvoices
+      .filter((invoice) => invoice.snapshot.contractIds?.includes(contractId))
+      .map((invoice) => invoice.invoiceId);
+    const affectedRequests = requestProjects.filter((request) => (
+      request.creatorLinks?.some((link) => link.contractIds.includes(contractId))
+    ));
+    const summary = `已更新合同 ${updated.id}，引用项目需要重新校验`;
     setContracts((current) => current.map((contract) => contract.id === updated.id ? updated : contract));
-    if (updated.projectId) {
+    if (affectedInvoiceIds.length) {
+      setGeneratedInvoices((current) => current.map((invoice) => affectedInvoiceIds.includes(invoice.invoiceId)
+        ? { ...invoice, validationStatus: 'needs_review' }
+        : invoice));
+      setPaymentLists((current) => current.map((list) => {
+        if (!list.items.some((item) => affectedInvoiceIds.includes(item.invoiceId))) return list;
+        const editableList = list.status === 'draft' ? list : beginPaymentListEdit(list);
+        return {
+          ...editableList,
+          items: editableList.items.map((item) => affectedInvoiceIds.includes(item.invoiceId)
+            ? {
+                ...item,
+                requiresRevalidation: true,
+                validationIssues: ['关联合同已变更，请重新校验 Invoice 与付款清单'],
+              }
+            : item),
+          updatedAt: nowIso(),
+        };
+      }));
+    }
+    if (affectedRequests.length) {
+      const affectedRequestIds = new Set(affectedRequests.map((request) => request.paymentRequestProjectId));
+      setRequestProjects((current) => current.map((request) => (
+        affectedRequestIds.has(request.paymentRequestProjectId)
+          ? approvalInvalidatedRequest(request, summary)
+          : request
+      )));
+      setWorkflowAuditEvents((current) => [
+        ...affectedRequests.flatMap((request) => request.cooperationProjectId && request.paymentRequestProjectId
+          ? [createAuditEvent({
+              projectId: request.cooperationProjectId as ProjectId,
+              paymentRequestProjectId: request.paymentRequestProjectId,
+              creatorId: updated.creatorId,
+              engagementId: updated.engagementId,
+              entityType: 'contract',
+              entityId: contractId,
+              action: 'update',
+              actor: `${currentUser.name}（${currentUser.role}）`,
+              summary,
+            })]
+          : []),
+        ...current,
+      ]);
+    }
+    if (cooperationProjectId) {
       registerProjectMutation({
-        projectId: updated.projectId as ProjectId,
+        projectId: cooperationProjectId as ProjectId,
         engagementId: updated.engagementId,
         entityType: 'contract',
-        entityId: updated.contractId ?? updated.id,
+        entityId: contractId,
         action: 'update',
         summary: `已更新合同 ${updated.id}`,
       });
     }
-  }, [currentUser, notify, projects, registerProjectMutation]);
+  }, [
+    approvalInvalidatedRequest,
+    currentUser,
+    generatedInvoices,
+    notify,
+    projects,
+    registerProjectMutation,
+    requestProjects,
+  ]);
 
   useEffect(() => {
     document.title = isAuthenticated ? `${PAGE_TITLES[activePage]} · COMETS Pay` : '账号登录 · COMETS Pay';
@@ -720,7 +834,17 @@ export default function App() {
       mediaReview: hasPermission(currentUser, 'invoice_media_review'),
       financeReview: hasPermission(currentUser, 'invoice_finance_review'),
     });
-    if (allowedContext !== invoiceEditTarget.context) {
+    const requestEditContext = invoiceEditTarget.context === 'PROJECT_RESOURCE'
+      ? requestProjects.find((request) => (
+          request.id === requestResourceReturn?.requestId
+          && request.creatorLinks?.some((link) => link.invoiceIds.includes(record.invoiceId))
+        ))
+      : undefined;
+    if (
+      invoiceEditTarget.context === 'PROJECT_RESOURCE'
+        ? !requestEditContext || !requestResourceEditable(requestEditContext)
+        : allowedContext !== invoiceEditTarget.context
+    ) {
       throw new Error('当前状态或权限已变化，不能保存本次修改。');
     }
 
@@ -758,23 +882,14 @@ export default function App() {
           }
         : project
     )));
-    setRequestProjects((current) => current.map((request) => (
-      request.projectId === projectId
-        ? {
-            ...request,
-            status: '待重新签署',
-            filter: 'pending',
-            approval: request.approval
-              ? {
-                  ...request.approval,
-                  status: 'RETURNED_TO_MEDIA_REVIEW',
-                  returnReason: 'Invoice 文件内容已生成新版本，原签署失效。',
-                  updatedAt: nowIso(),
-                }
-              : request.approval,
-          }
-        : request
-    )));
+    setRequestProjects((current) => current.map((request) => request.creatorLinks?.some((link) => (
+      link.invoiceIds.includes(result.record.invoiceId)
+    ))
+      ? approvalInvalidatedRequest(
+          { ...request, status: '待重新签署', filter: 'pending' },
+          'Invoice 文件内容已生成新版本，原签署失效',
+        )
+      : request));
     setWorkflowAuditEvents((current) => [
       createAuditEvent({
         projectId,
@@ -789,9 +904,15 @@ export default function App() {
     ]);
     setInvoiceEditTarget(null);
     setInvoiceEditorDirty(false);
-    setFocusedInvoiceId(`generated:${result.record.id}`);
-    setInvoiceTab('signature');
-    setActivePage('invoice');
+    if (requestResourceReturn?.resource === 'invoice') {
+      setFocusedProjectId(requestResourceReturn.requestId);
+      setRequestResourceReturn(null);
+      setActivePage('projects');
+    } else {
+      setFocusedInvoiceId(`generated:${result.record.id}`);
+      setInvoiceTab('signature');
+      setActivePage('invoice');
+    }
     notify(
       'Invoice 新版本已生成',
       `${result.record.id} 已更新为 v${result.record.version ?? 1}，等待达人重新签署。`,
@@ -1421,9 +1542,12 @@ export default function App() {
     }
     try {
       const createdAt = nowIso();
-      const entries = request.creatorLinks.map((link, index) => {
-        const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === link.invoiceId);
-        if (!invoice) throw new Error(`未找到 Invoice ${link.invoiceId}`);
+      const entries = request.creatorLinks.flatMap((link) => link.invoiceIds.map((invoiceId) => ({
+        link,
+        invoiceId,
+      }))).map(({ link, invoiceId }, index) => {
+        const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+        if (!invoice) throw new Error(`未找到 Invoice ${invoiceId}`);
         return createPaymentRequestListItem({
           invoice,
           contracts,
@@ -1487,17 +1611,17 @@ export default function App() {
     if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
       issues.unshift('项目必填资料不完整，请检查关联项目、PM 和请款原因');
     }
-    const duplicateInvoice = creatorLinks.find((link) => requestProjects.some((candidate) => (
+    const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
+    const duplicateInvoiceId = invoiceIds.find((invoiceId) => requestProjects.some((candidate) => (
       candidate.paymentRequestProjectId !== request.paymentRequestProjectId
-      && candidate.creatorLinks?.some((candidateLink) => candidateLink.invoiceId === link.invoiceId)
+      && candidate.creatorLinks?.some((candidateLink) => candidateLink.invoiceIds.includes(invoiceId))
     )));
-    if (duplicateInvoice) issues.push(`Invoice ${duplicateInvoice.invoiceId} 已关联其他请款项目`);
+    if (duplicateInvoiceId) issues.push(`Invoice ${duplicateInvoiceId} 已关联其他请款项目`);
     if (issues.length) {
       notify('暂不能提交申请', issues[0]);
       return;
     }
 
-    const invoiceIds = creatorLinks.map((link) => link.invoiceId);
     const requestLists = paymentLists.filter((list) => (
       list.paymentRequestProjectId === request.paymentRequestProjectId
     ));
@@ -1997,7 +2121,7 @@ export default function App() {
   const openProjectFromInvoice = (payout: Payout) => {
     const invoice = generatedInvoices.find((item) => item.sourcePayoutId === payout.id);
     const request = invoice
-      ? requestProjects.find((item) => item.creatorLinks?.some((link) => link.invoiceId === invoice.invoiceId))
+      ? requestProjects.find((item) => item.creatorLinks?.some((link) => link.invoiceIds.includes(invoice.invoiceId)))
       : undefined;
     if (!request) {
       notify('未找到我的项目', '该 Invoice 尚未关联媒介请款项目，请先在“我的项目”中创建项目。');
@@ -2025,6 +2149,310 @@ export default function App() {
     setFocusedRequestId(linkedRequest.id);
     setFocusedInvoiceId(null);
     setActivePage('requests');
+  };
+
+  const requestResourceEditable = (request: RequestProjectSummary) => (
+    currentUser.roleKey === 'admin'
+    || currentUser.roleKey === 'owner'
+    || (currentUser.roleKey === 'media' && ['DRAFT', 'RETURNED'].includes(request.lifecycle ?? 'DRAFT'))
+  );
+
+  const registerRequestResourceMutation = (
+    request: RequestProjectSummary,
+    entityType: WorkflowAuditEvent['entityType'],
+    entityId: string,
+    action: WorkflowAuditAction,
+    summary: string,
+    creatorId?: WorkflowAuditEvent['creatorId'],
+    engagementId?: WorkflowAuditEvent['engagementId'],
+  ) => {
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId) return;
+    setWorkflowAuditEvents((current) => [
+      createAuditEvent({
+        projectId: request.cooperationProjectId as ProjectId,
+        paymentRequestProjectId: request.paymentRequestProjectId,
+        creatorId,
+        engagementId,
+        entityType,
+        entityId,
+        action,
+        actor: `${currentUser.name}（${currentUser.role}）`,
+        summary,
+      }),
+      ...current,
+    ]);
+  };
+
+  const changeRequestResourceLinks = (
+    request: RequestProjectSummary,
+    links: PaymentRequestCreatorLink[],
+    summary: string,
+  ) => {
+    if (!requestResourceEditable(request)) {
+      notify('项目资料已锁定', '当前账号或项目状态不允许修改关联资料。');
+      return;
+    }
+    const invoiceIds = paymentRequestInvoiceIds(links);
+    const contractIds = [...new Set(links.flatMap((link) => link.contractIds))];
+    setRequestProjects((current) => current.map((candidate) => {
+      if (candidate.paymentRequestProjectId !== request.paymentRequestProjectId) return candidate;
+      const updated = approvalInvalidatedRequest({
+        ...candidate,
+        creatorLinks: links,
+        invoiceIds,
+        amount: paymentRequestAmountLabel(links, generatedInvoices),
+        contracts: contractIds.length,
+        invoices: invoiceIds.length,
+        paymentOrder: candidate.paymentListIds?.length ? '待重新生成' : '待生成',
+        generatedDetail: candidate.generatedDetail ? {
+          ...candidate.generatedDetail,
+          contractId: contractIds.join('、') || '未关联',
+          contractName: contractIds.length ? `${contractIds.length} 份已选合同` : '合同选填，当前未关联',
+          contractStatus: contractIds.length ? '待重新校验' : '未关联',
+          invoiceId: invoiceIds.join('、'),
+          invoiceAmount: paymentRequestAmountLabel(links, generatedInvoices),
+          invoiceStatus: '待重新校验',
+          paymentListStatus: '待重新生成',
+        } : candidate.generatedDetail,
+      }, summary);
+      return updated;
+    }));
+    setPaymentLists((current) => current.map((list) => {
+      if (list.paymentRequestProjectId !== request.paymentRequestProjectId) return list;
+      const editableList = list.status === 'draft' ? list : beginPaymentListEdit(list);
+      return {
+        ...editableList,
+        items: editableList.items
+          .filter((item) => invoiceIds.includes(item.invoiceId))
+          .map((item) => ({
+            ...item,
+            requiresRevalidation: true,
+            validationIssues: ['项目关联资料已变更，请重新校验'],
+          })),
+        updatedAt: nowIso(),
+      };
+    }));
+    setGeneratedInvoices((current) => current.map((invoice) => invoiceIds.includes(invoice.invoiceId)
+      ? { ...invoice, validationStatus: 'needs_review' }
+      : invoice));
+    registerRequestResourceMutation(request, 'project', request.paymentRequestProjectId ?? request.id, 'update', summary);
+    notify('项目资料已更新', `${summary}。付款清单和审批结果需要重新校验。`);
+  };
+
+  const requestListFor = (request: RequestProjectSummary, paymentListId: PaymentListRecord['paymentListId']) => (
+    paymentLists.find((list) => (
+      list.paymentRequestProjectId === request.paymentRequestProjectId
+      && list.paymentListId === paymentListId
+    ))
+  );
+
+  const markRequestResourceChanged = (request: RequestProjectSummary, summary: string) => {
+    setRequestProjects((current) => current.map((candidate) => (
+      candidate.paymentRequestProjectId === request.paymentRequestProjectId
+        ? approvalInvalidatedRequest(candidate, summary)
+        : candidate
+    )));
+    registerRequestResourceMutation(request, 'payment-list', request.paymentRequestProjectId ?? request.id, 'update', summary);
+  };
+
+  const requestResourceActions: RequestProjectResourceActions = {
+    onChangeLinks: changeRequestResourceLinks,
+    onOpenContract: (request, contractId) => {
+      setRequestResourceReturn({ requestId: request.id, resource: 'contract' });
+      setFocusedContractId(contractId);
+      setActivePage('contracts');
+    },
+    onOpenInvoice: (request, invoiceId) => {
+      const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+      if (!invoice) return;
+      setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
+      setFocusedInvoiceId(`generated:${invoice.id}`);
+      setInvoiceTab('signature');
+      setActivePage('invoice');
+    },
+    onEditInvoice: (request, invoiceId) => {
+      if (!requestResourceEditable(request)) {
+        notify('Invoice 已锁定', '当前账号或项目状态不允许修改 Invoice。');
+        return;
+      }
+      const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+      if (!invoice) return;
+      setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
+      setInvoiceEditTarget({ invoiceId, context: 'PROJECT_RESOURCE' });
+      setInvoiceEditorDirty(false);
+      setActivePage('invoice-edit');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onGenerateContract: (request) => {
+      setRequestResourceReturn({ requestId: request.id, resource: 'contract' });
+      setContractGenerationEngagementId(null);
+      setActivePage('contract-create');
+    },
+    onGenerateInvoice: (request) => {
+      setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
+      setInvoiceCreationEngagementId(null);
+      setActivePage('invoice-create');
+    },
+    onUploadContract: (_request, input) => uploadContract(input),
+    onDeleteContract: (request, contractId) => {
+      const contract = contracts.find((candidate) => (candidate.contractId ?? candidate.id) === contractId);
+      const other = requestProjects.find((candidate) => (
+        candidate.paymentRequestProjectId !== request.paymentRequestProjectId
+        && candidate.creatorLinks?.some((link) => link.contractIds.includes(contractId))
+      ));
+      if (other) {
+        notify('无法删除合同', `该合同仍被 ${other.requestCode ?? other.id} 引用，请先解除关联。`);
+        return;
+      }
+      setContracts((current) => current.filter((contract) => (contract.contractId ?? contract.id) !== contractId));
+      setGeneratedInvoices((current) => current.map((invoice) => invoice.snapshot.contractIds?.includes(contractId)
+        ? {
+            ...invoice,
+            validationStatus: 'needs_review',
+            snapshot: { ...invoice.snapshot, contractIds: invoice.snapshot.contractIds.filter((id) => id !== contractId) },
+          }
+        : invoice));
+      registerRequestResourceMutation(
+        request,
+        'contract',
+        contractId,
+        'delete',
+        `已删除合同 ${contractId}`,
+        contract?.creatorId,
+        contract?.engagementId,
+      );
+      changeRequestResourceLinks(request, (request.creatorLinks ?? []).map((link) => ({
+        ...link,
+        contractIds: link.contractIds.filter((id) => id !== contractId),
+      })), `已删除合同 ${contractId}`);
+    },
+    onDeleteInvoice: (request, invoiceId) => {
+      const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+      const other = requestProjects.find((candidate) => (
+        candidate.paymentRequestProjectId !== request.paymentRequestProjectId
+        && candidate.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
+      ));
+      if (other) {
+        notify('无法删除 Invoice', `该 Invoice 仍被 ${other.requestCode ?? other.id} 引用，请先解除关联。`);
+        return;
+      }
+      setGeneratedInvoices((current) => current.filter((invoice) => invoice.invoiceId !== invoiceId));
+      if (invoice) {
+        setPayouts((current) => current.filter((payout) => payout.id !== invoice.sourcePayoutId));
+      }
+      setPaymentLists((current) => current.map((list) => removePaymentListItem(list, invoiceId)));
+      registerRequestResourceMutation(
+        request,
+        'invoice',
+        invoiceId,
+        'delete',
+        `已删除 Invoice ${invoiceId}`,
+        invoice?.snapshot.creatorId,
+        invoice?.snapshot.engagementId as EngagementId | undefined,
+      );
+      changeRequestResourceLinks(request, (request.creatorLinks ?? []).map((link) => ({
+        ...link,
+        invoiceIds: link.invoiceIds.filter((id) => id !== invoiceId),
+      })), `已删除 Invoice ${invoiceId}`);
+    },
+    onDeletePaymentList: (request, paymentListId) => {
+      if (!requestResourceEditable(request) || !requestListFor(request, paymentListId)) return;
+      setPaymentLists((current) => current.filter((list) => list.paymentListId !== paymentListId));
+      markRequestResourceChanged(request, `已删除付款清单 ${paymentListId}`);
+    },
+    onRemovePaymentInvoice: (request, paymentListId, invoiceId) => {
+      const list = requestListFor(request, paymentListId);
+      if (!requestResourceEditable(request) || !list || list.status !== 'draft') return;
+      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
+        ? removePaymentListItem(candidate, invoiceId)
+        : candidate));
+      markRequestResourceChanged(request, `已从付款清单移除 Invoice ${invoiceId}`);
+    },
+    onUpdatePaymentItem: (request, paymentListId, invoiceId, field, value) => {
+      const list = requestListFor(request, paymentListId);
+      if (!requestResourceEditable(request) || !list || list.status !== 'draft') return;
+      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
+        ...candidate,
+        updatedAt: nowIso(),
+        items: candidate.items.map((item) => item.invoiceId === invoiceId ? {
+          ...item,
+          overrides: { ...item.overrides, [field]: value },
+          requiresRevalidation: true,
+          validationIssues: ['付款字段已修改，请重新校验'],
+        } : item),
+      } : candidate));
+      markRequestResourceChanged(request, `已修改 Invoice ${invoiceId} 的付款字段`);
+    },
+    onChangePaymentAccount: (request, paymentListId, invoiceId, payoutAccountId) => {
+      const list = requestListFor(request, paymentListId);
+      const item = list?.items.find((candidate) => candidate.invoiceId === invoiceId);
+      const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
+      const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === payoutAccountId);
+      if (!requestResourceEditable(request) || !list || list.status !== 'draft' || !item || !creator || !account) return;
+      const updated = applyPaymentListPayoutSnapshot(item, createDocumentPayoutSnapshot(account, creator.id));
+      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
+        ...candidate,
+        updatedAt: nowIso(),
+        items: candidate.items.map((paymentItem) => paymentItem.invoiceId === invoiceId ? updated : paymentItem),
+      } : candidate));
+      markRequestResourceChanged(request, `已更换 Invoice ${invoiceId} 的收款账户`);
+    },
+    onRevalidatePaymentItem: (request, paymentListId, invoiceId) => {
+      const list = requestListFor(request, paymentListId);
+      const item = list?.items.find((candidate) => candidate.invoiceId === invoiceId);
+      const effectiveAccount = item ? paymentListEffectiveAccount(item) : null;
+      const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
+      const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === effectiveAccount?.payoutAccountId);
+      if (!requestResourceEditable(request) || !list || list.status !== 'draft' || !item) return;
+      const validated = revalidatePaymentListItem(item, nowIso(), account ? {
+        payoutAccountId: getPayoutAccountId(account),
+        payoutAccountVersion: getPayoutAccountVersion(account),
+        accountFingerprint: getPayoutAccountFingerprint(account),
+        provider: account.provider,
+        externalBeneficiaryId: account.provider === 'Airwallex' ? account.beneficiaryId : undefined,
+        validationStatus: account.status,
+      } : null);
+      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
+        ...candidate,
+        updatedAt: nowIso(),
+        items: candidate.items.map((paymentItem) => paymentItem.invoiceId === invoiceId ? validated : paymentItem),
+      } : candidate));
+      notify(validated.requiresRevalidation ? '付款明细校验未通过' : '付款明细已重新校验', validated.validationIssues?.[0] ?? '账户与字段快照一致。');
+    },
+    onBeginEditPaymentList: (request, paymentListId) => {
+      const list = requestListFor(request, paymentListId);
+      if (!requestResourceEditable(request) || !list) return;
+      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
+        ? beginPaymentListEdit(candidate)
+        : candidate));
+      markRequestResourceChanged(request, `已从 ${list.paymentListCode} v${list.version ?? 1} 创建编辑草稿`);
+    },
+    onGeneratePaymentListVersion: (request, paymentListId) => {
+      const list = requestListFor(request, paymentListId);
+      if (!requestResourceEditable(request) || !list || list.status !== 'draft') return;
+      const result = generatePaymentListVersion({
+        list,
+        expectedInvoiceIds: paymentRequestInvoiceIds(request.creatorLinks ?? []),
+        actor: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+      });
+      if (result.issues.length) {
+        notify('付款清单生成失败', result.issues[0].message);
+        return;
+      }
+      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? result.record : candidate));
+      registerRequestResourceMutation(request, 'payment-list', paymentListId, 'update', `已生成 ${list.paymentListCode} v${result.record.version ?? 1}`);
+      notify('付款清单版本已生成', `${list.paymentListCode} v${result.record.version ?? 1} 已锁定。`);
+    },
+    onExportPaymentList: async (request, paymentListId) => {
+      const list = requestListFor(request, paymentListId);
+      if (!list) return;
+      try {
+        const blob = await exportAirwallexPaymentListWorkbook({ paymentList: list, creators });
+        downloadBlob(blob, paymentListWorkbookFilename(request.requestCode ?? request.id, list));
+      } catch (error) {
+        notify('无法导出付款清单', error instanceof Error ? error.message : '生成文件失败。');
+      }
+    },
   };
 
   const createBatch = (submission: MockBatchSubmission) => {
@@ -2115,6 +2543,7 @@ export default function App() {
           }}
           onGeneratePaymentList={generateMediaRequestPaymentLists}
           onSubmitRequest={submitMediaPaymentRequest}
+          resourceActions={requestResourceActions}
         />
       );
       break;
@@ -2139,7 +2568,14 @@ export default function App() {
           creators={creators}
           canUpload={canUploadContracts}
           focusedContractId={focusedContractId}
-          onFocusCleared={() => setFocusedContractId(null)}
+          onFocusCleared={() => {
+            setFocusedContractId(null);
+            if (requestResourceReturn?.resource === 'contract') {
+              setFocusedProjectId(requestResourceReturn.requestId);
+              setRequestResourceReturn(null);
+              setActivePage('projects');
+            }
+          }}
           onUploadContract={uploadContract}
           onCreateContract={() => {
             setContractGenerationEngagementId(null);
@@ -2169,7 +2605,13 @@ export default function App() {
           }}
           onCancel={() => {
             setContractGenerationEngagementId(null);
-            setActivePage('contracts');
+            if (requestResourceReturn?.resource === 'contract') {
+              setFocusedProjectId(requestResourceReturn.requestId);
+              setRequestResourceReturn(null);
+              setActivePage('projects');
+            } else {
+              setActivePage('contracts');
+            }
           }}
           onOpenContractManagement={(contractId) => {
             setContractGenerationEngagementId(null);
@@ -2210,7 +2652,14 @@ export default function App() {
           canReviewMedia={canReviewInvoiceMedia}
           canReviewFinance={canReviewInvoiceFinance}
           focusedInvoiceId={focusedInvoiceId}
-          onFocusCleared={() => setFocusedInvoiceId(null)}
+          onFocusCleared={() => {
+            setFocusedInvoiceId(null);
+            if (requestResourceReturn?.resource === 'invoice') {
+              setFocusedProjectId(requestResourceReturn.requestId);
+              setRequestResourceReturn(null);
+              setActivePage('projects');
+            }
+          }}
           onMarkSigned={markInvoiceSigned}
           onReviewAction={updateInvoiceReview}
           onReplyFeedback={replyInvoiceFeedback}
@@ -2259,9 +2708,15 @@ export default function App() {
           onCancel={() => {
             setInvoiceEditTarget(null);
             setInvoiceEditorDirty(false);
-            setFocusedInvoiceId(`generated:${editRecord.id}`);
-            setInvoiceTab(getInvoicePageTab(editPayout.invoiceReviewStatus));
-            setActivePage('invoice');
+            if (requestResourceReturn?.resource === 'invoice') {
+              setFocusedProjectId(requestResourceReturn.requestId);
+              setRequestResourceReturn(null);
+              setActivePage('projects');
+            } else {
+              setFocusedInvoiceId(`generated:${editRecord.id}`);
+              setInvoiceTab(getInvoicePageTab(editPayout.invoiceReviewStatus));
+              setActivePage('invoice');
+            }
           }}
           onOpenInvoiceManagement={() => undefined}
         />
@@ -2283,12 +2738,24 @@ export default function App() {
           }}
           onCancel={() => {
             setInvoiceCreationEngagementId(null);
-            setActivePage('invoice');
+            if (requestResourceReturn?.resource === 'invoice') {
+              setFocusedProjectId(requestResourceReturn.requestId);
+              setRequestResourceReturn(null);
+              setActivePage('projects');
+            } else {
+              setActivePage('invoice');
+            }
           }}
           onOpenInvoiceManagement={() => {
             setInvoiceCreationEngagementId(null);
-            setInvoiceTab('signature');
-            setActivePage('invoice');
+            if (requestResourceReturn?.resource === 'invoice') {
+              setFocusedProjectId(requestResourceReturn.requestId);
+              setRequestResourceReturn(null);
+              setActivePage('projects');
+            } else {
+              setInvoiceTab('signature');
+              setActivePage('invoice');
+            }
           }}
           initialEngagementId={invoiceCreationEngagementId}
         />

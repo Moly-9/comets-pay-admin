@@ -16,6 +16,10 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import {
+  RequestProjectResourceManager,
+  type RequestProjectResourceActions,
+} from '../components/RequestProjectResourceManager';
 import { formatContractMoney, isConfirmedContract, type ContractRecord } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
 import {
@@ -24,6 +28,7 @@ import {
   type ContractId,
   type CooperationProjectId,
   type CreatorId,
+  type InvoiceId,
   type PaymentListRecord,
   type PaymentRequestProjectId,
   type ProjectId,
@@ -35,6 +40,7 @@ import {
   filterPaymentRequestList,
   paymentRequestAmount,
   paymentRequestAmountLabel,
+  paymentRequestInvoiceIds,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
@@ -52,10 +58,9 @@ import type { RequestProjectSummary } from './RequestProjectDetailPage';
 type Notify = (title: string, message: string) => void;
 
 const STATUS_COPY = {
-  READY: '已自动关联唯一 Invoice',
+  READY: '可选择多份 Invoice',
   MISSING_INVOICE: '该合作项目下暂无此达人 Invoice',
-  MULTIPLE_INVOICES: '检测到多份 Invoice，需先处理数据冲突',
-  INVOICE_IN_USE: '该 Invoice 已关联其他请款项目',
+  INVOICE_IN_USE: '可用 Invoice 均已关联其他请款项目',
 } as const;
 
 const requestCodeFor = (request: RequestProjectSummary) => request.requestCode ?? request.id;
@@ -97,6 +102,7 @@ export function MediaPaymentProjectsPage({
   onUpdated,
   onGeneratePaymentList,
   onSubmitRequest,
+  resourceActions,
 }: {
   notify: Notify;
   currentUser: SystemUser;
@@ -113,6 +119,7 @@ export function MediaPaymentProjectsPage({
   onUpdated: (request: RequestProjectSummary) => void;
   onGeneratePaymentList: (request: RequestProjectSummary) => void;
   onSubmitRequest: (request: RequestProjectSummary) => void;
+  resourceActions: RequestProjectResourceActions;
 }) {
   const [creating, setCreating] = useState(false);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -125,6 +132,7 @@ export function MediaPaymentProjectsPage({
   const [creatorPickerOpen, setCreatorPickerOpen] = useState(false);
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<CreatorId[]>([]);
   const [contractIdsByCreator, setContractIdsByCreator] = useState<Record<string, ContractId[]>>({});
+  const [invoiceIdsByCreator, setInvoiceIdsByCreator] = useState<Record<string, InvoiceId[]>>({});
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
 
@@ -227,6 +235,7 @@ export function MediaPaymentProjectsPage({
     setCreatorPickerOpen(false);
     setSelectedCreatorIds([]);
     setContractIdsByCreator({});
+    setInvoiceIdsByCreator({});
     setEditingRequestId(null);
   };
 
@@ -253,6 +262,9 @@ export function MediaPaymentProjectsPage({
     setContractIdsByCreator(Object.fromEntries(
       (request.creatorLinks ?? []).map((link) => [link.creatorId, [...link.contractIds]]),
     ));
+    setInvoiceIdsByCreator(Object.fromEntries(
+      (request.creatorLinks ?? []).map((link) => [link.creatorId, [...link.invoiceIds]]),
+    ));
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
     setCreating(true);
@@ -262,6 +274,7 @@ export function MediaPaymentProjectsPage({
     setCooperationProjectId(value);
     setSelectedCreatorIds([]);
     setContractIdsByCreator({});
+    setInvoiceIdsByCreator({});
   };
 
   const toggleCreator = (creatorId: CreatorId) => {
@@ -269,7 +282,8 @@ export function MediaPaymentProjectsPage({
       notify('达人名单已锁定', '只有草稿状态可以添加或移除达人。');
       return;
     }
-    setSelectedCreatorIds((current) => current.includes(creatorId)
+    const removing = selectedCreatorIds.includes(creatorId);
+    setSelectedCreatorIds((current) => removing
       ? current.filter((id) => id !== creatorId)
       : [...current, creatorId]);
     setContractIdsByCreator((current) => {
@@ -277,6 +291,18 @@ export function MediaPaymentProjectsPage({
       const next = { ...current };
       delete next[creatorId];
       return next;
+    });
+    setInvoiceIdsByCreator((current) => {
+      if (removing) {
+        if (!current[creatorId]) return current;
+        const next = { ...current };
+        delete next[creatorId];
+        return next;
+      }
+      return {
+        ...current,
+        [creatorId]: resolutions.get(creatorId)?.availableInvoices.map((invoice) => invoice.invoiceId) ?? [],
+      };
     });
   };
 
@@ -292,16 +318,29 @@ export function MediaPaymentProjectsPage({
     });
   };
 
+  const toggleInvoice = (creatorId: CreatorId, invoiceId: InvoiceId) => {
+    setInvoiceIdsByCreator((current) => {
+      const selected = current[creatorId] ?? [];
+      return {
+        ...current,
+        [creatorId]: selected.includes(invoiceId)
+          ? selected.filter((id) => id !== invoiceId)
+          : [...selected, invoiceId],
+      };
+    });
+  };
+
   const validCreatorLinks = selectedCreators.flatMap<PaymentRequestCreatorLink>((creator) => {
     const resolution = resolutions.get(creator.id);
-    const invoice = resolution?.status === 'READY' ? resolution.invoice : null;
-    const engagementId = invoice?.snapshot.engagementId;
-    if (!invoice || !engagementId) return [];
+    const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
+    const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
+    const engagementId = selectedInvoices[0]?.snapshot.engagementId;
+    if (!selectedInvoices.length || !engagementId) return [];
     return [{
       creatorId: creator.id as CreatorId,
       engagementId,
       contractIds: contractIdsByCreator[creator.id] ?? [],
-      invoiceId: invoice.invoiceId,
+      invoiceIds: selectedInvoices.map((invoice) => invoice.invoiceId),
     }];
   });
   const creatorsReady = selectedCreators.length > 0
@@ -319,7 +358,7 @@ export function MediaPaymentProjectsPage({
       ?? createPrototypeId('request-project') as PaymentRequestProjectId;
     const requestCode = editingRequest?.requestCode ?? createPrototypeCode('REQ');
     const selectedContractIds = validCreatorLinks.flatMap((link) => link.contractIds);
-    const selectedInvoiceIds = validCreatorLinks.map((link) => link.invoiceId);
+    const selectedInvoiceIds = paymentRequestInvoiceIds(validCreatorLinks);
     const request: RequestProjectSummary = {
       ...editingRequest,
       id: editingRequest?.id ?? requestCode,
@@ -392,8 +431,8 @@ export function MediaPaymentProjectsPage({
       list.paymentRequestProjectId === selectedRequest.paymentRequestProjectId
     ));
     const linkedContractIds = Array.from(new Set(links.flatMap((link) => link.contractIds)));
-    const linkedInvoices = links.flatMap((link) => {
-      const invoice = invoices.find((item) => item.invoiceId === link.invoiceId);
+    const linkedInvoices = paymentRequestInvoiceIds(links).flatMap((invoiceId) => {
+      const invoice = invoices.find((item) => item.invoiceId === invoiceId);
       return invoice ? [invoice] : [];
     });
     const latestPaymentList = requestPaymentLists[0];
@@ -427,27 +466,35 @@ export function MediaPaymentProjectsPage({
           </dl>
         </section>
         <section className="project-detail-card project-workflow-card">
-          <header className="project-detail-card-header"><div><h2>合同、Invoice 与付款清单</h2><p>逐项查看当前请款项目明确关联的资料。</p></div></header>
-          <div className="project-resource-list">
-            <article className="project-resource-row">
-              <span className="project-resource-icon"><FileText size={19} /></span>
-              <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">合同</h3><span className="project-resource-count">{linkedContractIds.length} 条可查看</span></div><strong>{linkedContractIds.length ? `${linkedContractIds.length} 份合同` : '未关联合同（选填）'}</strong><small>对应 {links.length} 位达人 · 仅展示本项目已选合同</small></div>
-              <ProjectStatus status={linkedContractIds.length ? '已归档' : '未关联'} />
-              <button className="text-link project-resource-summary-open" type="button" onClick={() => notify('关联合同', linkedContractIds.join('、') || '当前请款项目未关联合同。')}>查看合同</button>
-            </article>
-            <article className="project-resource-row project-resource-row-invoice">
-              <span className="project-resource-icon"><ReceiptText size={19} /></span>
-              <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">Invoice</h3><span className="project-resource-count">{linkedInvoices.length} 条可查看</span></div><strong>{linkedInvoices.length} 份 Invoice</strong><small>对应 {links.length} 位达人 · 请款金额 {selectedRequest.amount}</small></div>
-              <ProjectStatus status={linkedInvoices.every((invoice) => invoice.status === '待发起请款') ? '已通过' : '待审批'} />
-              <button className="text-link project-resource-summary-open" type="button" onClick={() => notify('关联 Invoice', linkedInvoices.map((invoice) => invoice.id).join('、') || '当前请款项目暂无 Invoice。')}>查看 Invoice</button>
-            </article>
-            <article className="project-resource-row project-resource-row-payment">
-              <span className="project-resource-icon"><WalletCards size={19} /></span>
-              <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">付款清单</h3><span className="project-resource-count">{requestPaymentLists.length} 条可查看</span></div><strong>{requestPaymentLists.length ? requestPaymentLists.map((list) => list.paymentListCode).join('、') : '待生成'}</strong><small>{requestPaymentLists.length ? `${requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0)} 笔达人付款明细` : '提交审批前生成并校验账户快照'}</small></div>
-              <ProjectStatus status={paymentListStatusLabel(latestPaymentList?.status)} />
-              <button className="text-link project-resource-summary-open" type="button" onClick={() => notify('付款清单', requestPaymentLists.length ? requestPaymentLists.map((list) => list.paymentListCode).join('、') : '当前请款项目尚未生成付款清单。')}>查看清单</button>
-            </article>
-          </div>
+          <header className="project-detail-card-header"><div><h2>合同、Invoice 与付款清单</h2><p>逐项查看和管理当前请款项目明确关联的资料。</p></div></header>
+          <RequestProjectResourceManager
+            request={selectedRequest}
+            cooperationProject={cooperationProject ?? cooperationProjects[0]}
+            requests={requests}
+            creators={creators}
+            contracts={contracts}
+            invoices={invoices}
+            paymentLists={paymentLists}
+            currentUser={currentUser}
+            onChangeLinks={(nextLinks, summary) => resourceActions.onChangeLinks(selectedRequest, nextLinks, summary)}
+            onOpenContract={(contractId) => resourceActions.onOpenContract(selectedRequest, contractId)}
+            onOpenInvoice={(invoiceId) => resourceActions.onOpenInvoice(selectedRequest, invoiceId)}
+            onEditInvoice={(invoiceId) => resourceActions.onEditInvoice(selectedRequest, invoiceId)}
+            onGenerateContract={() => resourceActions.onGenerateContract(selectedRequest)}
+            onGenerateInvoice={() => resourceActions.onGenerateInvoice(selectedRequest)}
+            onUploadContract={(input) => resourceActions.onUploadContract(selectedRequest, input)}
+            onDeleteContract={(contractId) => resourceActions.onDeleteContract(selectedRequest, contractId)}
+            onDeleteInvoice={(invoiceId) => resourceActions.onDeleteInvoice(selectedRequest, invoiceId)}
+            onGeneratePaymentLists={() => onGeneratePaymentList(selectedRequest)}
+            onDeletePaymentList={(paymentListId) => resourceActions.onDeletePaymentList(selectedRequest, paymentListId)}
+            onRemovePaymentInvoice={(paymentListId, invoiceId) => resourceActions.onRemovePaymentInvoice(selectedRequest, paymentListId, invoiceId)}
+            onUpdatePaymentItem={(paymentListId, invoiceId, field, value) => resourceActions.onUpdatePaymentItem(selectedRequest, paymentListId, invoiceId, field, value)}
+            onChangePaymentAccount={(paymentListId, invoiceId, payoutAccountId) => resourceActions.onChangePaymentAccount(selectedRequest, paymentListId, invoiceId, payoutAccountId)}
+            onRevalidatePaymentItem={(paymentListId, invoiceId) => resourceActions.onRevalidatePaymentItem(selectedRequest, paymentListId, invoiceId)}
+            onBeginEditPaymentList={(paymentListId) => resourceActions.onBeginEditPaymentList(selectedRequest, paymentListId)}
+            onGeneratePaymentListVersion={(paymentListId) => resourceActions.onGeneratePaymentListVersion(selectedRequest, paymentListId)}
+            onExportPaymentList={(paymentListId) => resourceActions.onExportPaymentList(selectedRequest, paymentListId)}
+          />
         </section>
         <section className="project-detail-card">
           <header className="project-detail-card-header"><div><h2>达人名单</h2><p>展示当前请款项目已关联的达人及单据状态。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => openEditForm(selectedRequest, true)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
@@ -457,8 +504,11 @@ export function MediaPaymentProjectsPage({
                 <thead><tr><th>达人</th><th>平台</th><th>Invoice</th><th>合同</th><th>单据状态</th></tr></thead>
                 <tbody>{links.map((link) => {
                   const creator = creators.find((item) => item.id === link.creatorId);
-                  const invoice = invoices.find((item) => item.invoiceId === link.invoiceId);
-                  return <tr key={link.creatorId}><td><div className="media-request-creator-cell"><Avatar initials={creator?.initials ?? '?'} accent={creator?.accent ?? '#718096'} size="sm" /><span><strong>{creator?.name ?? link.creatorId}</strong><small>{creator?.handle ?? '达人档案待核对'}</small></span></div></td><td>{creator?.platform ?? '待核对'}</td><td><strong>{invoice?.id ?? link.invoiceId}</strong><small className="cell-subtext">{invoice?.status ?? '记录缺失'}</small></td><td>{link.contractIds.length ? `${link.contractIds.length} 份` : '未关联（选填）'}</td><td><ProjectStatus status={invoice ? '已关联' : '待补资料'} /></td></tr>;
+                  const creatorInvoices = link.invoiceIds.flatMap((invoiceId) => {
+                    const invoice = invoices.find((item) => item.invoiceId === invoiceId);
+                    return invoice ? [invoice] : [];
+                  });
+                  return <tr key={link.creatorId}><td><div className="media-request-creator-cell"><Avatar initials={creator?.initials ?? '?'} accent={creator?.accent ?? '#718096'} size="sm" /><span><strong>{creator?.name ?? link.creatorId}</strong><small>{creator?.handle ?? '达人档案待核对'}</small></span></div></td><td>{creator?.platform ?? '待核对'}</td><td><strong>{creatorInvoices.length ? `${creatorInvoices.length} 份 Invoice` : '未关联'}</strong><small className="cell-subtext">{creatorInvoices.map((invoice) => invoice.id).join('、') || '记录缺失'}</small></td><td>{link.contractIds.length ? `${link.contractIds.length} 份` : '未关联（选填）'}</td><td><ProjectStatus status={creatorInvoices.length ? '已关联' : '待补资料'} /></td></tr>;
                 })}</tbody>
               </table>
             </div>
@@ -576,7 +626,7 @@ export function MediaPaymentProjectsPage({
                     {selectedCreators.map((creator) => creatorSelectionEditable ? (
                       <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span><X size={13} aria-hidden="true" /></button>
                     ) : <span className="creator-selection-chip is-readonly" key={creator.id}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span></span>)}
-                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); }}>清除已选</button> : null}
+                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); }}>清除已选</button> : null}
                   </div>
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
@@ -587,7 +637,7 @@ export function MediaPaymentProjectsPage({
                         const selected = selectedCreatorIds.includes(creator.id as CreatorId);
                         const resolution = resolutions.get(creator.id);
                         const ready = resolution?.status === 'READY';
-                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><span className="creator-option-profile"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></span><span className="creator-option-meta"><strong>{ready ? '可创建项目' : creator.region}</strong><small>{ready ? '唯一 Invoice 可自动关联' : `${creator.platform} · ${resolution ? STATUS_COPY[resolution.status] : '待选择项目'}`}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
+                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><span className="creator-option-profile"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></span><span className="creator-option-meta"><strong>{ready ? '可创建项目' : creator.region}</strong><small>{ready ? `${resolution?.availableInvoices.length ?? 0} 份 Invoice 可多选` : `${creator.platform} · ${resolution ? STATUS_COPY[resolution.status] : '待选择项目'}`}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
                       })}
                       {!visibleCreators.length ? <div className="creator-picker-empty">没有找到匹配的达人档案</div> : null}
                     </div>
@@ -597,7 +647,7 @@ export function MediaPaymentProjectsPage({
             </div>
             {selectedCreators.length ? (
               <section className="media-request-document-section">
-                <header><div><h3>达人单据关联</h3><p>合同选填；每位达人必须在当前合作项目下有且只有一份 Invoice。</p></div><span>{selectedCreators.length} 位达人</span></header>
+                <header><div><h3>达人单据关联</h3><p>合同选填；每位达人提交前至少关联一份 Invoice，合同和 Invoice 均可多选。</p></div><span>{selectedCreators.length} 位达人</span></header>
                 {selectedCreators.map((creator) => {
                   const resolution = resolutions.get(creator.id);
                   const selectedContractIds = contractIdsByCreator[creator.id] ?? [];
@@ -605,9 +655,13 @@ export function MediaPaymentProjectsPage({
                     <article className="media-request-document-row" key={creator.id}>
                       <div className="media-request-document-creator"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></div>
                       <div className={`media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
-                        <span><ReceiptText size={16} />Invoice <em>必填</em></span>
-                        <strong>{resolution?.invoice?.id ?? STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}</strong>
-                        <small>{resolution?.status === 'READY' ? resolution.invoice?.status : resolution?.status === 'INVOICE_IN_USE' ? `已关联 ${resolution.invoiceOwner?.requestCode ?? resolution.invoiceOwner?.id}` : resolution?.invoices.map((invoice) => invoice.id).join('、')}</small>
+                        <span><ReceiptText size={16} />Invoice <em>必填，可多选</em></span>
+                        {resolution?.invoices.length ? resolution.invoices.map((invoice) => {
+                          const owner = resolution.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
+                          const enabled = !owner;
+                          const selected = (invoiceIdsByCreator[creator.id] ?? []).includes(invoice.invoiceId);
+                          return <button type="button" disabled={!enabled} aria-pressed={selected} className={selected ? 'is-selected' : ''} key={invoice.invoiceId} onClick={() => toggleInvoice(creator.id as CreatorId, invoice.invoiceId)}><span>{selected ? <CheckCircle2 size={15} /> : <Circle size={15} />}{invoice.id}</span><small>{enabled ? `${invoice.status} · 可关联` : `已关联 ${owner?.requestCode ?? owner?.id}`}</small></button>;
+                        }) : <small className="media-request-empty-copy">{STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}</small>}
                       </div>
                       <div className="media-request-contracts">
                         <span><FileText size={16} />合同 <em>选填，可多选</em></span>
