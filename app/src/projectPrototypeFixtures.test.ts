@@ -7,6 +7,8 @@ import {
   ALL_PROJECT_PROTOTYPE_PAYOUTS,
   AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
   INVOICE_EDIT_REQUEST_INVOICES,
+  PAYMENT_REQUEST_CREATION_DEMO_INVOICES,
+  PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
   REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
@@ -17,6 +19,7 @@ import {
   REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
+import { resolveCreatorDocuments } from './paymentRequestProjects';
 import {
   invoicePaymentListItem,
   paymentListEffectiveAccount,
@@ -49,6 +52,50 @@ describe('project prototype fixtures', () => {
     });
     expect(alexDemoEngagement).toBeDefined();
     expect(activeEngagementIds.has(alexDemoEngagement?.engagementId)).toBe(false);
+  });
+
+  it('keeps two request-ready Invoices available for the new My Project demo', () => {
+    const demoProject = INITIAL_PROJECTS.find((project) => project.id === 'PRJ-301164');
+    const demoInvoices = [
+      ...ACTIVE_INVOICE_DEMO_INVOICES,
+      ...PAYMENT_REQUEST_CREATION_DEMO_INVOICES,
+    ];
+    const existingRequestLinks = ACTIVE_INVOICE_DEMO_INVOICES.flatMap((invoice) => (
+      invoice.snapshot.creatorId && invoice.snapshot.engagementId
+        ? [{
+            creatorId: invoice.snapshot.creatorId,
+            engagementId: invoice.snapshot.engagementId,
+            contractIds: [],
+            invoiceIds: [invoice.invoiceId],
+          }]
+        : []
+    ));
+    const payoutByInvoiceNumber = new Map(
+      PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS.map((payout) => [payout.invoice, payout]),
+    );
+
+    expect(demoProject?.projectId).toBeDefined();
+    expect(PAYMENT_REQUEST_CREATION_DEMO_INVOICES.map((invoice) => invoice.id)).toEqual([
+      'INV-301164-19',
+      'INV-301164-20',
+    ]);
+    expect(PAYMENT_REQUEST_CREATION_DEMO_INVOICES.map((invoice) => invoice.status)).toEqual([
+      '待发起请款',
+      '待发起请款',
+    ]);
+
+    PAYMENT_REQUEST_CREATION_DEMO_INVOICES.forEach((invoice) => {
+      const resolution = resolveCreatorDocuments({
+        contracts: PROJECT_DEMO_CONTRACTS,
+        invoices: demoInvoices,
+        requests: [{ id: 'REQ-EXISTING', creatorLinks: existingRequestLinks }],
+        cooperationProjectId: demoProject!.projectId!,
+        creatorId: invoice.snapshot.creatorId!,
+      });
+      expect(resolution.status).toBe('READY');
+      expect(resolution.availableInvoices.map((candidate) => candidate.invoiceId)).toContain(invoice.invoiceId);
+      expect(payoutByInvoiceNumber.get(invoice.id)?.payoutAccountId).toBe(invoice.snapshot.payoutAccountId);
+    });
   });
 
   it('creates one stable creator engagement for every displayed project creator', () => {

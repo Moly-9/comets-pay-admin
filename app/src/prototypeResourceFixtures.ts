@@ -1050,6 +1050,23 @@ export const REQUEST_INVOICE_ASSOCIATION_PAYOUTS: Payout[] = REQUEST_INVOICE_ASS
   };
 });
 
+const paymentRequestCreationDemoInvoiceIds = new Set<InvoiceId>([
+  'invoice_fixture_association_301164_01' as InvoiceId,
+  'invoice_fixture_association_301164_05' as InvoiceId,
+]);
+
+export const PAYMENT_REQUEST_CREATION_DEMO_INVOICES = REQUEST_INVOICE_ASSOCIATION_FIXTURES.filter(
+  (invoice) => paymentRequestCreationDemoInvoiceIds.has(invoice.invoiceId),
+);
+
+const paymentRequestCreationDemoPayoutIds = new Set(
+  PAYMENT_REQUEST_CREATION_DEMO_INVOICES.map((invoice) => invoice.sourcePayoutId),
+);
+
+export const PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS = REQUEST_INVOICE_ASSOCIATION_PAYOUTS.filter(
+  (payout) => paymentRequestCreationDemoPayoutIds.has(payout.id),
+);
+
 const cloneFixtureItems = (items: PaymentListItem[]) => items.map((item) => ({
   ...item,
   snapshot: {

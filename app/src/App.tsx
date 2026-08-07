@@ -141,6 +141,8 @@ import {
   ACTIVE_INVOICE_DEMO_PAYOUTS,
   ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
   AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
+  PAYMENT_REQUEST_CREATION_DEMO_INVOICES,
+  PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
   PROJECT_DEMO_CONTRACTS,
   PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
   REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
@@ -237,6 +239,7 @@ export default function App() {
   const [payouts, setPayouts] = useState<Payout[]>(() => [
     ...INITIAL_PAYOUTS,
     ...ACTIVE_INVOICE_DEMO_PAYOUTS,
+    ...PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
   ]);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
@@ -250,7 +253,7 @@ export default function App() {
   })));
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => ({
+    [...ACTIVE_INVOICE_DEMO_INVOICES, ...PAYMENT_REQUEST_CREATION_DEMO_INVOICES].map((invoice) => ({
       ...invoice,
       snapshot: {
         ...invoice.snapshot,
