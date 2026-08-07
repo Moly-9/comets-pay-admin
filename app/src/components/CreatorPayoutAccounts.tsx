@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   AlertCircle,
   CheckCircle2,
   Circle,
@@ -13,6 +14,7 @@ import {
   Search,
   ShieldCheck,
   Star,
+  Trash2,
   Wallet,
   WifiOff,
 } from 'lucide-react';
@@ -20,9 +22,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AIRWALLEX_COUNTRIES,
   AIRWALLEX_CURRENCIES,
+  canDeletePayoutAccount,
   createEmptyAirwallexAccount,
   createEmptyPayMaxAccount,
   createEmptyPayPalAccount,
+  deletePayoutAccount,
   getDefaultPayoutAccount,
   getPayoutAccountIdentifier,
   getPayoutAccountStatusMeta,
@@ -59,7 +63,7 @@ import type {
   PayMaxPayoutAccount,
   PayPalPayoutAccount,
 } from '../types';
-import { Button, SelectField } from './Common';
+import { Button, Modal, SelectField } from './Common';
 
 type CreatorPayoutAccountsProps = {
   accounts: CreatorPayoutAccount[];
@@ -883,6 +887,7 @@ export function CreatorPayoutAccounts({
   );
   const [selectedId, setSelectedId] = useState(defaultAccount?.id ?? '');
   const [openMenuId, setOpenMenuId] = useState('');
+  const [deleteTargetId, setDeleteTargetId] = useState('');
   const activeAccounts = useMemo(
     () => accounts.filter((account) => account.provider === activeProvider),
     [accounts, activeProvider],
@@ -893,6 +898,7 @@ export function CreatorPayoutAccounts({
     ?? activeAccounts[0]
     ?? null
   );
+  const deleteTarget = accounts.find((account) => account.id === deleteTargetId) ?? null;
   const usableAccountCount = accounts.filter(isPayoutAccountVerified).length;
   const activeProviderConfig = (
     PAYOUT_PROVIDERS.find((provider) => provider.value === activeProvider)
@@ -915,7 +921,7 @@ export function CreatorPayoutAccounts({
       : provider === 'PayPal'
         ? createEmptyPayPalAccount(creatorName, creatorEmail, creatorId)
         : createEmptyPayMaxAccount(creatorName, creatorEmail, creatorId);
-    const normalized = { ...next, isDefault: accounts.length === 0 };
+    const normalized = { ...next, isDefault: getDefaultPayoutAccount(accounts) === null };
     onChange?.([...accounts, normalized]);
     setActiveProvider(provider);
     setSelectedId(normalized.id);
@@ -937,6 +943,28 @@ export function CreatorPayoutAccounts({
         form?.querySelector<HTMLInputElement>('[aria-label="账户别名"]')?.focus({ preventScroll: true });
       });
     });
+  };
+
+  const requestDeleteAccount = (target: CreatorPayoutAccount) => {
+    if (!canDeletePayoutAccount(target)) return;
+    setDeleteTargetId(target.id);
+    setOpenMenuId('');
+  };
+
+  const confirmDeleteAccount = () => {
+    if (!deleteTarget) return;
+    const nextAccounts = deletePayoutAccount(accounts, deleteTarget.id);
+    if (nextAccounts === accounts) {
+      setDeleteTargetId('');
+      return;
+    }
+
+    onChange?.(nextAccounts);
+    const nextSelected = nextAccounts.find((account) => (
+      account.provider === activeProvider && account.id !== deleteTarget.id
+    )) ?? null;
+    setSelectedId(nextSelected?.id ?? '');
+    setDeleteTargetId('');
   };
 
   return (
@@ -986,6 +1014,10 @@ export function CreatorPayoutAccounts({
             const status = getPayoutAccountStatusMeta(account.status, account.provider);
             const provider = PAYOUT_PROVIDERS.find((item) => item.value === account.provider);
             const ProviderIcon = provider?.icon ?? Landmark;
+            const deletable = canDeletePayoutAccount(account);
+            const deleteBlockedReason = account.activePaymentId
+              ? '该账户存在进行中的付款，暂不能删除'
+              : '该账户已验证或存在历史业务关联，为保护合同、Invoice 和付款快照，不能直接删除';
             return (
               <article
                 className={`payout-account-card ${selectedAccount?.id === account.id ? 'payout-account-card-active' : ''}`}
@@ -1037,6 +1069,17 @@ export function CreatorPayoutAccounts({
                       <Star size={14} />
                       {account.isDefault ? '当前默认账户' : '设为默认账户'}
                     </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!deletable}
+                      title={deletable ? '删除账户' : deleteBlockedReason}
+                      aria-label={deletable ? `删除${account.nickname}` : `无法删除${account.nickname}：${deleteBlockedReason}`}
+                      onClick={() => requestDeleteAccount(account)}
+                    >
+                      <Trash2 size={14} />
+                      {deletable ? '删除账户' : '删除账户（不可用）'}
+                    </button>
                   </div>
                 ) : null}
               </article>
@@ -1081,6 +1124,30 @@ export function CreatorPayoutAccounts({
         editing
           ? <PayMaxAccountForm account={selectedAccount} onChange={replaceAccount} />
           : <PayMaxAccountView account={selectedAccount} />
+      ) : null}
+
+      {deleteTarget ? (
+        <Modal
+          title="删除收款账户"
+          width="440px"
+          className="project-payment-remove-modal"
+          onClose={() => setDeleteTargetId('')}
+          footer={(
+            <>
+              <Button variant="secondary" autoFocus onClick={() => setDeleteTargetId('')}>取消</Button>
+              <Button variant="danger" onClick={confirmDeleteAccount}>删除账户</Button>
+            </>
+          )}
+        >
+          <div className="project-payment-remove-confirmation">
+            <span><AlertTriangle size={22} /></span>
+            <div>
+              <strong>{deleteTarget.nickname}</strong>
+              <p>{deleteTarget.provider} · {getPayoutAccountIdentifier(deleteTarget)}</p>
+              <small>删除后，该账户将从当前达人档案中移除。已有历史业务关联的账户不会开放删除，合同、Invoice 和付款快照不受影响。</small>
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </div>
   );

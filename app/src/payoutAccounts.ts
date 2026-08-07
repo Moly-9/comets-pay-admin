@@ -588,6 +588,26 @@ export const canDeletePayoutAccount = (account: CreatorPayoutAccount) => (
   && ['DRAFT', 'READY_FOR_VALIDATION', 'INVALID', 'CANNOT_VERIFY'].includes(account.status)
 );
 
+export const deletePayoutAccount = (
+  accounts: CreatorPayoutAccount[],
+  accountId: string,
+): CreatorPayoutAccount[] => {
+  const target = accounts.find((account) => account.id === accountId);
+  if (!target || !canDeletePayoutAccount(target)) return accounts;
+
+  const remaining = accounts.filter((account) => account.id !== accountId);
+  if (!target.isDefault) return remaining;
+
+  const nextDefault = remaining.find((account) => (
+    account.status !== 'DISABLED' && isPayoutAccountVerified(account)
+  )) ?? remaining.find((account) => account.status !== 'DISABLED') ?? null;
+
+  return remaining.map((account) => ({
+    ...account,
+    isDefault: account.id === nextDefault?.id,
+  }));
+};
+
 export const canDisablePayoutAccount = (account: CreatorPayoutAccount) => (
   account.status !== 'DISABLED' && !account.activePaymentId
 );

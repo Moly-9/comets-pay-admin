@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   assertDocumentPayoutSnapshotReady,
   clonePayoutAccounts,
+  canDeletePayoutAccount,
   createEmptyAirwallexAccount,
   createEmptyPayMaxAccount,
   createEmptyPayPalAccount,
+  deletePayoutAccount,
   eligibleInvoicePayoutAccounts,
   getPayoutAccountDocumentIssues,
   getPayoutAccountForProvider,
@@ -123,6 +125,44 @@ describe('creator payout channels', () => {
 
     expect(result.accounts[0]?.payoutAccountVersion).toBe('v1');
     expect(result.archived).toEqual([]);
+  });
+
+  it('deletes an unlinked draft account and promotes a verified account as default', () => {
+    const draft = {
+      ...createEmptyAirwallexAccount('', '', 'creator-1'),
+      id: 'draft-account',
+      payoutAccountId: 'draft-account',
+      isDefault: true,
+    };
+    const ready = {
+      ...createEmptyPayPalAccount('Mina Kato', 'mina@example.com', 'creator-1'),
+      id: 'verified-account',
+      payoutAccountId: 'verified-account',
+      status: 'VERIFIED' as const,
+      isDefault: false,
+    };
+
+    const result = deletePayoutAccount([draft, ready], draft.id);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: ready.id, isDefault: true });
+  });
+
+  it('keeps accounts that have history or an active payment', () => {
+    const withHistory = {
+      ...createEmptyAirwallexAccount('', '', 'creator-1'),
+      linkedProjectIds: ['project-1'],
+    };
+    const processing = {
+      ...createEmptyPayPalAccount('', '', 'creator-1'),
+      activePaymentId: 'payment-1',
+    };
+    const accounts = [withHistory, processing];
+
+    expect(canDeletePayoutAccount(withHistory)).toBe(false);
+    expect(canDeletePayoutAccount(processing)).toBe(false);
+    expect(deletePayoutAccount(accounts, withHistory.id)).toBe(accounts);
+    expect(deletePayoutAccount(accounts, processing.id)).toBe(accounts);
   });
 
   it('maps PayPal Transfer Note and account identity into the unified document snapshot', () => {
