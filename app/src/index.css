@@ -905,22 +905,13 @@
 
 .request-payment-row-footer {
   display: flex;
-  gap: 12px;
   align-items: center;
-  justify-content: space-between;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid #e9edf2;
 }
 
 .request-payment-row-footer > span { color: #687282; font-size: 12px; }
-
-.request-payment-row-footer > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
 
 .media-request-invoice-state > button {
   display: grid;
@@ -971,9 +962,6 @@
   .request-resource-candidate > div,
   .request-resource-candidate > button { grid-column: 2; }
   .request-resource-candidate > label { grid-column: 1 / -1; }
-  .request-payment-row-footer { align-items: stretch; flex-direction: column; }
-  .request-payment-row-footer > div { justify-content: stretch; }
-  .request-payment-row-footer .button { flex: 1 1 100%; }
 }
 
 .project-resource-picker-list {

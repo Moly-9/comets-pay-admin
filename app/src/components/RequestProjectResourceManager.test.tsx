@@ -161,6 +161,31 @@ describe('request project resource aggregation', () => {
     );
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
   });
+
+  it('keeps payment-list editing and Excel export at list level', () => {
+    const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
+    const paymentDialogSource = source.slice(
+      source.indexOf("resourceDialog === 'payment'"),
+      source.indexOf('{linkDialog ?'),
+    );
+    const toolbarSource = paymentDialogSource.slice(
+      paymentDialogSource.indexOf('request-payment-toolbar'),
+      paymentDialogSource.indexOf('request-payment-flat-rows'),
+    );
+    const paymentRowsSource = paymentDialogSource.slice(
+      paymentDialogSource.indexOf('request-payment-flat-rows'),
+    );
+
+    expect(toolbarSource).toContain('生成 / 刷新清单');
+    expect(toolbarSource).toContain('导出 Excel');
+    expect(toolbarSource).toContain('编辑付款清单');
+    expect(toolbarSource.indexOf('生成 / 刷新清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
+    expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('编辑付款清单'));
+    expect(paymentRowsSource).not.toContain('创建编辑版本');
+    expect(paymentRowsSource).not.toContain('>导出</Button>');
+    expect(source).toContain("currentPaymentList?.status === 'draft'");
+    expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
+  });
 });
 
 describe('Invoice association workflow', () => {

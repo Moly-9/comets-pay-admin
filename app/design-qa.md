@@ -43,6 +43,35 @@ final result: passed
 
 ---
 
+# Design QA - 付款清单编辑、刷新与 Excel 导出
+
+## Environment and State
+
+- Local implementation URL: `http://127.0.0.1:5173/`.
+- State: administrator account, `REQ-202607-000001`, payment list `PAY-301164-01` with two synthetic Airwallex payment rows.
+- Desktop viewport: default application viewport; responsive override: `390 x 844`.
+- Exported workbook: `/Users/aria/Downloads/DRAFT-COMETS-PAY-REQ-202607-000001-PAY-301164-01.xlsx`.
+
+## Interaction Checks
+
+- The list toolbar order is `生成 / 刷新清单`, `导出 Excel`, `编辑付款清单`, `删除清单`; duplicate row-level edit, export, and list-delete actions are absent.
+- Clicking `编辑付款清单` unlocks the payment fields. Editing the optional description marks the row for revalidation without changing the Invoice snapshot.
+- After revalidation, `生成 / 刷新清单` creates and locks version `v2`; the manually edited description remains in the generated snapshot.
+- `导出 Excel` writes the current locked version. The workbook contains the `Airwallex batch transfer` sheet, 21 columns from `A:U`, and two payment rows matching the UI.
+- Formula-error scan returned no matches.
+
+## Responsive and Runtime Checks
+
+- At `390 x 844`, the four toolbar actions stack vertically and remain fully visible with no text or control overlap.
+- Desktop controls remain right aligned beside the summary panel and use the existing modal spacing and button system.
+- Browser console error log is empty.
+- Full Vitest suite: 33 files and 216 tests passed.
+- TypeScript production build: passed; only the existing Vite chunk-size advisory remains.
+
+final result: passed
+
+---
+
 # Design QA - 移除合同选择提示文字
 
 ## Reference and Environment
