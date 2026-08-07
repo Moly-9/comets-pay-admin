@@ -50,6 +50,48 @@ final result: passed
 
 ---
 
+# Design QA - 合同列表批量操作分层
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9264c93c-b6ea-4b82-a6d0-ccbcd50b7364.png`.
+- Browser-rendered desktop implementation: `app/design-qa-contract-toolbar-desktop.png`.
+- Browser-rendered narrow implementation: `app/design-qa-contract-toolbar-900.png`.
+- Source pixels: `1406 x 547`; desktop CSS viewport: `1406 x 720`, rendered capture: `1391 x 712`; narrow CSS viewport: `900 x 720`, rendered capture: `885 x 708`; density: `1`.
+- States: administrator with no selection and one selected contract.
+
+## Comparison Evidence
+
+- The supplied source and the browser-rendered desktop implementation were opened together in one comparison input.
+- The source identifies the existing compact filter and batch-action area. The requested change is visible in the implementation: `全部 / 可付款 / 待处理 / 模板` remains on the first row, while selection count, export and administrator delete form a second right-aligned row.
+- Focused DOM measurements confirmed the batch row begins below the filter row at both `1406px` and `900px`, with no page-level horizontal overflow.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed; filter chips remain `11px`, while selection text and batch actions use `10px` to create the requested one-level hierarchy without changing the system font.
+- Spacing and layout rhythm: passed; the second row uses a compact `6px` vertical and horizontal gap, removes the obsolete vertical divider and stays aligned to the filter group's right edge.
+- Colors and visual tokens: passed; existing neutral, disabled, active-filter and danger-button colors remain unchanged.
+- Image and icon fidelity: passed; no raster asset is required, and the existing Lucide download and delete icons remain unchanged.
+- Copy and content: passed; filter labels, selection count, export and administrator-only delete copy are unchanged.
+
+## Interaction and Responsive Checks
+
+- Selecting one contract updates the count to `已选择 1 项` and enables both export and administrator delete without changing their second-row placement.
+- At `900 x 720`, the two rows remain separated and right aligned, and the document has no horizontal overflow.
+- Browser console warning and error log: empty.
+- Full Vitest suite: 33 files and 212 tests passed.
+- Production build: passed; Vite reported only the existing chunk-size advisory.
+
+## Comparison History
+
+1. Initial P2: filter and batch actions shared one horizontal row, so the less frequent export/delete actions competed with the primary list filters.
+   - Fix: stacked batch actions under the filter group and reduced their text and control dimensions by one visual level.
+2. Post-fix desktop, narrow, selected-state, console, test and build checks found no remaining actionable P0, P1 or P2 issue in the requested toolbar area.
+
+final result: passed
+
+---
+
 # Design QA - 新建项目紧凑单据选择器与演示数据
 
 ## Reference and Environment

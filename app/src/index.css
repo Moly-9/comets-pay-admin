@@ -12565,6 +12565,7 @@ button:disabled {
 }
 
 .contract-bulk-actions .button {
+  height: 28px;
   min-height: 28px;
   padding: 0 9px;
   border-radius: 7px;
