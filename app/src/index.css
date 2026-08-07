@@ -12575,14 +12575,6 @@ button:disabled {
   font-size: 10px;
 }
 
-.contract-selection-count {
-  min-width: 70px;
-  color: #858b97;
-  font-size: 10px;
-  text-align: right;
-  white-space: nowrap;
-}
-
 .contract-table {
   min-width: 1090px;
 }
@@ -13931,11 +13923,6 @@ button:disabled {
 
   .contract-bulk-actions {
     align-self: flex-start;
-  }
-
-  .contract-selection-count {
-    margin-right: auto;
-    text-align: left;
   }
 }
 

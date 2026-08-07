@@ -31,6 +31,7 @@ describe('ContractsPage batch actions', () => {
   it('shows the list-level delete action only when the role can delete contracts', () => {
     const html = renderContractsPage(true);
     expect(html).toContain('data-testid="contract-bulk-delete"');
-    expect(html).toContain('请选择合同');
+    expect(html).not.toContain('请选择合同');
+    expect(html).not.toContain('contract-selection-count');
   });
 });

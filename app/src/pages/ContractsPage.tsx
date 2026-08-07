@@ -237,9 +237,6 @@ export function ContractsPage({
                 </button>
               ))}
             </div>
-            <span className="contract-selection-count" aria-live="polite">
-              {selected.length ? `已选择 ${selected.length} 项` : '请选择合同'}
-            </span>
           </div>
         </div>
 

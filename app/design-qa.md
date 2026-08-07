@@ -43,6 +43,44 @@ final result: passed
 
 ---
 
+# Design QA - 移除合同选择提示文字
+
+## Reference and Environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-1c3152cc-1c9f-44ff-b667-220948a2186f.png`.
+- Browser-rendered implementation: `app/design-qa-contract-selection-copy-removed.jpg`.
+- Source pixels: `1442 x 527`; implementation viewport and screenshot: `1414 x 800`, device density 1.
+- State: administrator contract list, with both unselected and one-contract-selected behavior checked.
+
+## Comparison Evidence
+
+- The source and browser-rendered implementation were opened together in the same visual comparison input at original width.
+- The source is already a focused contract-list capture; the implementation clearly shows the corresponding search, batch-action, filter, and table region, so a second detail crop was unnecessary.
+- The boxed `请选择合同` location is empty in the implementation, and no replacement selection-count text is rendered.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed; no remaining selection helper text or orphaned text spacing is visible.
+- Spacing and layout rhythm: passed; filters align with the search and batch actions without adding a blank second row.
+- Colors and tokens: passed; existing search, disabled action, active filter, and table treatments are unchanged.
+- Image and icon fidelity: passed; no new asset is required and existing Lucide action icons are unchanged.
+- Copy and behavior: passed; `请选择合同` and dynamic `已选择 N 项` copy are both removed while checkbox selection remains available.
+
+## Interaction and Technical Checks
+
+- No `.contract-selection-count` element exists before or after selecting a contract.
+- Export and delete remain disabled with no selection and enabled after selecting one contract.
+- Browser console warning/error log is empty.
+- Focused component test: 2 tests passed; TypeScript production build passed.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+
+final result: passed
+
+---
+
 # Design QA — 请款项目关联 Invoice 与达人筛选
 
 ## Reference and environment
