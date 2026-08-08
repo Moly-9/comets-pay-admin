@@ -499,7 +499,7 @@ export function MediaPaymentProjectsPage({
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
-    !reason.trim() ? '请填写请款原因' : '',
+    !reason.trim() ? '请填写请款事由' : '',
     !selectedCreators.length ? '请至少选择一位合作达人' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
@@ -635,7 +635,7 @@ export function MediaPaymentProjectsPage({
             <div><dt>负责 PM</dt><dd>{selectedRequest.pm}</dd></div>
             <div><dt>项目媒介</dt><dd>{selectedRequest.media}</dd></div>
             <div><dt>创建时间</dt><dd>{formatCreatedAt(selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt)}</dd></div>
-            <div className="project-info-wide"><dt>请款原因</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
+            <div className="project-info-wide"><dt>请款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
           </dl>
         </section>
         <section className="project-detail-card project-workflow-card">
@@ -864,7 +864,7 @@ export function MediaPaymentProjectsPage({
             </div>
             <label><span>品牌 <small className="request-optional-label">选填</small></span><input placeholder="输入品牌或客户名称" value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
             <div className="form-field"><span className="form-field-label">项目 PM <em className="required-mark" aria-hidden="true">*</em></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))} onChange={setPm} /></div>
-            <label><span>请款原因 <em className="required-mark" aria-hidden="true">*</em></span><textarea placeholder="填写本项目的请款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+            <label><span className="required-field-label">请款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea placeholder="填写本项目的请款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>展示达人库全部达人</small></span>
               <div className="creator-picker media-request-creator-picker" data-testid="media-request-creator-picker">
