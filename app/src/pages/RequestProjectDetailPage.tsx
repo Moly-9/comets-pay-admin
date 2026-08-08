@@ -123,6 +123,27 @@ type RequestProjectDetail = {
 
 type Notify = (title: string, message: string) => void;
 
+export const requestPaymentMethodLabel = (channel: string) => {
+  const methods = [
+    /airwallex|paymax|bank/i.test(channel) ? '银行转账' : '',
+    /paypal/i.test(channel) ? 'PayPal' : '',
+  ].filter(Boolean);
+  return methods.join('、') || '待确认';
+};
+
+export const requestExpectedPaymentTimeLabel = (
+  request: Pick<RequestProjectSummary, 'approval' | 'lifecycle' | 'status'>,
+) => {
+  if (request.lifecycle === 'COMPLETED' || request.status === '已完成') return '已完成';
+  if (request.approval?.status === 'APPROVED' || request.status === '待打款') return '3 个工作日内';
+  return '全部审批通过后 3 个工作日内';
+};
+
+const requestPaymentMethodsLabel = (payees: RequestPayee[]) => {
+  const methods = payees.flatMap((payee) => requestPaymentMethodLabel(payee.channel).split('、'));
+  return [...new Set(methods)].join('、');
+};
+
 const APPROVAL_STEPS: Array<{
   status: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   stage: NonNullable<ReturnType<typeof requestApprovalStage>>;
@@ -501,6 +522,7 @@ function getRequestProjectResourceRecords(
         { label: '关联项目', value: request.project },
         { label: '关联 Invoice', value: invoice.id },
         { label: '付款渠道', value: invoice.channel ?? '待确认' },
+        { label: '付款方式', value: requestPaymentMethodLabel(invoice.channel ?? '') },
         { label: '付款金额', value: invoice.amount },
         { label: '付款状态', value: detail.payment.status },
       ],
@@ -543,6 +565,8 @@ export function RequestProjectDetailPage({
     : request.status;
   const normalizedReturnReason = returnReason.trim();
   const payees = getRequestPayees(request, detail);
+  const paymentMethods = requestPaymentMethodsLabel(payees);
+  const expectedPaymentTime = requestExpectedPaymentTimeLabel(request);
   const records = getRequestProjectResourceRecords(request, detail, payees);
   const projectContext = {
     id: request.requestCode ?? request.id,
@@ -633,7 +657,8 @@ export function RequestProjectDetailPage({
               <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
               <div><dt>提交时间</dt><dd>{detail.submittedAt}</dd></div>
               <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
-              <div><dt>审批负责人</dt><dd>{detail.approver}</dd></div>
+              <div><dt>付款方式</dt><dd>{paymentMethods}</dd></div>
+              <div><dt>预计付款时间</dt><dd>{expectedPaymentTime}</dd></div>
               <div className="project-info-full"><dt>请款原因</dt><dd>{detail.reason}</dd></div>
             </dl>
           </section>
@@ -674,13 +699,13 @@ export function RequestProjectDetailPage({
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>付款明细</h2><p>展示当前请款中的达人、Invoice 与渠道状态。</p></div>
+              <div><h2>付款明细</h2><p>展示当前请款中的达人、Invoice、付款渠道、方式与状态。</p></div>
               <span>共 {request.invoices} 份 Invoice</span>
             </header>
             <div className="table-scroll">
               <table className="data-table request-detail-payment-table">
-                <thead><tr><th>收款人 / 达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>状态</th></tr></thead>
-                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td>{payee.channel}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
+                <thead><tr><th>达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>付款方式</th><th>状态</th></tr></thead>
+                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td>{payee.channel}</td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
               </table>
             </div>
           </section>
