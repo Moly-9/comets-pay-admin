@@ -77,7 +77,7 @@ const countryLabel = (countryCode: string, fallback = '') => (
   getAirwallexCountryProfile(countryCode)?.label || fallback || countryCode
 );
 
-const accountForItem = (
+export const paymentListAccountForItem = (
   item: PaymentListItem,
   creators: CreatorProfile[],
 ): AirwallexPayoutAccount | null => {
@@ -103,22 +103,15 @@ const feeValues = (item: PaymentListItem, transferMethod: AirwallexTransferMetho
   };
 };
 
-const itemIssues = (
+export const paymentListItemAccountIssues = (
   item: PaymentListItem,
   account: AirwallexPayoutAccount | null,
 ) => {
   const effectiveAccount = paymentListEffectiveAccount(item);
   const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
   const prefix = `${invoiceLabel}：`;
-  const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency')).trim();
-  const sourceCurrency = String(paymentListItemValue(item, 'currency')).trim();
-  const amount = Number(paymentListItemValue(item, 'amount'));
-  const feeBearer = paymentListItemValue(item, 'feeBearer');
-  const paymentReason = String(paymentListItemValue(item, 'paymentReason')).trim();
-  const transactionReference = String(paymentListItemValue(item, 'transactionReference')).trim();
   return [
-    item.requiresRevalidation ? `${prefix}${item.validationIssues?.[0] ?? '付款行需要重新校验'}` : '',
-    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板不能导出 ${effectiveAccount.provider || '未指定'} 付款行` : '',
+    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板与校验 API 不支持 ${effectiveAccount.provider || '未指定'} 收款账户` : '',
     !account ? `${prefix}达人档案中未找到关联的 Airwallex 收款账户` : '',
     account && getPayoutAccountVersion(account) !== effectiveAccount.payoutAccountVersion
       ? `${prefix}收款账户版本已变化`
@@ -133,12 +126,6 @@ const itemIssues = (
       ? `${prefix}Airwallex 收款账户未通过验证`
       : '',
     account && !account.beneficiaryId ? `${prefix}Airwallex 收款账户缺少 beneficiary ID` : '',
-    !receiveCurrency ? `${prefix}缺少收款币种` : '',
-    !sourceCurrency ? `${prefix}缺少支付币种` : '',
-    !(amount > 0) ? `${prefix}付款金额必须大于 0` : '',
-    !feeBearer ? `${prefix}手续费承担方未确认` : '',
-    !paymentReason ? `${prefix}付款原因未填写` : '',
-    !transactionReference ? `${prefix}交易附言未填写` : '',
     account && !account.bankDetails.bankCountryCode ? `${prefix}缺少银行国家或地区` : '',
     account && !account.bankDetails.accountName ? `${prefix}缺少账户名` : '',
     account && !(account.bankDetails.iban || account.bankDetails.accountNumber)
@@ -157,21 +144,47 @@ const itemIssues = (
   ].filter(Boolean);
 };
 
+const itemIssues = (
+  item: PaymentListItem,
+  account: AirwallexPayoutAccount | null,
+) => {
+  const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
+  const prefix = `${invoiceLabel}：`;
+  const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency')).trim();
+  const sourceCurrency = String(paymentListItemValue(item, 'currency')).trim();
+  const amount = Number(paymentListItemValue(item, 'amount'));
+  const feeBearer = paymentListItemValue(item, 'feeBearer');
+  const paymentReason = String(paymentListItemValue(item, 'paymentReason')).trim();
+  const transactionReference = String(paymentListItemValue(item, 'transactionReference')).trim();
+  return [
+    item.requiresRevalidation ? `${prefix}${item.validationIssues?.[0] ?? '付款行需要重新校验'}` : '',
+    ...paymentListItemAccountIssues(item, account),
+    !receiveCurrency ? `${prefix}缺少收款币种` : '',
+    !sourceCurrency ? `${prefix}缺少支付币种` : '',
+    !(amount > 0) ? `${prefix}付款金额必须大于 0` : '',
+    !feeBearer ? `${prefix}手续费承担方未确认` : '',
+    !paymentReason ? `${prefix}付款原因未填写` : '',
+    !transactionReference ? `${prefix}交易附言未填写` : '',
+  ].filter(Boolean);
+};
+
 export const buildAirwallexPaymentListRows = ({
   paymentList,
   creators,
+  allowSubmitted = false,
 }: {
   paymentList: PaymentListRecord;
   creators: CreatorProfile[];
+  allowSubmitted?: boolean;
 }): AirwallexPaymentListRow[] => {
   const issues = [
     !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
     paymentList.provider !== 'Airwallex' ? `${paymentList.provider} 付款清单不能使用 Airwallex 模板导出` : '',
     paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
-    paymentList.status === 'submitted' ? '付款清单审批中，暂不能导出' : '',
+    paymentList.status === 'submitted' && !allowSubmitted ? '付款清单审批中，暂不能导出' : '',
   ].filter(Boolean);
   const resolved = paymentList.items.map((item) => {
-    const account = accountForItem(item, creators);
+    const account = paymentListAccountForItem(item, creators);
     issues.push(...itemIssues(item, account));
     return { item, account };
   });
@@ -241,11 +254,13 @@ const WORKBOOK_COLUMNS: Array<{
 export const exportAirwallexPaymentListWorkbook = async ({
   paymentList,
   creators,
+  allowSubmitted = false,
 }: {
   paymentList: PaymentListRecord;
   creators: CreatorProfile[];
+  allowSubmitted?: boolean;
 }) => {
-  const rows = buildAirwallexPaymentListRows({ paymentList, creators });
+  const rows = buildAirwallexPaymentListRows({ paymentList, creators, allowSubmitted });
   const { Workbook } = await import('exceljs');
   const workbook = new Workbook();
   workbook.creator = 'COMETS Pay';

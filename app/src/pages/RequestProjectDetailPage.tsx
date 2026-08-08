@@ -2,9 +2,14 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  CircleAlert,
+  CircleCheck,
   Clock3,
+  Download,
   FileText,
+  LoaderCircle,
   ReceiptText,
+  ShieldCheck,
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -18,17 +23,21 @@ import type {
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
 import type { SystemUser } from '../data';
-import type {
-  ContractId,
-  CooperationProjectId,
-  CreatorId,
-  EngagementId,
-  InvoiceId,
-  PaymentRequestProjectId,
-  PaymentListId,
-  ProjectId,
-  RequestApprovalState,
-  RequestApprovalStatus,
+import type { CreatorProfile } from '../types';
+import {
+  paymentListEffectiveAccount,
+  paymentListItemValue,
+  type ContractId,
+  type CooperationProjectId,
+  type CreatorId,
+  type EngagementId,
+  type InvoiceId,
+  type PaymentRequestProjectId,
+  type PaymentListId,
+  type PaymentListRecord,
+  type ProjectId,
+  type RequestApprovalState,
+  type RequestApprovalStatus,
 } from '../businessWorkflow';
 import {
   canReviewRequestApproval,
@@ -40,6 +49,12 @@ import {
   requestProjectStatusFor,
   type PaymentRequestPaymentPlan,
 } from '../paymentRequestProjects';
+import { formatInvoiceMoney } from '../invoice/invoiceUtils';
+import {
+  reviewPaymentListAccountSnapshot,
+  validatePaymentListAccountViaApi,
+  type PaymentAccountApiValidation,
+} from '../requestPaymentAccountValidation';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & {
   id: string;
@@ -153,6 +168,86 @@ export const normalizeRequestPaymentChannels = <T extends { channel: string }>(i
   const channel = requestPaymentChannelLabel(items.map((item) => item.channel));
   return items.map((item) => ({ ...item, channel }));
 };
+
+export const paymentListsForRequest = (
+  request: Pick<RequestProjectSummary, 'paymentListId' | 'paymentListIds' | 'paymentRequestProjectId'>,
+  paymentLists: PaymentListRecord[],
+) => {
+  const explicitIds = new Set([
+    ...(request.paymentListIds ?? []),
+    ...(request.paymentListId ? [request.paymentListId] : []),
+  ]);
+  return paymentLists.filter((list) => (
+    Boolean(
+      request.paymentRequestProjectId
+      && list.paymentRequestProjectId === request.paymentRequestProjectId,
+    )
+    || explicitIds.has(list.paymentListId)
+  ));
+};
+
+const requestPaymentListStatusLabel = (paymentList: PaymentListRecord | null) => {
+  if (!paymentList) return '未生成';
+  if (paymentList.status === 'paid') return '已付款';
+  if (paymentList.status === 'approved') return '已批准';
+  if (paymentList.status === 'submitted') return '已提交';
+  if (paymentList.status === 'generated') return '已生成';
+  return '草稿';
+};
+
+const requestFeeBearerLabel = (value: unknown) => {
+  if (value === 'ADVERTISER') return '付款方承担';
+  if (value === 'PUBLISHER') return '收款方承担';
+  if (value === 'SHARED') return '共同承担';
+  return '待确认';
+};
+
+export const paymentRecordsFromLists = (
+  paymentLists: PaymentListRecord[],
+  projectName: string,
+): ProjectResourceRecord[] => paymentLists.flatMap((list) => (
+  list.items.map((item, index) => {
+    const effectiveAccount = paymentListEffectiveAccount(item);
+    const provider = effectiveAccount.provider || list.provider || '待确认';
+    const currency = String(paymentListItemValue(item, 'currency') || '待确认');
+    const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency') || '待确认');
+    const amount = Number(paymentListItemValue(item, 'amount') || 0);
+    const recordId = `${list.paymentListCode}-${String(index + 1).padStart(2, '0')}`;
+    const status = item.requiresRevalidation
+      ? '需重新校验'
+      : requestPaymentListStatusLabel(list);
+    const updatedAt = item.lastValidatedAt ?? list.generatedAt ?? list.updatedAt;
+
+    return {
+      id: recordId,
+      title: item.snapshot.creatorName,
+      subtitle: `${list.paymentListCode} · ${provider}`,
+      amount: formatInvoiceMoney(currency, amount),
+      status,
+      channel: provider,
+      fields: [
+        { label: '付款明细编号', value: recordId },
+        { label: '付款清单', value: list.paymentListCode },
+        { label: '达人 / 收款人', value: item.snapshot.creatorName },
+        { label: '关联项目', value: projectName },
+        { label: '关联 Invoice', value: item.snapshot.invoiceNumber },
+        { label: '付款渠道', value: provider },
+        { label: '付款方式', value: requestPaymentMethodLabel(provider) },
+        { label: '支付币种', value: currency },
+        { label: '收款币种', value: receiveCurrency },
+        { label: '付款金额', value: formatInvoiceMoney(currency, amount) },
+        { label: '费用承担', value: requestFeeBearerLabel(paymentListItemValue(item, 'feeBearer')) },
+        { label: '收款账户', value: effectiveAccount.accountSummary || '待补充' },
+        { label: '付款原因', value: String(paymentListItemValue(item, 'paymentReason') || '未填写') },
+        { label: '交易附言', value: String(paymentListItemValue(item, 'transactionReference') || '未填写') },
+        { label: '描述', value: String(paymentListItemValue(item, 'description') || '未填写') },
+        { label: '清单版本', value: `v${list.version ?? 1}` },
+        { label: '付款状态', value: status },
+        { label: '更新时间', value: updatedAt ? new Date(updatedAt).toLocaleString('zh-CN') : '待更新' },
+      ],
+    };
+  })
+));
 
 const parsedRequestDate = (value?: string) => {
   const parts = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -524,6 +619,7 @@ function getRequestProjectResourceRecords(
   request: RequestProjectSummary,
   detail: RequestProjectDetail,
   payees: RequestPayee[],
+  paymentLists: PaymentListRecord[],
 ): ProjectResourceRecords {
   const projectCode = request.id.replace('PRJ-', '');
   const invoices: ProjectResourceRecord[] = payees.map((payee, index) => ({
@@ -565,7 +661,7 @@ function getRequestProjectResourceRecords(
       ],
     };
   });
-  const payments: ProjectResourceRecord[] = detail.payment.id === '待生成'
+  const fallbackPayments: ProjectResourceRecord[] = detail.payment.id === '待生成'
     ? []
     : invoices.map((invoice, index) => ({
       id: `${detail.payment.id}-${String(index + 1).padStart(2, '0')}`,
@@ -586,18 +682,254 @@ function getRequestProjectResourceRecords(
         { label: '付款状态', value: detail.payment.status },
       ],
     }));
+  const payments = paymentLists.length
+    ? paymentRecordsFromLists(paymentLists, request.cooperationProjectName ?? request.project)
+    : fallbackPayments;
   return { contract: contracts, invoice: invoices, payment: payments };
+}
+
+type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
+  state: 'checking';
+  message: string;
+};
+
+const requestTransferMethodLabel = (
+  transferMethod: ReturnType<typeof paymentListEffectiveAccount>['transferMethod'],
+  localClearingSystem?: string,
+) => {
+  if (transferMethod === 'PAYPAL') return 'PayPal';
+  if (transferMethod === 'SWIFT') return 'SWIFT 转账';
+  if (transferMethod === 'LOCAL') {
+    return localClearingSystem ? `本地转账 · ${localClearingSystem}` : '本地转账';
+  }
+  return '待确认';
+};
+
+function RequestPaymentListReviewViewer({
+  project,
+  paymentLists,
+  creators,
+  onExportPaymentList,
+  onClose,
+}: {
+  project: { id: string; name: string };
+  paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
+  onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [accountChecks, setAccountChecks] = useState<Record<string, RequestPaymentAccountCheck>>({});
+  const [validating, setValidating] = useState(false);
+  const rows = paymentLists.flatMap((list) => list.items.map((item) => ({
+    key: `${list.paymentListId}-${item.id}`,
+    list,
+    item,
+    effectiveAccount: paymentListEffectiveAccount(item),
+    snapshotReview: reviewPaymentListAccountSnapshot(item, creators),
+  })));
+  const snapshotAttentionCount = rows.filter((row) => row.snapshotReview.state !== 'ready').length;
+  const apiPassedCount = rows.filter((row) => accountChecks[row.key]?.state === 'passed').length;
+  const apiIssueCount = rows.filter((row) => ['invalid', 'unavailable'].includes(accountChecks[row.key]?.state ?? '')).length;
+  const allApiChecksPassed = rows.length > 0 && apiPassedCount === rows.length && snapshotAttentionCount === 0;
+
+  const validateAccounts = async () => {
+    if (!rows.length || validating) return;
+    setValidating(true);
+    setAccountChecks(Object.fromEntries(rows.map((row) => [row.key, {
+      state: 'checking',
+      message: '正在请求收款账户校验 API',
+    }])));
+    const results = await Promise.all(rows.map(async (row) => [
+      row.key,
+      await validatePaymentListAccountViaApi({ item: row.item, creators }),
+    ] as const));
+    setAccountChecks(Object.fromEntries(results));
+    setValidating(false);
+  };
+
+  const summaryTitle = validating
+    ? '正在校验收款账户'
+    : allApiChecksPassed
+      ? '全部收款账户已通过 API 校验'
+      : apiIssueCount
+        ? `${apiIssueCount} 笔 API 校验未通过`
+        : snapshotAttentionCount
+          ? `${snapshotAttentionCount} 笔账户快照需要处理`
+          : '账户快照完整，待 API 校验';
+
+  return (
+    <Modal
+      title={`${project.name} · 付款清单`}
+      width="1120px"
+      className="project-resource-modal request-payment-review-modal"
+      onClose={onClose}
+      footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
+    >
+      <div className="project-resource-browser" data-testid="request-payment-list-review">
+        <div className="project-resource-browser-heading">
+          <div>
+            <strong>全部付款明细</strong>
+            <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
+          </div>
+          <span>{rows.length} 笔</span>
+        </div>
+
+        {rows.length ? (
+          <>
+            <div className="project-resource-browser-toolbar request-payment-review-toolbar">
+              <Button
+                variant="secondary"
+                icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
+                disabled={validating}
+                onClick={() => { void validateAccounts(); }}
+              >
+                {validating ? '校验中' : '校验账户完整性'}
+              </Button>
+              {paymentLists.map((list) => (
+                <Button
+                  variant="secondary"
+                  icon={<Download size={15} />}
+                  key={list.paymentListId}
+                  onClick={() => { void onExportPaymentList(list.paymentListId); }}
+                >
+                  {paymentLists.length === 1 ? '导出 Excel' : `导出 ${list.paymentListCode}`}
+                </Button>
+              ))}
+            </div>
+
+            <div
+              className={`request-payment-review-summary${allApiChecksPassed ? ' is-passed' : snapshotAttentionCount || apiIssueCount ? ' is-warning' : ''}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span>
+                {validating
+                  ? <LoaderCircle className="is-spinning" size={18} />
+                  : allApiChecksPassed
+                    ? <CircleCheck size={18} />
+                    : snapshotAttentionCount || apiIssueCount
+                      ? <CircleAlert size={18} />
+                      : <ShieldCheck size={18} />}
+              </span>
+              <div>
+                <strong>{summaryTitle}</strong>
+                <p>审批前应核对冻结账户、币种、金额、费用承担与交易附言；API 校验只检查账户字段，不改写付款数据。</p>
+              </div>
+            </div>
+
+            <div className="project-payment-rows request-payment-flat-rows">
+              {rows.map((row) => {
+                const check = accountChecks[row.key];
+                const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
+                const amount = Number(paymentListItemValue(row.item, 'amount') || 0);
+                const accountIssue = row.snapshotReview.issues[0];
+                const validationMessage = check
+                  ? accountIssue && check.state !== 'checking'
+                    ? `${check.message}；${accountIssue}`
+                    : check.message
+                  : accountIssue || '账户快照完整，等待审批人执行 API 校验';
+                const validationState = check?.state === 'passed' && row.snapshotReview.state === 'ready'
+                  ? 'is-passed'
+                  : check?.state === 'checking'
+                    ? 'is-checking'
+                    : row.snapshotReview.state !== 'ready' || ['invalid', 'unavailable'].includes(check?.state ?? '')
+                      ? 'is-warning'
+                      : '';
+                const updatedAt = check?.state === 'passed'
+                  ? check.checkedAt
+                  : row.item.lastValidatedAt ?? row.list.generatedAt ?? row.list.updatedAt;
+
+                return (
+                  <article className="project-payment-row request-payment-review-row" key={row.key}>
+                    <header className="project-payment-row-header">
+                      <div>
+                        <strong>{row.item.snapshot.creatorName}</strong>
+                        <span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</span>
+                      </div>
+                      <span className="project-record-status"><i />{requestPaymentListStatusLabel(row.list)}</span>
+                    </header>
+
+                    <div className={`request-payment-account-check ${validationState}`} role="status" aria-live="polite">
+                      {check?.state === 'checking'
+                        ? <LoaderCircle className="is-spinning" size={14} />
+                        : validationState === 'is-passed'
+                          ? <CircleCheck size={14} />
+                          : validationState === 'is-warning'
+                            ? <CircleAlert size={14} />
+                            : <ShieldCheck size={14} />}
+                      <span>{validationMessage}</span>
+                    </div>
+
+                    <dl className="request-payment-review-fields">
+                      <div className="request-payment-review-account">
+                        <dt>收款账户</dt>
+                        <dd>{row.effectiveAccount.accountSummary || '待补充'}</dd>
+                        <small>{requestTransferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small>
+                      </div>
+                      <div>
+                        <dt>支付币种</dt>
+                        <dd>{currency}</dd>
+                      </div>
+                      <div>
+                        <dt>收款币种</dt>
+                        <dd>{String(paymentListItemValue(row.item, 'receiveCurrency') || '待确认')}</dd>
+                      </div>
+                      <div>
+                        <dt>付款金额</dt>
+                        <dd>{formatInvoiceMoney(currency, amount)}</dd>
+                      </div>
+                      <div>
+                        <dt>费用承担</dt>
+                        <dd>{requestFeeBearerLabel(paymentListItemValue(row.item, 'feeBearer'))}</dd>
+                      </div>
+                      <div>
+                        <dt>付款原因</dt>
+                        <dd>{String(paymentListItemValue(row.item, 'paymentReason') || '未填写')}</dd>
+                      </div>
+                      <div className="request-payment-review-reference">
+                        <dt>交易附言</dt>
+                        <dd>{String(paymentListItemValue(row.item, 'transactionReference') || '未填写')}</dd>
+                      </div>
+                    </dl>
+
+                    <footer className="project-payment-row-meta">
+                      <span>{requestPaymentListStatusLabel(row.list)} · v{row.list.version ?? 1}</span>
+                      <span>Invoice {row.item.snapshot.invoiceNumber}</span>
+                      <span>{row.item.snapshot.contractIds?.length ? `${row.item.snapshot.contractIds.length} 份合同` : '未关联合同'}</span>
+                      <span>{updatedAt ? `校验时间 ${new Date(updatedAt).toLocaleString('zh-CN')}` : '尚未校验'}</span>
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="project-resource-browser-empty">
+            <WalletCards size={23} />
+            <strong>付款清单尚未生成</strong>
+            <p>当前请款项目没有可供审批查看的付款清单快照。</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
 }
 
 export function RequestProjectDetailPage({
   request,
+  paymentLists,
+  creators,
   currentUser,
+  onExportPaymentList,
   onApprovalAction,
   onBack,
   notify,
 }: {
   request: RequestProjectSummary;
+  paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
   currentUser: SystemUser;
+  onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
     request: RequestProjectSummary,
     action: RequestApprovalAction,
@@ -624,7 +956,10 @@ export function RequestProjectDetailPage({
   const payees = getRequestPayees(request, detail);
   const paymentChannel = requestPaymentChannelLabel(payees.map((payee) => payee.channel));
   const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
-  const records = getRequestProjectResourceRecords(request, detail, payees);
+  const requestPaymentLists = paymentListsForRequest(request, paymentLists);
+  const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);
+  const paymentListItemCount = requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0);
+  const currentPaymentList = requestPaymentLists[0] ?? null;
   const projectContext = {
     id: request.requestCode ?? request.id,
     name: request.cooperationProjectName ?? request.project,
@@ -649,13 +984,15 @@ export function RequestProjectDetailPage({
     },
     {
       kind: 'payment' as const,
-      label: '付款单',
+      label: '付款清单',
       icon: WalletCards,
       data: {
         ...detail.payment,
-        meta: `${paymentChannel} · ${records.payment.length} 笔付款明细`,
+        id: currentPaymentList?.paymentListCode ?? detail.payment.id,
+        meta: `${paymentChannel} · ${paymentListItemCount || records.payment.length} 笔付款明细`,
+        status: currentPaymentList ? requestPaymentListStatusLabel(currentPaymentList) : detail.payment.status,
       },
-      action: '查看付款单',
+      action: '查看清单',
     },
   ];
 
@@ -725,7 +1062,7 @@ export function RequestProjectDetailPage({
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>合同、Invoice 与付款单</h2><p>核对请款项目中的全部关联资料。</p></div>
+              <div><h2>合同、Invoice 与付款清单</h2><p>核对请款项目中的全部关联资料。</p></div>
             </header>
             <div className="project-resource-list">
               {resources.map((resource) => {
@@ -796,7 +1133,15 @@ export function RequestProjectDetailPage({
         </aside>
       </div>
 
-      {viewer ? (
+      {viewer?.kind === 'payment' ? (
+        <RequestPaymentListReviewViewer
+          project={projectContext}
+          paymentLists={requestPaymentLists}
+          creators={creators}
+          onExportPaymentList={(paymentListId) => onExportPaymentList(request, paymentListId)}
+          onClose={() => setViewer(null)}
+        />
+      ) : viewer ? (
         <ProjectResourceViewer
           project={projectContext}
           records={records}

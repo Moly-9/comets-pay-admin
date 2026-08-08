@@ -2619,10 +2619,23 @@ export default function App() {
       const list = requestListFor(request, paymentListId);
       if (!list) return;
       try {
-        const blob = await exportAirwallexPaymentListWorkbook({ paymentList: list, creators });
+        const blob = await exportAirwallexPaymentListWorkbook({
+          paymentList: list,
+          creators,
+          allowSubmitted: true,
+        });
         downloadBlob(blob, paymentListWorkbookFilename(request.requestCode ?? request.id, list));
+        notify(
+          '付款清单已导出',
+          '已使用“我的项目”相同的 Airwallex Excel 模板生成审批文件。',
+        );
       } catch (error) {
-        notify('无法导出付款清单', error instanceof Error ? error.message : '生成文件失败。');
+        const message = error instanceof PaymentListWorkbookError
+          ? error.issues[0]
+          : error instanceof Error
+            ? error.message
+            : '生成文件失败。';
+        notify('无法导出付款清单', message);
       }
     },
   };
@@ -2726,6 +2739,9 @@ export default function App() {
           notify={notify}
           currentUser={currentUser}
           requests={requestProjects}
+          paymentLists={paymentLists}
+          creators={creators}
+          onExportPaymentList={requestResourceActions.onExportPaymentList}
           onApprovalAction={handleRequestApproval}
           focusedRequestId={focusedRequestId}
           onFocusCleared={() => setFocusedRequestId(null)}

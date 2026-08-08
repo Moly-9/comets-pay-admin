@@ -980,6 +980,9 @@ export function RequestsPage({
   notify,
   currentUser,
   requests,
+  paymentLists,
+  creators,
+  onExportPaymentList,
   onApprovalAction,
   focusedRequestId,
   onFocusCleared,
@@ -987,6 +990,9 @@ export function RequestsPage({
   notify: Notify;
   currentUser: SystemUser;
   requests: RequestProjectSummary[];
+  paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
+  onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
     request: RequestProjectSummary,
     action: RequestApprovalAction,
@@ -1111,7 +1117,10 @@ export function RequestsPage({
     return (
       <RequestProjectDetailPage
         request={selectedRequest}
+        paymentLists={paymentLists}
+        creators={creators}
         currentUser={currentUser}
+        onExportPaymentList={onExportPaymentList}
         onApprovalAction={onApprovalAction}
         notify={notify}
         onBack={() => {

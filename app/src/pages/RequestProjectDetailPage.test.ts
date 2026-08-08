@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import type { PaymentListRecord } from '../businessWorkflow';
 import {
   normalizeRequestPaymentChannels,
+  paymentRecordsFromLists,
+  paymentListsForRequest,
   requestExpectedPaymentDateLabel,
   requestPaymentChannelLabel,
   requestPaymentMethodLabel,
@@ -27,6 +30,19 @@ describe('request project payment presentation', () => {
     expect(requestPaymentMethodLabel('PayPal')).toBe('PayPal');
     expect(requestPaymentMethodLabel('Airwallex、PayPal')).toBe('银行转账');
     expect(requestPaymentMethodLabel('按 Invoice 账户快照')).toBe('待确认');
+  });
+
+  it('selects payment lists by stable request and explicit list IDs', () => {
+    const paymentLists = [
+      { paymentListId: 'list-one', paymentRequestProjectId: 'request-one' },
+      { paymentListId: 'list-two', paymentRequestProjectId: 'request-two' },
+      { paymentListId: 'list-three' },
+    ] as unknown as PaymentListRecord[];
+
+    expect(paymentListsForRequest({ paymentRequestProjectId: 'request-one' as never }, paymentLists))
+      .toEqual([paymentLists[0]]);
+    expect(paymentListsForRequest({ paymentListIds: ['list-two', 'list-three'] as never }, paymentLists))
+      .toEqual([paymentLists[1], paymentLists[2]]);
   });
 
   it('returns a concrete expected payment date and skips weekends', () => {
@@ -67,5 +83,74 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<th>付款渠道</th>');
     expect(paymentTable).toContain('<th>付款方式</th>');
     expect(paymentTable).toContain('<th>状态</th>');
+  });
+
+  it('maps real payment-list snapshots into the shared read-only project viewer', () => {
+    const records = paymentRecordsFromLists([{
+      paymentListId: 'payment-list-one',
+      paymentListCode: 'PAY-301164-01',
+      projectId: 'project-one',
+      provider: 'Airwallex',
+      status: 'paid',
+      version: 2,
+      generatedAt: '2026-08-01T12:00:00.000Z',
+      updatedAt: '2026-08-01T12:00:00.000Z',
+      createdAt: '2026-08-01T10:00:00.000Z',
+      items: [{
+        id: 'payment-item-one',
+        engagementId: 'engagement-one',
+        invoiceId: 'invoice-one',
+        snapshot: {
+          invoiceNumber: 'INV-301164-01',
+          creatorName: '项目达人 01',
+          currency: 'USD',
+          receiveCurrency: 'USD',
+          amount: 3800,
+          provider: 'Airwallex',
+          accountSummary: '•••• 3011',
+          paymentReason: '创作者合作款',
+          transactionReference: 'REQ-301164-01',
+          description: '',
+          feeBearer: 'ADVERTISER',
+        },
+        overrides: {},
+      }],
+    } as unknown as PaymentListRecord], '#301164 DCD 项目');
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      id: 'PAY-301164-01-01',
+      title: '项目达人 01',
+      subtitle: 'PAY-301164-01 · Airwallex',
+      amount: 'USD 3,800.00',
+      status: '已付款',
+    });
+    expect(records[0].fields).toEqual(expect.arrayContaining([
+      { label: '关联 Invoice', value: 'INV-301164-01' },
+      { label: '付款方式', value: '银行转账' },
+      { label: '收款账户', value: '•••• 3011' },
+      { label: '清单版本', value: 'v2' },
+    ]));
+  });
+
+  it('renders approval-focused payment fields, API validation, and export without mutation controls', () => {
+    const source = readFileSync(new URL('./RequestProjectDetailPage.tsx', import.meta.url), 'utf8');
+    const viewerSource = source.slice(
+      source.indexOf('function RequestPaymentListReviewViewer'),
+      source.indexOf('export function RequestProjectDetailPage'),
+    );
+
+    expect(viewerSource).toContain('校验账户完整性');
+    expect(viewerSource).toContain('导出 Excel');
+    expect(viewerSource).toContain('<dt>收款账户</dt>');
+    expect(viewerSource).toContain('<dt>付款金额</dt>');
+    expect(viewerSource).toContain('<dt>费用承担</dt>');
+    expect(viewerSource).toContain('<dt>交易附言</dt>');
+    expect(viewerSource).toContain('validatePaymentListAccountViaApi');
+    expect(viewerSource).toContain('onExportPaymentList(list.paymentListId)');
+    expect(viewerSource).not.toContain('添加付款行');
+    expect(viewerSource).not.toContain('删除清单');
+    expect(viewerSource).not.toContain('编辑付款清单');
+    expect(viewerSource).not.toContain('生成付款单');
   });
 });

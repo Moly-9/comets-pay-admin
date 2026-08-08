@@ -168,3 +168,92 @@ shows an input with Cancel and Save actions.
   confirmation, and list-return flow.
 
 final result: passed
+
+---
+
+# Request Payment List Read-Only Design QA
+
+## Evidence
+
+- Source visual truth:
+  `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6b45bb77-df33-48f5-9455-bc964c53d0ec.png`
+- Existing design reference: the shared payment list browser in
+  `app/src/pages/ProjectDetailPage.tsx`, matching the supplied list/detail screenshot.
+- Implementation screenshot: automated capture is blocked because browser control
+  policy rejects the local `http://127.0.0.1:5173/` URL. The page remains available
+  for manual review in the in-app browser.
+
+## Normalization
+
+- Source image: 1074 x 636 px.
+- Intended browser QA viewport: 1284 x 904 CSS px at device scale factor 1,
+  matching the annotated page context before normalized comparison.
+- Implementation dimensions and density: unavailable to automated browser capture
+  because of the local URL policy restriction.
+
+## State
+
+The target state is the request-project detail payment-list modal for
+`REQ-202607-000001`, opened in view-only approval mode. It keeps the same payment-row
+hierarchy and visual tokens as `我的项目`, replaces editable controls with compact
+approval fields, and adds account validation plus fixed-template Excel export.
+
+## Findings
+
+- [P0] Browser-rendered implementation evidence is unavailable.
+  The local app is reachable and the production build passes, but browser control
+  policy blocks local-page inspection. Visual fidelity, responsive behavior,
+  interaction behavior, and console state cannot be passed without rendered evidence.
+- The request modal reads the real request-linked `PaymentListRecord[]` state and
+  uses the existing project payment-row shell, modal, buttons, status treatment,
+  breakpoints, and Lucide icon system.
+- Approval content is read-only. The modal exposes only account completeness
+  validation, Excel export, and close actions; it contains no generate, edit,
+  delete, clear, row removal, or refresh controls.
+- Airwallex validation uses schema plus validate-only proxy requests and renders
+  passed, invalid, unsupported-channel, and proxy-unavailable reminders inline.
+- Export calls the same `exportAirwallexPaymentListWorkbook` implementation and
+  exact 21-column template used by `我的项目`, with submitted-list export enabled
+  only for the approval entry point.
+- Image assets: the target contains standard interface icons only; the
+  implementation uses the repository's existing Lucide icon system and adds no
+  raster, placeholder, CSS-art, or handcrafted SVG assets.
+
+## Focused Comparison
+
+Blocked. The source image was opened, but the browser-control policy rejects the
+local implementation URL and therefore prevents same-state screenshot comparison.
+
+## Interaction Verification
+
+- Automated source checks confirm the request viewer contains no add, edit,
+  delete, generate, refresh, or clear action.
+- Focused tests cover real payment-list mapping, read-only controls, API validation,
+  unsupported and unavailable API states, and submitted-list export through the
+  unchanged workbook template.
+- Browser checks for close behavior, overflow, and console errors remain blocked
+  by local URL access policy.
+
+## Comparison History
+
+1. The source image and existing `我的项目` payment-list structure were
+   inspected.
+2. The request viewer now uses the same payment-row hierarchy and shared visual
+   tokens as the supplied `我的项目` reference, populated from stable request and
+   payment-list IDs.
+3. Editable form fields were replaced with approval-focused read-only values;
+   API validation and the shared Excel export were added as the only work actions.
+4. Local browser capture was attempted, but browser control rejected the local URL.
+
+## Implementation Checklist
+
+- Manually open `http://127.0.0.1:5173/` and sign in.
+- Open `请款项目` -> `REQ-202607-000001` -> `查看清单`.
+- Check desktop and narrow-screen modal states, close behavior, and page overflow.
+- Confirm only `校验账户完整性`, `导出 Excel`, and `关闭` are available.
+- Confirm the local static prototype reports the Airwallex proxy as unavailable;
+  do not treat that warning as a successful provider validation.
+- Compare source and implementation together, address any P0/P1/P2 mismatch,
+  and update this section to `final result: passed` after rendered evidence exists.
+
+final result: blocked

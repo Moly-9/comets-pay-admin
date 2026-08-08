@@ -990,6 +990,155 @@
 
 .request-payment-row-footer > span { color: #687282; font-size: 12px; }
 
+.request-payment-review-toolbar {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.request-payment-review-summary {
+  display: flex;
+  min-height: 62px;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  background: #f7f9fb;
+  padding: 13px 15px;
+  color: #46515f;
+}
+
+.request-payment-review-summary > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: #60758c;
+}
+
+.request-payment-review-summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.request-payment-review-summary strong {
+  color: #27303b;
+  font-size: 12.5px;
+}
+
+.request-payment-review-summary p {
+  margin: 0;
+  color: #6d7886;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.request-payment-review-summary.is-passed {
+  border-color: #cce3d7;
+  background: #f3faf6;
+}
+
+.request-payment-review-summary.is-passed > span,
+.request-payment-review-summary.is-passed strong {
+  color: #2f7453;
+}
+
+.request-payment-review-summary.is-warning {
+  border-color: #ead8bd;
+  background: #fffaf2;
+}
+
+.request-payment-review-summary.is-warning > span,
+.request-payment-review-summary.is-warning strong {
+  color: #8b5b22;
+}
+
+.request-payment-review-row .project-payment-row-header > div:first-child > strong {
+  color: #242a33;
+  font-size: 14px;
+}
+
+.request-payment-account-check {
+  display: flex;
+  min-height: 30px;
+  align-items: flex-start;
+  gap: 7px;
+  border-left: 3px solid #9ba9b8;
+  background: #f7f9fb;
+  padding: 7px 9px;
+  color: #5e6c7b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.request-payment-account-check svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.request-payment-account-check.is-passed {
+  border-left-color: #4f8d6c;
+  background: #f3faf6;
+  color: #2f7453;
+}
+
+.request-payment-account-check.is-warning {
+  border-left-color: #b47732;
+  background: #fff9f0;
+  color: #875820;
+}
+
+.request-payment-account-check.is-checking {
+  border-left-color: #6680a0;
+  color: #526c89;
+}
+
+.request-payment-review-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(110px, .75fr));
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid #e6e9ee;
+  border-left: 1px solid #e6e9ee;
+}
+
+.request-payment-review-fields > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 4px;
+  border-right: 1px solid #e6e9ee;
+  border-bottom: 1px solid #e6e9ee;
+  padding: 10px 11px;
+  background: #fff;
+}
+
+.request-payment-review-fields dt,
+.request-payment-review-fields dd {
+  margin: 0;
+}
+
+.request-payment-review-fields dt,
+.request-payment-review-fields small {
+  color: #788391;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.request-payment-review-fields dd {
+  overflow-wrap: anywhere;
+  color: #2d3540;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.request-payment-review-fields .request-payment-review-account {
+  grid-column: span 2;
+}
+
+.request-payment-review-modal .is-spinning {
+  animation: auth-spin 800ms linear infinite;
+}
+
 .media-request-invoice-state > button {
   display: grid;
   width: 100%;
@@ -1020,6 +1169,7 @@
   .request-resource-flat-row .project-contract-record-actions { grid-column: 2 / -1; justify-content: flex-start; }
   .request-resource-candidate { grid-template-columns: minmax(200px, 1.2fr) minmax(150px, 1fr) auto; }
   .request-resource-candidate > div:last-of-type { grid-column: 2 / -1; }
+  .request-payment-review-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -1039,6 +1189,10 @@
   .request-resource-candidate > div,
   .request-resource-candidate > button { grid-column: 2; }
   .request-resource-candidate > label { grid-column: 1 / -1; }
+  .request-payment-review-toolbar { grid-template-columns: 1fr; }
+  .request-payment-review-fields { grid-template-columns: 1fr; }
+  .request-payment-review-fields .request-payment-review-account,
+  .request-payment-review-fields .request-payment-review-reference { grid-column: 1; }
 }
 
 .project-resource-picker-list {

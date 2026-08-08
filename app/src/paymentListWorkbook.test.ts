@@ -201,6 +201,29 @@ describe('Airwallex payment-list workbook', () => {
     })).toThrow(PaymentListWorkbookError);
   });
 
+  it('allows the approval view to export a submitted list with the same fixed template', async () => {
+    expect(() => buildAirwallexPaymentListRows({
+      paymentList: { ...paymentList(), status: 'submitted' },
+      creators: [creator],
+    })).toThrow(PaymentListWorkbookError);
+    expect(buildAirwallexPaymentListRows({
+      paymentList: { ...paymentList(), status: 'submitted' },
+      creators: [creator],
+      allowSubmitted: true,
+    })).toHaveLength(2);
+
+    const blob = await exportAirwallexPaymentListWorkbook({
+      paymentList: { ...paymentList(), status: 'submitted' },
+      creators: [creator],
+      allowSubmitted: true,
+    });
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await blob.arrayBuffer());
+    const sheet = workbook.getWorksheet(AIRWALLEX_PAYMENT_LIST_SHEET)!;
+    expect(workbook.worksheets).toHaveLength(1);
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual(AIRWALLEX_PAYMENT_LIST_HEADERS);
+  });
+
   it('does not export a PayPal list with the Airwallex template', () => {
     expect(() => buildAirwallexPaymentListRows({
       paymentList: { ...paymentList(), provider: 'PayPal' },
