@@ -139,6 +139,16 @@ describe('Invoice review workflow', () => {
     expect(rechecked.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('复核通过并重新提交');
   });
 
+  it.each([
+    '待发起请款',
+    '待PM审核',
+    '待项目负责人审核',
+    '待老板审核',
+    '待财务审核',
+  ] as const)('groups %s under the in-progress approval tab', (status) => {
+    expect(getInvoicePageTab(status)).toBe('approval');
+  });
+
   it('returns a signed Invoice to creator and invalidates the signature', () => {
     const signed = {
       ...payout,

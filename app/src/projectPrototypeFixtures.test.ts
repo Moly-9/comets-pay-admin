@@ -213,6 +213,10 @@ describe('project prototype fixtures', () => {
     expect(lists('PRJ-260727-02').flatMap((list) => list.items).every((item) => (
       Boolean(paymentListItemValue(item, 'transactionReference'))
     ))).toBe(true);
+    expect(INITIAL_PAYOUTS.some((payout) => (
+      payout.projectId === 'PRJ-260727-08'
+      && payout.invoiceReviewStatus === '待财务审核'
+    ))).toBe(true);
   });
 
   it('keeps new payment-list transaction reference and description empty by default', () => {
