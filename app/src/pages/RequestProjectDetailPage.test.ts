@@ -1,23 +1,49 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  requestExpectedPaymentTimeLabel,
+  normalizeRequestPaymentChannels,
+  requestExpectedPaymentDateLabel,
+  requestPaymentChannelLabel,
   requestPaymentMethodLabel,
 } from './RequestProjectDetailPage';
 
 describe('request project payment presentation', () => {
-  it('maps payment providers to user-facing methods', () => {
+  it('keeps one standard payment channel across the request', () => {
+    expect(requestPaymentChannelLabel('Airwallex、PayPal')).toBe('Airwallex');
+    expect(requestPaymentChannelLabel(['PayPal', 'Airwallex'])).toBe('PayPal');
+    expect(requestPaymentChannelLabel('payer Max')).toBe('PayMax');
+    expect(normalizeRequestPaymentChannels([
+      { id: 'one', channel: 'Airwallex' },
+      { id: 'two', channel: 'PayPal' },
+    ])).toEqual([
+      { id: 'one', channel: 'Airwallex' },
+      { id: 'two', channel: 'Airwallex' },
+    ]);
+  });
+
+  it('maps the selected payment channel to a user-facing method', () => {
     expect(requestPaymentMethodLabel('Airwallex')).toBe('银行转账');
     expect(requestPaymentMethodLabel('PayMax')).toBe('银行转账');
     expect(requestPaymentMethodLabel('PayPal')).toBe('PayPal');
-    expect(requestPaymentMethodLabel('Airwallex、PayPal')).toBe('银行转账、PayPal');
+    expect(requestPaymentMethodLabel('Airwallex、PayPal')).toBe('银行转账');
     expect(requestPaymentMethodLabel('按 Invoice 账户快照')).toBe('待确认');
   });
 
-  it('describes the expected payment time from request progress', () => {
-    expect(requestExpectedPaymentTimeLabel({ lifecycle: 'COMPLETED', status: '已完成' })).toBe('已完成');
-    expect(requestExpectedPaymentTimeLabel({ status: '待打款' })).toBe('3 个工作日内');
-    expect(requestExpectedPaymentTimeLabel({ status: 'PM 审批中' })).toBe('全部审批通过后 3 个工作日内');
+  it('returns a concrete expected payment date and skips weekends', () => {
+    expect(requestExpectedPaymentDateLabel({
+      lifecycle: 'COMPLETED',
+      status: '已完成',
+      createdAt: '2026-07-22T02:00:00.000Z',
+    })).toBe('2026-07-22');
+    expect(requestExpectedPaymentDateLabel({
+      status: '待打款',
+      createdAt: '2026-08-07T02:00:00.000Z',
+    })).toBe('2026-08-12');
+    expect(requestExpectedPaymentDateLabel(
+      { status: 'PM 审批中' },
+      undefined,
+      new Date(2026, 7, 10),
+    )).toBe('2026-08-13');
   });
 
   it('keeps the requested project fields and payment columns in the detail view', () => {
@@ -32,7 +58,8 @@ describe('request project payment presentation', () => {
     );
 
     expect(projectInfo).not.toContain('<dt>审批负责人</dt>');
-    expect(projectInfo).toContain('<dt>付款方式</dt>');
+    expect(projectInfo).not.toContain('<dt>付款方式</dt>');
+    expect(projectInfo).toContain('<dt>付款渠道</dt>');
     expect(projectInfo).toContain('<dt>预计付款时间</dt>');
     expect(paymentTable).toContain('<th>达人</th>');
     expect(paymentTable).toContain('<th>Invoice</th>');

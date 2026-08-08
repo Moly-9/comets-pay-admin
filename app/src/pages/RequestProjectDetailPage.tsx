@@ -32,10 +32,10 @@ import type {
 } from '../businessWorkflow';
 import {
   canReviewRequestApproval,
-  REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalStage,
   type RequestApprovalAction,
 } from '../requestApprovalWorkflow';
+import { myProjectStatusFor, requestProjectStatusFor } from '../paymentRequestProjects';
 
 export type RequestProjectSummary = {
   id: string;
@@ -123,25 +123,68 @@ type RequestProjectDetail = {
 
 type Notify = (title: string, message: string) => void;
 
+type RequestPaymentChannel = 'Airwallex' | 'PayPal' | 'PayMax' | '待确认';
+
+const paymentChannelFromValue = (value: string): RequestPaymentChannel => {
+  const match = value.match(/airwallex|paypal|pay(?:er)?\s*max/i)?.[0].toLowerCase();
+  if (match === 'airwallex') return 'Airwallex';
+  if (match === 'paypal') return 'PayPal';
+  if (match?.startsWith('pay')) return 'PayMax';
+  return '待确认';
+};
+
+export const requestPaymentChannelLabel = (channels: string | string[]) => {
+  const values = Array.isArray(channels) ? channels : [channels];
+  return values.map(paymentChannelFromValue).find((channel) => channel !== '待确认') ?? '待确认';
+};
+
 export const requestPaymentMethodLabel = (channel: string) => {
-  const methods = [
-    /airwallex|paymax|bank/i.test(channel) ? '银行转账' : '',
-    /paypal/i.test(channel) ? 'PayPal' : '',
-  ].filter(Boolean);
-  return methods.join('、') || '待确认';
+  const normalizedChannel = requestPaymentChannelLabel(channel);
+  if (normalizedChannel === 'PayPal') return 'PayPal';
+  if (normalizedChannel === 'Airwallex' || normalizedChannel === 'PayMax') return '银行转账';
+  return '待确认';
 };
 
-export const requestExpectedPaymentTimeLabel = (
-  request: Pick<RequestProjectSummary, 'approval' | 'lifecycle' | 'status'>,
+export const normalizeRequestPaymentChannels = <T extends { channel: string }>(items: T[]): T[] => {
+  const channel = requestPaymentChannelLabel(items.map((item) => item.channel));
+  return items.map((item) => ({ ...item, channel }));
+};
+
+const parsedRequestDate = (value?: string) => {
+  const parts = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!parts) return null;
+  return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+};
+
+const addBusinessDays = (value: Date, businessDays: number) => {
+  const result = new Date(value);
+  let added = 0;
+  while (added < businessDays) {
+    result.setDate(result.getDate() + 1);
+    if (result.getDay() !== 0 && result.getDay() !== 6) added += 1;
+  }
+  return result;
+};
+
+const formatRequestDate = (value: Date) => [
+  value.getFullYear(),
+  String(value.getMonth() + 1).padStart(2, '0'),
+  String(value.getDate()).padStart(2, '0'),
+].join('-');
+
+export const requestExpectedPaymentDateLabel = (
+  request: Pick<RequestProjectSummary, 'approval' | 'createdAt' | 'lifecycle' | 'status'>,
+  fallbackSource?: string,
+  fallbackDate = new Date(),
 ) => {
-  if (request.lifecycle === 'COMPLETED' || request.status === '已完成') return '已完成';
-  if (request.approval?.status === 'APPROVED' || request.status === '待打款') return '3 个工作日内';
-  return '全部审批通过后 3 个工作日内';
-};
-
-const requestPaymentMethodsLabel = (payees: RequestPayee[]) => {
-  const methods = payees.flatMap((payee) => requestPaymentMethodLabel(payee.channel).split('、'));
-  return [...new Set(methods)].join('、');
+  const sourceDate = parsedRequestDate(
+    request.approval?.updatedAt
+    ?? request.createdAt
+    ?? request.approval?.submittedAt
+    ?? fallbackSource,
+  ) ?? new Date(fallbackDate);
+  const isCompleted = myProjectStatusFor(request) === '已付款';
+  return formatRequestDate(isCompleted ? sourceDate : addBusinessDays(sourceDate, 3));
 };
 
 const APPROVAL_STEPS: Array<{
@@ -332,6 +375,7 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
 };
 
 function getRequestProjectDetail(request: RequestProjectSummary): RequestProjectDetail {
+  const myProjectStatus = myProjectStatusFor(request);
   if (request.generatedDetail) {
     const generated = request.generatedDetail;
     const hasContract = request.contracts > 0;
@@ -390,7 +434,8 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
     };
   }
 
-  const processed = request.filter === 'processed';
+  const paid = myProjectStatus === '已付款';
+  const approved = paid || myProjectStatus === '待打款';
   const paymentGenerated = request.paymentOrder !== '待生成';
   return REQUEST_PROJECT_DETAILS[request.id] ?? {
     brand: request.brand,
@@ -402,26 +447,26 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
     contract: {
       id: `${request.contracts} 份合同`,
       meta: `对应 ${request.invoices} 份 Invoice · 与达人一一签约`,
-      status: processed ? '已归档' : '已签署',
+      status: approved ? '已归档' : '已签署',
     },
     invoice: {
       id: `${request.invoices} 份 Invoice`,
       meta: `对应 ${request.contracts} 份合同 · 请款金额 ${request.amount}`,
-      status: processed ? '已通过' : request.status === '待补资料' ? '待补资料' : '已校验',
+      status: approved ? '已通过' : myProjectStatus === '已退回' ? '待补资料' : '已校验',
     },
     payment: {
       id: request.paymentOrder,
       meta: paymentGenerated ? `${request.invoices} 笔达人付款明细` : '请款审核通过后生成',
-      status: processed ? '已完成' : request.status === '待打款' ? '待打款' : '审批中',
+      status: paid ? '已完成' : approved ? '待打款' : '审批中',
     },
     payees: [],
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已同步', time: '已完成', state: 'complete' },
-      { label: 'PM 审批', description: processed ? `${request.pm}已完成审核` : `由${request.pm}审核项目资料`, time: processed ? '已完成' : '处理中', state: processed ? 'complete' : 'current' },
-      { label: '项目负责人审批', description: processed ? '项目资料与预算已通过' : 'PM 审批通过后进入', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
-      { label: '老板审批', description: processed ? '业务审批已完成' : '项目负责人审批通过后进入', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
-      { label: '财务审批', description: processed ? '收款主体与金额已通过' : '老板审批通过后进入', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
-      { label: '渠道付款', description: processed ? '付款已完成' : '全部审批完成后执行', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
+      { label: 'PM 审批', description: approved ? `${request.pm}已完成审核` : `由${request.pm}审核项目资料`, time: approved ? '已完成' : '处理中', state: approved ? 'complete' : 'current' },
+      { label: '项目负责人审批', description: approved ? '项目资料与预算已通过' : 'PM 审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '老板审批', description: approved ? '业务审批已完成' : '项目负责人审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '财务审批', description: approved ? '收款主体与金额已通过' : '老板审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '渠道付款', description: paid ? '付款已完成' : '全部审批完成后执行', time: paid ? '已完成' : '待开始', state: paid ? 'complete' : approved ? 'current' : 'pending' },
     ],
   };
 }
@@ -436,13 +481,23 @@ function getRequestPayees(
   request: RequestProjectSummary,
   detail: RequestProjectDetail,
 ): RequestPayee[] {
-  if (detail.payees.length >= request.invoices) return detail.payees.slice(0, request.invoices);
+  if (detail.payees.length >= request.invoices) {
+    return normalizeRequestPaymentChannels(detail.payees.slice(0, request.invoices));
+  }
   const names = REQUEST_CREATOR_NAMES[request.id] ?? [];
   const requestMoney = parseAmount(request.amount);
   const existingTotal = detail.payees.reduce((sum, payee) => sum + parseAmount(payee.amount).amount, 0);
   const missingCount = Math.max(request.invoices - detail.payees.length, 0);
   const defaultAmount = missingCount > 0 ? Math.max((requestMoney.amount - existingTotal) / missingCount, 0) : 0;
   const projectCode = request.id.replace('PRJ-', '');
+  const myProjectStatus = myProjectStatusFor(request);
+  const payoutStatus = myProjectStatus === '已付款'
+    ? '已付款'
+    : myProjectStatus === '待打款'
+      ? '待打款'
+      : myProjectStatus === '已退回'
+        ? '已退回'
+        : '待审批';
   const missing = Array.from({ length: missingCount }, (_, index) => {
     const position = detail.payees.length + index;
     const name = names[position] ?? `项目达人 ${String(position + 1).padStart(2, '0')}`;
@@ -455,10 +510,10 @@ function getRequestPayees(
       invoice: `INV-${projectCode}-${String(position + 1).padStart(2, '0')}`,
       amount: `${requestMoney.currency} ${roundedAmount.toLocaleString('en-US')}`,
       channel: position % 3 === 1 ? 'PayPal' : position % 3 === 2 ? 'PayMax' : 'Airwallex',
-      status: request.status === '已完成' ? '已付款' : request.status,
+      status: payoutStatus,
     };
   });
-  return [...detail.payees, ...missing];
+  return normalizeRequestPaymentChannels([...detail.payees, ...missing]);
 }
 
 function getRequestProjectResourceRecords(
@@ -560,13 +615,11 @@ export function RequestProjectDetailPage({
     request.approval
     && canReviewRequestApproval(currentUser, request.approval, request.pm),
   );
-  const currentApprovalLabel = request.approval
-    ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
-    : request.status;
+  const currentApprovalLabel = requestProjectStatusFor(request) ?? '请款提交';
   const normalizedReturnReason = returnReason.trim();
   const payees = getRequestPayees(request, detail);
-  const paymentMethods = requestPaymentMethodsLabel(payees);
-  const expectedPaymentTime = requestExpectedPaymentTimeLabel(request);
+  const paymentChannel = requestPaymentChannelLabel(payees.map((payee) => payee.channel));
+  const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
   const records = getRequestProjectResourceRecords(request, detail, payees);
   const projectContext = {
     id: request.requestCode ?? request.id,
@@ -594,7 +647,10 @@ export function RequestProjectDetailPage({
       kind: 'payment' as const,
       label: '付款单',
       icon: WalletCards,
-      data: detail.payment,
+      data: {
+        ...detail.payment,
+        meta: `${paymentChannel} · ${records.payment.length} 笔付款明细`,
+      },
       action: '查看付款单',
     },
   ];
@@ -657,8 +713,8 @@ export function RequestProjectDetailPage({
               <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
               <div><dt>提交时间</dt><dd>{detail.submittedAt}</dd></div>
               <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
-              <div><dt>付款方式</dt><dd>{paymentMethods}</dd></div>
-              <div><dt>预计付款时间</dt><dd>{expectedPaymentTime}</dd></div>
+              <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
+              <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
               <div className="project-info-full"><dt>请款原因</dt><dd>{detail.reason}</dd></div>
             </dl>
           </section>
