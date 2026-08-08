@@ -52,22 +52,38 @@
 }
 
 .media-request-form-issues {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: 10px;
-  border: 1px solid #efd4ad;
-  border-radius: 9px;
-  background: #fffaf3;
-  padding: 12px 14px;
-  color: #85511b;
+  border: 1px solid #dfe3e9;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 11px 12px;
+  color: #34373f;
+}
+
+.media-request-form-issues > svg {
+  margin-top: 1px;
+  color: #b56f35;
 }
 
 .media-request-form-issues > div {
   display: grid;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
+}
+
+.media-request-form-issues strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .media-request-form-issues span {
+  color: #727887;
   font-size: 11px;
+  line-height: 1.5;
 }
 
 .media-request-creator-cell {
