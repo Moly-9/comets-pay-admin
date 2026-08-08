@@ -35,9 +35,13 @@ import {
   requestApprovalStage,
   type RequestApprovalAction,
 } from '../requestApprovalWorkflow';
-import { myProjectStatusFor, requestProjectStatusFor } from '../paymentRequestProjects';
+import {
+  myProjectStatusFor,
+  requestProjectStatusFor,
+  type PaymentRequestPaymentPlan,
+} from '../paymentRequestProjects';
 
-export type RequestProjectSummary = {
+export type RequestProjectSummary = PaymentRequestPaymentPlan & {
   id: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   requestCode?: string;

@@ -25,6 +25,16 @@
 /* Media payment request projects */
 .media-request-create-form { gap: 16px; }
 
+.media-request-payment-plan {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.media-request-payment-plan > * {
+  min-width: 0;
+}
+
 .media-request-create-form .media-request-creator-picker {
   overflow: visible;
   border: 0;
@@ -380,6 +390,7 @@
 }
 
 @media (max-width: 760px) {
+  .media-request-payment-plan { grid-template-columns: 1fr; }
   .media-request-link-row { grid-template-columns: 1fr; }
   .media-request-document-creator { padding: 12px; }
   .media-request-document-fields {

@@ -21,6 +21,8 @@ import {
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
   paymentRequestInvoiceIds,
+  paymentRequestPaymentPlanFor,
+  paymentRequestPaymentPlanIssues,
   invoiceAmountLabel,
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
@@ -118,6 +120,33 @@ const contract = (id: string, projectId = cooperationProjectId, contractCreatorI
   creatorId: contractCreatorId,
   engagementId,
   lifecycle: 'CONFIRMED',
+});
+
+describe('payment request payment plan', () => {
+  it('requires both the payment channel and expected payment date', () => {
+    expect(paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor())).toEqual([
+      '请选择付款渠道',
+      '请选择预计付款时间',
+    ]);
+    expect(paymentRequestPaymentPlanIssues({
+      paymentChannel: 'Airwallex',
+      expectedPaymentDate: '',
+    })).toEqual(['请选择预计付款时间']);
+    expect(paymentRequestPaymentPlanIssues({
+      paymentChannel: 'PayPal',
+      expectedPaymentDate: '2026-08-20',
+    })).toEqual([]);
+  });
+
+  it('hydrates saved values when a request is edited', () => {
+    expect(paymentRequestPaymentPlanFor({
+      paymentChannel: 'Payermax',
+      expectedPaymentDate: '2026-08-28',
+    })).toEqual({
+      paymentChannel: 'Payermax',
+      expectedPaymentDate: '2026-08-28',
+    });
+  });
 });
 
 describe('media payment request document resolution', () => {

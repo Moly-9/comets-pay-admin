@@ -26,6 +26,33 @@ export type PaymentRequestCreatorLink = {
   invoiceIds: InvoiceId[];
 };
 
+export type PaymentRequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payermax';
+
+export type PaymentRequestPaymentPlan = {
+  paymentChannel?: PaymentRequestPaymentChannel;
+  expectedPaymentDate?: string;
+};
+
+export type PaymentRequestPaymentPlanForm = {
+  paymentChannel: PaymentRequestPaymentChannel | '';
+  expectedPaymentDate: string;
+};
+
+export const paymentRequestPaymentPlanFor = (
+  request?: PaymentRequestPaymentPlan,
+): PaymentRequestPaymentPlanForm => ({
+  paymentChannel: request?.paymentChannel ?? '',
+  expectedPaymentDate: request?.expectedPaymentDate ?? '',
+});
+
+export const paymentRequestPaymentPlanIssues = ({
+  paymentChannel,
+  expectedPaymentDate,
+}: PaymentRequestPaymentPlanForm) => [
+  !paymentChannel ? '请选择付款渠道' : '',
+  !expectedPaymentDate.trim() ? '请选择预计付款时间' : '',
+].filter((issue) => Boolean(issue));
+
 export type PaymentRequestCreatorInvoicePresentation = {
   invoiceId: InvoiceId;
   invoiceNumber: string;

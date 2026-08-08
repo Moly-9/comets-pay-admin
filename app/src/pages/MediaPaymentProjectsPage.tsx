@@ -46,9 +46,12 @@ import {
   paymentRequestCreatorPresentation,
   paymentRequestInvoiceIds,
   paymentRequestListMetrics,
+  paymentRequestPaymentPlanFor,
+  paymentRequestPaymentPlanIssues,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
   type PaymentRequestCreatorLink,
+  type PaymentRequestPaymentChannel,
 } from '../paymentRequestProjects';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import {
@@ -66,6 +69,12 @@ const STATUS_COPY = {
   MISSING_INVOICE: '该合作项目下暂无此达人 Invoice',
   INVOICE_IN_USE: '可用 Invoice 均已关联其他请款项目',
 } as const;
+
+const PAYMENT_CHANNEL_OPTIONS = [
+  { value: 'Airwallex', label: 'Airwallex', description: '跨境银行转账' },
+  { value: 'PayPal', label: 'PayPal', description: 'PayPal 账户付款' },
+  { value: 'Payermax', label: 'Payermax', description: '本地支付网络' },
+] as const;
 
 type RequestResourcePickerOption = {
   value: string;
@@ -224,6 +233,8 @@ export function MediaPaymentProjectsPage({
   const [cooperationProjectId, setCooperationProjectId] = useState('');
   const [brand, setBrand] = useState('');
   const [pm, setPm] = useState(PM_USERS[0]?.name ?? '');
+  const [paymentChannel, setPaymentChannel] = useState<PaymentRequestPaymentChannel | ''>('');
+  const [expectedPaymentDate, setExpectedPaymentDate] = useState('');
   const [reason, setReason] = useState('');
   const [creatorSearch, setCreatorSearch] = useState('');
   const [creatorPickerOpen, setCreatorPickerOpen] = useState(false);
@@ -330,6 +341,8 @@ export function MediaPaymentProjectsPage({
     setCooperationProjectId('');
     setBrand('');
     setPm(PM_USERS[0]?.name ?? '');
+    setPaymentChannel('');
+    setExpectedPaymentDate('');
     setReason('');
     setCreatorSearch('');
     setCreatorPickerOpen(false);
@@ -355,9 +368,12 @@ export function MediaPaymentProjectsPage({
   };
 
   const openEditForm = (request: RequestProjectSummary, showCreatorPicker = false) => {
+    const paymentPlan = paymentRequestPaymentPlanFor(request);
     setCooperationProjectId(String(request.cooperationProjectId ?? request.projectId ?? ''));
     setBrand(request.brand ?? '');
     setPm(request.pm);
+    setPaymentChannel(paymentPlan.paymentChannel);
+    setExpectedPaymentDate(paymentPlan.expectedPaymentDate);
     setReason(request.generatedDetail?.reason ?? '');
     setCreatorSearch('');
     setCreatorPickerOpen(showCreatorPicker && canAddCreatorToPaymentRequest(request));
@@ -500,6 +516,7 @@ export function MediaPaymentProjectsPage({
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
+    ...paymentRequestPaymentPlanIssues({ paymentChannel, expectedPaymentDate }),
     !reason.trim() ? '请填写请款事由' : '',
     !selectedCreators.length ? '请至少选择一位合作达人' : '',
     ...selectedCreators.flatMap((creator) => {
@@ -517,6 +534,8 @@ export function MediaPaymentProjectsPage({
   const canCreateRequest = Boolean(
     selectedProject
     && pm
+    && paymentChannel
+    && expectedPaymentDate
     && reason.trim()
     && creatorsReady
     && formIssues.length === 0,
@@ -524,7 +543,7 @@ export function MediaPaymentProjectsPage({
 
   const saveRequest = () => {
     setFormSubmitAttempted(true);
-    if (!selectedProject || !canCreateRequest) {
+    if (!selectedProject || !paymentChannel || !expectedPaymentDate || !canCreateRequest) {
       notify('请完善必填信息', formIssues[0] ?? '请检查达人和 Invoice 关联信息。');
       return;
     }
@@ -549,6 +568,8 @@ export function MediaPaymentProjectsPage({
       brand: brand.trim(),
       media: currentScopeName,
       pm,
+      paymentChannel,
+      expectedPaymentDate,
       amount: paymentRequestAmountLabel(validCreatorLinks, invoices),
       contracts: selectedContractIds.length,
       invoices: selectedInvoiceIds.length,
@@ -629,12 +650,14 @@ export function MediaPaymentProjectsPage({
           <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
         </div>
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>项目基础信息</h2><p>请款项目与合作项目通过稳定 ID 关联。</p></div></header>
+          <header className="project-detail-card-header"><div><h2>请款项目信息</h2><p>查看关联项目、付款安排与请款背景。</p></div></header>
           <dl className="project-info-grid">
             <div><dt>项目编号</dt><dd>{requestCodeFor(selectedRequest)}</dd></div>
             <div><dt>关联项目</dt><dd>{cooperationProject?.name ?? selectedRequest.cooperationProjectName ?? selectedRequest.project}<small className="cell-subtext">{selectedRequest.cooperationProjectCode ?? cooperationProject?.cooperationProjectCode ?? '待同步'}</small></dd></div>
             <div><dt>品牌</dt><dd>{selectedRequest.brand || '未填写（非必填）'}</dd></div>
             <div><dt>负责 PM</dt><dd>{selectedRequest.pm}</dd></div>
+            <div><dt>付款渠道</dt><dd>{selectedRequest.paymentChannel || '待补充'}</dd></div>
+            <div><dt>预计付款时间</dt><dd>{selectedRequest.expectedPaymentDate || '待补充'}</dd></div>
             <div><dt>项目媒介</dt><dd>{selectedRequest.media}</dd></div>
             <div><dt>创建时间</dt><dd>{formatCreatedAt(selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt)}</dd></div>
             <div className="project-info-wide"><dt>请款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
@@ -866,6 +889,29 @@ export function MediaPaymentProjectsPage({
             </div>
             <label><span>品牌 <small className="request-optional-label">选填</small></span><input placeholder="输入品牌或客户名称" value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
             <div className="form-field"><span className="form-field-label">项目 PM <em className="required-mark" aria-hidden="true">*</em></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))} onChange={setPm} /></div>
+            <div className="media-request-payment-plan">
+              <div className="form-field">
+                <span className="form-field-label">付款渠道 <em className="required-mark" aria-hidden="true">*</em></span>
+                <SelectField<PaymentRequestPaymentChannel | ''>
+                  ariaLabel="选择付款渠道"
+                  variant="form"
+                  value={paymentChannel}
+                  options={PAYMENT_CHANNEL_OPTIONS}
+                  onChange={setPaymentChannel}
+                  placeholder="请选择付款渠道"
+                />
+              </div>
+              <div className="form-field">
+                <span id="media-request-expected-payment-date-label" className="form-field-label">预计付款时间 <em className="required-mark" aria-hidden="true">*</em></span>
+                <input
+                  id="media-request-expected-payment-date"
+                  type="date"
+                  aria-labelledby="media-request-expected-payment-date-label"
+                  value={expectedPaymentDate}
+                  onChange={(event) => setExpectedPaymentDate(event.target.value)}
+                />
+              </div>
+            </div>
             <div className="form-field"><span id="media-request-reason-label" className="form-field-label">请款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本项目的请款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>展示达人库全部达人</small></span>
