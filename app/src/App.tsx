@@ -119,6 +119,8 @@ import {
   contractCooperationProjectId,
   createPaymentRequestListItem,
   invoiceCooperationProjectId,
+  isPaymentRequestFullyPaid,
+  myProjectStatusFor,
   paymentRequestAmountLabel,
   paymentRequestInvoiceIds,
   paymentRequestSubmissionIssues,
@@ -1611,7 +1613,7 @@ export default function App() {
       contracts: contracts.filter((contract) => contract.projectId === projectId && contract.lifecycle !== 'GENERATED_DRAFT').length,
       invoices: projectInvoices.length,
       paymentOrder: lists.map((list) => list.paymentListCode).join('、'),
-      status: REQUEST_APPROVAL_STATUS_LABEL[approval.status],
+      status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED' }),
       filter: 'pending',
       generatedDetail: {
         brand: project.brand,
@@ -1773,7 +1775,7 @@ export default function App() {
             ...candidate,
             lifecycle: 'SUBMITTED',
             approval,
-            status: REQUEST_APPROVAL_STATUS_LABEL[approval.status],
+            status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED' }),
             invoiceIds,
             paymentListId: paymentListIds[0],
             paymentListIds,
@@ -1884,12 +1886,13 @@ export default function App() {
           ? { ...invoice, status: nextInvoiceStatus }
           : invoice
       )));
+      const nextRequestLifecycle = isApproved ? 'APPROVED' as const : isReturned ? 'RETURNED' as const : 'SUBMITTED' as const;
       setRequestProjects((current) => current.map((item) => item.id === request.id
         ? {
             ...item,
             approval: nextApproval,
-            lifecycle: isApproved ? 'APPROVED' : isReturned ? 'RETURNED' : 'SUBMITTED',
-            status: REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status],
+            lifecycle: nextRequestLifecycle,
+            status: myProjectStatusFor({ approval: nextApproval, lifecycle: nextRequestLifecycle }),
             filter: isApproved ? 'processed' : 'pending',
             generatedDetail: item.generatedDetail
               ? {
@@ -1962,19 +1965,38 @@ export default function App() {
       issue: payout.status === '信息异常' ? undefined : payout.issue,
       paidAt: nextStatus === '已付款' ? '2026-07-17 刚刚' : payout.paidAt,
     };
-    const allProjectPaymentsCompleted = nextStatus === '已付款'
-      && payouts
-        .filter((item) => item.projectId === payout.projectId)
-        .every((item) => item.id === payout.id || item.status === '已付款');
-    setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
-    if (allProjectPaymentsCompleted) {
-      const project = projects.find((item) => item.id === payout.projectId);
-      if (project) {
-        const projectId = getProjectId(project);
-        setPaymentLists((current) => current.map((list) => list.projectId === projectId
-          ? { ...list, status: 'paid', updatedAt: nowIso() }
-          : list));
-      }
+    const nextPayouts = payouts.map((item) => item.id === payout.id ? updated : item);
+    const completedRequests = nextStatus === '已付款'
+      ? requestProjects.filter((request) => (
+          request.lifecycle === 'APPROVED'
+          && isPaymentRequestFullyPaid({ request, invoices: generatedInvoices, payouts: nextPayouts })
+        ))
+      : [];
+    const completedRequestIds = new Set(completedRequests.map((request) => request.paymentRequestProjectId).filter(Boolean));
+    const completedLegacyInvoiceIds = new Set(completedRequests
+      .filter((request) => !request.paymentRequestProjectId)
+      .flatMap((request) => request.creatorLinks?.length
+        ? paymentRequestInvoiceIds(request.creatorLinks)
+        : request.invoiceIds ?? []));
+    const completedIds = new Set(completedRequests.map((request) => request.id));
+    setPayouts(nextPayouts);
+    if (completedRequests.length) {
+      const completedAt = nowIso();
+      setRequestProjects((current) => current.map((request) => (
+        completedIds.has(request.id)
+          ? { ...request, lifecycle: 'COMPLETED', status: '已付款', filter: 'processed' }
+          : request
+      )));
+      setPaymentLists((current) => current.map((list) => (
+        (list.paymentRequestProjectId && completedRequestIds.has(list.paymentRequestProjectId))
+        || (
+          !list.paymentRequestProjectId
+          && list.items.length > 0
+          && list.items.every((item) => completedLegacyInvoiceIds.has(item.invoiceId))
+        )
+          ? { ...list, status: 'paid', updatedAt: completedAt }
+          : list
+      )));
     }
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify('付款状态已更新', `${payout.creator} 已进入“${nextStatus}”。`);

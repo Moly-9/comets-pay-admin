@@ -9,6 +9,7 @@ import type {
   PaymentListRecord,
   PaymentRequestProjectId,
   ProjectId,
+  RequestApprovalState,
 } from './businessWorkflow';
 import {
   invoicePaymentListItem,
@@ -92,9 +93,92 @@ export type PaymentRequestProjectLike = {
   paymentRequestProjectId?: PaymentRequestProjectId;
   requestCode?: string;
   lifecycle?: 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'COMPLETED';
+  approval?: RequestApprovalState;
   creatorLinks?: PaymentRequestCreatorLink[];
   invoiceIds?: InvoiceId[];
+  status?: string;
 };
+
+export type MyProjectStatus =
+  | '草稿'
+  | 'PM审批中'
+  | '项目负责人审批中'
+  | '老板审批中'
+  | '财务审批中'
+  | '待打款'
+  | '已付款'
+  | '已退回';
+
+export type RequestProjectStatus =
+  | '请款提交'
+  | 'PM审批通过'
+  | '项目负责人审批通过'
+  | '老板审批通过'
+  | '财务审批通过'
+  | '已付款'
+  | '已退回';
+
+const MY_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], MyProjectStatus> = {
+  PENDING_PM: 'PM审批中',
+  PENDING_PROJECT_OWNER: '项目负责人审批中',
+  PENDING_OWNER: '老板审批中',
+  PENDING_FINANCE: '财务审批中',
+  APPROVED: '待打款',
+  RETURNED_TO_MEDIA_REVIEW: '已退回',
+};
+
+const REQUEST_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], RequestProjectStatus> = {
+  PENDING_PM: '请款提交',
+  PENDING_PROJECT_OWNER: 'PM审批通过',
+  PENDING_OWNER: '项目负责人审批通过',
+  PENDING_FINANCE: '老板审批通过',
+  APPROVED: '财务审批通过',
+  RETURNED_TO_MEDIA_REVIEW: '已退回',
+};
+
+const legacyMyProjectStatus = (status?: string): MyProjectStatus => {
+  if (status === '已完成' || status === '已付款') return '已付款';
+  if (status === '待打款' || status === '已通过') return '待打款';
+  if (status === '已退回' || status === '待补资料' || status === '待媒介复核') return '已退回';
+  if (status?.includes('财务')) return '财务审批中';
+  if (status?.includes('老板')) return '老板审批中';
+  if (status?.includes('项目负责人')) return '项目负责人审批中';
+  if (status?.includes('PM') || status === '待审批') return 'PM审批中';
+  return '草稿';
+};
+
+export const myProjectStatusFor = (
+  request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
+): MyProjectStatus => {
+  if (request.lifecycle === 'COMPLETED') return '已付款';
+  if (request.lifecycle === 'RETURNED') return '已退回';
+  if (request.lifecycle === 'APPROVED') return '待打款';
+  if (request.approval) return MY_PROJECT_APPROVAL_STATUS[request.approval.status];
+  if (request.lifecycle === 'DRAFT') return '草稿';
+  return legacyMyProjectStatus(request.status);
+};
+
+export const requestProjectStatusFor = (
+  request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
+): RequestProjectStatus | null => {
+  if (request.lifecycle === 'DRAFT' || (!request.approval && !request.lifecycle)) return null;
+  if (request.lifecycle === 'COMPLETED') return '已付款';
+  if (request.lifecycle === 'RETURNED') return '已退回';
+  if (request.lifecycle === 'APPROVED') return '财务审批通过';
+  if (request.approval) return REQUEST_PROJECT_APPROVAL_STATUS[request.approval.status];
+  const legacyStatus = legacyMyProjectStatus(request.status);
+  if (legacyStatus === '已付款') return '已付款';
+  if (legacyStatus === '待打款') return '财务审批通过';
+  if (legacyStatus === '已退回') return '已退回';
+  return '请款提交';
+};
+
+export const MY_PROJECT_APPROVAL_STATUSES = new Set<MyProjectStatus>([
+  'PM审批中',
+  '项目负责人审批中',
+  '老板审批中',
+  '财务审批中',
+]);
 
 export type PaymentRequestListItem = PaymentRequestProjectLike & {
   cooperationProjectName?: string;
@@ -129,13 +213,12 @@ export const paymentRequestAmount = (value: string) => ({
 });
 
 export const paymentRequestListMetrics = (requests: PaymentRequestListItem[]) => {
-  const waitingReview = requests.filter((request) => request.status === '待审批').length;
-  const reviewing = requests.filter((request) => request.status.includes('审批中')).length;
+  const statuses = requests.map(myProjectStatusFor);
+  const reviewing = statuses.filter((status) => MY_PROJECT_APPROVAL_STATUSES.has(status)).length;
   return {
-    waitingReview,
     reviewing,
-    reviewTotal: waitingReview + reviewing,
-    waitingPayment: requests.filter((request) => request.status === '待打款').length,
+    reviewTotal: reviewing,
+    waitingPayment: statuses.filter((status) => status === '待打款').length,
     total: requests.length,
   };
 };
@@ -162,7 +245,7 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
     const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;
-    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(request.status);
+    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(myProjectStatusFor(request));
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
   return { visible, invalidBudgetRange };
@@ -171,6 +254,28 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
 export const canAddCreatorToPaymentRequest = (request: PaymentRequestProjectLike) => (
   request.lifecycle === 'DRAFT'
 );
+
+export const isPaymentRequestFullyPaid = ({
+  request,
+  invoices,
+  payouts,
+}: {
+  request: PaymentRequestProjectLike;
+  invoices: Array<Pick<GeneratedInvoiceRecord, 'invoiceId' | 'sourcePayoutId'>>;
+  payouts: Array<{ id: string; status: string }>;
+}) => {
+  const invoiceIds = request.creatorLinks?.length
+    ? paymentRequestInvoiceIds(request.creatorLinks)
+    : request.invoiceIds ?? [];
+  if (!invoiceIds.length) return false;
+  const payoutIds = invoiceIds.map((invoiceId) => (
+    invoices.find((invoice) => invoice.invoiceId === invoiceId)?.sourcePayoutId
+  ));
+  if (payoutIds.some((payoutId) => !payoutId)) return false;
+  return payoutIds.every((payoutId) => payouts.some((payout) => (
+    payout.id === payoutId && payout.status === '已付款'
+  )));
+};
 
 export type CooperationProjectLike = {
   id: string;

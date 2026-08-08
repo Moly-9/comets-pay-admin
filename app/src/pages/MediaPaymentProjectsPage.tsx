@@ -40,6 +40,7 @@ import {
   createEmptyPaymentRequestListFilters,
   filterPaymentRequestList,
   invoiceAmountLabel,
+  myProjectStatusFor,
   paymentRequestAmount,
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
@@ -304,7 +305,7 @@ export function MediaPaymentProjectsPage({
   const currencies = Array.from(new Set(visibleRequests
     .map((request) => paymentRequestAmount(request.amount).currency)
     .filter(Boolean)));
-  const statuses = Array.from(new Set(visibleRequests.map((request) => request.status)));
+  const statuses = Array.from(new Set(visibleRequests.map(myProjectStatusFor)));
   const currencyFilterOptions = [
     { value: 'all', label: '全部币种' },
     ...currencies.map((currency) => ({ value: currency, label: currency })),
@@ -319,8 +320,8 @@ export function MediaPaymentProjectsPage({
     ...statuses.map((status) => ({
       value: status,
       label: status,
-      description: `${visibleRequests.filter((request) => request.status === status).length} 个项目`,
-      leading: <span className={`project-status-select-dot ${status === '已完成' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'}`} />,
+      description: `${visibleRequests.filter((request) => myProjectStatusFor(request) === status).length} 个项目`,
+      leading: <span className={`project-status-select-dot ${status === '已付款' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'}`} />,
     })),
   ];
   const creatorSelectionEditable = !editingRequest || canAddCreatorToPaymentRequest(editingRequest);
@@ -587,6 +588,7 @@ export function MediaPaymentProjectsPage({
   };
 
   if (selectedRequest) {
+    const selectedMyProjectStatus = myProjectStatusFor(selectedRequest);
     const cooperationProject = cooperationProjects.find((project) => (
       cooperationProjectIdFor(project) === (selectedRequest.cooperationProjectId ?? selectedRequest.projectId)
     ));
@@ -619,12 +621,12 @@ export function MediaPaymentProjectsPage({
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
-          actions={<div className="page-heading-actions">{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>编辑项目</Button> : null}<span className="project-detail-status"><i />{selectedRequest.status}</span></div>}
+          actions={<div className="page-heading-actions">{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>编辑项目</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></div>}
         />
         <div className="metrics-grid project-detail-metrics">
           <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
-          <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedRequest.status}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
+          <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
         </div>
         <section className="project-detail-card">
           <header className="project-detail-card-header"><div><h2>项目基础信息</h2><p>请款项目与合作项目通过稳定 ID 关联。</p></div></header>
@@ -683,7 +685,7 @@ export function MediaPaymentProjectsPage({
                     paymentLists,
                     paymentRequestProjectId: selectedRequest.paymentRequestProjectId,
                     requestLifecycle: selectedRequest.lifecycle,
-                    requestStatus: selectedRequest.status,
+                    requestStatus: selectedMyProjectStatus,
                   });
                   return (
                     <tr key={link.creatorId}>
@@ -779,7 +781,7 @@ export function MediaPaymentProjectsPage({
           {editable ? submissionIssues.length ? (
             <div className="media-request-issue-list"><AlertTriangle size={18} /><div><strong>暂不能提交</strong>{submissionIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div>
           ) : <NoticeBanner>资料与付款账户快照校验通过，可以提交审批。</NoticeBanner> : (
-            <NoticeBanner>申请当前状态：{selectedRequest.status}。审批处理请前往“请款项目”工作台。</NoticeBanner>
+            <NoticeBanner>申请当前状态：{selectedMyProjectStatus}。审批处理请前往“请款项目”工作台。</NoticeBanner>
           )}
           {editable ? <div className="media-request-submit-actions">
             <Button variant="secondary" onClick={() => onGeneratePaymentList(selectedRequest)}>生成 / 刷新付款清单</Button>
@@ -798,7 +800,7 @@ export function MediaPaymentProjectsPage({
         actions={canCreate ? <Button icon={<Plus size={17} />} onClick={openCreateForm}>新建项目</Button> : undefined}
       />
       <div className="metrics-grid">
-        <article className="metric-card metric-peach"><span>审核中</span><strong>{metrics.reviewTotal}</strong><small>{metrics.waitingReview} 个待审批 · {metrics.reviewing} 个审批中</small></article>
+        <article className="metric-card metric-peach"><span>审核中</span><strong>{metrics.reviewTotal}</strong><small>{metrics.reviewing} 个正在审批</small></article>
         <article className="metric-card"><span>待打款</span><strong>{metrics.waitingPayment}</strong><small>已完成全部审批</small></article>
         <article className="metric-card metric-lilac"><span>请款项目总数</span><strong>{metrics.total}</strong><small>已关联真实合作项目</small></article>
       </div>
@@ -829,7 +831,7 @@ export function MediaPaymentProjectsPage({
                   <td>{request.pm}</td>
                   <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
                   <td>{request.amount}</td>
-                  <td><ProjectStatus status={request.status} /></td>
+                  <td><ProjectStatus status={myProjectStatusFor(request)} /></td>
                   <td className="action-cell"><button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button></td>
                 </tr>
               ))}

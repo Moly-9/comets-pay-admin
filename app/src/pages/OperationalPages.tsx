@@ -97,6 +97,11 @@ import {
   type RequestApprovalStatus,
   type WorkflowAuditEvent,
 } from '../businessWorkflow';
+import {
+  MY_PROJECT_APPROVAL_STATUSES,
+  myProjectStatusFor,
+  requestProjectStatusFor,
+} from '../paymentRequestProjects';
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
 
 type Notify = (title: string, message: string) => void;
@@ -236,18 +241,25 @@ type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'draft' 
 const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '执行中': 'active',
   'PM 审批中': 'active',
+  'PM审批中': 'active',
   '项目负责人审批中': 'active',
   '老板审批中': 'active',
   '财务审批中': 'active',
   '飞书审批中': 'active',
   '待验收': 'review',
   '待审批': 'review',
+  '请款提交': 'review',
   '待补资料': 'review',
   '待财务复核': 'review',
+  'PM审批通过': 'active',
+  '项目负责人审批通过': 'active',
+  '老板审批通过': 'active',
+  '财务审批通过': 'payment',
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
   '已完成': 'complete',
+  '已付款': 'complete',
   '已归档': 'complete',
   '已通过': 'complete',
   '已关联': 'complete',
@@ -326,7 +338,7 @@ export function ProjectInlineFilterPanel({
     + Number(filters.statuses.length > 0);
   const hasActiveFilters = activeFilterCount > 0 || Boolean(search.trim());
   const selectedStatus = filters.statuses[0] ?? 'all';
-  const selectedStatusTone = selectedStatus === '已完成'
+  const selectedStatusTone = selectedStatus === '已完成' || selectedStatus === '已付款'
     ? 'complete'
     : selectedStatus === 'all'
       ? 'all'
@@ -995,15 +1007,18 @@ export function RequestsPage({
     if (currentUser.roleKey === 'pm') return request.pm === currentScopeName;
     return true;
   });
+  const requestStatusById = new Map(relatedRequests.map((request) => [
+    request.id,
+    requestProjectStatusFor(request),
+  ]));
   const requestOverview = relatedRequests.reduce((summary, request) => {
-    if (request.status === '待审批') summary.pendingApproval += 1;
-    if (request.status.includes('审批中')) summary.approvalInProgress += 1;
-    if (request.status === '待打款') summary.awaitingPayment += 1;
-    if (request.status === '已完成') summary.completed += 1;
-    if (request.status === '待补资料' || request.status === '已退回') summary.needsAttention += 1;
+    const status = myProjectStatusFor(request);
+    if (MY_PROJECT_APPROVAL_STATUSES.has(status)) summary.approvalInProgress += 1;
+    if (status === '待打款') summary.awaitingPayment += 1;
+    if (status === '已付款') summary.completed += 1;
+    if (status === '已退回') summary.needsAttention += 1;
     return summary;
   }, {
-    pendingApproval: 0,
     approvalInProgress: 0,
     awaitingPayment: 0,
     completed: 0,
@@ -1029,14 +1044,20 @@ export function RequestsPage({
       label: user.name,
       description: `${requestPmCounts[user.name]} 个项目 · ${user.email}`,
     }));
-  const requestStatusFilterOptions = Array.from(new Set(relatedRequests.map((request) => request.status))).map((status) => ({
+  const requestStatuses = Array.from(new Set(
+    relatedRequests.flatMap((request) => {
+      const status = requestStatusById.get(request.id);
+      return status ? [status] : [];
+    }),
+  ));
+  const requestStatusFilterOptions = requestStatuses.map((status) => ({
     value: status,
     label: status,
-    description: `${relatedRequests.filter((request) => request.status === status).length} 个项目`,
+    description: `${relatedRequests.filter((request) => requestStatusById.get(request.id) === status).length} 个项目`,
     leading: (
       <span
         className={`project-status-select-dot ${
-          status === '已完成' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'
+          status === '已付款' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'
         }`}
       />
     ),
@@ -1071,7 +1092,8 @@ export function RequestsPage({
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidRequestBudgetRange || requestMinBudget === null || budget.amount >= requestMinBudget;
     const matchesMaxBudget = invalidRequestBudgetRange || requestMaxBudget === null || budget.amount <= requestMaxBudget;
-    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(request.status);
+    const requestStatus = requestStatusById.get(request.id);
+    const matchesStatus = filters.statuses.length === 0 || Boolean(requestStatus && filters.statuses.includes(requestStatus));
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
 
@@ -1110,8 +1132,8 @@ export function RequestsPage({
       <div className="metrics-grid">
         <MetricCard
           label="审批中"
-          value={(requestOverview.pendingApproval + requestOverview.approvalInProgress).toString()}
-          meta={`${requestOverview.pendingApproval} 个待审批 · ${requestOverview.approvalInProgress} 个审批中`}
+          value={requestOverview.approvalInProgress.toString()}
+          meta={`${requestOverview.approvalInProgress} 个流程处理中`}
           tone="peach"
         />
         <MetricCard
@@ -1160,7 +1182,7 @@ export function RequestsPage({
                   <td>{request.contracts} 份</td>
                   <td>{request.invoices} 份</td>
                   <td className="mono-cell">{request.paymentOrder}</td>
-                  <td><ProjectStatus status={request.status} /></td>
+                  <td><ProjectStatus status={requestStatusById.get(request.id) ?? '请款提交'} /></td>
                   <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</button></td>
                 </tr>
               ))}
