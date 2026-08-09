@@ -11,6 +11,31 @@ import {
 import type { PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
 
+const invoicePaymentDetails = {
+  bankCountry: 'United Kingdom',
+  accountName: 'Creator',
+  accountType: 'Checking',
+  swiftCode: 'EXAMPLEXX',
+  accountNumber: '1234567890',
+  iban: 'GB82WEST12345698765432',
+  beneficiaryType: 'Personal',
+  bankName: 'Example Bank',
+  bankStreetAddress: '1 Main Street',
+  bankCity: 'London',
+  bankState: 'Greater London',
+  bankPostalCode: 'SW1A 1AA',
+  intermediaryBankCountry: '',
+  intermediaryBankCode: '',
+  transferRemarks: '',
+  paypalUsername: '',
+  paypalEmail: '',
+  payoutAccountId: 'account-test',
+  payoutAccountVersion: 2 as never,
+  payoutProvider: 'Airwallex' as const,
+  accountFingerprint: 'fingerprint-test',
+  transferMethod: 'LOCAL' as const,
+};
+
 const invoice = {
   id: 'INV-TEST',
   invoiceId: 'invoice-test',
@@ -28,7 +53,7 @@ const invoice = {
     items: [{ id: 'line', description: 'Content service', unitPrice: 100, quantity: 1, lineTotal: 100 }],
     payoutAccountId: 'account-test', payoutAccountVersion: 2 as never,
     payoutAccountFingerprint: 'fingerprint-test', payoutProvider: 'Airwallex',
-    paymentMethod: 'bank', payment: {},
+    paymentMethod: 'bank', payment: invoicePaymentDetails,
   },
 } as unknown as GeneratedInvoiceRecord;
 
@@ -49,11 +74,13 @@ const paymentList = (): PaymentListRecord => ({
     id: 'item-test', engagementId: invoice.snapshot.engagementId!, invoiceId: invoice.invoiceId,
     snapshot: {
       invoiceNumber: invoice.id, creatorName: invoice.snapshot.creatorName,
+      realName: invoice.snapshot.from.legalName,
       creatorId: invoice.snapshot.creatorId, currency: 'USD', receiveCurrency: 'USD', amount: 100,
       provider: 'Airwallex', accountSummary: '****0000', paymentReason: 'Content service',
       transactionReference: invoice.id, description: 'Content service', payoutAccountId: 'account-test',
       payoutAccountVersion: 2 as never, accountFingerprint: 'fingerprint-test', transferMethod: 'LOCAL',
       feeBearer: 'ADVERTISER',
+      paymentDetails: { ...invoicePaymentDetails },
     },
     overrides: {},
   }],
@@ -66,6 +93,66 @@ describe('request finance review', () => {
     expect(review.canApprove).toBe(true);
     expect(review.matchedCount).toBe(1);
     expect(review.invoices[0].fields.some((field) => field.state === 'review')).toBe(true);
+    expect(review.invoices[0].fields.filter((field) => [
+      'real-name',
+      'account-name',
+      'account-number',
+      'bank-name',
+      'bank-address',
+      'swift-code',
+      'iban',
+    ].includes(field.id)).every((field) => field.state === 'match')).toBe(true);
+  });
+
+  it('blocks approval when a complete account snapshot differs from the Invoice', () => {
+    const mismatched = paymentList();
+    mismatched.items[0].snapshot.paymentDetails = {
+      ...mismatched.items[0].snapshot.paymentDetails!,
+      accountNumber: '9999999999',
+    };
+
+    const review = buildRequestFinanceReview(request, [invoice], [mismatched]);
+    expect(review.canApprove).toBe(false);
+    expect(review.pages[0].fields.find((field) => field.id === 'account-number')).toMatchObject({
+      label: 'Account Number',
+      invoiceValue: '1234567890',
+      paymentValue: '9999999999',
+      state: 'mismatch',
+    });
+  });
+
+  it('normalizes account spacing and letter case without hiding real differences', () => {
+    const normalized = paymentList();
+    normalized.items[0].snapshot.realName = '  creator  ';
+    normalized.items[0].snapshot.paymentDetails = {
+      ...normalized.items[0].snapshot.paymentDetails!,
+      accountName: 'creator',
+      accountNumber: '1234 567 890',
+      bankName: 'example bank',
+      bankStreetAddress: '1   main street',
+      bankCity: 'london',
+      bankState: 'greater london',
+      bankPostalCode: 'sw1a 1aa',
+      bankCountry: 'united kingdom',
+      swiftCode: 'example xx',
+      iban: 'gb82 west 1234 5698 7654 32',
+    };
+
+    const review = buildRequestFinanceReview(request, [invoice], [normalized]);
+    expect(review.mismatchCount).toBe(0);
+    expect(review.canApprove).toBe(true);
+  });
+
+  it('treats a missing full payment-account snapshot as a blocking mismatch', () => {
+    const missing = paymentList();
+    delete missing.items[0].snapshot.paymentDetails;
+
+    const review = buildRequestFinanceReview(request, [invoice], [missing]);
+    expect(review.canApprove).toBe(false);
+    expect(review.pages[0].fields.find((field) => field.id === 'bank-name')).toMatchObject({
+      paymentValue: '未填写',
+      state: 'mismatch',
+    });
   });
 
   it('blocks amount mismatches and duplicate payment rows', () => {

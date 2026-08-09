@@ -1132,8 +1132,14 @@ const cloneFixtureItems = (items: PaymentListItem[]) => items.map((item) => ({
   snapshot: {
     ...item.snapshot,
     contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
+    paymentDetails: item.snapshot.paymentDetails ? { ...item.snapshot.paymentDetails } : undefined,
   },
-  accountOverride: item.accountOverride ? { ...item.accountOverride } : undefined,
+  accountOverride: item.accountOverride ? {
+    ...item.accountOverride,
+    paymentDetails: item.accountOverride.paymentDetails
+      ? { ...item.accountOverride.paymentDetails }
+      : undefined,
+  } : undefined,
   overrides: { ...item.overrides },
   validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
 }));

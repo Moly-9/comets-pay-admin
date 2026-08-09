@@ -257,3 +257,59 @@ local implementation URL and therefore prevents same-state screenshot comparison
   and update this section to `final result: passed` after rendered evidence exists.
 
 final result: blocked
+
+---
+
+# Full-Screen Finance Review Workspace Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-11e9fad5-08f4-4217-a9d6-8584a8cba692.png`
+- Source dimensions: 1043 x 220 px at the supplied image density.
+- Desktop implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-workspace-desktop-fixed.png`
+- Desktop viewport and implementation dimensions: 1643 x 903 CSS px, device scale factor 1, 1643 x 903 PNG.
+- Mobile account implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-workspace-mobile-account.png`
+- Mobile viewport and implementation dimensions: 390 x 844 CSS px, device scale factor 1, 390 x 844 PNG.
+- State: signed in as `finance.demo`, opened the first pending request, selected the payment pane on mobile, and scrolled to the complete account-payment section.
+
+## Comparison Scope
+
+The source is an isolated 1043 x 220 payment-field crop rather than a complete finance-review screen. Exact full-screen column proportions therefore come from the requested three-column behavior and the established COMETS Pay review workspace. The source and both rendered implementation screenshots were opened together in one visual comparison input; focused judgment is limited to the payment-field hierarchy, read-only field treatment, spacing rhythm, labels, and values visible in the source.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The desktop workspace occupies the complete 1643 x 903 viewport. Its three independently scrolling boards measure approximately 628 / 653 / 360 px and retain the existing Invoice-first hierarchy.
+- The middle payment form preserves the source's quiet gray read-only surfaces, visible labels, compact grouping, and amount emphasis. It reflows from the source's wide two-row composition to the narrower center board without truncation.
+- The complete account-payment section exposes Real Name, Account Name, Account Number, Beneficiary Bank Name, Beneficiary Bank Address, Swift Code, and optional IBAN. Match state uses both icon and text; mismatches use the same non-color-only treatment.
+- The 390 px segmented layout has no horizontal overflow. Payment content scrolls independently above the fixed action footer, and the complete account number remains readable without masking.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: existing Noto Sans SC and system Latin fallbacks are preserved; labels, values, amounts, and status copy use the existing compact review hierarchy with zero custom letter spacing.
+- Spacing and layout rhythm: the payment form follows the source's tight 8-12 px rhythm, 6 px field radii, stable grid tracks, and full-width description row. The desktop boards and mobile footer do not overlap.
+- Colors and tokens: the implementation retains the current neutral surfaces, purple focus treatment, green match state, and orange review state instead of introducing a new palette.
+- Image and icon fidelity: the Invoice is rendered by the existing document component and all controls/status markers use the existing Lucide icon family; no placeholder or drawn substitute was introduced.
+- Copy and content: all source payment fields are present, with the additional requested complete account fields and explicit `关键字段一致 / 关键字段不一致` status.
+
+## Interaction Verification
+
+- Right-top close button: passed; 44 x 44 px target.
+- Escape close: passed.
+- Focus restoration: passed; focus returns to the originating `审核` button.
+- Desktop independent scrolling: passed for Invoice, payment details, and approval timeline.
+- Mobile tabs and account-detail scrolling: passed at 390 x 844.
+- Final approval blocking: covered by finance-review domain tests for missing or mismatched complete account snapshots.
+- Console: 0 warnings and 0 errors during the verified flow.
+
+## Comparison History
+
+1. First desktop pass found a P1 clipping issue: CSS Grid compressed the payment card and comparison block into equal-height rows, hiding the account-payment section inside an `overflow: hidden` card.
+2. The payment column was changed to max-content rows with its own vertical scrolling, and background-page scrolling was locked while the full-screen review is open.
+3. Second desktop capture shows the full account section directly below the payment form, a true 1643 x 903 overlay, and no viewport-width loss. The 390 px focused capture confirms every requested account field remains reachable without horizontal overflow.
+
+## Follow-Up Polish
+
+- P3: the isolated source is wider than the implementation's center board, so its amount/reason row can remain on one line while the implementation intentionally wraps into two compact rows.
+
+final result: passed

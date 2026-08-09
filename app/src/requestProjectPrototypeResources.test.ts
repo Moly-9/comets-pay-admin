@@ -91,7 +91,9 @@ describe('complete request project prototype resources', () => {
           payoutAccountId: invoice?.snapshot.payoutAccountId,
           payoutAccountVersion: invoice?.snapshot.payoutAccountVersion,
           accountFingerprint: invoice?.snapshot.payoutAccountFingerprint,
+          paymentDetails: invoice?.snapshot.payment,
         });
+        expect(item.snapshot.realName).toBe(invoice?.snapshot.from.legalName);
         expect(payout).toMatchObject({
           paymentRequestProjectId: request.paymentRequestProjectId,
           creatorId: link.creatorId,

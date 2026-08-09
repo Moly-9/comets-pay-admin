@@ -1,6 +1,6 @@
 import type { PaymentListItem, PaymentListRecord } from './businessWorkflow';
 import { paymentListEffectiveAccount, paymentListItemValue } from './businessWorkflow';
-import { invoiceTotal } from './invoice/invoiceUtils';
+import { bankAddress, invoiceTotal } from './invoice/invoiceUtils';
 import { paymentRequestInvoiceIds, type PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
 
@@ -113,6 +113,15 @@ const reviewField = (
   state: 'review',
 });
 
+const normalizeText = (value: unknown) => String(value ?? '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase('en-US');
+
+const normalizeCode = (value: unknown) => String(value ?? '')
+  .replace(/\s+/g, '')
+  .toUpperCase();
+
 const paymentMethodLabel = (record: GeneratedInvoiceRecord) => (
   record.snapshot.paymentMethod === 'paypal' ? 'PayPal' : '银行转账'
 );
@@ -125,19 +134,6 @@ const paymentItemMethodLabel = (item: PaymentListItem, list: PaymentListRecord) 
 const invoiceDescription = (record: GeneratedInvoiceRecord) => (
   record.snapshot.items.map((item) => item.description).filter(Boolean).join('；') || '未填写'
 );
-
-const invoiceAccountSummary = (record: GeneratedInvoiceRecord) => {
-  const value = record.snapshot.paymentMethod === 'paypal'
-    ? record.snapshot.payment.paypalEmail || record.snapshot.payment.paypalUsername
-    : record.snapshot.payment.iban || record.snapshot.payment.accountNumber;
-  if (!value) return '未填写';
-  if (value.includes('@')) {
-    const [localPart, domain = ''] = value.split('@');
-    return `${localPart.slice(0, 1) || '*'}***@${domain}`;
-  }
-  const compact = value.replace(/\s/g, '');
-  return `•••• ${compact.slice(-4)}`;
-};
 
 const invoiceVersionToken = (record: GeneratedInvoiceRecord) => (
   `invoice:${record.invoiceId}:v${record.version ?? 0}:${record.generatedAt}`
@@ -183,6 +179,7 @@ const reviewInvoice = (
 
   const { item, list } = first;
   const account = paymentListEffectiveAccount(item);
+  const paymentDetails = account.paymentDetails;
   const currency = display(paymentListItemValue(item, 'currency'));
   const amount = Number(paymentListItemValue(item, 'amount') || 0);
   const invoiceAmount = invoiceTotal(record.snapshot);
@@ -205,7 +202,19 @@ const reviewInvoice = (
     matchedField('account-id', '收款账户 ID', record.snapshot.payoutAccountId, account.payoutAccountId),
     matchedField('account-version', '账户版本', record.snapshot.payoutAccountVersion, account.payoutAccountVersion),
     matchedField('account-fingerprint', '账户指纹', record.snapshot.payoutAccountFingerprint, account.accountFingerprint),
-    reviewField('account-summary', '脱敏账户信息', invoiceAccountSummary(record), account.accountSummary),
+    matchedField('real-name', 'Real Name', record.snapshot.from.legalName, item.snapshot.realName, normalizeText),
+    matchedField('account-name', 'Account Name', record.snapshot.payment.accountName, paymentDetails?.accountName, normalizeText),
+    matchedField('account-number', 'Account Number', record.snapshot.payment.accountNumber, paymentDetails?.accountNumber, normalizeCode),
+    matchedField('bank-name', 'Beneficiary Bank Name', record.snapshot.payment.bankName, paymentDetails?.bankName, normalizeText),
+    matchedField(
+      'bank-address',
+      'Beneficiary Bank Address',
+      bankAddress(record.snapshot),
+      paymentDetails ? bankAddress({ payment: paymentDetails }) : undefined,
+      normalizeText,
+    ),
+    matchedField('swift-code', 'Swift Code', record.snapshot.payment.swiftCode, paymentDetails?.swiftCode, normalizeCode),
+    matchedField('iban', 'IBAN (optional)', record.snapshot.payment.iban, paymentDetails?.iban, normalizeCode),
     reviewField('reason', '付款原因', invoiceDescription(record), paymentListItemValue(item, 'paymentReason')),
     reviewField('fee', '费用承担', 'Invoice 未单列', paymentListItemValue(item, 'feeBearer')),
     reviewField('reference', '交易附言', record.snapshot.invoiceNumber, paymentListItemValue(item, 'transactionReference')),

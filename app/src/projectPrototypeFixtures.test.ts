@@ -224,6 +224,8 @@ describe('project prototype fixtures', () => {
     const item = invoicePaymentListItem(ALL_PROJECT_PROTOTYPE_INVOICES[0]!, PROJECT_DEMO_CONTRACTS);
     expect(item.snapshot.transactionReference).toBe('');
     expect(item.snapshot.description).toBe('');
+    expect(item.snapshot.realName).toBe(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.from.legalName);
+    expect(item.snapshot.paymentDetails).toEqual(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.payment);
     expect(item.validationIssues).toContain('交易附言未填写');
   });
 

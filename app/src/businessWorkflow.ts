@@ -76,6 +76,7 @@ export type ProjectEngagement = {
 export type PaymentListItemSnapshot = {
   invoiceNumber: string;
   creatorName: string;
+  realName?: string;
   currency: string;
   receiveCurrency: string;
   amount: number;
@@ -97,6 +98,7 @@ export type PaymentListItemSnapshot = {
   schemaKey?: string;
   validationStatus?: PayoutAccountStatus;
   transferNote?: string;
+  paymentDetails?: DocumentPayoutSnapshot;
 };
 
 export type PaymentListEditableField =
@@ -123,6 +125,7 @@ export type PaymentListAccountSnapshot = Pick<
   | 'schemaKey'
   | 'validationStatus'
   | 'transferNote'
+  | 'paymentDetails'
 >;
 
 export type PaymentListItem = {
@@ -657,6 +660,7 @@ export const applyPaymentListPayoutSnapshot = (
       schemaKey: payment.schemaKey,
       validationStatus: payment.validationStatus,
       transferNote: payment.transferRemarks,
+      paymentDetails: { ...payment },
     },
     overrides,
     requiresRevalidation: true,
@@ -695,6 +699,7 @@ export const invoicePaymentListItem = (
     snapshot: {
       invoiceNumber: invoice.id,
       creatorName: invoice.snapshot.creatorName,
+      realName: invoice.snapshot.from.legalName,
       currency: invoice.snapshot.currency,
       receiveCurrency: payment.accountCurrency || invoice.snapshot.currency,
       amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
@@ -720,6 +725,7 @@ export const invoicePaymentListItem = (
       schemaKey: payment.schemaKey,
       validationStatus: payment.validationStatus,
       transferNote: payment.transferRemarks,
+      paymentDetails: { ...payment },
     },
     overrides: {},
   };
