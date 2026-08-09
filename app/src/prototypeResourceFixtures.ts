@@ -782,6 +782,7 @@ const requestStatusPaymentListState = (
   projectId: string,
   requestStatus: string,
 ): PaymentListRecord['status'] => {
+  if (projectId === 'PRJ-260801-08') return 'draft';
   if (requestStatus === '待补资料') return 'draft';
   if (requestStatus === '已退回') {
     return projectId === 'PRJ-260801-08' ? 'draft' : 'submitted';

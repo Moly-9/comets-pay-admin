@@ -1026,7 +1026,7 @@ export function RequestProjectDetailPage({
     action: RequestApprovalAction,
     reason?: string,
   ) => boolean;
-  onOpenFinanceReview: (requestId: string) => void;
+  onOpenFinanceReview: () => void;
   onBack: () => void;
   notify: Notify;
 }) {
@@ -1228,8 +1228,8 @@ export function RequestProjectDetailPage({
           ) : null}
           {isFinanceApprovalStage && canReviewCurrentStage ? (
             <div className="invoice-review-actions request-approval-actions">
-              <Button icon={<ShieldCheck size={16} />} onClick={() => onOpenFinanceReview(request.id)}>
-                进入财务审核
+              <Button icon={<WalletCards size={16} />} onClick={onOpenFinanceReview}>
+                前往付款工作台
               </Button>
             </div>
           ) : canReviewCurrentStage || canReturnCurrentRequest ? (
@@ -1252,7 +1252,7 @@ export function RequestProjectDetailPage({
                 <strong>{financeApprovalBlocked ? '存在待处理差异' : '等待逐份核对'}</strong>
                 {financeApprovalBlocked
                   ? `Invoice 与付款清单存在 ${financeReview.mismatchCount || '未定位'} 项关键差异。`
-                  : `请进入财务审核，逐份确认 ${financeReview.totalCount} 份 Invoice 与付款明细。`}
+                  : `请前往付款工作台，逐份确认 ${financeReview.totalCount} 份 Invoice 与付款明细。`}
               </span>
             </div>
           ) : null}

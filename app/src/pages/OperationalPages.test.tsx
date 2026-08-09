@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from '../data';
+import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { GeneratedInvoiceRecord } from '../types';
-import { InvoicePage, INITIAL_CREATORS, INITIAL_REQUEST_PROJECTS } from './OperationalPages';
+import { InvoicePage, INITIAL_CREATORS } from './OperationalPages';
 
 describe('InvoicePage OA states', () => {
   it('derives OA presentation from the linked request without an approval tab', () => {
@@ -74,18 +75,14 @@ describe('InvoicePage OA states', () => {
 });
 
 describe('request project fixtures', () => {
-  it('covers every OA node and the returned, approved and completed lifecycles', () => {
-    const approvalStatuses = new Set(INITIAL_REQUEST_PROJECTS.map((request) => request.approval?.status));
-    expect([...approvalStatuses]).toEqual(expect.arrayContaining([
-      'PENDING_PM',
-      'PENDING_PROJECT_OWNER',
-      'PENDING_OWNER',
-      'PENDING_FINANCE',
-      'APPROVED',
-      'RETURNED_TO_MEDIA_REVIEW',
-    ]));
-    expect(INITIAL_REQUEST_PROJECTS.some((request) => request.lifecycle === 'RETURNED')).toBe(true);
-    expect(INITIAL_REQUEST_PROJECTS.some((request) => request.lifecycle === 'APPROVED')).toBe(true);
-    expect(INITIAL_REQUEST_PROJECTS.some((request) => request.lifecycle === 'COMPLETED')).toBe(true);
+  it('provides the agreed finance-review, payment, paid, and draft distribution', () => {
+    const requests = INITIAL_COMPLETE_REQUEST_RESOURCES.requests;
+    expect(requests.filter((request) => (
+      request.lifecycle === 'SUBMITTED' && request.approval?.status === 'PENDING_FINANCE'
+    ))).toHaveLength(10);
+    expect(requests.filter((request) => request.lifecycle === 'APPROVED')).toHaveLength(3);
+    expect(requests.filter((request) => request.lifecycle === 'COMPLETED')).toHaveLength(6);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(1);
+    expect(requests.some((request) => request.lifecycle === 'RETURNED')).toBe(false);
   });
 });

@@ -1030,7 +1030,7 @@ export function RequestsPage({
     action: RequestApprovalAction,
     reason?: string,
   ) => boolean;
-  onOpenFinanceReview: (requestId: string) => void;
+  onOpenFinanceReview: () => void;
   focusedRequestId: string | null;
   onFocusCleared: () => void;
 }) {

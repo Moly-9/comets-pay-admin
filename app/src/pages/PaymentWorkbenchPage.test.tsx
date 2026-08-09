@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_PAYOUTS } from '../data';
 import type { InvoiceCurrency, Payout } from '../types';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
-import { CURRENCY_FLAG_PATHS, PaymentWorkbenchPage } from './PaymentWorkbenchPage';
+import { CURRENCY_FLAG_PATHS, buildPaymentProjectRows, PaymentWorkbenchPage } from './PaymentWorkbenchPage';
+import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 
 const renderWorkbench = (payouts: Payout[], requests: RequestProjectSummary[] = []) => renderToStaticMarkup(
   <PaymentWorkbenchPage
@@ -12,7 +13,7 @@ const renderWorkbench = (payouts: Payout[], requests: RequestProjectSummary[] = 
     generatedInvoices={[]}
     onNewBatch={vi.fn()}
     onSelectPayout={vi.fn()}
-    onSelectRequest={vi.fn()}
+    onReviewRequest={vi.fn()}
     canCreateBatch
     currentDate={new Date('2026-08-09T00:00:00.000Z')}
   />,
@@ -101,6 +102,8 @@ describe('PaymentWorkbenchPage currency overview', () => {
         submittedAt: '2026-08-09T00:00:00.000Z',
         updatedAt: '2026-08-09T00:00:00.000Z',
       },
+      cooperationProjectCode: 'PRJ-FINANCE-001',
+      cooperationProjectName: 'Finance Review Project',
       project: 'Finance Review Project',
       brand: 'Test Brand',
       media: 'Media',
@@ -114,8 +117,38 @@ describe('PaymentWorkbenchPage currency overview', () => {
     }]);
 
     expect(html).toContain('待审核<span>1</span>');
+    expect(html).toContain('<th>项目编号</th><th>关联项目</th>');
+    expect(html).toContain('REQ-FINANCE-001');
+    expect(html).toContain('PRJ-FINANCE-001');
     expect(html).toContain('Finance Review Project');
     expect(html).toContain('待财务审核');
     expect(html).toContain('<span>审核</span>');
+  });
+
+  it('routes all complete request fixtures into workbench tabs by request lifecycle', () => {
+    const input = {
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    };
+
+    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(10);
+    expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(3);
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(6);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(0);
+
+    const reviewRow = buildPaymentProjectRows({ ...input, tab: 'review' })[0];
+    expect(reviewRow).toMatchObject({
+      requestCode: expect.stringMatching(/^REQ-/),
+      cooperationProjectCode: expect.stringMatching(/^PRJ-/),
+      status: '待财务审核',
+      actionLabel: '审核',
+    });
+    expect(reviewRow.requestId).toBeTruthy();
+    expect(reviewRow.payouts.every((item) => (
+      item.paymentRequestProjectId === INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((request) => (
+        request.id === reviewRow.requestId
+      ))?.paymentRequestProjectId
+    ))).toBe(true);
   });
 });

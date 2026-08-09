@@ -4,6 +4,7 @@ import type {
   CreatorId,
   EngagementId,
   InvoiceId,
+  PaymentRequestProjectId,
   ProjectId,
 } from './businessWorkflow';
 
@@ -446,6 +447,7 @@ export type PaymentFailureReturn = {
 
 export type Payout = {
   id: string;
+  paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
   handle: string;
   initials: string;

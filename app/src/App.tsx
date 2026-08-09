@@ -78,7 +78,6 @@ import {
   InvoicePage,
   INITIAL_CREATORS,
   INITIAL_PROJECTS,
-  INITIAL_REQUEST_PROJECTS,
   MOCK_FEISHU_COOPERATION_PROJECT_SOURCE,
   NotificationsPage,
   OrganizationPage,
@@ -132,7 +131,6 @@ import {
 import {
   contractCooperationProjectId,
   createPaymentRequestListItem,
-  invoiceCooperationProjectId,
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
   paymentRequestAmountLabel,
@@ -154,17 +152,7 @@ import {
 } from './paymentListWorkbook';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
-import {
-  ACTIVE_INVOICE_DEMO_INVOICES,
-  ACTIVE_INVOICE_DEMO_PAYOUTS,
-  ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS,
-  AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
-  PAYMENT_REQUEST_CREATION_DEMO_INVOICES,
-  PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
-  PROJECT_DEMO_CONTRACTS,
-  PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
-  REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
-} from './prototypeResourceFixtures';
+import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import {
   applyRequestApprovalAction,
   canReturnRequestApproval,
@@ -185,145 +173,34 @@ const getProjectId = (project: ProjectSummary) => (
   (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
 );
 
-const FINANCE_REVIEW_FIXTURE_PROJECT_ID = 'PRJ-301164' as ProjectId;
-const financeReviewFixtureListId = (provider: PaymentListRecord['provider']) => (
-  `payment_list_finance_review_${provider.toLowerCase()}` as PaymentListRecord['paymentListId']
-);
-
 const canManageCooperationProjectFor = (user: SystemUser, project: ProjectSummary) => (
   user.roleKey === 'admin'
   || user.roleKey === 'owner'
   || (user.roleKey === 'media' && project.media === (user.scopeName ?? user.name))
 );
 
-const INITIAL_REQUEST_PROJECTS_WITH_LINKS: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((request) => {
-  const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
-  const isFinanceReviewFixture = cooperationProjectId === FINANCE_REVIEW_FIXTURE_PROJECT_ID;
-  const invoicePool = isFinanceReviewFixture
-    ? PAYMENT_REQUEST_CREATION_DEMO_INVOICES
-    : ACTIVE_INVOICE_DEMO_INVOICES;
-  const requestInvoices = invoicePool.filter((invoice) => (
-    invoiceCooperationProjectId(invoice) === cooperationProjectId
-    && invoice.invoiceId !== AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
-  ));
-  const invoicesByCreator = requestInvoices.reduce<Map<string, GeneratedInvoiceRecord[]>>((groups, invoice) => {
-    if (!invoice.snapshot.creatorId || !invoice.snapshot.engagementId) return groups;
-    const existing = groups.get(invoice.snapshot.creatorId) ?? [];
-    groups.set(invoice.snapshot.creatorId, [...existing, invoice]);
-    return groups;
-  }, new Map());
-  const creatorLinks = [...invoicesByCreator.values()].flatMap((creatorInvoices) => {
-    const firstInvoice = creatorInvoices[0];
-    if (!firstInvoice?.snapshot.creatorId || !firstInvoice.snapshot.engagementId) return [];
-    const invoiceContractIds = new Set([
-      ...creatorInvoices.flatMap((invoice) => invoice.snapshot.contractIds ?? []),
-      ...PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS,
-    ]);
-    const contractIds = [
-      ...INITIAL_CONTRACTS,
-      ...PROJECT_DEMO_CONTRACTS,
-      ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
-    ]
-      .filter((contract) => (
-        contract.contractId
-        && invoiceContractIds.has(contract.contractId)
-        && contractCooperationProjectId(contract) === cooperationProjectId
-        && contract.creatorId === firstInvoice.snapshot.creatorId
-      ))
-      .map((contract) => contract.contractId as ContractId);
-    return [{
-      creatorId: firstInvoice.snapshot.creatorId,
-      engagementId: firstInvoice.snapshot.engagementId,
-      contractIds,
-      invoiceIds: creatorInvoices.map((invoice) => invoice.invoiceId),
-    }];
-  });
-  return {
-    ...request,
-    ...(isFinanceReviewFixture ? {
-      lifecycle: 'SUBMITTED' as const,
-      status: '财务审批中',
-      filter: 'pending' as const,
-      approval: {
-        status: 'PENDING_FINANCE' as const,
-        round: 1,
-        history: request.approval?.history.filter((event) => event.stage !== 'FINANCE') ?? [],
-        submittedAt: request.approval?.submittedAt ?? request.createdAt ?? '2026-08-06T09:00:00.000Z',
-        updatedAt: '2026-08-08T09:00:00.000Z',
-      },
-      paymentListIds: [...new Set(requestInvoices.map((invoice) => (
-        financeReviewFixtureListId(invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex')
-      )))],
-      paymentOrder: [...new Set(requestInvoices.map((invoice) => (
-        invoice.snapshot.paymentMethod === 'paypal' ? 'PAY-FINANCE-PAYPAL' : 'PAY-FINANCE-AIRWALLEX'
-      )))].join('、'),
-    } : {}),
-    creatorLinks,
-    invoiceIds: paymentRequestInvoiceIds(creatorLinks),
-    amount: paymentRequestAmountLabel(creatorLinks, requestInvoices),
-    contracts: creatorLinks.reduce((count, link) => count + link.contractIds.length, 0),
-    invoices: paymentRequestInvoiceIds(creatorLinks).length,
-  };
-});
-
-const FINANCE_REVIEW_FIXTURE_PAYMENT_LISTS: PaymentListRecord[] = (() => {
-  const request = INITIAL_REQUEST_PROJECTS_WITH_LINKS.find((candidate) => (
-    candidate.cooperationProjectId === FINANCE_REVIEW_FIXTURE_PROJECT_ID
-  ));
-  if (!request?.paymentRequestProjectId) return [];
-  const entries = PAYMENT_REQUEST_CREATION_DEMO_INVOICES.map((invoice, index) => ({
-    provider: invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' as const : 'Airwallex' as const,
-    item: createPaymentRequestListItem({
-      invoice,
-      contracts: [...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS, ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES],
-      contractIds: invoice.snapshot.contractIds ?? [],
-      requestCode: request.requestCode ?? request.id,
-      lineNumber: index + 1,
-    }),
-  }));
-  return (['Airwallex', 'PayPal'] as const).flatMap((provider) => {
-    const items = entries.filter((entry) => entry.provider === provider).map((entry) => entry.item);
-    if (!items.length) return [];
-    const createdAt = '2026-08-08T08:30:00.000Z';
-    return [{
-      paymentListId: financeReviewFixtureListId(provider),
-      paymentListCode: provider === 'PayPal' ? 'PAY-FINANCE-PAYPAL' : 'PAY-FINANCE-AIRWALLEX',
-      projectId: FINANCE_REVIEW_FIXTURE_PROJECT_ID,
-      paymentRequestProjectId: request.paymentRequestProjectId,
-      provider,
-      status: 'submitted' as const,
-      version: 1,
-      generatedAt: createdAt,
-      generatedBy: { account: 'media.fixture', name: request.media, role: '媒介账号' },
-      items,
-      createdAt,
-      updatedAt: createdAt,
-    }];
-  });
-})();
-
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<SystemUser>(CURRENT_USER);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
-  const [payouts, setPayouts] = useState<Payout[]>(() => [
-    ...INITIAL_PAYOUTS,
-    ...ACTIVE_INVOICE_DEMO_PAYOUTS,
-    ...PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
-  ]);
+  const [payouts, setPayouts] = useState<Payout[]>(() => (
+    [...new Map([
+      ...INITIAL_PAYOUTS,
+      ...INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+    ].map((payout) => [payout.id, payout])).values()]
+  ));
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [contracts, setContracts] = useState<ContractRecord[]>(() => [
     ...INITIAL_CONTRACTS,
-    ...PROJECT_DEMO_CONTRACTS,
-    ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
+    ...INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
   ].map((contract) => ({
     ...contract,
     cooperationProjectId: (contract.cooperationProjectId ?? contract.projectId) as ContractRecord['cooperationProjectId'],
   })));
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    [...ACTIVE_INVOICE_DEMO_INVOICES, ...PAYMENT_REQUEST_CREATION_DEMO_INVOICES].map((invoice) => ({
+    INITIAL_COMPLETE_REQUEST_RESOURCES.invoices.map((invoice) => ({
       ...invoice,
       snapshot: {
         ...invoice.snapshot,
@@ -331,30 +208,11 @@ export default function App() {
       },
     }))
   ));
-  const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(() => (
-    [
-      ...ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((list) => list.items.some((item) => (
-        ACTIVE_INVOICE_DEMO_INVOICES.some((invoice) => invoice.invoiceId === item.invoiceId)
-      ))).map((list) => {
-        const request = INITIAL_REQUEST_PROJECTS_WITH_LINKS.find((candidate) => (
-          candidate.cooperationProjectId === list.projectId
-        ));
-        const invoiceIds = new Set(request?.creatorLinks ? paymentRequestInvoiceIds(request.creatorLinks) : []);
-        return {
-          ...list,
-          paymentRequestProjectId: request?.paymentRequestProjectId,
-          items: list.items.filter((item) => invoiceIds.has(item.invoiceId)),
-          versions: list.versions?.map((version) => ({
-            ...version,
-            items: version.items.filter((item) => invoiceIds.has(item.invoiceId)),
-          })),
-        };
-      }).filter((list) => list.items.length > 0),
-      ...FINANCE_REVIEW_FIXTURE_PAYMENT_LISTS,
-    ]
-  ));
+  const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(
+    INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+  );
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
-  const [requestProjects, setRequestProjects] = useState(INITIAL_REQUEST_PROJECTS_WITH_LINKS);
+  const [requestProjects, setRequestProjects] = useState(INITIAL_COMPLETE_REQUEST_RESOURCES.requests);
   const [paymentBatches, setPaymentBatches] = useState(() => createInitialPaymentBatches({
     payouts,
     requests: requestProjects,
@@ -2900,7 +2758,7 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           onExportPaymentList={requestResourceActions.onExportPaymentList}
           onApprovalAction={handleRequestApproval}
-          onOpenFinanceReview={openFinanceReview}
+          onOpenFinanceReview={() => setActivePage('payment-workbench')}
           focusedRequestId={focusedRequestId}
           onFocusCleared={() => setFocusedRequestId(null)}
         />
@@ -3178,7 +3036,7 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}
-          onSelectRequest={openFinanceReview}
+          onReviewRequest={openFinanceReview}
           canCreateBatch={canExecutePayouts}
         />
       );

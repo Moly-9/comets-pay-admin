@@ -50,13 +50,14 @@ describe('RequestProjectDetailPage approval permissions', () => {
     expect(html).not.toContain('<span>审批通过</span>');
   });
 
-  it('routes the finance node into the dedicated review workspace', () => {
+  it('routes the finance node to the payment workbench without a direct approval action', () => {
     const html = renderDetail('PENDING_FINANCE');
     expect(html).toContain('待财务审批');
     expect(html).not.toContain('老板审批通过');
     expect(html).not.toContain('退回媒介修改');
     expect(html).not.toContain('<span>审批通过</span>');
-    expect(html).toContain('进入财务审核');
+    expect(html).toContain('前往付款工作台');
+    expect(html).not.toContain('进入财务审核');
     expect(html).toContain('存在待处理差异');
   });
 });

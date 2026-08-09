@@ -3429,7 +3429,7 @@
   }
 
   .finance-review-mobile-tabs button {
-    min-height: 34px;
+    min-height: 44px;
     border: 0;
     border-radius: 6px;
     background: #f2f4f6;
@@ -3486,7 +3486,13 @@
   .finance-review-footer-actions .button {
     width: 100%;
     min-width: 0;
+    min-height: 44px;
     justify-content: center;
+  }
+
+  .finance-review-page-nav .icon-button {
+    width: 44px;
+    height: 44px;
   }
 
   .finance-review-footer-actions .button:last-child {
@@ -5654,6 +5660,25 @@ button:disabled {
 
 .request-project-table {
   min-width: 1180px;
+}
+
+.payment-project-table {
+  min-width: 1320px;
+}
+
+.payment-project-code {
+  width: 172px;
+}
+
+.payment-project-associated {
+  width: 300px;
+  max-width: 340px;
+  white-space: normal;
+}
+
+.payment-project-associated strong {
+  display: block;
+  line-height: 1.45;
 }
 
 .clickable-table-row {
@@ -11526,6 +11551,10 @@ button:disabled {
   .main-content {
     margin-left: 0;
     padding: 86px 15px 32px;
+  }
+
+  .payment-project-table .table-action {
+    min-height: 44px;
   }
 
   .page-heading-row {
