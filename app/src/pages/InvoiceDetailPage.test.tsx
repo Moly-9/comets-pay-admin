@@ -78,6 +78,7 @@ const basePayout: Payout = {
 const renderDetail = (
   payout: Payout,
   permissions: { manage: boolean; media: boolean },
+  canEditProjectResource = false,
 ) => renderToStaticMarkup(
   <InvoiceDetailPage
     source={{ kind: 'payout', payout }}
@@ -91,6 +92,7 @@ const renderDetail = (
     canManageInvoice={permissions.manage}
     canReviewMedia={permissions.media}
     canReviewFinance={false}
+    canEditProjectResource={canEditProjectResource}
     notify={() => undefined}
   />,
 );
@@ -147,6 +149,14 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(paymentListHtml).toContain('等待项目付款清单重新提交');
     expect(paymentListHtml).not.toContain('修改并重新发起');
     expect(paymentListHtml).not.toContain('复核通过并重新提交');
+  });
+
+  it('allows an editable returned-project Invoice to start a new signature version', () => {
+    const html = renderDetail({
+      ...basePayout,
+      invoiceReviewStatus: '待发起请款',
+    }, { manage: true, media: false }, true);
+    expect(html).toContain('修改 Invoice 并重新签署');
   });
 
   it('explains the prototype delivery channels for feedback replies', () => {

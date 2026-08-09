@@ -58,6 +58,7 @@ export type RequestApprovalState = {
   history: RequestApprovalEvent[];
   submittedAt: string;
   returnedFromStage?: RequestApprovalStage;
+  resumeStatus?: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   returnReason?: string;
   updatedAt: string;
 };

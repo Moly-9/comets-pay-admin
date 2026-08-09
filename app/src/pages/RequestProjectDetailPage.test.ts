@@ -5,6 +5,7 @@ import {
   normalizeRequestPaymentChannels,
   paymentRecordsFromLists,
   paymentListsForRequest,
+  requestPayeesFromPaymentLists,
   requestExpectedPaymentDateLabel,
   requestPaymentChannelLabel,
   requestPaymentMethodLabel,
@@ -131,6 +132,41 @@ describe('request project payment presentation', () => {
       { label: '收款账户', value: '•••• 3011' },
       { label: '清单版本', value: 'v2' },
     ]));
+  });
+
+  it('uses bound payment-list snapshots for request payment rows', () => {
+    const payees = requestPayeesFromPaymentLists([{
+      paymentListId: 'payment-list-one',
+      paymentListCode: 'PAY-301164-01',
+      projectId: 'project-one',
+      provider: 'Airwallex',
+      status: 'submitted',
+      version: 1,
+      generatedAt: '2026-08-01T12:00:00.000Z',
+      updatedAt: '2026-08-01T12:00:00.000Z',
+      createdAt: '2026-08-01T10:00:00.000Z',
+      items: [{
+        id: 'payment-item-one',
+        engagementId: 'engagement-one',
+        invoiceId: 'invoice-one',
+        snapshot: {
+          invoiceNumber: 'INV-301164-19',
+          creatorName: 'Mina Kato',
+          currency: 'USD',
+          amount: 1250,
+          provider: 'Airwallex',
+        },
+        overrides: {},
+      }],
+    } as unknown as PaymentListRecord]);
+
+    expect(payees).toEqual([{
+      name: 'Mina Kato',
+      invoice: 'INV-301164-19',
+      amount: 'USD 1,250.00',
+      channel: 'Airwallex',
+      status: '已提交',
+    }]);
   });
 
   it('renders approval-focused payment fields, API validation, and export without mutation controls', () => {

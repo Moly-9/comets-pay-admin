@@ -129,7 +129,7 @@ describe('Invoice review workflow', () => {
     const mediaApproved = applyInvoiceReviewAction(signed, 'APPROVE_MEDIA', actor);
     expect(mediaApproved.invoiceReviewStatus).toBe('待发起请款');
     expect(mediaApproved.status).toBe('未进入付款');
-    expect(getInvoicePageTab(mediaApproved.invoiceReviewStatus)).toBe('approval');
+    expect(getInvoicePageTab(mediaApproved.invoiceReviewStatus)).toBe('approved');
 
     const rechecked = applyInvoiceReviewAction(
       { ...signed, invoiceReviewStatus: '待媒介复核' },
@@ -139,14 +139,8 @@ describe('Invoice review workflow', () => {
     expect(rechecked.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('复核通过并重新提交');
   });
 
-  it.each([
-    '待发起请款',
-    '待PM审核',
-    '待项目负责人审核',
-    '待老板审核',
-    '待财务审核',
-  ] as const)('groups %s under the in-progress approval tab', (status) => {
-    expect(getInvoicePageTab(status)).toBe('approval');
+  it('groups media-approved Invoices under the approved business tab', () => {
+    expect(getInvoicePageTab('待发起请款')).toBe('approved');
   });
 
   it('returns a signed Invoice to creator and invalidates the signature', () => {
@@ -247,7 +241,7 @@ describe('Invoice review workflow', () => {
       'MARK_SIGNED',
       'RECORD_CREATOR_FEEDBACK',
     ]);
-    expect(getAvailableInvoiceReviewActions('待财务审核', readOnly)).toEqual([]);
+    expect(getAvailableInvoiceReviewActions('待发起请款', readOnly)).toEqual([]);
     expect(getInvoiceDetailReviewActions('待签署', manage)).toEqual([]);
     expect(getInvoiceDetailReviewActions('达人反馈', manage)).toEqual([]);
   });
@@ -478,10 +472,6 @@ describe('Invoice review workflow', () => {
     expect(getInvoiceDetailNavigationTarget('待媒介审核')).toBeNull();
     expect(getInvoiceDetailNavigationTarget('待媒介复核')).toBeNull();
     expect(getInvoiceDetailNavigationTarget('待发起请款')).toBe('PROJECT');
-    expect(getInvoiceDetailNavigationTarget('待PM审核')).toBe('REQUEST');
-    expect(getInvoiceDetailNavigationTarget('待项目负责人审核')).toBe('REQUEST');
-    expect(getInvoiceDetailNavigationTarget('待老板审核')).toBe('REQUEST');
-    expect(getInvoiceDetailNavigationTarget('待财务审核')).toBe('REQUEST');
     expect(getInvoiceDetailNavigationTarget('已通过')).toBe('PAYMENT');
     expect(getInvoiceDetailNavigationTarget('已退回')).toBeNull();
   });
@@ -518,10 +508,10 @@ describe('Invoice review workflow', () => {
       status: '等待付款',
     })).toBe(true);
     const expectedStatuses = [
-      ['等待付款', '等待付款'],
-      ['付款处理中', '付款处理中'],
+      ['等待付款', '付款中'],
+      ['付款处理中', '付款中'],
       ['已付款', '已付款'],
-      ['付款失败', '付款失败待财务处理'],
+      ['付款失败', '付款中'],
     ] as const;
     expectedStatuses.forEach(([status, label]) => {
       const approvedPayout = { ...payout, invoiceReviewStatus: '已通过' as const, status };
@@ -537,7 +527,7 @@ describe('Invoice review workflow', () => {
       ...payout,
       invoiceReviewStatus: '已通过',
       status: '信息异常',
-    })).toBe('等待付款');
+    })).toBe('付款中');
   });
 
   it('uses one display label set for Invoice lists and details', () => {
@@ -547,10 +537,6 @@ describe('Invoice review workflow', () => {
       待媒介审核: '待审核',
       待媒介复核: '待复核',
       待发起请款: '待发起请款',
-      待PM审核: '待 PM 审批',
-      待项目负责人审核: '待项目负责人审批',
-      待老板审核: '待老板审批',
-      待财务审核: '待财务审批',
       已退回: '已退回',
     } as const;
 

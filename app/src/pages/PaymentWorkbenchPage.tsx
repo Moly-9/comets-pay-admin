@@ -4,12 +4,13 @@ import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../compon
 import { Pagination } from '../components/Pagination';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
+import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import {
   aggregatePayoutCurrencies,
   getPaymentCurrencyOverviews,
   type PaymentCurrencyItem,
 } from '../paymentCurrencyOverview';
-import type { Payout } from '../types';
+import type { GeneratedInvoiceRecord, Payout } from '../types';
 
 type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
 
@@ -176,6 +177,7 @@ type PaymentProjectRow = {
   status: string;
   actionLabel: string;
   payouts: Payout[];
+  requestId?: string;
 };
 
 const summarizePayoutAmounts = (payouts: Payout[]) => {
@@ -190,7 +192,7 @@ function PaymentProjectTable({
   emptyText,
 }: {
   projects: PaymentProjectRow[];
-  onSelect: (payout: Payout) => void;
+  onSelect: (project: PaymentProjectRow) => void;
   emptyText: string;
 }) {
   const [page, setPage] = useState(1);
@@ -218,16 +220,15 @@ function PaymentProjectTable({
           </thead>
           <tbody>
             {visibleProjects.length ? visibleProjects.map((project) => {
-              const representativePayout = project.payouts[0];
               return (
-                <tr className="clickable-table-row" key={project.id} onClick={() => onSelect(representativePayout)}>
+                <tr className="clickable-table-row" key={project.id} onClick={() => onSelect(project)}>
                   <td>
                     <button
                       className="request-project-link"
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelect(representativePayout);
+                        onSelect(project);
                       }}
                     >
                       <strong>{project.project}</strong>
@@ -247,7 +248,7 @@ function PaymentProjectTable({
                       className="table-action"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelect(representativePayout);
+                        onSelect(project);
                       }}
                     >
                       {project.actionLabel}
@@ -283,14 +284,20 @@ function PaymentProjectTable({
 
 export function PaymentWorkbenchPage({
   payouts,
+  requests,
+  generatedInvoices,
   onNewBatch,
   onSelectPayout,
+  onSelectRequest,
   canCreateBatch,
   currentDate = new Date(),
 }: {
   payouts: Payout[];
+  requests: RequestProjectSummary[];
+  generatedInvoices: GeneratedInvoiceRecord[];
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
+  onSelectRequest: (requestId: string) => void;
   canCreateBatch: boolean;
   currentDate?: Date;
 }) {
@@ -306,16 +313,57 @@ export function PaymentWorkbenchPage({
     [currentDate, payouts],
   );
 
+  const financeReviewProjects = useMemo(() => requests
+    .filter((request) => (
+      request.lifecycle === 'SUBMITTED'
+      && request.approval?.status === 'PENDING_FINANCE'
+    ))
+    .map((request): PaymentProjectRow => {
+      const invoiceIds = new Set([
+        ...(request.invoiceIds ?? []),
+        ...(request.creatorLinks ?? []).flatMap((link) => link.invoiceIds),
+      ]);
+      const sourcePayoutIds = new Set(generatedInvoices
+        .filter((invoice) => invoiceIds.has(invoice.invoiceId))
+        .map((invoice) => invoice.sourcePayoutId));
+      const projectPayouts = payouts.filter((payout) => sourcePayoutIds.has(payout.id));
+      return {
+        id: request.requestCode ?? request.id,
+        requestId: request.id,
+        project: request.cooperationProjectName ?? request.project,
+        media: request.media,
+        pm: request.pm,
+        amount: request.amount,
+        contracts: request.contracts,
+        invoices: invoiceIds.size || request.invoices,
+        paymentOrder: request.paymentOrder,
+        status: '待财务审核',
+        actionLabel: '审核',
+        payouts: projectPayouts,
+      };
+    }), [generatedInvoices, payouts, requests]);
+
   const filtered = useMemo(() => {
+    if (activeTab === 'review') {
+      return provider === '全部渠道'
+        ? financeReviewProjects.flatMap((project) => project.payouts)
+        : financeReviewProjects.flatMap((project) => project.payouts)
+          .filter((payout) => payout.provider === provider);
+    }
     const tabFiltered = payouts.filter((payout) => (
       isInvoiceApprovedForPayment(payout) && TAB_STATUSES[activeTab].includes(payout.status)
     ));
     return provider === '全部渠道'
       ? tabFiltered
       : tabFiltered.filter((payout) => payout.provider === provider);
-  }, [activeTab, payouts, provider]);
+  }, [activeTab, financeReviewProjects, payouts, provider]);
 
   const filteredProjects = useMemo(() => {
+    if (activeTab === 'review') {
+      return provider === '全部渠道'
+        ? financeReviewProjects
+        : financeReviewProjects.filter((project) => project.payouts.some((payout) => payout.provider === provider));
+    }
     const payoutsByProject = filtered.reduce<Map<string, Payout[]>>((result, payout) => {
       const current = result.get(payout.projectId) ?? [];
       result.set(payout.projectId, [...current, payout]);
@@ -338,23 +386,25 @@ export function PaymentWorkbenchPage({
         payouts: projectPayouts,
       };
     });
-  }, [activeTab, filtered]);
+  }, [activeTab, filtered, financeReviewProjects, provider]);
 
   const statusCounts = useMemo(() => TAB_LABELS.reduce<Record<WorkbenchTab, number>>((counts, tab) => ({
     ...counts,
-    [tab.id]: new Set(
-      payouts
-        .filter((payout) => (
-          isInvoiceApprovedForPayment(payout) && TAB_STATUSES[tab.id].includes(payout.status)
-        ))
-        .map((payout) => payout.projectId),
-    ).size,
+    [tab.id]: tab.id === 'review'
+      ? financeReviewProjects.length
+      : new Set(
+          payouts
+            .filter((payout) => (
+              isInvoiceApprovedForPayment(payout) && TAB_STATUSES[tab.id].includes(payout.status)
+            ))
+            .map((payout) => payout.projectId),
+        ).size,
   }), {
     review: 0,
     payment: 0,
     paid: 0,
     returned: 0,
-  }), [payouts]);
+  }), [financeReviewProjects, payouts]);
 
   const filteredAmountSummary = useMemo(
     () => summarizePayoutAmounts(filtered),
@@ -436,7 +486,14 @@ export function PaymentWorkbenchPage({
         <PaymentProjectTable
           key={`${activeTab}-${provider}`}
           projects={filteredProjects}
-          onSelect={onSelectPayout}
+          onSelect={(project) => {
+            if (project.requestId) {
+              onSelectRequest(project.requestId);
+              return;
+            }
+            const payout = project.payouts[0];
+            if (payout) onSelectPayout(payout);
+          }}
           emptyText={`当前没有${activeTabLabel}付款项目`}
         />
       </section>

@@ -379,7 +379,7 @@ const returnedInvoiceReviewFixture = (
     ? { account: 'lailihong', name: '赖丽红', role: '媒介账号' }
     : { account: 'xiwenhui', name: '奚文慧', role: '财务账号' };
   const reviewStage = stage === 'MEDIA' ? 'MEDIA' : 'FINANCE';
-  const toStatus = stage === 'MEDIA' ? '待签署' : '待媒介复核';
+  const toStatus = stage === 'MEDIA' ? '待签署' : '已退回';
   return {
     invoiceReviewStatus: toStatus,
     invoiceReviewReturn: { stage: reviewStage, reason, actorName: actor.name, occurredAt },
@@ -389,7 +389,7 @@ const returnedInvoiceReviewFixture = (
       actorAccount: actor.account,
       actorName: actor.name,
       actorRole: actor.role,
-      fromStatus: stage === 'MEDIA' ? '待媒介审核' : '待财务审核',
+      fromStatus: stage === 'MEDIA' ? '待媒介审核' : '待发起请款',
       toStatus,
       reason,
       occurredAt,
@@ -451,7 +451,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2160,
     account: '0000000002',
     status: '未进入付款',
-    invoiceReviewStatus: '待PM审核',
+    invoiceReviewStatus: '待发起请款',
     accent: '#f97316',
   },
   {
@@ -469,7 +469,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 3750,
     account: '0000000003',
     status: '未进入付款',
-    invoiceReviewStatus: '待项目负责人审核',
+    invoiceReviewStatus: '待发起请款',
     accent: '#06b6d4',
   },
   {
@@ -561,6 +561,14 @@ export const INITIAL_PAYOUTS: Payout[] = [
     account: '000000005',
     status: '未进入付款',
     ...returnedInvoiceReviewFixture('APPROVAL', 'Invoice 缺少达人签字页', '2026-08-02T08:42:00.000Z'),
+    paymentFailureReturn: {
+      issueType: 'INVOICE_CONTENT',
+      reason: 'Invoice 缺少达人签字页',
+      actorAccount: 'xiwenhui',
+      actorName: '奚文慧',
+      occurredAt: '2026-08-02T08:42:00.000Z',
+      restartStage: 'SIGNATURE',
+    },
     accent: '#ef4444',
     issue: '财务退回：Invoice 缺少达人签字页',
     returnReason: 'Invoice 缺少达人签字页',
@@ -680,7 +688,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1740,
     account: 'yuki.tanaka@example.com',
     status: '未进入付款',
-    invoiceReviewStatus: '待老板审核',
+    invoiceReviewStatus: '待发起请款',
     accent: '#ec4899',
   },
   {
@@ -698,7 +706,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2480,
     account: '0000000010',
     status: '未进入付款',
-    invoiceReviewStatus: '待财务审核',
+    invoiceReviewStatus: '待发起请款',
     accent: '#3b82f6',
   },
   {

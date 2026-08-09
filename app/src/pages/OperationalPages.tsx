@@ -45,9 +45,11 @@ import { Pagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
-  getApprovedInvoicePaymentStatus,
-  getInvoicePageTab,
-  getInvoiceRowStatus,
+  findInvoiceRequest,
+  getInvoiceManagementView,
+  type InvoiceManagementView,
+} from '../invoice/invoiceManagement';
+import {
   isInvoiceApprovedForPayment,
   type InvoiceReviewAction,
   type InvoicePageTab,
@@ -906,8 +908,9 @@ export function ProjectsPage({
 const createFixtureRequestApproval = (
   requestStatus: string,
   pmName: string,
+  statusOverride?: RequestApprovalStatus,
 ): RequestApprovalState => {
-  const status: RequestApprovalStatus = requestStatus.includes('财务')
+  const status: RequestApprovalStatus = statusOverride ?? (requestStatus.includes('财务')
     ? 'PENDING_FINANCE'
     : requestStatus.includes('项目负责人')
       ? 'PENDING_PROJECT_OWNER'
@@ -917,7 +920,7 @@ const createFixtureRequestApproval = (
           ? 'APPROVED'
           : requestStatus === '已退回'
             ? 'RETURNED_TO_MEDIA_REVIEW'
-            : 'PENDING_PM';
+            : 'PENDING_PM');
   const ordered = ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'] as const;
   const currentIndex = status === 'APPROVED' ? ordered.length : ordered.indexOf(status as typeof ordered[number]);
   const actorByStage = {
@@ -946,6 +949,7 @@ const createFixtureRequestApproval = (
     history,
     submittedAt: '2026-07-17T02:00:00.000Z',
     returnedFromStage: status === 'RETURNED_TO_MEDIA_REVIEW' ? 'FINANCE' : undefined,
+    resumeStatus: status === 'RETURNED_TO_MEDIA_REVIEW' ? 'PENDING_FINANCE' : undefined,
     returnReason: status === 'RETURNED_TO_MEDIA_REVIEW' ? '请媒介复核付款资料后重新提交。' : undefined,
     updatedAt: '2026-07-22T02:00:00.000Z',
   };
@@ -959,7 +963,15 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     cooperationProjectId: project.id as CooperationProjectId,
     cooperationProjectCode: project.id,
     cooperationProjectName: project.name,
-    lifecycle: project.requestStatus === '已完成' ? 'COMPLETED' as const : 'SUBMITTED' as const,
+    lifecycle: project.requestStatus === '已完成'
+      ? 'COMPLETED' as const
+      : project.requestStatus === '待打款'
+        ? 'APPROVED' as const
+        : project.requestStatus === '已退回'
+          ? 'RETURNED' as const
+          : project.requestStatus === '待补资料'
+            ? 'DRAFT' as const
+            : 'SUBMITTED' as const,
     projectId: project.id as ProjectId,
     project: project.name,
     brand: project.brand,
@@ -971,7 +983,15 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     paymentOrder: project.paymentOrder,
     status: project.requestStatus,
     filter: project.requestFilter,
-    approval: createFixtureRequestApproval(project.requestStatus, project.pm),
+    approval: createFixtureRequestApproval(
+      project.requestStatus,
+      project.pm,
+      projectIndex === 1
+        ? 'PENDING_PROJECT_OWNER'
+        : projectIndex === 9
+          ? 'PENDING_OWNER'
+          : undefined,
+    ),
     createdAt: `2026-07-${String(10 + (projectIndex % 18)).padStart(2, '0')}T${String(8 + (projectIndex % 9)).padStart(2, '0')}:30:00.000Z`,
   })),
 ];
@@ -982,6 +1002,7 @@ export function RequestsPage({
   requests,
   paymentLists,
   creators,
+  generatedInvoices,
   onExportPaymentList,
   onApprovalAction,
   focusedRequestId,
@@ -992,6 +1013,7 @@ export function RequestsPage({
   requests: RequestProjectSummary[];
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
+  generatedInvoices: GeneratedInvoiceRecord[];
   onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
     request: RequestProjectSummary,
@@ -1119,6 +1141,7 @@ export function RequestsPage({
         request={selectedRequest}
         paymentLists={paymentLists}
         creators={creators}
+        generatedInvoices={generatedInvoices}
         currentUser={currentUser}
         onExportPaymentList={onExportPaymentList}
         onApprovalAction={onApprovalAction}
@@ -1661,7 +1684,11 @@ const createProjectCreatorProfiles = (
   projectIndex: number,
 ): NonNullable<ProjectSummary['creatorProfiles']> => (
   Array.from({ length: project.creators }, (_, creatorIndex) => {
-    const creator = INITIAL_CREATORS[(projectIndex * 5 + creatorIndex) % INITIAL_CREATORS.length];
+    const returnedRequestCreator = project.id === 'PRJ-260801-07' && creatorIndex === 0
+      ? INITIAL_CREATORS.find((creator) => creator.id === 'creator-marc')
+      : undefined;
+    const creator = returnedRequestCreator
+      ?? INITIAL_CREATORS[(projectIndex * 5 + creatorIndex) % INITIAL_CREATORS.length];
     return {
       creatorId: creator.id as CreatorId,
       projectId: project.id as ProjectId,
@@ -2528,6 +2555,7 @@ export function InvoicePage({
   creators,
   invoiceEntity,
   generatedInvoices,
+  requests,
   tab,
   onTabChange,
   onCreateInvoice,
@@ -2536,6 +2564,7 @@ export function InvoicePage({
   canManageInvoice,
   canReviewMedia,
   canReviewFinance,
+  canEditProjectResourceInvoice,
   focusedInvoiceId,
   onFocusCleared,
   onMarkSigned,
@@ -2553,6 +2582,7 @@ export function InvoicePage({
   creators: CreatorProfile[];
   invoiceEntity: InvoiceEntity;
   generatedInvoices: GeneratedInvoiceRecord[];
+  requests: RequestProjectSummary[];
   tab: InvoicePageTab;
   onTabChange: (tab: InvoicePageTab) => void;
   onCreateInvoice: () => void;
@@ -2561,6 +2591,7 @@ export function InvoicePage({
   canManageInvoice: boolean;
   canReviewMedia: boolean;
   canReviewFinance: boolean;
+  canEditProjectResourceInvoice: (payout: Payout) => boolean;
   focusedInvoiceId: string | null;
   onFocusCleared: () => void;
   onMarkSigned: (record: GeneratedInvoiceRecord) => void;
@@ -2593,33 +2624,40 @@ export function InvoicePage({
   const selectedGenerated = effectiveSourceKey?.startsWith('generated:')
     ? generatedInvoices.find((record) => record.id === effectiveSourceKey.slice('generated:'.length)) ?? null
     : null;
+  const selectedDetailPayout = selectedPayout
+    ?? (selectedGenerated
+      ? payouts.find((payout) => payout.id === selectedGenerated.sourcePayoutId) ?? null
+      : null);
   const selectedSource: InvoiceDetailSource | null = selectedPayout
     ? { kind: 'payout', payout: selectedPayout }
     : selectedGenerated
       ? {
           kind: 'generated',
           record: selectedGenerated,
-          payout: payouts.find((payout) => payout.id === selectedGenerated.sourcePayoutId),
+          payout: selectedDetailPayout ?? undefined,
         }
       : null;
   const selectedModel = selectedPayout
     ? selectedPayout.invoiceSnapshot ?? buildInvoiceReviewModel(selectedPayout, creators, invoiceEntity)
     : selectedGenerated?.snapshot ?? null;
+  const managementViewFor = (payout: Payout): InvoiceManagementView => getInvoiceManagementView(
+    payout,
+    findInvoiceRequest(payout, generatedInvoices, requests),
+  );
   const groupedPayouts = useMemo(() => {
     const groups = {
       signature: [] as Payout[],
-      'media-review': [] as Payout[],
-      approval: [] as Payout[],
+      review: [] as Payout[],
       approved: [] as Payout[],
       returned: [] as Payout[],
     };
 
     payouts.forEach((payout) => {
-      groups[getInvoicePageTab(payout.invoiceReviewStatus)].push(payout);
+      groups[managementViewFor(payout).tab].push(payout);
     });
 
     return groups;
-  }, [payouts]);
+  }, [generatedInvoices, payouts, requests]);
   const visiblePayouts = useMemo(() => {
     const query = search.trim().toLowerCase();
     const source = groupedPayouts[tab];
@@ -2660,6 +2698,9 @@ export function InvoicePage({
       && canManageInvoice
     )
   );
+  const selectedManagementView = selectedDetailPayout
+    ? managementViewFor(selectedDetailPayout)
+    : undefined;
 
   if (selectedSource && selectedModel) {
     return (
@@ -2678,7 +2719,11 @@ export function InvoicePage({
         canManageInvoice={canManageInvoice}
         canReviewMedia={canReviewMedia}
         canReviewFinance={canReviewFinance}
+        canEditProjectResource={Boolean(
+          selectedDetailPayout && canEditProjectResourceInvoice(selectedDetailPayout)
+        )}
         canExecutePayout={canExecutePayout}
+        managementView={selectedManagementView}
         onBack={closeInvoiceDetail}
       />
     );
@@ -2699,25 +2744,20 @@ export function InvoicePage({
       <section className="content-card">
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedPayouts.signature.length}</span></button>
-          <button className={`tab-button ${tab === 'media-review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('media-review')}>待媒介审核 <span>{groupedPayouts['media-review'].length}</span></button>
-          <button className={`tab-button ${tab === 'approval' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approval')}>审批中 <span>{groupedPayouts.approval.length}</span></button>
+          <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedPayouts.review.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedPayouts.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedPayouts.returned.length}</span></button>
         </div>
         <div className="content-toolbar compact-toolbar">
           <SearchBar value={search} onChange={setSearch} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
-          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approval' ? '项目审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
+          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
         </div>
         <PayoutTable
           payouts={visiblePayouts}
           onSelect={openReviewInvoice}
           emptyText="当前筛选条件下没有 Invoice 记录"
-          statusFor={(payout) => (
-            tab === 'approved'
-              ? getApprovedInvoicePaymentStatus(payout)
-              : payout.invoiceReviewStatus
-          )}
-          statusLabelFor={getInvoiceRowStatus}
+          statusFor={(payout) => payout.invoiceReviewStatus}
+          statusLabelFor={(payout) => managementViewFor(payout).status}
           actionLabelFor={(payout) => canActOnInvoice(payout)
             ? payout.invoiceReviewStatus === '达人反馈'
               ? '处理反馈'

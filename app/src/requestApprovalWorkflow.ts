@@ -51,11 +51,22 @@ export const canReviewRequestApproval = (
   return false;
 };
 
+export const canReturnRequestApproval = (
+  user: Pick<SystemUser, 'roleKey' | 'name' | 'scopeName'>,
+  state: RequestApprovalState,
+  assignedPmName: string,
+) => Boolean(requestApprovalStage(state.status)) && (
+  user.roleKey === 'finance'
+  || canReviewRequestApproval(user, state, assignedPmName)
+);
+
 export const createRequestApprovalState = (
   occurredAt = new Date().toISOString(),
   previous?: RequestApprovalState,
 ): RequestApprovalState => ({
-  status: 'PENDING_PM',
+  status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
+    ? previous.resumeStatus
+    : 'PENDING_PM',
   round: (previous?.round ?? 0) + 1,
   history: previous?.history ?? [],
   submittedAt: occurredAt,
@@ -99,6 +110,9 @@ export const applyRequestApprovalAction = (
     history: [...state.history, event],
     submittedAt: state.submittedAt,
     returnedFromStage: action === 'RETURN' ? stage : undefined,
+    resumeStatus: action === 'RETURN'
+      ? state.status as Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>
+      : undefined,
     returnReason: action === 'RETURN' ? normalizedReason : undefined,
     updatedAt: occurredAt,
   };

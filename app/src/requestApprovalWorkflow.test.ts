@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEMO_SYSTEM_USERS } from './data';
 import {
   applyRequestApprovalAction,
+  canReturnRequestApproval,
   canReviewRequestApproval,
   createRequestApprovalState,
 } from './requestApprovalWorkflow';
@@ -49,12 +50,13 @@ describe('request approval workflow', () => {
     ]);
   });
 
-  it('returns any active approval node to media recheck and starts a new round at PM', () => {
+  it('returns any active approval node and starts a new round at the intercepted node', () => {
     const pm = userFor('pm');
     const state = createRequestApprovalState();
     const returned = applyRequestApprovalAction(state, 'RETURN', pm, '金额需要复核');
     expect(returned.status).toBe('RETURNED_TO_MEDIA_REVIEW');
     expect(returned.returnReason).toBe('金额需要复核');
+    expect(returned.resumeStatus).toBe('PENDING_PM');
     expect(myProjectStatusFor({ lifecycle: 'RETURNED', approval: returned })).toBe('已退回');
     expect(requestProjectStatusFor({ lifecycle: 'RETURNED', approval: returned })).toBe('已退回');
 
@@ -65,6 +67,23 @@ describe('request approval workflow', () => {
     expect(nextRound.submittedAt).toBe('2026-08-05T01:00:00.000Z');
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
     expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('请款提交');
+  });
+
+  it('restores a returned project-owner request to the project-owner node', () => {
+    const projectOwner = userFor('project');
+    const state = { ...createRequestApprovalState(), status: 'PENDING_PROJECT_OWNER' as const };
+    const returned = applyRequestApprovalAction(state, 'RETURN', projectOwner, '付款清单需要修正');
+    const nextRound = createRequestApprovalState('2026-08-05T01:00:00.000Z', returned);
+    expect(nextRound.status).toBe('PENDING_PROJECT_OWNER');
+    expect(nextRound.round).toBe(2);
+  });
+
+  it('allows finance to return any active OA stage without approving it', () => {
+    const finance = userFor('finance');
+    const pm = userFor('pm');
+    const state = createRequestApprovalState();
+    expect(canReviewRequestApproval(finance, state, pm.scopeName ?? pm.name)).toBe(false);
+    expect(canReturnRequestApproval(finance, state, pm.scopeName ?? pm.name)).toBe(true);
   });
 
   it('enforces role ownership while allowing admin and owner to substitute only current node', () => {

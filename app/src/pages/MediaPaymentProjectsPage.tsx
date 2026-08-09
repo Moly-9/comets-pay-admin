@@ -642,7 +642,7 @@ export function MediaPaymentProjectsPage({
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
-          actions={<div className="page-heading-actions">{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>编辑项目</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></div>}
+          actions={<>{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>编辑项目</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></>}
         />
         <div className="metrics-grid project-detail-metrics">
           <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>

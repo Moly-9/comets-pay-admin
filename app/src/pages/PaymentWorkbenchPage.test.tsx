@@ -2,13 +2,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_PAYOUTS } from '../data';
 import type { InvoiceCurrency, Payout } from '../types';
+import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import { CURRENCY_FLAG_PATHS, PaymentWorkbenchPage } from './PaymentWorkbenchPage';
 
-const renderWorkbench = (payouts: Payout[]) => renderToStaticMarkup(
+const renderWorkbench = (payouts: Payout[], requests: RequestProjectSummary[] = []) => renderToStaticMarkup(
   <PaymentWorkbenchPage
     payouts={payouts}
+    requests={requests}
+    generatedInvoices={[]}
     onNewBatch={vi.fn()}
     onSelectPayout={vi.fn()}
+    onSelectRequest={vi.fn()}
     canCreateBatch
     currentDate={new Date('2026-08-09T00:00:00.000Z')}
   />,
@@ -83,5 +87,35 @@ describe('PaymentWorkbenchPage currency overview', () => {
 
     expect(html).toContain('USD 0');
     expect(html).toContain('待付款总额 · 0 笔');
+  });
+
+  it('uses finance-stage requests as the pending review source', () => {
+    const html = renderWorkbench([], [{
+      id: 'request-finance-review',
+      requestCode: 'REQ-FINANCE-001',
+      lifecycle: 'SUBMITTED',
+      approval: {
+        status: 'PENDING_FINANCE',
+        round: 1,
+        history: [],
+        submittedAt: '2026-08-09T00:00:00.000Z',
+        updatedAt: '2026-08-09T00:00:00.000Z',
+      },
+      project: 'Finance Review Project',
+      brand: 'Test Brand',
+      media: 'Media',
+      pm: 'PM',
+      amount: 'USD 100',
+      contracts: 1,
+      invoices: 1,
+      paymentOrder: 'PAY-TEST',
+      status: '财务审批中',
+      filter: 'pending',
+    }]);
+
+    expect(html).toContain('待审核<span>1</span>');
+    expect(html).toContain('Finance Review Project');
+    expect(html).toContain('待财务审核');
+    expect(html).toContain('<span>审核</span>');
   });
 });

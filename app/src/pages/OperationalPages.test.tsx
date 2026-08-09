@@ -1,22 +1,48 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from '../data';
-import { InvoicePage, INITIAL_CREATORS } from './OperationalPages';
+import type { GeneratedInvoiceRecord } from '../types';
+import { InvoicePage, INITIAL_CREATORS, INITIAL_REQUEST_PROJECTS } from './OperationalPages';
 
-describe('InvoicePage approval states', () => {
-  it('shows pending finance approval inside the in-progress approval tab', () => {
-    const financePayout = INITIAL_PAYOUTS.find((payout) => (
-      payout.invoiceReviewStatus === '待财务审核'
-    ));
+describe('InvoicePage OA states', () => {
+  it('derives OA presentation from the linked request without an approval tab', () => {
+    const financePayout = INITIAL_PAYOUTS.find((payout) => payout.id === 'pay-022');
     expect(financePayout).toBeDefined();
+    const invoice = {
+      invoiceId: 'invoice-finance-review',
+      sourcePayoutId: financePayout!.id,
+    } as GeneratedInvoiceRecord;
+    const request = {
+      id: 'request-finance-review',
+      lifecycle: 'SUBMITTED' as const,
+      invoiceIds: [invoice.invoiceId],
+      project: financePayout!.project,
+      brand: 'Test Brand',
+      media: 'Media',
+      pm: 'PM',
+      amount: 'USD 2,480',
+      contracts: 1,
+      invoices: 1,
+      paymentOrder: 'PAY-TEST',
+      status: '财务审批中',
+      filter: 'pending' as const,
+      approval: {
+        status: 'PENDING_FINANCE' as const,
+        round: 1,
+        history: [],
+        submittedAt: '2026-08-09T00:00:00.000Z',
+        updatedAt: '2026-08-09T00:00:00.000Z',
+      },
+    };
 
     const html = renderToStaticMarkup(
       <InvoicePage
         payouts={[financePayout!]}
         creators={INITIAL_CREATORS}
         invoiceEntity={INITIAL_INVOICE_ENTITY}
-        generatedInvoices={[]}
-        tab="approval"
+        generatedInvoices={[invoice]}
+        requests={[request]}
+        tab="approved"
         onTabChange={vi.fn()}
         onCreateInvoice={vi.fn()}
         onCreateBatchInvoice={vi.fn()}
@@ -24,6 +50,7 @@ describe('InvoicePage approval states', () => {
         canManageInvoice={false}
         canReviewMedia={false}
         canReviewFinance={true}
+        canEditProjectResourceInvoice={() => false}
         focusedInvoiceId={null}
         onFocusCleared={vi.fn()}
         onMarkSigned={vi.fn()}
@@ -39,8 +66,26 @@ describe('InvoicePage approval states', () => {
       />,
     );
 
-    expect(html).toContain('审批中 <span>1</span>');
-    expect(html).toContain('待财务审批');
+    expect(html).not.toContain('>审批中 <span>');
+    expect(html).toContain('OA审批中');
+    expect(html).toContain('已通过 <span>1</span>');
     expect(html).toContain('INV-240806');
+  });
+});
+
+describe('request project fixtures', () => {
+  it('covers every OA node and the returned, approved and completed lifecycles', () => {
+    const approvalStatuses = new Set(INITIAL_REQUEST_PROJECTS.map((request) => request.approval?.status));
+    expect([...approvalStatuses]).toEqual(expect.arrayContaining([
+      'PENDING_PM',
+      'PENDING_PROJECT_OWNER',
+      'PENDING_OWNER',
+      'PENDING_FINANCE',
+      'APPROVED',
+      'RETURNED_TO_MEDIA_REVIEW',
+    ]));
+    expect(INITIAL_REQUEST_PROJECTS.some((request) => request.lifecycle === 'RETURNED')).toBe(true);
+    expect(INITIAL_REQUEST_PROJECTS.some((request) => request.lifecycle === 'APPROVED')).toBe(true);
+    expect(INITIAL_REQUEST_PROJECTS.some((request) => request.lifecycle === 'COMPLETED')).toBe(true);
   });
 });
