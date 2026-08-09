@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
+  Download,
   FileText,
   Pencil,
   Plus,
@@ -25,6 +26,7 @@ import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
   createPrototypeId,
+  paymentListEffectiveAccount,
   type ContractId,
   type CooperationProjectId,
   type CreatorId,
@@ -61,6 +63,7 @@ import {
 } from './OperationalPages';
 import type { ProjectSummary } from './ProjectDetailPage';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
+import { downloadBlob } from '../invoice/invoiceUtils';
 
 type Notify = (title: string, message: string) => void;
 
@@ -192,6 +195,79 @@ const paymentListStatusLabel = (status?: PaymentListRecord['status']) => {
   return '草稿';
 };
 
+const MEDIA_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
+const MEDIA_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
+
+type MediaConfirmationAssetLoader = (path: string) => Promise<Blob>;
+
+export type MediaConfirmationItem = {
+  paymentListCode: string;
+  invoiceNumber: string;
+};
+
+const loadMediaConfirmationAsset: MediaConfirmationAssetLoader = async (path) => {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Unable to read confirmation asset: ${response.status}`);
+  return response.blob();
+};
+
+const safeMediaExportSegment = (value: string, fallback: string) => {
+  const safe = value.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
+  return safe || fallback;
+};
+
+export const mediaConfirmationItemsFor = (
+  request: RequestProjectSummary,
+  paymentLists: PaymentListRecord[],
+): MediaConfirmationItem[] => {
+  const explicitIds = new Set([
+    ...(request.paymentListIds ?? []),
+    ...(request.paymentListId ? [request.paymentListId] : []),
+  ]);
+  return paymentLists
+    .filter((list) => (
+      list.status === 'paid'
+      && (
+        Boolean(
+          request.paymentRequestProjectId
+          && list.paymentRequestProjectId === request.paymentRequestProjectId,
+        )
+        || explicitIds.has(list.paymentListId)
+      )
+    ))
+    .flatMap((list) => list.items.flatMap((item) => (
+      paymentListEffectiveAccount(item).provider === 'Airwallex'
+        ? [{
+            paymentListCode: list.paymentListCode,
+            invoiceNumber: item.snapshot.invoiceNumber,
+          }]
+        : []
+    )));
+};
+
+export const createMediaConfirmationArchive = async (
+  requestCode: string,
+  items: MediaConfirmationItem[],
+  loadAsset: MediaConfirmationAssetLoader = loadMediaConfirmationAsset,
+) => {
+  const [{ default: JSZip }, template] = await Promise.all([
+    import('jszip'),
+    loadAsset(MEDIA_CONFIRMATION_ASSET_PATH),
+  ]);
+  const bytes = new Uint8Array(await template.arrayBuffer());
+  const zip = new JSZip();
+  const projectFolder = zip.folder(`${safeMediaExportSegment(requestCode, 'project')}-付款确认函`);
+  items.forEach((item, index) => {
+    const paymentListCode = safeMediaExportSegment(item.paymentListCode, `payment-list-${index + 1}`);
+    const invoiceNumber = safeMediaExportSegment(item.invoiceNumber, `invoice-${index + 1}`);
+    projectFolder?.file(
+      `${String(index + 1).padStart(2, '0')}-${paymentListCode}-${invoiceNumber}-${MEDIA_CONFIRMATION_FILENAME}`,
+      bytes,
+    );
+  });
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+};
+
 export function MediaPaymentProjectsPage({
   notify,
   currentUser,
@@ -246,6 +322,7 @@ export function MediaPaymentProjectsPage({
   const [formSubmitAttempted, setFormSubmitAttempted] = useState(false);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
+  const [exportingRequestId, setExportingRequestId] = useState<string | null>(null);
 
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const visibleRequests = requests.filter((request) => {
@@ -336,6 +413,24 @@ export function MediaPaymentProjectsPage({
     })),
   ];
   const creatorSelectionEditable = !editingRequest || canAddCreatorToPaymentRequest(editingRequest);
+
+  const exportProjectConfirmations = async (
+    request: RequestProjectSummary,
+    items: MediaConfirmationItem[],
+  ) => {
+    if (!items.length || exportingRequestId) return;
+    setExportingRequestId(request.id);
+    try {
+      const requestCode = requestCodeFor(request);
+      const archive = await createMediaConfirmationArchive(requestCode, items);
+      downloadBlob(archive, `${safeMediaExportSegment(requestCode, 'project')}-付款确认函.zip`);
+      notify('确认函已导出', `已为 ${requestCode} 生成 ${items.length} 份 Airwallex 付款确认函。`);
+    } catch {
+      notify('确认函导出失败', '无法读取付款确认函模板，请检查导出资源后重试。');
+    } finally {
+      setExportingRequestId(null);
+    }
+  };
 
   const resetForm = () => {
     setCooperationProjectId('');
@@ -846,18 +941,48 @@ export function MediaPaymentProjectsPage({
           <table className="data-table operational-table">
             <thead><tr><th>项目编号</th><th>关联项目</th><th>品牌</th><th>负责 PM</th><th>达人</th><th>请款金额</th><th>状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
-              {filteredRequests.map((request) => (
-                <tr key={request.id}>
-                  <td><strong>{requestCodeFor(request)}</strong></td>
-                  <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
-                  <td>{request.brand || '—'}</td>
-                  <td>{request.pm}</td>
-                  <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
-                  <td>{request.amount}</td>
-                  <td><ProjectStatus status={myProjectStatusFor(request)} /></td>
-                  <td className="action-cell"><button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button></td>
-                </tr>
-              ))}
+              {filteredRequests.map((request) => {
+                const canShowConfirmationExport = (
+                  currentUser.roleKey === 'media'
+                  && request.media === currentScopeName
+                  && request.lifecycle === 'COMPLETED'
+                );
+                const confirmationItems = canShowConfirmationExport
+                  ? mediaConfirmationItemsFor(request, paymentLists)
+                  : [];
+                const isExporting = exportingRequestId === request.id;
+                return (
+                  <tr key={request.id}>
+                    <td><strong>{requestCodeFor(request)}</strong></td>
+                    <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
+                    <td>{request.brand || '—'}</td>
+                    <td>{request.pm}</td>
+                    <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
+                    <td>{request.amount}</td>
+                    <td><ProjectStatus status={myProjectStatusFor(request)} /></td>
+                    <td className="action-cell">
+                      <div className="media-project-row-actions">
+                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button>
+                        {canShowConfirmationExport ? (
+                          <>
+                            <button
+                              className="media-project-confirmation-action"
+                              type="button"
+                              disabled={!confirmationItems.length || Boolean(exportingRequestId)}
+                              title={!confirmationItems.length ? '没有已付款的 Airwallex 付款明细' : undefined}
+                              onClick={() => { void exportProjectConfirmations(request, confirmationItems); }}
+                            >
+                              <Download size={14} aria-hidden="true" />
+                              {isExporting ? '导出中...' : '导出确认函'}
+                            </button>
+                            {!confirmationItems.length ? <small>无已付款 Airwallex 明细</small> : null}
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {!filteredRequests.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的项目</td></tr> : null}
             </tbody>
           </table>

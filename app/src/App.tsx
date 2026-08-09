@@ -163,7 +163,14 @@ import {
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
 
-type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
+type CreatedBatch = {
+  id: string;
+  count: number;
+  amount: string;
+  provider: string;
+  payer: string;
+  paidAt: string;
+} | null;
 
 const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   等待付款: '付款处理中',
@@ -2725,6 +2732,10 @@ export default function App() {
       return;
     }
     const execution = executeMockBatchSubmission(submission);
+    const now = new Date();
+    const localPaymentTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16);
     setPayouts((current) => current.map((payout) => selected.some((item) => item.id === payout.id)
       ? { ...payout, status: '付款处理中', issue: undefined }
       : payout));
@@ -2733,6 +2744,8 @@ export default function App() {
       count: selected.length,
       amount: batchAmountLabel(execution.items),
       provider: execution.provider,
+      payer: currentUser.name,
+      paidAt: localPaymentTime,
     });
     setActivePage('batches');
     notify(

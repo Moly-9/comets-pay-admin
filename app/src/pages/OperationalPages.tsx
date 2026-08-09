@@ -8,7 +8,9 @@ import {
   Clock3,
   Download,
   ExternalLink,
+  FileArchive,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   Files,
   Link2,
@@ -32,6 +34,7 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type KeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
@@ -105,9 +108,17 @@ import {
   requestProjectStatusFor,
 } from '../paymentRequestProjects';
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
+import { downloadBlob } from '../invoice/invoiceUtils';
 
 type Notify = (title: string, message: string) => void;
-type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
+type CreatedBatch = {
+  id: string;
+  count: number;
+  amount: string;
+  provider: string;
+  payer: string;
+  paidAt: string;
+} | null;
 
 function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
@@ -2774,16 +2785,368 @@ export function InvoicePage({
   );
 }
 
-const BASE_BATCHES = [
-  { id: 'BAT-20260716-007', provider: 'Airwallex', count: 12, amount: 'USD 28,420', creator: '奚文慧', time: '2026-07-16 16:42', status: '付款处理中' },
-  { id: 'BAT-20260715-006', provider: 'PayMax', count: 8, amount: 'EUR 16,880', creator: '李梦', time: '2026-07-15 11:20', status: '已完成' },
-  { id: 'BAT-20260712-005', provider: 'PayPal', count: 23, amount: 'USD 41,260', creator: '吴雪霓', time: '2026-07-12 09:05', status: '部分失败' },
+export type PaymentBatchRow = {
+  id: string;
+  provider: string;
+  count: number;
+  amount: string;
+  payer: string;
+  paidAt: string;
+  status: string;
+};
+
+export type PaymentBatchFilters = {
+  search: string;
+  start: string;
+  end: string;
+  provider: string;
+};
+
+const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
+const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明细表.xlsx';
+export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
+export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
+
+export const BASE_BATCHES: PaymentBatchRow[] = [
+  { id: 'BAT-20260716-007', provider: 'Airwallex', count: 12, amount: 'USD 28,420', payer: '奚文慧', paidAt: '2026-07-16T16:42', status: '付款处理中' },
+  { id: 'BAT-20260715-006', provider: 'PayMax', count: 8, amount: 'EUR 16,880', payer: '李梦', paidAt: '2026-07-15T11:20', status: '已完成' },
+  { id: 'BAT-20260712-005', provider: 'PayPal', count: 23, amount: 'USD 41,260', payer: '吴雪霓', paidAt: '2026-07-12T09:05', status: '部分失败' },
 ];
 
+type ExportAssetLoader = (path: string) => Promise<Blob>;
+
+const loadExportAsset: ExportAssetLoader = async (path) => {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Unable to read export asset: ${response.status}`);
+  return response.blob();
+};
+
+export const filterPaymentBatchRows = (
+  rows: PaymentBatchRow[],
+  filters: PaymentBatchFilters,
+) => {
+  const query = filters.search.trim().toLowerCase();
+  return rows.filter((row) => (
+    (!query || row.id.toLowerCase().includes(query))
+    && (!filters.start || row.paidAt >= filters.start)
+    && (!filters.end || row.paidAt <= filters.end)
+    && (filters.provider === 'all' || row.provider === filters.provider)
+  ));
+};
+
+export const correctedPaymentBatchDateRange = (
+  start: string,
+  end: string,
+  changed: 'start' | 'end',
+): [string, string] => {
+  if (!start || !end || start <= end) return [start, end];
+  return changed === 'start' ? [start, start] : [end, end];
+};
+
+export const toggleVisibleAirwallexBatchSelection = (
+  selectedIds: Set<string>,
+  visibleRows: PaymentBatchRow[],
+) => {
+  const next = new Set(selectedIds);
+  const eligibleIds = visibleRows.filter((row) => row.provider === 'Airwallex').map((row) => row.id);
+  const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => next.has(id));
+  eligibleIds.forEach((id) => {
+    if (allSelected) next.delete(id);
+    else next.add(id);
+  });
+  return next;
+};
+
+export const createBatchConfirmationArchive = async (
+  batchIds: string[],
+  loadAsset: ExportAssetLoader = loadExportAsset,
+) => {
+  const [{ default: JSZip }, template] = await Promise.all([
+    import('jszip'),
+    loadAsset(PAYMENT_CONFIRMATION_ASSET_PATH),
+  ]);
+  const bytes = new Uint8Array(await template.arrayBuffer());
+  const zip = new JSZip();
+  batchIds.forEach((batchId) => {
+    zip.folder(batchId)?.file(PAYMENT_CONFIRMATION_FILENAME, bytes);
+  });
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+};
+
+export const loadPaymentDataRecord = async (
+  loadAsset: ExportAssetLoader = loadExportAsset,
+) => loadAsset(PAYMENT_DATA_ASSET_PATH);
+
+const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
+
 export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }: { createdBatch: CreatedBatch; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
-  const rows = createdBatch ? [{ id: createdBatch.id, provider: createdBatch.provider, count: createdBatch.count, amount: createdBatch.amount, creator: CURRENT_USER.name, time: '刚刚', status: '等待付款' }, ...BASE_BATCHES] : BASE_BATCHES;
+  const [search, setSearch] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [provider, setProvider] = useState('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState<'confirmations' | 'records' | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportTriggerRef = useRef<HTMLButtonElement>(null);
+  const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const rows: PaymentBatchRow[] = createdBatch ? [{
+    id: createdBatch.id,
+    provider: createdBatch.provider,
+    count: createdBatch.count,
+    amount: createdBatch.amount,
+    payer: createdBatch.payer,
+    paidAt: createdBatch.paidAt,
+    status: '等待付款',
+  }, ...BASE_BATCHES] : BASE_BATCHES;
+  const visibleRows = useMemo(() => filterPaymentBatchRows(rows, {
+    search,
+    start,
+    end,
+    provider,
+  }), [end, provider, rows, search, start]);
+  const eligibleVisibleRows = visibleRows.filter((row) => row.provider === 'Airwallex');
+  const selectedRows = rows.filter((row) => selectedIds.has(row.id) && row.provider === 'Airwallex');
+  const selectedVisibleCount = eligibleVisibleRows.filter((row) => selectedIds.has(row.id)).length;
+  const allVisibleSelected = eligibleVisibleRows.length > 0 && selectedVisibleCount === eligibleVisibleRows.length;
+  const exportDisabled = selectedRows.length === 0 || exporting !== null;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+    }
+  }, [allVisibleSelected, selectedVisibleCount]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [menuOpen]);
+
+  const updateStart = (value: string) => {
+    const [nextStart, nextEnd] = correctedPaymentBatchDateRange(value, end, 'start');
+    setStart(nextStart);
+    setEnd(nextEnd);
+  };
+  const updateEnd = (value: string) => {
+    const [nextStart, nextEnd] = correctedPaymentBatchDateRange(start, value, 'end');
+    setStart(nextStart);
+    setEnd(nextEnd);
+  };
+  const toggleOne = (batchId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
+      return next;
+    });
+  };
+  const focusExportItem = (index: number) => {
+    window.requestAnimationFrame(() => exportItemRefs.current[index]?.focus());
+  };
+  const openExportMenu = (focusIndex?: number) => {
+    setMenuOpen(true);
+    if (focusIndex !== undefined && !exportDisabled) focusExportItem(focusIndex);
+  };
+  const closeExportMenu = (restoreFocus = false) => {
+    setMenuOpen(false);
+    if (restoreFocus) window.requestAnimationFrame(() => exportTriggerRef.current?.focus());
+  };
+  const handleExportTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      openExportMenu(event.key === 'ArrowDown' ? 0 : 1);
+    } else if (event.key === 'Escape' && menuOpen) {
+      event.preventDefault();
+      closeExportMenu();
+    }
+  };
+  const handleExportItemKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const nextIndex = event.key === 'ArrowDown' ? (index + 1) % 2 : (index - 1 + 2) % 2;
+      exportItemRefs.current[nextIndex]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      exportItemRefs.current[event.key === 'Home' ? 0 : 1]?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeExportMenu(true);
+    }
+  };
+  const exportConfirmations = async () => {
+    if (exportDisabled) return;
+    setMenuOpen(false);
+    setExporting('confirmations');
+    try {
+      const archive = await createBatchConfirmationArchive(selectedRows.map((row) => row.id));
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      downloadBlob(archive, `付款批次确认函-${date}.zip`);
+      notify('确认函已导出', `已为 ${selectedRows.length} 个 Airwallex 批次生成确认函压缩包。`);
+    } catch {
+      notify('确认函导出失败', '无法读取付款确认函模板，请检查导出资源后重试。');
+    } finally {
+      setExporting(null);
+    }
+  };
+  const exportPaymentData = async () => {
+    if (exportDisabled) return;
+    setMenuOpen(false);
+    setExporting('records');
+    try {
+      const workbook = await loadPaymentDataRecord();
+      downloadBlob(workbook, PAYMENT_DATA_FILENAME);
+      notify('付款数据记录已导出', `已下载 ${PAYMENT_DATA_FILENAME}。`);
+    } catch {
+      notify('付款数据记录导出失败', '无法读取付款数据 Excel，请检查导出资源后重试。');
+    } finally {
+      setExporting(null);
+    }
+  };
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
-  return <div className="page-stack"><PageHeading title="付款批次" subtitle="按渠道组织批量付款，并追踪失败重试与回写结果。" actions={createAction} /><div className="metrics-grid"><MetricCard label="处理中批次" value="2" meta="共 16 笔付款" tone="peach" /><MetricCard label="本月成功率" value="98.6%" meta="1,248 / 1,266 笔" /><MetricCard label="需人工处理" value="3" meta="来自 2 个批次" tone="lilac" /></div><section className="content-card"><div className="content-toolbar"><SearchBar value="" onChange={() => undefined} placeholder="搜索批次号" /><Button variant="secondary" icon={<Download size={16} />}>导出记录</Button></div><div className="table-scroll"><table className="data-table operational-table"><thead><tr><th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>创建人 / 时间</th><th>状态</th><th className="action-cell">操作</th></tr></thead><tbody>{rows.map((batch) => <tr key={batch.id}><td className="mono-cell">{batch.id}</td><td>{batch.provider}</td><td>{batch.count} 笔</td><td>{batch.amount}</td><td><strong>{batch.creator}</strong><small className="cell-subtext">{batch.time}</small></td><td><span className="simple-status"><i />{batch.status}</span></td><td className="action-cell"><button className="text-link" type="button" onClick={() => notify('批次详情', `${batch.id} 的付款明细与渠道响应已打开。`)}>查看明细</button></td></tr>)}</tbody></table></div></section></div>;
+
+  return (
+    <div className="page-stack payment-batches-page">
+      <PageHeading title="付款批次" subtitle="按渠道组织批量付款，并追踪失败重试与回写结果。" actions={createAction} />
+      <div className="metrics-grid">
+        <MetricCard label="处理中批次" value="2" meta="共 16 笔付款" tone="peach" />
+        <MetricCard label="本月成功率" value="98.6%" meta="1,248 / 1,266 笔" />
+        <MetricCard label="需人工处理" value="3" meta="来自 2 个批次" tone="lilac" />
+      </div>
+      <section className="content-card">
+        <div className="content-toolbar payment-batch-toolbar">
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索批次号" />
+          <div className="payment-batch-date-range" role="group" aria-label="付款时间范围">
+            <label>
+              <span>开始</span>
+              <input aria-label="付款开始时间" type="datetime-local" step="60" value={start} onChange={(event) => updateStart(event.target.value)} />
+            </label>
+            <span className="payment-batch-date-divider">至</span>
+            <label>
+              <span>结束</span>
+              <input aria-label="付款结束时间" type="datetime-local" step="60" value={end} onChange={(event) => updateEnd(event.target.value)} />
+            </label>
+          </div>
+          <SelectField
+            ariaLabel="付款渠道筛选"
+            className="payment-batch-channel-filter"
+            value={provider}
+            options={[
+              { value: 'all', label: '全部付款渠道' },
+              { value: 'Airwallex', label: 'Airwallex' },
+              { value: 'PayPal', label: 'PayPal' },
+              { value: 'PayMax', label: 'PayMax' },
+            ]}
+            onChange={setProvider}
+          />
+          <div
+            className="payment-batch-export"
+            ref={exportMenuRef}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
+            }}
+          >
+            <button
+              ref={exportTriggerRef}
+              className="button button-secondary payment-batch-export-trigger"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={exporting !== null}
+              onKeyDown={handleExportTriggerKeyDown}
+              onClick={() => setMenuOpen((current) => !current)}
+            >
+              <Download size={16} aria-hidden="true" />
+              <span>{exporting ? '导出中...' : selectedRows.length ? `导出（${selectedRows.length}）` : '导出'}</span>
+              <ChevronDown className="payment-batch-export-chevron" size={15} aria-hidden="true" />
+            </button>
+            {menuOpen ? (
+              <div className="payment-batch-export-menu" role="menu" aria-label="批次导出选项">
+                <button
+                  ref={(node) => { exportItemRefs.current[0] = node; }}
+                  type="button"
+                  role="menuitem"
+                  disabled={exportDisabled}
+                  tabIndex={-1}
+                  onKeyDown={(event) => handleExportItemKeyDown(event, 0)}
+                  onClick={() => { void exportConfirmations(); }}
+                >
+                  <FileArchive size={17} aria-hidden="true" />
+                  <span><strong>导出确认函</strong><small>按批次目录生成 ZIP</small></span>
+                </button>
+                <button
+                  ref={(node) => { exportItemRefs.current[1] = node; }}
+                  type="button"
+                  role="menuitem"
+                  disabled={exportDisabled}
+                  tabIndex={-1}
+                  onKeyDown={(event) => handleExportItemKeyDown(event, 1)}
+                  onClick={() => { void exportPaymentData(); }}
+                >
+                  <FileSpreadsheet size={17} aria-hidden="true" />
+                  <span><strong>导出付款数据记录</strong><small>下载原始 Excel 文件</small></span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="payment-batch-selection-summary" aria-live="polite">
+          已选择 {selectedRows.length} 个 Airwallex 批次
+        </div>
+        <div className="table-scroll">
+          <table className="data-table operational-table payment-batch-table">
+            <thead>
+              <tr>
+                <th className="payment-batch-select-cell">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    aria-label="全选当前筛选结果中的 Airwallex 批次"
+                    checked={allVisibleSelected}
+                    disabled={!eligibleVisibleRows.length}
+                    onChange={() => setSelectedIds((current) => toggleVisibleAirwallexBatchSelection(current, visibleRows))}
+                  />
+                </th>
+                <th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((batch) => {
+                const selectable = batch.provider === 'Airwallex';
+                const selected = selectedIds.has(batch.id);
+                return (
+                  <tr className={selected ? 'is-selected' : ''} key={batch.id} aria-selected={selectable ? selected : undefined}>
+                    <td className="payment-batch-select-cell">
+                      <input
+                        type="checkbox"
+                        aria-label={selectable ? `选择付款批次 ${batch.id}` : `${batch.id} 不支持确认函导出`}
+                        title={selectable ? undefined : '仅 Airwallex 批次支持导出'}
+                        checked={selected}
+                        disabled={!selectable}
+                        onChange={() => toggleOne(batch.id)}
+                      />
+                    </td>
+                    <td className="mono-cell">{batch.id}</td>
+                    <td>{batch.provider}</td>
+                    <td>{batch.count} 笔</td>
+                    <td>{batch.amount}</td>
+                    <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
+                    <td><span className="simple-status"><i />{batch.status}</span></td>
+                    <td className="action-cell"><button className="text-link" type="button" onClick={() => notify('批次详情', `${batch.id} 的付款明细与渠道响应已打开。`)}>查看明细</button></td>
+                  </tr>
+                );
+              })}
+              {!visibleRows.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
