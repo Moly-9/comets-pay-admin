@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_PAYOUTS } from '../data';
 import type { InvoiceCurrency, Payout } from '../types';
-import { PaymentWorkbenchPage } from './PaymentWorkbenchPage';
+import { CURRENCY_FLAG_PATHS, PaymentWorkbenchPage } from './PaymentWorkbenchPage';
 
 const renderWorkbench = (payouts: Payout[]) => renderToStaticMarkup(
   <PaymentWorkbenchPage
@@ -44,7 +44,27 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html).toContain('待付款总额 · 3 笔');
     expect(html).toContain('USD 4,860');
     expect(html).toContain('本月已付款 · 1 笔');
+    const secondaryRows = Array.from(
+      html.matchAll(/<div class="payment-summary-secondary-row">([\s\S]*?)<\/div>/g),
+      (match) => match[1],
+    );
+    expect(secondaryRows).toHaveLength(8);
+    expect(html).toContain('>EUR<');
+    expect(html).toContain('>GBP<');
+    expect(html).toContain('>HKD<');
+    expect(html).toContain('>SGD<');
+    expect(secondaryRows.every((row) => !row.includes('<strong>'))).toBe(true);
     expect(html.match(/>查看详情<\/button>/g)).toHaveLength(2);
+  });
+
+  it('maps every supported currency to a flag asset for the detail list', () => {
+    expect(CURRENCY_FLAG_PATHS).toEqual({
+      USD: '/currency-flags/us.svg',
+      EUR: '/currency-flags/eu.svg',
+      GBP: '/currency-flags/gb.svg',
+      HKD: '/currency-flags/hk.svg',
+      SGD: '/currency-flags/sg.svg',
+    });
   });
 
   it('hides the detail action when a card has no more than four currencies', () => {

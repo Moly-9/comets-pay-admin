@@ -3011,11 +3011,11 @@ button:disabled {
 
 .payment-workbench-summary-card .payment-summary-secondary {
   display: grid;
-  width: min(38%, 178px);
+  width: min(40%, 184px);
   flex: none;
   align-self: stretch;
   align-content: center;
-  gap: 3px;
+  gap: 2px;
   border-left: 1px solid rgba(98, 94, 111, 0.14);
   padding-left: 16px;
 }
@@ -3023,28 +3023,27 @@ button:disabled {
 .payment-summary-secondary-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 28px 52px auto;
   align-items: baseline;
-  gap: 6px;
+  justify-content: start;
+  gap: 3px;
   color: #5f6471;
   font-size: 11.5px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
-.payment-summary-secondary-row > span {
+.payment-summary-secondary-row > span:first-child {
   color: #4f5360;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 400;
 }
 
-.payment-workbench-summary-card .payment-summary-secondary-row > strong {
-  overflow: hidden;
+.payment-summary-secondary-row > span:nth-child(2) {
   color: #343741;
   font-size: 11.5px;
-  font-weight: 750;
-  text-align: right;
-  text-overflow: ellipsis;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -3078,46 +3077,74 @@ button:disabled {
 }
 
 .payment-currency-detail-modal .modal-content {
-  padding: 8px 22px 12px;
+  padding: 4px 22px 12px;
 }
 
-.payment-currency-detail-table table {
-  width: 100%;
-  border-collapse: collapse;
+.payment-currency-detail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   font-variant-numeric: tabular-nums;
 }
 
-.payment-currency-detail-table th,
-.payment-currency-detail-table td {
+.payment-currency-detail-row {
+  display: grid;
+  min-height: 56px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   border-bottom: 1px solid #ececf1;
-  padding: 12px 8px;
-  text-align: right;
+  padding: 10px 8px;
+  transition: background-color 150ms ease;
 }
 
-.payment-currency-detail-table th {
-  color: #7a7f8d;
-  font-size: 11.5px;
-  font-weight: 700;
+.payment-currency-detail-row:hover {
+  background: #f7f8fc;
 }
 
-.payment-currency-detail-table td {
-  color: #343741;
-  font-size: 13px;
-}
-
-.payment-currency-detail-table th:first-child,
-.payment-currency-detail-table td:first-child {
-  padding-left: 0;
-  text-align: left;
-}
-
-.payment-currency-detail-table th:last-child,
-.payment-currency-detail-table td:last-child {
-  padding-right: 0;
-}
-
-.payment-currency-detail-table tbody tr:last-child td {
+.payment-currency-detail-row:last-child {
   border-bottom: 0;
+}
+
+.payment-currency-flag {
+  display: block;
+  width: 24px;
+  height: 16px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(39, 43, 54, 0.08);
+  object-fit: cover;
+}
+
+.payment-currency-detail-meta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.payment-currency-detail-meta strong {
+  color: #2f323b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.payment-currency-detail-meta small {
+  color: #858a96;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
+.payment-currency-detail-amount {
+  color: #2f323b;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.payment-currency-detail-amount small {
+  color: #555a67;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .operations-card,
@@ -9448,7 +9475,7 @@ button:disabled {
   }
 
   .payment-workbench-summary-card .payment-summary-secondary {
-    width: min(38%, 150px);
+    width: min(40%, 150px);
     padding-left: 11px;
   }
 
@@ -9564,13 +9591,13 @@ button:disabled {
   }
 
   .payment-workbench-summary-card .payment-summary-secondary {
-    width: 105px;
+    width: 124px;
     padding-left: 9px;
   }
 
   .payment-summary-secondary-row {
-    grid-template-columns: 26px minmax(0, 1fr) auto;
-    gap: 4px;
+    grid-template-columns: 26px 47px auto;
+    gap: 2px;
   }
 }
 

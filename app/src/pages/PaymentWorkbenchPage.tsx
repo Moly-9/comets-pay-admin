@@ -25,6 +25,14 @@ const CURRENCY_OVERVIEW_META: Record<CurrencyOverviewId, {
 
 const formatOverviewAmount = (amount: number) => amount.toLocaleString('en-US');
 
+export const CURRENCY_FLAG_PATHS: Record<PaymentCurrencyItem['currency'], string> = {
+  USD: '/currency-flags/us.svg',
+  EUR: '/currency-flags/eu.svg',
+  GBP: '/currency-flags/gb.svg',
+  HKD: '/currency-flags/hk.svg',
+  SGD: '/currency-flags/sg.svg',
+};
+
 function CurrencyOverviewCard({
   id,
   items,
@@ -38,7 +46,7 @@ function CurrencyOverviewCard({
     ?? { currency: 'USD', amount: 0, count: 0 };
   const secondary = items.filter((item) => item.currency !== 'USD');
   const hasDetails = items.length > 4;
-  const visibleSecondary = secondary.slice(0, hasDetails ? 2 : 3);
+  const visibleSecondary = secondary.slice(0, 4);
   const meta = CURRENCY_OVERVIEW_META[id];
 
   return (
@@ -58,7 +66,7 @@ function CurrencyOverviewCard({
           {visibleSecondary.map((item) => (
             <div className="payment-summary-secondary-row" key={item.currency}>
               <span>{item.currency}</span>
-              <strong>{formatOverviewAmount(item.amount)}</strong>
+              <span>{formatOverviewAmount(item.amount)}</span>
               <small>{item.count} 笔</small>
             </div>
           ))}
@@ -90,22 +98,26 @@ function CurrencyOverviewModal({
       onClose={onClose}
       footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
     >
-      <div className="payment-currency-detail-table">
-        <table>
-          <thead>
-            <tr><th>币种</th><th>金额</th><th>笔数</th></tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.currency}>
-                <td><strong>{item.currency}</strong></td>
-                <td>{formatOverviewAmount(item.amount)}</td>
-                <td>{item.count} 笔</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ul className="payment-currency-detail-list" aria-label="币种金额和付款笔数">
+        {items.map((item) => (
+          <li className="payment-currency-detail-row" key={item.currency}>
+            <img
+              className="payment-currency-flag"
+              src={CURRENCY_FLAG_PATHS[item.currency]}
+              alt=""
+              width="24"
+              height="16"
+            />
+            <span className="payment-currency-detail-meta">
+              <strong>{item.currency}</strong>
+              <small>{item.count} 笔</small>
+            </span>
+            <strong className="payment-currency-detail-amount">
+              {formatOverviewAmount(item.amount)} <small>{item.currency}</small>
+            </strong>
+          </li>
+        ))}
+      </ul>
     </Modal>
   );
 }
