@@ -1,12 +1,85 @@
-import { CalendarDays, Plus, WalletCards } from 'lucide-react';
+import { CalendarDays, CircleDollarSign, Plus, WalletCards } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination } from '../components/Pagination';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
-import type { Payout } from '../types';
+import type { InvoiceCurrency, Payout } from '../types';
 
 type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
+
+type CurrencyOverviewItem = {
+  currency: InvoiceCurrency;
+  amount: number;
+  count: number;
+};
+
+type CurrencyOverview = {
+  id: 'pending' | 'paid';
+  title: string;
+  description: string;
+  tone: 'amber' | 'rose';
+  items: CurrencyOverviewItem[];
+};
+
+const PAYMENT_CURRENCY_OVERVIEWS: CurrencyOverview[] = [
+  {
+    id: 'pending',
+    title: '待付款',
+    description: '已审核待执行',
+    tone: 'amber',
+    items: [
+      { currency: 'USD', amount: 48_210, count: 24 },
+      { currency: 'EUR', amount: 31_860, count: 18 },
+      { currency: 'GBP', amount: 14_920, count: 9 },
+      { currency: 'HKD', amount: 286_400, count: 12 },
+    ],
+  },
+  {
+    id: 'paid',
+    title: '本月已付款',
+    description: '本月累计完成',
+    tone: 'rose',
+    items: [
+      { currency: 'USD', amount: 128_640, count: 86 },
+      { currency: 'EUR', amount: 74_520, count: 41 },
+      { currency: 'GBP', amount: 38_760, count: 22 },
+      { currency: 'HKD', amount: 692_300, count: 34 },
+    ],
+  },
+];
+
+const formatOverviewAmount = (amount: number) => amount.toLocaleString('en-US');
+
+function CurrencyOverviewCard({ overview }: { overview: CurrencyOverview }) {
+  const Icon = overview.id === 'pending' ? CircleDollarSign : WalletCards;
+
+  return (
+    <article className={`payment-currency-card payment-currency-card-${overview.tone}`}>
+      <header className="payment-currency-card-header">
+        <div className="payment-currency-card-heading">
+          <span className="payment-currency-card-icon" aria-hidden="true"><Icon size={20} /></span>
+          <div>
+            <h2>{overview.title}</h2>
+            <p>{overview.description}</p>
+          </div>
+        </div>
+        <span className="payment-currency-card-scope">{overview.items.length} 个币种</span>
+      </header>
+      <dl className="payment-currency-ledger">
+        {overview.items.map((item, index) => (
+          <div className={index === 0 ? 'payment-currency-entry payment-currency-entry-primary' : 'payment-currency-entry'} key={item.currency}>
+            <dt>{item.currency}</dt>
+            <dd>
+              <strong>{formatOverviewAmount(item.amount)}</strong>
+              <span>{item.count} 笔</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </article>
+  );
+}
 
 const TAB_LABELS: Array<{ id: WorkbenchTab; label: string }> = [
   { id: 'review', label: '待审核' },
@@ -274,15 +347,10 @@ export function PaymentWorkbenchPage({
         </NoticeBanner>
       ) : null}
 
-      <section className="summary-surface" aria-label="付款概览">
-        <article className="summary-card summary-card-peach">
-          <span className="summary-illustration summary-coins" aria-hidden="true">◆</span>
-          <div><strong>USD 48,210</strong><span>待付款总额 · 24 笔</span></div>
-        </article>
-        <article className="summary-card summary-card-lilac">
-          <span className="summary-illustration" aria-hidden="true"><WalletCards size={27} /></span>
-          <div><strong>USD 128,640</strong><span>本月已付款 · 86 笔</span></div>
-        </article>
+      <section className="summary-surface payment-currency-summary-surface" aria-label="付款概览">
+        {PAYMENT_CURRENCY_OVERVIEWS.map((overview) => (
+          <CurrencyOverviewCard overview={overview} key={overview.id} />
+        ))}
       </section>
 
       <section className="operations-card">
