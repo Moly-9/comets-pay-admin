@@ -30,7 +30,7 @@ import { normalizeLineItem } from './invoiceUtils';
 export const INVOICE_BATCH_SCHEMA_VERSION = '1.0' as const;
 export const INVOICE_BATCH_MAX_ROWS = 50;
 export const INVOICE_BATCH_MAX_FILE_SIZE = 5 * 1024 * 1024;
-export const INVOICE_BATCH_CURRENCIES: InvoiceCurrency[] = ['USD', 'EUR', 'GBP', 'HKD'];
+export const INVOICE_BATCH_CURRENCIES: InvoiceCurrency[] = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'];
 
 export type InvoiceBatchContext = {
   project: ProjectSummary;

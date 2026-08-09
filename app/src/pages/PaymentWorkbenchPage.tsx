@@ -1,83 +1,112 @@
-import { CalendarDays, CircleDollarSign, Plus, WalletCards } from 'lucide-react';
+import { CalendarDays, Plus, WalletCards } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination } from '../components/Pagination';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
-import type { InvoiceCurrency, Payout } from '../types';
+import {
+  aggregatePayoutCurrencies,
+  getPaymentCurrencyOverviews,
+  type PaymentCurrencyItem,
+} from '../paymentCurrencyOverview';
+import type { Payout } from '../types';
 
 type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
 
-type CurrencyOverviewItem = {
-  currency: InvoiceCurrency;
-  amount: number;
-  count: number;
-};
+type CurrencyOverviewId = 'pending' | 'paid';
 
-type CurrencyOverview = {
-  id: 'pending' | 'paid';
-  title: string;
-  description: string;
-  tone: 'amber' | 'rose';
-  items: CurrencyOverviewItem[];
+const CURRENCY_OVERVIEW_META: Record<CurrencyOverviewId, {
+  detailTitle: string;
+  summaryLabel: string;
+}> = {
+  pending: { detailTitle: '待付款币种详情', summaryLabel: '待付款总额' },
+  paid: { detailTitle: '本月已付款币种详情', summaryLabel: '本月已付款' },
 };
-
-const PAYMENT_CURRENCY_OVERVIEWS: CurrencyOverview[] = [
-  {
-    id: 'pending',
-    title: '待付款',
-    description: '已审核待执行',
-    tone: 'amber',
-    items: [
-      { currency: 'USD', amount: 48_210, count: 24 },
-      { currency: 'EUR', amount: 31_860, count: 18 },
-      { currency: 'GBP', amount: 14_920, count: 9 },
-      { currency: 'HKD', amount: 286_400, count: 12 },
-    ],
-  },
-  {
-    id: 'paid',
-    title: '本月已付款',
-    description: '本月累计完成',
-    tone: 'rose',
-    items: [
-      { currency: 'USD', amount: 128_640, count: 86 },
-      { currency: 'EUR', amount: 74_520, count: 41 },
-      { currency: 'GBP', amount: 38_760, count: 22 },
-      { currency: 'HKD', amount: 692_300, count: 34 },
-    ],
-  },
-];
 
 const formatOverviewAmount = (amount: number) => amount.toLocaleString('en-US');
 
-function CurrencyOverviewCard({ overview }: { overview: CurrencyOverview }) {
-  const Icon = overview.id === 'pending' ? CircleDollarSign : WalletCards;
+function CurrencyOverviewCard({
+  id,
+  items,
+  onViewDetails,
+}: {
+  id: CurrencyOverviewId;
+  items: PaymentCurrencyItem[];
+  onViewDetails: () => void;
+}) {
+  const primary = items.find((item) => item.currency === 'USD')
+    ?? { currency: 'USD', amount: 0, count: 0 };
+  const secondary = items.filter((item) => item.currency !== 'USD');
+  const hasDetails = items.length > 4;
+  const visibleSecondary = secondary.slice(0, hasDetails ? 2 : 3);
+  const meta = CURRENCY_OVERVIEW_META[id];
 
   return (
-    <article className={`payment-currency-card payment-currency-card-${overview.tone}`}>
-      <header className="payment-currency-card-header">
-        <div className="payment-currency-card-heading">
-          <span className="payment-currency-card-icon" aria-hidden="true"><Icon size={20} /></span>
-          <div>
-            <h2>{overview.title}</h2>
-            <p>{overview.description}</p>
-          </div>
-        </div>
-        <span className="payment-currency-card-scope">{overview.items.length} 个币种</span>
-      </header>
-      <dl className="payment-currency-ledger">
-        {overview.items.map((item, index) => (
-          <div className={index === 0 ? 'payment-currency-entry payment-currency-entry-primary' : 'payment-currency-entry'} key={item.currency}>
-            <dt>{item.currency}</dt>
-            <dd>
+    <article
+      className={`summary-card ${id === 'pending' ? 'summary-card-peach' : 'summary-card-lilac'} payment-workbench-summary-card`}
+      aria-label={meta.summaryLabel}
+    >
+      <span className={`summary-illustration ${id === 'pending' ? 'summary-coins' : ''}`} aria-hidden="true">
+        {id === 'pending' ? '◆' : <WalletCards size={27} />}
+      </span>
+      <div className="payment-summary-primary">
+        <strong>USD {formatOverviewAmount(primary.amount)}</strong>
+        <span>{meta.summaryLabel} · {primary.count} 笔</span>
+      </div>
+      {visibleSecondary.length || hasDetails ? (
+        <div className="payment-summary-secondary" aria-label={`${meta.summaryLabel}其他币种`}>
+          {visibleSecondary.map((item) => (
+            <div className="payment-summary-secondary-row" key={item.currency}>
+              <span>{item.currency}</span>
               <strong>{formatOverviewAmount(item.amount)}</strong>
-              <span>{item.count} 笔</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
+              <small>{item.count} 笔</small>
+            </div>
+          ))}
+          {hasDetails ? (
+            <button className="payment-summary-details-button" type="button" onClick={onViewDetails}>
+              查看详情
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </article>
+  );
+}
+
+function CurrencyOverviewModal({
+  id,
+  items,
+  onClose,
+}: {
+  id: CurrencyOverviewId;
+  items: PaymentCurrencyItem[];
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      title={CURRENCY_OVERVIEW_META[id].detailTitle}
+      width="460px"
+      className="payment-currency-detail-modal"
+      onClose={onClose}
+      footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
+    >
+      <div className="payment-currency-detail-table">
+        <table>
+          <thead>
+            <tr><th>币种</th><th>金额</th><th>笔数</th></tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.currency}>
+                <td><strong>{item.currency}</strong></td>
+                <td>{formatOverviewAmount(item.amount)}</td>
+                <td>{item.count} 笔</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   );
 }
 
@@ -138,27 +167,8 @@ type PaymentProjectRow = {
 };
 
 const summarizePayoutAmounts = (payouts: Payout[]) => {
-  const totals = payouts.reduce<Record<string, number>>((result, payout) => ({
-    ...result,
-    [payout.currency]: (result[payout.currency] ?? 0) + payout.amount,
-  }), {});
-  return Object.entries(totals)
-    .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
-    .join(' · ');
-};
-
-const summarizeProjectAmounts = (projects: PaymentProjectRow[]) => {
-  const totals = projects.reduce<Record<string, number>>((result, project) => {
-    const currency = project.amount.match(/\b[A-Z]{3}\b/)?.[0];
-    const amount = Number(project.amount.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0] ?? 0);
-    if (!currency) return result;
-    return {
-      ...result,
-      [currency]: (result[currency] ?? 0) + amount,
-    };
-  }, {});
-  return Object.entries(totals)
-    .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
+  return aggregatePayoutCurrencies(payouts)
+    .map(({ currency, amount }) => `${currency} ${formatOverviewAmount(amount)}`)
     .join(' · ');
 };
 
@@ -264,17 +274,25 @@ export function PaymentWorkbenchPage({
   onNewBatch,
   onSelectPayout,
   canCreateBatch,
+  currentDate = new Date(),
 }: {
   payouts: Payout[];
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
   canCreateBatch: boolean;
+  currentDate?: Date;
 }) {
   const [showNotice, setShowNotice] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkbenchTab>('review');
   const [provider, setProvider] = useState('全部渠道');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [detailOverview, setDetailOverview] = useState<CurrencyOverviewId | null>(null);
+
+  const currencyOverviews = useMemo(
+    () => getPaymentCurrencyOverviews(payouts, currentDate),
+    [currentDate, payouts],
+  );
 
   const filtered = useMemo(() => {
     const tabFiltered = payouts.filter((payout) => (
@@ -299,7 +317,7 @@ export function PaymentWorkbenchPage({
         project: project?.name ?? projectPayouts[0].project,
         media: project?.media ?? '待同步',
         pm: project?.pm ?? '待同步',
-        amount: project?.budget ?? summarizePayoutAmounts(projectPayouts),
+        amount: summarizePayoutAmounts(projectPayouts),
         contracts: project?.creators ?? new Set(projectPayouts.map((payout) => payout.contract)).size,
         invoices: project?.creators ?? new Set(projectPayouts.map((payout) => payout.invoice)).size,
         paymentOrder: project?.paymentOrder ?? '待生成',
@@ -327,8 +345,8 @@ export function PaymentWorkbenchPage({
   }), [payouts]);
 
   const filteredAmountSummary = useMemo(
-    () => summarizeProjectAmounts(filteredProjects),
-    [filteredProjects],
+    () => summarizePayoutAmounts(filtered),
+    [filtered],
   );
   const activeTabLabel = TAB_LABELS.find((tab) => tab.id === activeTab)?.label ?? '';
   const activeTabSummaryLabel = TAB_SUMMARY_LABELS[activeTab];
@@ -347,10 +365,17 @@ export function PaymentWorkbenchPage({
         </NoticeBanner>
       ) : null}
 
-      <section className="summary-surface payment-currency-summary-surface" aria-label="付款概览">
-        {PAYMENT_CURRENCY_OVERVIEWS.map((overview) => (
-          <CurrencyOverviewCard overview={overview} key={overview.id} />
-        ))}
+      <section className="summary-surface payment-workbench-summary" aria-label="付款概览">
+        <CurrencyOverviewCard
+          id="pending"
+          items={currencyOverviews.pending}
+          onViewDetails={() => setDetailOverview('pending')}
+        />
+        <CurrencyOverviewCard
+          id="paid"
+          items={currencyOverviews.paid}
+          onViewDetails={() => setDetailOverview('paid')}
+        />
       </section>
 
       <section className="operations-card">
@@ -403,6 +428,14 @@ export function PaymentWorkbenchPage({
           emptyText={`当前没有${activeTabLabel}付款项目`}
         />
       </section>
+
+      {detailOverview ? (
+        <CurrencyOverviewModal
+          id={detailOverview}
+          items={currencyOverviews[detailOverview]}
+          onClose={() => setDetailOverview(null)}
+        />
+      ) : null}
     </div>
   );
 }

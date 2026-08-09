@@ -30,7 +30,7 @@ export type NavPage =
 
 export type Provider = 'Airwallex' | 'PayMax' | 'PayPal' | '手动打款';
 
-export type InvoiceCurrency = 'USD' | 'EUR' | 'GBP' | 'HKD';
+export type InvoiceCurrency = 'USD' | 'EUR' | 'GBP' | 'HKD' | 'SGD';
 
 export type AirwallexEntityType = 'PERSONAL' | 'COMPANY';
 

@@ -2834,7 +2834,7 @@ export function OrganizationPage({
 }
 
 const CHANNELS = [
-  { name: 'Airwallex', tag: '国际银行转账', description: '支持本地转账、SWIFT 与批量付款', currencies: 'USD · EUR · GBP · HKD', state: '已连接', color: '#6d5ce7' },
+  { name: 'Airwallex', tag: '国际银行转账', description: '支持本地转账、SWIFT 与批量付款', currencies: 'USD · EUR · GBP · HKD · SGD', state: '已连接', color: '#6d5ce7' },
   { name: 'PayMax', tag: '本地银行网络', description: '俄罗斯、泰国及区域本地银行模板', currencies: 'USD · EUR · THB', state: '已连接', color: '#ff765d' },
   { name: 'PayPal', tag: '数字钱包', description: '通过达人 PayPal 邮箱快速付款', currencies: 'USD · EUR', state: '已连接', color: '#1689e5' },
 ];
