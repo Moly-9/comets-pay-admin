@@ -1011,6 +1011,7 @@ export function RequestProjectDetailPage({
   currentUser,
   onExportPaymentList,
   onApprovalAction,
+  onOpenFinanceReview,
   onBack,
   notify,
 }: {
@@ -1024,7 +1025,8 @@ export function RequestProjectDetailPage({
     request: RequestProjectSummary,
     action: RequestApprovalAction,
     reason?: string,
-  ) => void;
+  ) => boolean;
+  onOpenFinanceReview: (requestId: string) => void;
   onBack: () => void;
   notify: Notify;
 }) {
@@ -1056,6 +1058,7 @@ export function RequestProjectDetailPage({
   const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
   const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
+  const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
   const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);
   const paymentListItemCount = requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0);
   const currentPaymentList = requestPaymentLists[0] ?? null;
@@ -1223,7 +1226,13 @@ export function RequestProjectDetailPage({
               <span><strong>已退回媒介复核</strong>{request.approval.returnReason}</span>
             </div>
           ) : null}
-          {canReviewCurrentStage || canReturnCurrentRequest ? (
+          {isFinanceApprovalStage && canReviewCurrentStage ? (
+            <div className="invoice-review-actions request-approval-actions">
+              <Button icon={<ShieldCheck size={16} />} onClick={() => onOpenFinanceReview(request.id)}>
+                进入财务审核
+              </Button>
+            </div>
+          ) : canReviewCurrentStage || canReturnCurrentRequest ? (
             <div className="invoice-review-actions request-approval-actions">
               {canReturnCurrentRequest ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>退回媒介修改</Button> : null}
               {canReviewCurrentStage ? (
@@ -1236,10 +1245,15 @@ export function RequestProjectDetailPage({
               ) : null}
             </div>
           ) : null}
-          {financeApprovalBlocked && canReviewCurrentStage ? (
+          {isFinanceApprovalStage && canReviewCurrentStage ? (
             <div className="drawer-alert">
-              <CircleAlert size={18} />
-              <span><strong>暂不能通过财务审核</strong>Invoice 与付款清单存在 {financeReview.mismatchCount || '未定位'} 项关键差异。</span>
+              {financeApprovalBlocked ? <CircleAlert size={18} /> : <ShieldCheck size={18} />}
+              <span>
+                <strong>{financeApprovalBlocked ? '存在待处理差异' : '等待逐份核对'}</strong>
+                {financeApprovalBlocked
+                  ? `Invoice 与付款清单存在 ${financeReview.mismatchCount || '未定位'} 项关键差异。`
+                  : `请进入财务审核，逐份确认 ${financeReview.totalCount} 份 Invoice 与付款明细。`}
+              </span>
             </div>
           ) : null}
         </aside>

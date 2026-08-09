@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentListRecord } from './businessWorkflow';
-import { buildRequestFinanceReview } from './financeReview';
+import {
+  buildRequestFinanceReview,
+  createFinanceReviewSession,
+  financeReviewReturnReason,
+  financeReviewSessionCanApprove,
+  reconcileFinanceReviewSession,
+  setFinanceReviewDecision,
+} from './financeReview';
 import type { PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
 
@@ -64,11 +71,35 @@ describe('request finance review', () => {
   it('blocks amount mismatches and duplicate payment rows', () => {
     const amountMismatch = paymentList();
     amountMismatch.items[0].snapshot.amount = 99;
-    expect(buildRequestFinanceReview(request, [invoice], [amountMismatch]).canApprove).toBe(false);
+    const amountReview = buildRequestFinanceReview(request, [invoice], [amountMismatch]);
+    expect(amountReview.canApprove).toBe(false);
+    expect(amountReview.pages[0].kind).toBe('pair');
 
     const duplicate = paymentList();
     duplicate.items.push({ ...duplicate.items[0], id: 'item-duplicate' });
-    expect(buildRequestFinanceReview(request, [invoice], [duplicate]).canApprove).toBe(false);
+    const duplicateReview = buildRequestFinanceReview(request, [invoice], [duplicate]);
+    expect(duplicateReview.canApprove).toBe(false);
+    expect(duplicateReview.pages[0]).toMatchObject({
+      kind: 'duplicate-payment',
+      paymentItems: [{ itemId: 'item-test' }, { itemId: 'item-duplicate' }],
+    });
+  });
+
+  it('creates explicit pages for missing invoice and missing payment records', () => {
+    expect(buildRequestFinanceReview(request, [], [paymentList()]).pages[0].kind).toBe('missing-invoice');
+    expect(buildRequestFinanceReview(request, [invoice], []).pages[0].kind).toBe('missing-payment');
+  });
+
+  it('creates a returnable blocking page when the request has no review records', () => {
+    const emptyRequest = { ...request, invoiceIds: [] };
+    const review = buildRequestFinanceReview(emptyRequest, [], []);
+    expect(review.pages).toHaveLength(1);
+    expect(review.pages[0]).toMatchObject({
+      kind: 'empty-request',
+      invoiceNumber: '未关联 Invoice',
+      mismatchCount: 1,
+    });
+    expect(review.canApprove).toBe(false);
   });
 
   it('blocks payment rows that do not belong to the request', () => {
@@ -85,5 +116,65 @@ describe('request finance review', () => {
       label: '付款清单额外明细',
       state: 'mismatch',
     });
+    expect(review.pages[1]).toMatchObject({
+      kind: 'extra-payment',
+      invoiceNumber: 'INV-EXTRA',
+    });
+    expect(review.pageCount).toBe(2);
+  });
+
+  it('requires every stable page to be manually confirmed for the current fingerprint', () => {
+    const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    const initial = createFinanceReviewSession({
+      requestId: request.id,
+      approvalRound: 1,
+      reviewerAccount: 'finance.test',
+      review,
+    });
+    expect(financeReviewSessionCanApprove(initial, review)).toBe(false);
+
+    const confirmed = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'correct',
+      reviewedAt: '2026-08-09T10:00:00.000Z',
+    });
+    expect(financeReviewSessionCanApprove(confirmed, review)).toBe(true);
+
+    const changedList = paymentList();
+    changedList.items[0].snapshot.paymentReason = 'Changed reason';
+    const changedReview = buildRequestFinanceReview(request, [invoice], [changedList]);
+    const reconciled = reconcileFinanceReviewSession(confirmed, {
+      requestId: request.id,
+      approvalRound: 1,
+      reviewerAccount: 'finance.test',
+      review: changedReview,
+    });
+    expect(changedReview.fingerprint).not.toBe(review.fingerprint);
+    expect(reconciled.decisions[changedReview.pages[0].key]).toEqual({ state: 'unreviewed' });
+    expect(financeReviewSessionCanApprove(reconciled, changedReview)).toBe(false);
+
+    const versionedReview = buildRequestFinanceReview(
+      request,
+      [{ ...invoice, version: (invoice.version ?? 0) + 1 }],
+      [paymentList()],
+    );
+    expect(versionedReview.pages[0].fields).toEqual(review.pages[0].fields);
+    expect(versionedReview.fingerprint).not.toBe(review.fingerprint);
+    expect(financeReviewSessionCanApprove(confirmed, versionedReview)).toBe(false);
+  });
+
+  it('aggregates incorrect reasons by Invoice number', () => {
+    const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    const initial = createFinanceReviewSession({
+      requestId: request.id,
+      approvalRound: 1,
+      reviewerAccount: 'finance.test',
+      review,
+    });
+    const incorrect = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      reason: '收款账户与 Invoice 不一致',
+      reviewedAt: '2026-08-09T10:00:00.000Z',
+    });
+    expect(financeReviewReturnReason(incorrect, review)).toBe('INV-TEST：收款账户与 Invoice 不一致');
   });
 });

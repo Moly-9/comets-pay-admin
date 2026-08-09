@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from './components/AppShell';
+import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { Toast } from './components/Common';
 import type { RequestProjectResourceActions } from './components/RequestProjectResourceManager';
@@ -58,7 +59,13 @@ import {
   type InvoicePageTab,
 } from './invoice/invoiceReviewWorkflow';
 import { findInvoiceRequest, getInvoiceManagementView } from './invoice/invoiceManagement';
-import { buildRequestFinanceReview } from './financeReview';
+import {
+  buildRequestFinanceReview,
+  financeReviewSessionCanApprove,
+  financeReviewSessionKey,
+  reconcileFinanceReviewSession,
+  type FinanceReviewSession,
+} from './financeReview';
 import {
   BatchesPage,
   ChannelsPage,
@@ -383,6 +390,8 @@ export default function App() {
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [createdBatch, setCreatedBatch] = useState<CreatedBatch>(null);
+  const [financeReviewRequestId, setFinanceReviewRequestId] = useState<string | null>(null);
+  const [financeReviewSessions, setFinanceReviewSessions] = useState<Record<string, FinanceReviewSession>>({});
 
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
@@ -1887,23 +1896,33 @@ export default function App() {
     );
     if (!request.approval || (action === 'APPROVE' ? !canApprove : !canReturn)) {
       notify('暂无审批权限', '当前账号不是该请款当前节点的审批人，不能越级处理。');
-      return;
+      return false;
     }
     const currentStage = requestApprovalStage(request.approval.status);
     if (!currentStage) {
       notify('当前状态不可审批', '该请款已结束当前审批轮次。');
-      return;
+      return false;
     }
     if (action === 'APPROVE' && currentStage === 'FINANCE') {
       const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
-      if (!financeReview.canApprove) {
+      const session = financeReviewSessions[financeReviewSessionKey(
+        request.id,
+        request.approval.round,
+        currentUser.account,
+      )];
+      if (!financeReviewSessionCanApprove(session, financeReview)) {
+        const pendingCount = financeReview.pages.filter((page) => (
+          session?.decisions[page.key]?.state !== 'correct'
+        )).length;
         notify(
           '暂不能通过财务审核',
-          financeReview.totalCount
-            ? `Invoice 与付款清单存在 ${financeReview.mismatchCount} 项关键差异，请核对后退回修改。`
+          financeReview.mismatchCount
+            ? `Invoice 与付款清单存在 ${financeReview.mismatchCount} 项关键差异，请记录原因后退回修改。`
+            : financeReview.totalCount
+              ? `还有 ${pendingCount} 份 Invoice 尚未由当前审核人确认无误。`
             : '该请款没有可核对的 Invoice 与付款清单稳定关联。',
         );
-        return;
+        return false;
       }
     }
     try {
@@ -2022,9 +2041,47 @@ export default function App() {
             ? '项目请款与关联 Invoice 已通过，付款入口已解锁。'
             : `请款已进入“${REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status]}”。`,
       );
+      if (currentStage === 'FINANCE') {
+        const completedSessionKey = financeReviewSessionKey(
+          request.id,
+          request.approval.round,
+          currentUser.account,
+        );
+        setFinanceReviewSessions((current) => {
+          const next = { ...current };
+          delete next[completedSessionKey];
+          return next;
+        });
+      }
+      return true;
     } catch (error) {
       notify('审批操作失败', error instanceof Error ? error.message : '当前节点无法执行该操作。');
+      return false;
     }
+  };
+
+  const openFinanceReview = (requestId: string) => {
+    const request = requestProjects.find((candidate) => candidate.id === requestId);
+    if (!request?.approval || request.approval.status !== 'PENDING_FINANCE') {
+      notify('当前无需财务审核', '该请款已不在待财务审核节点。');
+      return;
+    }
+    if (!canReviewRequestApproval(currentUser, request.approval, request.pm)) {
+      notify('暂无审批权限', '当前账号不是该请款的财务审核人。');
+      return;
+    }
+    const review = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+    const sessionKey = financeReviewSessionKey(request.id, request.approval.round, currentUser.account);
+    setFinanceReviewSessions((current) => ({
+      ...current,
+      [sessionKey]: reconcileFinanceReviewSession(current[sessionKey], {
+        requestId: request.id,
+        approvalRound: request.approval!.round,
+        reviewerAccount: currentUser.account,
+        review,
+      }),
+    }));
+    setFinanceReviewRequestId(request.id);
   };
 
   const advancePayout = (payout: Payout) => {
@@ -2832,6 +2889,7 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           onExportPaymentList={requestResourceActions.onExportPaymentList}
           onApprovalAction={handleRequestApproval}
+          onOpenFinanceReview={openFinanceReview}
           focusedRequestId={focusedRequestId}
           onFocusCleared={() => setFocusedRequestId(null)}
         />
@@ -3109,10 +3167,7 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}
-          onSelectRequest={(requestId) => {
-            setFocusedRequestId(requestId);
-            setActivePage('requests');
-          }}
+          onSelectRequest={openFinanceReview}
           canCreateBatch={canExecutePayouts}
         />
       );
@@ -3135,10 +3190,50 @@ export default function App() {
   const selectedPayoutContract = selectedPayout
     ? contracts.find((contract) => contract.id === selectedPayout.contract) ?? null
     : null;
+  const financeReviewRequest = financeReviewRequestId
+    ? requestProjects.find((request) => request.id === financeReviewRequestId) ?? null
+    : null;
+  const activeFinanceReview = financeReviewRequest
+    ? buildRequestFinanceReview(financeReviewRequest, generatedInvoices, paymentLists)
+    : null;
+  const activeFinanceSessionKey = financeReviewRequest?.approval
+    ? financeReviewSessionKey(financeReviewRequest.id, financeReviewRequest.approval.round, currentUser.account)
+    : null;
+
+  const closeFinanceReview = (completed = false) => {
+    setFinanceReviewRequestId(null);
+    if (!completed) return;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>('.tab-button[aria-selected="true"]')?.focus();
+      });
+    });
+  };
 
   return (
     <AppShell activePage={activePage} onNavigate={navigate} currentUser={currentUser}>
       {pageContent}
+      {financeReviewRequest && activeFinanceReview && activeFinanceSessionKey ? (
+        <FinanceReviewWorkspace
+          request={financeReviewRequest}
+          financeReview={activeFinanceReview}
+          generatedInvoices={generatedInvoices}
+          paymentLists={paymentLists}
+          currentUser={currentUser}
+          session={financeReviewSessions[activeFinanceSessionKey]}
+          onSessionChange={(session) => {
+            const sessionKey = financeReviewSessionKey(
+              session.requestId,
+              session.approvalRound,
+              session.reviewerAccount,
+            );
+            setFinanceReviewSessions((current) => ({ ...current, [sessionKey]: session }));
+          }}
+          onApprove={() => handleRequestApproval(financeReviewRequest, 'APPROVE')}
+          onReturn={(reason) => handleRequestApproval(financeReviewRequest, 'RETURN', reason)}
+          onClose={closeFinanceReview}
+        />
+      ) : null}
       {selectedPayout ? (
         <PayoutDrawer
           payout={selectedPayout}

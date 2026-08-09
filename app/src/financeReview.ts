@@ -14,21 +14,66 @@ export type FinanceReviewField = {
   state: FinanceReviewFieldState;
 };
 
+export type FinanceReviewPageKind =
+  | 'pair'
+  | 'missing-invoice'
+  | 'missing-payment'
+  | 'duplicate-payment'
+  | 'extra-payment'
+  | 'empty-request';
+
+export type FinanceReviewPaymentItemRef = {
+  paymentListId: PaymentListRecord['paymentListId'];
+  itemId: PaymentListItem['id'];
+};
+
 export type FinanceInvoiceReview = {
+  key: string;
+  kind: Exclude<FinanceReviewPageKind, 'extra-payment' | 'empty-request'>;
   invoiceId: GeneratedInvoiceRecord['invoiceId'];
   invoiceNumber: string;
   creatorName: string;
+  paymentItems: FinanceReviewPaymentItemRef[];
+  sourceVersions: string[];
+  fields: FinanceReviewField[];
+  mismatchCount: number;
+};
+
+export type FinanceReviewPage = FinanceInvoiceReview | {
+  key: string;
+  kind: 'extra-payment' | 'empty-request';
+  invoiceId?: GeneratedInvoiceRecord['invoiceId'];
+  invoiceNumber: string;
+  creatorName: string;
+  paymentItems: FinanceReviewPaymentItemRef[];
+  sourceVersions: string[];
   fields: FinanceReviewField[];
   mismatchCount: number;
 };
 
 export type RequestFinanceReview = {
   invoices: FinanceInvoiceReview[];
+  pages: FinanceReviewPage[];
   projectIssues: FinanceReviewField[];
   totalCount: number;
+  pageCount: number;
   matchedCount: number;
   mismatchCount: number;
+  fingerprint: string;
   canApprove: boolean;
+};
+
+export type FinanceReviewDecision =
+  | { state: 'unreviewed' }
+  | { state: 'correct'; reviewedAt: string }
+  | { state: 'incorrect'; reason: string; reviewedAt: string };
+
+export type FinanceReviewSession = {
+  requestId: string;
+  approvalRound: number;
+  reviewerAccount: string;
+  fingerprint: string;
+  decisions: Record<string, FinanceReviewDecision>;
 };
 
 const display = (value: unknown) => {
@@ -94,10 +139,26 @@ const invoiceAccountSummary = (record: GeneratedInvoiceRecord) => {
   return `•••• ${compact.slice(-4)}`;
 };
 
+const invoiceVersionToken = (record: GeneratedInvoiceRecord) => (
+  `invoice:${record.invoiceId}:v${record.version ?? 0}:${record.generatedAt}`
+);
+
+const paymentListVersionToken = (list: PaymentListRecord) => (
+  `payment-list:${list.paymentListId}:v${list.version ?? 0}:${list.updatedAt}`
+);
+
 const reviewInvoice = (
   record: GeneratedInvoiceRecord,
   matches: Array<{ list: PaymentListRecord; item: PaymentListItem }>,
 ): FinanceInvoiceReview => {
+  const paymentItems = matches.map(({ list, item }) => ({
+    paymentListId: list.paymentListId,
+    itemId: item.id,
+  }));
+  const sourceVersions = [
+    invoiceVersionToken(record),
+    ...matches.map(({ list }) => paymentListVersionToken(list)),
+  ];
   const first = matches[0];
   if (!first || matches.length !== 1) {
     const fields: FinanceReviewField[] = [{
@@ -108,9 +169,13 @@ const reviewInvoice = (
       state: 'mismatch',
     }];
     return {
+      key: `invoice:${record.invoiceId}`,
+      kind: matches.length === 0 ? 'missing-payment' : 'duplicate-payment',
       invoiceId: record.invoiceId,
       invoiceNumber: record.id,
       creatorName: record.snapshot.creatorName,
+      paymentItems,
+      sourceVersions,
       fields,
       mismatchCount: 1,
     };
@@ -155,13 +220,31 @@ const reviewInvoice = (
     });
   }
   return {
+    key: `invoice:${record.invoiceId}`,
+    kind: 'pair',
     invoiceId: record.invoiceId,
     invoiceNumber: record.id,
     creatorName: record.snapshot.creatorName,
+    paymentItems,
+    sourceVersions,
     fields,
     mismatchCount: fields.filter((field) => field.state === 'mismatch').length,
   };
 };
+
+export const financeReviewFingerprint = (pages: FinanceReviewPage[]) => pages.map((page) => JSON.stringify({
+  key: page.key,
+  kind: page.kind,
+  invoiceId: page.invoiceId,
+  paymentItems: page.paymentItems,
+  sourceVersions: page.sourceVersions,
+  fields: page.fields.map((field) => [
+    field.id,
+    field.invoiceValue,
+    field.paymentValue,
+    field.state,
+  ]),
+})).join('\n');
 
 export const buildRequestFinanceReview = (
   request: PaymentRequestProjectLike,
@@ -178,12 +261,22 @@ export const buildRequestFinanceReview = (
         : false
   ));
   const reviews = invoiceIds.map((invoiceId) => {
+    const matches = requestLists.flatMap((list) => list.items
+      .filter((item) => item.invoiceId === invoiceId)
+      .map((item) => ({ list, item })));
     const record = invoices.find((invoice) => invoice.invoiceId === invoiceId);
     if (!record) {
       return {
+        key: `invoice:${invoiceId}`,
+        kind: 'missing-invoice' as const,
         invoiceId,
         invoiceNumber: String(invoiceId),
         creatorName: '未知达人',
+        paymentItems: matches.map(({ list, item }) => ({
+          paymentListId: list.paymentListId,
+          itemId: item.id,
+        })),
+        sourceVersions: matches.map(({ list }) => paymentListVersionToken(list)),
         fields: [{
           id: 'invoice-missing',
           label: 'Invoice 记录',
@@ -194,29 +287,132 @@ export const buildRequestFinanceReview = (
         mismatchCount: 1,
       };
     }
-    const matches = requestLists.flatMap((list) => list.items
-      .filter((item) => item.invoiceId === invoiceId)
-      .map((item) => ({ list, item })));
     return reviewInvoice(record, matches);
   });
   const expectedInvoiceIds = new Set(invoiceIds);
-  const projectIssues = requestLists.flatMap((list) => list.items
+  const extraPaymentPages: FinanceReviewPage[] = requestLists.flatMap((list) => list.items
     .filter((item) => !expectedInvoiceIds.has(item.invoiceId))
-    .map((item): FinanceReviewField => ({
-      id: `extra-payment-item-${list.paymentListId}-${item.id}`,
-      label: '付款清单额外明细',
-      invoiceValue: '请款项目未关联该 Invoice',
-      paymentValue: `${item.snapshot.invoiceNumber} · ${item.snapshot.creatorName}`,
-      state: 'mismatch',
+    .map((item): FinanceReviewPage => ({
+      key: `extra:${list.paymentListId}:${item.id}`,
+      kind: 'extra-payment',
+      invoiceId: item.invoiceId,
+      invoiceNumber: item.snapshot.invoiceNumber,
+      creatorName: item.snapshot.creatorName,
+      paymentItems: [{ paymentListId: list.paymentListId, itemId: item.id }],
+      sourceVersions: [paymentListVersionToken(list)],
+      fields: [{
+        id: `extra-payment-item-${list.paymentListId}-${item.id}`,
+        label: '付款清单额外明细',
+        invoiceValue: '请款项目未关联该 Invoice',
+        paymentValue: `${item.snapshot.invoiceNumber} · ${item.snapshot.creatorName}`,
+        state: 'mismatch',
+      }],
+      mismatchCount: 1,
     })));
+  const emptyRequestPages: FinanceReviewPage[] = reviews.length === 0 && extraPaymentPages.length === 0
+    ? [{
+        key: `request:${request.id}:missing-invoices`,
+        kind: 'empty-request',
+        invoiceNumber: '未关联 Invoice',
+        creatorName: '未关联达人',
+        paymentItems: [],
+        sourceVersions: [],
+        fields: [{
+          id: 'request-missing-invoices',
+          label: '请款项目关联',
+          invoiceValue: '未找到 Invoice',
+          paymentValue: '未找到付款明细',
+          state: 'mismatch',
+        }],
+        mismatchCount: 1,
+      }]
+    : [];
+  const pages: FinanceReviewPage[] = [...reviews, ...extraPaymentPages, ...emptyRequestPages];
+  const projectIssues = [...extraPaymentPages, ...emptyRequestPages].flatMap((page) => page.fields);
   const mismatchCount = reviews.reduce((total, review) => total + review.mismatchCount, 0)
     + projectIssues.length;
   return {
     invoices: reviews,
+    pages,
     projectIssues,
     totalCount: reviews.length,
+    pageCount: pages.length,
     matchedCount: reviews.filter((review) => review.mismatchCount === 0).length,
     mismatchCount,
+    fingerprint: financeReviewFingerprint(pages),
     canApprove: reviews.length > 0 && mismatchCount === 0,
   };
 };
+
+export const financeReviewSessionKey = (
+  requestId: string,
+  approvalRound: number,
+  reviewerAccount: string,
+) => `${requestId}:${approvalRound}:${reviewerAccount}`;
+
+export const createFinanceReviewSession = ({
+  requestId,
+  approvalRound,
+  reviewerAccount,
+  review,
+}: {
+  requestId: string;
+  approvalRound: number;
+  reviewerAccount: string;
+  review: RequestFinanceReview;
+}): FinanceReviewSession => ({
+  requestId,
+  approvalRound,
+  reviewerAccount,
+  fingerprint: review.fingerprint,
+  decisions: Object.fromEntries(review.pages.map((page) => [page.key, { state: 'unreviewed' }])),
+});
+
+export const reconcileFinanceReviewSession = (
+  session: FinanceReviewSession | undefined,
+  input: Parameters<typeof createFinanceReviewSession>[0],
+) => {
+  if (
+    !session
+    || session.requestId !== input.requestId
+    || session.approvalRound !== input.approvalRound
+    || session.reviewerAccount !== input.reviewerAccount
+    || session.fingerprint !== input.review.fingerprint
+  ) {
+    return createFinanceReviewSession(input);
+  }
+  return session;
+};
+
+export const setFinanceReviewDecision = (
+  session: FinanceReviewSession,
+  pageKey: string,
+  decision: Exclude<FinanceReviewDecision, { state: 'unreviewed' }>,
+): FinanceReviewSession => {
+  if (!(pageKey in session.decisions)) return session;
+  return {
+    ...session,
+    decisions: { ...session.decisions, [pageKey]: decision },
+  };
+};
+
+export const financeReviewSessionCanApprove = (
+  session: FinanceReviewSession | undefined,
+  review: RequestFinanceReview,
+) => Boolean(
+  session
+  && session.fingerprint === review.fingerprint
+  && review.canApprove
+  && review.pages.length > 0
+  && review.pages.every((page) => session.decisions[page.key]?.state === 'correct'),
+);
+
+export const financeReviewReturnReason = (
+  session: FinanceReviewSession,
+  review: RequestFinanceReview,
+) => review.pages.flatMap((page) => {
+  const decision = session.decisions[page.key];
+  return decision?.state === 'incorrect'
+    ? [`${page.invoiceNumber}：${decision.reason}`]
+    : [];
+}).join('；');

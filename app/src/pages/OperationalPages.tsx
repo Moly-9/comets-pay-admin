@@ -1016,6 +1016,7 @@ export function RequestsPage({
   generatedInvoices,
   onExportPaymentList,
   onApprovalAction,
+  onOpenFinanceReview,
   focusedRequestId,
   onFocusCleared,
 }: {
@@ -1030,7 +1031,8 @@ export function RequestsPage({
     request: RequestProjectSummary,
     action: RequestApprovalAction,
     reason?: string,
-  ) => void;
+  ) => boolean;
+  onOpenFinanceReview: (requestId: string) => void;
   focusedRequestId: string | null;
   onFocusCleared: () => void;
 }) {
@@ -1156,6 +1158,7 @@ export function RequestsPage({
         currentUser={currentUser}
         onExportPaymentList={onExportPaymentList}
         onApprovalAction={onApprovalAction}
+        onOpenFinanceReview={onOpenFinanceReview}
         notify={notify}
         onBack={() => {
           setSelectedRequestId(null);

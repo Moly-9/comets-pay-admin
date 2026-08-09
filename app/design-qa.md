@@ -1703,3 +1703,55 @@ final result: blocked
 2. Post-fix desktop, focused-modal, responsive, repeat-send, audit-history, keyboard and console checks found no remaining actionable P0, P1 or P2 issue.
 
 final result: passed
+
+---
+
+# Finance Review Workspace Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-df6276d5-9349-48d9-95c6-0d1db63b78b0.png`
+- Source pixels: 1897 x 868 at the supplied density.
+- Desktop implementation: `design-qa/finance-review-desktop-final.png`
+- Desktop pixels / CSS viewport: 1628 x 895 capture from a 1643 x 903 CSS viewport at device pixel ratio 1. The in-app browser removes its own outer frame from the captured page.
+- Mobile implementation: `design-qa/finance-review-mobile-invoice.png`, `design-qa/finance-review-mobile-payment.png`, and `design-qa/finance-review-mobile-approval.png`.
+- Mobile pixels / CSS viewport: 375 x 812 capture from a 390 x 844 CSS viewport at device pixel ratio 1.
+- Full comparison: `design-qa/finance-review-comparison-full.png`.
+- Focused approval comparison: `design-qa/finance-review-comparison-approval.png`.
+- State: finance user, payment workbench pending-review tab, first request, first Invoice, no manual decision recorded.
+
+## Comparison
+
+The supplied image is a right-side review drawer, while the approved implementation brief requires a full-screen three-column workspace. The comparison therefore treats the source as the visual-language reference and the written three-column layout as the structural source of truth.
+
+- Fonts and typography: existing Noto Sans SC and the Invoice's serif document typography are preserved. UI weights, compact labels, status hierarchy, and zero letter spacing match the existing COMETS Pay system and remain readable at desktop and mobile sizes.
+- Spacing and layout: the implementation retains the dimmed workbench background, white review surface, thin dividers, compact 8px-or-smaller framed regions, independent column scrolling, and fixed bottom actions. Desktop panes measure approximately 42 / 33 / 25 percent at 1440px with no workspace overflow.
+- Colors and tokens: neutral white/gray surfaces, green completed states, orange current-review states, red error states, and restrained lilac avatars match the reference. No new gradients or decorative artwork were introduced.
+- Image quality: the Invoice is rendered from the existing frozen document model rather than a placeholder. It is sharp at desktop size and scales to the mobile viewport without horizontal overflow.
+- Copy and content: labels describe real request, Invoice, payment-list, and approval data. Payment information is intentionally moved to the center column; the right column is limited to the approval flow as requested.
+- Icons: all visible actions and states use the existing Lucide icon library with consistent stroke weight and alignment.
+- Accessibility and responsiveness: the topmost modal alone handles Escape and focus trapping; nested issue and return dialogs restore focus correctly. Mobile uses three semantic tabs, footer button text fits, and all pane widths remain within the viewport.
+
+## Interaction Evidence
+
+- Confirmed that saving an issue is disabled until a reason is entered.
+- Confirmed Escape closes only the issue dialog and leaves the review workspace open.
+- Confirmed issue reasons appear in the aggregated return dialog.
+- Confirmed closing and reopening preserves the current browser-session decisions.
+- Confirmed the final approval remains disabled after one of two pages is confirmed and enables only after both are confirmed.
+- Confirmed successful approval closes the workspace, removes the request from the pending count, and shows the success toast.
+- Confirmed a request with zero Invoices renders one blocking page, cannot be marked correct, and can be returned after recording a reason.
+- Confirmed a fresh browser tab reports no console errors.
+
+## Comparison History
+
+1. Initial mobile capture showed the Invoice paper retaining a 640px minimum width, causing horizontal clipping at 390px. This was a P2 responsive issue.
+2. Removed the mobile minimum width and reused the existing compact Invoice typography. The revised paper measures 323px inside a 347px client area, with equal client and scroll widths.
+3. Rechecked Invoice, payment, and approval tabs. Payment pane client/scroll width is 362px, and every footer button has equal client and scroll width.
+
+## Findings
+
+- No actionable P0, P1, or P2 differences remain.
+- P3: the reference drawer can display more approval nodes vertically because it dedicates the entire width to one column; the implementation intentionally gives that space to simultaneous Invoice and payment comparison.
+
+final result: passed

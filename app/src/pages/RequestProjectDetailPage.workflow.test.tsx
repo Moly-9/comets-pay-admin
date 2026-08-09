@@ -37,6 +37,7 @@ const renderDetail = (status: NonNullable<RequestProjectSummary['approval']>['st
     currentUser={finance}
     onExportPaymentList={vi.fn()}
     onApprovalAction={vi.fn()}
+    onOpenFinanceReview={vi.fn()}
     onBack={vi.fn()}
     notify={vi.fn()}
   />,
@@ -49,13 +50,13 @@ describe('RequestProjectDetailPage approval permissions', () => {
     expect(html).not.toContain('<span>审批通过</span>');
   });
 
-  it('shows project approval at the finance node and blocks it without matched data', () => {
+  it('routes the finance node into the dedicated review workspace', () => {
     const html = renderDetail('PENDING_FINANCE');
     expect(html).toContain('待财务审批');
     expect(html).not.toContain('老板审批通过');
-    expect(html).toContain('退回媒介修改');
-    expect(html).toContain('<span>审批通过</span>');
-    expect(html).toContain('暂不能通过财务审核');
-    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('退回媒介修改');
+    expect(html).not.toContain('<span>审批通过</span>');
+    expect(html).toContain('进入财务审核');
+    expect(html).toContain('存在待处理差异');
   });
 });
