@@ -394,13 +394,27 @@ export const createInitialPaymentBatches = ({
   paymentLists,
   contracts,
 }: PaymentBatchSourceData): PaymentBatchRecord[] => {
+  const payoutForProvider = (
+    payoutIds: readonly string[],
+    provider: PaymentBatchRecord['provider'],
+  ) => {
+    const payout = payoutIds.reduce<Payout | undefined>(
+      (matched, payoutId) => matched ?? payouts.find((candidate) => candidate.id === payoutId),
+      undefined,
+    );
+    return payout ? { ...payout, provider } : undefined;
+  };
   const financeAirwallex = payouts.find((payout) => (
     payout.id.startsWith('payout_fixture_association_301164') && payout.provider === 'Airwallex'
   ));
   const financePayPal = payouts.find((payout) => (
     payout.id.startsWith('payout_fixture_association_301164') && payout.provider === 'PayPal'
-  ));
+  )) ?? payoutForProvider(['payout_fixture_301164_02'], 'PayPal');
   const returnedPayPal = payouts.find((payout) => payout.id === 'pay-020');
+  const paidAirwallex = payoutForProvider(['payout_fixture_301164_04', 'pay-005'], 'Airwallex');
+  const paidPayMax = payoutForProvider(['payout_fixture_301164_05', 'pay-006'], 'PayMax');
+  const approvedPayPal = payoutForProvider(['payout_fixture_02_01', 'pay-011'], 'PayPal');
+  const approvedPayMax = payoutForProvider(['payout_fixture_06_01', 'pay-002'], 'PayMax');
   const shared = { requests, generatedInvoices, paymentLists, contracts };
   const seeds = [
     {
@@ -416,6 +430,18 @@ export const createInitialPaymentBatches = ({
       itemStatus: '已付款' as const,
     },
     {
+      payout: paidAirwallex,
+      paymentBatchId: 'payment_batch_fixture_004' as PaymentBatchId,
+      paymentBatchCode: 'BAT-20260716-004',
+      provider: 'Airwallex' as const,
+      fundingAccountId: 'mock-awx-reserve',
+      payer: '周倩',
+      paidAt: '2026-07-16T14:32',
+      status: '已完成',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
+      itemStatus: '已付款' as const,
+    },
+    {
       payout: financePayPal,
       paymentBatchId: 'payment_batch_fixture_002' as PaymentBatchId,
       paymentBatchCode: 'BAT-20260715-006',
@@ -423,6 +449,42 @@ export const createInitialPaymentBatches = ({
       fundingAccountId: 'mock-paypal-balance',
       payer: '李梦',
       paidAt: '2026-07-15T11:20',
+      status: '已完成',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
+      itemStatus: '已付款' as const,
+    },
+    {
+      payout: paidPayMax,
+      paymentBatchId: 'payment_batch_fixture_005' as PaymentBatchId,
+      paymentBatchCode: 'BAT-20260715-003',
+      provider: 'PayMax' as const,
+      fundingAccountId: 'mock-paymax-operating',
+      payer: '赵敏',
+      paidAt: '2026-07-15T09:18',
+      status: '已完成',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
+      itemStatus: '已付款' as const,
+    },
+    {
+      payout: approvedPayPal,
+      paymentBatchId: 'payment_batch_fixture_006' as PaymentBatchId,
+      paymentBatchCode: 'BAT-20260714-002',
+      provider: 'PayPal' as const,
+      fundingAccountId: 'mock-paypal-balance',
+      payer: '孙悦',
+      paidAt: '2026-07-14T15:40',
+      status: '已完成',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
+      itemStatus: '已付款' as const,
+    },
+    {
+      payout: approvedPayMax,
+      paymentBatchId: 'payment_batch_fixture_007' as PaymentBatchId,
+      paymentBatchCode: 'BAT-20260713-001',
+      provider: 'PayMax' as const,
+      fundingAccountId: 'mock-paymax-operating',
+      payer: '郑凯',
+      paidAt: '2026-07-13T10:25',
       status: '已完成',
       lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
       itemStatus: '已付款' as const,

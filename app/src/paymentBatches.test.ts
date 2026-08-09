@@ -281,28 +281,46 @@ describe('payment batch snapshots', () => {
   });
 
   it('derives every historical row count and amount from its item snapshots', () => {
-    const first = buildInput();
-    const secondProjectId = 'project_history_two' as CooperationProjectId;
-    const secondInvoiceId = 'invoice_history_two' as InvoiceId;
-    const secondContractId = 'contract_history_two' as ContractId;
-    const secondPayout = createPayout('payout_fixture_association_301164_05', first.payouts[0].projectId as CooperationProjectId, 'INV-HISTORY-002', 'PayPal');
-    const returnedPayout = createPayout('pay-020', secondProjectId, 'INV-HISTORY-003', 'PayPal');
-    const airwallexPayout = { ...first.payouts[0], id: 'payout_fixture_association_301164_01' };
-    const airwallexInvoice = createInvoice(airwallexPayout, first.generatedInvoices[0].invoiceId, first.contracts[0].contractId!);
-    const paypalInvoiceId = 'invoice_history_paypal' as InvoiceId;
-    const paypalInvoice = createInvoice(secondPayout, paypalInvoiceId, first.contracts[0].contractId!);
-    const returnedInvoice = createInvoice(returnedPayout, secondInvoiceId, secondContractId);
-    const firstRequest = createRequest('HISTORY-001', first.payouts[0].projectId as CooperationProjectId, [airwallexInvoice.invoiceId, paypalInvoiceId]);
-    const secondRequest = createRequest('HISTORY-002', secondProjectId, [secondInvoiceId]);
+    const projectId = 'project_history_one' as CooperationProjectId;
+    const contractId = 'contract_history_one' as ContractId;
+    const payoutSpecs: Array<[string, Payout['provider']]> = [
+      ['payout_fixture_association_301164_01', 'Airwallex'],
+      ['payout_fixture_301164_02', 'PayPal'],
+      ['payout_fixture_301164_04', 'Airwallex'],
+      ['payout_fixture_301164_05', 'PayMax'],
+      ['payout_fixture_02_01', 'PayPal'],
+      ['payout_fixture_06_01', 'PayMax'],
+      ['pay-020', 'PayPal'],
+    ];
+    const payouts = payoutSpecs.map(([payoutId, provider], index) => (
+      createPayout(payoutId, projectId, `INV-HISTORY-${index + 1}`, provider)
+    ));
+    const invoices = payouts.map((payout, index) => createInvoice(
+      payout,
+      `invoice_history_${index + 1}` as InvoiceId,
+      contractId,
+    ));
+    const request = createRequest('HISTORY-001', projectId, invoices.map((invoice) => invoice.invoiceId));
     const records = createInitialPaymentBatches({
-      payouts: [airwallexPayout, secondPayout, returnedPayout],
-      requests: [firstRequest, secondRequest],
-      generatedInvoices: [airwallexInvoice, paypalInvoice, returnedInvoice],
+      payouts,
+      requests: [request],
+      generatedInvoices: invoices,
       paymentLists: [],
-      contracts: [first.contracts[0], createContract(secondContractId)],
+      contracts: [createContract(contractId)],
     });
 
-    expect(records).toHaveLength(3);
+    expect(records.map((record) => record.paymentBatchCode)).toEqual([
+      'BAT-20260716-007',
+      'BAT-20260716-004',
+      'BAT-20260715-006',
+      'BAT-20260715-003',
+      'BAT-20260714-002',
+      'BAT-20260713-001',
+      'BAT-20260712-005',
+    ]);
+    expect(new Set(records.map((record) => record.provider))).toEqual(
+      new Set(['Airwallex', 'PayPal', 'PayMax']),
+    );
     records.forEach((record) => {
       expect(record.items).toHaveLength(1);
       expect(paymentBatchAmountLabel(record)).toBe(`USD ${record.items[0].amount.toLocaleString('en-US')}`);

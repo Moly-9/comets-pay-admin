@@ -8,8 +8,9 @@ import {
   createBatchConfirmationArchive,
   filterPaymentBatchRows,
   loadPaymentDataRecord,
+  paymentBatchExportAvailability,
   paymentBatchRows,
-  toggleVisibleAirwallexBatchSelection,
+  toggleVisiblePaymentBatchSelection,
 } from './OperationalPages';
 import type { PaymentBatchRecord } from '../paymentBatches';
 
@@ -36,7 +37,11 @@ const createTestBatch = (
     pm: '测试 PM',
   },
   provider,
-  fundingAccountId: provider === 'Airwallex' ? 'mock-awx-operating' : 'mock-paypal-balance',
+  fundingAccountId: provider === 'Airwallex'
+    ? 'mock-awx-operating'
+    : provider === 'PayMax'
+      ? 'mock-paymax-operating'
+      : 'mock-paypal-balance',
   sourceCurrency: 'USD',
   payer: '付款测试员',
   paidAt,
@@ -69,6 +74,7 @@ const createTestBatch = (
 const TEST_BATCHES = [
   createTestBatch('BAT-20260716-007', 'Airwallex', '2026-07-16T16:42'),
   createTestBatch('BAT-20260715-006', 'PayPal', '2026-07-15T11:20'),
+  createTestBatch('BAT-20260714-005', 'PayMax', '2026-07-14T09:18'),
 ];
 const TEST_BATCH_ROWS = paymentBatchRows(TEST_BATCHES);
 
@@ -96,15 +102,35 @@ describe('payment batch filters and selection', () => {
       .toEqual(['2026-07-16T09:30', '2026-07-16T09:30']);
   });
 
-  it('selects only visible Airwallex rows and preserves hidden selections', () => {
-    const initial = new Set(['BAT-HIDDEN-AIRWALLEX']);
-    const selected = toggleVisibleAirwallexBatchSelection(initial, TEST_BATCH_ROWS);
-    expect([...selected].sort()).toEqual(['BAT-20260716-007', 'BAT-HIDDEN-AIRWALLEX']);
-    expect(toggleVisibleAirwallexBatchSelection(selected, TEST_BATCH_ROWS))
-      .toEqual(new Set(['BAT-HIDDEN-AIRWALLEX']));
+  it('selects all visible providers and preserves hidden selections', () => {
+    const initial = new Set(['BAT-HIDDEN']);
+    const selected = toggleVisiblePaymentBatchSelection(initial, TEST_BATCH_ROWS);
+    expect([...selected].sort()).toEqual([
+      'BAT-20260714-005',
+      'BAT-20260715-006',
+      'BAT-20260716-007',
+      'BAT-HIDDEN',
+    ]);
+    expect(toggleVisiblePaymentBatchSelection(selected, TEST_BATCH_ROWS))
+      .toEqual(new Set(['BAT-HIDDEN']));
   });
 
-  it('renders minute filters, Airwallex-only selection and the renamed payer column', () => {
+  it('enables payment data for every provider while keeping confirmations Airwallex-only', () => {
+    expect(paymentBatchExportAvailability(TEST_BATCH_ROWS.slice(1))).toEqual({
+      confirmations: false,
+      records: true,
+    });
+    expect(paymentBatchExportAvailability(TEST_BATCH_ROWS)).toEqual({
+      confirmations: true,
+      records: true,
+    });
+    expect(paymentBatchExportAvailability([])).toEqual({
+      confirmations: false,
+      records: false,
+    });
+  });
+
+  it('renders minute filters, all-provider selection and the renamed payer column', () => {
     const html = renderToStaticMarkup(
       <BatchesPage batches={TEST_BATCHES} onNewBatch={vi.fn()} notify={vi.fn()} canCreateBatch />,
     );
@@ -113,7 +139,9 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('付款人 / 付款时间');
     expect(html).not.toContain('创建人 / 时间');
     expect(html).toContain('aria-haspopup="menu"');
-    expect(html).toContain('aria-label="BAT-20260715-006 不支持确认函导出"');
+    expect(html).toContain('aria-label="选择付款批次 BAT-20260715-006"');
+    expect(html).toContain('aria-label="选择付款批次 BAT-20260714-005"');
+    expect(html).not.toContain('不支持确认函导出');
   });
 });
 

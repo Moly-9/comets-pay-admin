@@ -25,6 +25,7 @@ const fundingAccountLabel = (value: string) => {
   if (value === 'mock-awx-operating') return 'Airwallex 运营资金账户';
   if (value === 'mock-awx-reserve') return 'Airwallex 备用资金账户';
   if (value === 'mock-paypal-balance') return 'PayPal Business Balance';
+  if (value === 'mock-paymax-operating') return 'PayMax 运营资金账户';
   return value || '未记录';
 };
 

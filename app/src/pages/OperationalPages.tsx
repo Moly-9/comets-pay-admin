@@ -2852,19 +2852,24 @@ export const correctedPaymentBatchDateRange = (
   return changed === 'start' ? [start, start] : [end, end];
 };
 
-export const toggleVisibleAirwallexBatchSelection = (
+export const toggleVisiblePaymentBatchSelection = (
   selectedIds: Set<string>,
   visibleRows: PaymentBatchRow[],
 ) => {
   const next = new Set(selectedIds);
-  const eligibleIds = visibleRows.filter((row) => row.provider === 'Airwallex').map((row) => row.id);
-  const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => next.has(id));
-  eligibleIds.forEach((id) => {
+  const visibleIds = visibleRows.map((row) => row.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => next.has(id));
+  visibleIds.forEach((id) => {
     if (allSelected) next.delete(id);
     else next.add(id);
   });
   return next;
 };
+
+export const paymentBatchExportAvailability = (selectedRows: PaymentBatchRow[]) => ({
+  confirmations: selectedRows.some((row) => row.provider === 'Airwallex'),
+  records: selectedRows.length > 0,
+});
 
 export const createBatchConfirmationArchive = async (
   batchIds: string[],
@@ -2910,11 +2915,12 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
     end,
     provider,
   }), [end, provider, rows, search, start]);
-  const eligibleVisibleRows = visibleRows.filter((row) => row.provider === 'Airwallex');
-  const selectedRows = rows.filter((row) => selectedIds.has(row.id) && row.provider === 'Airwallex');
-  const selectedVisibleCount = eligibleVisibleRows.filter((row) => selectedIds.has(row.id)).length;
-  const allVisibleSelected = eligibleVisibleRows.length > 0 && selectedVisibleCount === eligibleVisibleRows.length;
-  const exportDisabled = selectedRows.length === 0 || exporting !== null;
+  const selectedRows = rows.filter((row) => selectedIds.has(row.id));
+  const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
+  const selectedVisibleCount = visibleRows.filter((row) => selectedIds.has(row.id)).length;
+  const allVisibleSelected = visibleRows.length > 0 && selectedVisibleCount === visibleRows.length;
+  const exportAvailability = paymentBatchExportAvailability(selectedRows);
+  const exportDisabled = !exportAvailability.records || exporting !== null;
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
   const batchMetrics = useMemo(() => {
     const totals = batches.reduce((result, batch) => {
@@ -2968,12 +2974,20 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
       return next;
     });
   };
+  const availableExportItemIndexes = [
+    exportAvailability.confirmations ? 0 : -1,
+    exportAvailability.records ? 1 : -1,
+  ].filter((index) => index >= 0);
   const focusExportItem = (index: number) => {
     window.requestAnimationFrame(() => exportItemRefs.current[index]?.focus());
   };
-  const openExportMenu = (focusIndex?: number) => {
+  const openExportMenu = (focusEdge?: 'first' | 'last') => {
     setMenuOpen(true);
-    if (focusIndex !== undefined && !exportDisabled) focusExportItem(focusIndex);
+    if (focusEdge && availableExportItemIndexes.length) {
+      focusExportItem(focusEdge === 'first'
+        ? availableExportItemIndexes[0]
+        : availableExportItemIndexes[availableExportItemIndexes.length - 1]);
+    }
   };
   const closeExportMenu = (restoreFocus = false) => {
     setMenuOpen(false);
@@ -2982,7 +2996,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   const handleExportTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      openExportMenu(event.key === 'ArrowDown' ? 0 : 1);
+      openExportMenu(event.key === 'ArrowDown' ? 'first' : 'last');
     } else if (event.key === 'Escape' && menuOpen) {
       event.preventDefault();
       closeExportMenu();
@@ -2991,25 +3005,29 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   const handleExportItemKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      const nextIndex = event.key === 'ArrowDown' ? (index + 1) % 2 : (index - 1 + 2) % 2;
-      exportItemRefs.current[nextIndex]?.focus();
+      const currentPosition = availableExportItemIndexes.indexOf(index);
+      const offset = event.key === 'ArrowDown' ? 1 : -1;
+      const nextPosition = (currentPosition + offset + availableExportItemIndexes.length)
+        % availableExportItemIndexes.length;
+      exportItemRefs.current[availableExportItemIndexes[nextPosition]]?.focus();
     } else if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
-      exportItemRefs.current[event.key === 'Home' ? 0 : 1]?.focus();
+      const targetPosition = event.key === 'Home' ? 0 : availableExportItemIndexes.length - 1;
+      exportItemRefs.current[availableExportItemIndexes[targetPosition]]?.focus();
     } else if (event.key === 'Escape') {
       event.preventDefault();
       closeExportMenu(true);
     }
   };
   const exportConfirmations = async () => {
-    if (exportDisabled) return;
+    if (!exportAvailability.confirmations || exporting !== null) return;
     setMenuOpen(false);
     setExporting('confirmations');
     try {
-      const archive = await createBatchConfirmationArchive(selectedRows.map((row) => row.id));
+      const archive = await createBatchConfirmationArchive(selectedAirwallexRows.map((row) => row.id));
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       downloadBlob(archive, `付款批次确认函-${date}.zip`);
-      notify('确认函已导出', `已为 ${selectedRows.length} 个 Airwallex 批次生成确认函压缩包。`);
+      notify('确认函已导出', `已为 ${selectedAirwallexRows.length} 个 Airwallex 批次生成确认函压缩包。`);
     } catch {
       notify('确认函导出失败', '无法读取付款确认函模板，请检查导出资源后重试。');
     } finally {
@@ -3017,7 +3035,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
     }
   };
   const exportPaymentData = async () => {
-    if (exportDisabled) return;
+    if (!exportAvailability.records || exporting !== null) return;
     setMenuOpen(false);
     setExporting('records');
     try {
@@ -3121,7 +3139,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
                   ref={(node) => { exportItemRefs.current[0] = node; }}
                   type="button"
                   role="menuitem"
-                  disabled={exportDisabled}
+                  disabled={!exportAvailability.confirmations || exporting !== null}
                   tabIndex={-1}
                   onKeyDown={(event) => handleExportItemKeyDown(event, 0)}
                   onClick={() => { void exportConfirmations(); }}
@@ -3146,7 +3164,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
           </div>
         </div>
         <div className="payment-batch-selection-summary" aria-live="polite">
-          已选择 {selectedRows.length} 个 Airwallex 批次
+          已选择 {selectedRows.length} 个付款批次，其中 {selectedAirwallexRows.length} 个 Airwallex 批次可导出确认函
         </div>
         <div className="table-scroll">
           <table className="data-table operational-table payment-batch-table">
@@ -3156,10 +3174,10 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
                   <input
                     ref={selectAllRef}
                     type="checkbox"
-                    aria-label="全选当前筛选结果中的 Airwallex 批次"
+                    aria-label="全选当前筛选结果中的付款批次"
                     checked={allVisibleSelected}
-                    disabled={!eligibleVisibleRows.length}
-                    onChange={() => setSelectedIds((current) => toggleVisibleAirwallexBatchSelection(current, visibleRows))}
+                    disabled={!visibleRows.length}
+                    onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, visibleRows))}
                   />
                 </th>
                 <th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
@@ -3167,17 +3185,14 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
             </thead>
             <tbody>
               {visibleRows.map((batch) => {
-                const selectable = batch.provider === 'Airwallex';
                 const selected = selectedIds.has(batch.id);
                 return (
-                  <tr className={selected ? 'is-selected' : ''} key={batch.id} aria-selected={selectable ? selected : undefined}>
+                  <tr className={selected ? 'is-selected' : ''} key={batch.id} aria-selected={selected}>
                     <td className="payment-batch-select-cell">
                       <input
                         type="checkbox"
-                        aria-label={selectable ? `选择付款批次 ${batch.id}` : `${batch.id} 不支持确认函导出`}
-                        title={selectable ? undefined : '仅 Airwallex 批次支持导出'}
+                        aria-label={`选择付款批次 ${batch.id}`}
                         checked={selected}
-                        disabled={!selectable}
                         onChange={() => toggleOne(batch.id)}
                       />
                     </td>
