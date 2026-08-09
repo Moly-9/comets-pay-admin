@@ -109,16 +109,14 @@ import {
 } from '../paymentRequestProjects';
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
 import { downloadBlob } from '../invoice/invoiceUtils';
+import {
+  paymentBatchAmountLabel,
+  paymentBatchStatusCounts,
+  type PaymentBatchRecord,
+} from '../paymentBatches';
+import { PaymentBatchDetailPage } from './PaymentBatchDetailPage';
 
 type Notify = (title: string, message: string) => void;
-type CreatedBatch = {
-  id: string;
-  count: number;
-  amount: string;
-  provider: string;
-  payer: string;
-  paidAt: string;
-} | null;
 
 function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
@@ -2789,6 +2787,7 @@ export function InvoicePage({
 }
 
 export type PaymentBatchRow = {
+  paymentBatchId: PaymentBatchRecord['paymentBatchId'];
   id: string;
   provider: string;
   count: number;
@@ -2810,11 +2809,18 @@ const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明�
 export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
 export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
-export const BASE_BATCHES: PaymentBatchRow[] = [
-  { id: 'BAT-20260716-007', provider: 'Airwallex', count: 12, amount: 'USD 28,420', payer: '奚文慧', paidAt: '2026-07-16T16:42', status: '付款处理中' },
-  { id: 'BAT-20260715-006', provider: 'PayMax', count: 8, amount: 'EUR 16,880', payer: '李梦', paidAt: '2026-07-15T11:20', status: '已完成' },
-  { id: 'BAT-20260712-005', provider: 'PayPal', count: 23, amount: 'USD 41,260', payer: '吴雪霓', paidAt: '2026-07-12T09:05', status: '部分失败' },
-];
+export const paymentBatchRows = (batches: readonly PaymentBatchRecord[]): PaymentBatchRow[] => (
+  batches.map((batch) => ({
+    paymentBatchId: batch.paymentBatchId,
+    id: batch.paymentBatchCode,
+    provider: batch.provider,
+    count: batch.items.length,
+    amount: paymentBatchAmountLabel(batch),
+    payer: batch.payer,
+    paidAt: batch.paidAt,
+    status: batch.status,
+  }))
+);
 
 type ExportAssetLoader = (path: string) => Promise<Blob>;
 
@@ -2882,27 +2888,22 @@ export const loadPaymentDataRecord = async (
 
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
 
-export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }: { createdBatch: CreatedBatch; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
+export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { batches: readonly PaymentBatchRecord[]; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
   const [search, setSearch] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [provider, setProvider] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [exporting, setExporting] = useState<'confirmations' | 'records' | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const exportTriggerRef = useRef<HTMLButtonElement>(null);
   const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const rows: PaymentBatchRow[] = createdBatch ? [{
-    id: createdBatch.id,
-    provider: createdBatch.provider,
-    count: createdBatch.count,
-    amount: createdBatch.amount,
-    payer: createdBatch.payer,
-    paidAt: createdBatch.paidAt,
-    status: '等待付款',
-  }, ...BASE_BATCHES] : BASE_BATCHES;
+  const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
+  const listScrollPositionRef = useRef(0);
+  const rows = useMemo(() => paymentBatchRows(batches), [batches]);
   const visibleRows = useMemo(() => filterPaymentBatchRows(rows, {
     search,
     start,
@@ -2914,6 +2915,25 @@ export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }
   const selectedVisibleCount = eligibleVisibleRows.filter((row) => selectedIds.has(row.id)).length;
   const allVisibleSelected = eligibleVisibleRows.length > 0 && selectedVisibleCount === eligibleVisibleRows.length;
   const exportDisabled = selectedRows.length === 0 || exporting !== null;
+  const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
+  const batchMetrics = useMemo(() => {
+    const totals = batches.reduce((result, batch) => {
+      const counts = paymentBatchStatusCounts(batch);
+      return {
+        succeeded: result.succeeded + counts.succeeded,
+        failed: result.failed + counts.failed,
+        processing: result.processing + counts.processing,
+      };
+    }, { succeeded: 0, failed: 0, processing: 0 });
+    const total = totals.succeeded + totals.failed + totals.processing;
+    return {
+      ...totals,
+      processingBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).processing > 0).length,
+      failedBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).failed > 0).length,
+      successRate: total ? `${((totals.succeeded / total) * 100).toFixed(1)}%` : '—',
+      total,
+    };
+  }, [batches]);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -3010,15 +3030,43 @@ export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }
       setExporting(null);
     }
   };
+  const openBatchDetail = (batchId: PaymentBatchRecord['paymentBatchId']) => {
+    listScrollPositionRef.current = window.scrollY;
+    setSelectedBatchId(batchId);
+  };
+  const closeBatchDetail = () => {
+    const batchId = selectedBatchId;
+    setSelectedBatchId(null);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: listScrollPositionRef.current, behavior: 'auto' });
+      if (batchId) detailTriggerRefs.current.get(batchId)?.focus();
+    });
+  };
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
+
+  if (selectedBatchId) {
+    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} onBack={closeBatchDetail} />;
+    return (
+      <div className="page-stack payment-batch-detail-page">
+        <button className="project-back-button payment-batch-detail-back" type="button" onClick={closeBatchDetail}>
+          返回付款批次
+        </button>
+        <section className="payment-batch-detail-missing" role="status">
+          <AlertCircle size={24} aria-hidden="true" />
+          <h1>批次不存在</h1>
+          <p>该付款批次可能已被移除，请返回列表后重新选择。</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="page-stack payment-batches-page">
       <PageHeading title="付款批次" subtitle="按渠道组织批量付款，并追踪失败重试与回写结果。" actions={createAction} />
       <div className="metrics-grid">
-        <MetricCard label="处理中批次" value="2" meta="共 16 笔付款" tone="peach" />
-        <MetricCard label="本月成功率" value="98.6%" meta="1,248 / 1,266 笔" />
-        <MetricCard label="需人工处理" value="3" meta="来自 2 个批次" tone="lilac" />
+        <MetricCard label="处理中批次" value={String(batchMetrics.processingBatches)} meta={`共 ${batchMetrics.processing} 笔付款`} tone="peach" />
+        <MetricCard label="付款成功率" value={batchMetrics.successRate} meta={`${batchMetrics.succeeded} / ${batchMetrics.total} 笔`} />
+        <MetricCard label="需人工处理" value={String(batchMetrics.failed)} meta={`来自 ${batchMetrics.failedBatches} 个批次`} tone="lilac" />
       </div>
       <section className="content-card">
         <div className="content-toolbar payment-batch-toolbar">
@@ -3139,7 +3187,17 @@ export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }
                     <td>{batch.amount}</td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
                     <td><span className="simple-status"><i />{batch.status}</span></td>
-                    <td className="action-cell"><button className="text-link" type="button" onClick={() => notify('批次详情', `${batch.id} 的付款明细与渠道响应已打开。`)}>查看明细</button></td>
+                    <td className="action-cell">
+                      <button
+                        ref={(node) => { if (node) detailTriggerRefs.current.set(batch.paymentBatchId, node); }}
+                        className="text-link"
+                        type="button"
+                        data-batch-detail-trigger={batch.paymentBatchId}
+                        onClick={() => openBatchDetail(batch.paymentBatchId)}
+                      >
+                        查看明细
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

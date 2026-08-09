@@ -21,6 +21,7 @@ export type EngagementId = EntityId<'engagement'>;
 export type ContractId = EntityId<'contract'>;
 export type InvoiceId = EntityId<'invoice'>;
 export type PaymentListId = EntityId<'payment-list'>;
+export type PaymentBatchId = EntityId<'payment-batch'>;
 
 export type ProjectReviewStatus =
   | 'draft'

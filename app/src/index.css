@@ -22,6 +22,679 @@
   --shadow-soft: 0 12px 36px rgba(30, 25, 45, 0.055);
 }
 
+/* Payment batch detail: linked request, project and immutable payment snapshots. */
+.payment-batch-detail-page {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding-bottom: 28px;
+}
+
+.payment-batch-detail-back {
+  width: fit-content;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.payment-batch-detail-back:focus-visible,
+.payment-batch-item-trigger:focus-visible {
+  outline: 2px solid #d96e59;
+  outline-offset: 2px;
+}
+
+.payment-batch-detail-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid #dfe3e9;
+  padding: 4px 0 18px;
+}
+
+.payment-batch-detail-header > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.payment-batch-detail-header > div:first-child > span,
+.payment-batch-detail-header p,
+.payment-batch-detail-total small {
+  color: #7b818e;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.payment-batch-detail-header h1,
+.payment-batch-detail-header p {
+  margin: 0;
+}
+
+.payment-batch-detail-header h1 {
+  overflow-wrap: anywhere;
+  color: #202229;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.payment-batch-detail-header h1:focus {
+  outline: 0;
+}
+
+.payment-batch-detail-total {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 4px;
+  text-align: right;
+}
+
+.payment-batch-detail-total > strong {
+  color: #23262e;
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.payment-batch-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #e1e4ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.payment-batch-detail-summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 15px 17px;
+  border-right: 1px solid #eceef2;
+}
+
+.payment-batch-detail-summary > div:last-child {
+  border-right: 0;
+}
+
+.payment-batch-detail-summary span,
+.payment-batch-detail-summary small {
+  overflow-wrap: anywhere;
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payment-batch-detail-summary strong {
+  overflow-wrap: anywhere;
+  color: #2f333c;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.payment-batch-detail-section {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e1e4ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.payment-batch-detail-section > header {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #eceef2;
+  padding: 13px 17px;
+}
+
+.payment-batch-detail-section > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.payment-batch-detail-section h2,
+.payment-batch-detail-section header p {
+  margin: 0;
+}
+
+.payment-batch-detail-section h2 {
+  color: #272a32;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.payment-batch-detail-section header p,
+.payment-batch-items-section > header > span {
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payment-batch-lifecycle-section ol {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  margin: 0;
+  padding: 17px;
+  list-style: none;
+}
+
+.payment-batch-lifecycle-section li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #565c68;
+  font-size: 11px;
+}
+
+.payment-batch-lifecycle-section li > span {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d8dde5;
+  border-radius: 50%;
+  background: #fff7f4;
+  color: #b85e4d;
+}
+
+.payment-batch-lifecycle-section li > i {
+  width: clamp(24px, 5vw, 72px);
+  height: 1px;
+  margin: 0 10px;
+  background: #dfe3e9;
+}
+
+.payment-batch-project-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 16px 17px 10px;
+}
+
+.payment-batch-project-heading > span {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: #f7f1fa;
+  color: #735b80;
+}
+
+.payment-batch-project-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.payment-batch-project-heading strong {
+  overflow-wrap: anywhere;
+  color: #292c34;
+  font-size: 13px;
+}
+
+.payment-batch-project-heading small {
+  color: #858b97;
+  font-size: 10.5px;
+}
+
+.payment-batch-project-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 4px 17px 16px;
+}
+
+.payment-batch-project-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  border-bottom: 1px solid #eceef2;
+  padding: 11px 12px 11px 0;
+}
+
+.payment-batch-project-grid > div:nth-last-child(-n + 3),
+.payment-batch-project-grid > .payment-batch-project-full {
+  border-bottom: 0;
+}
+
+.payment-batch-project-grid dt,
+.payment-batch-project-grid dd,
+.payment-batch-item-details dt,
+.payment-batch-item-details dd {
+  margin: 0;
+}
+
+.payment-batch-project-grid dt,
+.payment-batch-item-details dt {
+  color: #858b97;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.payment-batch-project-grid dd,
+.payment-batch-item-details dd {
+  overflow-wrap: anywhere;
+  color: #343842;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.payment-batch-project-full {
+  grid-column: 1 / -1;
+}
+
+.payment-batch-item-list {
+  overflow-x: auto;
+}
+
+.payment-batch-item {
+  min-width: 1060px;
+  border-bottom: 1px solid #eceef2;
+}
+
+.payment-batch-item:last-child {
+  border-bottom: 0;
+}
+
+.payment-batch-item-trigger {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(170px, 1.35fr) minmax(135px, 1fr) minmax(135px, 1fr) minmax(130px, 1fr) minmax(115px, .82fr) minmax(145px, 1fr) minmax(100px, .76fr) 24px;
+  width: 100%;
+  min-height: 66px;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  background: #fff;
+  padding: 9px 16px;
+  color: #343842;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.payment-batch-item-trigger:hover,
+.payment-batch-item.is-expanded .payment-batch-item-trigger {
+  background: #fafbfc;
+}
+
+.payment-batch-item-trigger > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.payment-batch-item-trigger > span > small {
+  color: #8a909b;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.payment-batch-item-trigger > span > strong {
+  overflow: hidden;
+  color: #3a3e48;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-batch-item-trigger > svg {
+  color: #8a909b;
+  transition: transform 160ms ease;
+}
+
+.payment-batch-item.is-expanded .payment-batch-item-trigger > svg {
+  transform: rotate(180deg);
+}
+
+.payment-batch-item-trigger > .payment-batch-item-person {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.payment-batch-item-person > svg {
+  flex: 0 0 auto;
+  color: #8b6b91;
+}
+
+.payment-batch-item-person > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.payment-batch-item-person strong,
+.payment-batch-item-person small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-batch-item-person small {
+  color: #858b97;
+  font-size: 9.5px;
+}
+
+.payment-batch-item-status strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.payment-batch-item-status i {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #6f8d7d;
+}
+
+.payment-batch-item-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid #e2e5eb;
+  background: #f8f9fb;
+  padding: 14px 16px 16px;
+}
+
+.payment-batch-item-details > section {
+  min-width: 0;
+  padding: 2px 16px;
+  border-right: 1px solid #e1e4e9;
+}
+
+.payment-batch-item-details > section:first-child {
+  padding-left: 0;
+}
+
+.payment-batch-item-details > section:nth-child(3) {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.payment-batch-item-details section > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  color: #626977;
+}
+
+.payment-batch-item-details h3 {
+  margin: 0;
+  color: #3b3f48;
+  font-size: 11.5px;
+}
+
+.payment-batch-item-details dl {
+  display: grid;
+  margin: 0;
+}
+
+.payment-batch-item-details dl > div {
+  display: grid;
+  grid-template-columns: minmax(84px, .8fr) minmax(0, 1.5fr);
+  gap: 10px;
+  border-bottom: 1px solid #e5e8ed;
+  padding: 7px 0;
+}
+
+.payment-batch-item-details dl > div:last-child {
+  border-bottom: 0;
+}
+
+.payment-batch-document-list {
+  display: grid;
+  gap: 12px;
+}
+
+.payment-batch-detail-empty {
+  margin: 0;
+  color: #777e8b;
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.payment-batch-failure-result,
+.payment-batch-association-warning {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 11px;
+  border: 1px solid #eadbc8;
+  border-radius: 6px;
+  background: #fff9ef;
+  padding: 9px 10px;
+  color: #815822;
+}
+
+.payment-batch-failure-result svg,
+.payment-batch-association-warning svg {
+  margin-top: 1px;
+}
+
+.payment-batch-failure-result span,
+.payment-batch-association-warning span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  overflow-wrap: anywhere;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.payment-batch-failure-result small {
+  color: #8d704a;
+  font-size: 9.5px;
+}
+
+.payment-batch-association-warning {
+  grid-column: 1 / -1;
+  margin: 12px 0 0;
+}
+
+.payment-batch-detail-empty-state,
+.payment-batch-detail-missing {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 28px;
+  color: #777e8b;
+  text-align: center;
+}
+
+.payment-batch-detail-empty-state strong,
+.payment-batch-detail-missing h1 {
+  margin: 0;
+  color: #373b44;
+  font-size: 14px;
+}
+
+.payment-batch-detail-empty-state span,
+.payment-batch-detail-missing p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.payment-batch-detail-missing {
+  border: 1px solid #e1e4ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+@media (max-width: 980px) {
+  .payment-batch-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payment-batch-detail-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .payment-batch-detail-summary > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #eceef2;
+  }
+
+  .payment-batch-project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payment-batch-project-grid > div:nth-last-child(-n + 3) {
+    border-bottom: 1px solid #eceef2;
+  }
+
+  .payment-batch-project-grid > div:nth-last-child(-n + 2),
+  .payment-batch-project-grid > .payment-batch-project-full {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .payment-batch-detail-page {
+    padding-bottom: 18px;
+  }
+
+  .payment-batch-detail-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 13px;
+  }
+
+  .payment-batch-detail-header h1 {
+    font-size: 18px;
+  }
+
+  .payment-batch-detail-total {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .payment-batch-detail-total > strong {
+    font-size: 17px;
+  }
+
+  .payment-batch-detail-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-batch-detail-summary > div,
+  .payment-batch-detail-summary > div:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid #eceef2;
+  }
+
+  .payment-batch-detail-summary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .payment-batch-detail-section > header {
+    min-height: 0;
+    align-items: flex-start;
+    padding: 13px 14px;
+  }
+
+  .payment-batch-project-heading {
+    padding: 14px 14px 8px;
+  }
+
+  .payment-batch-project-grid {
+    grid-template-columns: 1fr;
+    padding: 4px 14px 14px;
+  }
+
+  .payment-batch-project-grid > div,
+  .payment-batch-project-grid > div:nth-last-child(-n + 3),
+  .payment-batch-project-grid > div:nth-last-child(-n + 2) {
+    border-bottom: 1px solid #eceef2;
+    padding-right: 0;
+  }
+
+  .payment-batch-project-grid > div:last-child {
+    border-bottom: 0;
+  }
+
+  .payment-batch-item-list {
+    overflow-x: visible;
+  }
+
+  .payment-batch-item {
+    min-width: 0;
+  }
+
+  .payment-batch-item-trigger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    gap: 13px 10px;
+    padding: 14px 42px 14px 14px;
+  }
+
+  .payment-batch-item-trigger > .payment-batch-item-person {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .payment-batch-item-trigger > svg {
+    position: absolute;
+    top: 27px;
+    right: 15px;
+  }
+
+  .payment-batch-item-trigger > span > strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .payment-batch-item-details {
+    grid-template-columns: 1fr;
+    padding: 3px 14px 14px;
+  }
+
+  .payment-batch-item-details > section,
+  .payment-batch-item-details > section:first-child,
+  .payment-batch-item-details > section:nth-child(3) {
+    padding: 13px 0;
+    border-right: 0;
+    border-bottom: 1px solid #e1e4e9;
+  }
+
+  .payment-batch-item-details > section:nth-child(3) {
+    border-bottom: 0;
+  }
+
+  .payment-batch-association-warning {
+    margin-top: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .payment-batch-item-trigger,
+  .payment-batch-item-trigger > svg {
+    transition: none;
+  }
+}
+
 /* Media payment request projects */
 .media-request-create-form { gap: 16px; }
 

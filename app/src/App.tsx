@@ -33,6 +33,10 @@ import {
   executeMockBatchSubmission,
   type MockBatchSubmission,
 } from './batchTransfers';
+import {
+  createInitialPaymentBatches,
+  createPaymentBatchRecord,
+} from './paymentBatches';
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -117,6 +121,7 @@ import {
   type ContractId,
   type InvoiceId,
   type PaymentListEditableField,
+  type PaymentBatchId,
   type PaymentListRecord,
   type PaymentRequestProjectId,
   type ProjectId,
@@ -170,29 +175,10 @@ import {
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
 
-type CreatedBatch = {
-  id: string;
-  count: number;
-  amount: string;
-  provider: string;
-  payer: string;
-  paidAt: string;
-} | null;
-
 const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   等待付款: '付款处理中',
   信息异常: '等待付款',
   付款处理中: '已付款',
-};
-
-const batchAmountLabel = (items: MockBatchSubmission['items']) => {
-  const totals = items.reduce<Record<string, number>>((result, item) => ({
-    ...result,
-    [item.transferCurrency]: (result[item.transferCurrency] ?? 0) + item.transferAmount,
-  }), {});
-  return Object.entries(totals)
-    .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
-    .join(' + ');
 };
 
 const getProjectId = (project: ProjectSummary) => (
@@ -369,6 +355,13 @@ export default function App() {
   ));
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
   const [requestProjects, setRequestProjects] = useState(INITIAL_REQUEST_PROJECTS_WITH_LINKS);
+  const [paymentBatches, setPaymentBatches] = useState(() => createInitialPaymentBatches({
+    payouts,
+    requests: requestProjects,
+    generatedInvoices,
+    paymentLists,
+    contracts,
+  }));
   const [invoiceTab, setInvoiceTab] = useState<InvoicePageTab>('signature');
   const [focusedInvoiceId, setFocusedInvoiceId] = useState<string | null>(null);
   const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
@@ -389,7 +382,6 @@ export default function App() {
   const [invoiceBatchDirty, setInvoiceBatchDirty] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
-  const [createdBatch, setCreatedBatch] = useState<CreatedBatch>(null);
   const [financeReviewRequestId, setFinanceReviewRequestId] = useState<string | null>(null);
   const [financeReviewSessions, setFinanceReviewSessions] = useState<Record<string, FinanceReviewSession>>({});
 
@@ -2793,17 +2785,36 @@ export default function App() {
     const localPaymentTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
       .toISOString()
       .slice(0, 16);
+    let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
+    try {
+      batchRecord = createPaymentBatchRecord({
+        payouts: selected,
+        requests: requestProjects,
+        generatedInvoices,
+        paymentLists,
+        contracts,
+        paymentBatchId: execution.batchId as PaymentBatchId,
+        paymentBatchCode: execution.batchCode,
+        provider: execution.provider,
+        fundingAccountId: execution.fundingAccountId,
+        sourceCurrency: execution.sourceCurrency,
+        payer: currentUser.name,
+        paidAt: localPaymentTime,
+        status: '付款处理中',
+        lifecycle: execution.lifecycle,
+        itemStatus: '付款处理中',
+      });
+    } catch (error) {
+      notify(
+        '无法创建付款批次',
+        error instanceof Error ? error.message : '付款记录无法稳定关联到唯一请款项目。',
+      );
+      return;
+    }
     setPayouts((current) => current.map((payout) => selected.some((item) => item.id === payout.id)
       ? { ...payout, status: '付款处理中', issue: undefined }
       : payout));
-    setCreatedBatch({
-      id: execution.batchCode,
-      count: selected.length,
-      amount: batchAmountLabel(execution.items),
-      provider: execution.provider,
-      payer: currentUser.name,
-      paidAt: localPaymentTime,
-    });
+    setPaymentBatches((current) => [batchRecord, ...current]);
     setActivePage('batches');
     notify(
       '模拟付款批次已提交',
@@ -3132,7 +3143,7 @@ export default function App() {
       );
       break;
     case 'batches':
-      pageContent = <BatchesPage createdBatch={createdBatch} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} />;
+      pageContent = <BatchesPage batches={paymentBatches} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} />;
       break;
     case 'new-batch':
       pageContent = (
