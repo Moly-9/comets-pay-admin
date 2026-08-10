@@ -3855,6 +3855,10 @@ input[type="checkbox"]:disabled {
   width: 158px;
 }
 
+.payment-batch-status-filter.custom-select-toolbar {
+  width: 168px;
+}
+
 .payment-batch-export {
   position: relative;
   margin-left: auto;
@@ -4020,6 +4024,7 @@ input[type="checkbox"]:disabled {
 @media (max-width: 620px) {
   .payment-batch-toolbar > .page-search,
   .payment-batch-date-range,
+  .payment-batch-status-filter.custom-select-toolbar,
   .payment-batch-channel-filter.custom-select-toolbar,
   .payment-batch-export,
   .payment-batch-export-trigger {

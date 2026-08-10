@@ -51,13 +51,13 @@ const paymentStatusTone = (status: string) => {
 };
 
 const projectStatusTone = (status: PaymentProjectPaymentRecord['status']) => {
-  if (status === '部分失败' || status === '已退回') return 'is-danger';
+  if (status === '部分失败' || status === '全部失败' || status === '已退回') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   return 'is-success';
 };
 
 const projectSummaryResultTone = (status: PaymentProjectPaymentRecord['status']) => {
-  if (status === '部分失败' || status === '已退回') return 'is-result-danger';
+  if (status === '部分失败' || status === '全部失败' || status === '已退回') return 'is-result-danger';
   if (status === '付款处理中') return 'is-result-processing';
   return 'is-result-success';
 };

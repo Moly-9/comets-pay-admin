@@ -59,7 +59,7 @@ const paymentStatusTone = (status: string) => {
 };
 
 const batchStatusTone = (status: PaymentBatchRecord['status']) => {
-  if (status === '部分失败') return 'is-danger';
+  if (status === '部分失败' || status === '全部失败') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   return 'is-success';
 };

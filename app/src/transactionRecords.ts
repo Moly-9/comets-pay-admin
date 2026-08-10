@@ -7,12 +7,20 @@ import {
   type PaymentBatchRecord,
 } from './paymentBatches';
 import type { Payout } from './types';
+import {
+  ALL_PAYMENT_STATUSES,
+  aggregatePaymentStatus,
+  matchesPaymentStatus,
+  type PaymentAggregateStatus,
+  type PaymentStatusFilter,
+} from './paymentStatusFilters';
 
 export type TransactionTab = 'all' | 'paid' | 'failed';
 export type TransactionProvider = 'all' | Payout['provider'];
 
 export type TransactionRecordFilters = {
-  tab: TransactionTab;
+  tab?: TransactionTab;
+  status?: PaymentStatusFilter;
   search: string;
   provider: TransactionProvider;
   startDate: string;
@@ -286,6 +294,25 @@ export const isFinalTransaction = (payout: Payout) => (
   && (payout.status === '已付款' || payout.status === '付款失败')
 );
 
+export const isPaymentTransactionRecord = (payout: Payout) => (
+  isInvoiceApprovedForPayment(payout)
+  && ['付款处理中', '已付款', '付款失败'].includes(payout.status)
+);
+
+export const transactionPaymentStatus = (
+  payout: Payout,
+  payouts: readonly Payout[],
+  batches: readonly PaymentBatchRecord[] = [],
+): PaymentAggregateStatus => {
+  const context = findTransactionBatchContext(payout, batches);
+  if (!context) return aggregatePaymentStatus([payout.status]);
+  const payoutById = new Map(payouts.map((item) => [item.id, item]));
+  const statuses = context.batch.items.map((item) => (
+    payoutById.get(item.payoutId)?.status ?? item.paymentStatus
+  ));
+  return aggregatePaymentStatus(statuses, context.batch.status);
+};
+
 const matchesTransactionSearch = (
   payout: Payout,
   search: string,
@@ -319,9 +346,13 @@ export const filterTransactionRecords = (
   filters: TransactionRecordFilters,
   batches: readonly PaymentBatchRecord[] = [],
 ) => payouts.filter((payout) => {
-  if (!isFinalTransaction(payout)) return false;
+  if (!isPaymentTransactionRecord(payout)) return false;
   if (filters.tab === 'paid' && payout.status !== '已付款') return false;
   if (filters.tab === 'failed' && payout.status !== '付款失败') return false;
+  if (!matchesPaymentStatus(
+    transactionPaymentStatus(payout, payouts, batches),
+    filters.status ?? ALL_PAYMENT_STATUSES,
+  )) return false;
   if (filters.provider !== 'all' && payout.provider !== filters.provider) return false;
   if (!matchesTransactionSearch(payout, filters.search, findTransactionBatchContext(payout, batches))) return false;
 

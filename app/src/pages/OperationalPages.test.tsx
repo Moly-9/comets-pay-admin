@@ -83,7 +83,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html.indexOf('全部渠道成功率')).toBeLessThan(html.indexOf('各渠道付款成功率'));
   });
 
-  it('shows only final-state tabs and excludes processing payouts from all transactions', () => {
+  it('uses the complete payment-status filter and includes processing transactions', () => {
     const html = renderToStaticMarkup(
       <TransactionsPage
         payouts={[
@@ -96,18 +96,14 @@ describe('TransactionsPage currency overview', () => {
       />,
     );
 
-    expect(html).toContain('<span>全部</span>');
-    expect(html).toContain('<span>已付款</span>');
-    expect(html).toContain('<span>付款失败</span>');
-    expect(html).not.toContain('<span>全部</span><small>');
-    expect(html).not.toContain('<span>已付款</span><small>');
-    expect(html).not.toContain('<span>付款失败</span><small>');
-    expect(html).not.toContain('<span>处理中</span>');
+    expect(html).toContain('aria-label="付款状态"');
+    expect(html).toContain('>全部付款状态</span>');
+    expect(html).not.toContain('role="tablist" aria-label="交易状态"');
     expect(html).toContain('INV-11');
     expect(html).toContain('INV-12');
-    expect(html).not.toContain('INV-13');
+    expect(html).toContain('INV-13');
     expect(html).not.toContain('INV-14');
-    expect(html).not.toContain('付款处理中');
+    expect(html).toContain('付款处理中');
     expect(html).not.toContain('等待付款');
   });
 
@@ -122,6 +118,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('type="search" aria-label="搜索交易记录"');
     expect(html.match(/type="date"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="付款渠道"');
+    expect(html).toContain('aria-label="付款状态"');
     expect(html).toContain('>全部付款渠道</span>');
     expect(html).toContain('当前显示 1 条记录');
     expect(html).toContain('<span>导出已选（0）</span>');

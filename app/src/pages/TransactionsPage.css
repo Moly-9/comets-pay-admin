@@ -25,6 +25,10 @@
   width: 168px;
 }
 
+.transactions-page .transaction-status-select {
+  width: 168px;
+}
+
 .transactions-page .transaction-filter-result {
   display: inline-flex;
   align-items: center;
@@ -741,6 +745,7 @@
 
   .transactions-page .transaction-search,
   .transactions-page .transaction-search input,
+  .transactions-page .transaction-status-select,
   .transactions-page .transaction-provider-select {
     width: 100%;
   }

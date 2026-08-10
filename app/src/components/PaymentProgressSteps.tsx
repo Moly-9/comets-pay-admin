@@ -1,6 +1,6 @@
 import { CircleDollarSign, RadioTower, Send } from 'lucide-react';
 
-export type PaymentProgressStatus = '付款处理中' | '部分失败' | '已退回' | '已付款';
+export type PaymentProgressStatus = '付款处理中' | '部分失败' | '全部失败' | '已退回' | '已付款';
 
 const PAYMENT_PROGRESS_STEPS = [
   { label: '已提交', icon: Send },
@@ -10,7 +10,7 @@ const PAYMENT_PROGRESS_STEPS = [
 
 const progressStepState = (status: PaymentProgressStatus, index: number) => {
   if (status === '已付款') return 'complete';
-  if (status === '部分失败' || status === '已退回') return index < 2 ? 'complete' : 'failed';
+  if (status === '部分失败' || status === '全部失败' || status === '已退回') return index < 2 ? 'complete' : 'failed';
   if (index === 0) return 'complete';
   return index === 1 ? 'current' : 'pending';
 };

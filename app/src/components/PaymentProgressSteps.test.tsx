@@ -30,4 +30,12 @@ describe('PaymentProgressSteps', () => {
     expect(html).toContain('<small>部分失败</small>');
     expect(html).toContain('aria-current="step"');
   });
+
+  it('shows the failed outcome when every payment failed', () => {
+    const html = renderToStaticMarkup(<PaymentProgressSteps ariaLabel="付款进度" status="全部失败" />);
+
+    expect(html.match(/class="is-complete"/g)).toHaveLength(2);
+    expect(html.match(/class="is-failed"/g)).toHaveLength(1);
+    expect(html).toContain('<small>全部失败</small>');
+  });
 });

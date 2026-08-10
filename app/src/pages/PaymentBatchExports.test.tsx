@@ -86,6 +86,7 @@ describe('payment batch filters and selection', () => {
       start: '2026-07-16T16:42',
       end: '2026-07-16T16:42',
       provider: 'Airwallex',
+      status: '已付款',
     }).map((row) => row.id)).toEqual(['BAT-20260716-007']);
 
     expect(filterPaymentBatchRows(TEST_BATCH_ROWS, {
@@ -137,6 +138,8 @@ describe('payment batch filters and selection', () => {
     );
     expect(html.match(/type="datetime-local"/g)).toHaveLength(2);
     expect(html).toContain('全部付款渠道');
+    expect(html).toContain('aria-label="付款状态筛选"');
+    expect(html).toContain('>全部付款状态</span>');
     expect(html).toContain('付款人 / 付款时间');
     expect(html).not.toContain('创建人 / 时间');
     expect(html).toContain('aria-haspopup="menu"');
@@ -153,7 +156,7 @@ describe('payment batch filters and selection', () => {
     } as Payout;
 
     expect(paymentBatchRows([{ ...batch, status: '部分失败' }], [basePayout])[0].status).toBe('已付款');
-    expect(paymentBatchRows([batch], [{ ...basePayout, status: '已退回' }])[0].status).toBe('部分失败');
+    expect(paymentBatchRows([batch], [{ ...basePayout, status: '已退回' }])[0].status).toBe('全部失败');
   });
 });
 

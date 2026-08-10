@@ -122,9 +122,8 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 import {
   findTransactionBatchContext,
   filterTransactionRecords,
-  isFinalTransaction,
+  isPaymentTransactionRecord,
   type TransactionProvider,
-  type TransactionTab,
 } from '../transactionRecords';
 import {
   loadTransactionRecordsWorkbook,
@@ -135,6 +134,14 @@ import {
   paymentBatchStatusCounts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
+import {
+  ALL_PAYMENT_STATUSES,
+  PAYMENT_STATUS_FILTER_OPTIONS,
+  aggregatePaymentStatus,
+  matchesPaymentStatus,
+  type PaymentAggregateStatus,
+  type PaymentStatusFilter,
+} from '../paymentStatusFilters';
 import { PaymentBatchDetailPage } from './PaymentBatchDetailPage';
 import { TransactionDetailPage } from './TransactionDetailPage';
 import './TransactionsPage.css';
@@ -2916,7 +2923,7 @@ export type PaymentBatchRow = {
   amount: string;
   payer: string;
   paidAt: string;
-  status: PaymentBatchRecord['status'];
+  status: PaymentAggregateStatus;
 };
 
 export type PaymentBatchFilters = {
@@ -2924,6 +2931,7 @@ export type PaymentBatchFilters = {
   start: string;
   end: string;
   provider: string;
+  status?: PaymentStatusFilter;
 };
 
 const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
@@ -2947,9 +2955,7 @@ export const paymentBatchRows = (
       const itemStatuses = batch.items.map((item) => (
         payouts.find((payout) => payout.id === item.payoutId)?.status ?? item.paymentStatus
       ));
-      if (itemStatuses.some((status) => status === '付款失败' || status === '已退回')) return '部分失败';
-      if (itemStatuses.length > 0 && itemStatuses.every((status) => status === '已付款')) return '已付款';
-      return batch.status;
+      return aggregatePaymentStatus(itemStatuses, batch.status);
     })(),
   }))
 );
@@ -2972,6 +2978,7 @@ export const filterPaymentBatchRows = (
     && (!filters.start || row.paidAt >= filters.start)
     && (!filters.end || row.paidAt <= filters.end)
     && (filters.provider === 'all' || row.provider === filters.provider)
+    && matchesPaymentStatus(row.status, filters.status ?? ALL_PAYMENT_STATUSES)
   ));
 };
 
@@ -3025,8 +3032,8 @@ export const loadPaymentDataRecord = async (
 
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
 
-const paymentBatchStatusTone = (status: PaymentBatchRecord['status']) => {
-  if (status === '部分失败') return 'is-danger';
+const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
+  if (status === '部分失败' || status === '全部失败') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   return 'is-success';
 };
@@ -3052,6 +3059,7 @@ export function BatchesPage({
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [provider, setProvider] = useState('all');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -3068,14 +3076,15 @@ export function BatchesPage({
     start,
     end,
     provider,
-  }), [end, provider, rows, search, start]);
+    status: paymentStatus,
+  }), [end, paymentStatus, provider, rows, search, start]);
   const {
     page: batchPage,
     pageItems: visibleRows,
     pageSize: batchPageSize,
     setPage: setBatchPage,
     setPageSize: setBatchPageSize,
-  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}` });
+  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}\u0000${paymentStatus}` });
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
   const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
   const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
@@ -3262,6 +3271,13 @@ export function BatchesPage({
             </label>
           </div>
           <SelectField
+            ariaLabel="付款状态筛选"
+            className="payment-batch-status-filter"
+            value={paymentStatus}
+            options={PAYMENT_STATUS_FILTER_OPTIONS}
+            onChange={setPaymentStatus}
+          />
+          <SelectField
             ariaLabel="付款渠道筛选"
             className="payment-batch-channel-filter"
             value={provider}
@@ -3411,9 +3427,9 @@ export function TransactionsPage({
   payouts: Payout[];
   paymentBatches: readonly PaymentBatchRecord[];
 }) {
-  const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
   const [provider, setProvider] = useState<TransactionProvider>('all');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -3421,9 +3437,9 @@ export function TransactionsPage({
   const detailReturnIdRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const transactions = payouts.filter(isFinalTransaction);
+  const transactions = payouts.filter(isPaymentTransactionRecord);
   const visible = filterTransactionRecords(payouts, {
-    tab,
+    status: paymentStatus,
     search,
     provider,
     startDate,
@@ -3517,7 +3533,7 @@ export function TransactionsPage({
 
   return (
     <div className="page-stack transactions-page">
-      <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" />
+      <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与付款状态。" />
       <section className="summary-surface" aria-label="交易概览">
         <PaymentCurrencySummaryCard
           items={paidCurrencies}
@@ -3550,11 +3566,6 @@ export function TransactionsPage({
         </article>
       </section>
       <section className="content-card">
-        <div className="tabs-row" role="tablist" aria-label="交易状态">
-          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}><span>全部</span></button>
-          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}><span>已付款</span></button>
-          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}><span>付款失败</span></button>
-        </div>
         <div className="transaction-filter-row">
           <label className="search-control transaction-search">
             <Search size={16} aria-hidden="true" />
@@ -3578,6 +3589,13 @@ export function TransactionsPage({
               <input type="date" value={endDate} onChange={(event) => updateEndDate(event.target.value)} />
             </label>
           </div>
+          <SelectField<PaymentStatusFilter>
+            ariaLabel="付款状态"
+            className="transaction-status-select"
+            value={paymentStatus}
+            options={PAYMENT_STATUS_FILTER_OPTIONS}
+            onChange={setPaymentStatus}
+          />
           <SelectField<TransactionProvider>
             ariaLabel="付款渠道"
             className="transaction-provider-select"
