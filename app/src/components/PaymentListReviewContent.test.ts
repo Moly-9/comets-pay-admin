@@ -125,13 +125,28 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('aria-expanded={!approvalCollapsed}');
     expect(workspaceSource).toContain('finance-review-invoice-edge-nav is-previous');
     expect(workspaceSource).toContain('finance-review-invoice-edge-nav is-next');
-    expect(workspaceSource).toContain('finance-review-project-page-nav');
-    expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex - 1\)\}/g)).toHaveLength(3);
-    expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(3);
+    expect(workspaceSource).toContain('上一页');
+    expect(workspaceSource).toContain('下一页');
+    expect(workspaceSource).not.toContain('finance-review-project-page-nav');
+    expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex - 1\)\}/g)).toHaveLength(2);
+    expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(2);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 4fr\) minmax\(0, 4fr\) minmax\(260px, 2fr\);/s);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\) 0fr;/s);
-    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-project-page-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-approval-toggle\s*\{[^}]*right:\s*8px;[^}]*top:\s*7px;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-invoice-edge-nav\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;[^}]*border-radius:\s*50%;/s);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
+  });
+
+  it('supports accessible Invoice zoom controls and modifier-wheel trackpad zoom', () => {
+    expect(workspaceSource).toContain('finance-review-invoice-zoom-stage');
+    expect(workspaceSource).toContain('finance-review-zoom-controls');
+    expect(workspaceSource).toContain('event.ctrlKey && !event.metaKey');
+    expect(workspaceSource).toContain("addEventListener('wheel', handleInvoiceWheel, { passive: false })");
+    expect(workspaceSource).toContain("event.key === '+' || event.key === '='");
+    expect(workspaceSource).toContain("event.key === '0'");
+    expect(workspaceStyles).toMatch(/\.finance-review-invoice-zoom-stage\s*\{[^}]*width:\s*calc\(min\(100%, 680px\) \* var\(--finance-review-invoice-zoom, 1\)\);/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-invoice-zoom-stage \.invoice-paper\s*\{[^}]*transform:\s*scale\(var\(--finance-review-invoice-zoom, 1\)\);/s);
   });
 
   it('preserves read-only validation and export behavior without payment mutation controls', () => {

@@ -13,8 +13,10 @@ import {
   ReceiptText,
   ShieldCheck,
   WalletCards,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
@@ -93,6 +95,14 @@ const reviewStatusLabel = (state: 'unreviewed' | 'correct' | 'incorrect') => {
   if (state === 'incorrect') return '已记录有误';
   return '待核对';
 };
+
+const MIN_INVOICE_ZOOM = 0.6;
+const MAX_INVOICE_ZOOM = 2.2;
+const INVOICE_ZOOM_STEP = 0.1;
+
+const normalizeInvoiceZoom = (value: number) => (
+  Math.round(Math.min(MAX_INVOICE_ZOOM, Math.max(MIN_INVOICE_ZOOM, value)) * 100) / 100
+);
 
 export function ApprovalTimeline({
   request,
@@ -245,13 +255,58 @@ export function FinanceReviewWorkspace({
   const [reviewIndex, setReviewIndex] = useState(firstPendingIndex);
   const [activePane, setActivePane] = useState<FinanceReviewPane>('invoice');
   const [approvalCollapsed, setApprovalCollapsed] = useState(false);
+  const [invoiceZoom, setInvoiceZoom] = useState(1);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [issueReason, setIssueReason] = useState('');
+  const invoiceCanvasRef = useRef<HTMLDivElement>(null);
+  const invoiceZoomRef = useRef(1);
+
+  const setInvoiceZoomLevel = useCallback((value: number, anchor?: { clientX: number; clientY: number }) => {
+    const nextZoom = normalizeInvoiceZoom(value);
+    const previousZoom = invoiceZoomRef.current;
+    if (nextZoom === previousZoom) return;
+
+    const canvas = invoiceCanvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+    const offsetX = rect && anchor ? anchor.clientX - rect.left : 0;
+    const offsetY = rect && anchor ? anchor.clientY - rect.top : 0;
+    const contentX = canvas && anchor ? (canvas.scrollLeft + offsetX) / previousZoom : 0;
+    const contentY = canvas && anchor ? (canvas.scrollTop + offsetY) / previousZoom : 0;
+
+    invoiceZoomRef.current = nextZoom;
+    setInvoiceZoom(nextZoom);
+
+    if (canvas && anchor) {
+      requestAnimationFrame(() => {
+        canvas.scrollTo({
+          left: Math.max(0, contentX * nextZoom - offsetX),
+          top: Math.max(0, contentY * nextZoom - offsetY),
+        });
+      });
+    }
+  }, []);
 
   useEffect(() => {
     setReviewIndex((current) => Math.min(current, Math.max(0, financeReview.pages.length - 1)));
   }, [financeReview.fingerprint, financeReview.pages.length]);
+
+  useEffect(() => {
+    const canvas = invoiceCanvasRef.current;
+    if (!canvas) return undefined;
+
+    const handleInvoiceWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setInvoiceZoomLevel(invoiceZoomRef.current * Math.exp(-event.deltaY * 0.003), {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+    };
+
+    canvas.addEventListener('wheel', handleInvoiceWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleInvoiceWheel);
+  }, [setInvoiceZoomLevel]);
 
   const currentPage = financeReview.pages[reviewIndex];
   const currentDecision = currentPage
@@ -335,30 +390,28 @@ export function FinanceReviewWorkspace({
         onBackdropMouseDown={() => undefined}
         footer={(
           <div className="finance-review-footer">
-            <div className="finance-review-footer-summary" aria-live="polite">
-              <strong>{counts.correct} / {financeReview.pageCount}</strong>
-              <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
-            </div>
-            <div className="finance-review-page-nav">
+            <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
               <button
-                className="icon-button"
+                className="finance-review-page-button"
                 type="button"
-                aria-label="上一份 Invoice"
                 disabled={reviewIndex === 0}
                 onClick={() => goTo(reviewIndex - 1)}
               >
-                <ChevronLeft size={18} />
+                上一页
               </button>
               <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
               <button
-                className="icon-button"
+                className="finance-review-page-button"
                 type="button"
-                aria-label="下一份 Invoice"
                 disabled={reviewIndex >= financeReview.pageCount - 1}
                 onClick={() => goTo(reviewIndex + 1)}
               >
-                <ChevronRight size={18} />
+                下一页
               </button>
+            </div>
+            <div className="finance-review-footer-summary" aria-live="polite">
+              <strong>{counts.correct} / {financeReview.pageCount}</strong>
+              <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
             </div>
             <div className="finance-review-footer-actions">
               <Button
@@ -397,29 +450,6 @@ export function FinanceReviewWorkspace({
                 <div className="finance-review-project-line">
                   <span className="finance-review-project-label">所属项目</span>
                   <strong>{request.cooperationProjectName ?? request.project}</strong>
-                  <div className="finance-review-project-page-nav" role="group" aria-label="审核记录翻页">
-                    <button
-                      className="icon-button"
-                      type="button"
-                      title="上一份 Invoice 与付款清单"
-                      aria-label="上一份 Invoice 与付款清单"
-                      disabled={reviewIndex === 0}
-                      onClick={() => goTo(reviewIndex - 1)}
-                    >
-                      <ChevronLeft size={20} strokeWidth={2.5} />
-                    </button>
-                    <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      title="下一份 Invoice 与付款清单"
-                      aria-label="下一份 Invoice 与付款清单"
-                      disabled={reviewIndex >= financeReview.pageCount - 1}
-                      onClick={() => goTo(reviewIndex + 1)}
-                    >
-                      <ChevronRight size={20} strokeWidth={2.5} />
-                    </button>
-                  </div>
                 </div>
                 <span className="finance-review-current-record">{currentPage?.invoiceNumber ?? '暂无可审核记录'} · {currentPage?.creatorName ?? '待补充'}</span>
               </div>
@@ -453,11 +483,68 @@ export function FinanceReviewWorkspace({
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div><FileText size={18} /><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
-                {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
+                <div className="finance-review-invoice-header-actions">
+                  {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
+                  <div className="finance-review-zoom-controls" role="group" aria-label="Invoice 缩放">
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title="缩小 Invoice"
+                      aria-label="缩小 Invoice"
+                      disabled={!invoice || invoiceZoom <= MIN_INVOICE_ZOOM}
+                      onClick={() => setInvoiceZoomLevel(invoiceZoomRef.current - INVOICE_ZOOM_STEP)}
+                    >
+                      <ZoomOut size={16} />
+                    </button>
+                    <button
+                      className="finance-review-zoom-reset"
+                      type="button"
+                      title="恢复 100%"
+                      aria-label={`当前缩放 ${Math.round(invoiceZoom * 100)}%，点击恢复 100%`}
+                      disabled={!invoice || invoiceZoom === 1}
+                      onClick={() => setInvoiceZoomLevel(1)}
+                    >
+                      {Math.round(invoiceZoom * 100)}%
+                    </button>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title="放大 Invoice"
+                      aria-label="放大 Invoice"
+                      disabled={!invoice || invoiceZoom >= MAX_INVOICE_ZOOM}
+                      onClick={() => setInvoiceZoomLevel(invoiceZoomRef.current + INVOICE_ZOOM_STEP)}
+                    >
+                      <ZoomIn size={16} />
+                    </button>
+                  </div>
+                </div>
               </header>
-              <div className="finance-review-invoice-canvas">
+              <div
+                ref={invoiceCanvasRef}
+                className="finance-review-invoice-canvas"
+                tabIndex={0}
+                aria-label="Invoice 快照查看区"
+                onKeyDown={(event) => {
+                  if (!event.ctrlKey && !event.metaKey) return;
+                  if (event.key === '+' || event.key === '=') {
+                    event.preventDefault();
+                    setInvoiceZoomLevel(invoiceZoomRef.current + INVOICE_ZOOM_STEP);
+                  } else if (event.key === '-') {
+                    event.preventDefault();
+                    setInvoiceZoomLevel(invoiceZoomRef.current - INVOICE_ZOOM_STEP);
+                  } else if (event.key === '0') {
+                    event.preventDefault();
+                    setInvoiceZoomLevel(1);
+                  }
+                }}
+              >
                 {invoice ? (
-                  <InvoiceDocumentView model={invoice.snapshot} ariaLabel={`${invoice.id} Invoice 冻结快照`} />
+                  <div
+                    className="finance-review-invoice-zoom-stage"
+                    style={{ '--finance-review-invoice-zoom': invoiceZoom } as CSSProperties}
+                  >
+                    <InvoiceDocumentView model={invoice.snapshot} ariaLabel={`${invoice.id} Invoice 冻结快照`} />
+                  </div>
                 ) : (
                   <div className="finance-review-empty">
                     <ReceiptText size={30} />

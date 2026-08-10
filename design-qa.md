@@ -171,6 +171,65 @@ final result: passed
 
 ---
 
+# Finance Review Drawer And Invoice Controls Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-daf09230-eb1e-4616-9059-107b9c7905b2.png`.
+- Desktop implementation: `artifacts/finance-review-drawer-zoom-final-1846x841.png`.
+- Mobile implementation: `artifacts/finance-review-drawer-zoom-390x844.png`.
+- Combined full-view and focused comparison: `artifacts/finance-review-drawer-zoom-comparison.png`.
+
+## Dimensions And State
+
+- Source and desktop implementation: 1846 x 841 px, 1846 x 841 CSS viewport, device scale factor 1; no density normalization was required.
+- Mobile implementation: 390 x 844 px, 390 x 844 CSS viewport, device scale factor 1.
+- State: signed in as the finance demo role, `付款工作台 > 待审核`, with `REQ-202607-000001` open at Invoice 1 / 17, approval drawer expanded, and Invoice zoom reset to 100%.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the existing Noto Sans SC hierarchy is unchanged. `上一页` and `下一页` use the same compact action weight as the review footer, with zero letter spacing and no truncation at desktop or 390 px.
+- Spacing and layout rhythm: the approval handle sits inside the top-right area of the `项目与审批` header. Invoice edge controls are 48 x 48 px circles centered vertically. Footer paging starts at the lower-left without overlapping the review count or approval actions.
+- Colors and visual tokens: the new controls reuse the existing white, cool-gray, and restrained purple finance-review palette. Hover and focus states retain the established high-contrast purple treatment.
+- Image and asset fidelity: no new raster or decorative assets were required. Drawer, zoom, and page controls use the repository's existing Lucide icon set.
+- Copy and content: the removed top pager is replaced by explicit `上一页` / `下一页` footer actions. Invoice, payment-list, account-snapshot, and page-count content remain synchronized.
+
+## Full-View Comparison
+
+- The implementation preserves the source's 4:4:2 board composition and moves the drawer handle to the exact requested top-right area of the approval board.
+- The source's highlighted top paging group is intentionally removed. The implementation places the same synchronized navigation at the lower-left and exposes literal previous/next labels as requested.
+- Invoice navigation remains visible at both vertical edges, now using circular buttons; the added compact zoom group fits in the Invoice header without reducing document width or overlapping the correspondence badge.
+
+## Focused Region Comparison
+
+- Drawer region: the control is fully contained by the approval header, remains visible when the drawer collapses, and returns to the same top-right position when expanded.
+- Invoice region: both edge buttons are true circles. Zooming from 100% to 110% increases the rendered page width from about 679 px to 747 px and expands the Invoice canvas scroll width from 723 px to 791 px.
+- Footer region: `上一页`, `1 / 17`, and `下一页` occupy the first footer group at the lower-left. The same controls remain reachable at 390 px with 44 px minimum height.
+
+## Interaction Verification
+
+- Zoom-out, percentage reset, and zoom-in controls: passed.
+- `Control` / `Command` modifier-wheel and trackpad pinch handling uses a non-passive wheel listener, clamps zoom to 60%-220%, and preserves the pointer anchor inside the Invoice canvas.
+- `Control` / `Command` plus, minus, and zero keyboard zoom: passed; 100% to 110% changed the document and scroll geometry without changing the browser viewport.
+- Drawer collapse and expand: passed; collapsed columns measured 923 px / 923 px / 0 px at 1846 px.
+- Bottom pager synchronization: passed; Invoice and payment-list comparison both moved from `INV-301164-R01` to `INV-301164-R03` at 2 / 17.
+- Desktop and 390 px layouts had no page-level horizontal overflow. Browser console contained 0 errors.
+
+## Comparison History
+
+1. The first browser pass exposed a P1 zoom behavior issue: the percentage changed, but percentage-based document sizing kept the visible Invoice width fixed.
+2. The Invoice stage was changed to reserve scaled width and height while transforming the document from its top-left origin.
+3. The final comparison confirms real document enlargement, scrollable overflow, top-right drawer placement, circular edge navigation, lower-left labeled paging, and a responsive 390 px layout.
+
+## Follow-up Polish
+
+- No P3 refinement is required for this scoped interaction.
+
+final result: passed
+
+---
+
 # Transaction Paid Total Card Design QA
 
 ## Evidence
