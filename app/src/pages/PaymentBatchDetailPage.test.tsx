@@ -110,6 +110,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，收起付款详情"');
     expect(html).toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
     expect(html).toContain('class="payment-batch-order-card"');
+    expect(html).toContain('payment-batch-project-full payment-batch-project-reason');
+    expect(html).toContain('class="payment-batch-order-items-heading"');
     expect(html).toContain('<span>付款单</span><strong>PAY-202608-000001</strong>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');

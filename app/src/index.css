@@ -440,20 +440,20 @@ input[type="checkbox"]:disabled {
 .payment-batch-order-card {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #dfe3e9;
+  border: 1px solid #d9dee7;
   border-radius: 8px;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(37, 42, 51, 0.035), 0 10px 30px rgba(37, 42, 51, 0.035);
 }
 
 .payment-batch-order-header {
   display: flex;
-  min-height: 76px;
+  min-height: 72px;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  border-bottom: 1px solid #e5e8ed;
-  background: #fafbfc;
-  padding: 14px 17px;
+  background: #fdfdfe;
+  padding: 14px 20px;
 }
 
 .payment-batch-order-identity {
@@ -513,11 +513,25 @@ input[type="checkbox"]:disabled {
 }
 
 .payment-batch-order-project {
-  border-bottom: 1px solid #e5e8ed;
+  display: grid;
+  grid-template-columns: minmax(220px, .72fr) minmax(0, 2.28fr);
+  border-top: 1px solid #ebe8ef;
+  border-bottom: 1px solid #e7e9ee;
+  background: #fbfafc;
 }
 
 .payment-batch-order-project .payment-batch-project-heading {
-  padding-top: 14px;
+  align-items: flex-start;
+  gap: 12px;
+  border-right: 1px solid #e5e1e9;
+  background: #f8f6fa;
+  padding: 18px 20px;
+}
+
+.payment-batch-order-project .payment-batch-project-heading > span {
+  width: 38px;
+  height: 38px;
+  background: #eee8f2;
 }
 
 .payment-batch-project-section-title {
@@ -530,15 +544,34 @@ input[type="checkbox"]:disabled {
 
 .payment-batch-order-items > header {
   display: flex;
-  min-height: 58px;
+  min-height: 62px;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  border-bottom: 1px solid #e5e8ed;
-  padding: 11px 17px;
+  background: #fff;
+  padding: 12px 20px;
 }
 
-.payment-batch-order-items > header > div {
+.payment-batch-order-items-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.payment-batch-order-items-heading > span {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: #f0f2f6;
+  color: #596273;
+}
+
+.payment-batch-order-items-heading > div {
   display: grid;
   min-width: 0;
   gap: 2px;
@@ -551,10 +584,20 @@ input[type="checkbox"]:disabled {
 }
 
 .payment-batch-order-items header p,
-.payment-batch-order-items header > span {
+.payment-batch-order-items-count {
   color: #858b97;
   font-size: 10px;
   line-height: 1.5;
+}
+
+.payment-batch-order-items-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-batch-order-items-count strong {
+  color: #4b5260;
+  font-size: 12px;
 }
 
 .payment-batch-project-heading {
@@ -656,6 +699,35 @@ input[type="checkbox"]:disabled {
   padding-left: 0 !important;
 }
 
+.payment-batch-order-card .payment-batch-project-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: stretch;
+  padding: 0;
+}
+
+.payment-batch-order-card .payment-batch-project-grid > div {
+  min-height: 62px;
+  align-content: center;
+  gap: 4px;
+  border-right: 1px solid #e9e6ec;
+  border-bottom: 1px solid #e9e6ec;
+  padding: 12px 16px;
+}
+
+.payment-batch-order-card .payment-batch-project-grid > div:nth-child(4) {
+  border-right: 0;
+}
+
+.payment-batch-order-card .payment-batch-project-grid > div:nth-child(n + 5) {
+  border-bottom: 0;
+}
+
+.payment-batch-order-card .payment-batch-project-grid > .payment-batch-project-reason {
+  grid-column: span 2;
+  border-right: 0 !important;
+  padding: 12px 16px !important;
+}
+
 .payment-batch-item-list {
   overflow-x: auto;
 }
@@ -663,6 +735,13 @@ input[type="checkbox"]:disabled {
 .payment-batch-order-card .payment-batch-item-table-head,
 .payment-batch-order-card .payment-batch-item-trigger {
   grid-template-columns: minmax(128px, 1.35fr) minmax(92px, .8fr) minmax(104px, 1fr) minmax(104px, 1fr) minmax(92px, .8fr) minmax(90px, .75fr) 28px;
+  padding-right: 20px;
+  padding-left: 20px;
+}
+
+.payment-batch-order-card .payment-batch-item-table-head {
+  border-top: 1px solid #eceef2;
+  background: #f5f7f9;
 }
 
 .payment-batch-order-card .payment-batch-item-trigger > span > strong,
@@ -1187,6 +1266,40 @@ input[type="checkbox"]:disabled {
   .payment-batch-project-grid > .payment-batch-project-full {
     border-bottom: 0;
   }
+
+  .payment-batch-order-project {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-batch-order-project .payment-batch-project-heading {
+    border-right: 0;
+    border-bottom: 1px solid #e5e1e9;
+    padding: 15px 18px;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid > div,
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-child(3n),
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-child(3n + 1),
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-last-child(-n + 3),
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-last-child(-n + 2) {
+    border-right: 1px solid #e9e6ec;
+    border-bottom: 1px solid #e9e6ec;
+    padding: 12px 16px;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid > .payment-batch-project-reason {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1223,6 +1336,11 @@ input[type="checkbox"]:disabled {
     flex-direction: column;
   }
 
+  .payment-batch-order-header {
+    gap: 13px;
+    padding: 14px;
+  }
+
   .payment-batch-orders-heading > span {
     align-self: flex-start;
   }
@@ -1234,7 +1352,7 @@ input[type="checkbox"]:disabled {
 
   .payment-batch-order-items > header {
     min-height: 0;
-    align-items: flex-start;
+    align-items: center;
     padding: 13px 14px;
   }
 
@@ -1266,6 +1384,37 @@ input[type="checkbox"]:disabled {
 
   .payment-batch-project-grid > div:last-child {
     border-bottom: 0;
+  }
+
+  .payment-batch-order-project .payment-batch-project-heading {
+    padding: 14px;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid > div,
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-last-child(-n + 3),
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-last-child(-n + 2),
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-child(2n),
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-child(2n + 1) {
+    min-height: 58px;
+    border-right: 1px solid #e9e6ec;
+    border-bottom: 1px solid #e9e6ec;
+    padding: 10px 12px;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .payment-batch-order-card .payment-batch-project-grid > .payment-batch-project-reason {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 0;
+    padding: 10px 12px !important;
   }
 
   .payment-batch-item-list {

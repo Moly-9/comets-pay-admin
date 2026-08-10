@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileText,
   Landmark,
+  ListChecks,
   ReceiptText,
   RotateCcw,
   UserRound,
@@ -336,12 +337,18 @@ export function PaymentBatchDetailPage({
                     <div><dt>项目媒介</dt><dd>{batch.request.media}</dd></div>
                     <div><dt>负责 PM</dt><dd>{batch.request.pm}</dd></div>
                     <div><dt>预计付款时间</dt><dd>{batch.request.expectedPaymentDate}</dd></div>
-                    <div className="payment-batch-project-full"><dt>请款原因</dt><dd>{batch.request.reason}</dd></div>
+                    <div className="payment-batch-project-full payment-batch-project-reason"><dt>请款原因</dt><dd>{batch.request.reason}</dd></div>
                   </dl>
                 </section>
 
                 <section className="payment-batch-order-items" aria-label={`${order.code} 付款明细`}>
-                  <header><div><h3>付款明细</h3><p>展开付款项查看合同、Invoice、账户快照和渠道结果。</p></div><span>{order.items.length} 笔</span></header>
+                  <header>
+                    <div className="payment-batch-order-items-heading">
+                      <span aria-hidden="true"><ListChecks size={17} /></span>
+                      <div><h3>付款明细</h3><p>展开付款项查看合同、Invoice、账户快照和渠道结果。</p></div>
+                    </div>
+                    <span className="payment-batch-order-items-count"><strong>{order.items.length}</strong> 笔</span>
+                  </header>
                   <div className="payment-batch-item-list">
                     <div className="payment-batch-item-table-head" aria-hidden="true">
                       <span>达人</span>
