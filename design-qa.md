@@ -529,3 +529,51 @@ final result: passed
 - Approval resume rule: covered by unit test; a finance return creates round 2 at `PENDING_FINANCE` after resubmission.
 
 final result: passed
+
+---
+
+# Circular Multi-Select Controls Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f6aa6027-816a-4db9-a733-5ec5fa5b1a44.png`.
+- Source pixels: 1517 x 594 at the provided density.
+- Intended implementation viewport: 1517 x 594, desktop, selected contract-list state.
+- Implementation screenshot: unavailable. The in-app browser rejected `http://127.0.0.1:5173/` under its local URL security policy, so no browser-rendered capture could be produced.
+- Implementation service check: HTTP 200; this is not a substitute for visual evidence.
+
+## Findings
+
+- [P1] Browser-rendered comparison is unavailable.
+  Location: all native checkboxes and custom multi-select indicators.
+  Evidence: the reference image is available, but there is no implementation screenshot to place beside it at the same viewport and state.
+  Impact: roundness, pink-purple color fidelity, spacing, focus treatment, and selected-state consistency cannot be accepted from source code and build output alone.
+  Fix: capture the contract list with selected rows in an allowed in-app browser session, then compare it with the source at matching dimensions.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: unchanged by this task; browser comparison blocked.
+- Spacing and layout rhythm: control dimensions remain page-specific; browser comparison blocked.
+- Colors and visual tokens: implemented with shared light pink-purple selection tokens; visual sampling against the source is blocked.
+- Image quality and asset fidelity: no new image assets were introduced; existing Lucide selection icons are retained.
+- Copy and content: unchanged by this task.
+
+## Interaction Verification
+
+- Native checked, unchecked, indeterminate, disabled, hover, and keyboard-focus states are implemented in CSS.
+- Custom searchable filters, creator pickers, Invoice/contract pickers, and batch creator indicators use the same circular pink-purple treatment.
+- Automated tests and production build pass, but browser interaction and console inspection are blocked by the local URL policy.
+
+## Comparison History
+
+1. The source image was opened and measured at 1517 x 594.
+2. The local implementation returned HTTP 200.
+3. The existing in-app browser tab was claimed and reloaded once; the browser URL policy rejected the local address. No alternate browser, raw CDP, or Playwright workaround was attempted.
+
+## Implementation Checklist
+
+- Capture the selected contract-list state when the local URL is permitted.
+- Compare the full table and a focused checkbox region against the source image.
+- Check desktop and narrow-screen control alignment, then update this result.
+
+final result: blocked

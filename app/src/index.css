@@ -17,9 +17,78 @@
   --peach: #ffaf8c;
   --pink: #ff8dc7;
   --purple: #ad6ee7;
+  --multi-select-fill: #e4cbea;
+  --multi-select-border: #cda8d9;
+  --multi-select-icon: #bd8ace;
+  --multi-select-ink: #6f507b;
+  --multi-select-soft: #faf6fc;
   --desktop-content-scale: 1.15;
   --accent-gradient: linear-gradient(135deg, var(--peach) 0%, var(--pink) 52%, var(--purple) 100%);
   --shadow-soft: 0 12px 36px rgba(30, 25, 45, 0.055);
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #cfd3dc;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--multi-select-ink);
+  cursor: pointer;
+  display: inline-grid;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  place-content: center;
+  vertical-align: middle;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  -webkit-appearance: none;
+}
+
+input[type="checkbox"]::after {
+  width: 4px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: translateY(-1px) rotate(45deg) scale(0);
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--multi-select-border);
+  background: var(--multi-select-soft);
+}
+
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate {
+  border-color: var(--multi-select-border);
+  background: var(--multi-select-fill);
+}
+
+input[type="checkbox"]:checked::after {
+  transform: translateY(-1px) rotate(45deg) scale(1);
+}
+
+input[type="checkbox"]:indeterminate::after {
+  width: 7px;
+  height: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: currentColor;
+  transform: none;
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(189, 138, 206, 0.23);
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 /* Payment batch detail: linked request, project and immutable payment snapshots. */
@@ -9168,7 +9237,7 @@ button:disabled {
 }
 
 .project-creator-modal-check-selected {
-  color: #ed6b55;
+  color: var(--multi-select-icon);
 }
 
 .project-creator-modal-empty {
@@ -9551,14 +9620,14 @@ button:disabled {
   align-items: center;
   justify-content: center;
   border: 1px solid #cfd3dc;
-  border-radius: 5px;
+  border-radius: 50%;
   background: #fff;
-  color: #fff;
+  color: var(--multi-select-ink);
 }
 
 .searchable-multi-option-selected .searchable-multi-option-check {
-  border-color: #f07961;
-  background: #f07961;
+  border-color: var(--multi-select-border);
+  background: var(--multi-select-fill);
 }
 
 .searchable-multi-option-copy {
@@ -10004,7 +10073,7 @@ button:disabled {
 }
 
 .creator-option-mark-selected {
-  color: #ee6c57;
+  color: var(--multi-select-icon);
 }
 
 .creator-picker-empty {
@@ -10160,7 +10229,7 @@ button:disabled {
 }
 
 .invoice-option-mark-selected {
-  color: #ee6c57;
+  color: var(--multi-select-icon);
 }
 
 .invoice-selection-clear {

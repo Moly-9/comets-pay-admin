@@ -241,15 +241,15 @@
   align-items: center;
   justify-content: center;
   border: 1px solid #bcc4cd;
-  border-radius: 5px;
+  border-radius: 50%;
   background: #fff;
   color: transparent;
 }
 
 .invoice-batch-creator.is-selected .invoice-batch-creator-check {
-  border-color: #e6765f;
-  background: #e6765f;
-  color: #fff;
+  border-color: var(--multi-select-border);
+  background: var(--multi-select-fill);
+  color: var(--multi-select-ink);
 }
 
 .invoice-batch-creator > span:nth-of-type(2) {
