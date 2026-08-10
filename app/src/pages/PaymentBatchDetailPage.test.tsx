@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { PaymentBatchRecord } from '../paymentBatches';
+import type { Payout } from '../types';
 import { PaymentBatchDetailPage, PaymentItemDetails } from './PaymentBatchDetailPage';
 
 const DETAIL_BATCH: PaymentBatchRecord = {
@@ -141,6 +142,47 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('付款关联文件');
     expect(html).toContain('账户快照与渠道结果');
     expect(html).not.toContain('1234567890');
+  });
+
+  it('reads the shared failure return record and exposes the payment-list deep link', () => {
+    const payout: Payout = {
+      id: 'payout_detail_test',
+      paymentRequestProjectId: DETAIL_BATCH.request.paymentRequestProjectId,
+      creator: 'Mina Kato',
+      handle: '@minakato',
+      initials: 'MK',
+      projectId: DETAIL_BATCH.request.cooperationProjectId,
+      project: DETAIL_BATCH.request.cooperationProjectName,
+      contract: 'CON-202608-000001',
+      invoice: 'INV-202608-000001',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 1250,
+      account: 'prototype-account',
+      status: '已退回',
+      invoiceReviewStatus: '已通过',
+      accent: '#64748b',
+      paymentFailureReturn: {
+        issueType: 'PAYMENT_LIST',
+        reason: '付款清单账户快照已失效，请达人更新账户。',
+        actorAccount: 'finance',
+        actorName: '财务人员',
+        occurredAt: '2026-08-10T15:00:00.000Z',
+        restartStage: 'PAYMENT_LIST_RESUBMISSION',
+      },
+      paymentFailureRecovery: {
+        status: 'AWAITING_CREATOR_UPDATE',
+        notifications: [],
+      },
+    };
+    const html = renderToStaticMarkup(
+      <PaymentItemDetails item={DETAIL_BATCH.items[0]} payout={payout} onOpenFailurePaymentList={vi.fn()} />,
+    );
+
+    expect(html).toContain('失败款已转交媒介恢复');
+    expect(html).toContain('付款清单账户快照已失效，请达人更新账户。');
+    expect(html).toContain('等待达人更新账户');
+    expect(html).toContain('查看付款清单');
   });
 
   it('shows an explicit empty state when a stored batch has no item snapshots', () => {

@@ -17,7 +17,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
@@ -61,7 +61,8 @@ import {
   type PaymentRequestCreatorLink,
   type PaymentRequestPaymentChannel,
 } from '../paymentRequestProjects';
-import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
 import {
   ProjectInlineFilterPanel,
@@ -297,15 +298,21 @@ export function MediaPaymentProjectsPage({
   contracts,
   invoices,
   paymentLists,
+  payouts = [],
   requests,
   canCreate,
   focusedProjectId,
   onFocusCleared,
+  initialFocusedFailurePayoutId = null,
+  onFailureFocusCleared = () => undefined,
   onCreated,
   onUpdated,
   onGeneratePaymentList,
   onSubmitRequest,
   resourceActions,
+  onSendPaymentFailureNotification = () => false,
+  onSimulatePaymentFailureAccountUpdate = () => false,
+  onRevalidatePaymentFailureAccount = () => false,
 }: {
   notify: Notify;
   currentUser: SystemUser;
@@ -314,15 +321,21 @@ export function MediaPaymentProjectsPage({
   contracts: ContractRecord[];
   invoices: GeneratedInvoiceRecord[];
   paymentLists: PaymentListRecord[];
+  payouts?: Payout[];
   requests: RequestProjectSummary[];
   canCreate: boolean;
   focusedProjectId: string | null;
   onFocusCleared: () => void;
+  initialFocusedFailurePayoutId?: string | null;
+  onFailureFocusCleared?: () => void;
   onCreated: (request: RequestProjectSummary) => void;
   onUpdated: (request: RequestProjectSummary) => void;
   onGeneratePaymentList: (request: RequestProjectSummary) => void;
   onSubmitRequest: (request: RequestProjectSummary) => void;
   resourceActions: RequestProjectResourceActions;
+  onSendPaymentFailureNotification?: (payoutId: string, message: string) => boolean;
+  onSimulatePaymentFailureAccountUpdate?: (payoutId: string) => boolean;
+  onRevalidatePaymentFailureAccount?: (payoutId: string) => boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -344,12 +357,21 @@ export function MediaPaymentProjectsPage({
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
   const [exportingRequestId, setExportingRequestId] = useState<string | null>(null);
+  const [focusedFailurePayoutId, setFocusedFailurePayoutId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialFocusedFailurePayoutId) setFocusedFailurePayoutId(initialFocusedFailurePayoutId);
+  }, [initialFocusedFailurePayoutId]);
 
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const visibleRequests = requests.filter((request) => {
     if (currentUser.roleKey === 'media') return request.media === currentScopeName;
     return true;
   });
+  const failurePayoutsForRequest = (request: RequestProjectSummary) => payouts.filter((payout) => (
+    payout.paymentRequestProjectId === request.paymentRequestProjectId
+    && Boolean(payout.paymentFailureRecovery)
+  ));
   const editingRequest = editingRequestId
     ? visibleRequests.find((request) => request.id === editingRequestId) ?? null
     : null;
@@ -393,6 +415,12 @@ export function MediaPaymentProjectsPage({
     .filter((request) => request.lifecycle === 'RETURNED')
     .map((request) => ({ request, details: requestApprovalReturnDetails(request.approval) }));
   const financeReturnedCount = returnedRequests.filter(({ details }) => details?.stage === 'FINANCE').length;
+  const paymentFailureRequests = visibleRequests
+    .map((request) => ({ request, payouts: failurePayoutsForRequest(request) }))
+    .filter(({ request, payouts: failedPayouts }) => (
+      myProjectStatusFor(request) === '部分打款失败' && failedPayouts.length > 0
+    ));
+  const paymentFailureCount = paymentFailureRequests.reduce((total, item) => total + item.payouts.length, 0);
   const { visible: filteredRequests, invalidBudgetRange } = filterPaymentRequestList({
     requests: visibleRequests,
     search,
@@ -783,6 +811,9 @@ export function MediaPaymentProjectsPage({
     });
     const latestPaymentList = requestPaymentLists[0];
     const isReturned = selectedRequest.lifecycle === 'RETURNED';
+    const failedPayouts = failurePayoutsForRequest(selectedRequest);
+    const isPaymentFailure = selectedMyProjectStatus === '部分打款失败' && failedPayouts.length > 0;
+    const canHandlePaymentFailure = ['media', 'admin', 'owner'].includes(currentUser.roleKey);
     const returnDetails = requestApprovalReturnDetails(selectedRequest.approval);
     const returnHeading = returnDetails?.stage === 'FINANCE'
       ? '付款工作台已退回此请款项目'
@@ -807,6 +838,33 @@ export function MediaPaymentProjectsPage({
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
           <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
         </div>
+        {isPaymentFailure ? (
+          <section className="media-request-return-panel media-request-payment-failure-panel" aria-labelledby="media-request-payment-failure-heading">
+            <div className="media-request-return-panel-icon"><AlertTriangle size={21} aria-hidden="true" /></div>
+            <div className="media-request-return-panel-body">
+              <header>
+                <div>
+                  <span>部分打款失败</span>
+                  <h2 id="media-request-payment-failure-heading">{failedPayouts.length} 笔款项需处理</h2>
+                  <p>成功款项保持已付款；请逐笔通知达人更新账户，并在重新校验通过后安排重试。</p>
+                </div>
+              </header>
+              <div className="media-payment-failure-list">
+                {failedPayouts.map((payout) => (
+                  <article key={payout.id}>
+                    <div>
+                      <strong>{payout.creator}</strong>
+                      <span>{payout.invoice} · {payout.provider} · {payout.currency} {payout.amount.toLocaleString('en-US')}</span>
+                      <small>{payout.paymentFailureReturn?.reason ?? payout.paymentFailure?.providerResponse ?? '未记录失败原因'}</small>
+                    </div>
+                    <span className="media-payment-failure-state">{paymentFailureRecoveryLabel(payout)}</span>
+                    <Button variant="secondary" onClick={() => setFocusedFailurePayoutId(payout.id)}>查看付款清单</Button>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
         {isReturned ? (
           <section className="media-request-return-panel" aria-labelledby="media-request-return-heading">
             <div className="media-request-return-panel-icon"><AlertTriangle size={21} aria-hidden="true" /></div>
@@ -858,6 +916,16 @@ export function MediaPaymentProjectsPage({
             contracts={contracts}
             invoices={invoices}
             paymentLists={paymentLists}
+            payouts={payouts}
+            focusedFailurePayoutId={focusedFailurePayoutId}
+            canHandlePaymentFailure={canHandlePaymentFailure}
+            onFailureFocusHandled={() => {
+              setFocusedFailurePayoutId(null);
+              onFailureFocusCleared();
+            }}
+            onSendPaymentFailureNotification={onSendPaymentFailureNotification}
+            onSimulatePaymentFailureAccountUpdate={onSimulatePaymentFailureAccountUpdate}
+            onRevalidatePaymentFailureAccount={onRevalidatePaymentFailureAccount}
             currentUser={currentUser}
             onChangeLinks={(nextLinks, summary) => resourceActions.onChangeLinks(selectedRequest, nextLinks, summary)}
             onOpenContract={(contractId) => resourceActions.onOpenContract(selectedRequest, contractId)}
@@ -1023,6 +1091,15 @@ export function MediaPaymentProjectsPage({
           </div>
         </div>
       ) : null}
+      {paymentFailureRequests.length ? (
+        <div className="media-request-return-notice media-request-payment-failure-notice" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div>
+            <strong>{paymentFailureRequests.length} 个项目存在部分打款失败</strong>
+            <p>共 {paymentFailureCount} 笔失败款待处理。请在下方列表点击“处理失败请款”，查看原因并通知达人更换收款账户。</p>
+          </div>
+        </div>
+      ) : null}
       <section className="content-card">
         <ProjectInlineFilterPanel
           search={search}
@@ -1045,17 +1122,20 @@ export function MediaPaymentProjectsPage({
               {paginatedRequests.map((request) => {
                 const returnDetails = requestApprovalReturnDetails(request.approval);
                 const isReturned = request.lifecycle === 'RETURNED';
+                const failedPayouts = failurePayoutsForRequest(request);
+                const isPaymentFailure = myProjectStatusFor(request) === '部分打款失败' && failedPayouts.length > 0;
                 const canShowConfirmationExport = (
                   currentUser.roleKey === 'media'
                   && request.media === currentScopeName
                   && request.lifecycle === 'COMPLETED'
+                  && !isPaymentFailure
                 );
                 const confirmationItems = canShowConfirmationExport
                   ? mediaConfirmationItemsFor(request, paymentLists)
                   : [];
                 const isExporting = exportingRequestId === request.id;
                 return (
-                  <tr className={isReturned ? 'media-request-returned-row' : undefined} key={request.id}>
+                  <tr className={isReturned ? 'media-request-returned-row' : isPaymentFailure ? 'media-request-payment-failure-row' : undefined} key={request.id}>
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
@@ -1070,11 +1150,12 @@ export function MediaPaymentProjectsPage({
                             {returnDetails?.stage === 'FINANCE' ? '付款工作台' : returnDetails?.stageLabel ?? '审批流'} · {returnDetails?.reason ?? '请查看退回原因'}
                           </small>
                         ) : null}
+                        {isPaymentFailure ? <small>{failedPayouts.length} 笔失败款待恢复</small> : null}
                       </div>
                     </td>
                     <td className="action-cell">
                       <div className="media-project-row-actions">
-                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
+                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{isPaymentFailure ? (canCreate ? '处理失败请款' : '查看失败请款') : isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
                         {canShowConfirmationExport ? (
                           <>
                             <button

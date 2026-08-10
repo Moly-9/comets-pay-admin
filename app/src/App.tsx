@@ -169,6 +169,16 @@ import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
 import {
+  beginPaymentFailureAccountRecovery,
+  completePaymentFailureRevalidation,
+  isPaymentFailureRetryCandidate,
+  isPaymentFailureRetryReady,
+  markPaymentFailureRetrySubmitted,
+  paymentFailureRevalidationIssues,
+  recordPaymentFailureNotification,
+  simulateCreatorAccountUpdated,
+} from './paymentFailureRecovery';
+import {
   applyRequestApprovalAction,
   canReturnRequestApproval,
   canReviewRequestApproval,
@@ -248,6 +258,7 @@ export default function App() {
   const [focusedInvoiceId, setFocusedInvoiceId] = useState<string | null>(null);
   const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
   const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
+  const [focusedPaymentFailurePayoutId, setFocusedPaymentFailurePayoutId] = useState<string | null>(null);
   const [focusedRequestId, setFocusedRequestId] = useState<string | null>(null);
   const [requestResourceReturn, setRequestResourceReturn] = useState<{
     requestId: string;
@@ -2128,7 +2139,7 @@ export default function App() {
     const nextPayouts = payouts.map((item) => item.id === payout.id ? updated : item);
     const completedRequests = nextStatus === '已付款'
       ? requestProjects.filter((request) => (
-          request.lifecycle === 'APPROVED'
+          (request.lifecycle === 'APPROVED' || request.status === '部分打款失败')
           && isPaymentRequestFullyPaid({ request, invoices: generatedInvoices, payouts: nextPayouts })
         ))
       : [];
@@ -2252,10 +2263,9 @@ export default function App() {
       return false;
     }
     const occurredAt = nowIso();
-    const updated: Payout = {
+    const returnedPayout: Payout = {
       ...payout,
       status: '已退回',
-      invoiceReviewStatus: '已退回',
       paymentFailureReturn: {
         issueType,
         reason: normalizedReason,
@@ -2281,20 +2291,63 @@ export default function App() {
       returnReason: normalizedReason,
       issue: `付款失败已退回：${normalizedReason}`,
     };
-    setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
-    setGeneratedInvoices((current) => current.map((invoice) => invoice.sourcePayoutId === payout.id
-      ? { ...invoice, status: '已退回' }
-      : invoice));
     const linkedRequest = requestProjects.find((request) => (
       (Boolean(payout.paymentRequestProjectId)
         && request.paymentRequestProjectId === payout.paymentRequestProjectId)
       || request.projectId === payout.projectId
       || request.cooperationProjectId === payout.projectId
     ));
-    const cooperationProjectId = linkedRequest?.cooperationProjectId
-      ?? linkedRequest?.projectId
-      ?? payout.projectId;
-    const returnStatus = issueType === 'INVOICE_CONTENT' ? 'Invoice 待修改' : '付款清单待修改';
+    if (issueType === 'PAYMENT_LIST') {
+      const updated = beginPaymentFailureAccountRecovery(returnedPayout);
+      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+      setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+      if (linkedInvoice) {
+        setPaymentLists((current) => current.map((list) => (
+          !list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
+            ? list
+            : {
+                ...list,
+                items: list.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
+                  ? {
+                      ...item,
+                      requiresRevalidation: true,
+                      validationIssues: ['付款失败，等待达人更新收款账户'],
+                    }
+                  : item),
+                updatedAt: occurredAt,
+              }
+        )));
+      }
+      setRequestProjects((current) => current.map((request) => {
+        const matchesRequest = (Boolean(payout.paymentRequestProjectId)
+          && request.paymentRequestProjectId === payout.paymentRequestProjectId)
+          || request.id === linkedRequest?.id;
+        if (!matchesRequest) return request;
+        return {
+          ...request,
+          lifecycle: 'COMPLETED',
+          status: '部分打款失败',
+          filter: 'processed',
+          generatedDetail: request.generatedDetail ? {
+            ...request.generatedDetail,
+            paymentListStatus: '部分打款失败',
+          } : request.generatedDetail,
+        };
+      }));
+      setSelectedPayout((current) => current?.id === payout.id ? updated : current);
+      notify('已转交媒介处理', '成功款项保持已付款；该失败款已进入达人账户更新和重新校验流程。');
+      return true;
+    }
+
+    const updated: Payout = {
+      ...returnedPayout,
+      invoiceReviewStatus: '已退回',
+    };
+    setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
+    setGeneratedInvoices((current) => current.map((invoice) => invoice.sourcePayoutId === payout.id
+      ? { ...invoice, status: '已退回' }
+      : invoice));
+    const returnStatus = 'Invoice 待修改';
     setRequestProjects((current) => current.map((request) => {
       const matchesRequest = (Boolean(payout.paymentRequestProjectId)
         && request.paymentRequestProjectId === payout.paymentRequestProjectId)
@@ -2315,31 +2368,166 @@ export default function App() {
           : request.approval,
       };
     }));
-    if (issueType === 'PAYMENT_LIST') {
-      setProjects((current) => current.map((item) => getProjectId(item) === cooperationProjectId
-        ? {
-            ...item,
-            reviewStatus: 'returned',
-            status: '付款清单待修改',
-            reviewUpdatedAt: occurredAt,
-          }
-        : item));
-      setPaymentLists((current) => current.map((list) => (
-        (Boolean(payout.paymentRequestProjectId)
-          && list.paymentRequestProjectId === payout.paymentRequestProjectId)
-        || list.projectId === cooperationProjectId
-      )
-        ? { ...list, status: 'draft', updatedAt: occurredAt }
-        : list));
-    }
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify(
       '已退回媒介',
-      issueType === 'INVOICE_CONTENT'
-        ? '请在 Invoice 详情进入修改页，生成新版后从达人签署开始。'
-        : 'Invoice 保持已退回，请在项目付款清单修正并重新提交后进入 PM 审批。',
+      '请在 Invoice 详情进入修改页，生成新版后从达人签署开始。',
     );
     return true;
+  };
+
+  const sendPaymentFailureNotification = (payoutId: string, message: string) => {
+    if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
+      notify('暂无通知权限', '仅项目媒介、管理员或老板可以通知达人处理失败款。');
+      return false;
+    }
+    const payout = payouts.find((candidate) => candidate.id === payoutId);
+    if (!payout) return false;
+    const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+    try {
+      const updated = recordPaymentFailureNotification(
+        payout,
+        { account: currentUser.account, name: currentUser.name },
+        message,
+        creator?.contact.email ?? '',
+        nowIso(),
+      );
+      setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? updated : candidate));
+      notify('失败通知已记录', '站内信与 Gmail 发送结果已按原型流程保存。');
+      return true;
+    } catch (error) {
+      notify('无法发送通知', error instanceof Error ? error.message : '当前付款不能通知达人。');
+      return false;
+    }
+  };
+
+  const simulatePaymentFailureAccountUpdate = (payoutId: string) => {
+    if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
+      notify('暂无操作权限', '仅项目媒介、管理员或老板可以记录达人账户更新反馈。');
+      return false;
+    }
+    const payout = payouts.find((candidate) => candidate.id === payoutId);
+    if (!payout) return false;
+    try {
+      const updated = simulateCreatorAccountUpdated(payout, nowIso());
+      const recovery = updated.paymentFailureRecovery!;
+      const linkedPayoutAccountId = payout.payoutAccountId ?? payout.invoiceSnapshot?.payoutAccountId;
+      setCreators((current) => current.map((creator) => creator.id !== payout.creatorId ? creator : ({
+        ...creator,
+        payoutAccounts: creator.payoutAccounts.map((account) => {
+          if (getPayoutAccountId(account) !== linkedPayoutAccountId) return account;
+          const identity = {
+            payoutAccountVersion: recovery.reportedPayoutAccountVersion,
+            accountFingerprint: recovery.reportedAccountFingerprint,
+            status: 'READY_FOR_VALIDATION' as const,
+          };
+          return account.provider === 'Airwallex'
+            ? { ...account, ...identity, beneficiaryId: recovery.reportedExternalBeneficiaryId ?? account.beneficiaryId }
+            : { ...account, ...identity };
+        }),
+      })));
+      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+      if (linkedInvoice) {
+        setPaymentLists((current) => current.map((list) => !list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
+          ? list
+          : {
+              ...list,
+              items: list.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
+                ? { ...item, requiresRevalidation: true, validationIssues: ['达人已更新账户，待重新校验'] }
+                : item),
+              updatedAt: nowIso(),
+            }));
+      }
+      setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? updated : candidate));
+      notify('已收到达人模拟反馈', '账户版本已更新，该笔付款仍需重新校验。');
+      return true;
+    } catch (error) {
+      notify('无法记录达人反馈', error instanceof Error ? error.message : '请先完成失败通知。');
+      return false;
+    }
+  };
+
+  const revalidatePaymentFailureAccount = (payoutId: string) => {
+    if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
+      notify('暂无校验权限', '仅项目媒介、管理员或老板可以发起失败款资料重新校验。');
+      return false;
+    }
+    const payout = payouts.find((candidate) => candidate.id === payoutId);
+    if (!payout) return false;
+    try {
+      const occurredAt = nowIso();
+      const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+      const linkedPayoutAccountId = payout.payoutAccountId ?? payout.invoiceSnapshot?.payoutAccountId;
+      const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === linkedPayoutAccountId);
+      const issues = paymentFailureRevalidationIssues(payout, account ? {
+        payoutAccountId: getPayoutAccountId(account),
+        payoutAccountVersion: getPayoutAccountVersion(account),
+        accountFingerprint: getPayoutAccountFingerprint(account),
+        externalBeneficiaryId: account.provider === 'Airwallex' ? account.beneficiaryId : undefined,
+      } : null);
+      const updated = completePaymentFailureRevalidation(payout, occurredAt, issues);
+      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+      if (!linkedInvoice) throw new Error('未找到失败款项对应的 Invoice。');
+      if (issues.length) {
+        setPaymentLists((current) => current.map((list) => !list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
+          ? list
+          : {
+              ...list,
+              items: list.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
+                ? { ...item, requiresRevalidation: true, validationIssues: [...issues], lastValidatedAt: occurredAt }
+                : item),
+              updatedAt: occurredAt,
+            }));
+        setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? updated : candidate));
+        notify('重新校验未通过', issues.join('；'));
+        return false;
+      }
+      setPaymentLists((current) => current.map((list) => (
+        !list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
+          ? list
+          : {
+              ...list,
+              items: list.items.map((item) => {
+                if (item.invoiceId !== linkedInvoice.invoiceId) return item;
+                const effectiveAccount = paymentListEffectiveAccount(item);
+                return {
+                  ...item,
+                  accountOverride: {
+                    ...effectiveAccount,
+                    payoutAccountVersion: updated.payoutAccountVersion,
+                    accountFingerprint: updated.payoutAccountFingerprint,
+                    externalBeneficiaryId: updated.externalBeneficiaryId,
+                    validationStatus: 'VALIDATED',
+                    paymentDetails: effectiveAccount.paymentDetails ? {
+                      ...effectiveAccount.paymentDetails,
+                      payoutAccountVersion: updated.payoutAccountVersion,
+                      accountFingerprint: updated.payoutAccountFingerprint,
+                      externalBeneficiaryId: updated.externalBeneficiaryId,
+                      validationStatus: 'VALIDATED',
+                      validatedAt: occurredAt,
+                    } : effectiveAccount.paymentDetails,
+                  },
+                  requiresRevalidation: false,
+                  validationIssues: [],
+                  lastValidatedAt: occurredAt,
+                };
+              }),
+              updatedAt: occurredAt,
+            }
+      )));
+      setCreators((current) => current.map((candidate) => candidate.id !== payout.creatorId ? candidate : ({
+        ...candidate,
+        payoutAccounts: candidate.payoutAccounts.map((account) => getPayoutAccountId(account) === linkedPayoutAccountId
+          ? { ...account, status: 'VALIDATED' as const }
+          : account),
+      })));
+      setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? updated : candidate));
+      notify('失败款资料校验通过', '该笔付款已可在新建付款批次中手动选择。');
+      return true;
+    } catch (error) {
+      notify('资料校验未通过', error instanceof Error ? error.message : '账户快照仍需处理。');
+      return false;
+    }
   };
 
   const updateInvoiceReview = (
@@ -2870,7 +3058,9 @@ export default function App() {
     const selected = payouts.filter((payout) => (
       submission.items.some((item) => item.payoutId === payout.id)
     ));
-    const ineligible = selected.filter((payout) => !isPayoutEligibleForBatch(payout));
+    const ineligible = selected.filter((payout) => (
+      !isPayoutEligibleForBatch(payout) && !isPaymentFailureRetryReady(payout)
+    ));
     if (ineligible.length > 0) {
       notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
       return;
@@ -2906,9 +3096,12 @@ export default function App() {
       );
       return;
     }
-    setPayouts((current) => current.map((payout) => selected.some((item) => item.id === payout.id)
-      ? { ...payout, status: '付款处理中', issue: undefined }
-      : payout));
+    setPayouts((current) => current.map((payout) => {
+      if (!selected.some((item) => item.id === payout.id)) return payout;
+      return isPaymentFailureRetryReady(payout)
+        ? markPaymentFailureRetrySubmitted(payout, execution.batchId, execution.batchCode)
+        : { ...payout, status: '付款处理中', issue: undefined };
+    }));
     setPaymentBatches((current) => [batchRecord, ...current]);
     setActivePage('batches');
     notify(
@@ -2949,7 +3142,7 @@ export default function App() {
     canManageCooperationProjectFor(currentUser, project)
   ));
   const batchReadyPayouts = payouts
-    .filter(isPayoutEligibleForBatch)
+    .filter((payout) => isPayoutEligibleForBatch(payout) || isPaymentFailureRetryCandidate(payout))
     .map((payout) => {
       const invoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
       const paymentItem = invoice
@@ -2957,7 +3150,7 @@ export default function App() {
         : undefined;
       return paymentItem ? payoutWithPaymentListSnapshot(payout, paymentItem) : payout;
     })
-    .slice(0, 4);
+    .sort((left, right) => Number(isPaymentFailureRetryCandidate(right)) - Number(isPaymentFailureRetryCandidate(left)));
   const paymentDetailRequest = paymentDetailRequestId
     ? requestProjects.find((request) => request.id === paymentDetailRequestId)
     : undefined;
@@ -2983,10 +3176,13 @@ export default function App() {
           contracts={contracts}
           invoices={generatedInvoices}
           paymentLists={paymentLists}
+          payouts={payouts}
           requests={requestProjects}
           canCreate={canManageProjects && ['media', 'admin', 'owner'].includes(currentUser.roleKey)}
           focusedProjectId={focusedProjectId}
           onFocusCleared={() => setFocusedProjectId(null)}
+          initialFocusedFailurePayoutId={focusedPaymentFailurePayoutId}
+          onFailureFocusCleared={() => setFocusedPaymentFailurePayoutId(null)}
           onCreated={(request) => setRequestProjects((current) => [request, ...current])}
           onUpdated={(request) => {
             setRequestProjects((current) => current.map((candidate) => (
@@ -2999,6 +3195,9 @@ export default function App() {
           onGeneratePaymentList={generateMediaRequestPaymentLists}
           onSubmitRequest={submitMediaPaymentRequest}
           resourceActions={requestResourceActions}
+          onSendPaymentFailureNotification={sendPaymentFailureNotification}
+          onSimulatePaymentFailureAccountUpdate={simulatePaymentFailureAccountUpdate}
+          onRevalidatePaymentFailureAccount={revalidatePaymentFailureAccount}
         />
       );
       break;
@@ -3259,7 +3458,12 @@ export default function App() {
       );
       break;
     case 'batches':
-      pageContent = <BatchesPage batches={paymentBatches} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} />;
+      pageContent = <BatchesPage batches={paymentBatches} payouts={payouts} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} onOpenFailurePaymentList={(requestId, payoutId) => {
+        const request = requestProjects.find((candidate) => candidate.paymentRequestProjectId === requestId);
+        setFocusedProjectId(request?.id ?? requestId);
+        setFocusedPaymentFailurePayoutId(payoutId);
+        setActivePage('projects');
+      }} />;
       break;
     case 'new-batch':
       pageContent = (
@@ -3309,6 +3513,13 @@ export default function App() {
           canHandleFailure={canExecutePayouts}
           onBack={() => setPaymentDetailRequestId(null)}
           onReturnPayout={returnPayout}
+          onOpenFailurePaymentList={(requestId, payoutId) => {
+            const request = requestProjects.find((candidate) => candidate.paymentRequestProjectId === requestId);
+            setPaymentDetailRequestId(null);
+            setFocusedProjectId(request?.id ?? requestId);
+            setFocusedPaymentFailurePayoutId(payoutId);
+            setActivePage('projects');
+          }}
         />
       ) : (
         <PaymentWorkbenchPage

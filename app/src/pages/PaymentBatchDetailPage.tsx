@@ -6,18 +6,21 @@ import {
   ChevronDown,
   CircleAlert,
   Clock3,
+  ExternalLink,
   FileText,
   ReceiptText,
   WalletCards,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { Avatar } from '../components/Common';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Avatar, Button } from '../components/Common';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
 } from '../paymentBatches';
+import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
+import type { Payout } from '../types';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 
@@ -30,10 +33,6 @@ const fundingAccountLabel = (value: string) => {
 };
 
 const PAYMENT_PROGRESS_STEPS = ['已付款', '平台处理中', '已完成'] as const;
-
-const isBatchComplete = (batch: PaymentBatchRecord) => (
-  batch.lifecycle.includes('COMPLETED') || batch.status === '已付款'
-);
 
 const creatorInitials = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -70,7 +69,15 @@ const contractSummary = (item: PaymentBatchItemSnapshot) => {
   return item.legacyContractReference || '未关联';
 };
 
-export function PaymentItemDetails({ item }: { item: PaymentBatchItemSnapshot }) {
+export function PaymentItemDetails({
+  item,
+  payout,
+  onOpenFailurePaymentList,
+}: {
+  item: PaymentBatchItemSnapshot;
+  payout?: Payout;
+  onOpenFailurePaymentList?: () => void;
+}) {
   return (
     <div className="payment-batch-item-details">
       <section className="payment-batch-detail-panel is-contract" aria-labelledby={`${item.payoutId}-contract-title`}>
@@ -161,6 +168,18 @@ export function PaymentItemDetails({ item }: { item: PaymentBatchItemSnapshot })
             </span>
           </div>
         ) : null}
+        {payout?.paymentFailureReturn ? (
+          <div className="payment-batch-failure-return" role="status">
+            <div>
+              <strong>{payout.paymentFailureReturn.issueType === 'PAYMENT_LIST' ? '失败款已转交媒介恢复' : 'Invoice 已退回修改'}</strong>
+              <p>{payout.paymentFailureReturn.reason}</p>
+              <small>{payout.paymentFailureReturn.actorName} · {displayTime(payout.paymentFailureReturn.occurredAt)}{payout.paymentFailureRecovery ? ` · ${paymentFailureRecoveryLabel(payout)}` : ''}</small>
+            </div>
+            {payout.paymentFailureReturn.issueType === 'PAYMENT_LIST' && onOpenFailurePaymentList ? (
+              <Button variant="secondary" icon={<ExternalLink size={15} />} onClick={onOpenFailurePaymentList}>查看付款清单</Button>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       {item.associationIssues.length ? (
@@ -175,16 +194,39 @@ export function PaymentItemDetails({ item }: { item: PaymentBatchItemSnapshot })
 
 export function PaymentBatchDetailPage({
   batch,
+  payouts = [],
   onBack,
+  onOpenFailurePaymentList,
 }: {
   batch: PaymentBatchRecord;
+  payouts?: readonly Payout[];
   onBack: () => void;
+  onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const totals = paymentBatchAmountLabel(batch);
-  const statusCounts = paymentBatchStatusCounts(batch);
-  const completed = isBatchComplete(batch);
+  const liveItems = useMemo(() => batch.items.map((item) => {
+    const payout = payouts.find((candidate) => candidate.id === item.payoutId);
+    if (!payout) return item;
+    return {
+      ...item,
+      paymentStatus: payout.status,
+      paidAt: payout.paidAt ?? item.paidAt,
+      failure: payout.paymentFailure ? {
+        code: payout.paymentFailure.errorCode,
+        response: payout.paymentFailure.providerResponse,
+        occurredAt: payout.paymentFailure.occurredAt,
+      } : item.failure,
+    };
+  }), [batch.items, payouts]);
+  const liveStatus: PaymentBatchRecord['status'] = liveItems.some((item) => ['付款失败', '已退回'].includes(item.paymentStatus))
+    ? '部分失败'
+    : liveItems.length > 0 && liveItems.every((item) => item.paymentStatus === '已付款')
+      ? '已付款'
+      : batch.status;
+  const totals = paymentBatchAmountLabel({ items: liveItems });
+  const statusCounts = paymentBatchStatusCounts({ items: liveItems });
+  const completed = liveStatus === '已付款';
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -204,7 +246,7 @@ export function PaymentBatchDetailPage({
           <p>{batch.request.requestCode} · {batch.request.cooperationProjectName}</p>
         </div>
         <div className="payment-batch-detail-total">
-          <span className={`simple-status ${batchStatusTone(batch.status)}`}><i />{batch.status}</span>
+          <span className={`simple-status ${batchStatusTone(liveStatus)}`}><i />{liveStatus}</span>
           <strong>{totals}</strong>
           <small>{batch.items.length} 笔付款</small>
         </div>
@@ -221,9 +263,9 @@ export function PaymentBatchDetailPage({
         <header><div><h2>渠道处理进度</h2><p>付款发起、平台处理与最终结果回写。</p></div></header>
         <ol aria-label="渠道处理进度">
           {PAYMENT_PROGRESS_STEPS.map((step, index) => {
-            const state = completed || batch.status === '部分失败' && index < 2
+            const state = completed || liveStatus === '部分失败' && index < 2
               ? 'complete'
-              : batch.status === '部分失败' && index === 2
+              : liveStatus === '部分失败' && index === 2
                 ? 'failed'
                 : index === 0
                   ? 'complete'
@@ -286,7 +328,7 @@ export function PaymentBatchDetailPage({
             </div>
           ) : null}
           <div className="payment-batch-item-rows" role="list">
-            {batch.items.map((item) => {
+            {liveItems.map((item) => {
               const expanded = expandedItemId === item.payoutId;
               const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
               return (
@@ -311,7 +353,7 @@ export function PaymentBatchDetailPage({
                     <span className={`payment-batch-item-status ${paymentStatusTone(item.paymentStatus)}`} data-label="付款状态"><strong><i />{item.paymentStatus}</strong></span>
                     <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
                   </button>
-                  {expanded ? <div id={detailId}><PaymentItemDetails item={item} /></div> : null}
+                  {expanded ? <div id={detailId}><PaymentItemDetails item={item} payout={payouts.find((payout) => payout.id === item.payoutId)} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined} /></div> : null}
                 </article>
               );
             })}

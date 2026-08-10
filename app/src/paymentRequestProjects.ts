@@ -148,6 +148,7 @@ export type MyProjectStatus =
   | '老板审批中'
   | '财务审批中'
   | '待打款'
+  | '部分打款失败'
   | '已付款'
   | '已退回';
 
@@ -157,6 +158,7 @@ export type RequestProjectStatus =
   | '项目负责人审批通过'
   | '老板审批通过'
   | '财务审批通过'
+  | '部分打款失败'
   | '已付款'
   | '已退回';
 
@@ -192,6 +194,7 @@ const legacyMyProjectStatus = (status?: string): MyProjectStatus => {
 export const myProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
 ): MyProjectStatus => {
+  if (request.status === '部分打款失败') return '部分打款失败';
   if (request.lifecycle === 'COMPLETED') return '已付款';
   if (request.lifecycle === 'RETURNED') return '已退回';
   if (request.lifecycle === 'APPROVED') return '待打款';
@@ -203,6 +206,7 @@ export const myProjectStatusFor = (
 export const requestProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
 ): RequestProjectStatus | null => {
+  if (request.status === '部分打款失败') return '部分打款失败';
   if (request.lifecycle === 'DRAFT' || (!request.approval && !request.lifecycle)) return null;
   if (request.lifecycle === 'COMPLETED') return '已付款';
   if (request.lifecycle === 'RETURNED') return '已退回';

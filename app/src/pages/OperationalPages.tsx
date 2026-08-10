@@ -268,7 +268,7 @@ function MetricCard({ label, value, meta, tone = 'plain' }: { label: string; val
   return <article className={`metric-card metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{meta}</small></article>;
 }
 
-type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'draft' | 'default';
+type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'failure' | 'draft' | 'default';
 
 const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '执行中': 'active',
@@ -290,6 +290,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
+  '部分打款失败': 'failure',
   '已完成': 'complete',
   '已付款': 'complete',
   '已归档': 'complete',
@@ -3018,7 +3019,21 @@ const paymentBatchStatusTone = (status: PaymentBatchRecord['status']) => {
   return 'is-success';
 };
 
-export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { batches: readonly PaymentBatchRecord[]; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
+export function BatchesPage({
+  batches,
+  payouts = [],
+  onNewBatch,
+  notify,
+  canCreateBatch,
+  onOpenFailurePaymentList,
+}: {
+  batches: readonly PaymentBatchRecord[];
+  payouts?: readonly Payout[];
+  onNewBatch: () => void;
+  notify: Notify;
+  canCreateBatch: boolean;
+  onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
+}) {
   const [search, setSearch] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -3195,7 +3210,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
 
   if (selectedBatchId) {
-    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} onBack={closeBatchDetail} />;
+    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} payouts={payouts} onBack={closeBatchDetail} onOpenFailurePaymentList={onOpenFailurePaymentList} />;
     return (
       <div className="page-stack payment-batch-detail-page">
         <button className="project-back-button payment-batch-detail-back" type="button" onClick={closeBatchDetail}>

@@ -10,7 +10,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, Modal } from '../components/Common';
+import { Avatar, Button, Modal, SelectField } from '../components/Common';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -70,12 +70,14 @@ export function PaymentProjectPaymentDetailPage({
   canHandleFailure,
   onBack,
   onReturnPayout,
+  onOpenFailurePaymentList,
 }: {
   record: PaymentProjectPaymentRecord;
   payouts: readonly Payout[];
   canHandleFailure: boolean;
   onBack: () => void;
   onReturnPayout: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
+  onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(() => initialExpandedItemId(record));
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
@@ -255,6 +257,7 @@ export function PaymentProjectPaymentDetailPage({
           <div className="payment-batch-item-rows" role="list">
             {record.items.map((item) => {
               const expanded = expandedItemId === item.payoutId;
+              const livePayout = payouts.find((payout) => payout.id === item.payoutId);
               const itemDomId = `payment-project-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
               const detailId = `${itemDomId}-details`;
               return (
@@ -281,8 +284,8 @@ export function PaymentProjectPaymentDetailPage({
                   </button>
                   {expanded ? (
                     <div id={detailId}>
-                      <PaymentItemDetails item={item} />
-                      {item.paymentStatus === '付款失败' ? (
+                      <PaymentItemDetails item={item} payout={livePayout} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined} />
+                      {item.paymentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
                         <div className="payment-project-failure-action">
                           <div>
                             <strong>该笔付款需要财务判断问题类型</strong>
@@ -342,15 +345,18 @@ export function PaymentProjectPaymentDetailPage({
             </div>
             <label className="return-review-field">
               <span>问题类型 <em className="required-mark" aria-hidden="true">*</em></span>
-              <select
-                aria-label="付款失败问题类型"
+              <SelectField<PaymentFailureIssueType | ''>
+                ariaLabel="付款失败问题类型"
                 value={issueType}
-                onChange={(event) => setIssueType(event.target.value as PaymentFailureIssueType | '')}
-              >
-                <option value="">请选择问题类型</option>
-                <option value="INVOICE_CONTENT">Invoice 内容问题</option>
-                <option value="PAYMENT_LIST">付款清单问题</option>
-              </select>
+                placeholder="请选择问题类型"
+                variant="form"
+                menuStrategy="fixed"
+                options={[
+                  { value: 'INVOICE_CONTENT', label: 'Invoice 内容问题', description: '修改 Invoice 并重新签署' },
+                  { value: 'PAYMENT_LIST', label: '付款清单问题', description: '仅恢复失败达人的收款账户' },
+                ]}
+                onChange={setIssueType}
+              />
               <small>必须由财务人工判断，系统不会根据渠道错误文本自动分类。</small>
             </label>
             <label className="return-review-field">
@@ -369,8 +375,8 @@ export function PaymentProjectPaymentDetailPage({
               issueType === 'INVOICE_CONTENT'
                 ? '确认后需修改 Invoice，并从达人签署节点重新开始。'
                 : issueType === 'PAYMENT_LIST'
-                  ? '确认后需修正项目付款清单并重新提交，无需达人重新签署。'
-                  : '确认后该笔付款进入已退回，不能直接重试付款。'
+                  ? '确认后仅该失败款进入账户恢复流程；成功款和审批结果保持不变。'
+                  : '确认后将按所选资料节点进入对应处理流程。'
             }</span></div>
           </div>
         </Modal>

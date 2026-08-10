@@ -1054,3 +1054,43 @@ final result: passed
 - Full Vitest passed 59 files and 371 tests; TypeScript/Vite build and the final diff check passed.
 
 final result: passed
+
+---
+
+# Partial Payment Failure Recovery Design QA
+
+## Evidence
+
+- Desktop retry candidate: `artifacts/payment-failure-recovery-qa/desktop-retry-candidate-1440x900.png`.
+- Mobile failure return dialog: `artifacts/payment-failure-recovery-qa/mobile-return-dialog-390x844.png`.
+- Mobile system select open state: `artifacts/payment-failure-recovery-qa/mobile-return-select-open-390x844.png`.
+- Mobile payment-list recovery panel: `artifacts/payment-failure-recovery-qa/mobile-recovery-panel-390x844.png`.
+- Mobile retry candidate: `artifacts/payment-failure-recovery-qa/mobile-retry-candidate-390x844.png`.
+
+## Dimensions And States
+
+- Desktop verification used a 1440 x 900 CSS viewport. The page-level scroll width remained within the browser content width.
+- Mobile verification used a 390 x 844 CSS viewport; the in-app browser content capture was 375 px wide after browser chrome. The page reported no horizontal overflow.
+- Verified states: untreated partial failure, payment-list issue return, creator notification pending, dual-channel notification recorded, creator updated, revalidation ready, retry candidate, and retry submitted.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The failure classification control uses the shared `SelectField` form treatment, fixed menu strategy, existing radii, shadows, typography, and selected/disabled states.
+- Returning a payment-list issue preserves the four successful payments and project approval result, while only the failed creator enters recovery.
+- The project status and warning use the existing failure palette and provide text labels in addition to color.
+- Deep linking opens the correct payment list, focuses the failed creator row, and keeps the recovery actions reachable in the 390 px dialog.
+- The prototype notice explicitly states that in-app messages, Gmail, creator feedback, and account changes are simulated.
+- The retry row is promoted to the top of the batch candidate list, marked `失败重试`, remains unchecked by default, and becomes selectable only after revalidation.
+
+## Interaction Verification
+
+- Selecting `付款清单问题` and entering a required reason records one shared failure-return source used by the batch, workbench, and project views.
+- Simulated notification records both in-app and Gmail results; the missing-recipient branch is covered by unit tests.
+- Simulated creator feedback increments the account version and updates the prototype fingerprint and beneficiary identity.
+- Revalidation updates the frozen payment snapshot only after all account identity fields match; mismatches remain blocking with field-level reasons.
+- Creating a retry batch marks the payout as `RETRY_SUBMITTED` and removes it from candidates, preventing duplicate submission.
+- Browser console contained 0 warnings and 0 errors during the final desktop and mobile verification.
+- Full Vitest passed 62 files and 383 tests. TypeScript/Vite production build and `git diff --check` passed.
+
+final result: passed
