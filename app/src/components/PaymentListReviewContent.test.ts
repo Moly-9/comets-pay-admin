@@ -117,6 +117,23 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStyles).toMatch(/\.finance-review-approval-scroll\s*{[^}]*grid-auto-rows:\s*max-content;/s);
   });
 
+  it('supports the desktop approval drawer and synchronized prominent page navigation', () => {
+    expect(workspaceSource).toContain("const [approvalCollapsed, setApprovalCollapsed] = useState(false)");
+    expect(workspaceSource).toContain('PanelRightClose');
+    expect(workspaceSource).toContain('PanelRightOpen');
+    expect(workspaceSource).toContain('aria-controls="finance-review-approval-panel"');
+    expect(workspaceSource).toContain('aria-expanded={!approvalCollapsed}');
+    expect(workspaceSource).toContain('finance-review-invoice-edge-nav is-previous');
+    expect(workspaceSource).toContain('finance-review-invoice-edge-nav is-next');
+    expect(workspaceSource).toContain('finance-review-project-page-nav');
+    expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex - 1\)\}/g)).toHaveLength(3);
+    expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(3);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 4fr\) minmax\(0, 4fr\) minmax\(260px, 2fr\);/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\) 0fr;/s);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-project-page-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
+    expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
+  });
+
   it('preserves read-only validation and export behavior without payment mutation controls', () => {
     expect(reviewContentSource).toContain('validatePaymentListAccountViaApi');
     expect(reviewContentSource).toContain('reviewPaymentListAccountSnapshot');

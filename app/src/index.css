@@ -3220,6 +3220,64 @@ body:has(.finance-review-workspace) {
   gap: 3px;
 }
 
+.finance-review-project-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.finance-review-project-line > strong {
+  min-width: 0;
+}
+
+.finance-review-project-label {
+  flex: 0 0 auto;
+  color: #8a7a9b !important;
+  font-size: 10px !important;
+  font-weight: 700;
+}
+
+.finance-review-project-page-nav {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  margin-left: 2px;
+}
+
+.finance-review-project-page-nav .icon-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #d9d2e6;
+  border-radius: 8px;
+  background: #f8f5fc;
+  color: #675187;
+}
+
+.finance-review-project-page-nav .icon-button:hover:not(:disabled),
+.finance-review-project-page-nav .icon-button:focus-visible {
+  border-color: #766098;
+  background: #675187;
+  color: #fff;
+}
+
+.finance-review-project-page-nav .icon-button:focus-visible,
+.finance-review-invoice-edge-nav:focus-visible,
+.finance-review-approval-toggle:focus-visible {
+  outline: 3px solid rgba(103, 81, 135, 0.24);
+  outline-offset: 2px;
+}
+
+.finance-review-project-page-nav > span {
+  min-width: 42px;
+  color: #61586c !important;
+  font-size: 10.5px !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: center;
+}
+
 .finance-review-title-group strong {
   overflow: hidden;
   color: #222833;
@@ -3293,15 +3351,17 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-review-grid {
+  position: relative;
   display: grid;
   height: 0;
   min-height: 0;
   flex: 1 1 0;
-  grid-template-columns: minmax(0, 38fr) minmax(0, 38fr) minmax(260px, 24fr);
+  grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(260px, 2fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 1px;
   overflow: hidden;
   background: #dfe3e8;
+  transition: grid-template-columns 200ms ease-out;
 }
 
 .finance-review-pane {
@@ -3311,6 +3371,113 @@ body:has(.finance-review-workspace) {
   flex-direction: column;
   overflow: hidden;
   background: #fff;
+}
+
+.finance-review-invoice-pane {
+  position: relative;
+}
+
+.finance-review-invoice-edge-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  display: inline-flex;
+  width: 48px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(108, 88, 139, 0.24);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 5px 16px rgba(47, 40, 58, 0.08);
+  color: #745f93;
+  cursor: pointer;
+  opacity: 0.62;
+  transition: background-color 180ms ease-out, border-color 180ms ease-out, color 180ms ease-out, opacity 180ms ease-out, box-shadow 180ms ease-out;
+}
+
+.finance-review-invoice-edge-nav.is-previous {
+  left: 12px;
+}
+
+.finance-review-invoice-edge-nav.is-next {
+  right: 12px;
+}
+
+.finance-review-invoice-edge-nav:hover:not(:disabled),
+.finance-review-invoice-edge-nav:focus-visible {
+  border-color: #675187;
+  background: #675187;
+  box-shadow: 0 8px 20px rgba(71, 53, 96, 0.24);
+  color: #fff;
+  opacity: 1;
+}
+
+.finance-review-invoice-edge-nav:disabled {
+  cursor: not-allowed;
+  opacity: 0.2;
+}
+
+.finance-review-approval-pane {
+  position: relative;
+  z-index: 2;
+  box-shadow: -10px 0 24px rgba(42, 39, 49, 0.08);
+  transition: transform 200ms ease-out, opacity 160ms ease-out, visibility 200ms;
+}
+
+.finance-review-approval-toggle {
+  position: absolute;
+  right: calc(max(260px, 20%) - 23px);
+  top: 50%;
+  z-index: 6;
+  display: inline-flex;
+  width: 46px;
+  height: 58px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 1px solid #cfc4dd;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 7px 22px rgba(54, 43, 68, 0.18);
+  color: #675187;
+  cursor: pointer;
+  transition: right 200ms ease-out, background-color 180ms ease-out, border-color 180ms ease-out, color 180ms ease-out, box-shadow 180ms ease-out;
+}
+
+.finance-review-approval-toggle:hover,
+.finance-review-approval-toggle:focus-visible {
+  border-color: #675187;
+  background: #675187;
+  box-shadow: 0 9px 24px rgba(67, 49, 91, 0.28);
+  color: #fff;
+}
+
+@media (min-width: 901px) {
+  .finance-review-grid.is-approval-collapsed {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 0fr;
+  }
+
+  .finance-review-grid.is-approval-collapsed .finance-review-approval-pane {
+    visibility: hidden;
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .finance-review-grid.is-approval-collapsed .finance-review-approval-toggle {
+    right: 12px;
+    border-color: #675187;
+    background: #675187;
+    color: #fff;
+  }
+
+  .finance-review-grid.is-approval-collapsed .finance-review-approval-toggle:hover,
+  .finance-review-grid.is-approval-collapsed .finance-review-approval-toggle:focus-visible {
+    border-color: #4e3d69;
+    background: #4e3d69;
+  }
 }
 
 .finance-review-pane-header {
@@ -4259,7 +4426,7 @@ body:has(.finance-review-workspace) {
   display: grid;
   width: 100%;
   align-items: center;
-  grid-template-columns: minmax(112px, .55fr) auto minmax(480px, 1.6fr);
+  grid-template-columns: minmax(112px, .55fr) minmax(480px, 1.6fr);
   gap: 14px;
 }
 
@@ -4290,6 +4457,10 @@ body:has(.finance-review-workspace) {
 
 .finance-review-page-nav {
   gap: 7px;
+}
+
+.finance-review-footer > .finance-review-page-nav {
+  display: none;
 }
 
 .finance-review-page-nav .icon-button {
@@ -4400,7 +4571,11 @@ body:has(.finance-review-workspace) {
 
 @media (max-width: 1180px) {
   .finance-review-grid {
-    grid-template-columns: minmax(0, 38fr) minmax(0, 38fr) minmax(240px, 24fr);
+    grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(240px, 2fr);
+  }
+
+  .finance-review-approval-toggle {
+    right: calc(max(240px, 20%) - 23px);
   }
 
   .finance-review-counts {
@@ -4408,7 +4583,7 @@ body:has(.finance-review-workspace) {
   }
 
   .finance-review-footer {
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto 1fr;
   }
 
   .finance-review-footer-actions .button {
@@ -4445,6 +4620,12 @@ body:has(.finance-review-workspace) {
   .finance-review-title-icon {
     width: 32px;
     height: 32px;
+  }
+
+  .finance-review-project-page-nav,
+  .finance-review-invoice-edge-nav,
+  .finance-review-approval-toggle {
+    display: none;
   }
 
   .finance-review-mobile-tabs {
@@ -4506,6 +4687,10 @@ body:has(.finance-review-workspace) {
     justify-self: end;
   }
 
+  .finance-review-footer > .finance-review-page-nav {
+    display: flex;
+  }
+
   .finance-review-footer-actions {
     display: grid;
     grid-column: 1 / -1;
@@ -4527,6 +4712,15 @@ body:has(.finance-review-workspace) {
 
   .finance-review-footer-actions .button:last-child {
     grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finance-review-grid,
+  .finance-review-approval-pane,
+  .finance-review-approval-toggle,
+  .finance-review-invoice-edge-nav {
+    transition: none;
   }
 }
 

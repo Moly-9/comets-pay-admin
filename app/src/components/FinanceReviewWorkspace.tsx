@@ -8,6 +8,8 @@ import {
   CircleAlert,
   Clock3,
   FileText,
+  PanelRightClose,
+  PanelRightOpen,
   ReceiptText,
   ShieldCheck,
   WalletCards,
@@ -242,6 +244,7 @@ export function FinanceReviewWorkspace({
   )));
   const [reviewIndex, setReviewIndex] = useState(firstPendingIndex);
   const [activePane, setActivePane] = useState<FinanceReviewPane>('invoice');
+  const [approvalCollapsed, setApprovalCollapsed] = useState(false);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [issueReason, setIssueReason] = useState('');
@@ -390,9 +393,35 @@ export function FinanceReviewWorkspace({
           <header className="finance-review-overview">
             <div className="finance-review-title-group">
               <span className="finance-review-title-icon"><ShieldCheck size={19} /></span>
-              <div>
-                <strong>{request.cooperationProjectName ?? request.project}</strong>
-                <span>{currentPage?.invoiceNumber ?? '暂无可审核记录'} · {currentPage?.creatorName ?? '待补充'}</span>
+              <div className="finance-review-title-copy">
+                <div className="finance-review-project-line">
+                  <span className="finance-review-project-label">所属项目</span>
+                  <strong>{request.cooperationProjectName ?? request.project}</strong>
+                  <div className="finance-review-project-page-nav" role="group" aria-label="审核记录翻页">
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title="上一份 Invoice 与付款清单"
+                      aria-label="上一份 Invoice 与付款清单"
+                      disabled={reviewIndex === 0}
+                      onClick={() => goTo(reviewIndex - 1)}
+                    >
+                      <ChevronLeft size={20} strokeWidth={2.5} />
+                    </button>
+                    <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title="下一份 Invoice 与付款清单"
+                      aria-label="下一份 Invoice 与付款清单"
+                      disabled={reviewIndex >= financeReview.pageCount - 1}
+                      onClick={() => goTo(reviewIndex + 1)}
+                    >
+                      <ChevronRight size={20} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+                <span className="finance-review-current-record">{currentPage?.invoiceNumber ?? '暂无可审核记录'} · {currentPage?.creatorName ?? '待补充'}</span>
               </div>
             </div>
             <div className="finance-review-counts" aria-live="polite">
@@ -420,7 +449,7 @@ export function FinanceReviewWorkspace({
             ))}
           </div>
 
-          <div className="finance-review-grid">
+          <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div><FileText size={18} /><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
@@ -437,6 +466,26 @@ export function FinanceReviewWorkspace({
                   </div>
                 )}
               </div>
+              <button
+                className="finance-review-invoice-edge-nav is-previous"
+                type="button"
+                title="上一份 Invoice 与付款清单"
+                aria-label="上一份 Invoice 与付款清单"
+                disabled={reviewIndex === 0}
+                onClick={() => goTo(reviewIndex - 1)}
+              >
+                <ChevronLeft size={26} strokeWidth={2.6} />
+              </button>
+              <button
+                className="finance-review-invoice-edge-nav is-next"
+                type="button"
+                title="下一份 Invoice 与付款清单"
+                aria-label="下一份 Invoice 与付款清单"
+                disabled={reviewIndex >= financeReview.pageCount - 1}
+                onClick={() => goTo(reviewIndex + 1)}
+              >
+                <ChevronRight size={26} strokeWidth={2.6} />
+              </button>
             </section>
 
             <section className={`finance-review-pane finance-review-payment-pane${activePane === 'payment' ? ' is-mobile-active' : ''}`}>
@@ -462,7 +511,10 @@ export function FinanceReviewWorkspace({
               </div>
             </section>
 
-            <aside className={`finance-review-pane finance-review-approval-pane${activePane === 'approval' ? ' is-mobile-active' : ''}`}>
+            <aside
+              id="finance-review-approval-panel"
+              className={`finance-review-pane finance-review-approval-pane${activePane === 'approval' ? ' is-mobile-active' : ''}`}
+            >
               <header className="finance-review-pane-header">
                 <div><ShieldCheck size={18} /><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
               </header>
@@ -518,6 +570,19 @@ export function FinanceReviewWorkspace({
                 ) : null}
               </div>
             </aside>
+            <button
+              className="finance-review-approval-toggle"
+              type="button"
+              title={approvalCollapsed ? '展开项目与审批看板' : '收起项目与审批看板'}
+              aria-label={approvalCollapsed ? '展开项目与审批看板' : '收起项目与审批看板'}
+              aria-controls="finance-review-approval-panel"
+              aria-expanded={!approvalCollapsed}
+              onClick={() => setApprovalCollapsed((collapsed) => !collapsed)}
+            >
+              {approvalCollapsed
+                ? <PanelRightOpen size={23} strokeWidth={2.4} />
+                : <PanelRightClose size={23} strokeWidth={2.4} />}
+            </button>
           </div>
         </div>
       </Modal>
