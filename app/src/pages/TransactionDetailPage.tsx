@@ -2,13 +2,14 @@ import {
   AlertTriangle,
   ArrowLeft,
   Building2,
+  Eye,
   FileSpreadsheet,
   FileText,
   Layers3,
   ReceiptText,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { Avatar, StatusMark } from '../components/Common';
+import { useEffect, useRef, useState } from 'react';
+import { Avatar, Button, Modal, StatusMark } from '../components/Common';
 import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import type { TransactionBatchContext } from '../transactionRecords';
@@ -24,6 +25,8 @@ const money = (currency: string, amount: number | null) => (
   amount === null ? '未记录' : `${currency} ${amount.toLocaleString('en-US')}`
 );
 
+type TransactionResourceView = 'contract' | 'invoice' | 'payment-list';
+
 export function TransactionDetailPage({
   payout,
   context,
@@ -34,10 +37,11 @@ export function TransactionDetailPage({
   onBack: () => void;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [resourceView, setResourceView] = useState<TransactionResourceView | null>(null);
   const batch = context?.batch;
   const item = context?.item;
   const finalTime = transactionOccurredAt(payout);
-  const transactionTitle = item?.transactionReference || payout.invoice || payout.id;
+  const requestReason = batch?.request.reason ?? item?.paymentReason ?? '未记录';
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -49,15 +53,7 @@ export function TransactionDetailPage({
         <ArrowLeft size={17} aria-hidden="true" />
         返回交易记录
       </button>
-
-      <header className="transaction-detail-header">
-        <div>
-          <span>交易详情</span>
-          <h1 ref={titleRef} tabIndex={-1}>{transactionTitle}</h1>
-          <p>{payout.invoice || 'Invoice 未记录'} · {displayTime(finalTime)}</p>
-        </div>
-        <StatusMark status={payout.status} />
-      </header>
+      <h1 ref={titleRef} className="sr-only" tabIndex={-1}>交易详情：{payout.invoice || payout.creator}</h1>
 
       <section className="transaction-creator-summary-card" aria-label={`付款达人 ${payout.creator}`}>
         <Avatar initials={payout.initials} accent={payout.accent} size="lg" />
@@ -103,14 +99,14 @@ export function TransactionDetailPage({
           <div><h2>付款信息</h2><p>本笔交易的渠道、账户与付款执行快照。</p></div>
         </header>
         <dl className="transaction-detail-info-grid">
-          <div><dt>交易记录 ID</dt><dd>{payout.id}</dd></div>
           <div><dt>付款时间</dt><dd>{displayTime(finalTime)}</dd></div>
           <div><dt>付款人</dt><dd>{batch?.payer ?? '未记录'}</dd></div>
-          <div><dt>付款批次时间</dt><dd>{displayTime(batch?.paidAt)}</dd></div>
+          <div><dt>付款批次号</dt><dd>{batch?.paymentBatchCode ?? '未关联'}</dd></div>
           <div><dt>收款账户</dt><dd>{item?.accountSummary ?? payout.account ?? '未记录'}</dd></div>
           <div><dt>付款方式</dt><dd>{item?.transferMethod ?? payout.provider}</dd></div>
           <div><dt>费用承担</dt><dd>{item?.feeBearer ?? '未记录'}</dd></div>
           <div><dt>交易附言</dt><dd>{item?.transactionReference ?? '未记录'}</dd></div>
+          <div><dt>请款原因</dt><dd>{requestReason}</dd></div>
         </dl>
       </section>
 
@@ -154,6 +150,14 @@ export function TransactionDetailPage({
                 </div>
               )) : <span>{item?.legacyContractReference ?? payout.contract ?? '未关联'}</span>}
             </div>
+            <Button
+              variant="secondary"
+              className="transaction-resource-view-button"
+              icon={<Eye size={15} />}
+              aria-label="查看合同"
+              aria-haspopup="dialog"
+              onClick={() => setResourceView('contract')}
+            >查看</Button>
           </article>
 
           <article className="transaction-resource-card">
@@ -171,6 +175,14 @@ export function TransactionDetailPage({
                 </div>
               ) : <span>{item?.legacyInvoiceReference ?? payout.invoice ?? '未关联'}</span>}
             </div>
+            <Button
+              variant="secondary"
+              className="transaction-resource-view-button"
+              icon={<Eye size={15} />}
+              aria-label="查看 Invoice"
+              aria-haspopup="dialog"
+              onClick={() => setResourceView('invoice')}
+            >查看</Button>
           </article>
 
           <article className="transaction-resource-card is-payment-list">
@@ -186,9 +198,77 @@ export function TransactionDetailPage({
                 <small>{item?.paymentListStatus ?? '历史记录未保留付款清单快照'}</small>
               </div>
             </div>
+            <Button
+              variant="secondary"
+              className="transaction-resource-view-button is-payment-list"
+              icon={<Eye size={15} />}
+              aria-label="查看付款清单"
+              aria-haspopup="dialog"
+              onClick={() => setResourceView('payment-list')}
+            >查看</Button>
           </article>
         </div>
       </section>
+
+      {resourceView ? (
+        <Modal
+          className="transaction-resource-modal"
+          width="680px"
+          title={resourceView === 'contract' ? '合同详情' : resourceView === 'invoice' ? 'Invoice 详情' : '付款清单详情'}
+          onClose={() => setResourceView(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceView(null)}>关闭</Button>}
+        >
+          {resourceView === 'contract' ? (
+            item?.contracts.length ? (
+              <div className="transaction-resource-modal-list">
+                {item.contracts.map((contract) => (
+                  <section key={contract.contractId}>
+                    <header><FileText size={18} aria-hidden="true" /><strong>{contract.contractCode}</strong></header>
+                    <dl>
+                      <div><dt>合同名称</dt><dd>{contract.name}</dd></div>
+                      <div><dt>合同金额</dt><dd>{money(contract.currency, contract.amount)}</dd></div>
+                      <div><dt>签署状态</dt><dd>{contract.signed ? '已签署' : '待签署'}</dd></div>
+                      <div><dt>合同状态</dt><dd>{contract.status}</dd></div>
+                      <div><dt>更新时间</dt><dd>{contract.updatedAt || '未记录'}</dd></div>
+                    </dl>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <p className="transaction-resource-modal-empty">仅保留历史合同编号：{item?.legacyContractReference ?? payout.contract ?? '未关联'}</p>
+            )
+          ) : null}
+
+          {resourceView === 'invoice' ? (
+            item?.invoice ? (
+              <dl className="transaction-resource-modal-grid">
+                <div><dt>Invoice 号</dt><dd>{item.invoice.invoiceNumber}</dd></div>
+                <div><dt>Invoice 日期</dt><dd>{item.invoice.invoiceDate}</dd></div>
+                <div><dt>Invoice 金额</dt><dd>{money(item.invoice.currency, item.invoice.amount)}</dd></div>
+                <div><dt>版本</dt><dd>V{item.invoice.version}</dd></div>
+                <div><dt>审核状态</dt><dd>{item.invoice.reviewStatus}</dd></div>
+                <div><dt>资料校验</dt><dd>{item.invoice.validationStatus === 'valid' ? '已通过' : '需要复核'}</dd></div>
+              </dl>
+            ) : (
+              <p className="transaction-resource-modal-empty">仅保留历史 Invoice 编号：{item?.legacyInvoiceReference ?? payout.invoice ?? '未关联'}</p>
+            )
+          ) : null}
+
+          {resourceView === 'payment-list' ? (
+            <dl className="transaction-resource-modal-grid is-payment-list">
+              <div><dt>付款清单编号</dt><dd>{item?.paymentListCode ?? '未关联'}</dd></div>
+              <div><dt>版本</dt><dd>{item?.paymentListVersion ? `V${item.paymentListVersion}` : '未记录'}</dd></div>
+              <div><dt>清单状态</dt><dd>{item?.paymentListStatus ?? '未记录'}</dd></div>
+              <div><dt>付款达人</dt><dd>{payout.creator}</dd></div>
+              <div><dt>付款金额</dt><dd>{formatAmount(payout)}</dd></div>
+              <div><dt>付款渠道</dt><dd>{payout.provider}</dd></div>
+              <div><dt>付款方式</dt><dd>{item?.transferMethod ?? payout.provider}</dd></div>
+              <div><dt>付款批次号</dt><dd>{batch?.paymentBatchCode ?? '未关联'}</dd></div>
+              <div className="transaction-resource-modal-full"><dt>请款原因</dt><dd>{requestReason}</dd></div>
+            </dl>
+          ) : null}
+        </Modal>
+      ) : null}
     </div>
   );
 }

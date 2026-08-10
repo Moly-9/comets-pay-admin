@@ -35,6 +35,7 @@ const context = {
       cooperationProjectCode: 'PRJ-20260810-001',
       requestCode: 'REQ-20260810-001',
       requestStatus: '已付款',
+      reason: '达人合作内容验收完成',
     },
   },
   item: {
@@ -73,6 +74,7 @@ describe('TransactionDetailPage', () => {
     );
 
     expect(html).toContain('transaction-creator-summary-card');
+    expect(html).not.toContain('transaction-detail-header');
     expect(html).toContain('付款金额');
     expect(html).toContain('付款渠道');
     expect(html).toContain('交易状态');
@@ -83,6 +85,14 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('INV-20260810-001');
     expect(html).toContain('transaction-resource-card is-payment-list');
     expect(html).toContain('PL-20260810-001');
+    expect(html).not.toContain('交易记录 ID');
+    expect(html).toContain('付款批次号');
+    expect(html).toContain('PAY-20260810-001');
+    expect(html).toContain('请款原因');
+    expect(html).toContain('达人合作内容验收完成');
+    expect(html).toContain('aria-label="查看合同"');
+    expect(html).toContain('aria-label="查看 Invoice"');
+    expect(html).toContain('aria-label="查看付款清单"');
   });
 
   it('shows explicit fallbacks when historical batch snapshots are unavailable', () => {

@@ -152,49 +152,9 @@
   padding: 0 4px;
 }
 
-.transaction-detail-back:focus-visible,
-.transaction-detail-header h1:focus {
+.transaction-detail-back:focus-visible {
   outline: 2px solid #d96e59;
   outline-offset: 2px;
-}
-
-.transaction-detail-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  border-bottom: 1px solid #dfe3e9;
-  padding: 4px 0 18px;
-}
-
-.transaction-detail-header > div {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-}
-
-.transaction-detail-header span,
-.transaction-detail-header p {
-  color: #7b818e;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.transaction-detail-header h1,
-.transaction-detail-header p {
-  margin: 0;
-}
-
-.transaction-detail-header h1 {
-  overflow-wrap: anywhere;
-  color: #202229;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 22px;
-  line-height: 1.3;
-}
-
-.transaction-detail-header h1:focus {
-  outline-offset: 4px;
 }
 
 .transaction-creator-summary-card {
@@ -450,7 +410,7 @@
 .transaction-resource-card {
   display: grid;
   min-width: 0;
-  grid-template-columns: 38px minmax(150px, .55fr) minmax(0, 1.65fr);
+  grid-template-columns: 38px minmax(150px, .55fr) minmax(0, 1.65fr) auto;
   align-items: center;
   gap: 12px;
   border: 1px solid #e2e5ea;
@@ -521,6 +481,148 @@
   border-left-color: #efc8c4;
 }
 
+.transaction-resource-view-button {
+  min-width: 74px;
+  min-height: 34px;
+  justify-content: center;
+  padding-right: 11px;
+  padding-left: 11px;
+}
+
+.transaction-resource-view-button.is-payment-list {
+  border-color: #dfaaa4;
+  background: #fff;
+  color: #a83d34;
+}
+
+.transaction-resource-view-button.is-payment-list:hover {
+  border-color: #cc7d74;
+  background: #fff8f7;
+}
+
+.transaction-resource-modal .modal-content {
+  padding-top: 14px;
+}
+
+.transaction-resource-modal-list {
+  display: grid;
+  gap: 12px;
+}
+
+.transaction-resource-modal-list > section {
+  overflow: hidden;
+  border: 1px solid #e2e5ea;
+  border-radius: 7px;
+}
+
+.transaction-resource-modal-list > section > header {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid #e8eaf0;
+  background: #faf8fb;
+  padding: 10px 13px;
+  color: #765e83;
+}
+
+.transaction-resource-modal-list > section > header strong {
+  color: #30343d;
+  font-size: 12px;
+}
+
+.transaction-resource-modal-list dl,
+.transaction-resource-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.transaction-resource-modal-list dl {
+  padding: 4px 13px 10px;
+}
+
+.transaction-resource-modal-list dl > div,
+.transaction-resource-modal-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border-right: 1px solid #eceef2;
+  border-bottom: 1px solid #eceef2;
+  padding: 11px 13px;
+}
+
+.transaction-resource-modal-list dl > div:nth-child(2n),
+.transaction-resource-modal-grid > div:nth-child(2n) {
+  border-right: 0;
+}
+
+.transaction-resource-modal-list dl > div:nth-last-child(-n + 2),
+.transaction-resource-modal-grid > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.transaction-resource-modal-list dl > div:nth-child(2n + 1) {
+  padding-left: 0;
+}
+
+.transaction-resource-modal-list dl > div:nth-child(2n) {
+  padding-right: 0;
+}
+
+.transaction-resource-modal-grid.is-payment-list {
+  border: 1px solid #e9c2bd;
+  border-radius: 7px;
+  background: #fff8f7;
+  padding: 5px 13px 10px;
+}
+
+.transaction-resource-modal-grid.is-payment-list > div:nth-child(2n + 1) {
+  padding-left: 0;
+}
+
+.transaction-resource-modal-grid.is-payment-list > div:nth-child(2n) {
+  padding-right: 0;
+}
+
+.transaction-resource-modal-grid > .transaction-resource-modal-full {
+  grid-column: 1 / -1;
+  border-right: 0;
+  border-bottom: 0;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.transaction-resource-modal dt,
+.transaction-resource-modal dd {
+  margin: 0;
+}
+
+.transaction-resource-modal dt {
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.transaction-resource-modal dd {
+  overflow-wrap: anywhere;
+  color: #343842;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.transaction-resource-modal-empty {
+  margin: 0;
+  border: 1px dashed #dcdfe5;
+  border-radius: 7px;
+  background: #f8f9fa;
+  padding: 18px;
+  color: #737986;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 @media (max-width: 860px) {
   .transactions-page .transaction-filter-row {
     padding: 12px 0;
@@ -588,14 +690,6 @@
     width: 100%;
   }
 
-  .transaction-detail-header {
-    align-items: flex-start;
-  }
-
-  .transaction-detail-header h1 {
-    font-size: 18px;
-  }
-
   .transaction-creator-summary-card {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -646,5 +740,36 @@
   .transaction-resource-card.is-payment-list .transaction-resource-content {
     border-top-color: #efc8c4;
     border-left: 0;
+  }
+
+  .transaction-resource-view-button {
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+
+  .transaction-resource-modal-list dl,
+  .transaction-resource-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .transaction-resource-modal-list dl > div,
+  .transaction-resource-modal-list dl > div:nth-child(2n),
+  .transaction-resource-modal-list dl > div:nth-child(2n + 1),
+  .transaction-resource-modal-grid > div,
+  .transaction-resource-modal-grid > div:nth-child(2n),
+  .transaction-resource-modal-grid > div:nth-child(2n + 1) {
+    border-right: 0;
+    border-bottom: 1px solid #eceef2;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .transaction-resource-modal-list dl > div:last-child,
+  .transaction-resource-modal-grid > div:last-child {
+    border-bottom: 0;
+  }
+
+  .transaction-resource-modal-grid > .transaction-resource-modal-full {
+    grid-column: 1;
   }
 }

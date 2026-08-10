@@ -171,6 +171,42 @@ final result: passed
 
 ---
 
+# Transaction Detail Information And Resource Views Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-549728f0-663a-4e7c-942f-fd326ebddfe6.png`.
+- Desktop implementation: `artifacts/transaction-detail-revision-desktop.png`.
+- Mobile implementation: `artifacts/transaction-detail-revision-mobile.png`.
+- Contract dialog: `artifacts/transaction-detail-contract-dialog.png`.
+- Payment-list dialog: `artifacts/transaction-detail-payment-list-dialog.png`.
+- Mobile payment-list dialog: `artifacts/transaction-detail-payment-list-dialog-mobile.png`.
+
+## Dimensions And State
+
+- Desktop verification used a 1518 x 767 CSS viewport. The browser content capture was 1503 x 759 px after browser chrome and scrollbar exclusion.
+- Mobile verification used a 390 x 844 CSS viewport. The browser content capture was 375 x 812 px after browser chrome exclusion.
+- Verified the transaction detail page, contract dialog, Invoice dialog, payment-list dialog, dialog close behavior, Escape behavior, focus trapping, and focus return to the originating `查看` button.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The source-marked transaction title block is removed while a screen-reader-only page heading preserves navigation semantics and receives focus after entry.
+- Payment information no longer exposes the transaction record ID. It shows the payment batch number and request reason alongside payment time, payer, account, method, fee bearer, and transaction reference.
+- Contract, Invoice, and payment-list cards use the existing compact resource-card treatment and add consistent Lucide Eye actions without changing the page's visual hierarchy.
+- The payment-list card retains its red emphasis, and its detail dialog uses the same restrained emphasis for the payment snapshot.
+- Desktop and mobile layouts keep labels, long identifiers, and action text inside their containers with no visible overlap or horizontal overflow.
+
+## Interaction And Technical Verification
+
+- Contract, Invoice, and payment-list `查看` buttons open read-only dialogs populated from the selected transaction snapshot.
+- Closing a dialog restores focus to its originating action; Escape and the shared modal focus trap continue to work.
+- Full Vitest passed 60 files and 374/374 tests. The TypeScript/Vite production build and final diff check passed.
+
+final result: passed
+
+---
+
 # Transaction Records Selection And Detail Design QA
 
 ## Evidence
