@@ -1103,8 +1103,201 @@ input[type="checkbox"]:disabled {
 }
 
 /* Workbench project payment detail: one request and all of its payment items. */
+.payment-project-payment-detail-page .payment-batch-detail-header h1 {
+  color: #1f2229;
+  font-family: inherit;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.payment-project-payment-detail-page .payment-batch-detail-header p {
+  font-size: 12px;
+}
+
+.payment-project-payment-detail-page .payment-project-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card {
+  display: grid;
+  min-width: 0;
+  min-height: 92px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--payment-project-summary-border);
+  border-radius: 8px;
+  background: var(--payment-project-summary-surface);
+  padding: 14px;
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card > div {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card strong {
+  overflow: hidden;
+  color: var(--payment-project-summary-text);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card > div > span:first-child,
+.payment-project-payment-detail-page .payment-project-summary-card small {
+  color: var(--payment-project-summary-muted);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-icon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--payment-project-summary-icon-surface);
+  color: var(--payment-project-summary-accent);
+}
+
+.payment-project-summary-card.is-order {
+  --payment-project-summary-accent: #765783;
+  --payment-project-summary-border: #e3d8e8;
+  --payment-project-summary-icon-surface: #eee4f2;
+  --payment-project-summary-muted: #806f88;
+  --payment-project-summary-surface: #faf7fb;
+  --payment-project-summary-text: #4f3f57;
+}
+
+.payment-project-summary-card.is-provider {
+  --payment-project-summary-accent: #4c6f9c;
+  --payment-project-summary-border: #d9e3f0;
+  --payment-project-summary-icon-surface: #e8eff8;
+  --payment-project-summary-muted: #667b96;
+  --payment-project-summary-surface: #f7f9fd;
+  --payment-project-summary-text: #3f5674;
+}
+
+.payment-project-summary-card.is-result-processing {
+  --payment-project-summary-accent: #ac604b;
+  --payment-project-summary-border: #ecd8d0;
+  --payment-project-summary-icon-surface: #f8e9e4;
+  --payment-project-summary-muted: #8f7168;
+  --payment-project-summary-surface: #fdf9f7;
+  --payment-project-summary-text: #744b3f;
+}
+
+.payment-project-summary-card.is-result-success {
+  --payment-project-summary-accent: #477a64;
+  --payment-project-summary-border: #d5e5dd;
+  --payment-project-summary-icon-surface: #e5f2eb;
+  --payment-project-summary-muted: #668273;
+  --payment-project-summary-surface: #f6faf8;
+  --payment-project-summary-text: #3e6755;
+}
+
+.payment-project-summary-card.is-result-danger {
+  --payment-project-summary-accent: #b64f43;
+  --payment-project-summary-border: #ecd2cd;
+  --payment-project-summary-icon-surface: #f9e5e2;
+  --payment-project-summary-muted: #946b66;
+  --payment-project-summary-surface: #fff8f6;
+  --payment-project-summary-text: #7f4038;
+}
+
+.payment-project-summary-card.is-updated {
+  --payment-project-summary-accent: #98702d;
+  --payment-project-summary-border: #eadfc7;
+  --payment-project-summary-icon-surface: #f5ecd9;
+  --payment-project-summary-muted: #877656;
+  --payment-project-summary-surface: #fdfbf7;
+  --payment-project-summary-text: #665333;
+}
+
 .payment-project-payment-detail-page .payment-batch-detail-summary .payment-provider-badge-group {
-  align-self: center;
+  min-width: 0;
+  align-self: start;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.payment-project-payment-detail-page .payment-batch-detail-summary .payment-provider-badge {
+  max-width: 100%;
+  color: var(--payment-provider-text, #4f5968);
+  font-size: 11.5px;
+}
+
+.payment-project-payment-detail-page .payment-batch-detail-summary .payment-provider-mark {
+  color: #fff;
+  font-size: 10px;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section ol {
+  gap: 18px;
+  padding: 22px 24px 24px;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li {
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 12px;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > span {
+  width: 42px;
+  height: 42px;
+  border-width: 1px;
+  border-radius: 8px;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > strong {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > small {
+  width: fit-content;
+  border-radius: 999px;
+  background: #f0f2f5;
+  padding: 2px 7px;
+  color: #737a87;
+  font-size: 9.5px;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > i {
+  top: 20px;
+  right: 0;
+  left: 56px;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li.is-complete > small {
+  background: #edf7f1;
+  color: #397259;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li.is-current > small {
+  background: #fff0eb;
+  color: #9e4737;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li.is-failed > small {
+  background: #fff0ed;
+  color: #a4473d;
+}
+
+.payment-project-payment-detail-page .payment-batch-item-provider {
+  justify-items: start;
+}
+
+.payment-project-payment-detail-page .payment-batch-item-provider .payment-provider-badge {
+  max-width: 100%;
 }
 
 .payment-project-failure-overview {
@@ -1178,6 +1371,29 @@ input[type="checkbox"]:disabled {
 }
 
 @media (max-width: 720px) {
+  .payment-project-payment-detail-page .payment-batch-detail-header h1 {
+    font-size: 24px;
+  }
+
+  .payment-project-payment-detail-page .payment-project-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .payment-project-payment-detail-page .payment-project-summary-card {
+    min-height: 82px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section ol {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 18px 14px 20px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section li > i {
+    display: none;
+  }
+
   .payment-project-failure-overview {
     grid-template-columns: 40px minmax(0, 1fr);
   }
@@ -1194,6 +1410,63 @@ input[type="checkbox"]:disabled {
 
   .payment-project-failure-action .button {
     width: 100%;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1399px) {
+  .payment-project-payment-detail-page .payment-project-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-list {
+    overflow-x: visible;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-table-head {
+    display: none;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-trigger {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-height: 0;
+    gap: 13px 18px;
+    padding: 14px 52px 16px 16px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-trigger > .payment-batch-item-person {
+    grid-column: 1 / -1;
+    min-height: 42px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-trigger > span[data-label] {
+    display: grid;
+    min-width: 0;
+    justify-items: start;
+    gap: 4px;
+    text-align: left;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-trigger > span[data-label]::before {
+    color: #858b97;
+    content: attr(data-label);
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-trigger > .payment-batch-item-expand-icon {
+    position: absolute;
+    top: 12px;
+    right: 7px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-item-trigger > span > strong {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

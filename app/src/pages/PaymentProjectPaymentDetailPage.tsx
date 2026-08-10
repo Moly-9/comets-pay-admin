@@ -1,17 +1,22 @@
 import {
+  Activity,
   AlertTriangle,
   ArrowLeft,
+  BadgeCheck,
   Building2,
-  Check,
+  CalendarClock,
   ChevronDown,
   CircleAlert,
-  Clock3,
+  CircleDollarSign,
+  RadioTower,
   ReceiptText,
   RotateCcw,
+  WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
+import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -21,7 +26,11 @@ import {
 import type { PaymentFailureIssueType, Payout } from '../types';
 import { PaymentItemDetails } from './PaymentBatchDetailPage';
 
-const PAYMENT_PROGRESS_STEPS = ['已付款', '平台处理中', '已完成'] as const;
+const PAYMENT_PROGRESS_STEPS = [
+  { label: '已付款', icon: CircleDollarSign },
+  { label: '平台处理中', icon: RadioTower },
+  { label: '已完成', icon: BadgeCheck },
+] as const;
 
 const displayTime = (value?: string) => value
   ? value.replace('T', ' ').replace(/\.\d{3}Z$/, '')
@@ -53,6 +62,12 @@ const projectStatusTone = (status: PaymentProjectPaymentRecord['status']) => {
   if (status === '部分失败' || status === '已退回') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   return 'is-success';
+};
+
+const projectSummaryResultTone = (status: PaymentProjectPaymentRecord['status']) => {
+  if (status === '部分失败' || status === '已退回') return 'is-result-danger';
+  if (status === '付款处理中') return 'is-result-processing';
+  return 'is-result-success';
 };
 
 const contractSummary = (item: PaymentBatchItemSnapshot) => (
@@ -127,7 +142,7 @@ export function PaymentProjectPaymentDetailPage({
 
       <header className="payment-batch-detail-header">
         <div>
-          <span>请款项目付款</span>
+          <span>付款项目</span>
           <h1 ref={titleRef} tabIndex={-1}>{record.request.requestCode}</h1>
           <p>{record.request.cooperationProjectCode} · {record.request.cooperationProjectName}</p>
         </div>
@@ -138,26 +153,38 @@ export function PaymentProjectPaymentDetailPage({
         </div>
       </header>
 
-      <section className="payment-batch-detail-summary" aria-label="项目付款摘要">
-        <div>
-          <span>付款单</span>
-          <strong>{record.paymentOrderCodes.join('、') || '未关联'}</strong>
-          <small>{record.paymentOrderCodes.length} 份付款清单</small>
+      <section className="payment-batch-detail-summary payment-project-summary-grid" aria-label="项目付款摘要">
+        <div className="payment-project-summary-card is-order">
+          <span className="payment-project-summary-icon" aria-hidden="true"><ReceiptText size={18} /></span>
+          <div>
+            <span>付款单</span>
+            <strong>{record.paymentOrderCodes.join('、') || '未关联'}</strong>
+            <small>{record.paymentOrderCodes.length} 份付款清单</small>
+          </div>
         </div>
-        <div>
-          <span>付款渠道</span>
-          <strong>{record.providers.join('、') || '待确认'}</strong>
-          <small>{record.providers.length} 个执行渠道</small>
+        <div className="payment-project-summary-card is-provider">
+          <span className="payment-project-summary-icon" aria-hidden="true"><WalletCards size={18} /></span>
+          <div>
+            <span>付款渠道</span>
+            <PaymentProviderBadges compact providers={record.providers} />
+            <small>{record.providers.length} 个执行渠道</small>
+          </div>
         </div>
-        <div>
-          <span>处理结果</span>
-          <strong>{statusCounts.succeeded} 成功 · {statusCounts.failed} 失败</strong>
-          <small>{statusCounts.processing} 笔处理中</small>
+        <div className={`payment-project-summary-card ${projectSummaryResultTone(record.status)}`}>
+          <span className="payment-project-summary-icon" aria-hidden="true"><Activity size={18} /></span>
+          <div>
+            <span>处理结果</span>
+            <strong>{statusCounts.succeeded} 成功 · {statusCounts.failed} 失败</strong>
+            <small>{statusCounts.processing} 笔处理中</small>
+          </div>
         </div>
-        <div>
-          <span>最近更新</span>
-          <strong>{displayTime(record.lastActivityAt)}</strong>
-          <small>以渠道回写时间为准</small>
+        <div className="payment-project-summary-card is-updated">
+          <span className="payment-project-summary-icon" aria-hidden="true"><CalendarClock size={18} /></span>
+          <div>
+            <span>最近更新</span>
+            <strong>{displayTime(record.lastActivityAt)}</strong>
+            <small>以渠道回写时间为准</small>
+          </div>
         </div>
       </section>
 
@@ -181,6 +208,7 @@ export function PaymentProjectPaymentDetailPage({
         </header>
         <ol aria-label="项目付款进度">
           {PAYMENT_PROGRESS_STEPS.map((step, index) => {
+            const StepIcon = step.icon;
             const state = record.status === '已付款'
               ? 'complete'
               : (record.status === '部分失败' || record.status === '已退回') && index < 2
@@ -193,17 +221,9 @@ export function PaymentProjectPaymentDetailPage({
                       ? 'current'
                       : 'pending';
             return (
-              <li className={`is-${state}`} key={step} aria-current={state === 'current' || state === 'failed' ? 'step' : undefined}>
-                <span aria-hidden="true">
-                  {state === 'complete'
-                    ? <Check size={14} />
-                    : state === 'current'
-                      ? <Clock3 size={14} />
-                      : state === 'failed'
-                        ? <CircleAlert size={14} />
-                        : index + 1}
-                </span>
-                <strong>{step}</strong>
+              <li className={`is-${state}`} key={step.label} aria-current={state === 'current' || state === 'failed' ? 'step' : undefined}>
+                <span aria-hidden="true"><StepIcon size={18} /></span>
+                <strong>{step.label}</strong>
                 <small>{state === 'complete' ? '已完成' : state === 'current' ? '当前阶段' : state === 'failed' ? record.status : '待处理'}</small>
                 {index < PAYMENT_PROGRESS_STEPS.length - 1 ? <i aria-hidden="true" /> : null}
               </li>
@@ -262,7 +282,10 @@ export function PaymentProjectPaymentDetailPage({
                       <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
                       <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
                     </span>
-                    <span data-label="付款渠道"><strong>{item.provider}</strong><small>{item.transferMethod}</small></span>
+                    <span className="payment-batch-item-provider" data-label="付款渠道">
+                      <PaymentProviderBadge compact provider={item.provider} />
+                      <small>{item.transferMethod}</small>
+                    </span>
                     <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
                     <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
                     <span data-label="付款清单" title={item.paymentListCode}><strong>{item.paymentListCode}</strong></span>

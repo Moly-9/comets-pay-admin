@@ -34,6 +34,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     );
 
     expect(html).toContain('返回付款工作台');
+    expect(html).toContain('>付款项目</span>');
     expect(html).toContain('REQ-202607-000011');
     expect(html).toContain(failedRecord.request.cooperationProjectName);
     expect(html).toContain('本页面仅展示当前请款项目，不混入同批次的其他项目');
@@ -43,6 +44,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('BENEFICIARY_UNAVAILABLE');
     expect(html).not.toContain('付款批次</span>');
+    expect(html).not.toContain('请款项目付款');
   });
 
   it('uses project-level progress copy and status counts', () => {
@@ -61,5 +63,10 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('部分失败');
     expect(html).toContain('以渠道回写时间为准');
     expect(html).toContain('disabled=""');
+    expect(html).toContain('payment-project-summary-card is-order');
+    expect(html).toContain('payment-project-summary-card is-provider');
+    expect(html).toContain('payment-project-summary-card is-result-danger');
+    expect(html).toContain('payment-project-summary-card is-updated');
+    expect(html).toContain('data-payment-provider="Airwallex"');
   });
 });
