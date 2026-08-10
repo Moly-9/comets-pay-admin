@@ -650,6 +650,22 @@ export const isInvoiceApprovedForPayment = (
   payout: Pick<Payout, 'invoiceReviewStatus'>,
 ) => payout.invoiceReviewStatus === '已通过';
 
+export const isPayoutPaymentInformationValidated = (
+  payout: Pick<
+    Payout,
+    | 'account'
+    | 'invoiceReviewStatus'
+    | 'paymentListRequiresRevalidation'
+    | 'paymentListValidationIssues'
+  >,
+) => (
+  isInvoiceApprovedForPayment(payout)
+  && Boolean(payout.account.trim())
+  && payout.account !== '待补充'
+  && !payout.paymentListRequiresRevalidation
+  && !(payout.paymentListValidationIssues?.length)
+);
+
 export const isPayoutEligibleForBatch = (
   payout: Pick<Payout, 'invoiceReviewStatus' | 'status'>,
 ) => isInvoiceApprovedForPayment(payout) && payout.status === '等待付款';

@@ -6,6 +6,7 @@ import {
   canReviewRequestApproval,
   createRequestApprovalState,
   requestApprovalReturnDetails,
+  returnApprovedRequestToMediaReview,
 } from './requestApprovalWorkflow';
 import { myProjectStatusFor, requestProjectStatusFor } from './paymentRequestProjects';
 
@@ -106,6 +107,31 @@ describe('request approval workflow', () => {
     expect(resubmitted.status).toBe('PENDING_FINANCE');
     expect(resubmitted.round).toBe(2);
     expect(requestApprovalReturnDetails(resubmitted)).toBeNull();
+  });
+
+  it('returns an approved unpaid request from payment execution back to finance review', () => {
+    const finance = userFor('finance');
+    const approved = {
+      ...createRequestApprovalState('2026-08-04T01:00:00.000Z'),
+      status: 'APPROVED' as const,
+    };
+    const returned = returnApprovedRequestToMediaReview(
+      approved,
+      finance,
+      '收款账户需要媒介重新确认',
+      '2026-08-10T06:00:00.000Z',
+    );
+
+    expect(returned.status).toBe('RETURNED_TO_MEDIA_REVIEW');
+    expect(returned.resumeStatus).toBe('PENDING_FINANCE');
+    expect(requestApprovalReturnDetails(returned)).toMatchObject({
+      stage: 'FINANCE',
+      reason: '收款账户需要媒介重新确认',
+    });
+    expect(createRequestApprovalState('2026-08-10T07:00:00.000Z', returned)).toMatchObject({
+      status: 'PENDING_FINANCE',
+      round: 2,
+    });
   });
 
   it('allows finance to return any active OA stage without approving it', () => {

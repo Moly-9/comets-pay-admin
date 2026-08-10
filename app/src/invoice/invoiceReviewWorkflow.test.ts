@@ -14,6 +14,7 @@ import {
   getPaymentListResubmissionState,
   invalidateSignedInvoice,
   isInvoiceApprovedForPayment,
+  isPayoutPaymentInformationValidated,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   maskInvoiceAccountValue,
@@ -528,6 +529,26 @@ describe('Invoice review workflow', () => {
       invoiceReviewStatus: '已通过',
       status: '信息异常',
     })).toBe('付款中');
+  });
+
+  it('validates the approved Invoice and payment-list snapshot before execution', () => {
+    const validated = {
+      ...payout,
+      account: '•••• 2048',
+      invoiceReviewStatus: '已通过' as const,
+      paymentListRequiresRevalidation: false,
+      paymentListValidationIssues: [],
+    };
+
+    expect(isPayoutPaymentInformationValidated(validated)).toBe(true);
+    expect(isPayoutPaymentInformationValidated({
+      ...validated,
+      paymentListRequiresRevalidation: true,
+    })).toBe(false);
+    expect(isPayoutPaymentInformationValidated({
+      ...validated,
+      account: '待补充',
+    })).toBe(false);
   });
 
   it('uses one display label set for Invoice lists and details', () => {

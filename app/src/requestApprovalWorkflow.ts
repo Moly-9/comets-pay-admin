@@ -154,3 +154,39 @@ export const applyRequestApprovalAction = (
     updatedAt: occurredAt,
   };
 };
+
+export const returnApprovedRequestToMediaReview = (
+  state: RequestApprovalState,
+  actor: Pick<SystemUser, 'account' | 'name' | 'role'>,
+  reason: string,
+  occurredAt = new Date().toISOString(),
+): RequestApprovalState => {
+  if (state.status !== 'APPROVED') {
+    throw new Error('只有已完成财务审批且尚未付款的请款可以从付款执行页退回。');
+  }
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) throw new Error('退回项目请款时必须填写原因。');
+
+  const event: RequestApprovalEvent = {
+    round: state.round,
+    stage: 'FINANCE',
+    action: 'RETURN',
+    actorAccount: actor.account,
+    actorName: actor.name,
+    actorRole: actor.role,
+    fromStatus: state.status,
+    toStatus: 'RETURNED_TO_MEDIA_REVIEW',
+    reason: normalizedReason,
+    occurredAt,
+  };
+  return {
+    status: 'RETURNED_TO_MEDIA_REVIEW',
+    round: state.round,
+    history: [...state.history, event],
+    submittedAt: state.submittedAt,
+    returnedFromStage: 'FINANCE',
+    resumeStatus: 'PENDING_FINANCE',
+    returnReason: normalizedReason,
+    updatedAt: occurredAt,
+  };
+};

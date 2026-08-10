@@ -15,6 +15,7 @@ const renderWorkbench = (payouts: Payout[], requests: RequestProjectSummary[] = 
     onSelectPayout={vi.fn()}
     onReviewRequest={vi.fn()}
     onExecuteRequest={vi.fn(() => true)}
+    onReturnRequest={vi.fn(() => true)}
     canCreateBatch
     currentDate={new Date('2026-08-09T00:00:00.000Z')}
   />,
@@ -160,5 +161,27 @@ describe('PaymentWorkbenchPage currency overview', () => {
         request.id === reviewRow.requestId
       ))?.paymentRequestProjectId
     ))).toBe(true);
+  });
+
+  it('moves an approved request out of pending payment after all payouts start processing', () => {
+    const input = {
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    };
+    const waitingRow = buildPaymentProjectRows({ ...input, tab: 'payment' })[0];
+    const processingIds = new Set(waitingRow.payouts.map((item) => item.id));
+    const processingPayouts = input.payouts.map((item) => (
+      processingIds.has(item.id) ? { ...item, status: '付款处理中' as const } : item
+    ));
+
+    expect(buildPaymentProjectRows({ ...input, payouts: processingPayouts, tab: 'payment' }))
+      .not.toContainEqual(expect.objectContaining({ id: waitingRow.id }));
+    expect(buildPaymentProjectRows({ ...input, payouts: processingPayouts, tab: 'paid' }))
+      .toContainEqual(expect.objectContaining({
+        id: waitingRow.id,
+        status: '付款处理中',
+        actionLabel: '查看进度',
+      }));
   });
 });

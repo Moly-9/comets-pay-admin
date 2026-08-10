@@ -54,6 +54,7 @@ import {
   getInvoicePageTab,
   getPaymentListResubmissionState,
   isInvoiceApprovedForPayment,
+  isPayoutPaymentInformationValidated,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   paymentFailureRestartStage,
@@ -169,6 +170,7 @@ import {
   createRequestApprovalState,
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalStage,
+  returnApprovedRequestToMediaReview,
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
 
@@ -1819,19 +1821,30 @@ export default function App() {
     action: RequestApprovalAction,
     reason?: string,
   ) => {
+    const isPaymentExecutionReturn = Boolean(
+      action === 'RETURN'
+      && request.lifecycle === 'APPROVED'
+      && request.approval?.status === 'APPROVED',
+    );
     const canApprove = Boolean(
       request.approval
       && canReviewRequestApproval(currentUser, request.approval, request.pm),
     );
     const canReturn = Boolean(
       request.approval
-      && canReturnRequestApproval(currentUser, request.approval, request.pm),
+      && (
+        isPaymentExecutionReturn
+          ? hasPermission(currentUser, 'payout_execute')
+          : canReturnRequestApproval(currentUser, request.approval, request.pm)
+      ),
     );
     if (!request.approval || (action === 'APPROVE' ? !canApprove : !canReturn)) {
       notify('暂无审批权限', '当前账号不是该请款当前节点的审批人，不能越级处理。');
       return false;
     }
-    const currentStage = requestApprovalStage(request.approval.status);
+    const currentStage = isPaymentExecutionReturn
+      ? 'FINANCE' as const
+      : requestApprovalStage(request.approval.status);
     if (!currentStage) {
       notify('当前状态不可审批', '该请款已结束当前审批轮次。');
       return false;
@@ -1881,13 +1894,10 @@ export default function App() {
     }
     try {
       const occurredAt = nowIso();
-      const nextApproval = applyRequestApprovalAction(
-        request.approval,
-        action,
-        { account: currentUser.account, name: currentUser.name, role: currentUser.role },
-        reason,
-        occurredAt,
-      );
+      const actor = { account: currentUser.account, name: currentUser.name, role: currentUser.role };
+      const nextApproval = isPaymentExecutionReturn
+        ? returnApprovedRequestToMediaReview(request.approval, actor, reason ?? '', occurredAt)
+        : applyRequestApprovalAction(request.approval, action, actor, reason, occurredAt);
       const invoiceIds = new Set(request.invoiceIds ?? []);
       const sourcePayoutIds = new Set(
         generatedInvoices
@@ -1902,12 +1912,14 @@ export default function App() {
       }
       const isReturned = nextApproval.status === 'RETURNED_TO_MEDIA_REVIEW';
       const isApproved = nextApproval.status === 'APPROVED';
+      const returnedFromPaymentExecution = isReturned && isPaymentExecutionReturn;
+      const normalizedReturnReason = reason?.trim();
       setPayouts((current) => current.map((payout) => {
         if (!sourcePayoutIds.has(payout.id)) return payout;
         const nextInvoiceStatus = isApproved ? '已通过' : payout.invoiceReviewStatus;
         return {
           ...payout,
-          status: isApproved ? '等待付款' : payout.status,
+          status: isApproved ? '等待付款' : returnedFromPaymentExecution ? '已退回' : payout.status,
           invoiceReviewStatus: nextInvoiceStatus,
           invoiceReviewHistory: isApproved
             ? [
@@ -1924,7 +1936,27 @@ export default function App() {
                   approvalRound: nextApproval.round,
                 },
               ]
+            : returnedFromPaymentExecution
+              ? [
+                  ...(payout.invoiceReviewHistory ?? []),
+                  {
+                    stage: 'FINANCE',
+                    action: '退回媒介',
+                    actorAccount: currentUser.account,
+                    actorName: currentUser.name,
+                    actorRole: currentUser.role,
+                    fromStatus: payout.invoiceReviewStatus,
+                    toStatus: payout.invoiceReviewStatus,
+                    reason: normalizedReturnReason,
+                    occurredAt,
+                    approvalRound: nextApproval.round,
+                  },
+                ]
             : payout.invoiceReviewHistory,
+          returnReason: returnedFromPaymentExecution ? normalizedReturnReason : payout.returnReason,
+          issue: returnedFromPaymentExecution
+            ? `付款执行前退回：${normalizedReturnReason}`
+            : payout.issue,
         };
       }));
       if (isApproved) {
@@ -1984,13 +2016,17 @@ export default function App() {
           ?? { id: request.id } as ProjectSummary),
         isReturned ? 'return' : isApproved ? 'approve' : 'approve',
         isReturned
-          ? `第 ${nextApproval.round} 轮审批在${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}退回媒介修改`
+          ? isPaymentExecutionReturn
+            ? `第 ${nextApproval.round} 轮请款在执行付款前退回媒介修改`
+            : `第 ${nextApproval.round} 轮审批在${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}退回媒介修改`
           : `${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}已通过`,
       );
       notify(
         isReturned ? '已退回媒介修改' : isApproved ? '财务审批已通过' : '审批已通过',
         isReturned
-          ? `请款项目已退回，修改后将回到“${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}”；Invoice 可按反馈选择是否修改。`
+          ? isPaymentExecutionReturn
+            ? '请款项目已从付款执行页退回；媒介修改并重新提交后，将回到待财务审批节点。'
+            : `请款项目已退回，修改后将回到“${REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]}”；Invoice 可按反馈选择是否修改。`
           : isApproved
             ? '项目请款与关联 Invoice 已通过，付款入口已解锁。'
             : `请款已进入“${REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status]}”。`,
@@ -2012,6 +2048,31 @@ export default function App() {
       notify('审批操作失败', error instanceof Error ? error.message : '当前节点无法执行该操作。');
       return false;
     }
+  };
+
+  const returnPaymentRequestToMedia = (requestId: string, reason: string) => {
+    const request = requestProjects.find((candidate) => candidate.id === requestId);
+    if (!request) {
+      notify('无法退回媒介', '未找到当前请款项目，请刷新付款工作台后重试。');
+      return false;
+    }
+    const invoiceIds = new Set([
+      ...(request.invoiceIds ?? []),
+      ...(request.creatorLinks ?? []).flatMap((link) => link.invoiceIds),
+    ]);
+    const sourcePayoutIds = new Set(generatedInvoices
+      .filter((invoice) => invoiceIds.has(invoice.invoiceId))
+      .map((invoice) => invoice.sourcePayoutId));
+    const linkedPayouts = payouts.filter((payout) => (
+      (Boolean(request.paymentRequestProjectId)
+        && payout.paymentRequestProjectId === request.paymentRequestProjectId)
+      || sourcePayoutIds.has(payout.id)
+    ));
+    if (!linkedPayouts.length || linkedPayouts.some((payout) => payout.status !== '等待付款')) {
+      notify('当前无法退回媒介', '仅全部明细均未开始付款的请款项目可以退回媒介修改。');
+      return false;
+    }
+    return handleRequestApproval(request, 'RETURN', reason);
   };
 
   const openFinanceReview = (requestId: string) => {
@@ -2098,9 +2159,9 @@ export default function App() {
       notify('当前无需执行打款', '该请款项目没有待打款明细。');
       return false;
     }
-    const unapprovedPayout = waitingPayouts.find((payout) => !isInvoiceApprovedForPayment(payout));
-    if (unapprovedPayout) {
-      notify('Invoice 尚未通过', `${unapprovedPayout.invoice} 尚未完成媒介与财务审核。`);
+    const invalidPayout = waitingPayouts.find((payout) => !isPayoutPaymentInformationValidated(payout));
+    if (invalidPayout) {
+      notify('付款信息校验未通过', `${invalidPayout.invoice} 的 Invoice 或付款清单仍需复核。`);
       return false;
     }
     const waitingPayoutIds = new Set(waitingPayouts.map((payout) => payout.id));
@@ -3185,6 +3246,7 @@ export default function App() {
           onSelectPayout={setSelectedPayout}
           onReviewRequest={openFinanceReview}
           onExecuteRequest={executePaymentRequest}
+          onReturnRequest={returnPaymentRequestToMedia}
           canCreateBatch={canExecutePayouts}
         />
       );

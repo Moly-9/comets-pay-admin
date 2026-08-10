@@ -328,7 +328,14 @@ body:has(.payment-execution-workspace) {
   border-radius: 0;
   background: transparent;
   padding: 0 0 0 8px;
-  color: #9b6444;
+}
+
+.payment-execution-payee-status.is-valid {
+  color: #2f7a58;
+}
+
+.payment-execution-payee-status.is-pending {
+  color: #a75538;
 }
 
 .payment-execution-account-note {
@@ -336,12 +343,24 @@ body:has(.payment-execution-workspace) {
   align-items: center;
   gap: 7px;
   margin: 12px 14px 0;
-  border-left: 2px solid #6f879e;
+  border-left: 2px solid #a8b2bd;
   background: #f5f7f9;
   padding: 10px 12px;
   color: #627384;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.payment-execution-account-note.is-valid {
+  border-left-color: #5c9a79;
+  background: #f2f8f4;
+  color: #47745b;
+}
+
+.payment-execution-account-note.is-pending {
+  border-left-color: #cb8062;
+  background: #fff6f1;
+  color: #945d45;
 }
 
 .payment-execution-payee > dl {
@@ -482,6 +501,81 @@ body:has(.payment-execution-workspace) {
   font-size: 13px;
 }
 
+.payment-execution-return-content {
+  display: grid;
+  gap: 18px;
+}
+
+.payment-execution-return-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-left: 3px solid #c76950;
+  background: #fff6f2;
+  padding: 14px 16px;
+  color: #9b4f3b;
+}
+
+.payment-execution-return-heading > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.payment-execution-return-heading strong,
+.payment-execution-return-heading p {
+  margin: 0;
+}
+
+.payment-execution-return-heading strong {
+  color: #6e3b30;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.payment-execution-return-heading p {
+  margin-top: 4px;
+  color: #8d665c;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.payment-execution-return-field {
+  display: grid;
+  gap: 8px;
+  color: #3f4752;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.payment-execution-return-field em {
+  color: #c34f3a;
+  font-style: normal;
+}
+
+.payment-execution-return-field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #d9dee5;
+  border-radius: 7px;
+  padding: 11px 12px;
+  color: #2f3742;
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.payment-execution-return-field textarea:focus {
+  border-color: #8068aa;
+  outline: 3px solid rgba(128, 104, 170, 0.14);
+}
+
+.payment-execution-return-field small {
+  color: #7a8490;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
 @media (max-width: 1180px) and (min-width: 901px) {
   .payment-execution-shell {
     grid-template-columns: minmax(0, 1fr) 360px;
@@ -581,6 +675,10 @@ body:has(.payment-execution-workspace) {
   .payment-execution-footer > div:last-child {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .payment-execution-submit-action {
+    grid-column: 1 / -1;
   }
 
   .payment-execution-footer .button {

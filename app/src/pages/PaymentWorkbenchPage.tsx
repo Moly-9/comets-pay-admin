@@ -212,13 +212,22 @@ export const togglePaymentProjectSelection = (
 const requestMatchesWorkbenchTab = (
   request: RequestProjectSummary,
   tab: WorkbenchTab,
+  projectPayouts: Payout[],
 ) => {
   if (tab === 'review') {
     return request.lifecycle === 'SUBMITTED' && request.approval?.status === 'PENDING_FINANCE';
   }
-  if (tab === 'payment') return request.lifecycle === 'APPROVED';
-  if (tab === 'paid') return request.lifecycle === 'COMPLETED';
-  return request.lifecycle === 'RETURNED';
+  if (tab === 'returned') return request.lifecycle === 'RETURNED';
+  if (request.lifecycle === 'COMPLETED') return tab === 'paid';
+  if (request.lifecycle !== 'APPROVED') return false;
+
+  const hasWaitingPayout = projectPayouts.some((payout) => payout.status === '等待付款');
+  if (tab === 'payment') return !projectPayouts.length || hasWaitingPayout;
+  return !hasWaitingPayout && projectPayouts.some((payout) => (
+    payout.status === '付款处理中'
+    || payout.status === '付款失败'
+    || payout.status === '已付款'
+  ));
 };
 
 const paymentProjectPresentation = (tab: WorkbenchTab, payouts: Payout[]) => {
@@ -258,9 +267,7 @@ export const buildPaymentProjectRows = ({
     request.cooperationProjectId,
     request.projectId,
   ].filter((value): value is string => Boolean(value))));
-  const requestRows = requests
-    .filter((request) => requestMatchesWorkbenchTab(request, tab))
-    .map((request): PaymentProjectRow => {
+  const requestRows = requests.flatMap((request): PaymentProjectRow[] => {
       const invoiceIds = new Set([
         ...(request.invoiceIds ?? []),
         ...(request.creatorLinks ?? []).flatMap((link) => link.invoiceIds),
@@ -273,9 +280,10 @@ export const buildPaymentProjectRows = ({
         payout.paymentRequestProjectId === request.paymentRequestProjectId
         || sourcePayoutIds.has(payout.id)
       ));
+      if (!requestMatchesWorkbenchTab(request, tab, projectPayouts)) return [];
       const amount = projectPayouts.length ? summarizePayoutAmounts(projectPayouts) : request.amount;
       const presentation = paymentProjectPresentation(tab, projectPayouts);
-      return {
+      return [{
         id: String(request.paymentRequestProjectId ?? request.id),
         requestId: request.id,
         requestCode: request.requestCode ?? request.id,
@@ -292,7 +300,7 @@ export const buildPaymentProjectRows = ({
         status: presentation.status,
         actionLabel: presentation.actionLabel,
         payouts: projectPayouts,
-      };
+      }];
     });
 
   if (tab === 'review') return requestRows;
@@ -492,6 +500,7 @@ export function PaymentWorkbenchPage({
   onSelectPayout,
   onReviewRequest,
   onExecuteRequest,
+  onReturnRequest,
   canCreateBatch,
   currentDate = new Date(),
 }: {
@@ -502,6 +511,7 @@ export function PaymentWorkbenchPage({
   onSelectPayout: (payout: Payout) => void;
   onReviewRequest: (requestId: string) => void;
   onExecuteRequest: (payouts: Payout[]) => boolean;
+  onReturnRequest: (requestId: string, reason: string) => boolean;
   canCreateBatch: boolean;
   currentDate?: Date;
 }) {
@@ -740,6 +750,7 @@ export function PaymentWorkbenchPage({
           project={paymentExecutionProject}
           canExecute={canCreateBatch}
           onExecute={onExecuteRequest}
+          onReturn={(reason) => onReturnRequest(paymentExecutionRequest.id, reason)}
           onClose={() => setPaymentExecutionProjectId(null)}
         />
       ) : null}
