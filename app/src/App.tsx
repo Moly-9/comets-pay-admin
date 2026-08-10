@@ -36,6 +36,7 @@ import {
 import {
   createInitialPaymentBatches,
   createPaymentBatchRecord,
+  createPaymentExecutionBatchRecord,
   createPaymentProjectPaymentRecord,
 } from './paymentBatches';
 import { BatchWizardPage } from './pages/BatchWizardPage';
@@ -2241,22 +2242,45 @@ export default function App() {
       notify('当前无需执行打款', '该请款项目没有待打款明细。');
       return false;
     }
-    const invalidPayout = waitingPayouts.find((payout) => !isPayoutPaymentInformationValidated(payout));
+    if (waitingPayouts.length !== projectPayouts.length) {
+      notify('无法执行部分打款', '请款项目的全部付款明细必须同时处于“等待付款”。');
+      return false;
+    }
+    const invalidPayout = projectPayouts.find((payout) => !isPayoutPaymentInformationValidated(payout));
     if (invalidPayout) {
       notify('付款信息校验未通过', `${invalidPayout.invoice} 的 Invoice 或付款清单仍需复核。`);
       return false;
     }
-    const waitingPayoutIds = new Set(waitingPayouts.map((payout) => payout.id));
+    let batchRecord: ReturnType<typeof createPaymentExecutionBatchRecord>;
+    try {
+      batchRecord = createPaymentExecutionBatchRecord({
+        payouts: projectPayouts,
+        requests: requestProjects,
+        generatedInvoices,
+        paymentLists,
+        contracts,
+        existingBatches: paymentBatches,
+        paymentBatchId: createPrototypeId('batch') as PaymentBatchId,
+        paymentBatchCode: createPrototypeCode('BAT'),
+        payer: currentUser.name,
+        submittedAt: nowIso(),
+      });
+    } catch (error) {
+      notify(
+        '无法执行打款',
+        error instanceof Error ? error.message : '请款项目无法生成唯一付款批次。',
+      );
+      return false;
+    }
+
+    const waitingPayoutIds = new Set(projectPayouts.map((payout) => payout.id));
     setPayouts((current) => current.map((payout) => (
       waitingPayoutIds.has(payout.id) ? { ...payout, status: '付款处理中' } : payout
     )));
-    const paymentRequestProjectId = waitingPayouts[0].paymentRequestProjectId;
-    const request = paymentRequestProjectId
-      ? requestProjects.find((candidate) => candidate.paymentRequestProjectId === paymentRequestProjectId)
-      : undefined;
+    setPaymentBatches((current) => [batchRecord, ...current]);
     notify(
       '项目付款已提交渠道',
-      `${request?.requestCode ?? waitingPayouts[0].project} 的 ${waitingPayouts.length} 笔付款已进入“付款处理中”。`,
+      `${batchRecord.request.requestCode} 的 ${projectPayouts.length} 笔付款已进入“付款处理中”，批次号 ${batchRecord.paymentBatchCode}。`,
     );
     return true;
   };

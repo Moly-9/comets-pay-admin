@@ -14,6 +14,7 @@ import type {
 import {
   createInitialPaymentBatches,
   createPaymentBatchRecord,
+  createPaymentExecutionBatchRecord,
   createPaymentProjectPaymentRecord,
   maskPaymentAccount,
   paymentBatchAmountLabel,
@@ -234,6 +235,65 @@ const buildInput = () => {
 };
 
 describe('payment batch snapshots', () => {
+  it('creates one processing batch when a request project starts payment execution', () => {
+    const input = buildInput();
+    const record = createPaymentExecutionBatchRecord({
+      payouts: input.payouts,
+      requests: input.requests,
+      generatedInvoices: input.generatedInvoices,
+      paymentLists: input.paymentLists,
+      contracts: input.contracts,
+      existingBatches: [],
+      paymentBatchId: 'payment_batch_execution' as PaymentBatchId,
+      paymentBatchCode: 'BAT-20260811-000001',
+      payer: '财务测试员',
+      submittedAt: '2026-08-11T10:30:00.000Z',
+    });
+
+    expect(record).toMatchObject({
+      paymentBatchCode: 'BAT-20260811-000001',
+      provider: 'Airwallex',
+      fundingAccountId: 'mock-awx-operating',
+      sourceCurrency: 'USD',
+      payer: '财务测试员',
+      paidAt: '2026-08-11T10:30:00.000Z',
+      status: '付款处理中',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
+    });
+    expect(record.request.paymentRequestProjectId).toBe(input.requests[0].paymentRequestProjectId);
+    expect(record.items).toHaveLength(input.payouts.length);
+    expect(record.items.every((item) => item.paymentStatus === '付款处理中')).toBe(true);
+  });
+
+  it('rejects repeated, partial-state, or mixed-provider payment execution batches', () => {
+    const input = buildInput();
+    const createExecution = (overrides: Partial<Parameters<typeof createPaymentExecutionBatchRecord>[0]> = {}) => (
+      createPaymentExecutionBatchRecord({
+        payouts: input.payouts,
+        requests: input.requests,
+        generatedInvoices: input.generatedInvoices,
+        paymentLists: input.paymentLists,
+        contracts: input.contracts,
+        existingBatches: [],
+        paymentBatchId: 'payment_batch_execution' as PaymentBatchId,
+        paymentBatchCode: 'BAT-20260811-000001',
+        payer: '财务测试员',
+        submittedAt: '2026-08-11T10:30:00.000Z',
+        ...overrides,
+      })
+    );
+    const existing = createExecution();
+
+    expect(() => createExecution({ existingBatches: [existing] }))
+      .toThrow('已生成付款批次');
+    expect(() => createExecution({
+      payouts: [{ ...input.payouts[0], status: '付款处理中' }],
+    })).toThrow('全部付款明细必须处于等待付款状态');
+    expect(() => createExecution({
+      payouts: [input.payouts[0], { ...input.payouts[0], id: 'payout-paypal', provider: 'PayPal' }],
+    })).toThrow('一个请款项目只能使用一个付款渠道');
+  });
+
   it('builds one linked request snapshot with contract, Invoice and payment-list data', () => {
     const record = createPaymentBatchRecord(buildInput());
 

@@ -770,7 +770,11 @@ export function PaymentWorkbenchPage({
           project={paymentExecutionProject}
           variant={paymentExecutionVariant}
           canExecute={canCreateBatch}
-          onExecute={onExecuteRequest}
+          onExecute={(projectPayouts) => {
+            const executed = onExecuteRequest(projectPayouts);
+            if (executed) setActiveTab('paid');
+            return executed;
+          }}
           onReturn={(reason) => onReturnRequest(paymentExecutionRequest.id, reason)}
           onClose={() => setPaymentExecutionProjectId(null)}
         />
