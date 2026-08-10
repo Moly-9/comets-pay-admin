@@ -107,6 +107,22 @@ describe('TransactionsPage currency overview', () => {
     expect(html).not.toContain('付款处理中');
     expect(html).not.toContain('等待付款');
   });
+
+  it('renders workbench-style search, date, provider, and export controls', () => {
+    const html = renderToStaticMarkup(
+      <TransactionsPage
+        payouts={[transactionPayout('USD', 100, 21)]}
+        onSelectPayout={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('type="search" aria-label="搜索交易记录"');
+    expect(html.match(/type="date"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="付款渠道"');
+    expect(html).toContain('>全部付款渠道</span>');
+    expect(html).toContain('当前显示 1 条记录');
+    expect(html).toContain('<span>导出流水</span>');
+  });
 });
 
 describe('InvoicePage OA states', () => {

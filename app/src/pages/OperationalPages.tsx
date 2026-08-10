@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -112,11 +113,22 @@ import type { RequestApprovalAction } from '../requestApprovalWorkflow';
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
+  filterTransactionRecords,
+  isFinalTransaction,
+  type TransactionProvider,
+  type TransactionTab,
+} from '../transactionRecords';
+import {
+  loadTransactionRecordsWorkbook,
+  transactionRecordsFilename,
+} from '../transactionRecordsWorkbook';
+import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
 import { PaymentBatchDetailPage } from './PaymentBatchDetailPage';
+import './TransactionsPage.css';
 
 type Notify = (title: string, message: string) => void;
 
@@ -3333,19 +3345,29 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   );
 }
 
+const TRANSACTION_PROVIDER_OPTIONS = [
+  { value: 'all', label: '全部付款渠道' },
+  { value: 'Airwallex', label: 'Airwallex' },
+  { value: 'PayPal', label: 'PayPal' },
+  { value: 'PayMax', label: 'PayMax' },
+] as const;
+
 export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
-  const [tab, setTab] = useState<'all' | 'paid' | 'failed'>('all');
-  const transactions = payouts.filter((payout) => (
-    isInvoiceApprovedForPayment(payout)
-    && (payout.status === '已付款' || payout.status === '付款失败')
-  ));
-  const visible = transactions.filter((payout) => (
-    tab === 'paid'
-      ? payout.status === '已付款'
-      : tab === 'failed'
-        ? payout.status === '付款失败'
-        : true
-  ));
+  const [tab, setTab] = useState<TransactionTab>('all');
+  const [search, setSearch] = useState('');
+  const [provider, setProvider] = useState<TransactionProvider>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const transactions = payouts.filter(isFinalTransaction);
+  const visible = filterTransactionRecords(payouts, {
+    tab,
+    search,
+    provider,
+    startDate,
+    endDate,
+  });
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
   const paidCurrencies = aggregatePayoutCurrencies(paid, true);
@@ -3363,8 +3385,30 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
       failedCount,
     };
   });
+
+  const updateStartDate = (value: string) => {
+    setStartDate(value);
+    if (value && endDate && value > endDate) setEndDate(value);
+  };
+  const updateEndDate = (value: string) => {
+    setEndDate(value);
+    if (value && startDate && value < startDate) setStartDate(value);
+  };
+  const exportTransactions = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const workbook = await loadTransactionRecordsWorkbook(visible);
+      downloadBlob(workbook, transactionRecordsFilename());
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : '交易流水导出失败，请稍后重试');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <div className="page-stack">
+    <div className="page-stack transactions-page">
       <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" />
       <section className="summary-surface" aria-label="交易概览">
         <PaymentCurrencySummaryCard
@@ -3398,16 +3442,58 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
         </article>
       </section>
       <section className="content-card">
-        <div className="tabs-row">
-          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button>
-          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button>
-          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('failed')}>付款失败</button>
+        <div className="tabs-row" role="tablist" aria-label="交易状态">
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>全部</button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}>已付款</button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}>付款失败</button>
         </div>
-        <div className="content-toolbar compact-toolbar">
-          <div className="date-range-static">2026-07-01 <span>—</span> 2026-08-31</div>
-          <Button variant="secondary" icon={<Download size={16} />}>导出流水</Button>
+        <div className="transaction-filter-row">
+          <label className="search-control transaction-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="搜索交易记录"
+              placeholder="搜索达人、项目、Invoice 等"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <div className="date-filter">
+            <CalendarDays size={17} aria-hidden="true" />
+            <label>
+              <span className="sr-only">交易开始日期</span>
+              <input type="date" value={startDate} onChange={(event) => updateStartDate(event.target.value)} />
+            </label>
+            <span className="date-divider">—</span>
+            <label>
+              <span className="sr-only">交易结束日期</span>
+              <input type="date" value={endDate} onChange={(event) => updateEndDate(event.target.value)} />
+            </label>
+          </div>
+          <SelectField<TransactionProvider>
+            ariaLabel="付款渠道"
+            className="transaction-provider-select"
+            value={provider}
+            options={TRANSACTION_PROVIDER_OPTIONS}
+            onChange={setProvider}
+          />
+          <span className="transaction-filter-result" aria-live="polite">当前显示 {visible.length} 条记录</span>
+          <Button
+            className="transaction-export-button"
+            variant="secondary"
+            icon={<Download size={16} />}
+            disabled={exporting || !visible.length}
+            onClick={exportTransactions}
+          >
+            {exporting ? '导出中...' : '导出流水'}
+          </Button>
         </div>
-        <PayoutTable payouts={visible} onSelect={onSelectPayout} />
+        {exportError ? <p className="transaction-export-error" role="alert">{exportError}</p> : null}
+        <PayoutTable
+          payouts={visible}
+          onSelect={onSelectPayout}
+          emptyText="暂无符合当前搜索与筛选条件的交易记录"
+        />
       </section>
     </div>
   );
