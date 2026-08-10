@@ -547,8 +547,13 @@ export function PaymentWorkbenchPage({
     buildPaymentProjectRows({ tab: tab.id, payouts, requests, generatedInvoices }),
   ])) as Record<WorkbenchTab, PaymentProjectRow[]>, [generatedInvoices, payouts, requests]);
   const paymentExecutionProject = paymentExecutionProjectId
-    ? rowsByTab.payment.find((project) => project.id === paymentExecutionProjectId)
+    ? [...rowsByTab.payment, ...rowsByTab.returned]
+      .find((project) => project.id === paymentExecutionProjectId)
     : undefined;
+  const paymentExecutionVariant = paymentExecutionProject
+    && rowsByTab.returned.some((project) => project.id === paymentExecutionProject.id)
+    ? 'returned' as const
+    : 'execution' as const;
   const paymentExecutionRequest = paymentExecutionProject?.requestId
     ? requests.find((request) => request.id === paymentExecutionProject.requestId)
     : undefined;
@@ -737,6 +742,10 @@ export function PaymentWorkbenchPage({
               setPaymentExecutionProjectId(project.id);
               return;
             }
+            if (activeTab === 'returned' && project.requestId) {
+              setPaymentExecutionProjectId(project.id);
+              return;
+            }
             const payout = project.payouts[0];
             if (payout) onSelectPayout(payout);
           }}
@@ -751,6 +760,7 @@ export function PaymentWorkbenchPage({
         <PaymentExecutionWorkspace
           request={paymentExecutionRequest}
           project={paymentExecutionProject}
+          variant={paymentExecutionVariant}
           canExecute={canCreateBatch}
           onExecute={onExecuteRequest}
           onReturn={(reason) => onReturnRequest(paymentExecutionRequest.id, reason)}

@@ -171,6 +171,38 @@ final result: passed
 
 ---
 
+# Payment Workbench Returned Reason Detail Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6a0d8703-09ff-4152-b739-babdfdfc85b8.png` (1907 x 824 px).
+- Desktop comparison: `artifacts/payment-returned-reason-qa/returned-reason-1907x824.png`.
+- Compact desktop / iPad landscape: `artifacts/payment-returned-reason-qa/returned-reason-1024x768.png`.
+- iPad portrait: `artifacts/payment-returned-reason-qa/returned-reason-768x1024.png`.
+- Narrow layout: `artifacts/payment-returned-reason-qa/returned-reason-390x844.png` and `returned-reason-390x844-details.png`.
+- State: signed in as `finance.demo`, returned `REQ-202607-000006` from the payment execution workspace, opened the `已退回` tab, and selected `查看原因`.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains.
+- The returned detail preserves the reference's full-screen split workspace, project metrics, payee summaries, fixed footer, and read-only approval column.
+- The project information section adds one restrained danger summary with the failure reason, return stage, actor, approval round, and timestamp.
+- Every affected payee card replaces the success note with an explicit `请款信息已退回` state and its applicable failure reason.
+- The footer exposes only `返回列表`; payment execution and repeat-return actions are absent in this state.
+- At 1024 px the approval column reports equal client and scroll widths after the long-reason wrapping fix. At 390 px the project subtitle truncates before the status badge, the workspace has no horizontal overflow, and both failure surfaces remain reachable in the shared vertical scroll area.
+
+## Interaction And Technical Verification
+
+- Browser flow verified: `待打款 -> 退回媒介修改 -> 已退回 -> 查看原因`.
+- Returned workspace component tests: 3/3 passed.
+- Complete Vitest run: 59 files and 371 tests passed.
+- TypeScript and production Vite build: passed.
+- Source and implementation were opened in the same visual comparison pass at 1907 x 824.
+
+final result: passed
+
+---
+
 # Finance Review Return Gate And Responsive Type Design QA
 
 ## Evidence

@@ -14,6 +14,7 @@ import { useState, type CSSProperties } from 'react';
 import { isPayoutPaymentInformationValidated } from '../invoice/invoiceReviewWorkflow';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
+import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
 import type { Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { Button, Modal } from './Common';
@@ -54,9 +55,18 @@ const feeBearerLabel = (value?: Payout['feeBearer']) => {
   return '按付款单执行';
 };
 
+const payoutFailureReason = (payout: Payout, requestReason: string) => (
+  payout.paymentFailureReturn?.reason?.trim()
+  || payout.returnReason?.trim()
+  || payout.issue?.trim()
+  || requestReason
+  || '未记录失败原因'
+);
+
 export function PaymentExecutionWorkspace({
   request,
   project,
+  variant = 'execution',
   canExecute,
   onExecute,
   onReturn,
@@ -64,11 +74,13 @@ export function PaymentExecutionWorkspace({
 }: {
   request: RequestProjectSummary;
   project: PaymentProjectRow;
+  variant?: 'execution' | 'returned';
   canExecute: boolean;
   onExecute: (payouts: Payout[]) => boolean;
   onReturn: (reason: string) => boolean;
   onClose: () => void;
 }) {
+  const isReturned = variant === 'returned';
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
@@ -77,6 +89,15 @@ export function PaymentExecutionWorkspace({
   const projectBrand = request.generatedDetail?.brand ?? request.brand ?? '待补充';
   const requestReason = request.generatedDetail?.reason ?? '未单独填写';
   const submittedAt = request.approval?.submittedAt ?? request.createdAt;
+  const returnDetails = requestApprovalReturnDetails(request.approval);
+  const requestReturnReason = returnDetails?.reason?.trim() || '';
+  const returnedReason = project.payouts
+    .map((payout) => payoutFailureReason(payout, requestReturnReason))
+    .find((reason) => reason !== '未记录失败原因')
+    ?? '未记录失败原因';
+  const returnedAt = returnDetails?.occurredAt
+    ?? project.payouts.find((payout) => payout.paymentFailureReturn?.occurredAt)
+      ?.paymentFailureReturn?.occurredAt;
   const canSubmitPayment = canExecute
     && payablePayouts.length > 0
     && payablePayouts.length === project.payouts.length
@@ -100,36 +121,42 @@ export function PaymentExecutionWorkspace({
   return (
     <>
       <Modal
-        title={`${project.requestCode} · 执行打款`}
+        title={`${project.requestCode} · ${isReturned ? '已退回详情' : '执行打款'}`}
         width="100vw"
         className="payment-execution-workspace"
         onClose={onClose}
         onBackdropMouseDown={() => undefined}
         footer={(
-          <div className="payment-execution-footer">
+          <div className={`payment-execution-footer${isReturned ? ' is-returned' : ''}`}>
             <div>
               <strong>{project.amount}</strong>
-              <span>{validatedPayouts.length} 笔付款信息校验成功 · {paymentProvider}</span>
+              <span>{isReturned
+                ? `${project.payouts.length} 笔请款明细已退回 · ${paymentProvider}`
+                : `${validatedPayouts.length} 笔付款信息校验成功 · ${paymentProvider}`}</span>
             </div>
             <div>
               <Button variant="secondary" onClick={onClose}>返回列表</Button>
-              <Button
-                className="payment-execution-return-action"
-                variant="danger"
-                icon={<AlertTriangle size={16} />}
-                disabled={!canReturnPayment}
-                onClick={() => setReturnDialogOpen(true)}
-              >
-                退回媒介修改
-              </Button>
-              <Button
-                className="payment-execution-submit-action"
-                icon={<Send size={16} />}
-                disabled={!canSubmitPayment}
-                onClick={executePayment}
-              >
-                执行打款
-              </Button>
+              {!isReturned ? (
+                <>
+                  <Button
+                    className="payment-execution-return-action"
+                    variant="danger"
+                    icon={<AlertTriangle size={16} />}
+                    disabled={!canReturnPayment}
+                    onClick={() => setReturnDialogOpen(true)}
+                  >
+                    退回媒介修改
+                  </Button>
+                  <Button
+                    className="payment-execution-submit-action"
+                    icon={<Send size={16} />}
+                    disabled={!canSubmitPayment}
+                    onClick={executePayment}
+                  >
+                    执行打款
+                  </Button>
+                </>
+              ) : null}
             </div>
           </div>
         )}
@@ -149,7 +176,7 @@ export function PaymentExecutionWorkspace({
                   <p>{project.cooperationProjectName}</p>
                 </div>
               </div>
-              <span className="payment-execution-status"><i />待打款</span>
+              <span className={`payment-execution-status${isReturned ? ' is-returned' : ''}`}><i />{isReturned ? '已退回' : '待打款'}</span>
             </header>
 
             <div className="payment-execution-metrics" aria-label="请款项目概览">
@@ -171,6 +198,21 @@ export function PaymentExecutionWorkspace({
               <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
               <div className="is-wide"><dt>请款事由</dt><dd>{requestReason}</dd></div>
             </dl>
+            {isReturned ? (
+              <div className="payment-execution-failure-summary" role="alert">
+                <AlertTriangle size={20} />
+                <div>
+                  <span>失败原因</span>
+                  <strong>{returnedReason}</strong>
+                  <small>
+                    {returnDetails
+                      ? `${returnDetails.stageLabel} · ${returnDetails.actorName} · 第 ${returnDetails.round} 轮`
+                      : '付款工作台退回'}
+                    {returnedAt ? ` · ${formatDateTime(returnedAt)}` : ''}
+                  </small>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="payment-execution-payees" aria-labelledby="payment-execution-payees-title">
@@ -187,8 +229,9 @@ export function PaymentExecutionWorkspace({
             <div className="payment-execution-payee-list">
               {project.payouts.map((payout, index) => {
                 const informationValidated = isPayoutPaymentInformationValidated(payout);
+                const failureReason = payoutFailureReason(payout, requestReturnReason);
                 return (
-                  <article className="payment-execution-payee" key={payout.id}>
+                  <article className={`payment-execution-payee${isReturned ? ' is-returned' : ''}`} key={payout.id}>
                     <header>
                       <span className="payment-execution-payee-avatar" style={{ '--payee-accent': payout.accent } as CSSProperties}>
                         {payout.initials}
@@ -197,16 +240,18 @@ export function PaymentExecutionWorkspace({
                         <strong>{payout.creator}</strong>
                         <small>{payout.invoice} · {project.paymentOrder} · <PaymentProviderBadge compact provider={payout.provider} /></small>
                       </div>
-                      <span className={`payment-execution-payee-status ${informationValidated ? 'is-valid' : 'is-pending'}`}>
-                        {informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-                        {informationValidated ? '付款信息校验成功' : '付款信息待校验'}
+                      <span className={`payment-execution-payee-status ${isReturned ? 'is-error' : informationValidated ? 'is-valid' : 'is-pending'}`}>
+                        {isReturned || !informationValidated ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+                        {isReturned ? '请款信息已退回' : informationValidated ? '付款信息校验成功' : '付款信息待校验'}
                       </span>
                     </header>
-                    <div className={`payment-execution-account-note ${informationValidated ? 'is-valid' : 'is-pending'}`}>
-                      {informationValidated ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-                      <span>{informationValidated
-                        ? '付款信息校验成功，收款账户与付款资料均已通过审核'
-                        : '付款信息尚未完成校验，暂不能执行打款'}</span>
+                    <div className={`payment-execution-account-note ${isReturned ? 'is-error' : informationValidated ? 'is-valid' : 'is-pending'}`}>
+                      {isReturned || !informationValidated ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+                      <span>{isReturned
+                        ? <><b>失败原因：</b>{failureReason}</>
+                        : informationValidated
+                          ? '付款信息校验成功，收款账户与付款资料均已通过审核'
+                          : '付款信息尚未完成校验，暂不能执行打款'}</span>
                     </div>
                     <dl>
                       <div className="is-account"><dt>收款账户</dt><dd>{payout.account}<small>{transferMethodLabel(payout)}</small></dd></div>
@@ -235,15 +280,24 @@ export function PaymentExecutionWorkspace({
                 <span className="payment-execution-section-icon"><ShieldCheck size={18} /></span>
                 <div>
                   <h2 id="payment-execution-approval-title">当前审批流</h2>
-                  <p>第 {request.approval?.round ?? 1} 轮 · 财务审批已完成</p>
+                  <p>第 {request.approval?.round ?? 1} 轮 · {isReturned ? '请款已退回媒介修改' : '财务审批已完成'}</p>
                 </div>
               </div>
-              <span><CalendarClock size={14} />待执行</span>
+              <span className={isReturned ? 'is-returned' : ''}><CalendarClock size={14} />{isReturned ? '已退回' : '待执行'}</span>
             </header>
             <div className="payment-execution-approval-scroll" tabIndex={0} aria-label="付款审批流程">
+              {isReturned ? (
+                <div className="payment-execution-approval-return-note">
+                  <AlertTriangle size={17} />
+                  <div>
+                    <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
+                    <p>{returnedReason}</p>
+                  </div>
+                </div>
+              ) : null}
               <ApprovalTimeline
                 request={request}
-                paymentReady
+                paymentReady={!isReturned}
                 paymentProvider={paymentProvider}
               />
             </div>
@@ -251,7 +305,7 @@ export function PaymentExecutionWorkspace({
         </div>
       </Modal>
 
-      {returnDialogOpen ? (
+      {!isReturned && returnDialogOpen ? (
         <Modal
           title="退回媒介修改"
           width="580px"
