@@ -1,4 +1,5 @@
 import type { ContractRecord } from './contracts';
+import { SYSTEM_USERS } from './data';
 import {
   paymentListEffectiveAccount,
   paymentListItemValue,
@@ -394,127 +395,62 @@ export const createInitialPaymentBatches = ({
   paymentLists,
   contracts,
 }: PaymentBatchSourceData): PaymentBatchRecord[] => {
-  const payoutForProvider = (
-    payoutIds: readonly string[],
-    provider: PaymentBatchRecord['provider'],
-  ) => {
-    const payout = payoutIds.reduce<Payout | undefined>(
-      (matched, payoutId) => matched ?? payouts.find((candidate) => candidate.id === payoutId),
-      undefined,
-    );
-    return payout ? { ...payout, provider } : undefined;
+  const batchItemLimit = 5;
+  const financePayers = SYSTEM_USERS
+    .filter((user) => user.roleKey === 'finance' && !user.isDemo)
+    .map((user) => user.name);
+  const fundingAccountIds: Record<PaymentBatchRecord['provider'], string> = {
+    Airwallex: 'mock-awx-operating',
+    PayPal: 'mock-paypal-balance',
+    PayMax: 'mock-paymax-operating',
   };
-  const financeAirwallex = payouts.find((payout) => (
-    payout.id.startsWith('payout_fixture_association_301164') && payout.provider === 'Airwallex'
-  ));
-  const financePayPal = payouts.find((payout) => (
-    payout.id.startsWith('payout_fixture_association_301164') && payout.provider === 'PayPal'
-  )) ?? payoutForProvider(['payout_fixture_301164_02'], 'PayPal');
-  const returnedPayPal = payouts.find((payout) => payout.id === 'pay-020');
-  const paidAirwallex = payoutForProvider(['payout_fixture_301164_04', 'pay-005'], 'Airwallex');
-  const paidPayMax = payoutForProvider(['payout_fixture_301164_05', 'pay-006'], 'PayMax');
-  const approvedPayPal = payoutForProvider(['payout_fixture_02_01', 'pay-011'], 'PayPal');
-  const approvedPayMax = payoutForProvider(['payout_fixture_06_01', 'pay-002'], 'PayMax');
-  const shared = { requests, generatedInvoices, paymentLists, contracts };
-  const seeds = [
-    {
-      payout: financeAirwallex,
-      paymentBatchId: 'payment_batch_fixture_001' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260716-007',
-      provider: 'Airwallex' as const,
-      fundingAccountId: 'mock-awx-operating',
-      payer: '奚文慧',
-      paidAt: '2026-07-16T16:42',
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
-      itemStatus: '已付款' as const,
-    },
-    {
-      payout: paidAirwallex,
-      paymentBatchId: 'payment_batch_fixture_004' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260716-004',
-      provider: 'Airwallex' as const,
-      fundingAccountId: 'mock-awx-reserve',
-      payer: '周倩',
-      paidAt: '2026-07-16T14:32',
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
-      itemStatus: '已付款' as const,
-    },
-    {
-      payout: financePayPal,
-      paymentBatchId: 'payment_batch_fixture_002' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260715-006',
-      provider: 'PayPal' as const,
-      fundingAccountId: 'mock-paypal-balance',
-      payer: '李梦',
-      paidAt: '2026-07-15T11:20',
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
-      itemStatus: '已付款' as const,
-    },
-    {
-      payout: paidPayMax,
-      paymentBatchId: 'payment_batch_fixture_005' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260715-003',
-      provider: 'PayMax' as const,
-      fundingAccountId: 'mock-paymax-operating',
-      payer: '赵敏',
-      paidAt: '2026-07-15T09:18',
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
-      itemStatus: '已付款' as const,
-    },
-    {
-      payout: approvedPayPal,
-      paymentBatchId: 'payment_batch_fixture_006' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260714-002',
-      provider: 'PayPal' as const,
-      fundingAccountId: 'mock-paypal-balance',
-      payer: '孙悦',
-      paidAt: '2026-07-14T15:40',
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
-      itemStatus: '已付款' as const,
-    },
-    {
-      payout: approvedPayMax,
-      paymentBatchId: 'payment_batch_fixture_007' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260713-001',
-      provider: 'PayMax' as const,
-      fundingAccountId: 'mock-paymax-operating',
-      payer: '郑凯',
-      paidAt: '2026-07-13T10:25',
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'] as const,
-      itemStatus: '已付款' as const,
-    },
-    {
-      payout: returnedPayPal,
-      paymentBatchId: 'payment_batch_fixture_003' as PaymentBatchId,
-      paymentBatchCode: 'BAT-20260712-005',
-      provider: 'PayPal' as const,
-      fundingAccountId: 'mock-paypal-balance',
-      payer: '吴雪霓',
-      paidAt: '2026-07-12T09:05',
-      status: '部分失败',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'PARTIALLY_FAILED'] as const,
-      itemStatus: '付款失败' as const,
-    },
-  ];
+  const eligibleGroups = requests
+    .filter((request) => request.lifecycle === 'COMPLETED')
+    .flatMap((request) => {
+      const invoiceIds = requestInvoiceIds(request);
+      const sourcePayoutIds = new Set(generatedInvoices
+        .filter((invoice) => invoiceIds.has(invoice.invoiceId))
+        .map((invoice) => invoice.sourcePayoutId));
+      const groupedPayouts = payouts.reduce<Map<PaymentBatchRecord['provider'], Payout[]>>(
+        (groups, payout) => {
+          if (payout.status !== '已付款' || !sourcePayoutIds.has(payout.id)) return groups;
+          groups.set(payout.provider, [...(groups.get(payout.provider) ?? []), payout]);
+          return groups;
+        },
+        new Map(),
+      );
+      return [...groupedPayouts.entries()].flatMap(([provider, grouped]) => {
+        const chunks: Array<{ provider: PaymentBatchRecord['provider']; payouts: Payout[] }> = [];
+        for (let index = 0; index < grouped.length; index += batchItemLimit) {
+          chunks.push({ provider, payouts: grouped.slice(index, index + batchItemLimit) });
+        }
+        return chunks;
+      });
+    });
 
-  return seeds.flatMap(({ payout, ...seed }) => {
-    if (!payout) return [];
-    try {
-      return [createPaymentBatchRecord({
-        ...shared,
-        ...seed,
-        payouts: [payout],
-        sourceCurrency: payout.currency,
-      })];
-    } catch {
-      // Partial demo fixtures must not prevent the rest of the prototype from opening.
-      return [];
-    }
+  return eligibleGroups.map(({ provider, payouts: groupedPayouts }, index) => {
+    const ordinal = eligibleGroups.length - index;
+    const ordinalLabel = String(ordinal).padStart(3, '0');
+    const totalMinutes = (16 * 60) - (index * 10);
+    const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+    const minutes = String(totalMinutes % 60).padStart(2, '0');
+    const paidAt = `2026-08-05T${hours}:${minutes}`;
+    return createPaymentBatchRecord({
+      requests,
+      generatedInvoices,
+      paymentLists,
+      contracts,
+      payouts: groupedPayouts.map((payout) => ({ ...payout, paidAt })),
+      paymentBatchId: `payment_batch_fixture_paid_${ordinalLabel}` as PaymentBatchId,
+      paymentBatchCode: `BAT-20260805-${ordinalLabel}`,
+      provider,
+      fundingAccountId: fundingAccountIds[provider],
+      sourceCurrency: groupedPayouts[0].currency,
+      payer: financePayers[index % financePayers.length],
+      paidAt,
+      status: '已完成',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
+      itemStatus: '已付款',
+    });
   });
 };

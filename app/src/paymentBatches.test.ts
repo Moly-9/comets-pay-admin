@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContractRecord } from './contracts';
+import { INITIAL_PAYOUTS } from './data';
 import type {
   ContractId,
   CooperationProjectId,
@@ -17,6 +18,7 @@ import {
   paymentBatchAmountLabel,
 } from './paymentBatches';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
+import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import type { DocumentPayoutSnapshot, GeneratedInvoiceRecord, Payout } from './types';
 
 const paymentSnapshot = (accountName: string): DocumentPayoutSnapshot => ({
@@ -280,51 +282,65 @@ describe('payment batch snapshots', () => {
     expect(maskPaymentAccount('')).toBe('待补充');
   });
 
-  it('derives every historical row count and amount from its item snapshots', () => {
-    const projectId = 'project_history_one' as CooperationProjectId;
-    const contractId = 'contract_history_one' as ContractId;
-    const payoutSpecs: Array<[string, Payout['provider']]> = [
-      ['payout_fixture_association_301164_01', 'Airwallex'],
-      ['payout_fixture_301164_02', 'PayPal'],
-      ['payout_fixture_301164_04', 'Airwallex'],
-      ['payout_fixture_301164_05', 'PayMax'],
-      ['payout_fixture_02_01', 'PayPal'],
-      ['payout_fixture_06_01', 'PayMax'],
-      ['pay-020', 'PayPal'],
-    ];
-    const payouts = payoutSpecs.map(([payoutId, provider], index) => (
-      createPayout(payoutId, projectId, `INV-HISTORY-${index + 1}`, provider)
-    ));
-    const invoices = payouts.map((payout, index) => createInvoice(
-      payout,
-      `invoice_history_${index + 1}` as InvoiceId,
-      contractId,
-    ));
-    const request = createRequest('HISTORY-001', projectId, invoices.map((invoice) => invoice.invoiceId));
+  it('builds completed request payouts into stable single-provider batches of at most five items', () => {
+    const resources = INITIAL_COMPLETE_REQUEST_RESOURCES;
+    const appPayouts = [...new Map([
+      ...INITIAL_PAYOUTS,
+      ...resources.payouts,
+    ].map((payout) => [payout.id, payout])).values()];
     const records = createInitialPaymentBatches({
-      payouts,
-      requests: [request],
-      generatedInvoices: invoices,
-      paymentLists: [],
-      contracts: [createContract(contractId)],
+      payouts: appPayouts,
+      requests: resources.requests,
+      generatedInvoices: resources.invoices,
+      paymentLists: resources.paymentLists,
+      contracts: resources.contracts,
     });
+    const completedRequests = resources.requests.filter((request) => request.lifecycle === 'COMPLETED');
+    const completedInvoiceIds = new Set(completedRequests.flatMap((request) => request.invoiceIds ?? []));
+    const expectedPayoutIds = resources.invoices
+      .filter((invoice) => completedInvoiceIds.has(invoice.invoiceId))
+      .map((invoice) => invoice.sourcePayoutId)
+      .sort();
+    const actualPayoutIds = records.flatMap((record) => record.items.map((item) => item.payoutId));
 
-    expect(records.map((record) => record.paymentBatchCode)).toEqual([
-      'BAT-20260716-007',
-      'BAT-20260716-004',
-      'BAT-20260715-006',
-      'BAT-20260715-003',
-      'BAT-20260714-002',
-      'BAT-20260713-001',
-      'BAT-20260712-005',
-    ]);
-    expect(new Set(records.map((record) => record.provider))).toEqual(
-      new Set(['Airwallex', 'PayPal', 'PayMax']),
+    expect(records).toHaveLength(13);
+    expect(records.map((record) => record.paymentBatchCode)).toEqual(
+      Array.from({ length: 13 }, (_, index) => `BAT-20260805-${String(13 - index).padStart(3, '0')}`),
     );
+    expect(records.map((record) => record.items.length)).toEqual([5, 5, 4, 5, 5, 3, 5, 5, 5, 5, 5, 5, 3]);
+    expect(records.map((record) => record.request.requestCode)).toEqual([
+      'REQ-202607-000007',
+      'REQ-202607-000007',
+      'REQ-202607-000007',
+      'REQ-202607-000009',
+      'REQ-202607-000009',
+      'REQ-202607-000009',
+      'REQ-202607-000011',
+      'REQ-202607-000012',
+      'REQ-202607-000012',
+      'REQ-202607-000017',
+      'REQ-202607-000017',
+      'REQ-202607-000018',
+      'REQ-202607-000018',
+    ]);
+    expect(actualPayoutIds).toHaveLength(60);
+    expect(new Set(actualPayoutIds).size).toBe(60);
+    expect([...actualPayoutIds].sort()).toEqual(expectedPayoutIds);
+    expect(new Set(records.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
+    expect(new Set(records.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
+
     records.forEach((record) => {
-      expect(record.items).toHaveLength(1);
-      expect(paymentBatchAmountLabel(record)).toBe(`USD ${record.items[0].amount.toLocaleString('en-US')}`);
-      expect(new Set(record.items.map(() => record.request.paymentRequestProjectId)).size).toBe(1);
+      expect(record.items.length).toBeLessThanOrEqual(5);
+      expect(record.status).toBe('已完成');
+      expect(record.request.lifecycle).toBe('COMPLETED');
+      expect(new Set(record.items.map((item) => item.provider))).toEqual(new Set([record.provider]));
+      expect(record.items.every((item) => item.paymentStatus === '已付款')).toBe(true);
+      expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
+      expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
+      expect(record.items.every((item) => item.associationIssues.length === 0)).toBe(true);
+      expect(paymentBatchAmountLabel(record)).toBe(
+        `USD ${record.items.reduce((total, item) => total + item.amount, 0).toLocaleString('en-US')}`,
+      );
     });
   });
 });
