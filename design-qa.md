@@ -171,6 +171,62 @@ final result: passed
 
 ---
 
+# Transaction Paid Total Card Design QA
+
+## Evidence
+
+- Transaction reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-193cfc59-10c8-418b-a9ec-b13e9974d006.png` (1483 x 718 px).
+- Payment-workbench card reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e9ee8868-4f34-4329-b71b-e283f21f2d44.png` (1544 x 484 px).
+- Intended implementation viewport: 1483 x 718 CSS px at device scale factor 1, followed by a 390 px responsive pass.
+- Implementation screenshot: unavailable because the in-app browser's local-URL policy rejected the running `127.0.0.1` preview.
+
+## State
+
+The target is the signed-in `交易记录` page with the complete paid-payout fixture set. The left overview card must use USD as the primary amount, place EUR, GBP, HKD, and SGD below the divider, preserve the all-currency paid count, and expose the same currency-detail action as the payment workbench.
+
+## Findings
+
+- [P0] Browser-rendered implementation evidence is unavailable. The local server returns HTTP 200, 54 test files / 345 tests pass, and the production build succeeds, but visual comparison, responsive rendering, interaction behavior, and console state cannot pass without a rendered implementation capture.
+- The transaction card and both payment-workbench cards now render through one shared component, so icon sizing, amount hierarchy, divider, secondary-currency rows, detail action, and modal remain structurally identical.
+- USD is guaranteed as the primary row even when no USD payout exists. Secondary currencies use the established USD, EUR, GBP, HKD, SGD ordering and retain their per-currency counts.
+- The transaction summary label continues to use the total number of paid transactions rather than the USD-only count.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: the shared component retains the existing Noto Sans SC stack, 25 px primary amount, compact secondary values, tabular numbers, and zero added letter spacing.
+- Spacing and layout rhythm: the existing two-column summary surface, 48 px icon slot, 18 px desktop gap, divider, two-column secondary grid, and single-column narrow layout are reused without new CSS.
+- Colors and visual tokens: the transaction card keeps its peach surface while adopting the payment-workbench content hierarchy; no new color token or effect was introduced.
+- Image and icon fidelity: WalletCards, ChevronRight, and Diamond come from the existing Lucide icon library. Currency flags use the existing repository SVG assets.
+- Copy and content: `已付款总额` remains the transaction label; USD is primary and EUR, GBP, HKD, SGD are secondary.
+
+## Focused Comparison
+
+Blocked. Both source images were opened and measured, but the browser policy prevented the matching implementation capture and combined comparison input.
+
+## Interaction Verification
+
+- Static rendering verifies USD appears before the secondary-currency group, all four secondary currencies render below it, the total paid count is retained, and the detail action is labeled for assistive technology.
+- Existing workbench tests continue to verify both card tones, currency ordering, detail actions, and the zero-USD fallback.
+- Browser checks for the detail modal, 1483 px composition, 390 px reflow, overflow, and console errors remain blocked by local-URL access policy.
+
+## Comparison History
+
+1. The two supplied source images were opened and measured.
+2. The payment-workbench card was extracted into a shared component and reused by `交易记录` with its original paid-total label and total count.
+3. Focused tests and the production build passed.
+4. The local preview remained healthy, but browser capture was rejected before the implementation state could be opened.
+
+## Implementation Checklist
+
+- Open `http://127.0.0.1:5173/`, sign in, and navigate to `交易记录`.
+- Capture the page at 1483 x 718 and 390 px wide.
+- Open and close `已付款币种详情`, then check keyboard focus and console output.
+- Compare the reference and implementation images together and resolve any remaining P0/P1/P2 difference.
+
+final result: blocked
+
+---
+
 # Finance Review Approval Scroll And Account Routing QA
 
 ## Evidence

@@ -2,8 +2,61 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
-import type { GeneratedInvoiceRecord } from '../types';
-import { InvoicePage, INITIAL_CREATORS } from './OperationalPages';
+import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
+import { InvoicePage, INITIAL_CREATORS, TransactionsPage } from './OperationalPages';
+
+const transactionPayout = (
+  currency: InvoiceCurrency,
+  amount: number,
+  index: number,
+  status: Payout['status'] = '已付款',
+): Payout => ({
+  id: `transaction-${index}`,
+  creator: `Creator ${index}`,
+  handle: `@creator-${index}`,
+  initials: 'CR',
+  projectId: `project-${index}`,
+  project: `Project ${index}`,
+  contract: `CON-${index}`,
+  invoice: `INV-${index}`,
+  provider: 'Airwallex',
+  currency,
+  amount,
+  account: `0000000${index}`,
+  status,
+  invoiceReviewStatus: '已通过',
+  accent: '#8b5cf6',
+});
+
+describe('TransactionsPage currency overview', () => {
+  it('uses USD as the primary paid total and lists secondary currencies below it', () => {
+    const html = renderToStaticMarkup(
+      <TransactionsPage
+        payouts={[
+          transactionPayout('USD', 100, 1),
+          transactionPayout('USD', 200, 2),
+          transactionPayout('EUR', 300, 3),
+          transactionPayout('GBP', 400, 4),
+          transactionPayout('HKD', 500, 5),
+          transactionPayout('SGD', 600, 6),
+          transactionPayout('USD', 700, 7, '付款失败'),
+        ]}
+        onSelectPayout={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('aria-label="已付款总额"');
+    expect(html).toContain('summary-card summary-card-peach payment-workbench-summary-card has-details');
+    expect(html).toContain('<strong>USD 300</strong><span>已付款总额 · 6 笔</span>');
+    expect(html).toContain('aria-label="已付款总额其他币种"');
+    expect(html).toContain('aria-label="查看已付款币种详情"');
+    expect(html).toContain('>EUR<');
+    expect(html).toContain('>GBP<');
+    expect(html).toContain('>HKD<');
+    expect(html).toContain('>SGD<');
+    expect(html.indexOf('USD 300')).toBeLessThan(html.indexOf('已付款总额其他币种'));
+  });
+});
 
 describe('InvoicePage OA states', () => {
   it('derives OA presentation from the linked request without an approval tab', () => {

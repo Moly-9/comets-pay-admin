@@ -1,7 +1,8 @@
-import { CalendarDays, ChevronRight, Plus, Search, WalletCards } from 'lucide-react';
+import { CalendarDays, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
+import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
@@ -28,110 +29,7 @@ const CURRENCY_OVERVIEW_META: Record<CurrencyOverviewId, {
 
 const formatOverviewAmount = (amount: number) => amount.toLocaleString('en-US');
 
-export const CURRENCY_FLAG_PATHS: Record<PaymentCurrencyItem['currency'], string> = {
-  USD: '/currency-flags/us.svg',
-  EUR: '/currency-flags/eu.svg',
-  GBP: '/currency-flags/gb.svg',
-  HKD: '/currency-flags/hk.svg',
-  SGD: '/currency-flags/sg.svg',
-};
-
-function CurrencyOverviewCard({
-  id,
-  items,
-  onViewDetails,
-}: {
-  id: CurrencyOverviewId;
-  items: PaymentCurrencyItem[];
-  onViewDetails: () => void;
-}) {
-  const primary = items.find((item) => item.currency === 'USD')
-    ?? { currency: 'USD', amount: 0, count: 0 };
-  const secondary = items.filter((item) => item.currency !== 'USD');
-  const hasDetails = items.length > 4;
-  const visibleSecondary = secondary.slice(0, 4);
-  const meta = CURRENCY_OVERVIEW_META[id];
-
-  return (
-    <article
-      className={`summary-card ${id === 'pending' ? 'summary-card-peach' : 'summary-card-lilac'} payment-workbench-summary-card${hasDetails ? ' has-details' : ''}`}
-      aria-label={meta.summaryLabel}
-    >
-      <span className={`summary-illustration ${id === 'pending' ? 'summary-coins' : ''}`} aria-hidden="true">
-        {id === 'pending' ? '◆' : <WalletCards size={27} />}
-      </span>
-      <div className="payment-summary-content">
-        <div className="payment-summary-primary">
-          <strong>USD {formatOverviewAmount(primary.amount)}</strong>
-          <span>{meta.summaryLabel} · {primary.count} 笔</span>
-        </div>
-      </div>
-      {hasDetails ? (
-        <button
-          className="payment-summary-details-button"
-          type="button"
-          aria-label={`查看${meta.detailTitle}`}
-          title={`查看${meta.detailTitle}`}
-          onClick={onViewDetails}
-        >
-          <ChevronRight size={19} aria-hidden="true" />
-        </button>
-      ) : null}
-      {visibleSecondary.length ? (
-        <div className="payment-summary-secondary" aria-label={`${meta.summaryLabel}其他币种`}>
-          {visibleSecondary.map((item) => (
-            <div className="payment-summary-secondary-row" key={item.currency}>
-              <span>{item.currency}</span>
-              <span>{formatOverviewAmount(item.amount)}</span>
-              <small>{item.count} 笔</small>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function CurrencyOverviewModal({
-  id,
-  items,
-  onClose,
-}: {
-  id: CurrencyOverviewId;
-  items: PaymentCurrencyItem[];
-  onClose: () => void;
-}) {
-  return (
-    <Modal
-      title={CURRENCY_OVERVIEW_META[id].detailTitle}
-      width="460px"
-      className="payment-currency-detail-modal"
-      onClose={onClose}
-      footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
-    >
-      <ul className="payment-currency-detail-list" aria-label="币种金额和付款笔数">
-        {items.map((item) => (
-          <li className="payment-currency-detail-row" key={item.currency}>
-            <img
-              className="payment-currency-flag"
-              src={CURRENCY_FLAG_PATHS[item.currency]}
-              alt=""
-              width="24"
-              height="16"
-            />
-            <span className="payment-currency-detail-meta">
-              <strong>{item.currency}</strong>
-              <small>{item.count} 笔</small>
-            </span>
-            <strong className="payment-currency-detail-amount">
-              {formatOverviewAmount(item.amount)} <small>{item.currency}</small>
-            </strong>
-          </li>
-        ))}
-      </ul>
-    </Modal>
-  );
-}
+export { CURRENCY_FLAG_PATHS } from '../components/PaymentCurrencySummaryCard';
 
 const TAB_LABELS: Array<{ id: WorkbenchTab; label: string }> = [
   { id: 'review', label: '待审核' },
@@ -605,7 +503,6 @@ export function PaymentWorkbenchPage({
   }));
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [detailOverview, setDetailOverview] = useState<CurrencyOverviewId | null>(null);
 
   const currencyOverviews = useMemo(
     () => getPaymentCurrencyOverviews(payouts, currentDate),
@@ -706,15 +603,19 @@ export function PaymentWorkbenchPage({
       ) : null}
 
       <section className="summary-surface payment-workbench-summary" aria-label="付款概览">
-        <CurrencyOverviewCard
-          id="pending"
+        <PaymentCurrencySummaryCard
           items={currencyOverviews.pending}
-          onViewDetails={() => setDetailOverview('pending')}
+          summaryLabel={CURRENCY_OVERVIEW_META.pending.summaryLabel}
+          detailTitle={CURRENCY_OVERVIEW_META.pending.detailTitle}
+          tone="peach"
+          icon="pending"
         />
-        <CurrencyOverviewCard
-          id="paid"
+        <PaymentCurrencySummaryCard
           items={currencyOverviews.paid}
-          onViewDetails={() => setDetailOverview('paid')}
+          summaryLabel={CURRENCY_OVERVIEW_META.paid.summaryLabel}
+          detailTitle={CURRENCY_OVERVIEW_META.paid.detailTitle}
+          tone="lilac"
+          icon="paid"
         />
       </section>
 
@@ -803,14 +704,6 @@ export function PaymentWorkbenchPage({
               : `当前没有${activeTabLabel}付款项目`}
         />
       </section>
-
-      {detailOverview ? (
-        <CurrencyOverviewModal
-          id={detailOverview}
-          items={currencyOverviews[detailOverview]}
-          onClose={() => setDetailOverview(null)}
-        />
-      ) : null}
     </div>
   );
 }

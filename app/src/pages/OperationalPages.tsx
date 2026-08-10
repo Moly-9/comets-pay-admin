@@ -41,6 +41,7 @@ import {
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
+import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
@@ -108,6 +109,7 @@ import {
   requestProjectStatusFor,
 } from '../paymentRequestProjects';
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
+import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
   paymentBatchAmountLabel,
@@ -3345,16 +3347,41 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
   ));
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
-  const paidTotals = paid.reduce<Record<string, number>>((totals, payout) => ({
-    ...totals,
-    [payout.currency]: (totals[payout.currency] ?? 0) + payout.amount,
-  }), {});
-  const paidAmount = Object.entries(paidTotals)
-    .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
-    .join(' · ') || 'USD 0';
+  const paidCurrencies = aggregatePayoutCurrencies(paid, true);
   const settled = paid.length + failed.length;
   const successRate = settled ? `${((paid.length / settled) * 100).toFixed(1)}%` : '—';
-  return <div className="page-stack"><PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" /><section className="summary-surface"><article className="summary-card summary-card-peach"><span className="summary-illustration"><WalletCards size={26} /></span><div><strong>{paidAmount}</strong><span>已付款总额 · {paid.length} 笔</span></div></article><article className="summary-card summary-card-lilac"><span className="summary-illustration"><Check size={26} /></span><div><strong>{successRate}</strong><span>渠道付款成功率 · {failed.length} 笔失败</span></div></article></section><section className="content-card"><div className="tabs-row"><button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button><button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button><button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button><button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('failed')}>付款失败</button></div><div className="content-toolbar compact-toolbar"><div className="date-range-static">2026-07-01 <span>—</span> 2026-08-31</div><Button variant="secondary" icon={<Download size={16} />}>导出流水</Button></div><PayoutTable payouts={visible} onSelect={onSelectPayout} /></section></div>;
+  return (
+    <div className="page-stack">
+      <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" />
+      <section className="summary-surface" aria-label="交易概览">
+        <PaymentCurrencySummaryCard
+          items={paidCurrencies}
+          summaryLabel="已付款总额"
+          detailTitle="已付款币种详情"
+          summaryCount={paid.length}
+          tone="peach"
+          icon="paid"
+        />
+        <article className="summary-card summary-card-lilac">
+          <span className="summary-illustration"><Check size={26} /></span>
+          <div><strong>{successRate}</strong><span>渠道付款成功率 · {failed.length} 笔失败</span></div>
+        </article>
+      </section>
+      <section className="content-card">
+        <div className="tabs-row">
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button>
+          <button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('failed')}>付款失败</button>
+        </div>
+        <div className="content-toolbar compact-toolbar">
+          <div className="date-range-static">2026-07-01 <span>—</span> 2026-08-31</div>
+          <Button variant="secondary" icon={<Download size={16} />}>导出流水</Button>
+        </div>
+        <PayoutTable payouts={visible} onSelect={onSelectPayout} />
+      </section>
+    </div>
+  );
 }
 
 const ORGANIZATION_COUNTRY_OPTIONS = [
