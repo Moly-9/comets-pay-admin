@@ -1,0 +1,213 @@
+.payment-project-search {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.payment-project-search input {
+  width: 100%;
+  min-width: 0;
+}
+
+.payment-project-search:focus-within {
+  border-color: #ff9e87;
+  box-shadow: 0 0 0 3px rgba(255, 157, 135, 0.13);
+}
+
+.payment-workbench-page .filter-row {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.3fr) minmax(180px, 1fr) 170px;
+}
+
+.payment-workbench-page .filter-result {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-left: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.payment-workbench-page .dashboard-provider-select.custom-select-toolbar {
+  width: 100%;
+}
+
+.payment-project-summary-bar {
+  min-height: 58px;
+  gap: 18px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.payment-project-summary-bar.has-selection {
+  border-color: #f0d8d1;
+  background: #fff8f5;
+}
+
+.table-group-title .payment-project-summary-title {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 2px;
+  font-weight: 400;
+}
+
+.payment-project-summary-title > strong {
+  color: #282b32;
+  font-size: 12.5px;
+}
+
+.payment-project-summary-title > small {
+  color: #858b97;
+  font-size: 10.5px;
+  font-weight: 450;
+}
+
+.table-group-title .payment-project-summary-metrics {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+  color: #737986;
+  font-size: 11px;
+  font-weight: 450;
+}
+
+.payment-project-summary-metrics > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.payment-project-summary-metrics > span + span {
+  border-left: 1px solid #dfe2e8;
+  padding-left: 18px;
+}
+
+.table-group-title .payment-project-summary-metrics strong {
+  color: #30343c;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-project-table {
+  min-width: 1470px;
+}
+
+.payment-project-table .payment-project-select-cell {
+  width: 50px;
+  padding-right: 5px;
+  padding-left: 5px;
+  text-align: center;
+}
+
+.payment-project-select-control {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.payment-project-select-control:hover {
+  background: rgba(238, 115, 88, 0.08);
+}
+
+.payment-project-select-control:has(input:focus-visible) {
+  outline: 2px solid rgba(238, 115, 88, 0.4);
+  outline-offset: -2px;
+}
+
+.payment-project-select-control input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #e8755d;
+  cursor: pointer;
+}
+
+.payment-project-select-control input:disabled {
+  cursor: not-allowed;
+}
+
+.payment-project-table tbody tr.is-selected td,
+.payment-project-table tbody tr.is-selected:hover td {
+  background: #fff8f5;
+}
+
+.payment-project-channel {
+  width: 132px;
+  max-width: 156px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (max-width: 1040px) {
+  .payment-workbench-page .filter-row {
+    grid-template-columns: minmax(280px, 1.3fr) minmax(180px, 1fr);
+  }
+
+  .payment-workbench-page .dashboard-provider-select.custom-select-toolbar {
+    grid-column: 1;
+    width: 170px;
+  }
+
+  .payment-workbench-page .filter-result {
+    grid-column: 2;
+    align-self: center;
+  }
+}
+
+@media (max-width: 860px) {
+  .payment-workbench-page .filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-project-search {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .payment-workbench-page .dashboard-provider-select.custom-select-toolbar,
+  .payment-workbench-page .filter-result {
+    grid-column: 1;
+    width: 100%;
+  }
+
+  .payment-project-summary-bar {
+    min-height: 72px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .table-group-title .payment-project-summary-metrics {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .table-group-title .payment-project-summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 12px;
+  }
+
+  .payment-project-summary-metrics > span {
+    white-space: normal;
+  }
+
+  .payment-project-summary-metrics > span + span {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .payment-project-summary-metrics > span:last-child {
+    grid-column: 1 / -1;
+  }
+}
