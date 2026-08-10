@@ -236,9 +236,7 @@ export function PaymentBatchDetailPage({
   const totals = paymentBatchAmountLabel({ items: liveItems });
   const statusCounts = paymentBatchStatusCounts({ items: liveItems });
   const completed = liveStatus === '已付款';
-  const liveRequestStatus = liveItems.some((item) => item.paymentStatus === '已退回')
-    ? '部分打款失败'
-    : batch.request.requestStatus;
+  const paymentInformationStatus = liveStatus === '部分失败' ? '部分打款失败' : liveStatus;
   const failureDialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
 
   useEffect(() => {
@@ -269,7 +267,7 @@ export function PaymentBatchDetailPage({
         <div><span>付款渠道</span><strong>{batch.provider}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></div>
         <div><span>付款人 / 时间</span><strong>{batch.payer}</strong><small>{displayTime(batch.paidAt)}</small></div>
         <div><span>处理结果</span><strong>{statusCounts.succeeded} 成功 · {statusCounts.failed} 失败</strong><small>{statusCounts.processing} 笔处理中</small></div>
-        <div><span>资金源币种</span><strong>{batch.sourceCurrency}</strong><small>{batch.paymentBatchId}</small></div>
+        <div><span>资金源币种</span><strong>{batch.sourceCurrency}</strong></div>
       </section>
 
       <section className="payment-batch-detail-section payment-batch-lifecycle-section">
@@ -307,16 +305,16 @@ export function PaymentBatchDetailPage({
 
       <section className="payment-batch-detail-section">
         <header>
-          <div><h2>请款项目 / 所属项目</h2><p>本批次只关联一个请款项目。</p></div>
-          <span className="simple-status"><i />{liveRequestStatus}</span>
+          <div><h2>付款信息</h2><p>本批次只关联一个请款项目。</p></div>
+          <span className="simple-status"><i />{paymentInformationStatus}</span>
         </header>
         <div className="payment-batch-project-heading">
           <span aria-hidden="true"><Building2 size={20} /></span>
           <div><span className="payment-batch-project-name">{batch.request.cooperationProjectName}</span><small>{batch.request.cooperationProjectCode}</small></div>
         </div>
         <dl className="payment-batch-project-grid">
-          <div><dt>请款编号</dt><dd>{batch.request.requestCode}</dd></div>
-          <div><dt>请款金额</dt><dd>{batch.request.amount}</dd></div>
+          <div><dt>付款项目编号</dt><dd>{batch.request.requestCode}</dd></div>
+          <div><dt>付款金额</dt><dd>{batch.request.amount}</dd></div>
           <div><dt>品牌 / 客户</dt><dd>{batch.request.brand}</dd></div>
           <div><dt>项目媒介</dt><dd>{batch.request.media}</dd></div>
           <div><dt>负责 PM</dt><dd>{batch.request.pm}</dd></div>

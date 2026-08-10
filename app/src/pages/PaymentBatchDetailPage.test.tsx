@@ -107,6 +107,32 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('aria-controls="payment-batch-item-payout_detail_test"');
     expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，收起付款详情"');
+    expect(html).toContain('<h2>付款信息</h2>');
+    expect(html).toContain('<dt>付款项目编号</dt>');
+    expect(html).toContain('<dt>付款金额</dt>');
+    expect(html).not.toContain('payment_batch_detail_test');
+    expect(html).not.toContain('请款项目 / 所属项目');
+    expect(html).not.toContain('<dt>请款编号</dt>');
+    expect(html).not.toContain('<dt>请款金额</dt>');
+  });
+
+  it('uses the processing batch status in the payment information section', () => {
+    const processingBatch: PaymentBatchRecord = {
+      ...DETAIL_BATCH,
+      request: { ...DETAIL_BATCH.request, requestStatus: '已付款' },
+      status: '付款处理中',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
+      items: DETAIL_BATCH.items.map((item) => ({
+        ...item,
+        paymentStatus: '付款处理中',
+        failure: undefined,
+      })),
+    };
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage batch={processingBatch} onBack={vi.fn()} />,
+    );
+
+    expect(html).toMatch(/<h2>付款信息<\/h2>[\s\S]*?<span class="simple-status"><i><\/i>付款处理中<\/span>/);
   });
 
   it('exposes the shared return action for a failed item in the batch detail', () => {
