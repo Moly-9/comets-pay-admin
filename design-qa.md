@@ -497,3 +497,35 @@ final result: passed
 3. The final desktop and mobile captures show the corrected 18-row scope, synchronized pagination, stable board dimensions, no page overflow, and no overlapping controls.
 
 final result: passed
+
+---
+
+# Returned Payment Request Correction Design QA
+
+## Evidence
+
+- Desktop viewport: 1280 x 720 in the in-app browser.
+- Mobile viewport: 390 x 844 in the in-app browser.
+- Flow: a finance-stage request was returned from the payment workbench with a required page-level reason, then opened from `我的项目` as the administrator demo user.
+- Verified request: `REQ-202607-000010` with a finance return reason tied to `INV-260727-10-01`.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Returned requests stay visible in `我的项目`; the list shows a compact warning banner, `已退回` status, payment-workbench source, reason summary, and `处理退回` action.
+- The project detail shows the full reason, return stage, actor and role, time, and approval round before the normal request content.
+- Request content and payment-list correction entry points remain separate and reuse the existing edit form and resource manager.
+- The resubmit section lists missing payment-plan fields and keeps the final action disabled until content and resource validation both pass.
+- At 390 px, the return banner, heading actions, reason, metadata, and correction buttons wrap without page-level horizontal overflow; the measured page width and scroll width are equal.
+
+## Interaction Verification
+
+- Payment-workbench return: passed; the project moved from `待审核` to `已退回`.
+- My Projects visibility: passed; the returned request remained in the list with its finance reason.
+- Detail reason and metadata: passed.
+- `修改请款内容`: passed; the existing edit dialog opened with `保存修改` available.
+- Payment-list correction routing: passed; `检查付款清单` scrolls to the existing resource manager.
+- Resubmit validation: passed; missing expected payment time or request reason is reported before submission.
+- Approval resume rule: covered by unit test; a finance return creates round 2 at `PENDING_FINANCE` after resubmission.
+
+final result: passed

@@ -1,8 +1,10 @@
 import {
   AlertTriangle,
+  ArrowDown,
   ArrowLeft,
   CheckCircle2,
   ChevronDown,
+  Clock3,
   Circle,
   Download,
   FileText,
@@ -59,6 +61,7 @@ import {
   type PaymentRequestPaymentChannel,
 } from '../paymentRequestProjects';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
 import {
   ProjectInlineFilterPanel,
   ProjectStatus,
@@ -182,6 +185,20 @@ const formatCreatedAt = (value?: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+};
+
+const formatReturnTime = (value?: string) => {
+  if (!value) return '未记录';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -371,6 +388,10 @@ export function MediaPaymentProjectsPage({
     });
 
   const metrics = paymentRequestListMetrics(visibleRequests);
+  const returnedRequests = visibleRequests
+    .filter((request) => request.lifecycle === 'RETURNED')
+    .map((request) => ({ request, details: requestApprovalReturnDetails(request.approval) }));
+  const financeReturnedCount = returnedRequests.filter(({ details }) => details?.stage === 'FINANCE').length;
   const { visible: filteredRequests, invalidBudgetRange } = filterPaymentRequestList({
     requests: visibleRequests,
     search,
@@ -737,13 +758,17 @@ export function MediaPaymentProjectsPage({
       cooperationProjectIdFor(project) === (selectedRequest.cooperationProjectId ?? selectedRequest.projectId)
     ));
     const links = selectedRequest.creatorLinks ?? [];
-    const submissionIssues = paymentRequestSubmissionIssues({
-      creatorLinks: links,
-      invoices,
-      paymentLists,
-      paymentRequestProjectId: selectedRequest.paymentRequestProjectId,
-      paymentChannel: selectedRequest.paymentChannel,
-    });
+    const submissionIssues = [
+      ...paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor(selectedRequest)),
+      !selectedRequest.generatedDetail?.reason?.trim() ? '请填写请款事由' : '',
+      ...paymentRequestSubmissionIssues({
+        creatorLinks: links,
+        invoices,
+        paymentLists,
+        paymentRequestProjectId: selectedRequest.paymentRequestProjectId,
+        paymentChannel: selectedRequest.paymentChannel,
+      }),
+    ].filter(Boolean);
     const editable = canCreate && ['DRAFT', 'RETURNED'].includes(selectedRequest.lifecycle ?? '');
     const canAddCreators = canCreate && canAddCreatorToPaymentRequest(selectedRequest);
     const canSubmit = editable && submissionIssues.length === 0;
@@ -756,6 +781,14 @@ export function MediaPaymentProjectsPage({
       return invoice ? [invoice] : [];
     });
     const latestPaymentList = requestPaymentLists[0];
+    const isReturned = selectedRequest.lifecycle === 'RETURNED';
+    const returnDetails = requestApprovalReturnDetails(selectedRequest.approval);
+    const returnHeading = returnDetails?.stage === 'FINANCE'
+      ? '付款工作台已退回此请款项目'
+      : `${returnDetails?.stageLabel ?? '审批流'}已退回此请款项目`;
+    const scrollToSection = (id: string) => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
     return (
       <div className="page-stack project-detail-page media-request-detail-page">
         <button className="project-back-button" type="button" onClick={() => {
@@ -766,13 +799,40 @@ export function MediaPaymentProjectsPage({
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
-          actions={<>{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>编辑项目</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></>}
+          actions={<>{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></>}
         />
         <div className="metrics-grid project-detail-metrics">
           <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
           <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
         </div>
+        {isReturned ? (
+          <section className="media-request-return-panel" aria-labelledby="media-request-return-heading">
+            <div className="media-request-return-panel-icon"><AlertTriangle size={21} aria-hidden="true" /></div>
+            <div className="media-request-return-panel-body">
+              <header>
+                <div>
+                  <span>退回待处理</span>
+                  <h2 id="media-request-return-heading">{returnHeading}</h2>
+                  <p>请根据退回意见修改请款内容和付款清单，完成校验后重新提交。</p>
+                </div>
+                {editable ? (
+                  <div className="media-request-return-panel-actions">
+                    <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openEditForm(selectedRequest)}>修改请款内容</Button>
+                    <Button variant="ghost" onClick={() => scrollToSection('media-request-resource-section')}>检查付款清单</Button>
+                  </div>
+                ) : null}
+              </header>
+              <blockquote>{returnDetails?.reason ?? '未记录退回原因'}</blockquote>
+              <dl className="media-request-return-meta">
+                <div><dt>退回节点</dt><dd>{returnDetails?.stageLabel ?? '未记录'}</dd></div>
+                <div><dt>退回人</dt><dd>{returnDetails?.actorName ?? '未记录'}<small>{returnDetails?.actorRole ?? ''}</small></dd></div>
+                <div><dt>退回时间</dt><dd><Clock3 size={14} aria-hidden="true" />{formatReturnTime(returnDetails?.occurredAt)}</dd></div>
+                <div><dt>审批轮次</dt><dd>第 {returnDetails?.round ?? selectedRequest.approval?.round ?? 1} 轮</dd></div>
+              </dl>
+            </div>
+          </section>
+        ) : null}
         <section className="project-detail-card">
           <header className="project-detail-card-header"><div><h2>请款项目信息</h2><p>查看关联项目、付款安排与请款背景。</p></div></header>
           <dl className="project-info-grid">
@@ -787,7 +847,7 @@ export function MediaPaymentProjectsPage({
             <div className="project-info-wide"><dt>请款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
           </dl>
         </section>
-        <section className="project-detail-card project-workflow-card">
+        <section id="media-request-resource-section" className="project-detail-card project-workflow-card">
           <header className="project-detail-card-header"><div><h2>合同、Invoice 与付款清单</h2><p>逐项查看和管理当前请款项目明确关联的资料。</p></div></header>
           <RequestProjectResourceManager
             request={selectedRequest}
@@ -923,8 +983,8 @@ export function MediaPaymentProjectsPage({
             <button className="project-detail-empty project-detail-empty-action" type="button" onClick={() => openEditForm(selectedRequest, true)}><Users size={20} /><span><strong>尚未添加达人</strong><small>点击从达人档案筛选项目达人</small></span></button>
           ) : <div className="project-detail-empty"><Users size={20} /><span><strong>尚未添加达人</strong><small>当前项目为只读状态</small></span></div>}
         </section>
-        <section className="project-detail-card media-request-submit-card">
-          <header className="project-detail-card-header"><div><h2>{editable ? '提交申请' : '申请状态'}</h2><p>{editable ? '提交后进入“请款项目”审批工作台，草稿不会出现在审批列表。' : '该项目已进入“请款项目”审批工作台，当前页面保留关联资料快照。'}</p></div></header>
+        <section id="media-request-submit-section" className="project-detail-card media-request-submit-card">
+          <header className="project-detail-card-header"><div><h2>{editable ? (isReturned ? '重新提交申请' : '提交申请') : '申请状态'}</h2><p>{editable ? (isReturned ? '请先按退回意见完成请款内容和付款清单修正；重新提交后将回到原退回审批节点。' : '提交后进入“请款项目”审批工作台，草稿不会出现在审批列表。') : '该项目已进入“请款项目”审批工作台，当前页面保留关联资料快照。'}</p></div></header>
           {editable ? submissionIssues.length ? (
             <div className="media-request-issue-list"><AlertTriangle size={18} /><div><strong>暂不能提交</strong>{submissionIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div>
           ) : <NoticeBanner>资料与付款账户快照校验通过，可以提交审批。</NoticeBanner> : (
@@ -932,7 +992,7 @@ export function MediaPaymentProjectsPage({
           )}
           {editable ? <div className="media-request-submit-actions">
             <Button variant="secondary" onClick={() => onGeneratePaymentList(selectedRequest)}>生成 / 刷新付款清单</Button>
-            <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>提交申请</Button>
+            <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>
           </div> : null}
         </section>
       </div>
@@ -951,6 +1011,15 @@ export function MediaPaymentProjectsPage({
         <article className="metric-card"><span>待打款</span><strong>{metrics.waitingPayment}</strong><small>已完成全部审批</small></article>
         <article className="metric-card metric-lilac"><span>请款项目总数</span><strong>{metrics.total}</strong><small>已关联真实合作项目</small></article>
       </div>
+      {returnedRequests.length ? (
+        <div className="media-request-return-notice" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div>
+            <strong>{returnedRequests.length} 个请款项目待修改</strong>
+            <p>{financeReturnedCount ? `其中 ${financeReturnedCount} 个由付款工作台退回。` : ''}请在下方列表点击“处理退回”，查看原因并修改后重新提交。</p>
+          </div>
+        </div>
+      ) : null}
       <section className="content-card">
         <ProjectInlineFilterPanel
           search={search}
@@ -971,6 +1040,8 @@ export function MediaPaymentProjectsPage({
             <thead><tr><th>项目编号</th><th>关联项目</th><th>品牌</th><th>负责 PM</th><th>达人</th><th>请款金额</th><th>状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {paginatedRequests.map((request) => {
+                const returnDetails = requestApprovalReturnDetails(request.approval);
+                const isReturned = request.lifecycle === 'RETURNED';
                 const canShowConfirmationExport = (
                   currentUser.roleKey === 'media'
                   && request.media === currentScopeName
@@ -981,17 +1052,26 @@ export function MediaPaymentProjectsPage({
                   : [];
                 const isExporting = exportingRequestId === request.id;
                 return (
-                  <tr key={request.id}>
+                  <tr className={isReturned ? 'media-request-returned-row' : undefined} key={request.id}>
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
                     <td>{request.pm}</td>
                     <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
                     <td>{request.amount}</td>
-                    <td><ProjectStatus status={myProjectStatusFor(request)} /></td>
+                    <td>
+                      <div className="media-request-list-status">
+                        <ProjectStatus status={myProjectStatusFor(request)} />
+                        {isReturned ? (
+                          <small title={returnDetails?.reason}>
+                            {returnDetails?.stage === 'FINANCE' ? '付款工作台' : returnDetails?.stageLabel ?? '审批流'} · {returnDetails?.reason ?? '请查看退回原因'}
+                          </small>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="action-cell">
                       <div className="media-project-row-actions">
-                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button>
+                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
                         {canShowConfirmationExport ? (
                           <>
                             <button

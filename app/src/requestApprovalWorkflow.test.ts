@@ -5,6 +5,7 @@ import {
   canReturnRequestApproval,
   canReviewRequestApproval,
   createRequestApprovalState,
+  requestApprovalReturnDetails,
 } from './requestApprovalWorkflow';
 import { myProjectStatusFor, requestProjectStatusFor } from './paymentRequestProjects';
 
@@ -76,6 +77,35 @@ describe('request approval workflow', () => {
     const nextRound = createRequestApprovalState('2026-08-05T01:00:00.000Z', returned);
     expect(nextRound.status).toBe('PENDING_PROJECT_OWNER');
     expect(nextRound.round).toBe(2);
+  });
+
+  it('exposes the current-round finance return reason for the media project detail', () => {
+    const finance = userFor('finance');
+    const state = {
+      ...createRequestApprovalState('2026-08-04T01:00:00.000Z'),
+      status: 'PENDING_FINANCE' as const,
+    };
+    const returned = applyRequestApprovalAction(
+      state,
+      'RETURN',
+      finance,
+      '收款账户名与 Invoice 不一致',
+      '2026-08-10T04:30:00.000Z',
+    );
+
+    expect(requestApprovalReturnDetails(returned)).toEqual({
+      stage: 'FINANCE',
+      stageLabel: '财务审核',
+      reason: '收款账户名与 Invoice 不一致',
+      actorName: finance.name,
+      actorRole: finance.role,
+      occurredAt: '2026-08-10T04:30:00.000Z',
+      round: 1,
+    });
+    const resubmitted = createRequestApprovalState('2026-08-10T05:00:00.000Z', returned);
+    expect(resubmitted.status).toBe('PENDING_FINANCE');
+    expect(resubmitted.round).toBe(2);
+    expect(requestApprovalReturnDetails(resubmitted)).toBeNull();
   });
 
   it('allows finance to return any active OA stage without approving it', () => {

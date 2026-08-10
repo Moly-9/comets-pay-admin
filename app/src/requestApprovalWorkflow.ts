@@ -31,6 +31,43 @@ export const REQUEST_APPROVAL_STATUS_LABEL: Record<RequestApprovalStatus, string
   RETURNED_TO_MEDIA_REVIEW: '待媒介复核',
 };
 
+export const REQUEST_APPROVAL_STAGE_LABEL: Record<RequestApprovalStage, string> = {
+  PM: 'PM 审批',
+  PROJECT_OWNER: '项目负责人审批',
+  OWNER: '老板审批',
+  FINANCE: '财务审核',
+};
+
+export type RequestApprovalReturnDetails = {
+  stage: RequestApprovalStage;
+  stageLabel: string;
+  reason: string;
+  actorName: string;
+  actorRole: string;
+  occurredAt: string;
+  round: number;
+};
+
+export const requestApprovalReturnDetails = (
+  state?: RequestApprovalState,
+): RequestApprovalReturnDetails | null => {
+  if (!state || state.status !== 'RETURNED_TO_MEDIA_REVIEW') return null;
+  const returnEvent = [...state.history].reverse().find((event) => (
+    event.action === 'RETURN' && event.round === state.round
+  ));
+  const stage = state.returnedFromStage ?? returnEvent?.stage;
+  if (!stage) return null;
+  return {
+    stage,
+    stageLabel: REQUEST_APPROVAL_STAGE_LABEL[stage],
+    reason: state.returnReason?.trim() || returnEvent?.reason?.trim() || '未记录退回原因',
+    actorName: returnEvent?.actorName || '审批人',
+    actorRole: returnEvent?.actorRole || REQUEST_APPROVAL_STAGE_LABEL[stage],
+    occurredAt: returnEvent?.occurredAt || state.updatedAt,
+    round: returnEvent?.round ?? state.round,
+  };
+};
+
 export const requestApprovalStage = (
   status: RequestApprovalStatus,
 ) => STATUS_STAGE[status] ?? null;
