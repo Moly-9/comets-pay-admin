@@ -3232,6 +3232,11 @@ body:has(.finance-review-workspace) {
 }
 
 .modal-panel.finance-review-workspace {
+  --finance-review-font-xs: 10px;
+  --finance-review-font-sm: 11px;
+  --finance-review-font-body: 12px;
+  --finance-review-font-title: 13.5px;
+  --finance-review-font-heading: 16px;
   width: 100vw;
   height: 100dvh;
   max-height: 100dvh;
@@ -3246,7 +3251,7 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-review-workspace .modal-header h2 {
-  font-size: 16px;
+  font-size: var(--finance-review-font-heading);
   letter-spacing: 0;
 }
 
@@ -3297,7 +3302,7 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-review-title-group {
-  flex: 1 1 auto;
+  flex: 1 1 320px;
   align-items: center;
   gap: 10px;
 }
@@ -3348,7 +3353,7 @@ body:has(.finance-review-workspace) {
 .finance-review-title-group strong {
   overflow: hidden;
   color: #222833;
-  font-size: 13.5px;
+  font-size: var(--finance-review-font-title);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3357,9 +3362,51 @@ body:has(.finance-review-workspace) {
 .finance-review-pane-header small {
   overflow: hidden;
   color: #77818e;
-  font-size: 10.5px;
+  font-size: var(--finance-review-font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.finance-review-guidance {
+  display: flex;
+  min-width: 260px;
+  max-width: 540px;
+  flex: 0 1 auto;
+  align-items: flex-start;
+  gap: 7px;
+  border: 1px solid #ddd6ea;
+  border-radius: 7px;
+  background: #f8f6fc;
+  padding: 7px 9px;
+  color: #675b76;
+  font-size: var(--finance-review-font-sm);
+  line-height: 1.45;
+}
+
+.finance-review-guidance svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #806aa0;
+}
+
+.finance-review-guidance.is-return-ready {
+  border-color: #efcfc5;
+  background: #fff6f2;
+  color: #8f4f40;
+}
+
+.finance-review-guidance.is-return-ready svg {
+  color: #b65d48;
+}
+
+.finance-review-guidance.is-approval-ready {
+  border-color: #cce2d7;
+  background: #f1f8f4;
+  color: #39765a;
+}
+
+.finance-review-guidance.is-approval-ready svg {
+  color: #39765a;
 }
 
 .finance-review-counts {
@@ -4718,13 +4765,92 @@ body:has(.finance-review-workspace) {
   font-size: 11px;
 }
 
+/* Bounded type steps keep the dense review workspace legible without viewport-driven reflow. */
+.finance-review-workspace .finance-review-project-label {
+  font-size: var(--finance-review-font-xs) !important;
+}
+
+.finance-review-workspace .finance-review-pane-header strong,
+.finance-review-workspace .finance-review-project-section > header strong,
+.finance-review-workspace .finance-review-return-heading strong,
+.finance-review-workspace .finance-review-metrics strong {
+  font-size: var(--finance-review-font-title);
+}
+
+.finance-review-workspace .finance-review-counts > span,
+.finance-review-workspace .finance-review-current-state,
+.finance-review-workspace .finance-review-kind,
+.finance-review-workspace .finance-review-warning-count,
+.finance-review-workspace .finance-review-match-count,
+.finance-review-workspace .finance-review-mobile-tabs button,
+.finance-review-workspace .finance-review-page-button,
+.finance-review-workspace .finance-review-footer-actions .button,
+.finance-review-workspace .finance-review-reason-field > span,
+.finance-review-workspace .finance-review-reason-field textarea,
+.finance-review-workspace .finance-payment-account-fields dd,
+.finance-review-workspace .finance-review-project-info dd,
+.finance-review-workspace .finance-approval-stage strong,
+.finance-review-workspace .finance-approval-actor strong,
+.finance-review-workspace .finance-review-recorded-issue strong,
+.finance-review-workspace .finance-review-empty strong {
+  font-size: var(--finance-review-font-body);
+}
+
+.finance-review-workspace .finance-payment-list-review-content .project-resource-browser-heading p,
+.finance-review-workspace .finance-payment-list-review-content .button,
+.finance-review-workspace .finance-payment-list-review-content .request-payment-review-summary strong,
+.finance-review-workspace .finance-payment-list-review-content .request-finance-project-summary strong,
+.finance-review-workspace .finance-payment-list-review-content .request-finance-comparison-table th,
+.finance-review-workspace .finance-payment-list-review-content .request-finance-comparison-table td,
+.finance-review-workspace .finance-payment-account-snapshots > header small,
+.finance-review-workspace .finance-payment-account-snapshots > header > span,
+.finance-review-workspace .finance-payment-account-snapshot > header small,
+.finance-review-workspace .finance-payment-account-fields dt,
+.finance-review-workspace .finance-review-project-section > header span,
+.finance-review-workspace .finance-review-project-info dt,
+.finance-review-workspace .finance-review-project-info dd small,
+.finance-review-workspace .finance-approval-stage > div > span,
+.finance-review-workspace .finance-approval-stage p,
+.finance-review-workspace .finance-approval-actor small,
+.finance-review-workspace .finance-approval-step time,
+.finance-review-workspace .finance-review-recorded-issue p,
+.finance-review-workspace .finance-review-empty p,
+.finance-review-workspace .finance-review-footer-summary span,
+.finance-review-workspace .finance-review-page-nav > span,
+.finance-review-workspace .finance-review-reason-field small {
+  font-size: var(--finance-review-font-xs);
+}
+
+@media (min-width: 1600px) {
+  .modal-panel.finance-review-workspace {
+    --finance-review-font-xs: 10.5px;
+    --finance-review-font-sm: 11.5px;
+    --finance-review-font-body: 12.5px;
+    --finance-review-font-title: 14.5px;
+    --finance-review-font-heading: 18px;
+  }
+}
+
 @media (max-width: 1180px) {
+  .modal-panel.finance-review-workspace {
+    --finance-review-font-xs: 9.5px;
+    --finance-review-font-sm: 10.5px;
+    --finance-review-font-body: 11.5px;
+    --finance-review-font-title: 13px;
+    --finance-review-font-heading: 15.5px;
+  }
+
   .finance-review-grid {
     grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(240px, 2fr);
   }
 
   .finance-review-counts {
     display: none;
+  }
+
+  .finance-review-guidance {
+    min-width: 220px;
+    max-width: 440px;
   }
 
   .finance-review-footer {
@@ -4737,6 +4863,14 @@ body:has(.finance-review-workspace) {
 }
 
 @media (max-width: 900px) {
+  .modal-panel.finance-review-workspace {
+    --finance-review-font-xs: 9.5px;
+    --finance-review-font-sm: 10.5px;
+    --finance-review-font-body: 11px;
+    --finance-review-font-title: 12.5px;
+    --finance-review-font-heading: 15px;
+  }
+
   .modal-backdrop:has(.finance-review-workspace) {
     padding: 0;
   }
@@ -4757,9 +4891,17 @@ body:has(.finance-review-workspace) {
   }
 
   .finance-review-overview {
+    display: grid;
     min-height: 58px;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 9px;
     padding: 8px 11px;
+  }
+
+  .finance-review-guidance {
+    min-width: 0;
+    max-width: none;
+    grid-column: 1 / -1;
   }
 
   .finance-review-title-icon {
@@ -4866,10 +5008,18 @@ body:has(.finance-review-workspace) {
 }
 
 @media (max-width: 480px) {
+  .modal-panel.finance-review-workspace {
+    --finance-review-font-xs: 9.5px;
+    --finance-review-font-sm: 10px;
+    --finance-review-font-body: 10.5px;
+    --finance-review-font-title: 12px;
+    --finance-review-font-heading: 14px;
+  }
+
   .finance-review-workspace .modal-header h2 {
     max-width: calc(100vw - 76px);
     overflow: hidden;
-    font-size: 14px;
+    font-size: var(--finance-review-font-heading);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -4880,7 +5030,7 @@ body:has(.finance-review-workspace) {
 
   .finance-review-current-state {
     padding: 3px 7px;
-    font-size: 9px;
+    font-size: var(--finance-review-font-xs);
   }
 
   .finance-review-payment-scroll,
@@ -4921,7 +5071,7 @@ body:has(.finance-review-workspace) {
 
   .finance-review-footer-actions .button {
     padding: 0 7px;
-    font-size: 10.5px;
+    font-size: var(--finance-review-font-body);
   }
 }
 

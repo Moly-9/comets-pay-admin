@@ -66,6 +66,7 @@ import { findInvoiceRequest, getInvoiceManagementView } from './invoice/invoiceM
 import {
   buildRequestFinanceReview,
   financeReviewSessionCanApprove,
+  financeReviewSessionCanReturn,
   financeReviewSessionKey,
   reconcileFinanceReviewSession,
   type FinanceReviewSession,
@@ -1853,6 +1854,27 @@ export default function App() {
             : financeReview.totalCount
               ? `还有 ${pendingCount} 份 Invoice 尚未由当前审核人确认无误。`
             : '该请款没有可核对的 Invoice 与付款清单稳定关联。',
+        );
+        return false;
+      }
+    }
+    if (action === 'RETURN' && currentStage === 'FINANCE' && request.approval.status === 'PENDING_FINANCE') {
+      const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+      const session = financeReviewSessions[financeReviewSessionKey(
+        request.id,
+        request.approval.round,
+        currentUser.account,
+      )];
+      if (!financeReviewSessionCanReturn(session, financeReview)) {
+        const unreviewedCount = financeReview.pages.filter((page) => (
+          session?.decisions[page.key]?.state === 'unreviewed'
+          || !session?.decisions[page.key]
+        )).length;
+        notify(
+          '请先完成全部核对',
+          unreviewedCount > 0
+            ? `还有 ${unreviewedCount} 份 Invoice 与付款清单待核对；全部完成后再统一退回媒介。`
+            : '请至少记录一份有误项及具体原因后再退回媒介。',
         );
         return false;
       }

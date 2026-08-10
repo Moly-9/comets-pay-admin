@@ -171,6 +171,70 @@ final result: passed
 
 ---
 
+# Finance Review Return Gate And Responsive Type Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-85498f35-9591-4ab4-940b-5ac0ff5573bb.png`
+- Desktop implementation: `artifacts/finance-review-qa/finance-review-return-gate-1857x791.png`
+- Narrow implementation: `artifacts/finance-review-qa/finance-review-return-gate-390x844.png`
+- Source and desktop implementation are both 1857 x 791 px at device scale factor 1, so no density normalization was required.
+- Narrow implementation uses a 390 x 844 CSS viewport at device scale factor 1.
+
+## State
+
+Signed in as `finance.demo`, opened `付款工作台`, selected the first pending finance request, recorded `INV-301164-R01` as incorrect, and left the other 16 Invoice/payment-list pairs unreviewed. This matches the requested return-gate state.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the workspace keeps Noto Sans SC and zero letter spacing. Five bounded type variables step at 1600, 1180, 900, and 480 px breakpoints, enlarging the hierarchy on wide screens and reducing it to a 9.5 px minimum on narrow screens without viewport-proportional reflow.
+- Spacing and layout rhythm: the new guidance occupies the marked top-right gap without changing the 4:4:2 review-board proportions. At 390 px it moves to a full-width second row; the current state, segmented tabs, Invoice canvas, and 198 px action footer remain unobstructed.
+- Colors and visual tokens: the reminder uses the existing restrained purple information palette, then switches to the established orange return or green approval semantic state. Disabled return uses the product's existing disabled control treatment.
+- Image and asset fidelity: no new raster asset is required for this operational UI. Status affordances use the repository's existing Lucide icons and the Invoice remains the real frozen document snapshot.
+- Copy and content: the reminder states the remaining count and explains that errors are returned once, after all Invoice/payment-list pairs are reviewed. Completed-error and completed-success states use distinct action-oriented copy.
+
+## Full-View Comparison
+
+The source explicitly marks the empty space before the counters. The implementation fills that exact region with one compact reminder while preserving project identity on the left, counters and current state on the right, the three review boards, and the fixed action footer. The implementation's gray disabled return button intentionally differs from the source's red enabled button because this request requires early return to be impossible.
+
+## Focused Region Comparison
+
+- Top guidance: at 1857 x 791 the reminder stays on one line between project identity and counters; no text, icon, counter, or status overlaps.
+- Footer gate: after one incorrect decision and 16 unreviewed pages, `退回媒介修改` remains visible but disabled. After all 17 pages are decided, it becomes enabled and opens one aggregate dialog containing the Invoice number and recorded reason.
+- Narrow layout: at 390 x 844 the guidance wraps within its own row, the four footer actions remain visible, and the modal reports no horizontal overflow.
+
+## Interaction Verification
+
+- First incorrect page: reminder shows 16 remaining records and return stays disabled.
+- All pages decided: reminder changes to `全部核对已完成，可一次性退回 1 份有误记录。` and return becomes enabled.
+- Aggregate dialog: displays `INV-301164-R01` and `收款账户与 Invoice 不一致`; confirmation is enabled only in this completed state.
+- A fresh browser-rendered session reported 0 console warnings and 0 console errors.
+- Targeted Vitest passed 21/21 assertions and TypeScript/Vite production build passed.
+- Full Vitest passed 362/363 assertions; the one unrelated failure is the pre-existing TransactionsPage provider-badge markup assertion in the user's concurrent worktree changes.
+
+## Comparison History
+
+1. The source identified an unused top-right region and an early-return action that needed clearer process guidance.
+2. The implementation added the dynamic guidance, bounded responsive type variables, a disabled early-return state, and domain plus App-level submission guards.
+3. Equal-size desktop evidence and 390 px evidence showed no overlap, clipping, or hierarchy regression; no post-capture P0/P1/P2 correction was required.
+
+## Implementation Checklist
+
+- [x] Dynamic remaining/completed reminder in the marked region.
+- [x] Return blocked until every review page has a valid decision.
+- [x] Aggregate return dialog and final callback protected by the same rule.
+- [x] Bounded responsive typography for wide, desktop, tablet, and narrow viewports.
+- [x] Desktop and 390 px browser interaction verification.
+
+## Follow-up Polish
+
+- No P3 refinement is required for this scoped change.
+
+final result: passed
+
+---
+
 # Finance Review Drawer And Invoice Controls Design QA
 
 ## Evidence

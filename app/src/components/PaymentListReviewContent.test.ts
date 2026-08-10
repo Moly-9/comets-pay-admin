@@ -149,6 +149,17 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStyles).toMatch(/\.finance-review-invoice-zoom-stage \.invoice-paper\s*\{[^}]*transform:\s*scale\(var\(--finance-review-invoice-zoom, 1\)\);/s);
   });
 
+  it('requires all Invoice and payment-list pages to be reviewed before returning to media', () => {
+    expect(workspaceSource).toContain('const allPagesReviewed = financeReview.pageCount > 0 && counts.unreviewed === 0');
+    expect(workspaceSource).toContain('financeReviewSessionCanReturn(activeSession, financeReview)');
+    expect(workspaceSource).toContain('请先完成剩余 ${counts.unreviewed} 份 Invoice 与付款清单核对');
+    expect(workspaceSource).toContain('全部核对已完成，可一次性退回 ${counts.incorrect} 份有误记录');
+    expect(workspaceSource).toContain('全部核对完成，可提交财务审核');
+    expect(workspaceSource).toContain('disabled={!canReturn}');
+    expect(workspaceSource).toContain('if (!canReturn || !returnReason) return');
+    expect(workspaceSource).toContain('if (canReturn && returnReason && onReturn(returnReason))');
+  });
+
   it('preserves read-only validation and export behavior without payment mutation controls', () => {
     expect(reviewContentSource).toContain('validatePaymentListAccountViaApi');
     expect(reviewContentSource).toContain('reviewPaymentListAccountSnapshot');

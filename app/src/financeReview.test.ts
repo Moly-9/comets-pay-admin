@@ -5,6 +5,7 @@ import {
   createFinanceReviewSession,
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
+  financeReviewSessionCanReturn,
   reconcileFinanceReviewSession,
   setFinanceReviewDecision,
 } from './financeReview';
@@ -268,5 +269,60 @@ describe('request finance review', () => {
       reviewedAt: '2026-08-09T10:00:00.000Z',
     });
     expect(financeReviewReturnReason(incorrect, review)).toBe('INV-TEST：收款账户与 Invoice 不一致');
+  });
+
+  it('allows a finance return only after every page is reviewed and at least one is incorrect', () => {
+    const baseReview = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    const review = {
+      ...baseReview,
+      pageCount: 2,
+      pages: [
+        baseReview.pages[0],
+        { ...baseReview.pages[0], key: 'invoice:second', invoiceNumber: 'INV-SECOND' },
+      ],
+    };
+    const initial = createFinanceReviewSession({
+      requestId: request.id,
+      approvalRound: 1,
+      reviewerAccount: 'finance.test',
+      review,
+    });
+    const oneIncorrect = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      reason: '收款账户与 Invoice 不一致',
+      reviewedAt: '2026-08-09T10:00:00.000Z',
+    });
+
+    expect(financeReviewSessionCanReturn(initial, review)).toBe(false);
+    expect(financeReviewSessionCanReturn(oneIncorrect, review)).toBe(false);
+
+    const allReviewed = setFinanceReviewDecision(oneIncorrect, review.pages[1].key, {
+      state: 'correct',
+      reviewedAt: '2026-08-09T10:01:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(allReviewed, review)).toBe(true);
+
+    const allCorrect = setFinanceReviewDecision(
+      setFinanceReviewDecision(initial, review.pages[0].key, {
+        state: 'correct',
+        reviewedAt: '2026-08-09T10:00:00.000Z',
+      }),
+      review.pages[1].key,
+      { state: 'correct', reviewedAt: '2026-08-09T10:01:00.000Z' },
+    );
+    expect(financeReviewSessionCanReturn(allCorrect, review)).toBe(false);
+    expect(financeReviewSessionCanReturn({
+      ...allReviewed,
+      decisions: { [review.pages[0].key]: allReviewed.decisions[review.pages[0].key] },
+    }, review)).toBe(false);
+    expect(financeReviewSessionCanReturn(setFinanceReviewDecision(
+      oneIncorrect,
+      review.pages[1].key,
+      { state: 'incorrect', reason: '   ', reviewedAt: '2026-08-09T10:01:00.000Z' },
+    ), review)).toBe(false);
+    expect(financeReviewSessionCanReturn(
+      { ...allReviewed, fingerprint: 'stale-fingerprint' },
+      review,
+    )).toBe(false);
   });
 });

@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import {
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
+  financeReviewSessionCanReturn,
   reconcileFinanceReviewSession,
   setFinanceReviewDecision,
   type FinanceReviewPage,
@@ -334,7 +335,16 @@ export function FinanceReviewWorkspace({
     return { ...result, [state]: result[state] + 1 };
   }, { correct: 0, incorrect: 0, unreviewed: 0 });
   const canApprove = financeReviewSessionCanApprove(activeSession, financeReview);
+  const allPagesReviewed = financeReview.pageCount > 0 && counts.unreviewed === 0;
+  const canReturn = financeReviewSessionCanReturn(activeSession, financeReview);
   const returnReason = financeReviewReturnReason(activeSession, financeReview);
+  const reviewGuidance = counts.unreviewed > 0
+    ? `请先完成剩余 ${counts.unreviewed} 份 Invoice 与付款清单核对；全部核对后，可一次性汇总有误项并退回媒介。`
+    : counts.incorrect > 0
+      ? `全部核对已完成，可一次性退回 ${counts.incorrect} 份有误记录。`
+      : allPagesReviewed
+        ? '全部核对完成，可提交财务审核。'
+        : '请完成全部 Invoice 与付款清单核对后再提交审核结果。';
 
   const goTo = (nextIndex: number) => {
     setReviewIndex(Math.min(Math.max(0, nextIndex), Math.max(0, financeReview.pages.length - 1)));
@@ -376,8 +386,13 @@ export function FinanceReviewWorkspace({
     if (canApprove && onApprove()) onClose(true);
   };
 
+  const openReturnDialog = () => {
+    if (!canReturn || !returnReason) return;
+    setReturnDialogOpen(true);
+  };
+
   const submitReturn = () => {
-    if (returnReason && onReturn(returnReason)) onClose(true);
+    if (canReturn && returnReason && onReturn(returnReason)) onClose(true);
   };
 
   return (
@@ -431,7 +446,13 @@ export function FinanceReviewWorkspace({
                 确认本页无误
               </Button>
               {counts.incorrect > 0 ? (
-                <Button variant="danger" icon={<AlertTriangle size={16} />} onClick={() => setReturnDialogOpen(true)}>
+                <Button
+                  variant="danger"
+                  icon={<AlertTriangle size={16} />}
+                  disabled={!canReturn}
+                  title={canReturn ? '汇总全部有误记录并退回媒介' : `仍有 ${counts.unreviewed} 份记录待核对`}
+                  onClick={openReturnDialog}
+                >
                   退回媒介修改
                 </Button>
               ) : null}
@@ -453,6 +474,18 @@ export function FinanceReviewWorkspace({
                 </div>
                 <span className="finance-review-current-record">{currentPage?.invoiceNumber ?? '暂无可审核记录'} · {currentPage?.creatorName ?? '待补充'}</span>
               </div>
+            </div>
+            <div
+              className={`finance-review-guidance${allPagesReviewed ? counts.incorrect > 0 ? ' is-return-ready' : ' is-approval-ready' : ''}`}
+              role="status"
+              aria-live="polite"
+            >
+              {allPagesReviewed
+                ? counts.incorrect > 0
+                  ? <AlertTriangle size={15} aria-hidden="true" />
+                  : <CheckCircle2 size={15} aria-hidden="true" />
+                : <CircleAlert size={15} aria-hidden="true" />}
+              <span>{reviewGuidance}</span>
             </div>
             <div className="finance-review-counts" aria-live="polite">
               <span className="is-correct"><CheckCircle2 size={14} />已确认 {counts.correct}</span>
@@ -708,7 +741,7 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!returnReason} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!canReturn || !returnReason} onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >

@@ -412,6 +412,21 @@ export const financeReviewSessionCanApprove = (
   && review.pages.every((page) => session.decisions[page.key]?.state === 'correct'),
 );
 
+export const financeReviewSessionCanReturn = (
+  session: FinanceReviewSession | undefined,
+  review: RequestFinanceReview,
+) => Boolean(
+  session
+  && session.fingerprint === review.fingerprint
+  && review.pages.length > 0
+  && review.pages.every((page) => {
+    const decision = session.decisions[page.key];
+    return decision?.state === 'correct'
+      || (decision?.state === 'incorrect' && Boolean(decision.reason.trim()));
+  })
+  && review.pages.some((page) => session.decisions[page.key]?.state === 'incorrect'),
+);
+
 export const financeReviewReturnReason = (
   session: FinanceReviewSession,
   review: RequestFinanceReview,
