@@ -45,7 +45,7 @@ const createTestBatch = (
   sourceCurrency: 'USD',
   payer: '付款测试员',
   paidAt,
-  status: '已完成',
+  status: '已付款',
   lifecycle: ['CREATED', 'SUBMITTED', 'COMPLETED'],
   items: [{
     payoutId: `${paymentBatchCode}-item`,

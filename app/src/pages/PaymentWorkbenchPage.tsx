@@ -149,7 +149,7 @@ const TAB_SUMMARY_LABELS: Record<WorkbenchTab, string> = {
 
 const TAB_STATUSES: Record<WorkbenchTab, Payout['status'][]> = {
   review: ['飞书审批中'],
-  payment: ['等待付款', '付款处理中'],
+  payment: ['等待付款', '付款处理中', '付款失败'],
   paid: ['已付款'],
   returned: ['已退回'],
 };
@@ -311,6 +311,26 @@ const requestMatchesWorkbenchTab = (
   return request.lifecycle === 'RETURNED';
 };
 
+const paymentProjectPresentation = (tab: WorkbenchTab, payouts: Payout[]) => {
+  if (tab !== 'payment') {
+    return { status: tab === 'review' ? '待财务审核' : TAB_PROJECT_STATUS[tab], actionLabel: TAB_ACTION_LABELS[tab] };
+  }
+  if (payouts.some((payout) => payout.status === '付款失败')) {
+    return { status: '部分失败', actionLabel: '处理失败' };
+  }
+  if (payouts.some((payout) => payout.status === '付款处理中')) {
+    return { status: '付款处理中', actionLabel: '查看进度' };
+  }
+  return { status: '待打款', actionLabel: '执行打款' };
+};
+
+const paymentProjectStatusTone = (status: string) => {
+  if (status === '部分失败') return 'is-danger';
+  if (status === '付款处理中') return 'is-processing';
+  if (status === '已付款') return 'is-success';
+  return '';
+};
+
 export const buildPaymentProjectRows = ({
   tab,
   payouts,
@@ -344,6 +364,7 @@ export const buildPaymentProjectRows = ({
         || sourcePayoutIds.has(payout.id)
       ));
       const amount = projectPayouts.length ? summarizePayoutAmounts(projectPayouts) : request.amount;
+      const presentation = paymentProjectPresentation(tab, projectPayouts);
       return {
         id: String(request.paymentRequestProjectId ?? request.id),
         requestId: request.id,
@@ -358,8 +379,8 @@ export const buildPaymentProjectRows = ({
         paymentOrder: request.paymentOrder,
         paymentChannels: paymentChannelsFor(projectPayouts, request.generatedDetail?.provider),
         amountTotals: paymentAmountTotalsFor(projectPayouts, amount),
-        status: tab === 'review' ? '待财务审核' : TAB_PROJECT_STATUS[tab],
-        actionLabel: TAB_ACTION_LABELS[tab],
+        status: presentation.status,
+        actionLabel: presentation.actionLabel,
         payouts: projectPayouts,
       };
     });
@@ -380,6 +401,7 @@ export const buildPaymentProjectRows = ({
   }, new Map());
   const legacyRows = [...legacyByProject.entries()].map(([projectId, projectPayouts]): PaymentProjectRow => {
     const project = getProjectFixture(projectId);
+    const presentation = paymentProjectPresentation(tab, projectPayouts);
     return {
       id: `legacy:${projectId}`,
       requestCode: projectId,
@@ -393,8 +415,8 @@ export const buildPaymentProjectRows = ({
       paymentOrder: project?.paymentOrder ?? '待生成',
       paymentChannels: paymentChannelsFor(projectPayouts),
       amountTotals: aggregatePayoutCurrencies(projectPayouts),
-      status: TAB_PROJECT_STATUS[tab],
-      actionLabel: TAB_ACTION_LABELS[tab],
+      status: presentation.status,
+      actionLabel: presentation.actionLabel,
       payouts: projectPayouts,
     };
   });
@@ -507,7 +529,7 @@ function PaymentProjectTable({
                   <td>{project.invoices} 份</td>
                   <td className="mono-cell">{project.paymentOrder}</td>
                   <td className="payment-project-channel">{project.paymentChannels.join('、') || '待确认'}</td>
-                  <td><span className="simple-status"><i />{project.status}</span></td>
+                  <td><span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span></td>
                   <td className="action-cell">
                     <Button
                       variant={project.actionLabel === '审核' ? 'primary' : 'secondary'}

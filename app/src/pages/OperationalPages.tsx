@@ -2794,7 +2794,7 @@ export type PaymentBatchRow = {
   amount: string;
   payer: string;
   paidAt: string;
-  status: string;
+  status: PaymentBatchRecord['status'];
 };
 
 export type PaymentBatchFilters = {
@@ -2892,6 +2892,12 @@ export const loadPaymentDataRecord = async (
 ) => loadAsset(PAYMENT_DATA_ASSET_PATH);
 
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
+
+const paymentBatchStatusTone = (status: PaymentBatchRecord['status']) => {
+  if (status === '部分失败') return 'is-danger';
+  if (status === '付款处理中') return 'is-processing';
+  return 'is-success';
+};
 
 export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { batches: readonly PaymentBatchRecord[]; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
   const [search, setSearch] = useState('');
@@ -3201,7 +3207,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
                     <td>{batch.count} 笔</td>
                     <td>{batch.amount}</td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
-                    <td><span className="simple-status"><i />{batch.status}</span></td>
+                    <td><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
                     <td className="action-cell">
                       <button
                         ref={(node) => { if (node) detailTriggerRefs.current.set(batch.paymentBatchId, node); }}
@@ -3226,16 +3232,29 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
 }
 
 export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
-  const [tab, setTab] = useState<'all' | 'processing' | 'paid'>('all');
-  const visible = payouts.filter((payout) => (
-    isInvoiceApprovedForPayment(payout)
-    && (tab === 'processing'
+  const [tab, setTab] = useState<'all' | 'processing' | 'paid' | 'failed'>('all');
+  const transactions = payouts.filter(isInvoiceApprovedForPayment);
+  const visible = transactions.filter((payout) => (
+    tab === 'processing'
       ? payout.status === '付款处理中' || payout.status === '等待付款'
       : tab === 'paid'
         ? payout.status === '已付款'
-        : true)
+        : tab === 'failed'
+          ? payout.status === '付款失败'
+          : true
   ));
-  return <div className="page-stack"><PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" /><section className="summary-surface"><article className="summary-card summary-card-peach"><span className="summary-illustration"><WalletCards size={26} /></span><div><strong>USD 128,640</strong><span>本月付款总额 · 86 笔</span></div></article><article className="summary-card summary-card-lilac"><span className="summary-illustration"><Check size={26} /></span><div><strong>98.6%</strong><span>渠道付款成功率</span></div></article></section><section className="content-card"><div className="tabs-row"><button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button><button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button><button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button></div><div className="content-toolbar compact-toolbar"><div className="date-range-static">2026-07-01 <span>—</span> 2026-07-31</div><Button variant="secondary" icon={<Download size={16} />}>导出流水</Button></div><PayoutTable payouts={visible} onSelect={onSelectPayout} /></section></div>;
+  const paid = transactions.filter((payout) => payout.status === '已付款');
+  const failed = transactions.filter((payout) => payout.status === '付款失败');
+  const paidTotals = paid.reduce<Record<string, number>>((totals, payout) => ({
+    ...totals,
+    [payout.currency]: (totals[payout.currency] ?? 0) + payout.amount,
+  }), {});
+  const paidAmount = Object.entries(paidTotals)
+    .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
+    .join(' · ') || 'USD 0';
+  const settled = paid.length + failed.length;
+  const successRate = settled ? `${((paid.length / settled) * 100).toFixed(1)}%` : '—';
+  return <div className="page-stack"><PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" /><section className="summary-surface"><article className="summary-card summary-card-peach"><span className="summary-illustration"><WalletCards size={26} /></span><div><strong>{paidAmount}</strong><span>已付款总额 · {paid.length} 笔</span></div></article><article className="summary-card summary-card-lilac"><span className="summary-illustration"><Check size={26} /></span><div><strong>{successRate}</strong><span>渠道付款成功率 · {failed.length} 笔失败</span></div></article></section><section className="content-card"><div className="tabs-row"><button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button><button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button><button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button><button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('failed')}>付款失败</button></div><div className="content-toolbar compact-toolbar"><div className="date-range-static">2026-07-01 <span>—</span> 2026-08-31</div><Button variant="secondary" icon={<Download size={16} />}>导出流水</Button></div><PayoutTable payouts={visible} onSelect={onSelectPayout} /></section></div>;
 }
 
 const ORGANIZATION_COUNTRY_OPTIONS = [

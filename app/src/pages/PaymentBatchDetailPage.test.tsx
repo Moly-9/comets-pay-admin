@@ -115,6 +115,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('已付款');
     expect(html).toContain('平台处理中');
     expect(html).toContain('已完成');
+    expect(html).toContain('class="is-failed"');
+    expect(html).toContain('<small>部分失败</small>');
     expect(html).toContain('aria-current="step"');
     expect(html).not.toContain('已创建');
     expect(html).not.toContain('已加入付款项');

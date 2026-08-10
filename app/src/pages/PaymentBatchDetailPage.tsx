@@ -32,7 +32,7 @@ const fundingAccountLabel = (value: string) => {
 const PAYMENT_PROGRESS_STEPS = ['已付款', '平台处理中', '已完成'] as const;
 
 const isBatchComplete = (batch: PaymentBatchRecord) => (
-  batch.lifecycle.includes('COMPLETED') || batch.status === '已完成'
+  batch.lifecycle.includes('COMPLETED') || batch.status === '已付款'
 );
 
 const creatorInitials = (name: string) => {
@@ -53,6 +53,12 @@ const paymentStatusTone = (status: string) => {
   if (/处理中|等待|审批/.test(status)) return 'is-processing';
   if (status === '已付款') return 'is-success';
   return 'is-neutral';
+};
+
+const batchStatusTone = (status: PaymentBatchRecord['status']) => {
+  if (status === '部分失败') return 'is-danger';
+  if (status === '付款处理中') return 'is-processing';
+  return 'is-success';
 };
 
 const money = (currency: string, amount: number | null) => (
@@ -186,7 +192,7 @@ export function PaymentBatchDetailPage({
           <p>{batch.request.requestCode} · {batch.request.cooperationProjectName}</p>
         </div>
         <div className="payment-batch-detail-total">
-          <span className="simple-status"><i />{batch.status}</span>
+          <span className={`simple-status ${batchStatusTone(batch.status)}`}><i />{batch.status}</span>
           <strong>{totals}</strong>
           <small>{batch.items.length} 笔付款</small>
         </div>
@@ -203,14 +209,28 @@ export function PaymentBatchDetailPage({
         <header><div><h2>渠道处理进度</h2><p>付款发起、平台处理与最终结果回写。</p></div></header>
         <ol aria-label="渠道处理进度">
           {PAYMENT_PROGRESS_STEPS.map((step, index) => {
-            const state = completed || index === 0 ? 'complete' : index === 1 ? 'current' : 'pending';
+            const state = completed || batch.status === '部分失败' && index < 2
+              ? 'complete'
+              : batch.status === '部分失败' && index === 2
+                ? 'failed'
+                : index === 0
+                  ? 'complete'
+                  : index === 1
+                    ? 'current'
+                    : 'pending';
             return (
-              <li className={`is-${state}`} key={step} aria-current={state === 'current' ? 'step' : undefined}>
+              <li className={`is-${state}`} key={step} aria-current={state === 'current' || state === 'failed' ? 'step' : undefined}>
                 <span aria-hidden="true">
-                  {state === 'complete' ? <Check size={14} /> : state === 'current' ? <Clock3 size={14} /> : index + 1}
+                  {state === 'complete'
+                    ? <Check size={14} />
+                    : state === 'current'
+                      ? <Clock3 size={14} />
+                      : state === 'failed'
+                        ? <CircleAlert size={14} />
+                        : index + 1}
                 </span>
                 <strong>{step}</strong>
-                <small>{state === 'complete' ? '已完成' : state === 'current' ? '当前阶段' : '待处理'}</small>
+                <small>{state === 'complete' ? '已完成' : state === 'current' ? '当前阶段' : state === 'failed' ? '部分失败' : '待处理'}</small>
                 {index < PAYMENT_PROGRESS_STEPS.length - 1 ? <i aria-hidden="true" /> : null}
               </li>
             );

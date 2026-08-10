@@ -16,6 +16,7 @@ import {
   createPaymentBatchRecord,
   maskPaymentAccount,
   paymentBatchAmountLabel,
+  paymentBatchStatusCounts,
 } from './paymentBatches';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
@@ -225,7 +226,7 @@ const buildInput = () => {
     sourceCurrency: 'USD' as const,
     payer: '财务测试员',
     paidAt: '2026-08-10T10:30',
-    status: '付款处理中',
+    status: '付款处理中' as const,
     lifecycle: ['CREATED', 'ITEMS_ADDED', 'SUBMITTED'],
     itemStatus: '付款处理中' as const,
   };
@@ -282,7 +283,7 @@ describe('payment batch snapshots', () => {
     expect(maskPaymentAccount('')).toBe('待补充');
   });
 
-  it('builds completed request payouts into stable single-provider batches of at most five items', () => {
+  it('builds all prototype batch states with consistent request and item snapshots', () => {
     const resources = INITIAL_COMPLETE_REQUEST_RESOURCES;
     const appPayouts = [...new Map([
       ...INITIAL_PAYOUTS,
@@ -328,19 +329,42 @@ describe('payment batch snapshots', () => {
     expect([...actualPayoutIds].sort()).toEqual(expectedPayoutIds);
     expect(new Set(records.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
     expect(new Set(records.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
+    expect(records.map((record) => record.status)).toEqual([
+      '付款处理中', '付款处理中', '付款处理中',
+      '已付款', '已付款', '已付款',
+      '部分失败',
+      '付款处理中', '付款处理中',
+      '已付款', '已付款',
+      '部分失败', '部分失败',
+    ]);
 
     records.forEach((record) => {
       expect(record.items.length).toBeLessThanOrEqual(5);
-      expect(record.status).toBe('已完成');
-      expect(record.request.lifecycle).toBe('COMPLETED');
       expect(new Set(record.items.map((item) => item.provider))).toEqual(new Set([record.provider]));
-      expect(record.items.every((item) => item.paymentStatus === '已付款')).toBe(true);
       expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
       expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
       expect(record.items.every((item) => item.associationIssues.length === 0)).toBe(true);
       expect(paymentBatchAmountLabel(record)).toBe(
         `USD ${record.items.reduce((total, item) => total + item.amount, 0).toLocaleString('en-US')}`,
       );
+
+      const counts = paymentBatchStatusCounts(record);
+      if (record.status === '已付款') {
+        expect(record.request.lifecycle).toBe('COMPLETED');
+        expect(record.items.every((item) => item.paymentStatus === '已付款')).toBe(true);
+        expect(counts).toEqual({ succeeded: record.items.length, failed: 0, processing: 0 });
+      } else if (record.status === '付款处理中') {
+        expect(record.request.lifecycle).toBe('APPROVED');
+        expect(record.items.every((item) => item.paymentStatus === '付款处理中')).toBe(true);
+        expect(counts).toEqual({ succeeded: 0, failed: 0, processing: record.items.length });
+      } else {
+        expect(record.request.lifecycle).toBe('APPROVED');
+        expect(record.items.filter((item) => item.paymentStatus === '付款失败')).toHaveLength(1);
+        expect(record.items.filter((item) => item.paymentStatus === '已付款')).toHaveLength(record.items.length - 1);
+        expect(record.items.find((item) => item.paymentStatus === '付款失败')?.failure?.code)
+          .toBe('BENEFICIARY_UNAVAILABLE');
+        expect(counts).toEqual({ succeeded: record.items.length - 1, failed: 1, processing: 0 });
+      }
     });
   });
 });

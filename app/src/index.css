@@ -260,6 +260,18 @@
   color: #9e4737;
 }
 
+.payment-batch-lifecycle-section li.is-failed > span {
+  border-color: #e8b7b0;
+  background: #fff1ef;
+  color: #b64f43;
+  box-shadow: 0 0 0 3px rgba(182, 79, 67, 0.09);
+}
+
+.payment-batch-lifecycle-section li.is-failed > strong,
+.payment-batch-lifecycle-section li.is-failed > small {
+  color: #a4473d;
+}
+
 .payment-batch-project-heading {
   display: flex;
   align-items: center;
@@ -6597,6 +6609,30 @@ button:disabled {
   height: 13px;
   border-radius: 3px;
   background: #7a8fae;
+}
+
+.simple-status.is-success {
+  color: #25664d;
+}
+
+.simple-status.is-success i {
+  background: #2f8f68;
+}
+
+.simple-status.is-processing {
+  color: #875a16;
+}
+
+.simple-status.is-processing i {
+  background: #d2922b;
+}
+
+.simple-status.is-danger {
+  color: #a4473d;
+}
+
+.simple-status.is-danger i {
+  background: #c95f52;
 }
 
 .project-status-active i {

@@ -19,6 +19,13 @@ import type {
   PayoutAccountVersion,
   Provider,
 } from './types';
+import {
+  applyPaymentBatchPrototypeScenario,
+  paymentBatchPrototypeStatusFor,
+  type PaymentBatchPrototypeStatus,
+} from './paymentBatchPrototypeScenario';
+
+export type PaymentBatchStatus = PaymentBatchPrototypeStatus;
 
 export type PaymentBatchContractSnapshot = Readonly<{
   contractId: ContractId;
@@ -103,7 +110,7 @@ export type PaymentBatchRecord = Readonly<{
   sourceCurrency: InvoiceCurrency;
   payer: string;
   paidAt: string;
-  status: string;
+  status: PaymentBatchStatus;
   lifecycle: readonly string[];
   items: readonly PaymentBatchItemSnapshot[];
 }>;
@@ -124,7 +131,7 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   sourceCurrency: InvoiceCurrency;
   payer: string;
   paidAt: string;
-  status: string;
+  status: PaymentBatchStatus;
   lifecycle: readonly string[];
   itemStatus?: Payout['status'];
 }>;
@@ -396,6 +403,12 @@ export const createInitialPaymentBatches = ({
   contracts,
 }: PaymentBatchSourceData): PaymentBatchRecord[] => {
   const batchItemLimit = 5;
+  const scenarioResources = applyPaymentBatchPrototypeScenario({
+    payouts,
+    requests,
+    generatedInvoices,
+    paymentLists,
+  });
   const financePayers = SYSTEM_USERS
     .filter((user) => user.roleKey === 'finance' && !user.isDemo)
     .map((user) => user.name);
@@ -404,31 +417,36 @@ export const createInitialPaymentBatches = ({
     PayPal: 'mock-paypal-balance',
     PayMax: 'mock-paymax-operating',
   };
-  const eligibleGroups = requests
-    .filter((request) => request.lifecycle === 'COMPLETED')
+  const eligibleGroups = scenarioResources.requests
+    .filter((request) => Boolean(paymentBatchPrototypeStatusFor(request)))
     .flatMap((request) => {
       const invoiceIds = requestInvoiceIds(request);
       const sourcePayoutIds = new Set(generatedInvoices
         .filter((invoice) => invoiceIds.has(invoice.invoiceId))
         .map((invoice) => invoice.sourcePayoutId));
-      const groupedPayouts = payouts.reduce<Map<PaymentBatchRecord['provider'], Payout[]>>(
+      const groupedPayouts = scenarioResources.payouts.reduce<Map<PaymentBatchRecord['provider'], Payout[]>>(
         (groups, payout) => {
-          if (payout.status !== '已付款' || !sourcePayoutIds.has(payout.id)) return groups;
+          if (!sourcePayoutIds.has(payout.id)) return groups;
           groups.set(payout.provider, [...(groups.get(payout.provider) ?? []), payout]);
           return groups;
         },
         new Map(),
       );
       return [...groupedPayouts.entries()].flatMap(([provider, grouped]) => {
-        const chunks: Array<{ provider: PaymentBatchRecord['provider']; payouts: Payout[] }> = [];
+        const chunks: Array<{
+          provider: PaymentBatchRecord['provider'];
+          payouts: Payout[];
+          status: PaymentBatchStatus;
+        }> = [];
+        const status = paymentBatchPrototypeStatusFor(request)!;
         for (let index = 0; index < grouped.length; index += batchItemLimit) {
-          chunks.push({ provider, payouts: grouped.slice(index, index + batchItemLimit) });
+          chunks.push({ provider, payouts: grouped.slice(index, index + batchItemLimit), status });
         }
         return chunks;
       });
     });
 
-  return eligibleGroups.map(({ provider, payouts: groupedPayouts }, index) => {
+  return eligibleGroups.map(({ provider, payouts: groupedPayouts, status }, index) => {
     const ordinal = eligibleGroups.length - index;
     const ordinalLabel = String(ordinal).padStart(3, '0');
     const totalMinutes = (16 * 60) - (index * 10);
@@ -436,9 +454,9 @@ export const createInitialPaymentBatches = ({
     const minutes = String(totalMinutes % 60).padStart(2, '0');
     const paidAt = `2026-08-05T${hours}:${minutes}`;
     return createPaymentBatchRecord({
-      requests,
+      requests: scenarioResources.requests,
       generatedInvoices,
-      paymentLists,
+      paymentLists: scenarioResources.paymentLists,
       contracts,
       payouts: groupedPayouts.map((payout) => ({ ...payout, paidAt })),
       paymentBatchId: `payment_batch_fixture_paid_${ordinalLabel}` as PaymentBatchId,
@@ -448,9 +466,12 @@ export const createInitialPaymentBatches = ({
       sourceCurrency: groupedPayouts[0].currency,
       payer: financePayers[index % financePayers.length],
       paidAt,
-      status: '已完成',
-      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
-      itemStatus: '已付款',
+      status,
+      lifecycle: status === '已付款'
+        ? ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED']
+        : status === '部分失败'
+          ? ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'PARTIALLY_FAILED']
+          : ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
     });
   });
 };

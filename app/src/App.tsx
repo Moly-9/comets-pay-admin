@@ -157,6 +157,7 @@ import {
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
+import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
 import {
   applyRequestApprovalAction,
   canReturnRequestApproval,
@@ -166,6 +167,13 @@ import {
   requestApprovalStage,
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
+
+const INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES = applyPaymentBatchPrototypeScenario({
+  payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+  requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+  generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+  paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+});
 
 const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   等待付款: '付款处理中',
@@ -190,7 +198,7 @@ export default function App() {
   const [payouts, setPayouts] = useState<Payout[]>(() => (
     [...new Map([
       ...INITIAL_PAYOUTS,
-      ...INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      ...INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts,
     ].map((payout) => [payout.id, payout])).values()]
   ));
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
@@ -213,10 +221,10 @@ export default function App() {
     }))
   ));
   const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(
-    INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+    INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.paymentLists,
   );
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
-  const [requestProjects, setRequestProjects] = useState(INITIAL_COMPLETE_REQUEST_RESOURCES.requests);
+  const [requestProjects, setRequestProjects] = useState(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.requests);
   const [paymentBatches, setPaymentBatches] = useState(() => createInitialPaymentBatches({
     payouts,
     requests: requestProjects,
