@@ -2,6 +2,7 @@ import type { ContractRecord } from './contracts';
 import { INITIAL_PAYOUTS } from './data';
 import {
   invoicePaymentListItem,
+  paymentListProviderForItems,
   revalidatePaymentListItem,
   type ContractId,
   type PaymentListItem,
@@ -326,53 +327,45 @@ const paymentListStatusFor = (request: RequestProjectSummary): PaymentListRecord
   return 'submitted';
 };
 
-const requestPaymentLists: PaymentListRecord[] = requestSeeds.flatMap((request, requestIndex) => {
+const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requestIndex) => {
   const entries = requestInvoiceEntries.filter((entry) => entry.request.id === request.id);
-  const providerEntries = entries.reduce<Map<PaymentListRecord['provider'], RequestInvoiceEntry[]>>((groups, entry) => {
-    const provider = entry.invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex';
-    groups.set(provider, [...(groups.get(provider) ?? []), entry]);
-    return groups;
-  }, new Map());
-  return [...providerEntries.entries()].map(([provider, groupedEntries], providerIndex) => {
-    const generatedAt = `2026-08-${String((requestIndex % 5) + 1).padStart(2, '0')}T12:00:00.000Z`;
-    const items = groupedEntries.map((entry, itemIndex) => {
-      const source = invoicePaymentListItem(entry.invoice, [entry.contract]);
-      return revalidatePaymentListItem({
-        ...source,
-        id: `payment_item_request_fixture_${String(requestIndex + 1).padStart(2, '0')}_${provider.toLowerCase()}_${String(itemIndex + 1).padStart(2, '0')}`,
-        snapshot: {
-          ...source.snapshot,
-          feeBearer: 'ADVERTISER',
-          paymentReason: '影音服务',
-          transactionReference: `${request.requestCode ?? request.id}-${String(itemIndex + 1).padStart(2, '0')}`,
-        },
-      }, generatedAt);
-    });
-    const status = paymentListStatusFor(request);
-    const version = status === 'draft' ? 0 : 1;
-    const providerCode = provider === 'PayPal' ? 'PP' : 'AWX';
-    const paymentListCode = `PAY-${(request.cooperationProjectCode ?? request.id).replace(/^PRJ-/, '')}-${providerCode}`;
-    return {
-      paymentListId: `payment_list_request_fixture_${String(requestIndex + 1).padStart(2, '0')}_${String(providerIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
-      paymentListCode,
-      projectId: request.cooperationProjectId as PaymentListRecord['projectId'],
-      paymentRequestProjectId: request.paymentRequestProjectId,
-      provider,
-      status,
-      version,
-      generatedAt: version ? generatedAt : undefined,
-      generatedBy: version ? RESOURCE_ACTOR : undefined,
-      versions: version ? [{
-        version,
-        generatedAt,
-        generatedBy: RESOURCE_ACTOR,
-        items: cloneItems(items),
-      }] : undefined,
-      items,
-      createdAt: generatedAt,
-      updatedAt: generatedAt,
-    };
+  const generatedAt = `2026-08-${String((requestIndex % 5) + 1).padStart(2, '0')}T12:00:00.000Z`;
+  const items = entries.map((entry, itemIndex) => {
+    const source = invoicePaymentListItem(entry.invoice, [entry.contract]);
+    return revalidatePaymentListItem({
+      ...source,
+      id: `payment_item_request_fixture_${String(requestIndex + 1).padStart(2, '0')}_${String(itemIndex + 1).padStart(3, '0')}`,
+      snapshot: {
+        ...source.snapshot,
+        feeBearer: 'ADVERTISER',
+        paymentReason: '影音服务',
+        transactionReference: `${request.requestCode ?? request.id}-${String(itemIndex + 1).padStart(2, '0')}`,
+      },
+    }, generatedAt);
   });
+  const status = paymentListStatusFor(request);
+  const version = status === 'draft' ? 0 : 1;
+  const paymentListCode = `PAY-${(request.cooperationProjectCode ?? request.id).replace(/^PRJ-/, '')}`;
+  return {
+    paymentListId: `payment_list_request_fixture_${String(requestIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
+    paymentListCode,
+    projectId: request.cooperationProjectId as PaymentListRecord['projectId'],
+    paymentRequestProjectId: request.paymentRequestProjectId,
+    provider: paymentListProviderForItems(items),
+    status,
+    version,
+    generatedAt: version ? generatedAt : undefined,
+    generatedBy: version ? RESOURCE_ACTOR : undefined,
+    versions: version ? [{
+      version,
+      generatedAt,
+      generatedBy: RESOURCE_ACTOR,
+      items: cloneItems(items),
+    }] : undefined,
+    items,
+    createdAt: generatedAt,
+    updatedAt: generatedAt,
+  };
 });
 
 const requests: RequestProjectSummary[] = requestSeeds.map((request) => {
@@ -393,11 +386,11 @@ const requests: RequestProjectSummary[] = requestSeeds.map((request) => {
     creatorLinks,
     invoiceIds,
     paymentListId: lists[0]?.paymentListId,
-    paymentListIds: lists.map((list) => list.paymentListId),
+    paymentListIds: lists[0] ? [lists[0].paymentListId] : [],
     amount: paymentRequestAmountLabel(creatorLinks, requestInvoices),
     contracts: contractIds.size,
     invoices: invoiceIds.length,
-    paymentOrder: lists.map((list) => list.paymentListCode).join('、'),
+    paymentOrder: lists[0]?.paymentListCode ?? '待生成',
     status: myProjectStatusFor(request),
   };
 });

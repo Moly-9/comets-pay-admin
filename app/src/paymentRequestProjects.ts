@@ -660,6 +660,12 @@ export const paymentRequestSubmissionIssues = ({
   const issues: string[] = [];
   if (!creatorLinks.length) issues.push('请至少关联一位合作达人');
   const expectedInvoiceIds = paymentRequestInvoiceIds(creatorLinks);
+  const requestLists = paymentLists.filter((list) => (
+    !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId
+  ));
+  if (requestLists.length > 1) {
+    issues.push('一个请款项目只能关联一张付款单');
+  }
   creatorLinks.forEach((link) => {
     if (!link.invoiceIds.length) {
       issues.push(`达人 ${link.creatorId} 缺少关联 Invoice`);
@@ -680,8 +686,7 @@ export const paymentRequestSubmissionIssues = ({
       if (!SUBMITTABLE_INVOICE_STATUSES.includes(invoice.status)) {
         issues.push(`${invoice.id} 尚未完成签署和媒介审核`);
       }
-      const paymentList = paymentLists
-        .filter((list) => !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId)
+      const paymentList = requestLists
         .find((list) => list.items.some((item) => item.invoiceId === invoiceId));
       const paymentItem = paymentList?.items.find((item) => item.invoiceId === invoiceId);
       if (!paymentItem) {
@@ -693,9 +698,6 @@ export const paymentRequestSubmissionIssues = ({
       }
     });
   });
-  const requestLists = paymentLists.filter((list) => (
-    !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId
-  ));
   const listedInvoiceIds = requestLists.flatMap((list) => list.items.map((item) => item.invoiceId));
   const listedCounts = listedInvoiceIds.reduce<Map<InvoiceId, number>>((counts, invoiceId) => (
     counts.set(invoiceId, (counts.get(invoiceId) ?? 0) + 1)

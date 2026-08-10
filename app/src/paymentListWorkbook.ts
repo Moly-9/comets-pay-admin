@@ -2,6 +2,7 @@ import {
   paymentListEffectiveAccount,
   paymentListItemValue,
   type PaymentListItem,
+  type PaymentListItemProvider,
   type PaymentListRecord,
 } from './businessWorkflow';
 import { getAirwallexCountryProfile } from './airwallexFormSchema';
@@ -453,4 +454,5 @@ const safeFilenamePart = (value: string) => (
 export const paymentListWorkbookFilename = (
   projectCode: string,
   paymentList: PaymentListRecord,
-) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}.xlsx`;
+  provider?: PaymentListItemProvider,
+) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}${provider ? `-${provider.toUpperCase()}` : ''}.xlsx`;

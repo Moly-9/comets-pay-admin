@@ -23,6 +23,7 @@ import {
   type RequestFinanceReview,
 } from '../financeReview';
 import {
+  paymentListProviders,
   type PaymentListId,
   type PaymentListRecord,
   type RequestApprovalStage,
@@ -253,7 +254,7 @@ export function FinanceReviewWorkspace({
     : request.status;
   const submittedAt = request.approval?.submittedAt ?? request.createdAt ?? '待补充';
   const paymentChannel = request.paymentChannel
-    || [...new Set(reviewPaymentLists.map((list) => list.provider))].join(' / ')
+    || [...new Set(reviewPaymentLists.flatMap(paymentListProviders))].join(' / ')
     || '待补充';
   const projectBrand = request.generatedDetail?.brand ?? request.brand ?? '待补充';
   const requestReason = request.generatedDetail?.reason ?? '未单独填写';

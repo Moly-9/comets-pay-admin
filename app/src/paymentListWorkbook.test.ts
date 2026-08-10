@@ -332,5 +332,8 @@ describe('Airwallex payment-list workbook', () => {
     expect(paymentListWorkbookFilename('PRJ-TEST', { ...paymentList(), status: 'paid' })).toBe(
       'COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01.xlsx',
     );
+    expect(paymentListWorkbookFilename('PRJ-TEST', paymentList(), 'PayPal')).toBe(
+      'DRAFT-COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01-PAYPAL.xlsx',
+    );
   });
 });

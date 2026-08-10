@@ -372,6 +372,23 @@ describe('media payment request submission validation', () => {
       creatorLinks: [link], invoices: [invoice()], paymentLists: [extraList], paymentRequestProjectId,
     })).toContain('付款清单包含当前请款项目未关联的 Invoice invoice_extra');
   });
+
+  it('rejects more than one payment order for the same request project', () => {
+    const first = paymentList();
+    const second = {
+      ...paymentList(),
+      paymentListId: 'payment_list_002' as PaymentListRecord['paymentListId'],
+      paymentListCode: 'PAY-20260807-000002',
+      items: [],
+    };
+
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice()],
+      paymentLists: [first, second],
+      paymentRequestProjectId,
+    })).toContain('一个请款项目只能关联一张付款单');
+  });
 });
 
 describe('media payment request creator table presentation', () => {

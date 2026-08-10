@@ -26,6 +26,7 @@ describe('complete request project prototype resources', () => {
     expect(links).toHaveLength(237);
     expect(linkedInvoiceIds).toHaveLength(237);
     expect(new Set(linkedInvoiceIds).size).toBe(237);
+    expect(paymentLists).toHaveLength(20);
 
     INITIAL_PROJECTS.forEach((project) => {
       const request = requests.find((candidate) => candidate.cooperationProjectId === project.cooperationProjectId);
@@ -47,6 +48,11 @@ describe('complete request project prototype resources', () => {
       const requestLists = paymentLists.filter((list) => (
         list.paymentRequestProjectId === request.paymentRequestProjectId
       ));
+      expect(requestLists).toHaveLength(1);
+      expect(request.paymentListId).toBe(requestLists[0]?.paymentListId);
+      expect(request.paymentListIds).toEqual([requestLists[0]?.paymentListId]);
+      expect(request.paymentOrder).toBe(requestLists[0]?.paymentListCode);
+      expect(request.paymentOrder).not.toMatch(/、|-(?:AWX|PP)$/);
       const requestItems = requestLists.flatMap((list) => list.items.map((item) => ({ list, item })));
       (request.creatorLinks ?? []).forEach((link) => {
         expect(link.contractIds).toHaveLength(1);
@@ -77,7 +83,7 @@ describe('complete request project prototype resources', () => {
         expect(contract).toMatchObject({
           currency: invoice?.snapshot.currency,
           totalFee: invoiceAmount,
-          payoutProvider: list.provider,
+          payoutProvider: account.provider,
           payoutAccountId: invoice?.snapshot.payoutAccountId,
           payoutAccountVersion: invoice?.snapshot.payoutAccountVersion,
           payoutAccountFingerprint: invoice?.snapshot.payoutAccountFingerprint,
@@ -87,7 +93,7 @@ describe('complete request project prototype resources', () => {
         expect(Number(paymentListItemValue(item, 'amount'))).toBe(invoiceAmount);
         expect(String(paymentListItemValue(item, 'currency'))).toBe(invoice?.snapshot.currency);
         expect(account).toMatchObject({
-          provider: list.provider,
+          provider: account.provider,
           payoutAccountId: invoice?.snapshot.payoutAccountId,
           payoutAccountVersion: invoice?.snapshot.payoutAccountVersion,
           accountFingerprint: invoice?.snapshot.payoutAccountFingerprint,
@@ -99,7 +105,7 @@ describe('complete request project prototype resources', () => {
           paymentRequestProjectId: request.paymentRequestProjectId,
           creatorId: link.creatorId,
           invoice: invoice?.id,
-          provider: list.provider,
+          provider: account.provider,
         });
       });
     });

@@ -9,6 +9,7 @@ import {
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
   paymentListEffectiveAccount,
+  paymentListProviderForItems,
   payoutWithPaymentListSnapshot,
   refreshPaymentListItemSnapshot,
   revalidatePaymentListItem,
@@ -216,7 +217,7 @@ describe('project payment list', () => {
     expect(cleared.versions).toEqual(generated.versions);
   });
 
-  it('allows a payment-list account override but blocks non-Airwallex generation', () => {
+  it('allows supported provider overrides and summarizes mixed-channel payment items', () => {
     const paypalItem = {
       ...item,
       invoiceId: 'invoice-paypal' as InvoiceId,
@@ -235,13 +236,10 @@ describe('project payment list', () => {
     expect(paypalItem.snapshot.provider).toBe('Airwallex');
     expect(paymentListEffectiveAccount(paypalItem).provider).toBe('PayPal');
     expect(validatePaymentListGeneration({ ...record, items: [paypalItem] }, [paypalItem.invoiceId]))
-      .toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          code: 'UNSUPPORTED_PROVIDER',
-          invoiceId: paypalItem.invoiceId,
-          message: expect.stringContaining('Synthetic Creator 当前选择 PayPal'),
-        }),
+      .not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'UNSUPPORTED_PROVIDER' }),
       ]));
+    expect(paymentListProviderForItems([item, paypalItem])).toBe('Mixed');
   });
 
   it('requires a transaction reference before generating a locked payment version', () => {

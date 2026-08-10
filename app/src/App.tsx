@@ -110,6 +110,9 @@ import {
   nextReviewStatusAfterMutation,
   nowIso,
   paymentListEffectiveAccount,
+  paymentListForProvider,
+  paymentListProviderForItems,
+  paymentListProviders,
   payoutWithPaymentListSnapshot,
   revalidatePaymentListItem,
   refreshPaymentListItemSnapshot,
@@ -999,13 +1002,14 @@ export default function App() {
       notify('尚无可加入付款清单的 Invoice', '请先为项目达人生成包含付款账户的 Invoice。');
       return;
     }
+    const items = invoices.map((invoice) => invoicePaymentListItem(invoice, contracts));
     const list: PaymentListRecord = {
       paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
       paymentListCode: createPrototypeCode('PAY'),
       projectId,
-      provider: 'Airwallex',
+      provider: paymentListProviderForItems(items),
       status: 'draft',
-      items: invoices.map((invoice) => invoicePaymentListItem(invoice, contracts)),
+      items,
       createdAt,
       updatedAt: createdAt,
     };
@@ -1219,14 +1223,19 @@ export default function App() {
       createDocumentPayoutSnapshot(account, creator.id),
     );
     const paymentListId = list!.paymentListId;
-    setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
-      ? {
-          ...candidate,
-          status: 'draft',
-          updatedAt: nowIso(),
-          items: candidate.items.map((currentItem) => currentItem.invoiceId === invoiceId ? updated : currentItem),
-        }
-      : candidate));
+    setPaymentLists((current) => current.map((candidate) => {
+      if (candidate.paymentListId !== paymentListId) return candidate;
+      const items = candidate.items.map((currentItem) => (
+        currentItem.invoiceId === invoiceId ? updated : currentItem
+      ));
+      return {
+        ...candidate,
+        provider: paymentListProviderForItems(items, candidate.provider),
+        status: 'draft',
+        updatedAt: nowIso(),
+        items,
+      };
+    }));
     registerProjectMutation({
       projectId,
       engagementId: item.engagementId,
@@ -1347,6 +1356,40 @@ export default function App() {
     );
   };
 
+  const exportPaymentListFiles = async ({
+    projectCode,
+    list,
+    allowSubmitted = false,
+  }: {
+    projectCode: string;
+    list: PaymentListRecord;
+    allowSubmitted?: boolean;
+  }) => {
+    const providers = paymentListProviders(list);
+    if (!providers.length) {
+      throw new PaymentListWorkbookError(['付款单没有可导出的渠道付款明细']);
+    }
+    if (providers.includes('PayMax')) {
+      throw new PaymentListWorkbookError(['PayMax 付款模板尚未配置，暂不能导出该渠道明细']);
+    }
+    const files = await Promise.all(providers.map(async (provider) => {
+      const providerList = paymentListForProvider(list, provider);
+      const blob = provider === 'PayPal'
+        ? await exportPayPalPaymentListWorkbook({ paymentList: providerList, allowSubmitted })
+        : await exportAirwallexPaymentListWorkbook({
+            paymentList: providerList,
+            creators,
+            allowSubmitted,
+          });
+      return { provider, blob };
+    }));
+    files.forEach(({ provider, blob }) => downloadBlob(
+      blob,
+      paymentListWorkbookFilename(projectCode, list, files.length > 1 ? provider : undefined),
+    ));
+    return providers;
+  };
+
   const exportPaymentList = async (
     project: ProjectSummary,
     paymentListId: PaymentListRecord['paymentListId'],
@@ -1360,17 +1403,15 @@ export default function App() {
       return;
     }
     try {
-      const blob = await exportAirwallexPaymentListWorkbook({
-        paymentList: list,
-        creators,
+      const providers = await exportPaymentListFiles({
+        projectCode: project.projectCode ?? project.id,
+        list,
       });
-      downloadBlob(
-        blob,
-        paymentListWorkbookFilename(project.projectCode ?? project.id, list),
-      );
       notify(
         ['approved', 'paid'].includes(list.status) ? '付款清单已导出' : '付款清单预览已导出',
-        'Excel 由浏览器本地生成，包含付款资料，请按敏感文件管理。',
+        providers.length > 1
+          ? `已按 ${providers.length} 个付款渠道导出执行文件，文件共用付款单号 ${list.paymentListCode}。`
+          : 'Excel 由浏览器本地生成，包含付款资料，请按敏感文件管理。',
       );
     } catch (error) {
       const message = error instanceof PaymentListWorkbookError
@@ -1408,6 +1449,10 @@ export default function App() {
       invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
     ));
     const lists = paymentLists.filter((item) => item.projectId === projectId);
+    if (lists.length > 1) {
+      notify('付款单关联异常', '一个请款项目只能关联一张付款单，请先合并历史付款单后再提交。');
+      return;
+    }
     const invalidPaymentItems = lists.flatMap((list) => (
       list.items.filter((item) => item.requiresRevalidation)
     ));
@@ -1534,7 +1579,7 @@ export default function App() {
       projectId,
       invoiceIds,
       paymentListId: lists[0]?.paymentListId,
-      paymentListIds: lists.map((list) => list.paymentListId),
+      paymentListIds: lists[0] ? [lists[0].paymentListId] : [],
       approval,
       createdAt: approval.submittedAt,
       project: project.name,
@@ -1544,7 +1589,7 @@ export default function App() {
       amount: amountLabel,
       contracts: contracts.filter((contract) => contract.projectId === projectId && contract.lifecycle !== 'GENERATED_DRAFT').length,
       invoices: projectInvoices.length,
-      paymentOrder: lists.map((list) => list.paymentListCode).join('、'),
+      paymentOrder: lists[0]?.paymentListCode ?? '待生成',
       status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED' }),
       filter: 'pending',
       generatedDetail: {
@@ -1557,10 +1602,10 @@ export default function App() {
         invoiceId: projectInvoices.map((invoice) => invoice.id).join('、'),
         invoiceAmount: amountLabel,
         invoiceStatus: '已校验',
-        paymentListId: lists.map((list) => list.paymentListCode).join('、'),
+        paymentListId: lists[0]?.paymentListCode ?? '待生成',
         paymentListStatus: '已提交',
         payee: `${references.length} 位项目达人`,
-        provider: lists.map((list) => list.provider).join('、'),
+        provider: lists[0] ? paymentListProviders(lists[0]).join('、') : '待确认',
         beneficiaryId: '按付款清单账户快照',
         feePolicy: '按合同及付款清单执行',
       },
@@ -1601,45 +1646,46 @@ export default function App() {
           lineNumber: index + 1,
         });
       });
-      const groups = entries.reduce<Record<string, typeof entries>>((result, item) => {
-        const provider = item.snapshot.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
-        result[provider] = [...(result[provider] ?? []), item];
-        return result;
-      }, {});
-      const lists: PaymentListRecord[] = Object.entries(groups).map(([provider, items]) => ({
+      const list: PaymentListRecord = {
         paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
         paymentListCode: createPrototypeCode('PAY'),
         projectId: request.cooperationProjectId as ProjectId,
         paymentRequestProjectId: request.paymentRequestProjectId,
-        provider: provider as PaymentListRecord['provider'],
+        provider: paymentListProviderForItems(entries),
         status: 'generated',
         version: 1,
         generatedAt: createdAt,
         generatedBy: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
-        items,
+        versions: [{
+          version: 1,
+          generatedAt: createdAt,
+          generatedBy: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+          items: entries,
+        }],
+        items: entries,
         createdAt,
         updatedAt: createdAt,
-      }));
+      };
       setPaymentLists((current) => [
-        ...lists,
+        list,
         ...current.filter((list) => list.paymentRequestProjectId !== request.paymentRequestProjectId),
       ]);
       setRequestProjects((current) => current.map((candidate) => candidate.id === request.id
         ? {
             ...candidate,
-            paymentListId: lists[0]?.paymentListId,
-            paymentListIds: lists.map((list) => list.paymentListId),
-            paymentOrder: lists.map((list) => list.paymentListCode).join('、'),
+            paymentListId: list.paymentListId,
+            paymentListIds: [list.paymentListId],
+            paymentOrder: list.paymentListCode,
             generatedDetail: candidate.generatedDetail
               ? {
                   ...candidate.generatedDetail,
-                  paymentListId: lists.map((list) => list.paymentListCode).join('、'),
+                  paymentListId: list.paymentListCode,
                   paymentListStatus: '已生成',
                 }
               : candidate.generatedDetail,
           }
         : candidate));
-      notify('付款清单已生成', `${lists.length} 份渠道清单仅包含当前请款项目的 ${entries.length} 份 Invoice。`);
+      notify('付款单已生成', `${list.paymentListCode} 已包含当前请款项目的 ${entries.length} 份 Invoice 付款明细。`);
     } catch (error) {
       notify('无法生成付款清单', error instanceof Error ? error.message : 'Invoice 账户快照校验失败。');
     }
@@ -1670,16 +1716,17 @@ export default function App() {
     const requestLists = paymentLists.filter((list) => (
       list.paymentRequestProjectId === request.paymentRequestProjectId
     ));
-    const listedInvoiceIds = new Set(requestLists.flatMap((list) => list.items.map((item) => item.invoiceId)));
-    if (!requestLists.length || invoiceIds.some((invoiceId) => !listedInvoiceIds.has(invoiceId))) {
+    const requestList = requestLists[0];
+    const listedInvoiceIds = new Set(requestList?.items.map((item) => item.invoiceId) ?? []);
+    if (requestLists.length !== 1 || invoiceIds.some((invoiceId) => !listedInvoiceIds.has(invoiceId))) {
       notify('暂不能提交申请', '请先在项目详情生成当前请款项目专属的付款清单。');
       return;
     }
 
     const submittedAt = nowIso();
     const approval = createRequestApprovalState(submittedAt, request.approval);
-    const paymentListIds = requestLists.map((list) => list.paymentListId);
-    const paymentListCodes = requestLists.map((list) => list.paymentListCode);
+    const paymentListId = requestList.paymentListId;
+    const paymentListCode = requestList.paymentListCode;
     const sourcePayoutIds = new Set(
       generatedInvoices
         .filter((invoice) => invoiceIds.includes(invoice.invoiceId))
@@ -1704,14 +1751,14 @@ export default function App() {
             approval,
             status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED' }),
             invoiceIds,
-            paymentListId: paymentListIds[0],
-            paymentListIds,
-            paymentOrder: paymentListCodes.join('、'),
+            paymentListId,
+            paymentListIds: [paymentListId],
+            paymentOrder: paymentListCode,
             generatedDetail: candidate.generatedDetail
               ? {
                   ...candidate.generatedDetail,
                   invoiceStatus: '已提交审批',
-                  paymentListId: paymentListCodes.join('、'),
+                  paymentListId: paymentListCode,
                   paymentListStatus: '已提交',
                 }
               : candidate.generatedDetail,
@@ -2552,11 +2599,18 @@ export default function App() {
       const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === payoutAccountId);
       if (!requestResourceEditable(request) || !list || list.status !== 'draft' || !item || !creator || !account) return;
       const updated = applyPaymentListPayoutSnapshot(item, createDocumentPayoutSnapshot(account, creator.id));
-      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
-        ...candidate,
-        updatedAt: nowIso(),
-        items: candidate.items.map((paymentItem) => paymentItem.invoiceId === invoiceId ? updated : paymentItem),
-      } : candidate));
+      setPaymentLists((current) => current.map((candidate) => {
+        if (candidate.paymentListId !== paymentListId) return candidate;
+        const items = candidate.items.map((paymentItem) => (
+          paymentItem.invoiceId === invoiceId ? updated : paymentItem
+        ));
+        return {
+          ...candidate,
+          provider: paymentListProviderForItems(items, candidate.provider),
+          updatedAt: nowIso(),
+          items,
+        };
+      }));
       markRequestResourceChanged(request, `已更换 Invoice ${invoiceId} 的收款账户`);
     },
     onRevalidatePaymentItem: (request, paymentListId, invoiceId) => {
@@ -2609,17 +2663,16 @@ export default function App() {
       const list = requestListFor(request, paymentListId);
       if (!list) return;
       try {
-        const blob = list.provider === 'PayPal'
-          ? await exportPayPalPaymentListWorkbook({ paymentList: list, allowSubmitted: true })
-          : await exportAirwallexPaymentListWorkbook({
-            paymentList: list,
-            creators,
-            allowSubmitted: true,
-          });
-        downloadBlob(blob, paymentListWorkbookFilename(request.requestCode ?? request.id, list));
+        const providers = await exportPaymentListFiles({
+          projectCode: request.requestCode ?? request.id,
+          list,
+          allowSubmitted: true,
+        });
         notify(
-          '付款清单已导出',
-          `已使用 ${list.provider} 对应的 Excel 模板生成审批文件。`,
+          '付款单已导出',
+          providers.length > 1
+            ? `已按 ${providers.length} 个渠道导出执行文件，所有文件共用 ${list.paymentListCode}。`
+            : `已使用 ${providers[0]} 对应的 Excel 模板生成审批文件。`,
         );
       } catch (error) {
         const message = error instanceof PaymentListWorkbookError
