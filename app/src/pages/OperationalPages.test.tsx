@@ -42,7 +42,7 @@ describe('TransactionsPage currency overview', () => {
           transactionPayout('SGD', 600, 6),
           transactionPayout('USD', 700, 7, '付款失败'),
         ]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
@@ -71,7 +71,7 @@ describe('TransactionsPage currency overview', () => {
           transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
           transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
         ]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
@@ -92,7 +92,7 @@ describe('TransactionsPage currency overview', () => {
           transactionPayout('USD', 100, 13, '付款处理中'),
           transactionPayout('USD', 100, 14, '等待付款'),
         ]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
@@ -112,7 +112,7 @@ describe('TransactionsPage currency overview', () => {
     const html = renderToStaticMarkup(
       <TransactionsPage
         payouts={[transactionPayout('USD', 100, 21)]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
@@ -121,7 +121,17 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('aria-label="付款渠道"');
     expect(html).toContain('>全部付款渠道</span>');
     expect(html).toContain('当前显示 1 条记录');
-    expect(html).toContain('<span>导出流水</span>');
+    expect(html).toContain('<span>导出已选（0）</span>');
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('aria-label="选择 Creator 21 的交易"');
+    expect(html).toContain('>达人 / 付款项目</th>');
+    expect(html).toContain('>Invoice</th>');
+    expect(html).toContain('>渠道</th>');
+    expect(html).toContain('>状态</th>');
+    expect(html).toContain('>金额</th>');
+    expect(html).toContain('>时间</th>');
+    expect(html).toContain('>付款人 / 付款时间</th>');
+    expect(html).toContain('>操作</th>');
   });
 });
 

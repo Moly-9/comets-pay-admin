@@ -1,0 +1,97 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import type { TransactionBatchContext } from '../transactionRecords';
+import type { Payout } from '../types';
+import { TransactionDetailPage } from './TransactionDetailPage';
+
+const payout: Payout = {
+  id: 'pay-detail-test',
+  creator: 'Kenji Mori',
+  handle: '@kenji.mori',
+  initials: 'KM',
+  projectId: 'project-test',
+  project: 'Racing Master NA/EU KOC 4-6月',
+  contract: 'CON-20260810-001',
+  invoice: 'INV-20260810-001',
+  provider: 'Airwallex',
+  currency: 'USD',
+  amount: 4100,
+  account: '•••• 0007',
+  status: '已付款',
+  invoiceReviewStatus: '已通过',
+  accent: '#2f9f68',
+  paidAt: '2026-08-10 16:30',
+};
+
+const context = {
+  batch: {
+    paymentBatchCode: 'PAY-20260810-001',
+    provider: 'Airwallex',
+    payer: '财务测试员',
+    paidAt: '2026-08-10 16:30',
+    status: '已付款',
+    request: {
+      cooperationProjectName: 'Racing Master NA/EU KOC 4-6月',
+      cooperationProjectCode: 'PRJ-20260810-001',
+      requestCode: 'REQ-20260810-001',
+      requestStatus: '已付款',
+    },
+  },
+  item: {
+    receiveCurrency: 'USD',
+    transferMethod: '本地转账',
+    accountSummary: '•••• 0007',
+    feeBearer: '广告主承担',
+    transactionReference: 'Racing Master creator payout',
+    contracts: [{
+      contractId: 'contract-test',
+      contractCode: 'CON-20260810-001',
+      name: 'Racing Master 达人合作合同',
+      currency: 'USD',
+      amount: 4100,
+      signed: true,
+      status: '已生效',
+    }],
+    invoice: {
+      invoiceNumber: 'INV-20260810-001',
+      version: 2,
+      currency: 'USD',
+      amount: 4100,
+      invoiceDate: '2026-08-08',
+      reviewStatus: '已通过',
+    },
+    paymentListCode: 'PL-20260810-001',
+    paymentListVersion: 3,
+    paymentListStatus: 'paid',
+  },
+} as unknown as TransactionBatchContext;
+
+describe('TransactionDetailPage', () => {
+  it('renders the creator card, transaction summary, associations, and highlighted payment list', () => {
+    const html = renderToStaticMarkup(
+      <TransactionDetailPage payout={payout} context={context} onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain('transaction-creator-summary-card');
+    expect(html).toContain('付款金额');
+    expect(html).toContain('付款渠道');
+    expect(html).toContain('交易状态');
+    expect(html).toContain('所属关联项目');
+    expect(html).toContain('所属请款项目');
+    expect(html).toContain('所属请款批次');
+    expect(html).toContain('CON-20260810-001');
+    expect(html).toContain('INV-20260810-001');
+    expect(html).toContain('transaction-resource-card is-payment-list');
+    expect(html).toContain('PL-20260810-001');
+  });
+
+  it('shows explicit fallbacks when historical batch snapshots are unavailable', () => {
+    const html = renderToStaticMarkup(
+      <TransactionDetailPage payout={payout} context={null} onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain('历史记录未保留批次快照');
+    expect(html).toContain('历史记录未保留付款清单快照');
+    expect(html).toContain('>未关联<');
+  });
+});

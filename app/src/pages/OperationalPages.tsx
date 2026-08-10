@@ -46,6 +46,7 @@ import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
@@ -117,6 +118,7 @@ import type { RequestApprovalReminderSummary } from '../requestApprovalReminders
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
+  findTransactionBatchContext,
   filterTransactionRecords,
   isFinalTransaction,
   type TransactionProvider,
@@ -132,6 +134,7 @@ import {
   type PaymentBatchRecord,
 } from '../paymentBatches';
 import { PaymentBatchDetailPage } from './PaymentBatchDetailPage';
+import { TransactionDetailPage } from './TransactionDetailPage';
 import './TransactionsPage.css';
 
 type Notify = (title: string, message: string) => void;
@@ -3372,12 +3375,21 @@ const TRANSACTION_PROVIDER_OPTIONS = [
   { value: 'PayMax', label: 'PayMax' },
 ] as const;
 
-export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
+export function TransactionsPage({
+  payouts,
+  paymentBatches,
+}: {
+  payouts: Payout[];
+  paymentBatches: readonly PaymentBatchRecord[];
+}) {
   const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
   const [provider, setProvider] = useState<TransactionProvider>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [detailPayoutId, setDetailPayoutId] = useState<string | null>(null);
+  const detailReturnIdRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const transactions = payouts.filter(isFinalTransaction);
@@ -3387,7 +3399,11 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
     provider,
     startDate,
     endDate,
-  });
+  }, paymentBatches);
+  const selectedTransactions = transactions.filter((payout) => selectedIds.has(payout.id));
+  const detailPayout = detailPayoutId
+    ? transactions.find((payout) => payout.id === detailPayoutId) ?? null
+    : null;
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
   const paidCurrencies = aggregatePayoutCurrencies(paid, true);
@@ -3414,11 +3430,44 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
     setEndDate(value);
     if (value && startDate && value < startDate) setStartDate(value);
   };
+  const toggleTransaction = (payoutId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(payoutId);
+      else next.delete(payoutId);
+      return next;
+    });
+  };
+  const toggleTransactions = (payoutIds: readonly string[], checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      payoutIds.forEach((payoutId) => {
+        if (checked) next.add(payoutId);
+        else next.delete(payoutId);
+      });
+      return next;
+    });
+  };
+  const openTransactionDetail = (payout: Payout) => {
+    detailReturnIdRef.current = payout.id;
+    setDetailPayoutId(payout.id);
+  };
+  const closeTransactionDetail = () => {
+    const returnId = detailReturnIdRef.current;
+    setDetailPayoutId(null);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!returnId) return;
+        const button = document.querySelector<HTMLButtonElement>(`[data-transaction-detail="${returnId}"]`);
+        button?.focus();
+      });
+    });
+  };
   const exportTransactions = async () => {
     setExporting(true);
     setExportError('');
     try {
-      const workbook = await loadTransactionRecordsWorkbook(visible);
+      const workbook = await loadTransactionRecordsWorkbook(selectedTransactions);
       downloadBlob(workbook, transactionRecordsFilename());
     } catch (error) {
       setExportError(error instanceof Error ? error.message : '交易流水导出失败，请稍后重试');
@@ -3426,6 +3475,16 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
       setExporting(false);
     }
   };
+
+  if (detailPayout) {
+    return (
+      <TransactionDetailPage
+        payout={detailPayout}
+        context={findTransactionBatchContext(detailPayout, paymentBatches)}
+        onBack={closeTransactionDetail}
+      />
+    );
+  }
 
   return (
     <div className="page-stack transactions-page">
@@ -3498,21 +3557,30 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
             onChange={setProvider}
           />
           <span className="transaction-filter-result" aria-live="polite">当前显示 {visible.length} 条记录</span>
+          {selectedTransactions.length ? (
+            <span className="transaction-selection-summary" aria-live="polite">
+              <strong>已选 {selectedTransactions.length} 条</strong>
+              <button className="transaction-selection-clear" type="button" onClick={() => setSelectedIds(new Set())}>清空</button>
+            </span>
+          ) : null}
           <Button
             className="transaction-export-button"
             variant="secondary"
             icon={<Download size={16} />}
-            disabled={exporting || !visible.length}
+            disabled={exporting || !selectedTransactions.length}
             onClick={exportTransactions}
           >
-            {exporting ? '导出中...' : '导出流水'}
+            {exporting ? '导出中...' : `导出已选（${selectedTransactions.length}）`}
           </Button>
         </div>
         {exportError ? <p className="transaction-export-error" role="alert">{exportError}</p> : null}
-        <PayoutTable
+        <TransactionRecordsTable
           payouts={visible}
-          onSelect={onSelectPayout}
-          emptyText="暂无符合当前搜索与筛选条件的交易记录"
+          paymentBatches={paymentBatches}
+          selectedIds={selectedIds}
+          onToggle={toggleTransaction}
+          onToggleAll={toggleTransactions}
+          onOpenDetail={openTransactionDetail}
         />
       </section>
     </div>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { PaymentBatchRecord } from './paymentBatches';
 import type { Payout } from './types';
 import {
+  findTransactionBatchContext,
   filterTransactionRecords,
   transactionCreatorLabel,
   transactionDateKey,
@@ -35,6 +37,37 @@ const filters = (overrides: Partial<TransactionRecordFilters> = {}): Transaction
   endDate: '',
   ...overrides,
 });
+
+const batch = {
+  paymentBatchId: 'payment-batch-test',
+  paymentBatchCode: 'PAY-20260810-TEST',
+  request: {
+    paymentRequestProjectId: 'request-test',
+    requestCode: 'REQ-20260810-TEST',
+    requestStatus: '已付款',
+    lifecycle: 'PAID',
+    amount: 'USD 1,980',
+    reason: '达人合作款',
+    expectedPaymentDate: '2026-08-05',
+    cooperationProjectId: 'project-test',
+    cooperationProjectCode: 'PRJ-20260801-TEST01',
+    cooperationProjectName: '夏季新品推广',
+    brand: 'COMETS',
+    media: 'Mina',
+    pm: 'PM',
+  },
+  provider: 'Airwallex',
+  fundingAccountId: 'mock-awx-operating',
+  sourceCurrency: 'USD',
+  payer: '财务测试员',
+  paidAt: '2026-08-05 16:00',
+  status: '已付款',
+  lifecycle: ['COMPLETED'],
+  items: [{
+    payoutId: 'pay-test',
+    paymentListCode: 'PL-20260810-TEST',
+  }],
+} as unknown as PaymentBatchRecord;
 
 describe('transaction records', () => {
   it('keeps only approved final transactions for the selected tab', () => {
@@ -85,5 +118,14 @@ describe('transaction records', () => {
     expect(transactionDateKey(failed)).toBe('2026-08-04');
     expect(transactionCreatorLabel(failed)).toBe('Mina Kato (@MinaKato)');
     expect(transactionCreatorLabel(payout({ creator: '@MinaKato' }))).toBe('@MinaKato');
+  });
+
+  it('matches stable batch context and searches request, batch, payer, and payment-list data', () => {
+    expect(findTransactionBatchContext(payout(), [batch])?.batch.paymentBatchCode).toBe('PAY-20260810-TEST');
+    expect(findTransactionBatchContext(payout({ id: 'other' }), [batch])).toBeNull();
+
+    ['REQ-20260810-TEST', 'PAY-20260810-TEST', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
+      expect(filterTransactionRecords([payout()], filters({ search }), [batch])).toHaveLength(1);
+    });
   });
 });

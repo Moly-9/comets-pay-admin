@@ -3272,7 +3272,7 @@ export default function App() {
       );
       break;
     case 'transactions':
-      pageContent = <TransactionsPage payouts={payouts} onSelectPayout={setSelectedPayout} />;
+      pageContent = <TransactionsPage payouts={payouts} paymentBatches={paymentBatches} />;
       break;
     case 'organization':
       pageContent = <OrganizationPage notify={notify} invoiceEntity={invoiceEntity} onInvoiceEntityChange={setInvoiceEntity} />;

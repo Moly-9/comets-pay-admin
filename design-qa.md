@@ -171,6 +171,40 @@ final result: passed
 
 ---
 
+# Transaction Records Selection And Detail Design QA
+
+## Evidence
+
+- Transaction-list source: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-1f7431f8-b38e-428f-ae2a-7f80493611d1.png` (1833 x 789 px).
+- Detail-layout source: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d2036841-1349-4044-afe7-91465e71bf35.png` (1413 x 807 px).
+- Creator-card source: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-2d404939-75de-406e-a4cb-11d3a2942cd5.png` (452 x 760 px).
+- Desktop transaction list: `artifacts/transaction-records-list-desktop.png` (1842 x 785 px).
+- Desktop detail top and linked resources: `artifacts/transaction-detail-top-desktop.png`, `artifacts/transaction-detail-payment-list-desktop.png`.
+- Mobile transaction list and detail: `artifacts/transaction-records-top-mobile.png`, `artifacts/transaction-detail-top-mobile.png`, `artifacts/transaction-detail-resources-mobile.png` (375 x 812 px browser content captures).
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The table includes the requested checkbox, creator/payment project, Invoice, provider, status, amount, transaction time, payer/payment time, and action columns. It remains contained in the existing horizontal table scroller on narrow screens.
+- The detail view follows the existing COMETS Pay page hierarchy and the supplied detail reference: compact header, creator identity card, three transaction summary cards, structured information grid, business associations, and linked document rows.
+- The creator identity uses the compact tinted card treatment from the source, with avatar, name, project, handle, and visible status. Text wraps or truncates within stable bounds at desktop and 390 px.
+- The payment-list row is the only resource given the requested red background, border, icon, and leading rule. Contract and Invoice rows keep neutral and blue-tinted resource treatments.
+- Historical transactions without a stable payment-batch snapshot explicitly show `未记录` or `未关联`; no payer, batch, request, contract, Invoice, or payment-list data is fabricated.
+
+## Interaction And Technical Verification
+
+- Selecting two rows changed the disabled export control to enabled `导出已选（2）`; completing the export returned the control to its ready state with no error message. The workbook template test verifies typed selected-row output.
+- Selecting all 36 batch-filtered records and moving to page 2 preserved the `导出已选（36）` state, confirming selection is stable across pagination.
+- Searching `BAT-20260805` matched batch-linked transactions and displayed the batch payer and payment time. Opening one record exposed its project, request, batch, contract, Invoice, and payment-list snapshots.
+- Returning from detail restored keyboard focus to the originating `查看详情` button.
+- The reference and implementation captures were opened together in one comparison pass at comparable desktop and mobile states.
+- Browser console contained 0 warnings and 0 errors.
+- Full Vitest passed 60 files and 374 tests. TypeScript and the Vite production build also passed.
+
+final result: passed
+
+---
+
 # Payment Workbench Returned Reason Detail Design QA
 
 ## Evidence

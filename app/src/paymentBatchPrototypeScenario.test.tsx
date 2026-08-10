@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildPaymentProjectRows } from './pages/PaymentWorkbenchPage';
 import { TransactionsPage } from './pages/OperationalPages';
 import {
@@ -82,7 +82,7 @@ describe('payment batch prototype scenario', () => {
     const settled = paid.length + failed.length;
     const successRate = `${((paid.length / settled) * 100).toFixed(1)}%`;
     const html = renderToStaticMarkup(
-      <TransactionsPage payouts={scenario.payouts} onSelectPayout={vi.fn()} />,
+      <TransactionsPage payouts={scenario.payouts} paymentBatches={[]} />,
     );
 
     expect(html).toContain('>付款失败</button>');
