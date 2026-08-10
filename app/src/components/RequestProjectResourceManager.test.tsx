@@ -189,6 +189,11 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
     expect(source).toContain('付款单已清空');
     expect(source).toContain('run: onClearPaymentLists');
+    expect(paymentRowsSource).toContain('ariaLabel={`${item.snapshot.creatorName} 支付币种`}');
+    expect(paymentRowsSource).toContain('ariaLabel={`${item.snapshot.creatorName} 收款币种`}');
+    expect(paymentRowsSource.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
+    expect(paymentRowsSource).toContain("'paymentReason', event.target.value");
+    expect(paymentRowsSource).toContain("'transactionReference', event.target.value");
   });
 });
 

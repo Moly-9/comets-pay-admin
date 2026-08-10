@@ -47,6 +47,7 @@ import {
   getPayoutAccountId,
   getPayoutAccountIdentifier,
 } from '../payoutAccounts';
+import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
@@ -700,7 +701,25 @@ export function RequestProjectResourceManager({
                         ) : null}
                       </section>
                     ) : null}
-                    <div className="project-payment-fields"><label className="project-payment-account-field"><span>收款账户</span><SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label><label><span>支付币种</span><input disabled={!editable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value.toUpperCase())} /></label><label><span>收款币种</span><input disabled={!editable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} /></label><label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label><label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label><label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label><label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label><label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label></div>
+                    <div className="project-payment-fields">
+                      <label className="project-payment-account-field">
+                        <span>收款账户</span>
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} />
+                      </label>
+                      <label>
+                        <span>支付币种</span>
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 支付币种`} variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', value)} />
+                      </label>
+                      <label>
+                        <span>收款币种</span>
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 收款币种`} variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', value)} />
+                      </label>
+                      <label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
+                      <label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label>
+                      <label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label>
+                      <label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label>
+                      <label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label>
+                    </div>
                     <footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer>
                   </article>
                 );

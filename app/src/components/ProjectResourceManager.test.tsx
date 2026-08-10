@@ -346,6 +346,15 @@ describe('project resource aggregation', () => {
     expect(source).not.toContain('补齐渠道清单');
   });
 
+  it('uses controlled dropdowns for both payment currencies', () => {
+    const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('ariaLabel={`${item.snapshot.creatorName} 支付币种`}');
+    expect(source).toContain('ariaLabel={`${item.snapshot.creatorName} 收款币种`}');
+    expect(source.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
+    expect(source).not.toContain("'currency', event.target.value.toUpperCase()");
+    expect(source).not.toContain("'receiveCurrency', event.target.value.toUpperCase()");
+  });
+
   it('removes contract generation and Invoice editing only from project details', () => {
     const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
     const contractsPage = readFileSync(new URL('../pages/ContractsPage.tsx', import.meta.url), 'utf8');

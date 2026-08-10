@@ -124,6 +124,7 @@ import {
   paymentListProviders,
   payoutWithPaymentListSnapshot,
   revalidatePaymentListItem,
+  refreshPaymentListFromInvoices,
   refreshPaymentListItemSnapshot,
   removePaymentListItem,
   upsertPaymentListItem,
@@ -1717,7 +1718,7 @@ export default function App() {
     }
     try {
       const createdAt = nowIso();
-      const entries = request.creatorLinks.flatMap((link) => link.invoiceIds.map((invoiceId) => ({
+      const refreshedItems = request.creatorLinks.flatMap((link) => link.invoiceIds.map((invoiceId) => ({
         link,
         invoiceId,
       }))).map(({ link, invoiceId }, index) => {
@@ -1735,7 +1736,28 @@ export default function App() {
       if (!requestPaymentProvider) {
         throw new Error('请先为请款项目选择唯一付款渠道');
       }
-      const mismatchedEntry = entries.find((entry) => (
+      const existingList = paymentLists.find((list) => (
+        list.paymentRequestProjectId === request.paymentRequestProjectId
+      ));
+      const actor = { account: currentUser.account, name: currentUser.name, role: currentUser.role };
+      const baseList: PaymentListRecord = existingList ?? {
+        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
+        paymentListCode: createPrototypeCode('PAY'),
+        projectId: request.cooperationProjectId as ProjectId,
+        paymentRequestProjectId: request.paymentRequestProjectId,
+        provider: requestPaymentProvider,
+        status: 'draft',
+        items: [],
+        createdAt,
+        updatedAt: createdAt,
+      };
+      const list = refreshPaymentListFromInvoices({
+        list: baseList,
+        refreshedItems,
+        actor,
+        refreshedAt: createdAt,
+      });
+      const mismatchedEntry = list.items.find((entry) => (
         paymentListItemProvider(entry) !== requestPaymentProvider
       ));
       if (mismatchedEntry) {
@@ -1743,26 +1765,6 @@ export default function App() {
           `${mismatchedEntry.snapshot.invoiceNumber} 的收款账户渠道与请款项目付款渠道 ${request.paymentChannel} 不一致`,
         );
       }
-      const list: PaymentListRecord = {
-        paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-        paymentListCode: createPrototypeCode('PAY'),
-        projectId: request.cooperationProjectId as ProjectId,
-        paymentRequestProjectId: request.paymentRequestProjectId,
-        provider: requestPaymentProvider,
-        status: 'generated',
-        version: 1,
-        generatedAt: createdAt,
-        generatedBy: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
-        versions: [{
-          version: 1,
-          generatedAt: createdAt,
-          generatedBy: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
-          items: entries,
-        }],
-        items: entries,
-        createdAt,
-        updatedAt: createdAt,
-      };
       setPaymentLists((current) => [
         list,
         ...current.filter((list) => list.paymentRequestProjectId !== request.paymentRequestProjectId),
@@ -1782,7 +1784,10 @@ export default function App() {
               : candidate.generatedDetail,
           }
         : candidate));
-      notify('付款单已生成', `${list.paymentListCode} 已包含当前请款项目的 ${entries.length} 份 Invoice 付款明细。`);
+      notify(
+        existingList ? '付款单已刷新' : '付款单已生成',
+        `${list.paymentListCode} 已包含当前请款项目的 ${list.items.length} 份 Invoice 付款明细。`,
+      );
     } catch (error) {
       notify('无法生成付款清单', error instanceof Error ? error.message : 'Invoice 账户快照校验失败。');
     }
