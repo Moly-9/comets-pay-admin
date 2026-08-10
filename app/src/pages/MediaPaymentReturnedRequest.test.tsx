@@ -157,7 +157,7 @@ describe('media returned payment request handling', () => {
     expect(html).toContain('重新提交');
   });
 
-  it('keeps a payment failure return in the original returned-project interaction', () => {
+  it('separates a payment failure recovery from the ordinary returned-project interaction', () => {
     const failedPayout: Payout = {
       id: 'payout-returned-failure',
       paymentRequestProjectId: returnedRequest.paymentRequestProjectId,
@@ -191,12 +191,15 @@ describe('media returned payment request handling', () => {
     const listHtml = renderPage(null, [failedPayout]);
     const detailHtml = renderPage(returnedRequest.id, [failedPayout]);
 
-    expect(listHtml).toContain('处理退回');
-    expect(listHtml).not.toContain('处理失败请款');
+    expect(listHtml).toContain('处理失败请款');
+    expect(listHtml).not.toContain('处理退回');
+    expect(listHtml).toContain('部分打款失败');
     expect(listHtml).toContain('1 笔失败款待恢复');
     expect(detailHtml).toContain('付款失败退回');
     expect(detailHtml).toContain('1 笔失败款需恢复');
     expect(detailHtml).toContain('达人收款账户不可用，请更新后重新校验。');
     expect(detailHtml).toContain('等待达人更新账户');
+    expect(detailHtml).not.toContain('退回待处理');
+    expect(detailHtml).not.toContain('付款工作台已退回此请款项目');
   });
 });

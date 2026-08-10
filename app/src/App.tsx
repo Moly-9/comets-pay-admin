@@ -176,6 +176,7 @@ import {
   completePaymentFailureRevalidation,
   isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
+  markPaymentFailureAccountChanged,
   markPaymentFailureRetrySubmitted,
   paymentFailureRevalidationIssues,
   recordPaymentFailureNotification,
@@ -2406,17 +2407,20 @@ export default function App() {
         setPaymentLists((current) => current.map((list) => (
           !list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
             ? list
-            : {
-                ...list,
-                items: list.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
-                  ? {
-                      ...item,
-                      requiresRevalidation: true,
-                      validationIssues: ['付款失败，等待达人更新收款账户'],
-                    }
-                  : item),
+            : (() => {
+                const editableList = list.status === 'draft' ? list : beginPaymentListEdit(list, occurredAt);
+                return {
+                  ...editableList,
+                  items: editableList.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
+                    ? {
+                        ...item,
+                        requiresRevalidation: false,
+                        validationIssues: [],
+                      }
+                    : item),
                 updatedAt: occurredAt,
-              }
+                };
+              })()
         )));
       }
       setRequestProjects((current) => current.map((request) => {
@@ -2427,17 +2431,17 @@ export default function App() {
         return {
           ...request,
           lifecycle: 'RETURNED',
-          status: '付款清单待修改',
+          status: '部分打款失败',
           filter: 'pending',
           approval: returnedApproval ?? request.approval,
           generatedDetail: request.generatedDetail ? {
             ...request.generatedDetail,
-            paymentListStatus: '付款清单待修改',
+            paymentListStatus: '部分打款失败',
           } : request.generatedDetail,
         };
       }));
       setSelectedPayout((current) => current?.id === payout.id ? updated : current);
-      notify('已退回媒介', '请款项目已回到“已退回”；成功款保持已付款，仅该失败款进入账户恢复。');
+      notify('已退回媒介', '项目已标记为“部分打款失败”；成功款保持已付款，仅该失败款进入恢复流程。');
       return true;
     }
 
@@ -2488,7 +2492,12 @@ export default function App() {
         nowIso(),
       );
       setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? updated : candidate));
-      notify('失败通知已记录', '站内信与 Gmail 发送结果已按原型流程保存。');
+      notify(
+        '失败通知已记录',
+        updated.paymentFailureRecovery?.status === 'READY_FOR_RETRY'
+          ? '原收款账户未修改，该笔付款已自动更新为可加入新付款批次。'
+          : '站内信与 Gmail 发送结果已按原型流程保存。',
+      );
       return true;
     } catch (error) {
       notify('无法发送通知', error instanceof Error ? error.message : '当前付款不能通知达人。');
@@ -2819,6 +2828,37 @@ export default function App() {
     || (currentUser.roleKey === 'media' && ['DRAFT', 'RETURNED'].includes(request.lifecycle ?? 'DRAFT'))
   );
 
+  const paymentFailurePayoutForInvoice = (
+    request: RequestProjectSummary,
+    invoiceId: InvoiceId,
+  ) => {
+    const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+    if (!invoice) return undefined;
+    return payouts.find((payout) => (
+      payout.id === invoice.sourcePayoutId
+      && payout.paymentRequestProjectId === request.paymentRequestProjectId
+      && Boolean(payout.paymentFailureRecovery)
+      && payout.status !== '已付款'
+    ));
+  };
+
+  const requestHasPaymentFailureRecovery = (request: RequestProjectSummary) => payouts.some((payout) => (
+    payout.paymentRequestProjectId === request.paymentRequestProjectId
+    && Boolean(payout.paymentFailureRecovery)
+    && payout.status !== '已付款'
+  ));
+
+  const paymentListItemEditable = (
+    request: RequestProjectSummary,
+    invoiceId: InvoiceId,
+  ) => (
+    requestResourceEditable(request)
+    && (
+      !requestHasPaymentFailureRecovery(request)
+      || Boolean(paymentFailurePayoutForInvoice(request, invoiceId))
+    )
+  );
+
   const editableReturnedRequestForInvoice = (invoiceId: InvoiceId) => requestProjects.find((request) => (
     request.lifecycle === 'RETURNED'
     && request.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
@@ -3019,7 +3059,7 @@ export default function App() {
         list.paymentRequestProjectId === request.paymentRequestProjectId
       ));
       const clearedItemCount = requestLists.reduce((sum, list) => sum + list.items.length, 0);
-      if (!requestResourceEditable(request) || !clearedItemCount) return;
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !clearedItemCount) return;
       const clearedAt = nowIso();
       setPaymentLists((current) => current.map((list) => (
         list.paymentRequestProjectId === request.paymentRequestProjectId
@@ -3030,7 +3070,7 @@ export default function App() {
     },
     onRemovePaymentInvoice: (request, paymentListId, invoiceId) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || !list || list.status !== 'draft') return;
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list || list.status !== 'draft') return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? removePaymentListItem(candidate, invoiceId)
         : candidate));
@@ -3038,7 +3078,7 @@ export default function App() {
     },
     onUpdatePaymentItem: (request, paymentListId, invoiceId, field, value) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || !list || list.status !== 'draft') return;
+      if (!paymentListItemEditable(request, invoiceId) || !list || list.status !== 'draft') return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
         ...candidate,
         updatedAt: nowIso(),
@@ -3056,7 +3096,7 @@ export default function App() {
       const item = list?.items.find((candidate) => candidate.invoiceId === invoiceId);
       const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
       const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === payoutAccountId);
-      if (!requestResourceEditable(request) || !list || list.status !== 'draft' || !item || !creator || !account) return;
+      if (!paymentListItemEditable(request, invoiceId) || !list || list.status !== 'draft' || !item || !creator || !account) return;
       const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
       if (requestPaymentProvider && account.provider !== requestPaymentProvider) {
         notify('收款账户渠道不一致', `当前请款项目固定使用 ${request.paymentChannel}，不能选择 ${account.provider} 账户。`);
@@ -3075,6 +3115,17 @@ export default function App() {
           items,
         };
       }));
+      const failurePayout = paymentFailurePayoutForInvoice(request, invoiceId);
+      if (failurePayout) {
+        const occurredAt = nowIso();
+        const changed = markPaymentFailureAccountChanged(failurePayout, {
+          payoutAccountId: getPayoutAccountId(account),
+          payoutAccountVersion: getPayoutAccountVersion(account),
+          accountFingerprint: getPayoutAccountFingerprint(account),
+          externalBeneficiaryId: account.provider === 'Airwallex' ? account.beneficiaryId : undefined,
+        }, occurredAt);
+        setPayouts((current) => current.map((candidate) => candidate.id === changed.id ? changed : candidate));
+      }
       markRequestResourceChanged(request, `已更换 Invoice ${invoiceId} 的收款账户`);
     },
     onRevalidatePaymentItem: (request, paymentListId, invoiceId) => {
@@ -3083,7 +3134,7 @@ export default function App() {
       const effectiveAccount = item ? paymentListEffectiveAccount(item) : null;
       const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
       const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === effectiveAccount?.payoutAccountId);
-      if (!requestResourceEditable(request) || !list || list.status !== 'draft' || !item) return;
+      if (!paymentListItemEditable(request, invoiceId) || !list || list.status !== 'draft' || !item) return;
       const validated = revalidatePaymentListItem(item, nowIso(), account ? {
         payoutAccountId: getPayoutAccountId(account),
         payoutAccountVersion: getPayoutAccountVersion(account),
@@ -3101,7 +3152,7 @@ export default function App() {
     },
     onBeginEditPaymentList: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || !list) return;
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list) return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? beginPaymentListEdit(candidate)
         : candidate));
@@ -3109,7 +3160,7 @@ export default function App() {
     },
     onGeneratePaymentListVersion: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || !list || list.status !== 'draft') return;
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list || list.status !== 'draft') return;
       const result = generatePaymentListVersion({
         list,
         expectedInvoiceIds: paymentRequestInvoiceIds(request.creatorLinks ?? []),

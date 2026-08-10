@@ -87,6 +87,11 @@ describe('payment failure recovery', () => {
       channel: 'GMAIL',
       status: 'SKIPPED_MISSING_RECIPIENT',
     });
+    expect(withEmail.paymentFailureRecovery).toMatchObject({
+      status: 'READY_FOR_RETRY',
+      readyReason: 'ACCOUNT_UNCHANGED',
+    });
+    expect(isPaymentFailureRetryReady(withEmail)).toBe(true);
   });
 
   it('requires a notification before accepting the simulated creator update', () => {

@@ -468,9 +468,11 @@ export type PaymentFailureNotification = {
 export type PaymentFailureRecovery = {
   status: PaymentFailureRecoveryStatus;
   notifications: PaymentFailureNotification[];
+  readyReason?: 'ACCOUNT_UNCHANGED' | 'REVALIDATED';
   failureCode?: string;
   returnReason?: string;
   creatorUpdatedAt?: string;
+  reportedPayoutAccountId?: string;
   reportedPayoutAccountVersion?: PayoutAccountVersion;
   reportedAccountFingerprint?: string;
   reportedExternalBeneficiaryId?: string;

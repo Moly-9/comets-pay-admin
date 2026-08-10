@@ -291,6 +291,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
+  '部分打款失败': 'failure',
   '已完成': 'complete',
   '已付款': 'complete',
   '已归档': 'complete',
@@ -2929,7 +2930,10 @@ const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明�
 export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
 export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
-export const paymentBatchRows = (batches: readonly PaymentBatchRecord[]): PaymentBatchRow[] => (
+export const paymentBatchRows = (
+  batches: readonly PaymentBatchRecord[],
+  payouts: readonly Payout[] = [],
+): PaymentBatchRow[] => (
   batches.map((batch) => ({
     paymentBatchId: batch.paymentBatchId,
     id: batch.paymentBatchCode,
@@ -2938,7 +2942,14 @@ export const paymentBatchRows = (batches: readonly PaymentBatchRecord[]): Paymen
     amount: paymentBatchAmountLabel(batch),
     payer: batch.payer,
     paidAt: batch.paidAt,
-    status: batch.status,
+    status: (() => {
+      const itemStatuses = batch.items.map((item) => (
+        payouts.find((payout) => payout.id === item.payoutId)?.status ?? item.paymentStatus
+      ));
+      if (itemStatuses.some((status) => status === '付款失败' || status === '已退回')) return '部分失败';
+      if (itemStatuses.length > 0 && itemStatuses.every((status) => status === '已付款')) return '已付款';
+      return batch.status;
+    })(),
   }))
 );
 
@@ -3050,7 +3061,7 @@ export function BatchesPage({
   const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
   const listScrollPositionRef = useRef(0);
-  const rows = useMemo(() => paymentBatchRows(batches), [batches]);
+  const rows = useMemo(() => paymentBatchRows(batches, payouts), [batches, payouts]);
   const filteredRows = useMemo(() => filterPaymentBatchRows(rows, {
     search,
     start,

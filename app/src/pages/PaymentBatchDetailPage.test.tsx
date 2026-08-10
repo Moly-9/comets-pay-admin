@@ -224,7 +224,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('查看付款清单');
   });
 
-  it('shows the returned request state when a live batch payout has been returned', () => {
+  it('shows the partial-payment-failure request state when a live batch payout has been returned', () => {
     const payout: Payout = {
       id: 'payout_detail_test',
       paymentRequestProjectId: DETAIL_BATCH.request.paymentRequestProjectId,
@@ -247,7 +247,7 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage batch={DETAIL_BATCH} payouts={[payout]} onBack={vi.fn()} />,
     );
 
-    expect(html).toContain('<span class="simple-status"><i></i>已退回</span>');
+    expect(html).toContain('<span class="simple-status"><i></i>部分打款失败</span>');
   });
 
   it('shows an explicit empty state when a stored batch has no item snapshots', () => {

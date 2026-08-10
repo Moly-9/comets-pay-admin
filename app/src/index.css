@@ -1903,6 +1903,10 @@ input[type="checkbox"]:disabled {
   border-color: #eccfc9;
 }
 
+.project-payment-row.is-payment-locked {
+  background: #f8f9fb;
+}
+
 .project-payment-row.is-failure-focused {
   outline: 3px solid rgba(201, 95, 82, .16);
   outline-offset: 2px;
@@ -9791,13 +9795,14 @@ button:disabled {
   table-layout: fixed;
 }
 
-.media-request-creator-table th:nth-child(1) { width: 17%; }
-.media-request-creator-table th:nth-child(2) { width: 12.5%; }
-.media-request-creator-table th:nth-child(3) { width: 14%; }
-.media-request-creator-table th:nth-child(4) { width: 17.5%; }
-.media-request-creator-table th:nth-child(5) { width: 13%; }
-.media-request-creator-table th:nth-child(6) { width: 13%; }
-.media-request-creator-table th:nth-child(7) { width: 13%; }
+.media-request-creator-table th:nth-child(1) { width: 15%; }
+.media-request-creator-table th:nth-child(2) { width: 11%; }
+.media-request-creator-table th:nth-child(3) { width: 13%; }
+.media-request-creator-table th:nth-child(4) { width: 15%; }
+.media-request-creator-table th:nth-child(5) { width: 12%; }
+.media-request-creator-table th:nth-child(6) { width: 12%; }
+.media-request-creator-table th:nth-child(7) { width: 11%; }
+.media-request-creator-table th:nth-child(8) { width: 11%; }
 
 .media-request-creator-table th,
 .media-request-creator-table td,

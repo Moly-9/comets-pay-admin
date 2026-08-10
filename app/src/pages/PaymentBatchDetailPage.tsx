@@ -237,7 +237,7 @@ export function PaymentBatchDetailPage({
   const statusCounts = paymentBatchStatusCounts({ items: liveItems });
   const completed = liveStatus === '已付款';
   const liveRequestStatus = liveItems.some((item) => item.paymentStatus === '已退回')
-    ? '已退回'
+    ? '部分打款失败'
     : batch.request.requestStatus;
   const failureDialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
 

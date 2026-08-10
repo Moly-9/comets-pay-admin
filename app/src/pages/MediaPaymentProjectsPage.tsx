@@ -371,6 +371,7 @@ export function MediaPaymentProjectsPage({
   const failurePayoutsForRequest = (request: RequestProjectSummary) => payouts.filter((payout) => (
     payout.paymentRequestProjectId === request.paymentRequestProjectId
     && Boolean(payout.paymentFailureRecovery)
+    && payout.status !== '已付款'
   ));
   const editingRequest = editingRequestId
     ? visibleRequests.find((request) => request.id === editingRequestId) ?? null
@@ -412,7 +413,7 @@ export function MediaPaymentProjectsPage({
 
   const metrics = paymentRequestListMetrics(visibleRequests);
   const returnedRequests = visibleRequests
-    .filter((request) => request.lifecycle === 'RETURNED')
+    .filter((request) => request.lifecycle === 'RETURNED' && !failurePayoutsForRequest(request).length)
     .map((request) => ({ request, details: requestApprovalReturnDetails(request.approval) }));
   const financeReturnedCount = returnedRequests.filter(({ details }) => details?.stage === 'FINANCE').length;
   const { visible: filteredRequests, invalidBudgetRange } = filterPaymentRequestList({
@@ -792,8 +793,11 @@ export function MediaPaymentProjectsPage({
         paymentChannel: selectedRequest.paymentChannel,
       }),
     ].filter(Boolean);
+    const failedPayouts = failurePayoutsForRequest(selectedRequest);
+    const hasPaymentFailureRecovery = failedPayouts.length > 0;
     const editable = canCreate && ['DRAFT', 'RETURNED'].includes(selectedRequest.lifecycle ?? '');
-    const canAddCreators = canCreate && canAddCreatorToPaymentRequest(selectedRequest);
+    const requestContentEditable = editable && !hasPaymentFailureRecovery;
+    const canAddCreators = !hasPaymentFailureRecovery && canCreate && canAddCreatorToPaymentRequest(selectedRequest);
     const canSubmit = editable && submissionIssues.length === 0;
     const requestPaymentLists = paymentLists.filter((list) => (
       list.paymentRequestProjectId === selectedRequest.paymentRequestProjectId
@@ -805,8 +809,6 @@ export function MediaPaymentProjectsPage({
     });
     const latestPaymentList = requestPaymentLists[0];
     const isReturned = selectedRequest.lifecycle === 'RETURNED';
-    const failedPayouts = failurePayoutsForRequest(selectedRequest);
-    const hasPaymentFailureRecovery = failedPayouts.length > 0;
     const canHandlePaymentFailure = ['media', 'admin', 'owner'].includes(currentUser.roleKey);
     const returnDetails = requestApprovalReturnDetails(selectedRequest.approval);
     const returnHeading = returnDetails?.stage === 'FINANCE'
@@ -825,7 +827,7 @@ export function MediaPaymentProjectsPage({
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
-          actions={<>{editable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></>}
+          actions={<>{requestContentEditable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned && !hasPaymentFailureRecovery ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></>}
         />
         <div className="metrics-grid project-detail-metrics">
           <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
@@ -840,7 +842,7 @@ export function MediaPaymentProjectsPage({
                 <div>
                   <span>付款失败退回</span>
                   <h2 id="media-request-payment-failure-heading">{failedPayouts.length} 笔失败款需恢复</h2>
-                  <p>成功款项保持已付款；请逐笔通知达人更新账户，重新校验通过后可加入新付款批次。</p>
+                  <p>成功款项保持冻结；原账户未修改时发送通知即可重试，账户有修改时需重新校验通过。</p>
                 </div>
               </header>
               <div className="media-payment-failure-list">
@@ -859,7 +861,7 @@ export function MediaPaymentProjectsPage({
             </div>
           </section>
         ) : null}
-        {isReturned ? (
+        {isReturned && !hasPaymentFailureRecovery ? (
           <section className="media-request-return-panel" aria-labelledby="media-request-return-heading">
             <div className="media-request-return-panel-icon"><AlertTriangle size={21} aria-hidden="true" /></div>
             <div className="media-request-return-panel-body">
@@ -945,7 +947,7 @@ export function MediaPaymentProjectsPage({
           {links.length ? (
             <div className="table-scroll">
               <table className="data-table project-creator-table media-request-creator-table">
-                <thead><tr><th>达人</th><th>付款渠道</th><th>Invoice</th><th>合同</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th>校验状态</th></tr></thead>
+                <thead><tr><th>达人</th><th>付款渠道</th><th>Invoice</th><th>合同</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
                 <tbody>{links.map((link) => {
                   const creator = creators.find((item) => item.id === link.creatorId);
                   const presentation = paymentRequestCreatorPresentation({
@@ -957,6 +959,16 @@ export function MediaPaymentProjectsPage({
                     requestLifecycle: selectedRequest.lifecycle,
                     requestStatus: selectedMyProjectStatus,
                   });
+                  const creatorPayouts = link.invoiceIds.map((invoiceId) => {
+                    const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
+                    return invoice ? payouts.find((payout) => payout.id === invoice.sourcePayoutId) : undefined;
+                  });
+                  const validationFailed = presentation.invoices.some((invoice) => (
+                    invoice.missing
+                    || invoice.paymentItemMissing
+                    || invoice.accountNeedsReview
+                    || invoice.requiresRevalidation
+                  ));
                   return (
                     <tr key={link.creatorId}>
                       <td><div className="media-request-creator-cell"><Avatar initials={creator?.initials ?? '?'} accent={creator?.accent ?? '#718096'} size="sm" /><span><strong>{creator?.name ?? link.creatorId}</strong><small>{creator?.handle ?? '达人档案待核对'}</small></span></div></td>
@@ -1032,11 +1044,18 @@ export function MediaPaymentProjectsPage({
                       </td>
                       <td>
                         <div className="media-request-validation-stack">
-                          {presentation.statuses.map((status) => (
-                            <span className="media-request-validation-status" data-tone={status.tone} key={status.label}>
-                              <i aria-hidden="true" />{status.label}
-                            </span>
-                          ))}
+                          <span className="media-request-validation-status" data-tone={validationFailed ? 'danger' : 'success'}>
+                            <i aria-hidden="true" />{validationFailed ? '校验失败' : '校验通过'}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="media-request-validation-stack">
+                          {creatorPayouts.length ? creatorPayouts.map((payout, index) => {
+                            const status = payout?.status ?? '未进入付款';
+                            const tone = status === '已付款' ? 'success' : ['付款失败', '已退回'].includes(status) ? 'danger' : 'info';
+                            return <span className="media-request-validation-status" data-tone={tone} key={`${link.invoiceIds[index]}-${status}`}><i aria-hidden="true" />{status}</span>;
+                          }) : <span className="media-request-validation-status" data-tone="info"><i aria-hidden="true" />未进入付款</span>}
                         </div>
                       </td>
                     </tr>
@@ -1048,7 +1067,7 @@ export function MediaPaymentProjectsPage({
             <button className="project-detail-empty project-detail-empty-action" type="button" onClick={() => openEditForm(selectedRequest, true)}><Users size={20} /><span><strong>尚未添加达人</strong><small>点击从达人档案筛选项目达人</small></span></button>
           ) : <div className="project-detail-empty"><Users size={20} /><span><strong>尚未添加达人</strong><small>当前项目为只读状态</small></span></div>}
         </section>
-        <section id="media-request-submit-section" className="project-detail-card media-request-submit-card">
+        {!hasPaymentFailureRecovery ? <section id="media-request-submit-section" className="project-detail-card media-request-submit-card">
           <header className="project-detail-card-header"><div><h2>{editable ? (isReturned ? '重新提交申请' : '提交申请') : '申请状态'}</h2><p>{editable ? (isReturned ? '请先按退回意见完成请款内容和付款清单修正；重新提交后将回到原退回审批节点。' : '提交后进入“请款项目”审批工作台，草稿不会出现在审批列表。') : '该项目已进入“请款项目”审批工作台，当前页面保留关联资料快照。'}</p></div></header>
           {editable ? submissionIssues.length ? (
             <div className="media-request-issue-list"><AlertTriangle size={18} /><div><strong>暂不能提交</strong>{submissionIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div>
@@ -1059,7 +1078,7 @@ export function MediaPaymentProjectsPage({
             <Button variant="secondary" onClick={() => onGeneratePaymentList(selectedRequest)}>生成 / 刷新付款清单</Button>
             <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>
           </div> : null}
-        </section>
+        </section> : null}
       </div>
     );
   }
@@ -1108,6 +1127,7 @@ export function MediaPaymentProjectsPage({
                 const returnDetails = requestApprovalReturnDetails(request.approval);
                 const isReturned = request.lifecycle === 'RETURNED';
                 const failedPayouts = failurePayoutsForRequest(request);
+                const hasPaymentFailure = failedPayouts.length > 0;
                 const canShowConfirmationExport = (
                   currentUser.roleKey === 'media'
                   && request.media === currentScopeName
@@ -1127,8 +1147,8 @@ export function MediaPaymentProjectsPage({
                     <td>{request.amount}</td>
                     <td>
                       <div className="media-request-list-status">
-                        <ProjectStatus status={myProjectStatusFor(request)} />
-                        {isReturned ? (
+                        <ProjectStatus status={hasPaymentFailure ? '部分打款失败' : myProjectStatusFor(request)} />
+                        {isReturned && !hasPaymentFailure ? (
                           <small title={returnDetails?.reason}>
                             {returnDetails?.stage === 'FINANCE' ? '付款工作台' : returnDetails?.stageLabel ?? '审批流'} · {returnDetails?.reason ?? '请查看退回原因'}
                           </small>
@@ -1138,7 +1158,7 @@ export function MediaPaymentProjectsPage({
                     </td>
                     <td className="action-cell">
                       <div className="media-project-row-actions">
-                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
+                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{hasPaymentFailure ? (canCreate ? '处理失败请款' : '查看失败请款') : isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
                         {canShowConfirmationExport ? (
                           <>
                             <button

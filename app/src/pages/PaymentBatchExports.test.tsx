@@ -13,6 +13,7 @@ import {
   toggleVisiblePaymentBatchSelection,
 } from './OperationalPages';
 import type { PaymentBatchRecord } from '../paymentBatches';
+import type { Payout } from '../types';
 
 const createTestBatch = (
   paymentBatchCode: string,
@@ -142,6 +143,17 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('aria-label="选择付款批次 BAT-20260715-006"');
     expect(html).toContain('aria-label="选择付款批次 BAT-20260714-005"');
     expect(html).not.toContain('不支持确认函导出');
+  });
+
+  it('derives the batch list status from live payout results', () => {
+    const batch = createTestBatch('BAT-LIVE-001', 'Airwallex', '2026-08-11T10:00');
+    const basePayout = {
+      id: batch.items[0].payoutId,
+      status: '已付款',
+    } as Payout;
+
+    expect(paymentBatchRows([{ ...batch, status: '部分失败' }], [basePayout])[0].status).toBe('已付款');
+    expect(paymentBatchRows([batch], [{ ...basePayout, status: '已退回' }])[0].status).toBe('部分失败');
   });
 });
 

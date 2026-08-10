@@ -82,4 +82,20 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" checked=""');
   });
+
+  it('makes an unchanged account selectable immediately after the failure notice', () => {
+    const ready = recordPaymentFailureNotification(
+      beginPaymentFailureAccountRecovery(retryPayout()),
+      { account: 'media', name: '项目媒介' },
+      '付款失败，请确认原账户是否仍可使用',
+      'creator@example.com',
+    );
+    const html = renderToStaticMarkup(
+      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+    );
+
+    expect(html).toContain('已通知，可重试');
+    expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox"');
+    expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
+  });
 });

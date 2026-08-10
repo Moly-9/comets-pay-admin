@@ -79,7 +79,7 @@ export function BatchWizardPage({
     const issues = validatePayoutForBatch(payout, provider);
     return {
       eligible: issues.length === 0,
-      label: issues[0] ?? (retryCandidate ? '已重新校验，可重试' : '冻结快照校验通过'),
+      label: issues[0] ?? (retryCandidate ? paymentFailureRecoveryLabel(payout) : '冻结快照校验通过'),
       description: `${payout.provider} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${payout.account}`,
     };
   };

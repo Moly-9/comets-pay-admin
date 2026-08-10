@@ -194,6 +194,11 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
     expect(paymentRowsSource).toContain("'paymentReason', event.target.value");
     expect(paymentRowsSource).toContain("'transactionReference', event.target.value");
+    expect(toolbarSource).toContain('!paymentFailureRecoveryMode');
+    expect(paymentRowsSource).toContain("paymentLocked ? ' is-payment-locked' : ''");
+    expect(paymentRowsSource).toContain("'校验通过 · 已付款冻结'");
+    expect(paymentRowsSource).toContain("!paymentFailureRecoveryMode || Boolean(failurePayout)");
+    expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
   });
 });
 

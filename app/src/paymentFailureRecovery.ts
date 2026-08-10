@@ -16,6 +16,32 @@ export type PaymentFailureRevalidationAccount = {
   externalBeneficiaryId?: string;
 };
 
+export const markPaymentFailureAccountChanged = (
+  payout: Payout,
+  account: PaymentFailureRevalidationAccount,
+  occurredAt = new Date().toISOString(),
+): Payout => {
+  if (!payout.paymentFailureRecovery || payout.paymentFailureRecovery.status === 'RETRY_SUBMITTED') {
+    throw new Error('当前付款不在可修改的失败恢复流程中。');
+  }
+  return {
+    ...payout,
+    paymentListRequiresRevalidation: true,
+    paymentListValidationIssues: ['收款账户已修改，请重新校验'],
+    paymentFailureRecovery: {
+      ...payout.paymentFailureRecovery,
+      status: 'CREATOR_UPDATED',
+      readyReason: undefined,
+      creatorUpdatedAt: occurredAt,
+      reportedPayoutAccountId: account.payoutAccountId,
+      reportedPayoutAccountVersion: account.payoutAccountVersion,
+      reportedAccountFingerprint: account.accountFingerprint,
+      reportedExternalBeneficiaryId: account.externalBeneficiaryId,
+      revalidationIssues: [],
+    },
+  };
+};
+
 const nextAccountVersion = (value?: PayoutAccountVersion): PayoutAccountVersion => {
   const current = value && value !== 'legacy-v1' ? Number(value.slice(1)) : 1;
   return `v${Number.isFinite(current) ? current + 1 : 2}`;
@@ -43,7 +69,11 @@ export const isPaymentFailureRetryReady = (payout: Payout) => (
 export const paymentFailureRecoveryLabel = (payout: Payout) => {
   const status = payout.paymentFailureRecovery?.status;
   if (status === 'CREATOR_UPDATED') return '达人已更新，待重新校验';
-  if (status === 'READY_FOR_RETRY') return '已重新校验，可重试';
+  if (status === 'READY_FOR_RETRY') {
+    return payout.paymentFailureRecovery?.readyReason === 'ACCOUNT_UNCHANGED'
+      ? '已通知，可重试'
+      : '已重新校验，可重试';
+  }
   if (status === 'RETRY_SUBMITTED') return '已进入重试批次';
   return '等待达人更新账户';
 };
@@ -56,11 +86,12 @@ export const beginPaymentFailureAccountRecovery = (
     ...payout,
     status: '已退回',
     invoiceReviewStatus: '已通过',
-    paymentListRequiresRevalidation: true,
-    paymentListValidationIssues: ['付款失败，等待达人更新收款账户'],
+    paymentListRequiresRevalidation: false,
+    paymentListValidationIssues: [],
     paymentFailureRecovery: {
       status: 'AWAITING_CREATOR_UPDATE',
       notifications: [],
+      readyReason: undefined,
       failureCode: payout.paymentFailure?.errorCode,
       returnReason: payout.paymentFailureReturn?.reason,
       previousAttempts: previous ? [
@@ -109,6 +140,14 @@ export const recordPaymentFailureNotification = (
     ...payout,
     paymentFailureRecovery: {
       ...payout.paymentFailureRecovery!,
+      status: payout.paymentFailureRecovery!.status === 'AWAITING_CREATOR_UPDATE'
+        && !payout.paymentListRequiresRevalidation
+        ? 'READY_FOR_RETRY'
+        : payout.paymentFailureRecovery!.status,
+      readyReason: payout.paymentFailureRecovery!.status === 'AWAITING_CREATOR_UPDATE'
+        && !payout.paymentListRequiresRevalidation
+        ? 'ACCOUNT_UNCHANGED'
+        : payout.paymentFailureRecovery!.readyReason,
       notifications: [
         ...payout.paymentFailureRecovery!.notifications,
         {
@@ -136,11 +175,14 @@ export const simulateCreatorAccountUpdated = (
   const revision = payout.paymentFailureRecovery.notifications.length;
   return {
     ...payout,
+    paymentListRequiresRevalidation: true,
     paymentListValidationIssues: ['达人已更新账户，待重新校验'],
     paymentFailureRecovery: {
       ...payout.paymentFailureRecovery,
       status: 'CREATOR_UPDATED',
+      readyReason: undefined,
       creatorUpdatedAt: occurredAt,
+      reportedPayoutAccountId: payout.payoutAccountId ?? payout.invoiceSnapshot?.payoutAccountId,
       reportedPayoutAccountVersion: nextAccountVersion(
         payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion,
       ),
@@ -182,7 +224,9 @@ export const completePaymentFailureRevalidation = (
   }
   return {
     ...payout,
-    payoutAccountId: payout.payoutAccountId ?? payout.invoiceSnapshot?.payoutAccountId,
+    payoutAccountId: recovery.reportedPayoutAccountId
+      ?? payout.payoutAccountId
+      ?? payout.invoiceSnapshot?.payoutAccountId,
     payoutAccountVersion: recovery.reportedPayoutAccountVersion,
     payoutAccountFingerprint: recovery.reportedAccountFingerprint,
     externalBeneficiaryId: recovery.reportedExternalBeneficiaryId ?? payout.externalBeneficiaryId,
@@ -191,6 +235,7 @@ export const completePaymentFailureRevalidation = (
     paymentFailureRecovery: {
       ...recovery,
       status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
       revalidatedAt: occurredAt,
       revalidationIssues: [],
     },
@@ -204,7 +249,9 @@ export const paymentFailureRevalidationIssues = (
   const recovery = payout.paymentFailureRecovery;
   if (!recovery || recovery.status !== 'CREATOR_UPDATED') return ['达人账户尚未更新'];
   if (!account) return ['达人档案中未找到失败款关联的收款账户'];
-  const expectedPayoutAccountId = payout.payoutAccountId ?? payout.invoiceSnapshot?.payoutAccountId;
+  const expectedPayoutAccountId = recovery.reportedPayoutAccountId
+    ?? payout.payoutAccountId
+    ?? payout.invoiceSnapshot?.payoutAccountId;
   return [
     account.payoutAccountId !== expectedPayoutAccountId ? '收款账户 ID 与失败付款记录不一致' : '',
     account.payoutAccountVersion !== recovery.reportedPayoutAccountVersion ? '收款账户版本与达人反馈不一致' : '',
