@@ -38,7 +38,7 @@ const payout = (currency: InvoiceCurrency, index: number): Payout => ({
 });
 
 describe('PaymentWorkbenchPage currency overview', () => {
-  it('restores the original card classes and renders both five-currency detail actions', () => {
+  it('places secondary currencies below the primary amount and renders icon detail actions', () => {
     const html = renderWorkbench(INITIAL_PAYOUTS);
 
     expect(html).toContain('summary-surface payment-workbench-summary');
@@ -59,7 +59,13 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html).toContain('>HKD<');
     expect(html).toContain('>SGD<');
     expect(secondaryRows.every((row) => !row.includes('<strong>'))).toBe(true);
-    expect(html.match(/>查看详情<\/button>/g)).toHaveLength(2);
+    expect(html.match(/class="payment-summary-content"/g)).toHaveLength(2);
+    const detailButtons = html.match(/<button class="payment-summary-details-button"[\s\S]*?<\/button>/g) ?? [];
+    expect(detailButtons).toHaveLength(2);
+    expect(detailButtons.every((button) => button.includes('lucide-chevron-right'))).toBe(true);
+    expect(detailButtons.every((button) => !button.includes('查看详情'))).toBe(true);
+    expect(html).toContain('aria-label="查看待付款币种详情"');
+    expect(html).toContain('aria-label="查看本月已付款币种详情"');
   });
 
   it('maps every supported currency to a flag asset for the detail list', () => {

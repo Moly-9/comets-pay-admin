@@ -1,4 +1,4 @@
-import { CalendarDays, Plus, WalletCards } from 'lucide-react';
+import { CalendarDays, ChevronRight, Plus, WalletCards } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination } from '../components/Pagination';
@@ -52,17 +52,30 @@ function CurrencyOverviewCard({
 
   return (
     <article
-      className={`summary-card ${id === 'pending' ? 'summary-card-peach' : 'summary-card-lilac'} payment-workbench-summary-card`}
+      className={`summary-card ${id === 'pending' ? 'summary-card-peach' : 'summary-card-lilac'} payment-workbench-summary-card${hasDetails ? ' has-details' : ''}`}
       aria-label={meta.summaryLabel}
     >
       <span className={`summary-illustration ${id === 'pending' ? 'summary-coins' : ''}`} aria-hidden="true">
         {id === 'pending' ? '◆' : <WalletCards size={27} />}
       </span>
-      <div className="payment-summary-primary">
-        <strong>USD {formatOverviewAmount(primary.amount)}</strong>
-        <span>{meta.summaryLabel} · {primary.count} 笔</span>
+      <div className="payment-summary-content">
+        <div className="payment-summary-primary">
+          <strong>USD {formatOverviewAmount(primary.amount)}</strong>
+          <span>{meta.summaryLabel} · {primary.count} 笔</span>
+        </div>
       </div>
-      {visibleSecondary.length || hasDetails ? (
+      {hasDetails ? (
+        <button
+          className="payment-summary-details-button"
+          type="button"
+          aria-label={`查看${meta.detailTitle}`}
+          title={`查看${meta.detailTitle}`}
+          onClick={onViewDetails}
+        >
+          <ChevronRight size={19} aria-hidden="true" />
+        </button>
+      ) : null}
+      {visibleSecondary.length ? (
         <div className="payment-summary-secondary" aria-label={`${meta.summaryLabel}其他币种`}>
           {visibleSecondary.map((item) => (
             <div className="payment-summary-secondary-row" key={item.currency}>
@@ -71,11 +84,6 @@ function CurrencyOverviewCard({
               <small>{item.count} 笔</small>
             </div>
           ))}
-          {hasDetails ? (
-            <button className="payment-summary-details-button" type="button" onClick={onViewDetails}>
-              查看详情
-            </button>
-          ) : null}
         </div>
       ) : null}
     </article>

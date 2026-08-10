@@ -5606,12 +5606,35 @@ button:disabled {
 }
 
 .payment-workbench-summary-card {
+  display: grid;
   min-width: 0;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 18px;
+  row-gap: 10px;
+}
+
+.payment-workbench-summary-card.has-details {
+  grid-template-columns: 48px minmax(0, 1fr) 44px;
+}
+
+.payment-workbench-summary-card > .summary-illustration {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.payment-summary-content {
+  display: grid;
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+  align-content: center;
 }
 
 .payment-summary-primary {
+  display: grid;
   min-width: 0;
-  flex: 1 1 auto;
+  gap: 5px;
 }
 
 .payment-summary-primary strong {
@@ -5620,19 +5643,19 @@ button:disabled {
 
 .payment-workbench-summary-card .payment-summary-secondary {
   display: grid;
-  width: min(40%, 184px);
-  flex: none;
-  align-self: stretch;
-  align-content: center;
-  gap: 2px;
-  border-left: 1px solid rgba(98, 94, 111, 0.14);
-  padding-left: 16px;
+  min-width: 0;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+  border-top: 1px solid rgba(98, 94, 111, 0.14);
+  padding-top: 8px;
 }
 
 .payment-summary-secondary-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: 28px 52px auto;
+  grid-template-columns: 28px minmax(48px, auto) auto;
   align-items: baseline;
   justify-content: start;
   gap: 3px;
@@ -5663,24 +5686,31 @@ button:disabled {
 }
 
 .payment-summary-details-button {
-  min-height: 24px;
-  justify-self: end;
-  border: 0;
-  background: transparent;
-  padding: 2px 0;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  grid-column: 3;
+  grid-row: 1;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  border: 1px solid rgba(75, 75, 89, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0;
   color: #5e6270;
   cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .payment-summary-details-button:hover {
+  border-color: rgba(75, 75, 89, 0.18);
+  background: rgba(255, 255, 255, 0.82);
   color: #252631;
 }
 
 .payment-summary-details-button:focus-visible {
-  border-radius: 4px;
   outline: 2px solid rgba(56, 78, 209, 0.35);
   outline-offset: 2px;
 }
@@ -12105,12 +12135,8 @@ button:disabled {
   }
 
   .payment-workbench-summary-card {
-    gap: 12px;
-  }
-
-  .payment-workbench-summary-card .payment-summary-secondary {
-    width: min(40%, 150px);
-    padding-left: 11px;
+    column-gap: 12px;
+    row-gap: 8px;
   }
 
   .operations-card,
@@ -12225,8 +12251,8 @@ button:disabled {
   }
 
   .payment-workbench-summary-card .payment-summary-secondary {
-    width: 124px;
-    padding-left: 9px;
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   .payment-summary-secondary-row {
