@@ -96,9 +96,30 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('PAY-202608-000001');
     expect(html).toContain('INV-202608-000001');
     expect(html).toContain('CON-202608-000001');
-    expect(html).toContain('Airwallex · LOCAL');
+    expect(html).toContain('>Airwallex</strong><small>LOCAL</small>');
+    expect(html).toContain('达人');
+    expect(html).toContain('付款渠道');
+    expect(html).toContain('付款金额');
+    expect(html).toContain('avatar avatar-sm');
+    expect(html).toContain('>MK</span>');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-controls="payment-batch-item-payout_detail_test"');
+    expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，展开付款详情"');
+  });
+
+  it('uses the simplified three-stage channel progress', () => {
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage batch={DETAIL_BATCH} onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain('已付款');
+    expect(html).toContain('平台处理中');
+    expect(html).toContain('已完成');
+    expect(html).toContain('aria-current="step"');
+    expect(html).not.toContain('已创建');
+    expect(html).not.toContain('已加入付款项');
+    expect(html).not.toContain('已询价');
+    expect(html).not.toContain('已提交渠道');
   });
 
   it('renders expanded contract, Invoice, masked account and channel failure details', () => {

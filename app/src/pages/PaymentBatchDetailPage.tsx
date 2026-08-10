@@ -8,10 +8,10 @@ import {
   Clock3,
   FileText,
   ReceiptText,
-  UserRound,
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Avatar } from '../components/Common';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -29,14 +29,31 @@ const fundingAccountLabel = (value: string) => {
   return value || '未记录';
 };
 
-const lifecycleLabel = (value: string) => ({
-  CREATED: '已创建',
-  ITEMS_ADDED: '已加入付款项',
-  QUOTED: '已询价',
-  SUBMITTED: '已提交渠道',
-  COMPLETED: '已完成',
-  PARTIALLY_FAILED: '部分失败',
-}[value] ?? value);
+const PAYMENT_PROGRESS_STEPS = ['已付款', '平台处理中', '已完成'] as const;
+
+const isBatchComplete = (batch: PaymentBatchRecord) => (
+  batch.lifecycle.includes('COMPLETED') || batch.status === '已完成'
+);
+
+const creatorInitials = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length > 1) return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+  return Array.from(parts[0] ?? '?').slice(0, 2).join('').toUpperCase();
+};
+
+const CREATOR_ACCENTS = ['#e49728', '#4c78d8', '#dc5d5d', '#8b5bd6', '#2f8f72', '#b35c96'];
+
+const creatorAccent = (value: string) => {
+  const hash = Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0);
+  return CREATOR_ACCENTS[hash % CREATOR_ACCENTS.length];
+};
+
+const paymentStatusTone = (status: string) => {
+  if (/失败|异常|退回/.test(status)) return 'is-danger';
+  if (/处理中|等待|审批/.test(status)) return 'is-processing';
+  if (status === '已付款') return 'is-success';
+  return 'is-neutral';
+};
 
 const money = (currency: string, amount: number | null) => (
   amount === null ? '未记录' : `${currency} ${amount.toLocaleString('en-US')}`
@@ -149,6 +166,7 @@ export function PaymentBatchDetailPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const totals = paymentBatchAmountLabel(batch);
   const statusCounts = paymentBatchStatusCounts(batch);
+  const completed = isBatchComplete(batch);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -182,21 +200,21 @@ export function PaymentBatchDetailPage({
       </section>
 
       <section className="payment-batch-detail-section payment-batch-lifecycle-section">
-        <header><div><h2>渠道处理进度</h2><p>批次创建、询价、提交与结果回写。</p></div></header>
-        <ol>
-          {batch.lifecycle.map((step, index) => (
-            <li key={`${step}-${index}`}>
-              <span>
-                {step === 'PARTIALLY_FAILED'
-                  ? <CircleAlert size={14} />
-                  : index < batch.lifecycle.length - 1 || step === 'COMPLETED'
-                    ? <Check size={14} />
-                    : <Clock3 size={14} />}
-              </span>
-              <strong>{lifecycleLabel(step)}</strong>
-              {index < batch.lifecycle.length - 1 ? <i /> : null}
-            </li>
-          ))}
+        <header><div><h2>渠道处理进度</h2><p>付款发起、平台处理与最终结果回写。</p></div></header>
+        <ol aria-label="渠道处理进度">
+          {PAYMENT_PROGRESS_STEPS.map((step, index) => {
+            const state = completed || index === 0 ? 'complete' : index === 1 ? 'current' : 'pending';
+            return (
+              <li className={`is-${state}`} key={step} aria-current={state === 'current' ? 'step' : undefined}>
+                <span aria-hidden="true">
+                  {state === 'complete' ? <Check size={14} /> : state === 'current' ? <Clock3 size={14} /> : index + 1}
+                </span>
+                <strong>{step}</strong>
+                <small>{state === 'complete' ? '已完成' : state === 'current' ? '当前阶段' : '待处理'}</small>
+                {index < PAYMENT_PROGRESS_STEPS.length - 1 ? <i aria-hidden="true" /> : null}
+              </li>
+            );
+          })}
         </ol>
       </section>
 
@@ -222,39 +240,57 @@ export function PaymentBatchDetailPage({
 
       <section className="payment-batch-detail-section payment-batch-items-section">
         <header><div><h2>付款明细</h2><p>按付款项查看合同、Invoice、账户快照和渠道结果。</p></div><span>{batch.items.length} 笔</span></header>
-        <div className="payment-batch-item-list" role="list">
-          {batch.items.map((item) => {
-            const expanded = expandedItemId === item.payoutId;
-            const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-            return (
-              <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
-                <button
-                  className="payment-batch-item-trigger"
-                  type="button"
-                  aria-expanded={expanded}
-                  aria-controls={detailId}
-                  onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
-                >
-                  <span className="payment-batch-item-person"><UserRound size={17} aria-hidden="true" /><span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span></span>
-                  <span><small>Invoice</small><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
-                  <span><small>合同</small><strong>{contractSummary(item)}</strong></span>
-                  <span><small>付款清单</small><strong>{item.paymentListCode}</strong></span>
-                  <span><small>金额</small><strong>{money(item.currency, item.amount)}</strong></span>
-                  <span><small>渠道 / 方式</small><strong>{item.provider} · {item.transferMethod}</strong></span>
-                  <span className="payment-batch-item-status"><small>状态</small><strong><i />{item.paymentStatus}</strong></span>
-                  <ChevronDown size={17} aria-hidden="true" />
-                </button>
-                {expanded ? <div id={detailId}><PaymentItemDetails item={item} /></div> : null}
-              </article>
-            );
-          })}
-          {!batch.items.length ? (
-            <div className="payment-batch-detail-empty-state" role="status">
-              <ReceiptText size={22} aria-hidden="true" />
-              <strong>该批次暂无付款明细</strong>
-              <span>批次记录存在，但没有可展示的付款项快照。</span>
+        <div className="payment-batch-item-list">
+          {batch.items.length ? (
+            <div className="payment-batch-item-table-head" aria-hidden="true">
+              <span>达人</span>
+              <span>付款渠道</span>
+              <span>Invoice</span>
+              <span>合同</span>
+              <span>付款清单</span>
+              <span>付款金额</span>
+              <span>付款状态</span>
+              <span />
             </div>
           ) : null}
+          <div className="payment-batch-item-rows" role="list">
+            {batch.items.map((item) => {
+              const expanded = expandedItemId === item.payoutId;
+              const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+              return (
+                <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
+                  <button
+                    className="payment-batch-item-trigger"
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={detailId}
+                    aria-label={`${item.creatorName}，${money(item.currency, item.amount)}，${item.paymentStatus}，${expanded ? '收起' : '展开'}付款详情`}
+                    onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
+                  >
+                    <span className="payment-batch-item-person">
+                      <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
+                      <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
+                    </span>
+                    <span data-label="付款渠道"><strong>{item.provider}</strong><small>{item.transferMethod}</small></span>
+                    <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
+                    <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
+                    <span data-label="付款清单" title={item.paymentListCode}><strong>{item.paymentListCode}</strong></span>
+                    <span className="payment-batch-item-amount" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
+                    <span className={`payment-batch-item-status ${paymentStatusTone(item.paymentStatus)}`} data-label="付款状态"><strong><i />{item.paymentStatus}</strong></span>
+                    <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
+                  </button>
+                  {expanded ? <div id={detailId}><PaymentItemDetails item={item} /></div> : null}
+                </article>
+              );
+            })}
+            {!batch.items.length ? (
+              <div className="payment-batch-detail-empty-state" role="status">
+                <ReceiptText size={22} aria-hidden="true" />
+                <strong>该批次暂无付款明细</strong>
+                <span>批次记录存在，但没有可展示的付款项快照。</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       </section>
     </div>
