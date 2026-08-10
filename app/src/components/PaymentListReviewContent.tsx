@@ -30,7 +30,6 @@ import {
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
 import { Button } from './Common';
-import { PaymentProviderBadge } from './PaymentProviderBadge';
 
 type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
   state: 'checking';
@@ -449,7 +448,7 @@ export function PaymentListReviewContent({
                     tabIndex={-1}
                   >
                     <header>
-                      <div><strong>{row.item.snapshot.creatorName}</strong><small>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · <PaymentProviderBadge compact provider={row.effectiveAccount.provider} /></small></div>
+                      <div><strong>{row.item.snapshot.creatorName}</strong><small>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</small></div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}
@@ -495,7 +494,7 @@ export function PaymentListReviewContent({
                 return (
                   <article className="project-payment-row request-payment-review-row" key={row.key}>
                     <header className="project-payment-row-header">
-                      <div><strong>{row.item.snapshot.creatorName}</strong><span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · <PaymentProviderBadge compact provider={row.effectiveAccount.provider} /></span></div>
+                      <div><strong>{row.item.snapshot.creatorName}</strong><span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</span></div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}

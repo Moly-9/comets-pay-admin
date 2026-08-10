@@ -18,7 +18,6 @@ import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
 import type { Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { Button, Modal } from './Common';
-import { PaymentProviderBadge } from './PaymentProviderBadge';
 import './PaymentExecutionWorkspace.css';
 
 const formatDateTime = (value?: string) => {
@@ -238,7 +237,7 @@ export function PaymentExecutionWorkspace({
                       </span>
                       <div>
                         <strong>{payout.creator}</strong>
-                        <small>{payout.invoice} · {project.paymentOrder} · <PaymentProviderBadge compact provider={payout.provider} /></small>
+                        <small>{payout.invoice} · {project.paymentOrder} · {payout.provider}</small>
                       </div>
                       <span className={`payment-execution-payee-status ${isReturned ? 'is-error' : informationValidated ? 'is-valid' : 'is-pending'}`}>
                         {isReturned || !informationValidated ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}

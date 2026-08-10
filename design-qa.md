@@ -957,3 +957,30 @@ final result: passed
 - [x] Desktop and 390 px responsive verification.
 
 final result: passed
+
+---
+
+# Provider Highlight Scope And Creator Badge Sizing Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d4b7247a-20d0-4ad7-ba3c-bd429a3918c6.png`.
+- Desktop implementation: `artifacts/provider-scope-qa/creator-list-desktop.jpg`, captured at a 1280 x 720 CSS viewport.
+- State: signed in as `admin.demo`, opened `达人档案`, then opened a payment batch detail from `付款批次` to verify the non-list treatment.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The creator-list provider label and its adjacent account description both resolve to `9.5px`; the provider frame uses a stable 20px CSS height and a compact 15px initial mark.
+- The smaller label retains the existing Airwallex, PayPal, and PayMax color mapping, border, visible provider name, and letter mark, so color is not the only identifying signal.
+- Provider highlighting remains in top-level payment tables and lists. The transaction channel summary, payment batch detail, payment execution workspace, payment-list review, request creation/detail, and resource review areas render provider names as ordinary text.
+- The verified creator list and payment batch detail have no page-level horizontal overflow. The badge dimensions remain fixed inside the existing horizontally scrollable table structure on narrow layouts.
+
+## Interaction And Technical Verification
+
+- The creator list rendered 10 scoped provider badges and no unscoped provider badge.
+- The payment batch list rendered provider badges; opening the first batch detail rendered zero provider badges and preserved the provider and transfer-method text.
+- Source and implementation were opened together for direct visual comparison. The implementation keeps the source color treatment while reducing its visual weight to match the adjacent account copy.
+- Full Vitest passed 59 files and 371 tests; TypeScript/Vite build and the final diff check passed.
+
+final result: passed

@@ -96,9 +96,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('PAY-202608-000001');
     expect(html).toContain('INV-202608-000001');
     expect(html).toContain('CON-202608-000001');
-    expect(html).toContain('data-payment-provider="Airwallex"');
-    expect(html).toContain('<span class="payment-provider-label">Airwallex</span>');
-    expect(html).toContain('<small>LOCAL</small>');
+    expect(html).toContain('>Airwallex</strong><small>LOCAL</small>');
+    expect(html).not.toContain('data-payment-provider=');
     expect(html).toContain('达人');
     expect(html).toContain('付款渠道');
     expect(html).toContain('付款金额');

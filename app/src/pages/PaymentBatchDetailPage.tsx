@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '../components/Common';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -304,7 +303,7 @@ export function PaymentBatchDetailPage({
                       <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
                       <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
                     </span>
-                    <span data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
+                    <span data-label="付款渠道"><strong>{item.provider}</strong><small>{item.transferMethod}</small></span>
                     <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
                     <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
                     <span data-label="付款清单" title={item.paymentListCode}><strong>{item.paymentListCode}</strong></span>

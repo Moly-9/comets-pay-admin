@@ -98,19 +98,23 @@
   min-width: 0;
 }
 
-.transaction-channel-summary-row > .payment-provider-badge.payment-provider-badge {
-  align-self: center;
-  color: var(--payment-provider-text);
-  font-size: 11.5px;
+.payout-list-provider .payment-provider-badge.payout-list-provider-badge {
+  box-sizing: border-box;
+  height: 20px;
+  min-height: 20px;
+  gap: 4px;
+  padding: 1px 5px 1px 2px;
+  border-radius: 5px;
+  font-size: 9.5px;
+  line-height: 1;
 }
 
-.payment-workbench-summary-card.transaction-channel-summary-card .payment-summary-secondary.transaction-channel-summary-details {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.transaction-channel-summary-card .transaction-channel-summary-row {
-  grid-template-columns: minmax(96px, max-content) auto auto;
-  align-items: center;
+.payout-list-provider .payout-list-provider-badge .payment-provider-mark {
+  width: 15px;
+  height: 15px;
+  flex-basis: 15px;
+  border-radius: 4px;
+  font-size: 8.5px;
 }
 
 @media (max-width: 680px) {

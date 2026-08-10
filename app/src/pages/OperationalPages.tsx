@@ -2448,7 +2448,7 @@ export function CreatorsPage({
                           <strong>{status.label}</strong>
                           {defaultAccount ? (
                             <span className="payout-list-provider">
-                              <PaymentProviderBadge compact provider={defaultAccount.provider} />
+                              <PaymentProviderBadge className="payout-list-provider-badge" compact provider={defaultAccount.provider} />
                               <small>{defaultAccount.nickname}</small>
                             </span>
                           ) : <small>尚未建立收款账户</small>}
@@ -3453,7 +3453,7 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
           <ul className="payment-summary-secondary transaction-channel-summary-details" aria-label="各渠道付款成功率">
             {providerSuccessRates.map((item) => (
               <li className="transaction-channel-summary-row" key={item.provider}>
-                <PaymentProviderBadge compact provider={item.provider} />
+                <span>{item.provider}</span>
                 <span>{item.successRate}</span>
                 <small>{item.failedCount} 笔失败</small>
               </li>
