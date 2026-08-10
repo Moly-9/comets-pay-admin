@@ -58,6 +58,7 @@ import {
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
+  type MyProjectStatus,
   type PaymentRequestCreatorLink,
   type PaymentRequestPaymentChannel,
 } from '../paymentRequestProjects';
@@ -373,6 +374,11 @@ export function MediaPaymentProjectsPage({
     && Boolean(payout.paymentFailureRecovery)
     && payout.status !== '已付款'
   ));
+  const requestStatusForDisplay = (request: RequestProjectSummary): MyProjectStatus => (
+    failurePayoutsForRequest(request).length > 0
+      ? '部分打款失败'
+      : myProjectStatusFor(request)
+  );
   const editingRequest = editingRequestId
     ? visibleRequests.find((request) => request.id === editingRequestId) ?? null
     : null;
@@ -415,11 +421,15 @@ export function MediaPaymentProjectsPage({
   const returnedRequests = visibleRequests
     .filter((request) => request.lifecycle === 'RETURNED' && !failurePayoutsForRequest(request).length)
     .map((request) => ({ request, details: requestApprovalReturnDetails(request.approval) }));
-  const financeReturnedCount = returnedRequests.filter(({ details }) => details?.stage === 'FINANCE').length;
+  const paymentFailureRequests = visibleRequests.filter((request) => (
+    failurePayoutsForRequest(request).length > 0
+  ));
+  const pendingRequestCount = returnedRequests.length + paymentFailureRequests.length;
   const { visible: filteredRequests, invalidBudgetRange } = filterPaymentRequestList({
     requests: visibleRequests,
     search,
     filters,
+    statusFor: requestStatusForDisplay,
   });
   const {
     page,
@@ -450,7 +460,7 @@ export function MediaPaymentProjectsPage({
   const currencies = Array.from(new Set(visibleRequests
     .map((request) => paymentRequestAmount(request.amount).currency)
     .filter(Boolean)));
-  const statuses = Array.from(new Set(visibleRequests.map(myProjectStatusFor)));
+  const statuses = Array.from(new Set(visibleRequests.map(requestStatusForDisplay)));
   const currencyFilterOptions = [
     { value: 'all', label: '全部币种' },
     ...currencies.map((currency) => ({ value: currency, label: currency })),
@@ -465,8 +475,8 @@ export function MediaPaymentProjectsPage({
     ...statuses.map((status) => ({
       value: status,
       label: status,
-      description: `${visibleRequests.filter((request) => myProjectStatusFor(request) === status).length} 个项目`,
-      leading: <span className={`project-status-select-dot ${status === '已付款' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'}`} />,
+      description: `${visibleRequests.filter((request) => requestStatusForDisplay(request) === status).length} 个项目`,
+      leading: <span className={`project-status-select-dot ${status === '已付款' ? 'project-status-select-dot-complete' : status === '部分打款失败' ? 'project-status-select-dot-failure' : 'project-status-select-dot-active'}`} />,
     })),
   ];
   const creatorSelectionEditable = !editingRequest || canAddCreatorToPaymentRequest(editingRequest);
@@ -777,7 +787,9 @@ export function MediaPaymentProjectsPage({
   };
 
   if (selectedRequest) {
-    const selectedMyProjectStatus = myProjectStatusFor(selectedRequest);
+    const failedPayouts = failurePayoutsForRequest(selectedRequest);
+    const hasPaymentFailureRecovery = failedPayouts.length > 0;
+    const selectedMyProjectStatus = requestStatusForDisplay(selectedRequest);
     const cooperationProject = cooperationProjects.find((project) => (
       cooperationProjectIdFor(project) === (selectedRequest.cooperationProjectId ?? selectedRequest.projectId)
     ));
@@ -793,8 +805,6 @@ export function MediaPaymentProjectsPage({
         paymentChannel: selectedRequest.paymentChannel,
       }),
     ].filter(Boolean);
-    const failedPayouts = failurePayoutsForRequest(selectedRequest);
-    const hasPaymentFailureRecovery = failedPayouts.length > 0;
     const editable = canCreate && ['DRAFT', 'RETURNED'].includes(selectedRequest.lifecycle ?? '');
     const requestContentEditable = editable && !hasPaymentFailureRecovery;
     const canAddCreators = !hasPaymentFailureRecovery && canCreate && canAddCreatorToPaymentRequest(selectedRequest);
@@ -827,12 +837,12 @@ export function MediaPaymentProjectsPage({
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
-          actions={<>{requestContentEditable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned && !hasPaymentFailureRecovery ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}<span className="project-detail-status"><i />{selectedMyProjectStatus}</span></>}
+          actions={<>{requestContentEditable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned && !hasPaymentFailureRecovery ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}<span className="project-detail-status" data-tone={hasPaymentFailureRecovery ? 'failure' : undefined}><i />{selectedMyProjectStatus}</span></>}
         />
         <div className="metrics-grid project-detail-metrics">
           <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
-          <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
+          <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong>{hasPaymentFailureRecovery ? null : <small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small>}</article>
         </div>
         {hasPaymentFailureRecovery ? (
           <section className="media-request-return-panel media-request-payment-failure-panel" aria-labelledby="media-request-payment-failure-heading">
@@ -1095,12 +1105,12 @@ export function MediaPaymentProjectsPage({
         <article className="metric-card"><span>待打款</span><strong>{metrics.waitingPayment}</strong><small>已完成全部审批</small></article>
         <article className="metric-card metric-lilac"><span>请款项目总数</span><strong>{metrics.total}</strong><small>已关联真实合作项目</small></article>
       </div>
-      {returnedRequests.length ? (
+      {pendingRequestCount ? (
         <div className="media-request-return-notice" role="status">
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
-            <strong>{returnedRequests.length} 个请款项目待修改</strong>
-            <p>{financeReturnedCount ? `其中 ${financeReturnedCount} 个由付款工作台退回。` : ''}请在下方列表点击“处理退回”，查看原因并修改后重新提交。</p>
+            <strong>{pendingRequestCount} 个请款项目待处理</strong>
+            <p>其中 {returnedRequests.length} 个付款信息有误，{paymentFailureRequests.length} 个打款失败。请在下方列表中点击“处理退回”或“处理失败请款”，查看原因并处理。</p>
           </div>
         </div>
       ) : null}
@@ -1138,7 +1148,7 @@ export function MediaPaymentProjectsPage({
                   : [];
                 const isExporting = exportingRequestId === request.id;
                 return (
-                  <tr className={isReturned ? 'media-request-returned-row' : undefined} key={request.id}>
+                  <tr className={hasPaymentFailure ? 'media-request-payment-failure-row' : isReturned ? 'media-request-returned-row' : undefined} key={request.id}>
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
@@ -1147,7 +1157,7 @@ export function MediaPaymentProjectsPage({
                     <td>{request.amount}</td>
                     <td>
                       <div className="media-request-list-status">
-                        <ProjectStatus status={hasPaymentFailure ? '部分打款失败' : myProjectStatusFor(request)} />
+                        <ProjectStatus status={requestStatusForDisplay(request)} />
                         {isReturned && !hasPaymentFailure ? (
                           <small title={returnDetails?.reason}>
                             {returnDetails?.stage === 'FINANCE' ? '付款工作台' : returnDetails?.stageLabel ?? '审批流'} · {returnDetails?.reason ?? '请查看退回原因'}

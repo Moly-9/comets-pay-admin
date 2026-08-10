@@ -688,6 +688,21 @@ describe('media payment request list presentation', () => {
     expect(result.visible.map((request) => request.id)).toEqual(['request-2']);
   });
 
+  it('accepts a live payment-status resolver for the My Projects status filter', () => {
+    const filters = {
+      ...createEmptyPaymentRequestListFilters(),
+      statuses: ['部分打款失败'],
+    };
+    const result = filterPaymentRequestList({
+      requests,
+      search: '',
+      filters,
+      statusFor: (request) => request.id === 'request-3' ? '部分打款失败' : myProjectStatusFor(request),
+    });
+
+    expect(result.visible.map((request) => request.id)).toEqual(['request-3']);
+  });
+
   it('only allows adding creators while the request remains a draft', () => {
     expect(canAddCreatorToPaymentRequest({ id: 'draft', lifecycle: 'DRAFT' })).toBe(true);
     expect(canAddCreatorToPaymentRequest({ id: 'returned', lifecycle: 'RETURNED' })).toBe(false);
@@ -722,6 +737,10 @@ describe('payment request module status presentation', () => {
     expect(requestProjectStatusFor({ lifecycle: 'DRAFT' })).toBeNull();
     expect(myProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
     expect(requestProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
+  });
+
+  it('keeps the partial payment failure status available to My Projects filters', () => {
+    expect(myProjectStatusFor({ lifecycle: 'RETURNED', status: '部分打款失败' })).toBe('部分打款失败');
   });
 });
 

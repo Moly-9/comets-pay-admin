@@ -9490,6 +9490,16 @@ button:disabled {
   background: #7a8fae;
 }
 
+.project-detail-status[data-tone="failure"] {
+  border-color: #efc7c1;
+  background: #fff8f6;
+  color: #a4473d;
+}
+
+.project-detail-status[data-tone="failure"] i {
+  background: #c95f52;
+}
+
 .project-detail-metrics .metric-card strong {
   overflow: hidden;
   font-size: 20px;
@@ -10691,6 +10701,11 @@ button:disabled {
 .project-status-select-dot-active {
   background: #3b82f6;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.project-status-select-dot-failure {
+  background: #c95f52;
+  box-shadow: 0 0 0 4px rgba(201, 95, 82, 0.12);
 }
 
 .project-status-select-complete .custom-select-value {

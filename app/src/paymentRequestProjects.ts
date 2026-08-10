@@ -271,10 +271,12 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
   requests,
   search,
   filters,
+  statusFor = myProjectStatusFor,
 }: {
   requests: T[];
   search: string;
   filters: PaymentRequestListFilters;
+  statusFor?: (request: T) => MyProjectStatus;
 }) => {
   const query = search.trim().toLowerCase();
   const minBudget = filters.minBudget ? Number(filters.minBudget) : null;
@@ -289,7 +291,7 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
     const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;
-    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(myProjectStatusFor(request));
+    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(statusFor(request));
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
   return { visible, invalidBudgetRange };

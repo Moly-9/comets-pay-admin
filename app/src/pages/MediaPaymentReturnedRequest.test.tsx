@@ -109,7 +109,11 @@ const resourceActions = {
   onExportPaymentList: vi.fn(),
 };
 
-const renderPage = (focusedProjectId: string | null, payouts: Payout[] = []) => renderToStaticMarkup(
+const renderPage = (
+  focusedProjectId: string | null,
+  payouts: Payout[] = [],
+  requests: RequestProjectSummary[] = [returnedRequest],
+) => renderToStaticMarkup(
   <MediaPaymentProjectsPage
     notify={vi.fn()}
     currentUser={mediaUser}
@@ -119,7 +123,7 @@ const renderPage = (focusedProjectId: string | null, payouts: Payout[] = []) => 
     invoices={[]}
     paymentLists={[]}
     payouts={payouts}
-    requests={[returnedRequest]}
+    requests={requests}
     canCreate
     focusedProjectId={focusedProjectId}
     onFocusCleared={vi.fn()}
@@ -135,8 +139,9 @@ describe('media returned payment request handling', () => {
   it('keeps payment-workbench returns visible in My Projects with a reason and action', () => {
     const html = renderPage(null);
 
-    expect(html).toContain('1 个请款项目待修改');
-    expect(html).toContain('1 个由付款工作台退回');
+    expect(html).toContain('1 个请款项目待处理');
+    expect(html).toContain('其中 1 个付款信息有误，0 个打款失败');
+    expect(html).toContain('“处理退回”或“处理失败请款”');
     expect(html).toContain('付款工作台 · 收款账户名与 Invoice 不一致');
     expect(html).toContain('处理退回');
   });
@@ -192,14 +197,55 @@ describe('media returned payment request handling', () => {
     const detailHtml = renderPage(returnedRequest.id, [failedPayout]);
 
     expect(listHtml).toContain('处理失败请款');
-    expect(listHtml).not.toContain('处理退回');
     expect(listHtml).toContain('部分打款失败');
+    expect(listHtml).toContain('其中 0 个付款信息有误，1 个打款失败');
     expect(listHtml).toContain('1 笔失败款待恢复');
+    expect(detailHtml.match(/部分打款失败/g)).toHaveLength(2);
+    expect(detailHtml).not.toContain('已进入审批流');
     expect(detailHtml).toContain('付款失败退回');
     expect(detailHtml).toContain('1 笔失败款需恢复');
     expect(detailHtml).toContain('达人收款账户不可用，请更新后重新校验。');
     expect(detailHtml).toContain('等待达人更新账户');
     expect(detailHtml).not.toContain('退回待处理');
     expect(detailHtml).not.toContain('付款工作台已退回此请款项目');
+  });
+
+  it('summarizes ordinary returns and payment failures in one actionable reminder', () => {
+    const failedRequest: RequestProjectSummary = {
+      ...returnedRequest,
+      id: 'request-partial-failure',
+      requestCode: 'REQ-PARTIAL-FAILURE-01',
+      paymentRequestProjectId: 'request-partial-failure-internal' as RequestProjectSummary['paymentRequestProjectId'],
+      status: '部分打款失败',
+    };
+    const failedPayout: Payout = {
+      id: 'payout-partial-failure',
+      paymentRequestProjectId: failedRequest.paymentRequestProjectId,
+      creator: '失败达人',
+      handle: '@failed',
+      initials: 'FD',
+      projectId: 'project-returned',
+      project: cooperationProject.name,
+      contract: 'CON-PARTIAL-FAILURE-01',
+      invoice: 'INV-PARTIAL-FAILURE-01',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 800,
+      account: 'prototype-account',
+      status: '已退回',
+      invoiceReviewStatus: '已通过',
+      accent: '#c95f52',
+      paymentFailureRecovery: {
+        status: 'AWAITING_CREATOR_UPDATE',
+        notifications: [],
+      },
+    };
+
+    const html = renderPage(null, [failedPayout], [returnedRequest, failedRequest]);
+
+    expect(html).toContain('2 个请款项目待处理');
+    expect(html).toContain('其中 1 个付款信息有误，1 个打款失败');
+    expect(html).toContain('处理退回');
+    expect(html).toContain('处理失败请款');
   });
 });
