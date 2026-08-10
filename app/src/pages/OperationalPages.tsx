@@ -43,6 +43,7 @@ import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMa
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
@@ -2432,7 +2433,15 @@ export function CreatorsPage({
                     <td>
                       <span className={`payout-list-status payout-list-status-${status.tone}`}>
                         {status.tone === 'success' ? <CheckCircle2 size={16} /> : status.tone === 'danger' || status.tone === 'warning' ? <AlertCircle size={16} /> : <Clock3 size={16} />}
-                        <span><strong>{status.label}</strong><small>{defaultAccount ? `${defaultAccount.provider} · ${defaultAccount.nickname}` : '尚未建立收款账户'}</small></span>
+                        <span>
+                          <strong>{status.label}</strong>
+                          {defaultAccount ? (
+                            <span className="payout-list-provider">
+                              <PaymentProviderBadge compact provider={defaultAccount.provider} />
+                              <small>{defaultAccount.nickname}</small>
+                            </span>
+                          ) : <small>尚未建立收款账户</small>}
+                        </span>
                       </span>
                     </td>
                     <td>{creator.projects} 个</td>
@@ -3306,7 +3315,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
                       />
                     </td>
                     <td className="mono-cell">{batch.id}</td>
-                    <td>{batch.provider}</td>
+                    <td><PaymentProviderBadge compact provider={batch.provider} /></td>
                     <td>{batch.count} 笔</td>
                     <td>{batch.amount}</td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
@@ -3433,7 +3442,7 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
           <ul className="payment-summary-secondary transaction-channel-summary-details" aria-label="各渠道付款成功率">
             {providerSuccessRates.map((item) => (
               <li className="transaction-channel-summary-row" key={item.provider}>
-                <span>{item.provider}</span>
+                <PaymentProviderBadge compact provider={item.provider} />
                 <span>{item.successRate}</span>
                 <small>{item.failedCount} 笔失败</small>
               </li>

@@ -20,6 +20,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
@@ -900,7 +901,9 @@ export function MediaPaymentProjectsPage({
                       <td>
                         <div className="media-request-record-stack">
                           {presentation.invoices.length ? presentation.invoices.map((invoice) => (
-                            <span className="media-request-record-line media-request-channel" key={invoice.invoiceId}>{invoice.provider}</span>
+                            <span className="media-request-record-line media-request-channel" key={invoice.invoiceId}>
+                              <PaymentProviderBadge compact provider={invoice.provider} />
+                            </span>
                           )) : <span className="media-request-record-empty">—</span>}
                         </div>
                       </td>

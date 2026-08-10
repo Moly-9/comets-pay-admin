@@ -17,6 +17,7 @@ import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import type { Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { Button, Modal } from './Common';
+import { PaymentProviderBadge } from './PaymentProviderBadge';
 import './PaymentExecutionWorkspace.css';
 
 const formatDateTime = (value?: string) => {
@@ -194,7 +195,7 @@ export function PaymentExecutionWorkspace({
                       </span>
                       <div>
                         <strong>{payout.creator}</strong>
-                        <small>{payout.invoice} · {project.paymentOrder} · {payout.provider}</small>
+                        <small>{payout.invoice} · {project.paymentOrder} · <PaymentProviderBadge compact provider={payout.provider} /></small>
                       </div>
                       <span className={`payment-execution-payee-status ${informationValidated ? 'is-valid' : 'is-pending'}`}>
                         {informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}

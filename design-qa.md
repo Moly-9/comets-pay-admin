@@ -772,3 +772,41 @@ The source establishes four required regions through overlapping drawers: reques
 - No P3 refinement is required for this scoped workflow.
 
 final result: passed
+
+---
+
+# Payment Provider Badge Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e9718ad4-645f-4447-8205-34a721ad4cf3.png` (1420 x 400 px).
+- Desktop overview: `artifacts/provider-badges/transactions-desktop-final.png`.
+- Desktop list comparison: `artifacts/provider-badges/transactions-list-final.png`.
+- Narrow implementation: `artifacts/provider-badges/transactions-390x844-final.png`, captured with the browser viewport override set to 390 x 844.
+- State: signed in as `finance.demo`, opened `交易记录`, and displayed Airwallex, PayMax, and PayPal together in the channel summary and transaction list.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- Typography: channel names remain readable at the existing dense table scale. Labels use the product font, 700 weight, zero letter spacing, and stable line height without clipping.
+- Spacing and layout: the shared badge uses a compact 26-30 px height, 4-9 px insets, and a 6-7 px gap. It fits existing table cells and summary rows without changing column widths or row heights.
+- Colors: Airwallex uses a purple mark and lavender surface, PayMax uses coral and a warm pale surface, and PayPal uses blue and a pale blue surface. Each treatment includes a border and darker text for legibility.
+- Icon and asset fidelity: the source's initial block is retained as a real text monogram inside the badge. No decorative imagery, custom SVG, emoji, or unrelated asset was added.
+- Content: `Payermax`, `payer max`, and `PayMax` normalize to the displayed label `PayMax`; payment values and business rules remain unchanged. A letter mark plus provider name ensures color is not the only identifying signal.
+- Responsive behavior: at 390 px the three summary rows remain fully visible, and the existing transaction-table scroll region preserves the provider badges without page-level overlap.
+
+## Interaction And Technical Verification
+
+- Shared badge rendering and provider normalization: 3 component tests passed.
+- Complete Vitest run: 58 files and 365 tests passed.
+- TypeScript check and production Vite build: passed.
+- Browser console: 0 warnings and 0 errors during the verified transaction view.
+- Source and implementation were opened together for direct visual comparison; the implementation preserves the source's purple / coral / blue provider mapping while adapting it to compact list rows.
+
+## Comparison History
+
+1. The first list pass established the three provider treatments and shared reusable component.
+2. The first transaction-summary pass exposed truncated two-column content after badges were added.
+3. The final pass moved provider metrics to one stable row per channel, then verified the overview and list at desktop and 390 px widths.
+
+final result: passed

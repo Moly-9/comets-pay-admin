@@ -12,6 +12,7 @@ import {
 import { useState } from 'react';
 import { Button, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -939,7 +940,7 @@ export function RequestProjectDetailPage({
             <div className="table-scroll">
               <table className="data-table request-detail-payment-table">
                 <thead><tr><th>达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>付款方式</th><th>状态</th></tr></thead>
-                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td>{payee.channel}</td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
+                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
               </table>
             </div>
           </section>

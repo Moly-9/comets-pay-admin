@@ -4,6 +4,7 @@ import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Co
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { PaymentExecutionWorkspace } from '../components/PaymentExecutionWorkspace';
+import { PaymentProviderBadges } from '../components/PaymentProviderBadge';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import { paymentRequestProviderForChannel } from '../paymentRequestProjects';
@@ -453,7 +454,9 @@ function PaymentProjectTable({
                   <td>{project.contracts} 份</td>
                   <td>{project.invoices} 份</td>
                   <td className="mono-cell">{project.paymentOrder}</td>
-                  <td className="payment-project-channel">{project.paymentChannels.join('、') || '待确认'}</td>
+                  <td className="payment-project-channel">
+                    <PaymentProviderBadges compact providers={project.paymentChannels} />
+                  </td>
                   <td><span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span></td>
                   <td className="action-cell">
                     <Button

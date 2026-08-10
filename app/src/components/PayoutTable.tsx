@@ -1,4 +1,5 @@
 import { Avatar, Button, StatusMark } from './Common';
+import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
 import { formatAmount } from '../data';
 import type { InvoiceReviewStatus, Payout, PayoutStatus } from '../types';
@@ -67,7 +68,7 @@ export function PayoutTable({
                   </div>
                 </td>
                 <td className="mono-cell">{payout.invoice}</td>
-                <td>{payout.provider}</td>
+                <td><PaymentProviderBadge compact provider={payout.provider} /></td>
                 <td><StatusMark status={displayStatus} label={statusLabelFor?.(payout) ?? statusLabels?.[payout.status]} /></td>
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
