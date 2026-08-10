@@ -1388,7 +1388,7 @@ export default function App() {
     const privileged = currentUser.roleKey === 'admin' || currentUser.roleKey === 'owner';
     const historicalStatus = ['submitted', 'approved', 'paid'].includes(list.status);
     if (historicalStatus && !privileged) {
-      notify('付款单已锁定', '提交请款后的付款单只有在审批退回或付款清单问题退回后才能修改。');
+      notify('付款单已锁定', '提交请款后的付款单只有在审批退回或付款账户问题退回后才能修改。');
       return;
     }
     if (list.status === 'generated' && !canEditProject(currentUser, project.reviewStatus ?? 'draft')) {

@@ -851,22 +851,33 @@ export function MediaPaymentProjectsPage({
               <header>
                 <div>
                   <span>付款失败退回</span>
-                  <h2 id="media-request-payment-failure-heading">{failedPayouts.length} 笔失败款需恢复</h2>
-                  <p>成功款项保持冻结；原账户未修改时发送通知即可重试，账户有修改时需重新校验通过。</p>
+                  <h2 id="media-request-payment-failure-heading">{failedPayouts.length} 笔失败款待处理</h2>
+                  <p>仅失败款进入恢复流程，成功款保持已付款并冻结。达人更新账户后资料校验会同步刷新；重新校验通过并发起付款后，该笔状态更新为“付款处理中”。</p>
                 </div>
               </header>
               <div className="media-payment-failure-list">
-                {failedPayouts.map((payout) => (
-                  <article key={payout.id}>
-                    <div>
-                      <strong>{payout.creator}</strong>
-                      <span>{payout.invoice} · {payout.provider} · {payout.currency} {payout.amount.toLocaleString('en-US')}</span>
-                      <small>{payout.paymentFailureReturn?.reason ?? payout.paymentFailure?.providerResponse ?? '未记录失败原因'}</small>
-                    </div>
-                    <span className="media-payment-failure-state">{paymentFailureRecoveryLabel(payout)}</span>
-                    <Button variant="secondary" onClick={() => setFocusedFailurePayoutId(payout.id)}>查看付款清单</Button>
-                  </article>
-                ))}
+                {failedPayouts.map((payout) => {
+                  const recoveryStatus = payout.paymentFailureRecovery?.status ?? 'AWAITING_CREATOR_UPDATE';
+                  return (
+                    <article key={payout.id}>
+                      <div className="media-payment-failure-identity">
+                        <span className="media-payment-failure-account-icon" aria-hidden="true"><WalletCards size={18} /></span>
+                        <div>
+                          <strong>{payout.creator}</strong>
+                          <span>{payout.invoice} · {payout.provider} · {payout.currency} {payout.amount.toLocaleString('en-US')}</span>
+                        </div>
+                      </div>
+                      <p className="media-payment-failure-reason">
+                        <span>付款失败原因：</span>
+                        <strong>{payout.paymentFailureReturn?.reason ?? payout.paymentFailure?.providerResponse ?? '未记录失败原因'}</strong>
+                      </p>
+                      <div className="media-payment-failure-actions">
+                        <span className={`media-payment-failure-state is-${recoveryStatus.toLowerCase()}`}><i aria-hidden="true" />{paymentFailureRecoveryLabel(payout)}</span>
+                        <Button className="media-payment-failure-action" variant="secondary" icon={<ReceiptText size={15} />} onClick={() => setFocusedFailurePayoutId(payout.id)}>查看付款清单</Button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           </section>

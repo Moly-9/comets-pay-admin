@@ -2,9 +2,14 @@ import { AlertTriangle, CircleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { PaymentBatchItemSnapshot } from '../paymentBatches';
 import type { PaymentFailureIssueType } from '../types';
-import { Button, Modal, SelectField } from './Common';
+import { Button, Modal, SelectField, type SelectOption } from './Common';
 
 const money = (currency: string, amount: number) => `${currency} ${amount.toLocaleString('en-US')}`;
+
+export const PAYMENT_FAILURE_ISSUE_OPTIONS: readonly SelectOption<PaymentFailureIssueType>[] = [
+  { value: 'INVOICE_CONTENT', label: 'Invoice 内容问题', description: '修改 Invoice 并重新签署' },
+  { value: 'PAYMENT_LIST', label: '付款账户问题', description: '仅恢复失败达人的收款账户' },
+];
 
 export function PaymentFailureReturnDialog({
   item,
@@ -58,10 +63,7 @@ export function PaymentFailureReturnDialog({
             placeholder="请选择问题类型"
             variant="form"
             menuStrategy="fixed"
-            options={[
-              { value: 'INVOICE_CONTENT', label: 'Invoice 内容问题', description: '修改 Invoice 并重新签署' },
-              { value: 'PAYMENT_LIST', label: '付款清单问题', description: '仅恢复失败达人的收款账户' },
-            ]}
+            options={PAYMENT_FAILURE_ISSUE_OPTIONS}
             onChange={setIssueType}
           />
           <small>必须由财务人工判断，系统不会根据渠道错误文本自动分类。</small>

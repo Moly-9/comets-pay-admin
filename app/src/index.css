@@ -2412,8 +2412,9 @@ input[type="checkbox"]:disabled {
 }
 
 .media-request-payment-failure-panel {
-  border-color: #edd0ca;
-  background: #fffafa;
+  border-color: #ebc8c1;
+  background: #fffdfc;
+  box-shadow: 0 12px 30px rgba(133, 62, 52, 0.08);
 }
 
 .media-request-payment-failure-panel .media-request-return-panel-icon {
@@ -2423,35 +2424,85 @@ input[type="checkbox"]:disabled {
 
 .media-payment-failure-list {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  margin-top: 4px;
 }
 
 .media-payment-failure-list article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 18px;
   border-top: 1px solid #f0dfdb;
-  padding-top: 10px;
+  padding: 14px 0;
 }
 
-.media-payment-failure-list article > div {
+.media-payment-failure-identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.media-payment-failure-account-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #f0d1cb;
+  border-radius: 7px;
+  background: #fff3f0;
+  color: #b75246;
+}
+
+.media-payment-failure-identity > div {
   display: grid;
   min-width: 0;
   gap: 3px;
 }
 
-.media-payment-failure-list article > div > strong {
+.media-payment-failure-identity strong {
   color: #403a39;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
-.media-payment-failure-list article > div > span,
-.media-payment-failure-list article > div > small {
+.media-payment-failure-identity span {
   color: #806d69;
   font-size: 10px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.media-payment-failure-reason {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  color: #7b635f;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.media-payment-failure-reason > span {
+  flex: none;
+  color: #9a6a63;
+}
+
+.media-payment-failure-reason > strong {
+  color: #69423d;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.media-payment-failure-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .media-payment-failure-state,
@@ -2469,6 +2520,45 @@ input[type="checkbox"]:disabled {
   font-style: normal;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.media-payment-failure-state i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.media-payment-failure-state.is-creator_updated {
+  border-color: #ead7aa;
+  background: #fffaf0;
+  color: #8b671f;
+}
+
+.media-payment-failure-state.is-ready_for_retry {
+  border-color: #cfe3d8;
+  background: #f3faf6;
+  color: #3e7159;
+}
+
+.media-payment-failure-state.is-retry_submitted {
+  border-color: #d5ddf5;
+  background: #f5f7fd;
+  color: #4f63aa;
+}
+
+.media-payment-failure-action.button-secondary {
+  min-height: 36px;
+  border-color: #dcaaa1;
+  background: #fff;
+  color: #8e4037;
+  box-shadow: 0 4px 12px rgba(142, 64, 55, 0.08);
+}
+
+.media-payment-failure-action.button-secondary:hover:not(:disabled) {
+  border-color: #c66c60;
+  background: #fff5f3;
+  color: #73342d;
 }
 
 .payment-failure-recovery-status i {
@@ -2647,12 +2737,18 @@ input[type="checkbox"]:disabled {
   }
 
   .media-payment-failure-list article {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .media-payment-failure-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-items: start;
   }
 
   .media-payment-failure-list article .button {
     width: 100%;
-    grid-column: 1 / -1;
   }
 
   .payment-failure-recovery-panel {

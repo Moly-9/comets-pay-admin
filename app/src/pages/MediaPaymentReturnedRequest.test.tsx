@@ -203,9 +203,12 @@ describe('media returned payment request handling', () => {
     expect(detailHtml.match(/部分打款失败/g)).toHaveLength(2);
     expect(detailHtml).not.toContain('已进入审批流');
     expect(detailHtml).toContain('付款失败退回');
-    expect(detailHtml).toContain('1 笔失败款需恢复');
+    expect(detailHtml).toContain('1 笔失败款待处理');
     expect(detailHtml).toContain('达人收款账户不可用，请更新后重新校验。');
+    expect(detailHtml).toContain('付款失败原因：');
     expect(detailHtml).toContain('等待达人更新账户');
+    expect(detailHtml).toContain('media-payment-failure-action');
+    expect(detailHtml).toContain('查看付款清单');
     expect(detailHtml).not.toContain('退回待处理');
     expect(detailHtml).not.toContain('付款工作台已退回此请款项目');
   });

@@ -74,7 +74,7 @@ export const paymentFailureRecoveryLabel = (payout: Payout) => {
       ? '已通知，可重试'
       : '已重新校验，可重试';
   }
-  if (status === 'RETRY_SUBMITTED') return '已进入重试批次';
+  if (status === 'RETRY_SUBMITTED') return '付款处理中';
   return '等待达人更新账户';
 };
 

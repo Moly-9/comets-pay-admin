@@ -1094,3 +1094,32 @@ final result: passed
 - Full Vitest passed 62 files and 383 tests. TypeScript/Vite production build and `git diff --check` passed.
 
 final result: passed
+
+---
+
+# Payment Account Failure Return Card Design QA
+
+## Evidence
+
+- Source card reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-dbf7fabe-a7cc-4ff2-b13d-b39df0735d57.png`.
+- Desktop implementation: `artifacts/payment-failure-recovery-qa/my-project-failure-card-1591x744.png`, captured at a 1591 x 744 CSS viewport.
+- Mobile implementation: `artifacts/payment-failure-recovery-qa/my-project-failure-card-390x844.png` and `artifacts/payment-failure-recovery-qa/my-project-failure-card-390x844-focused.png`, captured at a 390 x 844 CSS viewport.
+- Same-viewport comparison: `artifacts/payment-failure-recovery-qa/source-vs-implementation-1591x744.png`.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains.
+- The failure card keeps the system's existing red warning semantics while separating the recovery summary, creator and payment metadata, failure reason, current recovery state, and next action into a clearer hierarchy.
+- The failure reason is explicitly labeled `付款失败原因：`, preventing it from being confused with the recovery status or general project notes.
+- The `查看付款清单` action uses the existing button language with a receipt icon, stable height, visible focus state, and sufficient contrast.
+- At 390 px, metadata, reason, status, and action stack into one column without text clipping, overlap, or horizontal page overflow.
+
+## Interaction Verification
+
+- The return dialog displays `付款账户问题` while preserving the existing explanation `仅恢复失败达人的收款账户`.
+- Opening the project recovery card and selecting `查看付款清单` locates and highlights the matching failed creator payment row.
+- Simulated creator account feedback synchronizes the recovery state to `达人已更新，待重新校验`; successful revalidation synchronizes it to `已重新校验，可重试` in the new-batch candidate list.
+- Submitting the retry marks the payment as `付款处理中` and removes it from selectable retry candidates.
+- Browser console contained no application errors during the desktop and mobile recovery flow.
+
+final result: passed

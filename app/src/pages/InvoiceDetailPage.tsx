@@ -809,8 +809,8 @@ export function InvoiceDetailPage({
                     ) : null}
                     {payout.paymentFailureReturn ? (
                       <>
-                        <div><dt>财务问题分类</dt><dd>{payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT' ? 'Invoice 内容问题' : '付款清单问题'}</dd></div>
-                        <div><dt>下一步起点</dt><dd>{payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT' ? '修改 Invoice 后达人重新签署' : '项目付款清单重新提交后进入 PM 审批'}</dd></div>
+                        <div><dt>财务问题分类</dt><dd>{payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT' ? 'Invoice 内容问题' : '付款账户问题'}</dd></div>
+                        <div><dt>下一步起点</dt><dd>{payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT' ? '修改 Invoice 后达人重新签署' : '更新收款账户并重新校验后进入新付款批次'}</dd></div>
                       </>
                     ) : null}
                   </dl>

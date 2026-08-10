@@ -5,6 +5,7 @@ import {
   isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
   markPaymentFailureRetrySubmitted,
+  paymentFailureRecoveryLabel,
   paymentFailureRevalidationIssues,
   recordPaymentFailureNotification,
   simulateCreatorAccountUpdated,
@@ -150,6 +151,8 @@ describe('payment failure recovery', () => {
     const failedAgain = beginPaymentFailureAccountRecovery({ ...submitted, status: '付款失败' });
 
     expect(isPaymentFailureRetryCandidate(submitted)).toBe(false);
+    expect(submitted.status).toBe('付款处理中');
+    expect(paymentFailureRecoveryLabel(submitted)).toBe('付款处理中');
     expect(submitted.paymentFailureRecovery?.retryBatchCode).toBe('BAT-RETRY-001');
     expect(failedAgain.paymentFailureRecovery?.status).toBe('AWAITING_CREATOR_UPDATE');
     expect(failedAgain.paymentFailureRecovery?.previousAttempts).toEqual([
