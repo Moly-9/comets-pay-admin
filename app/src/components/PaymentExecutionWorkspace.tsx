@@ -97,7 +97,11 @@ export function PaymentExecutionWorkspace({
       )}
     >
       <div className="payment-execution-shell" data-testid="payment-execution-workspace">
-        <main className="payment-execution-main">
+        <main
+          className="payment-execution-main"
+          tabIndex={0}
+          aria-label="请款项目与达人请款信息"
+        >
           <section className="payment-execution-project" aria-labelledby="payment-execution-project-title">
             <header>
               <div>

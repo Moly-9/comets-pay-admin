@@ -60,10 +60,19 @@ body:has(.payment-execution-workspace) {
 .payment-execution-main {
   display: grid;
   align-content: start;
+  grid-auto-rows: max-content;
   gap: 16px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 20px;
   scrollbar-gutter: stable;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.payment-execution-main:focus-visible {
+  outline: 2px solid #715b9d;
+  outline-offset: -2px;
 }
 
 .payment-execution-project,

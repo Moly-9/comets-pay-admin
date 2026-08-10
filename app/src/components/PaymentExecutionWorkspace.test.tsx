@@ -36,6 +36,8 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain(`${project.requestCode} · 执行打款`);
     expect(html).toContain('请款项目信息');
     expect(html).toContain('达人请款信息概览');
+    expect(html).toContain('aria-label="请款项目与达人请款信息"');
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain(`共 ${project.payouts.length} 位达人`);
     expect(html).toContain(project.payouts[0].creator);
     expect(html).toContain(project.payouts[0].invoice);
