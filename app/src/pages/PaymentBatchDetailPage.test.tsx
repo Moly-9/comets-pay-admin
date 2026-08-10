@@ -97,8 +97,9 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('PAY-202608-000001');
     expect(html).toContain('INV-202608-000001');
     expect(html).toContain('CON-202608-000001');
-    expect(html).toContain('>Airwallex</strong><small>LOCAL</small>');
-    expect(html).not.toContain('data-payment-provider=');
+    expect(html).toContain('data-payment-provider="Airwallex"');
+    expect(html).toContain('<span class="payment-provider-label">Airwallex</span>');
+    expect(html).toContain('<small>LOCAL</small>');
     expect(html).toContain('达人');
     expect(html).toContain('付款渠道');
     expect(html).toContain('付款金额');
@@ -107,7 +108,14 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('aria-controls="payment-batch-item-payout_detail_test"');
     expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，收起付款详情"');
-    expect(html).toContain('<h2>付款信息</h2>');
+    expect(html).toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
+    expect(html).toContain('class="payment-batch-order-card"');
+    expect(html).toContain('<span>付款单</span><strong>PAY-202608-000001</strong>');
+    expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
+    expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
+    expect(html).toContain('<span>支付币种</span><strong>USD</strong>');
+    expect(html).toContain('<p>COMETS 夏季内容项目</p>');
+    expect(html).not.toContain('<p>REQ-202608-000001 · COMETS 夏季内容项目</p>');
     expect(html).toContain('<dt>付款项目编号</dt>');
     expect(html).toContain('<dt>付款金额</dt>');
     expect(html).not.toContain('payment_batch_detail_test');
@@ -116,7 +124,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('<dt>请款金额</dt>');
   });
 
-  it('uses the processing batch status in the payment information section', () => {
+  it('uses the processing status in the payment order card', () => {
     const processingBatch: PaymentBatchRecord = {
       ...DETAIL_BATCH,
       request: { ...DETAIL_BATCH.request, requestStatus: '已付款' },
@@ -132,7 +140,63 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage batch={processingBatch} onBack={vi.fn()} />,
     );
 
-    expect(html).toMatch(/<h2>付款信息<\/h2>[\s\S]*?<span class="simple-status"><i><\/i>付款处理中<\/span>/);
+    expect(html).toMatch(/class="payment-batch-order-card"[\s\S]*?<span class="simple-status is-processing"><i><\/i>付款处理中<\/span>/);
+  });
+
+  it('highlights every supported payment provider in payment detail rows', () => {
+    const providerItems = [
+      DETAIL_BATCH.items[0],
+      {
+        ...DETAIL_BATCH.items[0],
+        payoutId: 'payout_detail_paypal',
+        creatorId: 'creator_detail_paypal',
+        creatorName: 'Alex Ruiz',
+        creatorHandle: '@alexbuilds',
+        provider: 'PayPal',
+      },
+      {
+        ...DETAIL_BATCH.items[0],
+        payoutId: 'payout_detail_paymax',
+        creatorId: 'creator_detail_paymax',
+        creatorName: 'Nora Singh',
+        creatorHandle: '@norasingh',
+        provider: 'PayMax',
+      },
+    ] satisfies PaymentBatchRecord['items'];
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage batch={{ ...DETAIL_BATCH, items: providerItems }} onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain('class="payment-provider-badge is-airwallex is-compact"');
+    expect(html).toContain('data-payment-provider="Airwallex"');
+    expect(html).toContain('class="payment-provider-badge is-paypal is-compact"');
+    expect(html).toContain('data-payment-provider="PayPal"');
+    expect(html).toContain('class="payment-provider-badge is-paymax is-compact"');
+    expect(html).toContain('data-payment-provider="PayMax"');
+  });
+
+  it('renders one integrated card for each payment order in the batch', () => {
+    const secondItem = {
+      ...DETAIL_BATCH.items[0],
+      payoutId: 'payout_detail_second',
+      creatorId: 'creator_detail_second',
+      creatorName: 'Alex Ruiz',
+      creatorHandle: '@alexbuilds',
+      paymentListId: 'payment_list_detail_second' as NonNullable<PaymentBatchRecord['items'][number]['paymentListId']>,
+      paymentListCode: 'PAY-202608-000002',
+      paymentStatus: '已付款',
+      failure: undefined,
+      associationIssues: [],
+    } satisfies PaymentBatchRecord['items'][number];
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage batch={{ ...DETAIL_BATCH, items: [...DETAIL_BATCH.items, secondItem] }} onBack={vi.fn()} />,
+    );
+
+    expect(html.match(/class="payment-batch-order-card"/g)).toHaveLength(2);
+    expect(html).toContain('PAY-202608-000001');
+    expect(html).toContain('PAY-202608-000002');
+    expect(html).toContain('<strong>2 张付款单</strong><small>2 笔付款明细</small>');
+    expect(html).toContain('2 张付款单 · 2 笔明细');
   });
 
   it('exposes the shared return action for a failed item in the batch detail', () => {
@@ -275,7 +339,7 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage batch={DETAIL_BATCH} payouts={[payout]} onBack={vi.fn()} />,
     );
 
-    expect(html).toContain('<span class="simple-status"><i></i>部分打款失败</span>');
+    expect(html).toContain('<span class="simple-status is-danger"><i></i>部分打款失败</span>');
   });
 
   it('shows an explicit empty state when a stored batch has no item snapshots', () => {

@@ -4,16 +4,20 @@ import {
   Building2,
   ChevronDown,
   CircleAlert,
+  Coins,
   ExternalLink,
   FileText,
+  Landmark,
   ReceiptText,
   RotateCcw,
+  UserRound,
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -66,6 +70,12 @@ const money = (currency: string, amount: number | null) => (
 const contractSummary = (item: PaymentBatchItemSnapshot) => {
   if (item.contracts.length) return item.contracts.map((contract) => contract.contractCode).join('、');
   return item.legacyContractReference || '未关联';
+};
+
+const paymentOrderStatus = (items: readonly PaymentBatchItemSnapshot[]) => {
+  if (items.some((item) => ['付款失败', '已退回'].includes(item.paymentStatus))) return '部分打款失败';
+  if (items.length > 0 && items.every((item) => item.paymentStatus === '已付款')) return '已付款';
+  return '付款处理中';
 };
 
 export function PaymentItemDetails({
@@ -146,7 +156,7 @@ export function PaymentItemDetails({
         </header>
         <dl>
           <div><dt>付款记录 ID</dt><dd>{item.payoutId}</dd></div>
-          <div><dt>付款清单</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
+          <div><dt>付款单</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
           <div><dt>付款渠道 / 方式</dt><dd>{item.provider} · {item.transferMethod}</dd></div>
           <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
           <div><dt>收款账户</dt><dd>{item.accountSummary}</dd></div>
@@ -231,8 +241,15 @@ export function PaymentBatchDetailPage({
       ? '已付款'
       : batch.status;
   const totals = paymentBatchAmountLabel({ items: liveItems });
-  const statusCounts = paymentBatchStatusCounts({ items: liveItems });
-  const paymentInformationStatus = liveStatus === '部分失败' ? '部分打款失败' : liveStatus;
+  const paymentOrders = useMemo(() => {
+    const grouped = new Map<string, PaymentBatchItemSnapshot[]>();
+    liveItems.forEach((item) => {
+      const code = item.paymentListCode || '关联资料缺失';
+      grouped.set(code, [...(grouped.get(code) ?? []), item]);
+    });
+    return [...grouped.entries()].map(([code, items]) => ({ code, items }));
+  }, [liveItems]);
+  const paymentOrderSummary = paymentOrders.length === 1 ? paymentOrders[0].code : `${paymentOrders.length} 张付款单`;
   const failureDialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
 
   useEffect(() => {
@@ -250,7 +267,7 @@ export function PaymentBatchDetailPage({
         <div>
           <span>付款批次</span>
           <h1 ref={titleRef} tabIndex={-1}>{batch.paymentBatchCode}</h1>
-          <p>{batch.request.requestCode} · {batch.request.cooperationProjectName}</p>
+          <p>{batch.request.cooperationProjectName}</p>
         </div>
         <div className="payment-batch-detail-total">
           <span className={`simple-status ${batchStatusTone(liveStatus)}`}><i />{liveStatus}</span>
@@ -260,10 +277,22 @@ export function PaymentBatchDetailPage({
       </header>
 
       <section className="payment-batch-detail-summary" aria-label="批次摘要">
-        <div><span>付款渠道</span><strong>{batch.provider}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></div>
-        <div><span>付款人 / 时间</span><strong>{batch.payer}</strong><small>{displayTime(batch.paidAt)}</small></div>
-        <div><span>处理结果</span><strong>{statusCounts.succeeded} 成功 · {statusCounts.failed} 失败</strong><small>{statusCounts.processing} 笔处理中</small></div>
-        <div><span>资金源币种</span><strong>{batch.sourceCurrency}</strong></div>
+        <div>
+          <span className="payment-batch-summary-icon is-order" aria-hidden="true"><ReceiptText size={18} /></span>
+          <span className="payment-batch-summary-content"><span>付款单</span><strong>{paymentOrderSummary}</strong><small>{batch.items.length} 笔付款明细</small></span>
+        </div>
+        <div>
+          <span className="payment-batch-summary-icon is-payer" aria-hidden="true"><UserRound size={18} /></span>
+          <span className="payment-batch-summary-content"><span>付款人 / 时间</span><strong>{batch.payer}</strong><small>{displayTime(batch.paidAt)}</small></span>
+        </div>
+        <div>
+          <span className="payment-batch-summary-icon is-provider" aria-hidden="true"><Landmark size={18} /></span>
+          <span className="payment-batch-summary-content"><span>付款渠道</span><strong>{batch.provider}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></span>
+        </div>
+        <div>
+          <span className="payment-batch-summary-icon is-currency" aria-hidden="true"><Coins size={18} /></span>
+          <span className="payment-batch-summary-content"><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>批次总额 {totals}</small></span>
+        </div>
       </section>
 
       <section className="payment-batch-detail-section payment-batch-lifecycle-section">
@@ -271,100 +300,121 @@ export function PaymentBatchDetailPage({
         <PaymentProgressSteps ariaLabel="渠道处理进度" status={liveStatus} />
       </section>
 
-      <section className="payment-batch-detail-section">
-        <header>
-          <div><h2>付款信息</h2><p>本批次只关联一个请款项目。</p></div>
-          <span className="simple-status"><i />{paymentInformationStatus}</span>
+      <section className="payment-batch-orders-section" aria-labelledby="payment-batch-orders-title">
+        <header className="payment-batch-orders-heading">
+          <div><h2 id="payment-batch-orders-title">付款单与付款明细</h2><p>每张付款单集中展示项目付款信息、付款项和渠道结果。</p></div>
+          <span>{paymentOrders.length} 张付款单 · {batch.items.length} 笔明细</span>
         </header>
-        <div className="payment-batch-project-heading">
-          <span aria-hidden="true"><Building2 size={20} /></span>
-          <div><span className="payment-batch-project-name">{batch.request.cooperationProjectName}</span><small>{batch.request.cooperationProjectCode}</small></div>
-        </div>
-        <dl className="payment-batch-project-grid">
-          <div><dt>付款项目编号</dt><dd>{batch.request.requestCode}</dd></div>
-          <div><dt>付款金额</dt><dd>{batch.request.amount}</dd></div>
-          <div><dt>品牌 / 客户</dt><dd>{batch.request.brand}</dd></div>
-          <div><dt>项目媒介</dt><dd>{batch.request.media}</dd></div>
-          <div><dt>负责 PM</dt><dd>{batch.request.pm}</dd></div>
-          <div><dt>预计付款时间</dt><dd>{batch.request.expectedPaymentDate}</dd></div>
-          <div className="payment-batch-project-full"><dt>请款原因</dt><dd>{batch.request.reason}</dd></div>
-        </dl>
-      </section>
+        <div className="payment-batch-order-list" role="list">
+          {paymentOrders.map((order) => {
+            const orderCounts = paymentBatchStatusCounts({ items: order.items });
+            const orderStatus = paymentOrderStatus(order.items);
+            const orderId = `payment-order-${order.code.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+            return (
+              <article className="payment-batch-order-card" key={order.code} role="listitem" aria-labelledby={`${orderId}-title`}>
+                <header className="payment-batch-order-header">
+                  <div className="payment-batch-order-identity">
+                    <span aria-hidden="true"><WalletCards size={20} /></span>
+                    <div><small>付款单</small><h2 id={`${orderId}-title`}>{order.code}</h2><p>{order.items.length} 笔付款明细</p></div>
+                  </div>
+                  <div className="payment-batch-order-result">
+                    <span className={`simple-status ${paymentStatusTone(orderStatus)}`}><i />{orderStatus}</span>
+                    <strong>{paymentBatchAmountLabel({ items: order.items })}</strong>
+                    <small>{orderCounts.succeeded} 成功 · {orderCounts.failed} 失败 · {orderCounts.processing} 处理中</small>
+                  </div>
+                </header>
 
-      <section className="payment-batch-detail-section payment-batch-items-section">
-        <header><div><h2>付款明细</h2><p>按付款项查看合同、Invoice、账户快照和渠道结果。</p></div><span>{batch.items.length} 笔</span></header>
-        <div className="payment-batch-item-list">
-          {batch.items.length ? (
-            <div className="payment-batch-item-table-head" aria-hidden="true">
-              <span>达人</span>
-              <span>付款渠道</span>
-              <span>Invoice</span>
-              <span>合同</span>
-              <span>付款清单</span>
-              <span>付款金额</span>
-              <span>付款状态</span>
-              <span />
+                <section className="payment-batch-order-project" aria-label={`${order.code} 付款信息`}>
+                  <div className="payment-batch-project-heading">
+                    <span aria-hidden="true"><Building2 size={20} /></span>
+                    <div><h3 className="payment-batch-project-section-title">付款信息</h3><span className="payment-batch-project-name">{batch.request.cooperationProjectName}</span><small>{batch.request.cooperationProjectCode}</small></div>
+                  </div>
+                  <dl className="payment-batch-project-grid">
+                    <div><dt>付款项目编号</dt><dd>{batch.request.requestCode}</dd></div>
+                    <div><dt>付款金额</dt><dd>{paymentBatchAmountLabel({ items: order.items })}</dd></div>
+                    <div><dt>品牌 / 客户</dt><dd>{batch.request.brand}</dd></div>
+                    <div><dt>项目媒介</dt><dd>{batch.request.media}</dd></div>
+                    <div><dt>负责 PM</dt><dd>{batch.request.pm}</dd></div>
+                    <div><dt>预计付款时间</dt><dd>{batch.request.expectedPaymentDate}</dd></div>
+                    <div className="payment-batch-project-full"><dt>请款原因</dt><dd>{batch.request.reason}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="payment-batch-order-items" aria-label={`${order.code} 付款明细`}>
+                  <header><div><h3>付款明细</h3><p>展开付款项查看合同、Invoice、账户快照和渠道结果。</p></div><span>{order.items.length} 笔</span></header>
+                  <div className="payment-batch-item-list">
+                    <div className="payment-batch-item-table-head" aria-hidden="true">
+                      <span>达人</span>
+                      <span>付款渠道</span>
+                      <span>Invoice</span>
+                      <span>合同</span>
+                      <span>付款金额</span>
+                      <span>付款状态</span>
+                      <span />
+                    </div>
+                    <div className="payment-batch-item-rows" role="list">
+                      {order.items.map((item) => {
+                        const expanded = expandedItemId === item.payoutId;
+                        const livePayout = payouts.find((payout) => payout.id === item.payoutId);
+                        const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                        return (
+                          <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
+                            <button
+                              className="payment-batch-item-trigger"
+                              type="button"
+                              aria-expanded={expanded}
+                              aria-controls={detailId}
+                              aria-label={`${item.creatorName}，${money(item.currency, item.amount)}，${item.paymentStatus}，${expanded ? '收起' : '展开'}付款详情`}
+                              onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
+                            >
+                              <span className="payment-batch-item-person">
+                                <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
+                                <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
+                              </span>
+                              <span className="payment-batch-item-provider" data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
+                              <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
+                              <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
+                              <span className="payment-batch-item-amount" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
+                              <span className={`payment-batch-item-status ${paymentStatusTone(item.paymentStatus)}`} data-label="付款状态"><strong><i />{item.paymentStatus}</strong></span>
+                              <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
+                            </button>
+                            {expanded ? (
+                              <div id={detailId}>
+                                <PaymentItemDetails item={item} payout={livePayout} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined} />
+                                {item.paymentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
+                                  <div className="payment-project-failure-action">
+                                    <div>
+                                      <strong>该笔付款需要财务判断问题类型</strong>
+                                      <span>退回后仅处理当前失败款，批次内已成功付款不会受影响。</span>
+                                    </div>
+                                    <Button
+                                      variant="danger"
+                                      icon={<RotateCcw size={16} />}
+                                      disabled={!canHandleFailure || !onReturnPayout}
+                                      onClick={() => setFailureDialogPayoutId(item.payoutId)}
+                                    >
+                                      退回媒介处理
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              </article>
+            );
+          })}
+          {!paymentOrders.length ? (
+            <div className="payment-batch-detail-empty-state" role="status">
+              <ReceiptText size={22} aria-hidden="true" />
+              <strong>该批次暂无付款明细</strong>
+              <span>批次记录存在，但没有可展示的付款项快照。</span>
             </div>
           ) : null}
-          <div className="payment-batch-item-rows" role="list">
-            {liveItems.map((item) => {
-              const expanded = expandedItemId === item.payoutId;
-              const livePayout = payouts.find((payout) => payout.id === item.payoutId);
-              const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-              return (
-                <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
-                  <button
-                    className="payment-batch-item-trigger"
-                    type="button"
-                    aria-expanded={expanded}
-                    aria-controls={detailId}
-                    aria-label={`${item.creatorName}，${money(item.currency, item.amount)}，${item.paymentStatus}，${expanded ? '收起' : '展开'}付款详情`}
-                    onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
-                  >
-                    <span className="payment-batch-item-person">
-                      <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                      <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
-                    </span>
-                    <span data-label="付款渠道"><strong>{item.provider}</strong><small>{item.transferMethod}</small></span>
-                    <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
-                    <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
-                    <span data-label="付款清单" title={item.paymentListCode}><strong>{item.paymentListCode}</strong></span>
-                    <span className="payment-batch-item-amount" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
-                    <span className={`payment-batch-item-status ${paymentStatusTone(item.paymentStatus)}`} data-label="付款状态"><strong><i />{item.paymentStatus}</strong></span>
-                    <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
-                  </button>
-                  {expanded ? (
-                    <div id={detailId}>
-                      <PaymentItemDetails item={item} payout={livePayout} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined} />
-                      {item.paymentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
-                        <div className="payment-project-failure-action">
-                          <div>
-                            <strong>该笔付款需要财务判断问题类型</strong>
-                            <span>退回后仅处理当前失败款，批次内已成功付款不会受影响。</span>
-                          </div>
-                          <Button
-                            variant="danger"
-                            icon={<RotateCcw size={16} />}
-                            disabled={!canHandleFailure || !onReturnPayout}
-                            onClick={() => setFailureDialogPayoutId(item.payoutId)}
-                          >
-                            退回媒介处理
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-            {!batch.items.length ? (
-              <div className="payment-batch-detail-empty-state" role="status">
-                <ReceiptText size={22} aria-hidden="true" />
-                <strong>该批次暂无付款明细</strong>
-                <span>批次记录存在，但没有可展示的付款项快照。</span>
-              </div>
-            ) : null}
-          </div>
         </div>
       </section>
 
