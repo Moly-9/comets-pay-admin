@@ -167,3 +167,44 @@
     grid-column: 1 / -1;
   }
 }
+
+@media (min-width: 861px) {
+  .payment-project-table {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    white-space: normal;
+  }
+
+  .payment-project-table th:nth-child(1) { width: 4%; }
+  .payment-project-table th:nth-child(2) { width: 11%; }
+  .payment-project-table th:nth-child(3) { width: 15%; }
+  .payment-project-table th:nth-child(4) { width: 8%; }
+  .payment-project-table th:nth-child(5) { width: 8%; }
+  .payment-project-table th:nth-child(6) { width: 9%; }
+  .payment-project-table th:nth-child(7) { width: 6%; }
+  .payment-project-table th:nth-child(8) { width: 6%; }
+  .payment-project-table th:nth-child(9) { width: 9%; }
+  .payment-project-table th:nth-child(10) { width: 9%; }
+  .payment-project-table th:nth-child(11) { width: 8%; }
+  .payment-project-table th:nth-child(12) { width: 7%; }
+
+  .payment-project-code,
+  .payment-project-associated,
+  .payment-project-channel {
+    width: auto;
+    max-width: none;
+  }
+
+  .payment-project-select-control {
+    width: 100%;
+    place-items: center start;
+  }
+
+  .payment-project-table .table-action {
+    min-width: 0;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+}

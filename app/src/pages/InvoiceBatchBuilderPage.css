@@ -1376,3 +1376,55 @@
     padding: 14px;
   }
 }
+
+@media (min-width: 1181px) {
+  .invoice-batch-table-wrap {
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .invoice-batch-table {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  .invoice-batch-table th:nth-child(1) { width: 11%; }
+  .invoice-batch-table th:nth-child(2) { width: 18%; }
+  .invoice-batch-table th:nth-child(3) { width: 8%; }
+  .invoice-batch-table th:nth-child(4) { width: 8%; }
+  .invoice-batch-table th:nth-child(5) { width: 10%; }
+  .invoice-batch-table th:nth-child(6) { width: 6%; }
+  .invoice-batch-table th:nth-child(7) { width: 19%; }
+  .invoice-batch-table th:nth-child(8) { width: 10%; }
+  .invoice-batch-table th:nth-child(9) { width: 7%; }
+  .invoice-batch-table th:nth-child(10) { width: 3%; }
+
+  .invoice-batch-table th,
+  .invoice-batch-table td,
+  .invoice-batch-table th:last-child,
+  .invoice-batch-table td:last-child,
+  .invoice-batch-preview-cell {
+    min-width: 0;
+    max-width: none;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+
+  .invoice-batch-creator-link {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .invoice-batch-line-totals > strong {
+    justify-content: flex-start;
+  }
+
+  .invoice-batch-row-total {
+    text-align: left;
+  }
+}

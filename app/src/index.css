@@ -20059,3 +20059,87 @@ button:disabled {
     max-width: 100%;
   }
 }
+
+/* Keep operational lists centered, readable, and fully visible on desktop. */
+.table-shell,
+.table-scroll,
+.batch-table-scroll,
+.invoice-batch-table-wrap {
+  max-width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+:where(.data-table, .batch-table, .invoice-batch-table, .request-finance-comparison-table) {
+  margin-right: auto;
+  margin-left: auto;
+  text-align: left;
+}
+
+:where(.data-table, .batch-table, .invoice-batch-table, .request-finance-comparison-table)
+  :is(th, td):not([colspan]) {
+  text-align: left !important;
+}
+
+.payment-batch-item-table-head > span,
+.payment-batch-item-amount {
+  text-align: left !important;
+}
+
+.payment-batch-item-amount,
+.media-request-money-cell .media-request-record-line {
+  justify-items: start;
+}
+
+@media (min-width: 861px) {
+  :where(.data-table, .batch-table, .request-finance-comparison-table) {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    white-space: normal;
+  }
+
+  :where(.data-table, .batch-table, .request-finance-comparison-table)
+    :is(th, td):not([colspan]) {
+    padding-right: clamp(8px, 0.65vw, 12px);
+    padding-left: clamp(8px, 0.65vw, 12px);
+    overflow-wrap: anywhere;
+  }
+
+  .creator-cell,
+  .system-account-cell,
+  .payment-project-associated {
+    min-width: 0;
+  }
+
+  .contract-table .contract-date-cell {
+    display: table-cell;
+  }
+
+  .contract-table th:nth-child(1) { width: 4%; }
+  .contract-table th:nth-child(2) { width: 22%; }
+  .contract-table th:nth-child(3) { width: 11%; }
+  .contract-table th:nth-child(4) { width: 18%; }
+  .contract-table th:nth-child(5) { width: 13%; }
+  .contract-table th:nth-child(6) { width: 16%; }
+  .contract-table th:nth-child(7) { width: 9%; }
+  .contract-table th:nth-child(8) { width: 7%; }
+
+  .contract-table td:nth-child(2),
+  .contract-table td:nth-child(3),
+  .contract-table td:nth-child(4),
+  .contract-name-link strong,
+  .contract-project-name,
+  .payment-batch-item-trigger > span > strong,
+  .payment-batch-item-person strong,
+  .payment-batch-item-person small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .contract-name-link {
+    max-width: none;
+  }
+}
