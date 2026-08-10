@@ -367,7 +367,12 @@ function PaymentProjectTable({
 
   return (
     <div className="table-shell">
-      <div className="table-scroll">
+      <div
+        className="table-scroll payment-project-table-scroll"
+        role="region"
+        aria-label="付款项目明细表，可横向滚动查看更多列"
+        tabIndex={0}
+      >
         <table className="data-table request-project-table payment-project-table">
           <thead>
             <tr>
