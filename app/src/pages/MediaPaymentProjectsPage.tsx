@@ -415,12 +415,6 @@ export function MediaPaymentProjectsPage({
     .filter((request) => request.lifecycle === 'RETURNED')
     .map((request) => ({ request, details: requestApprovalReturnDetails(request.approval) }));
   const financeReturnedCount = returnedRequests.filter(({ details }) => details?.stage === 'FINANCE').length;
-  const paymentFailureRequests = visibleRequests
-    .map((request) => ({ request, payouts: failurePayoutsForRequest(request) }))
-    .filter(({ request, payouts: failedPayouts }) => (
-      myProjectStatusFor(request) === '部分打款失败' && failedPayouts.length > 0
-    ));
-  const paymentFailureCount = paymentFailureRequests.reduce((total, item) => total + item.payouts.length, 0);
   const { visible: filteredRequests, invalidBudgetRange } = filterPaymentRequestList({
     requests: visibleRequests,
     search,
@@ -812,7 +806,7 @@ export function MediaPaymentProjectsPage({
     const latestPaymentList = requestPaymentLists[0];
     const isReturned = selectedRequest.lifecycle === 'RETURNED';
     const failedPayouts = failurePayoutsForRequest(selectedRequest);
-    const isPaymentFailure = selectedMyProjectStatus === '部分打款失败' && failedPayouts.length > 0;
+    const hasPaymentFailureRecovery = failedPayouts.length > 0;
     const canHandlePaymentFailure = ['media', 'admin', 'owner'].includes(currentUser.roleKey);
     const returnDetails = requestApprovalReturnDetails(selectedRequest.approval);
     const returnHeading = returnDetails?.stage === 'FINANCE'
@@ -838,15 +832,15 @@ export function MediaPaymentProjectsPage({
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
           <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong><small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small></article>
         </div>
-        {isPaymentFailure ? (
+        {hasPaymentFailureRecovery ? (
           <section className="media-request-return-panel media-request-payment-failure-panel" aria-labelledby="media-request-payment-failure-heading">
             <div className="media-request-return-panel-icon"><AlertTriangle size={21} aria-hidden="true" /></div>
             <div className="media-request-return-panel-body">
               <header>
                 <div>
-                  <span>部分打款失败</span>
-                  <h2 id="media-request-payment-failure-heading">{failedPayouts.length} 笔款项需处理</h2>
-                  <p>成功款项保持已付款；请逐笔通知达人更新账户，并在重新校验通过后安排重试。</p>
+                  <span>付款失败退回</span>
+                  <h2 id="media-request-payment-failure-heading">{failedPayouts.length} 笔失败款需恢复</h2>
+                  <p>成功款项保持已付款；请逐笔通知达人更新账户，重新校验通过后可加入新付款批次。</p>
                 </div>
               </header>
               <div className="media-payment-failure-list">
@@ -1091,15 +1085,6 @@ export function MediaPaymentProjectsPage({
           </div>
         </div>
       ) : null}
-      {paymentFailureRequests.length ? (
-        <div className="media-request-return-notice media-request-payment-failure-notice" role="status">
-          <AlertTriangle size={18} aria-hidden="true" />
-          <div>
-            <strong>{paymentFailureRequests.length} 个项目存在部分打款失败</strong>
-            <p>共 {paymentFailureCount} 笔失败款待处理。请在下方列表点击“处理失败请款”，查看原因并通知达人更换收款账户。</p>
-          </div>
-        </div>
-      ) : null}
       <section className="content-card">
         <ProjectInlineFilterPanel
           search={search}
@@ -1123,19 +1108,17 @@ export function MediaPaymentProjectsPage({
                 const returnDetails = requestApprovalReturnDetails(request.approval);
                 const isReturned = request.lifecycle === 'RETURNED';
                 const failedPayouts = failurePayoutsForRequest(request);
-                const isPaymentFailure = myProjectStatusFor(request) === '部分打款失败' && failedPayouts.length > 0;
                 const canShowConfirmationExport = (
                   currentUser.roleKey === 'media'
                   && request.media === currentScopeName
                   && request.lifecycle === 'COMPLETED'
-                  && !isPaymentFailure
                 );
                 const confirmationItems = canShowConfirmationExport
                   ? mediaConfirmationItemsFor(request, paymentLists)
                   : [];
                 const isExporting = exportingRequestId === request.id;
                 return (
-                  <tr className={isReturned ? 'media-request-returned-row' : isPaymentFailure ? 'media-request-payment-failure-row' : undefined} key={request.id}>
+                  <tr className={isReturned ? 'media-request-returned-row' : undefined} key={request.id}>
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
@@ -1150,12 +1133,12 @@ export function MediaPaymentProjectsPage({
                             {returnDetails?.stage === 'FINANCE' ? '付款工作台' : returnDetails?.stageLabel ?? '审批流'} · {returnDetails?.reason ?? '请查看退回原因'}
                           </small>
                         ) : null}
-                        {isPaymentFailure ? <small>{failedPayouts.length} 笔失败款待恢复</small> : null}
+                        {isReturned && failedPayouts.length ? <small>{failedPayouts.length} 笔失败款待恢复</small> : null}
                       </div>
                     </td>
                     <td className="action-cell">
                       <div className="media-project-row-actions">
-                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{isPaymentFailure ? (canCreate ? '处理失败请款' : '查看失败请款') : isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
+                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
                         {canShowConfirmationExport ? (
                           <>
                             <button

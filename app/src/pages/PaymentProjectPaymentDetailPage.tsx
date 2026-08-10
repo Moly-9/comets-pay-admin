@@ -10,7 +10,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, Modal, SelectField } from '../components/Common';
+import { Avatar, Button } from '../components/Common';
+import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -81,8 +82,6 @@ export function PaymentProjectPaymentDetailPage({
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(() => initialExpandedItemId(record));
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
-  const [issueType, setIssueType] = useState<PaymentFailureIssueType | ''>('');
-  const [returnReason, setReturnReason] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
   const totals = paymentBatchAmountLabel(record);
   const statusCounts = paymentBatchStatusCounts(record);
@@ -91,7 +90,6 @@ export function PaymentProjectPaymentDetailPage({
     [record.items],
   );
   const dialogItem = record.items.find((item) => item.payoutId === failureDialogPayoutId);
-  const normalizedReturnReason = returnReason.trim();
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -104,20 +102,10 @@ export function PaymentProjectPaymentDetailPage({
 
   const openFailureDialog = (payoutId: string) => {
     setFailureDialogPayoutId(payoutId);
-    setIssueType('');
-    setReturnReason('');
   };
 
   const closeFailureDialog = () => {
     setFailureDialogPayoutId(null);
-    setIssueType('');
-    setReturnReason('');
-  };
-
-  const submitFailureReturn = () => {
-    const payout = payouts.find((candidate) => candidate.id === failureDialogPayoutId);
-    if (!payout || !issueType || !normalizedReturnReason) return;
-    if (onReturnPayout(payout, issueType, normalizedReturnReason)) closeFailureDialog();
   };
 
   const revealFirstFailure = () => {
@@ -318,68 +306,15 @@ export function PaymentProjectPaymentDetailPage({
       </section>
 
       {failureDialogPayoutId && dialogItem ? (
-        <Modal
-          title="付款失败退回媒介"
-          width="520px"
+        <PaymentFailureReturnDialog
+          key={failureDialogPayoutId}
+          item={dialogItem}
           onClose={closeFailureDialog}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={closeFailureDialog}>取消</Button>
-              <Button
-                variant="danger"
-                disabled={!normalizedReturnReason || !issueType}
-                onClick={submitFailureReturn}
-              >
-                确认退回
-              </Button>
-            </>
-          )}
-        >
-          <div className="return-review-dialog">
-            <div className="return-review-summary">
-              <span><CircleAlert size={19} /></span>
-              <div>
-                <strong>请选择问题类型并填写退回原因</strong>
-                <p>{dialogItem.creatorName} · {dialogItem.invoice?.invoiceNumber ?? dialogItem.legacyInvoiceReference ?? '未关联 Invoice'} · {money(dialogItem.currency, dialogItem.amount)}</p>
-              </div>
-            </div>
-            <label className="return-review-field">
-              <span>问题类型 <em className="required-mark" aria-hidden="true">*</em></span>
-              <SelectField<PaymentFailureIssueType | ''>
-                ariaLabel="付款失败问题类型"
-                value={issueType}
-                placeholder="请选择问题类型"
-                variant="form"
-                menuStrategy="fixed"
-                options={[
-                  { value: 'INVOICE_CONTENT', label: 'Invoice 内容问题', description: '修改 Invoice 并重新签署' },
-                  { value: 'PAYMENT_LIST', label: '付款清单问题', description: '仅恢复失败达人的收款账户' },
-                ]}
-                onChange={setIssueType}
-              />
-              <small>必须由财务人工判断，系统不会根据渠道错误文本自动分类。</small>
-            </label>
-            <label className="return-review-field">
-              <span>退回原因 <em className="required-mark" aria-hidden="true">*</em><small>{returnReason.length}/300</small></span>
-              <textarea
-                autoFocus
-                maxLength={300}
-                aria-label="退回原因"
-                placeholder="请说明失败原因和媒介需要处理的内容"
-                value={returnReason}
-                onChange={(event) => setReturnReason(event.target.value)}
-              />
-              <small>原因、操作人和退回时间会记录在该笔付款详情中。</small>
-            </label>
-            <div className="return-review-warning"><AlertTriangle size={17} /><span>{
-              issueType === 'INVOICE_CONTENT'
-                ? '确认后需修改 Invoice，并从达人签署节点重新开始。'
-                : issueType === 'PAYMENT_LIST'
-                  ? '确认后仅该失败款进入账户恢复流程；成功款和审批结果保持不变。'
-                  : '确认后将按所选资料节点进入对应处理流程。'
-            }</span></div>
-          </div>
-        </Modal>
+          onSubmit={(issueType, reason) => {
+            const payout = payouts.find((candidate) => candidate.id === failureDialogPayoutId);
+            return payout ? onReturnPayout(payout, issueType, reason) : false;
+          }}
+        />
       ) : null}
     </div>
   );

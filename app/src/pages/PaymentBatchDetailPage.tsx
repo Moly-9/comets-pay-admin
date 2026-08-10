@@ -9,10 +9,12 @@ import {
   ExternalLink,
   FileText,
   ReceiptText,
+  RotateCcw,
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
+import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -20,7 +22,7 @@ import {
   type PaymentBatchRecord,
 } from '../paymentBatches';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
-import type { Payout } from '../types';
+import type { PaymentFailureIssueType, Payout } from '../types';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 
@@ -195,15 +197,22 @@ export function PaymentItemDetails({
 export function PaymentBatchDetailPage({
   batch,
   payouts = [],
+  canHandleFailure = false,
   onBack,
+  onReturnPayout,
   onOpenFailurePaymentList,
 }: {
   batch: PaymentBatchRecord;
   payouts?: readonly Payout[];
+  canHandleFailure?: boolean;
   onBack: () => void;
+  onReturnPayout?: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
 }) {
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(() => (
+    batch.items.find((item) => item.paymentStatus === '付款失败')?.payoutId ?? null
+  ));
+  const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const liveItems = useMemo(() => batch.items.map((item) => {
     const payout = payouts.find((candidate) => candidate.id === item.payoutId);
@@ -227,6 +236,10 @@ export function PaymentBatchDetailPage({
   const totals = paymentBatchAmountLabel({ items: liveItems });
   const statusCounts = paymentBatchStatusCounts({ items: liveItems });
   const completed = liveStatus === '已付款';
+  const liveRequestStatus = liveItems.some((item) => item.paymentStatus === '已退回')
+    ? '已退回'
+    : batch.request.requestStatus;
+  const failureDialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -295,7 +308,7 @@ export function PaymentBatchDetailPage({
       <section className="payment-batch-detail-section">
         <header>
           <div><h2>请款项目 / 所属项目</h2><p>本批次只关联一个请款项目。</p></div>
-          <span className="simple-status"><i />{batch.request.requestStatus}</span>
+          <span className="simple-status"><i />{liveRequestStatus}</span>
         </header>
         <div className="payment-batch-project-heading">
           <span aria-hidden="true"><Building2 size={20} /></span>
@@ -330,6 +343,7 @@ export function PaymentBatchDetailPage({
           <div className="payment-batch-item-rows" role="list">
             {liveItems.map((item) => {
               const expanded = expandedItemId === item.payoutId;
+              const livePayout = payouts.find((payout) => payout.id === item.payoutId);
               const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
               return (
                 <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
@@ -353,7 +367,27 @@ export function PaymentBatchDetailPage({
                     <span className={`payment-batch-item-status ${paymentStatusTone(item.paymentStatus)}`} data-label="付款状态"><strong><i />{item.paymentStatus}</strong></span>
                     <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
                   </button>
-                  {expanded ? <div id={detailId}><PaymentItemDetails item={item} payout={payouts.find((payout) => payout.id === item.payoutId)} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined} /></div> : null}
+                  {expanded ? (
+                    <div id={detailId}>
+                      <PaymentItemDetails item={item} payout={livePayout} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined} />
+                      {item.paymentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
+                        <div className="payment-project-failure-action">
+                          <div>
+                            <strong>该笔付款需要财务判断问题类型</strong>
+                            <span>退回后仅处理当前失败款，批次内已成功付款不会受影响。</span>
+                          </div>
+                          <Button
+                            variant="danger"
+                            icon={<RotateCcw size={16} />}
+                            disabled={!canHandleFailure || !onReturnPayout}
+                            onClick={() => setFailureDialogPayoutId(item.payoutId)}
+                          >
+                            退回媒介处理
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -367,6 +401,18 @@ export function PaymentBatchDetailPage({
           </div>
         </div>
       </section>
+
+      {failureDialogPayoutId && failureDialogItem && onReturnPayout ? (
+        <PaymentFailureReturnDialog
+          key={failureDialogPayoutId}
+          item={failureDialogItem}
+          onClose={() => setFailureDialogPayoutId(null)}
+          onSubmit={(issueType, reason) => {
+            const payout = payouts.find((candidate) => candidate.id === failureDialogPayoutId);
+            return payout ? onReturnPayout(payout, issueType, reason) : false;
+          }}
+        />
+      ) : null}
     </div>
   );
 }

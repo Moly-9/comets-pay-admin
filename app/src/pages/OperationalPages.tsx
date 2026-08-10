@@ -84,6 +84,7 @@ import type {
   GeneratedInvoiceRecord,
   InvoiceEditContext,
   InvoiceEntity,
+  PaymentFailureIssueType,
   Payout,
   PayoutAccountStatus,
 } from '../types';
@@ -290,7 +291,6 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
-  '部分打款失败': 'failure',
   '已完成': 'complete',
   '已付款': 'complete',
   '已归档': 'complete',
@@ -3025,6 +3025,7 @@ export function BatchesPage({
   onNewBatch,
   notify,
   canCreateBatch,
+  onReturnPayout,
   onOpenFailurePaymentList,
 }: {
   batches: readonly PaymentBatchRecord[];
@@ -3032,6 +3033,7 @@ export function BatchesPage({
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
+  onReturnPayout?: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -3210,7 +3212,7 @@ export function BatchesPage({
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
 
   if (selectedBatchId) {
-    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} payouts={payouts} onBack={closeBatchDetail} onOpenFailurePaymentList={onOpenFailurePaymentList} />;
+    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} payouts={payouts} canHandleFailure={canCreateBatch} onBack={closeBatchDetail} onReturnPayout={onReturnPayout} onOpenFailurePaymentList={onOpenFailurePaymentList} />;
     return (
       <div className="page-stack payment-batch-detail-page">
         <button className="project-back-button payment-batch-detail-back" type="button" onClick={closeBatchDetail}>

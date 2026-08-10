@@ -431,9 +431,7 @@ export const createPaymentProjectPaymentRecord = ({
     batchPaidAt: lastActivityAt ?? '',
   }));
   const statuses = new Set(items.map((item) => item.paymentStatus));
-  const status: PaymentProjectPaymentStatus = request.status === '部分打款失败'
-    ? '部分失败'
-    : statuses.has('付款失败')
+  const status: PaymentProjectPaymentStatus = statuses.has('付款失败')
     ? '部分失败'
     : statuses.has('已退回')
       ? '已退回'

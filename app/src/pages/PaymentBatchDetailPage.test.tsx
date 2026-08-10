@@ -104,9 +104,48 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('付款金额');
     expect(html).toContain('avatar avatar-sm');
     expect(html).toContain('>MK</span>');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('aria-controls="payment-batch-item-payout_detail_test"');
-    expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，展开付款详情"');
+    expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，收起付款详情"');
+  });
+
+  it('exposes the shared return action for a failed item in the batch detail', () => {
+    const payout: Payout = {
+      id: 'payout_detail_test',
+      paymentRequestProjectId: DETAIL_BATCH.request.paymentRequestProjectId,
+      creator: 'Mina Kato',
+      handle: '@minakato',
+      initials: 'MK',
+      projectId: DETAIL_BATCH.request.cooperationProjectId,
+      project: DETAIL_BATCH.request.cooperationProjectName,
+      contract: 'CON-202608-000001',
+      invoice: 'INV-202608-000001',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 1250,
+      account: 'prototype-account',
+      status: '付款失败',
+      invoiceReviewStatus: '已通过',
+      accent: '#64748b',
+      paymentFailure: {
+        provider: 'Airwallex',
+        errorCode: 'BENEFICIARY_DISABLED',
+        providerResponse: 'The beneficiary is currently disabled.',
+        occurredAt: '2026-08-10T14:35',
+      },
+    };
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage
+        batch={DETAIL_BATCH}
+        payouts={[payout]}
+        canHandleFailure
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(html).toContain('该笔付款需要财务判断问题类型');
+    expect(html).toContain('退回媒介处理');
   });
 
   it('uses the simplified three-stage channel progress', () => {
@@ -183,6 +222,32 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('付款清单账户快照已失效，请达人更新账户。');
     expect(html).toContain('等待达人更新账户');
     expect(html).toContain('查看付款清单');
+  });
+
+  it('shows the returned request state when a live batch payout has been returned', () => {
+    const payout: Payout = {
+      id: 'payout_detail_test',
+      paymentRequestProjectId: DETAIL_BATCH.request.paymentRequestProjectId,
+      creator: 'Mina Kato',
+      handle: '@minakato',
+      initials: 'MK',
+      projectId: DETAIL_BATCH.request.cooperationProjectId,
+      project: DETAIL_BATCH.request.cooperationProjectName,
+      contract: 'CON-202608-000001',
+      invoice: 'INV-202608-000001',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 1250,
+      account: 'prototype-account',
+      status: '已退回',
+      invoiceReviewStatus: '已通过',
+      accent: '#64748b',
+    };
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage batch={DETAIL_BATCH} payouts={[payout]} onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain('<span class="simple-status"><i></i>已退回</span>');
   });
 
   it('shows an explicit empty state when a stored batch has no item snapshots', () => {

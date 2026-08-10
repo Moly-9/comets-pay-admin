@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { RequestApprovalState } from '../businessWorkflow';
 import type { SystemUser } from '../data';
+import type { Payout } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
 import { MediaPaymentProjectsPage } from './MediaPaymentProjectsPage';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
@@ -108,7 +109,7 @@ const resourceActions = {
   onExportPaymentList: vi.fn(),
 };
 
-const renderPage = (focusedProjectId: string | null) => renderToStaticMarkup(
+const renderPage = (focusedProjectId: string | null, payouts: Payout[] = []) => renderToStaticMarkup(
   <MediaPaymentProjectsPage
     notify={vi.fn()}
     currentUser={mediaUser}
@@ -117,6 +118,7 @@ const renderPage = (focusedProjectId: string | null) => renderToStaticMarkup(
     contracts={[]}
     invoices={[]}
     paymentLists={[]}
+    payouts={payouts}
     requests={[returnedRequest]}
     canCreate
     focusedProjectId={focusedProjectId}
@@ -153,5 +155,48 @@ describe('media returned payment request handling', () => {
     expect(html).toContain('请选择付款渠道');
     expect(html).toContain('请选择预计付款时间');
     expect(html).toContain('重新提交');
+  });
+
+  it('keeps a payment failure return in the original returned-project interaction', () => {
+    const failedPayout: Payout = {
+      id: 'payout-returned-failure',
+      paymentRequestProjectId: returnedRequest.paymentRequestProjectId,
+      creator: '测试达人',
+      handle: '@test',
+      initials: 'TT',
+      projectId: 'project-returned',
+      project: cooperationProject.name,
+      contract: 'CON-RETURNED-01',
+      invoice: 'INV-RETURNED-01',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 1200,
+      account: 'prototype-account',
+      status: '已退回',
+      invoiceReviewStatus: '已通过',
+      accent: '#64748b',
+      paymentFailureReturn: {
+        issueType: 'PAYMENT_LIST',
+        reason: '达人收款账户不可用，请更新后重新校验。',
+        actorAccount: 'finance.returned',
+        actorName: '财务测试员',
+        occurredAt: '2026-08-10T04:30:00.000Z',
+        restartStage: 'PAYMENT_LIST_RESUBMISSION',
+      },
+      paymentFailureRecovery: {
+        status: 'AWAITING_CREATOR_UPDATE',
+        notifications: [],
+      },
+    };
+    const listHtml = renderPage(null, [failedPayout]);
+    const detailHtml = renderPage(returnedRequest.id, [failedPayout]);
+
+    expect(listHtml).toContain('处理退回');
+    expect(listHtml).not.toContain('处理失败请款');
+    expect(listHtml).toContain('1 笔失败款待恢复');
+    expect(detailHtml).toContain('付款失败退回');
+    expect(detailHtml).toContain('1 笔失败款需恢复');
+    expect(detailHtml).toContain('达人收款账户不可用，请更新后重新校验。');
+    expect(detailHtml).toContain('等待达人更新账户');
   });
 });

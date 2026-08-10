@@ -135,6 +135,7 @@ import {
   type PaymentListRecord,
   type PaymentRequestProjectId,
   type ProjectId,
+  type RequestApprovalState,
   type RequestApprovalStatus,
   type WorkflowAuditAction,
   type WorkflowAuditEvent,
@@ -201,6 +202,42 @@ const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   等待付款: '付款处理中',
   信息异常: '等待付款',
   付款处理中: '已付款',
+};
+
+const returnPaymentFailureApproval = (
+  state: RequestApprovalState,
+  actor: Pick<SystemUser, 'account' | 'name' | 'role'>,
+  reason: string,
+  occurredAt: string,
+): RequestApprovalState => {
+  if (state.status === 'APPROVED') {
+    return returnApprovedRequestToMediaReview(state, actor, reason, occurredAt);
+  }
+  if (state.status !== 'RETURNED_TO_MEDIA_REVIEW') {
+    throw new Error('当前请款项目不在可退回的付款执行状态。');
+  }
+  return {
+    ...state,
+    history: [
+      ...state.history,
+      {
+        round: state.round,
+        stage: 'FINANCE',
+        action: 'RETURN',
+        actorAccount: actor.account,
+        actorName: actor.name,
+        actorRole: actor.role,
+        fromStatus: state.status,
+        toStatus: 'RETURNED_TO_MEDIA_REVIEW',
+        reason,
+        occurredAt,
+      },
+    ],
+    returnedFromStage: 'FINANCE',
+    resumeStatus: 'PENDING_FINANCE',
+    returnReason: reason,
+    updatedAt: occurredAt,
+  };
 };
 
 const getProjectId = (project: ProjectSummary) => (
@@ -2138,10 +2175,16 @@ export default function App() {
     };
     const nextPayouts = payouts.map((item) => item.id === payout.id ? updated : item);
     const completedRequests = nextStatus === '已付款'
-      ? requestProjects.filter((request) => (
-          (request.lifecycle === 'APPROVED' || request.status === '部分打款失败')
-          && isPaymentRequestFullyPaid({ request, invoices: generatedInvoices, payouts: nextPayouts })
-        ))
+      ? requestProjects.filter((request) => {
+          const hasSubmittedRetry = nextPayouts.some((candidate) => (
+            candidate.paymentRequestProjectId === request.paymentRequestProjectId
+            && candidate.paymentFailureRecovery?.status === 'RETRY_SUBMITTED'
+          ));
+          return (
+            request.lifecycle === 'APPROVED'
+            || (request.lifecycle === 'RETURNED' && hasSubmittedRetry)
+          ) && isPaymentRequestFullyPaid({ request, invoices: generatedInvoices, payouts: nextPayouts });
+        })
       : [];
     const completedRequestIds = new Set(completedRequests.map((request) => request.paymentRequestProjectId).filter(Boolean));
     const completedLegacyInvoiceIds = new Set(completedRequests
@@ -2155,7 +2198,22 @@ export default function App() {
       const completedAt = nowIso();
       setRequestProjects((current) => current.map((request) => (
         completedIds.has(request.id)
-          ? { ...request, lifecycle: 'COMPLETED', status: '已付款', filter: 'processed' }
+          ? {
+              ...request,
+              lifecycle: 'COMPLETED',
+              status: '已付款',
+              filter: 'processed',
+              approval: request.approval?.status === 'RETURNED_TO_MEDIA_REVIEW'
+                ? {
+                    ...request.approval,
+                    status: 'APPROVED',
+                    returnedFromStage: undefined,
+                    resumeStatus: undefined,
+                    returnReason: undefined,
+                    updatedAt: completedAt,
+                  }
+                : request.approval,
+            }
           : request
       )));
       setPaymentLists((current) => current.map((list) => (
@@ -2297,6 +2355,20 @@ export default function App() {
       || request.projectId === payout.projectId
       || request.cooperationProjectId === payout.projectId
     ));
+    let returnedApproval: RequestApprovalState | undefined;
+    if (linkedRequest?.approval) {
+      try {
+        returnedApproval = returnPaymentFailureApproval(
+          linkedRequest.approval,
+          { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+          normalizedReason,
+          occurredAt,
+        );
+      } catch (error) {
+        notify('无法退回媒介', error instanceof Error ? error.message : '请款项目审批状态不允许退回。');
+        return false;
+      }
+    }
     if (issueType === 'PAYMENT_LIST') {
       const updated = beginPaymentFailureAccountRecovery(returnedPayout);
       const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
@@ -2325,17 +2397,18 @@ export default function App() {
         if (!matchesRequest) return request;
         return {
           ...request,
-          lifecycle: 'COMPLETED',
-          status: '部分打款失败',
-          filter: 'processed',
+          lifecycle: 'RETURNED',
+          status: '付款清单待修改',
+          filter: 'pending',
+          approval: returnedApproval ?? request.approval,
           generatedDetail: request.generatedDetail ? {
             ...request.generatedDetail,
-            paymentListStatus: '部分打款失败',
+            paymentListStatus: '付款清单待修改',
           } : request.generatedDetail,
         };
       }));
       setSelectedPayout((current) => current?.id === payout.id ? updated : current);
-      notify('已转交媒介处理', '成功款项保持已付款；该失败款已进入达人账户更新和重新校验流程。');
+      notify('已退回媒介', '请款项目已回到“已退回”；成功款保持已付款，仅该失败款进入账户恢复。');
       return true;
     }
 
@@ -2358,14 +2431,7 @@ export default function App() {
         lifecycle: 'RETURNED',
         status: returnStatus,
         filter: 'pending',
-        approval: request.approval
-          ? {
-              ...request.approval,
-              status: 'RETURNED_TO_MEDIA_REVIEW',
-              returnReason: normalizedReason,
-              updatedAt: occurredAt,
-            }
-          : request.approval,
+        approval: returnedApproval ?? request.approval,
       };
     }));
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
@@ -3458,7 +3524,7 @@ export default function App() {
       );
       break;
     case 'batches':
-      pageContent = <BatchesPage batches={paymentBatches} payouts={payouts} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} onOpenFailurePaymentList={(requestId, payoutId) => {
+      pageContent = <BatchesPage batches={paymentBatches} payouts={payouts} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} onReturnPayout={returnPayout} onOpenFailurePaymentList={(requestId, payoutId) => {
         const request = requestProjects.find((candidate) => candidate.paymentRequestProjectId === requestId);
         setFocusedProjectId(request?.id ?? requestId);
         setFocusedPaymentFailurePayoutId(payoutId);
