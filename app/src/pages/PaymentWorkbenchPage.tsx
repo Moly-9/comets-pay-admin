@@ -379,27 +379,13 @@ function PaymentProjectTable({
       <div
         className="table-scroll payment-project-table-scroll"
         role="region"
-        aria-label="付款项目明细表，所有字段均可在当前容器内查看"
+        aria-label="付款项目明细表，可横向滚动查看更多列"
         tabIndex={0}
       >
         <table className="data-table request-project-table payment-project-table">
-          <colgroup>
-            <col className="payment-project-col-select" />
-            <col className="payment-project-col-code" />
-            <col className="payment-project-col-associated" />
-            <col className="payment-project-col-media" />
-            <col className="payment-project-col-pm" />
-            <col className="payment-project-col-amount" />
-            <col className="payment-project-col-contract" />
-            <col className="payment-project-col-invoice" />
-            <col className="payment-project-col-order" />
-            <col className="payment-project-col-channel" />
-            <col className="payment-project-col-status" />
-            <col className="payment-project-col-action" />
-          </colgroup>
           <thead>
             <tr>
-              <th className="payment-project-select-cell" scope="col">
+              <th className="payment-project-select-cell">
                 <label className="payment-project-select-control">
                   <span className="sr-only">全选当前筛选结果中的付款项目</span>
                   <input
@@ -412,17 +398,17 @@ function PaymentProjectTable({
                   />
                 </label>
               </th>
-              <th scope="col">项目编号</th>
-              <th scope="col">关联项目</th>
-              <th scope="col">媒介</th>
-              <th scope="col">负责 PM</th>
-              <th scope="col">请款金额</th>
-              <th scope="col">合同</th>
-              <th scope="col">invoice</th>
-              <th scope="col">付款单</th>
-              <th scope="col">付款渠道</th>
-              <th scope="col">项目状态</th>
-              <th className="action-cell" scope="col">操作</th>
+              <th>项目编号</th>
+              <th>关联项目</th>
+              <th>媒介</th>
+              <th>负责 PM</th>
+              <th>请款金额</th>
+              <th>合同</th>
+              <th>invoice</th>
+              <th>付款单</th>
+              <th>付款渠道</th>
+              <th>项目状态</th>
+              <th className="action-cell">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -435,7 +421,7 @@ function PaymentProjectTable({
                   aria-selected={selected}
                   onClick={() => onSelect(project)}
                 >
-                  <td className="payment-project-select-cell" data-label="选择" onClick={(event) => event.stopPropagation()}>
+                  <td className="payment-project-select-cell" onClick={(event) => event.stopPropagation()}>
                     <label className="payment-project-select-control">
                       <span className="sr-only">选择付款项目 {project.requestCode}</span>
                       <input
@@ -446,7 +432,7 @@ function PaymentProjectTable({
                       />
                     </label>
                   </td>
-                  <td className="payment-project-code" data-label="项目编号">
+                  <td className="payment-project-code">
                     <button
                       className="request-project-link"
                       type="button"
@@ -458,34 +444,21 @@ function PaymentProjectTable({
                       <strong>{project.requestCode}</strong>
                     </button>
                   </td>
-                  <td className="payment-project-associated" data-label="关联项目">
-                    <strong
-                      className="payment-project-associated-name"
-                      title={project.cooperationProjectName}
-                    >
-                      {project.cooperationProjectName}
-                    </strong>
+                  <td className="payment-project-associated">
+                    <strong>{project.cooperationProjectName}</strong>
                     <small className="cell-subtext">{project.cooperationProjectCode}</small>
                   </td>
-                  <td data-label="媒介">{project.media}</td>
-                  <td data-label="负责 PM">{project.pm}</td>
-                  <td className="payment-project-amount" data-label="请款金额">
-                    <span className="payment-project-amount-list">
-                      {project.amountTotals.length ? project.amountTotals.map((item) => (
-                        <span key={item.currency}>{item.currency} {formatOverviewAmount(item.amount)}</span>
-                      )) : <span>{project.amount}</span>}
-                    </span>
-                  </td>
-                  <td data-label="合同">{project.contracts} 份</td>
-                  <td data-label="Invoice">{project.invoices} 份</td>
-                  <td className="mono-cell payment-project-order" data-label="付款单">{project.paymentOrder}</td>
-                  <td className="payment-project-channel" data-label="付款渠道">
+                  <td>{project.media}</td>
+                  <td>{project.pm}</td>
+                  <td>{project.amount}</td>
+                  <td>{project.contracts} 份</td>
+                  <td>{project.invoices} 份</td>
+                  <td className="mono-cell">{project.paymentOrder}</td>
+                  <td className="payment-project-channel">
                     <PaymentProviderBadges compact providers={project.paymentChannels} />
                   </td>
-                  <td className="payment-project-status" data-label="项目状态">
-                    <span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span>
-                  </td>
-                  <td className="action-cell" data-label="操作">
+                  <td><span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span></td>
+                  <td className="action-cell">
                     <Button
                       variant={project.actionLabel === '审核' ? 'primary' : 'secondary'}
                       className="table-action"
@@ -500,7 +473,7 @@ function PaymentProjectTable({
                 </tr>
               );
             }) : (
-              <tr className="payment-project-empty-row">
+              <tr>
                 <td className="request-project-empty" colSpan={12}>{emptyText}</td>
               </tr>
             )}

@@ -125,13 +125,10 @@ describe('PaymentWorkbenchPage currency overview', () => {
     }]);
 
     expect(html).toContain('待审核<span>1</span>');
-    expect(html).toContain('<th scope="col">项目编号</th><th scope="col">关联项目</th>');
+    expect(html).toContain('<th>项目编号</th><th>关联项目</th>');
     expect(html).toContain('REQ-FINANCE-001');
     expect(html).toContain('PRJ-FINANCE-001');
     expect(html).toContain('Finance Review Project');
-    expect(html).toContain('class="payment-project-associated-name" title="Finance Review Project"');
-    expect(html).toContain('data-label="关联项目"');
-    expect(html).toContain('data-label="请款金额"');
     expect(html).toContain('待财务审核');
     expect(html).toContain('<span>审核</span>');
   });
