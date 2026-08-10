@@ -5,6 +5,7 @@ import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
+import { paymentRequestProviderForChannel } from '../paymentRequestProjects';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import {
   aggregatePayoutCurrencies,
@@ -120,6 +121,16 @@ const paymentChannelsFor = (payouts: Payout[], fallback = '') => {
     });
   }
   return PAYMENT_PROVIDERS.filter((provider) => values.has(provider));
+};
+
+const paymentChannelForRequest = (
+  request: RequestProjectSummary,
+  payouts: Payout[],
+) => {
+  const configuredProvider = paymentRequestProviderForChannel(request.paymentChannel);
+  return configuredProvider
+    ? [configuredProvider]
+    : paymentChannelsFor(payouts, request.generatedDetail?.provider).slice(0, 1);
 };
 
 const paymentAmountTotalsFor = (payouts: Payout[], fallback: string) => (
@@ -275,7 +286,7 @@ export const buildPaymentProjectRows = ({
         contracts: request.contracts,
         invoices: invoiceIds.size || request.invoices,
         paymentOrder: request.paymentOrder,
-        paymentChannels: paymentChannelsFor(projectPayouts, request.generatedDetail?.provider),
+        paymentChannels: paymentChannelForRequest(request, projectPayouts),
         amountTotals: paymentAmountTotalsFor(projectPayouts, amount),
         status: presentation.status,
         actionLabel: presentation.actionLabel,

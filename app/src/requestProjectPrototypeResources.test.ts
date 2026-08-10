@@ -3,6 +3,7 @@ import { isConfirmedContract } from './contracts';
 import { buildRequestFinanceReview } from './financeReview';
 import { paymentListEffectiveAccount, paymentListItemValue } from './businessWorkflow';
 import { INITIAL_PROJECTS } from './pages/OperationalPages';
+import { paymentRequestProviderForChannel } from './paymentRequestProjects';
 import {
   COMPLETE_REQUEST_FINANCE_PROJECT_CODES,
   INITIAL_COMPLETE_REQUEST_RESOURCES,
@@ -17,15 +18,15 @@ const {
 } = INITIAL_COMPLETE_REQUEST_RESOURCES;
 
 describe('complete request project prototype resources', () => {
-  it('links all 20 projects and all 237 creator engagements through complete stable resources', () => {
+  it('links all 20 projects through channel-compatible stable resources', () => {
     const links = requests.flatMap((request) => request.creatorLinks ?? []);
     const linkedInvoiceIds = links.flatMap((link) => link.invoiceIds);
 
     expect(requests).toHaveLength(20);
     expect(new Set(requests.map((request) => request.paymentRequestProjectId)).size).toBe(20);
-    expect(links).toHaveLength(237);
-    expect(linkedInvoiceIds).toHaveLength(237);
-    expect(new Set(linkedInvoiceIds).size).toBe(237);
+    expect(links.length).toBeGreaterThanOrEqual(20);
+    expect(linkedInvoiceIds).toHaveLength(links.length);
+    expect(new Set(linkedInvoiceIds).size).toBe(linkedInvoiceIds.length);
     expect(paymentLists).toHaveLength(20);
 
     INITIAL_PROJECTS.forEach((project) => {
@@ -33,9 +34,10 @@ describe('complete request project prototype resources', () => {
       expect(request?.requestCode).toMatch(/^REQ-/);
       expect(request?.cooperationProjectCode).toBe(project.id);
       expect(request?.cooperationProjectName).toBe(project.name);
-      expect(request?.creatorLinks).toHaveLength(project.creators);
-      expect(request?.contracts).toBe(project.creators);
-      expect(request?.invoices).toBe(project.creators);
+      expect(request?.paymentChannel).toMatch(/^(Airwallex|PayPal|Payermax)$/);
+      expect(request?.creatorLinks?.length).toBeGreaterThan(0);
+      expect(request?.contracts).toBe(request?.creatorLinks?.length);
+      expect(request?.invoices).toBe(request?.creatorLinks?.length);
     });
   });
 
@@ -54,6 +56,10 @@ describe('complete request project prototype resources', () => {
       expect(request.paymentOrder).toBe(requestLists[0]?.paymentListCode);
       expect(request.paymentOrder).not.toMatch(/、|-(?:AWX|PP)$/);
       const requestItems = requestLists.flatMap((list) => list.items.map((item) => ({ list, item })));
+      const expectedProvider = paymentRequestProviderForChannel(request.paymentChannel);
+      expect(requestLists[0]?.provider).toBe(expectedProvider);
+      expect(new Set(requestItems.map(({ item }) => paymentListEffectiveAccount(item).provider)))
+        .toEqual(new Set([expectedProvider]));
       (request.creatorLinks ?? []).forEach((link) => {
         expect(link.contractIds).toHaveLength(1);
         expect(link.invoiceIds).toHaveLength(1);

@@ -19,10 +19,12 @@ import {
   filterPaymentRequestList,
   normalizePaymentRequestCreatorLink,
   paymentRequestAmountLabel,
+  paymentRequestChannelForProvider,
   paymentRequestCreatorPresentation,
   paymentRequestInvoiceIds,
   paymentRequestPaymentPlanFor,
   paymentRequestPaymentPlanIssues,
+  paymentRequestProviderForChannel,
   invoiceAmountLabel,
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
@@ -146,6 +148,13 @@ describe('payment request payment plan', () => {
       paymentChannel: 'Payermax',
       expectedPaymentDate: '2026-08-28',
     });
+  });
+
+  it('maps the project-level channel to the execution provider without creating a second channel', () => {
+    expect(paymentRequestProviderForChannel('Airwallex')).toBe('Airwallex');
+    expect(paymentRequestProviderForChannel('PayPal')).toBe('PayPal');
+    expect(paymentRequestProviderForChannel('Payermax')).toBe('PayMax');
+    expect(paymentRequestChannelForProvider('PayMax')).toBe('Payermax');
   });
 });
 
@@ -388,6 +397,23 @@ describe('media payment request submission validation', () => {
       paymentLists: [first, second],
       paymentRequestProjectId,
     })).toContain('一个请款项目只能关联一张付款单');
+  });
+
+  it('rejects a payment item whose account channel differs from the request channel', () => {
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice()],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+      paymentChannel: 'Airwallex',
+    })).toContain('INV-20260807-000001 的收款账户渠道与请款项目付款渠道 Airwallex 不一致');
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice()],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+      paymentChannel: 'PayPal',
+    })).toEqual([]);
   });
 });
 

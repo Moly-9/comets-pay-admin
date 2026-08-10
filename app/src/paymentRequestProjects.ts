@@ -6,6 +6,7 @@ import type {
   CreatorId,
   EngagementId,
   InvoiceId,
+  PaymentListItemProvider,
   PaymentListRecord,
   PaymentRequestProjectId,
   ProjectId,
@@ -14,6 +15,7 @@ import type {
 import {
   invoicePaymentListItem,
   paymentListEffectiveAccount,
+  paymentListItemProvider,
   paymentListItemValue,
   revalidatePaymentListItem,
 } from './businessWorkflow';
@@ -27,6 +29,19 @@ export type PaymentRequestCreatorLink = {
 };
 
 export type PaymentRequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payermax';
+
+export const paymentRequestProviderForChannel = (
+  channel?: PaymentRequestPaymentChannel,
+): PaymentListItemProvider | null => {
+  if (channel === 'Payermax') return 'PayMax';
+  return channel ?? null;
+};
+
+export const paymentRequestChannelForProvider = (
+  provider: PaymentListItemProvider,
+): PaymentRequestPaymentChannel => (
+  provider === 'PayMax' ? 'Payermax' : provider
+);
 
 export type PaymentRequestPaymentPlan = {
   paymentChannel?: PaymentRequestPaymentChannel;
@@ -651,11 +666,13 @@ export const paymentRequestSubmissionIssues = ({
   invoices,
   paymentLists,
   paymentRequestProjectId,
+  paymentChannel,
 }: {
   creatorLinks: PaymentRequestCreatorLink[];
   invoices: GeneratedInvoiceRecord[];
   paymentLists: PaymentListRecord[];
   paymentRequestProjectId?: PaymentRequestProjectId;
+  paymentChannel?: PaymentRequestPaymentChannel;
 }) => {
   const issues: string[] = [];
   if (!creatorLinks.length) issues.push('请至少关联一位合作达人');
@@ -665,6 +682,17 @@ export const paymentRequestSubmissionIssues = ({
   ));
   if (requestLists.length > 1) {
     issues.push('一个请款项目只能关联一张付款单');
+  }
+  const expectedProvider = paymentRequestProviderForChannel(paymentChannel);
+  if (expectedProvider) {
+    const mismatchedItem = requestLists
+      .flatMap((list) => list.items)
+      .find((item) => paymentListItemProvider(item) !== expectedProvider);
+    if (mismatchedItem) {
+      issues.push(
+        `${mismatchedItem.snapshot.invoiceNumber} 的收款账户渠道与请款项目付款渠道 ${paymentChannel} 不一致`,
+      );
+    }
   }
   creatorLinks.forEach((link) => {
     if (!link.invoiceIds.length) {

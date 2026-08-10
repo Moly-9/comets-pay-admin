@@ -2,7 +2,7 @@ import type { ContractRecord } from './contracts';
 import { INITIAL_PAYOUTS } from './data';
 import {
   invoicePaymentListItem,
-  paymentListProviderForItems,
+  invoicePaymentListProvider,
   revalidatePaymentListItem,
   type ContractId,
   type PaymentListItem,
@@ -24,6 +24,8 @@ import {
 import {
   myProjectStatusFor,
   paymentRequestAmountLabel,
+  paymentRequestChannelForProvider,
+  paymentRequestProviderForChannel,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import {
@@ -118,11 +120,28 @@ const financeApprovalHistory = (
   };
 };
 
+const sourceInvoiceByEngagement = new Map(ALL_PROJECT_PROTOTYPE_INVOICES.flatMap((invoice) => (
+  invoice.snapshot.engagementId
+    ? [[invoice.snapshot.engagementId, invoice] as const]
+    : []
+)));
+
 const requestSeeds: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((request) => {
-  if (!FINANCE_REVIEW_PROJECT_CODES.has(request.id)) return request;
-  const approval = financeApprovalHistory(request, RESUBMITTED_PROJECT_CODES.has(request.id));
+  const project = INITIAL_PROJECTS.find((candidate) => (
+    candidate.cooperationProjectId === request.cooperationProjectId
+  ));
+  const firstInvoice = project?.creatorProfiles?.flatMap((reference) => {
+    const invoice = sourceInvoiceByEngagement.get(reference.engagementId);
+    return invoice ? [invoice] : [];
+  })[0];
+  const paymentChannel = request.paymentChannel ?? paymentRequestChannelForProvider(
+    firstInvoice ? invoicePaymentListProvider(firstInvoice) : 'Airwallex',
+  );
+  const normalizedRequest = { ...request, paymentChannel };
+  if (!FINANCE_REVIEW_PROJECT_CODES.has(request.id)) return normalizedRequest;
+  const approval = financeApprovalHistory(normalizedRequest, RESUBMITTED_PROJECT_CODES.has(request.id));
   return {
-    ...request,
+    ...normalizedRequest,
     lifecycle: 'SUBMITTED',
     approval,
     status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED', status: request.status }),
@@ -132,11 +151,6 @@ const requestSeeds: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((requ
 
 const requestByProjectId = new Map(requestSeeds.map((request) => [request.cooperationProjectId, request]));
 const creatorById = new Map(INITIAL_CREATORS.map((creator) => [creator.id, creator]));
-const sourceInvoiceByEngagement = new Map(ALL_PROJECT_PROTOTYPE_INVOICES.flatMap((invoice) => (
-  invoice.snapshot.engagementId
-    ? [[invoice.snapshot.engagementId, invoice] as const]
-    : []
-)));
 
 const requestContracts: ContractRecord[] = INITIAL_PROJECTS.flatMap((project, projectIndex) => (
   (project.creatorProfiles ?? []).map((reference, creatorIndex) => {
@@ -221,13 +235,15 @@ type RequestInvoiceEntry = {
 };
 
 const requestInvoiceEntries: RequestInvoiceEntry[] = INITIAL_PROJECTS.flatMap((project, projectIndex) => (
-  (project.creatorProfiles ?? []).map((reference, creatorIndex) => {
+  (project.creatorProfiles ?? []).flatMap((reference, creatorIndex) => {
     const source = sourceInvoiceByEngagement.get(reference.engagementId);
     const contract = contractByEngagement.get(reference.engagementId);
     const request = requestByProjectId.get(project.cooperationProjectId);
     if (!source || !contract?.contractId || !request) {
       throw new Error(`请款资源 ${project.id}/${reference.engagementId} 无法建立稳定关联`);
     }
+    const requestProvider = paymentRequestProviderForChannel(request.paymentChannel);
+    if (requestProvider && invoicePaymentListProvider(source) !== requestProvider) return [];
     const projectPart = String(projectIndex + 1).padStart(2, '0');
     const creatorPart = String(creatorIndex + 1).padStart(2, '0');
     const cloneSpecial = SPECIAL_INVOICE_IDS.has(source.invoiceId);
@@ -242,7 +258,7 @@ const requestInvoiceEntries: RequestInvoiceEntry[] = INITIAL_PROJECTS.flatMap((p
       : request.lifecycle === 'RETURNED'
         ? '已退回' as const
         : '待发起请款' as const;
-    return {
+    return [{
       source,
       request,
       contract,
@@ -266,7 +282,7 @@ const requestInvoiceEntries: RequestInvoiceEntry[] = INITIAL_PROJECTS.flatMap((p
           contractIds: [contract.contractId],
         },
       },
-    };
+    }];
   })
 ));
 
@@ -295,7 +311,8 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     project: request.cooperationProjectName ?? request.project,
     contract: contract.id,
     invoice: invoice.id,
-    provider: invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
+    provider: paymentRequestProviderForChannel(request.paymentChannel)
+      ?? invoicePaymentListProvider(invoice),
     currency: invoice.snapshot.currency,
     amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
     account: account ? `•••• ${account.replace(/\s/g, '').slice(-4)}` : '待补充',
@@ -351,7 +368,8 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requ
     paymentListCode,
     projectId: request.cooperationProjectId as PaymentListRecord['projectId'],
     paymentRequestProjectId: request.paymentRequestProjectId,
-    provider: paymentListProviderForItems(items),
+    provider: paymentRequestProviderForChannel(request.paymentChannel)
+      ?? (entries[0] ? invoicePaymentListProvider(entries[0].invoice) : 'Airwallex'),
     status,
     version,
     generatedAt: version ? generatedAt : undefined,

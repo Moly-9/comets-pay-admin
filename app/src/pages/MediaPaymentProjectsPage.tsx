@@ -27,6 +27,7 @@ import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
   createPrototypeId,
+  invoicePaymentListProvider,
   paymentListEffectiveAccount,
   type ContractId,
   type CooperationProjectId,
@@ -51,6 +52,7 @@ import {
   paymentRequestListMetrics,
   paymentRequestPaymentPlanFor,
   paymentRequestPaymentPlanIssues,
+  paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
   type PaymentRequestCreatorLink,
@@ -568,6 +570,15 @@ export function MediaPaymentProjectsPage({
     const resolution = resolutions.get(creatorId);
     const invoice = resolution?.availableInvoices.find((candidate) => candidate.invoiceId === invoiceId);
     if (!invoice || !resolution) return;
+    const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
+    const invoiceProvider = invoicePaymentListProvider(invoice);
+    if (expectedProvider && invoiceProvider !== expectedProvider) {
+      notify(
+        'Invoice 付款渠道不一致',
+        `当前请款项目选择 ${paymentChannel}，不能关联使用 ${invoiceProvider} 收款账户的 Invoice。`,
+      );
+      return;
+    }
     const result = addInvoiceToPaymentRequestSelection({
       invoice,
       invoices: resolution.invoices,
@@ -630,6 +641,13 @@ export function MediaPaymentProjectsPage({
       const resolution = resolutions.get(creator.id);
       const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
       if (selectedInvoices.length !== selectedInvoiceIds.length) return [`${creator.name} 的 Invoice 关联已失效，请重新选择`];
+      const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
+      const incompatibleInvoice = expectedProvider
+        ? selectedInvoices.find((invoice) => invoicePaymentListProvider(invoice) !== expectedProvider)
+        : undefined;
+      if (incompatibleInvoice) {
+        return [`${creator.name} 的 ${incompatibleInvoice.id} 与付款渠道 ${paymentChannel} 不一致`];
+      }
       if (new Set(selectedInvoices.map((invoice) => invoice.snapshot.engagementId)).size > 1) {
         return [`${creator.name} 的 Invoice 分属不同合作关系，不能合并到同一达人记录`];
       }
@@ -697,7 +715,7 @@ export function MediaPaymentProjectsPage({
         paymentListId: '待生成',
         paymentListStatus: '草稿',
         payee: `${validCreatorLinks.length} 位合作达人`,
-        provider: '按 Invoice 账户快照',
+        provider: paymentChannel,
         beneficiaryId: '按付款清单账户快照',
         feePolicy: '按合同及 Invoice 执行',
       },
@@ -724,6 +742,7 @@ export function MediaPaymentProjectsPage({
       invoices,
       paymentLists,
       paymentRequestProjectId: selectedRequest.paymentRequestProjectId,
+      paymentChannel: selectedRequest.paymentChannel,
     });
     const editable = canCreate && ['DRAFT', 'RETURNED'].includes(selectedRequest.lifecycle ?? '');
     const canAddCreators = canCreate && canAddCreatorToPaymentRequest(selectedRequest);
@@ -1115,12 +1134,15 @@ export function MediaPaymentProjectsPage({
                   const invoiceOptions = (resolution?.invoices ?? []).map((invoice): RequestResourcePickerOption => {
                     const owner = resolution?.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
                     const selected = selectedInvoiceIds.includes(invoice.invoiceId);
+                    const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
+                    const invoiceProvider = invoicePaymentListProvider(invoice);
+                    const channelMismatch = Boolean(expectedProvider && invoiceProvider !== expectedProvider);
                     return {
                       value: invoice.invoiceId,
                       label: invoice.id,
-                      description: `${creator.handle} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : selected ? '已选择' : invoice.status}`,
+                      description: `${creator.handle} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
                       selected,
-                      disabled: Boolean(owner),
+                      disabled: Boolean(owner || channelMismatch),
                     };
                   });
                   const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {

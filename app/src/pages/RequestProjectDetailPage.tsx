@@ -787,7 +787,9 @@ export function RequestProjectDetailPage({
   const requestPaymentLists = paymentListsForRequest(request, paymentLists);
   const paymentListPayees = requestPayeesFromPaymentLists(requestPaymentLists);
   const payees = paymentListPayees.length ? paymentListPayees : getRequestPayees(request, detail);
-  const paymentChannel = requestPaymentChannelLabel(payees.map((payee) => payee.channel));
+  const paymentChannel = requestPaymentChannelLabel(
+    request.paymentChannel ?? payees.map((payee) => payee.channel),
+  );
   const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
   const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;

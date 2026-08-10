@@ -153,6 +153,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(reviewRow.requestId).toBeTruthy();
     expect(reviewRow.paymentOrder).toMatch(/^PAY-/);
     expect(reviewRow.paymentOrder).not.toMatch(/、|-(?:AWX|PP)$/);
+    expect(reviewRow.paymentChannels).toHaveLength(1);
     expect(reviewRow.payouts.every((item) => (
       item.paymentRequestProjectId === INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((request) => (
         request.id === reviewRow.requestId

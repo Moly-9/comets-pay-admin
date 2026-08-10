@@ -111,6 +111,7 @@ import {
   nowIso,
   paymentListEffectiveAccount,
   paymentListForProvider,
+  paymentListItemProvider,
   paymentListProviderForItems,
   paymentListProviders,
   payoutWithPaymentListSnapshot,
@@ -137,7 +138,9 @@ import {
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
   paymentRequestAmountLabel,
+  paymentRequestChannelForProvider,
   paymentRequestInvoiceIds,
+  paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
@@ -1461,6 +1464,13 @@ export default function App() {
       notify('付款单关联异常', '一个请款项目只能关联一张付款单，请先合并历史付款单后再提交。');
       return;
     }
+    const projectPaymentProviders = lists[0] ? paymentListProviders(lists[0]) : [];
+    if (projectPaymentProviders.length !== 1) {
+      notify('付款渠道不一致', '一个请款项目只能选择一个付款渠道，请先统一付款单中的收款账户渠道。');
+      return;
+    }
+    const projectPaymentProvider = projectPaymentProviders[0];
+    const projectPaymentChannel = paymentRequestChannelForProvider(projectPaymentProvider);
     const invalidPaymentItems = lists.flatMap((list) => (
       list.items.filter((item) => item.requiresRevalidation)
     ));
@@ -1541,6 +1551,7 @@ export default function App() {
     setPayouts((current) => current.map((payout) => sourcePayoutIds.has(payout.id)
       ? {
           ...payout,
+          provider: projectPaymentProvider,
           status: '未进入付款',
           requestApprovalRound: approval.round,
           paymentListVersion: projectInvoices
@@ -1594,6 +1605,7 @@ export default function App() {
       brand: project.brand,
       media: project.media,
       pm: project.pm,
+      paymentChannel: projectPaymentChannel,
       amount: amountLabel,
       contracts: contracts.filter((contract) => contract.projectId === projectId && contract.lifecycle !== 'GENERATED_DRAFT').length,
       invoices: projectInvoices.length,
@@ -1613,7 +1625,7 @@ export default function App() {
         paymentListId: lists[0]?.paymentListCode ?? '待生成',
         paymentListStatus: '已提交',
         payee: `${references.length} 位项目达人`,
-        provider: lists[0] ? paymentListProviders(lists[0]).join('、') : '待确认',
+        provider: projectPaymentChannel,
         beneficiaryId: '按付款清单账户快照',
         feePolicy: '按合同及付款清单执行',
       },
@@ -1654,12 +1666,24 @@ export default function App() {
           lineNumber: index + 1,
         });
       });
+      const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
+      if (!requestPaymentProvider) {
+        throw new Error('请先为请款项目选择唯一付款渠道');
+      }
+      const mismatchedEntry = entries.find((entry) => (
+        paymentListItemProvider(entry) !== requestPaymentProvider
+      ));
+      if (mismatchedEntry) {
+        throw new Error(
+          `${mismatchedEntry.snapshot.invoiceNumber} 的收款账户渠道与请款项目付款渠道 ${request.paymentChannel} 不一致`,
+        );
+      }
       const list: PaymentListRecord = {
         paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
         paymentListCode: createPrototypeCode('PAY'),
         projectId: request.cooperationProjectId as ProjectId,
         paymentRequestProjectId: request.paymentRequestProjectId,
-        provider: paymentListProviderForItems(entries),
+        provider: requestPaymentProvider,
         status: 'generated',
         version: 1,
         generatedAt: createdAt,
@@ -1706,9 +1730,10 @@ export default function App() {
       invoices: generatedInvoices,
       paymentLists,
       paymentRequestProjectId: request.paymentRequestProjectId,
+      paymentChannel: request.paymentChannel,
     });
-    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM 和请款原因');
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.paymentChannel || !request.generatedDetail?.reason) {
+      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道和请款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => requestProjects.some((candidate) => (
@@ -1747,6 +1772,7 @@ export default function App() {
     setPayouts((current) => current.map((payout) => sourcePayoutIds.has(payout.id)
       ? {
           ...payout,
+          provider: paymentRequestProviderForChannel(request.paymentChannel) ?? payout.provider,
           status: '未进入付款',
           requestApprovalRound: approval.round,
         }
@@ -2606,6 +2632,11 @@ export default function App() {
       const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
       const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === payoutAccountId);
       if (!requestResourceEditable(request) || !list || list.status !== 'draft' || !item || !creator || !account) return;
+      const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
+      if (requestPaymentProvider && account.provider !== requestPaymentProvider) {
+        notify('收款账户渠道不一致', `当前请款项目固定使用 ${request.paymentChannel}，不能选择 ${account.provider} 账户。`);
+        return;
+      }
       const updated = applyPaymentListPayoutSnapshot(item, createDocumentPayoutSnapshot(account, creator.id));
       setPaymentLists((current) => current.map((candidate) => {
         if (candidate.paymentListId !== paymentListId) return candidate;
