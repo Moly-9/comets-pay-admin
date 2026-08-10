@@ -20130,6 +20130,7 @@ button:disabled {
 :where(.data-table, .batch-table, .invoice-batch-table, .request-finance-comparison-table)
   :is(th, td):not([colspan]) {
   text-align: left !important;
+  white-space: nowrap;
 }
 
 .payment-batch-item-table-head > span,
@@ -20143,25 +20144,15 @@ button:disabled {
 }
 
 @media (min-width: 861px) {
-  :where(.data-table, .batch-table, .request-finance-comparison-table) {
+  :is(.data-table, .batch-table, .request-finance-comparison-table) {
     width: 100%;
-    min-width: 100%;
-    max-width: 100%;
-    table-layout: fixed;
-    white-space: normal;
+    table-layout: auto;
+    white-space: nowrap;
   }
 
   :where(.data-table, .batch-table, .request-finance-comparison-table)
     :is(th, td):not([colspan]) {
-    padding-right: clamp(8px, 0.65vw, 12px);
-    padding-left: clamp(8px, 0.65vw, 12px);
-    overflow-wrap: anywhere;
-  }
-
-  .creator-cell,
-  .system-account-cell,
-  .payment-project-associated {
-    min-width: 0;
+    white-space: nowrap;
   }
 
   .contract-table .contract-date-cell {
@@ -20187,10 +20178,62 @@ button:disabled {
   .payment-batch-item-person small {
     overflow: visible;
     text-overflow: clip;
-    white-space: normal;
+    white-space: nowrap;
   }
 
   .contract-name-link {
     max-width: none;
+  }
+}
+
+/* iPad and tablet: preserve readable columns inside a contained horizontal scroller. */
+@media (min-width: 861px) and (max-width: 1180px) {
+  .table-scroll,
+  .batch-table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :where(.data-table, .batch-table, .request-finance-comparison-table)
+    :is(th, td):not([colspan]) {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+}
+
+/* Compact PC: keep labels on one line with denser column gutters. */
+@media (min-width: 1181px) and (max-width: 1599px) {
+  :where(.data-table, .batch-table, .request-finance-comparison-table)
+    :is(th, td):not([colspan]) {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+}
+
+/* 24-inch desktop: fit standard lists to the available full-screen width. */
+@media (min-width: 1600px) and (max-width: 2199px) {
+  :is(.data-table, .batch-table, .request-finance-comparison-table) {
+    min-width: 100%;
+  }
+
+  :where(.data-table, .batch-table, .request-finance-comparison-table)
+    :is(th, td):not([colspan]) {
+    padding-right: 11px;
+    padding-left: 11px;
+  }
+}
+
+/* 27-inch desktop and wider: use the full canvas without stretching text spacing. */
+@media (min-width: 2200px) {
+  :is(.data-table, .batch-table, .request-finance-comparison-table) {
+    min-width: 100%;
+  }
+
+  :where(.data-table, .batch-table, .request-finance-comparison-table)
+    :is(th, td):not([colspan]) {
+    padding-right: 14px;
+    padding-left: 14px;
   }
 }
