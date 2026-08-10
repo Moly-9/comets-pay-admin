@@ -87,6 +87,6 @@ describe('payment batch prototype scenario', () => {
 
     expect(html).toContain('>付款失败</button>');
     expect(html).toContain(`>${successRate}</strong>`);
-    expect(html).toContain(`渠道付款成功率 · ${failed.length} 笔失败`);
+    expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);
   });
 });

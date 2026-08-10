@@ -10,6 +10,7 @@ const transactionPayout = (
   amount: number,
   index: number,
   status: Payout['status'] = '已付款',
+  provider: Payout['provider'] = 'Airwallex',
 ): Payout => ({
   id: `transaction-${index}`,
   creator: `Creator ${index}`,
@@ -19,7 +20,7 @@ const transactionPayout = (
   project: `Project ${index}`,
   contract: `CON-${index}`,
   invoice: `INV-${index}`,
-  provider: 'Airwallex',
+  provider,
   currency,
   amount,
   account: `0000000${index}`,
@@ -55,6 +56,31 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>HKD<');
     expect(html).toContain('>SGD<');
     expect(html.indexOf('USD 300')).toBeLessThan(html.indexOf('已付款总额其他币种'));
+  });
+
+  it('shows the overall success rate above each provider success rate and failure count', () => {
+    const html = renderToStaticMarkup(
+      <TransactionsPage
+        payouts={[
+          transactionPayout('USD', 100, 1, '已付款', 'Airwallex'),
+          transactionPayout('USD', 100, 2, '已付款', 'Airwallex'),
+          transactionPayout('USD', 100, 3, '付款失败', 'Airwallex'),
+          transactionPayout('USD', 100, 4, '已付款', 'PayPal'),
+          transactionPayout('USD', 100, 5, '付款失败', 'PayPal'),
+          transactionPayout('USD', 100, 6, '已付款', 'PayMax'),
+          transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
+          transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
+        ]}
+        onSelectPayout={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('aria-label="渠道付款成功率"');
+    expect(html).toContain('<strong>75.0%</strong><span>全部渠道成功率 · 2 笔失败</span>');
+    expect(html).toContain('<span>Airwallex</span><span>66.7%</span><small>1 笔失败</small>');
+    expect(html).toContain('<span>PayPal</span><span>50.0%</span><small>1 笔失败</small>');
+    expect(html).toContain('<span>PayMax</span><span>100.0%</span><small>0 笔失败</small>');
+    expect(html.indexOf('全部渠道成功率')).toBeLessThan(html.indexOf('各渠道付款成功率'));
   });
 });
 

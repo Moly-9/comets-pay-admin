@@ -3348,8 +3348,20 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
   const paidCurrencies = aggregatePayoutCurrencies(paid, true);
-  const settled = paid.length + failed.length;
-  const successRate = settled ? `${((paid.length / settled) * 100).toFixed(1)}%` : '—';
+  const formatSuccessRate = (successfulCount: number, failedCount: number) => {
+    const total = successfulCount + failedCount;
+    return total ? `${((successfulCount / total) * 100).toFixed(1)}%` : '—';
+  };
+  const successRate = formatSuccessRate(paid.length, failed.length);
+  const providerSuccessRates = (['Airwallex', 'PayPal', 'PayMax'] as const).map((provider) => {
+    const successfulCount = paid.filter((payout) => payout.provider === provider).length;
+    const failedCount = failed.filter((payout) => payout.provider === provider).length;
+    return {
+      provider,
+      successRate: formatSuccessRate(successfulCount, failedCount),
+      failedCount,
+    };
+  });
   return (
     <div className="page-stack">
       <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" />
@@ -3362,9 +3374,26 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
           tone="peach"
           icon="paid"
         />
-        <article className="summary-card summary-card-lilac">
+        <article
+          className="summary-card summary-card-lilac payment-workbench-summary-card transaction-channel-summary-card"
+          aria-label="渠道付款成功率"
+        >
           <span className="summary-illustration"><Check size={26} /></span>
-          <div><strong>{successRate}</strong><span>渠道付款成功率 · {failed.length} 笔失败</span></div>
+          <div className="payment-summary-content">
+            <div className="payment-summary-primary">
+              <strong>{successRate}</strong>
+              <span>全部渠道成功率 · {failed.length} 笔失败</span>
+            </div>
+          </div>
+          <ul className="payment-summary-secondary transaction-channel-summary-details" aria-label="各渠道付款成功率">
+            {providerSuccessRates.map((item) => (
+              <li className="transaction-channel-summary-row" key={item.provider}>
+                <span>{item.provider}</span>
+                <span>{item.successRate}</span>
+                <small>{item.failedCount} 笔失败</small>
+              </li>
+            ))}
+          </ul>
         </article>
       </section>
       <section className="content-card">
