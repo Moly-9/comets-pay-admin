@@ -91,9 +91,14 @@ describe('PaymentWorkbenchPage project list controls', () => {
     expect(html).toContain('全部付款渠道');
     expect(html).toContain('aria-label="全选当前筛选结果中的付款项目"');
     expect(html).toContain('class="table-scroll payment-project-table-scroll"');
-    expect(html).toContain('aria-label="付款项目明细表，可横向滚动查看更多列"');
+    expect(html).toContain('aria-label="付款项目明细表，所有字段均可在当前容器内查看"');
     expect(html).toContain('tabindex="0"');
-    expect(html).toContain('<th>付款单</th><th>付款渠道</th>');
+    expect(html).toContain('class="payment-project-col-select"');
+    expect(html).toContain('class="payment-project-col-associated"');
+    expect(html).toContain('class="payment-project-col-amount"');
+    expect(html).toContain('class="payment-project-col-status"');
+    expect(html).toContain('class="payment-project-col-action"');
+    expect(html).toContain('<th scope="col">付款单</th><th scope="col">付款渠道</th>');
     expect(html).toContain('待审核合计 · 0 个项目');
   });
 
