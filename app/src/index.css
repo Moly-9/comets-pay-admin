@@ -1830,6 +1830,71 @@
   line-height: 1.55;
 }
 
+.request-payment-attention-list {
+  display: grid;
+  max-height: 164px;
+  gap: 6px;
+  overflow-y: auto;
+  margin: 4px 0 0;
+  padding: 0 4px 0 0;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.request-payment-attention-list li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid rgba(139, 91, 34, 0.16);
+  padding-top: 6px;
+}
+
+.request-payment-attention-list li > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.request-payment-attention-list li strong,
+.request-payment-attention-list li small {
+  overflow-wrap: anywhere;
+}
+
+.request-payment-attention-list li small {
+  color: #765f42;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.request-payment-attention-list button {
+  display: inline-flex;
+  min-width: 66px;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid #d9bf99;
+  border-radius: 6px;
+  background: #fff;
+  color: #805421;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.request-payment-attention-list button:hover {
+  border-color: #c9a879;
+  background: #fff8ed;
+}
+
+.request-payment-attention-list button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
 .request-payment-review-summary.is-passed {
   border-color: #cce3d7;
   background: #f3faf6;
@@ -2874,10 +2939,13 @@ body:has(.finance-review-workspace) {
 
 .finance-review-grid {
   display: grid;
+  height: 0;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   grid-template-columns: minmax(0, 38fr) minmax(0, 38fr) minmax(260px, 24fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 1px;
+  overflow: hidden;
   background: #dfe3e8;
 }
 
@@ -2939,10 +3007,16 @@ body:has(.finance-review-workspace) {
   gap: 12px;
   flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 13px;
 }
 
 .finance-review-payment-scroll {
+  grid-auto-rows: max-content;
+}
+
+.finance-review-approval-scroll {
   grid-auto-rows: max-content;
 }
 
@@ -4045,6 +4119,7 @@ body:has(.finance-review-workspace) {
 
   .finance-review-grid {
     display: block;
+    height: auto;
     min-height: 0;
     flex: 1 1 auto;
     background: #fff;

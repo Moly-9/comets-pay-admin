@@ -452,7 +452,12 @@ export function FinanceReviewWorkspace({
               <header className="finance-review-pane-header">
                 <div><ShieldCheck size={18} /><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
               </header>
-              <div className="finance-review-approval-scroll">
+              <div
+                className="finance-review-approval-scroll"
+                tabIndex={0}
+                aria-label="项目与审批详情"
+                data-testid="finance-review-approval-scroll"
+              >
                 <section className="finance-review-metrics" aria-label="请款项目概况">
                   <article className="is-amount">
                     <span><WalletCards size={14} />请款金额</span>

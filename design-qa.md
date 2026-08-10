@@ -171,6 +171,41 @@ final result: passed
 
 ---
 
+# Finance Review Approval Scroll And Account Routing QA
+
+## Evidence
+
+- Right-board reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-13867e34-14f3-4a1b-8a4a-5aa7577f9407.png`
+- Account-warning reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-43ed51a4-0347-4392-8d0e-4d30b410042d.png`
+- Browser state: signed in as `finance.demo`, opened `REQ-202607-000001`, and verified the first PayPal account warning at the desktop viewport and 390 x 844.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The right board now contributes its full intrinsic content height to one independently scrolling viewport. It measures 661 px high with 1,336 px of content in the tested desktop view.
+- Scrolling reaches the final `渠道付款` approval node; its bottom edge is 13 px above the right board's lower edge, so no approval content remains clipped behind the fixed footer.
+- The warning summary identifies `Alex Ruiz`, recipient account `alexbuilds`, Invoice `INV-301164-02`, and the exact unsupported PayPal API reason.
+- `去核对` switches from page 1 to page 2, synchronizes the Invoice and payment-list content, scrolls the matching account card into view, and moves keyboard focus to that card.
+- At 390 x 844, the warning control retains a 66 x 30 px stable target, the review workspace stays within the 390 px viewport, and the fixed approval footer does not overlap the account content.
+
+## Interaction Verification
+
+- Right-board wheel scrolling: passed; `scrollTop` reached the 675 px maximum.
+- Right-board focus semantics: passed; the scroll viewport is labeled `项目与审批详情` and is keyboard focusable.
+- Problem-account routing: passed; the active element after navigation is the stable Alex Ruiz account-card ID.
+- Responsive overflow: passed; document width equals the 390 px viewport.
+- Console: 0 warnings and 0 errors during the verified flow.
+
+## Comparison History
+
+1. The first pass reproduced the reported clipping: the outer right board was scrollable, but implicit Grid rows compressed both inner sections and their `overflow: hidden` styling clipped 374 px and 749 px of content into two 225 px rows.
+2. The approval board was changed to max-content implicit rows, preserving the existing cards while allowing their complete height to participate in the parent scroll range.
+3. The final pass reached the last approval node and confirmed the account-warning route on desktop and the non-overlapping segmented layout at 390 px.
+
+final result: passed
+
+---
+
 # Finance Review Field Scope Design QA
 
 ## Evidence

@@ -11,6 +11,10 @@ const workspaceSource = readFileSync(
   new URL('./FinanceReviewWorkspace.tsx', import.meta.url),
   'utf8',
 );
+const workspaceStyles = readFileSync(
+  new URL('../index.css', import.meta.url),
+  'utf8',
+);
 
 describe('shared payment-list finance review content', () => {
   it('limits the finance workspace comparison to the fields selected for manual review', () => {
@@ -77,7 +81,7 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('Swift Code');
     expect(reviewContentSource).toContain('IBAN (optional)');
     expect(reviewContentSource).toContain('当前账户字段为原型展示，具体字段需调用 Airwallex API');
-    expect(reviewContentSource).toContain('details?.accountName || row.item.snapshot.realName');
+    expect(reviewContentSource).toContain("return details?.accountName || fallbackName || '未填写'");
     expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');
   });
 
@@ -92,6 +96,25 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('currentReview?.paymentItems');
     expect(reviewContentSource).toContain('currentListIds.includes(list.paymentListId)');
     expect(reviewContentSource).toContain('disabled>导出 Excel</Button>');
+  });
+
+  it('identifies each account requiring attention and jumps to its synchronized review page', () => {
+    expect(reviewContentSource).toContain('accountAttentionRows.map');
+    expect(reviewContentSource).toContain('需要处理的收款账户');
+    expect(reviewContentSource).toContain('收款账户：{row.accountName}');
+    expect(reviewContentSource).toContain('去核对<ArrowRight');
+    expect(reviewContentSource).toContain('setReviewIndex(row.reviewIndex)');
+    expect(reviewContentSource).toContain("scrollIntoView({ behavior: 'smooth', block: 'start' })");
+    expect(reviewContentSource).toContain('id={`finance-payment-account-${row.key}`}');
+  });
+
+  it('constrains the approval board to its own keyboard-scrollable viewport', () => {
+    expect(workspaceSource).toContain('data-testid="finance-review-approval-scroll"');
+    expect(workspaceSource).toContain('aria-label="项目与审批详情"');
+    expect(workspaceSource).toContain('tabIndex={0}');
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*{[^}]*height:\s*0;[^}]*grid-template-rows:\s*minmax\(0, 1fr\);[^}]*overflow:\s*hidden;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-payment-scroll,\s*\.finance-review-approval-scroll\s*{[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-approval-scroll\s*{[^}]*grid-auto-rows:\s*max-content;/s);
   });
 
   it('preserves read-only validation and export behavior without payment mutation controls', () => {

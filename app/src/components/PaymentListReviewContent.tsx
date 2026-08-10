@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -92,6 +93,17 @@ const displayValue = (value: unknown) => (
   value === undefined || value === null || value === '' ? '未填写' : String(value)
 );
 
+const recipientAccountName = (
+  account: ReturnType<typeof paymentListEffectiveAccount>,
+  fallbackName?: string,
+) => {
+  const details = account.paymentDetails;
+  if (account.transferMethod === 'PAYPAL') {
+    return details?.paypalUsername || details?.accountName || fallbackName || '未填写';
+  }
+  return details?.accountName || fallbackName || '未填写';
+};
+
 const fieldStateLabel = (field?: FinanceReviewField) => {
   if (field?.state === 'match') return '一致';
   if (field?.state === 'mismatch') return '不一致';
@@ -124,6 +136,7 @@ export function PaymentListReviewContent({
   const [accountChecks, setAccountChecks] = useState<Record<string, RequestPaymentAccountCheck>>({});
   const [validating, setValidating] = useState(false);
   const [localIndex, setLocalIndex] = useState(0);
+  const [pendingAccountFocusKey, setPendingAccountFocusKey] = useState<string | null>(null);
   const maxIndex = Math.max(0, pages.length - 1);
   const reviewIndex = Math.min(activeIndex ?? localIndex, maxIndex);
   const currentReview = pages[reviewIndex];
@@ -141,6 +154,12 @@ export function PaymentListReviewContent({
     `${row.list.paymentListId}:${row.item.id}`,
     row,
   ])), [rows]);
+  const reviewIndexByReference = useMemo(() => new Map(pages.flatMap((page, index) => (
+    page.paymentItems.map((reference) => [
+      `${reference.paymentListId}:${reference.itemId}`,
+      index,
+    ] as const)
+  ))), [pages]);
   const currentRows = currentReview?.paymentItems.flatMap((reference) => {
     const row = rowByReference.get(`${reference.paymentListId}:${reference.itemId}`);
     return row ? [row] : [];
@@ -151,6 +170,22 @@ export function PaymentListReviewContent({
   const apiIssueCount = rows.filter((row) => (
     ['invalid', 'unavailable'].includes(accountChecks[row.key]?.state ?? '')
   )).length;
+  const accountAttentionRows = useMemo(() => rows.flatMap((row) => {
+    const check = accountChecks[row.key];
+    const issues = [
+      ...(row.snapshotReview.state === 'ready' ? [] : row.snapshotReview.issues),
+      ...(check && ['invalid', 'unavailable'].includes(check.state) ? [check.message] : []),
+    ];
+    if (!issues.length) return [];
+    return [{
+      key: row.key,
+      accountName: recipientAccountName(row.effectiveAccount, row.item.snapshot.realName),
+      creatorName: row.item.snapshot.creatorName,
+      invoiceNumber: row.item.snapshot.invoiceNumber,
+      issue: [...new Set(issues)].join('；'),
+      reviewIndex: reviewIndexByReference.get(`${row.list.paymentListId}:${row.item.id}`),
+    }];
+  }), [accountChecks, reviewIndexByReference, rows]);
   const allApiChecksPassed = rows.length > 0
     && apiPassedCount === rows.length
     && snapshotAttentionCount === 0;
@@ -163,10 +198,27 @@ export function PaymentListReviewContent({
     if (activeIndex === undefined) setLocalIndex((current) => Math.min(current, maxIndex));
   }, [activeIndex, maxIndex]);
 
+  useEffect(() => {
+    if (!pendingAccountFocusKey) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`finance-payment-account-${pendingAccountFocusKey}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target?.focus({ preventScroll: true });
+      setPendingAccountFocusKey(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pendingAccountFocusKey, reviewIndex]);
+
   const setReviewIndex = (nextIndex: number) => {
     const normalized = Math.min(Math.max(0, nextIndex), maxIndex);
     if (activeIndex === undefined) setLocalIndex(normalized);
     onActiveIndexChange?.(normalized);
+  };
+
+  const focusAccountReview = (row: (typeof accountAttentionRows)[number]) => {
+    if (row.reviewIndex === undefined) return;
+    setPendingAccountFocusKey(row.key);
+    setReviewIndex(row.reviewIndex);
   };
 
   const validateAccounts = async () => {
@@ -277,6 +329,27 @@ export function PaymentListReviewContent({
             <div>
               <strong>{summaryTitle}</strong>
               <p>审批前应核对冻结账户、币种、金额、费用承担与交易附言；API 校验只检查账户字段，不改写付款数据。</p>
+              {accountDisplay === 'current-full' && accountAttentionRows.length ? (
+                <ul className="request-payment-attention-list" aria-label="需要处理的收款账户">
+                  {accountAttentionRows.map((row) => (
+                    <li key={row.key}>
+                      <span>
+                        <strong>{row.creatorName}</strong>
+                        <small>收款账户：{row.accountName} · {row.invoiceNumber}</small>
+                        <small>{row.issue}</small>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={row.reviewIndex === undefined}
+                        aria-label={`核对 ${row.creatorName} 的收款账户`}
+                        onClick={() => focusAccountReview(row)}
+                      >
+                        去核对<ArrowRight size={13} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           </div>
 
@@ -353,9 +426,7 @@ export function PaymentListReviewContent({
                 const details = row.effectiveAccount.paymentDetails;
                 const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
                 const amount = Number(paymentListItemValue(row.item, 'amount') || 0);
-                const recipientAccountName = row.effectiveAccount.transferMethod === 'PAYPAL'
-                  ? details?.paypalUsername || details?.accountName || row.item.snapshot.realName
-                  : details?.accountName || row.item.snapshot.realName;
+                const accountName = recipientAccountName(row.effectiveAccount, row.item.snapshot.realName);
                 const accountFields = [
                   { id: 'real-name', label: 'Real Name', value: row.item.snapshot.realName },
                   { id: 'account-name', label: 'Account Name', value: details?.accountName },
@@ -370,7 +441,12 @@ export function PaymentListReviewContent({
                   { id: 'iban', label: 'IBAN (optional)', value: details?.iban },
                 ];
                 return (
-                  <article className="finance-payment-account-snapshot" key={row.key}>
+                  <article
+                    className="finance-payment-account-snapshot"
+                    id={`finance-payment-account-${row.key}`}
+                    key={row.key}
+                    tabIndex={-1}
+                  >
                     <header>
                       <div><strong>{row.item.snapshot.creatorName}</strong><small>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</small></div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
@@ -388,7 +464,7 @@ export function PaymentListReviewContent({
                       })}
                     </dl>
                     <dl className="request-payment-review-fields finance-payment-operational-fields">
-                      <div className="request-payment-review-account"><dt>收款账户</dt><dd>{displayValue(recipientAccountName)}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
+                      <div className="request-payment-review-account"><dt>收款账户</dt><dd>{displayValue(accountName)}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
                       <div><dt>支付币种</dt><dd>{currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{displayValue(paymentListItemValue(row.item, 'receiveCurrency'))}</dd></div>
                       <div><dt>付款金额</dt><dd>{formatInvoiceMoney(currency, amount)}</dd></div>
