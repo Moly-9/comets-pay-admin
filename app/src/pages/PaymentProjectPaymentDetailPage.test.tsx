@@ -37,7 +37,14 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('>付款项目</span>');
     expect(html).toContain('REQ-202607-000011');
     expect(html).toContain(failedRecord.request.cooperationProjectName);
-    expect(html).toContain('本页面仅展示当前请款项目，不混入同批次的其他项目');
+    expect(html).toContain('付款项目信息');
+    expect(html).toContain('本页面仅展示当前付款项目，不混入同批次的其他项目');
+    expect(html).toContain('<dt>付款编号</dt>');
+    expect(html).toContain('<dt>付款金额</dt>');
+    expect(html).toContain(`simple-status is-danger"><i></i>${failedRecord.status}`);
+    expect(html).not.toContain('请款项目 / 所属项目');
+    expect(html).not.toContain('<dt>请款编号</dt>');
+    expect(html).not.toContain('<dt>请款金额</dt>');
     expect(html).toContain(`${failedRecord.items.length} 笔付款明细`);
     expect(html).toContain('付款失败需要处理');
     expect(html).toContain('退回媒介处理');
@@ -72,5 +79,29 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('payment-project-summary-card is-result-danger');
     expect(html).toContain('payment-project-summary-card is-updated');
     expect(html).toContain('data-payment-provider="Airwallex"');
+  });
+
+  it('shows the current payment project status in the payment information card', () => {
+    const processingRecord = {
+      ...failedRecord,
+      status: '付款处理中' as const,
+      request: {
+        ...failedRecord.request,
+        requestStatus: '已完成',
+      },
+    };
+    const html = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={processingRecord}
+        payouts={resources.payouts}
+        canHandleFailure
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(html).toContain('付款项目信息');
+    expect(html).toContain('simple-status is-processing"><i></i>付款处理中');
+    expect(html).not.toContain('simple-status"><i></i>已完成');
   });
 });

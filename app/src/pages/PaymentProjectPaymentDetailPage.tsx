@@ -203,16 +203,16 @@ export function PaymentProjectPaymentDetailPage({
 
       <section className="payment-batch-detail-section">
         <header>
-          <div><h2>请款项目 / 所属项目</h2><p>本页面仅展示当前请款项目，不混入同批次的其他项目。</p></div>
-          <span className="simple-status"><i />{record.request.requestStatus}</span>
+          <div><h2>付款项目信息</h2><p>本页面仅展示当前付款项目，不混入同批次的其他项目。</p></div>
+          <span className={`simple-status ${projectStatusTone(record.status)}`}><i />{record.status}</span>
         </header>
         <div className="payment-batch-project-heading">
           <span aria-hidden="true"><Building2 size={20} /></span>
           <div><span className="payment-batch-project-name">{record.request.cooperationProjectName}</span><small>{record.request.cooperationProjectCode}</small></div>
         </div>
         <dl className="payment-batch-project-grid">
-          <div><dt>请款编号</dt><dd>{record.request.requestCode}</dd></div>
-          <div><dt>请款金额</dt><dd>{record.request.amount}</dd></div>
+          <div><dt>付款编号</dt><dd>{record.request.requestCode}</dd></div>
+          <div><dt>付款金额</dt><dd>{record.request.amount}</dd></div>
           <div><dt>品牌 / 客户</dt><dd>{record.request.brand}</dd></div>
           <div><dt>项目媒介</dt><dd>{record.request.media}</dd></div>
           <div><dt>负责 PM</dt><dd>{record.request.pm}</dd></div>
