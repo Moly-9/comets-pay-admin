@@ -3334,16 +3334,17 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
 }
 
 export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
-  const [tab, setTab] = useState<'all' | 'processing' | 'paid' | 'failed'>('all');
-  const transactions = payouts.filter(isInvoiceApprovedForPayment);
+  const [tab, setTab] = useState<'all' | 'paid' | 'failed'>('all');
+  const transactions = payouts.filter((payout) => (
+    isInvoiceApprovedForPayment(payout)
+    && (payout.status === '已付款' || payout.status === '付款失败')
+  ));
   const visible = transactions.filter((payout) => (
-    tab === 'processing'
-      ? payout.status === '付款处理中' || payout.status === '等待付款'
-      : tab === 'paid'
-        ? payout.status === '已付款'
-        : tab === 'failed'
-          ? payout.status === '付款失败'
-          : true
+    tab === 'paid'
+      ? payout.status === '已付款'
+      : tab === 'failed'
+        ? payout.status === '付款失败'
+        : true
   ));
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
@@ -3399,7 +3400,6 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
       <section className="content-card">
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button>
-          <button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button>
           <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button>
           <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('failed')}>付款失败</button>
         </div>

@@ -82,6 +82,31 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('<span>PayMax</span><span>100.0%</span><small>0 笔失败</small>');
     expect(html.indexOf('全部渠道成功率')).toBeLessThan(html.indexOf('各渠道付款成功率'));
   });
+
+  it('shows only final-state tabs and excludes processing payouts from all transactions', () => {
+    const html = renderToStaticMarkup(
+      <TransactionsPage
+        payouts={[
+          transactionPayout('USD', 100, 11, '已付款'),
+          transactionPayout('USD', 100, 12, '付款失败'),
+          transactionPayout('USD', 100, 13, '付款处理中'),
+          transactionPayout('USD', 100, 14, '等待付款'),
+        ]}
+        onSelectPayout={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('>全部</button>');
+    expect(html).toContain('>已付款</button>');
+    expect(html).toContain('>付款失败</button>');
+    expect(html).not.toContain('>处理中</button>');
+    expect(html).toContain('INV-11');
+    expect(html).toContain('INV-12');
+    expect(html).not.toContain('INV-13');
+    expect(html).not.toContain('INV-14');
+    expect(html).not.toContain('付款处理中');
+    expect(html).not.toContain('等待付款');
+  });
 });
 
 describe('InvoicePage OA states', () => {
