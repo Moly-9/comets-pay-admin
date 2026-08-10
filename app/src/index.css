@@ -626,17 +626,14 @@ input[type="checkbox"]:disabled {
 
 .payment-batch-detail-panel.is-contract {
   border-color: #e5dcec;
-  background: #fdf8fc;
 }
 
 .payment-batch-detail-panel.is-invoice {
   border-color: #dbe3ef;
-  background: #f6f9ff;
 }
 
 .payment-batch-detail-panel.is-payment {
   border-color: #d7e6df;
-  background: #f5fbf8;
 }
 
 .payment-batch-item-details section > header {
@@ -652,27 +649,15 @@ input[type="checkbox"]:disabled {
 }
 
 .payment-batch-detail-panel.is-contract > header {
-  background: #f8eef6;
+  background: #fcf9fd;
 }
 
 .payment-batch-detail-panel.is-invoice > header {
-  background: #edf3fc;
+  background: #f8faff;
 }
 
 .payment-batch-detail-panel.is-payment > header {
-  background: #eaf6f0;
-}
-
-.payment-batch-detail-panel.is-contract dl > div {
-  border-color: #eadfeb;
-}
-
-.payment-batch-detail-panel.is-invoice dl > div {
-  border-color: #dfe6f1;
-}
-
-.payment-batch-detail-panel.is-payment dl > div {
-  border-color: #dce9e2;
+  background: #f7fbf9;
 }
 
 .payment-batch-detail-panel-icon {
