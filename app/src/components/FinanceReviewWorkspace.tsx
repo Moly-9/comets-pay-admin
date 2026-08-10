@@ -337,6 +337,11 @@ export function FinanceReviewWorkspace({
   const canApprove = financeReviewSessionCanApprove(activeSession, financeReview);
   const allPagesReviewed = financeReview.pageCount > 0 && counts.unreviewed === 0;
   const canReturn = financeReviewSessionCanReturn(activeSession, financeReview);
+  const canConfirmCurrentPage = Boolean(
+    currentPage
+    && currentPage.mismatchCount === 0
+    && currentDecision.state !== 'incorrect'
+  );
   const returnReason = financeReviewReturnReason(activeSession, financeReview);
   const reviewGuidance = counts.unreviewed > 0
     ? `请先完成剩余 ${counts.unreviewed} 份 Invoice 与付款清单核对；全部核对后，可一次性汇总有误项并退回媒介。`
@@ -366,7 +371,7 @@ export function FinanceReviewWorkspace({
   };
 
   const confirmCurrentPage = () => {
-    if (!currentPage || currentPage.mismatchCount > 0) return;
+    if (!currentPage || !canConfirmCurrentPage) return;
     const nextSession = setFinanceReviewDecision(activeSession, currentPage.key, {
       state: 'correct',
       reviewedAt: new Date().toISOString(),
@@ -405,28 +410,30 @@ export function FinanceReviewWorkspace({
         onBackdropMouseDown={() => undefined}
         footer={(
           <div className="finance-review-footer">
-            <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
-              <button
-                className="finance-review-page-button"
-                type="button"
-                disabled={reviewIndex === 0}
-                onClick={() => goTo(reviewIndex - 1)}
-              >
-                上一页
-              </button>
-              <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
-              <button
-                className="finance-review-page-button"
-                type="button"
-                disabled={reviewIndex >= financeReview.pageCount - 1}
-                onClick={() => goTo(reviewIndex + 1)}
-              >
-                下一页
-              </button>
-            </div>
-            <div className="finance-review-footer-summary" aria-live="polite">
-              <strong>{counts.correct} / {financeReview.pageCount}</strong>
-              <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
+            <div className="finance-review-footer-pagination">
+              <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
+                <button
+                  className="finance-review-page-button"
+                  type="button"
+                  disabled={reviewIndex === 0}
+                  onClick={() => goTo(reviewIndex - 1)}
+                >
+                  上一页
+                </button>
+                <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
+                <button
+                  className="finance-review-page-button"
+                  type="button"
+                  disabled={reviewIndex >= financeReview.pageCount - 1}
+                  onClick={() => goTo(reviewIndex + 1)}
+                >
+                  下一页
+                </button>
+              </div>
+              <div className="finance-review-footer-summary" aria-live="polite">
+                <strong>{counts.correct} / {financeReview.pageCount}</strong>
+                <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
+              </div>
             </div>
             <div className="finance-review-footer-actions">
               <Button
@@ -440,7 +447,7 @@ export function FinanceReviewWorkspace({
               <Button
                 variant="secondary"
                 icon={<CheckCircle2 size={16} />}
-                disabled={!currentPage || currentPage.mismatchCount > 0}
+                disabled={!canConfirmCurrentPage}
                 onClick={confirmCurrentPage}
               >
                 确认本页无误

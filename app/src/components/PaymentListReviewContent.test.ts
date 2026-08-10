@@ -138,6 +138,18 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
   });
 
+  it('centers the page controls in the space before the footer actions', () => {
+    expect(workspaceSource).toContain('className="finance-review-footer-pagination"');
+    expect(workspaceStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-footer-pagination\s*{[^}]*justify-self:\s*center;/s);
+  });
+
+  it('does not allow an incorrect record to be overwritten as correct', () => {
+    expect(workspaceSource).toContain("currentDecision.state !== 'incorrect'");
+    expect(workspaceSource).toContain('if (!currentPage || !canConfirmCurrentPage) return');
+    expect(workspaceSource).toContain('disabled={!canConfirmCurrentPage}');
+  });
+
   it('supports accessible Invoice zoom controls and modifier-wheel trackpad zoom', () => {
     expect(workspaceSource).toContain('finance-review-invoice-zoom-stage');
     expect(workspaceSource).toContain('finance-review-zoom-controls');

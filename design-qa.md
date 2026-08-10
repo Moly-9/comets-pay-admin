@@ -810,3 +810,55 @@ final result: passed
 3. The final pass moved provider metrics to one stable row per channel, then verified the overview and list at desktop and 390 px widths.
 
 final result: passed
+
+---
+
+# Finance Review Footer Centering And Incorrect-State Gate Design QA
+
+## Evidence
+
+- Source visual truth, incorrect-state gate: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-1d46885e-aa9a-4ce4-b8f7-1d4f010f2b46.png` (1905 x 857 px).
+- Source visual truth, centered footer: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-380f1826-6c6b-475c-9d50-c5969bfc68a3.png` (1890 x 865 px).
+- Desktop drawer expanded: `artifacts/finance-review-qa/footer-expanded-1904x857.png`.
+- Desktop drawer collapsed: `artifacts/finance-review-qa/footer-collapsed-1904x857.png`.
+- Incorrect record state: `artifacts/finance-review-qa/footer-incorrect-1904x857.png`.
+- iPad landscape: `artifacts/finance-review-qa/footer-incorrect-1024x768.png`.
+- iPad portrait: `artifacts/finance-review-qa/footer-incorrect-768x1024.png`.
+
+## Dimensions And State
+
+- Desktop implementation captures use a 1904 x 857 CSS viewport at device scale factor 1. The one-pixel source-width difference does not require density normalization.
+- iPad captures use 1024 x 768 and 768 x 1024 CSS viewports at device scale factor 1.
+- State: signed in as `finance.demo`, opened the first pending finance request, then recorded the current Invoice as incorrect. Desktop evidence covers the approval drawer in both expanded and collapsed states.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the footer keeps the existing Noto Sans SC hierarchy, compact labels, tabular counts, and zero letter spacing. Disabled action copy stays readable at desktop and tablet sizes.
+- Spacing and layout rhythm: navigation and review counts are one centered group inside the flexible track before the action buttons. At 1904 px its center is 763 px in both drawer states, exactly matching the center of the 16-1510 px available region. At 1024 px it centers at 270.5 px within the 16-525 px available region; at 768 px it centers at the 384 px viewport midpoint above the two-row action grid.
+- Colors and visual tokens: `确认本页无误` uses the existing disabled treatment after an incorrect decision. No new palette or decorative treatment was introduced.
+- Image and asset fidelity: this change adds no imagery or custom icons. Existing Lucide status and action icons remain unchanged.
+- Copy and content: `上一页`, page position, `下一页`, confirmed count, and incorrect or pending count stay together. The incorrect state changes the action to `编辑有误记录` and prevents the contradictory confirm action.
+
+## Full-View And Focused Comparison
+
+- The source and implementation images were opened together in the same comparison pass. The implementation moves the complete paging and count group into the marked footer space while retaining the source's right-aligned review actions.
+- The focused incorrect-state comparison confirms the source-marked `确认本页无误` action is visibly disabled after `已记录有误` appears.
+- Drawer collapse changes only the workspace columns. Footer measurements remain identical, so the centered group does not drift when the right panel is hidden.
+
+## Interaction Verification
+
+- Saving an incorrect reason changes the page state to `已记录有误`, changes the first action to `编辑有误记录`, and leaves `确认本页无误` disabled.
+- The confirm handler uses the same derived permission as the button and returns before mutating the session when the page is incorrect.
+- Desktop drawer expanded and collapsed measurements are identical for the footer group and action region.
+- 1024 x 768 and 768 x 1024 layouts report zero page-level horizontal overflow.
+- Browser console contained 0 warnings and 0 errors.
+- Focused Vitest passed 12/12 tests, full Vitest passed 58 files and 367/367 tests, and the TypeScript/Vite production build passed.
+
+## Comparison History
+
+1. The source identified two issues: a contradictory enabled confirmation action and a footer group anchored to the far left.
+2. The implementation added one shared confirmation guard and a two-track footer with a centered pagination group.
+3. Browser measurements and screenshots verified the corrected state across drawer positions and tablet orientations; no post-capture P0/P1/P2 correction was required.
+
+final result: passed
