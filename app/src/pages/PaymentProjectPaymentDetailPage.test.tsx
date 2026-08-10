@@ -59,7 +59,11 @@ describe('PaymentProjectPaymentDetailPage', () => {
     );
 
     expect(html).toContain('项目付款进度');
-    expect(html).toContain('平台处理中');
+    expect(html).toContain('<strong>已提交</strong>');
+    expect(html).toContain('<strong>平台处理中</strong>');
+    expect(html).toContain('<strong>已付款</strong>');
+    expect(html).not.toContain('<strong>已完成</strong>');
+    expect(html).toContain('payment-progress-steps');
     expect(html).toContain('部分失败');
     expect(html).toContain('以渠道回写时间为准');
     expect(html).toContain('disabled=""');

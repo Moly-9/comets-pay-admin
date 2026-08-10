@@ -179,9 +179,11 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage batch={DETAIL_BATCH} onBack={vi.fn()} />,
     );
 
-    expect(html).toContain('已付款');
-    expect(html).toContain('平台处理中');
-    expect(html).toContain('已完成');
+    expect(html).toContain('<strong>已提交</strong>');
+    expect(html).toContain('<strong>平台处理中</strong>');
+    expect(html).toContain('<strong>已付款</strong>');
+    expect(html).not.toContain('<strong>已完成</strong>');
+    expect(html).toContain('payment-progress-steps');
     expect(html).toContain('class="is-failed"');
     expect(html).toContain('<small>部分失败</small>');
     expect(html).toContain('aria-current="step"');

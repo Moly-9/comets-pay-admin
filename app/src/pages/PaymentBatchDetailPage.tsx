@@ -2,10 +2,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   Building2,
-  Check,
   ChevronDown,
   CircleAlert,
-  Clock3,
   ExternalLink,
   FileText,
   ReceiptText,
@@ -15,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
+import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -33,8 +32,6 @@ const fundingAccountLabel = (value: string) => {
   if (value === 'mock-paymax-operating') return 'PayMax 运营资金账户';
   return value || '未记录';
 };
-
-const PAYMENT_PROGRESS_STEPS = ['已付款', '平台处理中', '已完成'] as const;
 
 const creatorInitials = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -235,7 +232,6 @@ export function PaymentBatchDetailPage({
       : batch.status;
   const totals = paymentBatchAmountLabel({ items: liveItems });
   const statusCounts = paymentBatchStatusCounts({ items: liveItems });
-  const completed = liveStatus === '已付款';
   const paymentInformationStatus = liveStatus === '部分失败' ? '部分打款失败' : liveStatus;
   const failureDialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
 
@@ -271,36 +267,8 @@ export function PaymentBatchDetailPage({
       </section>
 
       <section className="payment-batch-detail-section payment-batch-lifecycle-section">
-        <header><div><h2>渠道处理进度</h2><p>付款发起、平台处理与最终结果回写。</p></div></header>
-        <ol aria-label="渠道处理进度">
-          {PAYMENT_PROGRESS_STEPS.map((step, index) => {
-            const state = completed || liveStatus === '部分失败' && index < 2
-              ? 'complete'
-              : liveStatus === '部分失败' && index === 2
-                ? 'failed'
-                : index === 0
-                  ? 'complete'
-                  : index === 1
-                    ? 'current'
-                    : 'pending';
-            return (
-              <li className={`is-${state}`} key={step} aria-current={state === 'current' || state === 'failed' ? 'step' : undefined}>
-                <span aria-hidden="true">
-                  {state === 'complete'
-                    ? <Check size={14} />
-                    : state === 'current'
-                      ? <Clock3 size={14} />
-                      : state === 'failed'
-                        ? <CircleAlert size={14} />
-                        : index + 1}
-                </span>
-                <strong>{step}</strong>
-                <small>{state === 'complete' ? '已完成' : state === 'current' ? '当前阶段' : state === 'failed' ? '部分失败' : '待处理'}</small>
-                {index < PAYMENT_PROGRESS_STEPS.length - 1 ? <i aria-hidden="true" /> : null}
-              </li>
-            );
-          })}
-        </ol>
+        <header><div><h2>渠道处理进度</h2><p>付款明细提交、平台处理与最终付款结果。</p></div></header>
+        <PaymentProgressSteps ariaLabel="渠道处理进度" status={liveStatus} />
       </section>
 
       <section className="payment-batch-detail-section">

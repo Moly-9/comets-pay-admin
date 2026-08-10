@@ -2,13 +2,10 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
-  BadgeCheck,
   Building2,
   CalendarClock,
   ChevronDown,
   CircleAlert,
-  CircleDollarSign,
-  RadioTower,
   ReceiptText,
   RotateCcw,
   WalletCards,
@@ -16,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
+import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
 import {
   paymentBatchAmountLabel,
@@ -25,12 +23,6 @@ import {
 } from '../paymentBatches';
 import type { PaymentFailureIssueType, Payout } from '../types';
 import { PaymentItemDetails } from './PaymentBatchDetailPage';
-
-const PAYMENT_PROGRESS_STEPS = [
-  { label: '已付款', icon: CircleDollarSign },
-  { label: '平台处理中', icon: RadioTower },
-  { label: '已完成', icon: BadgeCheck },
-] as const;
 
 const displayTime = (value?: string) => value
   ? value.replace('T', ' ').replace(/\.\d{3}Z$/, '')
@@ -206,30 +198,7 @@ export function PaymentProjectPaymentDetailPage({
             <p>当前请款项目全部付款明细的渠道处理结果。</p>
           </div>
         </header>
-        <ol aria-label="项目付款进度">
-          {PAYMENT_PROGRESS_STEPS.map((step, index) => {
-            const StepIcon = step.icon;
-            const state = record.status === '已付款'
-              ? 'complete'
-              : (record.status === '部分失败' || record.status === '已退回') && index < 2
-                ? 'complete'
-                : (record.status === '部分失败' || record.status === '已退回') && index === 2
-                  ? 'failed'
-                  : index === 0
-                    ? 'complete'
-                    : index === 1
-                      ? 'current'
-                      : 'pending';
-            return (
-              <li className={`is-${state}`} key={step.label} aria-current={state === 'current' || state === 'failed' ? 'step' : undefined}>
-                <span aria-hidden="true"><StepIcon size={18} /></span>
-                <strong>{step.label}</strong>
-                <small>{state === 'complete' ? '已完成' : state === 'current' ? '当前阶段' : state === 'failed' ? record.status : '待处理'}</small>
-                {index < PAYMENT_PROGRESS_STEPS.length - 1 ? <i aria-hidden="true" /> : null}
-              </li>
-            );
-          })}
-        </ol>
+        <PaymentProgressSteps ariaLabel="项目付款进度" status={record.status} />
       </section>
 
       <section className="payment-batch-detail-section">
