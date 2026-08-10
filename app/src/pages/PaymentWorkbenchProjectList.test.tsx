@@ -85,6 +85,7 @@ describe('PaymentWorkbenchPage project list controls', () => {
 
     expect(html).toContain('aria-label="搜索待审核付款项目"');
     expect(html).toContain('placeholder="搜索项目编号、名称、付款单等"');
+    expect(html.indexOf('aria-label="搜索待审核付款项目"')).toBeLessThan(html.indexOf('type="date"'));
     expect(html).toContain('全部付款渠道');
     expect(html).toContain('aria-label="全选当前筛选结果中的付款项目"');
     expect(html).toContain('<th>付款单</th><th>付款渠道</th>');

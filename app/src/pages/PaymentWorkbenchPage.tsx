@@ -636,6 +636,16 @@ export function PaymentWorkbenchPage({
         </div>
 
         <div className="filter-row">
+          <label className="search-control payment-project-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label={`搜索${activeTabLabel}付款项目`}
+              placeholder="搜索项目编号、名称、付款单等"
+              value={activeSearch}
+              onChange={(event) => updateSearch(event.target.value)}
+            />
+          </label>
           <div className="date-filter">
             <CalendarDays size={17} />
             <label>
@@ -648,16 +658,6 @@ export function PaymentWorkbenchPage({
               <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
             </label>
           </div>
-          <label className="search-control payment-project-search">
-            <Search size={16} aria-hidden="true" />
-            <input
-              type="search"
-              aria-label={`搜索${activeTabLabel}付款项目`}
-              placeholder="搜索项目编号、名称、付款单等"
-              value={activeSearch}
-              onChange={(event) => updateSearch(event.target.value)}
-            />
-          </label>
           <SelectField
             ariaLabel="付款渠道"
             className="dashboard-provider-select"

@@ -1,12 +1,13 @@
 .payment-project-search {
-  width: 100%;
+  width: auto;
   min-width: 0;
   max-width: none;
+  flex: none;
 }
 
-.payment-project-search input {
-  width: 100%;
-  min-width: 0;
+.payment-workbench-page .payment-project-search input {
+  width: 226px;
+  height: 17.9891px;
 }
 
 .payment-project-search:focus-within {
@@ -15,20 +16,7 @@
 }
 
 .payment-workbench-page .filter-row {
-  display: grid;
-  grid-template-columns: minmax(300px, 1.3fr) minmax(180px, 1fr) 170px;
-}
-
-.payment-workbench-page .filter-result {
-  grid-column: 1 / -1;
-  width: 100%;
-  margin-left: 0;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.payment-workbench-page .dashboard-provider-select.custom-select-toolbar {
-  width: 100%;
+  flex-wrap: wrap;
 }
 
 .payment-project-summary-bar {
@@ -143,39 +131,7 @@
   white-space: normal;
 }
 
-@media (max-width: 1040px) {
-  .payment-workbench-page .filter-row {
-    grid-template-columns: minmax(280px, 1.3fr) minmax(180px, 1fr);
-  }
-
-  .payment-workbench-page .dashboard-provider-select.custom-select-toolbar {
-    grid-column: 1;
-    width: 170px;
-  }
-
-  .payment-workbench-page .filter-result {
-    grid-column: 2;
-    align-self: center;
-  }
-}
-
 @media (max-width: 860px) {
-  .payment-workbench-page .filter-row {
-    grid-template-columns: 1fr;
-  }
-
-  .payment-project-search {
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-  }
-
-  .payment-workbench-page .dashboard-provider-select.custom-select-toolbar,
-  .payment-workbench-page .filter-result {
-    grid-column: 1;
-    width: 100%;
-  }
-
   .payment-project-summary-bar {
     min-height: 72px;
     align-items: flex-start;
