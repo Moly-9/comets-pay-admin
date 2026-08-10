@@ -36,6 +36,7 @@ import {
 import {
   createInitialPaymentBatches,
   createPaymentBatchRecord,
+  createPaymentProjectPaymentRecord,
 } from './paymentBatches';
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
@@ -43,6 +44,8 @@ import { ContractsPage } from './pages/ContractsPage';
 import { ContractBuilderPage } from './pages/ContractBuilderPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PaymentWorkbenchPage } from './pages/PaymentWorkbenchPage';
+import type { WorkbenchTab } from './pages/PaymentWorkbenchPage';
+import { PaymentProjectPaymentDetailPage } from './pages/PaymentProjectPaymentDetailPage';
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
@@ -260,6 +263,8 @@ export default function App() {
   const [invoiceEditorDirty, setInvoiceEditorDirty] = useState(false);
   const [invoiceBatchDirty, setInvoiceBatchDirty] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
+  const [paymentDetailRequestId, setPaymentDetailRequestId] = useState<string | null>(null);
+  const [paymentWorkbenchInitialTab, setPaymentWorkbenchInitialTab] = useState<WorkbenchTab>('review');
   const [toast, setToast] = useState<ToastState>(null);
   const [notificationItems, setNotificationItems] = useState<SystemNotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [showRequestApprovalReminder, setShowRequestApprovalReminder] = useState(true);
@@ -538,6 +543,8 @@ export default function App() {
     setFocusedRequestId(null);
     if (page !== 'creators') setFocusedCreatorId(null);
     setSelectedPayout(null);
+    setPaymentDetailRequestId(null);
+    setPaymentWorkbenchInitialTab('review');
     return true;
   };
 
@@ -2234,7 +2241,7 @@ export default function App() {
     const normalizedReason = reason.trim();
     if (!normalizedReason) {
       notify('请填写退回原因', '付款失败退回媒介时必须说明需要处理的内容。');
-      return;
+      return false;
     }
     if (
       payout.status !== '付款失败'
@@ -2242,7 +2249,7 @@ export default function App() {
       || !hasPermission(currentUser, 'payout_execute')
     ) {
       notify('无法退回媒介', '只有财务、管理员或老板可以处理当前付款失败记录。');
-      return;
+      return false;
     }
     const occurredAt = nowIso();
     const updated: Payout = {
@@ -2278,10 +2285,38 @@ export default function App() {
     setGeneratedInvoices((current) => current.map((invoice) => invoice.sourcePayoutId === payout.id
       ? { ...invoice, status: '已退回' }
       : invoice));
+    const linkedRequest = requestProjects.find((request) => (
+      (Boolean(payout.paymentRequestProjectId)
+        && request.paymentRequestProjectId === payout.paymentRequestProjectId)
+      || request.projectId === payout.projectId
+      || request.cooperationProjectId === payout.projectId
+    ));
+    const cooperationProjectId = linkedRequest?.cooperationProjectId
+      ?? linkedRequest?.projectId
+      ?? payout.projectId;
+    const returnStatus = issueType === 'INVOICE_CONTENT' ? 'Invoice 待修改' : '付款清单待修改';
+    setRequestProjects((current) => current.map((request) => {
+      const matchesRequest = (Boolean(payout.paymentRequestProjectId)
+        && request.paymentRequestProjectId === payout.paymentRequestProjectId)
+        || request.id === linkedRequest?.id;
+      if (!matchesRequest) return request;
+      return {
+        ...request,
+        lifecycle: 'RETURNED',
+        status: returnStatus,
+        filter: 'pending',
+        approval: request.approval
+          ? {
+              ...request.approval,
+              status: 'RETURNED_TO_MEDIA_REVIEW',
+              returnReason: normalizedReason,
+              updatedAt: occurredAt,
+            }
+          : request.approval,
+      };
+    }));
     if (issueType === 'PAYMENT_LIST') {
-      const project = projects.find((item) => item.id === payout.projectId);
-      const projectId = project ? getProjectId(project) : null;
-      setProjects((current) => current.map((item) => item.id === payout.projectId
+      setProjects((current) => current.map((item) => getProjectId(item) === cooperationProjectId
         ? {
             ...item,
             reviewStatus: 'returned',
@@ -2289,26 +2324,13 @@ export default function App() {
             reviewUpdatedAt: occurredAt,
           }
         : item));
-      if (projectId) {
-        setPaymentLists((current) => current.map((list) => list.projectId === projectId
-          ? { ...list, status: 'draft', updatedAt: occurredAt }
-          : list));
-        setRequestProjects((current) => current.map((request) => request.projectId === projectId
-          ? {
-              ...request,
-              status: '付款清单待修改',
-              filter: 'pending',
-              approval: request.approval
-                ? {
-                    ...request.approval,
-                    status: 'RETURNED_TO_MEDIA_REVIEW',
-                    returnReason: normalizedReason,
-                    updatedAt: occurredAt,
-                  }
-                : request.approval,
-            }
-          : request));
-      }
+      setPaymentLists((current) => current.map((list) => (
+        (Boolean(payout.paymentRequestProjectId)
+          && list.paymentRequestProjectId === payout.paymentRequestProjectId)
+        || list.projectId === cooperationProjectId
+      )
+        ? { ...list, status: 'draft', updatedAt: occurredAt }
+        : list));
     }
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify(
@@ -2317,6 +2339,7 @@ export default function App() {
         ? '请在 Invoice 详情进入修改页，生成新版后从达人签署开始。'
         : 'Invoice 保持已退回，请在项目付款清单修正并重新提交后进入 PM 审批。',
     );
+    return true;
   };
 
   const updateInvoiceReview = (
@@ -2935,6 +2958,18 @@ export default function App() {
       return paymentItem ? payoutWithPaymentListSnapshot(payout, paymentItem) : payout;
     })
     .slice(0, 4);
+  const paymentDetailRequest = paymentDetailRequestId
+    ? requestProjects.find((request) => request.id === paymentDetailRequestId)
+    : undefined;
+  const paymentDetailRecord = paymentDetailRequest
+    ? createPaymentProjectPaymentRecord({
+        request: paymentDetailRequest,
+        payouts,
+        generatedInvoices,
+        paymentLists,
+        contracts,
+      })
+    : null;
 
   let pageContent;
   switch (activePage) {
@@ -3267,13 +3302,31 @@ export default function App() {
       );
       break;
     case 'payment-workbench':
-      pageContent = (
+      pageContent = paymentDetailRecord ? (
+        <PaymentProjectPaymentDetailPage
+          record={paymentDetailRecord}
+          payouts={payouts}
+          canHandleFailure={canExecutePayouts}
+          onBack={() => setPaymentDetailRequestId(null)}
+          onReturnPayout={returnPayout}
+        />
+      ) : (
         <PaymentWorkbenchPage
           payouts={payouts}
           requests={requestProjects}
           generatedInvoices={generatedInvoices}
+          initialTab={paymentWorkbenchInitialTab}
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}
+          onSelectPaidProject={(project) => {
+            if (project.requestId) {
+              setPaymentWorkbenchInitialTab('paid');
+              setPaymentDetailRequestId(project.requestId);
+              return;
+            }
+            const payout = project.payouts[0];
+            if (payout) setSelectedPayout(payout);
+          }}
           onReviewRequest={openFinanceReview}
           onExecuteRequest={executePaymentRequest}
           onReturnRequest={returnPaymentRequestToMedia}

@@ -14,6 +14,7 @@ import type {
 import {
   createInitialPaymentBatches,
   createPaymentBatchRecord,
+  createPaymentProjectPaymentRecord,
   maskPaymentAccount,
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -281,6 +282,36 @@ describe('payment batch snapshots', () => {
     expect(maskPaymentAccount('1234 5678 9012')).toBe('•••• 9012');
     expect(maskPaymentAccount('creator.payment@example.com')).toBe('cr***@example.com');
     expect(maskPaymentAccount('')).toBe('待补充');
+  });
+
+  it('builds a project-level payment record without including payouts from other requests', () => {
+    const input = buildInput();
+    const failedPayout: Payout = {
+      ...input.payouts[0],
+      paymentRequestProjectId: input.requests[0].paymentRequestProjectId,
+      status: '付款失败',
+      paidAt: '2026-08-10T10:30',
+      paymentFailure: {
+        provider: 'Airwallex',
+        errorCode: 'BENEFICIARY_UNAVAILABLE',
+        providerResponse: 'The beneficiary is unavailable.',
+        occurredAt: '2026-08-10T10:35',
+      },
+    };
+    const record = createPaymentProjectPaymentRecord({
+      request: input.requests[0],
+      payouts: [failedPayout, INITIAL_PAYOUTS[0]],
+      generatedInvoices: input.generatedInvoices,
+      paymentLists: input.paymentLists,
+      contracts: input.contracts,
+    });
+
+    expect(record.request.requestCode).toBe('REQ-TEST-001');
+    expect(record.items.map((item) => item.payoutId)).toEqual(['payout-one']);
+    expect(record.paymentOrderCodes).toEqual(['PAY-TEST-001']);
+    expect(record.providers).toEqual(['Airwallex']);
+    expect(record.status).toBe('部分失败');
+    expect(record.lastActivityAt).toBe('2026-08-10T10:35');
   });
 
   it('builds all prototype batch states with consistent request and item snapshots', () => {

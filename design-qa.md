@@ -894,3 +894,66 @@ final result: passed
 3. Browser measurements and screenshots verified the corrected state across drawer positions and tablet orientations; no post-capture P0/P1/P2 correction was required.
 
 final result: passed
+
+---
+
+# Payment Project Payment Detail Design QA
+
+## Evidence
+
+- User entry-point reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9fbbf381-bb4b-40a9-8bea-6be12e32fac9.png` (1908 x 828 px).
+- Existing payment-batch detail reference: `artifacts/payment-project-detail-qa/batch-reference-1908x828.png` (1893 x 821 px browser content capture).
+- Project progress view: `artifacts/payment-project-detail-qa/progress-1908x828.png`.
+- Project detail view: `artifacts/payment-project-detail-qa/detail-1908x828.png`.
+- Failed project view: `artifacts/payment-project-detail-qa/failure-1908x828.png`.
+- Failure handling dialog: `artifacts/payment-project-detail-qa/failure-dialog-1908x828.png`.
+- Mobile failed project view: `artifacts/payment-project-detail-qa/failure-390x844.png` (375 x 812 px browser content capture).
+- Full-view comparison: `artifacts/payment-project-detail-qa/batch-vs-project-progress.png`.
+- Focused comparison: `artifacts/payment-project-detail-qa/batch-vs-project-progress-focused.png`.
+
+## Dimensions And State
+
+- Desktop reference and implementation were rendered with a 1908 x 828 CSS viewport at device scale factor 1. Browser content capture excluded 15 px of vertical scrollbar/chrome width and 7 px of browser chrome height, producing 1893 x 821 px page images on both sides; no density normalization was needed.
+- Mobile verification used a 390 x 844 CSS viewport at device scale factor 1. The 375 x 812 px content capture reflects the same browser chrome exclusion and was checked separately for responsive behavior rather than pixel-matched to the desktop reference.
+- States verified: payment processing (`查看进度`), fully paid (`查看详情`), partially failed (`处理失败`), expanded failed payment, failure return dialog, and the post-submit return to the workbench.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the project page reuses the batch-detail hierarchy, numeric emphasis, Noto Sans SC body treatment, tabular amounts, zero letter spacing, and compact metadata sizes. Long request and project identifiers remain readable without colliding with the status summary.
+- Spacing and layout rhythm: header, four-column summary, progress panel, project section, and payment-item list align with the existing batch-detail composition. The project version removes batch-level multi-project density while preserving the same margins, dividers, radii, and section rhythm.
+- Colors and visual tokens: processing, completed, failed, warning, and destructive states use the existing semantic tokens. The failure callout and return dialog add emphasis without introducing a new palette.
+- Image quality and asset fidelity: the source flow contains no photographic or illustrative assets. Existing logo assets and Lucide interface icons remain sharp and consistent; no custom SVG, CSS illustration, emoji, or placeholder image was introduced.
+- Copy and content: headings explicitly describe a single request project and its payment items. `查看进度`, `查看详情`, and `处理失败` resolve to the same project-level record while exposing state-appropriate guidance and actions.
+- Responsive behavior: the four-column summary becomes a single-column stack on mobile, the failed-payment callout and action remain fully visible, and the page reports no horizontal overflow at 390 px.
+
+## Full-View And Focused Comparison
+
+- The full-view comparison places the existing payment-batch detail and the new project-payment detail side by side at the same viewport. Navigation, page header, status summary, metric strip, progress tracker, and information-card hierarchy match; the intentional difference is that the project page contains exactly one request project.
+- The focused comparison confirms matching typography, border treatment, column height, progress spacing, and top-of-page alignment in the dense summary region where full-view text is otherwise too small to judge.
+
+## Interaction Verification
+
+- `查看进度`, `查看详情`, and `处理失败` open the selected request project instead of a payment batch or creator-only drawer.
+- Processing and completed records show the appropriate channel progress and final result counts.
+- Failed records automatically expose the first failed payment. The return dialog keeps confirmation disabled until an issue type and required reason are entered.
+- Confirming failure handling moves the request from `已付款` to `已退回`; the observed tab counts changed from `已付款 6 / 已退回 0` to `已付款 5 / 已退回 1`, and `REQ-202607-000011` appeared in the returned list.
+- Returning from the detail page restores the `已付款` tab and its current workbench context.
+- Browser console contained 0 warnings and 0 errors during the verified desktop and mobile flows.
+
+## Comparison History
+
+1. The existing payment-batch detail established the target hierarchy and interaction language, while the user entry-point reference identified the three project actions requiring implementation.
+2. The project detail page reused that hierarchy and reduced the data scope from multiple request projects to the selected single request project and all of its payment items.
+3. Same-viewport full and focused comparisons found no P0/P1/P2 visual drift. Desktop, mobile, validation, and post-return state checks then passed without a post-capture visual correction.
+
+## Implementation Checklist
+
+- [x] Shared project detail route for progress, details, and failure handling.
+- [x] Single-request project scope with all associated payment items.
+- [x] Batch-detail visual hierarchy and channel progress presentation.
+- [x] Required failure classification and return reason.
+- [x] Returned-state synchronization with workbench tab counts and list.
+- [x] Desktop and 390 px responsive verification.
+
+final result: passed

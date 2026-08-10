@@ -115,6 +115,17 @@ export type PaymentBatchRecord = Readonly<{
   items: readonly PaymentBatchItemSnapshot[];
 }>;
 
+export type PaymentProjectPaymentStatus = PaymentBatchStatus | '已退回';
+
+export type PaymentProjectPaymentRecord = Readonly<{
+  request: PaymentBatchRequestSnapshot;
+  paymentOrderCodes: readonly string[];
+  providers: readonly PaymentBatchRecord['provider'][];
+  status: PaymentProjectPaymentStatus;
+  lastActivityAt?: string;
+  items: readonly PaymentBatchItemSnapshot[];
+}>;
+
 type PaymentBatchSourceData = Readonly<{
   payouts: readonly Payout[];
   requests: readonly RequestProjectSummary[];
@@ -372,6 +383,71 @@ export const createPaymentBatchRecord = ({
       itemStatus,
       batchPaidAt: batch.paidAt,
     })),
+  };
+};
+
+export const createPaymentProjectPaymentRecord = ({
+  request,
+  payouts,
+  generatedInvoices,
+  paymentLists,
+  contracts,
+}: Omit<PaymentBatchSourceData, 'requests'> & Readonly<{
+  request: RequestProjectSummary;
+}>): PaymentProjectPaymentRecord => {
+  const invoiceIds = requestInvoiceIds(request);
+  const sourcePayoutIds = new Set(generatedInvoices
+    .filter((invoice) => invoiceIds.has(invoice.invoiceId))
+    .map((invoice) => invoice.sourcePayoutId));
+  const linkedPayouts = payouts.filter((payout) => (
+    (Boolean(request.paymentRequestProjectId)
+      && payout.paymentRequestProjectId === request.paymentRequestProjectId)
+    || sourcePayoutIds.has(payout.id)
+  ));
+  if (!linkedPayouts.length) {
+    throw new Error('当前请款项目没有可展示的付款明细');
+  }
+
+  const requestLists = paymentLists.filter((list) => (
+    list.paymentRequestProjectId === request.paymentRequestProjectId
+  ));
+  const lastActivityAt = [
+    ...linkedPayouts.flatMap((payout) => [
+      payout.paymentFailureReturn?.occurredAt,
+      payout.paymentFailure?.occurredAt,
+      payout.paidAt,
+    ]),
+    ...requestLists.map((list) => list.updatedAt),
+    request.approval?.updatedAt,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => right.localeCompare(left))[0];
+  const items = linkedPayouts.map((payout) => snapshotItem({
+    payout,
+    request,
+    generatedInvoices,
+    paymentLists,
+    contracts,
+    batchPaidAt: lastActivityAt ?? '',
+  }));
+  const statuses = new Set(items.map((item) => item.paymentStatus));
+  const status: PaymentProjectPaymentStatus = statuses.has('付款失败')
+    ? '部分失败'
+    : statuses.has('已退回')
+      ? '已退回'
+      : statuses.has('付款处理中')
+        ? '付款处理中'
+        : '已付款';
+  return {
+    request: snapshotRequest(request),
+    paymentOrderCodes: [...new Set([
+      ...requestLists.map((list) => list.paymentListCode),
+      ...items.map((item) => item.paymentListCode).filter((code) => code !== '关联资料缺失'),
+    ])],
+    providers: [...new Set(linkedPayouts.map((payout) => payout.provider))],
+    status,
+    lastActivityAt,
+    items,
   };
 };
 

@@ -18,7 +18,7 @@ import {
 import type { GeneratedInvoiceRecord, Payout } from '../types';
 import './PaymentWorkbenchPage.css';
 
-type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
+export type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
 
 type CurrencyOverviewId = 'pending' | 'paid';
 
@@ -501,10 +501,12 @@ export function PaymentWorkbenchPage({
   generatedInvoices,
   onNewBatch,
   onSelectPayout,
+  onSelectPaidProject,
   onReviewRequest,
   onExecuteRequest,
   onReturnRequest,
   canCreateBatch,
+  initialTab = 'review',
   currentDate = new Date(),
 }: {
   payouts: Payout[];
@@ -512,14 +514,16 @@ export function PaymentWorkbenchPage({
   generatedInvoices: GeneratedInvoiceRecord[];
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
+  onSelectPaidProject: (project: PaymentProjectRow) => void;
   onReviewRequest: (requestId: string) => void;
   onExecuteRequest: (payouts: Payout[]) => boolean;
   onReturnRequest: (requestId: string, reason: string) => boolean;
   canCreateBatch: boolean;
+  initialTab?: WorkbenchTab;
   currentDate?: Date;
 }) {
   const [showNotice, setShowNotice] = useState(true);
-  const [activeTab, setActiveTab] = useState<WorkbenchTab>('review');
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>(initialTab);
   const [provider, setProvider] = useState<PaymentProviderFilter>(ALL_PAYMENT_PROVIDERS);
   const [searchByTab, setSearchByTab] = useState<Record<WorkbenchTab, string>>({
     review: '',
@@ -744,6 +748,10 @@ export function PaymentWorkbenchPage({
             }
             if (activeTab === 'returned' && project.requestId) {
               setPaymentExecutionProjectId(project.id);
+              return;
+            }
+            if (activeTab === 'paid') {
+              onSelectPaidProject(project);
               return;
             }
             const payout = project.payouts[0];
