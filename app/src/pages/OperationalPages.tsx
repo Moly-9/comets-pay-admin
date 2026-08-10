@@ -16,6 +16,7 @@ import {
   FileText,
   Files,
   Link2,
+  ListFilter,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -3530,7 +3531,7 @@ export function TransactionsPage({
           className="summary-card summary-card-lilac payment-workbench-summary-card transaction-channel-summary-card"
           aria-label="渠道付款成功率"
         >
-          <span className="summary-illustration"><Check size={26} /></span>
+          <span className="summary-illustration"><CheckCircle2 size={26} /></span>
           <div className="payment-summary-content">
             <div className="payment-summary-primary">
               <strong>{successRate}</strong>
@@ -3550,9 +3551,9 @@ export function TransactionsPage({
       </section>
       <section className="content-card">
         <div className="tabs-row" role="tablist" aria-label="交易状态">
-          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>全部</button>
-          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}>已付款</button>
-          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}>付款失败</button>
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}><span>全部</span><small>{transactions.length}</small></button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}><span>已付款</span><small>{paid.length}</small></button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}><span>付款失败</span><small>{failed.length}</small></button>
         </div>
         <div className="transaction-filter-row">
           <label className="search-control transaction-search">
@@ -3560,7 +3561,7 @@ export function TransactionsPage({
             <input
               type="search"
               aria-label="搜索交易记录"
-              placeholder="搜索达人、项目、Invoice 等"
+              placeholder="搜索达人、项目、Invoice、批次号"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -3584,7 +3585,7 @@ export function TransactionsPage({
             options={TRANSACTION_PROVIDER_OPTIONS}
             onChange={setProvider}
           />
-          <span className="transaction-filter-result" aria-live="polite">当前显示 {visible.length} 条记录</span>
+          <span className="transaction-filter-result" aria-live="polite"><ListFilter size={14} aria-hidden="true" />当前显示 {visible.length} 条记录</span>
           {selectedTransactions.length ? (
             <span className="transaction-selection-summary" aria-live="polite">
               <strong>已选 {selectedTransactions.length} 条</strong>

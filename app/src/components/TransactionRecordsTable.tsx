@@ -1,8 +1,10 @@
+import { Banknote, CalendarClock, Eye, ReceiptText, UserRoundCheck } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { formatAmount } from '../data';
 import type { PaymentBatchRecord } from '../paymentBatches';
 import {
   findTransactionBatchContext,
+  transactionRecordDetails,
   transactionOccurredAt,
 } from '../transactionRecords';
 import type { Payout } from '../types';
@@ -13,6 +15,12 @@ import { PaymentProviderBadge } from './PaymentProviderBadge';
 const displayTime = (value?: string) => {
   if (!value) return '未记录';
   return value.replace('T', ' ').replace(/\.000Z$/, '').replace(/Z$/, '');
+};
+
+const displayTimeParts = (value?: string) => {
+  const normalized = displayTime(value);
+  const [date, ...timeParts] = normalized.split(' ');
+  return { date, time: timeParts.join(' ') || '时间未记录' };
 };
 
 export function TransactionRecordsTable({
@@ -76,11 +84,10 @@ export function TransactionRecordsTable({
           <tbody>
             {pageItems.length ? pageItems.map((payout) => {
               const context = findTransactionBatchContext(payout, paymentBatches);
-              const invoiceNumber = context?.item.invoice?.invoiceNumber
-                ?? context?.item.legacyInvoiceReference
-                ?? payout.invoice;
-              const payer = context?.batch.payer ?? '未记录';
-              const payerTime = context?.batch.paidAt;
+              const details = transactionRecordDetails(payout, context);
+              const invoiceNumber = details.invoice?.invoiceNumber ?? payout.invoice;
+              const transactionTime = displayTimeParts(transactionOccurredAt(payout));
+              const payerTime = displayTimeParts(details.paymentTime);
               return (
                 <tr className={selectedIds.has(payout.id) ? 'is-selected' : ''} key={payout.id}>
                   <td className="transaction-select-cell">
@@ -97,21 +104,49 @@ export function TransactionRecordsTable({
                       <span><strong>{payout.creator}</strong><small>{payout.project}</small></span>
                     </div>
                   </td>
-                  <td className="mono-cell">{invoiceNumber || '未记录'}</td>
+                  <td>
+                    <span className="transaction-data-cell transaction-invoice-cell">
+                      <span className="transaction-field-icon is-invoice" aria-hidden="true"><ReceiptText size={14} /></span>
+                      <span>
+                        <strong>{invoiceNumber || '未记录'}</strong>
+                        <small>{details.paymentBatchCode}</small>
+                      </span>
+                    </span>
+                  </td>
                   <td><PaymentProviderBadge compact provider={payout.provider} /></td>
                   <td><StatusMark status={payout.status} /></td>
-                  <td className="transaction-amount-cell">{formatAmount(payout)}</td>
-                  <td className="transaction-time-cell">{displayTime(transactionOccurredAt(payout))}</td>
                   <td>
-                    <span className="transaction-payer-cell">
-                      <strong>{payer}</strong>
-                      <small>{displayTime(payerTime)}</small>
+                    <span className="transaction-data-cell transaction-amount-cell">
+                      <span className="transaction-field-icon is-amount" aria-hidden="true"><Banknote size={14} /></span>
+                      <span>
+                        <strong>{formatAmount(payout)}</strong>
+                        <small>收款 {details.receiveCurrency}</small>
+                      </span>
+                    </span>
+                  </td>
+                  <td>
+                    <span className="transaction-data-cell transaction-time-cell">
+                      <span className="transaction-field-icon is-time" aria-hidden="true"><CalendarClock size={14} /></span>
+                      <span>
+                        <strong>{transactionTime.date}</strong>
+                        <small>{transactionTime.time}</small>
+                      </span>
+                    </span>
+                  </td>
+                  <td>
+                    <span className="transaction-data-cell transaction-payer-cell">
+                      <span className="transaction-field-icon is-payer" aria-hidden="true"><UserRoundCheck size={14} /></span>
+                      <span>
+                        <strong>{details.payer}</strong>
+                        <small>{payerTime.date} {payerTime.time}</small>
+                      </span>
                     </span>
                   </td>
                   <td className="action-cell">
                     <Button
                       variant="secondary"
                       className="table-action"
+                      icon={<Eye size={14} />}
                       data-transaction-detail={payout.id}
                       onClick={() => onOpenDetail(payout)}
                     >

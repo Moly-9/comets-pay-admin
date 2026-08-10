@@ -93,15 +93,17 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('aria-label="查看合同"');
     expect(html).toContain('aria-label="查看 Invoice"');
     expect(html).toContain('aria-label="查看付款清单"');
+    expect(html).toContain('transaction-section-icon');
+    expect(html).toContain('transaction-detail-summary-label');
   });
 
-  it('shows explicit fallbacks when historical batch snapshots are unavailable', () => {
+  it('marks unknown historical records for completion without hiding known payout data', () => {
     const html = renderToStaticMarkup(
       <TransactionDetailPage payout={payout} context={null} onBack={vi.fn()} />,
     );
 
-    expect(html).toContain('历史记录未保留批次快照');
-    expect(html).toContain('历史记录未保留付款清单快照');
-    expect(html).toContain('>未关联<');
+    expect(html).toContain('历史数据待补全');
+    expect(html).toContain('CON-20260810-001');
+    expect(html).toContain('INV-20260810-001');
   });
 });

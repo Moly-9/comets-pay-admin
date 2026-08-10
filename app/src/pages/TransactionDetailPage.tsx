@@ -1,19 +1,33 @@
 import {
   AlertTriangle,
+  AtSign,
   ArrowLeft,
+  Banknote,
   Building2,
+  CalendarClock,
+  CircleCheckBig,
+  ClipboardCheck,
+  CreditCard,
   Eye,
   FileSpreadsheet,
   FileText,
+  Files,
+  FolderKanban,
+  Landmark,
   Layers3,
+  Link2,
+  MessageSquareText,
   ReceiptText,
+  ShieldCheck,
+  UserRoundCheck,
+  WalletCards,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, Button, Modal, StatusMark } from '../components/Common';
 import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import type { TransactionBatchContext } from '../transactionRecords';
-import { transactionOccurredAt } from '../transactionRecords';
+import { transactionOccurredAt, transactionRecordDetails } from '../transactionRecords';
 import type { Payout } from '../types';
 
 const displayTime = (value?: string) => {
@@ -38,10 +52,8 @@ export function TransactionDetailPage({
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [resourceView, setResourceView] = useState<TransactionResourceView | null>(null);
-  const batch = context?.batch;
-  const item = context?.item;
+  const details = transactionRecordDetails(payout, context);
   const finalTime = transactionOccurredAt(payout);
-  const requestReason = batch?.request.reason ?? item?.paymentReason ?? '未记录';
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -57,27 +69,27 @@ export function TransactionDetailPage({
 
       <section className="transaction-creator-summary-card" aria-label={`付款达人 ${payout.creator}`}>
         <Avatar initials={payout.initials} accent={payout.accent} size="lg" />
-        <div>
+        <div className="transaction-creator-summary-identity">
           <strong>{payout.creator}</strong>
-          <small>{payout.project}</small>
-          <span>{payout.handle}</span>
+          <span><FolderKanban size={13} aria-hidden="true" />{payout.project}</span>
+          <small><AtSign size={12} aria-hidden="true" />{payout.handle.replace(/^@/, '')}</small>
         </div>
         <StatusMark status={payout.status} />
       </section>
 
       <section className="transaction-detail-summary" aria-label="交易摘要">
         <article>
-          <span>付款金额</span>
+          <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />付款金额</span>
           <strong>{formatAmount(payout)}</strong>
-          <small>{item ? `收款币种 ${item.receiveCurrency}` : '按交易记录快照'}</small>
+          <small>收款币种 {details.receiveCurrency}</small>
         </article>
         <article>
-          <span>付款渠道</span>
+          <span className="transaction-detail-summary-label"><Landmark size={15} aria-hidden="true" />付款渠道</span>
           <PaymentProviderBadge provider={payout.provider} />
-          <small>{item?.transferMethod ?? '渠道方式未记录'}</small>
+          <small>{details.transferMethod}</small>
         </article>
         <article>
-          <span>交易状态</span>
+          <span className="transaction-detail-summary-label"><CircleCheckBig size={15} aria-hidden="true" />交易状态</span>
           <StatusMark status={payout.status} />
           <small>{displayTime(finalTime)}</small>
         </article>
@@ -96,42 +108,45 @@ export function TransactionDetailPage({
 
       <section className="transaction-detail-section">
         <header>
+          <span className="transaction-section-icon" aria-hidden="true"><WalletCards size={18} /></span>
           <div><h2>付款信息</h2><p>本笔交易的渠道、账户与付款执行快照。</p></div>
         </header>
         <dl className="transaction-detail-info-grid">
-          <div><dt>付款时间</dt><dd>{displayTime(finalTime)}</dd></div>
-          <div><dt>付款人</dt><dd>{batch?.payer ?? '未记录'}</dd></div>
-          <div><dt>付款批次号</dt><dd>{batch?.paymentBatchCode ?? '未关联'}</dd></div>
-          <div><dt>收款账户</dt><dd>{item?.accountSummary ?? payout.account ?? '未记录'}</dd></div>
-          <div><dt>付款方式</dt><dd>{item?.transferMethod ?? payout.provider}</dd></div>
-          <div><dt>费用承担</dt><dd>{item?.feeBearer ?? '未记录'}</dd></div>
-          <div><dt>交易附言</dt><dd>{item?.transactionReference ?? '未记录'}</dd></div>
-          <div><dt>请款原因</dt><dd>{requestReason}</dd></div>
+          <div><dt><CalendarClock size={14} aria-hidden="true" />付款时间</dt><dd>{displayTime(details.paymentTime)}</dd></div>
+          <div><dt><UserRoundCheck size={14} aria-hidden="true" />付款人</dt><dd>{details.payer}</dd></div>
+          <div><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
+          <div><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{details.accountSummary}</dd></div>
+          <div><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{details.transferMethod}</dd></div>
+          <div><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{details.feeBearer}</dd></div>
+          <div><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
+          <div><dt><ClipboardCheck size={14} aria-hidden="true" />请款原因</dt><dd>{details.requestReason}</dd></div>
         </dl>
       </section>
 
       <section className="transaction-detail-section">
         <header>
+          <span className="transaction-section-icon is-association" aria-hidden="true"><Link2 size={18} /></span>
           <div><h2>业务关联</h2><p>追溯本笔交易所属项目、请款项目和付款批次。</p></div>
         </header>
         <div className="transaction-association-grid">
           <article>
             <span className="transaction-association-icon" aria-hidden="true"><Building2 size={19} /></span>
-            <div><small>所属关联项目</small><strong>{batch?.request.cooperationProjectName ?? payout.project}</strong><span>{batch?.request.cooperationProjectCode ?? payout.projectId}</span></div>
+            <div><small>所属关联项目</small><strong>{details.cooperationProjectName}</strong><span>{details.cooperationProjectCode}</span></div>
           </article>
           <article>
             <span className="transaction-association-icon" aria-hidden="true"><Layers3 size={19} /></span>
-            <div><small>所属请款项目</small><strong>{batch?.request.requestCode ?? '未关联'}</strong><span>{batch?.request.requestStatus ?? '未记录'}</span></div>
+            <div><small>所属请款项目</small><strong>{details.requestCode}</strong><span>{details.requestStatus}</span></div>
           </article>
           <article>
             <span className="transaction-association-icon" aria-hidden="true"><ReceiptText size={19} /></span>
-            <div><small>所属请款批次</small><strong>{batch?.paymentBatchCode ?? '未关联'}</strong><span>{batch ? `${batch.provider} · ${batch.status}` : '历史记录未保留批次快照'}</span></div>
+            <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{payout.provider} · {details.batchStatus}</span></div>
           </article>
         </div>
       </section>
 
       <section className="transaction-detail-section transaction-resource-section">
         <header>
+          <span className="transaction-section-icon is-resource" aria-hidden="true"><Files size={18} /></span>
           <div><h2>合同、Invoice 与付款清单</h2><p>查看这笔交易在付款时保存的关联资料快照。</p></div>
         </header>
         <div className="transaction-resource-list">
@@ -139,16 +154,16 @@ export function TransactionDetailPage({
             <span className="transaction-resource-icon" aria-hidden="true"><FileText size={19} /></span>
             <div className="transaction-resource-heading">
               <strong>合同</strong>
-              <small>{item?.contracts.length ? `${item.contracts.length} 份关联文件` : '未关联合同快照'}</small>
+              <small>{details.contracts.length ? `${details.contracts.length} 份关联文件` : '历史数据待补全'}</small>
             </div>
             <div className="transaction-resource-content">
-              {item?.contracts.length ? item.contracts.map((contract) => (
-                <div className="transaction-resource-entry" key={contract.contractId}>
+              {details.contracts.length ? details.contracts.map((contract) => (
+                <div className="transaction-resource-entry" key={contract.contractId ?? contract.contractCode}>
                   <strong>{contract.contractCode}</strong>
                   <span>{contract.name}</span>
                   <small>{money(contract.currency, contract.amount)} · {contract.signed ? '已签署' : '待签署'} · {contract.status}</small>
                 </div>
-              )) : <span>{item?.legacyContractReference ?? payout.contract ?? '未关联'}</span>}
+              )) : <span>{payout.contract || '历史数据待补全'}</span>}
             </div>
             <Button
               variant="secondary"
@@ -164,16 +179,16 @@ export function TransactionDetailPage({
             <span className="transaction-resource-icon is-invoice" aria-hidden="true"><ReceiptText size={19} /></span>
             <div className="transaction-resource-heading">
               <strong>Invoice</strong>
-              <small>{item?.invoice ? `版本 V${item.invoice.version}` : '未关联稳定快照'}</small>
+              <small>{details.invoice ? `版本 V${details.invoice.version}` : '历史数据待补全'}</small>
             </div>
             <div className="transaction-resource-content">
-              {item?.invoice ? (
+              {details.invoice ? (
                 <div className="transaction-resource-entry">
-                  <strong>{item.invoice.invoiceNumber}</strong>
-                  <span>{money(item.invoice.currency, item.invoice.amount)}</span>
-                  <small>{item.invoice.invoiceDate} · {item.invoice.reviewStatus}</small>
+                  <strong>{details.invoice.invoiceNumber}</strong>
+                  <span>{money(details.invoice.currency, details.invoice.amount)}</span>
+                  <small>{details.invoice.invoiceDate} · {details.invoice.reviewStatus}</small>
                 </div>
-              ) : <span>{item?.legacyInvoiceReference ?? payout.invoice ?? '未关联'}</span>}
+              ) : <span>{payout.invoice || '历史数据待补全'}</span>}
             </div>
             <Button
               variant="secondary"
@@ -193,9 +208,9 @@ export function TransactionDetailPage({
             </div>
             <div className="transaction-resource-content">
               <div className="transaction-resource-entry">
-                <strong>{item?.paymentListCode ?? '未关联'}</strong>
-                <span>{item?.paymentListVersion ? `版本 V${item.paymentListVersion}` : '版本未记录'}</span>
-                <small>{item?.paymentListStatus ?? '历史记录未保留付款清单快照'}</small>
+                <strong>{details.paymentListCode}</strong>
+                <span>{details.paymentListVersion ? `版本 V${details.paymentListVersion}` : '历史数据待补全'}</span>
+                <small>{details.paymentListStatus}</small>
               </div>
             </div>
             <Button
@@ -219,10 +234,10 @@ export function TransactionDetailPage({
           footer={<Button variant="secondary" onClick={() => setResourceView(null)}>关闭</Button>}
         >
           {resourceView === 'contract' ? (
-            item?.contracts.length ? (
+            details.contracts.length ? (
               <div className="transaction-resource-modal-list">
-                {item.contracts.map((contract) => (
-                  <section key={contract.contractId}>
+                {details.contracts.map((contract) => (
+                  <section key={contract.contractId ?? contract.contractCode}>
                     <header><FileText size={18} aria-hidden="true" /><strong>{contract.contractCode}</strong></header>
                     <dl>
                       <div><dt>合同名称</dt><dd>{contract.name}</dd></div>
@@ -235,36 +250,36 @@ export function TransactionDetailPage({
                 ))}
               </div>
             ) : (
-              <p className="transaction-resource-modal-empty">仅保留历史合同编号：{item?.legacyContractReference ?? payout.contract ?? '未关联'}</p>
+              <p className="transaction-resource-modal-empty">合同快照仍待补全：{payout.contract || '未提供合同编号'}</p>
             )
           ) : null}
 
           {resourceView === 'invoice' ? (
-            item?.invoice ? (
+            details.invoice ? (
               <dl className="transaction-resource-modal-grid">
-                <div><dt>Invoice 号</dt><dd>{item.invoice.invoiceNumber}</dd></div>
-                <div><dt>Invoice 日期</dt><dd>{item.invoice.invoiceDate}</dd></div>
-                <div><dt>Invoice 金额</dt><dd>{money(item.invoice.currency, item.invoice.amount)}</dd></div>
-                <div><dt>版本</dt><dd>V{item.invoice.version}</dd></div>
-                <div><dt>审核状态</dt><dd>{item.invoice.reviewStatus}</dd></div>
-                <div><dt>资料校验</dt><dd>{item.invoice.validationStatus === 'valid' ? '已通过' : '需要复核'}</dd></div>
+                <div><dt>Invoice 号</dt><dd>{details.invoice.invoiceNumber}</dd></div>
+                <div><dt>Invoice 日期</dt><dd>{details.invoice.invoiceDate}</dd></div>
+                <div><dt>Invoice 金额</dt><dd>{money(details.invoice.currency, details.invoice.amount)}</dd></div>
+                <div><dt>版本</dt><dd>V{details.invoice.version}</dd></div>
+                <div><dt>审核状态</dt><dd>{details.invoice.reviewStatus}</dd></div>
+                <div><dt>资料校验</dt><dd>{details.invoice.validationStatus === 'valid' ? '已通过' : '需要复核'}</dd></div>
               </dl>
             ) : (
-              <p className="transaction-resource-modal-empty">仅保留历史 Invoice 编号：{item?.legacyInvoiceReference ?? payout.invoice ?? '未关联'}</p>
+              <p className="transaction-resource-modal-empty">Invoice 快照仍待补全：{payout.invoice || '未提供 Invoice 编号'}</p>
             )
           ) : null}
 
           {resourceView === 'payment-list' ? (
             <dl className="transaction-resource-modal-grid is-payment-list">
-              <div><dt>付款清单编号</dt><dd>{item?.paymentListCode ?? '未关联'}</dd></div>
-              <div><dt>版本</dt><dd>{item?.paymentListVersion ? `V${item.paymentListVersion}` : '未记录'}</dd></div>
-              <div><dt>清单状态</dt><dd>{item?.paymentListStatus ?? '未记录'}</dd></div>
+              <div><dt>付款清单编号</dt><dd>{details.paymentListCode}</dd></div>
+              <div><dt>版本</dt><dd>{details.paymentListVersion ? `V${details.paymentListVersion}` : '历史数据待补全'}</dd></div>
+              <div><dt>清单状态</dt><dd>{details.paymentListStatus}</dd></div>
               <div><dt>付款达人</dt><dd>{payout.creator}</dd></div>
               <div><dt>付款金额</dt><dd>{formatAmount(payout)}</dd></div>
               <div><dt>付款渠道</dt><dd>{payout.provider}</dd></div>
-              <div><dt>付款方式</dt><dd>{item?.transferMethod ?? payout.provider}</dd></div>
-              <div><dt>付款批次号</dt><dd>{batch?.paymentBatchCode ?? '未关联'}</dd></div>
-              <div className="transaction-resource-modal-full"><dt>请款原因</dt><dd>{requestReason}</dd></div>
+              <div><dt>付款方式</dt><dd>{details.transferMethod}</dd></div>
+              <div><dt>付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
+              <div className="transaction-resource-modal-full"><dt>请款原因</dt><dd>{details.requestReason}</dd></div>
             </dl>
           ) : null}
         </Modal>

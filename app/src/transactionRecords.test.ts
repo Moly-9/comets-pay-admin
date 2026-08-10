@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { INITIAL_PAYOUTS } from './data';
 import type { PaymentBatchRecord } from './paymentBatches';
 import type { Payout } from './types';
 import {
   findTransactionBatchContext,
   filterTransactionRecords,
+  isFinalTransaction,
   transactionCreatorLabel,
   transactionDateKey,
+  transactionRecordDetails,
   type TransactionRecordFilters,
 } from './transactionRecords';
 
@@ -126,6 +129,32 @@ describe('transaction records', () => {
 
     ['REQ-20260810-TEST', 'PAY-20260810-TEST', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
       expect(filterTransactionRecords([payout()], filters({ search }), [batch])).toHaveLength(1);
+    });
+  });
+
+  it('provides complete historical snapshots for every current legacy transaction', () => {
+    const historicalTransactions = INITIAL_PAYOUTS.filter(isFinalTransaction);
+
+    expect(historicalTransactions).toHaveLength(10);
+    historicalTransactions.forEach((record) => {
+      const details = transactionRecordDetails(record, null);
+      const requiredValues = [
+        details.payer,
+        details.paymentTime,
+        details.paymentBatchCode,
+        details.requestCode,
+        details.requestReason,
+        details.transferMethod,
+        details.accountSummary,
+        details.feeBearer,
+        details.transactionReference,
+        details.paymentListCode,
+      ];
+
+      expect(details.source).toBe('historical');
+      expect(requiredValues.every((value) => value && !/未记录|未关联|待补全/.test(value))).toBe(true);
+      expect(details.contracts).toHaveLength(1);
+      expect(details.invoice?.invoiceNumber).toBe(record.invoice);
     });
   });
 });

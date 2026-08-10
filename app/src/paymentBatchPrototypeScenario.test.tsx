@@ -85,7 +85,7 @@ describe('payment batch prototype scenario', () => {
       <TransactionsPage payouts={scenario.payouts} paymentBatches={[]} />,
     );
 
-    expect(html).toContain('>付款失败</button>');
+    expect(html).toContain(`<span>付款失败</span><small>${failed.length}</small>`);
     expect(html).toContain(`>${successRate}</strong>`);
     expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);
   });
