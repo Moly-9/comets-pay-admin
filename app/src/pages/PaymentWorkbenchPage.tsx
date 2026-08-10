@@ -799,6 +799,7 @@ export function PaymentWorkbenchPage({
         <PaymentExecutionWorkspace
           request={paymentExecutionRequest}
           project={paymentExecutionProject}
+          generatedInvoices={generatedInvoices}
           variant={paymentExecutionVariant}
           canExecute={canCreateBatch}
           onExecute={(projectPayouts) => {

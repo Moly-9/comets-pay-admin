@@ -66,7 +66,10 @@ import {
 } from '../paymentRequestProjects';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
-import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
+import {
+  requestApprovalHasScopedReturnItems,
+  requestApprovalReturnDetails,
+} from '../requestApprovalWorkflow';
 import {
   ProjectInlineFilterPanel,
   ProjectStatus,
@@ -999,8 +1002,18 @@ export function MediaPaymentProjectsPage({
       }),
     ].filter(Boolean);
     const editable = requestEditAllowed(selectedRequest);
-    const requestContentEditable = editable && !hasPaymentFailureRecovery;
-    const canAddCreators = !hasPaymentFailureRecovery && canCreate && canAddCreatorToPaymentRequest(selectedRequest);
+    const hasScopedApprovalReturn = requestApprovalHasScopedReturnItems(selectedRequest.approval);
+    const hasInvoiceReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
+      item.issueType === 'INVOICE_CONTENT'
+    )));
+    const hasPaymentListReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
+      item.issueType === 'PAYMENT_LIST'
+    )));
+    const requestContentEditable = editable && !hasPaymentFailureRecovery && !hasScopedApprovalReturn;
+    const canAddCreators = !hasPaymentFailureRecovery
+      && !hasScopedApprovalReturn
+      && canCreate
+      && canAddCreatorToPaymentRequest(selectedRequest);
     const canSubmit = editable && submissionIssues.length === 0;
     const requestPaymentLists = paymentLists.filter((list) => (
       list.paymentRequestProjectId === selectedRequest.paymentRequestProjectId
@@ -1089,12 +1102,22 @@ export function MediaPaymentProjectsPage({
                 <div>
                   <span>退回待处理</span>
                   <h2 id="media-request-return-heading">{returnHeading}</h2>
-                  <p>请根据退回意见修改请款内容和付款清单，完成校验后重新提交。</p>
+                  <p>{hasScopedApprovalReturn
+                    ? '请仅处理下方标记的退回明细；未被标记的 Invoice 与付款明细保持锁定。'
+                    : '请根据退回意见修改请款内容和付款清单，完成校验后重新提交。'}</p>
                 </div>
                 {editable ? (
                   <div className="media-request-return-panel-actions">
-                    <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openEditForm(selectedRequest)}>修改请款内容</Button>
-                    <Button variant="ghost" onClick={() => scrollToSection('media-request-resource-section')}>检查付款清单</Button>
+                    {!hasScopedApprovalReturn ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openEditForm(selectedRequest)}>修改请款内容</Button> : null}
+                    <Button variant={hasScopedApprovalReturn ? 'secondary' : 'ghost'} onClick={() => scrollToSection('media-request-resource-section')}>
+                      {hasInvoiceReturn && hasPaymentListReturn
+                        ? '处理退回明细'
+                        : hasInvoiceReturn
+                          ? '修改指定 Invoice'
+                          : hasPaymentListReturn
+                            ? '修改指定付款明细'
+                            : '检查付款清单'}
+                    </Button>
                   </div>
                 ) : null}
               </header>

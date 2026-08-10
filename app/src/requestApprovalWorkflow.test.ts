@@ -5,6 +5,8 @@ import {
   canReturnRequestApproval,
   canReviewRequestApproval,
   createRequestApprovalState,
+  requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForInvoice,
   requestApprovalReturnDetails,
   returnApprovedRequestToMediaReview,
 } from './requestApprovalWorkflow';
@@ -92,6 +94,14 @@ describe('request approval workflow', () => {
       finance,
       '收款账户名与 Invoice 不一致',
       '2026-08-10T04:30:00.000Z',
+      [{
+        pageKey: 'invoice:stable-invoice-id',
+        invoiceId: 'stable-invoice-id' as never,
+        invoiceNumber: 'INV-TEST',
+        issueType: 'PAYMENT_LIST',
+        reason: '收款账户名与 Invoice 不一致',
+        paymentItems: [{ paymentListId: 'payment-list-id' as never, itemId: 'payment-item-id' }],
+      }],
     );
 
     expect(requestApprovalReturnDetails(returned)).toEqual({
@@ -102,11 +112,23 @@ describe('request approval workflow', () => {
       actorRole: finance.role,
       occurredAt: '2026-08-10T04:30:00.000Z',
       round: 1,
+      items: [{
+        pageKey: 'invoice:stable-invoice-id',
+        invoiceId: 'stable-invoice-id',
+        invoiceNumber: 'INV-TEST',
+        issueType: 'PAYMENT_LIST',
+        reason: '收款账户名与 Invoice 不一致',
+        paymentItems: [{ paymentListId: 'payment-list-id', itemId: 'payment-item-id' }],
+      }],
     });
+    expect(requestApprovalHasScopedReturnItems(returned)).toBe(true);
+    expect(requestApprovalReturnItemForInvoice(returned, 'stable-invoice-id' as never, 'PAYMENT_LIST'))
+      .toMatchObject({ invoiceNumber: 'INV-TEST' });
     const resubmitted = createRequestApprovalState('2026-08-10T05:00:00.000Z', returned);
     expect(resubmitted.status).toBe('PENDING_FINANCE');
     expect(resubmitted.round).toBe(2);
     expect(requestApprovalReturnDetails(resubmitted)).toBeNull();
+    expect(resubmitted.returnItems).toBeUndefined();
   });
 
   it('returns an approved unpaid request from payment execution back to finance review', () => {

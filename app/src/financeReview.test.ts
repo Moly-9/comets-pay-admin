@@ -3,6 +3,7 @@ import type { PaymentListRecord } from './businessWorkflow';
 import {
   buildRequestFinanceReview,
   createFinanceReviewSession,
+  financeReviewReturnItems,
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
   financeReviewSessionCanReturn,
@@ -265,10 +266,19 @@ describe('request finance review', () => {
     });
     const incorrect = setFinanceReviewDecision(initial, review.pages[0].key, {
       state: 'incorrect',
+      issueType: 'INVOICE_CONTENT',
       reason: '收款账户与 Invoice 不一致',
       reviewedAt: '2026-08-09T10:00:00.000Z',
     });
-    expect(financeReviewReturnReason(incorrect, review)).toBe('INV-TEST：收款账户与 Invoice 不一致');
+    expect(financeReviewReturnReason(incorrect, review)).toBe('INV-TEST（Invoice）：收款账户与 Invoice 不一致');
+    expect(financeReviewReturnItems(incorrect, review)).toEqual([{
+      pageKey: review.pages[0].key,
+      invoiceId: invoice.invoiceId,
+      invoiceNumber: 'INV-TEST',
+      issueType: 'INVOICE_CONTENT',
+      reason: '收款账户与 Invoice 不一致',
+      paymentItems: [{ paymentListId: 'payment-list-test', itemId: 'item-test' }],
+    }]);
   });
 
   it('allows a finance return only after every page is reviewed and at least one is incorrect', () => {
@@ -289,6 +299,7 @@ describe('request finance review', () => {
     });
     const oneIncorrect = setFinanceReviewDecision(initial, review.pages[0].key, {
       state: 'incorrect',
+      issueType: 'PAYMENT_LIST',
       reason: '收款账户与 Invoice 不一致',
       reviewedAt: '2026-08-09T10:00:00.000Z',
     });
@@ -318,8 +329,19 @@ describe('request finance review', () => {
     expect(financeReviewSessionCanReturn(setFinanceReviewDecision(
       oneIncorrect,
       review.pages[1].key,
-      { state: 'incorrect', reason: '   ', reviewedAt: '2026-08-09T10:01:00.000Z' },
+      { state: 'incorrect', issueType: 'PAYMENT_LIST', reason: '   ', reviewedAt: '2026-08-09T10:01:00.000Z' },
     ), review)).toBe(false);
+    expect(financeReviewSessionCanReturn({
+      ...allReviewed,
+      decisions: {
+        ...allReviewed.decisions,
+        [review.pages[0].key]: {
+          state: 'incorrect',
+          reason: '缺少问题类型',
+          reviewedAt: '2026-08-09T10:01:00.000Z',
+        } as never,
+      },
+    }, review)).toBe(false);
     expect(financeReviewSessionCanReturn(
       { ...allReviewed, fingerprint: 'stale-fingerprint' },
       review,

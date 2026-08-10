@@ -210,10 +210,15 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
     expect(paymentRowsSource).toContain("'paymentReason', event.target.value");
     expect(paymentRowsSource).toContain("'transactionReference', event.target.value");
-    expect(toolbarSource).toContain('!paymentFailureRecoveryMode');
+    expect(toolbarSource).toContain('canEditPaymentList && currentPaymentList');
+    expect(toolbarSource).toContain("hasScopedApprovalReturn ? '修改退回明细'");
+    expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
     expect(paymentRowsSource).toContain("paymentLocked ? ' is-payment-locked' : ''");
     expect(paymentRowsSource).toContain("'校验通过 · 已付款冻结'");
     expect(paymentRowsSource).toContain("!paymentFailureRecoveryMode || Boolean(failurePayout)");
+    expect(paymentRowsSource).toContain("!hasScopedApprovalReturn || Boolean(paymentListReturn)");
+    expect(paymentRowsSource).toContain("paymentListReturn ? '付款清单原因 · 待修改'");
+    expect(paymentRowsSource).toContain("paymentLocked && hasScopedApprovalReturn ? '已通过 · 已锁定'");
     expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
   });
 });

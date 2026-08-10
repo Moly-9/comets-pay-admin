@@ -40,6 +40,20 @@ export type RequestApprovalStatus =
 
 export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
 
+export type RequestApprovalReturnIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
+
+export type RequestApprovalReturnItem = {
+  pageKey: string;
+  invoiceId?: InvoiceId;
+  invoiceNumber: string;
+  issueType: RequestApprovalReturnIssueType;
+  reason: string;
+  paymentItems: Array<{
+    paymentListId: PaymentListId;
+    itemId: string;
+  }>;
+};
+
 export type RequestApprovalEvent = {
   round: number;
   stage: RequestApprovalStage;
@@ -50,6 +64,7 @@ export type RequestApprovalEvent = {
   fromStatus: RequestApprovalStatus;
   toStatus: RequestApprovalStatus;
   reason?: string;
+  returnItems?: RequestApprovalReturnItem[];
   occurredAt: string;
 };
 
@@ -61,6 +76,7 @@ export type RequestApprovalState = {
   returnedFromStage?: RequestApprovalStage;
   resumeStatus?: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   returnReason?: string;
+  returnItems?: RequestApprovalReturnItem[];
   updatedAt: string;
 };
 

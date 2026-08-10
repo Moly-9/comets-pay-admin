@@ -28,6 +28,7 @@ describe('PaymentExecutionWorkspace', () => {
       <PaymentExecutionWorkspace
         request={request!}
         project={project}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
         canExecute
         onExecute={vi.fn(() => true)}
         onReturn={vi.fn(() => true)}
@@ -73,6 +74,7 @@ describe('PaymentExecutionWorkspace', () => {
             index === 0 ? { ...payout, status: '付款处理中' } : payout
           )),
         }}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
         canExecute
         onExecute={vi.fn(() => true)}
         onReturn={vi.fn(() => true)}
@@ -121,6 +123,7 @@ describe('PaymentExecutionWorkspace', () => {
       <PaymentExecutionWorkspace
         request={returnedRequest}
         project={returnedProject}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
         variant="returned"
         canExecute
         onExecute={vi.fn(() => true)}
@@ -141,5 +144,66 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('>返回列表</span>');
     expect(html).not.toContain('payment-execution-return-action');
     expect(html).not.toContain('payment-execution-submit-action');
+  });
+
+  it('marks only scoped finance-return details as rejected and keeps the rest green', () => {
+    const project = buildPaymentProjectRows({
+      tab: 'payment',
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    })[0];
+    const request = INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((candidate) => (
+      candidate.id === project.requestId
+    ))!;
+    const targetPayout = project.payouts[0];
+    const targetInvoice = INITIAL_COMPLETE_REQUEST_RESOURCES.invoices.find((invoice) => (
+      invoice.sourcePayoutId === targetPayout.id
+    ))!;
+    const reason = '付款清单收款账户需修正。';
+    const approval = returnApprovedRequestToMediaReview(
+      request.approval!,
+      { account: 'finance.test', name: '财务测试员', role: '财务账号' },
+      reason,
+      '2026-08-10T04:30:00.000Z',
+    );
+    const returnItems = [{
+      pageKey: `invoice:${targetInvoice.invoiceId}`,
+      invoiceId: targetInvoice.invoiceId,
+      invoiceNumber: targetInvoice.id,
+      issueType: 'PAYMENT_LIST' as const,
+      reason,
+      paymentItems: [],
+    }];
+    const returnedRequest = {
+      ...request,
+      lifecycle: 'RETURNED' as const,
+      approval: {
+        ...approval,
+        returnItems,
+        history: approval.history.map((event, index) => (
+          index === approval.history.length - 1 ? { ...event, returnItems } : event
+        )),
+      },
+    };
+    const html = renderToStaticMarkup(
+      <PaymentExecutionWorkspace
+        request={returnedRequest}
+        project={{ ...project, status: '已退回', actionLabel: '查看原因' }}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        variant="returned"
+        canExecute
+        onExecute={vi.fn(() => true)}
+        onReturn={vi.fn(() => true)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('付款清单已退回');
+    expect(html).toContain(`<b>退回原因：</b>${reason}`);
+    expect(html).toContain('该明细已通过财务审核，无需修改');
+    expect(html).toContain('payment-execution-payee is-passed');
+    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(1);
+    expect(html).not.toContain('payment-execution-failure-summary');
   });
 });

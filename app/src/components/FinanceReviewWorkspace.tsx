@@ -28,6 +28,7 @@ import {
   type RequestFinanceReview,
 } from '../financeReview';
 import {
+  type RequestApprovalReturnIssueType,
   paymentListProviders,
   type PaymentListId,
   type PaymentListRecord,
@@ -42,7 +43,7 @@ import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
-import { Button, Modal } from './Common';
+import { Button, Modal, SelectField, type SelectOption } from './Common';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
 
@@ -54,6 +55,15 @@ const REVIEW_PANE_OPTIONS: Array<{
   { id: 'payment', label: '付款清单' },
   { id: 'approval', label: '项目与审批' },
 ];
+
+export const FINANCE_RETURN_ISSUE_OPTIONS: readonly SelectOption<RequestApprovalReturnIssueType>[] = [
+  { value: 'INVOICE_CONTENT', label: 'Invoice 原因', description: '仅开放该份 Invoice 修改权限' },
+  { value: 'PAYMENT_LIST', label: '付款清单原因', description: '仅开放对应付款明细修改权限' },
+];
+
+const financeReturnIssueLabel = (issueType: RequestApprovalReturnIssueType) => (
+  issueType === 'INVOICE_CONTENT' ? 'Invoice 原因' : '付款清单原因'
+);
 
 const PAGE_KIND_LABEL: Record<FinanceReviewPage['kind'], string> = {
   pair: '一一对应',
@@ -259,6 +269,7 @@ export function FinanceReviewWorkspace({
   const [invoiceZoom, setInvoiceZoom] = useState(1);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
   const invoiceZoomRef = useRef(1);
@@ -356,14 +367,16 @@ export function FinanceReviewWorkspace({
   };
 
   const openIssueEditor = () => {
+    setIssueType(currentDecision.state === 'incorrect' ? currentDecision.issueType : '');
     setIssueReason(currentDecision.state === 'incorrect' ? currentDecision.reason : '');
     setIssueEditorOpen(true);
   };
 
   const saveIssue = () => {
-    if (!currentPage || !issueReason.trim()) return;
+    if (!currentPage || !issueType || !issueReason.trim()) return;
     onSessionChange(setFinanceReviewDecision(activeSession, currentPage.key, {
       state: 'incorrect',
+      issueType,
       reason: issueReason.trim(),
       reviewedAt: new Date().toISOString(),
     }));
@@ -692,7 +705,7 @@ export function FinanceReviewWorkspace({
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
                     <CircleAlert size={17} />
-                    <div><strong>已记录有误</strong><p>{currentDecision.reason}</p></div>
+                    <div><strong>{financeReturnIssueLabel(currentDecision.issueType)}</strong><p>{currentDecision.reason}</p></div>
                   </section>
                 ) : null}
               </div>
@@ -722,17 +735,34 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setIssueEditorOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!issueReason.trim()} onClick={saveIssue}>保存有误记录</Button>
+              <Button variant="danger" disabled={!issueType || !issueReason.trim()} onClick={saveIssue}>保存有误记录</Button>
             </>
           )}
         >
+          <label className="finance-review-reason-field">
+            <span>问题类型 <em>*</em></span>
+            <SelectField<RequestApprovalReturnIssueType | ''>
+              ariaLabel="财务退回问题类型"
+              value={issueType}
+              placeholder="请选择 Invoice 原因或付款清单原因"
+              variant="form"
+              menuStrategy="fixed"
+              options={FINANCE_RETURN_ISSUE_OPTIONS}
+              onChange={setIssueType}
+            />
+            <small>所选类型决定媒介侧仅开放 Invoice 或对应付款明细。</small>
+          </label>
           <label className="finance-review-reason-field">
             <span>问题说明 <em>*</em></span>
             <textarea
               autoFocus
               rows={5}
               value={issueReason}
-              placeholder="填写 Invoice 与付款明细不一致的具体内容"
+              placeholder={issueType === 'INVOICE_CONTENT'
+                ? '请说明该份 Invoice 需要修改的内容'
+                : issueType === 'PAYMENT_LIST'
+                  ? '请说明对应付款明细需要修改的内容'
+                  : '请先选择问题类型，再填写具体原因'}
               onChange={(event) => setIssueReason(event.target.value)}
             />
             <small>该说明会随其他有误记录一并退回媒介。</small>
@@ -761,7 +791,10 @@ export function FinanceReviewWorkspace({
               {financeReview.pages.flatMap((page) => {
                 const decision = activeSession.decisions[page.key];
                 return decision?.state === 'incorrect' ? (
-                  <article key={page.key}><strong>{page.invoiceNumber}</strong><p>{decision.reason}</p></article>
+                  <article key={page.key}>
+                    <strong>{page.invoiceNumber}<span>{financeReturnIssueLabel(decision.issueType)}</span></strong>
+                    <p>{decision.reason}</p>
+                  </article>
                 ) : [];
               })}
             </div>

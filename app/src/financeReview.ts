@@ -1,4 +1,9 @@
-import type { PaymentListItem, PaymentListRecord } from './businessWorkflow';
+import type {
+  PaymentListItem,
+  PaymentListRecord,
+  RequestApprovalReturnItem,
+  RequestApprovalReturnIssueType,
+} from './businessWorkflow';
 import { paymentListEffectiveAccount, paymentListItemValue } from './businessWorkflow';
 import { bankAddress, invoiceTotal } from './invoice/invoiceUtils';
 import { paymentRequestInvoiceIds, type PaymentRequestProjectLike } from './paymentRequestProjects';
@@ -66,7 +71,12 @@ export type RequestFinanceReview = {
 export type FinanceReviewDecision =
   | { state: 'unreviewed' }
   | { state: 'correct'; reviewedAt: string }
-  | { state: 'incorrect'; reason: string; reviewedAt: string };
+  | {
+      state: 'incorrect';
+      issueType: RequestApprovalReturnIssueType;
+      reason: string;
+      reviewedAt: string;
+    };
 
 export type FinanceReviewSession = {
   requestId: string;
@@ -422,17 +432,35 @@ export const financeReviewSessionCanReturn = (
   && review.pages.every((page) => {
     const decision = session.decisions[page.key];
     return decision?.state === 'correct'
-      || (decision?.state === 'incorrect' && Boolean(decision.reason.trim()));
+      || (
+        decision?.state === 'incorrect'
+        && Boolean(decision.issueType)
+        && Boolean(decision.reason.trim())
+      );
   })
   && review.pages.some((page) => session.decisions[page.key]?.state === 'incorrect'),
 );
 
+export const financeReviewReturnItems = (
+  session: FinanceReviewSession,
+  review: RequestFinanceReview,
+): RequestApprovalReturnItem[] => review.pages.flatMap((page) => {
+  const decision = session.decisions[page.key];
+  return decision?.state === 'incorrect'
+    ? [{
+        pageKey: page.key,
+        invoiceId: page.invoiceId,
+        invoiceNumber: page.invoiceNumber,
+        issueType: decision.issueType,
+        reason: decision.reason,
+        paymentItems: page.paymentItems,
+      }]
+    : [];
+});
+
 export const financeReviewReturnReason = (
   session: FinanceReviewSession,
   review: RequestFinanceReview,
-) => review.pages.flatMap((page) => {
-  const decision = session.decisions[page.key];
-  return decision?.state === 'incorrect'
-    ? [`${page.invoiceNumber}：${decision.reason}`]
-    : [];
-}).join('；');
+) => financeReviewReturnItems(session, review)
+  .map((item) => `${item.invoiceNumber}（${item.issueType === 'INVOICE_CONTENT' ? 'Invoice' : '付款清单'}）：${item.reason}`)
+  .join('；');

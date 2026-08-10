@@ -5908,6 +5908,17 @@ body:has(.finance-review-workspace) {
   font-size: 11px;
 }
 
+.finance-review-return-list strong span {
+  display: inline-flex;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #fff0eb;
+  padding: 2px 7px;
+  color: #a24d39;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 /* Bounded type steps keep the dense review workspace legible without viewport-driven reflow. */
 .finance-review-workspace .finance-review-project-label {
   font-size: var(--finance-review-font-xs) !important;
@@ -6957,6 +6968,29 @@ body:has(.finance-review-workspace) {
 
 .project-payment-validation.is-warning {
   color: #a05b26;
+}
+
+.request-approval-return-item-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 14px 12px;
+  border-left: 2px solid #c85a4e;
+  background: #fff5f3;
+  padding: 10px 12px;
+  color: #8e433b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.request-approval-return-item-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.request-approval-return-item-note span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .project-payment-revalidate {
@@ -10334,6 +10368,14 @@ button:disabled {
   height: 12px;
   border-radius: 4px;
   background: #7a8fae;
+}
+
+.project-record-status.is-warning {
+  color: #a74339;
+}
+
+.project-record-status.is-warning i {
+  background: currentColor;
 }
 
 .project-record-open {

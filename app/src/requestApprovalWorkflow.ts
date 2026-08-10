@@ -1,6 +1,8 @@
 import type { SystemUser } from './data';
 import type {
   RequestApprovalEvent,
+  RequestApprovalReturnItem,
+  RequestApprovalReturnIssueType,
   RequestApprovalStage,
   RequestApprovalState,
   RequestApprovalStatus,
@@ -46,6 +48,7 @@ export type RequestApprovalReturnDetails = {
   actorRole: string;
   occurredAt: string;
   round: number;
+  items: RequestApprovalReturnItem[];
 };
 
 export const requestApprovalReturnDetails = (
@@ -65,8 +68,25 @@ export const requestApprovalReturnDetails = (
     actorRole: returnEvent?.actorRole || REQUEST_APPROVAL_STAGE_LABEL[stage],
     occurredAt: returnEvent?.occurredAt || state.updatedAt,
     round: returnEvent?.round ?? state.round,
+    items: state.returnItems ?? returnEvent?.returnItems ?? [],
   };
 };
+
+export const requestApprovalHasScopedReturnItems = (
+  state?: RequestApprovalState,
+) => Boolean(
+  state?.status === 'RETURNED_TO_MEDIA_REVIEW'
+  && state.returnItems?.length,
+);
+
+export const requestApprovalReturnItemForInvoice = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+  issueType?: RequestApprovalReturnIssueType,
+) => state?.returnItems?.find((item) => (
+  item.invoiceId === invoiceId
+  && (!issueType || item.issueType === issueType)
+));
 
 export const requestApprovalStage = (
   status: RequestApprovalStatus,
@@ -116,6 +136,7 @@ export const applyRequestApprovalAction = (
   actor: Pick<SystemUser, 'account' | 'name' | 'role'>,
   reason?: string,
   occurredAt = new Date().toISOString(),
+  returnItems?: RequestApprovalReturnItem[],
 ): RequestApprovalState => {
   const stage = requestApprovalStage(state.status);
   if (!stage) throw new Error('当前请款状态不能执行审批操作。');
@@ -139,6 +160,7 @@ export const applyRequestApprovalAction = (
     fromStatus: state.status,
     toStatus,
     reason: normalizedReason,
+    returnItems: action === 'RETURN' && returnItems?.length ? returnItems : undefined,
     occurredAt,
   };
   return {
@@ -151,6 +173,7 @@ export const applyRequestApprovalAction = (
       ? state.status as Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>
       : undefined,
     returnReason: action === 'RETURN' ? normalizedReason : undefined,
+    returnItems: action === 'RETURN' && returnItems?.length ? returnItems : undefined,
     updatedAt: occurredAt,
   };
 };

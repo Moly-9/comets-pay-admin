@@ -15,7 +15,7 @@ import { isPayoutPaymentInformationValidated } from '../invoice/invoiceReviewWor
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
-import type { Payout } from '../types';
+import type { GeneratedInvoiceRecord, Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { Button, Modal } from './Common';
 import './PaymentExecutionWorkspace.css';
@@ -65,6 +65,7 @@ const payoutFailureReason = (payout: Payout, requestReason: string) => (
 export function PaymentExecutionWorkspace({
   request,
   project,
+  generatedInvoices,
   variant = 'execution',
   canExecute,
   onExecute,
@@ -73,6 +74,7 @@ export function PaymentExecutionWorkspace({
 }: {
   request: RequestProjectSummary;
   project: PaymentProjectRow;
+  generatedInvoices: GeneratedInvoiceRecord[];
   variant?: 'execution' | 'returned';
   canExecute: boolean;
   onExecute: (payouts: Payout[]) => boolean;
@@ -89,6 +91,8 @@ export function PaymentExecutionWorkspace({
   const requestReason = request.generatedDetail?.reason ?? '未单独填写';
   const submittedAt = request.approval?.submittedAt ?? request.createdAt;
   const returnDetails = requestApprovalReturnDetails(request.approval);
+  const structuredReturnItems = returnDetails?.items ?? [];
+  const hasScopedReturnItems = isReturned && structuredReturnItems.length > 0;
   const requestReturnReason = returnDetails?.reason?.trim() || '';
   const returnedReason = project.payouts
     .map((payout) => payoutFailureReason(payout, requestReturnReason))
@@ -104,6 +108,12 @@ export function PaymentExecutionWorkspace({
   const canReturnPayment = canExecute
     && payablePayouts.length > 0
     && payablePayouts.length === project.payouts.length;
+  const returnItemForPayout = (payout: Payout) => {
+    const invoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
+    return invoice
+      ? structuredReturnItems.find((item) => item.invoiceId === invoice.invoiceId)
+      : undefined;
+  };
 
   const executePayment = () => {
     if (onExecute(project.payouts)) onClose();
@@ -130,7 +140,9 @@ export function PaymentExecutionWorkspace({
             <div>
               <strong>{project.amount}</strong>
               <span>{isReturned
-                ? `${project.payouts.length} 笔请款明细已退回 · ${paymentProvider}`
+                ? hasScopedReturnItems
+                  ? `${structuredReturnItems.length} 笔明细已退回，其余 ${Math.max(0, project.payouts.length - structuredReturnItems.length)} 笔已通过 · ${paymentProvider}`
+                  : `${project.payouts.length} 笔请款明细已退回 · ${paymentProvider}`
                 : `${validatedPayouts.length} 笔付款信息校验成功 · ${paymentProvider}`}</span>
             </div>
             <div>
@@ -197,7 +209,7 @@ export function PaymentExecutionWorkspace({
               <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
               <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
             </dl>
-            {isReturned ? (
+            {isReturned && !hasScopedReturnItems ? (
               <div className="payment-execution-failure-summary" role="alert">
                 <AlertTriangle size={20} />
                 <div>
@@ -228,9 +240,12 @@ export function PaymentExecutionWorkspace({
             <div className="payment-execution-payee-list">
               {project.payouts.map((payout, index) => {
                 const informationValidated = isPayoutPaymentInformationValidated(payout);
-                const failureReason = payoutFailureReason(payout, requestReturnReason);
+                const returnItem = hasScopedReturnItems ? returnItemForPayout(payout) : undefined;
+                const detailReturned = isReturned && (!hasScopedReturnItems || Boolean(returnItem));
+                const detailPassed = isReturned && hasScopedReturnItems && !returnItem;
+                const failureReason = returnItem?.reason ?? payoutFailureReason(payout, requestReturnReason);
                 return (
-                  <article className={`payment-execution-payee${isReturned ? ' is-returned' : ''}`} key={payout.id}>
+                  <article className={`payment-execution-payee${detailReturned ? ' is-returned' : ''}${detailPassed ? ' is-passed' : ''}`} key={payout.id}>
                     <header>
                       <span className="payment-execution-payee-avatar" style={{ '--payee-accent': payout.accent } as CSSProperties}>
                         {payout.initials}
@@ -239,18 +254,28 @@ export function PaymentExecutionWorkspace({
                         <strong>{payout.creator}</strong>
                         <small>{payout.invoice} · {project.paymentOrder} · {payout.provider}</small>
                       </div>
-                      <span className={`payment-execution-payee-status ${isReturned ? 'is-error' : informationValidated ? 'is-valid' : 'is-pending'}`}>
-                        {isReturned || !informationValidated ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
-                        {isReturned ? '请款信息已退回' : informationValidated ? '付款信息校验成功' : '付款信息待校验'}
+                      <span className={`payment-execution-payee-status ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
+                        {detailReturned || (!detailPassed && !informationValidated) ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+                        {detailReturned
+                          ? returnItem?.issueType === 'PAYMENT_LIST'
+                            ? '付款清单已退回'
+                            : returnItem?.issueType === 'INVOICE_CONTENT'
+                              ? 'Invoice 已退回'
+                              : '请款信息已退回'
+                          : detailPassed
+                            ? '已通过'
+                            : informationValidated ? '付款信息校验成功' : '付款信息待校验'}
                       </span>
                     </header>
-                    <div className={`payment-execution-account-note ${isReturned ? 'is-error' : informationValidated ? 'is-valid' : 'is-pending'}`}>
-                      {isReturned || !informationValidated ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
-                      <span>{isReturned
-                        ? <><b>失败原因：</b>{failureReason}</>
-                        : informationValidated
-                          ? '付款信息校验成功，收款账户与付款资料均已通过审核'
-                          : '付款信息尚未完成校验，暂不能执行打款'}</span>
+                    <div className={`payment-execution-account-note ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
+                      {detailReturned || (!detailPassed && !informationValidated) ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+                      <span>{detailReturned
+                        ? <><b>退回原因：</b>{failureReason}</>
+                        : detailPassed
+                          ? '该明细已通过财务审核，无需修改'
+                          : informationValidated
+                            ? '付款信息校验成功，收款账户与付款资料均已通过审核'
+                            : '付款信息尚未完成校验，暂不能执行打款'}</span>
                     </div>
                     <dl>
                       <div className="is-account"><dt>收款账户</dt><dd>{payout.account}<small>{transferMethodLabel(payout)}</small></dd></div>
@@ -290,7 +315,9 @@ export function PaymentExecutionWorkspace({
                   <AlertTriangle size={17} />
                   <div>
                     <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
-                    <p>{returnedReason}</p>
+                    <p>{hasScopedReturnItems
+                      ? `${structuredReturnItems.length} 笔明细需要修改，具体原因请查看左侧对应记录。`
+                      : returnedReason}</p>
                   </div>
                 </div>
               ) : null}

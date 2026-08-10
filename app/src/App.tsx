@@ -73,6 +73,7 @@ import {
 import { findInvoiceRequest, getInvoiceManagementView } from './invoice/invoiceManagement';
 import {
   buildRequestFinanceReview,
+  financeReviewReturnItems,
   financeReviewSessionCanApprove,
   financeReviewSessionCanReturn,
   financeReviewSessionKey,
@@ -191,6 +192,8 @@ import {
   canReviewRequestApproval,
   createRequestApprovalState,
   REQUEST_APPROVAL_STATUS_LABEL,
+  requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForInvoice,
   requestApprovalStage,
   returnApprovedRequestToMediaReview,
   type RequestApprovalAction,
@@ -1920,6 +1923,7 @@ export default function App() {
       notify('当前状态不可审批', '该请款已结束当前审批轮次。');
       return false;
     }
+    let structuredReturnItems: ReturnType<typeof financeReviewReturnItems> | undefined;
     if (action === 'APPROVE' && currentStage === 'FINANCE') {
       const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
       const session = financeReviewSessions[financeReviewSessionKey(
@@ -1962,13 +1966,23 @@ export default function App() {
         );
         return false;
       }
+      structuredReturnItems = session
+        ? financeReviewReturnItems(session, financeReview)
+        : undefined;
     }
     try {
       const occurredAt = nowIso();
       const actor = { account: currentUser.account, name: currentUser.name, role: currentUser.role };
       const nextApproval = isPaymentExecutionReturn
         ? returnApprovedRequestToMediaReview(request.approval, actor, reason ?? '', occurredAt)
-        : applyRequestApprovalAction(request.approval, action, actor, reason, occurredAt);
+        : applyRequestApprovalAction(
+            request.approval,
+            action,
+            actor,
+            reason,
+            occurredAt,
+            structuredReturnItems,
+          );
       const invoiceIds = new Set(request.invoiceIds ?? []);
       const sourcePayoutIds = new Set(
         generatedInvoices
@@ -2853,13 +2867,20 @@ export default function App() {
     )
   );
 
+  const requestWholeResourceEditable = (request: RequestProjectSummary) => (
+    requestResourceEditable(request)
+    && !requestApprovalHasScopedReturnItems(request.approval)
+  );
+
   const paymentListItemEditable = (
     request: RequestProjectSummary,
     invoiceId: InvoiceId,
   ) => (
     requestResourceEditable(request)
     && (
-      !requestHasPaymentFailureRecovery(request)
+      requestApprovalHasScopedReturnItems(request.approval)
+        ? Boolean(requestApprovalReturnItemForInvoice(request.approval, invoiceId, 'PAYMENT_LIST'))
+        : !requestHasPaymentFailureRecovery(request)
       || Boolean(paymentFailurePayoutForInvoice(request, invoiceId))
     )
   );
@@ -2868,6 +2889,10 @@ export default function App() {
     request.lifecycle === 'RETURNED'
     && request.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
     && requestResourceEditable(request)
+    && (
+      !requestApprovalHasScopedReturnItems(request.approval)
+      || Boolean(requestApprovalReturnItemForInvoice(request.approval, invoiceId, 'INVOICE_CONTENT'))
+    )
   ));
 
   const registerRequestResourceMutation = (
@@ -2901,7 +2926,7 @@ export default function App() {
     links: PaymentRequestCreatorLink[],
     summary: string,
   ) => {
-    if (!requestResourceEditable(request)) {
+    if (!requestWholeResourceEditable(request)) {
       notify('项目资料已锁定', '当前账号或项目状态不允许修改关联资料。');
       return;
     }
@@ -2984,7 +3009,7 @@ export default function App() {
       setActivePage('invoice');
     },
     onGenerateContract: (request) => {
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能生成新合同。');
         return;
       }
@@ -2993,7 +3018,7 @@ export default function App() {
       setActivePage('contract-create');
     },
     onGenerateInvoice: (request) => {
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能生成新 Invoice。');
         return;
       }
@@ -3002,14 +3027,14 @@ export default function App() {
       setActivePage('invoice-create');
     },
     onUploadContract: (request, input) => {
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能上传新合同。');
         return undefined;
       }
       return uploadContract(input);
     },
     onDeleteContract: (request, contractId) => {
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能删除合同。');
         return;
       }
@@ -3049,7 +3074,7 @@ export default function App() {
       })), `已删除合同 ${contractId}`);
     },
     onDeleteInvoice: (request, invoiceId) => {
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能删除 Invoice。');
         return;
       }
@@ -3086,7 +3111,7 @@ export default function App() {
         list.paymentRequestProjectId === request.paymentRequestProjectId
       ));
       const clearedItemCount = requestLists.reduce((sum, list) => sum + list.items.length, 0);
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !clearedItemCount) return;
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !clearedItemCount) return;
       const clearedAt = nowIso();
       setPaymentLists((current) => current.map((list) => (
         list.paymentRequestProjectId === request.paymentRequestProjectId
@@ -3097,7 +3122,7 @@ export default function App() {
     },
     onRemovePaymentInvoice: (request, paymentListId, invoiceId) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list || list.status !== 'draft') return;
+      if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list || list.status !== 'draft') return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? removePaymentListItem(candidate, invoiceId)
         : candidate));
@@ -3179,7 +3204,16 @@ export default function App() {
     },
     onBeginEditPaymentList: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list) return;
+      const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
+        item.issueType === 'PAYMENT_LIST'
+        && item.paymentItems.some((paymentItem) => paymentItem.paymentListId === paymentListId)
+      ));
+      if (
+        !requestResourceEditable(request)
+        || requestHasPaymentFailureRecovery(request)
+        || !list
+        || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
+      ) return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? beginPaymentListEdit(candidate)
         : candidate));
@@ -3187,7 +3221,17 @@ export default function App() {
     },
     onGeneratePaymentListVersion: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
-      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request) || !list || list.status !== 'draft') return;
+      const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
+        item.issueType === 'PAYMENT_LIST'
+        && item.paymentItems.some((paymentItem) => paymentItem.paymentListId === paymentListId)
+      ));
+      if (
+        !requestResourceEditable(request)
+        || requestHasPaymentFailureRecovery(request)
+        || !list
+        || list.status !== 'draft'
+        || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
+      ) return;
       const result = generatePaymentListVersion({
         list,
         expectedInvoiceIds: paymentRequestInvoiceIds(request.creatorLinks ?? []),

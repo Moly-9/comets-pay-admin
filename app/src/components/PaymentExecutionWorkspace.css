@@ -442,6 +442,10 @@ body:has(.payment-execution-workspace) {
   border-color: #e5cbc6;
 }
 
+.payment-execution-payee.is-passed {
+  border-color: #cfe3d6;
+}
+
 .payment-execution-payee > dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
