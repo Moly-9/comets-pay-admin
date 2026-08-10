@@ -19,6 +19,14 @@
   flex-wrap: wrap;
 }
 
+@media (min-width: 1440px) {
+  .page-stack.payment-workbench-page {
+    width: calc(100% - 152px);
+    margin-right: 76px;
+    margin-left: 76px;
+  }
+}
+
 .payment-project-summary-bar {
   min-height: 58px;
   gap: 18px;
