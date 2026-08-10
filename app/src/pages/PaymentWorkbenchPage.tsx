@@ -48,8 +48,8 @@ const TAB_SUMMARY_LABELS: Record<WorkbenchTab, string> = {
 
 const TAB_STATUSES: Record<WorkbenchTab, Payout['status'][]> = {
   review: ['飞书审批中'],
-  payment: ['等待付款', '付款处理中', '付款失败'],
-  paid: ['已付款'],
+  payment: ['等待付款'],
+  paid: ['付款处理中', '已付款', '付款失败'],
   returned: ['已退回'],
 };
 
@@ -221,16 +221,16 @@ const requestMatchesWorkbenchTab = (
 };
 
 const paymentProjectPresentation = (tab: WorkbenchTab, payouts: Payout[]) => {
-  if (tab !== 'payment') {
-    return { status: tab === 'review' ? '待财务审核' : TAB_PROJECT_STATUS[tab], actionLabel: TAB_ACTION_LABELS[tab] };
-  }
+  if (tab === 'review') return { status: '待财务审核', actionLabel: '审核' };
+  if (tab === 'returned') return { status: '已退回', actionLabel: '查看原因' };
+  if (tab === 'payment') return { status: '待打款', actionLabel: '执行打款' };
   if (payouts.some((payout) => payout.status === '付款失败')) {
     return { status: '部分失败', actionLabel: '处理失败' };
   }
   if (payouts.some((payout) => payout.status === '付款处理中')) {
     return { status: '付款处理中', actionLabel: '查看进度' };
   }
-  return { status: '待打款', actionLabel: '执行打款' };
+  return { status: '已付款', actionLabel: '查看详情' };
 };
 
 const paymentProjectStatusTone = (status: string) => {

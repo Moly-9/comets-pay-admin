@@ -340,6 +340,7 @@ describe('payment batch snapshots', () => {
 
     records.forEach((record) => {
       expect(record.items.length).toBeLessThanOrEqual(5);
+      expect(record.request.lifecycle).toBe('COMPLETED');
       expect(new Set(record.items.map((item) => item.provider))).toEqual(new Set([record.provider]));
       expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
       expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
@@ -350,15 +351,12 @@ describe('payment batch snapshots', () => {
 
       const counts = paymentBatchStatusCounts(record);
       if (record.status === '已付款') {
-        expect(record.request.lifecycle).toBe('COMPLETED');
         expect(record.items.every((item) => item.paymentStatus === '已付款')).toBe(true);
         expect(counts).toEqual({ succeeded: record.items.length, failed: 0, processing: 0 });
       } else if (record.status === '付款处理中') {
-        expect(record.request.lifecycle).toBe('APPROVED');
         expect(record.items.every((item) => item.paymentStatus === '付款处理中')).toBe(true);
         expect(counts).toEqual({ succeeded: 0, failed: 0, processing: record.items.length });
       } else {
-        expect(record.request.lifecycle).toBe('APPROVED');
         expect(record.items.filter((item) => item.paymentStatus === '付款失败')).toHaveLength(1);
         expect(record.items.filter((item) => item.paymentStatus === '已付款')).toHaveLength(record.items.length - 1);
         expect(record.items.find((item) => item.paymentStatus === '付款失败')?.failure?.code)

@@ -42,10 +42,10 @@ export const applyPaymentBatchPrototypeScenario = ({
   generatedInvoices: readonly GeneratedInvoiceRecord[];
   paymentLists: readonly PaymentListRecord[];
 }) => {
-  const requestStatusById = new Map(requests.flatMap((request) => {
+  const batchedRequestIds = new Set(requests.flatMap((request) => {
     const status = paymentBatchPrototypeStatusFor(request);
     return request.paymentRequestProjectId && status
-      ? [[request.paymentRequestProjectId, status] as const]
+      ? [request.paymentRequestProjectId]
       : [];
   }));
   const payoutScenario = new Map<string, {
@@ -73,15 +73,14 @@ export const applyPaymentBatchPrototypeScenario = ({
     requests: requests.map((request): RequestProjectSummary => {
       const batchStatus = paymentBatchPrototypeStatusFor(request);
       if (!batchStatus) return request;
-      const paid = batchStatus === '已付款';
       return {
         ...request,
-        lifecycle: paid ? 'COMPLETED' : 'APPROVED',
-        status: paid ? '已付款' : '待打款',
-        filter: paid ? 'processed' : 'pending',
+        lifecycle: 'COMPLETED',
+        status: '已付款',
+        filter: 'processed',
         generatedDetail: request.generatedDetail ? {
           ...request.generatedDetail,
-          paymentListStatus: paid ? '已付款' : '已批准',
+          paymentListStatus: '已付款',
         } : request.generatedDetail,
       };
     }),
@@ -107,13 +106,11 @@ export const applyPaymentBatchPrototypeScenario = ({
       };
     }),
     paymentLists: paymentLists.map((paymentList): PaymentListRecord => {
-      const batchStatus = paymentList.paymentRequestProjectId
-        ? requestStatusById.get(paymentList.paymentRequestProjectId)
-        : undefined;
-      if (!batchStatus) return paymentList;
+      if (!paymentList.paymentRequestProjectId
+        || !batchedRequestIds.has(paymentList.paymentRequestProjectId)) return paymentList;
       return {
         ...paymentList,
-        status: batchStatus === '已付款' ? 'paid' : 'approved',
+        status: 'paid',
       };
     }),
   };
