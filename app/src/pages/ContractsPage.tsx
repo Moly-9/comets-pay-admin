@@ -2,6 +2,7 @@ import { AlertTriangle, Download, FilePlus2, Search, Trash2, Upload } from 'luci
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Modal, PageHeading } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
+import { Pagination, usePagination } from '../components/Pagination';
 import {
   contractExportArchiveFilename,
   contractSelectionId,
@@ -64,7 +65,7 @@ export function ContractsPage({
     ? contracts.find((contract) => contract.id === selectedContractId)
     : null;
 
-  const visible = useMemo(() => {
+  const filteredContracts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return contracts.filter((contract) => {
       const readiness = getContractReadiness(contract);
@@ -80,6 +81,13 @@ export function ContractsPage({
       return matchesQuery && matchesFilter;
     });
   }, [contracts, filter, search]);
+  const {
+    page,
+    pageItems: visible,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}` });
 
   const readyCount = contracts.filter((contract) => getContractReadiness(contract).ready).length;
   const attentionCount = contracts.filter((contract) => !contract.isTemplate && !getContractReadiness(contract).ready).length;
@@ -89,7 +97,7 @@ export function ContractsPage({
     () => selectedContracts(contracts, selectedIds),
     [contracts, selectedIds],
   );
-  const visibleIds = useMemo(() => visible.map(contractSelectionId), [visible]);
+  const visibleIds = useMemo(() => filteredContracts.map(contractSelectionId), [filteredContracts]);
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
   const selectedCanBeDeleted = selected.length > 0 && selected.every(canDeleteContract);
@@ -254,8 +262,8 @@ export function ContractsPage({
                     type="checkbox"
                     aria-label="全选当前列表合同"
                     checked={allVisibleSelected}
-                    disabled={!visible.length}
-                    onChange={() => setSelectedIds((current) => toggleVisibleContractSelection(current, visible))}
+                    disabled={!filteredContracts.length}
+                    onChange={() => setSelectedIds((current) => toggleVisibleContractSelection(current, filteredContracts))}
                   />
                 </th>
                 <th>合同</th>
@@ -319,6 +327,17 @@ export function ContractsPage({
               {visible.length === 0 ? <tr><td className="request-project-empty" colSpan={8}>暂无符合条件的合同</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredContracts.length} 条</span>
+          <Pagination
+            ariaLabel="合同列表分页"
+            page={page}
+            pageSize={pageSize}
+            total={filteredContracts.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </div>
       </section>
       {uploadOpen ? (

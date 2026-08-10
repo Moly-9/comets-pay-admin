@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Pagination, usePagination } from '../components/Pagination';
 import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
@@ -372,6 +373,15 @@ export function MediaPaymentProjectsPage({
     requests: visibleRequests,
     search,
     filters,
+  });
+  const {
+    page,
+    pageItems: paginatedRequests,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(filteredRequests, {
+    resetKey: `${search}\u0000${JSON.stringify(filters)}`,
   });
   const customerCounts = visibleRequests.reduce<Record<string, number>>((result, request) => (
     request.brand ? { ...result, [request.brand]: (result[request.brand] ?? 0) + 1 } : result
@@ -941,7 +951,7 @@ export function MediaPaymentProjectsPage({
           <table className="data-table operational-table">
             <thead><tr><th>项目编号</th><th>关联项目</th><th>品牌</th><th>负责 PM</th><th>达人</th><th>请款金额</th><th>状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
-              {filteredRequests.map((request) => {
+              {paginatedRequests.map((request) => {
                 const canShowConfirmationExport = (
                   currentUser.roleKey === 'media'
                   && request.media === currentScopeName
@@ -986,6 +996,17 @@ export function MediaPaymentProjectsPage({
               {!filteredRequests.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的项目</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredRequests.length} 个项目</span>
+          <Pagination
+            ariaLabel="我的项目列表分页"
+            page={page}
+            pageSize={pageSize}
+            total={filteredRequests.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </div>
       </section>
       {creating ? (

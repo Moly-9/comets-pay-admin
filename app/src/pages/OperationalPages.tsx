@@ -44,7 +44,7 @@ import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
-import { Pagination } from '../components/Pagination';
+import { Pagination, usePagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
@@ -586,7 +586,7 @@ export function ProjectsPage({
   const minBudget = filters.minBudget ? Number(filters.minBudget) : null;
   const maxBudget = filters.maxBudget ? Number(filters.maxBudget) : null;
   const invalidBudgetRange = minBudget !== null && maxBudget !== null && minBudget > maxBudget;
-  const visible = relatedProjects.filter((project) => {
+  const filteredProjects = relatedProjects.filter((project) => {
     const budget = parseProjectBudget(project.budget);
     const matchesSearch = !query || `${project.name}${project.id}`.toLowerCase().includes(query);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(project.brand);
@@ -597,6 +597,13 @@ export function ProjectsPage({
     const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(project.status);
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
+  const {
+    page: projectPage,
+    pageItems: visibleProjects,
+    pageSize: projectPageSize,
+    setPage: setProjectPage,
+    setPageSize: setProjectPageSize,
+  } = usePagination(filteredProjects, { resetKey: `${search}\u0000${JSON.stringify(filters)}` });
   const clearProjectFilters = () => {
     setSearch('');
     setFilters(createEmptyProjectListFilters());
@@ -822,7 +829,7 @@ export function ProjectsPage({
           pmOptions={pmFilterOptions}
           currencyOptions={currencyFilterOptions}
           statusOptions={statusSelectOptions}
-          resultCount={visible.length}
+          resultCount={filteredProjects.length}
           totalCount={relatedProjects.length}
           invalidBudgetRange={invalidBudgetRange}
           onSearchChange={setSearch}
@@ -833,7 +840,7 @@ export function ProjectsPage({
           <table className="data-table operational-table">
             <thead><tr><th>项目</th><th>合作客户</th><th>负责 PM</th><th>达人</th><th>预算</th><th>状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
-              {visible.map((project) => (
+              {visibleProjects.map((project) => (
                 <tr key={project.id}>
                   <td><strong>{project.name}</strong><small className="cell-subtext">{project.id}</small></td>
                   <td>{project.brand}</td>
@@ -844,9 +851,20 @@ export function ProjectsPage({
                   <td className="action-cell"><button className="text-link" type="button" onClick={() => { setSelectedProjectId(project.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button></td>
                 </tr>
               ))}
-              {visible.length === 0 ? <tr><td className="project-list-empty" colSpan={7}>暂无符合当前搜索与筛选条件的项目</td></tr> : null}
+              {filteredProjects.length === 0 ? <tr><td className="project-list-empty" colSpan={7}>暂无符合当前搜索与筛选条件的项目</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredProjects.length} 个项目</span>
+          <Pagination
+            ariaLabel="项目列表分页"
+            page={projectPage}
+            pageSize={projectPageSize}
+            total={filteredProjects.length}
+            onPageChange={setProjectPage}
+            onPageSizeChange={setProjectPageSize}
+          />
         </div>
       </section>
       {modalOpen ? (
@@ -1123,7 +1141,7 @@ export function RequestsPage({
   const invalidRequestBudgetRange = requestMinBudget !== null
     && requestMaxBudget !== null
     && requestMinBudget > requestMaxBudget;
-  const visibleRequests = relatedRequests.filter((request) => {
+  const filteredRequests = relatedRequests.filter((request) => {
     const budget = parseProjectBudget(request.amount);
     const matchesSearch = !requestQuery || `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.cooperationProjectCode ?? ''}`.toLowerCase().includes(requestQuery);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
@@ -1135,6 +1153,13 @@ export function RequestsPage({
     const matchesStatus = filters.statuses.length === 0 || Boolean(requestStatus && filters.statuses.includes(requestStatus));
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
+  const {
+    page: requestPage,
+    pageItems: visibleRequests,
+    pageSize: requestPageSize,
+    setPage: setRequestPage,
+    setPageSize: setRequestPageSize,
+  } = usePagination(filteredRequests, { resetKey: `${search}\u0000${JSON.stringify(filters)}` });
 
   const clearRequestFilters = () => {
     setSearch('');
@@ -1205,7 +1230,7 @@ export function RequestsPage({
           pmOptions={requestPmFilterOptions}
           currencyOptions={requestCurrencyFilterOptions}
           statusOptions={requestStatusSelectOptions}
-          resultCount={visibleRequests.length}
+          resultCount={filteredRequests.length}
           totalCount={relatedRequests.length}
           invalidBudgetRange={invalidRequestBudgetRange}
           onSearchChange={setSearch}
@@ -1230,9 +1255,20 @@ export function RequestsPage({
                   <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</button></td>
                 </tr>
               ))}
-              {visibleRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={10}>暂无符合条件的请款项目</td></tr> : null}
+              {filteredRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={10}>暂无符合条件的请款项目</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredRequests.length} 个项目</span>
+          <Pagination
+            ariaLabel="请款项目列表分页"
+            page={requestPage}
+            pageSize={requestPageSize}
+            total={filteredRequests.length}
+            onPageChange={setRequestPage}
+            onPageSizeChange={setRequestPageSize}
+          />
         </div>
       </section>
     </div>
@@ -2064,8 +2100,6 @@ export function CreatorsPage({
   currentUserAccount: string;
 }) {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -2084,16 +2118,16 @@ export function CreatorsPage({
     const status = getDefaultPayoutAccount(creator.payoutAccounts)?.status ?? 'DRAFT';
     return ['DRAFT', 'REVIEW_REQUIRED', 'INVALID'].includes(status);
   }).length;
-  const totalPages = Math.max(1, Math.ceil(filteredCreators.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const visibleCreators = filteredCreators.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  const {
+    page,
+    pageItems: visibleCreators,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(filteredCreators, { resetKey: normalizedSearch });
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    setPage(1);
   };
 
   const openProfile = (creator: CreatorProfile) => {
@@ -2401,14 +2435,11 @@ export function CreatorsPage({
           <span>共 {filteredCreators.length} 条</span>
           <Pagination
             ariaLabel="达人列表分页"
-            page={currentPage}
+            page={page}
             pageSize={pageSize}
             total={filteredCreators.length}
             onPageChange={setPage}
-            onPageSizeChange={(nextPageSize) => {
-              setPageSize(nextPageSize);
-              setPage(1);
-            }}
+            onPageSizeChange={setPageSize}
           />
         </div>
       </section>
@@ -2556,10 +2587,61 @@ const COLLABORATIONS = [
 ];
 
 export function CollaborationsPage({ notify, canImport }: { notify: Notify; canImport: boolean }) {
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLowerCase();
+  const filteredCollaborations = COLLABORATIONS.filter((item) => (
+    !query || `${item.creator}${item.project}${item.deliverable}${item.invoice}${item.payment}`.toLowerCase().includes(query)
+  ));
+  const {
+    page,
+    pageItems: visibleCollaborations,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(filteredCollaborations, { resetKey: query });
   const importAction = canImport
     ? <Button icon={<Upload size={17} />} onClick={() => notify('导入模板', '已准备达人合作名单模板。')}>导入合作名单</Button>
     : undefined;
-  return <div className="page-stack"><PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} /><section className="content-card"><div className="content-toolbar"><SearchBar value="" onChange={() => undefined} placeholder="搜索达人或项目" /><span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span></div><div className="table-scroll"><table className="data-table operational-table"><thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead><tbody>{COLLABORATIONS.map((item) => <tr key={`${item.creator}${item.project}`}><td><strong>{item.creator}</strong></td><td>{item.project}</td><td>{item.deliverable}</td><td>{item.invoice}</td><td><ProjectStatus status={item.payment} /></td><td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td></tr>)}</tbody></table></div></section></div>;
+  return (
+    <div className="page-stack">
+      <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
+      <section className="content-card">
+        <div className="content-toolbar">
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索达人或项目" />
+          <span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table operational-table">
+            <thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead>
+            <tbody>
+              {visibleCollaborations.map((item) => (
+                <tr key={`${item.creator}${item.project}`}>
+                  <td><strong>{item.creator}</strong></td>
+                  <td>{item.project}</td>
+                  <td>{item.deliverable}</td>
+                  <td>{item.invoice}</td>
+                  <td><ProjectStatus status={item.payment} /></td>
+                  <td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td>
+                </tr>
+              ))}
+              {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={6}>暂无符合条件的合作记录</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredCollaborations.length} 条</span>
+          <Pagination
+            ariaLabel="合作名单分页"
+            page={page}
+            pageSize={pageSize}
+            total={filteredCollaborations.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export function InvoicePage({
@@ -2915,16 +2997,23 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
   const listScrollPositionRef = useRef(0);
   const rows = useMemo(() => paymentBatchRows(batches), [batches]);
-  const visibleRows = useMemo(() => filterPaymentBatchRows(rows, {
+  const filteredRows = useMemo(() => filterPaymentBatchRows(rows, {
     search,
     start,
     end,
     provider,
   }), [end, provider, rows, search, start]);
+  const {
+    page: batchPage,
+    pageItems: visibleRows,
+    pageSize: batchPageSize,
+    setPage: setBatchPage,
+    setPageSize: setBatchPageSize,
+  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}` });
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
   const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
-  const selectedVisibleCount = visibleRows.filter((row) => selectedIds.has(row.id)).length;
-  const allVisibleSelected = visibleRows.length > 0 && selectedVisibleCount === visibleRows.length;
+  const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
+  const allVisibleSelected = filteredRows.length > 0 && selectedVisibleCount === filteredRows.length;
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
   const exportDisabled = !exportAvailability.records || exporting !== null;
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
@@ -3182,8 +3271,8 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
                     type="checkbox"
                     aria-label="全选当前筛选结果中的付款批次"
                     checked={allVisibleSelected}
-                    disabled={!visibleRows.length}
-                    onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, visibleRows))}
+                    disabled={!filteredRows.length}
+                    onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, filteredRows))}
                   />
                 </th>
                 <th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
@@ -3222,9 +3311,20 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
                   </tr>
                 );
               })}
-              {!visibleRows.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
+              {!filteredRows.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredRows.length} 个批次{selectedRows.length ? `，已选 ${selectedRows.length} 个` : ''}</span>
+          <Pagination
+            ariaLabel="付款批次列表分页"
+            page={batchPage}
+            pageSize={batchPageSize}
+            total={filteredRows.length}
+            onPageChange={setBatchPage}
+            onPageSizeChange={setBatchPageSize}
+          />
         </div>
       </section>
     </div>
@@ -3359,5 +3459,49 @@ const INITIAL_NOTIFICATIONS = [
 export function NotificationsPage() {
   const [items, setItems] = useState(INITIAL_NOTIFICATIONS);
   const unreadCount = useMemo(() => items.filter((item) => item.unread).length, [items]);
-  return <div className="page-stack"><PageHeading title="通知" subtitle={`你有 ${unreadCount} 条未读消息。`} actions={<Button variant="secondary" onClick={() => setItems((current) => current.map((item) => ({ ...item, unread: false })))}>全部标为已读</Button>} /><section className="notification-card">{items.map((item) => { const Icon = item.icon; return <button className={`notification-item ${item.unread ? 'notification-unread' : ''}`} key={item.id} type="button" onClick={() => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unread: false } : entry))}><span className="notification-symbol"><Icon size={19} /></span><span><strong>{item.title}</strong><small>{item.body}</small></span><time><Clock3 size={14} />{item.time}</time>{item.unread ? <i className="unread-dot" /> : null}</button>; })}</section></div>;
+  const {
+    page,
+    pageItems: visibleItems,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(items, { resetKey: items.map((item) => item.id).join('|') });
+  return (
+    <div className="page-stack">
+      <PageHeading
+        title="通知"
+        subtitle={`你有 ${unreadCount} 条未读消息。`}
+        actions={<Button variant="secondary" onClick={() => setItems((current) => current.map((item) => ({ ...item, unread: false })))}>全部标为已读</Button>}
+      />
+      <section className="notification-card">
+        {visibleItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              className={`notification-item ${item.unread ? 'notification-unread' : ''}`}
+              key={item.id}
+              type="button"
+              onClick={() => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unread: false } : entry))}
+            >
+              <span className="notification-symbol"><Icon size={19} /></span>
+              <span><strong>{item.title}</strong><small>{item.body}</small></span>
+              <time><Clock3 size={14} />{item.time}</time>
+              {item.unread ? <i className="unread-dot" /> : null}
+            </button>
+          );
+        })}
+        <div className="table-footer notification-footer">
+          <span>共 {items.length} 条通知</span>
+          <Pagination
+            ariaLabel="通知列表分页"
+            page={page}
+            pageSize={pageSize}
+            total={items.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }

@@ -1,11 +1,12 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SelectField } from './Common';
 
 type PaginationItem = number | 'start-ellipsis' | 'end-ellipsis';
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
-const buildPaginationItems = (currentPage: number, totalPages: number): PaginationItem[] => {
+export const buildPaginationItems = (currentPage: number, totalPages: number): PaginationItem[] => {
   if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
   if (currentPage <= 4) return [1, 2, 3, 4, 5, 'end-ellipsis', totalPages];
   if (currentPage >= totalPages - 3) {
@@ -13,6 +14,65 @@ const buildPaginationItems = (currentPage: number, totalPages: number): Paginati
   }
   return [1, 'start-ellipsis', currentPage - 1, currentPage, currentPage + 1, 'end-ellipsis', totalPages];
 };
+
+export const paginateItems = <T,>(items: readonly T[], page: number, pageSize: number) => {
+  const safePageSize = Math.max(1, pageSize);
+  const totalPages = Math.max(1, Math.ceil(items.length / safePageSize));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const start = (currentPage - 1) * safePageSize;
+  return {
+    currentPage,
+    pageItems: items.slice(start, start + safePageSize),
+    totalPages,
+  };
+};
+
+export function usePagination<T>(
+  items: readonly T[],
+  {
+    initialPageSize = DEFAULT_PAGE_SIZE_OPTIONS[0],
+    resetKey,
+  }: {
+    initialPageSize?: number;
+    resetKey?: string | number;
+  } = {},
+) {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(initialPageSize);
+  const { currentPage, pageItems, totalPages } = useMemo(
+    () => paginateItems(items, requestedPage, pageSize),
+    [items, pageSize, requestedPage],
+  );
+
+  useEffect(() => {
+    setRequestedPage(1);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (requestedPage !== currentPage) setRequestedPage(currentPage);
+  }, [currentPage, requestedPage]);
+
+  const setPage = useCallback((nextPage: number) => {
+    setRequestedPage(Math.min(Math.max(1, nextPage), totalPages));
+  }, [totalPages]);
+
+  const setPageSize = useCallback((nextPageSize: number) => {
+    setPageSizeState(Math.max(1, nextPageSize));
+    setRequestedPage(1);
+  }, []);
+
+  const resetPage = useCallback(() => setRequestedPage(1), []);
+
+  return {
+    page: currentPage,
+    pageItems,
+    pageSize,
+    resetPage,
+    setPage,
+    setPageSize,
+    totalPages,
+  };
+}
 
 export function Pagination({
   page,

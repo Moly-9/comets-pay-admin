@@ -1,7 +1,7 @@
 import { CalendarDays, ChevronRight, Plus, Search, WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
-import { Pagination } from '../components/Pagination';
+import { Pagination, usePagination } from '../components/Pagination';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
@@ -438,12 +438,14 @@ function PaymentProjectTable({
   onSelect: (project: PaymentProjectRow) => void;
   emptyText: string;
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const totalPages = Math.max(1, Math.ceil(projects.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const visibleProjects = projects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const {
+    page,
+    pageItems: visibleProjects,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(projects, { resetKey: projects.map((project) => project.id).join('|') });
   const selectedCount = projects.filter((project) => selectedIds.has(project.id)).length;
   const allSelected = projects.length > 0 && selectedCount === projects.length;
 
@@ -556,14 +558,11 @@ function PaymentProjectTable({
         <span>共 {projects.length} 个项目{selectedCount ? `，已选 ${selectedCount} 个` : ''}</span>
         <Pagination
           ariaLabel="付款项目列表分页"
-          page={currentPage}
+          page={page}
           pageSize={pageSize}
           total={projects.length}
           onPageChange={setPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
-            setPage(1);
-          }}
+          onPageSizeChange={setPageSize}
         />
       </div>
     </div>

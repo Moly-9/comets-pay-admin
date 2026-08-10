@@ -6661,7 +6661,9 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  border-top: 1px solid #eceff3;
   flex-wrap: wrap;
+  padding: 12px 4px 0;
   color: #737987;
   font-size: 11.5px;
 }
@@ -6685,6 +6687,7 @@ button:disabled {
   background: #fff;
   padding: 0 6px;
   color: #262a31;
+  cursor: pointer;
   font-family: inherit;
   font-size: 12px;
   line-height: 30px;
@@ -6749,6 +6752,36 @@ button:disabled {
 .pagination-size-select .custom-select-trigger:focus-visible {
   border-color: #1677ff;
   box-shadow: 0 0 0 2px rgba(5, 145, 255, 0.1);
+}
+
+@media (max-width: 640px) {
+  .table-footer {
+    align-items: flex-start;
+    padding-inline: 0;
+  }
+
+  .table-footer > span {
+    width: 100%;
+  }
+
+  .pagination {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .pagination > button,
+  .pagination-ellipsis {
+    min-width: 36px;
+    height: 36px;
+  }
+
+  .pagination-size-select {
+    margin-left: auto;
+  }
+
+  .pagination-size-select.custom-select-compact .custom-select-trigger {
+    height: 36px;
+  }
 }
 
 .empty-table {
@@ -12173,6 +12206,10 @@ button:disabled {
 
 .notification-card {
   overflow: hidden;
+}
+
+.notification-footer {
+  padding: 12px 20px;
 }
 
 .notification-item {
