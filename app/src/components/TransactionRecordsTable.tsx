@@ -1,4 +1,4 @@
-import { Banknote, CalendarClock, Eye, ReceiptText, UserRoundCheck } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { formatAmount } from '../data';
 import type { PaymentBatchRecord } from '../paymentBatches';
@@ -106,40 +106,28 @@ export function TransactionRecordsTable({
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-invoice-cell">
-                      <span className="transaction-field-icon is-invoice" aria-hidden="true"><ReceiptText size={14} /></span>
-                      <span>
-                        <strong>{invoiceNumber || '未记录'}</strong>
-                        <small>{details.paymentBatchCode}</small>
-                      </span>
+                      <strong>{invoiceNumber || '未记录'}</strong>
+                      <small>{details.paymentBatchCode}</small>
                     </span>
                   </td>
                   <td><PaymentProviderBadge compact provider={payout.provider} /></td>
                   <td><StatusMark status={payout.status} /></td>
                   <td>
                     <span className="transaction-data-cell transaction-amount-cell">
-                      <span className="transaction-field-icon is-amount" aria-hidden="true"><Banknote size={14} /></span>
-                      <span>
-                        <strong>{formatAmount(payout)}</strong>
-                        <small>收款 {details.receiveCurrency}</small>
-                      </span>
+                      <strong>{formatAmount(payout)}</strong>
+                      <small>收款 {details.receiveCurrency}</small>
                     </span>
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-time-cell">
-                      <span className="transaction-field-icon is-time" aria-hidden="true"><CalendarClock size={14} /></span>
-                      <span>
-                        <strong>{transactionTime.date}</strong>
-                        <small>{transactionTime.time}</small>
-                      </span>
+                      <strong>{transactionTime.date}</strong>
+                      <small>{transactionTime.time}</small>
                     </span>
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-payer-cell">
-                      <span className="transaction-field-icon is-payer" aria-hidden="true"><UserRoundCheck size={14} /></span>
-                      <span>
-                        <strong>{details.payer}</strong>
-                        <small>{payerTime.date} {payerTime.time}</small>
-                      </span>
+                      <strong>{details.payer}</strong>
+                      <small>{payerTime.date} {payerTime.time}</small>
                     </span>
                   </td>
                   <td className="action-cell">

@@ -96,9 +96,12 @@ describe('TransactionsPage currency overview', () => {
       />,
     );
 
-    expect(html).toContain('<span>全部</span><small>2</small>');
-    expect(html).toContain('<span>已付款</span><small>1</small>');
-    expect(html).toContain('<span>付款失败</span><small>1</small>');
+    expect(html).toContain('<span>全部</span>');
+    expect(html).toContain('<span>已付款</span>');
+    expect(html).toContain('<span>付款失败</span>');
+    expect(html).not.toContain('<span>全部</span><small>');
+    expect(html).not.toContain('<span>已付款</span><small>');
+    expect(html).not.toContain('<span>付款失败</span><small>');
     expect(html).not.toContain('<span>处理中</span>');
     expect(html).toContain('INV-11');
     expect(html).toContain('INV-12');
@@ -132,10 +135,9 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>时间</th>');
     expect(html).toContain('>付款人 / 付款时间</th>');
     expect(html).toContain('>操作</th>');
-    expect(html).toContain('transaction-field-icon is-invoice');
-    expect(html).toContain('transaction-field-icon is-amount');
-    expect(html).toContain('transaction-field-icon is-time');
-    expect(html).toContain('transaction-field-icon is-payer');
+    expect(html).not.toContain('transaction-field-icon');
+    expect(html).toContain('INV-21');
+    expect(html).toContain('USD 100');
   });
 });
 

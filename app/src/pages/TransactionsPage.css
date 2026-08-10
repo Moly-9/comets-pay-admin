@@ -38,27 +38,6 @@
 .transactions-page .tab-button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-}
-
-.transactions-page .tab-button small {
-  display: inline-flex;
-  min-width: 22px;
-  height: 20px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: #f1f2f5;
-  padding: 0 6px;
-  color: #7b808c;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.transactions-page .tab-button.tab-active small {
-  background: #fff0ec;
-  color: #b24d3e;
 }
 
 .payment-workbench-summary-card.transaction-channel-summary-card .payment-summary-secondary.transaction-channel-summary-details {
@@ -67,9 +46,9 @@
 }
 
 .transaction-channel-summary-card .transaction-channel-summary-row {
-  grid-template-columns: minmax(72px, 1fr) auto minmax(56px, auto);
-  justify-content: stretch;
-  gap: 10px;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: start;
+  column-gap: 8px;
   padding: 4px 0;
 }
 
@@ -172,14 +151,6 @@
 .transaction-data-cell {
   display: grid;
   min-width: 0;
-  grid-template-columns: 30px minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-}
-
-.transaction-data-cell > span:last-child {
-  display: grid;
-  min-width: 0;
   gap: 3px;
 }
 
@@ -201,37 +172,6 @@
   font-size: 10px;
   font-weight: 400;
   line-height: 1.4;
-}
-
-.transaction-field-icon {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: #f3f1f6;
-  color: #765f82;
-}
-
-.transaction-field-icon.is-invoice {
-  background: #eef3fb;
-  color: #55709f;
-}
-
-.transaction-field-icon.is-amount {
-  background: #edf7f1;
-  color: #3f7f5d;
-}
-
-.transaction-field-icon.is-time {
-  background: #fff4e9;
-  color: #9a653a;
-}
-
-.transaction-field-icon.is-payer {
-  background: #f6eff8;
-  color: #765f82;
 }
 
 .transaction-invoice-cell strong,

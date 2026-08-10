@@ -171,6 +171,39 @@ final result: passed
 
 ---
 
+# Transaction Record Spacing And Icon Removal Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-57a3eef1-4988-463c-9ea4-8b22ed9c762b.png` (1920 x 962 px, including browser chrome).
+- Desktop implementation: `artifacts/transaction-records-spacing-desktop-1920x965.jpg` (1905 x 957 px content capture from a 1920 x 965 CSS viewport at device scale factor 1).
+- Mobile implementation: `artifacts/transaction-records-spacing-mobile-390x844.jpg` (375 x 812 px content capture from a 390 x 844 CSS viewport at device scale factor 1).
+- Focused source crop: `artifacts/transaction-records-spacing-reference-focus.png` (720 x 260 px).
+- Focused implementation crop: `artifacts/transaction-records-spacing-desktop-focus.jpg` (720 x 260 px).
+- State: signed in as the local admin demo account, with the `交易记录` page and `全部` tab active.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the existing COMETS Pay type hierarchy, weights, line heights, and tab labels remain unchanged; removing the icons does not alter the two-line data hierarchy.
+- Spacing and layout rhythm: each provider row now uses three content-width columns with one shared gap. Browser measurements show equal label-to-rate and rate-to-count gaps for Airwallex, PayPal, and PayMax: about 9.2 px in the desktop capture and 8 px at 390 px.
+- Colors and visual tokens: the lilac success-rate card, semantic channel/status treatments, borders, and table colors are unchanged.
+- Image and icon quality: Invoice, amount, time, and payer/payment-time cells contain zero icons. Existing creator avatars, channel badges, and the `查看详情` action icon remain intact because they are outside the requested removal scope.
+- Copy and content: the three final-state tabs retain `全部`, `已付款`, and `付款失败` while their numeric badges are removed. Dynamic totals differ from the supplied screenshot because the current fixture contains newer completed transactions.
+- Responsive behavior: desktop and 390 px views show no page-level horizontal overflow. The wide transaction table remains intentionally contained in its own horizontal scroller.
+
+## Comparison And Verification
+
+- The source and desktop implementation were opened together for a full-view comparison; the page structure, card color, filter layout, and transaction table remain consistent with the existing design.
+- The 720 x 260 source and implementation card crops were opened together for focused comparison. The requested channel metrics are visibly tighter, and both adjacent gaps use the same grid spacing.
+- DOM verification found zero tab count badges and zero field icons in the four specified columns.
+- The three tabs remain functional, transaction filters and table content remain present, and the browser console contained zero application warnings or errors.
+- This scoped pass required no follow-up P0/P1/P2 visual correction after the first browser capture.
+
+final result: passed
+
+---
+
 # My Projects Request Progress Restoration Design QA
 
 ## Evidence
