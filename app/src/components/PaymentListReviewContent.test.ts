@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import type { FinanceReviewPage } from '../financeReview';
+import { financeWorkspaceComparisonFields } from './PaymentListReviewContent';
 
 const reviewContentSource = readFileSync(
   new URL('./PaymentListReviewContent.tsx', import.meta.url),
@@ -11,8 +13,58 @@ const workspaceSource = readFileSync(
 );
 
 describe('shared payment-list finance review content', () => {
-  it('renders every comparison field and the complete unmasked current account snapshot', () => {
-    expect(reviewContentSource).toContain('currentReview.fields.map');
+  it('limits the finance workspace comparison to the fields selected for manual review', () => {
+    const fields = [
+      'invoice-number',
+      'creator',
+      'amount',
+      'real-name',
+      'account-name',
+      'account-number',
+      'bank-name',
+      'bank-address',
+      'swift-code',
+      'iban',
+      'reason',
+      'fee',
+      'reference',
+      'validation',
+    ].map((id) => ({
+      id,
+      label: id,
+      invoiceValue: id,
+      paymentValue: id,
+      state: 'match' as const,
+    }));
+    const page = {
+      key: 'invoice:test',
+      kind: 'pair',
+      invoiceId: 'invoice-test',
+      invoiceNumber: 'INV-TEST',
+      creatorName: 'Test Creator',
+      paymentItems: [],
+      sourceVersions: [],
+      fields,
+      mismatchCount: 0,
+    } as unknown as FinanceReviewPage;
+
+    expect(financeWorkspaceComparisonFields(page, 'current-full').map((field) => field.id)).toEqual([
+      'real-name',
+      'account-name',
+      'account-number',
+      'bank-name',
+      'bank-address',
+      'swift-code',
+      'iban',
+      'reason',
+      'fee',
+      'reference',
+    ]);
+    expect(financeWorkspaceComparisonFields(page, 'all-summary')).toEqual(fields);
+  });
+
+  it('renders the selected comparison fields and the complete current account snapshot', () => {
+    expect(reviewContentSource).toContain('currentReviewFields.map');
     expect(reviewContentSource).toContain('核对字段');
     expect(reviewContentSource).toContain('Invoice');
     expect(reviewContentSource).toContain('付款清单');
@@ -24,7 +76,9 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('Beneficiary Bank Address');
     expect(reviewContentSource).toContain('Swift Code');
     expect(reviewContentSource).toContain('IBAN (optional)');
-    expect(reviewContentSource).toContain('付款清单提交时冻结，不做脱敏');
+    expect(reviewContentSource).toContain('当前账户字段为原型展示，具体字段需调用 Airwallex API');
+    expect(reviewContentSource).toContain('details?.accountName || row.item.snapshot.realName');
+    expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');
   });
 
   it('keeps the Invoice page, payment comparison, account snapshot, and export target synchronized', () => {

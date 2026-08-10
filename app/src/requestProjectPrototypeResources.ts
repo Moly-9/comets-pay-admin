@@ -343,7 +343,7 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.flatMap((request, 
         snapshot: {
           ...source.snapshot,
           feeBearer: 'ADVERTISER',
-          paymentReason: entry.invoice.snapshot.items.map((item) => item.description).join('；'),
+          paymentReason: '影音服务',
           transactionReference: `${request.requestCode ?? request.id}-${String(itemIndex + 1).padStart(2, '0')}`,
         },
       }, generatedAt);

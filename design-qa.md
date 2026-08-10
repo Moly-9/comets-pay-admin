@@ -171,6 +171,56 @@ final result: passed
 
 ---
 
+# Finance Review Field Scope Design QA
+
+## Evidence
+
+- Source field reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6ad2afab-f92d-4db7-a17f-3ebf64007c9a.png` (1873 x 883 px).
+- Source account reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c54ad13e-4d68-4931-9a13-71a21039b2d8.png` (1908 x 880 px).
+- Desktop field capture: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-fields-1911x814.png` (1911 x 814 CSS px, device scale factor 1).
+- Desktop account capture: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-account-1911x814.png` (1911 x 814 CSS px, device scale factor 1).
+- Mobile payment capture: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-fields-390x844.png` (390 x 844 CSS px, device scale factor 1).
+- State: signed in as the finance demo user, opened `REQ-202607-000001`, selected the payment-list board, and inspected the first Invoice page.
+
+## Comparison
+
+The two source images and three browser-rendered captures were opened together in one comparison input. The first desktop capture verifies the scoped comparison table; the second verifies the account notice and recipient name; the mobile capture verifies the same content in the segmented layout.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The finance workspace comparison starts at `Real Name` and ends at `交易附言`, matching the selected source region. Invoice identifiers, stable IDs, amount/channel/method metadata, account version, and fingerprint rows are absent from normal paired pages.
+- The account section explicitly states that the fields are prototype display data and that concrete fields require the Airwallex API.
+- `收款账户` now displays the recipient account name (`Mina Kato`) instead of a masked account-number summary.
+- The comparison table and current-account detail both display `付款原因` as `影音服务`.
+- Exceptional missing or duplicate records retain their blocking association row so the review screen never hides a structural error.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: the existing Noto Sans SC stack, compact weights, line heights, and zero custom letter spacing are unchanged.
+- Spacing and layout rhythm: the original three-column proportions, row density, independent scrolling, fixed footer, and 390 px segmented layout are preserved.
+- Colors and tokens: existing neutral, green match, orange manual-review, and purple focus tokens are unchanged.
+- Image and icon fidelity: the existing Invoice renderer and Lucide icon system are preserved; no new raster asset, placeholder, CSS art, or handcrafted SVG was introduced.
+- Copy and content: all 10 selected fields, the Airwallex prototype notice, unmasked account name, and `影音服务` reason are visible and consistent.
+
+## Interaction Verification
+
+- Desktop 1911 x 814: passed; only the selected 10 comparison rows are present and the account section remains reachable by independent scrolling.
+- Mobile 390 x 844: passed; the payment-list tab, horizontal comparison-table scroll, account notice, and fixed actions remain reachable without overlap.
+- Data consistency: passed; the first current page exposes three rendered `影音服务` values across comparison and detail content, and the recipient account value is `Mina Kato`.
+- Console: 0 errors during the verified flow.
+- Automated verification: 50 Vitest files / 325 tests passed; TypeScript and Vite production build passed.
+
+## Comparison History
+
+1. The source comparison exposed metadata rows above `Real Name` that were outside the selected review scope, a masked account summary, and content-service descriptions used as payment reasons.
+2. The finance-workspace view now filters normal paired pages to the selected 10 rows, while the shared request-detail payment-list view keeps its complete field set.
+3. The final desktop and mobile captures show the scoped rows, account API notice, recipient name, and `影音服务` without clipping or overlap.
+
+final result: passed
+
+---
+
 # Request Payment List Read-Only Design QA
 
 ## Evidence

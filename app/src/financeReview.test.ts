@@ -102,6 +102,11 @@ describe('request finance review', () => {
       'swift-code',
       'iban',
     ].includes(field.id)).every((field) => field.state === 'match')).toBe(true);
+    expect(review.invoices[0].fields.find((field) => field.id === 'reason')).toMatchObject({
+      invoiceValue: '影音服务',
+      paymentValue: 'Content service',
+      state: 'review',
+    });
   });
 
   it('blocks approval when a complete account snapshot differs from the Invoice', () => {

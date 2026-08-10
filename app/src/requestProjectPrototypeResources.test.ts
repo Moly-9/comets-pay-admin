@@ -94,6 +94,7 @@ describe('complete request project prototype resources', () => {
           paymentDetails: invoice?.snapshot.payment,
         });
         expect(item.snapshot.realName).toBe(invoice?.snapshot.from.legalName);
+        expect(paymentListItemValue(item, 'paymentReason')).toBe('影音服务');
         expect(payout).toMatchObject({
           paymentRequestProjectId: request.paymentRequestProjectId,
           creatorId: link.creatorId,

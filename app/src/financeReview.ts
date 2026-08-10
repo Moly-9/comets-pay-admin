@@ -131,10 +131,6 @@ const paymentItemMethodLabel = (item: PaymentListItem, list: PaymentListRecord) 
   return account.transferMethod === 'PAYPAL' || list.provider === 'PayPal' ? 'PayPal' : '银行转账';
 };
 
-const invoiceDescription = (record: GeneratedInvoiceRecord) => (
-  record.snapshot.items.map((item) => item.description).filter(Boolean).join('；') || '未填写'
-);
-
 const invoiceVersionToken = (record: GeneratedInvoiceRecord) => (
   `invoice:${record.invoiceId}:v${record.version ?? 0}:${record.generatedAt}`
 );
@@ -215,7 +211,7 @@ const reviewInvoice = (
     ),
     matchedField('swift-code', 'Swift Code', record.snapshot.payment.swiftCode, paymentDetails?.swiftCode, normalizeCode),
     matchedField('iban', 'IBAN (optional)', record.snapshot.payment.iban, paymentDetails?.iban, normalizeCode),
-    reviewField('reason', '付款原因', invoiceDescription(record), paymentListItemValue(item, 'paymentReason')),
+    reviewField('reason', '付款原因', '影音服务', paymentListItemValue(item, 'paymentReason')),
     reviewField('fee', '费用承担', 'Invoice 未单列', paymentListItemValue(item, 'feeBearer')),
     reviewField('reference', '交易附言', record.snapshot.invoiceNumber, paymentListItemValue(item, 'transactionReference')),
   ];

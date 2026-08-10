@@ -38,6 +38,28 @@ type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
 type AccountDisplayMode = 'all-summary' | 'current-full';
 type ExportMode = 'all' | 'current';
 
+const FINANCE_WORKSPACE_COMPARISON_FIELD_IDS = new Set([
+  'real-name',
+  'account-name',
+  'account-number',
+  'bank-name',
+  'bank-address',
+  'swift-code',
+  'iban',
+  'reason',
+  'fee',
+  'reference',
+]);
+
+export const financeWorkspaceComparisonFields = (
+  page: FinanceReviewPage,
+  accountDisplay: AccountDisplayMode,
+) => (
+  accountDisplay === 'current-full' && page.kind === 'pair'
+    ? page.fields.filter((field) => FINANCE_WORKSPACE_COMPARISON_FIELD_IDS.has(field.id))
+    : page.fields
+);
+
 const paymentListStatusLabel = (paymentList: PaymentListRecord | null) => {
   if (!paymentList) return '未生成';
   if (paymentList.status === 'paid') return '已付款';
@@ -105,6 +127,9 @@ export function PaymentListReviewContent({
   const maxIndex = Math.max(0, pages.length - 1);
   const reviewIndex = Math.min(activeIndex ?? localIndex, maxIndex);
   const currentReview = pages[reviewIndex];
+  const currentReviewFields = currentReview
+    ? financeWorkspaceComparisonFields(currentReview, accountDisplay)
+    : [];
   const rows = useMemo(() => paymentLists.flatMap((list) => list.items.map((item) => ({
     key: `${list.paymentListId}-${item.id}`,
     list,
@@ -299,7 +324,7 @@ export function PaymentListReviewContent({
                 <table className="request-finance-comparison-table">
                   <thead><tr><th>核对字段</th><th>Invoice</th><th>付款清单</th><th>结果</th></tr></thead>
                   <tbody>
-                    {currentReview.fields.map((field) => (
+                    {currentReviewFields.map((field) => (
                       <tr key={field.id}>
                         <th>{field.label}</th>
                         <td>{field.invoiceValue}</td>
@@ -320,7 +345,7 @@ export function PaymentListReviewContent({
           {accountDisplay === 'current-full' ? (
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
               <header>
-                <div><Landmark size={16} /><span><strong>当前达人账户快照</strong><small>付款清单提交时冻结，不做脱敏</small></span></div>
+                <div><Landmark size={16} /><span><strong>当前达人账户快照</strong><small>当前账户字段为原型展示，具体字段需调用 Airwallex API</small></span></div>
                 <span>{visibleAccountRows.length} 条</span>
               </header>
               {visibleAccountRows.length ? visibleAccountRows.map((row) => {
@@ -328,6 +353,9 @@ export function PaymentListReviewContent({
                 const details = row.effectiveAccount.paymentDetails;
                 const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
                 const amount = Number(paymentListItemValue(row.item, 'amount') || 0);
+                const recipientAccountName = row.effectiveAccount.transferMethod === 'PAYPAL'
+                  ? details?.paypalUsername || details?.accountName || row.item.snapshot.realName
+                  : details?.accountName || row.item.snapshot.realName;
                 const accountFields = [
                   { id: 'real-name', label: 'Real Name', value: row.item.snapshot.realName },
                   { id: 'account-name', label: 'Account Name', value: details?.accountName },
@@ -360,7 +388,7 @@ export function PaymentListReviewContent({
                       })}
                     </dl>
                     <dl className="request-payment-review-fields finance-payment-operational-fields">
-                      <div className="request-payment-review-account"><dt>收款账户</dt><dd>{row.effectiveAccount.accountSummary || displayValue(details?.accountName)}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
+                      <div className="request-payment-review-account"><dt>收款账户</dt><dd>{displayValue(recipientAccountName)}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
                       <div><dt>支付币种</dt><dd>{currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{displayValue(paymentListItemValue(row.item, 'receiveCurrency'))}</dd></div>
                       <div><dt>付款金额</dt><dd>{formatInvoiceMoney(currency, amount)}</dd></div>
