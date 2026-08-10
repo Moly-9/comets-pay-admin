@@ -8,34 +8,34 @@ import {
   CircleAlert,
   Clock3,
   FileText,
-  Landmark,
   ReceiptText,
   ShieldCheck,
   WalletCards,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
   reconcileFinanceReviewSession,
   setFinanceReviewDecision,
-  type FinanceReviewField,
   type FinanceReviewPage,
   type FinanceReviewSession,
   type RequestFinanceReview,
 } from '../financeReview';
 import {
-  paymentListEffectiveAccount,
-  paymentListItemValue,
+  type PaymentListId,
   type PaymentListRecord,
   type RequestApprovalStage,
 } from '../businessWorkflow';
-import { bankAddress, formatInvoiceMoney } from '../invoice/invoiceUtils';
-import { requestApprovalStage } from '../requestApprovalWorkflow';
+import {
+  REQUEST_APPROVAL_STATUS_LABEL,
+  requestApprovalStage,
+} from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
-import type { GeneratedInvoiceRecord } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
+import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { Button, Modal } from './Common';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
@@ -45,19 +45,9 @@ const REVIEW_PANE_OPTIONS: Array<{
   label: string;
 }> = [
   { id: 'invoice', label: 'Invoice' },
-  { id: 'payment', label: '付款明细' },
-  { id: 'approval', label: '审批流' },
+  { id: 'payment', label: '付款清单' },
+  { id: 'approval', label: '项目与审批' },
 ];
-
-const ACCOUNT_REVIEW_FIELD_IDS = new Set([
-  'real-name',
-  'account-name',
-  'account-number',
-  'bank-name',
-  'bank-address',
-  'swift-code',
-  'iban',
-]);
 
 const PAGE_KIND_LABEL: Record<FinanceReviewPage['kind'], string> = {
   pair: '一一对应',
@@ -95,31 +85,10 @@ const initialsFor = (value: string) => {
   return normalized.slice(0, 2).toUpperCase();
 };
 
-const paymentMethodLabel = (list: PaymentListRecord, transferMethod?: string) => (
-  list.provider === 'PayPal' || transferMethod === 'PAYPAL' ? 'PayPal' : '银行转账'
-);
-
-const feeBearerLabel = (value: unknown) => {
-  if (value === 'ADVERTISER') return '广告主承担';
-  if (value === 'PUBLISHER') return '收款方承担';
-  if (value === 'SHARED') return '双方分担';
-  return String(value || '待确认');
-};
-
 const reviewStatusLabel = (state: 'unreviewed' | 'correct' | 'incorrect') => {
   if (state === 'correct') return '已确认无误';
   if (state === 'incorrect') return '已记录有误';
   return '待核对';
-};
-
-const paymentValue = (value: unknown) => (
-  value === undefined || value === null || value === '' ? '未填写' : String(value)
-);
-
-const accountReviewState = (field?: FinanceReviewField) => {
-  if (field?.state === 'mismatch') return 'mismatch';
-  if (field?.state === 'match') return 'match';
-  return 'review';
 };
 
 function ApprovalTimeline({
@@ -226,22 +195,26 @@ export function FinanceReviewWorkspace({
   financeReview,
   generatedInvoices,
   paymentLists,
+  creators,
   currentUser,
   session,
   onSessionChange,
   onApprove,
   onReturn,
+  onExportPaymentList,
   onClose,
 }: {
   request: RequestProjectSummary;
   financeReview: RequestFinanceReview;
   generatedInvoices: GeneratedInvoiceRecord[];
   paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
   currentUser: SystemUser;
   session?: FinanceReviewSession;
   onSessionChange: (session: FinanceReviewSession) => void;
   onApprove: () => boolean;
   onReturn: (reason: string) => boolean;
+  onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   onClose: (completed?: boolean) => void;
 }) {
   const activeSession = reconcileFinanceReviewSession(session, {
@@ -270,12 +243,20 @@ export function FinanceReviewWorkspace({
   const invoice = currentPage
     ? generatedInvoices.find((record) => record.invoiceId === currentPage.invoiceId)
     : undefined;
-  const paymentRows = useMemo(() => currentPage?.paymentItems.flatMap((reference) => {
-    const list = paymentLists.find((candidate) => candidate.paymentListId === reference.paymentListId);
-    const item = list?.items.find((candidate) => candidate.id === reference.itemId);
-    return list && item ? [{ list, item, account: paymentListEffectiveAccount(item) }] : [];
-  }) ?? [], [currentPage, paymentLists]);
-  const comparisonFields = currentPage?.fields.filter((field) => !ACCOUNT_REVIEW_FIELD_IDS.has(field.id)) ?? [];
+  const reviewPaymentListIds = new Set(financeReview.pages.flatMap((page) => (
+    page.paymentItems.map((item) => item.paymentListId)
+  )));
+  const reviewPaymentLists = paymentLists.filter((list) => reviewPaymentListIds.has(list.paymentListId));
+  const currentPaymentRowCount = currentPage?.paymentItems.length ?? 0;
+  const approvalLabel = request.approval
+    ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
+    : request.status;
+  const submittedAt = request.approval?.submittedAt ?? request.createdAt ?? '待补充';
+  const paymentChannel = request.paymentChannel
+    || [...new Set(reviewPaymentLists.map((list) => list.provider))].join(' / ')
+    || '待补充';
+  const projectBrand = request.generatedDetail?.brand ?? request.brand ?? '待补充';
+  const requestReason = request.generatedDetail?.reason ?? '未单独填写';
   const counts = financeReview.pages.reduce((result, page) => {
     const state = activeSession.decisions[page.key]?.state ?? 'unreviewed';
     return { ...result, [state]: result[state] + 1 };
@@ -285,7 +266,6 @@ export function FinanceReviewWorkspace({
 
   const goTo = (nextIndex: number) => {
     setReviewIndex(Math.min(Math.max(0, nextIndex), Math.max(0, financeReview.pages.length - 1)));
-    setActivePane('invoice');
   };
 
   const openIssueEditor = () => {
@@ -447,112 +427,70 @@ export function FinanceReviewWorkspace({
 
             <section className={`finance-review-pane finance-review-payment-pane${activePane === 'payment' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div><WalletCards size={18} /><span><strong>付款明细</strong><small>{paymentRows.length} 条冻结记录</small></span></div>
+                <div><WalletCards size={18} /><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
                 {currentPage?.mismatchCount
                   ? <span className="finance-review-warning-count"><CircleAlert size={13} />关键字段不一致 · {currentPage.mismatchCount} 项</span>
                   : <span className="finance-review-match-count"><CheckCircle2 size={13} />关键字段一致</span>}
               </header>
               <div className="finance-review-payment-scroll">
-                {paymentRows.length ? paymentRows.map(({ list, item, account }) => {
-                  const currency = String(paymentListItemValue(item, 'currency') || 'USD');
-                  const amount = Number(paymentListItemValue(item, 'amount') || 0);
-                  const details = account.paymentDetails;
-                  const fieldById = new Map(currentPage?.fields.map((field) => [field.id, field]) ?? []);
-                  const accountFields = [
-                    { id: 'real-name', label: 'Real Name', value: item.snapshot.realName },
-                    { id: 'account-name', label: 'Account Name', value: details?.accountName },
-                    { id: 'account-number', label: 'Account Number', value: details?.accountNumber },
-                    { id: 'bank-name', label: 'Beneficiary Bank Name', value: details?.bankName },
-                    {
-                      id: 'bank-address',
-                      label: 'Beneficiary Bank Address',
-                      value: details ? bankAddress({ payment: details }) : undefined,
-                    },
-                    { id: 'swift-code', label: 'Swift Code', value: details?.swiftCode },
-                    { id: 'iban', label: 'IBAN (optional)', value: details?.iban },
-                  ];
-                  return (
-                    <article className="finance-review-payment-card" key={`${list.paymentListId}:${item.id}`}>
-                      <header>
-                        <span className="finance-review-payee-avatar"><Landmark size={17} /></span>
-                        <div><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {list.paymentListCode}</small></div>
-                        <span>{list.status === 'submitted' ? '待财务审核' : list.status}</span>
-                      </header>
-                      <dl className="finance-review-payment-form" aria-label={`${item.snapshot.creatorName} 付款信息`}>
-                        <div className="is-half"><dt>收款账户</dt><dd><Landmark size={13} />{paymentValue(details?.accountName || account.provider || list.provider)}</dd></div>
-                        <div><dt>支付币种</dt><dd>{currency}</dd></div>
-                        <div><dt>收款币种</dt><dd>{paymentValue(paymentListItemValue(item, 'receiveCurrency') || currency)}</dd></div>
-                        <div className="is-half"><dt>金额</dt><dd className="is-money">{formatInvoiceMoney(currency, amount)}</dd></div>
-                        <div className="is-half"><dt>费用承担</dt><dd>{feeBearerLabel(paymentListItemValue(item, 'feeBearer'))}</dd></div>
-                        <div className="is-half"><dt>付款原因</dt><dd>{paymentValue(paymentListItemValue(item, 'paymentReason'))}</dd></div>
-                        <div className="is-half"><dt>交易附言</dt><dd>{paymentValue(paymentListItemValue(item, 'transactionReference'))}</dd></div>
-                        <div className="is-wide"><dt>描述（选填）</dt><dd>{paymentValue(paymentListItemValue(item, 'description'))}</dd></div>
-                      </dl>
-
-                      <section className="finance-review-account-details" aria-label="账户付款信息">
-                        <header>
-                          <div><Landmark size={15} /><span><strong>账户付款信息</strong><small>{paymentMethodLabel(list, account.transferMethod)} · {account.provider || list.provider}</small></span></div>
-                        </header>
-                        <dl>
-                          {accountFields.map((accountField) => {
-                            const reviewField = fieldById.get(accountField.id);
-                            const state = accountReviewState(reviewField);
-                            return (
-                              <div className={`is-${state}`} key={accountField.id}>
-                                <dt>
-                                  <span>{accountField.label}</span>
-                                  <span className="finance-review-account-field-state">
-                                    {state === 'match' ? <CheckCircle2 size={12} /> : state === 'mismatch' ? <CircleAlert size={12} /> : <Clock3 size={12} />}
-                                    {state === 'match' ? '一致' : state === 'mismatch' ? '不一致' : '待核对'}
-                                  </span>
-                                </dt>
-                                <dd>{paymentValue(reviewField?.paymentValue ?? accountField.value)}</dd>
-                              </div>
-                            );
-                          })}
-                        </dl>
-                      </section>
-                    </article>
-                  );
-                }) : (
-                  <div className="finance-review-empty finance-review-empty-compact">
-                    <WalletCards size={28} />
-                    <strong>未找到付款明细</strong>
-                    <p>当前 Invoice 没有一一对应的付款记录。</p>
-                  </div>
-                )}
-
-                {currentPage && comparisonFields.length ? (
-                  <section className="finance-review-comparison" aria-label="Invoice 与付款明细字段对照">
-                    <header><strong>其他字段对照</strong><span>{comparisonFields.length} 项</span></header>
-                    <div className="finance-review-comparison-list">
-                      {comparisonFields.map((field) => (
-                        <article className={`finance-review-field is-${field.state}`} key={field.id}>
-                          <div className="finance-review-field-heading">
-                            <strong>{field.label}</strong>
-                            <span>
-                              {field.state === 'match' ? <CheckCircle2 size={14} /> : field.state === 'mismatch' ? <CircleAlert size={14} /> : <Clock3 size={14} />}
-                              {field.state === 'match' ? '一致' : field.state === 'mismatch' ? '不一致' : '人工核对'}
-                            </span>
-                          </div>
-                          <dl>
-                            <div><dt>Invoice</dt><dd>{field.invoiceValue}</dd></div>
-                            <div><dt>付款明细</dt><dd>{field.paymentValue}</dd></div>
-                          </dl>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
+                <PaymentListReviewContent
+                  className="finance-payment-list-review-content"
+                  paymentLists={reviewPaymentLists}
+                  creators={creators}
+                  financeReview={financeReview}
+                  pages={financeReview.pages}
+                  activeIndex={reviewIndex}
+                  onActiveIndexChange={setReviewIndex}
+                  onExportPaymentList={onExportPaymentList}
+                  accountDisplay="current-full"
+                  exportMode="current"
+                />
               </div>
             </section>
 
             <aside className={`finance-review-pane finance-review-approval-pane${activePane === 'approval' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div><ShieldCheck size={18} /><span><strong>当前审批流</strong><small>第 {request.approval?.round ?? 1} 轮</small></span></div>
+                <div><ShieldCheck size={18} /><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
               </header>
               <div className="finance-review-approval-scroll">
-                <ApprovalTimeline request={request} currentUser={currentUser} />
+                <section className="finance-review-metrics" aria-label="请款项目概况">
+                  <article className="is-amount">
+                    <span><WalletCards size={14} />请款金额</span>
+                    <strong>{request.amount}</strong>
+                    <small>当前请款项目总额</small>
+                  </article>
+                  <article className="is-resources">
+                    <span><FileText size={14} />关联资料</span>
+                    <strong>{request.contracts + request.invoices} 份</strong>
+                    <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
+                  </article>
+                  <article className="is-status">
+                    <span><ShieldCheck size={14} />当前审批状态</span>
+                    <strong>{approvalLabel}</strong>
+                    <small>第 {request.approval?.round ?? 1} 轮审批</small>
+                  </article>
+                </section>
+
+                <section className="finance-review-project-section" aria-label="请款项目信息">
+                  <header><strong>请款项目信息</strong><span>提交时项目快照</span></header>
+                  <dl className="finance-review-project-info">
+                    <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
+                    <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
+                    <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
+                    <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
+                    <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
+                    <div><dt>提交人</dt><dd>{request.media}</dd></div>
+                    <div><dt>提交时间</dt><dd>{submittedAt}</dd></div>
+                    <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
+                    <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+                    <div className="is-wide"><dt>请款原因</dt><dd>{requestReason}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="finance-review-project-section" aria-label="当前审批流">
+                  <header><strong>当前审批流</strong><span>第 {request.approval?.round ?? 1} 轮</span></header>
+                  <ApprovalTimeline request={request} currentUser={currentUser} />
+                </section>
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
                     <CircleAlert size={17} />

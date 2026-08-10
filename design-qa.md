@@ -313,3 +313,46 @@ The source is an isolated 1043 x 220 payment-field crop rather than a complete f
 - P3: the isolated source is wider than the implementation's center board, so its amount/reason row can remain on one line while the implementation intentionally wraps into two compact rows.
 
 final result: passed
+
+---
+
+# Payment-List Comparison Finance Review Design QA
+
+## Evidence
+
+- Reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f9258078-ee69-4a99-b192-f10ca512cb87.png`
+- Reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c781a91b-0670-4e2a-8713-804a45ffa348.png`
+- Reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e792981f-2ed6-4de6-a1d1-5f726a8256c7.png`
+- 1911 x 814 implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-1911x814.png`
+- 1440 x 900 implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-1440x900.png`
+- 390 x 844 payment implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-390x844-payment.png`
+- 390 x 844 project implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-390x844-project.png`
+- All three references and the rendered implementation captures were inspected together in one comparison input.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The full-screen overlay retains the requested Invoice / payment-list comparison / project-and-approval hierarchy with independently scrolling boards and a fixed action footer.
+- At 1911 x 814, the measured board widths are approximately 725 / 725 / 458 px, matching the requested 38% / 38% / 24% ratio. At 1440 x 900 they measure approximately 546 / 546 / 345 px.
+- The middle board reuses the request-detail payment-list review content: validation and export controls, project summary, four-column comparison table, and the complete current creator account snapshot remain synchronized to one page index.
+- The right board preserves the reference's compact request metrics and project metadata above the real approval timeline.
+- At 390 px, the three boards become Invoice / payment list / project-and-approval tabs. The document has no horizontal overflow, the comparison table owns its horizontal scroll, and the fixed footer remains fully operable.
+
+## Interaction Verification
+
+- Page synchronization: passed; page 2 resolves to the same Invoice, creator, payment-list item, account snapshot, and `2 / 18` pager in both left and middle boards.
+- Account validation: passed for complete local snapshots, API failures, and the unsupported PayPal API state without mutating payment data.
+- Current-list export: passed for Airwallex and PayPal using provider-specific Excel templates.
+- Required issue reason: passed; save remains disabled while the reason is empty.
+- Review session: passed; one confirmed page remains `1 / 18` after closing and reopening.
+- Close and focus restore: passed; the top-right close returns focus to the originating `审核` button.
+- Approval guard: passed; final approval remains disabled until all pages are confirmed and the automatic comparison has no mismatches.
+- Clean-load console: 0 warnings and 0 errors.
+
+## Comparison History
+
+1. The first rendered pass exposed a P1 data-scope issue: account validation summarized all 237 system payment rows instead of the current request's 18 rows. The workspace now filters by stable payment-list references from the current finance review pages.
+2. Cross-channel export exposed a P1 functional issue: a PayPal page attempted to use the Airwallex workbook. A provider-specific PayPal workbook was added and the current page now selects the correct exporter.
+3. The final desktop and mobile captures show the corrected 18-row scope, synchronized pagination, stable board dimensions, no page overflow, and no overlapping controls.
+
+final result: passed

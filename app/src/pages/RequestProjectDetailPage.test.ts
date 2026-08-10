@@ -171,11 +171,12 @@ describe('request project payment presentation', () => {
 
   it('renders approval-focused payment fields, API validation, and export without mutation controls', () => {
     const source = readFileSync(new URL('./RequestProjectDetailPage.tsx', import.meta.url), 'utf8');
-    const viewerSource = source.slice(
-      source.indexOf('function RequestPaymentListReviewViewer'),
-      source.indexOf('export function RequestProjectDetailPage'),
+    const viewerSource = readFileSync(
+      new URL('../components/PaymentListReviewContent.tsx', import.meta.url),
+      'utf8',
     );
 
+    expect(source).toContain('<PaymentListReviewContent');
     expect(viewerSource).toContain('校验账户完整性');
     expect(viewerSource).toContain('导出 Excel');
     expect(viewerSource).toContain('<dt>收款账户</dt>');

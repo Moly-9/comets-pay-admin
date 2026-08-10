@@ -2,20 +2,16 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
-  ChevronLeft,
-  ChevronRight,
   CircleAlert,
-  CircleCheck,
   Clock3,
-  Download,
   FileText,
-  LoaderCircle,
   ReceiptText,
   ShieldCheck,
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Modal, PageHeading } from '../components/Common';
+import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -55,11 +51,6 @@ import {
   type PaymentRequestPaymentPlan,
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
-import {
-  reviewPaymentListAccountSnapshot,
-  validatePaymentListAccountViaApi,
-  type PaymentAccountApiValidation,
-} from '../requestPaymentAccountValidation';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & {
   id: string;
@@ -710,23 +701,6 @@ function getRequestProjectResourceRecords(
   return { contract: contracts, invoice: invoices, payment: payments };
 }
 
-type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
-  state: 'checking';
-  message: string;
-};
-
-const requestTransferMethodLabel = (
-  transferMethod: ReturnType<typeof paymentListEffectiveAccount>['transferMethod'],
-  localClearingSystem?: string,
-) => {
-  if (transferMethod === 'PAYPAL') return 'PayPal';
-  if (transferMethod === 'SWIFT') return 'SWIFT 转账';
-  if (transferMethod === 'LOCAL') {
-    return localClearingSystem ? `本地转账 · ${localClearingSystem}` : '本地转账';
-  }
-  return '待确认';
-};
-
 function RequestPaymentListReviewViewer({
   project,
   paymentLists,
@@ -742,47 +716,6 @@ function RequestPaymentListReviewViewer({
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   onClose: () => void;
 }) {
-  const [accountChecks, setAccountChecks] = useState<Record<string, RequestPaymentAccountCheck>>({});
-  const [validating, setValidating] = useState(false);
-  const [reviewIndex, setReviewIndex] = useState(0);
-  const rows = paymentLists.flatMap((list) => list.items.map((item) => ({
-    key: `${list.paymentListId}-${item.id}`,
-    list,
-    item,
-    effectiveAccount: paymentListEffectiveAccount(item),
-    snapshotReview: reviewPaymentListAccountSnapshot(item, creators),
-  })));
-  const snapshotAttentionCount = rows.filter((row) => row.snapshotReview.state !== 'ready').length;
-  const apiPassedCount = rows.filter((row) => accountChecks[row.key]?.state === 'passed').length;
-  const apiIssueCount = rows.filter((row) => ['invalid', 'unavailable'].includes(accountChecks[row.key]?.state ?? '')).length;
-  const allApiChecksPassed = rows.length > 0 && apiPassedCount === rows.length && snapshotAttentionCount === 0;
-  const currentFinanceReview = financeReview.invoices[Math.min(reviewIndex, Math.max(0, financeReview.invoices.length - 1))];
-
-  const validateAccounts = async () => {
-    if (!rows.length || validating) return;
-    setValidating(true);
-    setAccountChecks(Object.fromEntries(rows.map((row) => [row.key, {
-      state: 'checking',
-      message: '正在请求收款账户校验 API',
-    }])));
-    const results = await Promise.all(rows.map(async (row) => [
-      row.key,
-      await validatePaymentListAccountViaApi({ item: row.item, creators }),
-    ] as const));
-    setAccountChecks(Object.fromEntries(results));
-    setValidating(false);
-  };
-
-  const summaryTitle = validating
-    ? '正在校验收款账户'
-    : allApiChecksPassed
-      ? '全部收款账户已通过 API 校验'
-      : apiIssueCount
-        ? `${apiIssueCount} 笔 API 校验未通过`
-        : snapshotAttentionCount
-          ? `${snapshotAttentionCount} 笔账户快照需要处理`
-          : '账户快照完整，待 API 校验';
-
   return (
     <Modal
       title={`${project.name} · 付款清单`}
@@ -791,214 +724,14 @@ function RequestPaymentListReviewViewer({
       onClose={onClose}
       footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
     >
-      <div className="project-resource-browser" data-testid="request-payment-list-review">
-        <div className="project-resource-browser-heading">
-          <div>
-            <strong>全部付款明细</strong>
-            <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
-          </div>
-          <span>{rows.length} 笔</span>
-        </div>
-
-        {rows.length ? (
-          <>
-            <div className="project-resource-browser-toolbar request-payment-review-toolbar">
-              <Button
-                variant="secondary"
-                icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
-                disabled={validating}
-                onClick={() => { void validateAccounts(); }}
-              >
-                {validating ? '校验中' : '校验账户完整性'}
-              </Button>
-              {paymentLists.map((list) => (
-                <Button
-                  variant="secondary"
-                  icon={<Download size={15} />}
-                  key={list.paymentListId}
-                  onClick={() => { void onExportPaymentList(list.paymentListId); }}
-                >
-                  {paymentLists.length === 1 ? '导出 Excel' : `导出 ${list.paymentListCode}`}
-                </Button>
-              ))}
-            </div>
-
-            <div
-              className={`request-payment-review-summary${allApiChecksPassed ? ' is-passed' : snapshotAttentionCount || apiIssueCount ? ' is-warning' : ''}`}
-              role="status"
-              aria-live="polite"
-            >
-              <span>
-                {validating
-                  ? <LoaderCircle className="is-spinning" size={18} />
-                  : allApiChecksPassed
-                    ? <CircleCheck size={18} />
-                    : snapshotAttentionCount || apiIssueCount
-                      ? <CircleAlert size={18} />
-                      : <ShieldCheck size={18} />}
-              </span>
-              <div>
-                <strong>{summaryTitle}</strong>
-                <p>审批前应核对冻结账户、币种、金额、费用承担与交易附言；API 校验只检查账户字段，不改写付款数据。</p>
-              </div>
-            </div>
-
-            <div
-              className={`request-finance-project-summary${financeReview.canApprove ? ' is-passed' : ' is-warning'}`}
-              role="status"
-            >
-              <strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong>
-              <span>{financeReview.canApprove ? '可提交财务审批通过' : `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`}</span>
-              {financeReview.projectIssues.map((issue) => (
-                <small key={issue.id}>{issue.label}：{issue.paymentValue}</small>
-              ))}
-            </div>
-
-            {currentFinanceReview ? (
-              <section className="request-finance-comparison" aria-label="Invoice 与付款清单对照">
-                <header className="request-finance-comparison-header">
-                  <div>
-                    <strong>{currentFinanceReview.invoiceNumber}</strong>
-                    <span>{currentFinanceReview.creatorName} · {currentFinanceReview.mismatchCount ? `${currentFinanceReview.mismatchCount} 项不一致` : '关键字段一致'}</span>
-                  </div>
-                  <div className="request-finance-navigator">
-                    <span>{reviewIndex + 1} / {financeReview.totalCount}</span>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      aria-label="上一份 Invoice"
-                      disabled={reviewIndex === 0}
-                      onClick={() => setReviewIndex((current) => Math.max(0, current - 1))}
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      aria-label="下一份 Invoice"
-                      disabled={reviewIndex >= financeReview.totalCount - 1}
-                      onClick={() => setReviewIndex((current) => Math.min(financeReview.totalCount - 1, current + 1))}
-                    >
-                      <ChevronRight size={18} />
-                    </button>
-                  </div>
-                </header>
-                <div className="table-scroll">
-                  <table className="request-finance-comparison-table">
-                    <thead><tr><th>核对字段</th><th>Invoice</th><th>付款清单</th><th>结果</th></tr></thead>
-                    <tbody>
-                      {currentFinanceReview.fields.map((field) => (
-                        <tr key={field.id}>
-                          <th>{field.label}</th>
-                          <td>{field.invoiceValue}</td>
-                          <td>{field.paymentValue}</td>
-                          <td>
-                            <span className={`finance-match-state is-${field.state}`}>
-                              {field.state === 'match' ? '一致' : field.state === 'mismatch' ? '不一致' : '人工核对'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ) : null}
-
-            <div className="project-payment-rows request-payment-flat-rows">
-              {rows.map((row) => {
-                const check = accountChecks[row.key];
-                const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
-                const amount = Number(paymentListItemValue(row.item, 'amount') || 0);
-                const accountIssue = row.snapshotReview.issues[0];
-                const validationMessage = check
-                  ? accountIssue && check.state !== 'checking'
-                    ? `${check.message}；${accountIssue}`
-                    : check.message
-                  : accountIssue || '账户快照完整，等待审批人执行 API 校验';
-                const validationState = check?.state === 'passed' && row.snapshotReview.state === 'ready'
-                  ? 'is-passed'
-                  : check?.state === 'checking'
-                    ? 'is-checking'
-                    : row.snapshotReview.state !== 'ready' || ['invalid', 'unavailable'].includes(check?.state ?? '')
-                      ? 'is-warning'
-                      : '';
-                const updatedAt = check?.state === 'passed'
-                  ? check.checkedAt
-                  : row.item.lastValidatedAt ?? row.list.generatedAt ?? row.list.updatedAt;
-
-                return (
-                  <article className="project-payment-row request-payment-review-row" key={row.key}>
-                    <header className="project-payment-row-header">
-                      <div>
-                        <strong>{row.item.snapshot.creatorName}</strong>
-                        <span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</span>
-                      </div>
-                      <span className="project-record-status"><i />{requestPaymentListStatusLabel(row.list)}</span>
-                    </header>
-
-                    <div className={`request-payment-account-check ${validationState}`} role="status" aria-live="polite">
-                      {check?.state === 'checking'
-                        ? <LoaderCircle className="is-spinning" size={14} />
-                        : validationState === 'is-passed'
-                          ? <CircleCheck size={14} />
-                          : validationState === 'is-warning'
-                            ? <CircleAlert size={14} />
-                            : <ShieldCheck size={14} />}
-                      <span>{validationMessage}</span>
-                    </div>
-
-                    <dl className="request-payment-review-fields">
-                      <div className="request-payment-review-account">
-                        <dt>收款账户</dt>
-                        <dd>{row.effectiveAccount.accountSummary || '待补充'}</dd>
-                        <small>{requestTransferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small>
-                      </div>
-                      <div>
-                        <dt>支付币种</dt>
-                        <dd>{currency}</dd>
-                      </div>
-                      <div>
-                        <dt>收款币种</dt>
-                        <dd>{String(paymentListItemValue(row.item, 'receiveCurrency') || '待确认')}</dd>
-                      </div>
-                      <div>
-                        <dt>付款金额</dt>
-                        <dd>{formatInvoiceMoney(currency, amount)}</dd>
-                      </div>
-                      <div>
-                        <dt>费用承担</dt>
-                        <dd>{requestFeeBearerLabel(paymentListItemValue(row.item, 'feeBearer'))}</dd>
-                      </div>
-                      <div>
-                        <dt>付款原因</dt>
-                        <dd>{String(paymentListItemValue(row.item, 'paymentReason') || '未填写')}</dd>
-                      </div>
-                      <div className="request-payment-review-reference">
-                        <dt>交易附言</dt>
-                        <dd>{String(paymentListItemValue(row.item, 'transactionReference') || '未填写')}</dd>
-                      </div>
-                    </dl>
-
-                    <footer className="project-payment-row-meta">
-                      <span>{requestPaymentListStatusLabel(row.list)} · v{row.list.version ?? 1}</span>
-                      <span>Invoice {row.item.snapshot.invoiceNumber}</span>
-                      <span>{row.item.snapshot.contractIds?.length ? `${row.item.snapshot.contractIds.length} 份合同` : '未关联合同'}</span>
-                      <span>{updatedAt ? `校验时间 ${new Date(updatedAt).toLocaleString('zh-CN')}` : '尚未校验'}</span>
-                    </footer>
-                  </article>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div className="project-resource-browser-empty">
-            <WalletCards size={23} />
-            <strong>付款清单尚未生成</strong>
-            <p>当前请款项目没有可供审批查看的付款清单快照。</p>
-          </div>
-        )}
-      </div>
+      <PaymentListReviewContent
+        paymentLists={paymentLists}
+        creators={creators}
+        financeReview={financeReview}
+        onExportPaymentList={onExportPaymentList}
+        accountDisplay="all-summary"
+        exportMode="all"
+      />
     </Modal>
   );
 }

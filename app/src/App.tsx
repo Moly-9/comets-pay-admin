@@ -147,6 +147,7 @@ import {
 } from './payoutAccounts';
 import {
   exportAirwallexPaymentListWorkbook,
+  exportPayPalPaymentListWorkbook,
   paymentListWorkbookFilename,
   PaymentListWorkbookError,
 } from './paymentListWorkbook';
@@ -2608,15 +2609,17 @@ export default function App() {
       const list = requestListFor(request, paymentListId);
       if (!list) return;
       try {
-        const blob = await exportAirwallexPaymentListWorkbook({
-          paymentList: list,
-          creators,
-          allowSubmitted: true,
-        });
+        const blob = list.provider === 'PayPal'
+          ? await exportPayPalPaymentListWorkbook({ paymentList: list, allowSubmitted: true })
+          : await exportAirwallexPaymentListWorkbook({
+            paymentList: list,
+            creators,
+            allowSubmitted: true,
+          });
         downloadBlob(blob, paymentListWorkbookFilename(request.requestCode ?? request.id, list));
         notify(
           '付款清单已导出',
-          '已使用“我的项目”相同的 Airwallex Excel 模板生成审批文件。',
+          `已使用 ${list.provider} 对应的 Excel 模板生成审批文件。`,
         );
       } catch (error) {
         const message = error instanceof PaymentListWorkbookError
@@ -3088,6 +3091,7 @@ export default function App() {
           financeReview={activeFinanceReview}
           generatedInvoices={generatedInvoices}
           paymentLists={paymentLists}
+          creators={creators}
           currentUser={currentUser}
           session={financeReviewSessions[activeFinanceSessionKey]}
           onSessionChange={(session) => {
@@ -3100,6 +3104,9 @@ export default function App() {
           }}
           onApprove={() => handleRequestApproval(financeReviewRequest, 'APPROVE')}
           onReturn={(reason) => handleRequestApproval(financeReviewRequest, 'RETURN', reason)}
+          onExportPaymentList={(paymentListId) => (
+            requestResourceActions.onExportPaymentList(financeReviewRequest, paymentListId)
+          )}
           onClose={closeFinanceReview}
         />
       ) : null}
