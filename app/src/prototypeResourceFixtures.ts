@@ -256,42 +256,101 @@ const editRequestPayment = invoicePaymentForCreator(
   editRequestPayout.provider,
 );
 
-export const INVOICE_EDIT_REQUEST_INVOICES: GeneratedInvoiceRecord[] = [{
-  id: editRequestPayout.invoice,
-  invoiceId: 'invoice_fixture_edit_pay_013' as InvoiceId,
-  sourcePayoutId: editRequestPayout.id,
-  status: editRequestPayout.invoiceReviewStatus,
-  generatedAt: EDIT_REQUEST_TIMESTAMP,
-  snapshot: {
-    invoiceNumber: editRequestPayout.invoice,
-    invoiceDate: '2026-07-05',
-    billTo: { ...INITIAL_INVOICE_ENTITY },
-    creatorHandle: editRequestCreator.handle,
-    creatorName: editRequestCreator.name,
-    creatorId: editRequestCreator.id as CreatorId,
-    engagementId: editRequestEngagement.engagementId,
-    projectId: editRequestProject.projectId as ProjectId,
-    projectName: editRequestProject.name,
-    contractIds: [],
-    from: { ...editRequestCreator.contact },
-    currency: editRequestPayout.currency,
-    items: [{
-      id: 'invoice_line_fixture_edit_pay_013',
-      description: editRequestPayout.deliverable || '达人内容合作服务费',
-      unitPrice: editRequestPayout.amount,
-      quantity: 1,
-      lineTotal: editRequestPayout.amount,
-    }],
-    payoutAccountId: editRequestPayment.payoutAccountId,
-    payoutAccountVersion: editRequestPayment.payoutAccountVersion,
-    payoutProvider: editRequestPayment.payoutProvider,
-    payoutAccountFingerprint: editRequestPayment.accountFingerprint,
-    paymentMethod: editRequestPayout.provider === 'PayPal' ? 'paypal' : 'bank',
-    payment: editRequestPayment,
+const returnedRequestPayout = INITIAL_PAYOUTS.find((payout) => payout.id === 'pay-020');
+const returnedRequestProject = INITIAL_PROJECTS.find((project) => project.id === 'PRJ-260801-07');
+const returnedRequestCreator = creatorForReference('creator-marc' as CreatorId);
+const returnedRequestEngagement = returnedRequestProject?.creatorProfiles?.find((reference) => (
+  reference.creatorId === returnedRequestCreator.id
+));
+
+if (
+  !returnedRequestPayout
+  || !returnedRequestProject
+  || !returnedRequestEngagement
+  || returnedRequestPayout.projectId !== returnedRequestProject.id
+) {
+  throw new Error('INV-240807 退回请款 fixture 缺少稳定的付款、项目、达人或合作关系');
+}
+
+const returnedRequestPayment = invoicePaymentForCreator(
+  returnedRequestCreator,
+  returnedRequestPayout.provider,
+);
+
+export const INVOICE_EDIT_REQUEST_INVOICES: GeneratedInvoiceRecord[] = [
+  {
+    id: editRequestPayout.invoice,
+    invoiceId: 'invoice_fixture_edit_pay_013' as InvoiceId,
+    sourcePayoutId: editRequestPayout.id,
+    status: editRequestPayout.invoiceReviewStatus,
+    generatedAt: EDIT_REQUEST_TIMESTAMP,
+    snapshot: {
+      invoiceNumber: editRequestPayout.invoice,
+      invoiceDate: '2026-07-05',
+      billTo: { ...INITIAL_INVOICE_ENTITY },
+      creatorHandle: editRequestCreator.handle,
+      creatorName: editRequestCreator.name,
+      creatorId: editRequestCreator.id as CreatorId,
+      engagementId: editRequestEngagement.engagementId,
+      projectId: editRequestProject.projectId as ProjectId,
+      projectName: editRequestProject.name,
+      contractIds: [],
+      from: { ...editRequestCreator.contact },
+      currency: editRequestPayout.currency,
+      items: [{
+        id: 'invoice_line_fixture_edit_pay_013',
+        description: editRequestPayout.deliverable || '达人内容合作服务费',
+        unitPrice: editRequestPayout.amount,
+        quantity: 1,
+        lineTotal: editRequestPayout.amount,
+      }],
+      payoutAccountId: editRequestPayment.payoutAccountId,
+      payoutAccountVersion: editRequestPayment.payoutAccountVersion,
+      payoutProvider: editRequestPayment.payoutProvider,
+      payoutAccountFingerprint: editRequestPayment.accountFingerprint,
+      paymentMethod: editRequestPayout.provider === 'PayPal' ? 'paypal' : 'bank',
+      payment: editRequestPayment,
+    },
+    validationStatus: 'valid',
+    version: 1,
   },
-  validationStatus: 'valid',
-  version: 1,
-}];
+  {
+    id: returnedRequestPayout.invoice,
+    invoiceId: 'invoice_fixture_returned_pay_020' as InvoiceId,
+    sourcePayoutId: returnedRequestPayout.id,
+    status: returnedRequestPayout.invoiceReviewStatus,
+    generatedAt: returnedRequestPayout.paymentFailureReturn?.occurredAt ?? '2026-08-01T09:06:00.000Z',
+    snapshot: {
+      invoiceNumber: returnedRequestPayout.invoice,
+      invoiceDate: '2026-08-07',
+      billTo: { ...INITIAL_INVOICE_ENTITY },
+      creatorHandle: returnedRequestCreator.handle,
+      creatorName: returnedRequestCreator.name,
+      creatorId: returnedRequestCreator.id as CreatorId,
+      engagementId: returnedRequestEngagement.engagementId,
+      projectId: returnedRequestProject.projectId as ProjectId,
+      projectName: returnedRequestProject.name,
+      contractIds: [],
+      from: { ...returnedRequestCreator.contact },
+      currency: returnedRequestPayout.currency,
+      items: [{
+        id: 'invoice_line_fixture_returned_pay_020',
+        description: returnedRequestPayout.deliverable || '达人内容合作服务费',
+        unitPrice: returnedRequestPayout.amount,
+        quantity: 1,
+        lineTotal: returnedRequestPayout.amount,
+      }],
+      payoutAccountId: returnedRequestPayment.payoutAccountId,
+      payoutAccountVersion: returnedRequestPayment.payoutAccountVersion,
+      payoutProvider: returnedRequestPayment.payoutProvider,
+      payoutAccountFingerprint: returnedRequestPayment.accountFingerprint,
+      paymentMethod: returnedRequestPayout.provider === 'PayPal' ? 'paypal' : 'bank',
+      payment: returnedRequestPayment,
+    },
+    validationStatus: 'valid',
+    version: 1,
+  },
+];
 
 const providerForCreator = (creator: CreatorProfile): Exclude<Provider, '手动打款'> => {
   const account = getDefaultPayoutAccount(creator.payoutAccounts);
@@ -677,7 +736,7 @@ export const PROJECT_DEMO_PAYOUTS: Payout[] = PROJECT_DEMO_INVOICES.map((invoice
 export const ACTIVE_INVOICE_DEMO_INVOICES: GeneratedInvoiceRecord[] = [
   PROJECT_DEMO_INVOICES[0],
   PROJECT_DEMO_INVOICES[2],
-  INVOICE_EDIT_REQUEST_INVOICES[0],
+  ...INVOICE_EDIT_REQUEST_INVOICES,
 ];
 
 const activeInvoiceDemoSourcePayoutIds = new Set(
@@ -723,6 +782,7 @@ const requestStatusPaymentListState = (
   projectId: string,
   requestStatus: string,
 ): PaymentListRecord['status'] => {
+  if (projectId === 'PRJ-260801-08') return 'draft';
   if (requestStatus === '待补资料') return 'draft';
   if (requestStatus === '已退回') {
     return projectId === 'PRJ-260801-08' ? 'draft' : 'submitted';
@@ -736,7 +796,7 @@ const invoiceReviewState = (
   paymentListStatus: PaymentListRecord['status'],
 ): Payout['invoiceReviewStatus'] => {
   if (paymentListStatus === 'draft') return '待媒介审核';
-  if (paymentListStatus === 'submitted') return '待PM审核';
+  if (paymentListStatus === 'submitted') return '待发起请款';
   return '已通过';
 };
 
@@ -1072,8 +1132,14 @@ const cloneFixtureItems = (items: PaymentListItem[]) => items.map((item) => ({
   snapshot: {
     ...item.snapshot,
     contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
+    paymentDetails: item.snapshot.paymentDetails ? { ...item.snapshot.paymentDetails } : undefined,
   },
-  accountOverride: item.accountOverride ? { ...item.accountOverride } : undefined,
+  accountOverride: item.accountOverride ? {
+    ...item.accountOverride,
+    paymentDetails: item.accountOverride.paymentDetails
+      ? { ...item.accountOverride.paymentDetails }
+      : undefined,
+  } : undefined,
   overrides: { ...item.overrides },
   validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
 }));

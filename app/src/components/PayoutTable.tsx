@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { Avatar, Button, StatusMark } from './Common';
-import { Pagination } from './Pagination';
+import { PaymentProviderBadge } from './PaymentProviderBadge';
+import { Pagination, usePagination } from './Pagination';
 import { formatAmount } from '../data';
 import type { InvoiceReviewStatus, Payout, PayoutStatus } from '../types';
 
@@ -34,11 +34,13 @@ export function PayoutTable({
   actionLabelFor?: (payout: Payout) => string;
   primaryActionFor?: (payout: Payout) => boolean;
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const totalPages = Math.max(1, Math.ceil(payouts.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const visiblePayouts = payouts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const {
+    page,
+    pageItems: visiblePayouts,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(payouts, { resetKey: payouts.map((payout) => payout.id).join('|') });
 
   return (
     <div className="table-shell">
@@ -66,7 +68,7 @@ export function PayoutTable({
                   </div>
                 </td>
                 <td className="mono-cell">{payout.invoice}</td>
-                <td>{payout.provider}</td>
+                <td><PaymentProviderBadge compact provider={payout.provider} /></td>
                 <td><StatusMark status={displayStatus} label={statusLabelFor?.(payout) ?? statusLabels?.[payout.status]} /></td>
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
@@ -97,14 +99,11 @@ export function PayoutTable({
         <span>共 {payouts.length} 条</span>
         <Pagination
           ariaLabel="付款列表分页"
-          page={currentPage}
+          page={page}
           pageSize={pageSize}
           total={payouts.length}
           onPageChange={setPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
-            setPage(1);
-          }}
+          onPageSizeChange={setPageSize}
         />
       </div>
     </div>

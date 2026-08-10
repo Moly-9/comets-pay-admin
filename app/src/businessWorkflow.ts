@@ -21,6 +21,7 @@ export type EngagementId = EntityId<'engagement'>;
 export type ContractId = EntityId<'contract'>;
 export type InvoiceId = EntityId<'invoice'>;
 export type PaymentListId = EntityId<'payment-list'>;
+export type PaymentBatchId = EntityId<'payment-batch'>;
 
 export type ProjectReviewStatus =
   | 'draft'
@@ -58,6 +59,7 @@ export type RequestApprovalState = {
   history: RequestApprovalEvent[];
   submittedAt: string;
   returnedFromStage?: RequestApprovalStage;
+  resumeStatus?: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   returnReason?: string;
   updatedAt: string;
 };
@@ -74,6 +76,7 @@ export type ProjectEngagement = {
 export type PaymentListItemSnapshot = {
   invoiceNumber: string;
   creatorName: string;
+  realName?: string;
   currency: string;
   receiveCurrency: string;
   amount: number;
@@ -95,6 +98,7 @@ export type PaymentListItemSnapshot = {
   schemaKey?: string;
   validationStatus?: PayoutAccountStatus;
   transferNote?: string;
+  paymentDetails?: DocumentPayoutSnapshot;
 };
 
 export type PaymentListEditableField =
@@ -121,6 +125,7 @@ export type PaymentListAccountSnapshot = Pick<
   | 'schemaKey'
   | 'validationStatus'
   | 'transferNote'
+  | 'paymentDetails'
 >;
 
 export type PaymentListItem = {
@@ -136,7 +141,8 @@ export type PaymentListItem = {
 };
 
 export type PaymentListStatus = 'draft' | 'generated' | 'submitted' | 'approved' | 'paid';
-export type PaymentListProvider = 'Airwallex' | 'PayPal';
+export type PaymentListItemProvider = 'Airwallex' | 'PayPal' | 'PayMax';
+export type PaymentListProvider = PaymentListItemProvider | 'Mixed';
 
 export type PaymentListActor = {
   account: string;
@@ -321,6 +327,55 @@ export const paymentListEffectiveAccount = (
   ...(item.accountOverride ?? {}),
 });
 
+const PAYMENT_LIST_ITEM_PROVIDERS = new Set<PaymentListItemProvider>([
+  'Airwallex',
+  'PayPal',
+  'PayMax',
+]);
+
+export const paymentListItemProvider = (
+  item: PaymentListItem,
+): PaymentListItemProvider | null => {
+  const provider = paymentListEffectiveAccount(item).provider;
+  return PAYMENT_LIST_ITEM_PROVIDERS.has(provider as PaymentListItemProvider)
+    ? provider as PaymentListItemProvider
+    : null;
+};
+
+export const paymentListProviders = (
+  list: Pick<PaymentListRecord, 'items' | 'provider'>,
+): PaymentListItemProvider[] => {
+  const providers = [...new Set(list.items.flatMap((item) => {
+    const provider = paymentListItemProvider(item);
+    return provider ? [provider] : [];
+  }))];
+  if (providers.length || list.provider === 'Mixed') return providers;
+  return PAYMENT_LIST_ITEM_PROVIDERS.has(list.provider as PaymentListItemProvider)
+    ? [list.provider as PaymentListItemProvider]
+    : [];
+};
+
+export const paymentListProviderForItems = (
+  items: PaymentListItem[],
+  fallback: PaymentListProvider = 'Airwallex',
+): PaymentListProvider => {
+  const providers = [...new Set(items.flatMap((item) => {
+    const provider = paymentListItemProvider(item);
+    return provider ? [provider] : [];
+  }))];
+  if (providers.length > 1) return 'Mixed';
+  return providers[0] ?? fallback;
+};
+
+export const paymentListForProvider = (
+  list: PaymentListRecord,
+  provider: PaymentListItemProvider,
+): PaymentListRecord => ({
+  ...list,
+  provider,
+  items: list.items.filter((item) => paymentListItemProvider(item) === provider),
+});
+
 export const paymentListItemValue = <K extends keyof PaymentListItemSnapshot>(
   item: PaymentListItem,
   key: K,
@@ -335,27 +390,37 @@ export const upsertPaymentListItem = (
   item: PaymentListItem,
 ): PaymentListRecord => {
   if (list.items.some((current) => current.invoiceId === item.invoiceId)) return list;
-  return { ...list, items: [...list.items, item], updatedAt: nowIso() };
+  const items = [...list.items, item];
+  return {
+    ...list,
+    provider: paymentListProviderForItems(items, list.provider),
+    items,
+    updatedAt: nowIso(),
+  };
 };
 
 export const invoicePaymentListProvider = (
   invoice: GeneratedInvoiceRecord,
-): PaymentListProvider => (
-  invoice.snapshot.payoutProvider === 'PayPal'
-  || invoice.snapshot.payment.payoutProvider === 'PayPal'
-  || invoice.snapshot.paymentMethod === 'paypal'
-    ? 'PayPal'
-    : 'Airwallex'
-);
+): PaymentListItemProvider => {
+  const provider = invoice.snapshot.payoutProvider
+    ?? invoice.snapshot.payment.payoutProvider;
+  if (provider === 'PayPal' || invoice.snapshot.paymentMethod === 'paypal') return 'PayPal';
+  if (provider === 'PayMax') return 'PayMax';
+  return 'Airwallex';
+};
 
 export const removePaymentListItem = (
   list: PaymentListRecord,
   invoiceId: InvoiceId,
-): PaymentListRecord => ({
-  ...list,
-  items: list.items.filter((item) => item.invoiceId !== invoiceId),
-  updatedAt: nowIso(),
-});
+): PaymentListRecord => {
+  const items = list.items.filter((item) => item.invoiceId !== invoiceId);
+  return {
+    ...list,
+    provider: paymentListProviderForItems(items, list.provider),
+    items,
+    updatedAt: nowIso(),
+  };
+};
 
 export const clearPaymentListItems = (
   list: PaymentListRecord,
@@ -372,9 +437,8 @@ export const refreshPaymentListItemSnapshot = (
   list: PaymentListRecord,
   refreshedItem: PaymentListItem,
   updatedAt = nowIso(),
-): PaymentListRecord => ({
-  ...list,
-  items: list.items.map((item) => (
+): PaymentListRecord => {
+  const items = list.items.map((item) => (
     item.invoiceId === refreshedItem.invoiceId
       ? (() => {
           const previousEffectiveAccount = paymentListEffectiveAccount(item);
@@ -407,9 +471,14 @@ export const refreshPaymentListItemSnapshot = (
           };
         })()
       : item
-  )),
-  updatedAt,
-});
+  ));
+  return {
+    ...list,
+    provider: paymentListProviderForItems(items, list.provider),
+    items,
+    updatedAt,
+  };
+};
 
 export type PaymentListContractReference = {
   contractId?: ContractId | string;
@@ -481,11 +550,11 @@ export const validatePaymentListGeneration = (
   }
   list.items.forEach((item) => {
     const effectiveAccount = paymentListEffectiveAccount(item);
-    if (effectiveAccount.provider !== 'Airwallex') {
+    if (!paymentListItemProvider(item)) {
       issues.push({
         code: 'UNSUPPORTED_PROVIDER',
         invoiceId: item.invoiceId,
-        message: `${item.snapshot.creatorName} 当前选择 ${effectiveAccount.provider || '未指定渠道'}，付款单仅支持 Airwallex。`,
+        message: `${item.snapshot.creatorName} 当前选择 ${effectiveAccount.provider || '未指定渠道'}，付款单仅支持 Airwallex、PayPal 或 PayMax。`,
       });
     }
   });
@@ -655,6 +724,7 @@ export const applyPaymentListPayoutSnapshot = (
       schemaKey: payment.schemaKey,
       validationStatus: payment.validationStatus,
       transferNote: payment.transferRemarks,
+      paymentDetails: { ...payment },
     },
     overrides,
     requiresRevalidation: true,
@@ -693,6 +763,7 @@ export const invoicePaymentListItem = (
     snapshot: {
       invoiceNumber: invoice.id,
       creatorName: invoice.snapshot.creatorName,
+      realName: invoice.snapshot.from.legalName,
       currency: invoice.snapshot.currency,
       receiveCurrency: payment.accountCurrency || invoice.snapshot.currency,
       amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
@@ -718,6 +789,7 @@ export const invoicePaymentListItem = (
       schemaKey: payment.schemaKey,
       validationStatus: payment.validationStatus,
       transferNote: payment.transferRemarks,
+      paymentDetails: { ...payment },
     },
     overrides: {},
   };

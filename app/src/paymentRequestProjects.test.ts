@@ -8,6 +8,8 @@ import type {
   InvoiceId,
   PaymentListRecord,
   PaymentRequestProjectId,
+  RequestApprovalState,
+  RequestApprovalStatus,
 } from './businessWorkflow';
 import {
   canAddCreatorToPaymentRequest,
@@ -17,12 +19,19 @@ import {
   filterPaymentRequestList,
   normalizePaymentRequestCreatorLink,
   paymentRequestAmountLabel,
+  paymentRequestChannelForProvider,
   paymentRequestCreatorPresentation,
   paymentRequestInvoiceIds,
+  paymentRequestPaymentPlanFor,
+  paymentRequestPaymentPlanIssues,
+  paymentRequestProviderForChannel,
   invoiceAmountLabel,
+  isPaymentRequestFullyPaid,
+  myProjectStatusFor,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
+  requestProjectStatusFor,
   type PaymentRequestListItem,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
@@ -33,6 +42,14 @@ const otherProjectId = 'cooperation_project_002' as CooperationProjectId;
 const creatorId = 'creator_001' as CreatorId;
 const otherCreatorId = 'creator_002' as CreatorId;
 const engagementId = 'engagement_001' as EngagementId;
+
+const approvalState = (status: RequestApprovalStatus): RequestApprovalState => ({
+  status,
+  round: 1,
+  history: [],
+  submittedAt: '2026-08-07T02:00:00.000Z',
+  updatedAt: '2026-08-07T02:00:00.000Z',
+});
 
 const invoice = (overrides: Partial<GeneratedInvoiceRecord> = {}): GeneratedInvoiceRecord => ({
   id: 'INV-20260807-000001',
@@ -105,6 +122,40 @@ const contract = (id: string, projectId = cooperationProjectId, contractCreatorI
   creatorId: contractCreatorId,
   engagementId,
   lifecycle: 'CONFIRMED',
+});
+
+describe('payment request payment plan', () => {
+  it('requires both the payment channel and expected payment date', () => {
+    expect(paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor())).toEqual([
+      '请选择付款渠道',
+      '请选择预计付款时间',
+    ]);
+    expect(paymentRequestPaymentPlanIssues({
+      paymentChannel: 'Airwallex',
+      expectedPaymentDate: '',
+    })).toEqual(['请选择预计付款时间']);
+    expect(paymentRequestPaymentPlanIssues({
+      paymentChannel: 'PayPal',
+      expectedPaymentDate: '2026-08-20',
+    })).toEqual([]);
+  });
+
+  it('hydrates saved values when a request is edited', () => {
+    expect(paymentRequestPaymentPlanFor({
+      paymentChannel: 'Payermax',
+      expectedPaymentDate: '2026-08-28',
+    })).toEqual({
+      paymentChannel: 'Payermax',
+      expectedPaymentDate: '2026-08-28',
+    });
+  });
+
+  it('maps the project-level channel to the execution provider without creating a second channel', () => {
+    expect(paymentRequestProviderForChannel('Airwallex')).toBe('Airwallex');
+    expect(paymentRequestProviderForChannel('PayPal')).toBe('PayPal');
+    expect(paymentRequestProviderForChannel('Payermax')).toBe('PayMax');
+    expect(paymentRequestChannelForProvider('PayMax')).toBe('Payermax');
+  });
 });
 
 describe('media payment request document resolution', () => {
@@ -330,6 +381,40 @@ describe('media payment request submission validation', () => {
       creatorLinks: [link], invoices: [invoice()], paymentLists: [extraList], paymentRequestProjectId,
     })).toContain('付款清单包含当前请款项目未关联的 Invoice invoice_extra');
   });
+
+  it('rejects more than one payment order for the same request project', () => {
+    const first = paymentList();
+    const second = {
+      ...paymentList(),
+      paymentListId: 'payment_list_002' as PaymentListRecord['paymentListId'],
+      paymentListCode: 'PAY-20260807-000002',
+      items: [],
+    };
+
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice()],
+      paymentLists: [first, second],
+      paymentRequestProjectId,
+    })).toContain('一个请款项目只能关联一张付款单');
+  });
+
+  it('rejects a payment item whose account channel differs from the request channel', () => {
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice()],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+      paymentChannel: 'Airwallex',
+    })).toContain('INV-20260807-000001 的收款账户渠道与请款项目付款渠道 Airwallex 不一致');
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [link],
+      invoices: [invoice()],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+      paymentChannel: 'PayPal',
+    })).toEqual([]);
+  });
 });
 
 describe('media payment request creator table presentation', () => {
@@ -545,6 +630,7 @@ describe('media payment request list presentation', () => {
       id: 'request-1',
       requestCode: 'REQ-20260807-000001',
       lifecycle: 'SUBMITTED',
+      approval: approvalState('PENDING_PM'),
       cooperationProjectName: 'Creator Launch Campaign',
       project: 'Creator Launch Campaign',
       brand: 'Example Brand',
@@ -556,6 +642,7 @@ describe('media payment request list presentation', () => {
       id: 'request-2',
       requestCode: 'REQ-20260807-000002',
       lifecycle: 'SUBMITTED',
+      approval: approvalState('PENDING_FINANCE'),
       cooperationProjectName: 'Streaming Campaign',
       project: 'Streaming Campaign',
       brand: 'Example Brand',
@@ -567,6 +654,7 @@ describe('media payment request list presentation', () => {
       id: 'request-3',
       requestCode: 'REQ-20260807-000003',
       lifecycle: 'APPROVED',
+      approval: approvalState('APPROVED'),
       cooperationProjectName: 'Review Campaign',
       project: 'Review Campaign',
       brand: 'Other Brand',
@@ -578,8 +666,7 @@ describe('media payment request list presentation', () => {
 
   it('calculates review, payment and total metrics from the visible records', () => {
     expect(paymentRequestListMetrics(requests)).toEqual({
-      waitingReview: 1,
-      reviewing: 1,
+      reviewing: 2,
       reviewTotal: 2,
       waitingPayment: 1,
       total: 3,
@@ -605,5 +692,79 @@ describe('media payment request list presentation', () => {
     expect(canAddCreatorToPaymentRequest({ id: 'draft', lifecycle: 'DRAFT' })).toBe(true);
     expect(canAddCreatorToPaymentRequest({ id: 'returned', lifecycle: 'RETURNED' })).toBe(false);
     expect(canAddCreatorToPaymentRequest({ id: 'submitted', lifecycle: 'SUBMITTED' })).toBe(false);
+  });
+});
+
+describe('payment request module status presentation', () => {
+  it.each([
+    ['PENDING_PM', 'PM审批中', '请款提交'],
+    ['PENDING_PROJECT_OWNER', '项目负责人审批中', 'PM审批通过'],
+    ['PENDING_OWNER', '老板审批中', '项目负责人审批通过'],
+    ['PENDING_FINANCE', '财务审批中', '老板审批通过'],
+    ['APPROVED', '待打款', '财务审批通过'],
+    ['RETURNED_TO_MEDIA_REVIEW', '已退回', '已退回'],
+  ] as const)('maps %s to separate module labels', (approvalStatus, myStatus, requestStatus) => {
+    const source = {
+      id: 'request-status',
+      lifecycle: approvalStatus === 'APPROVED'
+        ? 'APPROVED' as const
+        : approvalStatus === 'RETURNED_TO_MEDIA_REVIEW'
+          ? 'RETURNED' as const
+          : 'SUBMITTED' as const,
+      approval: approvalState(approvalStatus),
+    };
+    expect(myProjectStatusFor(source)).toBe(myStatus);
+    expect(requestProjectStatusFor(source)).toBe(requestStatus);
+  });
+
+  it('keeps drafts out of request-project status and maps completed requests to paid', () => {
+    expect(myProjectStatusFor({ lifecycle: 'DRAFT' })).toBe('草稿');
+    expect(requestProjectStatusFor({ lifecycle: 'DRAFT' })).toBeNull();
+    expect(myProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
+    expect(requestProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
+  });
+});
+
+describe('payment request completion isolation', () => {
+  const secondInvoice = invoice({
+    id: 'INV-SECOND',
+    invoiceId: 'invoice_002' as InvoiceId,
+    sourcePayoutId: 'payout_002',
+  });
+  const otherRequestInvoice = invoice({
+    id: 'INV-OTHER-REQUEST',
+    invoiceId: 'invoice_003' as InvoiceId,
+    sourcePayoutId: 'payout_003',
+  });
+  const request = {
+    id: 'request-a',
+    projectId: cooperationProjectId,
+    lifecycle: 'APPROVED' as const,
+    invoiceIds: [invoice().invoiceId, secondInvoice.invoiceId],
+  };
+  const otherRequest = {
+    id: 'request-b',
+    projectId: cooperationProjectId,
+    lifecycle: 'APPROVED' as const,
+    invoiceIds: [otherRequestInvoice.invoiceId],
+  };
+  const invoices = [invoice(), secondInvoice, otherRequestInvoice];
+
+  it('waits for every linked payout and does not use the shared cooperation project id', () => {
+    const partialPayouts = [
+      { id: 'payout_001', status: '已付款' },
+      { id: 'payout_002', status: '付款处理中' },
+      { id: 'payout_003', status: '已付款' },
+    ];
+    expect(isPaymentRequestFullyPaid({ request, invoices, payouts: partialPayouts })).toBe(false);
+    expect(isPaymentRequestFullyPaid({ request: otherRequest, invoices, payouts: partialPayouts })).toBe(true);
+
+    expect(isPaymentRequestFullyPaid({
+      request,
+      invoices,
+      payouts: partialPayouts.map((payout) => (
+        payout.id === 'payout_002' ? { ...payout, status: '已付款' } : payout
+      )),
+    })).toBe(true);
   });
 });

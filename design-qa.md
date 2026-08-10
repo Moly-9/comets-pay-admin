@@ -168,3 +168,645 @@ shows an input with Cancel and Save actions.
   confirmation, and list-return flow.
 
 final result: passed
+
+---
+
+# Finance Review Return Gate And Responsive Type Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-85498f35-9591-4ab4-940b-5ac0ff5573bb.png`
+- Desktop implementation: `artifacts/finance-review-qa/finance-review-return-gate-1857x791.png`
+- Narrow implementation: `artifacts/finance-review-qa/finance-review-return-gate-390x844.png`
+- Source and desktop implementation are both 1857 x 791 px at device scale factor 1, so no density normalization was required.
+- Narrow implementation uses a 390 x 844 CSS viewport at device scale factor 1.
+
+## State
+
+Signed in as `finance.demo`, opened `付款工作台`, selected the first pending finance request, recorded `INV-301164-R01` as incorrect, and left the other 16 Invoice/payment-list pairs unreviewed. This matches the requested return-gate state.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the workspace keeps Noto Sans SC and zero letter spacing. Five bounded type variables step at 1600, 1180, 900, and 480 px breakpoints, enlarging the hierarchy on wide screens and reducing it to a 9.5 px minimum on narrow screens without viewport-proportional reflow.
+- Spacing and layout rhythm: the new guidance occupies the marked top-right gap without changing the 4:4:2 review-board proportions. At 390 px it moves to a full-width second row; the current state, segmented tabs, Invoice canvas, and 198 px action footer remain unobstructed.
+- Colors and visual tokens: the reminder uses the existing restrained purple information palette, then switches to the established orange return or green approval semantic state. Disabled return uses the product's existing disabled control treatment.
+- Image and asset fidelity: no new raster asset is required for this operational UI. Status affordances use the repository's existing Lucide icons and the Invoice remains the real frozen document snapshot.
+- Copy and content: the reminder states the remaining count and explains that errors are returned once, after all Invoice/payment-list pairs are reviewed. Completed-error and completed-success states use distinct action-oriented copy.
+
+## Full-View Comparison
+
+The source explicitly marks the empty space before the counters. The implementation fills that exact region with one compact reminder while preserving project identity on the left, counters and current state on the right, the three review boards, and the fixed action footer. The implementation's gray disabled return button intentionally differs from the source's red enabled button because this request requires early return to be impossible.
+
+## Focused Region Comparison
+
+- Top guidance: at 1857 x 791 the reminder stays on one line between project identity and counters; no text, icon, counter, or status overlaps.
+- Footer gate: after one incorrect decision and 16 unreviewed pages, `退回媒介修改` remains visible but disabled. After all 17 pages are decided, it becomes enabled and opens one aggregate dialog containing the Invoice number and recorded reason.
+- Narrow layout: at 390 x 844 the guidance wraps within its own row, the four footer actions remain visible, and the modal reports no horizontal overflow.
+
+## Interaction Verification
+
+- First incorrect page: reminder shows 16 remaining records and return stays disabled.
+- All pages decided: reminder changes to `全部核对已完成，可一次性退回 1 份有误记录。` and return becomes enabled.
+- Aggregate dialog: displays `INV-301164-R01` and `收款账户与 Invoice 不一致`; confirmation is enabled only in this completed state.
+- A fresh browser-rendered session reported 0 console warnings and 0 console errors.
+- Targeted Vitest passed 21/21 assertions and TypeScript/Vite production build passed.
+- Full Vitest passed 362/363 assertions; the one unrelated failure is the pre-existing TransactionsPage provider-badge markup assertion in the user's concurrent worktree changes.
+
+## Comparison History
+
+1. The source identified an unused top-right region and an early-return action that needed clearer process guidance.
+2. The implementation added the dynamic guidance, bounded responsive type variables, a disabled early-return state, and domain plus App-level submission guards.
+3. Equal-size desktop evidence and 390 px evidence showed no overlap, clipping, or hierarchy regression; no post-capture P0/P1/P2 correction was required.
+
+## Implementation Checklist
+
+- [x] Dynamic remaining/completed reminder in the marked region.
+- [x] Return blocked until every review page has a valid decision.
+- [x] Aggregate return dialog and final callback protected by the same rule.
+- [x] Bounded responsive typography for wide, desktop, tablet, and narrow viewports.
+- [x] Desktop and 390 px browser interaction verification.
+
+## Follow-up Polish
+
+- No P3 refinement is required for this scoped change.
+
+final result: passed
+
+---
+
+# Finance Review Drawer And Invoice Controls Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-daf09230-eb1e-4616-9059-107b9c7905b2.png`.
+- Desktop implementation: `artifacts/finance-review-drawer-zoom-final-1846x841.png`.
+- Mobile implementation: `artifacts/finance-review-drawer-zoom-390x844.png`.
+- Combined full-view and focused comparison: `artifacts/finance-review-drawer-zoom-comparison.png`.
+
+## Dimensions And State
+
+- Source and desktop implementation: 1846 x 841 px, 1846 x 841 CSS viewport, device scale factor 1; no density normalization was required.
+- Mobile implementation: 390 x 844 px, 390 x 844 CSS viewport, device scale factor 1.
+- State: signed in as the finance demo role, `付款工作台 > 待审核`, with `REQ-202607-000001` open at Invoice 1 / 17, approval drawer expanded, and Invoice zoom reset to 100%.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the existing Noto Sans SC hierarchy is unchanged. `上一页` and `下一页` use the same compact action weight as the review footer, with zero letter spacing and no truncation at desktop or 390 px.
+- Spacing and layout rhythm: the approval handle sits inside the top-right area of the `项目与审批` header. Invoice edge controls are 48 x 48 px circles centered vertically. Footer paging starts at the lower-left without overlapping the review count or approval actions.
+- Colors and visual tokens: the new controls reuse the existing white, cool-gray, and restrained purple finance-review palette. Hover and focus states retain the established high-contrast purple treatment.
+- Image and asset fidelity: no new raster or decorative assets were required. Drawer, zoom, and page controls use the repository's existing Lucide icon set.
+- Copy and content: the removed top pager is replaced by explicit `上一页` / `下一页` footer actions. Invoice, payment-list, account-snapshot, and page-count content remain synchronized.
+
+## Full-View Comparison
+
+- The implementation preserves the source's 4:4:2 board composition and moves the drawer handle to the exact requested top-right area of the approval board.
+- The source's highlighted top paging group is intentionally removed. The implementation places the same synchronized navigation at the lower-left and exposes literal previous/next labels as requested.
+- Invoice navigation remains visible at both vertical edges, now using circular buttons; the added compact zoom group fits in the Invoice header without reducing document width or overlapping the correspondence badge.
+
+## Focused Region Comparison
+
+- Drawer region: the control is fully contained by the approval header, remains visible when the drawer collapses, and returns to the same top-right position when expanded.
+- Invoice region: both edge buttons are true circles. Zooming from 100% to 110% increases the rendered page width from about 679 px to 747 px and expands the Invoice canvas scroll width from 723 px to 791 px.
+- Footer region: `上一页`, `1 / 17`, and `下一页` occupy the first footer group at the lower-left. The same controls remain reachable at 390 px with 44 px minimum height.
+
+## Interaction Verification
+
+- Zoom-out, percentage reset, and zoom-in controls: passed.
+- `Control` / `Command` modifier-wheel and trackpad pinch handling uses a non-passive wheel listener, clamps zoom to 60%-220%, and preserves the pointer anchor inside the Invoice canvas.
+- `Control` / `Command` plus, minus, and zero keyboard zoom: passed; 100% to 110% changed the document and scroll geometry without changing the browser viewport.
+- Drawer collapse and expand: passed; collapsed columns measured 923 px / 923 px / 0 px at 1846 px.
+- Bottom pager synchronization: passed; Invoice and payment-list comparison both moved from `INV-301164-R01` to `INV-301164-R03` at 2 / 17.
+- Desktop and 390 px layouts had no page-level horizontal overflow. Browser console contained 0 errors.
+
+## Comparison History
+
+1. The first browser pass exposed a P1 zoom behavior issue: the percentage changed, but percentage-based document sizing kept the visible Invoice width fixed.
+2. The Invoice stage was changed to reserve scaled width and height while transforming the document from its top-left origin.
+3. The final comparison confirms real document enlargement, scrollable overflow, top-right drawer placement, circular edge navigation, lower-left labeled paging, and a responsive 390 px layout.
+
+## Follow-up Polish
+
+- No P3 refinement is required for this scoped interaction.
+
+final result: passed
+
+---
+
+# Transaction Paid Total Card Design QA
+
+## Evidence
+
+- Transaction reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-193cfc59-10c8-418b-a9ec-b13e9974d006.png` (1483 x 718 px).
+- Payment-workbench card reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e9ee8868-4f34-4329-b71b-e283f21f2d44.png` (1544 x 484 px).
+- Intended implementation viewport: 1483 x 718 CSS px at device scale factor 1, followed by a 390 px responsive pass.
+- Implementation screenshot: unavailable because the in-app browser's local-URL policy rejected the running `127.0.0.1` preview.
+
+## State
+
+The target is the signed-in `交易记录` page with the complete paid-payout fixture set. The left overview card must use USD as the primary amount, place EUR, GBP, HKD, and SGD below the divider, preserve the all-currency paid count, and expose the same currency-detail action as the payment workbench.
+
+## Findings
+
+- [P0] Browser-rendered implementation evidence is unavailable. The local server returns HTTP 200, 54 test files / 345 tests pass, and the production build succeeds, but visual comparison, responsive rendering, interaction behavior, and console state cannot pass without a rendered implementation capture.
+- The transaction card and both payment-workbench cards now render through one shared component, so icon sizing, amount hierarchy, divider, secondary-currency rows, detail action, and modal remain structurally identical.
+- USD is guaranteed as the primary row even when no USD payout exists. Secondary currencies use the established USD, EUR, GBP, HKD, SGD ordering and retain their per-currency counts.
+- The transaction summary label continues to use the total number of paid transactions rather than the USD-only count.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: the shared component retains the existing Noto Sans SC stack, 25 px primary amount, compact secondary values, tabular numbers, and zero added letter spacing.
+- Spacing and layout rhythm: the existing two-column summary surface, 48 px icon slot, 18 px desktop gap, divider, two-column secondary grid, and single-column narrow layout are reused without new CSS.
+- Colors and visual tokens: the transaction card keeps its peach surface while adopting the payment-workbench content hierarchy; no new color token or effect was introduced.
+- Image and icon fidelity: WalletCards, ChevronRight, and Diamond come from the existing Lucide icon library. Currency flags use the existing repository SVG assets.
+- Copy and content: `已付款总额` remains the transaction label; USD is primary and EUR, GBP, HKD, SGD are secondary.
+
+## Focused Comparison
+
+Blocked. Both source images were opened and measured, but the browser policy prevented the matching implementation capture and combined comparison input.
+
+## Interaction Verification
+
+- Static rendering verifies USD appears before the secondary-currency group, all four secondary currencies render below it, the total paid count is retained, and the detail action is labeled for assistive technology.
+- Existing workbench tests continue to verify both card tones, currency ordering, detail actions, and the zero-USD fallback.
+- Browser checks for the detail modal, 1483 px composition, 390 px reflow, overflow, and console errors remain blocked by local-URL access policy.
+
+## Comparison History
+
+1. The two supplied source images were opened and measured.
+2. The payment-workbench card was extracted into a shared component and reused by `交易记录` with its original paid-total label and total count.
+3. Focused tests and the production build passed.
+4. The local preview remained healthy, but browser capture was rejected before the implementation state could be opened.
+
+## Implementation Checklist
+
+- Open `http://127.0.0.1:5173/`, sign in, and navigate to `交易记录`.
+- Capture the page at 1483 x 718 and 390 px wide.
+- Open and close `已付款币种详情`, then check keyboard focus and console output.
+- Compare the reference and implementation images together and resolve any remaining P0/P1/P2 difference.
+
+final result: blocked
+
+---
+
+# Finance Review Approval Scroll And Account Routing QA
+
+## Evidence
+
+- Right-board reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-13867e34-14f3-4a1b-8a4a-5aa7577f9407.png`
+- Account-warning reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-43ed51a4-0347-4392-8d0e-4d30b410042d.png`
+- Browser state: signed in as `finance.demo`, opened `REQ-202607-000001`, and verified the first PayPal account warning at the desktop viewport and 390 x 844.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The right board now contributes its full intrinsic content height to one independently scrolling viewport. It measures 661 px high with 1,336 px of content in the tested desktop view.
+- Scrolling reaches the final `渠道付款` approval node; its bottom edge is 13 px above the right board's lower edge, so no approval content remains clipped behind the fixed footer.
+- The warning summary identifies `Alex Ruiz`, recipient account `alexbuilds`, Invoice `INV-301164-02`, and the exact unsupported PayPal API reason.
+- `去核对` switches from page 1 to page 2, synchronizes the Invoice and payment-list content, scrolls the matching account card into view, and moves keyboard focus to that card.
+- At 390 x 844, the warning control retains a 66 x 30 px stable target, the review workspace stays within the 390 px viewport, and the fixed approval footer does not overlap the account content.
+
+## Interaction Verification
+
+- Right-board wheel scrolling: passed; `scrollTop` reached the 675 px maximum.
+- Right-board focus semantics: passed; the scroll viewport is labeled `项目与审批详情` and is keyboard focusable.
+- Problem-account routing: passed; the active element after navigation is the stable Alex Ruiz account-card ID.
+- Responsive overflow: passed; document width equals the 390 px viewport.
+- Console: 0 warnings and 0 errors during the verified flow.
+
+## Comparison History
+
+1. The first pass reproduced the reported clipping: the outer right board was scrollable, but implicit Grid rows compressed both inner sections and their `overflow: hidden` styling clipped 374 px and 749 px of content into two 225 px rows.
+2. The approval board was changed to max-content implicit rows, preserving the existing cards while allowing their complete height to participate in the parent scroll range.
+3. The final pass reached the last approval node and confirmed the account-warning route on desktop and the non-overlapping segmented layout at 390 px.
+
+final result: passed
+
+---
+
+# Finance Review Field Scope Design QA
+
+## Evidence
+
+- Source field reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6ad2afab-f92d-4db7-a17f-3ebf64007c9a.png` (1873 x 883 px).
+- Source account reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c54ad13e-4d68-4931-9a13-71a21039b2d8.png` (1908 x 880 px).
+- Desktop field capture: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-fields-1911x814.png` (1911 x 814 CSS px, device scale factor 1).
+- Desktop account capture: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-account-1911x814.png` (1911 x 814 CSS px, device scale factor 1).
+- Mobile payment capture: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-fields-390x844.png` (390 x 844 CSS px, device scale factor 1).
+- State: signed in as the finance demo user, opened `REQ-202607-000001`, selected the payment-list board, and inspected the first Invoice page.
+
+## Comparison
+
+The two source images and three browser-rendered captures were opened together in one comparison input. The first desktop capture verifies the scoped comparison table; the second verifies the account notice and recipient name; the mobile capture verifies the same content in the segmented layout.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The finance workspace comparison starts at `Real Name` and ends at `交易附言`, matching the selected source region. Invoice identifiers, stable IDs, amount/channel/method metadata, account version, and fingerprint rows are absent from normal paired pages.
+- The account section explicitly states that the fields are prototype display data and that concrete fields require the Airwallex API.
+- `收款账户` now displays the recipient account name (`Mina Kato`) instead of a masked account-number summary.
+- The comparison table and current-account detail both display `付款原因` as `影音服务`.
+- Exceptional missing or duplicate records retain their blocking association row so the review screen never hides a structural error.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: the existing Noto Sans SC stack, compact weights, line heights, and zero custom letter spacing are unchanged.
+- Spacing and layout rhythm: the original three-column proportions, row density, independent scrolling, fixed footer, and 390 px segmented layout are preserved.
+- Colors and tokens: existing neutral, green match, orange manual-review, and purple focus tokens are unchanged.
+- Image and icon fidelity: the existing Invoice renderer and Lucide icon system are preserved; no new raster asset, placeholder, CSS art, or handcrafted SVG was introduced.
+- Copy and content: all 10 selected fields, the Airwallex prototype notice, unmasked account name, and `影音服务` reason are visible and consistent.
+
+## Interaction Verification
+
+- Desktop 1911 x 814: passed; only the selected 10 comparison rows are present and the account section remains reachable by independent scrolling.
+- Mobile 390 x 844: passed; the payment-list tab, horizontal comparison-table scroll, account notice, and fixed actions remain reachable without overlap.
+- Data consistency: passed; the first current page exposes three rendered `影音服务` values across comparison and detail content, and the recipient account value is `Mina Kato`.
+- Console: 0 errors during the verified flow.
+- Automated verification: 50 Vitest files / 325 tests passed; TypeScript and Vite production build passed.
+
+## Comparison History
+
+1. The source comparison exposed metadata rows above `Real Name` that were outside the selected review scope, a masked account summary, and content-service descriptions used as payment reasons.
+2. The finance-workspace view now filters normal paired pages to the selected 10 rows, while the shared request-detail payment-list view keeps its complete field set.
+3. The final desktop and mobile captures show the scoped rows, account API notice, recipient name, and `影音服务` without clipping or overlap.
+
+final result: passed
+
+---
+
+# Request Payment List Read-Only Design QA
+
+## Evidence
+
+- Source visual truth:
+  `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6b45bb77-df33-48f5-9455-bc964c53d0ec.png`
+- Existing design reference: the shared payment list browser in
+  `app/src/pages/ProjectDetailPage.tsx`, matching the supplied list/detail screenshot.
+- Implementation screenshot: automated capture is blocked because browser control
+  policy rejects the local `http://127.0.0.1:5173/` URL. The page remains available
+  for manual review in the in-app browser.
+
+## Normalization
+
+- Source image: 1074 x 636 px.
+- Intended browser QA viewport: 1284 x 904 CSS px at device scale factor 1,
+  matching the annotated page context before normalized comparison.
+- Implementation dimensions and density: unavailable to automated browser capture
+  because of the local URL policy restriction.
+
+## State
+
+The target state is the request-project detail payment-list modal for
+`REQ-202607-000001`, opened in view-only approval mode. It keeps the same payment-row
+hierarchy and visual tokens as `我的项目`, replaces editable controls with compact
+approval fields, and adds account validation plus fixed-template Excel export.
+
+## Findings
+
+- [P0] Browser-rendered implementation evidence is unavailable.
+  The local app is reachable and the production build passes, but browser control
+  policy blocks local-page inspection. Visual fidelity, responsive behavior,
+  interaction behavior, and console state cannot be passed without rendered evidence.
+- The request modal reads the real request-linked `PaymentListRecord[]` state and
+  uses the existing project payment-row shell, modal, buttons, status treatment,
+  breakpoints, and Lucide icon system.
+- Approval content is read-only. The modal exposes only account completeness
+  validation, Excel export, and close actions; it contains no generate, edit,
+  delete, clear, row removal, or refresh controls.
+- Airwallex validation uses schema plus validate-only proxy requests and renders
+  passed, invalid, unsupported-channel, and proxy-unavailable reminders inline.
+- Export calls the same `exportAirwallexPaymentListWorkbook` implementation and
+  exact 21-column template used by `我的项目`, with submitted-list export enabled
+  only for the approval entry point.
+- Image assets: the target contains standard interface icons only; the
+  implementation uses the repository's existing Lucide icon system and adds no
+  raster, placeholder, CSS-art, or handcrafted SVG assets.
+
+## Focused Comparison
+
+Blocked. The source image was opened, but the browser-control policy rejects the
+local implementation URL and therefore prevents same-state screenshot comparison.
+
+## Interaction Verification
+
+- Automated source checks confirm the request viewer contains no add, edit,
+  delete, generate, refresh, or clear action.
+- Focused tests cover real payment-list mapping, read-only controls, API validation,
+  unsupported and unavailable API states, and submitted-list export through the
+  unchanged workbook template.
+- Browser checks for close behavior, overflow, and console errors remain blocked
+  by local URL access policy.
+
+## Comparison History
+
+1. The source image and existing `我的项目` payment-list structure were
+   inspected.
+2. The request viewer now uses the same payment-row hierarchy and shared visual
+   tokens as the supplied `我的项目` reference, populated from stable request and
+   payment-list IDs.
+3. Editable form fields were replaced with approval-focused read-only values;
+   API validation and the shared Excel export were added as the only work actions.
+4. Local browser capture was attempted, but browser control rejected the local URL.
+
+## Implementation Checklist
+
+- Manually open `http://127.0.0.1:5173/` and sign in.
+- Open `请款项目` -> `REQ-202607-000001` -> `查看清单`.
+- Check desktop and narrow-screen modal states, close behavior, and page overflow.
+- Confirm only `校验账户完整性`, `导出 Excel`, and `关闭` are available.
+- Confirm the local static prototype reports the Airwallex proxy as unavailable;
+  do not treat that warning as a successful provider validation.
+- Compare source and implementation together, address any P0/P1/P2 mismatch,
+  and update this section to `final result: passed` after rendered evidence exists.
+
+final result: blocked
+
+---
+
+# Full-Screen Finance Review Workspace Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-11e9fad5-08f4-4217-a9d6-8584a8cba692.png`
+- Source dimensions: 1043 x 220 px at the supplied image density.
+- Desktop implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-workspace-desktop-fixed.png`
+- Desktop viewport and implementation dimensions: 1643 x 903 CSS px, device scale factor 1, 1643 x 903 PNG.
+- Mobile account implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-workspace-mobile-account.png`
+- Mobile viewport and implementation dimensions: 390 x 844 CSS px, device scale factor 1, 390 x 844 PNG.
+- State: signed in as `finance.demo`, opened the first pending request, selected the payment pane on mobile, and scrolled to the complete account-payment section.
+
+## Comparison Scope
+
+The source is an isolated 1043 x 220 payment-field crop rather than a complete finance-review screen. Exact full-screen column proportions therefore come from the requested three-column behavior and the established COMETS Pay review workspace. The source and both rendered implementation screenshots were opened together in one visual comparison input; focused judgment is limited to the payment-field hierarchy, read-only field treatment, spacing rhythm, labels, and values visible in the source.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The desktop workspace occupies the complete 1643 x 903 viewport. Its three independently scrolling boards measure approximately 628 / 653 / 360 px and retain the existing Invoice-first hierarchy.
+- The middle payment form preserves the source's quiet gray read-only surfaces, visible labels, compact grouping, and amount emphasis. It reflows from the source's wide two-row composition to the narrower center board without truncation.
+- The complete account-payment section exposes Real Name, Account Name, Account Number, Beneficiary Bank Name, Beneficiary Bank Address, Swift Code, and optional IBAN. Match state uses both icon and text; mismatches use the same non-color-only treatment.
+- The 390 px segmented layout has no horizontal overflow. Payment content scrolls independently above the fixed action footer, and the complete account number remains readable without masking.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: existing Noto Sans SC and system Latin fallbacks are preserved; labels, values, amounts, and status copy use the existing compact review hierarchy with zero custom letter spacing.
+- Spacing and layout rhythm: the payment form follows the source's tight 8-12 px rhythm, 6 px field radii, stable grid tracks, and full-width description row. The desktop boards and mobile footer do not overlap.
+- Colors and tokens: the implementation retains the current neutral surfaces, purple focus treatment, green match state, and orange review state instead of introducing a new palette.
+- Image and icon fidelity: the Invoice is rendered by the existing document component and all controls/status markers use the existing Lucide icon family; no placeholder or drawn substitute was introduced.
+- Copy and content: all source payment fields are present, with the additional requested complete account fields and explicit `关键字段一致 / 关键字段不一致` status.
+
+## Interaction Verification
+
+- Right-top close button: passed; 44 x 44 px target.
+- Escape close: passed.
+- Focus restoration: passed; focus returns to the originating `审核` button.
+- Desktop independent scrolling: passed for Invoice, payment details, and approval timeline.
+- Mobile tabs and account-detail scrolling: passed at 390 x 844.
+- Final approval blocking: covered by finance-review domain tests for missing or mismatched complete account snapshots.
+- Console: 0 warnings and 0 errors during the verified flow.
+
+## Comparison History
+
+1. First desktop pass found a P1 clipping issue: CSS Grid compressed the payment card and comparison block into equal-height rows, hiding the account-payment section inside an `overflow: hidden` card.
+2. The payment column was changed to max-content rows with its own vertical scrolling, and background-page scrolling was locked while the full-screen review is open.
+3. Second desktop capture shows the full account section directly below the payment form, a true 1643 x 903 overlay, and no viewport-width loss. The 390 px focused capture confirms every requested account field remains reachable without horizontal overflow.
+
+## Follow-Up Polish
+
+- P3: the isolated source is wider than the implementation's center board, so its amount/reason row can remain on one line while the implementation intentionally wraps into two compact rows.
+
+final result: passed
+
+---
+
+# Payment-List Comparison Finance Review Design QA
+
+## Evidence
+
+- Reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f9258078-ee69-4a99-b192-f10ca512cb87.png`
+- Reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c781a91b-0670-4e2a-8713-804a45ffa348.png`
+- Reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e792981f-2ed6-4de6-a1d1-5f726a8256c7.png`
+- 1911 x 814 implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-1911x814.png`
+- 1440 x 900 implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-1440x900.png`
+- 390 x 844 payment implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-390x844-payment.png`
+- 390 x 844 project implementation: `/Users/aria/Documents/支付系统管理端/artifacts/finance-review-qa/finance-review-390x844-project.png`
+- All three references and the rendered implementation captures were inspected together in one comparison input.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The full-screen overlay retains the requested Invoice / payment-list comparison / project-and-approval hierarchy with independently scrolling boards and a fixed action footer.
+- At 1911 x 814, the measured board widths are approximately 725 / 725 / 458 px, matching the requested 38% / 38% / 24% ratio. At 1440 x 900 they measure approximately 546 / 546 / 345 px.
+- The middle board reuses the request-detail payment-list review content: validation and export controls, project summary, four-column comparison table, and the complete current creator account snapshot remain synchronized to one page index.
+- The right board preserves the reference's compact request metrics and project metadata above the real approval timeline.
+- At 390 px, the three boards become Invoice / payment list / project-and-approval tabs. The document has no horizontal overflow, the comparison table owns its horizontal scroll, and the fixed footer remains fully operable.
+
+## Interaction Verification
+
+- Page synchronization: passed; page 2 resolves to the same Invoice, creator, payment-list item, account snapshot, and `2 / 18` pager in both left and middle boards.
+- Account validation: passed for complete local snapshots, API failures, and the unsupported PayPal API state without mutating payment data.
+- Current-list export: passed for Airwallex and PayPal using provider-specific Excel templates.
+- Required issue reason: passed; save remains disabled while the reason is empty.
+- Review session: passed; one confirmed page remains `1 / 18` after closing and reopening.
+- Close and focus restore: passed; the top-right close returns focus to the originating `审核` button.
+- Approval guard: passed; final approval remains disabled until all pages are confirmed and the automatic comparison has no mismatches.
+- Clean-load console: 0 warnings and 0 errors.
+
+## Comparison History
+
+1. The first rendered pass exposed a P1 data-scope issue: account validation summarized all 237 system payment rows instead of the current request's 18 rows. The workspace now filters by stable payment-list references from the current finance review pages.
+2. Cross-channel export exposed a P1 functional issue: a PayPal page attempted to use the Airwallex workbook. A provider-specific PayPal workbook was added and the current page now selects the correct exporter.
+3. The final desktop and mobile captures show the corrected 18-row scope, synchronized pagination, stable board dimensions, no page overflow, and no overlapping controls.
+
+final result: passed
+
+---
+
+# Returned Payment Request Correction Design QA
+
+## Evidence
+
+- Desktop viewport: 1280 x 720 in the in-app browser.
+- Mobile viewport: 390 x 844 in the in-app browser.
+- Flow: a finance-stage request was returned from the payment workbench with a required page-level reason, then opened from `我的项目` as the administrator demo user.
+- Verified request: `REQ-202607-000010` with a finance return reason tied to `INV-260727-10-01`.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Returned requests stay visible in `我的项目`; the list shows a compact warning banner, `已退回` status, payment-workbench source, reason summary, and `处理退回` action.
+- The project detail shows the full reason, return stage, actor and role, time, and approval round before the normal request content.
+- Request content and payment-list correction entry points remain separate and reuse the existing edit form and resource manager.
+- The resubmit section lists missing payment-plan fields and keeps the final action disabled until content and resource validation both pass.
+- At 390 px, the return banner, heading actions, reason, metadata, and correction buttons wrap without page-level horizontal overflow; the measured page width and scroll width are equal.
+
+## Interaction Verification
+
+- Payment-workbench return: passed; the project moved from `待审核` to `已退回`.
+- My Projects visibility: passed; the returned request remained in the list with its finance reason.
+- Detail reason and metadata: passed.
+- `修改请款内容`: passed; the existing edit dialog opened with `保存修改` available.
+- Payment-list correction routing: passed; `检查付款清单` scrolls to the existing resource manager.
+- Resubmit validation: passed; missing expected payment time or request reason is reported before submission.
+- Approval resume rule: covered by unit test; a finance return creates round 2 at `PENDING_FINANCE` after resubmission.
+
+final result: passed
+
+---
+
+# Circular Multi-Select Controls Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f6aa6027-816a-4db9-a733-5ec5fa5b1a44.png`.
+- Source pixels: 1517 x 594 at the provided density.
+- Intended implementation viewport: 1517 x 594, desktop, selected contract-list state.
+- Implementation screenshot: unavailable. The in-app browser rejected `http://127.0.0.1:5173/` under its local URL security policy, so no browser-rendered capture could be produced.
+- Implementation service check: HTTP 200; this is not a substitute for visual evidence.
+
+## Findings
+
+- [P1] Browser-rendered comparison is unavailable.
+  Location: all native checkboxes and custom multi-select indicators.
+  Evidence: the reference image is available, but there is no implementation screenshot to place beside it at the same viewport and state.
+  Impact: roundness, pink-purple color fidelity, spacing, focus treatment, and selected-state consistency cannot be accepted from source code and build output alone.
+  Fix: capture the contract list with selected rows in an allowed in-app browser session, then compare it with the source at matching dimensions.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: unchanged by this task; browser comparison blocked.
+- Spacing and layout rhythm: control dimensions remain page-specific; browser comparison blocked.
+- Colors and visual tokens: implemented with shared light pink-purple selection tokens; visual sampling against the source is blocked.
+- Image quality and asset fidelity: no new image assets were introduced; existing Lucide selection icons are retained.
+- Copy and content: unchanged by this task.
+
+## Interaction Verification
+
+- Native checked, unchecked, indeterminate, disabled, hover, and keyboard-focus states are implemented in CSS.
+- Custom searchable filters, creator pickers, Invoice/contract pickers, and batch creator indicators use the same circular pink-purple treatment.
+- Automated tests and production build pass, but browser interaction and console inspection are blocked by the local URL policy.
+
+## Comparison History
+
+1. The source image was opened and measured at 1517 x 594.
+2. The local implementation returned HTTP 200.
+3. The existing in-app browser tab was claimed and reloaded once; the browser URL policy rejected the local address. No alternate browser, raw CDP, or Playwright workaround was attempted.
+
+## Implementation Checklist
+
+- Capture the selected contract-list state when the local URL is permitted.
+- Compare the full table and a focused checkbox region against the source image.
+- Check desktop and narrow-screen control alignment, then update this result.
+
+final result: blocked
+
+---
+
+# Payment Execution Workspace Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-48007313-5582-4cc0-af56-6a8aae7c664a.png`
+- Desktop implementation: `artifacts/payment-execution-workspace-desktop.png`
+- Narrow implementation, project section: `artifacts/payment-execution-workspace-390x844.png`
+- Narrow implementation, approval section: `artifacts/payment-execution-workspace-390x844-timeline.png`
+
+## Dimensions And Normalization
+
+- Source capture: 1671 x 960 px. It includes browser chrome and several overlapping prototype panels, so it is used as qualitative region and information-hierarchy truth rather than a pixel-for-pixel viewport target.
+- Desktop implementation: 1284 x 905 px at the in-app browser's default 1284 px CSS viewport and device scale factor 1.
+- Narrow implementation: 390 x 844 px at a 390 x 844 CSS viewport and device scale factor 1.
+- The full-view comparison keeps both captures at their native density. Region comparison maps the source's project summary, creator payment cards, approval rail, and bottom payment action to the corresponding implementation regions without stretching either image.
+
+## State
+
+Signed in as `finance.demo`, opened `付款工作台`, selected `待打款`, and opened `REQ-202607-000006`. The request is in round 1 after finance approval, with 15 creator payouts waiting for Airwallex execution.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the workspace inherits Noto Sans SC, preserves zero letter spacing, and uses the product's compact 9-16 px hierarchy. Long project, actor, Invoice, and payment references wrap or truncate without moving fixed controls.
+- Spacing and layout rhythm: desktop uses a stable wide-left/narrow-right grid, 8 px or smaller radii, 1 px dividers, and independent content and approval scrolling. At 390 px the regions stack into one continuous scroll while the amount summary and actions remain fixed.
+- Colors and visual tokens: white and cool-gray work surfaces, restrained purple identity accents, green completed states, and orange payment-pending states match the existing finance-review and form language. No decorative gradients or unrelated palette was added.
+- Image and asset fidelity: this operational screen requires no product imagery. Wallet, document, account, timeline, close, and send controls use the repository's existing Lucide icon library rather than handwritten assets.
+- Copy and content: project identity, payment order, single payment channel, creator-level Invoice and contract references, masked account details, fees, transfer notes, approval actors, timestamps, and channel writeback state are all present. The bottom action remains `执行打款`.
+
+## Full-View Comparison
+
+The source establishes four required regions through overlapping drawers: request information, creator payment details, the current approval flow, and a persistent payment action. The implementation preserves all four in one coherent full-screen workspace. The left column combines the source's request drawer and creator cards; the right rail carries the full approval flow; the footer keeps the amount, channel, return action, and execution action visible.
+
+## Focused Region Comparison
+
+- Project region: the implementation keeps the source's amount, linked-document counts, current state, project identity, team, channel, expected date, round, and request reason, with the payment order elevated into the summary row.
+- Creator region: repeated cards preserve the source's account snapshot, currencies, amount, fee bearer, reason, remittance reference, Invoice, contract, and provider at a denser but still scannable rhythm.
+- Approval region: all completed approval stages, channel payment, and system status writeback remain visible in order. The active channel step is labeled `待打款` and the right rail scrolls independently on desktop.
+- Action region: `执行打款` remains the rightmost primary action and is visible throughout desktop and narrow scrolling.
+
+## Interaction Verification
+
+- `待打款 3` opens the correct payment-project list, and the first row's `执行打款` opens the project-level workspace instead of a single creator drawer.
+- Desktop rendering shows the two-column composition and both independent scrollbars without clipped approval or creator content.
+- At 390 x 844, the page scroll reaches the final `状态回写` node while the fixed footer remains unobstructed and both 44 px action buttons remain usable.
+- The execution action is connected to the real prototype transition: all waiting payouts in the current request are validated, then moved together to `付款处理中`.
+- Browser console contained 0 warnings and 0 errors during the verified flow.
+
+## Comparison History
+
+1. The source review identified that separate request, creator, and approval drawers obscured one another and did not present a project-level execution context.
+2. The implementation consolidated those regions into a full-screen two-column workspace with a persistent footer and project-level action.
+3. The first browser pass confirmed desktop hierarchy and exposed no overlap or clipping.
+4. The narrow pass verified continuous scrolling from project information through creator cards to the final approval nodes, with the footer remaining fixed.
+
+## Implementation Checklist
+
+- [x] Project information above creator payment summaries.
+- [x] Complete creator-level payment overview for the selected request.
+- [x] Full approval flow with channel and status-writeback stages.
+- [x] Persistent bottom-right execution action wired to project-level payment processing.
+- [x] Desktop and 390 px responsive verification.
+- [x] Browser console verification.
+
+## Follow-up Polish
+
+- No P3 refinement is required for this scoped workflow.
+
+final result: passed
+
+---
+
+# Payment Provider Badge Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-e9718ad4-645f-4447-8205-34a721ad4cf3.png` (1420 x 400 px).
+- Desktop overview: `artifacts/provider-badges/transactions-desktop-final.png`.
+- Desktop list comparison: `artifacts/provider-badges/transactions-list-final.png`.
+- Narrow implementation: `artifacts/provider-badges/transactions-390x844-final.png`, captured with the browser viewport override set to 390 x 844.
+- State: signed in as `finance.demo`, opened `交易记录`, and displayed Airwallex, PayMax, and PayPal together in the channel summary and transaction list.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- Typography: channel names remain readable at the existing dense table scale. Labels use the product font, 700 weight, zero letter spacing, and stable line height without clipping.
+- Spacing and layout: the shared badge uses a compact 26-30 px height, 4-9 px insets, and a 6-7 px gap. It fits existing table cells and summary rows without changing column widths or row heights.
+- Colors: Airwallex uses a purple mark and lavender surface, PayMax uses coral and a warm pale surface, and PayPal uses blue and a pale blue surface. Each treatment includes a border and darker text for legibility.
+- Icon and asset fidelity: the source's initial block is retained as a real text monogram inside the badge. No decorative imagery, custom SVG, emoji, or unrelated asset was added.
+- Content: `Payermax`, `payer max`, and `PayMax` normalize to the displayed label `PayMax`; payment values and business rules remain unchanged. A letter mark plus provider name ensures color is not the only identifying signal.
+- Responsive behavior: at 390 px the three summary rows remain fully visible, and the existing transaction-table scroll region preserves the provider badges without page-level overlap.
+
+## Interaction And Technical Verification
+
+- Shared badge rendering and provider normalization: 3 component tests passed.
+- Complete Vitest run: 58 files and 365 tests passed.
+- TypeScript check and production Vite build: passed.
+- Browser console: 0 warnings and 0 errors during the verified transaction view.
+- Source and implementation were opened together for direct visual comparison; the implementation preserves the source's purple / coral / blue provider mapping while adapting it to compact list rows.
+
+## Comparison History
+
+1. The first list pass established the three provider treatments and shared reusable component.
+2. The first transaction-summary pass exposed truncated two-column content after badges were added.
+3. The final pass moved provider metrics to one stable row per channel, then verified the overview and list at desktop and 390 px widths.
+
+final result: passed

@@ -2,13 +2,17 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  CircleAlert,
   Clock3,
   FileText,
   ReceiptText,
+  ShieldCheck,
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Modal, PageHeading } from '../components/Common';
+import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -18,26 +22,38 @@ import type {
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
 import type { SystemUser } from '../data';
-import type {
-  ContractId,
-  CooperationProjectId,
-  CreatorId,
-  EngagementId,
-  InvoiceId,
-  PaymentRequestProjectId,
-  PaymentListId,
-  ProjectId,
-  RequestApprovalState,
-  RequestApprovalStatus,
+import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import { buildRequestFinanceReview, type RequestFinanceReview } from '../financeReview';
+import {
+  paymentListEffectiveAccount,
+  paymentListItemValue,
+  type ContractId,
+  type CooperationProjectId,
+  type CreatorId,
+  type EngagementId,
+  type InvoiceId,
+  type PaymentRequestProjectId,
+  type PaymentListId,
+  type PaymentListRecord,
+  type ProjectId,
+  type RequestApprovalState,
+  type RequestApprovalStatus,
 } from '../businessWorkflow';
 import {
+  canReturnRequestApproval,
   canReviewRequestApproval,
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalStage,
   type RequestApprovalAction,
 } from '../requestApprovalWorkflow';
+import {
+  myProjectStatusFor,
+  requestProjectStatusFor,
+  type PaymentRequestPaymentPlan,
+} from '../paymentRequestProjects';
+import { formatInvoiceMoney } from '../invoice/invoiceUtils';
 
-export type RequestProjectSummary = {
+export type RequestProjectSummary = PaymentRequestPaymentPlan & {
   id: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   requestCode?: string;
@@ -122,6 +138,167 @@ type RequestProjectDetail = {
 };
 
 type Notify = (title: string, message: string) => void;
+
+type RequestPaymentChannel = 'Airwallex' | 'PayPal' | 'PayMax' | '待确认';
+
+const paymentChannelFromValue = (value: string): RequestPaymentChannel => {
+  const match = value.match(/airwallex|paypal|pay(?:er)?\s*max/i)?.[0].toLowerCase();
+  if (match === 'airwallex') return 'Airwallex';
+  if (match === 'paypal') return 'PayPal';
+  if (match?.startsWith('pay')) return 'PayMax';
+  return '待确认';
+};
+
+export const requestPaymentChannelLabel = (channels: string | string[]) => {
+  const values = Array.isArray(channels) ? channels : [channels];
+  return values.map(paymentChannelFromValue).find((channel) => channel !== '待确认') ?? '待确认';
+};
+
+export const requestPaymentMethodLabel = (channel: string) => {
+  const normalizedChannel = requestPaymentChannelLabel(channel);
+  if (normalizedChannel === 'PayPal') return 'PayPal';
+  if (normalizedChannel === 'Airwallex' || normalizedChannel === 'PayMax') return '银行转账';
+  return '待确认';
+};
+
+export const normalizeRequestPaymentChannels = <T extends { channel: string }>(items: T[]): T[] => {
+  const channel = requestPaymentChannelLabel(items.map((item) => item.channel));
+  return items.map((item) => ({ ...item, channel }));
+};
+
+export const paymentListsForRequest = (
+  request: Pick<RequestProjectSummary, 'paymentListId' | 'paymentListIds' | 'paymentRequestProjectId'>,
+  paymentLists: PaymentListRecord[],
+) => {
+  const explicitIds = new Set([
+    ...(request.paymentListIds ?? []),
+    ...(request.paymentListId ? [request.paymentListId] : []),
+  ]);
+  return paymentLists.filter((list) => (
+    Boolean(
+      request.paymentRequestProjectId
+      && list.paymentRequestProjectId === request.paymentRequestProjectId,
+    )
+    || explicitIds.has(list.paymentListId)
+  ));
+};
+
+const requestPaymentListStatusLabel = (paymentList: PaymentListRecord | null) => {
+  if (!paymentList) return '未生成';
+  if (paymentList.status === 'paid') return '已付款';
+  if (paymentList.status === 'approved') return '已批准';
+  if (paymentList.status === 'submitted') return '已提交';
+  if (paymentList.status === 'generated') return '已生成';
+  return '草稿';
+};
+
+const requestFeeBearerLabel = (value: unknown) => {
+  if (value === 'ADVERTISER') return '付款方承担';
+  if (value === 'PUBLISHER') return '收款方承担';
+  if (value === 'SHARED') return '共同承担';
+  return '待确认';
+};
+
+export const paymentRecordsFromLists = (
+  paymentLists: PaymentListRecord[],
+  projectName: string,
+): ProjectResourceRecord[] => paymentLists.flatMap((list) => (
+  list.items.map((item, index) => {
+    const effectiveAccount = paymentListEffectiveAccount(item);
+    const provider = effectiveAccount.provider || list.provider || '待确认';
+    const currency = String(paymentListItemValue(item, 'currency') || '待确认');
+    const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency') || '待确认');
+    const amount = Number(paymentListItemValue(item, 'amount') || 0);
+    const recordId = `${list.paymentListCode}-${String(index + 1).padStart(2, '0')}`;
+    const status = item.requiresRevalidation
+      ? '需重新校验'
+      : requestPaymentListStatusLabel(list);
+    const updatedAt = item.lastValidatedAt ?? list.generatedAt ?? list.updatedAt;
+
+    return {
+      id: recordId,
+      title: item.snapshot.creatorName,
+      subtitle: `${list.paymentListCode} · ${provider}`,
+      amount: formatInvoiceMoney(currency, amount),
+      status,
+      channel: provider,
+      fields: [
+        { label: '付款明细编号', value: recordId },
+        { label: '付款清单', value: list.paymentListCode },
+        { label: '达人 / 收款人', value: item.snapshot.creatorName },
+        { label: '关联项目', value: projectName },
+        { label: '关联 Invoice', value: item.snapshot.invoiceNumber },
+        { label: '付款渠道', value: provider },
+        { label: '付款方式', value: requestPaymentMethodLabel(provider) },
+        { label: '支付币种', value: currency },
+        { label: '收款币种', value: receiveCurrency },
+        { label: '付款金额', value: formatInvoiceMoney(currency, amount) },
+        { label: '费用承担', value: requestFeeBearerLabel(paymentListItemValue(item, 'feeBearer')) },
+        { label: '收款账户', value: effectiveAccount.accountSummary || '待补充' },
+        { label: '付款原因', value: String(paymentListItemValue(item, 'paymentReason') || '未填写') },
+        { label: '交易附言', value: String(paymentListItemValue(item, 'transactionReference') || '未填写') },
+        { label: '描述', value: String(paymentListItemValue(item, 'description') || '未填写') },
+        { label: '清单版本', value: `v${list.version ?? 1}` },
+        { label: '付款状态', value: status },
+        { label: '更新时间', value: updatedAt ? new Date(updatedAt).toLocaleString('zh-CN') : '待更新' },
+      ],
+    };
+  })
+));
+
+export const requestPayeesFromPaymentLists = (
+  paymentLists: PaymentListRecord[],
+): RequestPayee[] => paymentLists.flatMap((list) => (
+  list.items.map((item) => {
+    const account = paymentListEffectiveAccount(item);
+    const currency = String(paymentListItemValue(item, 'currency') || '待确认');
+    const amount = Number(paymentListItemValue(item, 'amount') || 0);
+    return {
+      name: item.snapshot.creatorName,
+      invoice: item.snapshot.invoiceNumber,
+      amount: formatInvoiceMoney(currency, amount),
+      channel: account.provider || list.provider || '待确认',
+      status: requestPaymentListStatusLabel(list),
+    };
+  })
+));
+
+const parsedRequestDate = (value?: string) => {
+  const parts = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!parts) return null;
+  return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+};
+
+const addBusinessDays = (value: Date, businessDays: number) => {
+  const result = new Date(value);
+  let added = 0;
+  while (added < businessDays) {
+    result.setDate(result.getDate() + 1);
+    if (result.getDay() !== 0 && result.getDay() !== 6) added += 1;
+  }
+  return result;
+};
+
+const formatRequestDate = (value: Date) => [
+  value.getFullYear(),
+  String(value.getMonth() + 1).padStart(2, '0'),
+  String(value.getDate()).padStart(2, '0'),
+].join('-');
+
+export const requestExpectedPaymentDateLabel = (
+  request: Pick<RequestProjectSummary, 'approval' | 'createdAt' | 'lifecycle' | 'status'>,
+  fallbackSource?: string,
+  fallbackDate = new Date(),
+) => {
+  const sourceDate = parsedRequestDate(
+    request.approval?.updatedAt
+    ?? request.createdAt
+    ?? request.approval?.submittedAt
+    ?? fallbackSource,
+  ) ?? new Date(fallbackDate);
+  const isCompleted = myProjectStatusFor(request) === '已付款';
+  return formatRequestDate(isCompleted ? sourceDate : addBusinessDays(sourceDate, 3));
+};
 
 const APPROVAL_STEPS: Array<{
   status: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
@@ -311,6 +488,7 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
 };
 
 function getRequestProjectDetail(request: RequestProjectSummary): RequestProjectDetail {
+  const myProjectStatus = myProjectStatusFor(request);
   if (request.generatedDetail) {
     const generated = request.generatedDetail;
     const hasContract = request.contracts > 0;
@@ -369,7 +547,8 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
     };
   }
 
-  const processed = request.filter === 'processed';
+  const paid = myProjectStatus === '已付款';
+  const approved = paid || myProjectStatus === '待打款';
   const paymentGenerated = request.paymentOrder !== '待生成';
   return REQUEST_PROJECT_DETAILS[request.id] ?? {
     brand: request.brand,
@@ -381,26 +560,26 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
     contract: {
       id: `${request.contracts} 份合同`,
       meta: `对应 ${request.invoices} 份 Invoice · 与达人一一签约`,
-      status: processed ? '已归档' : '已签署',
+      status: approved ? '已归档' : '已签署',
     },
     invoice: {
       id: `${request.invoices} 份 Invoice`,
       meta: `对应 ${request.contracts} 份合同 · 请款金额 ${request.amount}`,
-      status: processed ? '已通过' : request.status === '待补资料' ? '待补资料' : '已校验',
+      status: approved ? '已通过' : myProjectStatus === '已退回' ? '待补资料' : '已校验',
     },
     payment: {
       id: request.paymentOrder,
       meta: paymentGenerated ? `${request.invoices} 笔达人付款明细` : '请款审核通过后生成',
-      status: processed ? '已完成' : request.status === '待打款' ? '待打款' : '审批中',
+      status: paid ? '已完成' : approved ? '待打款' : '审批中',
     },
     payees: [],
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已同步', time: '已完成', state: 'complete' },
-      { label: 'PM 审批', description: processed ? `${request.pm}已完成审核` : `由${request.pm}审核项目资料`, time: processed ? '已完成' : '处理中', state: processed ? 'complete' : 'current' },
-      { label: '项目负责人审批', description: processed ? '项目资料与预算已通过' : 'PM 审批通过后进入', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
-      { label: '老板审批', description: processed ? '业务审批已完成' : '项目负责人审批通过后进入', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
-      { label: '财务审批', description: processed ? '收款主体与金额已通过' : '老板审批通过后进入', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
-      { label: '渠道付款', description: processed ? '付款已完成' : '全部审批完成后执行', time: processed ? '已完成' : '待开始', state: processed ? 'complete' : 'pending' },
+      { label: 'PM 审批', description: approved ? `${request.pm}已完成审核` : `由${request.pm}审核项目资料`, time: approved ? '已完成' : '处理中', state: approved ? 'complete' : 'current' },
+      { label: '项目负责人审批', description: approved ? '项目资料与预算已通过' : 'PM 审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '老板审批', description: approved ? '业务审批已完成' : '项目负责人审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '财务审批', description: approved ? '收款主体与金额已通过' : '老板审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '渠道付款', description: paid ? '付款已完成' : '全部审批完成后执行', time: paid ? '已完成' : '待开始', state: paid ? 'complete' : approved ? 'current' : 'pending' },
     ],
   };
 }
@@ -415,13 +594,23 @@ function getRequestPayees(
   request: RequestProjectSummary,
   detail: RequestProjectDetail,
 ): RequestPayee[] {
-  if (detail.payees.length >= request.invoices) return detail.payees.slice(0, request.invoices);
+  if (detail.payees.length >= request.invoices) {
+    return normalizeRequestPaymentChannels(detail.payees.slice(0, request.invoices));
+  }
   const names = REQUEST_CREATOR_NAMES[request.id] ?? [];
   const requestMoney = parseAmount(request.amount);
   const existingTotal = detail.payees.reduce((sum, payee) => sum + parseAmount(payee.amount).amount, 0);
   const missingCount = Math.max(request.invoices - detail.payees.length, 0);
   const defaultAmount = missingCount > 0 ? Math.max((requestMoney.amount - existingTotal) / missingCount, 0) : 0;
   const projectCode = request.id.replace('PRJ-', '');
+  const myProjectStatus = myProjectStatusFor(request);
+  const payoutStatus = myProjectStatus === '已付款'
+    ? '已付款'
+    : myProjectStatus === '待打款'
+      ? '待打款'
+      : myProjectStatus === '已退回'
+        ? '已退回'
+        : '待审批';
   const missing = Array.from({ length: missingCount }, (_, index) => {
     const position = detail.payees.length + index;
     const name = names[position] ?? `项目达人 ${String(position + 1).padStart(2, '0')}`;
@@ -434,16 +623,17 @@ function getRequestPayees(
       invoice: `INV-${projectCode}-${String(position + 1).padStart(2, '0')}`,
       amount: `${requestMoney.currency} ${roundedAmount.toLocaleString('en-US')}`,
       channel: position % 3 === 1 ? 'PayPal' : position % 3 === 2 ? 'PayMax' : 'Airwallex',
-      status: request.status === '已完成' ? '已付款' : request.status,
+      status: payoutStatus,
     };
   });
-  return [...detail.payees, ...missing];
+  return normalizeRequestPaymentChannels([...detail.payees, ...missing]);
 }
 
 function getRequestProjectResourceRecords(
   request: RequestProjectSummary,
   detail: RequestProjectDetail,
   payees: RequestPayee[],
+  paymentLists: PaymentListRecord[],
 ): ProjectResourceRecords {
   const projectCode = request.id.replace('PRJ-', '');
   const invoices: ProjectResourceRecord[] = payees.map((payee, index) => ({
@@ -485,7 +675,7 @@ function getRequestProjectResourceRecords(
       ],
     };
   });
-  const payments: ProjectResourceRecord[] = detail.payment.id === '待生成'
+  const fallbackPayments: ProjectResourceRecord[] = detail.payment.id === '待生成'
     ? []
     : invoices.map((invoice, index) => ({
       id: `${detail.payment.id}-${String(index + 1).padStart(2, '0')}`,
@@ -501,27 +691,76 @@ function getRequestProjectResourceRecords(
         { label: '关联项目', value: request.project },
         { label: '关联 Invoice', value: invoice.id },
         { label: '付款渠道', value: invoice.channel ?? '待确认' },
+        { label: '付款方式', value: requestPaymentMethodLabel(invoice.channel ?? '') },
         { label: '付款金额', value: invoice.amount },
         { label: '付款状态', value: detail.payment.status },
       ],
     }));
+  const payments = paymentLists.length
+    ? paymentRecordsFromLists(paymentLists, request.cooperationProjectName ?? request.project)
+    : fallbackPayments;
   return { contract: contracts, invoice: invoices, payment: payments };
+}
+
+function RequestPaymentListReviewViewer({
+  project,
+  paymentLists,
+  creators,
+  financeReview,
+  onExportPaymentList,
+  onClose,
+}: {
+  project: { id: string; name: string };
+  paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
+  financeReview: RequestFinanceReview;
+  onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      title={`${project.name} · 付款清单`}
+      width="1120px"
+      className="project-resource-modal request-payment-review-modal"
+      onClose={onClose}
+      footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
+    >
+      <PaymentListReviewContent
+        paymentLists={paymentLists}
+        creators={creators}
+        financeReview={financeReview}
+        onExportPaymentList={onExportPaymentList}
+        accountDisplay="all-summary"
+        exportMode="all"
+      />
+    </Modal>
+  );
 }
 
 export function RequestProjectDetailPage({
   request,
+  paymentLists,
+  creators,
+  generatedInvoices,
   currentUser,
+  onExportPaymentList,
   onApprovalAction,
+  onOpenFinanceReview,
   onBack,
   notify,
 }: {
   request: RequestProjectSummary;
+  paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
+  generatedInvoices: GeneratedInvoiceRecord[];
   currentUser: SystemUser;
+  onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
     request: RequestProjectSummary,
     action: RequestApprovalAction,
     reason?: string,
-  ) => void;
+  ) => boolean;
+  onOpenFinanceReview: () => void;
   onBack: () => void;
   notify: Notify;
 }) {
@@ -538,12 +777,27 @@ export function RequestProjectDetailPage({
     request.approval
     && canReviewRequestApproval(currentUser, request.approval, request.pm),
   );
+  const canReturnCurrentRequest = Boolean(
+    request.approval
+    && canReturnRequestApproval(currentUser, request.approval, request.pm),
+  );
   const currentApprovalLabel = request.approval
     ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
-    : request.status;
+    : requestProjectStatusFor(request) ?? '请款提交';
   const normalizedReturnReason = returnReason.trim();
-  const payees = getRequestPayees(request, detail);
-  const records = getRequestProjectResourceRecords(request, detail, payees);
+  const requestPaymentLists = paymentListsForRequest(request, paymentLists);
+  const paymentListPayees = requestPayeesFromPaymentLists(requestPaymentLists);
+  const payees = paymentListPayees.length ? paymentListPayees : getRequestPayees(request, detail);
+  const paymentChannel = requestPaymentChannelLabel(
+    request.paymentChannel ?? payees.map((payee) => payee.channel),
+  );
+  const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
+  const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+  const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
+  const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
+  const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);
+  const paymentListItemCount = requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0);
+  const currentPaymentList = requestPaymentLists[0] ?? null;
   const projectContext = {
     id: request.requestCode ?? request.id,
     name: request.cooperationProjectName ?? request.project,
@@ -568,10 +822,15 @@ export function RequestProjectDetailPage({
     },
     {
       kind: 'payment' as const,
-      label: '付款单',
+      label: '付款清单',
       icon: WalletCards,
-      data: detail.payment,
-      action: '查看付款单',
+      data: {
+        ...detail.payment,
+        id: currentPaymentList?.paymentListCode ?? detail.payment.id,
+        meta: `${paymentChannel} · ${paymentListItemCount || records.payment.length} 笔付款明细`,
+        status: currentPaymentList ? requestPaymentListStatusLabel(currentPaymentList) : detail.payment.status,
+      },
+      action: '查看清单',
     },
   ];
 
@@ -633,14 +892,15 @@ export function RequestProjectDetailPage({
               <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
               <div><dt>提交时间</dt><dd>{detail.submittedAt}</dd></div>
               <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
-              <div><dt>审批负责人</dt><dd>{detail.approver}</dd></div>
+              <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
+              <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
               <div className="project-info-full"><dt>请款原因</dt><dd>{detail.reason}</dd></div>
             </dl>
           </section>
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>合同、Invoice 与付款单</h2><p>核对请款项目中的全部关联资料。</p></div>
+              <div><h2>合同、Invoice 与付款清单</h2><p>核对请款项目中的全部关联资料。</p></div>
             </header>
             <div className="project-resource-list">
               {resources.map((resource) => {
@@ -674,13 +934,13 @@ export function RequestProjectDetailPage({
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>付款明细</h2><p>展示当前请款中的达人、Invoice 与渠道状态。</p></div>
+              <div><h2>付款明细</h2><p>展示当前请款中的达人、Invoice、付款渠道、方式与状态。</p></div>
               <span>共 {request.invoices} 份 Invoice</span>
             </header>
             <div className="table-scroll">
               <table className="data-table request-detail-payment-table">
-                <thead><tr><th>收款人 / 达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>状态</th></tr></thead>
-                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td>{payee.channel}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
+                <thead><tr><th>达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>付款方式</th><th>状态</th></tr></thead>
+                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
               </table>
             </div>
           </section>
@@ -702,16 +962,49 @@ export function RequestProjectDetailPage({
               <span><strong>已退回媒介复核</strong>{request.approval.returnReason}</span>
             </div>
           ) : null}
-          {canReviewCurrentStage ? (
+          {isFinanceApprovalStage && canReviewCurrentStage ? (
             <div className="invoice-review-actions request-approval-actions">
-              <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>退回媒介复核</Button>
-              <Button onClick={() => onApprovalAction(request, 'APPROVE')}>审批通过</Button>
+              <Button icon={<WalletCards size={16} />} onClick={onOpenFinanceReview}>
+                前往付款工作台
+              </Button>
+            </div>
+          ) : canReviewCurrentStage || canReturnCurrentRequest ? (
+            <div className="invoice-review-actions request-approval-actions">
+              {canReturnCurrentRequest ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>退回媒介修改</Button> : null}
+              {canReviewCurrentStage ? (
+                <Button
+                  disabled={financeApprovalBlocked}
+                  onClick={() => onApprovalAction(request, 'APPROVE')}
+                >
+                  审批通过
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {isFinanceApprovalStage && canReviewCurrentStage ? (
+            <div className="drawer-alert">
+              {financeApprovalBlocked ? <CircleAlert size={18} /> : <ShieldCheck size={18} />}
+              <span>
+                <strong>{financeApprovalBlocked ? '存在待处理差异' : '等待逐份核对'}</strong>
+                {financeApprovalBlocked
+                  ? `Invoice 与付款清单存在 ${financeReview.mismatchCount || '未定位'} 项关键差异。`
+                  : `请前往付款工作台，逐份确认 ${financeReview.totalCount} 份 Invoice 与付款明细。`}
+              </span>
             </div>
           ) : null}
         </aside>
       </div>
 
-      {viewer ? (
+      {viewer?.kind === 'payment' ? (
+        <RequestPaymentListReviewViewer
+          project={projectContext}
+          paymentLists={requestPaymentLists}
+          creators={creators}
+          financeReview={financeReview}
+          onExportPaymentList={(paymentListId) => onExportPaymentList(request, paymentListId)}
+          onClose={() => setViewer(null)}
+        />
+      ) : viewer ? (
         <ProjectResourceViewer
           project={projectContext}
           records={records}
@@ -727,7 +1020,7 @@ export function RequestProjectDetailPage({
       ) : null}
       {returnDialogOpen ? (
         <Modal
-          title="退回媒介复核"
+          title="退回媒介修改"
           width="520px"
           onClose={() => setReturnDialogOpen(false)}
           footer={(
@@ -757,7 +1050,7 @@ export function RequestProjectDetailPage({
               value={returnReason}
               onChange={(event) => setReturnReason(event.target.value)}
             />
-            <small>该轮全部 Invoice 将进入“待媒介审核 / 待复核”，付款清单恢复草稿。</small>
+            <small>项目修改后回到当前 OA 节点；只有实际修改的 Invoice 需要重新签署和媒介审核。</small>
           </label>
         </Modal>
       ) : null}

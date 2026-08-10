@@ -1,0 +1,77 @@
+.transactions-page .transaction-filter-row {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.transactions-page .transaction-search {
+  width: auto;
+  flex: none;
+}
+
+.transactions-page .transaction-search input {
+  width: 226px;
+}
+
+.transactions-page .transaction-search:focus-within,
+.transactions-page .date-filter:focus-within {
+  border-color: #ff9e87;
+  box-shadow: 0 0 0 3px rgba(255, 157, 135, 0.13);
+}
+
+.transactions-page .transaction-provider-select {
+  width: 168px;
+}
+
+.transactions-page .transaction-filter-result {
+  margin-left: auto;
+  color: #7b818d;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.transactions-page .transaction-export-error {
+  width: 100%;
+  margin: -6px 0 10px;
+  color: #b33b30;
+  font-size: 11.5px;
+}
+
+.transactions-page .transaction-export-button {
+  flex: none;
+}
+
+@media (max-width: 860px) {
+  .transactions-page .transaction-filter-row {
+    padding: 12px 0;
+  }
+
+  .transactions-page .transaction-search,
+  .transactions-page .transaction-search input,
+  .transactions-page .transaction-provider-select {
+    width: 100%;
+  }
+
+  .transactions-page .transaction-filter-result {
+    width: auto;
+    margin-left: 0;
+  }
+
+  .transactions-page .transaction-export-button {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .transactions-page .transaction-filter-result,
+  .transactions-page .transaction-export-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .transactions-page .transaction-export-button {
+    justify-content: center;
+  }
+}

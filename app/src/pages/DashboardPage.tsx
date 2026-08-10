@@ -12,6 +12,7 @@ import {
 import { useMemo } from 'react';
 import { PageHeading } from '../components/Common';
 import type { ContractRecord } from '../contracts';
+import { MY_PROJECT_APPROVAL_STATUSES, myProjectStatusFor } from '../paymentRequestProjects';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type {
   CreatorProfile,
@@ -141,17 +142,14 @@ export function DashboardPage({
   onNavigate: (page: NavPage) => void;
 }) {
   const metrics = useMemo(() => {
-    const approvingRequests = requests.filter((request) => (
-      request.status.includes('审批中') || request.status === '待审批'
+    const requestStatuses = requests.map(myProjectStatusFor);
+    const approvingRequests = requestStatuses.filter((status) => (
+      MY_PROJECT_APPROVAL_STATUSES.has(status)
     )).length;
-    const approvedRequests = requests.filter((request) => (
-      request.status === '已完成'
-      || request.status.includes('审批完成')
-      || request.status.includes('待打款')
+    const approvedRequests = requestStatuses.filter((status) => (
+      status === '待打款' || status === '已付款'
     )).length;
-    const paidRequests = requests.filter((request) => (
-      request.status === '已完成' || request.status.includes('已打款')
-    )).length;
+    const paidRequests = requestStatuses.filter((status) => status === '已付款').length;
 
     const activeCreatorHandles = new Set(
       payouts

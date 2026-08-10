@@ -47,6 +47,7 @@ import {
 } from '../payoutAccounts';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
+import { PaymentProviderBadge } from './PaymentProviderBadge';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
 type CreateDialogKind = 'invoice';
@@ -811,7 +812,7 @@ export function ProjectResourceManager({
                         <header className="project-payment-row-header">
                           <div>
                             <strong>{item.snapshot.creatorName}</strong>
-                            <span>{item.snapshot.invoiceNumber} · {effectiveAccount.provider}</span>
+                            <span>{item.snapshot.invoiceNumber} · <PaymentProviderBadge compact provider={effectiveAccount.provider} /></span>
                           </div>
                           <div className="project-payment-row-actions">
                             {paymentFieldsEditable && item.requiresRevalidation ? (

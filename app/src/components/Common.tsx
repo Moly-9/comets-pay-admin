@@ -385,6 +385,8 @@ export function Modal({
       }
     });
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const openDialogs = document.querySelectorAll<HTMLElement>('.modal-panel[role="dialog"]');
+      if (openDialogs[openDialogs.length - 1] !== panelRef.current) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         onCloseRef.current();

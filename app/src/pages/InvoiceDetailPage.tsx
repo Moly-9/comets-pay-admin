@@ -50,6 +50,7 @@ import type {
   InvoiceReviewStatus,
   Payout,
 } from '../types';
+import type { InvoiceManagementView } from '../invoice/invoiceManagement';
 
 export type InvoiceDetailSource =
   | { kind: 'payout'; payout: Payout; record?: GeneratedInvoiceRecord }
@@ -78,13 +79,7 @@ const timelineIndex = (status: InvoiceReviewStatus) => {
   if (status === '待签署') return 1;
   if (status === '达人反馈') return 1;
   if (status === '待媒介审核' || status === '待媒介复核') return 2;
-  if (
-    status === '待发起请款'
-    || status === '待PM审核'
-    || status === '待项目负责人审核'
-    || status === '待老板审核'
-    || status === '待财务审核'
-  ) return 3;
+  if (status === '待发起请款') return 3;
   return 4;
 };
 
@@ -372,7 +367,9 @@ export function InvoiceDetailPage({
   canManageInvoice,
   canReviewMedia,
   canReviewFinance,
+  canEditProjectResource = false,
   canExecutePayout = false,
+  managementView,
   notify,
 }: {
   source: InvoiceDetailSource;
@@ -394,7 +391,9 @@ export function InvoiceDetailPage({
   canManageInvoice: boolean;
   canReviewMedia: boolean;
   canReviewFinance: boolean;
+  canEditProjectResource?: boolean;
   canExecutePayout?: boolean;
+  managementView?: InvoiceManagementView;
   notify: Notify;
 }) {
   const [activeTab, setActiveTab] = useState<InvoiceDetailTab>('summary');
@@ -417,14 +416,14 @@ export function InvoiceDetailPage({
     : source.kind === 'generated'
       ? source.payout?.invoiceReviewStatus ?? source.record.status
       : null;
-  const displayStatus = invoiceReviewStatus
+  const displayStatus = managementView?.status ?? (invoiceReviewStatus
     ? getInvoiceRowStatus({
         invoiceReviewStatus,
         status: payout?.status ?? '未进入付款',
       })
     : source.kind === 'project'
       ? source.status
-      : '';
+    : '');
   const displayStatusKey = invoiceReviewStatus === '已通过' && payout
     ? getApprovedInvoicePaymentStatus(payout)
     : invoiceReviewStatus ?? '未进入付款';
@@ -456,13 +455,20 @@ export function InvoiceDetailPage({
         manage: canManageInvoice,
         mediaReview: canReviewMedia,
         financeReview: canReviewFinance,
+        projectResourceEdit: canEditProjectResource,
       })
     : null;
   const isPaymentListReturn = payout?.invoiceReviewStatus === '已退回'
     && payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST';
-  const navigationTarget = invoiceReviewStatus
-    ? getInvoiceDetailNavigationTarget(invoiceReviewStatus)
-    : null;
+  const navigationTarget = managementView?.status === 'OA审批中'
+    ? 'REQUEST'
+    : managementView?.status === '待发起请款'
+      ? 'PROJECT'
+      : managementView && ['付款中', '已付款'].includes(managementView.status)
+        ? 'PAYMENT'
+        : invoiceReviewStatus
+          ? getInvoiceDetailNavigationTarget(invoiceReviewStatus)
+          : null;
   const projectTimelineIndex = source.kind === 'project'
     ? /已完成|已付款/.test(source.status)
       ? 4
@@ -482,13 +488,11 @@ export function InvoiceDetailPage({
     ?? Math.max(0, ...(payout?.invoiceReviewHistory ?? []).map((event) => event.approvalRound ?? 0));
   const paymentListVersion = payout?.paymentListVersion
     ?? (
-      invoiceReviewStatus && (
-        invoiceReviewStatus === '待PM审核'
-        || invoiceReviewStatus === '待项目负责人审核'
-        || invoiceReviewStatus === '待老板审核'
-        || invoiceReviewStatus === '待财务审核'
-        || invoiceReviewStatus === '已通过'
-        || invoiceReviewStatus === '已退回'
+      managementView && (
+        managementView.status === 'OA审批中'
+        || managementView.status === '付款中'
+        || managementView.status === '已付款'
+        || managementView.status === '已退回'
       )
         ? 1
         : null
@@ -610,7 +614,7 @@ export function InvoiceDetailPage({
   const navigationActionLabel = navigationTarget === 'PROJECT'
     ? canManageInvoice ? '前往项目发起请款' : '查看关联项目'
     : navigationTarget === 'REQUEST'
-      ? '查看 / 处理请款审批'
+      ? '查看请款审批'
       : navigationTarget === 'PAYMENT' && payout
         ? payout.status === '付款失败'
           ? canExecutePayout ? '处理付款失败' : '查看失败信息'
@@ -917,7 +921,9 @@ export function InvoiceDetailPage({
                     ? '修改并重新发送达人'
                     : editContext === 'MEDIA_RECHECK'
                       ? '修改 Invoice'
-                      : '修改并重新发起'}
+                      : editContext === 'PROJECT_RESOURCE'
+                        ? '修改 Invoice 并重新签署'
+                        : '修改并重新发起'}
                 </Button>
               ) : null}
               {returnAction ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>{ACTION_LABEL[returnAction]}</Button> : null}

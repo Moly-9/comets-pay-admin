@@ -28,6 +28,7 @@ import {
 import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Pagination, usePagination } from '../components/Pagination';
 import {
   CURRENT_USER,
   DEMO_SYSTEM_USERS,
@@ -498,6 +499,22 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     const matchesSearch = !normalizedSearch || `${account.name}${account.email}${ROLE_DEFINITIONS[account.role].label}`.toLowerCase().includes(normalizedSearch);
     return matchesRole && matchesSearch;
   });
+  const {
+    page: accountPage,
+    pageItems: paginatedAccounts,
+    pageSize: accountPageSize,
+    setPage: setAccountPage,
+    setPageSize: setAccountPageSize,
+  } = usePagination(visibleAccounts, { resetKey: `${search}\u0000${roleFilter}` });
+  const {
+    page: approvalPage,
+    pageItems: paginatedApprovalFlows,
+    pageSize: approvalPageSize,
+    setPage: setApprovalPage,
+    setPageSize: setApprovalPageSize,
+  } = usePagination(approvalFlows, {
+    resetKey: approvalFlows.map((flow) => flow.id).join('|'),
+  });
 
   const openCreateModal = () => {
     setNewName('');
@@ -705,7 +722,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
               <table className="data-table operational-table system-account-table">
                 <thead><tr><th>账号</th><th>账号类型</th><th>权限范围</th><th>登录设备</th><th>状态</th><th>最近登录</th><th className="action-cell">操作</th></tr></thead>
                 <tbody>
-                  {visibleAccounts.map((account) => {
+                  {paginatedAccounts.map((account) => {
                     const role = ROLE_DEFINITIONS[account.role];
                     return (
                       <tr key={account.id}>
@@ -734,6 +751,17 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
               </table>
               {visibleAccounts.length === 0 ? <div className="empty-table">暂无符合条件的系统账号</div> : null}
             </div>
+            <div className="table-footer">
+              <span>共 {visibleAccounts.length} 个账号</span>
+              <Pagination
+                ariaLabel="系统账号列表分页"
+                page={accountPage}
+                pageSize={accountPageSize}
+                total={visibleAccounts.length}
+                onPageChange={setAccountPage}
+                onPageSizeChange={setAccountPageSize}
+              />
+            </div>
           </>
         ) : view === 'permissions' ? (
           <div className="role-permission-grid">
@@ -759,11 +787,24 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
             })}
           </div>
         ) : (
-          <div className="approval-management">
-            {approvalFlows.map((flow) => (
-              <ApprovalFlowCard key={flow.id} flow={flow} onEdit={openEditApprovalFlow} onToggle={toggleApprovalFlow} />
-            ))}
-          </div>
+          <>
+            <div className="approval-management">
+              {paginatedApprovalFlows.map((flow) => (
+                <ApprovalFlowCard key={flow.id} flow={flow} onEdit={openEditApprovalFlow} onToggle={toggleApprovalFlow} />
+              ))}
+            </div>
+            <div className="table-footer">
+              <span>共 {approvalFlows.length} 条审批流程</span>
+              <Pagination
+                ariaLabel="审批流程列表分页"
+                page={approvalPage}
+                pageSize={approvalPageSize}
+                total={approvalFlows.length}
+                onPageChange={setApprovalPage}
+                onPageSizeChange={setApprovalPageSize}
+              />
+            </div>
+          </>
         )}
       </section>
 

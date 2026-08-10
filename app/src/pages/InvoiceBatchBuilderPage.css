@@ -241,15 +241,15 @@
   align-items: center;
   justify-content: center;
   border: 1px solid #bcc4cd;
-  border-radius: 5px;
+  border-radius: 50%;
   background: #fff;
   color: transparent;
 }
 
 .invoice-batch-creator.is-selected .invoice-batch-creator-check {
-  border-color: #e6765f;
-  background: #e6765f;
-  color: #fff;
+  border-color: var(--multi-select-border);
+  background: var(--multi-select-fill);
+  color: var(--multi-select-ink);
 }
 
 .invoice-batch-creator > span:nth-of-type(2) {
@@ -1374,5 +1374,63 @@
 
   .invoice-batch-preview-canvas {
     padding: 14px;
+  }
+}
+
+@media (min-width: 1181px) {
+  .invoice-batch-table-wrap {
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .invoice-batch-table {
+    width: 100%;
+    table-layout: auto;
+    white-space: nowrap;
+  }
+
+  .invoice-batch-table th,
+  .invoice-batch-table td,
+  .invoice-batch-table th:last-child,
+  .invoice-batch-table td:last-child,
+  .invoice-batch-preview-cell {
+    min-width: 0;
+    max-width: none;
+    text-align: left !important;
+    white-space: nowrap;
+  }
+
+  .invoice-batch-creator-link {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .invoice-batch-line-totals > strong {
+    justify-content: flex-start;
+  }
+
+  .invoice-batch-row-total {
+    text-align: left;
+  }
+}
+
+@media (min-width: 1181px) and (max-width: 1599px) {
+  .invoice-batch-table {
+    min-width: 1340px;
+  }
+}
+
+@media (min-width: 1600px) and (max-width: 2199px) {
+  .invoice-batch-table {
+    min-width: 1280px;
+  }
+}
+
+@media (min-width: 2200px) {
+  .invoice-batch-table {
+    min-width: 100%;
   }
 }

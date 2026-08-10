@@ -9,6 +9,9 @@ import type {
   Payout,
   PayoutStatus,
 } from '../types';
+import type { InvoicePageTab } from './invoiceManagement';
+
+export type { InvoicePageTab } from './invoiceManagement';
 
 export type InvoiceReviewAction =
   | 'MARK_SIGNED'
@@ -37,9 +40,9 @@ export type InvoiceReviewCapabilities = {
   manage: boolean;
   mediaReview: boolean;
   financeReview: boolean;
+  projectResourceEdit?: boolean;
 };
 
-export type InvoicePageTab = 'signature' | 'media-review' | 'approval' | 'approved' | 'returned';
 export type InvoiceDetailNavigationTarget = 'PROJECT' | 'REQUEST' | 'PAYMENT';
 export type ApprovedInvoicePaymentStatus = Extract<
   PayoutStatus,
@@ -65,10 +68,6 @@ export const INVOICE_REVIEW_STATUS_META: Record<
   待媒介审核: { label: '待媒介审核', color: '#f59e0b' },
   待媒介复核: { label: '待媒介复核', color: '#f97316' },
   待发起请款: { label: '待发起请款', color: '#0f766e' },
-  待PM审核: { label: '待 PM 审批', color: '#2563eb' },
-  待项目负责人审核: { label: '待项目负责人审批', color: '#2563eb' },
-  待老板审核: { label: '待老板审批', color: '#7c3aed' },
-  待财务审核: { label: '待财务审批', color: '#3b82f6' },
   已通过: { label: '已通过', color: '#22c55e' },
   已退回: { label: '已退回', color: '#ef4444' },
 };
@@ -113,16 +112,7 @@ const STATIC_TRANSITIONS: Partial<Record<InvoiceReviewAction, Transition>> = {
 export const getInvoicePageTab = (status: InvoiceReviewStatus): InvoicePageTab => {
   if (status === '待签署') return 'signature';
   if (status === '达人反馈' || status === '待媒介审核' || status === '待媒介复核') {
-    return 'media-review';
-  }
-  if (
-    status === '待发起请款'
-    || status === '待PM审核'
-    || status === '待项目负责人审核'
-    || status === '待老板审核'
-    || status === '待财务审核'
-  ) {
-    return 'approval';
+    return 'review';
   }
   if (status === '已退回') return 'returned';
   return 'approved';
@@ -132,14 +122,6 @@ export const getInvoiceDetailNavigationTarget = (
   status: InvoiceReviewStatus,
 ): InvoiceDetailNavigationTarget | null => {
   if (status === '待发起请款') return 'PROJECT';
-  if (
-    status === '待PM审核'
-    || status === '待项目负责人审核'
-    || status === '待老板审核'
-    || status === '待财务审核'
-  ) {
-    return 'REQUEST';
-  }
   if (status === '已通过') return 'PAYMENT';
   return null;
 };
@@ -163,7 +145,7 @@ export const getInvoiceRowStatus = (payout: Pick<Payout, 'invoiceReviewStatus' |
   if (payout.invoiceReviewStatus === '待媒介审核') return '待审核';
   if (payout.invoiceReviewStatus === '待媒介复核') return '待复核';
   if (payout.invoiceReviewStatus === '已通过') {
-    return APPROVED_INVOICE_PAYMENT_STATUS_LABEL[getApprovedInvoicePaymentStatus(payout)];
+    return getApprovedInvoicePaymentStatus(payout) === '已付款' ? '已付款' : '付款中';
   }
   return INVOICE_REVIEW_STATUS_META[payout.invoiceReviewStatus].label;
 };
@@ -300,6 +282,9 @@ export const getInvoiceEditContext = (
     && capabilities.manage
   ) {
     return 'PAYMENT_FAILURE_CONTENT';
+  }
+  if (capabilities.manage && capabilities.projectResourceEdit) {
+    return 'PROJECT_RESOURCE';
   }
   return null;
 };
@@ -661,19 +646,25 @@ export const sensitiveInvoiceSnapshotChanged = (
   return JSON.stringify(project(previous)) !== JSON.stringify(project(next));
 };
 
-export const invoiceStatusForRequestApproval = (
-  status: 'PENDING_PM' | 'PENDING_PROJECT_OWNER' | 'PENDING_OWNER' | 'PENDING_FINANCE' | 'APPROVED',
-): InvoiceReviewStatus => ({
-  PENDING_PM: '待PM审核',
-  PENDING_PROJECT_OWNER: '待项目负责人审核',
-  PENDING_OWNER: '待老板审核',
-  PENDING_FINANCE: '待财务审核',
-  APPROVED: '已通过',
-})[status] as InvoiceReviewStatus;
-
 export const isInvoiceApprovedForPayment = (
   payout: Pick<Payout, 'invoiceReviewStatus'>,
 ) => payout.invoiceReviewStatus === '已通过';
+
+export const isPayoutPaymentInformationValidated = (
+  payout: Pick<
+    Payout,
+    | 'account'
+    | 'invoiceReviewStatus'
+    | 'paymentListRequiresRevalidation'
+    | 'paymentListValidationIssues'
+  >,
+) => (
+  isInvoiceApprovedForPayment(payout)
+  && Boolean(payout.account.trim())
+  && payout.account !== '待补充'
+  && !payout.paymentListRequiresRevalidation
+  && !(payout.paymentListValidationIssues?.length)
+);
 
 export const isPayoutEligibleForBatch = (
   payout: Pick<Payout, 'invoiceReviewStatus' | 'status'>,

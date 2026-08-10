@@ -86,7 +86,13 @@ export function AppShell({
   activePage,
   onNavigate,
   currentUser,
-}: PropsWithChildren<{ activePage: NavPage; onNavigate: (page: NavPage) => void; currentUser: SystemUser }>) {
+  notificationUnreadCount,
+}: PropsWithChildren<{
+  activePage: NavPage;
+  onNavigate: (page: NavPage) => void;
+  currentUser: SystemUser;
+  notificationUnreadCount: number;
+}>) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     projects: true,
@@ -122,9 +128,18 @@ export function AppShell({
           <span className="product-name">支付系统</span>
         </div>
         <div className="topbar-actions">
-          <button className="icon-button notification-button" type="button" aria-label="通知" onClick={() => navigate('notifications')}>
+          <button
+            className="icon-button notification-button"
+            type="button"
+            aria-label={notificationUnreadCount ? `通知，${notificationUnreadCount} 条未读` : '通知'}
+            onClick={() => navigate('notifications')}
+          >
             <Bell size={20} />
-            <span className="notification-dot" />
+            {notificationUnreadCount ? (
+              <span className="notification-count" aria-hidden="true">
+                {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
+              </span>
+            ) : null}
           </button>
           <button className="language-button" type="button">
             <Globe2 size={20} />

@@ -142,7 +142,7 @@ describe('request project resource aggregation', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     expect(source).toContain('全部合同');
     expect(source).toContain('全部 Invoice');
-    expect(source).toContain('全部付款明细');
+    expect(source).toContain('一张付款单包含全部 Invoice');
     expect(source).toContain('ariaLabel="合同候选达人筛选"');
     expect(source).toContain('ariaLabel="Invoice 候选达人筛选"');
     expect(source).toContain('Invoice 候选范围不会受当前请款项目达人名单限制');
@@ -187,7 +187,7 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).not.toContain('>导出</Button>');
     expect(source).toContain("currentPaymentList?.status === 'draft'");
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
-    expect(source).toContain('付款清单已清空');
+    expect(source).toContain('付款单已清空');
     expect(source).toContain('run: onClearPaymentLists');
   });
 });

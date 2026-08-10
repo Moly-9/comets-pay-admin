@@ -22,7 +22,7 @@ const PROVIDERS: Array<{
   { id: 'PayMax', title: 'PayerMax', description: '渠道保留，当前阶段不可执行', disabled: true },
 ];
 
-const SOURCE_CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'HKD'].map((currency) => ({
+const SOURCE_CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'].map((currency) => ({
   value: currency,
   label: currency,
 }));

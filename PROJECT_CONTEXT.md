@@ -1,6 +1,6 @@
 # COMETS Pay 项目上下文
 
-更新时间：2026-08-03（Asia/Shanghai）
+更新时间：2026-08-08（Asia/Shanghai）
 
 这份文件用于在新的 Codex 任务中快速恢复项目上下文。开始工作前，应同时阅读
 `AGENTS.md`、`SYSTEM_AUDIT.md`、`app/SOURCE_BASELINE.md` 和 `ID_STANDARD.md`，
@@ -29,12 +29,20 @@ Codex 在本项目中持续以以下双重角色工作：
 - 完成后向用户说明变更文件、行为变化、验证结果和本地 commit ID。
 - 本地页面可运行时，提供可点击的预览地址。
 - 默认使用中文沟通。
+- 后续代码输出只展示聚焦 diff，不输出整个文件或重复调试日志。
+- 同一报错最多调试 3 次；仍无法解决时停止重试，给出可执行的人工排查方向。
+- 修改 `App.tsx`、`types.ts`、`index.css`、公共组件或其他全局文件前，
+  必须主动声明影响范围；优先复用现有类型、组件和工具函数。
 
 ## 3. 工作区与版本状态
 
-- 本地仓库：`/Users/aria/Documents/支付系统管理端`
-- 维护源码：`/Users/aria/Documents/支付系统管理端/app`
-- 当前分支：`main`
+- 主工作区：`/Users/aria/Documents/支付系统管理端`
+- 当前 Codex 工作树：`/Users/aria/.codex/worktrees/fc9a/支付系统管理端`
+- 维护源码：当前工作区下的 `app/`
+- GitHub：`https://github.com/Moly-9/comets-pay-admin`（公开仓库）
+- 默认远程分支：`main`
+- 当前功能基线：`e42f7fe style(requests): refine creator document columns`
+- Codex 工作树分支：`codex/merge-weekend-enhancements`，功能基线与 `main` 一致。
 - 源码基线提交：`1513bd6 chore: import maintainable frontend source baseline`
 - 原始源码压缩包标记提交：`7d419cb8694e7a3afbd05f608f69256a511cae81`
 - 原始压缩包 SHA-256：
@@ -43,11 +51,16 @@ Codex 在本项目中持续以以下双重角色工作：
 源码是从桌面压缩包导入 `app/` 的，没有覆盖根目录已有审计文档、增强模块、远端
 快照或历史代码。导入时已移除固定演示密码、员工邮箱和完整示例收款号码。
 
+当前工作树有一条需保护的用户改动：
+`app/design-qa-airwallex-beneficiary.md` 处于未提交删除状态。不得撤销、暂存或
+纳入其他需求提交，除非用户明确授权。
+
 ## 4. 本地运行与验证
 
 - 本地预览：`http://127.0.0.1:5173/`
 - Vite 开发和预览服务只绑定 `127.0.0.1`。
-- 当前基线已通过 `npm run build`、TypeScript 编译、桌面与 390px 移动端检查。
+- 当前功能基线已通过 33 个测试文件、227 项 Vitest 测试和 `npm run build`。
+- 主要页面已进行桌面端与 390px 窄屏视觉检查；个别新需求仍应重新验收。
 - 登录和主控制台已检查，浏览器控制台没有警告或错误。
 - `/health`、首页、静态资源、SPA 回退、404、405、`server.mjs` 语法和 plist
   均已验证。
@@ -72,6 +85,17 @@ COMETS Pay 当前是 React 18、Vite 和 TypeScript 构建的纯前端高保真�
 丢失。任何真实认证、PII、银行资料、审批或付款流程都必须先建设服务端能力，不能
 仅靠前端实现。
 
+当前已实现的主要原型能力：
+
+- 合作项目与媒介请款项目分离；飞书合作项目使用本地适配器和演示数据。
+- “我的项目”负责创建、资源维护和提交；“请款项目”保持独立审批工作台。
+- 合同支持单页上传、PDF/DOCX 本地解析、字段确认、结构化生成与 PDF/DOCX 下载。
+- Invoice 支持单笔和批量生成、签署提醒、媒介审核、版本修订和付款失败回退。
+- 同一达人可关联多份合同和多份 Invoice；关联通过合作项目、达人和合作关系 ID 约束。
+- 收款账户支持 Airwallex、PayPal 和 PayMax；文档使用选定账户的不可变快照。
+- 付款清单按 Invoice 保存独立付款行，支持版本化编辑、重新校验和 Excel 导出。
+- 管理员修改已提交资源时，现有审批和付款校验会失效并要求重提。
+
 ## 6. ID 规范与待实现事项
 
 `ID_STANDARD.md` 已确定系统采用：
@@ -82,9 +106,11 @@ COMETS Pay 当前是 React 18、Vite 和 TypeScript 构建的纯前端高保真�
 - `external_identity` 保存目标系统、租户与 `external_creator_id` 的映射。
 - 付款回调通过 `external_transfer_id` 定位交易，再关联付款单和网红。
 
-当前 ID 规范只完成了文档设计，尚未落到应用的 TypeScript 类型、模拟数据和页面
-流程中。姓名、邮箱、Handle、合同号、Invoice 号或渠道 beneficiary ID 都不能
-替代 `creator_id`。
+应用已引入 `CooperationProjectId`、`PaymentRequestProjectId`、`CreatorId`、
+`EngagementId`、`ContractId`、`InvoiceId` 和 `PaymentListId` 等品牌类型，主要跨模块流程
+已使用稳定 ID 关联。但现有 fixtures 与部分旧字段仍保留字符串兼容层，真实 UUIDv7
+仍必须由未来后端生成。姓名、邮箱、Handle、合同号、Invoice 号或渠道 beneficiary ID
+都不能替代 `creator_id`。
 
 ## 7. 开发与发布边界
 
@@ -99,8 +125,10 @@ COMETS Pay 当前是 React 18、Vite 和 TypeScript 构建的纯前端高保真�
 
 1. 阅读本文件以及开头列出的四份项目文档。
 2. 运行 `git status --short --branch`，确认并保护现有改动。
-3. 确认用户本次要修改的页面、角色、业务流程和验收结果。
-4. 只在 `app/` 内实现并进行与风险相称的构建和浏览器验证。
-5. 提交为聚焦的本地 Git commit，并报告差异、验证与 commit ID。
-6. 除非用户明确授权部署，否则始终保持 Mac 服务器不变。
-
+3. 运行 `git log -1 --oneline` 获取真实最新提交，不仅依赖本文档中的历史基线。
+4. 确认用户本次要修改的页面、角色、业务流程和验收结果。
+5. 先查找现有类型、组件、领域函数和测试，避免在页面内重复定义同一业务规则。
+6. 只在 `app/` 内实现业务改动；根目录文档仅在上下文、审计或发布元数据需要时修改。
+7. 进行与风险相称的测试、TypeScript 构建和浏览器验证。
+8. 提交为聚焦的本地 Git commit，并报告 diff 摘要、验证与 commit ID。
+9. 除非用户明确授权部署，否则始终保持 Mac 服务器不变。

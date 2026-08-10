@@ -4,6 +4,7 @@ import type {
   CreatorId,
   EngagementId,
   InvoiceId,
+  PaymentRequestProjectId,
   ProjectId,
 } from './businessWorkflow';
 
@@ -30,7 +31,7 @@ export type NavPage =
 
 export type Provider = 'Airwallex' | 'PayMax' | 'PayPal' | '手动打款';
 
-export type InvoiceCurrency = 'USD' | 'EUR' | 'GBP' | 'HKD';
+export type InvoiceCurrency = 'USD' | 'EUR' | 'GBP' | 'HKD' | 'SGD';
 
 export type AirwallexEntityType = 'PERSONAL' | 'COMPANY';
 
@@ -291,10 +292,6 @@ export type InvoiceReviewStatus =
   | '待媒介审核'
   | '待媒介复核'
   | '待发起请款'
-  | '待PM审核'
-  | '待项目负责人审核'
-  | '待老板审核'
-  | '待财务审核'
   | '已通过'
   | '已退回';
 
@@ -450,6 +447,7 @@ export type PaymentFailureReturn = {
 
 export type Payout = {
   id: string;
+  paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
   handle: string;
   initials: string;

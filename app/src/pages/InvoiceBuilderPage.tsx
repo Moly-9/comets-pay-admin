@@ -115,6 +115,7 @@ const CURRENCY_OPTIONS = [
   { value: 'EUR', label: 'EUR', description: '欧元' },
   { value: 'GBP', label: 'GBP', description: '英镑' },
   { value: 'HKD', label: 'HKD', description: '港币' },
+  { value: 'SGD', label: 'SGD', description: '新加坡元' },
 ] as const;
 
 const PAYMENT_OPTIONS = [
@@ -371,7 +372,7 @@ export function InvoiceBuilderPage({
     setContractIds(nextIds);
     if (nextContracts.length) {
       const first = nextContracts[0];
-      if (first.currency && ['USD', 'EUR', 'GBP', 'HKD'].includes(first.currency)) {
+      if (first.currency && ['USD', 'EUR', 'GBP', 'HKD', 'SGD'].includes(first.currency)) {
         setCurrency(first.currency as InvoiceCurrency);
       }
       if (first.advertiser) setBillTo((current) => ({ ...current, name: first.advertiser }));

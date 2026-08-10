@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, NoticeBanner, PageHeading } from '../components/Common';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   formatContractMoney,
   getContractReadiness,
@@ -290,7 +291,7 @@ export function RequestProjectCreatePage({
                     <td><strong>{paymentItem.beneficiaryName}</strong></td>
                     <td>{paymentItem.contractId}<small className="cell-subtext">{paymentItem.ioId}</small></td>
                     <td>{paymentItem.invoiceId}</td>
-                    <td>{paymentItem.provider}<small className="cell-subtext">{paymentItem.beneficiaryId}</small></td>
+                    <td><PaymentProviderBadge compact provider={paymentItem.provider} /><small className="cell-subtext">{paymentItem.beneficiaryId}</small></td>
                     <td><strong>{paymentItem.sourceCurrency} {paymentItem.amount.toLocaleString('en-US')}</strong></td>
                     <td>{paymentItem.feePolicy}</td>
                   </tr>

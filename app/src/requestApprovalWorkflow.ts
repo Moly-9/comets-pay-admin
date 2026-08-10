@@ -31,6 +31,43 @@ export const REQUEST_APPROVAL_STATUS_LABEL: Record<RequestApprovalStatus, string
   RETURNED_TO_MEDIA_REVIEW: '待媒介复核',
 };
 
+export const REQUEST_APPROVAL_STAGE_LABEL: Record<RequestApprovalStage, string> = {
+  PM: 'PM 审批',
+  PROJECT_OWNER: '项目负责人审批',
+  OWNER: '老板审批',
+  FINANCE: '财务审核',
+};
+
+export type RequestApprovalReturnDetails = {
+  stage: RequestApprovalStage;
+  stageLabel: string;
+  reason: string;
+  actorName: string;
+  actorRole: string;
+  occurredAt: string;
+  round: number;
+};
+
+export const requestApprovalReturnDetails = (
+  state?: RequestApprovalState,
+): RequestApprovalReturnDetails | null => {
+  if (!state || state.status !== 'RETURNED_TO_MEDIA_REVIEW') return null;
+  const returnEvent = [...state.history].reverse().find((event) => (
+    event.action === 'RETURN' && event.round === state.round
+  ));
+  const stage = state.returnedFromStage ?? returnEvent?.stage;
+  if (!stage) return null;
+  return {
+    stage,
+    stageLabel: REQUEST_APPROVAL_STAGE_LABEL[stage],
+    reason: state.returnReason?.trim() || returnEvent?.reason?.trim() || '未记录退回原因',
+    actorName: returnEvent?.actorName || '审批人',
+    actorRole: returnEvent?.actorRole || REQUEST_APPROVAL_STAGE_LABEL[stage],
+    occurredAt: returnEvent?.occurredAt || state.updatedAt,
+    round: returnEvent?.round ?? state.round,
+  };
+};
+
 export const requestApprovalStage = (
   status: RequestApprovalStatus,
 ) => STATUS_STAGE[status] ?? null;
@@ -51,11 +88,22 @@ export const canReviewRequestApproval = (
   return false;
 };
 
+export const canReturnRequestApproval = (
+  user: Pick<SystemUser, 'roleKey' | 'name' | 'scopeName'>,
+  state: RequestApprovalState,
+  assignedPmName: string,
+) => Boolean(requestApprovalStage(state.status)) && (
+  user.roleKey === 'finance'
+  || canReviewRequestApproval(user, state, assignedPmName)
+);
+
 export const createRequestApprovalState = (
   occurredAt = new Date().toISOString(),
   previous?: RequestApprovalState,
 ): RequestApprovalState => ({
-  status: 'PENDING_PM',
+  status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
+    ? previous.resumeStatus
+    : 'PENDING_PM',
   round: (previous?.round ?? 0) + 1,
   history: previous?.history ?? [],
   submittedAt: occurredAt,
@@ -99,7 +147,46 @@ export const applyRequestApprovalAction = (
     history: [...state.history, event],
     submittedAt: state.submittedAt,
     returnedFromStage: action === 'RETURN' ? stage : undefined,
+    resumeStatus: action === 'RETURN'
+      ? state.status as Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>
+      : undefined,
     returnReason: action === 'RETURN' ? normalizedReason : undefined,
+    updatedAt: occurredAt,
+  };
+};
+
+export const returnApprovedRequestToMediaReview = (
+  state: RequestApprovalState,
+  actor: Pick<SystemUser, 'account' | 'name' | 'role'>,
+  reason: string,
+  occurredAt = new Date().toISOString(),
+): RequestApprovalState => {
+  if (state.status !== 'APPROVED') {
+    throw new Error('只有已完成财务审批且尚未付款的请款可以从付款执行页退回。');
+  }
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) throw new Error('退回项目请款时必须填写原因。');
+
+  const event: RequestApprovalEvent = {
+    round: state.round,
+    stage: 'FINANCE',
+    action: 'RETURN',
+    actorAccount: actor.account,
+    actorName: actor.name,
+    actorRole: actor.role,
+    fromStatus: state.status,
+    toStatus: 'RETURNED_TO_MEDIA_REVIEW',
+    reason: normalizedReason,
+    occurredAt,
+  };
+  return {
+    status: 'RETURNED_TO_MEDIA_REVIEW',
+    round: state.round,
+    history: [...state.history, event],
+    submittedAt: state.submittedAt,
+    returnedFromStage: 'FINANCE',
+    resumeStatus: 'PENDING_FINANCE',
+    returnReason: normalizedReason,
     updatedAt: occurredAt,
   };
 };

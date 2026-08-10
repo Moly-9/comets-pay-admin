@@ -15,8 +15,12 @@ import {
 import {
   AIRWALLEX_PAYMENT_LIST_HEADERS,
   AIRWALLEX_PAYMENT_LIST_SHEET,
+  PAYPAL_PAYMENT_LIST_HEADERS,
+  PAYPAL_PAYMENT_LIST_SHEET,
   buildAirwallexPaymentListRows,
+  buildPayPalPaymentListRows,
   exportAirwallexPaymentListWorkbook,
+  exportPayPalPaymentListWorkbook,
   paymentListWorkbookFilename,
   PaymentListWorkbookError,
 } from './paymentListWorkbook';
@@ -201,11 +205,70 @@ describe('Airwallex payment-list workbook', () => {
     })).toThrow(PaymentListWorkbookError);
   });
 
+  it('allows the approval view to export a submitted list with the same fixed template', async () => {
+    expect(() => buildAirwallexPaymentListRows({
+      paymentList: { ...paymentList(), status: 'submitted' },
+      creators: [creator],
+    })).toThrow(PaymentListWorkbookError);
+    expect(buildAirwallexPaymentListRows({
+      paymentList: { ...paymentList(), status: 'submitted' },
+      creators: [creator],
+      allowSubmitted: true,
+    })).toHaveLength(2);
+
+    const blob = await exportAirwallexPaymentListWorkbook({
+      paymentList: { ...paymentList(), status: 'submitted' },
+      creators: [creator],
+      allowSubmitted: true,
+    });
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await blob.arrayBuffer());
+    const sheet = workbook.getWorksheet(AIRWALLEX_PAYMENT_LIST_SHEET)!;
+    expect(workbook.worksheets).toHaveLength(1);
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual(AIRWALLEX_PAYMENT_LIST_HEADERS);
+  });
+
   it('does not export a PayPal list with the Airwallex template', () => {
     expect(() => buildAirwallexPaymentListRows({
       paymentList: { ...paymentList(), provider: 'PayPal' },
       creators: [creator],
     })).toThrow(PaymentListWorkbookError);
+  });
+
+  it('exports a submitted PayPal list with its frozen PayPal account fields', async () => {
+    const paypal = paymentList();
+    paypal.provider = 'PayPal';
+    paypal.status = 'submitted';
+    paypal.items = [{
+      ...paypal.items[0],
+      snapshot: {
+        ...paypal.items[0].snapshot,
+        provider: 'PayPal',
+        realName: 'Synthetic Creator',
+        accountSummary: 'creator@example.test',
+        transferMethod: 'PAYPAL',
+        paymentDetails: {
+          bankCountry: '', accountName: '', accountType: '', swiftCode: '', accountNumber: '',
+          iban: '', beneficiaryType: 'Personal', bankName: '', bankStreetAddress: '', bankCity: '',
+          bankState: '', bankPostalCode: '', intermediaryBankCountry: '', intermediaryBankCode: '',
+          transferRemarks: '', paypalUsername: 'synthetic.creator', paypalEmail: 'creator@example.test',
+          payoutProvider: 'PayPal', transferMethod: 'PAYPAL', verifiedAt: '2026-08-06T00:00:00.000Z',
+        },
+      },
+    }];
+
+    expect(buildPayPalPaymentListRows({ paymentList: paypal, allowSubmitted: true })[0]).toMatchObject({
+      paypalName: 'synthetic.creator',
+      paypalEmail: 'creator@example.test',
+      amount: 3400,
+    });
+    const blob = await exportPayPalPaymentListWorkbook({ paymentList: paypal, allowSubmitted: true });
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await blob.arrayBuffer());
+    const sheet = workbook.getWorksheet(PAYPAL_PAYMENT_LIST_SHEET)!;
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual(PAYPAL_PAYMENT_LIST_HEADERS);
+    expect(sheet.getCell('F2').value).toBe('creator@example.test');
+    expect(sheet.getCell('H2').value).toBe(3400);
   });
 
   it('blocks a non-Airwallex row override even when the project list targets Airwallex', () => {
@@ -268,6 +331,9 @@ describe('Airwallex payment-list workbook', () => {
     );
     expect(paymentListWorkbookFilename('PRJ-TEST', { ...paymentList(), status: 'paid' })).toBe(
       'COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01.xlsx',
+    );
+    expect(paymentListWorkbookFilename('PRJ-TEST', paymentList(), 'PayPal')).toBe(
+      'DRAFT-COMETS-PAY-PRJ-TEST-PAY-20260806-TEST01-PAYPAL.xlsx',
     );
   });
 });

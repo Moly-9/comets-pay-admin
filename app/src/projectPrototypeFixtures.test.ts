@@ -29,7 +29,7 @@ import { eligibleInvoicePayoutAccounts, getPayoutAccountId } from './payoutAccou
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
 describe('project prototype fixtures', () => {
-  it('seeds only three active Invoice chains and leaves the other engagements available', () => {
+  it('seeds the focused active Invoice chains and leaves the other engagements available', () => {
     const activeEngagementIds = new Set(
       ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => invoice.snapshot.engagementId),
     );
@@ -40,12 +40,13 @@ describe('project prototype fixtures', () => {
       .find((project) => project.id === 'PRJ-260801-08')
       ?.creatorProfiles?.find((reference) => reference.creatorId === 'creator-alex');
 
-    expect(ACTIVE_INVOICE_DEMO_INVOICES).toHaveLength(3);
-    expect(activeEngagementIds.size).toBe(3);
+    expect(ACTIVE_INVOICE_DEMO_INVOICES).toHaveLength(4);
+    expect(activeEngagementIds.size).toBe(4);
     expect(ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => invoice.status)).toEqual([
       '达人反馈',
       '已退回',
-      '待媒介复核',
+      '已退回',
+      '已退回',
     ]);
     ACTIVE_INVOICE_DEMO_INVOICES.forEach((invoice) => {
       expect(activePayoutsById.get(invoice.sourcePayoutId)?.invoice).toBe(invoice.id);
@@ -213,12 +214,18 @@ describe('project prototype fixtures', () => {
     expect(lists('PRJ-260727-02').flatMap((list) => list.items).every((item) => (
       Boolean(paymentListItemValue(item, 'transactionReference'))
     ))).toBe(true);
+    expect(INITIAL_PAYOUTS.some((payout) => (
+      payout.projectId === 'PRJ-260727-08'
+      && payout.invoiceReviewStatus === '待发起请款'
+    ))).toBe(true);
   });
 
   it('keeps new payment-list transaction reference and description empty by default', () => {
     const item = invoicePaymentListItem(ALL_PROJECT_PROTOTYPE_INVOICES[0]!, PROJECT_DEMO_CONTRACTS);
     expect(item.snapshot.transactionReference).toBe('');
     expect(item.snapshot.description).toBe('');
+    expect(item.snapshot.realName).toBe(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.from.legalName);
+    expect(item.snapshot.paymentDetails).toEqual(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.payment);
     expect(item.validationIssues).toContain('交易附言未填写');
   });
 
@@ -329,12 +336,30 @@ describe('project prototype fixtures', () => {
       reference.engagementId === record.snapshot.engagementId
     ));
 
-    expect(INVOICE_EDIT_REQUEST_INVOICES).toHaveLength(1);
+    expect(INVOICE_EDIT_REQUEST_INVOICES).toHaveLength(2);
     expect(record.id).toBe('INV-240705');
     expect(record.sourcePayoutId).toBe('pay-013');
-    expect(record.status).toBe('待媒介复核');
+    expect(record.status).toBe('已退回');
     expect(record.snapshot.items[0]?.lineTotal).toBe(2440);
     expect(payout?.invoice).toBe(record.id);
+    expect(payout?.paymentFailureReturn?.issueType).toBe('INVOICE_CONTENT');
+    expect(payout?.projectId).toBe(project?.id);
+    expect(engagement?.creatorId).toBe(record.snapshot.creatorId);
+  });
+
+  it('provides a stable editable Invoice for the returned payment request', () => {
+    const record = INVOICE_EDIT_REQUEST_INVOICES[1]!;
+    const payout = INITIAL_PAYOUTS.find((item) => item.id === record.sourcePayoutId);
+    const project = INITIAL_PROJECTS.find((item) => item.projectId === record.snapshot.projectId);
+    const engagement = project?.creatorProfiles?.find((reference) => (
+      reference.engagementId === record.snapshot.engagementId
+    ));
+
+    expect(record.id).toBe('INV-240807');
+    expect(record.sourcePayoutId).toBe('pay-020');
+    expect(record.status).toBe('已退回');
+    expect(record.snapshot.items[0]?.lineTotal).toBe(1320);
+    expect(payout?.paymentFailureReturn?.issueType).toBe('INVOICE_CONTENT');
     expect(payout?.projectId).toBe(project?.id);
     expect(engagement?.creatorId).toBe(record.snapshot.creatorId);
   });

@@ -1,14 +1,18 @@
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
   Circle,
+  ClipboardCheck,
   Clock3,
   Download,
   ExternalLink,
+  FileArchive,
   FileCheck2,
+  FileSpreadsheet,
   FileText,
   Files,
   Link2,
@@ -25,6 +29,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   useEffect,
   useId,
@@ -32,22 +37,27 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type KeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
+import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
+import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
-import { Pagination } from '../components/Pagination';
+import { Pagination, usePagination } from '../components/Pagination';
 import { PayoutTable } from '../components/PayoutTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
-  getApprovedInvoicePaymentStatus,
-  getInvoicePageTab,
-  getInvoiceRowStatus,
+  findInvoiceRequest,
+  getInvoiceManagementView,
+  type InvoiceManagementView,
+} from '../invoice/invoiceManagement';
+import {
   isInvoiceApprovedForPayment,
   type InvoiceReviewAction,
   type InvoicePageTab,
@@ -97,10 +107,34 @@ import {
   type RequestApprovalStatus,
   type WorkflowAuditEvent,
 } from '../businessWorkflow';
+import {
+  MY_PROJECT_APPROVAL_STATUSES,
+  myProjectStatusFor,
+  requestProjectStatusFor,
+} from '../paymentRequestProjects';
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
+import type { RequestApprovalReminderSummary } from '../requestApprovalReminders';
+import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
+import { downloadBlob } from '../invoice/invoiceUtils';
+import {
+  filterTransactionRecords,
+  isFinalTransaction,
+  type TransactionProvider,
+  type TransactionTab,
+} from '../transactionRecords';
+import {
+  loadTransactionRecordsWorkbook,
+  transactionRecordsFilename,
+} from '../transactionRecordsWorkbook';
+import {
+  paymentBatchAmountLabel,
+  paymentBatchStatusCounts,
+  type PaymentBatchRecord,
+} from '../paymentBatches';
+import { PaymentBatchDetailPage } from './PaymentBatchDetailPage';
+import './TransactionsPage.css';
 
 type Notify = (title: string, message: string) => void;
-type CreatedBatch = { id: string; count: number; amount: string; provider: string } | null;
 
 function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
@@ -236,18 +270,25 @@ type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'draft' 
 const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '执行中': 'active',
   'PM 审批中': 'active',
+  'PM审批中': 'active',
   '项目负责人审批中': 'active',
   '老板审批中': 'active',
   '财务审批中': 'active',
   '飞书审批中': 'active',
   '待验收': 'review',
   '待审批': 'review',
+  '请款提交': 'review',
   '待补资料': 'review',
   '待财务复核': 'review',
+  'PM审批通过': 'active',
+  '项目负责人审批通过': 'active',
+  '老板审批通过': 'active',
+  '财务审批通过': 'payment',
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
   '已完成': 'complete',
+  '已付款': 'complete',
   '已归档': 'complete',
   '已通过': 'complete',
   '已关联': 'complete',
@@ -326,7 +367,7 @@ export function ProjectInlineFilterPanel({
     + Number(filters.statuses.length > 0);
   const hasActiveFilters = activeFilterCount > 0 || Boolean(search.trim());
   const selectedStatus = filters.statuses[0] ?? 'all';
-  const selectedStatusTone = selectedStatus === '已完成'
+  const selectedStatusTone = selectedStatus === '已完成' || selectedStatus === '已付款'
     ? 'complete'
     : selectedStatus === 'all'
       ? 'all'
@@ -563,7 +604,7 @@ export function ProjectsPage({
   const minBudget = filters.minBudget ? Number(filters.minBudget) : null;
   const maxBudget = filters.maxBudget ? Number(filters.maxBudget) : null;
   const invalidBudgetRange = minBudget !== null && maxBudget !== null && minBudget > maxBudget;
-  const visible = relatedProjects.filter((project) => {
+  const filteredProjects = relatedProjects.filter((project) => {
     const budget = parseProjectBudget(project.budget);
     const matchesSearch = !query || `${project.name}${project.id}`.toLowerCase().includes(query);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(project.brand);
@@ -574,6 +615,13 @@ export function ProjectsPage({
     const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(project.status);
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
+  const {
+    page: projectPage,
+    pageItems: visibleProjects,
+    pageSize: projectPageSize,
+    setPage: setProjectPage,
+    setPageSize: setProjectPageSize,
+  } = usePagination(filteredProjects, { resetKey: `${search}\u0000${JSON.stringify(filters)}` });
   const clearProjectFilters = () => {
     setSearch('');
     setFilters(createEmptyProjectListFilters());
@@ -799,7 +847,7 @@ export function ProjectsPage({
           pmOptions={pmFilterOptions}
           currencyOptions={currencyFilterOptions}
           statusOptions={statusSelectOptions}
-          resultCount={visible.length}
+          resultCount={filteredProjects.length}
           totalCount={relatedProjects.length}
           invalidBudgetRange={invalidBudgetRange}
           onSearchChange={setSearch}
@@ -810,7 +858,7 @@ export function ProjectsPage({
           <table className="data-table operational-table">
             <thead><tr><th>项目</th><th>合作客户</th><th>负责 PM</th><th>达人</th><th>预算</th><th>状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
-              {visible.map((project) => (
+              {visibleProjects.map((project) => (
                 <tr key={project.id}>
                   <td><strong>{project.name}</strong><small className="cell-subtext">{project.id}</small></td>
                   <td>{project.brand}</td>
@@ -821,9 +869,20 @@ export function ProjectsPage({
                   <td className="action-cell"><button className="text-link" type="button" onClick={() => { setSelectedProjectId(project.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button></td>
                 </tr>
               ))}
-              {visible.length === 0 ? <tr><td className="project-list-empty" colSpan={7}>暂无符合当前搜索与筛选条件的项目</td></tr> : null}
+              {filteredProjects.length === 0 ? <tr><td className="project-list-empty" colSpan={7}>暂无符合当前搜索与筛选条件的项目</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredProjects.length} 个项目</span>
+          <Pagination
+            ariaLabel="项目列表分页"
+            page={projectPage}
+            pageSize={projectPageSize}
+            total={filteredProjects.length}
+            onPageChange={setProjectPage}
+            onPageSizeChange={setProjectPageSize}
+          />
         </div>
       </section>
       {modalOpen ? (
@@ -894,8 +953,9 @@ export function ProjectsPage({
 const createFixtureRequestApproval = (
   requestStatus: string,
   pmName: string,
+  statusOverride?: RequestApprovalStatus,
 ): RequestApprovalState => {
-  const status: RequestApprovalStatus = requestStatus.includes('财务')
+  const status: RequestApprovalStatus = statusOverride ?? (requestStatus.includes('财务')
     ? 'PENDING_FINANCE'
     : requestStatus.includes('项目负责人')
       ? 'PENDING_PROJECT_OWNER'
@@ -905,7 +965,7 @@ const createFixtureRequestApproval = (
           ? 'APPROVED'
           : requestStatus === '已退回'
             ? 'RETURNED_TO_MEDIA_REVIEW'
-            : 'PENDING_PM';
+            : 'PENDING_PM');
   const ordered = ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'] as const;
   const currentIndex = status === 'APPROVED' ? ordered.length : ordered.indexOf(status as typeof ordered[number]);
   const actorByStage = {
@@ -934,6 +994,7 @@ const createFixtureRequestApproval = (
     history,
     submittedAt: '2026-07-17T02:00:00.000Z',
     returnedFromStage: status === 'RETURNED_TO_MEDIA_REVIEW' ? 'FINANCE' : undefined,
+    resumeStatus: status === 'RETURNED_TO_MEDIA_REVIEW' ? 'PENDING_FINANCE' : undefined,
     returnReason: status === 'RETURNED_TO_MEDIA_REVIEW' ? '请媒介复核付款资料后重新提交。' : undefined,
     updatedAt: '2026-07-22T02:00:00.000Z',
   };
@@ -947,7 +1008,15 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     cooperationProjectId: project.id as CooperationProjectId,
     cooperationProjectCode: project.id,
     cooperationProjectName: project.name,
-    lifecycle: project.requestStatus === '已完成' ? 'COMPLETED' as const : 'SUBMITTED' as const,
+    lifecycle: project.requestStatus === '已完成'
+      ? 'COMPLETED' as const
+      : project.requestStatus === '待打款'
+        ? 'APPROVED' as const
+        : project.requestStatus === '已退回'
+          ? 'RETURNED' as const
+          : project.requestStatus === '待补资料'
+            ? 'DRAFT' as const
+            : 'SUBMITTED' as const,
     projectId: project.id as ProjectId,
     project: project.name,
     brand: project.brand,
@@ -959,7 +1028,15 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     paymentOrder: project.paymentOrder,
     status: project.requestStatus,
     filter: project.requestFilter,
-    approval: createFixtureRequestApproval(project.requestStatus, project.pm),
+    approval: createFixtureRequestApproval(
+      project.requestStatus,
+      project.pm,
+      projectIndex === 1
+        ? 'PENDING_PROJECT_OWNER'
+        : projectIndex === 9
+          ? 'PENDING_OWNER'
+          : undefined,
+    ),
     createdAt: `2026-07-${String(10 + (projectIndex % 18)).padStart(2, '0')}T${String(8 + (projectIndex % 9)).padStart(2, '0')}:30:00.000Z`,
   })),
 ];
@@ -968,24 +1045,39 @@ export function RequestsPage({
   notify,
   currentUser,
   requests,
+  paymentLists,
+  creators,
+  generatedInvoices,
+  approvalReminder,
+  showApprovalReminder,
+  onDismissApprovalReminder,
+  onExportPaymentList,
   onApprovalAction,
+  onOpenFinanceReview,
   focusedRequestId,
   onFocusCleared,
 }: {
   notify: Notify;
   currentUser: SystemUser;
   requests: RequestProjectSummary[];
+  paymentLists: PaymentListRecord[];
+  creators: CreatorProfile[];
+  generatedInvoices: GeneratedInvoiceRecord[];
+  approvalReminder: RequestApprovalReminderSummary;
+  showApprovalReminder: boolean;
+  onDismissApprovalReminder: () => void;
+  onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
     request: RequestProjectSummary,
     action: RequestApprovalAction,
     reason?: string,
-  ) => void;
+  ) => boolean;
+  onOpenFinanceReview: () => void;
   focusedRequestId: string | null;
   onFocusCleared: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyProjectListFilters);
-  const [showApprovalNotice, setShowApprovalNotice] = useState(true);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedRequestId);
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
@@ -995,15 +1087,18 @@ export function RequestsPage({
     if (currentUser.roleKey === 'pm') return request.pm === currentScopeName;
     return true;
   });
+  const requestStatusById = new Map(relatedRequests.map((request) => [
+    request.id,
+    requestProjectStatusFor(request),
+  ]));
   const requestOverview = relatedRequests.reduce((summary, request) => {
-    if (request.status === '待审批') summary.pendingApproval += 1;
-    if (request.status.includes('审批中')) summary.approvalInProgress += 1;
-    if (request.status === '待打款') summary.awaitingPayment += 1;
-    if (request.status === '已完成') summary.completed += 1;
-    if (request.status === '待补资料' || request.status === '已退回') summary.needsAttention += 1;
+    const status = myProjectStatusFor(request);
+    if (MY_PROJECT_APPROVAL_STATUSES.has(status)) summary.approvalInProgress += 1;
+    if (status === '待打款') summary.awaitingPayment += 1;
+    if (status === '已付款') summary.completed += 1;
+    if (status === '已退回') summary.needsAttention += 1;
     return summary;
   }, {
-    pendingApproval: 0,
     approvalInProgress: 0,
     awaitingPayment: 0,
     completed: 0,
@@ -1029,14 +1124,20 @@ export function RequestsPage({
       label: user.name,
       description: `${requestPmCounts[user.name]} 个项目 · ${user.email}`,
     }));
-  const requestStatusFilterOptions = Array.from(new Set(relatedRequests.map((request) => request.status))).map((status) => ({
+  const requestStatuses = Array.from(new Set(
+    relatedRequests.flatMap((request) => {
+      const status = requestStatusById.get(request.id);
+      return status ? [status] : [];
+    }),
+  ));
+  const requestStatusFilterOptions = requestStatuses.map((status) => ({
     value: status,
     label: status,
-    description: `${relatedRequests.filter((request) => request.status === status).length} 个项目`,
+    description: `${relatedRequests.filter((request) => requestStatusById.get(request.id) === status).length} 个项目`,
     leading: (
       <span
         className={`project-status-select-dot ${
-          status === '已完成' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'
+          status === '已付款' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'
         }`}
       />
     ),
@@ -1063,7 +1164,7 @@ export function RequestsPage({
   const invalidRequestBudgetRange = requestMinBudget !== null
     && requestMaxBudget !== null
     && requestMinBudget > requestMaxBudget;
-  const visibleRequests = relatedRequests.filter((request) => {
+  const filteredRequests = relatedRequests.filter((request) => {
     const budget = parseProjectBudget(request.amount);
     const matchesSearch = !requestQuery || `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.cooperationProjectCode ?? ''}`.toLowerCase().includes(requestQuery);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
@@ -1071,9 +1172,17 @@ export function RequestsPage({
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidRequestBudgetRange || requestMinBudget === null || budget.amount >= requestMinBudget;
     const matchesMaxBudget = invalidRequestBudgetRange || requestMaxBudget === null || budget.amount <= requestMaxBudget;
-    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(request.status);
+    const requestStatus = requestStatusById.get(request.id);
+    const matchesStatus = filters.statuses.length === 0 || Boolean(requestStatus && filters.statuses.includes(requestStatus));
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
+  const {
+    page: requestPage,
+    pageItems: visibleRequests,
+    pageSize: requestPageSize,
+    setPage: setRequestPage,
+    setPageSize: setRequestPageSize,
+  } = usePagination(filteredRequests, { resetKey: `${search}\u0000${JSON.stringify(filters)}` });
 
   const clearRequestFilters = () => {
     setSearch('');
@@ -1089,8 +1198,13 @@ export function RequestsPage({
     return (
       <RequestProjectDetailPage
         request={selectedRequest}
+        paymentLists={paymentLists}
+        creators={creators}
+        generatedInvoices={generatedInvoices}
         currentUser={currentUser}
+        onExportPaymentList={onExportPaymentList}
         onApprovalAction={onApprovalAction}
+        onOpenFinanceReview={onOpenFinanceReview}
         notify={notify}
         onBack={() => {
           setSelectedRequestId(null);
@@ -1110,8 +1224,8 @@ export function RequestsPage({
       <div className="metrics-grid">
         <MetricCard
           label="审批中"
-          value={(requestOverview.pendingApproval + requestOverview.approvalInProgress).toString()}
-          meta={`${requestOverview.pendingApproval} 个待审批 · ${requestOverview.approvalInProgress} 个审批中`}
+          value={requestOverview.approvalInProgress.toString()}
+          meta={`${requestOverview.approvalInProgress} 个流程处理中`}
           tone="peach"
         />
         <MetricCard
@@ -1126,9 +1240,12 @@ export function RequestsPage({
           tone="lilac"
         />
       </div>
-      {showApprovalNotice ? (
-        <NoticeBanner onClose={() => setShowApprovalNotice(false)}>
-          审批流程：媒介提交 → PM 审批 → 项目负责人审批 → 老板审批 → 财务审批；全部通过后才会解锁打款，退回原因会同步给提交人。
+      {showApprovalReminder && approvalReminder.count > 0 ? (
+        <NoticeBanner onClose={onDismissApprovalReminder}>
+          <div className="request-approval-reminder-copy">
+            <strong>你当前有 <b>{approvalReminder.count}</b> 个请款项目待审批</strong>
+            <p>请及时核对请款资料并完成当前节点处理。</p>
+          </div>
         </NoticeBanner>
       ) : null}
       <section className="content-card">
@@ -1139,7 +1256,7 @@ export function RequestsPage({
           pmOptions={requestPmFilterOptions}
           currencyOptions={requestCurrencyFilterOptions}
           statusOptions={requestStatusSelectOptions}
-          resultCount={visibleRequests.length}
+          resultCount={filteredRequests.length}
           totalCount={relatedRequests.length}
           invalidBudgetRange={invalidRequestBudgetRange}
           onSearchChange={setSearch}
@@ -1160,13 +1277,24 @@ export function RequestsPage({
                   <td>{request.contracts} 份</td>
                   <td>{request.invoices} 份</td>
                   <td className="mono-cell">{request.paymentOrder}</td>
-                  <td><ProjectStatus status={request.status} /></td>
+                  <td><ProjectStatus status={requestStatusById.get(request.id) ?? '请款提交'} /></td>
                   <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</button></td>
                 </tr>
               ))}
-              {visibleRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={10}>暂无符合条件的请款项目</td></tr> : null}
+              {filteredRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={10}>暂无符合条件的请款项目</td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredRequests.length} 个项目</span>
+          <Pagination
+            ariaLabel="请款项目列表分页"
+            page={requestPage}
+            pageSize={requestPageSize}
+            total={filteredRequests.length}
+            onPageChange={setRequestPage}
+            onPageSizeChange={setRequestPageSize}
+          />
         </div>
       </section>
     </div>
@@ -1630,7 +1758,11 @@ const createProjectCreatorProfiles = (
   projectIndex: number,
 ): NonNullable<ProjectSummary['creatorProfiles']> => (
   Array.from({ length: project.creators }, (_, creatorIndex) => {
-    const creator = INITIAL_CREATORS[(projectIndex * 5 + creatorIndex) % INITIAL_CREATORS.length];
+    const returnedRequestCreator = project.id === 'PRJ-260801-07' && creatorIndex === 0
+      ? INITIAL_CREATORS.find((creator) => creator.id === 'creator-marc')
+      : undefined;
+    const creator = returnedRequestCreator
+      ?? INITIAL_CREATORS[(projectIndex * 5 + creatorIndex) % INITIAL_CREATORS.length];
     return {
       creatorId: creator.id as CreatorId,
       projectId: project.id as ProjectId,
@@ -1994,8 +2126,6 @@ export function CreatorsPage({
   currentUserAccount: string;
 }) {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -2014,16 +2144,16 @@ export function CreatorsPage({
     const status = getDefaultPayoutAccount(creator.payoutAccounts)?.status ?? 'DRAFT';
     return ['DRAFT', 'REVIEW_REQUIRED', 'INVALID'].includes(status);
   }).length;
-  const totalPages = Math.max(1, Math.ceil(filteredCreators.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const visibleCreators = filteredCreators.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  const {
+    page,
+    pageItems: visibleCreators,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(filteredCreators, { resetKey: normalizedSearch });
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    setPage(1);
   };
 
   const openProfile = (creator: CreatorProfile) => {
@@ -2314,7 +2444,15 @@ export function CreatorsPage({
                     <td>
                       <span className={`payout-list-status payout-list-status-${status.tone}`}>
                         {status.tone === 'success' ? <CheckCircle2 size={16} /> : status.tone === 'danger' || status.tone === 'warning' ? <AlertCircle size={16} /> : <Clock3 size={16} />}
-                        <span><strong>{status.label}</strong><small>{defaultAccount ? `${defaultAccount.provider} · ${defaultAccount.nickname}` : '尚未建立收款账户'}</small></span>
+                        <span>
+                          <strong>{status.label}</strong>
+                          {defaultAccount ? (
+                            <span className="payout-list-provider">
+                              <PaymentProviderBadge compact provider={defaultAccount.provider} />
+                              <small>{defaultAccount.nickname}</small>
+                            </span>
+                          ) : <small>尚未建立收款账户</small>}
+                        </span>
                       </span>
                     </td>
                     <td>{creator.projects} 个</td>
@@ -2331,14 +2469,11 @@ export function CreatorsPage({
           <span>共 {filteredCreators.length} 条</span>
           <Pagination
             ariaLabel="达人列表分页"
-            page={currentPage}
+            page={page}
             pageSize={pageSize}
             total={filteredCreators.length}
             onPageChange={setPage}
-            onPageSizeChange={(nextPageSize) => {
-              setPageSize(nextPageSize);
-              setPage(1);
-            }}
+            onPageSizeChange={setPageSize}
           />
         </div>
       </section>
@@ -2486,10 +2621,61 @@ const COLLABORATIONS = [
 ];
 
 export function CollaborationsPage({ notify, canImport }: { notify: Notify; canImport: boolean }) {
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLowerCase();
+  const filteredCollaborations = COLLABORATIONS.filter((item) => (
+    !query || `${item.creator}${item.project}${item.deliverable}${item.invoice}${item.payment}`.toLowerCase().includes(query)
+  ));
+  const {
+    page,
+    pageItems: visibleCollaborations,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(filteredCollaborations, { resetKey: query });
   const importAction = canImport
     ? <Button icon={<Upload size={17} />} onClick={() => notify('导入模板', '已准备达人合作名单模板。')}>导入合作名单</Button>
     : undefined;
-  return <div className="page-stack"><PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} /><section className="content-card"><div className="content-toolbar"><SearchBar value="" onChange={() => undefined} placeholder="搜索达人或项目" /><span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span></div><div className="table-scroll"><table className="data-table operational-table"><thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead><tbody>{COLLABORATIONS.map((item) => <tr key={`${item.creator}${item.project}`}><td><strong>{item.creator}</strong></td><td>{item.project}</td><td>{item.deliverable}</td><td>{item.invoice}</td><td><ProjectStatus status={item.payment} /></td><td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td></tr>)}</tbody></table></div></section></div>;
+  return (
+    <div className="page-stack">
+      <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
+      <section className="content-card">
+        <div className="content-toolbar">
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索达人或项目" />
+          <span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table operational-table">
+            <thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead>
+            <tbody>
+              {visibleCollaborations.map((item) => (
+                <tr key={`${item.creator}${item.project}`}>
+                  <td><strong>{item.creator}</strong></td>
+                  <td>{item.project}</td>
+                  <td>{item.deliverable}</td>
+                  <td>{item.invoice}</td>
+                  <td><ProjectStatus status={item.payment} /></td>
+                  <td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td>
+                </tr>
+              ))}
+              {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={6}>暂无符合条件的合作记录</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredCollaborations.length} 条</span>
+          <Pagination
+            ariaLabel="合作名单分页"
+            page={page}
+            pageSize={pageSize}
+            total={filteredCollaborations.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export function InvoicePage({
@@ -2497,6 +2683,7 @@ export function InvoicePage({
   creators,
   invoiceEntity,
   generatedInvoices,
+  requests,
   tab,
   onTabChange,
   onCreateInvoice,
@@ -2505,6 +2692,7 @@ export function InvoicePage({
   canManageInvoice,
   canReviewMedia,
   canReviewFinance,
+  canEditProjectResourceInvoice,
   focusedInvoiceId,
   onFocusCleared,
   onMarkSigned,
@@ -2522,6 +2710,7 @@ export function InvoicePage({
   creators: CreatorProfile[];
   invoiceEntity: InvoiceEntity;
   generatedInvoices: GeneratedInvoiceRecord[];
+  requests: RequestProjectSummary[];
   tab: InvoicePageTab;
   onTabChange: (tab: InvoicePageTab) => void;
   onCreateInvoice: () => void;
@@ -2530,6 +2719,7 @@ export function InvoicePage({
   canManageInvoice: boolean;
   canReviewMedia: boolean;
   canReviewFinance: boolean;
+  canEditProjectResourceInvoice: (payout: Payout) => boolean;
   focusedInvoiceId: string | null;
   onFocusCleared: () => void;
   onMarkSigned: (record: GeneratedInvoiceRecord) => void;
@@ -2562,33 +2752,40 @@ export function InvoicePage({
   const selectedGenerated = effectiveSourceKey?.startsWith('generated:')
     ? generatedInvoices.find((record) => record.id === effectiveSourceKey.slice('generated:'.length)) ?? null
     : null;
+  const selectedDetailPayout = selectedPayout
+    ?? (selectedGenerated
+      ? payouts.find((payout) => payout.id === selectedGenerated.sourcePayoutId) ?? null
+      : null);
   const selectedSource: InvoiceDetailSource | null = selectedPayout
     ? { kind: 'payout', payout: selectedPayout }
     : selectedGenerated
       ? {
           kind: 'generated',
           record: selectedGenerated,
-          payout: payouts.find((payout) => payout.id === selectedGenerated.sourcePayoutId),
+          payout: selectedDetailPayout ?? undefined,
         }
       : null;
   const selectedModel = selectedPayout
     ? selectedPayout.invoiceSnapshot ?? buildInvoiceReviewModel(selectedPayout, creators, invoiceEntity)
     : selectedGenerated?.snapshot ?? null;
+  const managementViewFor = (payout: Payout): InvoiceManagementView => getInvoiceManagementView(
+    payout,
+    findInvoiceRequest(payout, generatedInvoices, requests),
+  );
   const groupedPayouts = useMemo(() => {
     const groups = {
       signature: [] as Payout[],
-      'media-review': [] as Payout[],
-      approval: [] as Payout[],
+      review: [] as Payout[],
       approved: [] as Payout[],
       returned: [] as Payout[],
     };
 
     payouts.forEach((payout) => {
-      groups[getInvoicePageTab(payout.invoiceReviewStatus)].push(payout);
+      groups[managementViewFor(payout).tab].push(payout);
     });
 
     return groups;
-  }, [payouts]);
+  }, [generatedInvoices, payouts, requests]);
   const visiblePayouts = useMemo(() => {
     const query = search.trim().toLowerCase();
     const source = groupedPayouts[tab];
@@ -2629,6 +2826,9 @@ export function InvoicePage({
       && canManageInvoice
     )
   );
+  const selectedManagementView = selectedDetailPayout
+    ? managementViewFor(selectedDetailPayout)
+    : undefined;
 
   if (selectedSource && selectedModel) {
     return (
@@ -2647,7 +2847,11 @@ export function InvoicePage({
         canManageInvoice={canManageInvoice}
         canReviewMedia={canReviewMedia}
         canReviewFinance={canReviewFinance}
+        canEditProjectResource={Boolean(
+          selectedDetailPayout && canEditProjectResourceInvoice(selectedDetailPayout)
+        )}
         canExecutePayout={canExecutePayout}
+        managementView={selectedManagementView}
         onBack={closeInvoiceDetail}
       />
     );
@@ -2668,25 +2872,20 @@ export function InvoicePage({
       <section className="content-card">
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedPayouts.signature.length}</span></button>
-          <button className={`tab-button ${tab === 'media-review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('media-review')}>待媒介审核 <span>{groupedPayouts['media-review'].length}</span></button>
-          <button className={`tab-button ${tab === 'approval' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approval')}>审批中 <span>{groupedPayouts.approval.length}</span></button>
+          <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedPayouts.review.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedPayouts.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedPayouts.returned.length}</span></button>
         </div>
         <div className="content-toolbar compact-toolbar">
           <SearchBar value={search} onChange={setSearch} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
-          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approval' ? '项目审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
+          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
         </div>
         <PayoutTable
           payouts={visiblePayouts}
           onSelect={openReviewInvoice}
           emptyText="当前筛选条件下没有 Invoice 记录"
-          statusFor={(payout) => (
-            tab === 'approved'
-              ? getApprovedInvoicePaymentStatus(payout)
-              : payout.invoiceReviewStatus
-          )}
-          statusLabelFor={getInvoiceRowStatus}
+          statusFor={(payout) => payout.invoiceReviewStatus}
+          statusLabelFor={(payout) => managementViewFor(payout).status}
           actionLabelFor={(payout) => canActOnInvoice(payout)
             ? payout.invoiceReviewStatus === '达人反馈'
               ? '处理反馈'
@@ -2703,29 +2902,621 @@ export function InvoicePage({
   );
 }
 
-const BASE_BATCHES = [
-  { id: 'BAT-20260716-007', provider: 'Airwallex', count: 12, amount: 'USD 28,420', creator: '奚文慧', time: '2026-07-16 16:42', status: '付款处理中' },
-  { id: 'BAT-20260715-006', provider: 'PayMax', count: 8, amount: 'EUR 16,880', creator: '李梦', time: '2026-07-15 11:20', status: '已完成' },
-  { id: 'BAT-20260712-005', provider: 'PayPal', count: 23, amount: 'USD 41,260', creator: '吴雪霓', time: '2026-07-12 09:05', status: '部分失败' },
-];
+export type PaymentBatchRow = {
+  paymentBatchId: PaymentBatchRecord['paymentBatchId'];
+  id: string;
+  provider: string;
+  count: number;
+  amount: string;
+  payer: string;
+  paidAt: string;
+  status: PaymentBatchRecord['status'];
+};
 
-export function BatchesPage({ createdBatch, onNewBatch, notify, canCreateBatch }: { createdBatch: CreatedBatch; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
-  const rows = createdBatch ? [{ id: createdBatch.id, provider: createdBatch.provider, count: createdBatch.count, amount: createdBatch.amount, creator: CURRENT_USER.name, time: '刚刚', status: '等待付款' }, ...BASE_BATCHES] : BASE_BATCHES;
+export type PaymentBatchFilters = {
+  search: string;
+  start: string;
+  end: string;
+  provider: string;
+};
+
+const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
+const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明细表.xlsx';
+export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
+export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
+
+export const paymentBatchRows = (batches: readonly PaymentBatchRecord[]): PaymentBatchRow[] => (
+  batches.map((batch) => ({
+    paymentBatchId: batch.paymentBatchId,
+    id: batch.paymentBatchCode,
+    provider: batch.provider,
+    count: batch.items.length,
+    amount: paymentBatchAmountLabel(batch),
+    payer: batch.payer,
+    paidAt: batch.paidAt,
+    status: batch.status,
+  }))
+);
+
+type ExportAssetLoader = (path: string) => Promise<Blob>;
+
+const loadExportAsset: ExportAssetLoader = async (path) => {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Unable to read export asset: ${response.status}`);
+  return response.blob();
+};
+
+export const filterPaymentBatchRows = (
+  rows: PaymentBatchRow[],
+  filters: PaymentBatchFilters,
+) => {
+  const query = filters.search.trim().toLowerCase();
+  return rows.filter((row) => (
+    (!query || row.id.toLowerCase().includes(query))
+    && (!filters.start || row.paidAt >= filters.start)
+    && (!filters.end || row.paidAt <= filters.end)
+    && (filters.provider === 'all' || row.provider === filters.provider)
+  ));
+};
+
+export const correctedPaymentBatchDateRange = (
+  start: string,
+  end: string,
+  changed: 'start' | 'end',
+): [string, string] => {
+  if (!start || !end || start <= end) return [start, end];
+  return changed === 'start' ? [start, start] : [end, end];
+};
+
+export const toggleVisiblePaymentBatchSelection = (
+  selectedIds: Set<string>,
+  visibleRows: PaymentBatchRow[],
+) => {
+  const next = new Set(selectedIds);
+  const visibleIds = visibleRows.map((row) => row.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => next.has(id));
+  visibleIds.forEach((id) => {
+    if (allSelected) next.delete(id);
+    else next.add(id);
+  });
+  return next;
+};
+
+export const paymentBatchExportAvailability = (selectedRows: PaymentBatchRow[]) => ({
+  confirmations: selectedRows.some((row) => row.provider === 'Airwallex'),
+  records: selectedRows.length > 0,
+});
+
+export const createBatchConfirmationArchive = async (
+  batchIds: string[],
+  loadAsset: ExportAssetLoader = loadExportAsset,
+) => {
+  const [{ default: JSZip }, template] = await Promise.all([
+    import('jszip'),
+    loadAsset(PAYMENT_CONFIRMATION_ASSET_PATH),
+  ]);
+  const bytes = new Uint8Array(await template.arrayBuffer());
+  const zip = new JSZip();
+  batchIds.forEach((batchId) => {
+    zip.folder(batchId)?.file(PAYMENT_CONFIRMATION_FILENAME, bytes);
+  });
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+};
+
+export const loadPaymentDataRecord = async (
+  loadAsset: ExportAssetLoader = loadExportAsset,
+) => loadAsset(PAYMENT_DATA_ASSET_PATH);
+
+const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
+
+const paymentBatchStatusTone = (status: PaymentBatchRecord['status']) => {
+  if (status === '部分失败') return 'is-danger';
+  if (status === '付款处理中') return 'is-processing';
+  return 'is-success';
+};
+
+export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { batches: readonly PaymentBatchRecord[]; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
+  const [search, setSearch] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [provider, setProvider] = useState('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState<'confirmations' | 'records' | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportTriggerRef = useRef<HTMLButtonElement>(null);
+  const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
+  const listScrollPositionRef = useRef(0);
+  const rows = useMemo(() => paymentBatchRows(batches), [batches]);
+  const filteredRows = useMemo(() => filterPaymentBatchRows(rows, {
+    search,
+    start,
+    end,
+    provider,
+  }), [end, provider, rows, search, start]);
+  const {
+    page: batchPage,
+    pageItems: visibleRows,
+    pageSize: batchPageSize,
+    setPage: setBatchPage,
+    setPageSize: setBatchPageSize,
+  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}` });
+  const selectedRows = rows.filter((row) => selectedIds.has(row.id));
+  const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
+  const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
+  const allVisibleSelected = filteredRows.length > 0 && selectedVisibleCount === filteredRows.length;
+  const exportAvailability = paymentBatchExportAvailability(selectedRows);
+  const exportDisabled = !exportAvailability.records || exporting !== null;
+  const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
+  const batchMetrics = useMemo(() => {
+    const totals = batches.reduce((result, batch) => {
+      const counts = paymentBatchStatusCounts(batch);
+      return {
+        succeeded: result.succeeded + counts.succeeded,
+        failed: result.failed + counts.failed,
+        processing: result.processing + counts.processing,
+      };
+    }, { succeeded: 0, failed: 0, processing: 0 });
+    const total = totals.succeeded + totals.failed + totals.processing;
+    return {
+      ...totals,
+      processingBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).processing > 0).length,
+      failedBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).failed > 0).length,
+      successRate: total ? `${((totals.succeeded / total) * 100).toFixed(1)}%` : '—',
+      total,
+    };
+  }, [batches]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+    }
+  }, [allVisibleSelected, selectedVisibleCount]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [menuOpen]);
+
+  const updateStart = (value: string) => {
+    const [nextStart, nextEnd] = correctedPaymentBatchDateRange(value, end, 'start');
+    setStart(nextStart);
+    setEnd(nextEnd);
+  };
+  const updateEnd = (value: string) => {
+    const [nextStart, nextEnd] = correctedPaymentBatchDateRange(start, value, 'end');
+    setStart(nextStart);
+    setEnd(nextEnd);
+  };
+  const toggleOne = (batchId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
+      return next;
+    });
+  };
+  const availableExportItemIndexes = [
+    exportAvailability.confirmations ? 0 : -1,
+    exportAvailability.records ? 1 : -1,
+  ].filter((index) => index >= 0);
+  const focusExportItem = (index: number) => {
+    window.requestAnimationFrame(() => exportItemRefs.current[index]?.focus());
+  };
+  const openExportMenu = (focusEdge?: 'first' | 'last') => {
+    setMenuOpen(true);
+    if (focusEdge && availableExportItemIndexes.length) {
+      focusExportItem(focusEdge === 'first'
+        ? availableExportItemIndexes[0]
+        : availableExportItemIndexes[availableExportItemIndexes.length - 1]);
+    }
+  };
+  const closeExportMenu = (restoreFocus = false) => {
+    setMenuOpen(false);
+    if (restoreFocus) window.requestAnimationFrame(() => exportTriggerRef.current?.focus());
+  };
+  const handleExportTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      openExportMenu(event.key === 'ArrowDown' ? 'first' : 'last');
+    } else if (event.key === 'Escape' && menuOpen) {
+      event.preventDefault();
+      closeExportMenu();
+    }
+  };
+  const handleExportItemKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const currentPosition = availableExportItemIndexes.indexOf(index);
+      const offset = event.key === 'ArrowDown' ? 1 : -1;
+      const nextPosition = (currentPosition + offset + availableExportItemIndexes.length)
+        % availableExportItemIndexes.length;
+      exportItemRefs.current[availableExportItemIndexes[nextPosition]]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const targetPosition = event.key === 'Home' ? 0 : availableExportItemIndexes.length - 1;
+      exportItemRefs.current[availableExportItemIndexes[targetPosition]]?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeExportMenu(true);
+    }
+  };
+  const exportConfirmations = async () => {
+    if (!exportAvailability.confirmations || exporting !== null) return;
+    setMenuOpen(false);
+    setExporting('confirmations');
+    try {
+      const archive = await createBatchConfirmationArchive(selectedAirwallexRows.map((row) => row.id));
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      downloadBlob(archive, `付款批次确认函-${date}.zip`);
+      notify('确认函已导出', `已为 ${selectedAirwallexRows.length} 个 Airwallex 批次生成确认函压缩包。`);
+    } catch {
+      notify('确认函导出失败', '无法读取付款确认函模板，请检查导出资源后重试。');
+    } finally {
+      setExporting(null);
+    }
+  };
+  const exportPaymentData = async () => {
+    if (!exportAvailability.records || exporting !== null) return;
+    setMenuOpen(false);
+    setExporting('records');
+    try {
+      const workbook = await loadPaymentDataRecord();
+      downloadBlob(workbook, PAYMENT_DATA_FILENAME);
+      notify('付款数据记录已导出', `已下载 ${PAYMENT_DATA_FILENAME}。`);
+    } catch {
+      notify('付款数据记录导出失败', '无法读取付款数据 Excel，请检查导出资源后重试。');
+    } finally {
+      setExporting(null);
+    }
+  };
+  const openBatchDetail = (batchId: PaymentBatchRecord['paymentBatchId']) => {
+    listScrollPositionRef.current = window.scrollY;
+    setSelectedBatchId(batchId);
+  };
+  const closeBatchDetail = () => {
+    const batchId = selectedBatchId;
+    setSelectedBatchId(null);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: listScrollPositionRef.current, behavior: 'auto' });
+      if (batchId) detailTriggerRefs.current.get(batchId)?.focus();
+    });
+  };
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
-  return <div className="page-stack"><PageHeading title="付款批次" subtitle="按渠道组织批量付款，并追踪失败重试与回写结果。" actions={createAction} /><div className="metrics-grid"><MetricCard label="处理中批次" value="2" meta="共 16 笔付款" tone="peach" /><MetricCard label="本月成功率" value="98.6%" meta="1,248 / 1,266 笔" /><MetricCard label="需人工处理" value="3" meta="来自 2 个批次" tone="lilac" /></div><section className="content-card"><div className="content-toolbar"><SearchBar value="" onChange={() => undefined} placeholder="搜索批次号" /><Button variant="secondary" icon={<Download size={16} />}>导出记录</Button></div><div className="table-scroll"><table className="data-table operational-table"><thead><tr><th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>创建人 / 时间</th><th>状态</th><th className="action-cell">操作</th></tr></thead><tbody>{rows.map((batch) => <tr key={batch.id}><td className="mono-cell">{batch.id}</td><td>{batch.provider}</td><td>{batch.count} 笔</td><td>{batch.amount}</td><td><strong>{batch.creator}</strong><small className="cell-subtext">{batch.time}</small></td><td><span className="simple-status"><i />{batch.status}</span></td><td className="action-cell"><button className="text-link" type="button" onClick={() => notify('批次详情', `${batch.id} 的付款明细与渠道响应已打开。`)}>查看明细</button></td></tr>)}</tbody></table></div></section></div>;
+
+  if (selectedBatchId) {
+    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} onBack={closeBatchDetail} />;
+    return (
+      <div className="page-stack payment-batch-detail-page">
+        <button className="project-back-button payment-batch-detail-back" type="button" onClick={closeBatchDetail}>
+          返回付款批次
+        </button>
+        <section className="payment-batch-detail-missing" role="status">
+          <AlertCircle size={24} aria-hidden="true" />
+          <h1>批次不存在</h1>
+          <p>该付款批次可能已被移除，请返回列表后重新选择。</p>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-stack payment-batches-page">
+      <PageHeading title="付款批次" subtitle="按渠道组织批量付款，并追踪失败重试与回写结果。" actions={createAction} />
+      <div className="metrics-grid">
+        <MetricCard label="处理中批次" value={String(batchMetrics.processingBatches)} meta={`共 ${batchMetrics.processing} 笔付款`} tone="peach" />
+        <MetricCard label="付款成功率" value={batchMetrics.successRate} meta={`${batchMetrics.succeeded} / ${batchMetrics.total} 笔`} />
+        <MetricCard label="需人工处理" value={String(batchMetrics.failed)} meta={`来自 ${batchMetrics.failedBatches} 个批次`} tone="lilac" />
+      </div>
+      <section className="content-card">
+        <div className="content-toolbar payment-batch-toolbar">
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索批次号" />
+          <div className="payment-batch-date-range" role="group" aria-label="付款时间范围">
+            <label>
+              <span>开始</span>
+              <input aria-label="付款开始时间" type="datetime-local" step="60" value={start} onChange={(event) => updateStart(event.target.value)} />
+            </label>
+            <span className="payment-batch-date-divider">至</span>
+            <label>
+              <span>结束</span>
+              <input aria-label="付款结束时间" type="datetime-local" step="60" value={end} onChange={(event) => updateEnd(event.target.value)} />
+            </label>
+          </div>
+          <SelectField
+            ariaLabel="付款渠道筛选"
+            className="payment-batch-channel-filter"
+            value={provider}
+            options={[
+              { value: 'all', label: '全部付款渠道' },
+              { value: 'Airwallex', label: 'Airwallex' },
+              { value: 'PayPal', label: 'PayPal' },
+              { value: 'PayMax', label: 'PayMax' },
+            ]}
+            onChange={setProvider}
+          />
+          <div
+            className="payment-batch-export"
+            ref={exportMenuRef}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
+            }}
+          >
+            <button
+              ref={exportTriggerRef}
+              className="button button-secondary payment-batch-export-trigger"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={exporting !== null}
+              onKeyDown={handleExportTriggerKeyDown}
+              onClick={() => setMenuOpen((current) => !current)}
+            >
+              <Download size={16} aria-hidden="true" />
+              <span>{exporting ? '导出中...' : selectedRows.length ? `导出（${selectedRows.length}）` : '导出'}</span>
+              <ChevronDown className="payment-batch-export-chevron" size={15} aria-hidden="true" />
+            </button>
+            {menuOpen ? (
+              <div className="payment-batch-export-menu" role="menu" aria-label="批次导出选项">
+                <button
+                  ref={(node) => { exportItemRefs.current[0] = node; }}
+                  type="button"
+                  role="menuitem"
+                  disabled={!exportAvailability.confirmations || exporting !== null}
+                  tabIndex={-1}
+                  onKeyDown={(event) => handleExportItemKeyDown(event, 0)}
+                  onClick={() => { void exportConfirmations(); }}
+                >
+                  <FileArchive size={17} aria-hidden="true" />
+                  <span><strong>导出确认函</strong><small>按批次目录生成 ZIP</small></span>
+                </button>
+                <button
+                  ref={(node) => { exportItemRefs.current[1] = node; }}
+                  type="button"
+                  role="menuitem"
+                  disabled={exportDisabled}
+                  tabIndex={-1}
+                  onKeyDown={(event) => handleExportItemKeyDown(event, 1)}
+                  onClick={() => { void exportPaymentData(); }}
+                >
+                  <FileSpreadsheet size={17} aria-hidden="true" />
+                  <span><strong>导出付款数据记录</strong><small>下载原始 Excel 文件</small></span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="payment-batch-selection-summary" aria-live="polite">
+          已选择 {selectedRows.length} 个付款批次，其中 {selectedAirwallexRows.length} 个 Airwallex 批次可导出确认函
+        </div>
+        <div className="table-scroll">
+          <table className="data-table operational-table payment-batch-table">
+            <thead>
+              <tr>
+                <th className="payment-batch-select-cell">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    aria-label="全选当前筛选结果中的付款批次"
+                    checked={allVisibleSelected}
+                    disabled={!filteredRows.length}
+                    onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, filteredRows))}
+                  />
+                </th>
+                <th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((batch) => {
+                const selected = selectedIds.has(batch.id);
+                return (
+                  <tr className={selected ? 'is-selected' : ''} key={batch.id} aria-selected={selected}>
+                    <td className="payment-batch-select-cell">
+                      <input
+                        type="checkbox"
+                        aria-label={`选择付款批次 ${batch.id}`}
+                        checked={selected}
+                        onChange={() => toggleOne(batch.id)}
+                      />
+                    </td>
+                    <td className="mono-cell">{batch.id}</td>
+                    <td><PaymentProviderBadge compact provider={batch.provider} /></td>
+                    <td>{batch.count} 笔</td>
+                    <td>{batch.amount}</td>
+                    <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
+                    <td><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
+                    <td className="action-cell">
+                      <button
+                        ref={(node) => { if (node) detailTriggerRefs.current.set(batch.paymentBatchId, node); }}
+                        className="text-link"
+                        type="button"
+                        data-batch-detail-trigger={batch.paymentBatchId}
+                        onClick={() => openBatchDetail(batch.paymentBatchId)}
+                      >
+                        查看明细
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!filteredRows.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-footer">
+          <span>共 {filteredRows.length} 个批次{selectedRows.length ? `，已选 ${selectedRows.length} 个` : ''}</span>
+          <Pagination
+            ariaLabel="付款批次列表分页"
+            page={batchPage}
+            pageSize={batchPageSize}
+            total={filteredRows.length}
+            onPageChange={setBatchPage}
+            onPageSizeChange={setBatchPageSize}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }
 
+const TRANSACTION_PROVIDER_OPTIONS = [
+  { value: 'all', label: '全部付款渠道' },
+  { value: 'Airwallex', label: 'Airwallex' },
+  { value: 'PayPal', label: 'PayPal' },
+  { value: 'PayMax', label: 'PayMax' },
+] as const;
+
 export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
-  const [tab, setTab] = useState<'all' | 'processing' | 'paid'>('all');
-  const visible = payouts.filter((payout) => (
-    isInvoiceApprovedForPayment(payout)
-    && (tab === 'processing'
-      ? payout.status === '付款处理中' || payout.status === '等待付款'
-      : tab === 'paid'
-        ? payout.status === '已付款'
-        : true)
-  ));
-  return <div className="page-stack"><PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" /><section className="summary-surface"><article className="summary-card summary-card-peach"><span className="summary-illustration"><WalletCards size={26} /></span><div><strong>USD 128,640</strong><span>本月付款总额 · 86 笔</span></div></article><article className="summary-card summary-card-lilac"><span className="summary-illustration"><Check size={26} /></span><div><strong>98.6%</strong><span>渠道付款成功率</span></div></article></section><section className="content-card"><div className="tabs-row"><button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('all')}>全部</button><button className={`tab-button ${tab === 'processing' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('processing')}>处理中</button><button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" onClick={() => setTab('paid')}>已付款</button></div><div className="content-toolbar compact-toolbar"><div className="date-range-static">2026-07-01 <span>—</span> 2026-07-31</div><Button variant="secondary" icon={<Download size={16} />}>导出流水</Button></div><PayoutTable payouts={visible} onSelect={onSelectPayout} /></section></div>;
+  const [tab, setTab] = useState<TransactionTab>('all');
+  const [search, setSearch] = useState('');
+  const [provider, setProvider] = useState<TransactionProvider>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const transactions = payouts.filter(isFinalTransaction);
+  const visible = filterTransactionRecords(payouts, {
+    tab,
+    search,
+    provider,
+    startDate,
+    endDate,
+  });
+  const paid = transactions.filter((payout) => payout.status === '已付款');
+  const failed = transactions.filter((payout) => payout.status === '付款失败');
+  const paidCurrencies = aggregatePayoutCurrencies(paid, true);
+  const formatSuccessRate = (successfulCount: number, failedCount: number) => {
+    const total = successfulCount + failedCount;
+    return total ? `${((successfulCount / total) * 100).toFixed(1)}%` : '—';
+  };
+  const successRate = formatSuccessRate(paid.length, failed.length);
+  const providerSuccessRates = (['Airwallex', 'PayPal', 'PayMax'] as const).map((provider) => {
+    const successfulCount = paid.filter((payout) => payout.provider === provider).length;
+    const failedCount = failed.filter((payout) => payout.provider === provider).length;
+    return {
+      provider,
+      successRate: formatSuccessRate(successfulCount, failedCount),
+      failedCount,
+    };
+  });
+
+  const updateStartDate = (value: string) => {
+    setStartDate(value);
+    if (value && endDate && value > endDate) setEndDate(value);
+  };
+  const updateEndDate = (value: string) => {
+    setEndDate(value);
+    if (value && startDate && value < startDate) setStartDate(value);
+  };
+  const exportTransactions = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const workbook = await loadTransactionRecordsWorkbook(visible);
+      downloadBlob(workbook, transactionRecordsFilename());
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : '交易流水导出失败，请稍后重试');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="page-stack transactions-page">
+      <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" />
+      <section className="summary-surface" aria-label="交易概览">
+        <PaymentCurrencySummaryCard
+          items={paidCurrencies}
+          summaryLabel="已付款总额"
+          detailTitle="已付款币种详情"
+          summaryCount={paid.length}
+          tone="peach"
+          icon="paid"
+        />
+        <article
+          className="summary-card summary-card-lilac payment-workbench-summary-card transaction-channel-summary-card"
+          aria-label="渠道付款成功率"
+        >
+          <span className="summary-illustration"><Check size={26} /></span>
+          <div className="payment-summary-content">
+            <div className="payment-summary-primary">
+              <strong>{successRate}</strong>
+              <span>全部渠道成功率 · {failed.length} 笔失败</span>
+            </div>
+          </div>
+          <ul className="payment-summary-secondary transaction-channel-summary-details" aria-label="各渠道付款成功率">
+            {providerSuccessRates.map((item) => (
+              <li className="transaction-channel-summary-row" key={item.provider}>
+                <PaymentProviderBadge compact provider={item.provider} />
+                <span>{item.successRate}</span>
+                <small>{item.failedCount} 笔失败</small>
+              </li>
+            ))}
+          </ul>
+        </article>
+      </section>
+      <section className="content-card">
+        <div className="tabs-row" role="tablist" aria-label="交易状态">
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>全部</button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}>已付款</button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}>付款失败</button>
+        </div>
+        <div className="transaction-filter-row">
+          <label className="search-control transaction-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="搜索交易记录"
+              placeholder="搜索达人、项目、Invoice 等"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <div className="date-filter">
+            <CalendarDays size={17} aria-hidden="true" />
+            <label>
+              <span className="sr-only">交易开始日期</span>
+              <input type="date" value={startDate} onChange={(event) => updateStartDate(event.target.value)} />
+            </label>
+            <span className="date-divider">—</span>
+            <label>
+              <span className="sr-only">交易结束日期</span>
+              <input type="date" value={endDate} onChange={(event) => updateEndDate(event.target.value)} />
+            </label>
+          </div>
+          <SelectField<TransactionProvider>
+            ariaLabel="付款渠道"
+            className="transaction-provider-select"
+            value={provider}
+            options={TRANSACTION_PROVIDER_OPTIONS}
+            onChange={setProvider}
+          />
+          <span className="transaction-filter-result" aria-live="polite">当前显示 {visible.length} 条记录</span>
+          <Button
+            className="transaction-export-button"
+            variant="secondary"
+            icon={<Download size={16} />}
+            disabled={exporting || !visible.length}
+            onClick={exportTransactions}
+          >
+            {exporting ? '导出中...' : '导出流水'}
+          </Button>
+        </div>
+        {exportError ? <p className="transaction-export-error" role="alert">{exportError}</p> : null}
+        <PayoutTable
+          payouts={visible}
+          onSelect={onSelectPayout}
+          emptyText="暂无符合当前搜索与筛选条件的交易记录"
+        />
+      </section>
+    </div>
+  );
 }
 
 const ORGANIZATION_COUNTRY_OPTIONS = [
@@ -2803,7 +3594,7 @@ export function OrganizationPage({
 }
 
 const CHANNELS = [
-  { name: 'Airwallex', tag: '国际银行转账', description: '支持本地转账、SWIFT 与批量付款', currencies: 'USD · EUR · GBP · HKD', state: '已连接', color: '#6d5ce7' },
+  { name: 'Airwallex', tag: '国际银行转账', description: '支持本地转账、SWIFT 与批量付款', currencies: 'USD · EUR · GBP · HKD · SGD', state: '已连接', color: '#6d5ce7' },
   { name: 'PayMax', tag: '本地银行网络', description: '俄罗斯、泰国及区域本地银行模板', currencies: 'USD · EUR · THB', state: '已连接', color: '#ff765d' },
   { name: 'PayPal', tag: '数字钱包', description: '通过达人 PayPal 邮箱快速付款', currencies: 'USD · EUR', state: '已连接', color: '#1689e5' },
 ];
@@ -2820,15 +3611,115 @@ export function ChannelsPage({ notify }: { notify: Notify }) {
   return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
 }
 
-const INITIAL_NOTIFICATIONS = [
+export type SystemNotificationItem = {
+  id: number;
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  time: string;
+  unread: boolean;
+};
+
+export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
   { id: 1, icon: FileCheck2, title: 'Invoice INV-240718 等待财务复核', body: '@MinaKato · 夏日直播计划 · USD 3,240', time: '10 分钟前', unread: true },
   { id: 2, icon: AlertCircle, title: 'Nika 的收款资料校验失败', body: '泰国本地转账路由代码待补充，请在达人档案中更新。', time: '42 分钟前', unread: true },
   { id: 3, icon: Send, title: '批次 BAT-20260716-007 已提交渠道', body: 'Airwallex 正在处理 12 笔付款。', time: '昨天 16:42', unread: false },
   { id: 4, icon: CheckCircle2, title: '付款状态已回写', body: 'Kenji Mori · USD 4,100 · 已付款', time: '昨天 14:32', unread: false },
 ];
 
-export function NotificationsPage() {
-  const [items, setItems] = useState(INITIAL_NOTIFICATIONS);
-  const unreadCount = useMemo(() => items.filter((item) => item.unread).length, [items]);
-  return <div className="page-stack"><PageHeading title="通知" subtitle={`你有 ${unreadCount} 条未读消息。`} actions={<Button variant="secondary" onClick={() => setItems((current) => current.map((item) => ({ ...item, unread: false })))}>全部标为已读</Button>} /><section className="notification-card">{items.map((item) => { const Icon = item.icon; return <button className={`notification-item ${item.unread ? 'notification-unread' : ''}`} key={item.id} type="button" onClick={() => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unread: false } : entry))}><span className="notification-symbol"><Icon size={19} /></span><span><strong>{item.title}</strong><small>{item.body}</small></span><time><Clock3 size={14} />{item.time}</time>{item.unread ? <i className="unread-dot" /> : null}</button>; })}</section></div>;
+export function NotificationsPage({
+  items,
+  approvalReminder,
+  approvalReminderUnread,
+  onRead,
+  onReadApprovalReminder,
+  onMarkAllRead,
+  onOpenRequestApprovals,
+}: {
+  items: SystemNotificationItem[];
+  approvalReminder: RequestApprovalReminderSummary;
+  approvalReminderUnread: boolean;
+  onRead: (id: number) => void;
+  onReadApprovalReminder: () => void;
+  onMarkAllRead: () => void;
+  onOpenRequestApprovals: () => void;
+}) {
+  const hasApprovalReminder = approvalReminder.count > 0;
+  const unreadCount = items.filter((item) => item.unread).length
+    + (hasApprovalReminder && approvalReminderUnread ? 1 : 0);
+  const notificationEntries = [
+    ...(hasApprovalReminder ? [{ kind: 'approval' as const, key: 'approval-reminder' }] : []),
+    ...items.map((item) => ({ kind: 'notification' as const, key: `notification-${item.id}`, item })),
+  ];
+  const {
+    page,
+    pageItems: visibleEntries,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = usePagination(notificationEntries, {
+    resetKey: notificationEntries.map((entry) => entry.key).join('|'),
+  });
+  const openRequestApprovals = () => {
+    onReadApprovalReminder();
+    onOpenRequestApprovals();
+  };
+
+  return (
+    <div className="page-stack">
+      <PageHeading
+        title="通知"
+        subtitle={`你有 ${unreadCount} 条未读消息。`}
+        actions={<Button variant="secondary" onClick={onMarkAllRead}>全部标为已读</Button>}
+      />
+      <section className="notification-card">
+        {visibleEntries.map((entry) => {
+          if (entry.kind === 'approval') {
+            return (
+              <button
+                className={`notification-item request-approval-notification ${approvalReminderUnread ? 'notification-unread' : ''}`}
+                key={entry.key}
+                type="button"
+                onClick={openRequestApprovals}
+              >
+                <span className="notification-symbol"><ClipboardCheck size={19} /></span>
+                <span>
+                  <strong>你有 {approvalReminder.count} 个请款项目待审批</strong>
+                  <small>请及时核对请款资料，点击进入请款项目处理。</small>
+                </span>
+                <time><Clock3 size={14} />本次登录</time>
+                {approvalReminderUnread ? <i className="unread-dot" /> : null}
+              </button>
+            );
+          }
+          const { item } = entry;
+          const Icon = item.icon;
+          return (
+            <button
+              className={`notification-item ${item.unread ? 'notification-unread' : ''}`}
+              key={item.id}
+              type="button"
+              onClick={() => onRead(item.id)}
+            >
+              <span className="notification-symbol"><Icon size={19} /></span>
+              <span><strong>{item.title}</strong><small>{item.body}</small></span>
+              <time><Clock3 size={14} />{item.time}</time>
+              {item.unread ? <i className="unread-dot" /> : null}
+            </button>
+          );
+        })}
+        <div className="table-footer notification-footer">
+          <span>共 {notificationEntries.length} 条通知</span>
+          <Pagination
+            ariaLabel="通知列表分页"
+            page={page}
+            pageSize={pageSize}
+            total={notificationEntries.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }

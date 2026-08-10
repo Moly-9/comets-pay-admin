@@ -2,6 +2,7 @@ import {
   paymentListEffectiveAccount,
   paymentListItemValue,
   type PaymentListItem,
+  type PaymentListItemProvider,
   type PaymentListRecord,
 } from './businessWorkflow';
 import { getAirwallexCountryProfile } from './airwallexFormSchema';
@@ -14,6 +15,7 @@ import {
 import type { AirwallexPayoutAccount, AirwallexTransferMethod, CreatorProfile } from './types';
 
 export const AIRWALLEX_PAYMENT_LIST_SHEET = 'Airwallex batch transfer';
+export const PAYPAL_PAYMENT_LIST_SHEET = 'PayPal payment list';
 
 export const AIRWALLEX_PAYMENT_LIST_HEADERS = [
   '付款至',
@@ -37,6 +39,22 @@ export const AIRWALLEX_PAYMENT_LIST_HEADERS = [
   '洲 / 省',
   '邮政编码',
   '请求编号 (Request ID) (选填)',
+] as const;
+
+export const PAYPAL_PAYMENT_LIST_HEADERS = [
+  '付款清单编号',
+  'Invoice 编号',
+  '达人',
+  'Real Name',
+  'PayPal Name',
+  'PayPal Email',
+  '付款币种',
+  '付款金额',
+  '费用承担',
+  '付款原因',
+  '交易附言',
+  '描述',
+  '请求编号',
 ] as const;
 
 export type AirwallexPaymentListRow = {
@@ -77,7 +95,7 @@ const countryLabel = (countryCode: string, fallback = '') => (
   getAirwallexCountryProfile(countryCode)?.label || fallback || countryCode
 );
 
-const accountForItem = (
+export const paymentListAccountForItem = (
   item: PaymentListItem,
   creators: CreatorProfile[],
 ): AirwallexPayoutAccount | null => {
@@ -103,22 +121,15 @@ const feeValues = (item: PaymentListItem, transferMethod: AirwallexTransferMetho
   };
 };
 
-const itemIssues = (
+export const paymentListItemAccountIssues = (
   item: PaymentListItem,
   account: AirwallexPayoutAccount | null,
 ) => {
   const effectiveAccount = paymentListEffectiveAccount(item);
   const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
   const prefix = `${invoiceLabel}：`;
-  const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency')).trim();
-  const sourceCurrency = String(paymentListItemValue(item, 'currency')).trim();
-  const amount = Number(paymentListItemValue(item, 'amount'));
-  const feeBearer = paymentListItemValue(item, 'feeBearer');
-  const paymentReason = String(paymentListItemValue(item, 'paymentReason')).trim();
-  const transactionReference = String(paymentListItemValue(item, 'transactionReference')).trim();
   return [
-    item.requiresRevalidation ? `${prefix}${item.validationIssues?.[0] ?? '付款行需要重新校验'}` : '',
-    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板不能导出 ${effectiveAccount.provider || '未指定'} 付款行` : '',
+    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板与校验 API 不支持 ${effectiveAccount.provider || '未指定'} 收款账户` : '',
     !account ? `${prefix}达人档案中未找到关联的 Airwallex 收款账户` : '',
     account && getPayoutAccountVersion(account) !== effectiveAccount.payoutAccountVersion
       ? `${prefix}收款账户版本已变化`
@@ -133,12 +144,6 @@ const itemIssues = (
       ? `${prefix}Airwallex 收款账户未通过验证`
       : '',
     account && !account.beneficiaryId ? `${prefix}Airwallex 收款账户缺少 beneficiary ID` : '',
-    !receiveCurrency ? `${prefix}缺少收款币种` : '',
-    !sourceCurrency ? `${prefix}缺少支付币种` : '',
-    !(amount > 0) ? `${prefix}付款金额必须大于 0` : '',
-    !feeBearer ? `${prefix}手续费承担方未确认` : '',
-    !paymentReason ? `${prefix}付款原因未填写` : '',
-    !transactionReference ? `${prefix}交易附言未填写` : '',
     account && !account.bankDetails.bankCountryCode ? `${prefix}缺少银行国家或地区` : '',
     account && !account.bankDetails.accountName ? `${prefix}缺少账户名` : '',
     account && !(account.bankDetails.iban || account.bankDetails.accountNumber)
@@ -157,21 +162,47 @@ const itemIssues = (
   ].filter(Boolean);
 };
 
+const itemIssues = (
+  item: PaymentListItem,
+  account: AirwallexPayoutAccount | null,
+) => {
+  const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
+  const prefix = `${invoiceLabel}：`;
+  const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency')).trim();
+  const sourceCurrency = String(paymentListItemValue(item, 'currency')).trim();
+  const amount = Number(paymentListItemValue(item, 'amount'));
+  const feeBearer = paymentListItemValue(item, 'feeBearer');
+  const paymentReason = String(paymentListItemValue(item, 'paymentReason')).trim();
+  const transactionReference = String(paymentListItemValue(item, 'transactionReference')).trim();
+  return [
+    item.requiresRevalidation ? `${prefix}${item.validationIssues?.[0] ?? '付款行需要重新校验'}` : '',
+    ...paymentListItemAccountIssues(item, account),
+    !receiveCurrency ? `${prefix}缺少收款币种` : '',
+    !sourceCurrency ? `${prefix}缺少支付币种` : '',
+    !(amount > 0) ? `${prefix}付款金额必须大于 0` : '',
+    !feeBearer ? `${prefix}手续费承担方未确认` : '',
+    !paymentReason ? `${prefix}付款原因未填写` : '',
+    !transactionReference ? `${prefix}交易附言未填写` : '',
+  ].filter(Boolean);
+};
+
 export const buildAirwallexPaymentListRows = ({
   paymentList,
   creators,
+  allowSubmitted = false,
 }: {
   paymentList: PaymentListRecord;
   creators: CreatorProfile[];
+  allowSubmitted?: boolean;
 }): AirwallexPaymentListRow[] => {
   const issues = [
     !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
     paymentList.provider !== 'Airwallex' ? `${paymentList.provider} 付款清单不能使用 Airwallex 模板导出` : '',
     paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
-    paymentList.status === 'submitted' ? '付款清单审批中，暂不能导出' : '',
+    paymentList.status === 'submitted' && !allowSubmitted ? '付款清单审批中，暂不能导出' : '',
   ].filter(Boolean);
   const resolved = paymentList.items.map((item) => {
-    const account = accountForItem(item, creators);
+    const account = paymentListAccountForItem(item, creators);
     issues.push(...itemIssues(item, account));
     return { item, account };
   });
@@ -241,11 +272,13 @@ const WORKBOOK_COLUMNS: Array<{
 export const exportAirwallexPaymentListWorkbook = async ({
   paymentList,
   creators,
+  allowSubmitted = false,
 }: {
   paymentList: PaymentListRecord;
   creators: CreatorProfile[];
+  allowSubmitted?: boolean;
 }) => {
-  const rows = buildAirwallexPaymentListRows({ paymentList, creators });
+  const rows = buildAirwallexPaymentListRows({ paymentList, creators, allowSubmitted });
   const { Workbook } = await import('exceljs');
   const workbook = new Workbook();
   workbook.creator = 'COMETS Pay';
@@ -288,6 +321,132 @@ export const exportAirwallexPaymentListWorkbook = async ({
   );
 };
 
+export type PayPalPaymentListRow = {
+  paymentListCode: string;
+  invoiceNumber: string;
+  creatorName: string;
+  realName: string;
+  paypalName: string;
+  paypalEmail: string;
+  currency: string;
+  amount: number;
+  feeBearer: string;
+  paymentReason: string;
+  transactionReference: string;
+  description: string;
+  requestId: string;
+};
+
+const payPalFeeBearerLabel = (value: unknown) => {
+  if (value === 'ADVERTISER') return '付款方承担';
+  if (value === 'PUBLISHER') return '收款方承担';
+  if (value === 'SHARED') return '共同承担';
+  return '待确认';
+};
+
+export const buildPayPalPaymentListRows = ({
+  paymentList,
+  allowSubmitted = false,
+}: {
+  paymentList: PaymentListRecord;
+  allowSubmitted?: boolean;
+}): PayPalPaymentListRow[] => {
+  const issues = [
+    !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
+    paymentList.provider !== 'PayPal' ? `${paymentList.provider} 付款清单不能使用 PayPal 模板导出` : '',
+    paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
+    paymentList.status === 'submitted' && !allowSubmitted ? '付款清单审批中，暂不能导出' : '',
+  ].filter(Boolean);
+
+  const rows = paymentList.items.map((item): PayPalPaymentListRow => {
+    const account = paymentListEffectiveAccount(item);
+    const details = account.paymentDetails;
+    const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
+    const prefix = `${invoiceLabel}：`;
+    const currency = String(paymentListItemValue(item, 'currency') || '').trim();
+    const amount = Number(paymentListItemValue(item, 'amount'));
+    const paypalName = String(details?.paypalUsername || '').trim();
+    const paypalEmail = String(details?.paypalEmail || '').trim();
+    if (account.provider !== 'PayPal' || account.transferMethod !== 'PAYPAL') {
+      issues.push(`${prefix}付款行不是 PayPal 冻结账户`);
+    }
+    if (!paypalName) issues.push(`${prefix}缺少 PayPal Name`);
+    if (!paypalEmail) issues.push(`${prefix}缺少 PayPal Email`);
+    if (!currency) issues.push(`${prefix}缺少付款币种`);
+    if (!(amount > 0)) issues.push(`${prefix}付款金额必须大于 0`);
+    return {
+      paymentListCode: paymentList.paymentListCode,
+      invoiceNumber: invoiceLabel,
+      creatorName: item.snapshot.creatorName,
+      realName: item.snapshot.realName || '',
+      paypalName,
+      paypalEmail,
+      currency,
+      amount,
+      feeBearer: payPalFeeBearerLabel(paymentListItemValue(item, 'feeBearer')),
+      paymentReason: String(paymentListItemValue(item, 'paymentReason') || ''),
+      transactionReference: String(paymentListItemValue(item, 'transactionReference') || ''),
+      description: String(paymentListItemValue(item, 'description') || ''),
+      requestId: item.id,
+    };
+  });
+
+  if (issues.length) throw new PaymentListWorkbookError([...new Set(issues)]);
+  return rows;
+};
+
+export const exportPayPalPaymentListWorkbook = async ({
+  paymentList,
+  allowSubmitted = false,
+}: {
+  paymentList: PaymentListRecord;
+  allowSubmitted?: boolean;
+}) => {
+  const rows = buildPayPalPaymentListRows({ paymentList, allowSubmitted });
+  const { Workbook } = await import('exceljs');
+  const workbook = new Workbook();
+  workbook.creator = 'COMETS Pay';
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet(PAYPAL_PAYMENT_LIST_SHEET, {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
+  sheet.columns = [
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[0], key: 'paymentListCode', width: 24 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[1], key: 'invoiceNumber', width: 24 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[2], key: 'creatorName', width: 20 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[3], key: 'realName', width: 22 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[4], key: 'paypalName', width: 24 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[5], key: 'paypalEmail', width: 30 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[6], key: 'currency', width: 14 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[7], key: 'amount', width: 18 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[8], key: 'feeBearer', width: 18 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[9], key: 'paymentReason', width: 30 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[10], key: 'transactionReference', width: 28 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[11], key: 'description', width: 30 },
+    { header: PAYPAL_PAYMENT_LIST_HEADERS[12], key: 'requestId', width: 28 },
+  ];
+  sheet.autoFilter = { from: 'A1', to: 'M1' };
+  sheet.getRow(1).height = 32;
+  sheet.getRow(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B5563' } };
+  sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  rows.forEach((value) => {
+    const row = sheet.addRow(value);
+    row.height = 24;
+    row.font = { name: 'Arial', size: 10 };
+    row.alignment = { vertical: 'middle' };
+    row.getCell('amount').numFmt = '#,##0.00';
+    ['paymentListCode', 'invoiceNumber', 'paypalName', 'paypalEmail', 'requestId'].forEach((key) => {
+      row.getCell(key).numFmt = '@';
+    });
+  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob(
+    [new Uint8Array(buffer as ArrayBuffer)],
+    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+  );
+};
+
 const safeFilenamePart = (value: string) => (
   value.trim().replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'PROJECT'
 );
@@ -295,4 +454,5 @@ const safeFilenamePart = (value: string) => (
 export const paymentListWorkbookFilename = (
   projectCode: string,
   paymentList: PaymentListRecord,
-) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}.xlsx`;
+  provider?: PaymentListItemProvider,
+) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}${provider ? `-${provider.toUpperCase()}` : ''}.xlsx`;

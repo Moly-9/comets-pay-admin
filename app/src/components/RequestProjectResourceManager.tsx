@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import {
+  invoicePaymentListProvider,
   paymentListEffectiveAccount,
   paymentListItemValue,
   type ContractId,
@@ -33,6 +34,7 @@ import {
   contractCooperationProjectId,
   invoiceCooperationProjectId,
   paymentRequestInvoiceIds,
+  paymentRequestProviderForChannel,
   requestOwningInvoice,
   type PaymentRequestCreatorLink,
   type PaymentRequestProjectLike,
@@ -47,6 +49,7 @@ import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
 import { ContractUploadWizard } from './ContractUploadWizard';
+import { PaymentProviderBadge } from './PaymentProviderBadge';
 
 type ResourceKind = 'contract' | 'invoice' | 'payment';
 type ConfirmAction = {
@@ -325,7 +328,7 @@ export function RequestProjectResourceManager({
     list.paymentRequestProjectId === request.paymentRequestProjectId
   ));
   const currentPaymentList = requestPaymentLists[0] ?? null;
-  const paymentItemCount = requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0);
+  const paymentItemCount = currentPaymentList?.items.length ?? 0;
   const paymentListEditing = currentPaymentList?.status === 'draft';
   const paymentListExportable = Boolean(
     currentPaymentList
@@ -343,6 +346,20 @@ export function RequestProjectResourceManager({
   const contractCandidates = contractAssociationCandidates(contracts, cooperationProjectId);
 
   const invoiceCandidates = invoiceAssociationCandidates(invoices, cooperationProjectId);
+  const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
+  const invoiceUnavailableReason = (invoice: GeneratedInvoiceRecord) => (
+    invoiceAssociationUnavailableReason(
+      invoice,
+      links,
+      creators,
+      requests as PaymentRequestProjectLike[],
+      request.paymentRequestProjectId,
+    ) || (
+      requestPaymentProvider && invoicePaymentListProvider(invoice) !== requestPaymentProvider
+        ? `Invoice 收款账户渠道与请款项目付款渠道 ${request.paymentChannel} 不一致`
+        : ''
+    )
+  );
 
   const openLinkDialog = (kind: 'contract' | 'invoice') => {
     setSelectedCandidateIds([]);
@@ -379,13 +396,7 @@ export function RequestProjectResourceManager({
     }
     const additions = invoiceCandidates
       .filter((invoice) => selectedCandidateIds.includes(invoice.invoiceId))
-      .filter((invoice) => !invoiceAssociationUnavailableReason(
-        invoice,
-        links,
-        creators,
-        requests as PaymentRequestProjectLike[],
-        request.paymentRequestProjectId,
-      ));
+      .filter((invoice) => !invoiceUnavailableReason(invoice));
     const next = mergeInvoiceCandidateLinks(links, additions);
     const addedCreatorCount = next.length - links.length;
     onChangeLinks(
@@ -482,8 +493,8 @@ export function RequestProjectResourceManager({
         </article>
         <article className="project-resource-row project-resource-row-payment">
           <span className="project-resource-icon"><WalletCards size={19} /></span>
-          <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">付款清单</h3><span className="project-resource-count">{requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0)} 条明细</span></div><strong>{requestPaymentLists.length ? requestPaymentLists.map((list) => list.paymentListCode).join('、') : '待生成'}</strong><small>按 Invoice 保留独立付款行</small></div>
-          <span className="project-resource-status"><i />{requestPaymentLists.length ? paymentListStatusLabel(requestPaymentLists[0].status) : '未生成'}</span>
+          <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">付款单</h3><span className="project-resource-count">{paymentItemCount} 条明细</span></div><strong>{currentPaymentList?.paymentListCode ?? '待生成'}</strong><small>一张付款单覆盖当前请款项目全部 Invoice</small></div>
+          <span className="project-resource-status"><i />{currentPaymentList ? paymentListStatusLabel(currentPaymentList.status) : '未生成'}</span>
           <button className="text-link project-resource-summary-open" type="button" onClick={() => setResourceDialog('payment')}>查看清单</button>
         </article>
       </div>
@@ -525,9 +536,9 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {resourceDialog === 'payment' ? (
-        <Modal title={`${request.requestCode ?? request.id} · 付款清单`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
+        <Modal title={`${request.requestCode ?? request.id} · 付款单`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
-            <div className="project-resource-browser-heading"><div><strong>全部付款明细</strong><p>不按达人或渠道分组，每张 Invoice 保留独立付款行。</p></div><span>{paymentItemCount} 笔</span></div>
+            <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {request.paymentChannel || '待确认'}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 {canEdit ? <Button icon={<RefreshCw size={15} />} disabled={!linkedInvoices.length} onClick={generateOrRefreshPaymentList}>生成 / 刷新清单</Button> : null}
@@ -537,19 +548,22 @@ export function RequestProjectResourceManager({
               </div>
             ) : null}
             <div className="project-payment-rows request-payment-flat-rows">
-              {requestPaymentLists.flatMap((list) => list.items.map((item) => {
+              {currentPaymentList?.items.map((item) => {
+                const list = currentPaymentList;
                 const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
                 const effectiveAccount = paymentListEffectiveAccount(item);
                 const editable = canEdit && list.status === 'draft';
-                const accountOptions = eligibleInvoicePayoutAccounts(creator).map((account) => ({
+                const accountOptions = eligibleInvoicePayoutAccounts(creator)
+                  .filter((account) => !requestPaymentProvider || account.provider === requestPaymentProvider)
+                  .map((account) => ({
                   value: getPayoutAccountId(account),
                   label: account.nickname,
                   description: `${account.provider} · ${maskInvoiceAccountValue(getPayoutAccountIdentifier(account))}`,
-                }));
-                return <article className="project-payment-row" id={`request-payment-row-${item.invoiceId}`} key={`${list.paymentListId}-${item.invoiceId}`}><header className="project-payment-row-header"><div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {list.provider}</span></div><div className="project-payment-row-actions">{editable && item.requiresRevalidation ? <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}><RefreshCw size={12} />重新校验</button> : null}{editable ? <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => setConfirmAction({ title: '移除付款明细', description: '仅从当前付款清单移除这笔明细，Invoice 和项目关联保留。', confirmLabel: '确认移除', run: () => onRemovePaymentInvoice(list.paymentListId, item.invoiceId) })}><Trash2 size={15} /></button> : null}</div></header><div className="project-payment-validation-row"><span className={item.requiresRevalidation ? 'project-payment-validation is-warning' : 'project-payment-validation'}>{item.requiresRevalidation ? item.validationIssues?.[0] ?? '需重新校验' : `${paymentListStatusLabel(list.status)} · ${effectiveAccount.provider}`}</span></div><div className="project-payment-fields"><label className="project-payment-account-field"><span>收款账户</span><SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label><label><span>支付币种</span><input disabled={!editable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value.toUpperCase())} /></label><label><span>收款币种</span><input disabled={!editable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} /></label><label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label><label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label><label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label><label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label><label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label></div><footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer></article>;
-              }))}
-              {!requestPaymentLists.length ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款清单尚未生成</strong><p>请先关联 Invoice，再生成当前请款项目专属清单。</p></div> : null}
-              {requestPaymentLists.length && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款清单已清空</strong><p>点击“生成 / 刷新清单”可按当前关联的 Invoice 重新生成付款行。</p></div> : null}
+                  }));
+                return <article className="project-payment-row" id={`request-payment-row-${item.invoiceId}`} key={`${list.paymentListId}-${item.invoiceId}`}><header className="project-payment-row-header"><div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · <PaymentProviderBadge compact provider={effectiveAccount.provider} /></span></div><div className="project-payment-row-actions">{editable && item.requiresRevalidation ? <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}><RefreshCw size={12} />重新校验</button> : null}{editable ? <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => setConfirmAction({ title: '移除付款明细', description: '仅从当前付款单移除这笔明细，Invoice 和项目关联保留。', confirmLabel: '确认移除', run: () => onRemovePaymentInvoice(list.paymentListId, item.invoiceId) })}><Trash2 size={15} /></button> : null}</div></header><div className="project-payment-validation-row"><span className={item.requiresRevalidation ? 'project-payment-validation is-warning' : 'project-payment-validation'}>{item.requiresRevalidation ? item.validationIssues?.[0] ?? '需重新校验' : `${paymentListStatusLabel(list.status)} · ${effectiveAccount.provider}`}</span></div><div className="project-payment-fields"><label className="project-payment-account-field"><span>收款账户</span><SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label><label><span>支付币种</span><input disabled={!editable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value.toUpperCase())} /></label><label><span>收款币种</span><input disabled={!editable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} /></label><label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label><label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label><label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label><label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label><label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label></div><footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer></article>;
+              })}
+              {!currentPaymentList ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单尚未生成</strong><p>请先关联 Invoice，再生成当前请款项目唯一的付款单。</p></div> : null}
+              {currentPaymentList && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单已清空</strong><p>点击“生成 / 刷新清单”可按当前关联的 Invoice 重新生成付款明细。</p></div> : null}
             </div>
           </div>
         </Modal>
@@ -569,13 +583,7 @@ export function RequestProjectResourceManager({
             }) : filteredInvoiceCandidates.map((invoice) => {
               const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
               const currentLink = invoice.snapshot.creatorId ? linkByCreator.get(invoice.snapshot.creatorId) : undefined;
-              const unavailableReason = invoiceAssociationUnavailableReason(
-                invoice,
-                links,
-                creators,
-                requests as PaymentRequestProjectLike[],
-                request.paymentRequestProjectId,
-              );
+              const unavailableReason = invoiceUnavailableReason(invoice);
               const enabled = !unavailableReason;
               const selected = selectedCandidateIds.includes(invoice.invoiceId);
               return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={invoice.invoiceId}><label><input type="checkbox" aria-label={`选择 Invoice ${invoice.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(invoice.invoiceId)} /><span><strong>{invoice.id}</strong><small>{invoice.status}</small></span></label><div className="request-resource-candidate-creator"><strong>{creator?.name ?? invoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small>{enabled ? currentLink ? <span className="is-existing">已在请款项目</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot)) : '不可关联'}</strong><small>{enabled ? `${invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同` : unavailableReason}</small></div><button className="text-link" type="button" onClick={() => onOpenInvoice(invoice.invoiceId)}>查看 Invoice</button></article>;
