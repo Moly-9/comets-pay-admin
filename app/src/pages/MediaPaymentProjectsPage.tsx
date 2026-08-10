@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowLeft,
+  Check,
   CheckCircle2,
   ChevronDown,
   Clock3,
@@ -208,6 +209,180 @@ const formatReturnTime = (value?: string) => {
     minute: '2-digit',
     hour12: false,
   }).format(date);
+};
+
+export type MyProjectRequestProgressStep = {
+  label: string;
+  description: string;
+  time: string;
+  state: 'complete' | 'current' | 'pending';
+};
+
+export const buildMyProjectRequestProgress = ({
+  request,
+  invoices,
+  payouts,
+  submissionIssues = [],
+}: {
+  request: RequestProjectSummary;
+  invoices: GeneratedInvoiceRecord[];
+  payouts: Payout[];
+  submissionIssues?: readonly string[];
+}): MyProjectRequestProgressStep[] => {
+  const links = request.creatorLinks ?? [];
+  const linkedInvoiceIds = paymentRequestInvoiceIds(links);
+  const linkedContractCount = new Set(links.flatMap((link) => link.contractIds)).size || request.contracts;
+  const linkedInvoiceCount = linkedInvoiceIds.length || request.invoices;
+  const invoiceReady = links.length
+    ? links.every((link) => link.invoiceIds.length > 0)
+    : linkedInvoiceCount > 0;
+  const linkedPayoutIds = new Set(invoices
+    .filter((invoice) => linkedInvoiceIds.includes(invoice.invoiceId))
+    .map((invoice) => invoice.sourcePayoutId));
+  const requestPayouts = payouts.filter((payout) => (
+    linkedPayoutIds.size > 0
+      ? linkedPayoutIds.has(payout.id)
+      : Boolean(
+          request.paymentRequestProjectId
+          && payout.paymentRequestProjectId === request.paymentRequestProjectId,
+        )
+  ));
+  const paidPayouts = requestPayouts.filter((payout) => payout.status === '已付款');
+  const processingPayouts = requestPayouts.filter((payout) => payout.status === '付款处理中');
+  const waitingPayouts = requestPayouts.filter((payout) => payout.status === '等待付款');
+  const failedPayouts = requestPayouts.filter((payout) => (
+    ['付款失败', '已退回', '信息异常'].includes(payout.status)
+  ));
+  const hasPaymentFailureRecovery = failedPayouts.some((payout) => payout.paymentFailureRecovery);
+  const allPayoutsPaid = request.lifecycle === 'COMPLETED'
+    || (requestPayouts.length > 0 && paidPayouts.length === requestPayouts.length);
+  const approvalRound = request.approval?.round ?? 1;
+  const returnDetails = requestApprovalReturnDetails(request.approval);
+  const approvalCompleted = request.lifecycle === 'APPROVED'
+    || request.lifecycle === 'COMPLETED'
+    || request.approval?.status === 'APPROVED'
+    || hasPaymentFailureRecovery;
+  const createdTime = formatCreatedAt(request.createdAt ?? request.approval?.submittedAt);
+  const updatedTime = formatCreatedAt(request.approval?.updatedAt ?? request.approval?.submittedAt);
+
+  let invoiceStep: MyProjectRequestProgressStep;
+  if (invoiceReady) {
+    invoiceStep = {
+      label: '关联 Invoice',
+      description: `已关联 ${linkedInvoiceCount} 份 Invoice`,
+      time: '已完成',
+      state: 'complete',
+    };
+  } else {
+    const missingCreatorCount = links.filter((link) => link.invoiceIds.length === 0).length;
+    invoiceStep = {
+      label: '关联 Invoice',
+      description: missingCreatorCount
+        ? `仍有 ${missingCreatorCount} 位达人待关联 Invoice`
+        : '请先关联至少一份已完成媒介审核的 Invoice',
+      time: request.lifecycle === 'DRAFT' ? '待补充' : '资料不完整',
+      state: request.lifecycle === 'DRAFT' ? 'current' : 'pending',
+    };
+  }
+
+  let approvalStep: MyProjectRequestProgressStep;
+  if (approvalCompleted) {
+    approvalStep = {
+      label: '提交审核',
+      description: hasPaymentFailureRecovery ? '审批已完成，失败款正在恢复处理' : 'PM、项目负责人、老板及财务均已通过',
+      time: updatedTime,
+      state: 'complete',
+    };
+  } else if (request.lifecycle === 'RETURNED') {
+    approvalStep = {
+      label: '提交审核',
+      description: `${returnDetails?.stageLabel ?? '审批流'}已退回，待修改后重新提交`,
+      time: `第 ${returnDetails?.round ?? approvalRound} 轮 · ${formatCreatedAt(returnDetails?.occurredAt)}`,
+      state: 'current',
+    };
+  } else if (request.approval || request.lifecycle === 'SUBMITTED') {
+    approvalStep = {
+      label: '提交审核',
+      description: `第 ${approvalRound} 轮 · ${myProjectStatusFor(request)}`,
+      time: updatedTime,
+      state: 'current',
+    };
+  } else if (invoiceReady && submissionIssues.length === 0) {
+    approvalStep = {
+      label: '提交审核',
+      description: '资料完整，可以提交审核',
+      time: '待提交',
+      state: 'current',
+    };
+  } else {
+    approvalStep = {
+      label: '提交审核',
+      description: invoiceReady ? `仍有 ${submissionIssues.length} 项资料待完善` : '完成 Invoice 关联后提交',
+      time: '待开始',
+      state: 'pending',
+    };
+  }
+
+  let paymentStep: MyProjectRequestProgressStep;
+  if (allPayoutsPaid) {
+    const paidTimes = paidPayouts
+      .map((payout) => payout.paidAt)
+      .filter((value): value is string => Boolean(value))
+      .sort();
+    const paidAt = paidTimes[paidTimes.length - 1];
+    paymentStep = {
+      label: '渠道打款',
+      description: requestPayouts.length ? `${requestPayouts.length} 笔付款均已完成` : '全部关联付款均已完成',
+      time: paidAt ? formatCreatedAt(paidAt) : '已完成',
+      state: 'complete',
+    };
+  } else if (hasPaymentFailureRecovery || failedPayouts.length > 0) {
+    paymentStep = {
+      label: '渠道打款',
+      description: `${failedPayouts.length} 笔付款异常，待修正后重新发起`,
+      time: paidPayouts.length ? `已付款 ${paidPayouts.length} / ${requestPayouts.length} 笔` : '待处理',
+      state: 'current',
+    };
+  } else if (processingPayouts.length > 0) {
+    paymentStep = {
+      label: '渠道打款',
+      description: `${processingPayouts.length} 笔付款处理中`,
+      time: paidPayouts.length ? `已付款 ${paidPayouts.length} / ${requestPayouts.length} 笔` : '渠道处理中',
+      state: 'current',
+    };
+  } else if (waitingPayouts.length > 0 || approvalCompleted) {
+    paymentStep = {
+      label: '渠道打款',
+      description: waitingPayouts.length ? `${waitingPayouts.length} 笔付款等待执行` : '财务审批已通过，等待执行打款',
+      time: '待打款',
+      state: 'current',
+    };
+  } else {
+    paymentStep = {
+      label: '渠道打款',
+      description: request.lifecycle === 'RETURNED' ? '重新提交并完成审批后执行' : '全部审批完成后执行',
+      time: '待开始',
+      state: 'pending',
+    };
+  }
+
+  return [
+    {
+      label: '项目创建',
+      description: links.length ? `项目草稿与 ${links.length} 位达人已关联` : '请款项目草稿已创建',
+      time: createdTime,
+      state: 'complete',
+    },
+    {
+      label: '补充合同',
+      description: linkedContractCount ? `已关联 ${linkedContractCount} 份合同` : '合同为选填，当前未关联',
+      time: linkedContractCount ? '已完成' : '已跳过',
+      state: 'complete',
+    },
+    invoiceStep,
+    approvalStep,
+    paymentStep,
+  ];
 };
 
 const paymentListStatusLabel = (status?: PaymentListRecord['status']) => {
@@ -824,6 +999,12 @@ export function MediaPaymentProjectsPage({
     const returnHeading = returnDetails?.stage === 'FINANCE'
       ? '付款工作台已退回此请款项目'
       : `${returnDetails?.stageLabel ?? '审批流'}已退回此请款项目`;
+    const progress = buildMyProjectRequestProgress({
+      request: selectedRequest,
+      invoices,
+      payouts,
+      submissionIssues,
+    });
     const scrollToSection = (id: string) => {
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
@@ -909,6 +1090,8 @@ export function MediaPaymentProjectsPage({
             </div>
           </section>
         ) : null}
+        <div className="project-detail-layout">
+          <div className="project-detail-main">
         <section className="project-detail-card">
           <header className="project-detail-card-header"><div><h2>请款项目信息</h2><p>查看关联项目、付款安排与请款背景。</p></div></header>
           <dl className="project-info-grid">
@@ -1100,6 +1283,21 @@ export function MediaPaymentProjectsPage({
             <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>
           </div> : null}
         </section> : null}
+          </div>
+          <aside className="project-detail-card project-progress-card" aria-label="请款进度">
+            <header className="project-detail-card-header"><div><h2>请款进度</h2><p>项目资料、审核与打款状态。</p></div></header>
+            <div className="project-progress-list">
+              {progress.map((step, index) => (
+                <div className={`project-progress-item progress-${step.state}`} key={step.label}>
+                  <span className="project-progress-node">
+                    {step.state === 'complete' ? <Check size={15} aria-hidden="true" /> : step.state === 'current' ? <Clock3 size={15} aria-hidden="true" /> : index + 1}
+                  </span>
+                  <div><strong>{step.label}</strong><p>{step.description}</p><small>{step.time}</small></div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
       </div>
     );
   }

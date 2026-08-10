@@ -160,6 +160,13 @@ describe('media returned payment request handling', () => {
     expect(html).toContain('请选择付款渠道');
     expect(html).toContain('请选择预计付款时间');
     expect(html).toContain('重新提交');
+    expect(html).toContain('aria-label="请款进度"');
+    expect(html).toContain('项目创建');
+    expect(html).toContain('补充合同');
+    expect(html).toContain('关联 Invoice');
+    expect(html).toContain('提交审核');
+    expect(html).toContain('渠道打款');
+    expect(html).toContain('财务审核已退回，待修改后重新提交');
   });
 
   it('separates a payment failure recovery from the ordinary returned-project interaction', () => {

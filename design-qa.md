@@ -171,6 +171,40 @@ final result: passed
 
 ---
 
+# My Projects Request Progress Restoration Design QA
+
+## Evidence
+
+- Source reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-75eba917-a81e-4e81-bd69-64ff5b12b5fe.png` (1452 x 797 px).
+- Desktop implementation: `artifacts/my-project-request-progress-qa/progress-desktop-1284x904.png` (1269 x 891 px browser content capture).
+- Mobile implementation: `artifacts/my-project-request-progress-qa/progress-mobile-card-390x844.png` (375 x 812 px browser content capture).
+- Direct comparison: `artifacts/my-project-request-progress-qa/reference-vs-implementation.png`.
+
+## State And Rules
+
+- The restored sequence is `项目创建` -> `补充合同` -> `关联 Invoice` -> `提交审核` -> `渠道打款`.
+- Contracts remain optional under the current product rule. A project without a contract shows `合同为选填，当前未关联 / 已跳过` and does not block Invoice, approval, or payment.
+- Draft readiness, live approval round and node, approval return, finance approval, waiting payment, processing, partial payment failure recovery, and all-paid completion are derived from current request, approval, Invoice, and payout data.
+- Channel payment completes only when the request lifecycle is complete or every payout linked to the current request is paid.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The new request detail branch now reuses the established two-column project-detail layout, sticky progress card, node icons, connector, typography, spacing, and status colors from the supplied reference.
+- Return and payment-failure panels remain full width above the detail layout, so exception context is not squeezed into the main column.
+- The current fixture correctly renders the first three stages complete, `第 1 轮 · 财务审批中` current, and channel payment pending.
+- At 1920 and 2560 px the information and progress areas remain side by side. At 1024 and 390 px they stack to one column without text clipping, overlap, or page-level horizontal overflow.
+
+## Interaction And Technical Verification
+
+- Browser inspection confirmed five visible stage labels, one current approval node, no horizontal overflow, and no console warnings or errors.
+- Focused tests cover incomplete and complete drafts, finance approval, waiting and processing payments, all-paid completion, approval return, and failure recovery.
+- Full Vitest passed 66 files and 415 tests. TypeScript/Vite production build and `git diff --check` passed.
+
+final result: passed
+
+---
+
 # Transaction Detail Information And Resource Views Design QA
 
 ## Evidence
