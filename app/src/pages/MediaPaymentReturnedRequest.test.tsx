@@ -136,6 +136,31 @@ const renderPage = (
 );
 
 describe('media returned payment request handling', () => {
+  it('keeps a submitted media project strictly read-only', () => {
+    const submittedRequest: RequestProjectSummary = {
+      ...returnedRequest,
+      id: 'request-submitted',
+      requestCode: 'REQ-SUBMITTED-01',
+      paymentRequestProjectId: 'request-submitted-internal' as RequestProjectSummary['paymentRequestProjectId'],
+      lifecycle: 'SUBMITTED',
+      status: '财务审批中',
+      approval: {
+        ...approval,
+        status: 'PENDING_FINANCE',
+        returnedFromStage: undefined,
+        resumeStatus: undefined,
+        returnReason: undefined,
+      },
+    };
+    const html = renderPage(submittedRequest.id, [], [submittedRequest]);
+
+    expect(html).not.toContain('编辑项目');
+    expect(html).not.toContain('修改请款内容');
+    expect(html).not.toContain('保存修改');
+    expect(html).toContain('当前账号在项目提交后仅可查看与导出资料。');
+    expect(html).toContain('申请当前状态：财务审批中');
+  });
+
   it('keeps payment-workbench returns visible in My Projects with a reason and action', () => {
     const html = renderPage(null);
 
@@ -216,6 +241,8 @@ describe('media returned payment request handling', () => {
     expect(detailHtml).toContain('等待达人更新账户');
     expect(detailHtml).toContain('media-payment-failure-action');
     expect(detailHtml).toContain('查看付款清单');
+    expect(detailHtml).not.toContain('修改请款内容');
+    expect(detailHtml).not.toContain('当前账号在项目提交后仅可查看与导出资料。');
     expect(detailHtml).not.toContain('退回待处理');
     expect(detailHtml).not.toContain('付款工作台已退回此请款项目');
   });

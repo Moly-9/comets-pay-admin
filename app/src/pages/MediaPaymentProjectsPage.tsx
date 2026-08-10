@@ -23,6 +23,7 @@ import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '.
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
+  canEditRequestProjectResources,
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
 } from '../components/RequestProjectResourceManager';
@@ -549,6 +550,15 @@ export function MediaPaymentProjectsPage({
     && Boolean(payout.paymentFailureRecovery)
     && payout.status !== '已付款'
   ));
+  const requestEditAllowed = (request: RequestProjectSummary) => (
+    canCreate
+    && ['DRAFT', 'RETURNED'].includes(request.lifecycle ?? '')
+    && canEditRequestProjectResources(
+      currentUser,
+      request,
+      failurePayoutsForRequest(request).length > 0,
+    )
+  );
   const requestStatusForDisplay = (request: RequestProjectSummary): MyProjectStatus => (
     failurePayoutsForRequest(request).length > 0
       ? '部分打款失败'
@@ -705,6 +715,10 @@ export function MediaPaymentProjectsPage({
   };
 
   const openEditForm = (request: RequestProjectSummary, showCreatorPicker = false) => {
+    if (!requestEditAllowed(request)) {
+      notify('项目已锁定', '请款项目提交后仅可查看；审批退回或付款失败后才能修改。');
+      return;
+    }
     const paymentPlan = paymentRequestPaymentPlanFor(request);
     setCooperationProjectId(String(request.cooperationProjectId ?? request.projectId ?? ''));
     setBrand(request.brand ?? '');
@@ -896,6 +910,10 @@ export function MediaPaymentProjectsPage({
 
   const saveRequest = () => {
     setFormSubmitAttempted(true);
+    if (editingRequest && !requestEditAllowed(editingRequest)) {
+      notify('项目已锁定', '项目状态已变化，本次修改不能保存。');
+      return;
+    }
     if (!selectedProject || !paymentChannel || !expectedPaymentDate || !canCreateRequest) {
       notify('请完善必填信息', formIssues[0] ?? '请检查达人和 Invoice 关联信息。');
       return;
@@ -980,7 +998,7 @@ export function MediaPaymentProjectsPage({
         paymentChannel: selectedRequest.paymentChannel,
       }),
     ].filter(Boolean);
-    const editable = canCreate && ['DRAFT', 'RETURNED'].includes(selectedRequest.lifecycle ?? '');
+    const editable = requestEditAllowed(selectedRequest);
     const requestContentEditable = editable && !hasPaymentFailureRecovery;
     const canAddCreators = !hasPaymentFailureRecovery && canCreate && canAddCreatorToPaymentRequest(selectedRequest);
     const canSubmit = editable && submissionIssues.length === 0;

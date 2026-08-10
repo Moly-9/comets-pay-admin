@@ -3,7 +3,10 @@ import { AppShell } from './components/AppShell';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { Toast } from './components/Common';
-import type { RequestProjectResourceActions } from './components/RequestProjectResourceManager';
+import {
+  canEditRequestProjectResources,
+  type RequestProjectResourceActions,
+} from './components/RequestProjectResourceManager';
 import {
   completeGeneratedContractUpload,
   createGeneratedContractDraft,
@@ -2822,12 +2825,6 @@ export default function App() {
     setActivePage('requests');
   };
 
-  const requestResourceEditable = (request: RequestProjectSummary) => (
-    currentUser.roleKey === 'admin'
-    || currentUser.roleKey === 'owner'
-    || (currentUser.roleKey === 'media' && ['DRAFT', 'RETURNED'].includes(request.lifecycle ?? 'DRAFT'))
-  );
-
   const paymentFailurePayoutForInvoice = (
     request: RequestProjectSummary,
     invoiceId: InvoiceId,
@@ -2847,6 +2844,14 @@ export default function App() {
     && Boolean(payout.paymentFailureRecovery)
     && payout.status !== '已付款'
   ));
+
+  const requestResourceEditable = (request: RequestProjectSummary) => (
+    canEditRequestProjectResources(
+      currentUser,
+      request,
+      requestHasPaymentFailureRecovery(request),
+    )
+  );
 
   const paymentListItemEditable = (
     request: RequestProjectSummary,
@@ -2979,17 +2984,35 @@ export default function App() {
       setActivePage('invoice');
     },
     onGenerateContract: (request) => {
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+        notify('项目资料已锁定', '当前项目仅可查看，不能生成新合同。');
+        return;
+      }
       setRequestResourceReturn({ requestId: request.id, resource: 'contract' });
       setContractGenerationEngagementId(null);
       setActivePage('contract-create');
     },
     onGenerateInvoice: (request) => {
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+        notify('项目资料已锁定', '当前项目仅可查看，不能生成新 Invoice。');
+        return;
+      }
       setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
       setInvoiceCreationEngagementId(null);
       setActivePage('invoice-create');
     },
-    onUploadContract: (_request, input) => uploadContract(input),
+    onUploadContract: (request, input) => {
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+        notify('项目资料已锁定', '当前项目仅可查看，不能上传新合同。');
+        return undefined;
+      }
+      return uploadContract(input);
+    },
     onDeleteContract: (request, contractId) => {
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+        notify('项目资料已锁定', '当前项目仅可查看，不能删除合同。');
+        return;
+      }
       const contract = contracts.find((candidate) => (candidate.contractId ?? candidate.id) === contractId);
       if (!contract || !canDeleteContract(currentUser, contract)) {
         notify('暂无操作权限', '管理员可删除全部合同，媒介只能删除本人上传的合同。');
@@ -3026,6 +3049,10 @@ export default function App() {
       })), `已删除合同 ${contractId}`);
     },
     onDeleteInvoice: (request, invoiceId) => {
+      if (!requestResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
+        notify('项目资料已锁定', '当前项目仅可查看，不能删除 Invoice。');
+        return;
+      }
       const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
       const other = requestProjects.find((candidate) => (
         candidate.paymentRequestProjectId !== request.paymentRequestProjectId
@@ -3331,6 +3358,13 @@ export default function App() {
           onFailureFocusCleared={() => setFocusedPaymentFailurePayoutId(null)}
           onCreated={(request) => setRequestProjects((current) => [request, ...current])}
           onUpdated={(request) => {
+            const currentRequest = requestProjects.find((candidate) => (
+              candidate.paymentRequestProjectId === request.paymentRequestProjectId
+            ));
+            if (!currentRequest || !requestResourceEditable(currentRequest)) {
+              notify('项目已锁定', '请款项目提交后仅可查看；审批退回或付款失败后才能修改。');
+              return;
+            }
             setRequestProjects((current) => current.map((candidate) => (
               candidate.paymentRequestProjectId === request.paymentRequestProjectId ? request : candidate
             )));

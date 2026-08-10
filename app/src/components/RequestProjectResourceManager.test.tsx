@@ -114,13 +114,29 @@ const user = (roleKey: SystemUser['roleKey']): SystemUser => ({
 });
 
 describe('request project resource permissions', () => {
-  it('lets admins and owners edit every lifecycle, while media stops after submission', () => {
-    expect(canEditRequestProjectResources(user('admin'), 'COMPLETED')).toBe(true);
-    expect(canEditRequestProjectResources(user('owner'), 'APPROVED')).toBe(true);
-    expect(canEditRequestProjectResources(user('media'), 'DRAFT')).toBe(true);
-    expect(canEditRequestProjectResources(user('media'), 'RETURNED')).toBe(true);
-    expect(canEditRequestProjectResources(user('media'), 'SUBMITTED')).toBe(false);
-    expect(canEditRequestProjectResources(user('pm'), 'DRAFT')).toBe(false);
+  it('locks media edits after submission and reopens only explicit correction states', () => {
+    const state = (
+      lifecycle: RequestProjectSummary['lifecycle'],
+      approvalStatus?: NonNullable<RequestProjectSummary['approval']>['status'],
+    ) => ({
+      lifecycle,
+      approval: approvalStatus ? { status: approvalStatus } as RequestProjectSummary['approval'] : undefined,
+    });
+
+    expect(canEditRequestProjectResources(user('admin'), state('COMPLETED'))).toBe(true);
+    expect(canEditRequestProjectResources(user('owner'), state('APPROVED'))).toBe(true);
+    expect(canEditRequestProjectResources(user('media'), state('DRAFT'))).toBe(true);
+    expect(canEditRequestProjectResources(user('media'), state('SUBMITTED'))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state('APPROVED'))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state('COMPLETED'))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state(undefined))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state('RETURNED'))).toBe(false);
+    expect(canEditRequestProjectResources(
+      user('media'),
+      state('RETURNED', 'RETURNED_TO_MEDIA_REVIEW'),
+    )).toBe(true);
+    expect(canEditRequestProjectResources(user('media'), state('RETURNED'), true)).toBe(true);
+    expect(canEditRequestProjectResources(user('pm'), state('DRAFT'))).toBe(false);
   });
 });
 

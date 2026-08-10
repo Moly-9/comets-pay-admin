@@ -85,7 +85,7 @@ type Props = {
   onOpenInvoice: (invoiceId: InvoiceId) => void;
   onGenerateContract: () => void;
   onGenerateInvoice: () => void;
-  onUploadContract: (input: ContractUploadInput) => ContractRecord;
+  onUploadContract: (input: ContractUploadInput) => ContractRecord | undefined;
   onDeleteContract: (contractId: ContractId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onGeneratePaymentLists: () => void;
@@ -110,7 +110,7 @@ export type RequestProjectResourceActions = {
   onOpenInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onGenerateContract: (request: RequestProjectSummary) => void;
   onGenerateInvoice: (request: RequestProjectSummary) => void;
-  onUploadContract: (request: RequestProjectSummary, input: ContractUploadInput) => ContractRecord;
+  onUploadContract: (request: RequestProjectSummary, input: ContractUploadInput) => ContractRecord | undefined;
   onDeleteContract: (request: RequestProjectSummary, contractId: ContractId) => void;
   onDeleteInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onClearPaymentLists: (request: RequestProjectSummary) => void;
@@ -125,11 +125,24 @@ export type RequestProjectResourceActions = {
 
 export const canEditRequestProjectResources = (
   user: SystemUser,
-  lifecycle: RequestProjectSummary['lifecycle'],
+  request: Pick<RequestProjectSummary, 'approval' | 'lifecycle'>,
+  hasPaymentFailureRecovery = false,
 ) => (
   user.roleKey === 'admin'
   || user.roleKey === 'owner'
-  || (user.roleKey === 'media' && ['DRAFT', 'RETURNED'].includes(lifecycle ?? 'DRAFT'))
+  || (
+    user.roleKey === 'media'
+    && (
+      request.lifecycle === 'DRAFT'
+      || (
+        request.lifecycle === 'RETURNED'
+        && (
+          request.approval?.status === 'RETURNED_TO_MEDIA_REVIEW'
+          || hasPaymentFailureRecovery
+        )
+      )
+    )
+  )
 );
 
 const contractStableId = (contract: ContractRecord) => contract.contractId ?? contract.id as ContractId;
@@ -338,7 +351,6 @@ export function RequestProjectResourceManager({
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
-  const canEdit = canEditRequestProjectResources(currentUser, request.lifecycle);
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -353,6 +365,11 @@ export function RequestProjectResourceManager({
     && Boolean(payout.paymentFailureRecovery)
     && payout.status !== '已付款'
   ));
+  const canEdit = canEditRequestProjectResources(
+    currentUser,
+    request,
+    paymentFailureRecoveryMode,
+  );
   const canEditLinkedResources = canEdit && !paymentFailureRecoveryMode;
   const paymentItemCount = currentPaymentList?.items.length ?? 0;
   const paymentListEditing = currentPaymentList?.status === 'draft';
@@ -805,7 +822,7 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
-      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators.filter((creator) => linkByCreator.has(creator.id as PaymentRequestCreatorLink['creatorId']))} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(input) => { const record = onUploadContract(input); setUploadOpen(false); onOpenContract(record.id); }} /> : null}
+      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators.filter((creator) => linkByCreator.has(creator.id as PaymentRequestCreatorLink['creatorId']))} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(input) => { const record = onUploadContract(input); setUploadOpen(false); if (record) onOpenContract(record.id); }} /> : null}
 
       {confirmAction ? <Modal title={confirmAction.title} width="460px" className="project-payment-remove-modal" onClose={() => setConfirmAction(null)} footer={<><Button variant="secondary" onClick={() => setConfirmAction(null)}>取消</Button><Button variant={confirmAction.danger ? 'danger' : 'primary'} onClick={() => { confirmAction.run(); setConfirmAction(null); }}>{confirmAction.confirmLabel}</Button></>}><div className="project-payment-remove-confirmation"><span><AlertTriangle size={22} /></span><div><strong>请确认操作范围</strong><p>{confirmAction.description}</p><small>本原型的变更只保存在当前浏览器会话。</small></div></div></Modal> : null}
     </>
