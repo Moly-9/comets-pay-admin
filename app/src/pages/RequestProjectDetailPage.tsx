@@ -880,7 +880,7 @@ export function RequestProjectDetailPage({
         <div className="project-detail-main">
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>请款项目信息</h2><p>查看项目、提交人与请款背景。</p></div>
+              <div><h2>请款项目信息</h2><p>查看项目、提交人与付款背景。</p></div>
               <span>更新于 {detail.updatedAt}</span>
             </header>
             <dl className="project-info-grid">
@@ -893,7 +893,7 @@ export function RequestProjectDetailPage({
               <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
               <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
               <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
-              <div className="project-info-full"><dt>请款原因</dt><dd>{detail.reason}</dd></div>
+              <div className="project-info-full"><dt>付款事由</dt><dd>{detail.reason}</dd></div>
             </dl>
           </section>
 

@@ -88,7 +88,7 @@ describe('TransactionDetailPage', () => {
     expect(html).not.toContain('交易记录 ID');
     expect(html).toContain('付款批次号');
     expect(html).toContain('PAY-20260810-001');
-    expect(html).toContain('请款原因');
+    expect(html).toContain('付款事由');
     expect(html).toContain('达人合作内容验收完成');
     expect(html).toContain('aria-label="查看合同"');
     expect(html).toContain('aria-label="查看 Invoice"');

@@ -337,7 +337,7 @@ export function PaymentBatchDetailPage({
                     <div><dt>项目媒介</dt><dd>{batch.request.media}</dd></div>
                     <div><dt>负责 PM</dt><dd>{batch.request.pm}</dd></div>
                     <div><dt>预计付款时间</dt><dd>{batch.request.expectedPaymentDate}</dd></div>
-                    <div className="payment-batch-project-full payment-batch-project-reason"><dt>请款原因</dt><dd>{batch.request.reason}</dd></div>
+                    <div className="payment-batch-project-full payment-batch-project-reason"><dt>付款事由</dt><dd>{batch.request.reason}</dd></div>
                   </dl>
                 </section>
 

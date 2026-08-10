@@ -681,7 +681,7 @@ export function FinanceReviewWorkspace({
                     <div><dt>提交时间</dt><dd>{submittedAt}</dd></div>
                     <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
                     <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-                    <div className="is-wide"><dt>请款原因</dt><dd>{requestReason}</dd></div>
+                    <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
                   </dl>
                 </section>
 

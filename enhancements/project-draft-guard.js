@@ -365,7 +365,7 @@
   const getFields = (dialog) => ({
     projectName: getField(dialog, "例如：秋季新品首发"),
     brand: getCustomerField(dialog),
-    requestReason: getField(dialog, "填写本项目的请款背景或用途"),
+    requestReason: getField(dialog, "填写本项目的付款背景或用途"),
   });
 
   const relabelCustomerField = (dialog) => {

@@ -119,7 +119,7 @@ export function TransactionDetailPage({
           <div><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{details.transferMethod}</dd></div>
           <div><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{details.feeBearer}</dd></div>
           <div><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
-          <div><dt><ClipboardCheck size={14} aria-hidden="true" />请款原因</dt><dd>{details.requestReason}</dd></div>
+          <div><dt><ClipboardCheck size={14} aria-hidden="true" />付款事由</dt><dd>{details.requestReason}</dd></div>
         </dl>
       </section>
 
@@ -279,7 +279,7 @@ export function TransactionDetailPage({
               <div><dt>付款渠道</dt><dd>{payout.provider}</dd></div>
               <div><dt>付款方式</dt><dd>{details.transferMethod}</dd></div>
               <div><dt>付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
-              <div className="transaction-resource-modal-full"><dt>请款原因</dt><dd>{details.requestReason}</dd></div>
+              <div className="transaction-resource-modal-full"><dt>付款事由</dt><dd>{details.requestReason}</dd></div>
             </dl>
           ) : null}
         </Modal>

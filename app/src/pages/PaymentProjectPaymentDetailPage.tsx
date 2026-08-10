@@ -217,7 +217,7 @@ export function PaymentProjectPaymentDetailPage({
           <div><dt>项目媒介</dt><dd>{record.request.media}</dd></div>
           <div><dt>负责 PM</dt><dd>{record.request.pm}</dd></div>
           <div><dt>预计付款时间</dt><dd>{record.request.expectedPaymentDate}</dd></div>
-          <div className="payment-batch-project-full"><dt>请款原因</dt><dd>{record.request.reason}</dd></div>
+          <div className="payment-batch-project-full"><dt>付款事由</dt><dd>{record.request.reason}</dd></div>
         </dl>
       </section>
 

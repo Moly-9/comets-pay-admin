@@ -195,7 +195,7 @@ export function PaymentExecutionWorkspace({
               <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
               <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
               <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
-              <div className="is-wide"><dt>请款事由</dt><dd>{requestReason}</dd></div>
+              <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
             </dl>
             {isReturned ? (
               <div className="payment-execution-failure-summary" role="alert">

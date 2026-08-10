@@ -920,8 +920,8 @@ export function ProjectsPage({
               />
             </div>
             <label>
-              <span>请款原因</span>
-              <textarea placeholder="填写本项目的请款背景或用途" value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
+              <span>付款事由</span>
+              <textarea placeholder="填写本项目的付款背景或用途" value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
             </label>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta">

@@ -195,7 +195,7 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('提交时间');
     expect(workspaceSource).toContain('付款渠道');
     expect(workspaceSource).toContain('预计付款时间');
-    expect(workspaceSource).toContain('请款原因');
+    expect(workspaceSource).toContain('付款事由');
     expect(workspaceSource).toContain('<ApprovalTimeline request={request} currentUser={currentUser} />');
   });
 });

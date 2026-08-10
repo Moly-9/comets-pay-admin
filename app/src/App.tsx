@@ -1804,7 +1804,7 @@ export default function App() {
       paymentChannel: request.paymentChannel,
     });
     if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.paymentChannel || !request.generatedDetail?.reason) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道和请款事由');
+      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => requestProjects.some((candidate) => (

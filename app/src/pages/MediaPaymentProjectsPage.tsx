@@ -863,7 +863,7 @@ export function MediaPaymentProjectsPage({
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
     ...paymentRequestPaymentPlanIssues({ paymentChannel, expectedPaymentDate }),
-    !reason.trim() ? '请填写请款事由' : '',
+    !reason.trim() ? '请填写付款事由' : '',
     !selectedCreators.length ? '请至少选择一位合作达人' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
@@ -971,7 +971,7 @@ export function MediaPaymentProjectsPage({
     const links = selectedRequest.creatorLinks ?? [];
     const submissionIssues = [
       ...paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor(selectedRequest)),
-      !selectedRequest.generatedDetail?.reason?.trim() ? '请填写请款事由' : '',
+      !selectedRequest.generatedDetail?.reason?.trim() ? '请填写付款事由' : '',
       ...paymentRequestSubmissionIssues({
         creatorLinks: links,
         invoices,
@@ -1093,7 +1093,7 @@ export function MediaPaymentProjectsPage({
         <div className="project-detail-layout">
           <div className="project-detail-main">
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>请款项目信息</h2><p>查看关联项目、付款安排与请款背景。</p></div></header>
+          <header className="project-detail-card-header"><div><h2>请款项目信息</h2><p>查看关联项目、付款安排与付款背景。</p></div></header>
           <dl className="project-info-grid">
             <div><dt>项目编号</dt><dd>{requestCodeFor(selectedRequest)}</dd></div>
             <div><dt>关联项目</dt><dd>{cooperationProject?.name ?? selectedRequest.cooperationProjectName ?? selectedRequest.project}<small className="cell-subtext">{selectedRequest.cooperationProjectCode ?? cooperationProject?.cooperationProjectCode ?? '待同步'}</small></dd></div>
@@ -1103,7 +1103,7 @@ export function MediaPaymentProjectsPage({
             <div><dt>预计付款时间</dt><dd>{selectedRequest.expectedPaymentDate || '待补充'}</dd></div>
             <div><dt>项目媒介</dt><dd>{selectedRequest.media}</dd></div>
             <div><dt>创建时间</dt><dd>{formatCreatedAt(selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt)}</dd></div>
-            <div className="project-info-wide"><dt>请款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
+            <div className="project-info-wide"><dt>付款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
           </dl>
         </section>
         <section id="media-request-resource-section" className="project-detail-card project-workflow-card">
@@ -1463,7 +1463,7 @@ export function MediaPaymentProjectsPage({
                 />
               </div>
             </div>
-            <div className="form-field"><span id="media-request-reason-label" className="form-field-label">请款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本项目的请款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
+            <div className="form-field"><span id="media-request-reason-label" className="form-field-label">付款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本项目的付款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>展示达人库全部达人</small></span>
               <div className="creator-picker media-request-creator-picker" data-testid="media-request-creator-picker">
