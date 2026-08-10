@@ -245,7 +245,7 @@ export function PaymentBatchDetailPage({
         </header>
         <div className="payment-batch-project-heading">
           <span aria-hidden="true"><Building2 size={20} /></span>
-          <div><strong>{batch.request.cooperationProjectName}</strong><small>{batch.request.cooperationProjectCode}</small></div>
+          <div><span className="payment-batch-project-name">{batch.request.cooperationProjectName}</span><small>{batch.request.cooperationProjectCode}</small></div>
         </div>
         <dl className="payment-batch-project-grid">
           <div><dt>请款编号</dt><dd>{batch.request.requestCode}</dd></div>
