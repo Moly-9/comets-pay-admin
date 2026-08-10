@@ -92,12 +92,16 @@ const reviewStatusLabel = (state: 'unreviewed' | 'correct' | 'incorrect') => {
   return '待核对';
 };
 
-function ApprovalTimeline({
+export function ApprovalTimeline({
   request,
   currentUser,
+  paymentReady = false,
+  paymentProvider,
 }: {
   request: RequestProjectSummary;
-  currentUser: SystemUser;
+  currentUser?: SystemUser;
+  paymentReady?: boolean;
+  paymentProvider?: string;
 }) {
   const approval = request.approval;
   if (!approval) {
@@ -133,7 +137,7 @@ function ApprovalTimeline({
       const fallbackName = stage === 'PM'
         ? request.pm
         : stage === 'FINANCE' && isCurrent
-          ? currentUser.name
+          ? currentUser?.name ?? '财务'
           : STAGE_LABEL[stage].replace('审批', '');
       return {
         id: stage,
@@ -154,10 +158,19 @@ function ApprovalTimeline({
     {
       id: 'payment',
       label: '渠道付款',
-      description: '全部审批完成后执行',
+      description: paymentReady ? '财务审批已完成，等待执行付款' : '全部审批完成后执行',
+      state: paymentReady ? 'current' as const : 'pending' as const,
+      actorName: paymentProvider ?? '付款渠道',
+      actorMeta: `${paymentProvider ?? '付款渠道'} · 付款渠道`,
+      time: undefined,
+    },
+    {
+      id: 'status-writeback',
+      label: '状态回写',
+      description: '同步渠道结果与交易状态',
       state: 'pending' as const,
-      actorName: '付款渠道',
-      actorMeta: 'Airwallex / PayPal',
+      actorName: 'COMETS Pay',
+      actorMeta: '@system · 系统自动任务',
       time: undefined,
     },
   ];
@@ -176,7 +189,7 @@ function ApprovalTimeline({
           <div className="finance-approval-stage">
             <div>
               <strong>{step.label}</strong>
-              <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? '待审核' : '待处理'}</span>
+              <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
             </div>
             <p>{step.description}</p>
           </div>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
+import { PaymentExecutionWorkspace } from '../components/PaymentExecutionWorkspace';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import { paymentRequestProviderForChannel } from '../paymentRequestProjects';
@@ -485,6 +486,7 @@ export function PaymentWorkbenchPage({
   onNewBatch,
   onSelectPayout,
   onReviewRequest,
+  onExecuteRequest,
   canCreateBatch,
   currentDate = new Date(),
 }: {
@@ -494,6 +496,7 @@ export function PaymentWorkbenchPage({
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
   onReviewRequest: (requestId: string) => void;
+  onExecuteRequest: (payouts: Payout[]) => boolean;
   canCreateBatch: boolean;
   currentDate?: Date;
 }) {
@@ -514,6 +517,7 @@ export function PaymentWorkbenchPage({
   }));
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [paymentExecutionProjectId, setPaymentExecutionProjectId] = useState<string | null>(null);
 
   const currencyOverviews = useMemo(
     () => getPaymentCurrencyOverviews(payouts, currentDate),
@@ -524,6 +528,12 @@ export function PaymentWorkbenchPage({
     tab.id,
     buildPaymentProjectRows({ tab: tab.id, payouts, requests, generatedInvoices }),
   ])) as Record<WorkbenchTab, PaymentProjectRow[]>, [generatedInvoices, payouts, requests]);
+  const paymentExecutionProject = paymentExecutionProjectId
+    ? rowsByTab.payment.find((project) => project.id === paymentExecutionProjectId)
+    : undefined;
+  const paymentExecutionRequest = paymentExecutionProject?.requestId
+    ? requests.find((request) => request.id === paymentExecutionProject.requestId)
+    : undefined;
   const activeSearch = searchByTab[activeTab];
   const selectedIds = selectedIdsByTab[activeTab];
   const filteredProjects = useMemo(
@@ -705,6 +715,10 @@ export function PaymentWorkbenchPage({
               onReviewRequest(project.requestId);
               return;
             }
+            if (activeTab === 'payment' && project.requestId) {
+              setPaymentExecutionProjectId(project.id);
+              return;
+            }
             const payout = project.payouts[0];
             if (payout) onSelectPayout(payout);
           }}
@@ -715,6 +729,15 @@ export function PaymentWorkbenchPage({
               : `当前没有${activeTabLabel}付款项目`}
         />
       </section>
+      {paymentExecutionProject && paymentExecutionRequest ? (
+        <PaymentExecutionWorkspace
+          request={paymentExecutionRequest}
+          project={paymentExecutionProject}
+          canExecute={canCreateBatch}
+          onExecute={onExecuteRequest}
+          onClose={() => setPaymentExecutionProjectId(null)}
+        />
+      ) : null}
     </div>
   );
 }

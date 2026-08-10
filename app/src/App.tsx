@@ -2066,6 +2066,36 @@ export default function App() {
     notify('付款状态已更新', `${payout.creator} 已进入“${nextStatus}”。`);
   };
 
+  const executePaymentRequest = (projectPayouts: Payout[]) => {
+    if (!hasPermission(currentUser, 'payout_execute')) {
+      notify('暂无付款权限', '当前账号不能执行项目付款。');
+      return false;
+    }
+    const waitingPayouts = projectPayouts.filter((payout) => payout.status === '等待付款');
+    if (!waitingPayouts.length) {
+      notify('当前无需执行打款', '该请款项目没有待打款明细。');
+      return false;
+    }
+    const unapprovedPayout = waitingPayouts.find((payout) => !isInvoiceApprovedForPayment(payout));
+    if (unapprovedPayout) {
+      notify('Invoice 尚未通过', `${unapprovedPayout.invoice} 尚未完成媒介与财务审核。`);
+      return false;
+    }
+    const waitingPayoutIds = new Set(waitingPayouts.map((payout) => payout.id));
+    setPayouts((current) => current.map((payout) => (
+      waitingPayoutIds.has(payout.id) ? { ...payout, status: '付款处理中' } : payout
+    )));
+    const paymentRequestProjectId = waitingPayouts[0].paymentRequestProjectId;
+    const request = paymentRequestProjectId
+      ? requestProjects.find((candidate) => candidate.paymentRequestProjectId === paymentRequestProjectId)
+      : undefined;
+    notify(
+      '项目付款已提交渠道',
+      `${request?.requestCode ?? waitingPayouts[0].project} 的 ${waitingPayouts.length} 笔付款已进入“付款处理中”。`,
+    );
+    return true;
+  };
+
   const failPayout = (payout: Payout) => {
     if (!isInvoiceApprovedForPayment(payout) || payout.status !== '付款处理中') {
       notify('无法记录付款失败', '仅付款处理中的已通过 Invoice 可以记录渠道失败。');
@@ -3132,6 +3162,7 @@ export default function App() {
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}
           onReviewRequest={openFinanceReview}
+          onExecuteRequest={executePaymentRequest}
           canCreateBatch={canExecutePayouts}
         />
       );

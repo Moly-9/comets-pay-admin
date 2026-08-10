@@ -577,3 +577,75 @@ final result: passed
 - Check desktop and narrow-screen control alignment, then update this result.
 
 final result: blocked
+
+---
+
+# Payment Execution Workspace Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-48007313-5582-4cc0-af56-6a8aae7c664a.png`
+- Desktop implementation: `artifacts/payment-execution-workspace-desktop.png`
+- Narrow implementation, project section: `artifacts/payment-execution-workspace-390x844.png`
+- Narrow implementation, approval section: `artifacts/payment-execution-workspace-390x844-timeline.png`
+
+## Dimensions And Normalization
+
+- Source capture: 1671 x 960 px. It includes browser chrome and several overlapping prototype panels, so it is used as qualitative region and information-hierarchy truth rather than a pixel-for-pixel viewport target.
+- Desktop implementation: 1284 x 905 px at the in-app browser's default 1284 px CSS viewport and device scale factor 1.
+- Narrow implementation: 390 x 844 px at a 390 x 844 CSS viewport and device scale factor 1.
+- The full-view comparison keeps both captures at their native density. Region comparison maps the source's project summary, creator payment cards, approval rail, and bottom payment action to the corresponding implementation regions without stretching either image.
+
+## State
+
+Signed in as `finance.demo`, opened `付款工作台`, selected `待打款`, and opened `REQ-202607-000006`. The request is in round 1 after finance approval, with 15 creator payouts waiting for Airwallex execution.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the workspace inherits Noto Sans SC, preserves zero letter spacing, and uses the product's compact 9-16 px hierarchy. Long project, actor, Invoice, and payment references wrap or truncate without moving fixed controls.
+- Spacing and layout rhythm: desktop uses a stable wide-left/narrow-right grid, 8 px or smaller radii, 1 px dividers, and independent content and approval scrolling. At 390 px the regions stack into one continuous scroll while the amount summary and actions remain fixed.
+- Colors and visual tokens: white and cool-gray work surfaces, restrained purple identity accents, green completed states, and orange payment-pending states match the existing finance-review and form language. No decorative gradients or unrelated palette was added.
+- Image and asset fidelity: this operational screen requires no product imagery. Wallet, document, account, timeline, close, and send controls use the repository's existing Lucide icon library rather than handwritten assets.
+- Copy and content: project identity, payment order, single payment channel, creator-level Invoice and contract references, masked account details, fees, transfer notes, approval actors, timestamps, and channel writeback state are all present. The bottom action remains `执行打款`.
+
+## Full-View Comparison
+
+The source establishes four required regions through overlapping drawers: request information, creator payment details, the current approval flow, and a persistent payment action. The implementation preserves all four in one coherent full-screen workspace. The left column combines the source's request drawer and creator cards; the right rail carries the full approval flow; the footer keeps the amount, channel, return action, and execution action visible.
+
+## Focused Region Comparison
+
+- Project region: the implementation keeps the source's amount, linked-document counts, current state, project identity, team, channel, expected date, round, and request reason, with the payment order elevated into the summary row.
+- Creator region: repeated cards preserve the source's account snapshot, currencies, amount, fee bearer, reason, remittance reference, Invoice, contract, and provider at a denser but still scannable rhythm.
+- Approval region: all completed approval stages, channel payment, and system status writeback remain visible in order. The active channel step is labeled `待打款` and the right rail scrolls independently on desktop.
+- Action region: `执行打款` remains the rightmost primary action and is visible throughout desktop and narrow scrolling.
+
+## Interaction Verification
+
+- `待打款 3` opens the correct payment-project list, and the first row's `执行打款` opens the project-level workspace instead of a single creator drawer.
+- Desktop rendering shows the two-column composition and both independent scrollbars without clipped approval or creator content.
+- At 390 x 844, the page scroll reaches the final `状态回写` node while the fixed footer remains unobstructed and both 44 px action buttons remain usable.
+- The execution action is connected to the real prototype transition: all waiting payouts in the current request are validated, then moved together to `付款处理中`.
+- Browser console contained 0 warnings and 0 errors during the verified flow.
+
+## Comparison History
+
+1. The source review identified that separate request, creator, and approval drawers obscured one another and did not present a project-level execution context.
+2. The implementation consolidated those regions into a full-screen two-column workspace with a persistent footer and project-level action.
+3. The first browser pass confirmed desktop hierarchy and exposed no overlap or clipping.
+4. The narrow pass verified continuous scrolling from project information through creator cards to the final approval nodes, with the footer remaining fixed.
+
+## Implementation Checklist
+
+- [x] Project information above creator payment summaries.
+- [x] Complete creator-level payment overview for the selected request.
+- [x] Full approval flow with channel and status-writeback stages.
+- [x] Persistent bottom-right execution action wired to project-level payment processing.
+- [x] Desktop and 390 px responsive verification.
+- [x] Browser console verification.
+
+## Follow-up Polish
+
+- No P3 refinement is required for this scoped workflow.
+
+final result: passed

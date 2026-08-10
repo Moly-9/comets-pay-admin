@@ -14,6 +14,7 @@ const renderWorkbench = (payouts: Payout[], requests: RequestProjectSummary[] = 
     onNewBatch={vi.fn()}
     onSelectPayout={vi.fn()}
     onReviewRequest={vi.fn()}
+    onExecuteRequest={vi.fn(() => true)}
     canCreateBatch
     currentDate={new Date('2026-08-09T00:00:00.000Z')}
   />,

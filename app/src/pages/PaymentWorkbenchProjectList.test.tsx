@@ -79,6 +79,7 @@ describe('PaymentWorkbenchPage project list controls', () => {
         onNewBatch={vi.fn()}
         onSelectPayout={vi.fn()}
         onReviewRequest={vi.fn()}
+        onExecuteRequest={vi.fn(() => true)}
         canCreateBatch
       />,
     );
