@@ -6247,15 +6247,23 @@ button:disabled {
   position: relative;
 }
 
-.notification-dot {
+.notification-count {
   position: absolute;
-  right: 8px;
-  top: 7px;
-  width: 6px;
-  height: 6px;
-  border: 1.5px solid white;
-  border-radius: 50%;
+  right: -3px;
+  top: -4px;
+  display: inline-flex;
+  min-width: 17px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  border-radius: 9px;
   background: #ff5f57;
+  padding: 0 4px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 13px;
 }
 
 .language-button {
@@ -6579,6 +6587,31 @@ button:disabled {
 
 .notice-close {
   flex: none;
+}
+
+.request-approval-reminder-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.request-approval-reminder-copy strong {
+  color: #273047;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.request-approval-reminder-copy strong b {
+  color: #4058d6;
+  font-size: 15px;
+}
+
+.request-approval-reminder-copy p {
+  margin: 0;
+  color: #677087;
+  font-size: 11.5px;
 }
 
 .summary-surface {
@@ -13103,6 +13136,11 @@ button:disabled {
   color: #8d5e86;
 }
 
+.request-approval-notification .notification-symbol {
+  background: #eef2ff;
+  color: #4d64e8;
+}
+
 .notification-item > span:nth-child(2) {
   display: grid;
   gap: 5px;
@@ -13172,6 +13210,19 @@ button:disabled {
 
   .wizard-steps li > i {
     width: 45px;
+  }
+}
+
+@media (max-width: 680px) {
+  .request-approval-reminder-copy {
+    display: grid;
+    gap: 3px;
+  }
+
+  .request-approval-reminder-copy strong,
+  .request-approval-reminder-copy p {
+    font-size: 12px;
+    line-height: 1.55;
   }
 }
 

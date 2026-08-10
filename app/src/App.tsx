@@ -79,11 +79,13 @@ import {
   CreatorsPage,
   InvoicePage,
   INITIAL_CREATORS,
+  INITIAL_NOTIFICATIONS,
   INITIAL_PROJECTS,
   MOCK_FEISHU_COOPERATION_PROJECT_SOURCE,
   NotificationsPage,
   OrganizationPage,
   RequestsPage,
+  type SystemNotificationItem,
   TransactionsPage,
 } from './pages/OperationalPages';
 import { MediaPaymentProjectsPage } from './pages/MediaPaymentProjectsPage';
@@ -173,6 +175,7 @@ import {
   returnApprovedRequestToMediaReview,
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
+import { requestApprovalReminderFor } from './requestApprovalReminders';
 
 const INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -258,6 +261,9 @@ export default function App() {
   const [invoiceBatchDirty, setInvoiceBatchDirty] = useState(false);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+  const [notificationItems, setNotificationItems] = useState<SystemNotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [showRequestApprovalReminder, setShowRequestApprovalReminder] = useState(true);
+  const [requestApprovalReminderUnread, setRequestApprovalReminderUnread] = useState(true);
   const [financeReviewRequestId, setFinanceReviewRequestId] = useState<string | null>(null);
   const [financeReviewSessions, setFinanceReviewSessions] = useState<Record<string, FinanceReviewSession>>({});
 
@@ -2894,6 +2900,8 @@ export default function App() {
     const nextUser = result.user;
     setCurrentUser(nextUser);
     setActivePage(getDefaultPageForRole(nextUser.roleKey));
+    setShowRequestApprovalReminder(true);
+    setRequestApprovalReminderUnread(true);
     setIsAuthenticated(true);
     return null;
   };
@@ -2901,6 +2909,10 @@ export default function App() {
   if (!isAuthenticated) {
     return <AuthPage onAuthenticated={authenticate} />;
   }
+
+  const requestApprovalReminder = requestApprovalReminderFor(currentUser, requestProjects);
+  const notificationUnreadCount = notificationItems.filter((item) => item.unread).length
+    + (requestApprovalReminder.count > 0 && requestApprovalReminderUnread ? 1 : 0);
 
   const canReviewInvoiceMedia = hasPermission(currentUser, 'invoice_media_review');
   const canReviewInvoiceFinance = hasPermission(currentUser, 'invoice_finance_review');
@@ -2964,6 +2976,9 @@ export default function App() {
           paymentLists={paymentLists}
           creators={creators}
           generatedInvoices={generatedInvoices}
+          approvalReminder={requestApprovalReminder}
+          showApprovalReminder={showRequestApprovalReminder}
+          onDismissApprovalReminder={() => setShowRequestApprovalReminder(false)}
           onExportPaymentList={requestResourceActions.onExportPaymentList}
           onApprovalAction={handleRequestApproval}
           onOpenFinanceReview={() => setActivePage('payment-workbench')}
@@ -3234,7 +3249,22 @@ export default function App() {
       pageContent = <SystemSettingsPage notify={notify} />;
       break;
     case 'notifications':
-      pageContent = <NotificationsPage />;
+      pageContent = (
+        <NotificationsPage
+          items={notificationItems}
+          approvalReminder={requestApprovalReminder}
+          approvalReminderUnread={requestApprovalReminderUnread}
+          onRead={(notificationId) => setNotificationItems((current) => current.map((item) => (
+            item.id === notificationId ? { ...item, unread: false } : item
+          )))}
+          onReadApprovalReminder={() => setRequestApprovalReminderUnread(false)}
+          onMarkAllRead={() => {
+            setNotificationItems((current) => current.map((item) => ({ ...item, unread: false })));
+            setRequestApprovalReminderUnread(false);
+          }}
+          onOpenRequestApprovals={() => setActivePage('requests')}
+        />
+      );
       break;
     case 'payment-workbench':
       pageContent = (
@@ -3290,7 +3320,12 @@ export default function App() {
   };
 
   return (
-    <AppShell activePage={activePage} onNavigate={navigate} currentUser={currentUser}>
+    <AppShell
+      activePage={activePage}
+      onNavigate={navigate}
+      currentUser={currentUser}
+      notificationUnreadCount={notificationUnreadCount}
+    >
       {pageContent}
       {financeReviewRequest && activeFinanceReview && activeFinanceSessionKey ? (
         <FinanceReviewWorkspace

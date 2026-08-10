@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
+  ClipboardCheck,
   Clock3,
   Download,
   ExternalLink,
@@ -28,6 +29,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   useEffect,
   useId,
@@ -111,6 +113,7 @@ import {
   requestProjectStatusFor,
 } from '../paymentRequestProjects';
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
+import type { RequestApprovalReminderSummary } from '../requestApprovalReminders';
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
@@ -1045,6 +1048,9 @@ export function RequestsPage({
   paymentLists,
   creators,
   generatedInvoices,
+  approvalReminder,
+  showApprovalReminder,
+  onDismissApprovalReminder,
   onExportPaymentList,
   onApprovalAction,
   onOpenFinanceReview,
@@ -1057,6 +1063,9 @@ export function RequestsPage({
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  approvalReminder: RequestApprovalReminderSummary;
+  showApprovalReminder: boolean;
+  onDismissApprovalReminder: () => void;
   onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
     request: RequestProjectSummary,
@@ -1069,7 +1078,6 @@ export function RequestsPage({
 }) {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyProjectListFilters);
-  const [showApprovalNotice, setShowApprovalNotice] = useState(true);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedRequestId);
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
@@ -1232,9 +1240,12 @@ export function RequestsPage({
           tone="lilac"
         />
       </div>
-      {showApprovalNotice ? (
-        <NoticeBanner onClose={() => setShowApprovalNotice(false)}>
-          审批流程：媒介提交 → PM 审批 → 项目负责人审批 → 老板审批 → 财务审批；全部通过后才会解锁打款，退回原因会同步给提交人。
+      {showApprovalReminder && approvalReminder.count > 0 ? (
+        <NoticeBanner onClose={onDismissApprovalReminder}>
+          <div className="request-approval-reminder-copy">
+            <strong>你当前有 <b>{approvalReminder.count}</b> 个请款项目待审批</strong>
+            <p>请及时核对请款资料并完成当前节点处理。</p>
+          </div>
         </NoticeBanner>
       ) : null}
       <section className="content-card">
@@ -3600,39 +3611,95 @@ export function ChannelsPage({ notify }: { notify: Notify }) {
   return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
 }
 
-const INITIAL_NOTIFICATIONS = [
+export type SystemNotificationItem = {
+  id: number;
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  time: string;
+  unread: boolean;
+};
+
+export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
   { id: 1, icon: FileCheck2, title: 'Invoice INV-240718 等待财务复核', body: '@MinaKato · 夏日直播计划 · USD 3,240', time: '10 分钟前', unread: true },
   { id: 2, icon: AlertCircle, title: 'Nika 的收款资料校验失败', body: '泰国本地转账路由代码待补充，请在达人档案中更新。', time: '42 分钟前', unread: true },
   { id: 3, icon: Send, title: '批次 BAT-20260716-007 已提交渠道', body: 'Airwallex 正在处理 12 笔付款。', time: '昨天 16:42', unread: false },
   { id: 4, icon: CheckCircle2, title: '付款状态已回写', body: 'Kenji Mori · USD 4,100 · 已付款', time: '昨天 14:32', unread: false },
 ];
 
-export function NotificationsPage() {
-  const [items, setItems] = useState(INITIAL_NOTIFICATIONS);
-  const unreadCount = useMemo(() => items.filter((item) => item.unread).length, [items]);
+export function NotificationsPage({
+  items,
+  approvalReminder,
+  approvalReminderUnread,
+  onRead,
+  onReadApprovalReminder,
+  onMarkAllRead,
+  onOpenRequestApprovals,
+}: {
+  items: SystemNotificationItem[];
+  approvalReminder: RequestApprovalReminderSummary;
+  approvalReminderUnread: boolean;
+  onRead: (id: number) => void;
+  onReadApprovalReminder: () => void;
+  onMarkAllRead: () => void;
+  onOpenRequestApprovals: () => void;
+}) {
+  const hasApprovalReminder = approvalReminder.count > 0;
+  const unreadCount = items.filter((item) => item.unread).length
+    + (hasApprovalReminder && approvalReminderUnread ? 1 : 0);
+  const notificationEntries = [
+    ...(hasApprovalReminder ? [{ kind: 'approval' as const, key: 'approval-reminder' }] : []),
+    ...items.map((item) => ({ kind: 'notification' as const, key: `notification-${item.id}`, item })),
+  ];
   const {
     page,
-    pageItems: visibleItems,
+    pageItems: visibleEntries,
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(items, { resetKey: items.map((item) => item.id).join('|') });
+  } = usePagination(notificationEntries, {
+    resetKey: notificationEntries.map((entry) => entry.key).join('|'),
+  });
+  const openRequestApprovals = () => {
+    onReadApprovalReminder();
+    onOpenRequestApprovals();
+  };
+
   return (
     <div className="page-stack">
       <PageHeading
         title="通知"
         subtitle={`你有 ${unreadCount} 条未读消息。`}
-        actions={<Button variant="secondary" onClick={() => setItems((current) => current.map((item) => ({ ...item, unread: false })))}>全部标为已读</Button>}
+        actions={<Button variant="secondary" onClick={onMarkAllRead}>全部标为已读</Button>}
       />
       <section className="notification-card">
-        {visibleItems.map((item) => {
+        {visibleEntries.map((entry) => {
+          if (entry.kind === 'approval') {
+            return (
+              <button
+                className={`notification-item request-approval-notification ${approvalReminderUnread ? 'notification-unread' : ''}`}
+                key={entry.key}
+                type="button"
+                onClick={openRequestApprovals}
+              >
+                <span className="notification-symbol"><ClipboardCheck size={19} /></span>
+                <span>
+                  <strong>你有 {approvalReminder.count} 个请款项目待审批</strong>
+                  <small>请及时核对请款资料，点击进入请款项目处理。</small>
+                </span>
+                <time><Clock3 size={14} />本次登录</time>
+                {approvalReminderUnread ? <i className="unread-dot" /> : null}
+              </button>
+            );
+          }
+          const { item } = entry;
           const Icon = item.icon;
           return (
             <button
               className={`notification-item ${item.unread ? 'notification-unread' : ''}`}
               key={item.id}
               type="button"
-              onClick={() => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unread: false } : entry))}
+              onClick={() => onRead(item.id)}
             >
               <span className="notification-symbol"><Icon size={19} /></span>
               <span><strong>{item.title}</strong><small>{item.body}</small></span>
@@ -3642,12 +3709,12 @@ export function NotificationsPage() {
           );
         })}
         <div className="table-footer notification-footer">
-          <span>共 {items.length} 条通知</span>
+          <span>共 {notificationEntries.length} 条通知</span>
           <Pagination
             ariaLabel="通知列表分页"
             page={page}
             pageSize={pageSize}
-            total={items.length}
+            total={notificationEntries.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
           />
