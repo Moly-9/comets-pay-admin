@@ -73,10 +73,14 @@ const contractSummary = (item: PaymentBatchItemSnapshot) => {
 export function PaymentItemDetails({ item }: { item: PaymentBatchItemSnapshot }) {
   return (
     <div className="payment-batch-item-details">
-      <section aria-labelledby={`${item.payoutId}-contract-title`}>
+      <section className="payment-batch-detail-panel is-contract" aria-labelledby={`${item.payoutId}-contract-title`}>
         <header>
-          <FileText size={17} aria-hidden="true" />
-          <h3 id={`${item.payoutId}-contract-title`}>合同</h3>
+          <span className="payment-batch-detail-panel-icon" aria-hidden="true"><FileText size={17} /></span>
+          <div>
+            <h3 id={`${item.payoutId}-contract-title`}>合同</h3>
+            <small>{item.contracts.length ? '付款关联文件' : '本笔未关联合同'}</small>
+          </div>
+          <span className="payment-batch-detail-panel-badge">{item.contracts.length} 份</span>
         </header>
         {item.contracts.length ? (
           <div className="payment-batch-document-list">
@@ -99,10 +103,14 @@ export function PaymentItemDetails({ item }: { item: PaymentBatchItemSnapshot })
         )}
       </section>
 
-      <section aria-labelledby={`${item.payoutId}-invoice-title`}>
+      <section className="payment-batch-detail-panel is-invoice" aria-labelledby={`${item.payoutId}-invoice-title`}>
         <header>
-          <ReceiptText size={17} aria-hidden="true" />
-          <h3 id={`${item.payoutId}-invoice-title`}>Invoice</h3>
+          <span className="payment-batch-detail-panel-icon" aria-hidden="true"><ReceiptText size={17} /></span>
+          <div>
+            <h3 id={`${item.payoutId}-invoice-title`}>Invoice</h3>
+            <small>付款凭证与审核结果</small>
+          </div>
+          <span className="payment-batch-detail-panel-badge">{item.invoice ? `V${item.invoice.version}` : '未关联'}</span>
         </header>
         {item.invoice ? (
           <dl>
@@ -121,10 +129,14 @@ export function PaymentItemDetails({ item }: { item: PaymentBatchItemSnapshot })
         )}
       </section>
 
-      <section aria-labelledby={`${item.payoutId}-payment-title`}>
+      <section className="payment-batch-detail-panel is-payment" aria-labelledby={`${item.payoutId}-payment-title`}>
         <header>
-          <WalletCards size={17} aria-hidden="true" />
-          <h3 id={`${item.payoutId}-payment-title`}>付款信息</h3>
+          <span className="payment-batch-detail-panel-icon" aria-hidden="true"><WalletCards size={17} /></span>
+          <div>
+            <h3 id={`${item.payoutId}-payment-title`}>付款信息</h3>
+            <small>账户快照与渠道结果</small>
+          </div>
+          <span className={`payment-batch-detail-panel-badge ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
         </header>
         <dl>
           <div><dt>付款记录 ID</dt><dd>{item.payoutId}</dd></div>

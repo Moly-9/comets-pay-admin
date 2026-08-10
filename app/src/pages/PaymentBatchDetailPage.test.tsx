@@ -134,6 +134,11 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('COMETS-MINA-0810');
     expect(html).toContain('BENEFICIARY_DISABLED');
     expect(html).toContain('关联资料缺失');
+    expect(html).toContain('payment-batch-detail-panel is-contract');
+    expect(html).toContain('payment-batch-detail-panel is-invoice');
+    expect(html).toContain('payment-batch-detail-panel is-payment');
+    expect(html).toContain('付款关联文件');
+    expect(html).toContain('账户快照与渠道结果');
     expect(html).not.toContain('1234567890');
   });
 
