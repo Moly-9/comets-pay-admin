@@ -55,7 +55,7 @@ const invoice = (overrides: Partial<GeneratedInvoiceRecord> = {}): GeneratedInvo
   id: 'INV-20260807-000001',
   invoiceId: 'invoice_001' as InvoiceId,
   sourcePayoutId: 'payout_001',
-  status: '待发起请款',
+  status: '已通过',
   generatedAt: '2026-08-07T02:00:00.000Z',
   validationStatus: 'valid',
   snapshot: {
@@ -257,6 +257,19 @@ describe('media payment request document resolution', () => {
     });
     expect(used.status).toBe('INVOICE_IN_USE');
     expect(used.invoiceOwners[0]?.owner.requestCode).toBe('REQ-USED');
+  });
+
+  it('does not expose unsigned or unreviewed invoices to a payment request', () => {
+    const unresolved = resolveCreatorDocuments({
+      cooperationProjectId,
+      creatorId,
+      contracts: [],
+      invoices: [invoice({ status: '待媒介审核' })],
+      requests: [],
+    });
+
+    expect(unresolved.status).toBe('INVOICE_NOT_APPROVED');
+    expect(unresolved.availableInvoices).toEqual([]);
   });
 });
 

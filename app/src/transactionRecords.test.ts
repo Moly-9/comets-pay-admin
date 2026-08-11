@@ -84,7 +84,7 @@ describe('transaction records', () => {
         occurredAt: '2026-08-06T08:10:00.000Z',
       } }),
       payout({ id: 'processing', status: '付款处理中' }),
-      payout({ id: 'unapproved', invoiceReviewStatus: '待发起请款' }),
+      payout({ id: 'unapproved', invoiceReviewStatus: '待媒介审核' }),
     ];
 
     expect(filterTransactionRecords(records, filters()).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);

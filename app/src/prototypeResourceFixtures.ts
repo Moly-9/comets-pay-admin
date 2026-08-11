@@ -796,7 +796,7 @@ const invoiceReviewState = (
   paymentListStatus: PaymentListRecord['status'],
 ): Payout['invoiceReviewStatus'] => {
   if (paymentListStatus === 'draft') return '待媒介审核';
-  if (paymentListStatus === 'submitted') return '待发起请款';
+  if (paymentListStatus === 'submitted') return '已通过';
   return '已通过';
 };
 
@@ -867,7 +867,7 @@ const createPrototypeInvoice = (
     invoiceId,
     sourcePayoutId: `payout_fixture_${projectPart}_${creatorPart}`,
     status: invoiceId === AVAILABLE_PAYMENT_REQUEST_INVOICE_ID
-      ? '待发起请款'
+      ? '已通过'
       : invoiceReviewState(requestStatusPaymentListState(project.id, PROJECT_FIXTURES[projectIndex].requestStatus)),
     generatedAt,
     validationStatus: 'valid',
@@ -932,7 +932,7 @@ const createRequestInvoiceAssociationFixture = ({
   id: invoiceNumber,
   invoiceId,
   sourcePayoutId,
-  status: '待发起请款',
+  status: '已通过',
   generatedAt,
   validationStatus: 'valid',
   version: 1,
@@ -1071,7 +1071,7 @@ export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INV
     localClearingSystem: invoice.snapshot.payment.localClearingSystem,
     feeBearer: 'ADVERTISER',
     status: isAvailableRequestDemo ? '未进入付款' : payoutStatus(listStatus),
-    invoiceReviewStatus: isAvailableRequestDemo ? '待发起请款' : invoiceReviewState(listStatus),
+    invoiceReviewStatus: isAvailableRequestDemo ? '已通过' : invoiceReviewState(listStatus),
     invoiceVersion: 1,
     invoiceSignedAt: ['approved', 'paid'].includes(listStatus) ? '2026-08-02T10:00:00.000Z' : undefined,
     invoiceSnapshot: invoice.snapshot,
@@ -1097,7 +1097,7 @@ export const REQUEST_INVOICE_ASSOCIATION_PAYOUTS: Payout[] = REQUEST_INVOICE_ASS
     deliverable: invoice.snapshot.items[0]?.description ?? '创作者内容合作服务',
     amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
     status: '未进入付款',
-    invoiceReviewStatus: '待发起请款',
+    invoiceReviewStatus: '已通过',
     invoiceVersion: 1,
     invoiceSignedAt: invoice.generatedAt,
     invoiceSnapshot: invoice.snapshot,

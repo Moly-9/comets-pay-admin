@@ -79,8 +79,8 @@ const timelineIndex = (status: InvoiceReviewStatus) => {
   if (status === '待签署') return 1;
   if (status === '达人反馈') return 1;
   if (status === '待媒介审核' || status === '待媒介复核') return 2;
-  if (status === '待发起请款') return 3;
-  return 4;
+  if (status === '已通过') return 3;
+  return 3;
 };
 
 export const getInvoiceTimelineState = (status: InvoiceReviewStatus) => ({
@@ -424,7 +424,9 @@ export function InvoiceDetailPage({
     : source.kind === 'project'
       ? source.status
     : '');
-  const displayStatusKey = invoiceReviewStatus === '已通过' && payout
+  const displayStatusKey = managementView?.status === '已通过'
+    ? '已通过'
+    : invoiceReviewStatus === '已通过' && payout
     ? getApprovedInvoicePaymentStatus(payout)
     : invoiceReviewStatus ?? '未进入付款';
   const provider = source.kind === 'payout'
@@ -462,7 +464,7 @@ export function InvoiceDetailPage({
     && payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST';
   const navigationTarget = managementView?.status === 'OA审批中'
     ? 'REQUEST'
-    : managementView?.status === '待发起请款'
+    : managementView?.status === '已通过'
       ? 'PROJECT'
       : managementView && ['付款中', '已付款'].includes(managementView.status)
         ? 'PAYMENT'
@@ -483,7 +485,9 @@ export function InvoiceDetailPage({
   const invoiceTimelineState = invoiceReviewStatus
     ? getInvoiceTimelineState(invoiceReviewStatus)
     : null;
-  const currentIndex = invoiceTimelineState?.currentIndex ?? projectTimelineIndex;
+  const currentIndex = managementView && ['付款中', '已付款'].includes(managementView.status)
+    ? 4
+    : invoiceTimelineState?.currentIndex ?? projectTimelineIndex;
   const requestApprovalRound = payout?.requestApprovalRound
     ?? Math.max(0, ...(payout?.invoiceReviewHistory ?? []).map((event) => event.approvalRound ?? 0));
   const paymentListVersion = payout?.paymentListVersion
@@ -612,7 +616,7 @@ export function InvoiceDetailPage({
   };
 
   const navigationActionLabel = navigationTarget === 'PROJECT'
-    ? canManageInvoice ? '前往项目发起请款' : '查看关联项目'
+    ? canManageInvoice ? '前往我的项目发起请款' : '查看我的项目'
     : navigationTarget === 'REQUEST'
       ? '查看请款审批'
       : navigationTarget === 'PAYMENT' && payout
@@ -630,7 +634,7 @@ export function InvoiceDetailPage({
     : invoiceReviewStatus === '达人反馈'
       ? '达人尚未完成签署；查看反馈，回复或修改后重新发送'
       : navigationTarget === 'PROJECT'
-        ? '项目内全部 Invoice 就绪后统一发起请款'
+        ? 'Invoice 已通过，可在“我的项目”中创建请款项目'
         : navigationTarget === 'REQUEST'
           ? '项目审批操作统一在请款项目详情完成'
           : navigationTarget === 'PAYMENT'

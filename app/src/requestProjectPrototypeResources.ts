@@ -257,7 +257,7 @@ const requestInvoiceEntries: RequestInvoiceEntry[] = INITIAL_PROJECTS.flatMap((p
       ? '已通过' as const
       : request.lifecycle === 'RETURNED'
         ? '已退回' as const
-        : '待发起请款' as const;
+        : '已通过' as const;
     return [{
       source,
       request,
@@ -325,7 +325,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     localClearingSystem: invoice.snapshot.payment.localClearingSystem,
     feeBearer: 'ADVERTISER',
     status: paid ? '已付款' : approved ? '等待付款' : returned ? '已退回' : '未进入付款',
-    invoiceReviewStatus: paid || approved ? '已通过' : returned ? '已退回' : '待发起请款',
+    invoiceReviewStatus: paid || approved ? '已通过' : returned ? '已退回' : '已通过',
     invoiceVersion: invoice.version,
     invoiceSignedAt: invoice.generatedAt,
     invoiceSnapshot: invoice.snapshot,

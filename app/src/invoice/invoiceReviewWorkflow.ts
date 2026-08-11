@@ -67,7 +67,6 @@ export const INVOICE_REVIEW_STATUS_META: Record<
   达人反馈: { label: '达人反馈', color: '#e8792e' },
   待媒介审核: { label: '待媒介审核', color: '#f59e0b' },
   待媒介复核: { label: '待媒介复核', color: '#f97316' },
-  待发起请款: { label: '待发起请款', color: '#0f766e' },
   已通过: { label: '已通过', color: '#22c55e' },
   已退回: { label: '已退回', color: '#ef4444' },
 };
@@ -96,7 +95,7 @@ const STATIC_TRANSITIONS: Partial<Record<InvoiceReviewAction, Transition>> = {
   },
   APPROVE_MEDIA: {
     from: ['待媒介审核', '待媒介复核'],
-    to: '待发起请款',
+    to: '已通过',
     stage: 'MEDIA',
     label: '审核通过',
   },
@@ -121,8 +120,7 @@ export const getInvoicePageTab = (status: InvoiceReviewStatus): InvoicePageTab =
 export const getInvoiceDetailNavigationTarget = (
   status: InvoiceReviewStatus,
 ): InvoiceDetailNavigationTarget | null => {
-  if (status === '待发起请款') return 'PROJECT';
-  if (status === '已通过') return 'PAYMENT';
+  if (status === '已通过') return 'PROJECT';
   return null;
 };
 

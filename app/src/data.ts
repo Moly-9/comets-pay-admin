@@ -389,7 +389,7 @@ const returnedInvoiceReviewFixture = (
       actorAccount: actor.account,
       actorName: actor.name,
       actorRole: actor.role,
-      fromStatus: stage === 'MEDIA' ? '待媒介审核' : '待发起请款',
+      fromStatus: stage === 'MEDIA' ? '待媒介审核' : '已通过',
       toStatus,
       reason,
       occurredAt,
@@ -451,7 +451,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2160,
     account: '0000000002',
     status: '未进入付款',
-    invoiceReviewStatus: '待发起请款',
+    invoiceReviewStatus: '已通过',
     accent: '#f97316',
   },
   {
@@ -469,7 +469,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 3750,
     account: '0000000003',
     status: '未进入付款',
-    invoiceReviewStatus: '待发起请款',
+    invoiceReviewStatus: '已通过',
     accent: '#06b6d4',
   },
   {
@@ -688,7 +688,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 1740,
     account: 'yuki.tanaka@example.com',
     status: '未进入付款',
-    invoiceReviewStatus: '待发起请款',
+    invoiceReviewStatus: '已通过',
     accent: '#ec4899',
   },
   {
@@ -706,7 +706,7 @@ export const INITIAL_PAYOUTS: Payout[] = [
     amount: 2480,
     account: '0000000010',
     status: '未进入付款',
-    invoiceReviewStatus: '待发起请款',
+    invoiceReviewStatus: '已通过',
     accent: '#3b82f6',
   },
   {

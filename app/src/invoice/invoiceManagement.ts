@@ -9,7 +9,7 @@ export type InvoiceManagementStatus =
   | '达人反馈'
   | '待审核'
   | '待复核'
-  | '待发起请款'
+  | '已通过'
   | 'OA审批中'
   | '付款中'
   | '已付款'
@@ -70,19 +70,18 @@ export const getInvoiceManagementView = (
     return { tab: 'approved', status: '已付款', requestApprovalStatus: request?.approval?.status };
   }
   if (
-    payout.status === '等待付款'
-    || payout.status === '付款处理中'
-    || request?.lifecycle === 'APPROVED'
-    || request?.approval?.status === 'APPROVED'
-    || payout.invoiceReviewStatus === '已通过'
-  ) {
-    return { tab: 'approved', status: '付款中', requestApprovalStatus: request?.approval?.status };
-  }
-  if (
     request?.lifecycle === 'SUBMITTED'
     || (request?.approval && !['APPROVED', 'RETURNED_TO_MEDIA_REVIEW'].includes(request.approval.status))
   ) {
     return { tab: 'approved', status: 'OA审批中', requestApprovalStatus: request?.approval?.status };
   }
-  return { tab: 'approved', status: '待发起请款', requestApprovalStatus: request?.approval?.status };
+  if (
+    payout.status === '等待付款'
+    || payout.status === '付款处理中'
+    || request?.lifecycle === 'APPROVED'
+    || request?.approval?.status === 'APPROVED'
+  ) {
+    return { tab: 'approved', status: '付款中', requestApprovalStatus: request?.approval?.status };
+  }
+  return { tab: 'approved', status: '已通过', requestApprovalStatus: request?.approval?.status };
 };

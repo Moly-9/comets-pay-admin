@@ -93,7 +93,7 @@ const associationInvoice = ({
   invoiceId,
   id: `INV-${invoiceId}`,
   sourcePayoutId: `payout-${invoiceId}`,
-  status: '待发起请款',
+  status: '已通过',
   generatedAt: '2026-08-06T09:00:00.000Z',
   validationStatus: 'valid',
   snapshot: {

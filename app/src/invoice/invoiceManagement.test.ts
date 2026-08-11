@@ -28,14 +28,14 @@ describe('Invoice management presentation', () => {
   it('uses four page groups without an approval tab', () => {
     expect(getInvoiceManagementView(payout('待签署'))).toMatchObject({ tab: 'signature', status: '待签署' });
     expect(getInvoiceManagementView(payout('待媒介审核'))).toMatchObject({ tab: 'review', status: '待审核' });
-    expect(getInvoiceManagementView(payout('待发起请款'))).toMatchObject({ tab: 'approved', status: '待发起请款' });
+    expect(getInvoiceManagementView(payout('已通过'))).toMatchObject({ tab: 'approved', status: '已通过' });
     expect(getInvoiceManagementView(payout('已退回'))).toMatchObject({ tab: 'returned', status: '已退回' });
   });
 
   it.each(['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'] as const)(
     'presents %s as OA approval in the approved tab',
     (status) => {
-      expect(getInvoiceManagementView(payout('待发起请款'), request(status))).toMatchObject({
+      expect(getInvoiceManagementView(payout('已通过'), request(status))).toMatchObject({
         tab: 'approved',
         status: 'OA审批中',
       });
@@ -49,7 +49,7 @@ describe('Invoice management presentation', () => {
 
   it('places a returned request in the returned tab without changing document status', () => {
     expect(getInvoiceManagementView(
-      payout('待发起请款'),
+      payout('已通过'),
       request('RETURNED_TO_MEDIA_REVIEW', 'RETURNED'),
     )).toMatchObject({ tab: 'returned', status: '已退回' });
   });

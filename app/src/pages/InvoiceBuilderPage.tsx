@@ -53,6 +53,11 @@ import {
   invoicePaymentForCreator,
   payoutAccountToInvoicePayment,
 } from '../payoutAccounts';
+import {
+  contractCooperationProjectId,
+  cooperationProjectIdFor,
+  findExistingEngagementId,
+} from '../paymentRequestProjects';
 import type {
   CreatorInvoiceContact,
   CreatorProfile,
@@ -159,13 +164,31 @@ export function InvoiceBuilderPage({
   const initialCreator = creators.find((creator) => (
     creator.id === (editSnapshot?.creatorId ?? initialContext?.reference.creatorId)
   ));
+  const initialProjectId = editSnapshot?.cooperationProjectId
+    ?? editSnapshot?.projectId
+    ?? (initialContext ? cooperationProjectIdFor(initialContext.project) : '');
   const initialPayoutAccount = initialCreator
     ? eligibleInvoicePayoutAccounts(initialCreator).find((account) => (
         account.provider === (editSnapshot?.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex')
       )) ?? eligibleInvoicePayoutAccounts(initialCreator)[0] ?? null
     : null;
   const [creatorId, setCreatorId] = useState(initialCreator?.id ?? editSnapshot?.creatorId ?? '');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId);
   const [engagementId, setEngagementId] = useState(editSnapshot?.engagementId ?? initialEngagementId ?? '');
+  const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
+    projects.flatMap((project) => creators.map((creator) => {
+      const projectId = cooperationProjectIdFor(project);
+      return [
+        `${creator.id}:${projectId}`,
+        findExistingEngagementId({
+          project,
+          creatorId: creator.id as CreatorId,
+          contracts,
+          invoices: generatedInvoices,
+        }) ?? createPrototypeId('engagement') as EngagementId,
+      ];
+    })),
+  ));
   const [contractIds, setContractIds] = useState<ContractId[]>(() => (
     editSnapshot?.contractIds ? [...editSnapshot.contractIds] : []
   ));
@@ -229,13 +252,9 @@ export function InvoiceBuilderPage({
     ].join(' · '),
   }));
   const requiresPayoutAccountSelection = editContext === 'PAYMENT_FAILURE_CONTENT';
-  const creatorEngagements = useMemo(() => projects.flatMap((project) => (
-    (project.creatorProfiles ?? [])
-      .filter((reference) => reference.creatorId === creatorId && reference.status !== 'removed')
-      .map((reference) => ({ project, reference }))
-  )), [creatorId, projects]);
-  const selectedEngagement = creatorEngagements.find((item) => item.reference.engagementId === engagementId) ?? null;
-  const selectedProject = selectedEngagement?.project ?? null;
+  const selectedProject = projects.find((project) => (
+    cooperationProjectIdFor(project) === selectedProjectId
+  )) ?? null;
   const selectedPayout = selectedCreator && selectedProject
     ? payouts.find((payout) => (
         payout.creatorId === selectedCreator.id
@@ -243,7 +262,8 @@ export function InvoiceBuilderPage({
       )) ?? null
     : null;
   const selectableContracts = contracts.filter((contract) => (
-    contract.engagementId === engagementId
+    contract.creatorId === creatorId
+    && contractCooperationProjectId(contract) === selectedProjectId
     && isConfirmedContract(contract)
     && Boolean(contract.contractId)
   ));
@@ -269,8 +289,8 @@ export function InvoiceBuilderPage({
     label: creator.name,
     description: `${creator.handle} · ${creator.region} · ${creator.platform}`,
   }));
-  const projectOptions = creatorEngagements.map(({ project, reference }) => ({
-    value: reference.engagementId,
+  const projectOptions = projects.map((project) => ({
+    value: cooperationProjectIdFor(project),
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
   }));
@@ -327,6 +347,7 @@ export function InvoiceBuilderPage({
   const selectCreator = (id: string) => {
     const creator = creators.find((item) => item.id === id);
     setCreatorId(id);
+    setSelectedProjectId('');
     setEngagementId('');
     setContractIds([]);
     setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
@@ -345,7 +366,11 @@ export function InvoiceBuilderPage({
   const fillPrototypeData = () => {
     if (!prototypeSeed || isEditing) return;
     const creator = creators.find((item) => item.id === prototypeSeed.creatorId);
+    const project = projects.find((candidate) => candidate.creatorProfiles?.some((reference) => (
+      reference.engagementId === prototypeSeed.engagementId
+    )));
     setCreatorId(prototypeSeed.creatorId);
+    setSelectedProjectId(project ? cooperationProjectIdFor(project) : '');
     setEngagementId(prototypeSeed.engagementId);
     setContractIds([]);
     setInvoiceNumber(nextInvoiceNumber(generatedInvoices));
@@ -366,15 +391,19 @@ export function InvoiceBuilderPage({
   };
 
   const selectProject = (id: string) => {
-    const context = creatorEngagements.find((item) => item.reference.engagementId === id);
+    const project = projects.find((item) => cooperationProjectIdFor(item) === id);
     const creator = creators.find((item) => item.id === creatorId);
-    const payout = context && creator
+    const nextEngagementId = creator && project
+      ? draftEngagementIds[`${creator.id}:${id}`]
+      : undefined;
+    const payout = project && creator
       ? payouts.find((item) => (
           item.creatorId === creator.id
-          && item.projectId === (context.project.cooperationProjectId ?? context.project.projectId ?? context.project.id)
+          && item.projectId === cooperationProjectIdFor(project)
         ))
       : null;
-    setEngagementId(id);
+    setSelectedProjectId(id);
+    setEngagementId(nextEngagementId ?? '');
     setContractIds([]);
     if (payout) {
       const account = eligibleInvoicePayoutAccounts(creator).find((candidate) => (
@@ -478,7 +507,7 @@ export function InvoiceBuilderPage({
       allowContractPayoutOverride: allowPayoutAccountChange,
     });
     if (!creatorId) nextErrors.creator = '请选择达人';
-    if (!engagementId) nextErrors.project = '请选择该达人关联的项目';
+    if (!selectedProjectId || !engagementId) nextErrors.project = '请选择飞书合作项目';
     if (existingInvoice) nextErrors.project = `该项目达人已有 Invoice ${existingInvoice.id}，请先解除旧关联。`;
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -599,11 +628,11 @@ export function InvoiceBuilderPage({
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>
                 <span>合作项目 *</span>
-                <SelectField ariaLabel="合作项目" variant="form" value={engagementId} placeholder={creatorId ? '选择合作项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
+                <SelectField ariaLabel="合作项目" variant="form" value={selectedProjectId} placeholder={creatorId ? '选择飞书合作项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>
-            {engagementId ? (
+            {selectedProjectId && engagementId ? (
               <div className="invoice-contract-coverage">
                 <div className="invoice-contract-coverage-head">
                   <div>

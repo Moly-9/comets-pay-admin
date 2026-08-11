@@ -81,8 +81,8 @@ describe('project prototype fixtures', () => {
       'INV-301164-20',
     ]);
     expect(PAYMENT_REQUEST_CREATION_DEMO_INVOICES.map((invoice) => invoice.status)).toEqual([
-      '待发起请款',
-      '待发起请款',
+      '已通过',
+      '已通过',
     ]);
 
     PAYMENT_REQUEST_CREATION_DEMO_INVOICES.forEach((invoice) => {
@@ -184,7 +184,7 @@ describe('project prototype fixtures', () => {
       && candidate.snapshot.creatorId === invoice?.snapshot.creatorId
     ));
 
-    expect(invoice?.status).toBe('待发起请款');
+    expect(invoice?.status).toBe('已通过');
     expect(invoice?.snapshot.projectId).toBe(INITIAL_PROJECTS.find((project) => (
       project.id === 'PRJ-260727-04'
     ))?.projectId);
@@ -216,7 +216,7 @@ describe('project prototype fixtures', () => {
     ))).toBe(true);
     expect(INITIAL_PAYOUTS.some((payout) => (
       payout.projectId === 'PRJ-260727-08'
-      && payout.invoiceReviewStatus === '待发起请款'
+      && payout.invoiceReviewStatus === '已通过'
     ))).toBe(true);
   });
 
@@ -304,7 +304,7 @@ describe('project prototype fixtures', () => {
       const payout = payoutById.get(invoice.sourcePayoutId);
 
       expect(invoiceIds.has(invoice.invoiceId)).toBe(false);
-      expect(invoice.status).toBe('待发起请款');
+      expect(invoice.status).toBe('已通过');
       expect(['PRJ-301164', 'PRJ-260727-04']).toContain(project?.id);
       expect(engagement).toBeDefined();
       expect(payout?.invoice).toBe(invoice.id);

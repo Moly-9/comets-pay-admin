@@ -291,7 +291,6 @@ export type InvoiceReviewStatus =
   | '达人反馈'
   | '待媒介审核'
   | '待媒介复核'
-  | '待发起请款'
   | '已通过'
   | '已退回';
 

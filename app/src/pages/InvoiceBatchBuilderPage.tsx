@@ -63,6 +63,7 @@ import {
   getPayoutAccountIdentifier,
   getPayoutAccountSummary,
 } from '../payoutAccounts';
+import { findExistingEngagementId } from '../paymentRequestProjects';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -840,6 +841,20 @@ export function InvoiceBatchBuilderPage({
   );
   const [rows, setRows] = useState<InvoiceBatchRow[]>([]);
   const [batchId] = useState(() => createPrototypeId('batch'));
+  const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
+    projects.flatMap((project) => creators.map((creator) => {
+      const projectId = projectIdFor(project);
+      return [
+        `${creator.id}:${projectId}`,
+        findExistingEngagementId({
+          project,
+          creatorId: creator.id as CreatorId,
+          contracts,
+          invoices: generatedInvoices,
+        }) ?? createPrototypeId('engagement') as EngagementId,
+      ];
+    })),
+  ));
   const [onlyProblems, setOnlyProblems] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importIssues, setImportIssues] = useState<string[]>([]);
@@ -856,7 +871,22 @@ export function InvoiceBatchBuilderPage({
     () => withInvoiceBatchPrototypeAccounts(creators),
     [creators],
   );
-  const selectedProject = projects.find((project) => projectIdFor(project) === projectId) ?? null;
+  const invoiceProjects = useMemo(() => projects.map((project) => {
+    const stableProjectId = projectIdFor(project);
+    return {
+      ...project,
+      creatorProfiles: creators.map((creator) => ({
+        creatorId: creator.id as CreatorId,
+        projectId: stableProjectId,
+        engagementId: draftEngagementIds[`${creator.id}:${stableProjectId}`],
+        status: 'active' as const,
+        name: creator.name,
+        handle: creator.handle,
+        platform: creator.platform,
+      })),
+    };
+  }), [creators, draftEngagementIds, projects]);
+  const selectedProject = invoiceProjects.find((project) => projectIdFor(project) === projectId) ?? null;
   const context = useMemo<InvoiceBatchContext | null>(() => selectedProject ? ({
     project: selectedProject,
     creators: prototypeCreators,
@@ -872,8 +902,7 @@ export function InvoiceBatchBuilderPage({
     prototypeCreators,
     selectedProject,
   ]);
-  const projectReferences = selectedProject?.creatorProfiles
-    ?.filter((reference) => reference.status !== 'removed') ?? [];
+  const projectReferences = selectedProject?.creatorProfiles ?? [];
   const filteredProjectReferences = useMemo(
     () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch),
     [creatorSearch, projectReferences],
@@ -887,8 +916,8 @@ export function InvoiceBatchBuilderPage({
     [generatedInvoices, projectReferences],
   );
   const prototypeSeed = useMemo(
-    () => createInvoiceBatchPrototypeSeed(projects, generatedInvoices),
-    [generatedInvoices, projects],
+    () => createInvoiceBatchPrototypeSeed(invoiceProjects, generatedInvoices),
+    [generatedInvoices, invoiceProjects],
   );
   const lockedEngagementIds = rows
     .filter((row) => row.status === 'GENERATED' || row.status === 'GENERATING')
@@ -921,9 +950,7 @@ export function InvoiceBatchBuilderPage({
   const projectOptions = projects.map((project) => ({
     value: projectIdFor(project),
     label: project.name,
-    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${
-      project.creatorProfiles?.filter((item) => item.status !== 'removed').length ?? 0
-    } 位达人 · 飞书合作项目`,
+    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${creators.length} 位达人可选 · 飞书合作项目`,
   }));
 
   const setProject = (value: string) => {
@@ -938,7 +965,7 @@ export function InvoiceBatchBuilderPage({
 
   const fillPrototypeData = () => {
     if (!prototypeSeed) return;
-    const project = projects.find((candidate) => (
+    const project = invoiceProjects.find((candidate) => (
       projectIdFor(candidate) === prototypeSeed.projectId
     ));
     if (!project) return;
@@ -1366,7 +1393,7 @@ export function InvoiceBatchBuilderPage({
             <div className="invoice-batch-creator-picker">
               <div className="invoice-batch-creator-toolbar">
                 <div>
-                  <strong>项目达人</strong>
+                  <strong>达人档案</strong>
                   <span aria-live="polite">
                     已选 {selectedEngagementIds.length}/{Math.min(
                       selectableEngagementIds.length,
@@ -1380,7 +1407,7 @@ export function InvoiceBatchBuilderPage({
                     type="search"
                     value={creatorSearch}
                     placeholder="搜索达人姓名、Handle 或平台"
-                    aria-label="搜索项目内达人"
+                    aria-label="搜索达人档案"
                     onChange={(event) => setCreatorSearch(event.target.value)}
                   />
                 </label>
@@ -1391,7 +1418,7 @@ export function InvoiceBatchBuilderPage({
                   onClick={toggleSelectAll}
                 >
                   <Check size={15} />
-                  {allSelectableSelected ? '取消全选' : '全选项目内达人'}
+                  {allSelectableSelected ? '取消全选' : '全选可生成达人'}
                 </button>
               </div>
 

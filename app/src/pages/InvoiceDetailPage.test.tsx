@@ -154,7 +154,7 @@ describe('InvoiceDetailPage edit actions', () => {
   it('allows an editable returned-project Invoice to start a new signature version', () => {
     const html = renderDetail({
       ...basePayout,
-      invoiceReviewStatus: '待发起请款',
+      invoiceReviewStatus: '已通过',
     }, { manage: true, media: false }, true);
     expect(html).toContain('修改 Invoice 并重新签署');
   });

@@ -128,7 +128,7 @@ describe('Invoice review workflow', () => {
     expect(getInvoiceRowStatus(signed)).toBe('待审核');
 
     const mediaApproved = applyInvoiceReviewAction(signed, 'APPROVE_MEDIA', actor);
-    expect(mediaApproved.invoiceReviewStatus).toBe('待发起请款');
+    expect(mediaApproved.invoiceReviewStatus).toBe('已通过');
     expect(mediaApproved.status).toBe('未进入付款');
     expect(getInvoicePageTab(mediaApproved.invoiceReviewStatus)).toBe('approved');
 
@@ -141,7 +141,7 @@ describe('Invoice review workflow', () => {
   });
 
   it('groups media-approved Invoices under the approved business tab', () => {
-    expect(getInvoicePageTab('待发起请款')).toBe('approved');
+    expect(getInvoicePageTab('已通过')).toBe('approved');
   });
 
   it('returns a signed Invoice to creator and invalidates the signature', () => {
@@ -199,7 +199,7 @@ describe('Invoice review workflow', () => {
       { ...payout, invoiceReviewStatus: '待媒介审核' },
     ])).toBe('INVALID');
     expect(getPaymentListResubmissionState([
-      { ...payout, invoiceReviewStatus: '待发起请款' },
+      { ...payout, invoiceReviewStatus: '已通过' },
     ])).toBe('NOT_RETURNED');
   });
 
@@ -242,7 +242,7 @@ describe('Invoice review workflow', () => {
       'MARK_SIGNED',
       'RECORD_CREATOR_FEEDBACK',
     ]);
-    expect(getAvailableInvoiceReviewActions('待发起请款', readOnly)).toEqual([]);
+    expect(getAvailableInvoiceReviewActions('已通过', readOnly)).toEqual([]);
     expect(getInvoiceDetailReviewActions('待签署', manage)).toEqual([]);
     expect(getInvoiceDetailReviewActions('达人反馈', manage)).toEqual([]);
   });
@@ -472,8 +472,7 @@ describe('Invoice review workflow', () => {
     expect(getInvoiceDetailNavigationTarget('达人反馈')).toBeNull();
     expect(getInvoiceDetailNavigationTarget('待媒介审核')).toBeNull();
     expect(getInvoiceDetailNavigationTarget('待媒介复核')).toBeNull();
-    expect(getInvoiceDetailNavigationTarget('待发起请款')).toBe('PROJECT');
-    expect(getInvoiceDetailNavigationTarget('已通过')).toBe('PAYMENT');
+    expect(getInvoiceDetailNavigationTarget('已通过')).toBe('PROJECT');
     expect(getInvoiceDetailNavigationTarget('已退回')).toBeNull();
   });
 
@@ -557,7 +556,7 @@ describe('Invoice review workflow', () => {
       达人反馈: '达人反馈',
       待媒介审核: '待审核',
       待媒介复核: '待复核',
-      待发起请款: '待发起请款',
+      已通过: '付款中',
       已退回: '已退回',
     } as const;
 

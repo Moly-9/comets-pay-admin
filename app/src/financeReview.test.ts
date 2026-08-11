@@ -42,7 +42,7 @@ const invoice = {
   id: 'INV-TEST',
   invoiceId: 'invoice-test',
   sourcePayoutId: 'payout-test',
-  status: '待发起请款',
+  status: '已通过',
   generatedAt: '2026-08-09 10:00',
   validationStatus: 'valid',
   snapshot: {

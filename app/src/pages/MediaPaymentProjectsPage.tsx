@@ -48,6 +48,7 @@ import {
   cooperationProjectIdFor,
   createEmptyPaymentRequestListFilters,
   filterPaymentRequestList,
+  invoiceCooperationProjectId,
   invoiceAmountLabel,
   myProjectStatusFor,
   paymentRequestAmount,
@@ -84,6 +85,7 @@ type Notify = (title: string, message: string) => void;
 const STATUS_COPY = {
   READY: '可选择多份 Invoice',
   MISSING_INVOICE: '该合作项目下暂无此达人 Invoice',
+  INVOICE_NOT_APPROVED: '该合作项目下的 Invoice 尚未完成签署和审核',
   INVOICE_IN_USE: '可用 Invoice 均已关联其他请款项目',
 } as const;
 
@@ -594,9 +596,27 @@ export function MediaPaymentProjectsPage({
         })
       : null,
   ])), [contracts, cooperationProjectId, creators, editingRequest?.paymentRequestProjectId, invoices, requests]);
+  const occupiedInvoiceIds = new Set(requests.flatMap((request) => (
+    request.paymentRequestProjectId === editingRequest?.paymentRequestProjectId
+      ? []
+      : [...(request.invoiceIds ?? []), ...(request.creatorLinks ?? []).flatMap((link) => link.invoiceIds)]
+  )));
+  const eligibleProjectIds = new Set(invoices.flatMap((invoice) => (
+    invoice.status === '已通过' && !occupiedInvoiceIds.has(invoice.invoiceId)
+      ? [invoiceCooperationProjectId(invoice)]
+      : []
+  )));
+  const selectableCooperationProjects = cooperationProjects.filter((project) => (
+    eligibleProjectIds.has(cooperationProjectIdFor(project))
+    || cooperationProjectIdFor(project) === cooperationProjectId
+  ));
   const visibleCreators = creators
     .filter((creator) => (
       !query || `${creator.name}${creator.handle}${creator.region}${creator.platform}`.toLowerCase().includes(query)
+    ))
+    .filter((creator) => (
+      resolutions.get(creator.id)?.status === 'READY'
+      || selectedCreatorIds.includes(creator.id as CreatorId)
     ))
     .sort((left, right) => {
       const leftReady = resolutions.get(left.id)?.status === 'READY';
@@ -762,6 +782,10 @@ export function MediaPaymentProjectsPage({
       return;
     }
     const removing = selectedCreatorIds.includes(creatorId);
+    if (!removing && resolutions.get(creatorId)?.status !== 'READY') {
+      notify('暂无可请款 Invoice', '该达人在当前合作项目下没有未占用的已通过 Invoice。');
+      return;
+    }
     if (removing && openDocumentPicker?.startsWith(`${creatorId}:`)) setOpenDocumentPicker(null);
     setSelectedCreatorIds((current) => removing
       ? current.filter((id) => id !== creatorId)
@@ -1470,7 +1494,7 @@ export function MediaPaymentProjectsPage({
                 variant="form"
                 value={cooperationProjectId}
                 disabled={!creatorSelectionEditable}
-                options={cooperationProjects.map((project) => ({
+                options={selectableCooperationProjects.map((project) => ({
                   value: cooperationProjectIdFor(project),
                   label: project.name,
                   description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · 来自飞书`,
@@ -1506,7 +1530,7 @@ export function MediaPaymentProjectsPage({
             </div>
             <div className="form-field"><span id="media-request-reason-label" className="form-field-label">付款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本项目的付款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
             <div className="form-field">
-              <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>展示达人库全部达人</small></span>
+                    <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>仅展示有未占用已通过 Invoice 的达人</small></span>
               <div className="creator-picker media-request-creator-picker" data-testid="media-request-creator-picker">
                 <button
                   className={`invoice-picker-trigger creator-picker-trigger ${creatorPickerOpen ? 'invoice-picker-trigger-open' : ''}`}
@@ -1564,12 +1588,13 @@ export function MediaPaymentProjectsPage({
                     const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
                     const invoiceProvider = invoicePaymentListProvider(invoice);
                     const channelMismatch = Boolean(expectedProvider && invoiceProvider !== expectedProvider);
+                    const invoiceNotApproved = invoice.status !== '已通过';
                     return {
                       value: invoice.invoiceId,
                       label: invoice.id,
-                      description: `${creator.handle} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
+                      description: `${creator.handle} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
                       selected,
-                      disabled: Boolean(owner || channelMismatch),
+                      disabled: Boolean(owner || invoiceNotApproved || channelMismatch),
                     };
                   });
                   const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {

@@ -72,6 +72,10 @@ import {
 } from './invoice/invoiceReviewWorkflow';
 import { findInvoiceRequest, getInvoiceManagementView } from './invoice/invoiceManagement';
 import {
+  updateCreatorProjectCounts,
+  upsertGeneratedInvoiceEngagements,
+} from './invoice/invoiceEngagements';
+import {
   buildRequestFinanceReview,
   financeReviewReturnItems,
   financeReviewSessionCanApprove,
@@ -663,6 +667,21 @@ export default function App() {
   const addGeneratedInvoices = (records: GeneratedInvoiceRecord[]) => {
     if (!records.length) return;
     const normalized = records.map((record) => ({ ...record, version: record.version ?? 1 }));
+    const relationshipCreatedAt = nowIso();
+    const applyEngagements = (projectState: ProjectSummary[], creatorState: CreatorProfile[]) => (
+      upsertGeneratedInvoiceEngagements({
+        projects: projectState,
+        creators: creatorState,
+        records: normalized,
+        existingInvoices: generatedInvoices,
+        occurredAt: relationshipCreatedAt,
+      })
+    );
+    setProjects((current) => applyEngagements(current, creators));
+    setCreators((current) => updateCreatorProjectCounts(
+      current,
+      applyEngagements(projects, current),
+    ));
     setPayouts((current) => {
       const bySourcePayoutId = new Map(normalized.map((record) => [record.sourcePayoutId, record]));
       const updated = current.map((payout) => {
@@ -1569,7 +1588,7 @@ export default function App() {
       linkedPayouts.some((payout) => !payout)
       || (
         !isPaymentListResubmission
-        && linkedPayouts.some((payout) => payout?.invoiceReviewStatus !== '待发起请款')
+        && linkedPayouts.some((payout) => payout?.invoiceReviewStatus !== '已通过')
       )
     ) {
       notify('暂不能发起请款', '项目内全部 Invoice 必须先完成达人签署和媒介审核。');
@@ -2002,27 +2021,10 @@ export default function App() {
       const normalizedReturnReason = reason?.trim();
       setPayouts((current) => current.map((payout) => {
         if (!sourcePayoutIds.has(payout.id)) return payout;
-        const nextInvoiceStatus = isApproved ? '已通过' : payout.invoiceReviewStatus;
         return {
           ...payout,
           status: isApproved ? '等待付款' : returnedFromPaymentExecution ? '已退回' : payout.status,
-          invoiceReviewStatus: nextInvoiceStatus,
-          invoiceReviewHistory: isApproved
-            ? [
-                ...(payout.invoiceReviewHistory ?? []),
-                {
-                  stage: 'FINANCE',
-                  action: '审核通过',
-                  actorAccount: currentUser.account,
-                  actorName: currentUser.name,
-                  actorRole: currentUser.role,
-                  fromStatus: payout.invoiceReviewStatus,
-                  toStatus: '已通过',
-                  occurredAt,
-                  approvalRound: nextApproval.round,
-                },
-              ]
-            : returnedFromPaymentExecution
+          invoiceReviewHistory: returnedFromPaymentExecution
               ? [
                   ...(payout.invoiceReviewHistory ?? []),
                   {
@@ -2037,7 +2039,7 @@ export default function App() {
                     occurredAt,
                     approvalRound: nextApproval.round,
                   },
-                ]
+              ]
             : payout.invoiceReviewHistory,
           returnReason: returnedFromPaymentExecution ? normalizedReturnReason : payout.returnReason,
           issue: returnedFromPaymentExecution
@@ -2045,13 +2047,6 @@ export default function App() {
             : payout.issue,
         };
       }));
-      if (isApproved) {
-        setGeneratedInvoices((current) => current.map((invoice) => (
-          sourcePayoutIds.has(invoice.sourcePayoutId)
-            ? { ...invoice, status: '已通过' }
-            : invoice
-        )));
-      }
       const nextRequestLifecycle = isApproved ? 'APPROVED' as const : isReturned ? 'RETURNED' as const : 'SUBMITTED' as const;
       setRequestProjects((current) => current.map((item) => item.id === request.id
         ? {
@@ -2682,21 +2677,6 @@ export default function App() {
           : record
       )));
       setInvoiceTab(getInvoicePageTab(updated.invoiceReviewStatus));
-      if (action === 'APPROVE_MEDIA') {
-        const allProjectInvoicesReady = payouts
-          .filter((item) => item.projectId === payout.projectId)
-          .every((item) => (
-            item.id === payout.id
-              ? updated.invoiceReviewStatus === '待发起请款'
-              : item.invoiceReviewStatus === '待发起请款'
-          ));
-        setProjects((current) => current.map((project) => project.id === payout.projectId
-          ? {
-              ...project,
-              status: allProjectInvoicesReady ? '待发起请款' : 'Invoice审核中',
-            }
-          : project));
-      }
       notify('Invoice 审核状态已更新', `${payout.invoice} 已进入“${updated.invoiceReviewStatus}”。`);
     } catch (error) {
       notify('状态更新失败', error instanceof Error ? error.message : '当前 Invoice 无法执行该操作。');
@@ -2813,7 +2793,10 @@ export default function App() {
       ? requestProjects.find((item) => item.creatorLinks?.some((link) => link.invoiceIds.includes(invoice.invoiceId)))
       : undefined;
     if (!request) {
-      notify('未找到我的项目', '该 Invoice 尚未关联媒介请款项目，请先在“我的项目”中创建项目。');
+      setFocusedProjectId(null);
+      setFocusedInvoiceId(null);
+      setActivePage('projects');
+      notify('Invoice 已可请款', '请在“我的项目”中新建请款项目，并关联这张已通过 Invoice。');
       return;
     }
     setFocusedProjectId(request.id);

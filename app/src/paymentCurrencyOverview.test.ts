@@ -35,7 +35,7 @@ describe('payment currency overview', () => {
     const overview = getPaymentCurrencyOverviews([
       payout({ amount: 120, status: '等待付款' }),
       payout({ amount: 80, status: '付款处理中' }),
-      payout({ amount: 500, currency: 'EUR', invoiceReviewStatus: '待发起请款' }),
+      payout({ amount: 500, currency: 'EUR', invoiceReviewStatus: '待媒介审核' }),
       payout({ amount: 300, currency: 'GBP', status: '已付款', paidAt: '2026-08-08 12:30' }),
       payout({ amount: 400, currency: 'HKD', status: '已付款', paidAt: '2026-07-31 23:59' }),
       payout({ amount: 200, currency: 'SGD', status: '付款失败', paidAt: '2026-08-08 12:30' }),

@@ -329,6 +329,14 @@ export type CooperationProjectLike = {
   cooperationProjectId?: CooperationProjectId;
 };
 
+export type CooperationProjectWithCreatorsLike = CooperationProjectLike & {
+  creatorProfiles?: Array<{
+    creatorId: CreatorId;
+    engagementId: EngagementId;
+    status?: 'active' | 'removed';
+  }>;
+};
+
 export const cooperationProjectIdFor = (project: CooperationProjectLike) => (
   (project.cooperationProjectId ?? project.projectId ?? project.id) as CooperationProjectId
 );
@@ -358,6 +366,31 @@ export const invoicesForCooperationCreator = (
   invoiceCooperationProjectId(invoice) === cooperationProjectId
   && invoice.snapshot.creatorId === creatorId
 ));
+
+export const findExistingEngagementId = ({
+  project,
+  creatorId,
+  contracts,
+  invoices,
+}: {
+  project: CooperationProjectWithCreatorsLike;
+  creatorId: CreatorId;
+  contracts: ContractRecord[];
+  invoices: GeneratedInvoiceRecord[];
+}): EngagementId | undefined => {
+  const projectId = cooperationProjectIdFor(project);
+  const activeReference = project.creatorProfiles?.find((reference) => (
+    reference.creatorId === creatorId && reference.status !== 'removed'
+  ));
+  if (activeReference) return activeReference.engagementId;
+
+  const invoiceReference = invoicesForCooperationCreator(invoices, projectId, creatorId)
+    .find((invoice) => invoice.snapshot.engagementId)?.snapshot.engagementId;
+  if (invoiceReference) return invoiceReference as EngagementId;
+
+  return contractsForCooperationCreator(contracts, projectId, creatorId)
+    .find((contract) => contract.engagementId)?.engagementId;
+};
 
 export const requestOwningInvoice = (
   requests: PaymentRequestProjectLike[],
@@ -505,7 +538,7 @@ export const paymentRequestCreatorPresentation = ({
         invoice.snapshot.creatorId === link.creatorId
         && invoice.snapshot.engagementId === link.engagementId
       ),
-      invoiceReady: invoice.status === '待发起请款',
+      invoiceReady: invoice.status === '已通过',
       paymentListStatus: paymentList?.status,
       paymentItemMissing: !paymentItem,
       accountNeedsReview,
@@ -619,7 +652,7 @@ export type CreatorDocumentResolution = {
     invoiceId: InvoiceId;
     owner: PaymentRequestProjectLike;
   }>;
-  status: 'READY' | 'MISSING_INVOICE' | 'INVOICE_IN_USE';
+  status: 'READY' | 'MISSING_INVOICE' | 'INVOICE_NOT_APPROVED' | 'INVOICE_IN_USE';
 };
 
 export const resolveCreatorDocuments = ({
@@ -648,12 +681,24 @@ export const resolveCreatorDocuments = ({
       status: 'MISSING_INVOICE',
     };
   }
-  const invoiceOwners = matchedInvoices.flatMap((invoice) => {
+  const approvedInvoices = matchedInvoices.filter((invoice) => invoice.status === '已通过');
+  if (approvedInvoices.length === 0) {
+    return {
+      contracts: matchedContracts,
+      invoices: matchedInvoices,
+      availableInvoices: [],
+      invoiceOwners: [],
+      status: 'INVOICE_NOT_APPROVED',
+    };
+  }
+  const invoiceOwners = approvedInvoices.flatMap((invoice) => {
     const owner = requestOwningInvoice(requests, invoice.invoiceId, excludeRequestId);
     return owner ? [{ invoiceId: invoice.invoiceId, owner }] : [];
   });
   const occupiedIds = new Set(invoiceOwners.map((item) => item.invoiceId));
-  const availableInvoices = matchedInvoices.filter((invoice) => !occupiedIds.has(invoice.invoiceId));
+  const availableInvoices = approvedInvoices.filter((invoice) => (
+    !occupiedIds.has(invoice.invoiceId)
+  ));
   return {
     contracts: matchedContracts,
     invoices: matchedInvoices,
@@ -663,7 +708,7 @@ export const resolveCreatorDocuments = ({
   };
 };
 
-const SUBMITTABLE_INVOICE_STATUSES: InvoiceReviewStatus[] = ['待发起请款'];
+const SUBMITTABLE_INVOICE_STATUSES: InvoiceReviewStatus[] = ['已通过'];
 
 export const paymentRequestSubmissionIssues = ({
   creatorLinks,
