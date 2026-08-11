@@ -4607,9 +4607,10 @@ body:has(.finance-review-workspace) {
   flex: 1 1 0;
   grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(260px, 2fr);
   grid-template-rows: minmax(0, 1fr);
-  gap: 1px;
+  gap: 8px;
   overflow: hidden;
-  background: #dfe3e8;
+  background: #eef0f3;
+  padding: 8px;
   transition: grid-template-columns 200ms ease-out;
 }
 
@@ -4619,7 +4620,16 @@ body:has(.finance-review-workspace) {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid #dce1e7;
+  border-radius: 8px;
   background: #fff;
+  box-shadow: 0 1px 2px rgb(30 38 48 / 5%), 0 6px 18px rgb(30 38 48 / 4%);
+  transition: border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+
+.finance-review-pane:focus-within {
+  border-color: #d2c8df;
+  box-shadow: 0 0 0 2px rgb(103 81 135 / 6%), 0 8px 20px rgb(30 38 48 / 5%);
 }
 
 .finance-review-invoice-pane {
@@ -4671,14 +4681,14 @@ body:has(.finance-review-workspace) {
 .finance-review-approval-pane {
   position: relative;
   z-index: 2;
-  box-shadow: -10px 0 24px rgba(42, 39, 49, 0.08);
-  transition: transform 200ms ease-out, opacity 160ms ease-out, visibility 200ms;
+  box-shadow: 0 1px 2px rgb(30 38 48 / 5%), 0 6px 18px rgb(30 38 48 / 4%);
+  transition: transform 200ms ease-out, opacity 160ms ease-out, visibility 200ms, border-color 180ms ease-out, box-shadow 180ms ease-out;
 }
 
 .finance-review-approval-toggle {
   position: absolute;
-  right: 8px;
-  top: 7px;
+  right: 16px;
+  top: 15px;
   z-index: 6;
   display: inline-flex;
   width: 40px;
@@ -4715,7 +4725,7 @@ body:has(.finance-review-workspace) {
   }
 
   .finance-review-grid.is-approval-collapsed .finance-review-approval-toggle {
-    right: 12px;
+    right: 16px;
     border-color: #675187;
     background: #675187;
     color: #fff;
@@ -4736,6 +4746,7 @@ body:has(.finance-review-workspace) {
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid #e3e6ea;
+  background: #fbfcfd;
   padding: 8px 13px;
 }
 
@@ -6233,7 +6244,7 @@ body:has(.finance-review-workspace) {
     height: auto;
     min-height: 0;
     flex: 1 1 auto;
-    background: #fff;
+    background: #eef0f3;
   }
 
   .finance-review-pane {
@@ -6288,6 +6299,7 @@ body:has(.finance-review-workspace) {
 
 @media (prefers-reduced-motion: reduce) {
   .finance-review-grid,
+  .finance-review-pane,
   .finance-review-approval-pane,
   .finance-review-approval-toggle,
   .finance-review-invoice-edge-nav {
