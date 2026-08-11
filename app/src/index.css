@@ -4635,20 +4635,14 @@ body:has(.finance-review-workspace) {
 .finance-review-invoice-pane {
   position: relative;
   --finance-pane-accent: #ad607a;
-  --finance-pane-accent-bar: #ad607a;
   --finance-pane-accent-soft: #fbeaf0;
   --finance-pane-icon-border: #efcfda;
-  --finance-pane-border: #efd4dd;
-  --finance-pane-header: #fff7fa;
 }
 
 .finance-review-payment-pane {
   --finance-pane-accent: #75609e;
-  --finance-pane-accent-bar: #75609e;
   --finance-pane-accent-soft: #f0ecf8;
   --finance-pane-icon-border: #dbd2eb;
-  --finance-pane-border: #ddd5eb;
-  --finance-pane-header: #faf8fd;
 }
 
 .finance-review-invoice-edge-nav {
@@ -4697,11 +4691,8 @@ body:has(.finance-review-workspace) {
   position: relative;
   z-index: 2;
   --finance-pane-accent: #8d5f97;
-  --finance-pane-accent-bar: linear-gradient(90deg, #d987a5 0%, #9270b5 100%);
   --finance-pane-accent-soft: linear-gradient(135deg, #fae5ed 0%, #e9e1f6 100%);
   --finance-pane-icon-border: #e4cade;
-  --finance-pane-border: #e5d3e4;
-  --finance-pane-header: linear-gradient(135deg, #fff3f7 0%, #f5f0fb 100%);
   box-shadow: 0 1px 2px rgb(30 38 48 / 5%), 0 6px 18px rgb(30 38 48 / 4%);
   transition: transform 200ms ease-out, opacity 160ms ease-out, visibility 200ms, border-color 180ms ease-out, box-shadow 180ms ease-out;
 }
@@ -4760,26 +4751,15 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-review-pane-header {
-  position: relative;
   display: flex;
   min-height: 52px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid var(--finance-pane-border, #e3e6ea);
-  background: var(--finance-pane-header, #fbfcfd);
+  border-bottom: 1px solid #e3e6ea;
+  background: #fbfcfd;
   padding: 8px 13px;
-}
-
-.finance-review-pane-header::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 3px;
-  background: var(--finance-pane-accent-bar, var(--finance-pane-accent, #705b9d));
-  content: '';
 }
 
 .finance-review-pane-header-icon {
