@@ -83,7 +83,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html.indexOf('全部渠道成功率')).toBeLessThan(html.indexOf('各渠道付款成功率'));
   });
 
-  it('shows final transactions in all, paid, and failed tabs without processing records', () => {
+  it('shows paid, processing, and failed payment transactions in the all tab', () => {
     const html = renderToStaticMarkup(
       <TransactionsPage
         payouts={[
@@ -104,9 +104,9 @@ describe('TransactionsPage currency overview', () => {
     expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain('INV-11');
     expect(html).toContain('INV-12');
-    expect(html).not.toContain('INV-13');
+    expect(html).toContain('INV-13');
     expect(html).not.toContain('INV-14');
-    expect(html).not.toContain('付款处理中');
+    expect(html).toContain('付款处理中');
     expect(html).not.toContain('等待付款');
   });
 
@@ -132,7 +132,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>渠道</th>');
     expect(html).toContain('>状态</th>');
     expect(html).toContain('>金额</th>');
-    expect(html).toContain('>时间</th>');
+    expect(html).not.toContain('>时间</th>');
     expect(html).toContain('>付款人 / 付款时间</th>');
     expect(html).toContain('>操作</th>');
     expect(html).not.toContain('transaction-field-icon');

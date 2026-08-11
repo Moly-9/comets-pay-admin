@@ -171,6 +171,53 @@ final result: passed
 
 ---
 
+# Transaction Paid And Processing Filter Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f8831f52-3197-4b6d-8a8e-f7729bd8e5f5.png` at 1864 x 822 px.
+- Desktop implementation: `artifacts/transaction-status-filter-qa/paid-tab-desktop-1864x822.png`, captured from an 1864 x 822 CSS viewport at device scale factor 1; the in-app browser content capture is 1849 x 815 px.
+- Mobile implementation: `artifacts/transaction-status-filter-qa/paid-tab-mobile-390x844.png` and `artifacts/transaction-status-filter-qa/paid-tab-mobile-table-390x844.png`, captured from a 390 x 844 CSS viewport at device scale factor 1; each in-app browser content capture is 375 x 812 px.
+- State: signed in as the local administrator demo account, opened `交易记录`, selected `已付款`, and left the status selector at `全部付款状态` so both paid and processing rows are visible.
+- Normalization: the source and desktop implementation use the same requested CSS viewport and density. The browser's reserved scrollbar/content chrome accounts for the implementation bitmap being 15 px narrower and 7 px shorter; comparison used the visible app content rather than browser chrome.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The first desktop pass placed the export button on a second toolbar row after the status selector was added. Search, date, status, and channel control widths were tightened while preserving their 45 px rendered height; the revised capture keeps all six controls on one row.
+- The `已付款` tab defaults to 68 records: 42 `已付款` and 26 `付款处理中`. Its selector exposes exactly `全部付款状态`, `已付款`, and `付款处理中`.
+- The independent `时间` column is absent. `付款人 / 付款时间` remains as the seventh visible data column before `操作`.
+- The full page has no horizontal overflow at 390 px. The intentionally wide transaction table remains scrollable inside its own 317 px container.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: existing Noto Sans SC and monospace amount/Invoice treatments are preserved; the new selector uses the same size, weight, line height, and zero letter spacing as the channel selector.
+- Spacing and layout rhythm: tabs, 45 px filter controls, table header, row height, card radii, and section spacing remain aligned with the reference. Desktop filters stay on one row; mobile controls stack at a stable full width.
+- Colors and visual tokens: the selector reuses the existing white surface, gray border, dark text, chevron, focus, and selected-option tokens. Processing and paid status colors remain semantic and text-labeled.
+- Image quality and asset fidelity: the target contains no new photographic or illustrative asset. Existing logo and Lucide interface icons remain unchanged and sharp; no custom SVG, CSS drawing, or placeholder visual was introduced.
+- Copy and content: all three tabs remain `全部`, `已付款`, and `付款失败`. Filter labels and table headings match the requested payment terminology.
+
+## Full-View And Focused Comparison
+
+- The source and implementation were opened together at original resolution in one comparison input. Overview cards, tabs, toolbar, table density, provider badges, status marks, amounts, and row actions remain visually consistent.
+- A separate crop was unnecessary because both 1864 x 822 originals render the toolbar and table header legibly. The same full-resolution comparison makes the intentional additions and removals directly visible: one status selector added, one time column removed, and processing rows admitted.
+
+## Interaction Verification
+
+- `全部` shows 72 payment records; `已付款` shows 68 paid-or-processing records; `付款失败` shows 4 failed records.
+- Selecting `已付款` returns 42 records and every visible row has that status. Selecting `付款处理中` returns 26 records and every visible row has that status.
+- The status selector appears only in the `已付款` tab and resets to `全部付款状态` when the user changes tabs.
+- Browser console contained 0 warnings and 0 errors during desktop and mobile verification.
+- Full Vitest passed 69 files and 432 tests. TypeScript/Vite production build and `git diff --check` passed.
+
+## Comparison History
+
+1. The first rendered comparison found a P2 desktop toolbar wrap caused by the new selector.
+2. Filter widths were reduced using the existing responsive CSS, without changing control height, copy, or behavior.
+3. The second desktop capture and both 390 px captures found no remaining actionable P0/P1/P2 issue.
+
+final result: passed
+
 # Transaction Record Spacing And Icon Removal Design QA
 
 ## Evidence

@@ -5,7 +5,6 @@ import type { PaymentBatchRecord } from '../paymentBatches';
 import {
   findTransactionBatchContext,
   transactionRecordDetails,
-  transactionOccurredAt,
 } from '../transactionRecords';
 import type { Payout } from '../types';
 import { Avatar, Button, StatusMark } from './Common';
@@ -76,7 +75,6 @@ export function TransactionRecordsTable({
               <th>渠道</th>
               <th>状态</th>
               <th>金额</th>
-              <th>时间</th>
               <th>付款人 / 付款时间</th>
               <th className="action-cell">操作</th>
             </tr>
@@ -86,7 +84,6 @@ export function TransactionRecordsTable({
               const context = findTransactionBatchContext(payout, paymentBatches);
               const details = transactionRecordDetails(payout, context);
               const invoiceNumber = details.invoice?.invoiceNumber ?? payout.invoice;
-              const transactionTime = displayTimeParts(transactionOccurredAt(payout));
               const payerTime = displayTimeParts(details.paymentTime);
               return (
                 <tr className={selectedIds.has(payout.id) ? 'is-selected' : ''} key={payout.id}>
@@ -119,12 +116,6 @@ export function TransactionRecordsTable({
                     </span>
                   </td>
                   <td>
-                    <span className="transaction-data-cell transaction-time-cell">
-                      <strong>{transactionTime.date}</strong>
-                      <small>{transactionTime.time}</small>
-                    </span>
-                  </td>
-                  <td>
                     <span className="transaction-data-cell transaction-payer-cell">
                       <strong>{details.payer}</strong>
                       <small>{payerTime.date} {payerTime.time}</small>
@@ -145,7 +136,7 @@ export function TransactionRecordsTable({
               );
             }) : (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={8}>
                   <div className="empty-table">暂无符合当前搜索与筛选条件的交易记录</div>
                 </td>
               </tr>

@@ -122,7 +122,7 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 import {
   findTransactionBatchContext,
   filterTransactionRecords,
-  isFinalTransaction,
+  isPaymentTransactionRecord,
   type TransactionTab,
   type TransactionProvider,
 } from '../transactionRecords';
@@ -3421,6 +3421,12 @@ const TRANSACTION_PROVIDER_OPTIONS = [
   { value: 'PayMax', label: 'PayMax' },
 ] as const;
 
+const TRANSACTION_PAID_STATUS_OPTIONS = [
+  { value: ALL_PAYMENT_STATUSES, label: ALL_PAYMENT_STATUSES },
+  { value: '已付款', label: '已付款' },
+  { value: '付款处理中', label: '付款处理中' },
+] as const satisfies ReadonlyArray<{ value: PaymentStatusFilter; label: string }>;
+
 export function TransactionsPage({
   payouts,
   paymentBatches,
@@ -3431,6 +3437,7 @@ export function TransactionsPage({
   const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
   const [provider, setProvider] = useState<TransactionProvider>('all');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -3438,9 +3445,10 @@ export function TransactionsPage({
   const detailReturnIdRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const transactions = payouts.filter(isFinalTransaction);
+  const transactions = payouts.filter(isPaymentTransactionRecord);
   const visible = filterTransactionRecords(payouts, {
     tab,
+    status: tab === 'paid' ? paymentStatus : ALL_PAYMENT_STATUSES,
     search,
     provider,
     startDate,
@@ -3475,6 +3483,10 @@ export function TransactionsPage({
   const updateEndDate = (value: string) => {
     setEndDate(value);
     if (value && startDate && value < startDate) setStartDate(value);
+  };
+  const updateTab = (nextTab: TransactionTab) => {
+    setTab(nextTab);
+    setPaymentStatus(ALL_PAYMENT_STATUSES);
   };
   const toggleTransaction = (payoutId: string, checked: boolean) => {
     setSelectedIds((current) => {
@@ -3568,9 +3580,9 @@ export function TransactionsPage({
       </section>
       <section className="content-card">
         <div className="tabs-row" role="tablist" aria-label="交易状态">
-          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}><span>全部</span></button>
-          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}><span>已付款</span></button>
-          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}><span>付款失败</span></button>
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => updateTab('all')}><span>全部</span></button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => updateTab('paid')}><span>已付款</span></button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => updateTab('failed')}><span>付款失败</span></button>
         </div>
         <div className="transaction-filter-row">
           <label className="search-control transaction-search">
@@ -3595,6 +3607,15 @@ export function TransactionsPage({
               <input type="date" value={endDate} onChange={(event) => updateEndDate(event.target.value)} />
             </label>
           </div>
+          {tab === 'paid' ? (
+            <SelectField<PaymentStatusFilter>
+              ariaLabel="付款状态"
+              className="transaction-status-select"
+              value={paymentStatus}
+              options={TRANSACTION_PAID_STATUS_OPTIONS}
+              onChange={setPaymentStatus}
+            />
+          ) : null}
           <SelectField<TransactionProvider>
             ariaLabel="付款渠道"
             className="transaction-provider-select"

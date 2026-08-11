@@ -346,12 +346,15 @@ export const filterTransactionRecords = (
   filters: TransactionRecordFilters,
   batches: readonly PaymentBatchRecord[] = [],
 ) => payouts.filter((payout) => {
-  if (filters.tab ? !isFinalTransaction(payout) : !isPaymentTransactionRecord(payout)) return false;
-  if (filters.tab === 'paid' && payout.status !== '已付款') return false;
+  if (!isPaymentTransactionRecord(payout)) return false;
+  if (filters.tab === 'paid' && !['已付款', '付款处理中'].includes(payout.status)) return false;
   if (filters.tab === 'failed' && payout.status !== '付款失败') return false;
-  if (!matchesPaymentStatus(
+  const paymentStatus = filters.status ?? ALL_PAYMENT_STATUSES;
+  if (paymentStatus === '已付款' || paymentStatus === '付款处理中') {
+    if (payout.status !== paymentStatus) return false;
+  } else if (!matchesPaymentStatus(
     transactionPaymentStatus(payout, payouts, batches),
-    filters.status ?? ALL_PAYMENT_STATUSES,
+    paymentStatus,
   )) return false;
   if (filters.provider !== 'all' && payout.provider !== filters.provider) return false;
   if (!matchesTransactionSearch(payout, filters.search, findTransactionBatchContext(payout, batches))) return false;

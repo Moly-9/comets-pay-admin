@@ -12,7 +12,11 @@
 }
 
 .transactions-page .transaction-search input {
-  width: 226px;
+  width: 194px;
+}
+
+.transactions-page .date-filter input {
+  width: 90px;
 }
 
 .transactions-page .transaction-search:focus-within,
@@ -22,7 +26,11 @@
 }
 
 .transactions-page .transaction-provider-select {
-  width: 168px;
+  width: 136px;
+}
+
+.transactions-page .transaction-status-select {
+  width: 126px;
 }
 
 .transactions-page .transaction-filter-result {
@@ -103,7 +111,7 @@
 }
 
 .transaction-records-table {
-  min-width: 1410px;
+  min-width: 1230px;
 }
 
 .transaction-records-table .transaction-select-cell {
@@ -121,12 +129,11 @@
   min-width: 190px;
 }
 
-.transaction-records-table th:nth-child(6),
-.transaction-records-table th:nth-child(7) {
+.transaction-records-table th:nth-child(6) {
   min-width: 160px;
 }
 
-.transaction-records-table th:nth-child(8) {
+.transaction-records-table th:nth-child(7) {
   min-width: 170px;
 }
 
@@ -182,7 +189,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.transaction-records-table .transaction-time-cell strong,
 .transaction-records-table .transaction-payer-cell small {
   font-variant-numeric: tabular-nums;
 }
@@ -837,6 +843,7 @@
 
   .transactions-page .transaction-search,
   .transactions-page .transaction-search input,
+  .transactions-page .transaction-status-select,
   .transactions-page .transaction-provider-select {
     width: 100%;
   }
