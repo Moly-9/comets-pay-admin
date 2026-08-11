@@ -5931,7 +5931,12 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-approval-timeline.is-compact .finance-approval-stage strong {
-  max-width: 100%;
+  display: block;
+  max-width: none;
+  overflow: visible;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step.is-current .finance-approval-stage strong {

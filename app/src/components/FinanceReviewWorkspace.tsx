@@ -337,7 +337,7 @@ export function ApprovalTimeline({
             <div className="finance-approval-stage">
               {compact ? (
                 <>
-                  <strong>{step.label}</strong>
+                  <strong title={step.label}>{step.label}</strong>
                   <span title={step.accountName}>@{step.accountName}</span>
                 </>
               ) : (

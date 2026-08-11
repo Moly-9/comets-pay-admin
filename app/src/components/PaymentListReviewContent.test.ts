@@ -210,7 +210,7 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('const outerX = previous.column === 2 ? compactCurveWidth : 0');
     expect(workspaceSource).toContain('const compactCurvePath = buildCompactCurvePath(compactPositions.length - 1)');
     expect(workspaceSource).toContain('maskUnits="userSpaceOnUse"');
-    expect(workspaceSource).toContain('<strong>{step.label}</strong>');
+    expect(workspaceSource).toContain('<strong title={step.label}>{step.label}</strong>');
     expect(workspaceSource).toContain('<span title={step.accountName}>@{step.accountName}</span>');
     expect(workspaceSource).toContain("compact ? (");
     expect(workspaceSource).toContain('gridColumn: compactPositions[index].column');
@@ -219,6 +219,7 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStyles).toMatch(/\.finance-approval-curve path\.finance-approval-curve-progress\s*{[^}]*stroke:\s*#675187;/s);
     expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-node\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;[^}]*border-radius:\s*50%;/s);
     expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-stage\s*{[^}]*max-width:\s*142px;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-stage strong\s*{[^}]*max-width:\s*none;[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;[^}]*white-space:\s*nowrap;/s);
     expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-step::after\s*{[^}]*content:\s*none;/s);
   });
 });
