@@ -202,14 +202,17 @@ describe('shared payment-list finance review content', () => {
   it('keeps the real approval order in a continuous two-column horizontal curved flow', () => {
     expect(workspaceSource).toContain('className="finance-approval-curve"');
     expect(workspaceSource).toContain('<path d={compactCurvePath} />');
-    expect(workspaceSource).toContain('<span className="finance-approval-point" />');
+    expect(workspaceSource).toContain('className="finance-approval-curve-progress"');
+    expect(workspaceSource).toContain('className="finance-approval-stage-icon"');
+    expect(workspaceSource).toContain('className="finance-approval-state-mark"');
     expect(workspaceSource).toContain('<strong>{step.label}</strong>');
     expect(workspaceSource).toContain('<span title={step.accountName}>@{step.accountName}</span>');
     expect(workspaceSource).toContain("compact ? (");
     expect(workspaceSource).toContain('gridColumn: compactPositions[index].column');
     expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
     expect(workspaceStyles).toMatch(/\.finance-approval-curve path\s*{[^}]*stroke:\s*#cbd2da;[^}]*stroke-linecap:\s*round;/s);
-    expect(workspaceStyles).toMatch(/\.finance-approval-point\s*{[^}]*border-radius:\s*50%;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-curve path\.finance-approval-curve-progress\s*{[^}]*stroke:\s*#69a989;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-node\s*{[^}]*border-radius:\s*50%;/s);
     expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-step::after\s*{[^}]*content:\s*none;/s);
   });
 });

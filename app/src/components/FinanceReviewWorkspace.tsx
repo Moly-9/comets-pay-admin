@@ -1,20 +1,28 @@
 import {
   AlertTriangle,
+  BadgeCheck,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Circle,
   CircleAlert,
+  ClipboardCheck,
   Clock3,
+  CreditCard,
   FileText,
+  Landmark,
   PanelRightClose,
   PanelRightOpen,
   ReceiptText,
+  RefreshCw,
+  Send,
   ShieldCheck,
+  UserRoundCheck,
   WalletCards,
   ZoomIn,
   ZoomOut,
+  type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
@@ -79,6 +87,16 @@ const STAGE_LABEL: Record<RequestApprovalStage, string> = {
   PROJECT_OWNER: '项目负责人审批',
   OWNER: '老板审批',
   FINANCE: '财务审批',
+};
+
+const COMPACT_APPROVAL_ICONS: Record<string, LucideIcon> = {
+  submitted: Send,
+  PM: ClipboardCheck,
+  PROJECT_OWNER: UserRoundCheck,
+  OWNER: BadgeCheck,
+  FINANCE: Landmark,
+  payment: CreditCard,
+  'status-writeback': RefreshCw,
 };
 
 const formatReviewTime = (value?: string) => {
@@ -228,6 +246,15 @@ export function ApprovalTimeline({
     const turnX = previous.column === 2 ? 251 : 49;
     return `${path} C ${turnX} ${previous.y}, ${turnX} ${point.y}, ${point.x} ${point.y}`;
   }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
+  const compactProgressLastIndex = steps.reduce((lastIndex, step, index) => (
+    step.state === 'complete' || step.state === 'current' ? index : lastIndex
+  ), 0);
+  const compactProgressPath = compactPositions.slice(1, compactProgressLastIndex + 1).reduce((path, point, index) => {
+    const previous = compactPositions[index];
+    if (point.row === previous.row) return `${path} L ${point.x} ${point.y}`;
+    const turnX = previous.column === 2 ? 251 : 49;
+    return `${path} C ${turnX} ${previous.y}, ${turnX} ${point.y}, ${point.x} ${point.y}`;
+  }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
 
   return (
     <div className={`finance-approval-timeline ${compact ? 'is-compact' : ''}`} aria-label="当前审批流">
@@ -240,54 +267,71 @@ export function ApprovalTimeline({
           focusable="false"
         >
           <path d={compactCurvePath} />
+          <path className="finance-approval-curve-progress" d={compactProgressPath} />
         </svg>
       ) : null}
-      {steps.map((step, index) => (
-        <article
-          aria-label={`${step.label}，账号 ${step.accountName}，${step.state === 'complete' ? '已完成' : step.state === 'current' ? '当前节点' : '待处理'}`}
-          className={`finance-approval-step is-${step.state}`}
-          key={step.id}
-          style={compact ? {
-            gridColumn: compactPositions[index].column,
-            gridRow: compactPositions[index].row,
-          } : undefined}
-        >
-          <span className="finance-approval-node" aria-hidden="true">
-            {compact
-              ? <span className="finance-approval-point" />
-              : step.state === 'complete'
-                ? <Check size={13} />
-                : step.state === 'current'
-                  ? <Clock3 size={13} />
-                  : <Circle size={11} />}
-          </span>
-          <div className="finance-approval-stage">
-            {compact ? (
-              <>
-                <strong>{step.label}</strong>
-                <span title={step.accountName}>@{step.accountName}</span>
-              </>
-            ) : (
-              <>
-                <div>
+      {steps.map((step, index) => {
+        const CompactIcon = COMPACT_APPROVAL_ICONS[step.id] ?? Circle;
+        return (
+          <article
+            aria-label={`${step.label}，账号 ${step.accountName}，${step.state === 'complete' ? '已完成' : step.state === 'current' ? '当前节点' : '待处理'}`}
+            className={`finance-approval-step is-${step.state}`}
+            key={step.id}
+            style={compact ? {
+              gridColumn: compactPositions[index].column,
+              gridRow: compactPositions[index].row,
+            } : undefined}
+          >
+            <span className="finance-approval-node" aria-hidden="true">
+              {compact
+                ? (
+                    <>
+                      <CompactIcon className="finance-approval-stage-icon" size={17} strokeWidth={1.8} />
+                      {step.state === 'complete' ? (
+                        <span className="finance-approval-state-mark">
+                          <Check size={9} strokeWidth={2.6} />
+                        </span>
+                      ) : step.state === 'current' ? (
+                        <span className="finance-approval-state-mark">
+                          <Clock3 size={9} strokeWidth={2.4} />
+                        </span>
+                      ) : null}
+                    </>
+                  )
+                : step.state === 'complete'
+                  ? <Check size={13} />
+                  : step.state === 'current'
+                    ? <Clock3 size={13} />
+                    : <Circle size={11} />}
+            </span>
+            <div className="finance-approval-stage">
+              {compact ? (
+                <>
                   <strong>{step.label}</strong>
-                  <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
+                  <span title={step.accountName}>@{step.accountName}</span>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
+                  </div>
+                  <p>{step.description}</p>
+                </>
+              )}
+            </div>
+            {!compact ? (
+              <>
+                <div className="finance-approval-actor">
+                  <span>{initialsFor(step.actorName)}</span>
+                  <div><strong>{step.actorName}</strong><small>{step.actorMeta}</small></div>
                 </div>
-                <p>{step.description}</p>
+                <time>{formatReviewTime(step.time)}</time>
               </>
-            )}
-          </div>
-          {!compact ? (
-            <>
-              <div className="finance-approval-actor">
-                <span>{initialsFor(step.actorName)}</span>
-                <div><strong>{step.actorName}</strong><small>{step.actorMeta}</small></div>
-              </div>
-              <time>{formatReviewTime(step.time)}</time>
-            </>
-          ) : null}
-        </article>
-      ))}
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }

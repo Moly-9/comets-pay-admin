@@ -52,7 +52,14 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).toContain('PM 审批');
     expect(html).toContain('@fixture-pm');
     expect(html).toContain('class="finance-approval-curve"');
-    expect(html).toContain('class="finance-approval-point"');
+    expect(html).toContain('class="lucide lucide-send finance-approval-stage-icon"');
+    expect(html).toContain('class="lucide lucide-clipboard-check finance-approval-stage-icon"');
+    expect(html).toContain('class="lucide lucide-landmark finance-approval-stage-icon"');
+    expect(html).toContain('class="lucide lucide-credit-card finance-approval-stage-icon"');
+    expect(html).toContain('class="lucide lucide-refresh-cw finance-approval-stage-icon"');
+    expect(html).toContain('class="finance-approval-state-mark"');
+    expect(html).toContain('class="finance-approval-curve-progress"');
+    expect(html).toContain('财务审批，账号 finance，当前节点');
     expect(html).toContain('grid-column:1;grid-row:1');
     expect(html).toContain('grid-column:2;grid-row:1');
     expect(html).toContain('grid-column:2;grid-row:2');

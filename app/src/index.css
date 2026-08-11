@@ -5706,8 +5706,14 @@ body:has(.finance-review-workspace) {
   fill: none;
   stroke: #cbd2da;
   stroke-linecap: round;
+  stroke-linejoin: round;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+}
+
+.finance-approval-curve path.finance-approval-curve-progress {
+  stroke: #69a989;
+  stroke-width: 2.5;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step {
@@ -5732,32 +5738,51 @@ body:has(.finance-review-workspace) {
 
 .finance-approval-timeline.is-compact .finance-approval-node {
   z-index: 3;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #9aa4b1;
+  width: 36px;
+  height: 36px;
+  border: 2px solid #cbd2da;
+  border-radius: 50%;
+  background: #f7f8fa;
+  color: #7e8996;
+  box-shadow: 0 0 0 4px #fff, 0 4px 10px rgb(53 64 75 / 10%);
 }
 
-.finance-approval-point {
+.finance-approval-stage-icon {
   display: block;
-  width: 11px;
-  height: 11px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgb(255 255 255 / 88%);
+  flex: 0 0 auto;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step.is-complete .finance-approval-node {
-  background: transparent;
+  border-color: #65ab88;
+  background: #e9f7f0;
   color: #32845e;
+  box-shadow: 0 0 0 4px #fff, 0 4px 11px rgb(50 132 94 / 18%);
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step.is-current .finance-approval-node {
-  background: transparent;
-  color: #cf6842;
+  border-color: #e98c64;
+  background: #fff0e8;
+  color: #ba5732;
+  box-shadow: 0 0 0 4px #fff, 0 0 0 6px rgb(233 140 100 / 20%), 0 5px 13px rgb(186 87 50 / 18%);
+}
+
+.finance-approval-state-mark {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #32845e;
+  color: #fff;
+}
+
+.finance-approval-step.is-current .finance-approval-state-mark {
+  background: #c65f38;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-stage {
@@ -5777,6 +5802,10 @@ body:has(.finance-review-workspace) {
 
 .finance-approval-timeline.is-compact .finance-approval-step.is-current .finance-approval-stage strong {
   color: #b85b38;
+}
+
+.finance-approval-timeline.is-compact .finance-approval-step.is-complete .finance-approval-stage strong {
+  color: #276f50;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-stage > span {
