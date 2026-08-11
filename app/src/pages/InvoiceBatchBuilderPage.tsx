@@ -1038,7 +1038,10 @@ export function InvoiceBatchBuilderPage({
       />
 
       <section className="invoice-builder-form invoice-batch-form">
-        <div className="invoice-builder-section">
+        <section
+          className="invoice-builder-section invoice-batch-card"
+          data-batch-section="mode"
+        >
           <header>
             <span><FileText size={18} /></span>
             <div>
@@ -1070,9 +1073,12 @@ export function InvoiceBatchBuilderPage({
               {mode === 'XLSX_IMPORT' ? <CheckCircle2 size={18} /> : null}
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="invoice-builder-section">
+        <section
+          className="invoice-builder-section invoice-batch-card"
+          data-batch-section="creators"
+        >
           <header>
             <span><Users size={18} /></span>
             <div>
@@ -1178,9 +1184,12 @@ export function InvoiceBatchBuilderPage({
               <span>选择后可搜索、全选或逐个勾选项目内达人。</span>
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="invoice-builder-section">
+        <section
+          className="invoice-builder-section invoice-batch-card"
+          data-batch-section="common"
+        >
           <header>
             <span><ReceiptText size={18} /></span>
             <div>
@@ -1323,9 +1332,12 @@ export function InvoiceBatchBuilderPage({
               </div>
             </div>
           ) : null}
-        </div>
+        </section>
 
-        <div className="invoice-builder-section">
+        <section
+          className="invoice-builder-section invoice-batch-card"
+          data-batch-section="validation"
+        >
           <header className="invoice-batch-section-heading">
             <span><ListChecks size={18} /></span>
             <div>
@@ -1342,15 +1354,24 @@ export function InvoiceBatchBuilderPage({
             </label>
           </header>
 
-          <div className="invoice-batch-summary">
-            <div><span>已选择</span><strong>{rows.length}</strong></div>
-            <div><span>可生成</span><strong>{readyRows.length}</strong></div>
-            <div><span>需处理</span><strong>{problemRows.length}</strong></div>
-            <div className="is-wide">
-              <span>批次总额</span>
-              <strong>{batchTotal ? formatInvoiceMoney(currency, batchTotal) : '-'}</strong>
+          <dl className="invoice-batch-summary" aria-label="批量 Invoice 校验汇总">
+            <div className="invoice-batch-metric-card">
+              <dt>已选择达人</dt>
+              <dd>{rows.length}</dd>
             </div>
-          </div>
+            <div className="invoice-batch-metric-card is-ready">
+              <dt>可生成invoice</dt>
+              <dd>{readyRows.length}</dd>
+            </div>
+            <div className="invoice-batch-metric-card is-problem">
+              <dt>需处理条数</dt>
+              <dd>{problemRows.length}</dd>
+            </div>
+            <div className="invoice-batch-metric-card is-total">
+              <dt>批次总金额</dt>
+              <dd>{batchTotal ? formatInvoiceMoney(currency, batchTotal) : '-'}</dd>
+            </div>
+          </dl>
 
           {generationError ? (
             <div className="invoice-batch-alert" role="alert">
@@ -1372,10 +1393,10 @@ export function InvoiceBatchBuilderPage({
           ) : (
             <div className="invoice-batch-empty">请先选择项目和达人</div>
           )}
-        </div>
+        </section>
 
         {generatedRows.length ? (
-          <div className="invoice-builder-section invoice-batch-result-section">
+          <section className="invoice-builder-section invoice-batch-card invoice-batch-result-section">
             <header>
               <span><PackageCheck size={18} /></span>
               <div>
@@ -1431,7 +1452,7 @@ export function InvoiceBatchBuilderPage({
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         ) : null}
 
         <footer className="invoice-builder-footer invoice-batch-footer">

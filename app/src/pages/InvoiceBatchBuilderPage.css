@@ -7,15 +7,27 @@
 }
 
 .invoice-batch-form {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   overflow: visible;
+  box-shadow: none;
 }
 
-.invoice-batch-form > .invoice-builder-section:first-child {
-  border-radius: 18px 18px 0 0;
+.invoice-batch-form > .invoice-batch-card {
+  min-width: 0;
+  border: 1px solid rgba(222, 226, 232, 0.96);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(41, 45, 52, 0.045);
 }
 
-.invoice-batch-form > .invoice-builder-footer:last-child {
-  border-radius: 0 0 18px 18px;
+.invoice-batch-form > .invoice-batch-card + .invoice-batch-card {
+  border-top: 1px solid rgba(222, 226, 232, 0.96);
 }
 
 .invoice-batch-mode-segment {
@@ -475,34 +487,65 @@
 
 .invoice-batch-summary {
   display: grid;
-  grid-template-columns: 110px 110px 110px minmax(190px, 1fr);
-  margin: 0 -26px;
-  border-top: 1px solid #e5e8ed;
-  border-bottom: 1px solid #e5e8ed;
-  background: #f8f9fb;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 2px;
 }
 
-.invoice-batch-summary > div {
+.invoice-batch-metric-card {
   display: flex;
-  min-height: 62px;
+  min-width: 0;
+  min-height: 76px;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
-  padding: 10px 20px;
+  gap: 5px;
+  border: 1px solid #e1e5ea;
+  border-radius: 8px;
+  background: #f8f9fb;
+  padding: 12px 15px;
 }
 
-.invoice-batch-summary > div + div {
-  border-left: 1px solid #e5e8ed;
-}
-
-.invoice-batch-summary span {
+.invoice-batch-metric-card dt {
   color: #858b98;
-  font-size: 9.5px;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
-.invoice-batch-summary strong {
+.invoice-batch-metric-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
   color: #30343b;
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.invoice-batch-metric-card.is-ready {
+  border-color: #cfe5dc;
+  background: #f7fbf9;
+}
+
+.invoice-batch-metric-card.is-ready dd {
+  color: #247357;
+}
+
+.invoice-batch-metric-card.is-problem {
+  border-color: #eedfc2;
+  background: #fffbf3;
+}
+
+.invoice-batch-metric-card.is-problem dd {
+  color: #9a620f;
+}
+
+.invoice-batch-metric-card.is-total {
+  border-color: #eadfdc;
+  background: #fdf9f8;
+}
+
+.invoice-batch-metric-card.is-total dd {
+  color: #a84f3d;
 }
 
 .invoice-batch-table-wrap {
@@ -1042,7 +1085,10 @@
   bottom: 0;
   justify-content: flex-end;
   flex-wrap: wrap;
+  border: 1px solid rgba(222, 226, 232, 0.96);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -4px 16px rgba(41, 45, 52, 0.06);
 }
 
 .invoice-batch-footer .button:first-child {
@@ -1146,13 +1192,7 @@
   }
 
   .invoice-batch-summary {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .invoice-batch-summary .is-wide {
-    grid-column: 1 / -1;
-    border-top: 1px solid #e5e8ed;
-    border-left: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .invoice-batch-table-wrap {
@@ -1253,9 +1293,8 @@
     padding-left: 7px;
   }
 
-  .invoice-batch-form > .invoice-builder-section:first-child,
-  .invoice-batch-form > .invoice-builder-footer:last-child {
-    border-radius: 0;
+  .invoice-batch-form {
+    gap: 10px;
   }
 
   .invoice-batch-mode-segment > button {
@@ -1297,12 +1336,16 @@
   }
 
   .invoice-batch-summary {
-    margin-right: -15px;
-    margin-left: -15px;
+    gap: 8px;
   }
 
-  .invoice-batch-summary > div {
+  .invoice-batch-metric-card {
+    min-height: 72px;
     padding: 10px 12px;
+  }
+
+  .invoice-batch-metric-card dd {
+    font-size: 16px;
   }
 
   .invoice-batch-table-wrap {

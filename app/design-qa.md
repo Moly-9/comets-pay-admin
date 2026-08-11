@@ -1798,3 +1798,42 @@ The supplied image is a right-side review drawer, while the approved implementat
 - P3: the reference drawer can display more approval nodes vertically because it dedicates the entire width to one column; the implementation intentionally gives that space to simultaneous Invoice and payment comparison.
 
 final result: passed
+
+---
+
+# Design QA - Batch Invoice 卡片化布局
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c419cefc-ea2f-45c9-8e63-b63696970529.png` (`1396 x 788`).
+- Desktop implementation: `app/qa/invoice-batch-card-layout/implementation-desktop-final.png` (`1381 x 787`) from a `1396 x 796` CSS viewport at device pixel ratio 1.
+- Focused desktop implementation: `app/qa/invoice-batch-card-layout/implementation-desktop-validation-fixed.png` (`1265 x 712`) from a `1280 x 720` CSS viewport at device pixel ratio 1.
+- Mobile implementation: `app/qa/invoice-batch-card-layout/implementation-mobile-top.png` and `implementation-mobile-validation.png` (`375 x 812`) from a `390 x 844` CSS viewport at device pixel ratio 1.
+- State: media demo account, first cooperation project selected, one eligible creator selected, shared Description entered, and one validation issue visible.
+- Full-view comparison evidence: the source and final desktop capture were opened together in one visual comparison input at effectively matching desktop dimensions.
+- Focused evidence was required because the four validation metrics are below the source image crop; the focused desktop and mobile captures show their final layout and dynamic values.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed. Existing Noto Sans SC hierarchy, weights, zero letter spacing, control labels, and compact operations density are unchanged.
+- Spacing and layout rhythm: passed. The four workflow areas now use individual 8px-radius cards separated by 14px on desktop and 10px on mobile. The metric cards use a four-column desktop grid and a two-by-two mobile grid.
+- Colors and visual tokens: passed. Existing white/gray surfaces and coral interaction color remain dominant; restrained green, amber, and coral metric states improve scanning without changing business meaning.
+- Image and icon fidelity: passed. No new raster asset is required; existing Lucide section and control icons remain consistent with the source interface.
+- Copy and content: passed. The requested labels are exactly `已选择达人`, `可生成invoice`, `需处理条数`, and `批次总金额`.
+
+## Interaction And Responsive Checks
+
+- Project selection, select-all creator selection, shared Description entry, dynamic validation counts, and the existing table state were exercised in the browser.
+- At desktop size, all four main cards remain within the 820px content column and all four metric cards remain equal width.
+- At `390 x 844`, main cards measure 343px, metric cards measure 152px in a two-column grid, and document horizontal overflow is `0`.
+- Browser console warnings/errors after desktop and mobile flows: none.
+- Full Vitest suite: 70 files and 433 tests passed.
+- TypeScript production build: passed; only the existing Vite chunk-size advisory remains.
+
+## Comparison History
+
+1. Initial P2: after changing the outer form to CSS Grid, the table's desktop minimum width expanded the validation card to about 1603px and shifted the metric grid outside the viewport.
+2. Fix: constrained the form grid track with `minmax(0, 1fr)` and each workflow card with `min-width: 0`, keeping wide-table overflow inside its existing table wrapper.
+3. Post-fix desktop, selected-data, mobile, interaction, overflow, and console checks found no remaining actionable P0, P1, or P2 issue.
+
+final result: passed
