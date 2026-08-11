@@ -4634,6 +4634,21 @@ body:has(.finance-review-workspace) {
 
 .finance-review-invoice-pane {
   position: relative;
+  --finance-pane-accent: #ad607a;
+  --finance-pane-accent-bar: #ad607a;
+  --finance-pane-accent-soft: #fbeaf0;
+  --finance-pane-icon-border: #efcfda;
+  --finance-pane-border: #efd4dd;
+  --finance-pane-header: #fff7fa;
+}
+
+.finance-review-payment-pane {
+  --finance-pane-accent: #75609e;
+  --finance-pane-accent-bar: #75609e;
+  --finance-pane-accent-soft: #f0ecf8;
+  --finance-pane-icon-border: #dbd2eb;
+  --finance-pane-border: #ddd5eb;
+  --finance-pane-header: #faf8fd;
 }
 
 .finance-review-invoice-edge-nav {
@@ -4681,6 +4696,12 @@ body:has(.finance-review-workspace) {
 .finance-review-approval-pane {
   position: relative;
   z-index: 2;
+  --finance-pane-accent: #8d5f97;
+  --finance-pane-accent-bar: linear-gradient(90deg, #d987a5 0%, #9270b5 100%);
+  --finance-pane-accent-soft: linear-gradient(135deg, #fae5ed 0%, #e9e1f6 100%);
+  --finance-pane-icon-border: #e4cade;
+  --finance-pane-border: #e5d3e4;
+  --finance-pane-header: linear-gradient(135deg, #fff3f7 0%, #f5f0fb 100%);
   box-shadow: 0 1px 2px rgb(30 38 48 / 5%), 0 6px 18px rgb(30 38 48 / 4%);
   transition: transform 200ms ease-out, opacity 160ms ease-out, visibility 200ms, border-color 180ms ease-out, box-shadow 180ms ease-out;
 }
@@ -4739,15 +4760,39 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-review-pane-header {
+  position: relative;
   display: flex;
   min-height: 52px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid #e3e6ea;
-  background: #fbfcfd;
+  border-bottom: 1px solid var(--finance-pane-border, #e3e6ea);
+  background: var(--finance-pane-header, #fbfcfd);
   padding: 8px 13px;
+}
+
+.finance-review-pane-header::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: var(--finance-pane-accent-bar, var(--finance-pane-accent, #705b9d));
+  content: '';
+}
+
+.finance-review-pane-header-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--finance-pane-icon-border, #dcd3ec);
+  border-radius: 7px;
+  background: var(--finance-pane-accent-soft, #f0ecf8);
+  color: var(--finance-pane-accent, #705b9d);
 }
 
 .finance-review-approval-pane > .finance-review-pane-header {
@@ -4758,6 +4803,10 @@ body:has(.finance-review-workspace) {
   align-items: center;
   gap: 8px;
   color: #626d7a;
+}
+
+.finance-review-pane-heading {
+  min-width: 0;
 }
 
 .finance-review-pane-header > div > span {
@@ -4875,6 +4924,7 @@ body:has(.finance-review-workspace) {
 
 .finance-payment-list-review-content .project-resource-browser-heading {
   border-radius: 6px;
+  background: #f7f4fb;
   padding: 11px 12px;
 }
 
@@ -4924,6 +4974,14 @@ body:has(.finance-review-workspace) {
   padding: 8px 10px;
 }
 
+.finance-review-summary-heading strong {
+  min-width: 0;
+}
+
+.finance-review-comparison-title > div {
+  align-items: start;
+}
+
 .finance-payment-list-review-content .request-finance-comparison-table {
   min-width: 620px;
 }
@@ -4956,7 +5014,7 @@ body:has(.finance-review-workspace) {
   gap: 10px;
   border: 1px solid #e0e4e9;
   border-radius: 6px;
-  background: #fbfbfc;
+  background: #f7f4fb;
   padding: 7px 10px;
 }
 
@@ -4998,8 +5056,13 @@ body:has(.finance-review-workspace) {
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid #e7eaee;
-  background: #fbfbfc;
+  background: #fbf9fe;
   padding: 8px 10px;
+}
+
+.finance-payment-account-snapshot > header > div {
+  flex-direction: row;
+  gap: 8px;
 }
 
 .finance-payment-account-fields {
@@ -5131,6 +5194,35 @@ body:has(.finance-review-workspace) {
   font-size: 9px;
 }
 
+.finance-review-metric-icon,
+.finance-review-card-title-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.finance-review-metric-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.finance-review-metrics .is-amount .finance-review-metric-icon {
+  background: #ffeadf;
+  color: #a65e3d;
+}
+
+.finance-review-metrics .is-resources .finance-review-metric-icon {
+  background: #eee9f8;
+  color: #705b9d;
+}
+
+.finance-review-metrics .is-status .finance-review-metric-icon {
+  background: #e4f2eb;
+  color: #35765d;
+}
+
 .finance-review-metrics strong {
   overflow-wrap: anywhere;
   color: #29313c;
@@ -5160,6 +5252,56 @@ body:has(.finance-review-workspace) {
   border-bottom: 1px solid #e7eaee;
   background: #fbfbfc;
   padding: 8px 10px;
+}
+
+.finance-review-section-heading,
+.finance-review-heading-with-icon,
+.finance-review-summary-heading,
+.finance-review-comparison-title,
+.finance-payment-account-snapshot > header > div,
+.finance-payment-account-snapshot > header > div > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.finance-review-section-heading,
+.finance-review-heading-with-icon,
+.finance-review-summary-heading,
+.finance-review-comparison-title {
+  gap: 8px;
+}
+
+.finance-review-heading-with-icon > div,
+.finance-review-comparison-title > div,
+.finance-payment-account-snapshot > header > div > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.finance-review-card-title-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.finance-review-card-title-icon.is-payment,
+.finance-review-card-title-icon.is-account,
+.finance-review-card-title-icon.is-validation,
+.finance-review-card-title-icon.is-creator {
+  background: #f0ecf8;
+  color: #75609e;
+}
+
+.finance-review-card-title-icon.is-invoice {
+  background: #fbeaf0;
+  color: #ad607a;
+}
+
+.finance-review-card-title-icon.is-project,
+.finance-review-card-title-icon.is-workflow {
+  background: linear-gradient(135deg, #fae5ed 0%, #e9e1f6 100%);
+  color: #8d5f97;
 }
 
 .finance-review-project-section > header strong {

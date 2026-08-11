@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BadgeCheck,
+  BriefcaseBusiness,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -20,6 +21,7 @@ import {
   ShieldCheck,
   UserRoundCheck,
   WalletCards,
+  Workflow,
   ZoomIn,
   ZoomOut,
   type LucideIcon,
@@ -672,7 +674,7 @@ export function FinanceReviewWorkspace({
           <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div><FileText size={18} /><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><FileText size={17} /></span><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
                 <div className="finance-review-invoice-header-actions">
                   {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
                   <div className="finance-review-zoom-controls" role="group" aria-label="Invoice 缩放">
@@ -767,7 +769,7 @@ export function FinanceReviewWorkspace({
 
             <section className={`finance-review-pane finance-review-payment-pane${activePane === 'payment' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div><WalletCards size={18} /><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><WalletCards size={17} /></span><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
                 {currentPage?.mismatchCount
                   ? <span className="finance-review-warning-count"><CircleAlert size={13} />关键字段不一致 · {currentPage.mismatchCount} 项</span>
                   : <span className="finance-review-match-count"><CheckCircle2 size={13} />关键字段一致</span>}
@@ -793,7 +795,7 @@ export function FinanceReviewWorkspace({
               className={`finance-review-pane finance-review-approval-pane${activePane === 'approval' ? ' is-mobile-active' : ''}`}
             >
               <header className="finance-review-pane-header">
-                <div><ShieldCheck size={18} /><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><ShieldCheck size={17} /></span><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
               </header>
               <div
                 className="finance-review-approval-scroll"
@@ -803,24 +805,24 @@ export function FinanceReviewWorkspace({
               >
                 <section className="finance-review-metrics" aria-label="请款项目概况">
                   <article className="is-amount">
-                    <span><WalletCards size={14} />请款金额</span>
+                    <span><span className="finance-review-metric-icon" aria-hidden="true"><WalletCards size={13} /></span>请款金额</span>
                     <strong>{request.amount}</strong>
                     <small>当前请款项目总额</small>
                   </article>
                   <article className="is-resources">
-                    <span><FileText size={14} />关联资料</span>
+                    <span><span className="finance-review-metric-icon" aria-hidden="true"><FileText size={13} /></span>关联资料</span>
                     <strong>{request.contracts + request.invoices} 份</strong>
                     <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
                   </article>
                   <article className="is-status">
-                    <span><ShieldCheck size={14} />当前审批状态</span>
+                    <span><span className="finance-review-metric-icon" aria-hidden="true"><ShieldCheck size={13} /></span>当前审批状态</span>
                     <strong>{approvalLabel}</strong>
                     <small>第 {request.approval?.round ?? 1} 轮审批</small>
                   </article>
                 </section>
 
                 <section className="finance-review-project-section" aria-label="请款项目信息">
-                  <header><strong>请款项目信息</strong><span>提交时项目快照</span></header>
+                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div><span>提交时项目快照</span></header>
                   <dl className="finance-review-project-info">
                     <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
                     <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
@@ -836,7 +838,7 @@ export function FinanceReviewWorkspace({
                 </section>
 
                 <section className="finance-review-project-section" aria-label="当前审批流">
-                  <header><strong>当前审批流</strong><span>第 {request.approval?.round ?? 1} 轮</span></header>
+                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-workflow" aria-hidden="true"><Workflow size={14} /></span><strong>当前审批流</strong></div><span>第 {request.approval?.round ?? 1} 轮</span></header>
                   <ApprovalTimeline request={request} currentUser={currentUser} compact />
                 </section>
                 {currentDecision.state === 'incorrect' ? (
