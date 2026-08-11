@@ -346,7 +346,7 @@ export const filterTransactionRecords = (
   filters: TransactionRecordFilters,
   batches: readonly PaymentBatchRecord[] = [],
 ) => payouts.filter((payout) => {
-  if (!isPaymentTransactionRecord(payout)) return false;
+  if (filters.tab ? !isFinalTransaction(payout) : !isPaymentTransactionRecord(payout)) return false;
   if (filters.tab === 'paid' && payout.status !== '已付款') return false;
   if (filters.tab === 'failed' && payout.status !== '付款失败') return false;
   if (!matchesPaymentStatus(

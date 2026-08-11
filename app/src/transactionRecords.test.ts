@@ -74,7 +74,7 @@ const batch = {
 } as unknown as PaymentBatchRecord;
 
 describe('transaction records', () => {
-  it('keeps approved processing and final transactions for the selected payment status', () => {
+  it('keeps only final transactions in status tabs while supporting processing status filters', () => {
     const records = [
       payout(),
       payout({ id: 'failed', status: '付款失败', paidAt: undefined, paymentFailure: {
@@ -87,11 +87,11 @@ describe('transaction records', () => {
       payout({ id: 'unapproved', invoiceReviewStatus: '待发起请款' }),
     ];
 
-    expect(filterTransactionRecords(records, filters()).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);
+    expect(filterTransactionRecords(records, filters()).map((record) => record.id)).toEqual(['pay-test', 'failed']);
     expect(filterTransactionRecords(records, filters({ tab: 'paid' })).map((record) => record.id)).toEqual(['pay-test']);
     expect(filterTransactionRecords(records, filters({ tab: 'failed' })).map((record) => record.id)).toEqual(['failed']);
-    expect(filterTransactionRecords(records, filters({ status: '付款处理中' })).map((record) => record.id)).toEqual(['processing']);
-    expect(filterTransactionRecords(records, filters({ status: '全部失败' })).map((record) => record.id)).toEqual(['failed']);
+    expect(filterTransactionRecords(records, filters({ tab: undefined, status: '付款处理中' })).map((record) => record.id)).toEqual(['processing']);
+    expect(filterTransactionRecords(records, filters({ tab: undefined, status: '全部失败' })).map((record) => record.id)).toEqual(['failed']);
     expect(records.filter(isPaymentTransactionRecord).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);
   });
 

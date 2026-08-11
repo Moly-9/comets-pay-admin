@@ -122,7 +122,8 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 import {
   findTransactionBatchContext,
   filterTransactionRecords,
-  isPaymentTransactionRecord,
+  isFinalTransaction,
+  type TransactionTab,
   type TransactionProvider,
 } from '../transactionRecords';
 import {
@@ -3427,9 +3428,9 @@ export function TransactionsPage({
   payouts: Payout[];
   paymentBatches: readonly PaymentBatchRecord[];
 }) {
+  const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
   const [provider, setProvider] = useState<TransactionProvider>('all');
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -3437,9 +3438,9 @@ export function TransactionsPage({
   const detailReturnIdRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const transactions = payouts.filter(isPaymentTransactionRecord);
+  const transactions = payouts.filter(isFinalTransaction);
   const visible = filterTransactionRecords(payouts, {
-    status: paymentStatus,
+    tab,
     search,
     provider,
     startDate,
@@ -3566,6 +3567,11 @@ export function TransactionsPage({
         </article>
       </section>
       <section className="content-card">
+        <div className="tabs-row" role="tablist" aria-label="交易状态">
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}><span>全部</span></button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}><span>已付款</span></button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}><span>付款失败</span></button>
+        </div>
         <div className="transaction-filter-row">
           <label className="search-control transaction-search">
             <Search size={16} aria-hidden="true" />
@@ -3589,13 +3595,6 @@ export function TransactionsPage({
               <input type="date" value={endDate} onChange={(event) => updateEndDate(event.target.value)} />
             </label>
           </div>
-          <SelectField<PaymentStatusFilter>
-            ariaLabel="付款状态"
-            className="transaction-status-select"
-            value={paymentStatus}
-            options={PAYMENT_STATUS_FILTER_OPTIONS}
-            onChange={setPaymentStatus}
-          />
           <SelectField<TransactionProvider>
             ariaLabel="付款渠道"
             className="transaction-provider-select"

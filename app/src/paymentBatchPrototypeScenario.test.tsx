@@ -91,8 +91,11 @@ describe('payment batch prototype scenario', () => {
       <TransactionsPage payouts={scenario.payouts} paymentBatches={[]} />,
     );
 
-    expect(html).toContain('aria-label="付款状态"');
-    expect(html).toContain('>全部付款状态</span>');
+    expect(html).toContain('role="tablist" aria-label="交易状态"');
+    expect(html).toContain('<span>全部</span>');
+    expect(html).toContain('<span>已付款</span>');
+    expect(html).toContain('<span>付款失败</span>');
+    expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain(`>${successRate}</strong>`);
     expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);
   });
