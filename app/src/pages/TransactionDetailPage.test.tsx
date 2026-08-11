@@ -84,6 +84,11 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('CON-20260810-001');
     expect(html).toContain('INV-20260810-001');
     expect(html).toContain('transaction-resource-card is-payment-list');
+    expect(html).toContain('is-cooperation-project');
+    expect(html).toContain('is-request-project');
+    expect(html).toContain('is-payment-batch');
+    expect(html).toContain('transaction-resource-icon is-contract');
+    expect(html).toContain('transaction-resource-icon is-invoice');
     expect(html).toContain('PL-20260810-001');
     expect(html).not.toContain('交易记录 ID');
     expect(html).toContain('付款批次号');

@@ -78,17 +78,17 @@ export function TransactionDetailPage({
       </section>
 
       <section className="transaction-detail-summary" aria-label="交易摘要">
-        <article>
+        <article className="is-amount">
           <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />付款金额</span>
           <strong>{formatAmount(payout)}</strong>
           <small>收款币种 {details.receiveCurrency}</small>
         </article>
-        <article>
+        <article className="is-provider">
           <span className="transaction-detail-summary-label"><Landmark size={15} aria-hidden="true" />付款渠道</span>
           <PaymentProviderBadge provider={payout.provider} />
           <small>{details.transferMethod}</small>
         </article>
-        <article>
+        <article className="is-status">
           <span className="transaction-detail-summary-label"><CircleCheckBig size={15} aria-hidden="true" />交易状态</span>
           <StatusMark status={payout.status} />
           <small>{displayTime(finalTime)}</small>
@@ -112,14 +112,14 @@ export function TransactionDetailPage({
           <div><h2>付款信息</h2><p>本笔交易的渠道、账户与付款执行快照。</p></div>
         </header>
         <dl className="transaction-detail-info-grid">
-          <div><dt><CalendarClock size={14} aria-hidden="true" />付款时间</dt><dd>{displayTime(details.paymentTime)}</dd></div>
-          <div><dt><UserRoundCheck size={14} aria-hidden="true" />付款人</dt><dd>{details.payer}</dd></div>
-          <div><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
-          <div><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{details.accountSummary}</dd></div>
-          <div><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{details.transferMethod}</dd></div>
-          <div><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{details.feeBearer}</dd></div>
-          <div><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
-          <div><dt><ClipboardCheck size={14} aria-hidden="true" />付款事由</dt><dd>{details.requestReason}</dd></div>
+          <div className="is-time"><dt><CalendarClock size={14} aria-hidden="true" />付款时间</dt><dd>{displayTime(details.paymentTime)}</dd></div>
+          <div className="is-payer"><dt><UserRoundCheck size={14} aria-hidden="true" />付款人</dt><dd>{details.payer}</dd></div>
+          <div className="is-batch"><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
+          <div className="is-account"><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{details.accountSummary}</dd></div>
+          <div className="is-method"><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{details.transferMethod}</dd></div>
+          <div className="is-fee"><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{details.feeBearer}</dd></div>
+          <div className="is-reference"><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
+          <div className="is-reason"><dt><ClipboardCheck size={14} aria-hidden="true" />付款事由</dt><dd>{details.requestReason}</dd></div>
         </dl>
       </section>
 
@@ -129,15 +129,15 @@ export function TransactionDetailPage({
           <div><h2>业务关联</h2><p>追溯本笔交易所属项目、请款项目和付款批次。</p></div>
         </header>
         <div className="transaction-association-grid">
-          <article>
+          <article className="is-cooperation-project">
             <span className="transaction-association-icon" aria-hidden="true"><Building2 size={19} /></span>
             <div><small>所属关联项目</small><strong>{details.cooperationProjectName}</strong><span>{details.cooperationProjectCode}</span></div>
           </article>
-          <article>
+          <article className="is-request-project">
             <span className="transaction-association-icon" aria-hidden="true"><Layers3 size={19} /></span>
             <div><small>所属请款项目</small><strong>{details.requestCode}</strong><span>{details.requestStatus}</span></div>
           </article>
-          <article>
+          <article className="is-payment-batch">
             <span className="transaction-association-icon" aria-hidden="true"><ReceiptText size={19} /></span>
             <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{payout.provider} · {details.batchStatus}</span></div>
           </article>
@@ -151,7 +151,7 @@ export function TransactionDetailPage({
         </header>
         <div className="transaction-resource-list">
           <article className="transaction-resource-card">
-            <span className="transaction-resource-icon" aria-hidden="true"><FileText size={19} /></span>
+            <span className="transaction-resource-icon is-contract" aria-hidden="true"><FileText size={19} /></span>
             <div className="transaction-resource-heading">
               <strong>合同</strong>
               <small>{details.contracts.length ? `${details.contracts.length} 份关联文件` : '历史数据待补全'}</small>
