@@ -5,6 +5,7 @@ import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { PaymentExecutionWorkspace } from '../components/PaymentExecutionWorkspace';
 import { PaymentProviderBadges } from '../components/PaymentProviderBadge';
+import type { ContractRecord } from '../contracts';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import { paymentRequestProviderForChannel } from '../paymentRequestProjects';
@@ -15,7 +16,7 @@ import {
   sortPaymentCurrencyItems,
   type PaymentCurrencyItem,
 } from '../paymentCurrencyOverview';
-import type { GeneratedInvoiceRecord, Payout } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
@@ -509,12 +510,16 @@ export function PaymentWorkbenchPage({
   payouts,
   requests,
   generatedInvoices,
+  contracts = [],
+  creators = [],
   onNewBatch,
   onSelectPayout,
   onSelectPaidProject,
   onReviewRequest,
   onExecuteRequest,
   onReturnRequest,
+  onOpenContract,
+  onOpenInvoice,
   canCreateBatch,
   initialTab = 'review',
   currentDate = new Date(),
@@ -522,12 +527,16 @@ export function PaymentWorkbenchPage({
   payouts: Payout[];
   requests: RequestProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts?: ContractRecord[];
+  creators?: CreatorProfile[];
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
   onSelectPaidProject: (project: PaymentProjectRow) => void;
   onReviewRequest: (requestId: string) => void;
   onExecuteRequest: (payouts: Payout[]) => boolean;
   onReturnRequest: (requestId: string, reason: string) => boolean;
+  onOpenContract?: (request: RequestProjectSummary, contractId: string) => void;
+  onOpenInvoice?: (request: RequestProjectSummary, invoiceId: GeneratedInvoiceRecord['invoiceId']) => void;
   canCreateBatch: boolean;
   initialTab?: WorkbenchTab;
   currentDate?: Date;
@@ -800,6 +809,8 @@ export function PaymentWorkbenchPage({
           request={paymentExecutionRequest}
           project={paymentExecutionProject}
           generatedInvoices={generatedInvoices}
+          contracts={contracts}
+          creators={creators}
           variant={paymentExecutionVariant}
           canExecute={canCreateBatch}
           onExecute={(projectPayouts) => {
@@ -808,6 +819,8 @@ export function PaymentWorkbenchPage({
             return executed;
           }}
           onReturn={(reason) => onReturnRequest(paymentExecutionRequest.id, reason)}
+          onOpenContract={(contractId) => onOpenContract?.(paymentExecutionRequest, contractId)}
+          onOpenInvoice={(invoiceId) => onOpenInvoice?.(paymentExecutionRequest, invoiceId)}
           onClose={() => setPaymentExecutionProjectId(null)}
         />
       ) : null}

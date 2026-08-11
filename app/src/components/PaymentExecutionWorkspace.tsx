@@ -2,7 +2,9 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  Eye,
   FileText,
+  Files,
   Landmark,
   ReceiptText,
   Send,
@@ -11,12 +13,15 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState, type CSSProperties } from 'react';
+import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
 import { isPayoutPaymentInformationValidated } from '../invoice/invoiceReviewWorkflow';
+import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
-import type { GeneratedInvoiceRecord, Payout } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
+import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal } from './Common';
 import './PaymentExecutionWorkspace.css';
 
@@ -76,26 +81,48 @@ export function PaymentExecutionWorkspace({
   request,
   project,
   generatedInvoices,
+  contracts = [],
+  creators = [],
   variant = 'execution',
   canExecute,
   onExecute,
   onReturn,
+  onOpenContract,
+  onOpenInvoice,
   onClose,
 }: {
   request: RequestProjectSummary;
   project: PaymentProjectRow;
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts?: ContractRecord[];
+  creators?: CreatorProfile[];
   variant?: 'execution' | 'returned';
   canExecute: boolean;
   onExecute: (payouts: Payout[]) => boolean;
   onReturn: (reason: string) => boolean;
+  onOpenContract?: (contractId: string) => void;
+  onOpenInvoice?: (invoiceId: GeneratedInvoiceRecord['invoiceId']) => void;
   onClose: () => void;
 }) {
   const isReturned = variant === 'returned';
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
   const validatedPayouts = project.payouts.filter(isPayoutPaymentInformationValidated);
+  const linkedContracts = requestLinkedContracts(request, contracts);
+  const linkedInvoices = requestLinkedInvoices(request, generatedInvoices);
+  const accountValidationIssueCount = Math.max(0, project.payouts.length - validatedPayouts.length);
+  const accountValidationStatus = project.payouts.length === 0
+    ? 'empty'
+    : accountValidationIssueCount === 0
+      ? 'passed'
+      : 'warning';
+  const accountValidationLabel = accountValidationStatus === 'passed'
+    ? '已通过'
+    : accountValidationStatus === 'warning'
+      ? `${accountValidationIssueCount} 笔需处理`
+      : '暂无付款记录';
   const paymentProvider = project.paymentChannels[0] ?? '待确认';
   const projectBrand = request.generatedDetail?.brand ?? request.brand ?? '待补充';
   const requestReason = request.generatedDetail?.reason ?? '未单独填写';
@@ -329,38 +356,130 @@ export function PaymentExecutionWorkspace({
           </section>
         </main>
 
-          <aside className="payment-execution-approval payment-execution-board-card" aria-labelledby="payment-execution-approval-title">
-            <header>
-              <div>
-                <span className="payment-execution-section-icon"><ShieldCheck size={18} /></span>
+          <aside className="payment-execution-side" aria-label="审批与关联资料">
+            <section className="payment-execution-approval payment-execution-board-card" aria-labelledby="payment-execution-approval-title">
+              <header>
                 <div>
-                  <h2 id="payment-execution-approval-title">当前审批流</h2>
-                  <p>第 {request.approval?.round ?? 1} 轮 · {isReturned ? '请款已退回媒介修改' : '财务审批已完成'}</p>
-                </div>
-              </div>
-              <span className={isReturned ? 'is-returned' : ''}><CalendarClock size={14} />{isReturned ? '已退回' : '待执行'}</span>
-            </header>
-            <div className="payment-execution-approval-scroll" tabIndex={0} aria-label="付款审批流程">
-              {isReturned ? (
-                <div className="payment-execution-approval-return-note">
-                  <AlertTriangle size={17} />
+                  <span className="payment-execution-section-icon"><ShieldCheck size={18} /></span>
                   <div>
-                    <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
-                    <p>{hasScopedReturnItems
-                      ? `${returnedPayoutCount} 笔明细需要修改，具体原因请查看左侧对应达人卡片。`
-                      : `${returnedPayoutCount} 笔明细需要修改，其余 ${passedPayoutCount} 笔已通过审核。`}</p>
+                    <h2 id="payment-execution-approval-title">当前审批流</h2>
+                    <p>第 {request.approval?.round ?? 1} 轮 · {isReturned ? '请款已退回媒介修改' : '财务审批已完成'}</p>
                   </div>
                 </div>
-              ) : null}
-              <ApprovalTimeline
-                request={request}
-                paymentReady={!isReturned}
-                paymentProvider={paymentProvider}
-              />
-            </div>
+                <span className={isReturned ? 'is-returned' : ''}><CalendarClock size={14} />{isReturned ? '已退回' : '待执行'}</span>
+              </header>
+              <div className="payment-execution-approval-scroll" tabIndex={0} aria-label="付款审批流程">
+                {isReturned ? (
+                  <div className="payment-execution-approval-return-note">
+                    <AlertTriangle size={17} />
+                    <div>
+                      <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
+                      <p>{hasScopedReturnItems
+                        ? `${returnedPayoutCount} 笔明细需要修改，具体原因请查看左侧对应达人卡片。`
+                        : `${returnedPayoutCount} 笔明细需要修改，其余 ${passedPayoutCount} 笔已通过审核。`}</p>
+                    </div>
+                  </div>
+                ) : null}
+                <ApprovalTimeline
+                  request={request}
+                  paymentReady={!isReturned}
+                  paymentProvider={paymentProvider}
+                  compact
+                />
+              </div>
+            </section>
+
+            <section className="payment-execution-resources payment-execution-board-card" aria-labelledby="payment-execution-resources-title">
+              <header>
+                <div>
+                  <span className="payment-execution-section-icon"><Files size={18} /></span>
+                  <div>
+                    <h2 id="payment-execution-resources-title">关联资料</h2>
+                    <p>合同、Invoice 与收款账户校验汇总</p>
+                  </div>
+                </div>
+                <span>项目级汇总</span>
+              </header>
+              <div className="payment-execution-resource-list">
+                <div className="payment-execution-resource-row">
+                  <span className="payment-execution-resource-icon" aria-hidden="true"><FileText size={16} /></span>
+                  <strong>合同 · {linkedContracts.length} 份</strong>
+                  <button type="button" disabled={!linkedContracts.length} onClick={() => setResourceDialog('contract')}>查看合同</button>
+                </div>
+                <div className="payment-execution-resource-row">
+                  <span className="payment-execution-resource-icon" aria-hidden="true"><ReceiptText size={16} /></span>
+                  <strong>Invoice · {linkedInvoices.length} 份</strong>
+                  <button type="button" disabled={!linkedInvoices.length} onClick={() => setResourceDialog('invoice')}>查看 Invoice</button>
+                </div>
+                <div className="payment-execution-resource-row">
+                  <span className="payment-execution-resource-icon" aria-hidden="true"><Landmark size={16} /></span>
+                  <strong>收款账户校验结果</strong>
+                  <span className={`payment-execution-resource-status is-${accountValidationStatus}`}>{accountValidationLabel}</span>
+                </div>
+              </div>
+            </section>
           </aside>
         </div>
       </Modal>
+
+      {resourceDialog === 'contract' ? (
+        <Modal
+          title={`${request.requestCode ?? request.id} · 合同资料`}
+          width="1120px"
+          className="project-resource-modal request-resource-modal payment-execution-resource-modal"
+          onClose={() => setResourceDialog(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+        >
+          <div className="project-resource-browser">
+            <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
+            <div className="request-resource-flat-list">
+              {linkedContracts.map((contract) => {
+                const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const contractId = contract.contractId ?? contract.id;
+                return (
+                  <article className="request-resource-flat-row" key={contractId}>
+                    <span className="project-contract-record-icon"><FileText size={18} /></span>
+                    <div><strong>{contract.id}</strong><small>{contract.name}</small></div>
+                    <div><span>达人</span><strong>{creator?.name ?? contract.publisher ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorHandle ?? contract.creatorId}</small></div>
+                    <div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div>
+                    <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
+                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract?.(contract.id)}>查看</Button></div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {resourceDialog === 'invoice' ? (
+        <Modal
+          title={`${request.requestCode ?? request.id} · Invoice`}
+          width="1080px"
+          className="project-resource-modal request-resource-modal payment-execution-resource-modal"
+          onClose={() => setResourceDialog(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+        >
+          <div className="project-resource-browser">
+            <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
+            <div className="request-resource-flat-list">
+              {linkedInvoices.map((linkedInvoice) => {
+                const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                return (
+                  <article className="request-resource-flat-row request-resource-invoice-row" key={linkedInvoice.invoiceId}>
+                    <span className="project-contract-record-icon"><ReceiptText size={18} /></span>
+                    <div><strong>{linkedInvoice.id}</strong><small>{linkedInvoice.status}</small></div>
+                    <div><span>达人</span><strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small></div>
+                    <div><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong><small>{linkedInvoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div>
+                    <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>
+                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenInvoice?.(linkedInvoice.invoiceId)}>查看</Button></div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {!isReturned && returnDialogOpen ? (
         <Modal

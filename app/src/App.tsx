@@ -3758,6 +3758,8 @@ export default function App() {
           payouts={payouts}
           requests={requestProjects}
           generatedInvoices={generatedInvoices}
+          contracts={contracts}
+          creators={creators}
           initialTab={paymentWorkbenchInitialTab}
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}
@@ -3773,6 +3775,8 @@ export default function App() {
           onReviewRequest={openFinanceReview}
           onExecuteRequest={executePaymentRequest}
           onReturnRequest={returnPaymentRequestToMedia}
+          onOpenContract={(request, contractId) => requestResourceActions.onOpenContract(request, contractId)}
+          onOpenInvoice={(request, invoiceId) => requestResourceActions.onOpenInvoice(request, invoiceId)}
           canCreateBatch={canExecutePayouts}
         />
       );

@@ -52,9 +52,17 @@ body:has(.payment-execution-workspace) {
 }
 
 .payment-execution-main,
-.payment-execution-approval {
+.payment-execution-side,
+.payment-execution-approval,
+.payment-execution-resources {
   min-width: 0;
   min-height: 0;
+}
+
+.payment-execution-side {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
 }
 
 .payment-execution-board-card {
@@ -115,7 +123,8 @@ body:has(.payment-execution-workspace) {
 .payment-execution-project > header,
 .payment-execution-failure-card > header,
 .payment-execution-payees > header,
-.payment-execution-approval > header {
+.payment-execution-approval > header,
+.payment-execution-resources > header {
   display: flex;
   min-height: 64px;
   align-items: center;
@@ -129,7 +138,8 @@ body:has(.payment-execution-workspace) {
 .payment-execution-project > header > div,
 .payment-execution-failure-card > header > div,
 .payment-execution-payees > header > div,
-.payment-execution-approval > header > div {
+.payment-execution-approval > header > div,
+.payment-execution-resources > header > div {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
@@ -140,7 +150,8 @@ body:has(.payment-execution-workspace) {
 .payment-execution-project > header > div > div,
 .payment-execution-failure-card > header > div > div,
 .payment-execution-payees > header > div > div,
-.payment-execution-approval > header > div > div {
+.payment-execution-approval > header > div > div,
+.payment-execution-resources > header > div > div {
   min-width: 0;
 }
 
@@ -148,17 +159,20 @@ body:has(.payment-execution-workspace) {
 .payment-execution-failure-card h2,
 .payment-execution-payees h2,
 .payment-execution-approval h2,
+.payment-execution-resources h2,
 .payment-execution-project p,
 .payment-execution-failure-card p,
 .payment-execution-payees p,
-.payment-execution-approval p {
+.payment-execution-approval p,
+.payment-execution-resources p {
   margin: 0;
 }
 
 .payment-execution-project h2,
 .payment-execution-failure-card h2,
 .payment-execution-payees h2,
-.payment-execution-approval h2 {
+.payment-execution-approval h2,
+.payment-execution-resources h2 {
   color: #28313d;
   font-size: 16px;
   line-height: 1.4;
@@ -167,7 +181,8 @@ body:has(.payment-execution-workspace) {
 .payment-execution-project p,
 .payment-execution-failure-card p,
 .payment-execution-payees p,
-.payment-execution-approval p {
+.payment-execution-approval p,
+.payment-execution-resources p {
   margin-top: 3px;
   overflow: hidden;
   color: #7b8591;
@@ -198,7 +213,8 @@ body:has(.payment-execution-workspace) {
 
 .payment-execution-status,
 .payment-execution-payee-status,
-.payment-execution-approval > header > span {
+.payment-execution-approval > header > span,
+.payment-execution-resources > header > span {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -227,6 +243,16 @@ body:has(.payment-execution-workspace) {
   border-color: #edc7c0;
   background: #fff5f3;
   color: #a74339;
+}
+
+.payment-execution-resources > header > span {
+  min-height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #858d98;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .payment-execution-metrics {
@@ -648,31 +674,128 @@ body:has(.payment-execution-workspace) {
 }
 
 .payment-execution-approval .finance-approval-timeline {
+  width: min(100%, 540px);
+  margin: 0 auto;
   border: 0;
   border-radius: 0;
 }
 
-.payment-execution-approval .finance-approval-step {
-  gap: 10px;
-  padding: 16px 14px;
+.payment-execution-approval .finance-approval-timeline.is-compact {
+  min-height: 348px;
+  padding: 10px 14px;
 }
 
-.payment-execution-approval .finance-approval-stage strong,
-.payment-execution-approval .finance-approval-actor strong {
-  font-size: 14px;
+.payment-execution-approval .finance-approval-timeline.is-compact .finance-approval-step {
+  padding: 8px 6px;
+}
+
+.payment-execution-approval .finance-approval-timeline.is-compact .finance-approval-stage strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.payment-execution-approval .finance-approval-timeline.is-compact .finance-approval-stage > span {
+  font-size: 10px;
+}
+
+.payment-execution-resources {
+  overflow: hidden;
+  background: #fff;
+}
+
+.payment-execution-resource-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.payment-execution-resource-row {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 9px;
+  border: 1px solid #dfe3e8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 11px;
+}
+
+.payment-execution-resource-icon {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #f5f2fb;
+  color: #715b9d;
+}
+
+.payment-execution-resource-row > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #333b46;
+  font-size: 13px;
+  font-weight: 650;
   line-height: 1.4;
 }
 
-.payment-execution-approval .finance-approval-stage p,
-.payment-execution-approval .finance-approval-actor small,
-.payment-execution-approval .finance-approval-step time {
+.payment-execution-resource-row > button {
+  border: 0;
+  background: transparent;
+  padding: 7px 2px 7px 8px;
+  color: #715b9d;
+  cursor: pointer;
+  font: inherit;
   font-size: 12px;
-  line-height: 1.5;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
-.payment-execution-approval .finance-approval-stage > div > span,
-.payment-execution-approval .finance-approval-actor > span {
-  font-size: 12px;
+.payment-execution-resource-row > button:hover,
+.payment-execution-resource-row > button:focus-visible {
+  color: #4f3977;
+  text-decoration: underline;
+}
+
+.payment-execution-resource-row > button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(113, 91, 157, 0.28);
+  outline-offset: 2px;
+}
+
+.payment-execution-resource-row > button:disabled {
+  color: #a8afb8;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.payment-execution-resource-status {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.payment-execution-resource-status.is-passed {
+  background: #e8f6ee;
+  color: #2f7d58;
+}
+
+.payment-execution-resource-status.is-warning {
+  background: #fff0eb;
+  color: #ad5334;
+}
+
+.payment-execution-resource-status.is-empty {
+  background: #f0f2f4;
+  color: #737c88;
 }
 
 .payment-execution-footer {
@@ -816,13 +939,21 @@ body:has(.payment-execution-workspace) {
     overflow: visible;
   }
 
-  .payment-execution-approval {
-    min-height: 680px;
+  .payment-execution-side {
+    grid-template-rows: auto auto;
     margin-top: 14px;
+  }
+
+  .payment-execution-approval {
+    min-height: 0;
   }
 
   .payment-execution-approval-scroll {
     overflow: visible;
+  }
+
+  .payment-execution-approval .finance-approval-timeline {
+    width: 100%;
   }
 }
 
@@ -874,6 +1005,16 @@ body:has(.payment-execution-workspace) {
   .payment-execution-payee > dl > div.is-account,
   .payment-execution-payee > dl > div.is-money {
     grid-column: 1 / -1;
+  }
+
+  .payment-execution-resource-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .payment-execution-resource-row > button,
+  .payment-execution-resource-status {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .payment-execution-footer {
