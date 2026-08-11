@@ -137,4 +137,54 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).toContain('选择达人档案中的已验证账户后');
     expect(html).toContain('保存并重新发起签署');
   });
+
+  it('unlocks payout account and payment method for the scoped finance Invoice return', () => {
+    const record = PROJECT_DEMO_INVOICES[0]!;
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="PROJECT_RESOURCE"
+        allowPayoutAccountChange
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    const payoutAccountTrigger = html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0];
+    const paymentMethodTrigger = html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0];
+    expect(html).toContain('财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。');
+    expect(html).toContain('同步刷新对应付款明细');
+    expect(payoutAccountTrigger).not.toContain('disabled');
+    expect(paymentMethodTrigger).not.toContain('disabled');
+  });
+
+  it('keeps contract payout fields locked without a scoped finance override', () => {
+    const record = PROJECT_DEMO_INVOICES[0]!;
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="PROJECT_RESOURCE"
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    expect(html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0]).toContain('disabled');
+    expect(html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0]).toContain('disabled');
+    expect(html).toContain('已锁定，不能静默切换到达人最新账户');
+  });
 });

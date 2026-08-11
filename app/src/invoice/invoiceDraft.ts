@@ -17,6 +17,7 @@ export const payoutSnapshotKey = (snapshot: DocumentPayoutSnapshot) => (
 export const validateInvoiceDocumentModel = (
   model: InvoiceDocumentModel,
   selectedContracts: ContractRecord[],
+  options: { allowContractPayoutOverride?: boolean } = {},
 ) => {
   const errors: Record<string, string> = {};
 
@@ -38,10 +39,11 @@ export const validateInvoiceDocumentModel = (
     .map(payoutSnapshotForContract)
     .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
   const contractSnapshotKeys = new Set(contractSnapshots.map(payoutSnapshotKey));
-  if (contractSnapshotKeys.size > 1) {
+  if (!options.allowContractPayoutOverride && contractSnapshotKeys.size > 1) {
     errors.payoutAccountId = '所选合同冻结了不同的收款账户版本，不能合并生成同一张 Invoice';
   } else if (
-    contractSnapshots[0]
+    !options.allowContractPayoutOverride
+    && contractSnapshots[0]
     && payoutSnapshotKey(contractSnapshots[0]) !== payoutSnapshotKey(model.payment)
   ) {
     errors.payoutAccountId = 'Invoice 收款账户与合同冻结版本不一致，请重新选择合同或账户';
@@ -90,7 +92,9 @@ export const validateInvoiceDocumentModel = (
       amount: model.items.reduce((total, item) => total + item.lineTotal, 0),
       paymentMethod: model.paymentMethod === 'paypal' ? 'PAYPAL' : 'BANK',
     },
-  ).forEach((issue) => {
+  ).filter((issue) => (
+    !options.allowContractPayoutOverride || issue.field !== 'paymentMethod'
+  )).forEach((issue) => {
     errors[`contract-${issue.field}`] = issue.message;
   });
 

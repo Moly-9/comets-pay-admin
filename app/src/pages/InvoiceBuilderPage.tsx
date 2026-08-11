@@ -76,6 +76,7 @@ type InvoiceBuilderPageProps = {
   onGenerated?: (record: GeneratedInvoiceRecord) => void;
   editRecord?: GeneratedInvoiceRecord;
   editContext?: InvoiceEditContext;
+  allowPayoutAccountChange?: boolean;
   onEdited?: (snapshot: InvoiceDocumentModel) => GeneratedInvoiceRecord;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel: () => void;
@@ -141,6 +142,7 @@ export function InvoiceBuilderPage({
   onGenerated,
   editRecord,
   editContext,
+  allowPayoutAccountChange = false,
   onEdited,
   onDirtyChange,
   onCancel,
@@ -242,15 +244,14 @@ export function InvoiceBuilderPage({
   const selectedContractPayoutSnapshots = selectedContracts
     .map(payoutSnapshotForContract)
     .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
-  const contractPayoutLocked = selectedContractPayoutSnapshots.length > 0;
+  const contractPayoutLocked = selectedContractPayoutSnapshots.length > 0 && !allowPayoutAccountChange;
   const engagementInvoiceReferences = generatedInvoices.map((record) => ({
     invoiceId: record.invoiceId,
     engagementId: record.snapshot.engagementId as EngagementId | undefined,
   }));
-  const existingInvoice = hasInvoiceForEngagement(
+  const existingInvoice = !isEditing && hasInvoiceForEngagement(
     engagementInvoiceReferences,
     engagementId as EngagementId | '',
-    editRecord?.invoiceId,
   )
     ? generatedInvoices.find((record) => record.snapshot.engagementId === engagementId)
     : undefined;
@@ -441,7 +442,9 @@ export function InvoiceBuilderPage({
   };
 
   const validate = () => {
-    const nextErrors = validateInvoiceDocumentModel(model, selectedContracts);
+    const nextErrors = validateInvoiceDocumentModel(model, selectedContracts, {
+      allowContractPayoutOverride: allowPayoutAccountChange,
+    });
     if (!creatorId) nextErrors.creator = '请选择达人';
     if (!engagementId) nextErrors.project = '请选择该达人关联的项目';
     if (existingInvoice) nextErrors.project = `该项目达人已有 Invoice ${existingInvoice.id}，请先解除旧关联。`;
@@ -650,7 +653,9 @@ export function InvoiceBuilderPage({
               <div>
                 <h2>4. 收款方式</h2>
                 <p>
-                  {requiresPayoutAccountSelection
+                  {allowPayoutAccountChange
+                    ? '财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。'
+                    : requiresPayoutAccountSelection
                     ? '付款失败重新发起时，必须从达人档案中重新选择已验证账户。'
                     : contractPayoutLocked
                       ? '已继承关联合同冻结的账户版本；付款字段仅供核对。'
@@ -672,7 +677,9 @@ export function InvoiceBuilderPage({
                 />
                 <small>{errors.payoutAccountId}</small>
                 <p className="invoice-payout-account-note">
-                  {contractPayoutLocked
+                  {allowPayoutAccountChange
+                    ? '保存后将冻结新的账户 ID、版本与付款快照，并同步刷新对应付款明细。'
+                    : contractPayoutLocked
                     ? `合同账户版本 ${payment.payoutAccountVersion ?? 'legacy-v1'} 已锁定，不能静默切换到达人最新账户。`
                     : '选择达人档案中的已验证账户后，将冻结账户 ID、版本与付款快照。'}
                 </p>

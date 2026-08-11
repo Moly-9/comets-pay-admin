@@ -192,6 +192,7 @@ import {
   canReviewRequestApproval,
   createRequestApprovalState,
   REQUEST_APPROVAL_STATUS_LABEL,
+  requestApprovalAllowsInvoicePayoutOverride,
   requestApprovalHasScopedReturnItems,
   requestApprovalReturnItemForInvoice,
   requestApprovalStage,
@@ -3597,6 +3598,13 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           editRecord={editRecord}
           editContext={invoiceEditTarget.context}
+          allowPayoutAccountChange={Boolean(
+            invoiceEditTarget.context === 'PROJECT_RESOURCE'
+            && requestApprovalAllowsInvoicePayoutOverride(
+              editableReturnedRequestForInvoice(editRecord.invoiceId)?.approval,
+              editRecord.invoiceId,
+            )
+          )}
           onEdited={saveInvoiceEdit}
           onDirtyChange={setInvoiceEditorDirty}
           onCancel={() => {

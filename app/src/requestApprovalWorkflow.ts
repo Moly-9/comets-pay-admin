@@ -88,6 +88,13 @@ export const requestApprovalReturnItemForInvoice = (
   && (!issueType || item.issueType === issueType)
 ));
 
+export const requestApprovalAllowsInvoicePayoutOverride = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+) => state?.status === 'RETURNED_TO_MEDIA_REVIEW' && Boolean(
+  requestApprovalReturnItemForInvoice(state, invoiceId, 'INVOICE_CONTENT'),
+);
+
 export const requestApprovalStage = (
   status: RequestApprovalStatus,
 ) => STATUS_STAGE[status] ?? null;

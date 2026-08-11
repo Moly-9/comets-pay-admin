@@ -5,6 +5,7 @@ import {
   canReturnRequestApproval,
   canReviewRequestApproval,
   createRequestApprovalState,
+  requestApprovalAllowsInvoicePayoutOverride,
   requestApprovalHasScopedReturnItems,
   requestApprovalReturnItemForInvoice,
   requestApprovalReturnDetails,
@@ -124,11 +125,39 @@ describe('request approval workflow', () => {
     expect(requestApprovalHasScopedReturnItems(returned)).toBe(true);
     expect(requestApprovalReturnItemForInvoice(returned, 'stable-invoice-id' as never, 'PAYMENT_LIST'))
       .toMatchObject({ invoiceNumber: 'INV-TEST' });
+    expect(requestApprovalAllowsInvoicePayoutOverride(returned, 'stable-invoice-id' as never)).toBe(false);
     const resubmitted = createRequestApprovalState('2026-08-10T05:00:00.000Z', returned);
     expect(resubmitted.status).toBe('PENDING_FINANCE');
     expect(resubmitted.round).toBe(2);
     expect(requestApprovalReturnDetails(resubmitted)).toBeNull();
     expect(resubmitted.returnItems).toBeUndefined();
+  });
+
+  it('allows payout override only for the returned Invoice-content detail', () => {
+    const finance = userFor('finance');
+    const invoiceId = 'invoice-content-return-id' as never;
+    const returned = applyRequestApprovalAction(
+      { ...createRequestApprovalState(), status: 'PENDING_FINANCE' },
+      'RETURN',
+      finance,
+      'Invoice 收款账户需要修改',
+      '2026-08-10T07:00:00.000Z',
+      [{
+        pageKey: 'invoice:invoice-content-return-id',
+        invoiceId,
+        invoiceNumber: 'INV-RETURN-01',
+        issueType: 'INVOICE_CONTENT',
+        reason: 'Invoice 收款账户需要修改',
+        paymentItems: [],
+      }],
+    );
+
+    expect(requestApprovalAllowsInvoicePayoutOverride(returned, invoiceId)).toBe(true);
+    expect(requestApprovalAllowsInvoicePayoutOverride(returned, 'another-invoice-id' as never)).toBe(false);
+    expect(requestApprovalAllowsInvoicePayoutOverride(
+      { ...returned, status: 'PENDING_FINANCE' },
+      invoiceId,
+    )).toBe(false);
   });
 
   it('returns an approved unpaid request from payment execution back to finance review', () => {
