@@ -519,7 +519,7 @@ export function InvoiceBuilderPage({
       />
       <NoticeBanner>
         {isEditing
-          ? `正在修改 ${editRecord?.id} · v${editRecord?.version ?? 1}。达人、项目、Invoice 编号及内部 ID 已锁定；版本历史仅在当前浏览器会话保留。`
+          ? `正在修改 ${editRecord?.id} · v${editRecord?.version ?? 1}。达人、项目及 Invoice 编号已锁定；版本历史仅在当前浏览器会话保留。`
           : '生成文件会保留空白签名区；当前为前端原型，生成记录仅在本次会话内保留。'}
       </NoticeBanner>
       {Object.keys(errors).length > 0 ? (
@@ -554,18 +554,6 @@ export function InvoiceBuilderPage({
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>
-            {isEditing && editRecord ? (
-              <div className="invoice-form-grid">
-                <label>
-                  <span>Invoice ID（锁定）</span>
-                  <input value={editRecord.invoiceId} readOnly />
-                </label>
-                <label>
-                  <span>Source Payout ID（锁定）</span>
-                  <input value={editRecord.sourcePayoutId} readOnly />
-                </label>
-              </div>
-            ) : null}
             {engagementId ? (
               <div className="invoice-contract-coverage">
                 <div className="invoice-contract-coverage-head">

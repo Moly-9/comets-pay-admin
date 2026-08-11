@@ -33,7 +33,7 @@ describe('InvoiceBuilderPage create mode', () => {
 });
 
 describe('InvoiceBuilderPage edit mode', () => {
-  it('prefills and locks stable identity fields without enabling an unchanged save', () => {
+  it('prefills business identity fields without exposing internal IDs or enabling an unchanged save', () => {
     const record = PROJECT_DEMO_INVOICES[0]!;
     const html = renderToStaticMarkup(
       <InvoiceBuilderPage
@@ -53,10 +53,11 @@ describe('InvoiceBuilderPage edit mode', () => {
 
     expect(html).toContain('修改 Invoice');
     expect(html).toContain(record.id);
-    expect(html).toContain(record.invoiceId);
-    expect(html).toContain(record.sourcePayoutId);
-    expect(html).toContain('Invoice ID（锁定）');
-    expect(html).toContain('Source Payout ID（锁定）');
+    expect(html).not.toContain(record.invoiceId);
+    expect(html).not.toContain(record.sourcePayoutId);
+    expect(html).not.toContain('Invoice ID（锁定）');
+    expect(html).not.toContain('Source Payout ID（锁定）');
+    expect(html).toContain('达人、项目及 Invoice 编号已锁定');
     expect(html).toContain('保存并重新发送达人');
     expect(html).toMatch(/<button[^>]*disabled[^>]*>.*保存并重新发送达人/s);
     expect(html).toContain('role="group"');
@@ -84,8 +85,8 @@ describe('InvoiceBuilderPage edit mode', () => {
 
     expect(html).toContain('修改 Invoice');
     expect(html).toContain('INV-240705');
-    expect(html).toContain('invoice_fixture_edit_pay_013');
-    expect(html).toContain('pay-013');
+    expect(html).not.toContain('invoice_fixture_edit_pay_013');
+    expect(html).not.toContain('pay-013');
     expect(html).toContain('value="2440"');
     expect(html).toContain('保存修改并重新签署');
   });
