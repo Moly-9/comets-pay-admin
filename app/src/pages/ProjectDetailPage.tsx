@@ -569,7 +569,7 @@ function getProjectDetail(project: ProjectSummary, creatorArchive: CreatorProfil
   const hasPaymentOrder = Boolean(project.paymentOrder && project.paymentOrder !== '待生成');
   return {
     media: project.media,
-    requestReason: project.requestReason || '尚未填写请款原因。',
+    requestReason: project.requestReason || '尚未填写付款事由。',
     createdAt: '已从项目系统同步',
     updatedAt: '今天',
     contract: {
@@ -1095,7 +1095,7 @@ export function ProjectDetailPage({
         <div className="project-detail-main">
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>项目基础信息</h2><p>项目主体、负责人及请款背景。</p></div>
+              <div><h2>项目基础信息</h2><p>项目主体、负责人及付款背景。</p></div>
               <span>更新于 {detail.updatedAt}</span>
             </header>
             <dl className="project-info-grid">
@@ -1104,7 +1104,7 @@ export function ProjectDetailPage({
               <div><dt>项目媒介</dt><dd>{detail.media}</dd></div>
               <div><dt>负责 PM</dt><dd>{project.pm}</dd></div>
               <div><dt>创建时间</dt><dd>{detail.createdAt}</dd></div>
-              <div className="project-info-full"><dt>请款原因</dt><dd>{detail.requestReason}</dd></div>
+              <div className="project-info-full"><dt>付款事由</dt><dd>{detail.requestReason}</dd></div>
             </dl>
           </section>
 

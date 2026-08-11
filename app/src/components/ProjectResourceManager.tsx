@@ -45,9 +45,9 @@ import {
   getPayoutAccountId,
   getPayoutAccountIdentifier,
 } from '../payoutAccounts';
+import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
-import { PaymentProviderBadge } from './PaymentProviderBadge';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
 type CreateDialogKind = 'invoice';
@@ -812,7 +812,7 @@ export function ProjectResourceManager({
                         <header className="project-payment-row-header">
                           <div>
                             <strong>{item.snapshot.creatorName}</strong>
-                            <span>{item.snapshot.invoiceNumber} · <PaymentProviderBadge compact provider={effectiveAccount.provider} /></span>
+                            <span>{item.snapshot.invoiceNumber} · {effectiveAccount.provider}</span>
                           </div>
                           <div className="project-payment-row-actions">
                             {paymentFieldsEditable && item.requiresRevalidation ? (
@@ -862,11 +862,25 @@ export function ProjectResourceManager({
                           </label>
                           <label>
                             <span>支付币种</span>
-                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'currency', event.target.value.toUpperCase())} />
+                            <SelectField
+                              ariaLabel={`${item.snapshot.creatorName} 支付币种`}
+                              variant="form"
+                              value={String(paymentListItemValue(item, 'currency'))}
+                              options={PAYMENT_CURRENCY_OPTIONS}
+                              disabled={!paymentFieldsEditable}
+                              onChange={(value) => onUpdatePaymentItem(item.invoiceId, 'currency', value)}
+                            />
                           </label>
                           <label>
                             <span>收款币种</span>
-                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} />
+                            <SelectField
+                              ariaLabel={`${item.snapshot.creatorName} 收款币种`}
+                              variant="form"
+                              value={String(paymentListItemValue(item, 'receiveCurrency'))}
+                              options={PAYMENT_CURRENCY_OPTIONS}
+                              disabled={!paymentFieldsEditable}
+                              onChange={(value) => onUpdatePaymentItem(item.invoiceId, 'receiveCurrency', value)}
+                            />
                           </label>
                           <label>
                             <span>金额</span>

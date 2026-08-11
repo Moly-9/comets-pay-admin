@@ -16,6 +16,7 @@ import {
   FileText,
   Files,
   Link2,
+  ListFilter,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -46,6 +47,7 @@ import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
@@ -83,6 +85,7 @@ import type {
   GeneratedInvoiceRecord,
   InvoiceEditContext,
   InvoiceEntity,
+  PaymentFailureIssueType,
   Payout,
   PayoutAccountStatus,
 } from '../types';
@@ -117,10 +120,11 @@ import type { RequestApprovalReminderSummary } from '../requestApprovalReminders
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
+  findTransactionBatchContext,
   filterTransactionRecords,
-  isFinalTransaction,
-  type TransactionProvider,
+  isPaymentTransactionRecord,
   type TransactionTab,
+  type TransactionProvider,
 } from '../transactionRecords';
 import {
   loadTransactionRecordsWorkbook,
@@ -131,7 +135,16 @@ import {
   paymentBatchStatusCounts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
+import {
+  ALL_PAYMENT_STATUSES,
+  PAYMENT_STATUS_FILTER_OPTIONS,
+  aggregatePaymentStatus,
+  matchesPaymentStatus,
+  type PaymentAggregateStatus,
+  type PaymentStatusFilter,
+} from '../paymentStatusFilters';
 import { PaymentBatchDetailPage } from './PaymentBatchDetailPage';
+import { TransactionDetailPage } from './TransactionDetailPage';
 import './TransactionsPage.css';
 
 type Notify = (title: string, message: string) => void;
@@ -265,7 +278,7 @@ function MetricCard({ label, value, meta, tone = 'plain' }: { label: string; val
   return <article className={`metric-card metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{meta}</small></article>;
 }
 
-type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'draft' | 'default';
+type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'failure' | 'draft' | 'default';
 
 const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '执行中': 'active',
@@ -287,6 +300,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
+  '部分打款失败': 'failure',
   '已完成': 'complete',
   '已付款': 'complete',
   '已归档': 'complete',
@@ -914,8 +928,8 @@ export function ProjectsPage({
               />
             </div>
             <label>
-              <span>请款原因</span>
-              <textarea placeholder="填写本项目的请款背景或用途" value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
+              <span>付款事由</span>
+              <textarea placeholder="填写本项目的付款背景或用途" value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
             </label>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta">
@@ -2448,7 +2462,7 @@ export function CreatorsPage({
                           <strong>{status.label}</strong>
                           {defaultAccount ? (
                             <span className="payout-list-provider">
-                              <PaymentProviderBadge compact provider={defaultAccount.provider} />
+                              <PaymentProviderBadge className="payout-list-provider-badge" compact provider={defaultAccount.provider} />
                               <small>{defaultAccount.nickname}</small>
                             </span>
                           ) : <small>尚未建立收款账户</small>}
@@ -2910,7 +2924,7 @@ export type PaymentBatchRow = {
   amount: string;
   payer: string;
   paidAt: string;
-  status: PaymentBatchRecord['status'];
+  status: PaymentAggregateStatus;
 };
 
 export type PaymentBatchFilters = {
@@ -2918,6 +2932,7 @@ export type PaymentBatchFilters = {
   start: string;
   end: string;
   provider: string;
+  status?: PaymentStatusFilter;
 };
 
 const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
@@ -2925,7 +2940,10 @@ const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明�
 export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
 export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
-export const paymentBatchRows = (batches: readonly PaymentBatchRecord[]): PaymentBatchRow[] => (
+export const paymentBatchRows = (
+  batches: readonly PaymentBatchRecord[],
+  payouts: readonly Payout[] = [],
+): PaymentBatchRow[] => (
   batches.map((batch) => ({
     paymentBatchId: batch.paymentBatchId,
     id: batch.paymentBatchCode,
@@ -2934,7 +2952,12 @@ export const paymentBatchRows = (batches: readonly PaymentBatchRecord[]): Paymen
     amount: paymentBatchAmountLabel(batch),
     payer: batch.payer,
     paidAt: batch.paidAt,
-    status: batch.status,
+    status: (() => {
+      const itemStatuses = batch.items.map((item) => (
+        payouts.find((payout) => payout.id === item.payoutId)?.status ?? item.paymentStatus
+      ));
+      return aggregatePaymentStatus(itemStatuses, batch.status);
+    })(),
   }))
 );
 
@@ -2956,6 +2979,7 @@ export const filterPaymentBatchRows = (
     && (!filters.start || row.paidAt >= filters.start)
     && (!filters.end || row.paidAt <= filters.end)
     && (filters.provider === 'all' || row.provider === filters.provider)
+    && matchesPaymentStatus(row.status, filters.status ?? ALL_PAYMENT_STATUSES)
   ));
 };
 
@@ -3009,17 +3033,34 @@ export const loadPaymentDataRecord = async (
 
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
 
-const paymentBatchStatusTone = (status: PaymentBatchRecord['status']) => {
-  if (status === '部分失败') return 'is-danger';
+const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
+  if (status === '部分失败' || status === '全部失败') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   return 'is-success';
 };
 
-export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { batches: readonly PaymentBatchRecord[]; onNewBatch: () => void; notify: Notify; canCreateBatch: boolean }) {
+export function BatchesPage({
+  batches,
+  payouts = [],
+  onNewBatch,
+  notify,
+  canCreateBatch,
+  onReturnPayout,
+  onOpenFailurePaymentList,
+}: {
+  batches: readonly PaymentBatchRecord[];
+  payouts?: readonly Payout[];
+  onNewBatch: () => void;
+  notify: Notify;
+  canCreateBatch: boolean;
+  onReturnPayout?: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
+  onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
+}) {
   const [search, setSearch] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [provider, setProvider] = useState('all');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -3030,20 +3071,21 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
   const listScrollPositionRef = useRef(0);
-  const rows = useMemo(() => paymentBatchRows(batches), [batches]);
+  const rows = useMemo(() => paymentBatchRows(batches, payouts), [batches, payouts]);
   const filteredRows = useMemo(() => filterPaymentBatchRows(rows, {
     search,
     start,
     end,
     provider,
-  }), [end, provider, rows, search, start]);
+    status: paymentStatus,
+  }), [end, paymentStatus, provider, rows, search, start]);
   const {
     page: batchPage,
     pageItems: visibleRows,
     pageSize: batchPageSize,
     setPage: setBatchPage,
     setPageSize: setBatchPageSize,
-  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}` });
+  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}\u0000${paymentStatus}` });
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
   const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
   const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
@@ -3192,7 +3234,7 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
 
   if (selectedBatchId) {
-    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} onBack={closeBatchDetail} />;
+    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} payouts={payouts} canHandleFailure={canCreateBatch} onBack={closeBatchDetail} onReturnPayout={onReturnPayout} onOpenFailurePaymentList={onOpenFailurePaymentList} />;
     return (
       <div className="page-stack payment-batch-detail-page">
         <button className="project-back-button payment-batch-detail-back" type="button" onClick={closeBatchDetail}>
@@ -3229,6 +3271,13 @@ export function BatchesPage({ batches, onNewBatch, notify, canCreateBatch }: { b
               <input aria-label="付款结束时间" type="datetime-local" step="60" value={end} onChange={(event) => updateEnd(event.target.value)} />
             </label>
           </div>
+          <SelectField
+            ariaLabel="付款状态筛选"
+            className="payment-batch-status-filter"
+            value={paymentStatus}
+            options={PAYMENT_STATUS_FILTER_OPTIONS}
+            onChange={setPaymentStatus}
+          />
           <SelectField
             ariaLabel="付款渠道筛选"
             className="payment-batch-channel-filter"
@@ -3372,22 +3421,43 @@ const TRANSACTION_PROVIDER_OPTIONS = [
   { value: 'PayMax', label: 'PayMax' },
 ] as const;
 
-export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[]; onSelectPayout: (payout: Payout) => void }) {
+const TRANSACTION_PAID_STATUS_OPTIONS = [
+  { value: ALL_PAYMENT_STATUSES, label: ALL_PAYMENT_STATUSES },
+  { value: '已付款', label: '已付款' },
+  { value: '付款处理中', label: '付款处理中' },
+] as const satisfies ReadonlyArray<{ value: PaymentStatusFilter; label: string }>;
+
+export function TransactionsPage({
+  payouts,
+  paymentBatches,
+}: {
+  payouts: Payout[];
+  paymentBatches: readonly PaymentBatchRecord[];
+}) {
   const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
   const [provider, setProvider] = useState<TransactionProvider>('all');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [detailPayoutId, setDetailPayoutId] = useState<string | null>(null);
+  const detailReturnIdRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const transactions = payouts.filter(isFinalTransaction);
+  const transactions = payouts.filter(isPaymentTransactionRecord);
   const visible = filterTransactionRecords(payouts, {
     tab,
+    status: tab === 'paid' ? paymentStatus : ALL_PAYMENT_STATUSES,
     search,
     provider,
     startDate,
     endDate,
-  });
+  }, paymentBatches);
+  const selectedTransactions = transactions.filter((payout) => selectedIds.has(payout.id));
+  const detailPayout = detailPayoutId
+    ? transactions.find((payout) => payout.id === detailPayoutId) ?? null
+    : null;
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
   const paidCurrencies = aggregatePayoutCurrencies(paid, true);
@@ -3414,11 +3484,48 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
     setEndDate(value);
     if (value && startDate && value < startDate) setStartDate(value);
   };
+  const updateTab = (nextTab: TransactionTab) => {
+    setTab(nextTab);
+    setPaymentStatus(ALL_PAYMENT_STATUSES);
+  };
+  const toggleTransaction = (payoutId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(payoutId);
+      else next.delete(payoutId);
+      return next;
+    });
+  };
+  const toggleTransactions = (payoutIds: readonly string[], checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      payoutIds.forEach((payoutId) => {
+        if (checked) next.add(payoutId);
+        else next.delete(payoutId);
+      });
+      return next;
+    });
+  };
+  const openTransactionDetail = (payout: Payout) => {
+    detailReturnIdRef.current = payout.id;
+    setDetailPayoutId(payout.id);
+  };
+  const closeTransactionDetail = () => {
+    const returnId = detailReturnIdRef.current;
+    setDetailPayoutId(null);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!returnId) return;
+        const button = document.querySelector<HTMLButtonElement>(`[data-transaction-detail="${returnId}"]`);
+        button?.focus();
+      });
+    });
+  };
   const exportTransactions = async () => {
     setExporting(true);
     setExportError('');
     try {
-      const workbook = await loadTransactionRecordsWorkbook(visible);
+      const workbook = await loadTransactionRecordsWorkbook(selectedTransactions);
       downloadBlob(workbook, transactionRecordsFilename());
     } catch (error) {
       setExportError(error instanceof Error ? error.message : '交易流水导出失败，请稍后重试');
@@ -3427,9 +3534,19 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
     }
   };
 
+  if (detailPayout) {
+    return (
+      <TransactionDetailPage
+        payout={detailPayout}
+        context={findTransactionBatchContext(detailPayout, paymentBatches)}
+        onBack={closeTransactionDetail}
+      />
+    );
+  }
+
   return (
     <div className="page-stack transactions-page">
-      <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与最终状态。" />
+      <PageHeading title="交易记录" subtitle="查询每笔达人付款的渠道流水、币种与付款状态。" />
       <section className="summary-surface" aria-label="交易概览">
         <PaymentCurrencySummaryCard
           items={paidCurrencies}
@@ -3443,7 +3560,7 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
           className="summary-card summary-card-lilac payment-workbench-summary-card transaction-channel-summary-card"
           aria-label="渠道付款成功率"
         >
-          <span className="summary-illustration"><Check size={26} /></span>
+          <span className="summary-illustration"><CheckCircle2 size={26} /></span>
           <div className="payment-summary-content">
             <div className="payment-summary-primary">
               <strong>{successRate}</strong>
@@ -3453,7 +3570,7 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
           <ul className="payment-summary-secondary transaction-channel-summary-details" aria-label="各渠道付款成功率">
             {providerSuccessRates.map((item) => (
               <li className="transaction-channel-summary-row" key={item.provider}>
-                <PaymentProviderBadge compact provider={item.provider} />
+                <span>{item.provider}</span>
                 <span>{item.successRate}</span>
                 <small>{item.failedCount} 笔失败</small>
               </li>
@@ -3463,9 +3580,9 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
       </section>
       <section className="content-card">
         <div className="tabs-row" role="tablist" aria-label="交易状态">
-          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>全部</button>
-          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => setTab('paid')}>已付款</button>
-          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => setTab('failed')}>付款失败</button>
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => updateTab('all')}><span>全部</span></button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => updateTab('paid')}><span>已付款</span></button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => updateTab('failed')}><span>付款失败</span></button>
         </div>
         <div className="transaction-filter-row">
           <label className="search-control transaction-search">
@@ -3473,7 +3590,7 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
             <input
               type="search"
               aria-label="搜索交易记录"
-              placeholder="搜索达人、项目、Invoice 等"
+              placeholder="搜索达人、项目、Invoice、批次号"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -3490,6 +3607,15 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
               <input type="date" value={endDate} onChange={(event) => updateEndDate(event.target.value)} />
             </label>
           </div>
+          {tab === 'paid' ? (
+            <SelectField<PaymentStatusFilter>
+              ariaLabel="付款状态"
+              className="transaction-status-select"
+              value={paymentStatus}
+              options={TRANSACTION_PAID_STATUS_OPTIONS}
+              onChange={setPaymentStatus}
+            />
+          ) : null}
           <SelectField<TransactionProvider>
             ariaLabel="付款渠道"
             className="transaction-provider-select"
@@ -3497,22 +3623,31 @@ export function TransactionsPage({ payouts, onSelectPayout }: { payouts: Payout[
             options={TRANSACTION_PROVIDER_OPTIONS}
             onChange={setProvider}
           />
-          <span className="transaction-filter-result" aria-live="polite">当前显示 {visible.length} 条记录</span>
+          <span className="transaction-filter-result" aria-live="polite"><ListFilter size={14} aria-hidden="true" />当前显示 {visible.length} 条记录</span>
+          {selectedTransactions.length ? (
+            <span className="transaction-selection-summary" aria-live="polite">
+              <strong>已选 {selectedTransactions.length} 条</strong>
+              <button className="transaction-selection-clear" type="button" onClick={() => setSelectedIds(new Set())}>清空</button>
+            </span>
+          ) : null}
           <Button
             className="transaction-export-button"
             variant="secondary"
             icon={<Download size={16} />}
-            disabled={exporting || !visible.length}
+            disabled={exporting || !selectedTransactions.length}
             onClick={exportTransactions}
           >
-            {exporting ? '导出中...' : '导出流水'}
+            {exporting ? '导出中...' : `导出已选（${selectedTransactions.length}）`}
           </Button>
         </div>
         {exportError ? <p className="transaction-export-error" role="alert">{exportError}</p> : null}
-        <PayoutTable
+        <TransactionRecordsTable
           payouts={visible}
-          onSelect={onSelectPayout}
-          emptyText="暂无符合当前搜索与筛选条件的交易记录"
+          paymentBatches={paymentBatches}
+          selectedIds={selectedIds}
+          onToggle={toggleTransaction}
+          onToggleAll={toggleTransactions}
+          onOpenDetail={openTransactionDetail}
         />
       </section>
     </div>

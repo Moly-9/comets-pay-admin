@@ -1,8 +1,9 @@
 import type { PaymentListRecord } from './businessWorkflow';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import type { GeneratedInvoiceRecord, Payout } from './types';
+import type { PaymentAggregateStatus } from './paymentStatusFilters';
 
-export type PaymentBatchPrototypeStatus = '付款处理中' | '已付款' | '部分失败';
+export type PaymentBatchPrototypeStatus = PaymentAggregateStatus;
 
 export const PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<string, PaymentBatchPrototypeStatus>> = {
   'REQ-202607-000007': '付款处理中',
@@ -22,6 +23,7 @@ export const paymentBatchPrototypePayoutStatus = (
   providerItemIndex: number,
 ): Payout['status'] => {
   if (batchStatus === '付款处理中') return '付款处理中';
+  if (batchStatus === '全部失败') return '付款失败';
   if (batchStatus === '部分失败' && providerItemIndex % 5 === 0) return '付款失败';
   return '已付款';
 };

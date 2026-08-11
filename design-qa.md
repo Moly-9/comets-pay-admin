@@ -171,6 +171,264 @@ final result: passed
 
 ---
 
+# Finance Review Linked Resources Card Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ac6becd8-aa22-4a57-9f68-36dc265cedb8.png` (402 x 174 px).
+- Desktop implementation: `artifacts/finance-review-linked-resources/desktop-review-resources.png`, captured at a 1440 x 900 CSS viewport.
+- Focused implementation: `artifacts/finance-review-linked-resources/desktop-resource-card.jpg` (255 x 215 px, including the narrow approval-pane card frame).
+- Mobile implementation: `artifacts/finance-review-linked-resources/mobile-resource-card.jpg`, captured at a 390 x 844 CSS viewport.
+- Contract and Invoice dialogs: `artifacts/finance-review-linked-resources/desktop-contract-modal.jpg`, `desktop-invoice-modal.jpg`, `mobile-contract-modal.jpg`, and `mobile-invoice-modal.jpg`.
+- Same-input visual comparison: `artifacts/finance-review-linked-resources/reference-implementation-comparison.jpg`.
+
+## State And Normalization
+
+- Signed in as the finance demo role and opened `REQ-202607-000001` from `付款工作台 -> 待审核`.
+- The right approval pane was scrolled to the project-level resources card below the real approval flow.
+- The focused comparison preserves both source images at their native pixel density. The implementation is intentionally narrower because it occupies the 20% approval pane; layout and hierarchy were compared rather than stretching either image to a false common width.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains.
+- Fonts and typography: the card uses the existing product font stack and compact approval-pane type scale. Labels, counts, actions, and status remain readable without clipping or overlapping at both verified widths.
+- Spacing and layout rhythm: the implementation preserves the reference's heading followed by three separate bordered rows, consistent icon alignment, compact row height, and right-aligned actions. The narrow pane uses responsive wrapping rather than shrinking text beyond the existing review scale.
+- Colors and visual tokens: neutral borders and surfaces match the current finance workspace; the passed account result uses the existing restrained green semantic treatment. Hover and keyboard focus use the workspace's purple accent.
+- Image and icon fidelity: the source contains only standard interface icons. The implementation uses the project's existing Lucide icon set and introduces no raster placeholder, custom SVG, or decorative asset.
+- Copy and content: contract and Invoice names are replaced with real project-level counts (`合同 · 17 份`, `Invoice · 17 份`), while the third row reports the project account-validation result.
+
+## Interaction Verification
+
+- `查看合同` opens a project-scoped list with all 17 linked contracts, creator, IO, amount, readiness, and the existing per-record `查看` action.
+- `查看 Invoice` opens a project-scoped list with all 17 linked Invoice records, creator, amount, covered contract count, validation state, and the existing per-record `查看` action.
+- At 390 x 844, the resources card remains fully visible in the `项目与审批` tab. Both dialogs contain 17 records and report equal client and scroll widths, with no horizontal overflow.
+- The page and document root both report 390 px client and scroll widths. Browser console contained 0 warnings and 0 errors during desktop and mobile verification.
+
+## Comparison History
+
+1. The reference and first focused implementation were placed in one comparison image. The implementation preserved the reference hierarchy and interaction language while adapting to the narrower approval pane.
+2. Desktop and mobile dialog checks confirmed the real project counts and complete list content; no P0/P1/P2 visual correction was required after capture.
+
+final result: passed
+
+---
+
+# Transaction Paid And Processing Filter Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f8831f52-3197-4b6d-8a8e-f7729bd8e5f5.png` at 1864 x 822 px.
+- Desktop implementation: `artifacts/transaction-status-filter-qa/paid-tab-desktop-1864x822.png`, captured from an 1864 x 822 CSS viewport at device scale factor 1; the in-app browser content capture is 1849 x 815 px.
+- Mobile implementation: `artifacts/transaction-status-filter-qa/paid-tab-mobile-390x844.png` and `artifacts/transaction-status-filter-qa/paid-tab-mobile-table-390x844.png`, captured from a 390 x 844 CSS viewport at device scale factor 1; each in-app browser content capture is 375 x 812 px.
+- State: signed in as the local administrator demo account, opened `交易记录`, selected `已付款`, and left the status selector at `全部付款状态` so both paid and processing rows are visible.
+- Normalization: the source and desktop implementation use the same requested CSS viewport and density. The browser's reserved scrollbar/content chrome accounts for the implementation bitmap being 15 px narrower and 7 px shorter; comparison used the visible app content rather than browser chrome.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The first desktop pass placed the export button on a second toolbar row after the status selector was added. Search, date, status, and channel control widths were tightened while preserving their 45 px rendered height; the revised capture keeps all six controls on one row.
+- The `已付款` tab defaults to 68 records: 42 `已付款` and 26 `付款处理中`. Its selector exposes exactly `全部付款状态`, `已付款`, and `付款处理中`.
+- The independent `时间` column is absent. `付款人 / 付款时间` remains as the seventh visible data column before `操作`.
+- The full page has no horizontal overflow at 390 px. The intentionally wide transaction table remains scrollable inside its own 317 px container.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: existing Noto Sans SC and monospace amount/Invoice treatments are preserved; the new selector uses the same size, weight, line height, and zero letter spacing as the channel selector.
+- Spacing and layout rhythm: tabs, 45 px filter controls, table header, row height, card radii, and section spacing remain aligned with the reference. Desktop filters stay on one row; mobile controls stack at a stable full width.
+- Colors and visual tokens: the selector reuses the existing white surface, gray border, dark text, chevron, focus, and selected-option tokens. Processing and paid status colors remain semantic and text-labeled.
+- Image quality and asset fidelity: the target contains no new photographic or illustrative asset. Existing logo and Lucide interface icons remain unchanged and sharp; no custom SVG, CSS drawing, or placeholder visual was introduced.
+- Copy and content: all three tabs remain `全部`, `已付款`, and `付款失败`. Filter labels and table headings match the requested payment terminology.
+
+## Full-View And Focused Comparison
+
+- The source and implementation were opened together at original resolution in one comparison input. Overview cards, tabs, toolbar, table density, provider badges, status marks, amounts, and row actions remain visually consistent.
+- A separate crop was unnecessary because both 1864 x 822 originals render the toolbar and table header legibly. The same full-resolution comparison makes the intentional additions and removals directly visible: one status selector added, one time column removed, and processing rows admitted.
+
+## Interaction Verification
+
+- `全部` shows 72 payment records; `已付款` shows 68 paid-or-processing records; `付款失败` shows 4 failed records.
+- Selecting `已付款` returns 42 records and every visible row has that status. Selecting `付款处理中` returns 26 records and every visible row has that status.
+- The status selector appears only in the `已付款` tab and resets to `全部付款状态` when the user changes tabs.
+- Browser console contained 0 warnings and 0 errors during desktop and mobile verification.
+- Full Vitest passed 69 files and 432 tests. TypeScript/Vite production build and `git diff --check` passed.
+
+## Comparison History
+
+1. The first rendered comparison found a P2 desktop toolbar wrap caused by the new selector.
+2. Filter widths were reduced using the existing responsive CSS, without changing control height, copy, or behavior.
+3. The second desktop capture and both 390 px captures found no remaining actionable P0/P1/P2 issue.
+
+final result: passed
+
+# Transaction Record Spacing And Icon Removal Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-57a3eef1-4988-463c-9ea4-8b22ed9c762b.png` (1920 x 962 px, including browser chrome).
+- Desktop implementation: `artifacts/transaction-records-spacing-desktop-1920x965.jpg` (1905 x 957 px content capture from a 1920 x 965 CSS viewport at device scale factor 1).
+- Mobile implementation: `artifacts/transaction-records-spacing-mobile-390x844.jpg` (375 x 812 px content capture from a 390 x 844 CSS viewport at device scale factor 1).
+- Focused source crop: `artifacts/transaction-records-spacing-reference-focus.png` (720 x 260 px).
+- Focused implementation crop: `artifacts/transaction-records-spacing-desktop-focus.jpg` (720 x 260 px).
+- State: signed in as the local admin demo account, with the `交易记录` page and `全部` tab active.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the existing COMETS Pay type hierarchy, weights, line heights, and tab labels remain unchanged; removing the icons does not alter the two-line data hierarchy.
+- Spacing and layout rhythm: each provider row now uses three content-width columns with one shared gap. Browser measurements show equal label-to-rate and rate-to-count gaps for Airwallex, PayPal, and PayMax: about 9.2 px in the desktop capture and 8 px at 390 px.
+- Colors and visual tokens: the lilac success-rate card, semantic channel/status treatments, borders, and table colors are unchanged.
+- Image and icon quality: Invoice, amount, time, and payer/payment-time cells contain zero icons. Existing creator avatars, channel badges, and the `查看详情` action icon remain intact because they are outside the requested removal scope.
+- Copy and content: the three final-state tabs retain `全部`, `已付款`, and `付款失败` while their numeric badges are removed. Dynamic totals differ from the supplied screenshot because the current fixture contains newer completed transactions.
+- Responsive behavior: desktop and 390 px views show no page-level horizontal overflow. The wide transaction table remains intentionally contained in its own horizontal scroller.
+
+## Comparison And Verification
+
+- The source and desktop implementation were opened together for a full-view comparison; the page structure, card color, filter layout, and transaction table remain consistent with the existing design.
+- The 720 x 260 source and implementation card crops were opened together for focused comparison. The requested channel metrics are visibly tighter, and both adjacent gaps use the same grid spacing.
+- DOM verification found zero tab count badges and zero field icons in the four specified columns.
+- The three tabs remain functional, transaction filters and table content remain present, and the browser console contained zero application warnings or errors.
+- This scoped pass required no follow-up P0/P1/P2 visual correction after the first browser capture.
+
+final result: passed
+
+---
+
+# My Projects Request Progress Restoration Design QA
+
+## Evidence
+
+- Source reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-75eba917-a81e-4e81-bd69-64ff5b12b5fe.png` (1452 x 797 px).
+- Desktop implementation: `artifacts/my-project-request-progress-qa/progress-desktop-1284x904.png` (1269 x 891 px browser content capture).
+- Mobile implementation: `artifacts/my-project-request-progress-qa/progress-mobile-card-390x844.png` (375 x 812 px browser content capture).
+- Direct comparison: `artifacts/my-project-request-progress-qa/reference-vs-implementation.png`.
+
+## State And Rules
+
+- The restored sequence is `项目创建` -> `补充合同` -> `关联 Invoice` -> `提交审核` -> `渠道打款`.
+- Contracts remain optional under the current product rule. A project without a contract shows `合同为选填，当前未关联 / 已跳过` and does not block Invoice, approval, or payment.
+- Draft readiness, live approval round and node, approval return, finance approval, waiting payment, processing, partial payment failure recovery, and all-paid completion are derived from current request, approval, Invoice, and payout data.
+- Channel payment completes only when the request lifecycle is complete or every payout linked to the current request is paid.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The new request detail branch now reuses the established two-column project-detail layout, sticky progress card, node icons, connector, typography, spacing, and status colors from the supplied reference.
+- Return and payment-failure panels remain full width above the detail layout, so exception context is not squeezed into the main column.
+- The current fixture correctly renders the first three stages complete, `第 1 轮 · 财务审批中` current, and channel payment pending.
+- At 1920 and 2560 px the information and progress areas remain side by side. At 1024 and 390 px they stack to one column without text clipping, overlap, or page-level horizontal overflow.
+
+## Interaction And Technical Verification
+
+- Browser inspection confirmed five visible stage labels, one current approval node, no horizontal overflow, and no console warnings or errors.
+- Focused tests cover incomplete and complete drafts, finance approval, waiting and processing payments, all-paid completion, approval return, and failure recovery.
+- Full Vitest passed 66 files and 415 tests. TypeScript/Vite production build and `git diff --check` passed.
+
+final result: passed
+
+---
+
+# Transaction Detail Information And Resource Views Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-549728f0-663a-4e7c-942f-fd326ebddfe6.png`.
+- Desktop implementation: `artifacts/transaction-detail-revision-desktop.png`.
+- Mobile implementation: `artifacts/transaction-detail-revision-mobile.png`.
+- Contract dialog: `artifacts/transaction-detail-contract-dialog.png`.
+- Payment-list dialog: `artifacts/transaction-detail-payment-list-dialog.png`.
+- Mobile payment-list dialog: `artifacts/transaction-detail-payment-list-dialog-mobile.png`.
+
+## Dimensions And State
+
+- Desktop verification used a 1518 x 767 CSS viewport. The browser content capture was 1503 x 759 px after browser chrome and scrollbar exclusion.
+- Mobile verification used a 390 x 844 CSS viewport. The browser content capture was 375 x 812 px after browser chrome exclusion.
+- Verified the transaction detail page, contract dialog, Invoice dialog, payment-list dialog, dialog close behavior, Escape behavior, focus trapping, and focus return to the originating `查看` button.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The source-marked transaction title block is removed while a screen-reader-only page heading preserves navigation semantics and receives focus after entry.
+- Payment information no longer exposes the transaction record ID. It shows the payment batch number and request reason alongside payment time, payer, account, method, fee bearer, and transaction reference.
+- Contract, Invoice, and payment-list cards use the existing compact resource-card treatment and add consistent Lucide Eye actions without changing the page's visual hierarchy.
+- The payment-list card retains its red emphasis, and its detail dialog uses the same restrained emphasis for the payment snapshot.
+- Desktop and mobile layouts keep labels, long identifiers, and action text inside their containers with no visible overlap or horizontal overflow.
+
+## Interaction And Technical Verification
+
+- Contract, Invoice, and payment-list `查看` buttons open read-only dialogs populated from the selected transaction snapshot.
+- Closing a dialog restores focus to its originating action; Escape and the shared modal focus trap continue to work.
+- Full Vitest passed 60 files and 374/374 tests. The TypeScript/Vite production build and final diff check passed.
+
+final result: passed
+
+---
+
+# Transaction Records Selection And Detail Design QA
+
+## Evidence
+
+- Transaction-list source: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-1f7431f8-b38e-428f-ae2a-7f80493611d1.png` (1833 x 789 px).
+- Detail-layout source: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d2036841-1349-4044-afe7-91465e71bf35.png` (1413 x 807 px).
+- Creator-card source: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-2d404939-75de-406e-a4cb-11d3a2942cd5.png` (452 x 760 px).
+- Desktop transaction list: `artifacts/transaction-records-list-desktop.png` (1842 x 785 px).
+- Desktop detail top and linked resources: `artifacts/transaction-detail-top-desktop.png`, `artifacts/transaction-detail-payment-list-desktop.png`.
+- Mobile transaction list and detail: `artifacts/transaction-records-top-mobile.png`, `artifacts/transaction-detail-top-mobile.png`, `artifacts/transaction-detail-resources-mobile.png` (375 x 812 px browser content captures).
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The table includes the requested checkbox, creator/payment project, Invoice, provider, status, amount, transaction time, payer/payment time, and action columns. It remains contained in the existing horizontal table scroller on narrow screens.
+- The detail view follows the existing COMETS Pay page hierarchy and the supplied detail reference: compact header, creator identity card, three transaction summary cards, structured information grid, business associations, and linked document rows.
+- The creator identity uses the compact tinted card treatment from the source, with avatar, name, project, handle, and visible status. Text wraps or truncates within stable bounds at desktop and 390 px.
+- The payment-list row is the only resource given the requested red background, border, icon, and leading rule. Contract and Invoice rows keep neutral and blue-tinted resource treatments.
+- Historical transactions without a stable payment-batch snapshot explicitly show `未记录` or `未关联`; no payer, batch, request, contract, Invoice, or payment-list data is fabricated.
+
+## Interaction And Technical Verification
+
+- Selecting two rows changed the disabled export control to enabled `导出已选（2）`; completing the export returned the control to its ready state with no error message. The workbook template test verifies typed selected-row output.
+- Selecting all 36 batch-filtered records and moving to page 2 preserved the `导出已选（36）` state, confirming selection is stable across pagination.
+- Searching `BAT-20260805` matched batch-linked transactions and displayed the batch payer and payment time. Opening one record exposed its project, request, batch, contract, Invoice, and payment-list snapshots.
+- Returning from detail restored keyboard focus to the originating `查看详情` button.
+- The reference and implementation captures were opened together in one comparison pass at comparable desktop and mobile states.
+- Browser console contained 0 warnings and 0 errors.
+- Full Vitest passed 60 files and 374 tests. TypeScript and the Vite production build also passed.
+
+final result: passed
+
+---
+
+# Payment Workbench Returned Reason Detail Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-6a0d8703-09ff-4152-b739-babdfdfc85b8.png` (1907 x 824 px).
+- Desktop comparison: `artifacts/payment-returned-reason-qa/returned-reason-1907x824.png`.
+- Compact desktop / iPad landscape: `artifacts/payment-returned-reason-qa/returned-reason-1024x768.png`.
+- iPad portrait: `artifacts/payment-returned-reason-qa/returned-reason-768x1024.png`.
+- Narrow layout: `artifacts/payment-returned-reason-qa/returned-reason-390x844.png` and `returned-reason-390x844-details.png`.
+- State: signed in as `finance.demo`, returned `REQ-202607-000006` from the payment execution workspace, opened the `已退回` tab, and selected `查看原因`.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains.
+- The returned detail preserves the reference's full-screen split workspace, project metrics, payee summaries, fixed footer, and read-only approval column.
+- The project information section adds one restrained danger summary with the failure reason, return stage, actor, approval round, and timestamp.
+- Every affected payee card replaces the success note with an explicit `请款信息已退回` state and its applicable failure reason.
+- The footer exposes only `返回列表`; payment execution and repeat-return actions are absent in this state.
+- At 1024 px the approval column reports equal client and scroll widths after the long-reason wrapping fix. At 390 px the project subtitle truncates before the status badge, the workspace has no horizontal overflow, and both failure surfaces remain reachable in the shared vertical scroll area.
+
+## Interaction And Technical Verification
+
+- Browser flow verified: `待打款 -> 退回媒介修改 -> 已退回 -> 查看原因`.
+- Returned workspace component tests: 3/3 passed.
+- Complete Vitest run: 59 files and 371 tests passed.
+- TypeScript and production Vite build: passed.
+- Source and implementation were opened in the same visual comparison pass at 1907 x 824.
+
+final result: passed
+
+---
+
 # Finance Review Return Gate And Responsive Type Design QA
 
 ## Evidence
@@ -808,5 +1066,260 @@ final result: passed
 1. The first list pass established the three provider treatments and shared reusable component.
 2. The first transaction-summary pass exposed truncated two-column content after badges were added.
 3. The final pass moved provider metrics to one stable row per channel, then verified the overview and list at desktop and 390 px widths.
+
+final result: passed
+
+---
+
+# Finance Review Footer Centering And Incorrect-State Gate Design QA
+
+## Evidence
+
+- Source visual truth, incorrect-state gate: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-1d46885e-aa9a-4ce4-b8f7-1d4f010f2b46.png` (1905 x 857 px).
+- Source visual truth, centered footer: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-380f1826-6c6b-475c-9d50-c5969bfc68a3.png` (1890 x 865 px).
+- Desktop drawer expanded: `artifacts/finance-review-qa/footer-expanded-1904x857.png`.
+- Desktop drawer collapsed: `artifacts/finance-review-qa/footer-collapsed-1904x857.png`.
+- Incorrect record state: `artifacts/finance-review-qa/footer-incorrect-1904x857.png`.
+- iPad landscape: `artifacts/finance-review-qa/footer-incorrect-1024x768.png`.
+- iPad portrait: `artifacts/finance-review-qa/footer-incorrect-768x1024.png`.
+
+## Dimensions And State
+
+- Desktop implementation captures use a 1904 x 857 CSS viewport at device scale factor 1. The one-pixel source-width difference does not require density normalization.
+- iPad captures use 1024 x 768 and 768 x 1024 CSS viewports at device scale factor 1.
+- State: signed in as `finance.demo`, opened the first pending finance request, then recorded the current Invoice as incorrect. Desktop evidence covers the approval drawer in both expanded and collapsed states.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the footer keeps the existing Noto Sans SC hierarchy, compact labels, tabular counts, and zero letter spacing. Disabled action copy stays readable at desktop and tablet sizes.
+- Spacing and layout rhythm: navigation and review counts are one centered group inside the flexible track before the action buttons. At 1904 px its center is 763 px in both drawer states, exactly matching the center of the 16-1510 px available region. At 1024 px it centers at 270.5 px within the 16-525 px available region; at 768 px it centers at the 384 px viewport midpoint above the two-row action grid.
+- Colors and visual tokens: `确认本页无误` uses the existing disabled treatment after an incorrect decision. No new palette or decorative treatment was introduced.
+- Image and asset fidelity: this change adds no imagery or custom icons. Existing Lucide status and action icons remain unchanged.
+- Copy and content: `上一页`, page position, `下一页`, confirmed count, and incorrect or pending count stay together. The incorrect state changes the action to `编辑有误记录` and prevents the contradictory confirm action.
+
+## Full-View And Focused Comparison
+
+- The source and implementation images were opened together in the same comparison pass. The implementation moves the complete paging and count group into the marked footer space while retaining the source's right-aligned review actions.
+- The focused incorrect-state comparison confirms the source-marked `确认本页无误` action is visibly disabled after `已记录有误` appears.
+- Drawer collapse changes only the workspace columns. Footer measurements remain identical, so the centered group does not drift when the right panel is hidden.
+
+## Interaction Verification
+
+- Saving an incorrect reason changes the page state to `已记录有误`, changes the first action to `编辑有误记录`, and leaves `确认本页无误` disabled.
+- The confirm handler uses the same derived permission as the button and returns before mutating the session when the page is incorrect.
+- Desktop drawer expanded and collapsed measurements are identical for the footer group and action region.
+- 1024 x 768 and 768 x 1024 layouts report zero page-level horizontal overflow.
+- Browser console contained 0 warnings and 0 errors.
+- Focused Vitest passed 12/12 tests, full Vitest passed 58 files and 367/367 tests, and the TypeScript/Vite production build passed.
+
+## Comparison History
+
+1. The source identified two issues: a contradictory enabled confirmation action and a footer group anchored to the far left.
+2. The implementation added one shared confirmation guard and a two-track footer with a centered pagination group.
+3. Browser measurements and screenshots verified the corrected state across drawer positions and tablet orientations; no post-capture P0/P1/P2 correction was required.
+
+final result: passed
+
+---
+
+# Payment Project Payment Detail Design QA
+
+## Evidence
+
+- User entry-point reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9fbbf381-bb4b-40a9-8bea-6be12e32fac9.png` (1908 x 828 px).
+- Existing payment-batch detail reference: `artifacts/payment-project-detail-qa/batch-reference-1908x828.png` (1893 x 821 px browser content capture).
+- Project progress view: `artifacts/payment-project-detail-qa/progress-1908x828.png`.
+- Project detail view: `artifacts/payment-project-detail-qa/detail-1908x828.png`.
+- Failed project view: `artifacts/payment-project-detail-qa/failure-1908x828.png`.
+- Failure handling dialog: `artifacts/payment-project-detail-qa/failure-dialog-1908x828.png`.
+- Mobile failed project view: `artifacts/payment-project-detail-qa/failure-390x844.png` (375 x 812 px browser content capture).
+- Full-view comparison: `artifacts/payment-project-detail-qa/batch-vs-project-progress.png`.
+- Focused comparison: `artifacts/payment-project-detail-qa/batch-vs-project-progress-focused.png`.
+
+## Dimensions And State
+
+- Desktop reference and implementation were rendered with a 1908 x 828 CSS viewport at device scale factor 1. Browser content capture excluded 15 px of vertical scrollbar/chrome width and 7 px of browser chrome height, producing 1893 x 821 px page images on both sides; no density normalization was needed.
+- Mobile verification used a 390 x 844 CSS viewport at device scale factor 1. The 375 x 812 px content capture reflects the same browser chrome exclusion and was checked separately for responsive behavior rather than pixel-matched to the desktop reference.
+- States verified: payment processing (`查看进度`), fully paid (`查看详情`), partially failed (`处理失败`), expanded failed payment, failure return dialog, and the post-submit return to the workbench.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the project page reuses the batch-detail hierarchy, numeric emphasis, Noto Sans SC body treatment, tabular amounts, zero letter spacing, and compact metadata sizes. Long request and project identifiers remain readable without colliding with the status summary.
+- Spacing and layout rhythm: header, four-column summary, progress panel, project section, and payment-item list align with the existing batch-detail composition. The project version removes batch-level multi-project density while preserving the same margins, dividers, radii, and section rhythm.
+- Colors and visual tokens: processing, completed, failed, warning, and destructive states use the existing semantic tokens. The failure callout and return dialog add emphasis without introducing a new palette.
+- Image quality and asset fidelity: the source flow contains no photographic or illustrative assets. Existing logo assets and Lucide interface icons remain sharp and consistent; no custom SVG, CSS illustration, emoji, or placeholder image was introduced.
+- Copy and content: headings explicitly describe a single request project and its payment items. `查看进度`, `查看详情`, and `处理失败` resolve to the same project-level record while exposing state-appropriate guidance and actions.
+- Responsive behavior: the four-column summary becomes a single-column stack on mobile, the failed-payment callout and action remain fully visible, and the page reports no horizontal overflow at 390 px.
+
+## Full-View And Focused Comparison
+
+- The full-view comparison places the existing payment-batch detail and the new project-payment detail side by side at the same viewport. Navigation, page header, status summary, metric strip, progress tracker, and information-card hierarchy match; the intentional difference is that the project page contains exactly one request project.
+- The focused comparison confirms matching typography, border treatment, column height, progress spacing, and top-of-page alignment in the dense summary region where full-view text is otherwise too small to judge.
+
+## Interaction Verification
+
+- `查看进度`, `查看详情`, and `处理失败` open the selected request project instead of a payment batch or creator-only drawer.
+- Processing and completed records show the appropriate channel progress and final result counts.
+- Failed records automatically expose the first failed payment. The return dialog keeps confirmation disabled until an issue type and required reason are entered.
+- Confirming failure handling moves the request from `已付款` to `已退回`; the observed tab counts changed from `已付款 6 / 已退回 0` to `已付款 5 / 已退回 1`, and `REQ-202607-000011` appeared in the returned list.
+- Returning from the detail page restores the `已付款` tab and its current workbench context.
+- Browser console contained 0 warnings and 0 errors during the verified desktop and mobile flows.
+
+## Comparison History
+
+1. The existing payment-batch detail established the target hierarchy and interaction language, while the user entry-point reference identified the three project actions requiring implementation.
+2. The project detail page reused that hierarchy and reduced the data scope from multiple request projects to the selected single request project and all of its payment items.
+3. Same-viewport full and focused comparisons found no P0/P1/P2 visual drift. Desktop, mobile, validation, and post-return state checks then passed without a post-capture visual correction.
+
+## Implementation Checklist
+
+- [x] Shared project detail route for progress, details, and failure handling.
+- [x] Single-request project scope with all associated payment items.
+- [x] Batch-detail visual hierarchy and channel progress presentation.
+- [x] Required failure classification and return reason.
+- [x] Returned-state synchronization with workbench tab counts and list.
+- [x] Desktop and 390 px responsive verification.
+
+final result: passed
+
+---
+
+# Provider Highlight Scope And Creator Badge Sizing Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d4b7247a-20d0-4ad7-ba3c-bd429a3918c6.png`.
+- Desktop implementation: `artifacts/provider-scope-qa/creator-list-desktop.jpg`, captured at a 1280 x 720 CSS viewport.
+- State: signed in as `admin.demo`, opened `达人档案`, then opened a payment batch detail from `付款批次` to verify the non-list treatment.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- The creator-list provider label and its adjacent account description both resolve to `9.5px`; the provider frame uses a stable 20px CSS height and a compact 15px initial mark.
+- The smaller label retains the existing Airwallex, PayPal, and PayMax color mapping, border, visible provider name, and letter mark, so color is not the only identifying signal.
+- Provider highlighting remains in top-level payment tables and lists. The transaction channel summary, payment batch detail, payment execution workspace, payment-list review, request creation/detail, and resource review areas render provider names as ordinary text.
+- The verified creator list and payment batch detail have no page-level horizontal overflow. The badge dimensions remain fixed inside the existing horizontally scrollable table structure on narrow layouts.
+
+## Interaction And Technical Verification
+
+- The creator list rendered 10 scoped provider badges and no unscoped provider badge.
+- The payment batch list rendered provider badges; opening the first batch detail rendered zero provider badges and preserved the provider and transfer-method text.
+- Source and implementation were opened together for direct visual comparison. The implementation keeps the source color treatment while reducing its visual weight to match the adjacent account copy.
+- Full Vitest passed 59 files and 371 tests; TypeScript/Vite build and the final diff check passed.
+
+final result: passed
+
+---
+
+# Partial Payment Failure Recovery Design QA
+
+## Evidence
+
+- Desktop retry candidate: `artifacts/payment-failure-recovery-qa/desktop-retry-candidate-1440x900.png`.
+- Mobile failure return dialog: `artifacts/payment-failure-recovery-qa/mobile-return-dialog-390x844.png`.
+- Mobile system select open state: `artifacts/payment-failure-recovery-qa/mobile-return-select-open-390x844.png`.
+- Mobile payment-list recovery panel: `artifacts/payment-failure-recovery-qa/mobile-recovery-panel-390x844.png`.
+- Mobile retry candidate: `artifacts/payment-failure-recovery-qa/mobile-retry-candidate-390x844.png`.
+
+## Dimensions And States
+
+- Desktop verification used a 1440 x 900 CSS viewport. The page-level scroll width remained within the browser content width.
+- Mobile verification used a 390 x 844 CSS viewport; the in-app browser content capture was 375 px wide after browser chrome. The page reported no horizontal overflow.
+- Verified states: untreated partial failure, payment-list issue return, creator notification pending, dual-channel notification recorded, creator updated, revalidation ready, retry candidate, and retry submitted.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- The failure classification control uses the shared `SelectField` form treatment, fixed menu strategy, existing radii, shadows, typography, and selected/disabled states.
+- Returning a payment-list issue preserves the four successful payments and project approval result, while only the failed creator enters recovery.
+- The project status and warning use the existing failure palette and provide text labels in addition to color.
+- Deep linking opens the correct payment list, focuses the failed creator row, and keeps the recovery actions reachable in the 390 px dialog.
+- The prototype notice explicitly states that in-app messages, Gmail, creator feedback, and account changes are simulated.
+- The retry row is promoted to the top of the batch candidate list, marked `失败重试`, remains unchecked by default, and becomes selectable only after revalidation.
+
+## Interaction Verification
+
+- Selecting `付款清单问题` and entering a required reason records one shared failure-return source used by the batch, workbench, and project views.
+- Simulated notification records both in-app and Gmail results; the missing-recipient branch is covered by unit tests.
+- Simulated creator feedback increments the account version and updates the prototype fingerprint and beneficiary identity.
+- Revalidation updates the frozen payment snapshot only after all account identity fields match; mismatches remain blocking with field-level reasons.
+- Creating a retry batch marks the payout as `RETRY_SUBMITTED` and removes it from candidates, preventing duplicate submission.
+- Browser console contained 0 warnings and 0 errors during the final desktop and mobile verification.
+- Full Vitest passed 62 files and 383 tests. TypeScript/Vite production build and `git diff --check` passed.
+
+final result: passed
+
+---
+
+# Payment Account Failure Return Card Design QA
+
+## Evidence
+
+- Source card reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-dbf7fabe-a7cc-4ff2-b13d-b39df0735d57.png`.
+- Desktop implementation: `artifacts/payment-failure-recovery-qa/my-project-failure-card-1591x744.png`, captured at a 1591 x 744 CSS viewport.
+- Mobile implementation: `artifacts/payment-failure-recovery-qa/my-project-failure-card-390x844.png` and `artifacts/payment-failure-recovery-qa/my-project-failure-card-390x844-focused.png`, captured at a 390 x 844 CSS viewport.
+- Same-viewport comparison: `artifacts/payment-failure-recovery-qa/source-vs-implementation-1591x744.png`.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains.
+- The failure card keeps the system's existing red warning semantics while separating the recovery summary, creator and payment metadata, failure reason, current recovery state, and next action into a clearer hierarchy.
+- The failure reason is explicitly labeled `付款失败原因：`, preventing it from being confused with the recovery status or general project notes.
+- The `查看付款清单` action uses the existing button language with a receipt icon, stable height, visible focus state, and sufficient contrast.
+- At 390 px, metadata, reason, status, and action stack into one column without text clipping, overlap, or horizontal page overflow.
+
+## Interaction Verification
+
+- The return dialog displays `付款账户问题` while preserving the existing explanation `仅恢复失败达人的收款账户`.
+- Opening the project recovery card and selecting `查看付款清单` locates and highlights the matching failed creator payment row.
+- Simulated creator account feedback synchronizes the recovery state to `达人已更新，待重新校验`; successful revalidation synchronizes it to `已重新校验，可重试` in the new-batch candidate list.
+- Submitting the retry marks the payment as `付款处理中` and removes it from selectable retry candidates.
+- Browser console contained no application errors during the desktop and mobile recovery flow.
+
+final result: passed
+
+---
+
+# Payment Execution Equal Dual Cards Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-91cc0c48-c131-4216-ac76-30f2ac7d6561.png` (1891 x 862 px).
+- Execution implementation: `artifacts/payment-execution-equal-cards/execution-desktop-1892x864.jpg`, captured at a 1892 x 864 CSS viewport.
+- Returned-detail implementation: `artifacts/payment-execution-equal-cards/returned-desktop-1892x864.jpg`, captured at the same viewport.
+- Mobile implementation: `artifacts/payment-execution-equal-cards/returned-mobile-top-390x844.jpg` and `returned-mobile-approval-390x844.jpg`.
+- Same-input comparison: `artifacts/payment-execution-equal-cards/reference-vs-equal-cards.jpg`.
+
+## State And Normalization
+
+- The supplied source shows the execution state with an approximately 8:2 main/approval split. The requested target intentionally changes only that relationship to two equal cards while preserving the content and fixed footer.
+- The source's 30 px browser-chrome strip was removed for the comparison. Source and implementation content were then resized from their native dimensions to equal 900 px widths and placed together without density interpolation beyond that common scale.
+- Verified states: `执行打款`, a finance return created in the current prototype session, and the resulting `已退回详情`.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the existing workspace font stack, heading hierarchy, data labels, status pills, and footer copy remain unchanged and readable in both equal columns.
+- Spacing and layout rhythm: desktop uses two measured 922 px cards with a 16 px gap inside the 1892 px viewport. Both cards share the same 8 px radius, border, surface, and height, and each retains independent vertical scrolling.
+- Colors and visual tokens: the existing neutral surfaces, purple section icons, green approval states, orange execution state, and red returned state remain unchanged.
+- Image and icon fidelity: the screen uses the product's existing Lucide interface icons and contains no new raster asset, placeholder, custom SVG, or decorative illustration.
+- Copy and content: project details, payee records, approval nodes, return reason, totals, and action labels are unchanged; only the main-panel proportion and card framing changed.
+- At 390 x 844, the cards stack in normal document flow at 347 px width with no horizontal page overflow.
+
+## Interaction Verification
+
+- `执行打款` and `已退回详情` both render exactly two `.payment-execution-board-card` regions.
+- The return dialog still requires a reason, moves the project to `已退回`, and opens the same equal-card layout through `查看原因`.
+- The fixed footer remains visible and the action set continues to follow the active execution or returned state.
+- Browser console contained 0 warnings and 0 errors during desktop and mobile checks.
+- Full Vitest passed 70 files and 438 tests; TypeScript/Vite production build and `git diff --check` passed.
+
+## Comparison History
+
+1. The supplied reference and initial implementation were compared together. The intentional 8:2 to 5:5 change was correct and the two desktop card widths matched exactly.
+2. The first 390 px pass exposed a P2 issue where CSS Grid compressed the first card to almost zero height. The mobile container was changed to normal block flow with a 14 px card gap.
+3. Post-fix mobile captures show the project card followed by the approval card without overlap, clipping, or horizontal overflow.
 
 final result: passed

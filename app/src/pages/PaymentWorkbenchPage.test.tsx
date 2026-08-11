@@ -3,20 +3,32 @@ import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_PAYOUTS } from '../data';
 import type { InvoiceCurrency, Payout } from '../types';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
-import { CURRENCY_FLAG_PATHS, buildPaymentProjectRows, PaymentWorkbenchPage } from './PaymentWorkbenchPage';
+import {
+  CURRENCY_FLAG_PATHS,
+  buildPaymentProjectRows,
+  filterPaymentProjectRows,
+  PaymentWorkbenchPage,
+  type WorkbenchTab,
+} from './PaymentWorkbenchPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 
-const renderWorkbench = (payouts: Payout[], requests: RequestProjectSummary[] = []) => renderToStaticMarkup(
+const renderWorkbench = (
+  payouts: Payout[],
+  requests: RequestProjectSummary[] = [],
+  initialTab: WorkbenchTab = 'review',
+) => renderToStaticMarkup(
   <PaymentWorkbenchPage
     payouts={payouts}
     requests={requests}
     generatedInvoices={[]}
     onNewBatch={vi.fn()}
     onSelectPayout={vi.fn()}
+    onSelectPaidProject={vi.fn()}
     onReviewRequest={vi.fn()}
     onExecuteRequest={vi.fn(() => true)}
     onReturnRequest={vi.fn(() => true)}
     canCreateBatch
+    initialTab={initialTab}
     currentDate={new Date('2026-08-09T00:00:00.000Z')}
   />,
 );
@@ -183,5 +195,36 @@ describe('PaymentWorkbenchPage currency overview', () => {
         status: '付款处理中',
         actionLabel: '查看进度',
       }));
+  });
+
+  it('shows the complete status filter only on the paid tab and filters aggregate project states', () => {
+    const input = {
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    };
+    const paidRows = buildPaymentProjectRows({ ...input, tab: 'paid' });
+    const target = paidRows[0];
+    const failedPayoutIds = new Set(target.payouts.map((item) => item.id));
+    const allFailedRows = buildPaymentProjectRows({
+      ...input,
+      tab: 'paid',
+      payouts: input.payouts.map((item) => (
+        failedPayoutIds.has(item.id) ? { ...item, status: '付款失败' as const } : item
+      )),
+    });
+
+    expect(allFailedRows.find((row) => row.id === target.id)?.status).toBe('全部失败');
+    expect(filterPaymentProjectRows(allFailedRows, {
+      provider: '全部付款渠道',
+      search: '',
+      status: '全部失败',
+    }).map((row) => row.id)).toContain(target.id);
+
+    const paidHtml = renderWorkbench(input.payouts, input.requests, 'paid');
+    const reviewHtml = renderWorkbench(input.payouts, input.requests, 'review');
+    expect(paidHtml).toContain('class="custom-select custom-select-toolbar payment-status-select"');
+    expect(paidHtml).toContain('>全部付款状态</span>');
+    expect(reviewHtml).not.toContain('class="custom-select custom-select-toolbar payment-status-select"');
   });
 });

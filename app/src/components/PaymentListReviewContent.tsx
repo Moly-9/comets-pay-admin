@@ -6,8 +6,11 @@ import {
   CircleCheck,
   Download,
   Landmark,
+  ListChecks,
   LoaderCircle,
+  ReceiptText,
   ShieldCheck,
+  UserRoundCheck,
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -30,7 +33,6 @@ import {
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
 import { Button } from './Common';
-import { PaymentProviderBadge } from './PaymentProviderBadge';
 
 type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
   state: 'checking';
@@ -280,9 +282,12 @@ export function PaymentListReviewContent({
   return (
     <div className={`project-resource-browser payment-list-review-content ${className}`.trim()} data-testid="request-payment-list-review">
       <div className="project-resource-browser-heading">
-        <div>
-          <strong>全部付款明细</strong>
-          <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
+        <div className="finance-review-heading-with-icon">
+          <span className="finance-review-card-title-icon is-payment" aria-hidden="true"><ListChecks size={15} /></span>
+          <div>
+            <strong>全部付款明细</strong>
+            <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
+          </div>
         </div>
         <span>{rows.length} 笔</span>
       </div>
@@ -358,7 +363,7 @@ export function PaymentListReviewContent({
             className={`request-finance-project-summary${financeReview.canApprove ? ' is-passed' : ' is-warning'}`}
             role="status"
           >
-            <strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong>
+            <div className="finance-review-summary-heading"><span className="finance-review-card-title-icon is-validation" aria-hidden="true"><ShieldCheck size={14} /></span><strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong></div>
             <span>{financeReview.canApprove ? '可提交财务审批通过' : `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`}</span>
             {financeReview.projectIssues.map((issue) => (
               <small key={issue.id}>{issue.label}：{issue.paymentValue}</small>
@@ -368,9 +373,12 @@ export function PaymentListReviewContent({
           {currentReview ? (
             <section className="request-finance-comparison" aria-label="Invoice 与付款清单对照">
               <header className="request-finance-comparison-header">
-                <div>
-                  <strong>{currentReview.invoiceNumber}</strong>
-                  <span>{currentReview.creatorName} · {currentReview.mismatchCount ? `${currentReview.mismatchCount} 项不一致` : '关键字段一致'}</span>
+                <div className="finance-review-comparison-title">
+                  <span className="finance-review-card-title-icon is-invoice" aria-hidden="true"><ReceiptText size={14} /></span>
+                  <div>
+                    <strong>{currentReview.invoiceNumber}</strong>
+                    <span>{currentReview.creatorName} · {currentReview.mismatchCount ? `${currentReview.mismatchCount} 项不一致` : '关键字段一致'}</span>
+                  </div>
                 </div>
                 <div className="request-finance-navigator">
                   <span>{reviewIndex + 1} / {pages.length}</span>
@@ -419,7 +427,7 @@ export function PaymentListReviewContent({
           {accountDisplay === 'current-full' ? (
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
               <header>
-                <div><Landmark size={16} /><span><strong>当前达人账户快照</strong><small>当前账户字段为原型展示，具体字段需调用 Airwallex API</small></span></div>
+                <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人账户快照</strong><small>当前账户字段为原型展示，具体字段需调用 Airwallex API</small></span></div>
                 <span>{visibleAccountRows.length} 条</span>
               </header>
               {visibleAccountRows.length ? visibleAccountRows.map((row) => {
@@ -449,7 +457,7 @@ export function PaymentListReviewContent({
                     tabIndex={-1}
                   >
                     <header>
-                      <div><strong>{row.item.snapshot.creatorName}</strong><small>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · <PaymentProviderBadge compact provider={row.effectiveAccount.provider} /></small></div>
+                      <div><span className="finance-review-card-title-icon is-creator" aria-hidden="true"><UserRoundCheck size={14} /></span><span><strong>{row.item.snapshot.creatorName}</strong><small>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</small></span></div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}
@@ -495,7 +503,7 @@ export function PaymentListReviewContent({
                 return (
                   <article className="project-payment-row request-payment-review-row" key={row.key}>
                     <header className="project-payment-row-header">
-                      <div><strong>{row.item.snapshot.creatorName}</strong><span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · <PaymentProviderBadge compact provider={row.effectiveAccount.provider} /></span></div>
+                      <div><strong>{row.item.snapshot.creatorName}</strong><span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</span></div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}

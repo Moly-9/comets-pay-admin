@@ -114,13 +114,29 @@ const user = (roleKey: SystemUser['roleKey']): SystemUser => ({
 });
 
 describe('request project resource permissions', () => {
-  it('lets admins and owners edit every lifecycle, while media stops after submission', () => {
-    expect(canEditRequestProjectResources(user('admin'), 'COMPLETED')).toBe(true);
-    expect(canEditRequestProjectResources(user('owner'), 'APPROVED')).toBe(true);
-    expect(canEditRequestProjectResources(user('media'), 'DRAFT')).toBe(true);
-    expect(canEditRequestProjectResources(user('media'), 'RETURNED')).toBe(true);
-    expect(canEditRequestProjectResources(user('media'), 'SUBMITTED')).toBe(false);
-    expect(canEditRequestProjectResources(user('pm'), 'DRAFT')).toBe(false);
+  it('locks media edits after submission and reopens only explicit correction states', () => {
+    const state = (
+      lifecycle: RequestProjectSummary['lifecycle'],
+      approvalStatus?: NonNullable<RequestProjectSummary['approval']>['status'],
+    ) => ({
+      lifecycle,
+      approval: approvalStatus ? { status: approvalStatus } as RequestProjectSummary['approval'] : undefined,
+    });
+
+    expect(canEditRequestProjectResources(user('admin'), state('COMPLETED'))).toBe(true);
+    expect(canEditRequestProjectResources(user('owner'), state('APPROVED'))).toBe(true);
+    expect(canEditRequestProjectResources(user('media'), state('DRAFT'))).toBe(true);
+    expect(canEditRequestProjectResources(user('media'), state('SUBMITTED'))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state('APPROVED'))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state('COMPLETED'))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state(undefined))).toBe(false);
+    expect(canEditRequestProjectResources(user('media'), state('RETURNED'))).toBe(false);
+    expect(canEditRequestProjectResources(
+      user('media'),
+      state('RETURNED', 'RETURNED_TO_MEDIA_REVIEW'),
+    )).toBe(true);
+    expect(canEditRequestProjectResources(user('media'), state('RETURNED'), true)).toBe(true);
+    expect(canEditRequestProjectResources(user('pm'), state('DRAFT'))).toBe(false);
   });
 });
 
@@ -189,6 +205,21 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
     expect(source).toContain('付款单已清空');
     expect(source).toContain('run: onClearPaymentLists');
+    expect(paymentRowsSource).toContain('ariaLabel={`${item.snapshot.creatorName} 支付币种`}');
+    expect(paymentRowsSource).toContain('ariaLabel={`${item.snapshot.creatorName} 收款币种`}');
+    expect(paymentRowsSource.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
+    expect(paymentRowsSource).toContain("'paymentReason', event.target.value");
+    expect(paymentRowsSource).toContain("'transactionReference', event.target.value");
+    expect(toolbarSource).toContain('canEditPaymentList && currentPaymentList');
+    expect(toolbarSource).toContain("hasScopedApprovalReturn ? '修改退回明细'");
+    expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
+    expect(paymentRowsSource).toContain("paymentLocked ? ' is-payment-locked' : ''");
+    expect(paymentRowsSource).toContain("'校验通过 · 已付款冻结'");
+    expect(paymentRowsSource).toContain("!paymentFailureRecoveryMode || Boolean(failurePayout)");
+    expect(paymentRowsSource).toContain("!hasScopedApprovalReturn || Boolean(paymentListReturn)");
+    expect(paymentRowsSource).toContain("paymentListReturn ? '付款清单原因 · 待修改'");
+    expect(paymentRowsSource).toContain("paymentLocked && hasScopedApprovalReturn ? '已通过 · 已锁定'");
+    expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
   });
 });
 

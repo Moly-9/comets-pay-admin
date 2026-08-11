@@ -9,8 +9,10 @@ import {
   hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
   paymentListEffectiveAccount,
+  paymentListItemValue,
   paymentListProviderForItems,
   payoutWithPaymentListSnapshot,
+  refreshPaymentListFromInvoices,
   refreshPaymentListItemSnapshot,
   revalidatePaymentListItem,
   removePaymentListItem,
@@ -318,6 +320,79 @@ describe('project payment list', () => {
     });
     expect(refreshed.items[0]?.overrides).toEqual({ amount: 280, description: '人工确认付款说明' });
     expect(refreshed.updatedAt).toBe('2026-08-05T00:00:00.000Z');
+  });
+
+  it('refreshes a generated list without replacing user-edited payment fields', () => {
+    const actor = { account: 'media.test', name: 'Media Test', role: '媒介账号' };
+    const currentItem = {
+      ...item,
+      overrides: {
+        currency: 'HKD',
+        receiveCurrency: 'JPY',
+        paymentReason: '人工调整后的付款原因',
+        transactionReference: 'CUSTOM-REFERENCE-001',
+      },
+      requiresRevalidation: true,
+      validationIssues: ['付款字段已修改，请重新校验'],
+    };
+    const currentList: PaymentListRecord = {
+      ...record,
+      status: 'draft',
+      version: 1,
+      items: [currentItem],
+      versions: [{
+        version: 1,
+        generatedAt: '2026-08-05T08:00:00.000Z',
+        generatedBy: actor,
+        items: [item],
+      }],
+    };
+    const newInvoiceItem = {
+      ...item,
+      id: 'item-2',
+      invoiceId: 'invoice-2' as InvoiceId,
+      snapshot: {
+        ...item.snapshot,
+        invoiceNumber: 'INV-NEW',
+        paymentReason: '影音服务',
+        transactionReference: 'REQ-DEFAULT-02',
+      },
+    };
+    const refreshed = refreshPaymentListFromInvoices({
+      list: currentList,
+      refreshedItems: [{
+        ...item,
+        snapshot: {
+          ...item.snapshot,
+          currency: 'USD',
+          receiveCurrency: 'USD',
+          paymentReason: '影音服务',
+          transactionReference: 'REQ-DEFAULT-01',
+        },
+      }, newInvoiceItem],
+      actor,
+      refreshedAt: '2026-08-05T09:00:00.000Z',
+    });
+
+    expect(refreshed).toMatchObject({
+      paymentListId: currentList.paymentListId,
+      paymentListCode: currentList.paymentListCode,
+      status: 'generated',
+      version: 2,
+      updatedAt: '2026-08-05T09:00:00.000Z',
+    });
+    expect(refreshed.versions).toHaveLength(2);
+    expect(refreshed.items).toHaveLength(2);
+    expect(paymentListItemValue(refreshed.items[0]!, 'currency')).toBe('HKD');
+    expect(paymentListItemValue(refreshed.items[0]!, 'receiveCurrency')).toBe('JPY');
+    expect(paymentListItemValue(refreshed.items[0]!, 'paymentReason')).toBe('人工调整后的付款原因');
+    expect(paymentListItemValue(refreshed.items[0]!, 'transactionReference')).toBe('CUSTOM-REFERENCE-001');
+    expect(refreshed.items[0]).toMatchObject({
+      requiresRevalidation: true,
+      validationIssues: ['付款字段已修改，请重新校验'],
+    });
+    expect(paymentListItemValue(refreshed.items[1]!, 'currency')).toBe('USD');
+    expect(paymentListItemValue(refreshed.items[1]!, 'transactionReference')).toBe('REQ-DEFAULT-02');
   });
 
   it('requires revalidation when refresh changes the frozen payout-account version', () => {

@@ -8,6 +8,11 @@ import {
 } from '../batchTransfers';
 import { Avatar, Button, PageHeading, SelectField, StatusMark } from '../components/Common';
 import { formatAmount } from '../data';
+import {
+  isPaymentFailureRetryCandidate,
+  isPaymentFailureRetryReady,
+  paymentFailureRecoveryLabel,
+} from '../paymentFailureRecovery';
 import type { InvoiceCurrency, Payout } from '../types';
 
 const STEPS = ['选择付款', '校验资料', '选择渠道', '确认提交'];
@@ -48,7 +53,9 @@ export function BatchWizardPage({
   onSubmit: (submission: MockBatchSubmission) => void;
   onDraft: () => void;
 }) {
-  const [selected, setSelected] = useState(() => new Set(payouts.map((payout) => payout.id)));
+  const [selected, setSelected] = useState(() => new Set(
+    payouts.filter((payout) => !isPaymentFailureRetryCandidate(payout)).map((payout) => payout.id),
+  ));
   const [provider, setProvider] = useState<ExecutableBatchProvider>('Airwallex');
   const [mode, setMode] = useState<'batch' | 'single'>('batch');
   const [search, setSearch] = useState('');
@@ -61,10 +68,18 @@ export function BatchWizardPage({
   );
   const selectedPayouts = payouts.filter((payout) => selected.has(payout.id));
   const getAccountCheck = (payout: Payout) => {
+    const retryCandidate = isPaymentFailureRetryCandidate(payout);
+    if (retryCandidate && !isPaymentFailureRetryReady(payout)) {
+      return {
+        eligible: false,
+        label: paymentFailureRecoveryLabel(payout),
+        description: `${payout.provider} · ${payout.paymentFailureRecovery?.reportedPayoutAccountVersion ?? payout.payoutAccountVersion ?? 'legacy-v1'} · 失败重试款`,
+      };
+    }
     const issues = validatePayoutForBatch(payout, provider);
     return {
       eligible: issues.length === 0,
-      label: issues[0] ?? '冻结快照校验通过',
+      label: issues[0] ?? (retryCandidate ? paymentFailureRecoveryLabel(payout) : '冻结快照校验通过'),
       description: `${payout.provider} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${payout.account}`,
     };
   };
@@ -79,6 +94,8 @@ export function BatchWizardPage({
   }), {}), [selectedPayouts]);
 
   const toggleOne = (id: string) => {
+    const payout = payouts.find((candidate) => candidate.id === id);
+    if (!payout || (isPaymentFailureRetryCandidate(payout) && !isPaymentFailureRetryReady(payout))) return;
     setSelected((current) => {
       if (mode === 'single') {
         return current.has(id) && current.size === 1 ? new Set() : new Set([id]);
@@ -92,7 +109,12 @@ export function BatchWizardPage({
 
   const toggleAll = () => {
     if (mode === 'single') return;
-    setSelected((current) => current.size === payouts.length ? new Set() : new Set(payouts.map((payout) => payout.id)));
+    const selectableIds = payouts
+      .filter((payout) => !isPaymentFailureRetryCandidate(payout) || isPaymentFailureRetryReady(payout))
+      .map((payout) => payout.id);
+    setSelected((current) => selectableIds.every((id) => current.has(id))
+      ? new Set()
+      : new Set(selectableIds));
   };
 
   const changeMode = (nextMode: 'batch' | 'single') => {
@@ -150,16 +172,18 @@ export function BatchWizardPage({
 
           <div className="batch-table-scroll">
             <table className="batch-table">
-              <thead><tr><th><input aria-label="全选付款" type="checkbox" checked={mode === 'batch' && selected.size === payouts.length} disabled={mode === 'single'} onChange={toggleAll} /></th><th>达人 / 项目</th><th>执行账户</th><th>资料校验</th><th>金额</th></tr></thead>
+              <thead><tr><th><input aria-label="全选付款" type="checkbox" checked={mode === 'batch' && payouts.filter((payout) => !isPaymentFailureRetryCandidate(payout) || isPaymentFailureRetryReady(payout)).every((payout) => selected.has(payout.id))} disabled={mode === 'single'} onChange={toggleAll} /></th><th>达人 / 项目</th><th>执行账户</th><th>资料校验</th><th>金额</th></tr></thead>
               <tbody>
                 {visiblePayouts.map((payout) => {
                   const accountCheck = getAccountCheck(payout);
                   const accountIssue = !accountCheck.eligible;
                   const rowIssue = selected.has(payout.id) && accountIssue;
+                  const retryCandidate = isPaymentFailureRetryCandidate(payout);
+                  const retryBlocked = retryCandidate && !isPaymentFailureRetryReady(payout);
                   return (
-                    <tr className={rowIssue ? 'row-error' : ''} key={payout.id}>
-                      <td><input aria-label={`选择 ${payout.creator}`} type="checkbox" checked={selected.has(payout.id)} onChange={() => toggleOne(payout.id)} /></td>
-                      <td><div className="creator-cell"><Avatar initials={payout.initials} accent={payout.accent} size="sm" /><span><strong>{payout.creator}</strong><small>{payout.invoice} · {payout.project}</small></span></div></td>
+                    <tr className={`${rowIssue ? 'row-error ' : ''}${retryCandidate ? 'batch-retry-row' : ''}`.trim()} key={payout.id}>
+                      <td><input aria-label={`选择 ${payout.creator}`} type="checkbox" checked={selected.has(payout.id)} disabled={retryBlocked} onChange={() => toggleOne(payout.id)} /></td>
+                      <td><div className="creator-cell"><Avatar initials={payout.initials} accent={payout.accent} size="sm" /><span><strong>{payout.creator}{retryCandidate ? <em className="batch-retry-badge">失败重试</em> : null}</strong><small>{payout.invoice} · {payout.project}</small></span></div></td>
                       <td>
                         <span className="batch-account-cell">
                           <strong>{provider}</strong>

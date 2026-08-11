@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, NoticeBanner, PageHeading } from '../components/Common';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   formatContractMoney,
   getContractReadiness,
@@ -144,7 +143,7 @@ export function RequestProjectCreatePage({
         <>
           <NoticeBanner>合同不是提交审批的必选项。未关联合同时仍可继续选择Invoice、生成付款清单并提交审批，合同可在后续补充。</NoticeBanner>
           <section className="request-create-section">
-            <header><div><h2>付款项目信息</h2><p>填写本次请款的项目归属、负责人和请款说明。</p></div></header>
+            <header><div><h2>付款项目信息</h2><p>填写本次付款的项目归属、负责人和付款说明。</p></div></header>
             <div className="request-create-form">
               <label><span>项目名称</span><input aria-label="项目名称" placeholder="请输入项目名称" value={projectName} onChange={(event) => setProjectName(event.target.value)} /></label>
               <label><span>品牌 / 客户</span><input aria-label="品牌或客户" placeholder="请输入品牌或客户名称" value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
@@ -155,7 +154,7 @@ export function RequestProjectCreatePage({
                   {PM_USERS.map((user) => <option key={user.account} value={user.name}>{user.name}</option>)}
                 </select>
               </label>
-              <label className="request-create-form-wide"><span>请款原因</span><textarea aria-label="请款原因" placeholder="请说明本次请款用途" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+              <label className="request-create-form-wide"><span>付款事由</span><textarea aria-label="付款事由" placeholder="请说明本次付款用途" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
             </div>
           </section>
 
@@ -291,7 +290,7 @@ export function RequestProjectCreatePage({
                     <td><strong>{paymentItem.beneficiaryName}</strong></td>
                     <td>{paymentItem.contractId}<small className="cell-subtext">{paymentItem.ioId}</small></td>
                     <td>{paymentItem.invoiceId}</td>
-                    <td><PaymentProviderBadge compact provider={paymentItem.provider} /><small className="cell-subtext">{paymentItem.beneficiaryId}</small></td>
+                    <td>{paymentItem.provider}<small className="cell-subtext">{paymentItem.beneficiaryId}</small></td>
                     <td><strong>{paymentItem.sourceCurrency} {paymentItem.amount.toLocaleString('en-US')}</strong></td>
                     <td>{paymentItem.feePolicy}</td>
                   </tr>

@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildPaymentProjectRows } from './pages/PaymentWorkbenchPage';
 import { TransactionsPage } from './pages/OperationalPages';
 import {
   applyPaymentBatchPrototypeScenario,
   PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE,
+  paymentBatchPrototypePayoutStatus,
 } from './paymentBatchPrototypeScenario';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 
@@ -29,6 +30,11 @@ const payoutsForRequest = (request: (typeof scenario.requests)[number]) => {
 };
 
 describe('payment batch prototype scenario', () => {
+  it('maps a completely failed batch to failed payment items', () => {
+    expect(paymentBatchPrototypePayoutStatus('全部失败', 0)).toBe('付款失败');
+    expect(paymentBatchPrototypePayoutStatus('全部失败', 3)).toBe('付款失败');
+  });
+
   it('routes every batched project to the paid tab while preserving batch execution states', () => {
     const input = {
       payouts: scenario.payouts,
@@ -82,10 +88,14 @@ describe('payment batch prototype scenario', () => {
     const settled = paid.length + failed.length;
     const successRate = `${((paid.length / settled) * 100).toFixed(1)}%`;
     const html = renderToStaticMarkup(
-      <TransactionsPage payouts={scenario.payouts} onSelectPayout={vi.fn()} />,
+      <TransactionsPage payouts={scenario.payouts} paymentBatches={[]} />,
     );
 
-    expect(html).toContain('>付款失败</button>');
+    expect(html).toContain('role="tablist" aria-label="交易状态"');
+    expect(html).toContain('<span>全部</span>');
+    expect(html).toContain('<span>已付款</span>');
+    expect(html).toContain('<span>付款失败</span>');
+    expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain(`>${successRate}</strong>`);
     expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);
   });

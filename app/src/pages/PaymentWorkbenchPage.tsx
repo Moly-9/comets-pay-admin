@@ -5,6 +5,7 @@ import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { PaymentExecutionWorkspace } from '../components/PaymentExecutionWorkspace';
 import { PaymentProviderBadges } from '../components/PaymentProviderBadge';
+import type { ContractRecord } from '../contracts';
 import { getProjectFixture } from '../data';
 import { isInvoiceApprovedForPayment } from '../invoice/invoiceReviewWorkflow';
 import { paymentRequestProviderForChannel } from '../paymentRequestProjects';
@@ -15,10 +16,17 @@ import {
   sortPaymentCurrencyItems,
   type PaymentCurrencyItem,
 } from '../paymentCurrencyOverview';
-import type { GeneratedInvoiceRecord, Payout } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
+import {
+  ALL_PAYMENT_STATUSES,
+  PAYMENT_STATUS_FILTER_OPTIONS,
+  aggregatePaymentStatus,
+  matchesPaymentStatus,
+  type PaymentStatusFilter,
+} from '../paymentStatusFilters';
 import './PaymentWorkbenchPage.css';
 
-type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
+export type WorkbenchTab = 'review' | 'payment' | 'paid' | 'returned';
 
 type CurrencyOverviewId = 'pending' | 'paid';
 
@@ -166,13 +174,17 @@ const paymentProjectSearchText = (project: PaymentProjectRow) => [
 
 export const filterPaymentProjectRows = (
   projects: PaymentProjectRow[],
-  filters: { search: string; provider: PaymentProviderFilter },
+  filters: { search: string; provider: PaymentProviderFilter; status?: PaymentStatusFilter },
 ) => {
   const searchTerms = filters.search.trim().toLocaleLowerCase('zh-CN').split(/\s+/).filter(Boolean);
   return projects.filter((project) => {
     const matchesProvider = filters.provider === ALL_PAYMENT_PROVIDERS
       || project.paymentChannels.includes(filters.provider);
-    if (!matchesProvider || !searchTerms.length) return matchesProvider;
+    const matchesStatus = matchesPaymentStatus(
+      aggregatePaymentStatus(project.payouts.map((payout) => payout.status)),
+      filters.status ?? ALL_PAYMENT_STATUSES,
+    );
+    if (!matchesProvider || !matchesStatus || !searchTerms.length) return matchesProvider && matchesStatus;
     const searchText = paymentProjectSearchText(project);
     return searchTerms.every((term) => searchText.includes(term));
   });
@@ -235,17 +247,16 @@ const paymentProjectPresentation = (tab: WorkbenchTab, payouts: Payout[]) => {
   if (tab === 'review') return { status: '待财务审核', actionLabel: '审核' };
   if (tab === 'returned') return { status: '已退回', actionLabel: '查看原因' };
   if (tab === 'payment') return { status: '待打款', actionLabel: '执行打款' };
-  if (payouts.some((payout) => payout.status === '付款失败')) {
-    return { status: '部分失败', actionLabel: '处理失败' };
+  const status = aggregatePaymentStatus(payouts.map((payout) => payout.status));
+  if (status === '全部失败' || status === '部分失败') {
+    return { status, actionLabel: '处理失败' };
   }
-  if (payouts.some((payout) => payout.status === '付款处理中')) {
-    return { status: '付款处理中', actionLabel: '查看进度' };
-  }
-  return { status: '已付款', actionLabel: '查看详情' };
+  if (status === '付款处理中') return { status, actionLabel: '查看进度' };
+  return { status, actionLabel: '查看详情' };
 };
 
 const paymentProjectStatusTone = (status: string) => {
-  if (status === '部分失败') return 'is-danger';
+  if (status === '部分失败' || status === '全部失败') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   if (status === '已付款') return 'is-success';
   return '';
@@ -499,28 +510,41 @@ export function PaymentWorkbenchPage({
   payouts,
   requests,
   generatedInvoices,
+  contracts = [],
+  creators = [],
   onNewBatch,
   onSelectPayout,
+  onSelectPaidProject,
   onReviewRequest,
   onExecuteRequest,
   onReturnRequest,
+  onOpenContract,
+  onOpenInvoice,
   canCreateBatch,
+  initialTab = 'review',
   currentDate = new Date(),
 }: {
   payouts: Payout[];
   requests: RequestProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts?: ContractRecord[];
+  creators?: CreatorProfile[];
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
+  onSelectPaidProject: (project: PaymentProjectRow) => void;
   onReviewRequest: (requestId: string) => void;
   onExecuteRequest: (payouts: Payout[]) => boolean;
   onReturnRequest: (requestId: string, reason: string) => boolean;
+  onOpenContract?: (request: RequestProjectSummary, contractId: string) => void;
+  onOpenInvoice?: (request: RequestProjectSummary, invoiceId: GeneratedInvoiceRecord['invoiceId']) => void;
   canCreateBatch: boolean;
+  initialTab?: WorkbenchTab;
   currentDate?: Date;
 }) {
   const [showNotice, setShowNotice] = useState(true);
-  const [activeTab, setActiveTab] = useState<WorkbenchTab>('review');
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>(initialTab);
   const [provider, setProvider] = useState<PaymentProviderFilter>(ALL_PAYMENT_PROVIDERS);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [searchByTab, setSearchByTab] = useState<Record<WorkbenchTab, string>>({
     review: '',
     payment: '',
@@ -547,16 +571,25 @@ export function PaymentWorkbenchPage({
     buildPaymentProjectRows({ tab: tab.id, payouts, requests, generatedInvoices }),
   ])) as Record<WorkbenchTab, PaymentProjectRow[]>, [generatedInvoices, payouts, requests]);
   const paymentExecutionProject = paymentExecutionProjectId
-    ? rowsByTab.payment.find((project) => project.id === paymentExecutionProjectId)
+    ? [...rowsByTab.payment, ...rowsByTab.returned]
+      .find((project) => project.id === paymentExecutionProjectId)
     : undefined;
+  const paymentExecutionVariant = paymentExecutionProject
+    && rowsByTab.returned.some((project) => project.id === paymentExecutionProject.id)
+    ? 'returned' as const
+    : 'execution' as const;
   const paymentExecutionRequest = paymentExecutionProject?.requestId
     ? requests.find((request) => request.id === paymentExecutionProject.requestId)
     : undefined;
   const activeSearch = searchByTab[activeTab];
   const selectedIds = selectedIdsByTab[activeTab];
   const filteredProjects = useMemo(
-    () => filterPaymentProjectRows(rowsByTab[activeTab], { provider, search: activeSearch }),
-    [activeSearch, activeTab, provider, rowsByTab],
+    () => filterPaymentProjectRows(rowsByTab[activeTab], {
+      provider,
+      search: activeSearch,
+      status: activeTab === 'paid' ? paymentStatus : ALL_PAYMENT_STATUSES,
+    }),
+    [activeSearch, activeTab, paymentStatus, provider, rowsByTab],
   );
   const selectedProjects = useMemo(
     () => filteredProjects.filter((project) => selectedIds.has(project.id)),
@@ -610,6 +643,11 @@ export function PaymentWorkbenchPage({
 
   const updateProvider = (value: PaymentProviderFilter) => {
     setProvider(value);
+    clearActiveSelection();
+  };
+
+  const updatePaymentStatus = (value: PaymentStatusFilter) => {
+    setPaymentStatus(value);
     clearActiveSelection();
   };
 
@@ -704,6 +742,15 @@ export function PaymentWorkbenchPage({
             options={PAYMENT_PROVIDER_OPTIONS}
             onChange={updateProvider}
           />
+          {activeTab === 'paid' ? (
+            <SelectField<PaymentStatusFilter>
+              ariaLabel="付款状态"
+              className="payment-status-select"
+              value={paymentStatus}
+              options={PAYMENT_STATUS_FILTER_OPTIONS}
+              onChange={updatePaymentStatus}
+            />
+          ) : null}
           <span className="filter-result">当前显示 {filteredProjects.length} 个项目</span>
         </div>
 
@@ -723,7 +770,7 @@ export function PaymentWorkbenchPage({
           </span>
         </div>
         <PaymentProjectTable
-          key={`${activeTab}-${provider}-${activeSearch}`}
+          key={`${activeTab}-${provider}-${paymentStatus}-${activeSearch}`}
           projects={filteredProjects}
           selectedIds={selectedIds}
           onToggleProject={toggleProject}
@@ -737,12 +784,22 @@ export function PaymentWorkbenchPage({
               setPaymentExecutionProjectId(project.id);
               return;
             }
+            if (activeTab === 'returned' && project.requestId) {
+              setPaymentExecutionProjectId(project.id);
+              return;
+            }
+            if (activeTab === 'paid') {
+              onSelectPaidProject(project);
+              return;
+            }
             const payout = project.payouts[0];
             if (payout) onSelectPayout(payout);
           }}
           emptyText={activeSearch.trim()
             ? `未找到与“${activeSearch.trim()}”匹配的${activeTabLabel}付款项目，请尝试其他关键词`
-            : provider !== ALL_PAYMENT_PROVIDERS
+            : activeTab === 'paid' && paymentStatus !== ALL_PAYMENT_STATUSES
+              ? `当前付款状态下没有${activeTabLabel}付款项目`
+              : provider !== ALL_PAYMENT_PROVIDERS
               ? `当前付款渠道下没有${activeTabLabel}付款项目`
               : `当前没有${activeTabLabel}付款项目`}
         />
@@ -751,9 +808,19 @@ export function PaymentWorkbenchPage({
         <PaymentExecutionWorkspace
           request={paymentExecutionRequest}
           project={paymentExecutionProject}
+          generatedInvoices={generatedInvoices}
+          contracts={contracts}
+          creators={creators}
+          variant={paymentExecutionVariant}
           canExecute={canCreateBatch}
-          onExecute={onExecuteRequest}
+          onExecute={(projectPayouts) => {
+            const executed = onExecuteRequest(projectPayouts);
+            if (executed) setActiveTab('paid');
+            return executed;
+          }}
           onReturn={(reason) => onReturnRequest(paymentExecutionRequest.id, reason)}
+          onOpenContract={(contractId) => onOpenContract?.(paymentExecutionRequest, contractId)}
+          onOpenInvoice={(invoiceId) => onOpenInvoice?.(paymentExecutionRequest, invoiceId)}
           onClose={() => setPaymentExecutionProjectId(null)}
         />
       ) : null}

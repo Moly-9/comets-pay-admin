@@ -29,11 +29,13 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(html).toMatch(/<span>DESCRIPTION<\/span><input[^>]*value=""/);
     expect(html).toMatch(/<span>PRICE<\/span><input[^>]*value=""/);
     expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
+    expect(html).toContain('data-testid="invoice-fill-demo"');
+    expect(html).toContain('填充演示数据');
   });
 });
 
 describe('InvoiceBuilderPage edit mode', () => {
-  it('prefills and locks stable identity fields without enabling an unchanged save', () => {
+  it('prefills business identity fields without exposing internal IDs or enabling an unchanged save', () => {
     const record = PROJECT_DEMO_INVOICES[0]!;
     const html = renderToStaticMarkup(
       <InvoiceBuilderPage
@@ -52,11 +54,13 @@ describe('InvoiceBuilderPage edit mode', () => {
     );
 
     expect(html).toContain('修改 Invoice');
+    expect(html).not.toContain('填充演示数据');
     expect(html).toContain(record.id);
-    expect(html).toContain(record.invoiceId);
-    expect(html).toContain(record.sourcePayoutId);
-    expect(html).toContain('Invoice ID（锁定）');
-    expect(html).toContain('Source Payout ID（锁定）');
+    expect(html).not.toContain(record.invoiceId);
+    expect(html).not.toContain(record.sourcePayoutId);
+    expect(html).not.toContain('Invoice ID（锁定）');
+    expect(html).not.toContain('Source Payout ID（锁定）');
+    expect(html).toContain('达人、项目及 Invoice 编号已锁定');
     expect(html).toContain('保存并重新发送达人');
     expect(html).toMatch(/<button[^>]*disabled[^>]*>.*保存并重新发送达人/s);
     expect(html).toContain('role="group"');
@@ -84,8 +88,8 @@ describe('InvoiceBuilderPage edit mode', () => {
 
     expect(html).toContain('修改 Invoice');
     expect(html).toContain('INV-240705');
-    expect(html).toContain('invoice_fixture_edit_pay_013');
-    expect(html).toContain('pay-013');
+    expect(html).not.toContain('invoice_fixture_edit_pay_013');
+    expect(html).not.toContain('pay-013');
     expect(html).toContain('value="2440"');
     expect(html).toContain('保存修改并重新签署');
   });
@@ -136,5 +140,55 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).toContain('Thailand THB 主账户 · 默认');
     expect(html).toContain('选择达人档案中的已验证账户后');
     expect(html).toContain('保存并重新发起签署');
+  });
+
+  it('unlocks payout account and payment method for the scoped finance Invoice return', () => {
+    const record = PROJECT_DEMO_INVOICES[0]!;
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="PROJECT_RESOURCE"
+        allowPayoutAccountChange
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    const payoutAccountTrigger = html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0];
+    const paymentMethodTrigger = html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0];
+    expect(html).toContain('财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。');
+    expect(html).toContain('同步刷新对应付款明细');
+    expect(payoutAccountTrigger).not.toContain('disabled');
+    expect(paymentMethodTrigger).not.toContain('disabled');
+  });
+
+  it('keeps contract payout fields locked without a scoped finance override', () => {
+    const record = PROJECT_DEMO_INVOICES[0]!;
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="PROJECT_RESOURCE"
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    expect(html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0]).toContain('disabled');
+    expect(html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0]).toContain('disabled');
+    expect(html).toContain('已锁定，不能静默切换到达人最新账户');
   });
 });

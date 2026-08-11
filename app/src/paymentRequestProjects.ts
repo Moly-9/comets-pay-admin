@@ -148,6 +148,7 @@ export type MyProjectStatus =
   | '老板审批中'
   | '财务审批中'
   | '待打款'
+  | '部分打款失败'
   | '已付款'
   | '已退回';
 
@@ -193,6 +194,7 @@ export const myProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
 ): MyProjectStatus => {
   if (request.lifecycle === 'COMPLETED') return '已付款';
+  if (request.lifecycle === 'RETURNED' && request.status === '部分打款失败') return '部分打款失败';
   if (request.lifecycle === 'RETURNED') return '已退回';
   if (request.lifecycle === 'APPROVED') return '待打款';
   if (request.approval) return MY_PROJECT_APPROVAL_STATUS[request.approval.status];
@@ -269,10 +271,12 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
   requests,
   search,
   filters,
+  statusFor = myProjectStatusFor,
 }: {
   requests: T[];
   search: string;
   filters: PaymentRequestListFilters;
+  statusFor?: (request: T) => MyProjectStatus;
 }) => {
   const query = search.trim().toLowerCase();
   const minBudget = filters.minBudget ? Number(filters.minBudget) : null;
@@ -287,7 +291,7 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
     const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;
-    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(myProjectStatusFor(request));
+    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(statusFor(request));
     return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
   });
   return { visible, invalidBudgetRange };

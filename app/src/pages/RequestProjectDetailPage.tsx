@@ -12,7 +12,6 @@ import {
 import { useState } from 'react';
 import { Button, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -881,7 +880,7 @@ export function RequestProjectDetailPage({
         <div className="project-detail-main">
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>请款项目信息</h2><p>查看项目、提交人与请款背景。</p></div>
+              <div><h2>请款项目信息</h2><p>查看项目、提交人与付款背景。</p></div>
               <span>更新于 {detail.updatedAt}</span>
             </header>
             <dl className="project-info-grid">
@@ -894,7 +893,7 @@ export function RequestProjectDetailPage({
               <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
               <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
               <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
-              <div className="project-info-full"><dt>请款原因</dt><dd>{detail.reason}</dd></div>
+              <div className="project-info-full"><dt>付款事由</dt><dd>{detail.reason}</dd></div>
             </dl>
           </section>
 
@@ -940,7 +939,7 @@ export function RequestProjectDetailPage({
             <div className="table-scroll">
               <table className="data-table request-detail-payment-table">
                 <thead><tr><th>达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>付款方式</th><th>状态</th></tr></thead>
-                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
+                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td>{payee.channel}</td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
               </table>
             </div>
           </section>

@@ -1,22 +1,34 @@
 import {
   AlertTriangle,
+  BadgeCheck,
+  BriefcaseBusiness,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Circle,
   CircleAlert,
+  ClipboardCheck,
   Clock3,
+  CreditCard,
+  Eye,
   FileText,
+  Files,
+  Landmark,
   PanelRightClose,
   PanelRightOpen,
   ReceiptText,
+  RefreshCw,
+  Send,
   ShieldCheck,
+  UserRoundCheck,
   WalletCards,
+  Workflow,
   ZoomIn,
   ZoomOut,
+  type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import {
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
@@ -28,7 +40,9 @@ import {
   type RequestFinanceReview,
 } from '../financeReview';
 import {
+  type RequestApprovalReturnIssueType,
   paymentListProviders,
+  type InvoiceId,
   type PaymentListId,
   type PaymentListRecord,
   type RequestApprovalStage,
@@ -38,11 +52,14 @@ import {
   requestApprovalStage,
 } from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
+import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
+import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
-import { Button, Modal } from './Common';
+import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
+import { Button, Modal, SelectField, type SelectOption } from './Common';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
 
@@ -54,6 +71,15 @@ const REVIEW_PANE_OPTIONS: Array<{
   { id: 'payment', label: '付款清单' },
   { id: 'approval', label: '项目与审批' },
 ];
+
+export const FINANCE_RETURN_ISSUE_OPTIONS: readonly SelectOption<RequestApprovalReturnIssueType>[] = [
+  { value: 'INVOICE_CONTENT', label: 'Invoice 原因', description: '仅开放该份 Invoice 修改权限' },
+  { value: 'PAYMENT_LIST', label: '付款清单原因', description: '仅开放对应付款明细修改权限' },
+];
+
+const financeReturnIssueLabel = (issueType: RequestApprovalReturnIssueType) => (
+  issueType === 'INVOICE_CONTENT' ? 'Invoice 原因' : '付款清单原因'
+);
 
 const PAGE_KIND_LABEL: Record<FinanceReviewPage['kind'], string> = {
   pair: '一一对应',
@@ -69,6 +95,16 @@ const STAGE_LABEL: Record<RequestApprovalStage, string> = {
   PROJECT_OWNER: '项目负责人审批',
   OWNER: '老板审批',
   FINANCE: '财务审批',
+};
+
+const COMPACT_APPROVAL_ICONS: Record<string, LucideIcon> = {
+  submitted: Send,
+  PM: ClipboardCheck,
+  PROJECT_OWNER: UserRoundCheck,
+  OWNER: BadgeCheck,
+  FINANCE: Landmark,
+  payment: CreditCard,
+  'status-writeback': RefreshCw,
 };
 
 const formatReviewTime = (value?: string) => {
@@ -101,6 +137,20 @@ const MIN_INVOICE_ZOOM = 0.6;
 const MAX_INVOICE_ZOOM = 2.2;
 const INVOICE_ZOOM_STEP = 0.1;
 
+const ACCOUNT_VALIDATION_FIELD_IDS = new Set([
+  'account-id',
+  'account-version',
+  'account-fingerprint',
+  'real-name',
+  'account-name',
+  'account-number',
+  'bank-name',
+  'bank-address',
+  'swift-code',
+  'iban',
+  'validation',
+]);
+
 const normalizeInvoiceZoom = (value: number) => (
   Math.round(Math.min(MAX_INVOICE_ZOOM, Math.max(MIN_INVOICE_ZOOM, value)) * 100) / 100
 );
@@ -110,12 +160,15 @@ export function ApprovalTimeline({
   currentUser,
   paymentReady = false,
   paymentProvider,
+  compact = false,
 }: {
   request: RequestProjectSummary;
   currentUser?: SystemUser;
   paymentReady?: boolean;
   paymentProvider?: string;
+  compact?: boolean;
 }) {
+  const compactCurveMaskId = `finance-approval-curve-mask-${useId().replace(/:/g, '')}`;
   const approval = request.approval;
   if (!approval) {
     return (
@@ -133,6 +186,7 @@ export function ApprovalTimeline({
       label: '请款提交',
       description: `第 ${approval.round} 轮审批已提交`,
       state: 'complete' as const,
+      accountName: request.media,
       actorName: request.media,
       actorMeta: '媒介账号',
       time: approval.submittedAt,
@@ -147,6 +201,11 @@ export function ApprovalTimeline({
         : isCurrent
           ? 'current' as const
           : 'pending' as const;
+      const fallbackAccount = stage === 'PM'
+        ? request.pm
+        : stage === 'FINANCE' && isCurrent
+          ? currentUser?.account ?? 'finance'
+          : '待分配';
       const fallbackName = stage === 'PM'
         ? request.pm
         : stage === 'FINANCE' && isCurrent
@@ -163,6 +222,7 @@ export function ApprovalTimeline({
               ? '等待当前节点处理'
               : '上一节点通过后进入',
         state,
+        accountName: event?.actorAccount ?? fallbackAccount,
         actorName: event?.actorName ?? fallbackName,
         actorMeta: event ? `${event.actorRole} · @${event.actorAccount}` : STAGE_LABEL[stage],
         time: event?.occurredAt ?? (isCurrent ? approval.updatedAt : undefined),
@@ -173,6 +233,7 @@ export function ApprovalTimeline({
       label: '渠道付款',
       description: paymentReady ? '财务审批已完成，等待执行付款' : '全部审批完成后执行',
       state: paymentReady ? 'current' as const : 'pending' as const,
+      accountName: paymentProvider ?? '付款渠道',
       actorName: paymentProvider ?? '付款渠道',
       actorMeta: `${paymentProvider ?? '付款渠道'} · 付款渠道`,
       time: undefined,
@@ -182,37 +243,145 @@ export function ApprovalTimeline({
       label: '状态回写',
       description: '同步渠道结果与交易状态',
       state: 'pending' as const,
+      accountName: 'system',
       actorName: 'COMETS Pay',
       actorMeta: '@system · 系统自动任务',
       time: undefined,
     },
   ];
+  const compactRowHeight = 84;
+  const compactCurveWidth = 300;
+  const compactCurveHeight = Math.ceil(steps.length / 2) * compactRowHeight;
+  const compactPositions = steps.map((_step, index) => {
+    const rowIndex = Math.floor(index / 2);
+    const positionInRow = index % 2;
+    const column = rowIndex % 2 === 0 ? positionInRow + 1 : 2 - positionInRow;
+    return {
+      column,
+      row: rowIndex + 1,
+      x: column === 1 ? 75 : 225,
+      y: 23 + rowIndex * compactRowHeight,
+    };
+  });
+  const buildCompactCurvePath = (lastIndex: number) => compactPositions
+    .slice(1, lastIndex + 1)
+    .reduce((path, point, index) => {
+      const previous = compactPositions[index];
+      if (point.row === previous.row) {
+        const direction = point.x > previous.x ? 1 : -1;
+        const distance = Math.abs(point.x - previous.x);
+        const firstControlX = previous.x + direction * distance * 0.34;
+        const secondControlX = previous.x + direction * distance * 0.66;
+        return `${path} C ${firstControlX} ${previous.y - 3}, ${secondControlX} ${point.y + 3}, ${point.x} ${point.y}`;
+      }
+      const outerX = previous.column === 2 ? compactCurveWidth : 0;
+      return `${path} C ${outerX} ${previous.y}, ${outerX} ${point.y}, ${point.x} ${point.y}`;
+    }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
+  const compactCurvePath = buildCompactCurvePath(compactPositions.length - 1);
+  const compactProgressLastIndex = steps.reduce((lastIndex, step, index) => (
+    step.state === 'complete' || step.state === 'current' ? index : lastIndex
+  ), 0);
+  const compactProgressPath = buildCompactCurvePath(compactProgressLastIndex);
 
   return (
-    <div className="finance-approval-timeline" aria-label="当前审批流">
-      {steps.map((step) => (
-        <article className={`finance-approval-step is-${step.state}`} key={step.id}>
-          <span className="finance-approval-node" aria-hidden="true">
-            {step.state === 'complete'
-              ? <Check size={13} />
-              : step.state === 'current'
-                ? <Clock3 size={13} />
-                : <Circle size={11} />}
-          </span>
-          <div className="finance-approval-stage">
-            <div>
-              <strong>{step.label}</strong>
-              <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
+    <div className={`finance-approval-timeline ${compact ? 'is-compact' : ''}`} aria-label="当前审批流">
+      {compact ? (
+        <svg
+          className="finance-approval-curve"
+          viewBox={`0 0 ${compactCurveWidth} ${compactCurveHeight}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <defs>
+            <mask
+              id={compactCurveMaskId}
+              maskUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width={compactCurveWidth}
+              height={compactCurveHeight}
+            >
+              <rect width={compactCurveWidth} height={compactCurveHeight} fill="#fff" />
+              {compactPositions.map((position, index) => (
+                <circle
+                  key={`curve-mask-${steps[index].id}`}
+                  cx={position.x}
+                  cy={position.y}
+                  r="19"
+                  fill="#000"
+                />
+              ))}
+            </mask>
+          </defs>
+          <g mask={`url(#${compactCurveMaskId})`}>
+            <path d={compactCurvePath} />
+            <path className="finance-approval-curve-progress" d={compactProgressPath} />
+          </g>
+        </svg>
+      ) : null}
+      {steps.map((step, index) => {
+        const CompactIcon = COMPACT_APPROVAL_ICONS[step.id] ?? Circle;
+        return (
+          <article
+            aria-label={`${step.label}，账号 ${step.accountName}，${step.state === 'complete' ? '已完成' : step.state === 'current' ? '当前节点' : '待处理'}`}
+            className={`finance-approval-step is-${step.state}`}
+            key={step.id}
+            style={compact ? {
+              gridColumn: compactPositions[index].column,
+              gridRow: compactPositions[index].row,
+            } : undefined}
+          >
+            <span className="finance-approval-node" aria-hidden="true">
+              {compact
+                ? (
+                    <>
+                      <CompactIcon className="finance-approval-stage-icon" size={14} strokeWidth={1.8} />
+                      {step.state === 'complete' ? (
+                        <span className="finance-approval-state-mark">
+                          <Check size={7} strokeWidth={2.6} />
+                        </span>
+                      ) : step.state === 'current' ? (
+                        <span className="finance-approval-state-mark">
+                          <Clock3 size={7} strokeWidth={2.4} />
+                        </span>
+                      ) : null}
+                    </>
+                  )
+                : step.state === 'complete'
+                  ? <Check size={13} />
+                  : step.state === 'current'
+                    ? <Clock3 size={13} />
+                    : <Circle size={11} />}
+            </span>
+            <div className="finance-approval-stage">
+              {compact ? (
+                <>
+                  <strong title={step.label}>{step.label}</strong>
+                  <span title={step.accountName}>@{step.accountName}</span>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
+                  </div>
+                  <p>{step.description}</p>
+                </>
+              )}
             </div>
-            <p>{step.description}</p>
-          </div>
-          <div className="finance-approval-actor">
-            <span>{initialsFor(step.actorName)}</span>
-            <div><strong>{step.actorName}</strong><small>{step.actorMeta}</small></div>
-          </div>
-          <time>{formatReviewTime(step.time)}</time>
-        </article>
-      ))}
+            {!compact ? (
+              <>
+                <div className="finance-approval-actor">
+                  <span>{initialsFor(step.actorName)}</span>
+                  <div><strong>{step.actorName}</strong><small>{step.actorMeta}</small></div>
+                </div>
+                <time>{formatReviewTime(step.time)}</time>
+              </>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -221,6 +390,7 @@ export function FinanceReviewWorkspace({
   request,
   financeReview,
   generatedInvoices,
+  contracts,
   paymentLists,
   creators,
   currentUser,
@@ -229,11 +399,14 @@ export function FinanceReviewWorkspace({
   onApprove,
   onReturn,
   onExportPaymentList,
+  onOpenContract,
+  onOpenInvoice,
   onClose,
 }: {
   request: RequestProjectSummary;
   financeReview: RequestFinanceReview;
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts: ContractRecord[];
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   currentUser: SystemUser;
@@ -242,6 +415,8 @@ export function FinanceReviewWorkspace({
   onApprove: () => boolean;
   onReturn: (reason: string) => boolean;
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
+  onOpenContract: (contractId: string) => void;
+  onOpenInvoice: (invoiceId: InvoiceId) => void;
   onClose: (completed?: boolean) => void;
 }) {
   const activeSession = reconcileFinanceReviewSession(session, {
@@ -259,6 +434,8 @@ export function FinanceReviewWorkspace({
   const [invoiceZoom, setInvoiceZoom] = useState(1);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
+  const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
   const invoiceZoomRef = useRef(1);
@@ -320,6 +497,25 @@ export function FinanceReviewWorkspace({
     page.paymentItems.map((item) => item.paymentListId)
   )));
   const reviewPaymentLists = paymentLists.filter((list) => reviewPaymentListIds.has(list.paymentListId));
+  const linkedContracts = requestLinkedContracts(request, contracts);
+  const linkedInvoices = requestLinkedInvoices(request, generatedInvoices);
+  const accountValidationIssueCount = financeReview.pages.reduce((count, page) => (
+    page.kind !== 'pair'
+      ? count + 1
+      : count + page.fields.filter((field) => (
+          ACCOUNT_VALIDATION_FIELD_IDS.has(field.id) && field.state === 'mismatch'
+        )).length
+  ), 0);
+  const accountValidationStatus = financeReview.pageCount === 0
+    ? 'pending' as const
+    : accountValidationIssueCount > 0
+      ? 'warning' as const
+      : 'passed' as const;
+  const accountValidationLabel = accountValidationStatus === 'passed'
+    ? '已通过'
+    : accountValidationStatus === 'warning'
+      ? `${accountValidationIssueCount} 项需处理`
+      : '待校验';
   const currentPaymentRowCount = currentPage?.paymentItems.length ?? 0;
   const approvalLabel = request.approval
     ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
@@ -337,6 +533,11 @@ export function FinanceReviewWorkspace({
   const canApprove = financeReviewSessionCanApprove(activeSession, financeReview);
   const allPagesReviewed = financeReview.pageCount > 0 && counts.unreviewed === 0;
   const canReturn = financeReviewSessionCanReturn(activeSession, financeReview);
+  const canConfirmCurrentPage = Boolean(
+    currentPage
+    && currentPage.mismatchCount === 0
+    && currentDecision.state !== 'incorrect'
+  );
   const returnReason = financeReviewReturnReason(activeSession, financeReview);
   const reviewGuidance = counts.unreviewed > 0
     ? `请先完成剩余 ${counts.unreviewed} 份 Invoice 与付款清单核对；全部核对后，可一次性汇总有误项并退回媒介。`
@@ -351,14 +552,16 @@ export function FinanceReviewWorkspace({
   };
 
   const openIssueEditor = () => {
+    setIssueType(currentDecision.state === 'incorrect' ? currentDecision.issueType : '');
     setIssueReason(currentDecision.state === 'incorrect' ? currentDecision.reason : '');
     setIssueEditorOpen(true);
   };
 
   const saveIssue = () => {
-    if (!currentPage || !issueReason.trim()) return;
+    if (!currentPage || !issueType || !issueReason.trim()) return;
     onSessionChange(setFinanceReviewDecision(activeSession, currentPage.key, {
       state: 'incorrect',
+      issueType,
       reason: issueReason.trim(),
       reviewedAt: new Date().toISOString(),
     }));
@@ -366,7 +569,7 @@ export function FinanceReviewWorkspace({
   };
 
   const confirmCurrentPage = () => {
-    if (!currentPage || currentPage.mismatchCount > 0) return;
+    if (!currentPage || !canConfirmCurrentPage) return;
     const nextSession = setFinanceReviewDecision(activeSession, currentPage.key, {
       state: 'correct',
       reviewedAt: new Date().toISOString(),
@@ -405,28 +608,30 @@ export function FinanceReviewWorkspace({
         onBackdropMouseDown={() => undefined}
         footer={(
           <div className="finance-review-footer">
-            <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
-              <button
-                className="finance-review-page-button"
-                type="button"
-                disabled={reviewIndex === 0}
-                onClick={() => goTo(reviewIndex - 1)}
-              >
-                上一页
-              </button>
-              <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
-              <button
-                className="finance-review-page-button"
-                type="button"
-                disabled={reviewIndex >= financeReview.pageCount - 1}
-                onClick={() => goTo(reviewIndex + 1)}
-              >
-                下一页
-              </button>
-            </div>
-            <div className="finance-review-footer-summary" aria-live="polite">
-              <strong>{counts.correct} / {financeReview.pageCount}</strong>
-              <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
+            <div className="finance-review-footer-pagination">
+              <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
+                <button
+                  className="finance-review-page-button"
+                  type="button"
+                  disabled={reviewIndex === 0}
+                  onClick={() => goTo(reviewIndex - 1)}
+                >
+                  上一页
+                </button>
+                <span>{financeReview.pageCount ? reviewIndex + 1 : 0} / {financeReview.pageCount}</span>
+                <button
+                  className="finance-review-page-button"
+                  type="button"
+                  disabled={reviewIndex >= financeReview.pageCount - 1}
+                  onClick={() => goTo(reviewIndex + 1)}
+                >
+                  下一页
+                </button>
+              </div>
+              <div className="finance-review-footer-summary" aria-live="polite">
+                <strong>{counts.correct} / {financeReview.pageCount}</strong>
+                <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
+              </div>
             </div>
             <div className="finance-review-footer-actions">
               <Button
@@ -440,7 +645,7 @@ export function FinanceReviewWorkspace({
               <Button
                 variant="secondary"
                 icon={<CheckCircle2 size={16} />}
-                disabled={!currentPage || currentPage.mismatchCount > 0}
+                disabled={!canConfirmCurrentPage}
                 onClick={confirmCurrentPage}
               >
                 确认本页无误
@@ -515,7 +720,7 @@ export function FinanceReviewWorkspace({
           <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div><FileText size={18} /><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><FileText size={17} /></span><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
                 <div className="finance-review-invoice-header-actions">
                   {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
                   <div className="finance-review-zoom-controls" role="group" aria-label="Invoice 缩放">
@@ -610,7 +815,7 @@ export function FinanceReviewWorkspace({
 
             <section className={`finance-review-pane finance-review-payment-pane${activePane === 'payment' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div><WalletCards size={18} /><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><WalletCards size={17} /></span><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
                 {currentPage?.mismatchCount
                   ? <span className="finance-review-warning-count"><CircleAlert size={13} />关键字段不一致 · {currentPage.mismatchCount} 项</span>
                   : <span className="finance-review-match-count"><CheckCircle2 size={13} />关键字段一致</span>}
@@ -636,7 +841,7 @@ export function FinanceReviewWorkspace({
               className={`finance-review-pane finance-review-approval-pane${activePane === 'approval' ? ' is-mobile-active' : ''}`}
             >
               <header className="finance-review-pane-header">
-                <div><ShieldCheck size={18} /><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><ShieldCheck size={17} /></span><span><strong>项目与审批</strong><small>{request.requestCode ?? request.id}</small></span></div>
               </header>
               <div
                 className="finance-review-approval-scroll"
@@ -646,24 +851,24 @@ export function FinanceReviewWorkspace({
               >
                 <section className="finance-review-metrics" aria-label="请款项目概况">
                   <article className="is-amount">
-                    <span><WalletCards size={14} />请款金额</span>
+                    <span><span className="finance-review-metric-icon" aria-hidden="true"><WalletCards size={13} /></span>请款金额</span>
                     <strong>{request.amount}</strong>
                     <small>当前请款项目总额</small>
                   </article>
                   <article className="is-resources">
-                    <span><FileText size={14} />关联资料</span>
+                    <span><span className="finance-review-metric-icon" aria-hidden="true"><FileText size={13} /></span>关联资料</span>
                     <strong>{request.contracts + request.invoices} 份</strong>
                     <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
                   </article>
                   <article className="is-status">
-                    <span><ShieldCheck size={14} />当前审批状态</span>
+                    <span><span className="finance-review-metric-icon" aria-hidden="true"><ShieldCheck size={13} /></span>当前审批状态</span>
                     <strong>{approvalLabel}</strong>
                     <small>第 {request.approval?.round ?? 1} 轮审批</small>
                   </article>
                 </section>
 
                 <section className="finance-review-project-section" aria-label="请款项目信息">
-                  <header><strong>请款项目信息</strong><span>提交时项目快照</span></header>
+                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div><span>提交时项目快照</span></header>
                   <dl className="finance-review-project-info">
                     <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
                     <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
@@ -674,18 +879,39 @@ export function FinanceReviewWorkspace({
                     <div><dt>提交时间</dt><dd>{submittedAt}</dd></div>
                     <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
                     <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-                    <div className="is-wide"><dt>请款原因</dt><dd>{requestReason}</dd></div>
+                    <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
                   </dl>
                 </section>
 
                 <section className="finance-review-project-section" aria-label="当前审批流">
-                  <header><strong>当前审批流</strong><span>第 {request.approval?.round ?? 1} 轮</span></header>
-                  <ApprovalTimeline request={request} currentUser={currentUser} />
+                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-workflow" aria-hidden="true"><Workflow size={14} /></span><strong>当前审批流</strong></div><span>第 {request.approval?.round ?? 1} 轮</span></header>
+                  <ApprovalTimeline request={request} currentUser={currentUser} compact />
+                </section>
+
+                <section className="finance-review-project-section finance-review-linked-resources" aria-label="关联资料">
+                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-resources" aria-hidden="true"><Files size={14} /></span><strong>关联资料</strong></div><span>项目级汇总</span></header>
+                  <div className="finance-review-resource-list">
+                    <div className="finance-review-resource-row">
+                      <span className="finance-review-resource-icon" aria-hidden="true"><FileText size={15} /></span>
+                      <strong>合同 · {linkedContracts.length} 份</strong>
+                      <button type="button" onClick={() => setResourceDialog('contract')}>查看合同</button>
+                    </div>
+                    <div className="finance-review-resource-row">
+                      <span className="finance-review-resource-icon" aria-hidden="true"><ReceiptText size={15} /></span>
+                      <strong>Invoice · {linkedInvoices.length} 份</strong>
+                      <button type="button" onClick={() => setResourceDialog('invoice')}>查看 Invoice</button>
+                    </div>
+                    <div className="finance-review-resource-row">
+                      <span className="finance-review-resource-icon" aria-hidden="true"><Landmark size={15} /></span>
+                      <strong>收款账户校验结果</strong>
+                      <span className={`finance-review-resource-status is-${accountValidationStatus}`}>{accountValidationLabel}</span>
+                    </div>
+                  </div>
                 </section>
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
                     <CircleAlert size={17} />
-                    <div><strong>已记录有误</strong><p>{currentDecision.reason}</p></div>
+                    <div><strong>{financeReturnIssueLabel(currentDecision.issueType)}</strong><p>{currentDecision.reason}</p></div>
                   </section>
                 ) : null}
               </div>
@@ -707,6 +933,67 @@ export function FinanceReviewWorkspace({
         </div>
       </Modal>
 
+      {resourceDialog === 'contract' ? (
+        <Modal
+          title={`${request.requestCode ?? request.id} · 合同资料`}
+          width="1120px"
+          className="project-resource-modal request-resource-modal finance-review-resource-modal"
+          onClose={() => setResourceDialog(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+        >
+          <div className="project-resource-browser">
+            <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
+            <div className="request-resource-flat-list">
+              {linkedContracts.map((contract) => {
+                const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const contractId = contract.contractId ?? contract.id;
+                return (
+                  <article className="request-resource-flat-row" key={contractId}>
+                    <span className="project-contract-record-icon"><FileText size={18} /></span>
+                    <div><strong>{contract.id}</strong><small>{contract.name}</small></div>
+                    <div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div>
+                    <div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div>
+                    <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
+                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button></div>
+                  </article>
+                );
+              })}
+              {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>请回到请款项目核对关联资料。</p></div> : null}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {resourceDialog === 'invoice' ? (
+        <Modal
+          title={`${request.requestCode ?? request.id} · Invoice`}
+          width="1080px"
+          className="project-resource-modal request-resource-modal finance-review-resource-modal"
+          onClose={() => setResourceDialog(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+        >
+          <div className="project-resource-browser">
+            <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
+            <div className="request-resource-flat-list">
+              {linkedInvoices.map((linkedInvoice) => {
+                const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                return (
+                  <article className="request-resource-flat-row request-resource-invoice-row" key={linkedInvoice.invoiceId}>
+                    <span className="project-contract-record-icon"><ReceiptText size={18} /></span>
+                    <div><strong>{linkedInvoice.id}</strong><small>{linkedInvoice.status}</small></div>
+                    <div><span>达人</span><strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small></div>
+                    <div><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong><small>{linkedInvoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div>
+                    <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>
+                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenInvoice(linkedInvoice.invoiceId)}>查看</Button></div>
+                  </article>
+                );
+              })}
+              {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款项目未关联 Invoice</strong><p>请回到请款项目核对关联资料。</p></div> : null}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
       {issueEditorOpen && currentPage ? (
         <Modal
           title={`${currentPage.invoiceNumber} · 记录有误`}
@@ -715,17 +1002,34 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setIssueEditorOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!issueReason.trim()} onClick={saveIssue}>保存有误记录</Button>
+              <Button variant="danger" disabled={!issueType || !issueReason.trim()} onClick={saveIssue}>保存有误记录</Button>
             </>
           )}
         >
+          <label className="finance-review-reason-field">
+            <span>问题类型 <em>*</em></span>
+            <SelectField<RequestApprovalReturnIssueType | ''>
+              ariaLabel="财务退回问题类型"
+              value={issueType}
+              placeholder="请选择 Invoice 原因或付款清单原因"
+              variant="form"
+              menuStrategy="fixed"
+              options={FINANCE_RETURN_ISSUE_OPTIONS}
+              onChange={setIssueType}
+            />
+            <small>所选类型决定媒介侧仅开放 Invoice 或对应付款明细。</small>
+          </label>
           <label className="finance-review-reason-field">
             <span>问题说明 <em>*</em></span>
             <textarea
               autoFocus
               rows={5}
               value={issueReason}
-              placeholder="填写 Invoice 与付款明细不一致的具体内容"
+              placeholder={issueType === 'INVOICE_CONTENT'
+                ? '请说明该份 Invoice 需要修改的内容'
+                : issueType === 'PAYMENT_LIST'
+                  ? '请说明对应付款明细需要修改的内容'
+                  : '请先选择问题类型，再填写具体原因'}
               onChange={(event) => setIssueReason(event.target.value)}
             />
             <small>该说明会随其他有误记录一并退回媒介。</small>
@@ -754,7 +1058,10 @@ export function FinanceReviewWorkspace({
               {financeReview.pages.flatMap((page) => {
                 const decision = activeSession.decisions[page.key];
                 return decision?.state === 'incorrect' ? (
-                  <article key={page.key}><strong>{page.invoiceNumber}</strong><p>{decision.reason}</p></article>
+                  <article key={page.key}>
+                    <strong>{page.invoiceNumber}<span>{financeReturnIssueLabel(decision.issueType)}</span></strong>
+                    <p>{decision.reason}</p>
+                  </article>
                 ) : [];
               })}
             </div>

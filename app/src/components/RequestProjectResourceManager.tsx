@@ -6,15 +6,18 @@ import {
   FilePlus2,
   FileText,
   Link2,
+  Mail,
   Pencil,
   ReceiptText,
   RefreshCw,
+  Send,
   Trash2,
   Unlink,
   Upload,
+  UserCheck,
   WalletCards,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   invoicePaymentListProvider,
   paymentListEffectiveAccount,
@@ -44,12 +47,17 @@ import {
   getPayoutAccountId,
   getPayoutAccountIdentifier,
 } from '../payoutAccounts';
+import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
-import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
+import {
+  requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForInvoice,
+} from '../requestApprovalWorkflow';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
 import { ContractUploadWizard } from './ContractUploadWizard';
-import { PaymentProviderBadge } from './PaymentProviderBadge';
 
 type ResourceKind = 'contract' | 'invoice' | 'payment';
 type ConfirmAction = {
@@ -68,13 +76,20 @@ type Props = {
   contracts: ContractRecord[];
   invoices: GeneratedInvoiceRecord[];
   paymentLists: PaymentListRecord[];
+  payouts?: Payout[];
+  focusedFailurePayoutId?: string | null;
+  canHandlePaymentFailure?: boolean;
+  onFailureFocusHandled?: () => void;
+  onSendPaymentFailureNotification?: (payoutId: string, message: string) => boolean;
+  onSimulatePaymentFailureAccountUpdate?: (payoutId: string) => boolean;
+  onRevalidatePaymentFailureAccount?: (payoutId: string) => boolean;
   currentUser: SystemUser;
   onChangeLinks: (links: PaymentRequestCreatorLink[], summary: string) => void;
   onOpenContract: (contractId: string) => void;
   onOpenInvoice: (invoiceId: InvoiceId) => void;
   onGenerateContract: () => void;
   onGenerateInvoice: () => void;
-  onUploadContract: (input: ContractUploadInput) => ContractRecord;
+  onUploadContract: (input: ContractUploadInput) => ContractRecord | undefined;
   onDeleteContract: (contractId: ContractId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onGeneratePaymentLists: () => void;
@@ -99,7 +114,7 @@ export type RequestProjectResourceActions = {
   onOpenInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onGenerateContract: (request: RequestProjectSummary) => void;
   onGenerateInvoice: (request: RequestProjectSummary) => void;
-  onUploadContract: (request: RequestProjectSummary, input: ContractUploadInput) => ContractRecord;
+  onUploadContract: (request: RequestProjectSummary, input: ContractUploadInput) => ContractRecord | undefined;
   onDeleteContract: (request: RequestProjectSummary, contractId: ContractId) => void;
   onDeleteInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onClearPaymentLists: (request: RequestProjectSummary) => void;
@@ -114,11 +129,24 @@ export type RequestProjectResourceActions = {
 
 export const canEditRequestProjectResources = (
   user: SystemUser,
-  lifecycle: RequestProjectSummary['lifecycle'],
+  request: Pick<RequestProjectSummary, 'approval' | 'lifecycle'>,
+  hasPaymentFailureRecovery = false,
 ) => (
   user.roleKey === 'admin'
   || user.roleKey === 'owner'
-  || (user.roleKey === 'media' && ['DRAFT', 'RETURNED'].includes(lifecycle ?? 'DRAFT'))
+  || (
+    user.roleKey === 'media'
+    && (
+      request.lifecycle === 'DRAFT'
+      || (
+        request.lifecycle === 'RETURNED'
+        && (
+          request.approval?.status === 'RETURNED_TO_MEDIA_REVIEW'
+          || hasPaymentFailureRecovery
+        )
+      )
+    )
+  )
 );
 
 const contractStableId = (contract: ContractRecord) => contract.contractId ?? contract.id as ContractId;
@@ -291,6 +319,13 @@ export function RequestProjectResourceManager({
   contracts,
   invoices,
   paymentLists,
+  payouts = [],
+  focusedFailurePayoutId = null,
+  canHandlePaymentFailure = false,
+  onFailureFocusHandled,
+  onSendPaymentFailureNotification,
+  onSimulatePaymentFailureAccountUpdate,
+  onRevalidatePaymentFailureAccount,
   currentUser,
   onChangeLinks,
   onOpenContract,
@@ -318,7 +353,8 @@ export function RequestProjectResourceManager({
   const [selectedLinkedInvoiceIds, setSelectedLinkedInvoiceIds] = useState<InvoiceId[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const canEdit = canEditRequestProjectResources(currentUser, request.lifecycle);
+  const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
+  const [notificationMessage, setNotificationMessage] = useState('');
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -328,12 +364,77 @@ export function RequestProjectResourceManager({
     list.paymentRequestProjectId === request.paymentRequestProjectId
   ));
   const currentPaymentList = requestPaymentLists[0] ?? null;
+  const paymentFailureRecoveryMode = payouts.some((payout) => (
+    payout.paymentRequestProjectId === request.paymentRequestProjectId
+    && Boolean(payout.paymentFailureRecovery)
+    && payout.status !== '已付款'
+  ));
+  const canEdit = canEditRequestProjectResources(
+    currentUser,
+    request,
+    paymentFailureRecoveryMode,
+  );
+  const hasScopedApprovalReturn = requestApprovalHasScopedReturnItems(request.approval);
+  const hasScopedPaymentListReturn = Boolean(request.approval?.returnItems?.some((item) => (
+    item.issueType === 'PAYMENT_LIST'
+  )));
+  const canEditLinkedResources = canEdit && !paymentFailureRecoveryMode && !hasScopedApprovalReturn;
+  const canEditPaymentList = canEdit
+    && !paymentFailureRecoveryMode
+    && (!hasScopedApprovalReturn || hasScopedPaymentListReturn);
   const paymentItemCount = currentPaymentList?.items.length ?? 0;
   const paymentListEditing = currentPaymentList?.status === 'draft';
   const paymentListExportable = Boolean(
     currentPaymentList
     && !['draft', 'submitted'].includes(currentPaymentList.status),
   );
+  const notificationPayout = notificationPayoutId
+    ? payouts.find((payout) => payout.id === notificationPayoutId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (focusedFailurePayoutId) setResourceDialog('payment');
+  }, [focusedFailurePayoutId]);
+
+  useEffect(() => {
+    if (resourceDialog !== 'payment' || !focusedFailurePayoutId) return;
+    const invoice = invoices.find((candidate) => candidate.sourcePayoutId === focusedFailurePayoutId);
+    if (!invoice) return;
+    let secondFrame = 0;
+    let clearHighlightTimer = 0;
+    const frame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        document.getElementById(`request-payment-row-${invoice.invoiceId}`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+        document.getElementById(`request-payment-row-${invoice.invoiceId}`)?.focus({ preventScroll: true });
+        clearHighlightTimer = window.setTimeout(() => onFailureFocusHandled?.(), 2400);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+      if (clearHighlightTimer) window.clearTimeout(clearHighlightTimer);
+    };
+  }, [focusedFailurePayoutId, invoices, onFailureFocusHandled, resourceDialog]);
+
+  const openFailureNotification = (payout: Payout) => {
+    setNotificationPayoutId(payout.id);
+    setNotificationMessage(`您的 ${payout.invoice} 付款未成功，请更新收款账户后在系统中反馈，以便重新安排付款。`);
+  };
+
+  const closeFailureNotification = () => {
+    setNotificationPayoutId(null);
+    setNotificationMessage('');
+  };
+
+  const submitFailureNotification = () => {
+    if (!notificationPayout || !notificationMessage.trim()) return;
+    if (onSendPaymentFailureNotification?.(notificationPayout.id, notificationMessage.trim())) {
+      closeFailureNotification();
+    }
+  };
 
   const generateOrRefreshPaymentList = () => {
     if (currentPaymentList?.status === 'draft' && currentPaymentList.items.length) {
@@ -499,18 +600,20 @@ export function RequestProjectResourceManager({
         </article>
       </div>
 
-      {!canEdit ? <NoticeBanner>当前账号在项目提交后仅可查看与导出资料。</NoticeBanner> : null}
+      {hasScopedApprovalReturn ? (
+        <NoticeBanner>财务已按明细指定修改范围：仅标记为 Invoice 原因或付款清单原因的对应记录可修改，其余资料保持锁定。</NoticeBanner>
+      ) : !canEditLinkedResources && !paymentFailureRecoveryMode ? <NoticeBanner>当前账号在项目提交后仅可查看与导出资料。</NoticeBanner> : null}
 
       {resourceDialog === 'contract' ? (
         <Modal title={`${request.requestCode ?? request.id} · 合同资料`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
-            {canEdit ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateContract}>生成合同</Button><Button variant="ghost" icon={<Upload size={15} />} onClick={() => { setResourceDialog(null); setUploadOpen(true); }}>上传合同</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
+            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateContract}>生成合同</Button><Button variant="ghost" icon={<Upload size={15} />} onClick={() => { setResourceDialog(null); setUploadOpen(true); }}>上传合同</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
             <div className="request-resource-flat-list">
               {linkedContracts.map((contract) => {
                 const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
                 const contractId = contractStableId(contract);
-                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>{canEdit ? <><button type="button" onClick={() => setConfirmAction({ title: '解除合同关联', description: `合同 ${contract.id} 源记录会保留，仅从当前请款项目移除。`, confirmLabel: '确认解除', run: () => unlinkContract(contractId) })}><Unlink size={14} />解除</button>{canDeleteContract(currentUser, contract) ? <button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；若被其他请款项目引用，系统会阻止操作。`, confirmLabel: '删除合同', danger: true, run: () => onDeleteContract(contractId) })}><Trash2 size={14} />删除</button> : null}</> : null}</div></article>;
+                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>{canEditLinkedResources ? <><button type="button" onClick={() => setConfirmAction({ title: '解除合同关联', description: `合同 ${contract.id} 源记录会保留，仅从当前请款项目移除。`, confirmLabel: '确认解除', run: () => unlinkContract(contractId) })}><Unlink size={14} />解除</button>{canDeleteContract(currentUser, contract) ? <button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；若被其他请款项目引用，系统会阻止操作。`, confirmLabel: '删除合同', danger: true, run: () => onDeleteContract(contractId) })}><Trash2 size={14} />删除</button> : null}</> : null}</div></article>;
               })}
               {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可上传、生成或关联已有记录。</p></div> : null}
             </div>
@@ -522,12 +625,17 @@ export function RequestProjectResourceManager({
         <Modal title={`${request.requestCode ?? request.id} · Invoice`} width="1080px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
-            {canEdit ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateInvoice}>生成 Invoice</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('invoice')}>关联已有 Invoice</Button>{selectedLinkedInvoiceIds.length ? <Button variant="danger" icon={<Unlink size={15} />} onClick={() => setConfirmAction({ title: '批量解除 Invoice 关联', description: `将从当前请款项目移除 ${selectedLinkedInvoiceIds.length} 份 Invoice，源记录保留。`, confirmLabel: '确认解除', run: () => unlinkInvoices(selectedLinkedInvoiceIds) })}>解除已选</Button> : null}</div> : null}
+            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateInvoice}>生成 Invoice</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('invoice')}>关联已有 Invoice</Button>{selectedLinkedInvoiceIds.length ? <Button variant="danger" icon={<Unlink size={15} />} onClick={() => setConfirmAction({ title: '批量解除 Invoice 关联', description: `将从当前请款项目移除 ${selectedLinkedInvoiceIds.length} 份 Invoice，源记录保留。`, confirmLabel: '确认解除', run: () => unlinkInvoices(selectedLinkedInvoiceIds) })}>解除已选</Button> : null}</div> : null}
             <div className="request-resource-flat-list">
               {linkedInvoices.map((invoice) => {
                 const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
                 const selected = selectedLinkedInvoiceIds.includes(invoice.invoiceId);
-                return <article className="request-resource-flat-row request-resource-invoice-row" key={invoice.invoiceId}>{canEdit ? <label className="request-resource-select"><input type="checkbox" checked={selected} aria-label={`选择 ${invoice.id}`} onChange={() => setSelectedLinkedInvoiceIds((current) => selected ? current.filter((id) => id !== invoice.invoiceId) : [...current, invoice.invoiceId])} /></label> : <span className="project-contract-record-icon"><ReceiptText size={18} /></span>}<div><strong>{invoice.id}</strong><small>{invoice.status}</small></div><div><span>达人</span><strong>{creator?.name ?? invoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small></div><div><span>Invoice 金额</span><strong>{formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div><span className="project-record-status"><i />{invoice.validationStatus === 'valid' ? '已校验' : '需重新校验'}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenInvoice(invoice.invoiceId)}>查看</Button>{canEdit ? <><button type="button" onClick={() => setConfirmAction({ title: '解除 Invoice 关联', description: `${invoice.id} 源记录会保留，对应付款行将移除。`, confirmLabel: '确认解除', run: () => unlinkInvoices([invoice.invoiceId]) })}><Unlink size={14} />解除</button><button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除 Invoice 源记录', description: `将删除 ${invoice.id}；若被其他项目引用，系统会阻止操作。`, confirmLabel: '删除 Invoice', danger: true, run: () => onDeleteInvoice(invoice.invoiceId) })}><Trash2 size={14} />删除</button></> : null}</div></article>;
+                const invoiceReturn = requestApprovalReturnItemForInvoice(
+                  request.approval,
+                  invoice.invoiceId,
+                  'INVOICE_CONTENT',
+                );
+                return <article className="request-resource-flat-row request-resource-invoice-row" key={invoice.invoiceId}>{canEditLinkedResources ? <label className="request-resource-select"><input type="checkbox" checked={selected} aria-label={`选择 ${invoice.id}`} onChange={() => setSelectedLinkedInvoiceIds((current) => selected ? current.filter((id) => id !== invoice.invoiceId) : [...current, invoice.invoiceId])} /></label> : <span className="project-contract-record-icon"><ReceiptText size={18} /></span>}<div><strong>{invoice.id}</strong><small>{invoice.status}</small></div><div><span>达人</span><strong>{creator?.name ?? invoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small></div><div><span>Invoice 金额</span><strong>{formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div><span className={`project-record-status${invoiceReturn ? ' is-warning' : ''}`}><i />{invoiceReturn ? '需修改 Invoice' : invoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={invoiceReturn ? <Pencil size={14} /> : <Eye size={14} />} onClick={() => onOpenInvoice(invoice.invoiceId)}>{invoiceReturn ? '打开修改' : '查看'}</Button>{canEditLinkedResources ? <><button type="button" onClick={() => setConfirmAction({ title: '解除 Invoice 关联', description: `${invoice.id} 源记录会保留，对应付款行将移除。`, confirmLabel: '确认解除', run: () => unlinkInvoices([invoice.invoiceId]) })}><Unlink size={14} />解除</button><button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除 Invoice 源记录', description: `将删除 ${invoice.id}；若被其他项目引用，系统会阻止操作。`, confirmLabel: '删除 Invoice', danger: true, run: () => onDeleteInvoice(invoice.invoiceId) })}><Trash2 size={14} />删除</button></> : null}</div></article>;
               })}
               {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款项目未关联 Invoice</strong><p>每位达人提交审批前至少需要一份 Invoice。</p></div> : null}
             </div>
@@ -541,30 +649,182 @@ export function RequestProjectResourceManager({
             <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {request.paymentChannel || '待确认'}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
-                {canEdit ? <Button icon={<RefreshCw size={15} />} disabled={!linkedInvoices.length} onClick={generateOrRefreshPaymentList}>生成 / 刷新清单</Button> : null}
+                {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!linkedInvoices.length} onClick={generateOrRefreshPaymentList}>生成 / 刷新清单</Button> : null}
                 {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                {canEdit && currentPaymentList ? <Button variant="secondary" icon={<Pencil size={15} />} disabled={paymentListEditing} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>{paymentListEditing ? '编辑中' : '编辑付款清单'}</Button> : null}
-                {canEdit && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled={!paymentItemCount} onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
+                {canEditPaymentList && currentPaymentList ? <Button variant="secondary" icon={<Pencil size={15} />} disabled={paymentListEditing} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>{paymentListEditing ? '编辑中' : hasScopedApprovalReturn ? '修改退回明细' : '编辑付款清单'}</Button> : null}
+                {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled={!paymentItemCount} onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
               </div>
             ) : null}
+            {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
+            {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务标记为“付款清单原因”的明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
             <div className="project-payment-rows request-payment-flat-rows">
               {currentPaymentList?.items.map((item) => {
                 const list = currentPaymentList;
                 const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
                 const effectiveAccount = paymentListEffectiveAccount(item);
-                const editable = canEdit && list.status === 'draft';
-                const accountOptions = eligibleInvoicePayoutAccounts(creator)
-                  .filter((account) => !requestPaymentProvider || account.provider === requestPaymentProvider)
+                const invoice = invoices.find((candidate) => candidate.invoiceId === item.invoiceId);
+                const linkedPayout = invoice
+                  ? payouts.find((payout) => (
+                      payout.id === invoice.sourcePayoutId
+                    ))
+                  : undefined;
+                const failurePayout = linkedPayout?.paymentFailureRecovery && linkedPayout.status !== '已付款'
+                  ? linkedPayout
+                  : undefined;
+                const paymentListReturn = requestApprovalReturnItemForInvoice(
+                  request.approval,
+                  item.invoiceId,
+                  'PAYMENT_LIST',
+                );
+                const editable = canEdit
+                  && list.status === 'draft'
+                  && (!paymentFailureRecoveryMode || Boolean(failurePayout))
+                  && (!hasScopedApprovalReturn || Boolean(paymentListReturn));
+                const paymentLocked = (paymentFailureRecoveryMode && !failurePayout)
+                  || (hasScopedApprovalReturn && !paymentListReturn);
+                const recovery = failurePayout?.paymentFailureRecovery;
+                const focused = failurePayout?.id === focusedFailurePayoutId;
+                const eligibleAccounts = eligibleInvoicePayoutAccounts(creator)
+                  .filter((account) => !requestPaymentProvider || account.provider === requestPaymentProvider);
+                const currentAccount = creator?.payoutAccounts.find((account) => (
+                  getPayoutAccountId(account) === effectiveAccount.payoutAccountId
+                ));
+                const visibleAccounts = currentAccount && !eligibleAccounts.some((account) => (
+                  getPayoutAccountId(account) === getPayoutAccountId(currentAccount)
+                ))
+                  ? [...eligibleAccounts, currentAccount]
+                  : eligibleAccounts;
+                const eligibleAccountIds = new Set(eligibleAccounts.map(getPayoutAccountId));
+                const accountOptions = visibleAccounts
                   .map((account) => ({
-                  value: getPayoutAccountId(account),
-                  label: account.nickname,
-                  description: `${account.provider} · ${maskInvoiceAccountValue(getPayoutAccountIdentifier(account))}`,
+                    value: getPayoutAccountId(account),
+                    label: account.nickname,
+                    description: `${account.provider} · ${maskInvoiceAccountValue(getPayoutAccountIdentifier(account))}`,
+                    disabled: !eligibleAccountIds.has(getPayoutAccountId(account)),
                   }));
-                return <article className="project-payment-row" id={`request-payment-row-${item.invoiceId}`} key={`${list.paymentListId}-${item.invoiceId}`}><header className="project-payment-row-header"><div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · <PaymentProviderBadge compact provider={effectiveAccount.provider} /></span></div><div className="project-payment-row-actions">{editable && item.requiresRevalidation ? <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}><RefreshCw size={12} />重新校验</button> : null}{editable ? <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => setConfirmAction({ title: '移除付款明细', description: '仅从当前付款单移除这笔明细，Invoice 和项目关联保留。', confirmLabel: '确认移除', run: () => onRemovePaymentInvoice(list.paymentListId, item.invoiceId) })}><Trash2 size={15} /></button> : null}</div></header><div className="project-payment-validation-row"><span className={item.requiresRevalidation ? 'project-payment-validation is-warning' : 'project-payment-validation'}>{item.requiresRevalidation ? item.validationIssues?.[0] ?? '需重新校验' : `${paymentListStatusLabel(list.status)} · ${effectiveAccount.provider}`}</span></div><div className="project-payment-fields"><label className="project-payment-account-field"><span>收款账户</span><SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label><label><span>支付币种</span><input disabled={!editable} value={paymentListItemValue(item, 'currency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value.toUpperCase())} /></label><label><span>收款币种</span><input disabled={!editable} value={paymentListItemValue(item, 'receiveCurrency')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value.toUpperCase())} /></label><label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label><label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label><label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label><label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label><label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label></div><footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer></article>;
+                return (
+                  <article
+                    className={`project-payment-row${failurePayout ? ' is-payment-failure' : ''}${paymentLocked ? ' is-payment-locked' : ''}${focused ? ' is-failure-focused' : ''}`}
+                    id={`request-payment-row-${item.invoiceId}`}
+                    key={`${list.paymentListId}-${item.invoiceId}`}
+                    tabIndex={focused ? -1 : undefined}
+                  >
+                    <header className="project-payment-row-header">
+                      <div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {effectiveAccount.provider}</span></div>
+                      <div className="project-payment-row-actions">
+                        {editable && !failurePayout && item.requiresRevalidation ? <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}><RefreshCw size={12} />重新校验</button> : null}
+                        {editable && !paymentFailureRecoveryMode ? <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => setConfirmAction({ title: '移除付款明细', description: '仅从当前付款单移除这笔明细，Invoice 和项目关联保留。', confirmLabel: '确认移除', run: () => onRemovePaymentInvoice(list.paymentListId, item.invoiceId) })}><Trash2 size={15} /></button> : null}
+                      </div>
+                    </header>
+                    <div className="project-payment-validation-row"><span className={paymentListReturn || item.requiresRevalidation ? 'project-payment-validation is-warning' : 'project-payment-validation'}>{paymentListReturn ? '付款清单原因 · 待修改' : paymentLocked && hasScopedApprovalReturn ? '已通过 · 已锁定' : paymentLocked && linkedPayout?.status === '已付款' ? '校验通过 · 已付款冻结' : item.requiresRevalidation ? item.validationIssues?.[0] ?? '需重新校验' : `${paymentListStatusLabel(list.status)} · ${effectiveAccount.provider}`}</span></div>
+                    {paymentListReturn ? (
+                      <div className="request-approval-return-item-note" role="note">
+                        <AlertTriangle size={15} />
+                        <span><strong>退回原因：</strong>{paymentListReturn.reason}</span>
+                      </div>
+                    ) : null}
+                    {failurePayout && recovery ? (
+                      <section className="payment-failure-recovery-panel" aria-label={`${item.snapshot.creatorName} 付款失败恢复`}>
+                        <div className="payment-failure-recovery-copy">
+                          <span className={`payment-failure-recovery-status is-${recovery.status.toLowerCase()}`}><i />{paymentFailureRecoveryLabel(failurePayout)}</span>
+                          <strong>{failurePayout.paymentFailureReturn?.reason ?? failurePayout.paymentFailure?.providerResponse ?? '未记录失败原因'}</strong>
+                          <small>此处为前端原型流程，站内信、Gmail 和达人反馈不会真实发送或持久化。</small>
+                          {recovery.notifications.length ? (
+                            <span className="payment-failure-delivery-summary">
+                              <Mail size={14} aria-hidden="true" />
+                              已通知 {recovery.notifications.length} 次 · 最近一次 {recovery.notifications[recovery.notifications.length - 1]?.deliveries.map((delivery) => `${delivery.channel === 'IN_APP' ? '站内信' : 'Gmail'}${delivery.status === 'SIMULATED_SENT' ? '已发送' : '未发送'}`).join(' / ')}
+                            </span>
+                          ) : null}
+                          {recovery.revalidationIssues?.length ? (
+                            <ul className="payment-failure-revalidation-issues">
+                              {recovery.revalidationIssues.map((issue) => <li key={issue}>{issue}</li>)}
+                            </ul>
+                          ) : null}
+                        </div>
+                        {canHandlePaymentFailure ? (
+                          <div className="payment-failure-recovery-actions">
+                            <Button variant="secondary" icon={<Send size={15} />} disabled={recovery.status === 'RETRY_SUBMITTED'} onClick={() => openFailureNotification(failurePayout)}>发送失败通知</Button>
+                            <Button
+                              variant="ghost"
+                              icon={<UserCheck size={15} />}
+                              disabled={!recovery.notifications.length || !['AWAITING_CREATOR_UPDATE', 'READY_FOR_RETRY'].includes(recovery.status)}
+                              onClick={() => onSimulatePaymentFailureAccountUpdate?.(failurePayout.id)}
+                            >
+                              模拟达人已更新账户
+                            </Button>
+                            <Button
+                              icon={<RefreshCw size={15} />}
+                              disabled={recovery.status !== 'CREATOR_UPDATED'}
+                              onClick={() => onRevalidatePaymentFailureAccount?.(failurePayout.id)}
+                            >
+                              重新校验
+                            </Button>
+                          </div>
+                        ) : null}
+                      </section>
+                    ) : null}
+                    <div className="project-payment-fields">
+                      <label className="project-payment-account-field">
+                        <span>收款账户</span>
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} />
+                      </label>
+                      <label>
+                        <span>支付币种</span>
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 支付币种`} variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', value)} />
+                      </label>
+                      <label>
+                        <span>收款币种</span>
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 收款币种`} variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', value)} />
+                      </label>
+                      <label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
+                      <label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label>
+                      <label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label>
+                      <label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label>
+                      <label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label>
+                    </div>
+                    <footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer>
+                  </article>
+                );
               })}
               {!currentPaymentList ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单尚未生成</strong><p>请先关联 Invoice，再生成当前请款项目唯一的付款单。</p></div> : null}
               {currentPaymentList && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单已清空</strong><p>点击“生成 / 刷新清单”可按当前关联的 Invoice 重新生成付款明细。</p></div> : null}
             </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {notificationPayout ? (
+        <Modal
+          title="发送付款失败通知"
+          width="560px"
+          onClose={closeFailureNotification}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={closeFailureNotification}>取消</Button>
+              <Button icon={<Send size={16} />} disabled={!notificationMessage.trim()} onClick={submitFailureNotification}>模拟发送</Button>
+            </>
+          )}
+        >
+          <div className="payment-failure-notification-dialog">
+            <div className="payment-failure-notification-recipient">
+              <strong>{notificationPayout.creator}</strong>
+              <span>{notificationPayout.invoice} · {notificationPayout.provider} · {notificationPayout.currency} {notificationPayout.amount.toLocaleString('en-US')}</span>
+            </div>
+            <div className="payment-failure-notification-channels" aria-label="模拟通知渠道">
+              <span><Send size={15} aria-hidden="true" />站内信</span>
+              <span><Mail size={15} aria-hidden="true" />Gmail</span>
+            </div>
+            <label className="return-review-field">
+              <span>通知内容 <em className="required-mark" aria-hidden="true">*</em><small>{notificationMessage.length}/300</small></span>
+              <textarea
+                autoFocus
+                maxLength={300}
+                aria-label="付款失败通知内容"
+                value={notificationMessage}
+                onChange={(event) => setNotificationMessage(event.target.value)}
+              />
+              <small>当前仅模拟发送并保留通知记录，不会真实触发站内信或 Gmail。</small>
+            </label>
           </div>
         </Modal>
       ) : null}
@@ -594,7 +854,7 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
-      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators.filter((creator) => linkByCreator.has(creator.id as PaymentRequestCreatorLink['creatorId']))} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(input) => { const record = onUploadContract(input); setUploadOpen(false); onOpenContract(record.id); }} /> : null}
+      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators.filter((creator) => linkByCreator.has(creator.id as PaymentRequestCreatorLink['creatorId']))} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(input) => { const record = onUploadContract(input); setUploadOpen(false); if (record) onOpenContract(record.id); }} /> : null}
 
       {confirmAction ? <Modal title={confirmAction.title} width="460px" className="project-payment-remove-modal" onClose={() => setConfirmAction(null)} footer={<><Button variant="secondary" onClick={() => setConfirmAction(null)}>取消</Button><Button variant={confirmAction.danger ? 'danger' : 'primary'} onClick={() => { confirmAction.run(); setConfirmAction(null); }}>{confirmAction.confirmLabel}</Button></>}><div className="project-payment-remove-confirmation"><span><AlertTriangle size={22} /></span><div><strong>请确认操作范围</strong><p>{confirmAction.description}</p><small>本原型的变更只保存在当前浏览器会话。</small></div></div></Modal> : null}
     </>

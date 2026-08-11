@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { INITIAL_PAYOUTS } from './data';
+import type { PaymentBatchRecord } from './paymentBatches';
 import type { Payout } from './types';
 import {
+  findTransactionBatchContext,
   filterTransactionRecords,
+  isFinalTransaction,
+  isPaymentTransactionRecord,
   transactionCreatorLabel,
   transactionDateKey,
+  transactionRecordDetails,
   type TransactionRecordFilters,
 } from './transactionRecords';
 
@@ -36,8 +42,39 @@ const filters = (overrides: Partial<TransactionRecordFilters> = {}): Transaction
   ...overrides,
 });
 
+const batch = {
+  paymentBatchId: 'payment-batch-test',
+  paymentBatchCode: 'PAY-20260810-TEST',
+  request: {
+    paymentRequestProjectId: 'request-test',
+    requestCode: 'REQ-20260810-TEST',
+    requestStatus: '已付款',
+    lifecycle: 'PAID',
+    amount: 'USD 1,980',
+    reason: '达人合作款',
+    expectedPaymentDate: '2026-08-05',
+    cooperationProjectId: 'project-test',
+    cooperationProjectCode: 'PRJ-20260801-TEST01',
+    cooperationProjectName: '夏季新品推广',
+    brand: 'COMETS',
+    media: 'Mina',
+    pm: 'PM',
+  },
+  provider: 'Airwallex',
+  fundingAccountId: 'mock-awx-operating',
+  sourceCurrency: 'USD',
+  payer: '财务测试员',
+  paidAt: '2026-08-05 16:00',
+  status: '已付款',
+  lifecycle: ['COMPLETED'],
+  items: [{
+    payoutId: 'pay-test',
+    paymentListCode: 'PL-20260810-TEST',
+  }],
+} as unknown as PaymentBatchRecord;
+
 describe('transaction records', () => {
-  it('keeps only approved final transactions for the selected tab', () => {
+  it('groups processing payments with the paid tab and supports its row-status filters', () => {
     const records = [
       payout(),
       payout({ id: 'failed', status: '付款失败', paidAt: undefined, paymentFailure: {
@@ -50,9 +87,32 @@ describe('transaction records', () => {
       payout({ id: 'unapproved', invoiceReviewStatus: '待发起请款' }),
     ];
 
-    expect(filterTransactionRecords(records, filters()).map((record) => record.id)).toEqual(['pay-test', 'failed']);
-    expect(filterTransactionRecords(records, filters({ tab: 'paid' })).map((record) => record.id)).toEqual(['pay-test']);
+    expect(filterTransactionRecords(records, filters()).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);
+    expect(filterTransactionRecords(records, filters({ tab: 'paid' })).map((record) => record.id)).toEqual(['pay-test', 'processing']);
+    expect(filterTransactionRecords(records, filters({ tab: 'paid', status: '已付款' })).map((record) => record.id)).toEqual(['pay-test']);
+    expect(filterTransactionRecords(records, filters({ tab: 'paid', status: '付款处理中' })).map((record) => record.id)).toEqual(['processing']);
     expect(filterTransactionRecords(records, filters({ tab: 'failed' })).map((record) => record.id)).toEqual(['failed']);
+    expect(filterTransactionRecords(records, filters({ tab: undefined, status: '付款处理中' })).map((record) => record.id)).toEqual(['processing']);
+    expect(filterTransactionRecords(records, filters({ tab: undefined, status: '全部失败' })).map((record) => record.id)).toEqual(['failed']);
+    expect(records.filter(isPaymentTransactionRecord).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);
+  });
+
+  it('filters every transaction by its containing batch failure scope', () => {
+    const failed = payout({ id: 'failed', status: '付款失败' });
+    const partialBatch = {
+      ...batch,
+      status: '部分失败',
+      items: [
+        { ...batch.items[0], payoutId: 'pay-test', paymentStatus: '已付款' },
+        { ...batch.items[0], payoutId: 'failed', paymentStatus: '付款失败' },
+      ],
+    } as unknown as PaymentBatchRecord;
+
+    expect(filterTransactionRecords(
+      [payout(), failed],
+      filters({ status: '部分失败' }),
+      [partialBatch],
+    ).map((record) => record.id)).toEqual(['pay-test', 'failed']);
   });
 
   it('combines search, provider, and inclusive date filters', () => {
@@ -85,5 +145,40 @@ describe('transaction records', () => {
     expect(transactionDateKey(failed)).toBe('2026-08-04');
     expect(transactionCreatorLabel(failed)).toBe('Mina Kato (@MinaKato)');
     expect(transactionCreatorLabel(payout({ creator: '@MinaKato' }))).toBe('@MinaKato');
+  });
+
+  it('matches stable batch context and searches request, batch, payer, and payment-list data', () => {
+    expect(findTransactionBatchContext(payout(), [batch])?.batch.paymentBatchCode).toBe('PAY-20260810-TEST');
+    expect(findTransactionBatchContext(payout({ id: 'other' }), [batch])).toBeNull();
+
+    ['REQ-20260810-TEST', 'PAY-20260810-TEST', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
+      expect(filterTransactionRecords([payout()], filters({ search }), [batch])).toHaveLength(1);
+    });
+  });
+
+  it('provides complete historical snapshots for every current legacy transaction', () => {
+    const historicalTransactions = INITIAL_PAYOUTS.filter(isFinalTransaction);
+
+    expect(historicalTransactions).toHaveLength(10);
+    historicalTransactions.forEach((record) => {
+      const details = transactionRecordDetails(record, null);
+      const requiredValues = [
+        details.payer,
+        details.paymentTime,
+        details.paymentBatchCode,
+        details.requestCode,
+        details.requestReason,
+        details.transferMethod,
+        details.accountSummary,
+        details.feeBearer,
+        details.transactionReference,
+        details.paymentListCode,
+      ];
+
+      expect(details.source).toBe('historical');
+      expect(requiredValues.every((value) => value && !/未记录|未关联|待补全/.test(value))).toBe(true);
+      expect(details.contracts).toHaveLength(1);
+      expect(details.invoice?.invoiceNumber).toBe(record.invoice);
+    });
   });
 });

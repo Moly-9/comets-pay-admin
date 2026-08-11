@@ -1,14 +1,24 @@
-import type { EngagementId } from '../businessWorkflow';
+import type { EngagementId, ProjectId } from '../businessWorkflow';
 import {
   createAirwallexPayoutAccount,
   createPayPalPayoutAccount,
 } from '../payoutAccounts';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
-import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency } from '../types';
 
 export const INVOICE_BATCH_PROTOTYPE_CURRENCY = 'USD' as const;
+export const INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY: InvoiceCurrency = 'EUR';
+export const INVOICE_BATCH_PROTOTYPE_DEMO_DESCRIPTION = '海外创作者内容合作服务费（演示数据）';
 export const INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL = '默认空中云汇';
 export const INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL = 'PayPal USD 原型账户';
+
+const INVOICE_BATCH_PROTOTYPE_DEMO_VALUES = [
+  { unitPrice: 1_680, quantity: 1, payoutProvider: 'Airwallex' },
+  { unitPrice: 840, quantity: 2, payoutProvider: 'PayPal' },
+  { unitPrice: 2_250, quantity: 1, payoutProvider: 'Airwallex' },
+  { unitPrice: 610, quantity: 3, payoutProvider: 'PayPal' },
+  { unitPrice: 2_980, quantity: 1, payoutProvider: 'Airwallex' },
+] as const;
 
 type ProjectCreatorReference = NonNullable<ProjectSummary['creatorProfiles']>[number];
 
@@ -122,7 +132,57 @@ export const selectableInvoiceBatchEngagementIds = (
     generatedInvoices.map((record) => record.snapshot.engagementId).filter(Boolean),
   );
   return references
-    .filter((reference) => !existingEngagementIds.has(reference.engagementId))
+    .filter((reference) => (
+      reference.status !== 'removed'
+      && !existingEngagementIds.has(reference.engagementId)
+    ))
     .slice(0, limit)
     .map((reference) => reference.engagementId);
+};
+
+export type InvoiceBatchPrototypeSeed = {
+  projectId: ProjectId;
+  currency: InvoiceCurrency;
+  description: string;
+  rows: Array<{
+    engagementId: EngagementId;
+    unitPrice: number;
+    quantity: number;
+    payoutProvider: 'Airwallex' | 'PayPal';
+  }>;
+};
+
+export const createInvoiceBatchPrototypeSeed = (
+  projects: ProjectSummary[],
+  generatedInvoices: GeneratedInvoiceRecord[],
+  limit = INVOICE_BATCH_PROTOTYPE_DEMO_VALUES.length,
+): InvoiceBatchPrototypeSeed | null => {
+  const candidate = projects.reduce<{
+    projectId: ProjectId;
+    engagementIds: EngagementId[];
+  } | null>((best, project) => {
+    const projectId = (
+      project.cooperationProjectId ?? project.projectId ?? project.id
+    ) as ProjectId;
+    const engagementIds = selectableInvoiceBatchEngagementIds(
+      project.creatorProfiles ?? [],
+      generatedInvoices,
+      Math.min(limit, INVOICE_BATCH_PROTOTYPE_DEMO_VALUES.length),
+    );
+    return !best || engagementIds.length > best.engagementIds.length
+      ? { projectId, engagementIds }
+      : best;
+  }, null);
+
+  if (!candidate?.engagementIds.length) return null;
+
+  return {
+    projectId: candidate.projectId,
+    currency: INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY,
+    description: INVOICE_BATCH_PROTOTYPE_DEMO_DESCRIPTION,
+    rows: candidate.engagementIds.map((engagementId, index) => ({
+      engagementId,
+      ...INVOICE_BATCH_PROTOTYPE_DEMO_VALUES[index],
+    })),
+  };
 };

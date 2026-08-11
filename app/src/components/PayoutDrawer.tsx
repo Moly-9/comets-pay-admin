@@ -214,7 +214,7 @@ export function PayoutDrawer({
                     <strong>{
                       payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT'
                         ? 'Invoice 内容问题'
-                        : '付款清单问题'
+                        : '付款账户问题'
                     }</strong>
                     {payout.paymentFailureReturn.reason} · 下一步{
                       payout.paymentFailureReturn.restartStage === 'SIGNATURE'
@@ -306,7 +306,7 @@ export function PayoutDrawer({
               >
                 <option value="">请选择问题类型</option>
                 <option value="INVOICE_CONTENT">Invoice 内容问题</option>
-                <option value="PAYMENT_LIST">付款清单问题</option>
+                <option value="PAYMENT_LIST">付款账户问题</option>
               </select>
               <small>必须由财务人工判断，系统不会根据渠道错误文本自动分类。</small>
             </label>

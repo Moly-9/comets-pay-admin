@@ -131,11 +131,25 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex - 1\)\}/g)).toHaveLength(2);
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(2);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 4fr\) minmax\(0, 4fr\) minmax\(260px, 2fr\);/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*8px;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-pane\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*8px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\) 0fr;/s);
-    expect(workspaceStyles).toMatch(/\.finance-review-approval-toggle\s*\{[^}]*right:\s*8px;[^}]*top:\s*7px;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-approval-toggle\s*\{[^}]*right:\s*16px;[^}]*top:\s*15px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-invoice-edge-nav\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;[^}]*border-radius:\s*50%;/s);
     expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
+  });
+
+  it('centers the page controls in the space before the footer actions', () => {
+    expect(workspaceSource).toContain('className="finance-review-footer-pagination"');
+    expect(workspaceStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-footer-pagination\s*{[^}]*justify-self:\s*center;/s);
+  });
+
+  it('does not allow an incorrect record to be overwritten as correct', () => {
+    expect(workspaceSource).toContain("currentDecision.state !== 'incorrect'");
+    expect(workspaceSource).toContain('if (!currentPage || !canConfirmCurrentPage) return');
+    expect(workspaceSource).toContain('disabled={!canConfirmCurrentPage}');
   });
 
   it('supports accessible Invoice zoom controls and modifier-wheel trackpad zoom', () => {
@@ -183,7 +197,36 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('提交时间');
     expect(workspaceSource).toContain('付款渠道');
     expect(workspaceSource).toContain('预计付款时间');
-    expect(workspaceSource).toContain('请款原因');
-    expect(workspaceSource).toContain('<ApprovalTimeline request={request} currentUser={currentUser} />');
+    expect(workspaceSource).toContain('付款事由');
+    expect(workspaceSource).toContain('<ApprovalTimeline request={request} currentUser={currentUser} compact />');
+    expect(workspaceSource).toContain('合同 · {linkedContracts.length} 份');
+    expect(workspaceSource).toContain('Invoice · {linkedInvoices.length} 份');
+    expect(workspaceSource).toContain('收款账户校验结果');
+    expect(workspaceSource).toContain("setResourceDialog('contract')");
+    expect(workspaceSource).toContain("setResourceDialog('invoice')");
+    expect(workspaceSource).toContain('title={`${request.requestCode ?? request.id} · 合同资料`}');
+    expect(workspaceSource).toContain('title={`${request.requestCode ?? request.id} · Invoice`}');
+  });
+
+  it('keeps the real approval order in a continuous two-column horizontal curved flow', () => {
+    expect(workspaceSource).toContain('className="finance-approval-curve"');
+    expect(workspaceSource).toContain('<path d={compactCurvePath} />');
+    expect(workspaceSource).toContain('className="finance-approval-curve-progress"');
+    expect(workspaceSource).toContain('className="finance-approval-stage-icon"');
+    expect(workspaceSource).toContain('className="finance-approval-state-mark"');
+    expect(workspaceSource).toContain('const outerX = previous.column === 2 ? compactCurveWidth : 0');
+    expect(workspaceSource).toContain('const compactCurvePath = buildCompactCurvePath(compactPositions.length - 1)');
+    expect(workspaceSource).toContain('maskUnits="userSpaceOnUse"');
+    expect(workspaceSource).toContain('<strong title={step.label}>{step.label}</strong>');
+    expect(workspaceSource).toContain('<span title={step.accountName}>@{step.accountName}</span>');
+    expect(workspaceSource).toContain("compact ? (");
+    expect(workspaceSource).toContain('gridColumn: compactPositions[index].column');
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);[^}]*grid-auto-rows:\s*84px;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-curve path\s*{[^}]*stroke:\s*#cbd2da;[^}]*stroke-linecap:\s*round;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-curve path\.finance-approval-curve-progress\s*{[^}]*stroke:\s*#675187;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-node\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;[^}]*border-radius:\s*50%;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-stage\s*{[^}]*max-width:\s*142px;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-stage strong\s*{[^}]*max-width:\s*none;[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;[^}]*white-space:\s*nowrap;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-step::after\s*{[^}]*content:\s*none;/s);
   });
 });

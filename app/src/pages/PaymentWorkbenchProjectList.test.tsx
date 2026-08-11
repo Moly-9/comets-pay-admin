@@ -78,6 +78,7 @@ describe('PaymentWorkbenchPage project list controls', () => {
         generatedInvoices={[]}
         onNewBatch={vi.fn()}
         onSelectPayout={vi.fn()}
+        onSelectPaidProject={vi.fn()}
         onReviewRequest={vi.fn()}
         onExecuteRequest={vi.fn(() => true)}
         onReturnRequest={vi.fn(() => true)}

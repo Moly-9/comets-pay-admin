@@ -115,6 +115,17 @@ export type PaymentBatchRecord = Readonly<{
   items: readonly PaymentBatchItemSnapshot[];
 }>;
 
+export type PaymentProjectPaymentStatus = PaymentBatchStatus | '已退回';
+
+export type PaymentProjectPaymentRecord = Readonly<{
+  request: PaymentBatchRequestSnapshot;
+  paymentOrderCodes: readonly string[];
+  providers: readonly PaymentBatchRecord['provider'][];
+  status: PaymentProjectPaymentStatus;
+  lastActivityAt?: string;
+  items: readonly PaymentBatchItemSnapshot[];
+}>;
+
 type PaymentBatchSourceData = Readonly<{
   payouts: readonly Payout[];
   requests: readonly RequestProjectSummary[];
@@ -135,6 +146,20 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   lifecycle: readonly string[];
   itemStatus?: Payout['status'];
 }>;
+
+type CreatePaymentExecutionBatchRecordInput = PaymentBatchSourceData & Readonly<{
+  existingBatches: readonly PaymentBatchRecord[];
+  paymentBatchId: PaymentBatchId;
+  paymentBatchCode: string;
+  payer: string;
+  submittedAt: string;
+}>;
+
+const PAYMENT_EXECUTION_FUNDING_ACCOUNTS: Record<PaymentBatchRecord['provider'], string> = {
+  Airwallex: 'mock-awx-operating',
+  PayPal: 'mock-paypal-balance',
+  PayMax: 'mock-paymax-operating',
+};
 
 const requestInvoiceIds = (request: RequestProjectSummary) => new Set([
   ...(request.invoiceIds ?? []),
@@ -375,6 +400,118 @@ export const createPaymentBatchRecord = ({
   };
 };
 
+export const createPaymentExecutionBatchRecord = ({
+  payouts,
+  requests,
+  generatedInvoices,
+  paymentLists,
+  contracts,
+  existingBatches,
+  paymentBatchId,
+  paymentBatchCode,
+  payer,
+  submittedAt,
+}: CreatePaymentExecutionBatchRecordInput): PaymentBatchRecord => {
+  if (!payouts.length) throw new Error('当前请款项目没有待打款明细');
+  if (payouts.some((payout) => payout.status !== '等待付款')) {
+    throw new Error('请款项目的全部付款明细必须处于等待付款状态');
+  }
+  const providers = new Set(payouts.map((payout) => payout.provider));
+  if (providers.size !== 1) {
+    throw new Error('一个请款项目只能使用一个付款渠道');
+  }
+
+  const provider = payouts[0].provider;
+  const record = createPaymentBatchRecord({
+    payouts,
+    requests,
+    generatedInvoices,
+    paymentLists,
+    contracts,
+    paymentBatchId,
+    paymentBatchCode,
+    provider,
+    fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[provider],
+    sourceCurrency: payouts[0].currency,
+    payer,
+    paidAt: submittedAt,
+    status: '付款处理中',
+    lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
+    itemStatus: '付款处理中',
+  });
+  if (existingBatches.some((batch) => (
+    batch.request.paymentRequestProjectId === record.request.paymentRequestProjectId
+  ))) {
+    throw new Error(`请款项目 ${record.request.requestCode} 已生成付款批次`);
+  }
+  return record;
+};
+
+export const createPaymentProjectPaymentRecord = ({
+  request,
+  payouts,
+  generatedInvoices,
+  paymentLists,
+  contracts,
+}: Omit<PaymentBatchSourceData, 'requests'> & Readonly<{
+  request: RequestProjectSummary;
+}>): PaymentProjectPaymentRecord => {
+  const invoiceIds = requestInvoiceIds(request);
+  const sourcePayoutIds = new Set(generatedInvoices
+    .filter((invoice) => invoiceIds.has(invoice.invoiceId))
+    .map((invoice) => invoice.sourcePayoutId));
+  const linkedPayouts = payouts.filter((payout) => (
+    (Boolean(request.paymentRequestProjectId)
+      && payout.paymentRequestProjectId === request.paymentRequestProjectId)
+    || sourcePayoutIds.has(payout.id)
+  ));
+  if (!linkedPayouts.length) {
+    throw new Error('当前请款项目没有可展示的付款明细');
+  }
+
+  const requestLists = paymentLists.filter((list) => (
+    list.paymentRequestProjectId === request.paymentRequestProjectId
+  ));
+  const lastActivityAt = [
+    ...linkedPayouts.flatMap((payout) => [
+      payout.paymentFailureReturn?.occurredAt,
+      payout.paymentFailure?.occurredAt,
+      payout.paidAt,
+    ]),
+    ...requestLists.map((list) => list.updatedAt),
+    request.approval?.updatedAt,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => right.localeCompare(left))[0];
+  const items = linkedPayouts.map((payout) => snapshotItem({
+    payout,
+    request,
+    generatedInvoices,
+    paymentLists,
+    contracts,
+    batchPaidAt: lastActivityAt ?? '',
+  }));
+  const statuses = new Set(items.map((item) => item.paymentStatus));
+  const status: PaymentProjectPaymentStatus = statuses.has('付款失败')
+    ? '部分失败'
+    : statuses.has('已退回')
+      ? '已退回'
+      : statuses.has('付款处理中')
+        ? '付款处理中'
+        : '已付款';
+  return {
+    request: snapshotRequest(request),
+    paymentOrderCodes: [...new Set([
+      ...requestLists.map((list) => list.paymentListCode),
+      ...items.map((item) => item.paymentListCode).filter((code) => code !== '关联资料缺失'),
+    ])],
+    providers: [...new Set(linkedPayouts.map((payout) => payout.provider))],
+    status,
+    lastActivityAt,
+    items,
+  };
+};
+
 export const paymentBatchAmountLabel = (batch: Pick<PaymentBatchRecord, 'items'>) => {
   const totals = batch.items.reduce<Record<string, number>>((result, item) => ({
     ...result,
@@ -412,11 +549,6 @@ export const createInitialPaymentBatches = ({
   const financePayers = SYSTEM_USERS
     .filter((user) => user.roleKey === 'finance' && !user.isDemo)
     .map((user) => user.name);
-  const fundingAccountIds: Record<PaymentBatchRecord['provider'], string> = {
-    Airwallex: 'mock-awx-operating',
-    PayPal: 'mock-paypal-balance',
-    PayMax: 'mock-paymax-operating',
-  };
   const eligibleGroups = scenarioResources.requests
     .filter((request) => Boolean(paymentBatchPrototypeStatusFor(request)))
     .flatMap((request) => {
@@ -462,7 +594,7 @@ export const createInitialPaymentBatches = ({
       paymentBatchId: `payment_batch_fixture_paid_${ordinalLabel}` as PaymentBatchId,
       paymentBatchCode: `BAT-20260805-${ordinalLabel}`,
       provider,
-      fundingAccountId: fundingAccountIds[provider],
+      fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[provider],
       sourceCurrency: groupedPayouts[0].currency,
       payer: financePayers[index % financePayers.length],
       paidAt,

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { eligibleInvoicePayoutAccounts } from '../payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from '../pages/OperationalPages';
+import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { GeneratedInvoiceRecord } from '../types';
 import {
   INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL,
   INVOICE_BATCH_PROTOTYPE_CURRENCY,
+  INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY,
+  INVOICE_BATCH_PROTOTYPE_DEMO_DESCRIPTION,
   INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
+  createInvoiceBatchPrototypeSeed,
   filterInvoiceBatchCreatorReferences,
   selectableInvoiceBatchEngagementIds,
   withInvoiceBatchPrototypeAccounts,
@@ -88,5 +92,28 @@ describe('Invoice batch prototype defaults', () => {
     expect(selected).toHaveLength(5);
     expect(selected).not.toContain(existingReference.engagementId);
     expect(selected[0]).toBe(references[0].engagementId);
+  });
+
+  it('builds five deterministic ready-to-fill demo rows from the project with available creators', () => {
+    const seed = createInvoiceBatchPrototypeSeed(
+      INITIAL_PROJECTS,
+      INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    );
+
+    expect(seed).toMatchObject({
+      projectId: 'PRJ-260801-07',
+      currency: INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY,
+      description: INVOICE_BATCH_PROTOTYPE_DEMO_DESCRIPTION,
+    });
+    expect(seed?.rows).toHaveLength(5);
+    expect(new Set(seed?.rows.map((row) => row.engagementId)).size).toBe(5);
+    expect(seed?.rows.map((row) => row.payoutProvider)).toEqual([
+      'Airwallex',
+      'PayPal',
+      'Airwallex',
+      'PayPal',
+      'Airwallex',
+    ]);
+    expect(seed?.rows.every((row) => row.unitPrice > 0 && row.quantity > 0)).toBe(true);
   });
 });

@@ -40,6 +40,20 @@ export type RequestApprovalStatus =
 
 export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
 
+export type RequestApprovalReturnIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
+
+export type RequestApprovalReturnItem = {
+  pageKey: string;
+  invoiceId?: InvoiceId;
+  invoiceNumber: string;
+  issueType: RequestApprovalReturnIssueType;
+  reason: string;
+  paymentItems: Array<{
+    paymentListId: PaymentListId;
+    itemId: string;
+  }>;
+};
+
 export type RequestApprovalEvent = {
   round: number;
   stage: RequestApprovalStage;
@@ -50,6 +64,7 @@ export type RequestApprovalEvent = {
   fromStatus: RequestApprovalStatus;
   toStatus: RequestApprovalStatus;
   reason?: string;
+  returnItems?: RequestApprovalReturnItem[];
   occurredAt: string;
 };
 
@@ -61,6 +76,7 @@ export type RequestApprovalState = {
   returnedFromStage?: RequestApprovalStage;
   resumeStatus?: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   returnReason?: string;
+  returnItems?: RequestApprovalReturnItem[];
   updatedAt: string;
 };
 
@@ -440,36 +456,7 @@ export const refreshPaymentListItemSnapshot = (
 ): PaymentListRecord => {
   const items = list.items.map((item) => (
     item.invoiceId === refreshedItem.invoiceId
-      ? (() => {
-          const previousEffectiveAccount = paymentListEffectiveAccount(item);
-          const nextItem = {
-            ...item,
-            engagementId: refreshedItem.engagementId,
-            snapshot: { ...refreshedItem.snapshot },
-            accountOverride: item.accountOverride ? { ...item.accountOverride } : undefined,
-            overrides: { ...item.overrides },
-          };
-          const nextEffectiveAccount = paymentListEffectiveAccount(nextItem);
-          const previousAccountKey = [
-            previousEffectiveAccount.payoutAccountId ?? '',
-            previousEffectiveAccount.payoutAccountVersion ?? 'legacy-v1',
-            previousEffectiveAccount.accountFingerprint ?? '',
-          ].join(':');
-          const nextAccountKey = [
-            nextEffectiveAccount.payoutAccountId ?? '',
-            nextEffectiveAccount.payoutAccountVersion ?? 'legacy-v1',
-            nextEffectiveAccount.accountFingerprint ?? '',
-          ].join(':');
-          const accountVersionChanged = previousAccountKey !== nextAccountKey;
-          return {
-            ...nextItem,
-            requiresRevalidation: accountVersionChanged || refreshedItem.requiresRevalidation,
-            validationIssues: [
-              ...(accountVersionChanged ? ['Invoice 账户版本已变化，付款清单必须重新校验'] : []),
-              ...(refreshedItem.validationIssues ?? []),
-            ],
-          };
-        })()
+      ? mergeRefreshedPaymentListItem(item, refreshedItem)
       : item
   ));
   return {
@@ -478,6 +465,59 @@ export const refreshPaymentListItemSnapshot = (
     items,
     updatedAt,
   };
+};
+
+const paymentListAccountVersionKey = (item: PaymentListItem) => {
+  const account = paymentListEffectiveAccount(item);
+  return [
+    account.payoutAccountId ?? '',
+    account.payoutAccountVersion ?? 'legacy-v1',
+    account.accountFingerprint ?? '',
+  ].join(':');
+};
+
+export const mergeRefreshedPaymentListItem = (
+  currentItem: PaymentListItem,
+  refreshedItem: PaymentListItem,
+): PaymentListItem => {
+  const previousAccountKey = paymentListAccountVersionKey(currentItem);
+  const nextItem: PaymentListItem = {
+    ...currentItem,
+    engagementId: refreshedItem.engagementId,
+    snapshot: { ...refreshedItem.snapshot },
+    accountOverride: currentItem.accountOverride ? { ...currentItem.accountOverride } : undefined,
+    overrides: { ...currentItem.overrides },
+  };
+  const accountVersionChanged = previousAccountKey !== paymentListAccountVersionKey(nextItem);
+  const requiresRevalidation = Boolean(
+    accountVersionChanged
+    || currentItem.requiresRevalidation
+    || refreshedItem.requiresRevalidation
+  );
+  const validationIssues = [...new Set([
+    ...(accountVersionChanged ? ['Invoice 账户版本已变化，付款清单必须重新校验'] : []),
+    ...(currentItem.requiresRevalidation ? currentItem.validationIssues ?? ['付款行需要重新校验'] : []),
+    ...(refreshedItem.requiresRevalidation ? refreshedItem.validationIssues ?? ['付款行需要重新校验'] : []),
+  ])];
+
+  return {
+    ...nextItem,
+    requiresRevalidation,
+    validationIssues,
+  };
+};
+
+export const mergeRefreshedPaymentListItems = (
+  currentItems: PaymentListItem[],
+  refreshedItems: PaymentListItem[],
+) => {
+  const currentByInvoiceId = new Map(currentItems.map((item) => [item.invoiceId, item]));
+  return refreshedItems.map((refreshedItem) => {
+    const currentItem = currentByInvoiceId.get(refreshedItem.invoiceId);
+    return currentItem
+      ? mergeRefreshedPaymentListItem(currentItem, refreshedItem)
+      : refreshedItem;
+  });
 };
 
 export type PaymentListContractReference = {
@@ -534,6 +574,40 @@ const clonePaymentListItems = (items: PaymentListItem[]) => items.map((item) => 
   overrides: { ...item.overrides },
   validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
 }));
+
+export const refreshPaymentListFromInvoices = ({
+  list,
+  refreshedItems,
+  actor,
+  refreshedAt = nowIso(),
+}: {
+  list: PaymentListRecord;
+  refreshedItems: PaymentListItem[];
+  actor: PaymentListActor;
+  refreshedAt?: string;
+}): PaymentListRecord => {
+  const items = mergeRefreshedPaymentListItems(list.items, refreshedItems);
+  const version = (list.version ?? 0) + 1;
+  const snapshot: PaymentListVersionSnapshot = {
+    version,
+    generatedAt: refreshedAt,
+    generatedBy: { ...actor },
+    items: clonePaymentListItems(items),
+  };
+
+  return {
+    ...list,
+    provider: paymentListProviderForItems(items, list.provider),
+    status: 'generated',
+    version,
+    generatedAt: refreshedAt,
+    generatedBy: { ...actor },
+    draftFromVersion: undefined,
+    items: clonePaymentListItems(items),
+    versions: [...(list.versions ?? []), snapshot],
+    updatedAt: refreshedAt,
+  };
+};
 
 export const validatePaymentListGeneration = (
   list: PaymentListRecord,

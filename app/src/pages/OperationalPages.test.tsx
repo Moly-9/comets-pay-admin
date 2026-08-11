@@ -42,7 +42,7 @@ describe('TransactionsPage currency overview', () => {
           transactionPayout('SGD', 600, 6),
           transactionPayout('USD', 700, 7, '付款失败'),
         ]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
@@ -71,19 +71,19 @@ describe('TransactionsPage currency overview', () => {
           transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
           transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
         ]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
     expect(html).toContain('aria-label="渠道付款成功率"');
     expect(html).toContain('<strong>75.0%</strong><span>全部渠道成功率 · 2 笔失败</span>');
-    expect(html).toContain('<span class="payment-provider-label">Airwallex</span></span><span>66.7%</span><small>1 笔失败</small>');
-    expect(html).toContain('<span class="payment-provider-label">PayPal</span></span><span>50.0%</span><small>1 笔失败</small>');
-    expect(html).toContain('<span class="payment-provider-label">PayMax</span></span><span>100.0%</span><small>0 笔失败</small>');
+    expect(html).toContain('<span>Airwallex</span><span>66.7%</span><small>1 笔失败</small>');
+    expect(html).toContain('<span>PayPal</span><span>50.0%</span><small>1 笔失败</small>');
+    expect(html).toContain('<span>PayMax</span><span>100.0%</span><small>0 笔失败</small>');
     expect(html.indexOf('全部渠道成功率')).toBeLessThan(html.indexOf('各渠道付款成功率'));
   });
 
-  it('shows only final-state tabs and excludes processing payouts from all transactions', () => {
+  it('shows paid, processing, and failed payment transactions in the all tab', () => {
     const html = renderToStaticMarkup(
       <TransactionsPage
         payouts={[
@@ -92,19 +92,21 @@ describe('TransactionsPage currency overview', () => {
           transactionPayout('USD', 100, 13, '付款处理中'),
           transactionPayout('USD', 100, 14, '等待付款'),
         ]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
-    expect(html).toContain('>全部</button>');
-    expect(html).toContain('>已付款</button>');
-    expect(html).toContain('>付款失败</button>');
-    expect(html).not.toContain('>处理中</button>');
+    expect(html).toContain('role="tablist" aria-label="交易状态"');
+    expect(html).toContain('<span>全部</span>');
+    expect(html).toContain('<span>已付款</span>');
+    expect(html).toContain('<span>付款失败</span>');
+    expect(html).not.toContain('<span>全部</span><small>');
+    expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain('INV-11');
     expect(html).toContain('INV-12');
-    expect(html).not.toContain('INV-13');
+    expect(html).toContain('INV-13');
     expect(html).not.toContain('INV-14');
-    expect(html).not.toContain('付款处理中');
+    expect(html).toContain('付款处理中');
     expect(html).not.toContain('等待付款');
   });
 
@@ -112,16 +114,30 @@ describe('TransactionsPage currency overview', () => {
     const html = renderToStaticMarkup(
       <TransactionsPage
         payouts={[transactionPayout('USD', 100, 21)]}
-        onSelectPayout={vi.fn()}
+        paymentBatches={[]}
       />,
     );
 
     expect(html).toContain('type="search" aria-label="搜索交易记录"');
     expect(html.match(/type="date"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="付款渠道"');
+    expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain('>全部付款渠道</span>');
     expect(html).toContain('当前显示 1 条记录');
-    expect(html).toContain('<span>导出流水</span>');
+    expect(html).toContain('<span>导出已选（0）</span>');
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('aria-label="选择 Creator 21 的交易"');
+    expect(html).toContain('>达人 / 付款项目</th>');
+    expect(html).toContain('>Invoice</th>');
+    expect(html).toContain('>渠道</th>');
+    expect(html).toContain('>状态</th>');
+    expect(html).toContain('>金额</th>');
+    expect(html).not.toContain('>时间</th>');
+    expect(html).toContain('>付款人 / 付款时间</th>');
+    expect(html).toContain('>操作</th>');
+    expect(html).not.toContain('transaction-field-icon');
+    expect(html).toContain('INV-21');
+    expect(html).toContain('USD 100');
   });
 });
 

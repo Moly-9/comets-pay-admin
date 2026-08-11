@@ -5,6 +5,7 @@ import {
   Download,
   FileText,
   Plus,
+  Sparkles,
   Trash2,
   UserRound,
   WalletCards,
@@ -37,6 +38,7 @@ import {
   payoutSnapshotKey,
   validateInvoiceDocumentModel,
 } from '../invoice/invoiceDraft';
+import { createInvoiceBuilderPrototypeSeed } from '../invoice/invoiceBuilderPrototype';
 import {
   invoiceDocumentChanged,
   maskInvoiceAccountValue,
@@ -76,6 +78,7 @@ type InvoiceBuilderPageProps = {
   onGenerated?: (record: GeneratedInvoiceRecord) => void;
   editRecord?: GeneratedInvoiceRecord;
   editContext?: InvoiceEditContext;
+  allowPayoutAccountChange?: boolean;
   onEdited?: (snapshot: InvoiceDocumentModel) => GeneratedInvoiceRecord;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel: () => void;
@@ -141,6 +144,7 @@ export function InvoiceBuilderPage({
   onGenerated,
   editRecord,
   editContext,
+  allowPayoutAccountChange = false,
   onEdited,
   onDirtyChange,
   onCancel,
@@ -204,6 +208,13 @@ export function InvoiceBuilderPage({
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
+  const prototypeSeed = useMemo(() => createInvoiceBuilderPrototypeSeed({
+    creators,
+    payouts,
+    projects,
+    contracts,
+    generatedInvoices,
+  }), [contracts, creators, generatedInvoices, payouts, projects]);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
   const eligiblePayoutAccounts = eligibleInvoicePayoutAccounts(selectedCreator);
@@ -242,15 +253,14 @@ export function InvoiceBuilderPage({
   const selectedContractPayoutSnapshots = selectedContracts
     .map(payoutSnapshotForContract)
     .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
-  const contractPayoutLocked = selectedContractPayoutSnapshots.length > 0;
+  const contractPayoutLocked = selectedContractPayoutSnapshots.length > 0 && !allowPayoutAccountChange;
   const engagementInvoiceReferences = generatedInvoices.map((record) => ({
     invoiceId: record.invoiceId,
     engagementId: record.snapshot.engagementId as EngagementId | undefined,
   }));
-  const existingInvoice = hasInvoiceForEngagement(
+  const existingInvoice = !isEditing && hasInvoiceForEngagement(
     engagementInvoiceReferences,
     engagementId as EngagementId | '',
-    editRecord?.invoiceId,
   )
     ? generatedInvoices.find((record) => record.snapshot.engagementId === engagementId)
     : undefined;
@@ -329,6 +339,29 @@ export function InvoiceBuilderPage({
       : invoicePaymentForCreator(creator, paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex'));
     setItems([createBlankLine(0)]);
     setErrors({});
+    setGeneratedFiles(null);
+  };
+
+  const fillPrototypeData = () => {
+    if (!prototypeSeed || isEditing) return;
+    const creator = creators.find((item) => item.id === prototypeSeed.creatorId);
+    setCreatorId(prototypeSeed.creatorId);
+    setEngagementId(prototypeSeed.engagementId);
+    setContractIds([]);
+    setInvoiceNumber(nextInvoiceNumber(generatedInvoices));
+    setInvoiceDate(todayInputValue());
+    setBillTo({ ...invoiceEntity });
+    setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
+    setCurrency(prototypeSeed.currency);
+    setItems(prototypeSeed.lineItems.map((item, index) => normalizeLineItem({
+      id: `${createPrototypeId('item')}-demo-${index}`,
+      ...item,
+    })));
+    setPayoutAccountId(prototypeSeed.payoutAccountId);
+    setPaymentMethod(prototypeSeed.paymentMethod);
+    setPayment({ ...prototypeSeed.payment });
+    setErrors({});
+    setGenerationError('');
     setGeneratedFiles(null);
   };
 
@@ -441,7 +474,9 @@ export function InvoiceBuilderPage({
   };
 
   const validate = () => {
-    const nextErrors = validateInvoiceDocumentModel(model, selectedContracts);
+    const nextErrors = validateInvoiceDocumentModel(model, selectedContracts, {
+      allowContractPayoutOverride: allowPayoutAccountChange,
+    });
     if (!creatorId) nextErrors.creator = '请选择达人';
     if (!engagementId) nextErrors.project = '请选择该达人关联的项目';
     if (existingInvoice) nextErrors.project = `该项目达人已有 Invoice ${existingInvoice.id}，请先解除旧关联。`;
@@ -512,11 +547,28 @@ export function InvoiceBuilderPage({
         subtitle={isEditing
           ? '保留稳定关联并生成新文件版本；保存后原签署失效，重新进入待签署。'
           : '从达人档案与项目费用中自动带入资料，确认后同时生成 PDF 与 DOCX。'}
-        actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={cancel}>{isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}</Button>}
+        actions={(
+          <>
+            {!isEditing ? (
+              <Button
+                variant="secondary"
+                icon={<Sparkles size={17} />}
+                data-testid="invoice-fill-demo"
+                disabled={!prototypeSeed || generating}
+                onClick={fillPrototypeData}
+              >
+                填充演示数据
+              </Button>
+            ) : null}
+            <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={cancel}>
+              {isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}
+            </Button>
+          </>
+        )}
       />
       <NoticeBanner>
         {isEditing
-          ? `正在修改 ${editRecord?.id} · v${editRecord?.version ?? 1}。达人、项目、Invoice 编号及内部 ID 已锁定；版本历史仅在当前浏览器会话保留。`
+          ? `正在修改 ${editRecord?.id} · v${editRecord?.version ?? 1}。达人、项目及 Invoice 编号已锁定；版本历史仅在当前浏览器会话保留。`
           : '生成文件会保留空白签名区；当前为前端原型，生成记录仅在本次会话内保留。'}
       </NoticeBanner>
       {Object.keys(errors).length > 0 ? (
@@ -551,18 +603,6 @@ export function InvoiceBuilderPage({
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>
-            {isEditing && editRecord ? (
-              <div className="invoice-form-grid">
-                <label>
-                  <span>Invoice ID（锁定）</span>
-                  <input value={editRecord.invoiceId} readOnly />
-                </label>
-                <label>
-                  <span>Source Payout ID（锁定）</span>
-                  <input value={editRecord.sourcePayoutId} readOnly />
-                </label>
-              </div>
-            ) : null}
             {engagementId ? (
               <div className="invoice-contract-coverage">
                 <div className="invoice-contract-coverage-head">
@@ -650,7 +690,9 @@ export function InvoiceBuilderPage({
               <div>
                 <h2>4. 收款方式</h2>
                 <p>
-                  {requiresPayoutAccountSelection
+                  {allowPayoutAccountChange
+                    ? '财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。'
+                    : requiresPayoutAccountSelection
                     ? '付款失败重新发起时，必须从达人档案中重新选择已验证账户。'
                     : contractPayoutLocked
                       ? '已继承关联合同冻结的账户版本；付款字段仅供核对。'
@@ -672,7 +714,9 @@ export function InvoiceBuilderPage({
                 />
                 <small>{errors.payoutAccountId}</small>
                 <p className="invoice-payout-account-note">
-                  {contractPayoutLocked
+                  {allowPayoutAccountChange
+                    ? '保存后将冻结新的账户 ID、版本与付款快照，并同步刷新对应付款明细。'
+                    : contractPayoutLocked
                     ? `合同账户版本 ${payment.payoutAccountVersion ?? 'legacy-v1'} 已锁定，不能静默切换到达人最新账户。`
                     : '选择达人档案中的已验证账户后，将冻结账户 ID、版本与付款快照。'}
                 </p>

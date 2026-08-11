@@ -445,6 +445,53 @@ export type PaymentFailureReturn = {
   restartStage: 'SIGNATURE' | 'PAYMENT_LIST_RESUBMISSION';
 };
 
+export type PaymentFailureRecoveryStatus =
+  | 'AWAITING_CREATOR_UPDATE'
+  | 'CREATOR_UPDATED'
+  | 'READY_FOR_RETRY'
+  | 'RETRY_SUBMITTED';
+
+export type PaymentFailureNotificationDelivery = {
+  channel: 'IN_APP' | 'GMAIL';
+  status: 'SIMULATED_SENT' | 'SKIPPED_MISSING_RECIPIENT';
+  recipientLabel: string;
+};
+
+export type PaymentFailureNotification = {
+  message: string;
+  actorAccount: string;
+  actorName: string;
+  occurredAt: string;
+  deliveries: PaymentFailureNotificationDelivery[];
+};
+
+export type PaymentFailureRecovery = {
+  status: PaymentFailureRecoveryStatus;
+  notifications: PaymentFailureNotification[];
+  readyReason?: 'ACCOUNT_UNCHANGED' | 'REVALIDATED';
+  failureCode?: string;
+  returnReason?: string;
+  creatorUpdatedAt?: string;
+  reportedPayoutAccountId?: string;
+  reportedPayoutAccountVersion?: PayoutAccountVersion;
+  reportedAccountFingerprint?: string;
+  reportedExternalBeneficiaryId?: string;
+  revalidatedAt?: string;
+  revalidationIssues?: string[];
+  retryBatchId?: string;
+  retryBatchCode?: string;
+  previousAttempts?: Array<{
+    status: PaymentFailureRecoveryStatus;
+    notifications: PaymentFailureNotification[];
+    failureCode?: string;
+    returnReason?: string;
+    creatorUpdatedAt?: string;
+    revalidatedAt?: string;
+    retryBatchId?: string;
+    retryBatchCode?: string;
+  }>;
+};
+
 export type Payout = {
   id: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
@@ -498,6 +545,7 @@ export type Payout = {
   };
   paymentFailure?: PaymentFailureRecord;
   paymentFailureReturn?: PaymentFailureReturn;
+  paymentFailureRecovery?: PaymentFailureRecovery;
   invoiceSnapshot?: InvoiceDocumentModel;
   accent: string;
   issue?: string;

@@ -46,6 +46,120 @@ final result: passed
 
 ---
 
+# Design QA - Batch Invoice 生成结果列表
+
+## Evidence
+
+- Current-state reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-026497b8-f277-4bd9-b6ce-1c66049898a3.png`.
+- Target list reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-df227a1d-b3cd-4c84-a9f1-2149b0cb8f02.png`.
+- Desktop implementation: `artifacts/invoice-batch-results-qa/results-desktop.png` from a `1440 x 1000` viewport.
+- Mobile implementation: `artifacts/invoice-batch-results-qa/results-mobile-390.png` from a `390 x 844` viewport.
+- State: media demo account, five prototype creators, five successfully generated EUR Invoices.
+
+## Visual And Interaction Checks
+
+- The page has five persistent workflow cards; the fifth card provides a useful empty state before generation and the generated list afterward.
+- Generated results use a semantic seven-column table on desktop: creator, payment channel, Invoice, contract, amount, status, and files.
+- Creator initials and existing accent colors produce five distinct avatars. Airwallex and PayPal use restrained, differentiated channel badges.
+- PDF, DOCX, and batch ZIP actions remain available with Lucide icons and descriptive accessible labels.
+- At `1440px`, the result wrapper has equal client and scroll widths (`778px`), so all seven columns remain visible without horizontal scrolling.
+- At `390px`, the table reflows into creator result cards. Document client and scroll widths are both `375px`, each card is `311px`, and file actions use `44px` touch targets.
+- Success uses both an icon and text, not color alone. Browser console warnings/errors: none.
+
+## Verification
+
+- Focused Vitest: 2 tests passed.
+- TypeScript/Vite production build passed after the result-list change; later concurrent worktree edits introduced unrelated missing `contracts` / `creators` props in `PaymentWorkbenchPage.tsx`.
+- Full Vitest: 438 of 439 tests passed. The unrelated `PaymentExecutionWorkspace` test currently expects two board cards while concurrent worktree changes render three.
+
+final result: passed for the Batch Invoice result-list scope
+
+---
+
+# Design QA - Batch Invoice 演示数据与宽松合同校验
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-f4ad6898-2ed0-4180-b4f9-61f4e9f287e7.png` (`1492 x 379`).
+- Desktop full implementation: `qa/invoice-batch-demo-data/implementation-desktop-full.png` (`1425 x 2293`) from a `1440 x 900` viewport override at device pixel ratio 1.
+- Desktop focused implementation: `qa/invoice-batch-demo-data/implementation-desktop-validation-focused.png` (`1425 x 891`) from the same viewport and the validation-card state.
+- Mobile implementation: `qa/invoice-batch-demo-data/implementation-mobile-top.png` and `implementation-mobile-validation-focused.png` (`375 x 812`) from a `390 x 844` viewport override at device pixel ratio 1.
+- State: media demo account, demo seed loaded for `PRJ-260801-07`, five selected creators, EUR currency, mixed Bank/PayPal accounts, and five same-project creator contracts.
+- Full-view comparison evidence: the supplied source and desktop focused implementation were opened together. The source is a focused validation-card capture, so the desktop focused implementation is the direct comparison target.
+- Focused evidence: the implementation shows the same card, metric, table, status, and preview surfaces with the requested post-fix ready state. Separate mobile top and validation captures verify the new page action and responsive layout.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed. Existing Noto Sans SC hierarchy, compact table labels, tabular money display, zero added letter spacing, and readable mobile wrapping are preserved.
+- Spacing and layout rhythm: passed. The new header action uses the existing button component. Four metric cards remain equal width on desktop and reflow to two columns on mobile; five row cards fit within the 343px mobile content width.
+- Colors and visual tokens: passed. Ready rows use the existing green success treatment, while neutral, green, amber, and coral metric surfaces match the source visual language.
+- Image and icon fidelity: passed. No new raster asset is required; the new action uses the existing Lucide icon family and all source UI surfaces remain code-native controls.
+- Copy and content: passed. The demo seed shows five realistic creator rows, EUR `10,420.00`, varied Price/Amount values, mixed payment methods, stable contract codes, and no stale contract-mismatch error.
+
+## Interaction And Responsive Checks
+
+- `填充演示数据` selects the project with the largest eligible cohort and produces five ready rows without auto-dirtying the page on entry.
+- All five Payment Information controls remain enabled even when their account or payment method differs from the contract snapshot.
+- Invoice preview opens with EUR and the seeded amount, and all five contracts resolve to the same project, creator, and engagement as their row.
+- The summary reports `已选择达人 5`, `可生成invoice 5`, `需处理条数 0`, and `批次总金额 EUR 10,420.00`.
+- At `390 x 844`, document client width equals scroll width (`375px`), both heading actions fit, and there is no horizontal page overflow.
+- Browser console warnings/errors after desktop and mobile flows: none.
+- Full Vitest suite: 70 files and 438 tests passed.
+- TypeScript/Vite production build: passed; only the existing Vite chunk-size advisory remains.
+
+## Comparison History
+
+1. Source state: the row was blocked because Invoice amount, currency, account, and payment method differed from the selected contract snapshot.
+2. Fix: batch validation now checks only stable project, creator, engagement, document completeness, eligible creator account, and duplicate Invoice rules; contract snapshot value equality no longer participates.
+3. Post-fix evidence: five deliberately varied rows all render `可生成`, no issue text appears, payment accounts remain editable, preview works, and desktop/mobile checks found no actionable P0, P1, or P2 issue.
+
+final result: passed
+
+---
+
+# Design QA - 批量生成 Invoice 多币种选择
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9e5a1a1e-7402-4cac-b0bb-b329e3499c5e.png`.
+- Desktop implementation: `artifacts/invoice-batch-currency-qa/implementation-desktop-1419x497-final.png`.
+- Responsive implementation: `artifacts/invoice-batch-currency-qa/implementation-mobile-390x844-final.png` and `artifacts/invoice-batch-currency-qa/implementation-mobile-390x844-menu.png`.
+- Source pixels: `1419 x 497`; desktop CSS viewport: `1419 x 497`; browser-rendered capture: `1404 x 492`; responsive CSS viewport: `390 x 844`; browser-rendered capture: `375 x 812`; device pixel ratio: `1`.
+- Density normalization: the in-app browser removes its outer frame from captured page pixels. Source and desktop implementation were compared together at their original density; the focused main-content region was used for layout judgment because the source omits the application sidebar and header.
+- State: media demo account, batch Invoice builder, common currency changed from USD to EUR, one project creator selected; a fresh tab separately selected SGD for clean-console verification.
+
+## Comparison evidence
+
+- The supplied source and the browser-rendered desktop implementation were opened together in the same comparison input.
+- The source is a cropped common-information region. The implementation preserves the same two-column date/currency grid, notice banner, section hierarchy and Description controls while intentionally replacing the gray fixed-USD surface with an interactive select trigger.
+- Focused inspection was required for the currency menu and responsive state because the closed source does not show options or mobile behavior.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC labels, weights, line heights and zero letter spacing are unchanged. Currency codes remain the primary select text and Chinese currency names are secondary option descriptions.
+- Spacing and layout rhythm: passed; the select occupies the former fixed-currency slot without changing the public-information grid. At `390 x 844`, date and currency stack to full width, and the menu fits inside the viewport without covering the following heading incoherently.
+- Colors and visual tokens: passed; the trigger, focus ring, selected option and helper text reuse the existing custom-select and neutral form tokens.
+- Image and icon fidelity: passed; no new raster asset is required, and the existing Lucide chevron and check icons remain unchanged.
+- Copy and content: passed; the page offers `USD / EUR / GBP / HKD / SGD`, explains that one currency applies to the whole batch, and labels generated-row currency as the current batch currency.
+
+## Interaction and technical checks
+
+- Opening the currency control exposes all five options with Chinese descriptions. Selecting EUR updates the common field, new batch row, row totals, currency column, preview model and generated snapshot currency.
+- The XLSX export already reads each row's currency, so the selected batch currency remains reflected in the protected template.
+- Once any row has generated files, the common currency control is disabled to prevent a mixed-currency batch.
+- The 390px menu remains fully visible and selectable. A fresh browser tab selected SGD and reported no console warning or error.
+- Focused Invoice batch tests: 8 tests passed. Full Vitest suite: 69 files and 432 tests passed. TypeScript production build passed; only the existing Vite chunk-size advisory remains.
+
+## Findings and comparison history
+
+1. Initial P2: helper copy beneath the new select inherited the form error color, making the valid field look invalid.
+   - Fix: added a neutral currency-note style using the existing secondary text color and rechecked desktop and 390px states.
+2. Post-fix source comparison, five-option selection, row synchronization, responsive menu and clean-console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - 新建达人本地清算方式下拉浮层
 
 ## Reference and environment
@@ -1753,5 +1867,44 @@ The supplied image is a right-side review drawer, while the approved implementat
 
 - No actionable P0, P1, or P2 differences remain.
 - P3: the reference drawer can display more approval nodes vertically because it dedicates the entire width to one column; the implementation intentionally gives that space to simultaneous Invoice and payment comparison.
+
+final result: passed
+
+---
+
+# Design QA - Batch Invoice 卡片化布局
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c419cefc-ea2f-45c9-8e63-b63696970529.png` (`1396 x 788`).
+- Desktop implementation: `app/qa/invoice-batch-card-layout/implementation-desktop-final.png` (`1381 x 787`) from a `1396 x 796` CSS viewport at device pixel ratio 1.
+- Focused desktop implementation: `app/qa/invoice-batch-card-layout/implementation-desktop-validation-fixed.png` (`1265 x 712`) from a `1280 x 720` CSS viewport at device pixel ratio 1.
+- Mobile implementation: `app/qa/invoice-batch-card-layout/implementation-mobile-top.png` and `implementation-mobile-validation.png` (`375 x 812`) from a `390 x 844` CSS viewport at device pixel ratio 1.
+- State: media demo account, first cooperation project selected, one eligible creator selected, shared Description entered, and one validation issue visible.
+- Full-view comparison evidence: the source and final desktop capture were opened together in one visual comparison input at effectively matching desktop dimensions.
+- Focused evidence was required because the four validation metrics are below the source image crop; the focused desktop and mobile captures show their final layout and dynamic values.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed. Existing Noto Sans SC hierarchy, weights, zero letter spacing, control labels, and compact operations density are unchanged.
+- Spacing and layout rhythm: passed. The four workflow areas now use individual 8px-radius cards separated by 14px on desktop and 10px on mobile. The metric cards use a four-column desktop grid and a two-by-two mobile grid.
+- Colors and visual tokens: passed. Existing white/gray surfaces and coral interaction color remain dominant; restrained green, amber, and coral metric states improve scanning without changing business meaning.
+- Image and icon fidelity: passed. No new raster asset is required; existing Lucide section and control icons remain consistent with the source interface.
+- Copy and content: passed. The requested labels are exactly `已选择达人`, `可生成invoice`, `需处理条数`, and `批次总金额`.
+
+## Interaction And Responsive Checks
+
+- Project selection, select-all creator selection, shared Description entry, dynamic validation counts, and the existing table state were exercised in the browser.
+- At desktop size, all four main cards remain within the 820px content column and all four metric cards remain equal width.
+- At `390 x 844`, main cards measure 343px, metric cards measure 152px in a two-column grid, and document horizontal overflow is `0`.
+- Browser console warnings/errors after desktop and mobile flows: none.
+- Full Vitest suite: 70 files and 433 tests passed.
+- TypeScript production build: passed; only the existing Vite chunk-size advisory remains.
+
+## Comparison History
+
+1. Initial P2: after changing the outer form to CSS Grid, the table's desktop minimum width expanded the validation card to about 1603px and shifted the metric grid outside the viewport.
+2. Fix: constrained the form grid track with `minmax(0, 1fr)` and each workflow card with `min-width: 0`, keeping wide-table overflow inside its existing table wrapper.
+3. Post-fix desktop, selected-data, mobile, interaction, overflow, and console checks found no remaining actionable P0, P1, or P2 issue.
 
 final result: passed
