@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,14 @@ vi.mock('react-dom', () => ({
 vi.stubGlobal('document', { body: {} });
 
 describe('PaymentExecutionWorkspace', () => {
+  it('uses two equal card boards for execution and returned details', () => {
+    const source = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
+
+    expect(source).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(source).toContain('.payment-execution-board-card');
+    expect(source).not.toContain('clamp(380px, 30vw, 520px)');
+  });
+
   it('shows project information, creator payment summaries, approval flow, and the payment action', () => {
     const project = buildPaymentProjectRows({
       tab: 'payment',
@@ -40,6 +49,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('请款项目信息');
     expect(html).toContain('达人请款信息概览');
     expect(html).toContain('aria-label="请款项目与达人请款信息"');
+    expect(html.match(/payment-execution-board-card/g)).toHaveLength(2);
     expect(html).toContain('tabindex="0"');
     expect(html).toContain(`共 ${project.payouts.length} 位达人`);
     expect(html).toContain(project.payouts[0].creator);

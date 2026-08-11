@@ -1279,3 +1279,47 @@ final result: passed
 - Browser console contained no application errors during the desktop and mobile recovery flow.
 
 final result: passed
+
+---
+
+# Payment Execution Equal Dual Cards Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-91cc0c48-c131-4216-ac76-30f2ac7d6561.png` (1891 x 862 px).
+- Execution implementation: `artifacts/payment-execution-equal-cards/execution-desktop-1892x864.jpg`, captured at a 1892 x 864 CSS viewport.
+- Returned-detail implementation: `artifacts/payment-execution-equal-cards/returned-desktop-1892x864.jpg`, captured at the same viewport.
+- Mobile implementation: `artifacts/payment-execution-equal-cards/returned-mobile-top-390x844.jpg` and `returned-mobile-approval-390x844.jpg`.
+- Same-input comparison: `artifacts/payment-execution-equal-cards/reference-vs-equal-cards.jpg`.
+
+## State And Normalization
+
+- The supplied source shows the execution state with an approximately 8:2 main/approval split. The requested target intentionally changes only that relationship to two equal cards while preserving the content and fixed footer.
+- The source's 30 px browser-chrome strip was removed for the comparison. Source and implementation content were then resized from their native dimensions to equal 900 px widths and placed together without density interpolation beyond that common scale.
+- Verified states: `执行打款`, a finance return created in the current prototype session, and the resulting `已退回详情`.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Fonts and typography: the existing workspace font stack, heading hierarchy, data labels, status pills, and footer copy remain unchanged and readable in both equal columns.
+- Spacing and layout rhythm: desktop uses two measured 922 px cards with a 16 px gap inside the 1892 px viewport. Both cards share the same 8 px radius, border, surface, and height, and each retains independent vertical scrolling.
+- Colors and visual tokens: the existing neutral surfaces, purple section icons, green approval states, orange execution state, and red returned state remain unchanged.
+- Image and icon fidelity: the screen uses the product's existing Lucide interface icons and contains no new raster asset, placeholder, custom SVG, or decorative illustration.
+- Copy and content: project details, payee records, approval nodes, return reason, totals, and action labels are unchanged; only the main-panel proportion and card framing changed.
+- At 390 x 844, the cards stack in normal document flow at 347 px width with no horizontal page overflow.
+
+## Interaction Verification
+
+- `执行打款` and `已退回详情` both render exactly two `.payment-execution-board-card` regions.
+- The return dialog still requires a reason, moves the project to `已退回`, and opens the same equal-card layout through `查看原因`.
+- The fixed footer remains visible and the action set continues to follow the active execution or returned state.
+- Browser console contained 0 warnings and 0 errors during desktop and mobile checks.
+- Full Vitest passed 70 files and 438 tests; TypeScript/Vite production build and `git diff --check` passed.
+
+## Comparison History
+
+1. The supplied reference and initial implementation were compared together. The intentional 8:2 to 5:5 change was correct and the two desktop card widths matched exactly.
+2. The first 390 px pass exposed a P2 issue where CSS Grid compressed the first card to almost zero height. The mobile container was changed to normal block flow with a 14 px card gap.
+3. Post-fix mobile captures show the project card followed by the approval card without overlap, clipping, or horizontal overflow.
+
+final result: passed

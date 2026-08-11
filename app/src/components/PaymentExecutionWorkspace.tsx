@@ -174,7 +174,7 @@ export function PaymentExecutionWorkspace({
       >
         <div className="payment-execution-shell" data-testid="payment-execution-workspace">
           <main
-            className="payment-execution-main"
+            className="payment-execution-main payment-execution-board-card"
             tabIndex={0}
             aria-label="请款项目与达人请款信息"
           >
@@ -298,7 +298,7 @@ export function PaymentExecutionWorkspace({
           </section>
         </main>
 
-          <aside className="payment-execution-approval" aria-labelledby="payment-execution-approval-title">
+          <aside className="payment-execution-approval payment-execution-board-card" aria-labelledby="payment-execution-approval-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><ShieldCheck size={18} /></span>
