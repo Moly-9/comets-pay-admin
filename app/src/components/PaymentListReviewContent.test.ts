@@ -196,6 +196,20 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('付款渠道');
     expect(workspaceSource).toContain('预计付款时间');
     expect(workspaceSource).toContain('付款事由');
-    expect(workspaceSource).toContain('<ApprovalTimeline request={request} currentUser={currentUser} />');
+    expect(workspaceSource).toContain('<ApprovalTimeline request={request} currentUser={currentUser} compact />');
+  });
+
+  it('keeps the real approval order in a continuous two-column horizontal curved flow', () => {
+    expect(workspaceSource).toContain('className="finance-approval-curve"');
+    expect(workspaceSource).toContain('<path d={compactCurvePath} />');
+    expect(workspaceSource).toContain('<span className="finance-approval-point" />');
+    expect(workspaceSource).toContain('<strong>{step.label}</strong>');
+    expect(workspaceSource).toContain('<span title={step.accountName}>@{step.accountName}</span>');
+    expect(workspaceSource).toContain("compact ? (");
+    expect(workspaceSource).toContain('gridColumn: compactPositions[index].column');
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-curve path\s*{[^}]*stroke:\s*#cbd2da;[^}]*stroke-linecap:\s*round;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-point\s*{[^}]*border-radius:\s*50%;/s);
+    expect(workspaceStyles).toMatch(/\.finance-approval-timeline\.is-compact \.finance-approval-step::after\s*{[^}]*content:\s*none;/s);
   });
 });

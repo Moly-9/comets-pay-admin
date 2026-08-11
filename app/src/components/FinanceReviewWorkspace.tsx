@@ -120,11 +120,13 @@ export function ApprovalTimeline({
   currentUser,
   paymentReady = false,
   paymentProvider,
+  compact = false,
 }: {
   request: RequestProjectSummary;
   currentUser?: SystemUser;
   paymentReady?: boolean;
   paymentProvider?: string;
+  compact?: boolean;
 }) {
   const approval = request.approval;
   if (!approval) {
@@ -143,6 +145,7 @@ export function ApprovalTimeline({
       label: '请款提交',
       description: `第 ${approval.round} 轮审批已提交`,
       state: 'complete' as const,
+      accountName: request.media,
       actorName: request.media,
       actorMeta: '媒介账号',
       time: approval.submittedAt,
@@ -157,6 +160,11 @@ export function ApprovalTimeline({
         : isCurrent
           ? 'current' as const
           : 'pending' as const;
+      const fallbackAccount = stage === 'PM'
+        ? request.pm
+        : stage === 'FINANCE' && isCurrent
+          ? currentUser?.account ?? 'finance'
+          : '待分配';
       const fallbackName = stage === 'PM'
         ? request.pm
         : stage === 'FINANCE' && isCurrent
@@ -173,6 +181,7 @@ export function ApprovalTimeline({
               ? '等待当前节点处理'
               : '上一节点通过后进入',
         state,
+        accountName: event?.actorAccount ?? fallbackAccount,
         actorName: event?.actorName ?? fallbackName,
         actorMeta: event ? `${event.actorRole} · @${event.actorAccount}` : STAGE_LABEL[stage],
         time: event?.occurredAt ?? (isCurrent ? approval.updatedAt : undefined),
@@ -183,6 +192,7 @@ export function ApprovalTimeline({
       label: '渠道付款',
       description: paymentReady ? '财务审批已完成，等待执行付款' : '全部审批完成后执行',
       state: paymentReady ? 'current' as const : 'pending' as const,
+      accountName: paymentProvider ?? '付款渠道',
       actorName: paymentProvider ?? '付款渠道',
       actorMeta: `${paymentProvider ?? '付款渠道'} · 付款渠道`,
       time: undefined,
@@ -192,35 +202,90 @@ export function ApprovalTimeline({
       label: '状态回写',
       description: '同步渠道结果与交易状态',
       state: 'pending' as const,
+      accountName: 'system',
       actorName: 'COMETS Pay',
       actorMeta: '@system · 系统自动任务',
       time: undefined,
     },
   ];
+  const compactRowHeight = 78;
+  const compactCurveWidth = 300;
+  const compactCurveHeight = Math.ceil(steps.length / 2) * compactRowHeight;
+  const compactPositions = steps.map((_step, index) => {
+    const rowIndex = Math.floor(index / 2);
+    const positionInRow = index % 2;
+    const column = rowIndex % 2 === 0 ? positionInRow + 1 : 2 - positionInRow;
+    return {
+      column,
+      row: rowIndex + 1,
+      x: column === 1 ? 75 : 225,
+      y: 23 + rowIndex * compactRowHeight,
+    };
+  });
+  const compactCurvePath = compactPositions.slice(1).reduce((path, point, index) => {
+    const previous = compactPositions[index];
+    if (point.row === previous.row) return `${path} L ${point.x} ${point.y}`;
+    const turnX = previous.column === 2 ? 251 : 49;
+    return `${path} C ${turnX} ${previous.y}, ${turnX} ${point.y}, ${point.x} ${point.y}`;
+  }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
 
   return (
-    <div className="finance-approval-timeline" aria-label="当前审批流">
-      {steps.map((step) => (
-        <article className={`finance-approval-step is-${step.state}`} key={step.id}>
+    <div className={`finance-approval-timeline ${compact ? 'is-compact' : ''}`} aria-label="当前审批流">
+      {compact ? (
+        <svg
+          className="finance-approval-curve"
+          viewBox={`0 0 ${compactCurveWidth} ${compactCurveHeight}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d={compactCurvePath} />
+        </svg>
+      ) : null}
+      {steps.map((step, index) => (
+        <article
+          aria-label={`${step.label}，账号 ${step.accountName}，${step.state === 'complete' ? '已完成' : step.state === 'current' ? '当前节点' : '待处理'}`}
+          className={`finance-approval-step is-${step.state}`}
+          key={step.id}
+          style={compact ? {
+            gridColumn: compactPositions[index].column,
+            gridRow: compactPositions[index].row,
+          } : undefined}
+        >
           <span className="finance-approval-node" aria-hidden="true">
-            {step.state === 'complete'
-              ? <Check size={13} />
-              : step.state === 'current'
-                ? <Clock3 size={13} />
-                : <Circle size={11} />}
+            {compact
+              ? <span className="finance-approval-point" />
+              : step.state === 'complete'
+                ? <Check size={13} />
+                : step.state === 'current'
+                  ? <Clock3 size={13} />
+                  : <Circle size={11} />}
           </span>
           <div className="finance-approval-stage">
-            <div>
-              <strong>{step.label}</strong>
-              <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
-            </div>
-            <p>{step.description}</p>
+            {compact ? (
+              <>
+                <strong>{step.label}</strong>
+                <span title={step.accountName}>@{step.accountName}</span>
+              </>
+            ) : (
+              <>
+                <div>
+                  <strong>{step.label}</strong>
+                  <span>{step.state === 'complete' ? '已完成' : step.state === 'current' ? (step.id === 'payment' ? '待打款' : '待审核') : '待处理'}</span>
+                </div>
+                <p>{step.description}</p>
+              </>
+            )}
           </div>
-          <div className="finance-approval-actor">
-            <span>{initialsFor(step.actorName)}</span>
-            <div><strong>{step.actorName}</strong><small>{step.actorMeta}</small></div>
-          </div>
-          <time>{formatReviewTime(step.time)}</time>
+          {!compact ? (
+            <>
+              <div className="finance-approval-actor">
+                <span>{initialsFor(step.actorName)}</span>
+                <div><strong>{step.actorName}</strong><small>{step.actorMeta}</small></div>
+              </div>
+              <time>{formatReviewTime(step.time)}</time>
+            </>
+          ) : null}
         </article>
       ))}
     </div>
@@ -700,7 +765,7 @@ export function FinanceReviewWorkspace({
 
                 <section className="finance-review-project-section" aria-label="当前审批流">
                   <header><strong>当前审批流</strong><span>第 {request.approval?.round ?? 1} 轮</span></header>
-                  <ApprovalTimeline request={request} currentUser={currentUser} />
+                  <ApprovalTimeline request={request} currentUser={currentUser} compact />
                 </section>
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
