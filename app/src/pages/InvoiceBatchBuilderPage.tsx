@@ -40,6 +40,7 @@ import {
   buildInvoiceDocumentForBatchRow,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
+  INVOICE_BATCH_CURRENCIES,
   synchronizeInvoiceBatchLineItems,
   updateInvoiceBatchLineItem,
   updateAndValidateInvoiceBatchRow,
@@ -77,6 +78,7 @@ import type {
   GeneratedInvoiceRecord,
   InvoiceBatchMode,
   InvoiceBatchRow,
+  InvoiceCurrency,
   InvoiceDocumentModel,
   InvoiceEntity,
   Payout,
@@ -106,6 +108,20 @@ const STATUS_META = {
   GENERATED: { label: '已生成', tone: 'success' },
   FAILED: { label: '生成失败', tone: 'danger' },
 } as const;
+
+const INVOICE_BATCH_CURRENCY_NAMES: Record<InvoiceCurrency, string> = {
+  USD: '美元',
+  EUR: '欧元',
+  GBP: '英镑',
+  HKD: '港币',
+  SGD: '新加坡元',
+};
+
+const INVOICE_BATCH_CURRENCY_OPTIONS = INVOICE_BATCH_CURRENCIES.map((value) => ({
+  value,
+  label: value,
+  description: INVOICE_BATCH_CURRENCY_NAMES[value],
+}));
 
 const projectIdFor = (project: ProjectSummary) => (
   (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
@@ -516,20 +532,20 @@ function BatchRowTable({
                   <div className="invoice-batch-line-stack invoice-batch-line-totals">
                     {row.items.map((item) => (
                       <strong key={item.id}>
-                        {formatInvoiceMoney(INVOICE_BATCH_PROTOTYPE_CURRENCY, item.lineTotal)}
+                        {formatInvoiceMoney(row.currency || INVOICE_BATCH_PROTOTYPE_CURRENCY, item.lineTotal)}
                       </strong>
                     ))}
                   </div>
                   {row.items.length > 1 ? (
                     <small className="invoice-batch-row-total">
-                      合计 {formatInvoiceMoney(INVOICE_BATCH_PROTOTYPE_CURRENCY, rowTotal(row))}
+                      合计 {formatInvoiceMoney(row.currency || INVOICE_BATCH_PROTOTYPE_CURRENCY, rowTotal(row))}
                     </small>
                   ) : null}
                 </td>
                 <td data-label="币种">
                   <span className="invoice-batch-fixed-value">
-                    <strong>{INVOICE_BATCH_PROTOTYPE_CURRENCY}</strong>
-                    <small>固定币种</small>
+                    <strong>{row.currency || '-'}</strong>
+                    <small>当前批次</small>
                   </span>
                 </td>
                 <td data-label="Payment Information">
@@ -626,6 +642,7 @@ export function InvoiceBatchBuilderPage({
   const [selectedEngagementIds, setSelectedEngagementIds] = useState<EngagementId[]>([]);
   const [creatorSearch, setCreatorSearch] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayInputValue());
+  const [currency, setCurrency] = useState<InvoiceCurrency>(INVOICE_BATCH_PROTOTYPE_CURRENCY);
   const [sharedDescriptions, setSharedDescriptions] = useState<InvoiceBatchLineItemSeed[]>(
     () => [createSharedDescription()],
   );
@@ -683,10 +700,12 @@ export function InvoiceBatchBuilderPage({
   const allSelectableSelected = Boolean(selectableEngagementIds.length)
     && selectableEngagementIds.every((id) => selectedEngagementIds.includes(id));
   const hasPendingRows = rows.some((row) => row.status !== 'GENERATED');
+  const hasGeneratedRows = rows.some((row) => row.status === 'GENERATED');
   const isDirty = Boolean(
     rows.length
     || selectedEngagementIds.length
-    || sharedDescriptions.some((item) => item.description.trim()),
+    || sharedDescriptions.some((item) => item.description.trim())
+    || currency !== INVOICE_BATCH_PROTOTYPE_CURRENCY
   );
 
   useEffect(() => {
@@ -733,6 +752,7 @@ export function InvoiceBatchBuilderPage({
         ...context,
         engagementId,
         invoiceDate,
+        currency,
         lineItems: mode === 'SHARED_DESCRIPTION'
           ? sharedDescriptions
           : [createSharedDescription()],
@@ -1188,12 +1208,21 @@ export function InvoiceBatchBuilderPage({
               <small />
             </label>
             <div className="invoice-form-control">
-              <span>币种</span>
-              <div className="invoice-batch-readonly-control">
-                <strong>{INVOICE_BATCH_PROTOTYPE_CURRENCY}</strong>
-                <small>批量原型统一使用美元</small>
-              </div>
-              <small />
+              <span>币种 *</span>
+              <SelectField
+                ariaLabel="批量 Invoice 币种"
+                variant="form"
+                value={currency}
+                options={INVOICE_BATCH_CURRENCY_OPTIONS}
+                disabled={generating || hasGeneratedRows}
+                onChange={(value) => {
+                  setCurrency(value);
+                  updateAllRows({ currency: value });
+                }}
+              />
+              <p className="invoice-batch-currency-note">
+                {hasGeneratedRows ? '已有生成结果，币种已锁定' : '整批 Invoice 使用同一币种'}
+              </p>
             </div>
             {mode === 'SHARED_DESCRIPTION' ? (
               <div className="invoice-form-control full-width invoice-batch-description-items">
@@ -1319,7 +1348,7 @@ export function InvoiceBatchBuilderPage({
             <div><span>需处理</span><strong>{problemRows.length}</strong></div>
             <div className="is-wide">
               <span>批次总额</span>
-              <strong>{batchTotal ? formatInvoiceMoney('USD', batchTotal) : '-'}</strong>
+              <strong>{batchTotal ? formatInvoiceMoney(currency, batchTotal) : '-'}</strong>
             </div>
           </div>
 
@@ -1371,7 +1400,7 @@ export function InvoiceBatchBuilderPage({
                   {row.generated ? (
                     <>
                       <code>{row.generated.record.id}</code>
-                      <strong>{formatInvoiceMoney('USD', rowTotal(row))}</strong>
+                      <strong>{formatInvoiceMoney(row.currency || currency, rowTotal(row))}</strong>
                       <div>
                         <button
                           type="button"

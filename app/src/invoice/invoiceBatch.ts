@@ -121,10 +121,12 @@ export const createInvoiceBatchRow = ({
   generatedInvoices,
   invoiceEntity,
   invoiceDate,
+  currency = 'USD',
   lineItems,
 }: InvoiceBatchContext & {
   engagementId: EngagementId;
   invoiceDate: string;
+  currency?: InvoiceCurrency;
   lineItems: InvoiceBatchLineItemSeed[];
 }) => {
   const projectId = projectIdFor(project);
@@ -162,7 +164,7 @@ export const createInvoiceBatchRow = ({
     sourcePayoutId: payout?.id ?? createPrototypeId('payout'),
     invoiceDate,
     items: synchronizeInvoiceBatchLineItems([], lineItems),
-    currency: 'USD',
+    currency,
     payoutAccountId: selectedAccount ? getPayoutAccountId(selectedAccount) : '',
     payoutAccountLocked: Boolean(contractAccount && selectedAccount === contractAccount),
     contractIds,

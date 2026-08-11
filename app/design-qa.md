@@ -46,6 +46,49 @@ final result: passed
 
 ---
 
+# Design QA - 批量生成 Invoice 多币种选择
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9e5a1a1e-7402-4cac-b0bb-b329e3499c5e.png`.
+- Desktop implementation: `artifacts/invoice-batch-currency-qa/implementation-desktop-1419x497-final.png`.
+- Responsive implementation: `artifacts/invoice-batch-currency-qa/implementation-mobile-390x844-final.png` and `artifacts/invoice-batch-currency-qa/implementation-mobile-390x844-menu.png`.
+- Source pixels: `1419 x 497`; desktop CSS viewport: `1419 x 497`; browser-rendered capture: `1404 x 492`; responsive CSS viewport: `390 x 844`; browser-rendered capture: `375 x 812`; device pixel ratio: `1`.
+- Density normalization: the in-app browser removes its outer frame from captured page pixels. Source and desktop implementation were compared together at their original density; the focused main-content region was used for layout judgment because the source omits the application sidebar and header.
+- State: media demo account, batch Invoice builder, common currency changed from USD to EUR, one project creator selected; a fresh tab separately selected SGD for clean-console verification.
+
+## Comparison evidence
+
+- The supplied source and the browser-rendered desktop implementation were opened together in the same comparison input.
+- The source is a cropped common-information region. The implementation preserves the same two-column date/currency grid, notice banner, section hierarchy and Description controls while intentionally replacing the gray fixed-USD surface with an interactive select trigger.
+- Focused inspection was required for the currency menu and responsive state because the closed source does not show options or mobile behavior.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC labels, weights, line heights and zero letter spacing are unchanged. Currency codes remain the primary select text and Chinese currency names are secondary option descriptions.
+- Spacing and layout rhythm: passed; the select occupies the former fixed-currency slot without changing the public-information grid. At `390 x 844`, date and currency stack to full width, and the menu fits inside the viewport without covering the following heading incoherently.
+- Colors and visual tokens: passed; the trigger, focus ring, selected option and helper text reuse the existing custom-select and neutral form tokens.
+- Image and icon fidelity: passed; no new raster asset is required, and the existing Lucide chevron and check icons remain unchanged.
+- Copy and content: passed; the page offers `USD / EUR / GBP / HKD / SGD`, explains that one currency applies to the whole batch, and labels generated-row currency as the current batch currency.
+
+## Interaction and technical checks
+
+- Opening the currency control exposes all five options with Chinese descriptions. Selecting EUR updates the common field, new batch row, row totals, currency column, preview model and generated snapshot currency.
+- The XLSX export already reads each row's currency, so the selected batch currency remains reflected in the protected template.
+- Once any row has generated files, the common currency control is disabled to prevent a mixed-currency batch.
+- The 390px menu remains fully visible and selectable. A fresh browser tab selected SGD and reported no console warning or error.
+- Focused Invoice batch tests: 8 tests passed. Full Vitest suite: 69 files and 432 tests passed. TypeScript production build passed; only the existing Vite chunk-size advisory remains.
+
+## Findings and comparison history
+
+1. Initial P2: helper copy beneath the new select inherited the form error color, making the valid field look invalid.
+   - Fix: added a neutral currency-note style using the existing secondary text color and rechecked desktop and 390px states.
+2. Post-fix source comparison, five-option selection, row synchronization, responsive menu and clean-console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - 新建达人本地清算方式下拉浮层
 
 ## Reference and environment

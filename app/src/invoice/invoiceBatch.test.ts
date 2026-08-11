@@ -177,7 +177,7 @@ describe('Invoice batch rows', () => {
     expect(validated.issues).toContain('第 2 条 Amount 必须大于 0');
   });
 
-  it('defaults every batch row to USD', () => {
+  it('defaults batch rows to USD and accepts another supported common currency', () => {
     const creator = creatorWithAccounts([{
       ...baseAccount,
       isDefault: true,
@@ -209,7 +209,18 @@ describe('Invoice batch rows', () => {
       lineItems: lineItemSeeds('Dedicated Video'),
     });
 
+    const eurRow = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      currency: 'EUR',
+      lineItems: lineItemSeeds('Dedicated Video'),
+    });
+
     expect(row.currency).toBe('USD');
+    expect(eurRow.currency).toBe('EUR');
+    expect(buildInvoiceDocumentForBatchRow(eurRow, context, 'INV-20260806-EUR').currency)
+      .toBe('EUR');
   });
 
   it('switches Payment Information by stable payout account ID', () => {

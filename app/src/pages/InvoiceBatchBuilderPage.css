@@ -319,31 +319,11 @@
   font-size: 10px;
 }
 
-.invoice-batch-readonly-control {
-  display: flex;
-  min-height: 40px;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #e0e3e8;
-  border-radius: 9px;
-  background: #f6f7f9;
-  padding: 0 11px;
-  color: #6e7480;
-}
-
-.invoice-batch-readonly-control strong {
-  flex: none;
-  color: #454a54;
-  font-size: 11.5px;
-}
-
-.invoice-batch-readonly-control small {
-  overflow: hidden;
-  color: #8a909b;
+.invoice-batch-currency-note {
+  margin: 0;
+  color: #717784;
   font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
 }
 
 .invoice-batch-description-items {
@@ -1304,19 +1284,6 @@
 
   .invoice-batch-creator em {
     grid-column: 2;
-  }
-
-  .invoice-batch-readonly-control {
-    align-items: flex-start;
-    flex-direction: column;
-    justify-content: center;
-    padding-top: 7px;
-    padding-bottom: 7px;
-  }
-
-  .invoice-batch-readonly-control small {
-    width: 100%;
-    white-space: normal;
   }
 
   .invoice-batch-description-items .invoice-line-header {
