@@ -13,10 +13,10 @@ vi.mock('react-dom', () => ({
 vi.stubGlobal('document', { body: {} });
 
 describe('PaymentExecutionWorkspace', () => {
-  it('uses two equal card boards for execution and returned details', () => {
+  it('uses a 6:4 two-card layout for execution and returned details', () => {
     const source = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
 
-    expect(source).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(source).toContain('grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);');
     expect(source).toContain('.payment-execution-board-card');
     expect(source).not.toContain('clamp(380px, 30vw, 520px)');
   });
