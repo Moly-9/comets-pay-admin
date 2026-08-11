@@ -5,6 +5,7 @@ import {
   Download,
   FileText,
   Plus,
+  Sparkles,
   Trash2,
   UserRound,
   WalletCards,
@@ -37,6 +38,7 @@ import {
   payoutSnapshotKey,
   validateInvoiceDocumentModel,
 } from '../invoice/invoiceDraft';
+import { createInvoiceBuilderPrototypeSeed } from '../invoice/invoiceBuilderPrototype';
 import {
   invoiceDocumentChanged,
   maskInvoiceAccountValue,
@@ -206,6 +208,13 @@ export function InvoiceBuilderPage({
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
+  const prototypeSeed = useMemo(() => createInvoiceBuilderPrototypeSeed({
+    creators,
+    payouts,
+    projects,
+    contracts,
+    generatedInvoices,
+  }), [contracts, creators, generatedInvoices, payouts, projects]);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
   const eligiblePayoutAccounts = eligibleInvoicePayoutAccounts(selectedCreator);
@@ -330,6 +339,29 @@ export function InvoiceBuilderPage({
       : invoicePaymentForCreator(creator, paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex'));
     setItems([createBlankLine(0)]);
     setErrors({});
+    setGeneratedFiles(null);
+  };
+
+  const fillPrototypeData = () => {
+    if (!prototypeSeed || isEditing) return;
+    const creator = creators.find((item) => item.id === prototypeSeed.creatorId);
+    setCreatorId(prototypeSeed.creatorId);
+    setEngagementId(prototypeSeed.engagementId);
+    setContractIds([]);
+    setInvoiceNumber(nextInvoiceNumber(generatedInvoices));
+    setInvoiceDate(todayInputValue());
+    setBillTo({ ...invoiceEntity });
+    setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
+    setCurrency(prototypeSeed.currency);
+    setItems(prototypeSeed.lineItems.map((item, index) => normalizeLineItem({
+      id: `${createPrototypeId('item')}-demo-${index}`,
+      ...item,
+    })));
+    setPayoutAccountId(prototypeSeed.payoutAccountId);
+    setPaymentMethod(prototypeSeed.paymentMethod);
+    setPayment({ ...prototypeSeed.payment });
+    setErrors({});
+    setGenerationError('');
     setGeneratedFiles(null);
   };
 
@@ -515,7 +547,24 @@ export function InvoiceBuilderPage({
         subtitle={isEditing
           ? '保留稳定关联并生成新文件版本；保存后原签署失效，重新进入待签署。'
           : '从达人档案与项目费用中自动带入资料，确认后同时生成 PDF 与 DOCX。'}
-        actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={cancel}>{isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}</Button>}
+        actions={(
+          <>
+            {!isEditing ? (
+              <Button
+                variant="secondary"
+                icon={<Sparkles size={17} />}
+                data-testid="invoice-fill-demo"
+                disabled={!prototypeSeed || generating}
+                onClick={fillPrototypeData}
+              >
+                填充演示数据
+              </Button>
+            ) : null}
+            <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={cancel}>
+              {isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}
+            </Button>
+          </>
+        )}
       />
       <NoticeBanner>
         {isEditing

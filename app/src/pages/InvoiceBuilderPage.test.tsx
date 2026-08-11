@@ -29,6 +29,8 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(html).toMatch(/<span>DESCRIPTION<\/span><input[^>]*value=""/);
     expect(html).toMatch(/<span>PRICE<\/span><input[^>]*value=""/);
     expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
+    expect(html).toContain('data-testid="invoice-fill-demo"');
+    expect(html).toContain('填充演示数据');
   });
 });
 
@@ -52,6 +54,7 @@ describe('InvoiceBuilderPage edit mode', () => {
     );
 
     expect(html).toContain('修改 Invoice');
+    expect(html).not.toContain('填充演示数据');
     expect(html).toContain(record.id);
     expect(html).not.toContain(record.invoiceId);
     expect(html).not.toContain(record.sourcePayoutId);
