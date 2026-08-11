@@ -226,7 +226,7 @@ export function ApprovalTimeline({
       time: undefined,
     },
   ];
-  const compactRowHeight = 78;
+  const compactRowHeight = 84;
   const compactCurveWidth = 300;
   const compactCurveHeight = Math.ceil(steps.length / 2) * compactRowHeight;
   const compactPositions = steps.map((_step, index) => {
@@ -240,21 +240,25 @@ export function ApprovalTimeline({
       y: 23 + rowIndex * compactRowHeight,
     };
   });
-  const compactCurvePath = compactPositions.slice(1).reduce((path, point, index) => {
-    const previous = compactPositions[index];
-    if (point.row === previous.row) return `${path} L ${point.x} ${point.y}`;
-    const turnX = previous.column === 2 ? 251 : 49;
-    return `${path} C ${turnX} ${previous.y}, ${turnX} ${point.y}, ${point.x} ${point.y}`;
-  }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
+  const buildCompactCurvePath = (lastIndex: number) => compactPositions
+    .slice(1, lastIndex + 1)
+    .reduce((path, point, index) => {
+      const previous = compactPositions[index];
+      if (point.row === previous.row) {
+        const direction = point.x > previous.x ? 1 : -1;
+        const distance = Math.abs(point.x - previous.x);
+        const firstControlX = previous.x + direction * distance * 0.34;
+        const secondControlX = previous.x + direction * distance * 0.66;
+        return `${path} C ${firstControlX} ${previous.y - 3}, ${secondControlX} ${point.y + 3}, ${point.x} ${point.y}`;
+      }
+      const outerX = previous.column === 2 ? 292 : 8;
+      return `${path} C ${outerX} ${previous.y}, ${outerX} ${point.y}, ${point.x} ${point.y}`;
+    }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
+  const compactCurvePath = buildCompactCurvePath(compactPositions.length - 1);
   const compactProgressLastIndex = steps.reduce((lastIndex, step, index) => (
     step.state === 'complete' || step.state === 'current' ? index : lastIndex
   ), 0);
-  const compactProgressPath = compactPositions.slice(1, compactProgressLastIndex + 1).reduce((path, point, index) => {
-    const previous = compactPositions[index];
-    if (point.row === previous.row) return `${path} L ${point.x} ${point.y}`;
-    const turnX = previous.column === 2 ? 251 : 49;
-    return `${path} C ${turnX} ${previous.y}, ${turnX} ${point.y}, ${point.x} ${point.y}`;
-  }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
+  const compactProgressPath = buildCompactCurvePath(compactProgressLastIndex);
 
   return (
     <div className={`finance-approval-timeline ${compact ? 'is-compact' : ''}`} aria-label="当前审批流">
@@ -286,14 +290,14 @@ export function ApprovalTimeline({
               {compact
                 ? (
                     <>
-                      <CompactIcon className="finance-approval-stage-icon" size={17} strokeWidth={1.8} />
+                      <CompactIcon className="finance-approval-stage-icon" size={14} strokeWidth={1.8} />
                       {step.state === 'complete' ? (
                         <span className="finance-approval-state-mark">
-                          <Check size={9} strokeWidth={2.6} />
+                          <Check size={7} strokeWidth={2.6} />
                         </span>
                       ) : step.state === 'current' ? (
                         <span className="finance-approval-state-mark">
-                          <Clock3 size={9} strokeWidth={2.4} />
+                          <Clock3 size={7} strokeWidth={2.4} />
                         </span>
                       ) : null}
                     </>

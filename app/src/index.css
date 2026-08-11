@@ -5686,7 +5686,7 @@ body:has(.finance-review-workspace) {
 .finance-approval-timeline.is-compact {
   position: relative;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 78px;
+  grid-auto-rows: 84px;
   gap: 0;
   padding: 6px;
 }
@@ -5707,25 +5707,25 @@ body:has(.finance-review-workspace) {
   stroke: #cbd2da;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2;
+  stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
 }
 
 .finance-approval-curve path.finance-approval-curve-progress {
   stroke: #69a989;
-  stroke-width: 2.5;
+  stroke-width: 2;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step {
   z-index: 1;
   display: grid;
-  min-height: 78px;
+  min-height: 84px;
   align-content: start;
   justify-items: center;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 30px minmax(0, 1fr);
-  gap: 4px;
-  padding: 8px 4px 6px;
+  gap: 8px;
+  padding: 8px 4px;
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step + .finance-approval-step {
@@ -5738,13 +5738,13 @@ body:has(.finance-review-workspace) {
 
 .finance-approval-timeline.is-compact .finance-approval-node {
   z-index: 3;
-  width: 36px;
-  height: 36px;
-  border: 2px solid #cbd2da;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid #cbd2da;
   border-radius: 50%;
   background: #f7f8fa;
   color: #7e8996;
-  box-shadow: 0 0 0 4px #fff, 0 4px 10px rgb(53 64 75 / 10%);
+  box-shadow: 0 0 0 3px #fff, 0 3px 8px rgb(53 64 75 / 9%);
 }
 
 .finance-approval-stage-icon {
@@ -5756,23 +5756,23 @@ body:has(.finance-review-workspace) {
   border-color: #65ab88;
   background: #e9f7f0;
   color: #32845e;
-  box-shadow: 0 0 0 4px #fff, 0 4px 11px rgb(50 132 94 / 18%);
+  box-shadow: 0 0 0 3px #fff, 0 3px 9px rgb(50 132 94 / 15%);
 }
 
 .finance-approval-timeline.is-compact .finance-approval-step.is-current .finance-approval-node {
   border-color: #e98c64;
   background: #fff0e8;
   color: #ba5732;
-  box-shadow: 0 0 0 4px #fff, 0 0 0 6px rgb(233 140 100 / 20%), 0 5px 13px rgb(186 87 50 / 18%);
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgb(233 140 100 / 18%), 0 4px 10px rgb(186 87 50 / 15%);
 }
 
 .finance-approval-state-mark {
   position: absolute;
-  right: -4px;
+  right: -3px;
   bottom: -3px;
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   align-items: center;
   justify-content: center;
   border: 2px solid #fff;
@@ -5788,11 +5788,15 @@ body:has(.finance-review-workspace) {
 .finance-approval-timeline.is-compact .finance-approval-stage {
   z-index: 3;
   display: grid;
-  width: 100%;
+  width: calc(100% - 16px);
+  max-width: 126px;
   min-width: 0;
   justify-items: center;
   align-content: start;
-  gap: 1px;
+  gap: 2px;
+  border-radius: 3px;
+  background: #fff;
+  padding: 0 2px;
   text-align: center;
 }
 
