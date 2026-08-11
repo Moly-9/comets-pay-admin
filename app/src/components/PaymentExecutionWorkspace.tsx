@@ -62,6 +62,16 @@ const payoutFailureReason = (payout: Payout, requestReason: string) => (
   || '未记录失败原因'
 );
 
+const payoutHasFailureMarker = (payout: Payout) => Boolean(
+  payout.paymentFailure
+  || payout.paymentFailureReturn
+  || payout.paymentFailureRecovery
+  || payout.returnReason?.trim()
+  || payout.issue?.trim()
+  || payout.status === '付款失败'
+  || payout.status === '已退回'
+);
+
 export function PaymentExecutionWorkspace({
   request,
   project,
@@ -94,13 +104,6 @@ export function PaymentExecutionWorkspace({
   const structuredReturnItems = returnDetails?.items ?? [];
   const hasScopedReturnItems = isReturned && structuredReturnItems.length > 0;
   const requestReturnReason = returnDetails?.reason?.trim() || '';
-  const returnedReason = project.payouts
-    .map((payout) => payoutFailureReason(payout, requestReturnReason))
-    .find((reason) => reason !== '未记录失败原因')
-    ?? '未记录失败原因';
-  const returnedAt = returnDetails?.occurredAt
-    ?? project.payouts.find((payout) => payout.paymentFailureReturn?.occurredAt)
-      ?.paymentFailureReturn?.occurredAt;
   const canSubmitPayment = canExecute
     && payablePayouts.length > 0
     && payablePayouts.length === project.payouts.length
@@ -114,6 +117,24 @@ export function PaymentExecutionWorkspace({
       ? structuredReturnItems.find((item) => item.invoiceId === invoice.invoiceId)
       : undefined;
   };
+  const returnedPayoutDetails = isReturned ? project.payouts.flatMap((payout) => {
+    const returnItem = hasScopedReturnItems ? returnItemForPayout(payout) : undefined;
+    if (!returnItem && !payoutHasFailureMarker(payout)) return [];
+    return [{
+      payoutId: payout.id,
+      returnItem,
+      reason: returnItem?.reason ?? payoutFailureReason(payout, requestReturnReason),
+    }];
+  }) : [];
+  const returnedPayoutIds = new Set(returnedPayoutDetails.map((detail) => detail.payoutId));
+  const returnedPayoutCount = returnedPayoutDetails.length;
+  const passedPayoutCount = Math.max(0, project.payouts.length - returnedPayoutCount);
+  const returnedReason = requestReturnReason
+    || returnedPayoutDetails.find((detail) => detail.reason !== '未记录失败原因')?.reason
+    || '未记录失败原因';
+  const returnedAt = returnDetails?.occurredAt
+    ?? project.payouts.find((payout) => payout.paymentFailureReturn?.occurredAt)
+      ?.paymentFailureReturn?.occurredAt;
 
   const executePayment = () => {
     if (onExecute(project.payouts)) onClose();
@@ -140,9 +161,7 @@ export function PaymentExecutionWorkspace({
             <div>
               <strong>{project.amount}</strong>
               <span>{isReturned
-                ? hasScopedReturnItems
-                  ? `${structuredReturnItems.length} 笔明细已退回，其余 ${Math.max(0, project.payouts.length - structuredReturnItems.length)} 笔已通过 · ${paymentProvider}`
-                  : `${project.payouts.length} 笔请款明细已退回 · ${paymentProvider}`
+                ? `${returnedPayoutCount} 笔明细需修改，其余 ${passedPayoutCount} 笔已通过审核 · ${paymentProvider}`
                 : `${validatedPayouts.length} 笔付款信息校验成功 · ${paymentProvider}`}</span>
             </div>
             <div>
@@ -174,11 +193,11 @@ export function PaymentExecutionWorkspace({
       >
         <div className="payment-execution-shell" data-testid="payment-execution-workspace">
           <main
-            className="payment-execution-main payment-execution-board-card"
+            className={`payment-execution-main${isReturned ? ' is-returned' : ' payment-execution-board-card'}`}
             tabIndex={0}
             aria-label="请款项目与达人请款信息"
           >
-          <section className="payment-execution-project" aria-labelledby="payment-execution-project-title">
+          <section className={`payment-execution-project${isReturned ? ' payment-execution-content-card' : ''}`} aria-labelledby="payment-execution-project-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
@@ -209,11 +228,23 @@ export function PaymentExecutionWorkspace({
               <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
               <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
             </dl>
-            {isReturned && !hasScopedReturnItems ? (
+          </section>
+
+          {isReturned ? (
+            <section className="payment-execution-failure-card payment-execution-content-card" aria-labelledby="payment-execution-failure-title">
+              <header>
+                <div>
+                  <span className="payment-execution-section-icon is-failure"><AlertTriangle size={18} /></span>
+                  <div>
+                    <h2 id="payment-execution-failure-title">失败原因</h2>
+                    <p>{returnedPayoutCount} 位达人需修改 · {passedPayoutCount} 位达人已通过审核</p>
+                  </div>
+                </div>
+                <span className="payment-execution-failure-count">{returnedPayoutCount} 位需处理</span>
+              </header>
               <div className="payment-execution-failure-summary" role="alert">
                 <AlertTriangle size={20} />
                 <div>
-                  <span>失败原因</span>
                   <strong>{returnedReason}</strong>
                   <small>
                     {returnDetails
@@ -223,10 +254,10 @@ export function PaymentExecutionWorkspace({
                   </small>
                 </div>
               </div>
-            ) : null}
-          </section>
+            </section>
+          ) : null}
 
-          <section className="payment-execution-payees" aria-labelledby="payment-execution-payees-title">
+          <section className={`payment-execution-payees${isReturned ? ' payment-execution-content-card' : ''}`} aria-labelledby="payment-execution-payees-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><UserRound size={18} /></span>
@@ -241,8 +272,8 @@ export function PaymentExecutionWorkspace({
               {project.payouts.map((payout, index) => {
                 const informationValidated = isPayoutPaymentInformationValidated(payout);
                 const returnItem = hasScopedReturnItems ? returnItemForPayout(payout) : undefined;
-                const detailReturned = isReturned && (!hasScopedReturnItems || Boolean(returnItem));
-                const detailPassed = isReturned && hasScopedReturnItems && !returnItem;
+                const detailReturned = isReturned && returnedPayoutIds.has(payout.id);
+                const detailPassed = isReturned && !detailReturned;
                 const failureReason = returnItem?.reason ?? payoutFailureReason(payout, requestReturnReason);
                 return (
                   <article className={`payment-execution-payee${detailReturned ? ' is-returned' : ''}${detailPassed ? ' is-passed' : ''}`} key={payout.id}>
@@ -263,7 +294,7 @@ export function PaymentExecutionWorkspace({
                               ? 'Invoice 已退回'
                               : '请款信息已退回'
                           : detailPassed
-                            ? '已通过'
+                            ? '已通过审核'
                             : informationValidated ? '付款信息校验成功' : '付款信息待校验'}
                       </span>
                     </header>
@@ -272,7 +303,7 @@ export function PaymentExecutionWorkspace({
                       <span>{detailReturned
                         ? <><b>退回原因：</b>{failureReason}</>
                         : detailPassed
-                          ? '该明细已通过财务审核，无需修改'
+                          ? '该达人请款信息已通过审核，无需修改'
                           : informationValidated
                             ? '付款信息校验成功，收款账户与付款资料均已通过审核'
                             : '付款信息尚未完成校验，暂不能执行打款'}</span>
@@ -316,8 +347,8 @@ export function PaymentExecutionWorkspace({
                   <div>
                     <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
                     <p>{hasScopedReturnItems
-                      ? `${structuredReturnItems.length} 笔明细需要修改，具体原因请查看左侧对应记录。`
-                      : returnedReason}</p>
+                      ? `${returnedPayoutCount} 笔明细需要修改，具体原因请查看左侧对应达人卡片。`
+                      : `${returnedPayoutCount} 笔明细需要修改，其余 ${passedPayoutCount} 笔已通过审核。`}</p>
                   </div>
                 </div>
               ) : null}

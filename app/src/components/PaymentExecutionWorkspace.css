@@ -78,6 +78,11 @@ body:has(.payment-execution-workspace) {
   -webkit-overflow-scrolling: touch;
 }
 
+.payment-execution-main.is-returned {
+  gap: 12px;
+  background: transparent;
+}
+
 .payment-execution-main:focus-visible {
   outline: 2px solid #715b9d;
   outline-offset: -2px;
@@ -91,11 +96,24 @@ body:has(.payment-execution-workspace) {
   background: #fff;
 }
 
+.payment-execution-content-card {
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(35, 43, 54, 0.05);
+}
+
 .payment-execution-project {
   border-bottom: 12px solid #f3f5f7;
 }
 
+.payment-execution-main.is-returned .payment-execution-project {
+  border-bottom: 1px solid #dfe3e8;
+}
+
 .payment-execution-project > header,
+.payment-execution-failure-card > header,
 .payment-execution-payees > header,
 .payment-execution-approval > header {
   display: flex;
@@ -109,6 +127,7 @@ body:has(.payment-execution-workspace) {
 }
 
 .payment-execution-project > header > div,
+.payment-execution-failure-card > header > div,
 .payment-execution-payees > header > div,
 .payment-execution-approval > header > div {
   display: flex;
@@ -119,21 +138,25 @@ body:has(.payment-execution-workspace) {
 }
 
 .payment-execution-project > header > div > div,
+.payment-execution-failure-card > header > div > div,
 .payment-execution-payees > header > div > div,
 .payment-execution-approval > header > div > div {
   min-width: 0;
 }
 
 .payment-execution-project h2,
+.payment-execution-failure-card h2,
 .payment-execution-payees h2,
 .payment-execution-approval h2,
 .payment-execution-project p,
+.payment-execution-failure-card p,
 .payment-execution-payees p,
 .payment-execution-approval p {
   margin: 0;
 }
 
 .payment-execution-project h2,
+.payment-execution-failure-card h2,
 .payment-execution-payees h2,
 .payment-execution-approval h2 {
   color: #28313d;
@@ -142,6 +165,7 @@ body:has(.payment-execution-workspace) {
 }
 
 .payment-execution-project p,
+.payment-execution-failure-card p,
 .payment-execution-payees p,
 .payment-execution-approval p {
   margin-top: 3px;
@@ -164,6 +188,12 @@ body:has(.payment-execution-workspace) {
   border-radius: 7px;
   background: #f5f1fc;
   color: #715b9d;
+}
+
+.payment-execution-section-icon.is-failure {
+  border-color: #edc7c0;
+  background: #fff0ed;
+  color: #ad463b;
 }
 
 .payment-execution-status,
@@ -328,10 +358,29 @@ body:has(.payment-execution-workspace) {
   font-size: 12px;
 }
 
+.payment-execution-failure-count {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid #edc7c0;
+  border-radius: 999px;
+  background: #fff5f3;
+  padding: 5px 10px;
+  color: #a74339;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .payment-execution-payees > header {
   position: sticky;
   z-index: 1;
   top: 0;
+}
+
+.payment-execution-main.is-returned .payment-execution-payees > header {
+  position: static;
 }
 
 .payment-execution-payee-list {
@@ -341,6 +390,12 @@ body:has(.payment-execution-workspace) {
   padding: 0;
 }
 
+.payment-execution-main.is-returned .payment-execution-payee-list {
+  gap: 12px;
+  background: #f5f6f8;
+  padding: 14px;
+}
+
 .payment-execution-payee {
   overflow: hidden;
   border: 0;
@@ -348,8 +403,18 @@ body:has(.payment-execution-workspace) {
   background: #fff;
 }
 
+.payment-execution-main.is-returned .payment-execution-payee {
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(35, 43, 54, 0.04);
+}
+
 .payment-execution-payee + .payment-execution-payee {
   border-top: 12px solid #f3f5f7;
+}
+
+.payment-execution-main.is-returned .payment-execution-payee + .payment-execution-payee {
+  border-top: 1px solid #dfe3e8;
 }
 
 .payment-execution-payee > header {
@@ -460,6 +525,16 @@ body:has(.payment-execution-workspace) {
 
 .payment-execution-payee.is-passed {
   border-color: #cfe3d6;
+}
+
+.payment-execution-main.is-returned .payment-execution-payee.is-returned {
+  border-color: #e4bdb6;
+  box-shadow: inset 3px 0 0 #c85a4e;
+}
+
+.payment-execution-main.is-returned .payment-execution-payee.is-passed {
+  border-color: #c9e0d2;
+  box-shadow: inset 3px 0 0 #5c9a79;
 }
 
 .payment-execution-payee > dl {

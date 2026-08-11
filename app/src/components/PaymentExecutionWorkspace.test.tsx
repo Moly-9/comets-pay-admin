@@ -122,13 +122,14 @@ describe('PaymentExecutionWorkspace', () => {
       ...project,
       status: '已退回',
       actionLabel: '查看原因',
-      payouts: project.payouts.map((payout) => ({
+      payouts: project.payouts.map((payout, index) => index === 0 ? {
         ...payout,
         status: '已退回' as const,
         returnReason: reason,
         issue: `付款执行前退回：${reason}`,
-      })),
+      } : payout),
     };
+    expect(project.payouts.length).toBeGreaterThan(1);
     const html = renderToStaticMarkup(
       <PaymentExecutionWorkspace
         request={returnedRequest}
@@ -143,6 +144,7 @@ describe('PaymentExecutionWorkspace', () => {
     );
 
     expect(html).toContain(`${project.requestCode} · 已退回详情`);
+    expect(html).toContain('payment-execution-failure-card payment-execution-content-card');
     expect(html).toContain('class="payment-execution-failure-summary" role="alert"');
     expect(html).toContain('失败原因');
     expect(html).toContain(reason);
@@ -150,6 +152,11 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('payment-execution-payee-status is-error');
     expect(html).toContain('payment-execution-account-note is-error');
     expect(html).toContain('请款信息已退回');
+    expect(html).toContain('已通过审核');
+    expect(html).toContain('该达人请款信息已通过审核，无需修改');
+    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(1);
+    expect(html.match(/payment-execution-payee is-passed/g)).toHaveLength(project.payouts.length - 1);
+    expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
     expect(html).toContain('class="payment-execution-approval-return-note"');
     expect(html).toContain('>返回列表</span>');
     expect(html).not.toContain('payment-execution-return-action');
@@ -211,9 +218,10 @@ describe('PaymentExecutionWorkspace', () => {
 
     expect(html).toContain('付款清单已退回');
     expect(html).toContain(`<b>退回原因：</b>${reason}`);
-    expect(html).toContain('该明细已通过财务审核，无需修改');
+    expect(html).toContain('该达人请款信息已通过审核，无需修改');
     expect(html).toContain('payment-execution-payee is-passed');
     expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(1);
-    expect(html).not.toContain('payment-execution-failure-summary');
+    expect(html).toContain('payment-execution-failure-card payment-execution-content-card');
+    expect(html).toContain('付款清单收款账户需修正。');
   });
 });
