@@ -5723,7 +5723,7 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-approval-curve path.finance-approval-curve-progress {
-  stroke: #69a989;
+  stroke: #675187;
   stroke-width: 2;
 }
 
@@ -5799,15 +5799,12 @@ body:has(.finance-review-workspace) {
 .finance-approval-timeline.is-compact .finance-approval-stage {
   z-index: 3;
   display: grid;
-  width: calc(100% - 16px);
-  max-width: 126px;
+  width: calc(100% - 8px);
+  max-width: 142px;
   min-width: 0;
   justify-items: center;
   align-content: start;
   gap: 2px;
-  border-radius: 3px;
-  background: #fff;
-  padding: 0 2px;
   text-align: center;
 }
 

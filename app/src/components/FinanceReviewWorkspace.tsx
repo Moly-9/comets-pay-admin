@@ -24,7 +24,7 @@ import {
   ZoomOut,
   type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import {
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
@@ -146,6 +146,7 @@ export function ApprovalTimeline({
   paymentProvider?: string;
   compact?: boolean;
 }) {
+  const compactCurveMaskId = `finance-approval-curve-mask-${useId().replace(/:/g, '')}`;
   const approval = request.approval;
   if (!approval) {
     return (
@@ -251,7 +252,7 @@ export function ApprovalTimeline({
         const secondControlX = previous.x + direction * distance * 0.66;
         return `${path} C ${firstControlX} ${previous.y - 3}, ${secondControlX} ${point.y + 3}, ${point.x} ${point.y}`;
       }
-      const outerX = previous.column === 2 ? 292 : 8;
+      const outerX = previous.column === 2 ? compactCurveWidth : 0;
       return `${path} C ${outerX} ${previous.y}, ${outerX} ${point.y}, ${point.x} ${point.y}`;
     }, compactPositions[0] ? `M ${compactPositions[0].x} ${compactPositions[0].y}` : '');
   const compactCurvePath = buildCompactCurvePath(compactPositions.length - 1);
@@ -270,8 +271,31 @@ export function ApprovalTimeline({
           aria-hidden="true"
           focusable="false"
         >
-          <path d={compactCurvePath} />
-          <path className="finance-approval-curve-progress" d={compactProgressPath} />
+          <defs>
+            <mask
+              id={compactCurveMaskId}
+              maskUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width={compactCurveWidth}
+              height={compactCurveHeight}
+            >
+              <rect width={compactCurveWidth} height={compactCurveHeight} fill="#fff" />
+              {compactPositions.map((position, index) => (
+                <circle
+                  key={`curve-mask-${steps[index].id}`}
+                  cx={position.x}
+                  cy={position.y}
+                  r="19"
+                  fill="#000"
+                />
+              ))}
+            </mask>
+          </defs>
+          <g mask={`url(#${compactCurveMaskId})`}>
+            <path d={compactCurvePath} />
+            <path className="finance-approval-curve-progress" d={compactProgressPath} />
+          </g>
         </svg>
       ) : null}
       {steps.map((step, index) => {

@@ -59,6 +59,10 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).toContain('class="lucide lucide-refresh-cw finance-approval-stage-icon"');
     expect(html).toContain('class="finance-approval-state-mark"');
     expect(html).toContain('class="finance-approval-curve-progress"');
+    expect(html).toContain('<mask id="finance-approval-curve-mask-');
+    expect(html).toContain('maskUnits="userSpaceOnUse"');
+    expect(html).toContain('r="19"');
+    expect(html).toContain('<g mask="url(#finance-approval-curve-mask-');
     expect(html).toContain('财务审批，账号 finance，当前节点');
     expect(html).toContain('grid-column:1;grid-row:1');
     expect(html).toContain('grid-column:2;grid-row:1');
