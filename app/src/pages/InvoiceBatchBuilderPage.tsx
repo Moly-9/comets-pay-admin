@@ -30,7 +30,7 @@ import {
   type EngagementId,
   type ProjectId,
 } from '../businessWorkflow';
-import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import type { ContractRecord } from '../contracts';
 import {
@@ -118,6 +118,195 @@ const INVOICE_BATCH_CURRENCY_NAMES: Record<InvoiceCurrency, string> = {
   HKD: '港币',
   SGD: '新加坡元',
 };
+
+const creatorInitials = (name: string) => name
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0]?.toUpperCase())
+  .join('') || 'CR';
+
+type InvoiceBatchResultSectionProps = {
+  rows: InvoiceBatchRow[];
+  creators: CreatorProfile[];
+  contracts: ContractRecord[];
+  fallbackCurrency: InvoiceCurrency;
+  onDownloadZip: () => void;
+};
+
+export function InvoiceBatchResultSection({
+  rows,
+  creators,
+  contracts,
+  fallbackCurrency,
+  onDownloadZip,
+}: InvoiceBatchResultSectionProps) {
+  const resultRows = rows.filter((row) => row.status === 'GENERATED' || row.status === 'FAILED');
+  const generatedRows = resultRows.filter((row) => row.status === 'GENERATED');
+
+  return (
+    <section
+      className="invoice-builder-section invoice-batch-card invoice-batch-result-section"
+      data-batch-section="results"
+    >
+      <header>
+        <span><PackageCheck size={18} /></span>
+        <div>
+          <h2>生成结果</h2>
+          <p>成功记录将进入“待签署”，可在这里查看结果并下载文件。</p>
+        </div>
+      </header>
+
+      {!resultRows.length ? (
+        <div className="invoice-batch-result-empty">
+          <span><ReceiptText size={20} /></span>
+          <strong>暂无生成结果</strong>
+          <small>完成上方信息与校验后，生成的 Invoice 会展示在这里。</small>
+        </div>
+      ) : (
+        <>
+          {generatedRows.length ? (
+            <div className="invoice-batch-result-summary">
+              <CheckCircle2 size={26} />
+              <div>
+                <strong>已成功生成 {generatedRows.length} 张 Invoice</strong>
+                <span>每张记录保留独立编号、稳定项目达人关联和生成快照。</span>
+              </div>
+              <Button icon={<Download size={16} />} onClick={onDownloadZip}>
+                下载整批 ZIP
+              </Button>
+            </div>
+          ) : null}
+
+          <div className="invoice-batch-result-table-wrap">
+            <table className="invoice-batch-result-table">
+              <thead>
+                <tr>
+                  <th>达人</th>
+                  <th>付款渠道</th>
+                  <th>Invoice</th>
+                  <th>合同</th>
+                  <th>Invoice 金额</th>
+                  <th>状态</th>
+                  <th>文件</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultRows.map((row) => {
+                  const creator = creators.find((candidate) => candidate.id === row.creatorId);
+                  const account = eligibleInvoicePayoutAccounts(creator).find((candidate) => (
+                    getPayoutAccountId(candidate) === row.payoutAccountId
+                  ));
+                  const provider = row.generated?.record.snapshot.payoutProvider ?? account?.provider;
+                  const linkedContracts = row.contractIds.map((contractId) => (
+                    contracts.find((contract) => contract.contractId === contractId)
+                  )).filter((contract): contract is ContractRecord => Boolean(contract));
+                  const invoiceNumber = row.generated?.record.snapshot.invoiceNumber;
+                  const resultCurrency = row.generated?.record.snapshot.currency || row.currency || fallbackCurrency;
+
+                  return (
+                    <tr
+                      key={row.engagementId}
+                      className={row.generated ? 'is-generated' : 'is-failed'}
+                      data-creator-id={row.creatorId}
+                    >
+                      <td data-label="达人">
+                        <div className="invoice-batch-result-creator">
+                          <Avatar
+                            initials={creator?.initials || creatorInitials(row.creatorName)}
+                            accent={creator?.accent || '#5f72d8'}
+                            size="sm"
+                          />
+                          <span>
+                            <strong>{row.creatorName}</strong>
+                            <small>{row.creatorHandle}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td data-label="付款渠道">
+                        {provider ? (
+                          <span
+                            className={`invoice-batch-result-provider provider-${provider.toLowerCase()}`}
+                            data-provider={provider}
+                          >
+                            <i aria-hidden="true">{provider.slice(0, 1)}</i>
+                            {provider}
+                          </span>
+                        ) : <span className="invoice-batch-result-muted">-</span>}
+                      </td>
+                      <td data-label="Invoice">
+                        <span className="invoice-batch-result-reference">
+                          <strong>{invoiceNumber ? '1 份 Invoice' : '未生成'}</strong>
+                          <small>{invoiceNumber ?? '待处理'}</small>
+                        </span>
+                      </td>
+                      <td data-label="合同">
+                        <span className="invoice-batch-result-reference">
+                          <strong>{row.contractIds.length ? `${row.contractIds.length} 份合同` : '未关联合同'}</strong>
+                          {row.contractIds.length ? (
+                            <small>
+                              {linkedContracts.map((contract) => contract.id).join('、') || row.contractIds.join('、')}
+                            </small>
+                          ) : null}
+                        </span>
+                      </td>
+                      <td data-label="Invoice 金额">
+                        <strong className="invoice-batch-result-amount">
+                          {formatInvoiceMoney(resultCurrency, rowTotal(row))}
+                        </strong>
+                      </td>
+                      <td data-label="状态">
+                        {row.generated ? (
+                          <span className="invoice-batch-result-status is-success">
+                            <CheckCircle2 size={14} />
+                            已生成
+                          </span>
+                        ) : (
+                          <span className="invoice-batch-result-status is-failure" title={row.issues.join('；')}>
+                            <AlertTriangle size={14} />
+                            <span><strong>生成失败</strong><small>{row.issues[0] ?? '待补充后重试'}</small></span>
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="文件">
+                        {row.generated ? (
+                          <div className="invoice-batch-result-files">
+                            <button
+                              type="button"
+                              aria-label={`下载 ${row.creatorName} 的 PDF`}
+                              onClick={() => downloadBlob(
+                                row.generated!.pdfBlob,
+                                invoiceFilename(row.generated!.record.snapshot, 'pdf'),
+                              )}
+                            >
+                              <FileText size={13} />
+                              PDF
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`下载 ${row.creatorName} 的 DOCX`}
+                              onClick={() => downloadBlob(
+                                row.generated!.docxBlob,
+                                invoiceFilename(row.generated!.record.snapshot, 'docx'),
+                              )}
+                            >
+                              <FileText size={13} />
+                              DOCX
+                            </button>
+                          </div>
+                        ) : <span className="invoice-batch-result-muted">-</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 const INVOICE_BATCH_CURRENCY_OPTIONS = INVOICE_BATCH_CURRENCIES.map((value) => ({
   value,
@@ -1467,65 +1656,13 @@ export function InvoiceBatchBuilderPage({
           )}
         </section>
 
-        {generatedRows.length ? (
-          <section className="invoice-builder-section invoice-batch-card invoice-batch-result-section">
-            <header>
-              <span><PackageCheck size={18} /></span>
-              <div>
-                <h2>生成结果</h2>
-                <p>成功记录已进入“待签署”，失败行可在上方修正后再次生成。</p>
-              </div>
-            </header>
-            <div className="invoice-batch-result-summary">
-              <CheckCircle2 size={26} />
-              <div>
-                <strong>已成功生成 {generatedRows.length} 张 Invoice</strong>
-                <span>每张记录保留独立编号、稳定项目达人关联和生成快照。</span>
-              </div>
-              <Button icon={<Download size={16} />} onClick={() => void downloadZip()}>
-                下载整批 ZIP
-              </Button>
-            </div>
-            <div className="invoice-batch-results">
-              {rows.map((row) => (
-                <div className="invoice-batch-result-row" key={row.engagementId}>
-                  <span><strong>{row.creatorName}</strong><small>{row.creatorHandle}</small></span>
-                  {row.generated ? (
-                    <>
-                      <code>{row.generated.record.id}</code>
-                      <strong>{formatInvoiceMoney(row.currency || currency, rowTotal(row))}</strong>
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => downloadBlob(
-                            row.generated!.pdfBlob,
-                            invoiceFilename(row.generated!.record.snapshot, 'pdf'),
-                          )}
-                        >
-                          PDF
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => downloadBlob(
-                            row.generated!.docxBlob,
-                            invoiceFilename(row.generated!.record.snapshot, 'docx'),
-                          )}
-                        >
-                          DOCX
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <span className="invoice-batch-result-failed">
-                      <AlertTriangle size={15} />
-                      {row.issues[0] ?? '待补充后重试'}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+        <InvoiceBatchResultSection
+          rows={rows}
+          creators={prototypeCreators}
+          contracts={contracts}
+          fallbackCurrency={currency}
+          onDownloadZip={() => void downloadZip()}
+        />
 
         <footer className="invoice-builder-footer invoice-batch-footer">
           {generatedRows.length ? (

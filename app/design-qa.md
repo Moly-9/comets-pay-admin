@@ -46,6 +46,36 @@ final result: passed
 
 ---
 
+# Design QA - Batch Invoice 生成结果列表
+
+## Evidence
+
+- Current-state reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-026497b8-f277-4bd9-b6ce-1c66049898a3.png`.
+- Target list reference: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-df227a1d-b3cd-4c84-a9f1-2149b0cb8f02.png`.
+- Desktop implementation: `artifacts/invoice-batch-results-qa/results-desktop.png` from a `1440 x 1000` viewport.
+- Mobile implementation: `artifacts/invoice-batch-results-qa/results-mobile-390.png` from a `390 x 844` viewport.
+- State: media demo account, five prototype creators, five successfully generated EUR Invoices.
+
+## Visual And Interaction Checks
+
+- The page has five persistent workflow cards; the fifth card provides a useful empty state before generation and the generated list afterward.
+- Generated results use a semantic seven-column table on desktop: creator, payment channel, Invoice, contract, amount, status, and files.
+- Creator initials and existing accent colors produce five distinct avatars. Airwallex and PayPal use restrained, differentiated channel badges.
+- PDF, DOCX, and batch ZIP actions remain available with Lucide icons and descriptive accessible labels.
+- At `1440px`, the result wrapper has equal client and scroll widths (`778px`), so all seven columns remain visible without horizontal scrolling.
+- At `390px`, the table reflows into creator result cards. Document client and scroll widths are both `375px`, each card is `311px`, and file actions use `44px` touch targets.
+- Success uses both an icon and text, not color alone. Browser console warnings/errors: none.
+
+## Verification
+
+- Focused Vitest: 2 tests passed.
+- TypeScript/Vite production build passed after the result-list change; later concurrent worktree edits introduced unrelated missing `contracts` / `creators` props in `PaymentWorkbenchPage.tsx`.
+- Full Vitest: 438 of 439 tests passed. The unrelated `PaymentExecutionWorkspace` test currently expects two board cards while concurrent worktree changes render three.
+
+final result: passed for the Batch Invoice result-list scope
+
+---
+
 # Design QA - Batch Invoice 演示数据与宽松合同校验
 
 ## Evidence
