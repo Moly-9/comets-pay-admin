@@ -6,6 +6,7 @@ import {
   type ProjectId,
 } from '../businessWorkflow';
 import { INITIAL_INVOICE_ENTITY } from '../data';
+import type { ContractRecord } from '../contracts';
 import {
   eligibleInvoicePayoutAccounts,
   createPayPalPayoutAccount,
@@ -86,6 +87,33 @@ const creatorWithAccounts = (accounts: CreatorProfile['payoutAccounts']): Creato
     creatorId: 'creator_batch_test',
   })),
 });
+
+const confirmedContractFor = (
+  context: InvoiceBatchContext,
+  creator: CreatorProfile,
+  overrides: Partial<ContractRecord> = {},
+): ContractRecord => {
+  const account = eligibleInvoicePayoutAccounts(creator)[0];
+  const payment = payoutAccountToInvoicePayment(account, creator.id);
+  return {
+    ...PROJECT_DEMO_CONTRACTS[0],
+    contractId: 'contract_batch_test' as ContractId,
+    id: 'CON-BATCH-TEST',
+    projectId: context.project.projectId,
+    cooperationProjectId: context.project.cooperationProjectId,
+    creatorId: creator.id as CreatorId,
+    engagementId: context.project.creatorProfiles![0].engagementId,
+    lifecycle: 'CONFIRMED',
+    advertiser: INITIAL_INVOICE_ENTITY.name,
+    publisher: creator.contact.legalName,
+    currency: 'USD',
+    totalFee: 500,
+    paymentMethod: account.provider === 'PayPal' ? 'PAYPAL' : 'BANK',
+    payoutAccountId: payment.payoutAccountId,
+    paymentSnapshot: payment,
+    ...overrides,
+  };
+};
 
 describe('Invoice batch rows', () => {
   it('builds multiple line items and calculates Price x Amount for the Invoice total', () => {
@@ -286,27 +314,11 @@ describe('Invoice batch rows', () => {
     expect(row.issues).toContain('请选择唯一、已验证且资料完整的收款账户');
   });
 
-  it('uses the unique confirmed contract and its frozen account', () => {
+  it('uses the unique confirmed contract account as an editable default', () => {
     const creator = creatorWithAccounts([{ ...baseAccount, isDefault: false }]);
     const context = createContext({ creator });
     const engagementId = context.project.creatorProfiles![0].engagementId;
-    const payment = payoutAccountToInvoicePayment(creator.payoutAccounts[0], creator.id);
-    context.contracts = [{
-      ...PROJECT_DEMO_CONTRACTS[0],
-      contractId: 'contract_batch_test' as ContractId,
-      id: 'CON-BATCH-TEST',
-      projectId: context.project.projectId,
-      creatorId: creator.id as CreatorId,
-      engagementId,
-      lifecycle: 'CONFIRMED',
-      advertiser: INITIAL_INVOICE_ENTITY.name,
-      publisher: creator.contact.legalName,
-      currency: 'USD',
-      totalFee: 500,
-      paymentMethod: creator.payoutAccounts[0].provider === 'PayPal' ? 'PAYPAL' : 'BANK',
-      payoutAccountId: payment.payoutAccountId,
-      paymentSnapshot: payment,
-    }];
+    context.contracts = [confirmedContractFor(context, creator)];
     const initial = createInvoiceBatchRow({
       ...context,
       engagementId,
@@ -318,9 +330,75 @@ describe('Invoice batch rows', () => {
     }, context);
 
     expect(row.contractIds).toEqual(['contract_batch_test']);
-    expect(row.payoutAccountLocked).toBe(true);
+    expect(row.payoutAccountLocked).toBe(false);
     expect(row.payoutAccountId).toBe(getPayoutAccountId(creator.payoutAccounts[0]));
     expect(row.status).toBe('READY');
+  });
+
+  it('allows Invoice amount, currency, payout account, and payment method to differ from the contract', () => {
+    const bankAccount = { ...baseAccount, isDefault: true };
+    const paypalAccount = createPayPalPayoutAccount({
+      id: 'paypal-batch-mismatch',
+      creatorId: 'creator_batch_test',
+      payoutAccountId: 'paypal-batch-mismatch',
+      payoutAccountVersion: 'v2',
+      nickname: 'PayPal Invoice 账户',
+      isDefault: false,
+      status: 'VERIFIED',
+      paypalUsername: 'Invoice Mismatch',
+      paypalEmail: 'invoice-mismatch@example.invalid',
+    });
+    const creator = creatorWithAccounts([bankAccount, paypalAccount]);
+    const context = createContext({ creator });
+    context.contracts = [confirmedContractFor(context, creator)];
+    const initial = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      currency: 'EUR',
+      lineItems: lineItemSeeds('Creator Service'),
+    });
+    const row = updateAndValidateInvoiceBatchRow(initial, {
+      items: updateLineItemAmounts(initial, [{ unitPrice: 3_200, quantity: 1 }]),
+      currency: 'EUR',
+      payoutAccountId: 'paypal-batch-mismatch',
+      payoutAccountLocked: false,
+    }, context);
+    const model = buildInvoiceDocumentForBatchRow(row, context, 'INV-BATCH-MISMATCH');
+
+    expect(row.status).toBe('READY');
+    expect(row.issues).toEqual([]);
+    expect(row.contractIds).toEqual(['contract_batch_test']);
+    expect(model.currency).toBe('EUR');
+    expect(model.items[0].lineTotal).toBe(3_200);
+    expect(model.payoutAccountId).toBe('paypal-batch-mismatch');
+    expect(model.paymentMethod).toBe('paypal');
+  });
+
+  it.each([
+    ['another project', {
+      projectId: 'project_other' as ProjectId,
+      cooperationProjectId: 'project_other' as ContractRecord['cooperationProjectId'],
+    }],
+    ['another creator', { creatorId: 'creator_other' as CreatorId }],
+  ])('blocks a selected contract associated with %s', (_label, association) => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const invalidContract = confirmedContractFor(context, creator, association);
+    context.contracts = [invalidContract];
+    const initial = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Creator Service'),
+    });
+    const row = updateAndValidateInvoiceBatchRow(initial, {
+      contractIds: [invalidContract.contractId!],
+      items: updateLineItemAmounts(initial, [{ unitPrice: 500, quantity: 1 }]),
+    }, context);
+
+    expect(row.status).toBe('CONFLICT');
+    expect(row.issues).toContain('所选合同不属于当前项目达人');
   });
 
   it('blocks an engagement that already has an Invoice', () => {

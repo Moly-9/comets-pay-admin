@@ -24,7 +24,7 @@ import type {
   InvoiceEntity,
   Payout,
 } from '../types';
-import { payoutSnapshotForContract, payoutSnapshotKey, validateInvoiceDocumentModel } from './invoiceDraft';
+import { payoutSnapshotForContract, validateInvoiceDocumentModel } from './invoiceDraft';
 import { normalizeLineItem } from './invoiceUtils';
 
 export const INVOICE_BATCH_SCHEMA_VERSION = '1.0' as const;
@@ -89,13 +89,6 @@ const supportedCurrency = (value?: string): InvoiceCurrency | '' => (
     : ''
 );
 
-const selectedContractsForRow = (
-  row: InvoiceBatchRow,
-  contracts: ContractRecord[],
-) => contracts.filter((contract) => (
-  contract.contractId && row.contractIds.includes(contract.contractId)
-));
-
 const eligibleAccountsForRow = (
   row: Pick<InvoiceBatchRow, 'creatorId'>,
   creators: CreatorProfile[],
@@ -106,8 +99,11 @@ const eligibleAccountsForRow = (
 export const availableContractsForEngagement = (
   engagementId: EngagementId,
   contracts: ContractRecord[],
+  association: { projectId: ProjectId; creatorId: CreatorId },
 ) => contracts.filter((contract): contract is ContractRecord & { contractId: ContractId } => (
   contract.engagementId === engagementId
+  && contract.creatorId === association.creatorId
+  && (contract.cooperationProjectId ?? contract.projectId) === association.projectId
   && isConfirmedContract(contract)
   && Boolean(contract.contractId)
 ));
@@ -137,7 +133,10 @@ export const createInvoiceBatchRow = ({
   const payout = payouts.find((item) => (
     item.creatorId === creator.id && item.projectId === projectId
   ));
-  const availableContracts = availableContractsForEngagement(engagementId, contracts);
+  const availableContracts = availableContractsForEngagement(engagementId, contracts, {
+    projectId,
+    creatorId: reference.creatorId,
+  });
   const contractIds = availableContracts.length === 1
     ? [availableContracts[0].contractId]
     : [];
@@ -166,7 +165,7 @@ export const createInvoiceBatchRow = ({
     items: synchronizeInvoiceBatchLineItems([], lineItems),
     currency,
     payoutAccountId: selectedAccount ? getPayoutAccountId(selectedAccount) : '',
-    payoutAccountLocked: Boolean(contractAccount && selectedAccount === contractAccount),
+    payoutAccountLocked: false,
     contractIds,
     availableContractIds: availableContracts.map((contract) => contract.contractId),
     status: 'NEEDS_INPUT',
@@ -261,7 +260,10 @@ export const validateInvoiceBatchRow = (
     }
   }
 
-  const availableContracts = availableContractsForEngagement(row.engagementId, context.contracts);
+  const availableContracts = availableContractsForEngagement(row.engagementId, context.contracts, {
+    projectId: row.projectId,
+    creatorId: row.creatorId,
+  });
   if (availableContracts.length > 1 && row.contractIds.length === 0) {
     conflictIssues.push('存在多份已确认合同，请逐行选择');
   }
@@ -276,21 +278,6 @@ export const validateInvoiceBatchRow = (
     getPayoutAccountId(item) === row.payoutAccountId
   ));
   if (!account) issues.push('请选择唯一、已验证且资料完整的收款账户');
-
-  const selectedContracts = selectedContractsForRow(row, context.contracts);
-  const contractSnapshots = selectedContracts
-    .map(payoutSnapshotForContract)
-    .filter((snapshot) => Boolean(snapshot?.payoutAccountId));
-  if (
-    row.payoutAccountLocked
-    && contractSnapshots[0]
-    && account
-    && payoutSnapshotKey(contractSnapshots[0]!) !== payoutSnapshotKey(
-      payoutAccountToInvoicePayment(account, row.creatorId),
-    )
-  ) {
-    conflictIssues.push('收款账户与合同冻结版本不一致');
-  }
 
   if (!row.currency) issues.push('缺少支持的 Invoice 币种');
   if (!row.items.length) issues.push('至少需要 1 条费用明细');
@@ -324,7 +311,7 @@ export const validateInvoiceBatchRow = (
       context,
       'INV-BATCH-VALIDATION',
     );
-    Object.values(validateInvoiceDocumentModel(model, selectedContracts)).forEach((message) => {
+    Object.values(validateInvoiceDocumentModel(model, [])).forEach((message) => {
       if (message.includes('不一致') || message.includes('应等于')) conflictIssues.push(message);
       else issues.push(message);
     });

@@ -15,6 +15,7 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  Sparkles,
   Upload,
   Users,
   Trash2,
@@ -51,6 +52,7 @@ import {
 import { createInvoiceBatchArchive } from '../invoice/invoiceBatchArchive';
 import {
   INVOICE_BATCH_PROTOTYPE_CURRENCY,
+  createInvoiceBatchPrototypeSeed,
   filterInvoiceBatchCreatorReferences,
   selectableInvoiceBatchEngagementIds,
   withInvoiceBatchPrototypeAccounts,
@@ -445,6 +447,7 @@ function BatchRowTable({
             const availableContracts = availableContractsForEngagement(
               row.engagementId,
               context.contracts,
+              { projectId: row.projectId, creatorId: row.creatorId },
             );
             const meta = STATUS_META[row.status];
             const rowLocked = row.status === 'GENERATED' || row.status === 'GENERATING';
@@ -694,6 +697,10 @@ export function InvoiceBatchBuilderPage({
     ),
     [generatedInvoices, projectReferences],
   );
+  const prototypeSeed = useMemo(
+    () => createInvoiceBatchPrototypeSeed(projects, generatedInvoices),
+    [generatedInvoices, projects],
+  );
   const lockedEngagementIds = rows
     .filter((row) => row.status === 'GENERATED' || row.status === 'GENERATING')
     .map((row) => row.engagementId);
@@ -735,6 +742,60 @@ export function InvoiceBatchBuilderPage({
     setSelectedEngagementIds([]);
     setCreatorSearch('');
     setRows([]);
+    setImportIssues([]);
+    setGenerationError('');
+    setGenerationProgress({ current: 0, total: 0 });
+  };
+
+  const fillPrototypeData = () => {
+    if (!prototypeSeed) return;
+    const project = projects.find((candidate) => (
+      projectIdFor(candidate) === prototypeSeed.projectId
+    ));
+    if (!project) return;
+
+    const descriptionSeed = {
+      templateKey: createPrototypeId('item'),
+      description: prototypeSeed.description,
+    };
+    const demoContext: InvoiceBatchContext = {
+      project,
+      creators: prototypeCreators,
+      payouts,
+      contracts,
+      generatedInvoices,
+      invoiceEntity,
+    };
+    const demoRows = prototypeSeed.rows.map((seed) => {
+      const initial = createInvoiceBatchRow({
+        ...demoContext,
+        engagementId: seed.engagementId,
+        invoiceDate,
+        currency: prototypeSeed.currency,
+        lineItems: [descriptionSeed],
+      });
+      const account = eligibleInvoicePayoutAccounts(
+        prototypeCreators.find((creator) => creator.id === initial.creatorId),
+      ).find((candidate) => candidate.provider === seed.payoutProvider);
+      return updateAndValidateInvoiceBatchRow(initial, {
+        currency: prototypeSeed.currency,
+        payoutAccountId: account ? getPayoutAccountId(account) : initial.payoutAccountId,
+        payoutAccountLocked: false,
+        items: updateInvoiceBatchLineItem(initial.items, initial.items[0].id, {
+          unitPrice: seed.unitPrice,
+          quantity: seed.quantity,
+        }),
+      }, demoContext);
+    });
+
+    setMode('SHARED_DESCRIPTION');
+    setProjectId(prototypeSeed.projectId);
+    setSelectedEngagementIds(prototypeSeed.rows.map((row) => row.engagementId));
+    setCreatorSearch('');
+    setCurrency(prototypeSeed.currency);
+    setSharedDescriptions([descriptionSeed]);
+    setRows(demoRows);
+    setOnlyProblems(false);
     setImportIssues([]);
     setGenerationError('');
     setGenerationProgress({ current: 0, total: 0 });
@@ -1031,9 +1092,20 @@ export function InvoiceBatchBuilderPage({
         title="批量生成 Invoice"
         subtitle="在同一份长表单内选择合作项目达人、填写费用并完成批量校验与生成。"
         actions={(
-          <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={leave}>
-            返回
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              icon={<Sparkles size={17} />}
+              data-testid="invoice-batch-fill-demo"
+              disabled={!prototypeSeed || generating || hasGeneratedRows}
+              onClick={fillPrototypeData}
+            >
+              填充演示数据
+            </Button>
+            <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={leave}>
+              返回
+            </Button>
+          </>
         )}
       />
 
