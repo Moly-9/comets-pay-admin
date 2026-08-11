@@ -2828,6 +2828,16 @@ export function InvoicePage({
     onMarkSigned(record);
   };
 
+  const simulateCreatorSignature = (payout: Payout) => {
+    const record = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
+    if (!record) {
+      setSelectedSourceKey(`payout:${payout.id}`);
+      onReviewAction(payout, 'MARK_SIGNED');
+      return;
+    }
+    onMarkSigned(record);
+  };
+
   const canActOnInvoice = (payout: Payout) => (
     (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
     || (
@@ -2910,6 +2920,14 @@ export function InvoicePage({
                   : '审核'
             : '查看详情'}
           primaryActionFor={canActOnInvoice}
+          additionalActionFor={(payout) => (
+            tab === 'signature'
+            && canManageInvoice
+            && payout.invoiceReviewStatus === '待签署'
+          )}
+          additionalActionLabelFor={() => '模拟达人完成签署'}
+          additionalActionIcon={<CheckCircle2 size={15} />}
+          onAdditionalAction={simulateCreatorSignature}
         />
       </section>
     </div>

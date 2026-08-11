@@ -9015,6 +9015,13 @@ button:disabled {
   text-align: right !important;
 }
 
+.table-action-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .table-action {
   min-width: 88px;
   min-height: 31px;
@@ -14890,7 +14897,8 @@ button:disabled {
     padding: 86px 15px 32px;
   }
 
-  .payment-project-table .table-action {
+  .payment-project-table .table-action,
+  .payout-table .table-action {
     min-height: 44px;
   }
 

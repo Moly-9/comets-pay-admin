@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Avatar, Button, StatusMark } from './Common';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
@@ -24,6 +25,10 @@ export function PayoutTable({
   statusLabelFor,
   actionLabelFor,
   primaryActionFor,
+  additionalActionFor,
+  additionalActionLabelFor,
+  additionalActionIcon,
+  onAdditionalAction,
 }: {
   payouts: Payout[];
   onSelect: (payout: Payout) => void;
@@ -33,6 +38,10 @@ export function PayoutTable({
   statusLabelFor?: (payout: Payout) => string;
   actionLabelFor?: (payout: Payout) => string;
   primaryActionFor?: (payout: Payout) => boolean;
+  additionalActionFor?: (payout: Payout) => boolean;
+  additionalActionLabelFor?: (payout: Payout) => string;
+  additionalActionIcon?: ReactNode;
+  onAdditionalAction?: (payout: Payout) => void;
 }) {
   const {
     page,
@@ -59,6 +68,12 @@ export function PayoutTable({
           <tbody>
             {visiblePayouts.length ? visiblePayouts.map((payout) => {
               const displayStatus = statusFor?.(payout) ?? payout.status;
+              const additionalActionLabel = additionalActionLabelFor?.(payout);
+              const showAdditionalAction = Boolean(
+                onAdditionalAction
+                && additionalActionLabel
+                && additionalActionFor?.(payout),
+              );
               return (
               <tr key={payout.id} onClick={() => onSelect(payout)}>
                 <td>
@@ -72,16 +87,31 @@ export function PayoutTable({
                 <td><StatusMark status={displayStatus} label={statusLabelFor?.(payout) ?? statusLabels?.[payout.status]} /></td>
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
-                  <Button
-                    variant={primaryActionFor?.(payout) ? 'primary' : 'secondary'}
-                    className="table-action"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onSelect(payout);
-                    }}
-                  >
-                    {actionLabelFor?.(payout) ?? ACTION_LABELS[payout.status]}
-                  </Button>
+                  <div className="table-action-group">
+                    <Button
+                      variant={primaryActionFor?.(payout) ? 'primary' : 'secondary'}
+                      className="table-action"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelect(payout);
+                      }}
+                    >
+                      {actionLabelFor?.(payout) ?? ACTION_LABELS[payout.status]}
+                    </Button>
+                    {showAdditionalAction ? (
+                      <Button
+                        icon={additionalActionIcon}
+                        className="table-action"
+                        aria-label={`${additionalActionLabel}：${payout.invoice}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onAdditionalAction?.(payout);
+                        }}
+                      >
+                        {additionalActionLabel}
+                      </Button>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
               );
