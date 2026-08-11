@@ -171,6 +171,48 @@ final result: passed
 
 ---
 
+# Finance Review Linked Resources Card Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ac6becd8-aa22-4a57-9f68-36dc265cedb8.png` (402 x 174 px).
+- Desktop implementation: `artifacts/finance-review-linked-resources/desktop-review-resources.png`, captured at a 1440 x 900 CSS viewport.
+- Focused implementation: `artifacts/finance-review-linked-resources/desktop-resource-card.jpg` (255 x 215 px, including the narrow approval-pane card frame).
+- Mobile implementation: `artifacts/finance-review-linked-resources/mobile-resource-card.jpg`, captured at a 390 x 844 CSS viewport.
+- Contract and Invoice dialogs: `artifacts/finance-review-linked-resources/desktop-contract-modal.jpg`, `desktop-invoice-modal.jpg`, `mobile-contract-modal.jpg`, and `mobile-invoice-modal.jpg`.
+- Same-input visual comparison: `artifacts/finance-review-linked-resources/reference-implementation-comparison.jpg`.
+
+## State And Normalization
+
+- Signed in as the finance demo role and opened `REQ-202607-000001` from `付款工作台 -> 待审核`.
+- The right approval pane was scrolled to the project-level resources card below the real approval flow.
+- The focused comparison preserves both source images at their native pixel density. The implementation is intentionally narrower because it occupies the 20% approval pane; layout and hierarchy were compared rather than stretching either image to a false common width.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains.
+- Fonts and typography: the card uses the existing product font stack and compact approval-pane type scale. Labels, counts, actions, and status remain readable without clipping or overlapping at both verified widths.
+- Spacing and layout rhythm: the implementation preserves the reference's heading followed by three separate bordered rows, consistent icon alignment, compact row height, and right-aligned actions. The narrow pane uses responsive wrapping rather than shrinking text beyond the existing review scale.
+- Colors and visual tokens: neutral borders and surfaces match the current finance workspace; the passed account result uses the existing restrained green semantic treatment. Hover and keyboard focus use the workspace's purple accent.
+- Image and icon fidelity: the source contains only standard interface icons. The implementation uses the project's existing Lucide icon set and introduces no raster placeholder, custom SVG, or decorative asset.
+- Copy and content: contract and Invoice names are replaced with real project-level counts (`合同 · 17 份`, `Invoice · 17 份`), while the third row reports the project account-validation result.
+
+## Interaction Verification
+
+- `查看合同` opens a project-scoped list with all 17 linked contracts, creator, IO, amount, readiness, and the existing per-record `查看` action.
+- `查看 Invoice` opens a project-scoped list with all 17 linked Invoice records, creator, amount, covered contract count, validation state, and the existing per-record `查看` action.
+- At 390 x 844, the resources card remains fully visible in the `项目与审批` tab. Both dialogs contain 17 records and report equal client and scroll widths, with no horizontal overflow.
+- The page and document root both report 390 px client and scroll widths. Browser console contained 0 warnings and 0 errors during desktop and mobile verification.
+
+## Comparison History
+
+1. The reference and first focused implementation were placed in one comparison image. The implementation preserved the reference hierarchy and interaction language while adapting to the narrower approval pane.
+2. Desktop and mobile dialog checks confirmed the real project counts and complete list content; no P0/P1/P2 visual correction was required after capture.
+
+final result: passed
+
+---
+
 # Transaction Paid And Processing Filter Design QA
 
 ## Evidence

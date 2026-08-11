@@ -11,7 +11,9 @@ import {
   ClipboardCheck,
   Clock3,
   CreditCard,
+  Eye,
   FileText,
+  Files,
   Landmark,
   PanelRightClose,
   PanelRightOpen,
@@ -40,6 +42,7 @@ import {
 import {
   type RequestApprovalReturnIssueType,
   paymentListProviders,
+  type InvoiceId,
   type PaymentListId,
   type PaymentListRecord,
   type RequestApprovalStage,
@@ -49,10 +52,13 @@ import {
   requestApprovalStage,
 } from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
+import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
+import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
+import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal, SelectField, type SelectOption } from './Common';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
@@ -130,6 +136,20 @@ const reviewStatusLabel = (state: 'unreviewed' | 'correct' | 'incorrect') => {
 const MIN_INVOICE_ZOOM = 0.6;
 const MAX_INVOICE_ZOOM = 2.2;
 const INVOICE_ZOOM_STEP = 0.1;
+
+const ACCOUNT_VALIDATION_FIELD_IDS = new Set([
+  'account-id',
+  'account-version',
+  'account-fingerprint',
+  'real-name',
+  'account-name',
+  'account-number',
+  'bank-name',
+  'bank-address',
+  'swift-code',
+  'iban',
+  'validation',
+]);
 
 const normalizeInvoiceZoom = (value: number) => (
   Math.round(Math.min(MAX_INVOICE_ZOOM, Math.max(MIN_INVOICE_ZOOM, value)) * 100) / 100
@@ -370,6 +390,7 @@ export function FinanceReviewWorkspace({
   request,
   financeReview,
   generatedInvoices,
+  contracts,
   paymentLists,
   creators,
   currentUser,
@@ -378,11 +399,14 @@ export function FinanceReviewWorkspace({
   onApprove,
   onReturn,
   onExportPaymentList,
+  onOpenContract,
+  onOpenInvoice,
   onClose,
 }: {
   request: RequestProjectSummary;
   financeReview: RequestFinanceReview;
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts: ContractRecord[];
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   currentUser: SystemUser;
@@ -391,6 +415,8 @@ export function FinanceReviewWorkspace({
   onApprove: () => boolean;
   onReturn: (reason: string) => boolean;
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
+  onOpenContract: (contractId: string) => void;
+  onOpenInvoice: (invoiceId: InvoiceId) => void;
   onClose: (completed?: boolean) => void;
 }) {
   const activeSession = reconcileFinanceReviewSession(session, {
@@ -408,6 +434,7 @@ export function FinanceReviewWorkspace({
   const [invoiceZoom, setInvoiceZoom] = useState(1);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
   const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
@@ -470,6 +497,25 @@ export function FinanceReviewWorkspace({
     page.paymentItems.map((item) => item.paymentListId)
   )));
   const reviewPaymentLists = paymentLists.filter((list) => reviewPaymentListIds.has(list.paymentListId));
+  const linkedContracts = requestLinkedContracts(request, contracts);
+  const linkedInvoices = requestLinkedInvoices(request, generatedInvoices);
+  const accountValidationIssueCount = financeReview.pages.reduce((count, page) => (
+    page.kind !== 'pair'
+      ? count + 1
+      : count + page.fields.filter((field) => (
+          ACCOUNT_VALIDATION_FIELD_IDS.has(field.id) && field.state === 'mismatch'
+        )).length
+  ), 0);
+  const accountValidationStatus = financeReview.pageCount === 0
+    ? 'pending' as const
+    : accountValidationIssueCount > 0
+      ? 'warning' as const
+      : 'passed' as const;
+  const accountValidationLabel = accountValidationStatus === 'passed'
+    ? '已通过'
+    : accountValidationStatus === 'warning'
+      ? `${accountValidationIssueCount} 项需处理`
+      : '待校验';
   const currentPaymentRowCount = currentPage?.paymentItems.length ?? 0;
   const approvalLabel = request.approval
     ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
@@ -841,6 +887,27 @@ export function FinanceReviewWorkspace({
                   <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-workflow" aria-hidden="true"><Workflow size={14} /></span><strong>当前审批流</strong></div><span>第 {request.approval?.round ?? 1} 轮</span></header>
                   <ApprovalTimeline request={request} currentUser={currentUser} compact />
                 </section>
+
+                <section className="finance-review-project-section finance-review-linked-resources" aria-label="关联资料">
+                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-resources" aria-hidden="true"><Files size={14} /></span><strong>关联资料</strong></div><span>项目级汇总</span></header>
+                  <div className="finance-review-resource-list">
+                    <div className="finance-review-resource-row">
+                      <span className="finance-review-resource-icon" aria-hidden="true"><FileText size={15} /></span>
+                      <strong>合同 · {linkedContracts.length} 份</strong>
+                      <button type="button" onClick={() => setResourceDialog('contract')}>查看合同</button>
+                    </div>
+                    <div className="finance-review-resource-row">
+                      <span className="finance-review-resource-icon" aria-hidden="true"><ReceiptText size={15} /></span>
+                      <strong>Invoice · {linkedInvoices.length} 份</strong>
+                      <button type="button" onClick={() => setResourceDialog('invoice')}>查看 Invoice</button>
+                    </div>
+                    <div className="finance-review-resource-row">
+                      <span className="finance-review-resource-icon" aria-hidden="true"><Landmark size={15} /></span>
+                      <strong>收款账户校验结果</strong>
+                      <span className={`finance-review-resource-status is-${accountValidationStatus}`}>{accountValidationLabel}</span>
+                    </div>
+                  </div>
+                </section>
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
                     <CircleAlert size={17} />
@@ -865,6 +932,67 @@ export function FinanceReviewWorkspace({
           </div>
         </div>
       </Modal>
+
+      {resourceDialog === 'contract' ? (
+        <Modal
+          title={`${request.requestCode ?? request.id} · 合同资料`}
+          width="1120px"
+          className="project-resource-modal request-resource-modal finance-review-resource-modal"
+          onClose={() => setResourceDialog(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+        >
+          <div className="project-resource-browser">
+            <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
+            <div className="request-resource-flat-list">
+              {linkedContracts.map((contract) => {
+                const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const contractId = contract.contractId ?? contract.id;
+                return (
+                  <article className="request-resource-flat-row" key={contractId}>
+                    <span className="project-contract-record-icon"><FileText size={18} /></span>
+                    <div><strong>{contract.id}</strong><small>{contract.name}</small></div>
+                    <div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div>
+                    <div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div>
+                    <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
+                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button></div>
+                  </article>
+                );
+              })}
+              {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>请回到请款项目核对关联资料。</p></div> : null}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {resourceDialog === 'invoice' ? (
+        <Modal
+          title={`${request.requestCode ?? request.id} · Invoice`}
+          width="1080px"
+          className="project-resource-modal request-resource-modal finance-review-resource-modal"
+          onClose={() => setResourceDialog(null)}
+          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+        >
+          <div className="project-resource-browser">
+            <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
+            <div className="request-resource-flat-list">
+              {linkedInvoices.map((linkedInvoice) => {
+                const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                return (
+                  <article className="request-resource-flat-row request-resource-invoice-row" key={linkedInvoice.invoiceId}>
+                    <span className="project-contract-record-icon"><ReceiptText size={18} /></span>
+                    <div><strong>{linkedInvoice.id}</strong><small>{linkedInvoice.status}</small></div>
+                    <div><span>达人</span><strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small></div>
+                    <div><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong><small>{linkedInvoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div>
+                    <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>
+                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenInvoice(linkedInvoice.invoiceId)}>查看</Button></div>
+                  </article>
+                );
+              })}
+              {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款项目未关联 Invoice</strong><p>请回到请款项目核对关联资料。</p></div> : null}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {issueEditorOpen && currentPage ? (
         <Modal

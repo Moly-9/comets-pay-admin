@@ -3828,6 +3828,7 @@ export default function App() {
           request={financeReviewRequest}
           financeReview={activeFinanceReview}
           generatedInvoices={generatedInvoices}
+          contracts={contracts}
           paymentLists={paymentLists}
           creators={creators}
           currentUser={currentUser}
@@ -3845,6 +3846,14 @@ export default function App() {
           onExportPaymentList={(paymentListId) => (
             requestResourceActions.onExportPaymentList(financeReviewRequest, paymentListId)
           )}
+          onOpenContract={(contractId) => {
+            closeFinanceReview(false);
+            requestResourceActions.onOpenContract(financeReviewRequest, contractId);
+          }}
+          onOpenInvoice={(invoiceId) => {
+            closeFinanceReview(false);
+            requestResourceActions.onOpenInvoice(financeReviewRequest, invoiceId);
+          }}
           onClose={closeFinanceReview}
         />
       ) : null}

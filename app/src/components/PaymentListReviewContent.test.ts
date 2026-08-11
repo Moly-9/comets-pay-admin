@@ -199,6 +199,13 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('预计付款时间');
     expect(workspaceSource).toContain('付款事由');
     expect(workspaceSource).toContain('<ApprovalTimeline request={request} currentUser={currentUser} compact />');
+    expect(workspaceSource).toContain('合同 · {linkedContracts.length} 份');
+    expect(workspaceSource).toContain('Invoice · {linkedInvoices.length} 份');
+    expect(workspaceSource).toContain('收款账户校验结果');
+    expect(workspaceSource).toContain("setResourceDialog('contract')");
+    expect(workspaceSource).toContain("setResourceDialog('invoice')");
+    expect(workspaceSource).toContain('title={`${request.requestCode ?? request.id} · 合同资料`}');
+    expect(workspaceSource).toContain('title={`${request.requestCode ?? request.id} · Invoice`}');
   });
 
   it('keeps the real approval order in a continuous two-column horizontal curved flow', () => {
