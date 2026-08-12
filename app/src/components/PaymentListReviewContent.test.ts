@@ -91,9 +91,10 @@ describe('shared payment-list finance review content', () => {
 
   it('renders matching fields as accessible green circle-check icons', () => {
     expect(reviewContentSource).toContain("field.state === 'match'");
-    expect(reviewContentSource).toContain('<CircleCheck size={16} strokeWidth={2.4} aria-hidden="true" />');
-    expect(reviewContentSource).toContain('<span className="sr-only">一致</span>');
+    expect(reviewContentSource.match(/<CircleCheck size=\{16\} strokeWidth=\{2\.4\} aria-hidden="true" \/>/g)).toHaveLength(2);
+    expect(reviewContentSource.match(/<span className="sr-only">一致<\/span>/g)).toHaveLength(2);
     expect(workspaceStyles).toMatch(/\.finance-match-state\.is-match\s*{[^}]*background:\s*transparent;[^}]*color:\s*#15803d;/s);
+    expect(workspaceStyles).toMatch(/\.finance-payment-account-fields \.is-match dt em svg\s*{[^}]*color:\s*#15803d;/s);
   });
 
   it('keeps the Invoice page, payment comparison, and account snapshot synchronized', () => {
@@ -158,11 +159,13 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-validation-stage\s*{[^}]*transition:\s*none;/s);
   });
 
-  it('centers the page controls in the space before the footer actions', () => {
+  it('centers the complete page-review control group in the footer viewport', () => {
     expect(workspaceSource).toContain('className="finance-review-footer-primary"');
     expect(workspaceSource).toContain('className="finance-review-page-actions"');
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*justify-self:\s*center;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(min-width: 901px\)[\s\S]*\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer-primary\s*{[^}]*position:\s*static;[^}]*justify-self:\s*center;[^}]*transform:\s*none;/s);
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

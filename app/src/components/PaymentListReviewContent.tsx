@@ -491,7 +491,17 @@ export function PaymentListReviewContent({
                         const reviewField = fieldById.get(accountField.id);
                         return (
                           <div className={`is-${reviewField?.state ?? 'review'}`} key={accountField.id}>
-                            <dt><span>{accountField.label}</span><em>{fieldStateLabel(reviewField)}</em></dt>
+                            <dt>
+                              <span>{accountField.label}</span>
+                              <em>
+                                {reviewField?.state === 'match' ? (
+                                  <>
+                                    <CircleCheck size={16} strokeWidth={2.4} aria-hidden="true" />
+                                    <span className="sr-only">一致</span>
+                                  </>
+                                ) : fieldStateLabel(reviewField)}
+                              </em>
+                            </dt>
                             <dd>{displayValue(reviewField?.paymentValue ?? accountField.value)}</dd>
                           </div>
                         );

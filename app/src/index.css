@@ -5245,7 +5245,17 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-payment-account-fields .is-match dt em {
+  display: inline-flex;
+  min-width: 24px;
+  align-items: center;
+  justify-content: center;
   color: #39765a;
+}
+
+.finance-payment-account-fields .is-match dt em svg {
+  display: block;
+  flex: 0 0 auto;
+  color: #15803d;
 }
 
 .finance-payment-account-fields .is-mismatch dt em {

@@ -52,6 +52,7 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).not.toContain('className="finance-review-validation-bar"');
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(min-width: 901px\)[\s\S]*\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer > \.finance-review-footer-actions\s*{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s);
   });
 
