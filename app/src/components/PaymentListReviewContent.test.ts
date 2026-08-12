@@ -163,9 +163,10 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('className="finance-review-footer-primary"');
     expect(workspaceSource).toContain('className="finance-review-page-actions"');
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*flex:\s*1 1 100%;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*justify-self:\s*center;/s);
-    expect(workspaceStageStyles).toMatch(/@media \(min-width: 901px\)[\s\S]*\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer-primary\s*{[^}]*position:\s*static;[^}]*justify-self:\s*center;[^}]*transform:\s*none;/s);
+    expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

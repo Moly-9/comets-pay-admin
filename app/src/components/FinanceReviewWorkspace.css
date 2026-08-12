@@ -222,7 +222,7 @@
 }
 
 .finance-review-footer {
-  position: relative;
+  flex: 1 1 100%;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
 
@@ -233,14 +233,6 @@
   grid-column: 2;
   justify-self: center;
   gap: 14px;
-}
-
-@media (min-width: 901px) {
-  .finance-review-footer-primary {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-  }
 }
 
 .finance-review-page-actions {
@@ -273,6 +265,8 @@
 
   .finance-review-footer {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 8px;
   }
 
   .finance-review-footer-primary,
@@ -281,9 +275,7 @@
   }
 
   .finance-review-footer-primary {
-    position: static;
     justify-self: center;
-    transform: none;
   }
 
   .finance-review-footer > .finance-review-footer-actions {
