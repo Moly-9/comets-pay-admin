@@ -108,6 +108,7 @@
   display: grid;
   min-height: 0;
   align-content: start;
+  grid-auto-rows: max-content;
   gap: 12px;
   flex: 1 1 auto;
   overflow-x: hidden;
@@ -119,6 +120,14 @@
   touch-action: pan-y;
   background: #f4f5f7;
   padding: 16px;
+}
+
+.finance-review-overview-scroll > * {
+  min-height: max-content;
+}
+
+.finance-review-overview-scroll > .finance-review-project-section {
+  align-self: start;
 }
 
 .finance-review-overview-scroll::-webkit-scrollbar {
