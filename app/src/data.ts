@@ -358,10 +358,17 @@ export const resolveSystemUser = (value: string): SystemUser | undefined => {
   ));
 };
 
+const configuredDemoLoginPassword = () => import.meta.env.VITE_DEMO_LOGIN_PASSWORD?.trim();
+
 export const authenticateSystemUser = (account: string, password: string): { user?: SystemUser; error?: string } => {
   const user = resolveSystemUser(account);
   if (!user) return { error: '账号不存在，请检查账号或工作邮箱。' };
-  if (!password) return { error: '请输入登录密码。' };
+  if (!password) return user.isDemo ? { error: '请输入登录密码。' } : { user };
+  if (!user.isDemo) return { error: '该账号没有可恢复的原始密码记录，请使用体验账号登录。' };
+
+  const expectedPassword = configuredDemoLoginPassword();
+  if (!expectedPassword) return { error: '体验账号密码尚未配置，请联系管理员。' };
+  if (password !== expectedPassword) return { error: '体验账号密码不正确，请重新输入。' };
   return { user };
 };
 
