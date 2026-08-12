@@ -168,7 +168,48 @@ shows an input with Cancel and Save actions.
   confirmation, and list-return flow.
 
 final result: passed
+
 ---
+
+# Payment Execution Progressive Drawer Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-633620e7-c820-4222-b3c9-827848630c9c.png` (1902 x 871 px).
+- Desktop overview: `design-qa-assets/payment-execution-progressive-overview-1280x720.png`.
+- Desktop payment list: `design-qa-assets/payment-execution-progressive-list-1280x720.png`.
+- Mobile overview: `design-qa-assets/payment-execution-progressive-overview-390x844.png`.
+- Mobile payment list: `design-qa-assets/payment-execution-progressive-list-390x844.png`.
+- Combined comparison: `design-qa-assets/payment-execution-progressive-comparison.png`.
+- Viewports and density: 1280 x 720 and 390 x 844 CSS px at device scale factor 1. The 1902 x 870 source was aspect-fitted to 1280 x 720 without cropping for structural comparison.
+- State: payment workbench, pending-payment project, project overview drawer and expanded payment-list stages.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual or interaction issue remains.
+- Fonts and typography: the existing Noto Sans SC hierarchy is preserved. Drawer labels, project values, table fields and footer actions remain readable without negative letter spacing, unintended wrapping or dynamic layout shifts.
+- Spacing and layout rhythm: the first stage is a measured 520 px right drawer with independently scrollable project, approval and resource content. The second stage expands to the established 7:3 two-card layout; the main card regains focus without a visible outline artifact.
+- Colors and visual tokens: existing neutral surfaces, purple section icons, green validation states and orange waiting-payment states remain consistent with the workbench. No new gradient or unrelated palette was introduced.
+- Image and icon quality: the operational screen requires no raster product imagery. Existing Lucide icons are reused and no custom SVG, CSS illustration or placeholder asset was added.
+- Copy and content: the project overview precedes approval and resources; payment execution and return actions are intentionally absent until the user opens the payment list. The payment-list stage uses `返回项目`, `退回媒介修改` and `执行打款`.
+- Responsive behavior: below 900 px, the overview becomes a full-screen single panel. At 390 x 844, the footer actions remain visible, the project data stacks without horizontal overflow, and the expanded payment-list stage retains the existing responsive card/table presentation.
+- Accessibility: the two stages use an `aria-live` announcement, programmatic focus transfer, a non-dismissable backdrop, Escape handling through the shared Modal, and reduced-motion fallbacks.
+
+## Interaction Verification
+
+- Clicking a waiting-payment row action opens the overview stage with `请款项目信息`, `当前审批流`, then `关联资料`; the nine-column table is not mounted.
+- `查看付款清单` expands the same dialog to full viewport and renders all 15 payout rows.
+- Expanding all approval nodes, returning to the project overview and entering again preserves the approval state.
+- `执行打款` closes the dialog and updates the row from `待打款` to `付款处理中`, with the action changing to `查看进度`.
+- Browser console produced 0 warnings and 0 errors during desktop and mobile flow checks.
+
+## Comparison History
+
+1. The supplied reference represented the existing expanded execution layout. The implementation preserves that layout as the second stage and inserts the requested project-first drawer before it.
+2. The first browser pass showed a focus outline around the expanded main card. The payment-list focus target now suppresses only the programmatic outline while retaining control focus styles.
+3. Post-fix desktop and 390 px captures show fixed footers, visible actions, independent drawer scrolling and no text overlap or clipped persistent controls.
+
+final result: passed
 
 ---
 

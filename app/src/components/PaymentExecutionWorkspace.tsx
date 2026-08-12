@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowLeft,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
@@ -16,7 +17,7 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react';
-import { useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import {
   paymentListItemValue,
   type PaymentListItem,
@@ -114,6 +115,8 @@ type PaymentApprovalStep = {
   state: 'complete' | 'current' | 'pending';
 };
 
+type PaymentExecutionStage = 'overview' | 'payment-list';
+
 const paymentApprovalSteps = (
   request: RequestProjectSummary,
   paymentProvider: string,
@@ -168,6 +171,7 @@ export function PaymentExecutionWorkspace({
   contracts = [],
   creators = [],
   variant = 'execution',
+  initialStage = 'overview',
   canExecute,
   onExecute,
   onReturn,
@@ -182,6 +186,7 @@ export function PaymentExecutionWorkspace({
   contracts?: ContractRecord[];
   creators?: CreatorProfile[];
   variant?: 'execution' | 'returned';
+  initialStage?: PaymentExecutionStage;
   canExecute: boolean;
   onExecute: (payouts: Payout[]) => boolean;
   onReturn: (reason: string) => boolean;
@@ -190,11 +195,14 @@ export function PaymentExecutionWorkspace({
   onClose: () => void;
 }) {
   const isReturned = variant === 'returned';
+  const [stage, setStage] = useState<PaymentExecutionStage>(isReturned ? 'payment-list' : initialStage);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
   const [approvalExpanded, setApprovalExpanded] = useState(false);
   const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | null>(null);
+  const overviewFocusRef = useRef<HTMLElement>(null);
+  const paymentListFocusRef = useRef<HTMLElement>(null);
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
   const validatedPayouts = isReturned
     ? project.payouts.filter(isPayoutPaymentInformationValidated)
@@ -276,6 +284,15 @@ export function PaymentExecutionWorkspace({
   };
   const paymentCurrencies = [...new Set(project.payouts.map((payout) => payout.currency))].join(' / ') || '待确认';
   const validationReady = accountValidationIssueCount === 0 && project.payouts.length > 0;
+  const showOverview = !isReturned && stage === 'overview';
+
+  const changeStage = (nextStage: PaymentExecutionStage) => {
+    setStage(nextStage);
+    window.requestAnimationFrame(() => {
+      if (nextStage === 'overview') overviewFocusRef.current?.focus();
+      else paymentListFocusRef.current?.focus();
+    });
+  };
 
   const executePayment = () => {
     if (onExecute(project.payouts)) onClose();
@@ -327,11 +344,24 @@ export function PaymentExecutionWorkspace({
     <>
       <Modal
         title={`${project.requestCode} · ${isReturned ? '已退回详情' : '执行打款'}`}
-        width="100vw"
-        className="payment-execution-workspace"
+        width={showOverview ? '520px' : '100vw'}
+        className={`payment-execution-workspace ${isReturned ? 'is-returned' : `is-${stage}`}`}
         onClose={onClose}
         onBackdropMouseDown={() => undefined}
-        footer={(
+        footer={showOverview ? (
+          <div className="payment-execution-overview-footer">
+            <div className="payment-execution-overview-footer-note">
+              <ShieldCheck size={17} aria-hidden="true" />
+              <span>进入付款清单后，可逐笔核对收款信息并执行打款。</span>
+            </div>
+            <div className="payment-execution-overview-footer-actions">
+              <Button variant="secondary" onClick={onClose}>关闭</Button>
+              <Button icon={<ArrowLeft size={16} />} onClick={() => changeStage('payment-list')}>
+                查看付款清单
+              </Button>
+            </div>
+          </div>
+        ) : (
           <div className={`payment-execution-footer${isReturned ? ' is-returned' : ''}`}>
             <div>
               <strong>{project.amount}</strong>
@@ -340,7 +370,9 @@ export function PaymentExecutionWorkspace({
                 : `${validatedPayouts.length} 笔付款信息校验成功 · ${paymentProvider}`}</span>
             </div>
             <div>
-              <Button variant="secondary" onClick={onClose}>返回列表</Button>
+              <Button variant="secondary" onClick={isReturned ? onClose : () => changeStage('overview')}>
+                {isReturned ? '返回列表' : '返回项目'}
+              </Button>
               {!isReturned ? (
                 <>
                   <Button
@@ -366,10 +398,15 @@ export function PaymentExecutionWorkspace({
           </div>
         )}
       >
-        <div className={`payment-execution-shell${isReturned ? ' is-returned' : ' is-execution'}`} data-testid="payment-execution-workspace">
+        <div className={`payment-execution-shell${isReturned ? ' is-returned' : ` is-execution is-${stage}`}`} data-testid="payment-execution-workspace">
+          <span className="payment-execution-stage-announcement" aria-live="polite">
+            {showOverview ? '已打开请款项目概览' : '已进入付款清单核对'}
+          </span>
+          {!showOverview ? (
           <main
+            ref={paymentListFocusRef}
             className={`payment-execution-main${isReturned ? ' is-returned' : ' payment-execution-board-card'}`}
-            tabIndex={0}
+            tabIndex={-1}
             aria-label="请款项目与达人请款信息"
           >
           {!isReturned ? (
@@ -377,7 +414,7 @@ export function PaymentExecutionWorkspace({
               <div className="payment-execution-hero-heading">
                 <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
                 <div>
-                  <p>项目信息</p>
+                  <p>请款项目信息</p>
                   <h2 id="payment-execution-project-title" title={project.cooperationProjectName}>{project.cooperationProjectName}</h2>
                   <small>{project.cooperationProjectCode} · {projectBrand}</small>
                 </div>
@@ -590,8 +627,48 @@ export function PaymentExecutionWorkspace({
             )}
           </section>
         </main>
+          ) : null}
 
-          <aside className={`payment-execution-side${isReturned ? '' : ' payment-execution-board-card'}`} aria-label="审批与关联资料">
+          <aside
+            ref={showOverview ? overviewFocusRef : undefined}
+            className={`payment-execution-side${isReturned ? '' : ' payment-execution-board-card'}`}
+            aria-label={showOverview ? '请款项目概览' : '审批与关联资料'}
+            tabIndex={showOverview ? -1 : undefined}
+          >
+            {showOverview ? (
+              <section className="payment-execution-project payment-execution-overview-project" aria-labelledby="payment-execution-project-title">
+                <header>
+                  <div>
+                    <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
+                    <div>
+                      <h2 id="payment-execution-project-title">请款项目信息</h2>
+                      <p title={project.cooperationProjectName}>{project.cooperationProjectName}</p>
+                    </div>
+                  </div>
+                  <span className="payment-execution-status"><i />待打款</span>
+                </header>
+
+                <div className="payment-execution-metrics" aria-label="请款项目概览">
+                  <div><span>请款金额</span><strong>{project.amount}</strong></div>
+                  <div><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
+                  <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
+                </div>
+
+                <dl className="payment-execution-project-info">
+                  <div><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
+                  <div><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
+                  <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
+                  <div><dt>项目媒介</dt><dd>{project.media}</dd></div>
+                  <div><dt>负责 PM</dt><dd>{project.pm}</dd></div>
+                  <div><dt>提交人</dt><dd>{request.media}</dd></div>
+                  <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
+                  <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
+                  <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+                  <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
+                  <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
+                </dl>
+              </section>
+            ) : null}
             <section className={`payment-execution-approval${isReturned ? ' payment-execution-board-card' : ''}`} aria-labelledby="payment-execution-approval-title">
               <header>
                 <div>
