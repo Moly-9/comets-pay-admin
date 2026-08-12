@@ -1386,3 +1386,49 @@ final result: passed
 3. No implementation screenshot was captured because a login-screen capture is not valid comparison evidence for the requested review workspace.
 
 final result: blocked
+
+---
+
+# Payment Execution Workspace Design QA
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ad2e324d-d811-41af-a8ae-d90b75489be7.png`
+- Implementation screenshot: `design-qa-assets/payment-execution-desktop-1898x838-final.png`
+- Mobile screenshot: `design-qa-assets/payment-execution-mobile-390x844-final.png`
+- Combined comparison: `design-qa-assets/payment-execution-side-by-side.png`
+- Viewports: desktop 1898 x 838 CSS px; mobile 390 x 844 CSS px
+- Pixel density: source 1896 x 838, implementation normalized to 1896 x 838 for comparison, deviceScaleFactor 1
+- State: payment workbench, pending-payment project `REQ-202607-000006`, execution confirmation open
+
+## Full-view Comparison
+
+The implementation intentionally changes the source from a balanced card layout into the approved task-first 7:3 structure. The left region now prioritizes payment amount, payment order, validation readiness and the 15-row payee table. Historical approval information is compressed into a conventional vertical stepper, while project-level evidence is consolidated below it.
+
+## Focused Checks
+
+- Typography: Noto Sans SC remains consistent with the application; title, data and utility text use a stable 12/13/16/24 scale without negative letter spacing.
+- Spacing and layout: desktop measured approximately 68.5% main content and 29.5% aside after gutters; table and aside scroll independently and the footer remains visible.
+- Colors and tokens: existing purple action accents, green validation state and orange payment state are retained; no decorative gradients or new palette family were introduced.
+- Image quality: no raster imagery is required by this operational screen. All interface icons use the existing Lucide family.
+- Copy and content: project, payout, account, validation and resource labels are sourced from the existing domain models. Repeated status and project metadata were removed.
+- Responsive: at 390 x 844, payee rows become two-column detail blocks, the main area precedes the aside, and measured horizontal overflow is 0 px.
+- Accessibility: status uses icon plus text, buttons have visible focus treatment, evidence controls include record-specific accessible names, and reduced motion is respected.
+
+## Interaction Verification
+
+- Expanded the approval stepper from 3 summarized nodes to all 6 nodes.
+- Opened `INV-260727-06-01` from its payee row and verified the corresponding Invoice detail.
+- Verified the execute action remains enabled only when all 15 records pass validation.
+- Verified project-level contract and Invoice view/download controls render with enabled and loading states.
+- Fresh browser session console: no warnings or errors.
+
+## Comparison History
+
+1. P1: mobile grid constrained the main region and allowed the approval aside to appear before the payee table. Fixed by changing the execution main and aside to normal document flow below 900 px.
+2. P2: mobile payee rows were 423 px tall. Fixed by retaining the two-column detail grid, reducing each row to approximately 221 px.
+3. P2: the mobile payee header exceeded its container by approximately 12 px. Fixed by using a block header layout and explicit 100% inner widths; final measured main scroll width equals client width.
+
+## Findings
+
+No remaining P0, P1 or P2 visual or interaction findings. The project continues to be a client-side prototype; download generation and payment transitions are not server-backed production workflows.
+
+final result: passed

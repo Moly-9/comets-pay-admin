@@ -13,15 +13,16 @@ vi.mock('react-dom', () => ({
 vi.stubGlobal('document', { body: {} });
 
 describe('PaymentExecutionWorkspace', () => {
-  it('uses a 6:4 layout with two stacked cards on the right', () => {
+  it('uses a 7:3 task-first layout with two stacked cards on the right', () => {
     const source = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
 
-    expect(source).toContain('grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);');
+    expect(source).toContain('.payment-execution-shell.is-execution');
+    expect(source).toContain('grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);');
     expect(source).toContain('.payment-execution-board-card');
     expect(source).not.toContain('clamp(380px, 30vw, 520px)');
   });
 
-  it('shows project information, creator payment summaries, approval flow, and the payment action', () => {
+  it('shows a compact project hero, payout table, vertical approval steps, resources, and the payment action', () => {
     const project = buildPaymentProjectRows({
       tab: 'payment',
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -48,30 +49,70 @@ describe('PaymentExecutionWorkspace', () => {
 
     expect(html).toContain(`${project.requestCode} · 执行打款`);
     expect(html).toContain('请款项目信息');
-    expect(html).toContain('达人请款信息概览');
+    expect(html).toContain('请款总金额');
+    expect(html).toContain('付款单号');
+    expect(html).toContain('达人付款信息');
     expect(html).toContain('aria-label="请款项目与达人请款信息"');
     expect(html.match(/payment-execution-board-card/g)).toHaveLength(3);
     expect(html).toContain('tabindex="0"');
-    expect(html).toContain(`共 ${project.payouts.length} 位达人`);
+    expect(html).toContain(`付款明细</span><strong>${project.payouts.length} 笔`);
+    expect(html).toContain('class="payment-execution-table"');
+    expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>金额</th><th>校验状态</th><th>关联凭证</th>');
     expect(html).toContain(project.payouts[0].creator);
     expect(html).toContain(project.payouts[0].invoice);
-    expect(html).toContain('付款信息校验成功');
-    expect(html).toContain('付款信息校验成功，收款账户与付款资料均已通过审核');
+    expect(html).toContain(`${project.payouts.length} 笔付款信息均已校验，可执行打款`);
+    expect(html).toContain('收款账户、Invoice 与付款资料已通过执行前核对');
     expect(html).toContain('当前审批流');
-    expect(html).toContain('finance-approval-timeline is-compact');
+    expect(html).toContain('payment-execution-vertical-steps');
+    expect(html).toContain('展开全部 6 个节点');
     expect(html).toContain('关联资料');
     expect(html).toContain(`合同 · ${project.contracts} 份`);
     expect(html).toContain(`Invoice · ${project.invoices} 份`);
     expect(html).toContain('收款账户校验结果');
     expect(html).toContain('已通过');
-    expect(html).toContain('>查看合同</button>');
-    expect(html).toContain('>查看 Invoice</button>');
+    expect(html).toContain('>查看全部</button>');
+    expect(html).toContain('aria-label="打包下载全部合同"');
+    expect(html).toContain('aria-label="打包下载全部 Invoice"');
     expect(html).toContain('第 1 轮 · 财务审批已完成');
-    expect(html).toContain('状态回写');
     expect(html).toContain('>待打款</span>');
     expect(html).toContain('>退回媒介修改</span>');
     expect(html).toContain('>执行打款</span>');
     expect(html).toMatch(/class="button button-primary payment-execution-submit-action"(?![^>]*disabled)/);
+  });
+
+  it('shows pending validation risk and disables payment execution', () => {
+    const project = buildPaymentProjectRows({
+      tab: 'payment',
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    })[0];
+    const request = INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((candidate) => (
+      candidate.id === project.requestId
+    ));
+    const html = renderToStaticMarkup(
+      <PaymentExecutionWorkspace
+        request={request!}
+        project={{
+          ...project,
+          payouts: project.payouts.map((payout, index) => index === 0 ? {
+            ...payout,
+            paymentListRequiresRevalidation: true,
+          } : payout),
+        }}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        contracts={INITIAL_COMPLETE_REQUEST_RESOURCES.contracts}
+        canExecute
+        onExecute={vi.fn(() => true)}
+        onReturn={vi.fn(() => true)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('还有 1 笔付款信息需要处理');
+    expect(html).toContain('仅看待处理');
+    expect(html).toContain('payment-execution-table-status is-pending');
+    expect(html).toMatch(/class="button button-primary payment-execution-submit-action"[^>]*disabled=""/);
   });
 
   it('prevents returning the whole request after any payout has started', () => {

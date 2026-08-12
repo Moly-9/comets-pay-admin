@@ -2,6 +2,10 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  Download,
   Eye,
   FileText,
   Files,
@@ -13,9 +17,16 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState, type CSSProperties } from 'react';
+import { contractExportArchiveFilename, createContractExportArchive } from '../contractBatchOperations';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
+import { createInvoiceBatchArchive } from '../invoice/invoiceBatchArchive';
 import { isPayoutPaymentInformationValidated } from '../invoice/invoiceReviewWorkflow';
-import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
+import {
+  downloadBlob,
+  formatInvoiceMoney,
+  invoiceFilename,
+  invoiceTotal,
+} from '../invoice/invoiceUtils';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
@@ -52,6 +63,18 @@ const transferMethodLabel = (payout: Payout) => {
   return payout.transferMethod ? `银行转账 · ${payout.transferMethod}` : '银行转账';
 };
 
+const maskPayoutAccount = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) return '账户待补充';
+  if (/[•*]/.test(normalized)) return normalized;
+  if (normalized.includes('@')) {
+    const [name, domain] = normalized.split('@');
+    return `${name.slice(0, Math.min(2, name.length))}${name.length > 2 ? '•••' : ''}@${domain}`;
+  }
+  const compact = normalized.replace(/\s+/g, '');
+  return compact.length > 4 ? `•••• ${compact.slice(-4)}` : compact;
+};
+
 const feeBearerLabel = (value?: Payout['feeBearer']) => {
   if (value === 'ADVERTISER') return '付款方承担';
   if (value === 'PUBLISHER') return '收款方承担';
@@ -76,6 +99,61 @@ const payoutHasFailureMarker = (payout: Payout) => Boolean(
   || payout.status === '付款失败'
   || payout.status === '已退回'
 );
+
+type PaymentApprovalStep = {
+  id: string;
+  label: string;
+  account: string;
+  actor?: string;
+  time?: string;
+  state: 'complete' | 'current' | 'pending';
+};
+
+const paymentApprovalSteps = (
+  request: RequestProjectSummary,
+  paymentProvider: string,
+): PaymentApprovalStep[] => {
+  const approval = request.approval;
+  if (!approval) return [];
+  const stageDefinitions = [
+    { stage: 'PM' as const, label: 'PM 审批', fallback: request.pm },
+    { stage: 'PROJECT_OWNER' as const, label: '项目负责人审批', fallback: '项目负责人' },
+    { stage: 'OWNER' as const, label: '老板审批', fallback: '老板' },
+    { stage: 'FINANCE' as const, label: '财务审核', fallback: '财务' },
+  ];
+  return [
+    {
+      id: 'submitted',
+      label: '请款提交',
+      account: request.media,
+      actor: request.media,
+      time: approval.submittedAt,
+      state: 'complete' as const,
+    },
+    ...stageDefinitions.map(({ stage, label, fallback }) => {
+      const event = [...approval.history].reverse().find((candidate) => (
+        candidate.round === approval.round
+        && candidate.stage === stage
+        && candidate.action === 'APPROVE'
+      ));
+      return {
+        id: stage,
+        label,
+        account: event?.actorAccount ?? fallback,
+        actor: event?.actorName ?? fallback,
+        time: event?.occurredAt,
+        state: event ? 'complete' as const : 'pending' as const,
+      };
+    }),
+    {
+      id: 'payment',
+      label: '渠道付款',
+      account: paymentProvider,
+      actor: paymentProvider,
+      state: 'current' as const,
+    },
+  ];
+};
 
 export function PaymentExecutionWorkspace({
   request,
@@ -108,6 +186,9 @@ export function PaymentExecutionWorkspace({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
+  const [validationFilter, setValidationFilter] = useState<'all' | 'pending'>('all');
+  const [approvalExpanded, setApprovalExpanded] = useState(false);
+  const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | null>(null);
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
   const validatedPayouts = project.payouts.filter(isPayoutPaymentInformationValidated);
   const linkedContracts = requestLinkedContracts(request, contracts);
@@ -162,6 +243,14 @@ export function PaymentExecutionWorkspace({
   const returnedAt = returnDetails?.occurredAt
     ?? project.payouts.find((payout) => payout.paymentFailureReturn?.occurredAt)
       ?.paymentFailureReturn?.occurredAt;
+  const approvalSteps = paymentApprovalSteps(request, paymentProvider);
+  const visibleApprovalSteps = approvalExpanded ? approvalSteps : approvalSteps.filter((step) => (
+    step.id === 'submitted' || step.id === 'FINANCE' || step.state === 'current'
+  ));
+  const displayedPayouts = validationFilter === 'pending'
+    ? project.payouts.filter((payout) => !isPayoutPaymentInformationValidated(payout))
+    : project.payouts;
+  const validationReady = accountValidationIssueCount === 0 && project.payouts.length > 0;
 
   const executePayment = () => {
     if (onExecute(project.payouts)) onClose();
@@ -172,6 +261,40 @@ export function PaymentExecutionWorkspace({
     if (normalizedReason && onReturn(normalizedReason)) {
       setReturnDialogOpen(false);
       onClose();
+    }
+  };
+
+  const downloadContracts = async () => {
+    if (!linkedContracts.length || downloadingResource) return;
+    setDownloadingResource('contract');
+    try {
+      const archive = await createContractExportArchive(linkedContracts);
+      downloadBlob(archive.blob, contractExportArchiveFilename());
+    } finally {
+      setDownloadingResource(null);
+    }
+  };
+
+  const downloadInvoices = async () => {
+    if (!linkedInvoices.length || downloadingResource) return;
+    setDownloadingResource('invoice');
+    try {
+      const { generateInvoiceFiles } = await import('../invoice/generateInvoice');
+      const entries = await Promise.all(linkedInvoices.map(async (invoice) => {
+        const files = await generateInvoiceFiles(invoice.snapshot);
+        return {
+          pdfFilename: invoiceFilename(invoice.snapshot, 'pdf'),
+          docxFilename: invoiceFilename(invoice.snapshot, 'docx'),
+          pdfBlob: files.pdfBlob,
+          docxBlob: files.docxBlob,
+        };
+      }));
+      downloadBlob(
+        await createInvoiceBatchArchive(entries),
+        `${project.requestCode}-Invoice.zip`,
+      );
+    } finally {
+      setDownloadingResource(null);
     }
   };
 
@@ -218,13 +341,33 @@ export function PaymentExecutionWorkspace({
           </div>
         )}
       >
-        <div className="payment-execution-shell" data-testid="payment-execution-workspace">
+        <div className={`payment-execution-shell${isReturned ? ' is-returned' : ' is-execution'}`} data-testid="payment-execution-workspace">
           <main
             className={`payment-execution-main${isReturned ? ' is-returned' : ' payment-execution-board-card'}`}
             tabIndex={0}
             aria-label="请款项目与达人请款信息"
           >
-          <section className={`payment-execution-project${isReturned ? ' payment-execution-content-card' : ''}`} aria-labelledby="payment-execution-project-title">
+          {!isReturned ? (
+            <section className="payment-execution-hero" aria-labelledby="payment-execution-project-title">
+              <div className="payment-execution-hero-heading">
+                <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
+                <div>
+                  <p>请款项目信息</p>
+                  <h2 id="payment-execution-project-title" title={project.cooperationProjectName}>{project.cooperationProjectName}</h2>
+                  <small>{project.cooperationProjectCode} · {projectBrand}</small>
+                </div>
+                <span className="payment-execution-status"><i />待打款</span>
+              </div>
+              <div className="payment-execution-hero-summary">
+                <div className="is-amount"><span>请款总金额</span><strong>{project.amount}</strong></div>
+                <div><span>付款单号</span><strong>{project.paymentOrder}</strong></div>
+                <div><span>付款渠道</span><strong>{paymentProvider}</strong></div>
+                <div><span>付款明细</span><strong>{project.payouts.length} 笔</strong></div>
+                <div><span>预计付款时间</span><strong>{request.expectedPaymentDate || '待补充'}</strong></div>
+              </div>
+            </section>
+          ) : (
+          <section className="payment-execution-project payment-execution-content-card" aria-labelledby="payment-execution-project-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
@@ -233,7 +376,7 @@ export function PaymentExecutionWorkspace({
                   <p>{project.cooperationProjectName}</p>
                 </div>
               </div>
-              <span className={`payment-execution-status${isReturned ? ' is-returned' : ''}`}><i />{isReturned ? '已退回' : '待打款'}</span>
+              <span className="payment-execution-status is-returned"><i />已退回</span>
             </header>
 
             <div className="payment-execution-metrics" aria-label="请款项目概览">
@@ -256,6 +399,7 @@ export function PaymentExecutionWorkspace({
               <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
             </dl>
           </section>
+          )}
 
           {isReturned ? (
             <section className="payment-execution-failure-card payment-execution-content-card" aria-labelledby="payment-execution-failure-title">
@@ -284,17 +428,80 @@ export function PaymentExecutionWorkspace({
             </section>
           ) : null}
 
-          <section className={`payment-execution-payees${isReturned ? ' payment-execution-content-card' : ''}`} aria-labelledby="payment-execution-payees-title">
+          {!isReturned ? (
+            <section className={`payment-execution-validation-alert is-${validationReady ? 'success' : 'warning'}`} role="status" aria-live="polite">
+              <span>{validationReady ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</span>
+              <div>
+                <strong>{validationReady
+                  ? `${validatedPayouts.length} 笔付款信息均已校验，可执行打款`
+                  : `还有 ${accountValidationIssueCount} 笔付款信息需要处理`}</strong>
+                <p>{validationReady
+                  ? '收款账户、Invoice 与付款资料已通过执行前核对。'
+                  : '请完成全部付款信息校验；未通过前系统不会放行执行打款。'}</p>
+              </div>
+              <button
+                type="button"
+                aria-pressed={validationFilter === 'pending'}
+                disabled={validationReady}
+                onClick={() => setValidationFilter((current) => current === 'pending' ? 'all' : 'pending')}
+              >
+                {validationFilter === 'pending' ? '查看全部' : '仅看待处理'}
+              </button>
+            </section>
+          ) : null}
+
+          <section className={`payment-execution-payees${isReturned ? ' payment-execution-content-card' : ' is-table-view'}`} aria-labelledby="payment-execution-payees-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><UserRound size={18} /></span>
                 <div>
-                  <h2 id="payment-execution-payees-title">达人请款信息概览</h2>
-                  <p>共 {project.payouts.length} 位达人 · {project.invoices} 份 Invoice</p>
+                  <h2 id="payment-execution-payees-title">达人付款信息</h2>
+                  <p>{isReturned
+                    ? `共 ${project.payouts.length} 位达人 · ${project.invoices} 份 Invoice`
+                    : `逐笔核对收款账户、金额与关联凭证 · 已通过 ${validatedPayouts.length}/${project.payouts.length}`}</p>
                 </div>
               </div>
+              {!isReturned ? (
+                <div className="payment-execution-table-filters" aria-label="付款信息筛选">
+                  <button className={validationFilter === 'all' ? 'is-active' : ''} type="button" onClick={() => setValidationFilter('all')}>全部 {project.payouts.length}</button>
+                  <button className={validationFilter === 'pending' ? 'is-active' : ''} type="button" onClick={() => setValidationFilter('pending')}>待处理 {accountValidationIssueCount}</button>
+                </div>
+              ) : null}
             </header>
 
+            {!isReturned ? (
+              <div className="payment-execution-table-scroll">
+                <table className="payment-execution-table">
+                  <colgroup>
+                    <col className="is-creator" />
+                    <col className="is-account" />
+                    <col className="is-currency" />
+                    <col className="is-amount" />
+                    <col className="is-validation" />
+                    <col className="is-evidence" />
+                  </colgroup>
+                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>金额</th><th>校验状态</th><th>关联凭证</th></tr></thead>
+                  <tbody>
+                    {displayedPayouts.map((payout) => {
+                      const informationValidated = isPayoutPaymentInformationValidated(payout);
+                      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+                      const linkedContract = linkedContracts.find((contract) => contract.id === payout.contract || contract.contractId === payout.contract);
+                      return (
+                        <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
+                          <td><div className="payment-execution-creator-cell"><span style={{ '--payee-accent': payout.accent } as CSSProperties}>{payout.initials}</span><div><strong>{payout.creator}</strong><small>{payout.handle || '达人账号待补充'}</small></div></div></td>
+                          <td><div className="payment-execution-account-cell"><strong title={payout.account}>{maskPayoutAccount(payout.account)}</strong><small>{transferMethodLabel(payout)}</small></div></td>
+                          <td><span className="payment-execution-currency">{payout.currency}</span></td>
+                          <td className="payment-execution-amount-cell">{formatPayoutAmount(payout)}</td>
+                          <td><span className={`payment-execution-table-status is-${informationValidated ? 'valid' : 'pending'}`}>{informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{informationValidated ? '已通过' : '待校验'}</span></td>
+                          <td><div className="payment-execution-evidence-actions"><button type="button" title={payout.invoice} aria-label={`查看 Invoice ${payout.invoice}`} disabled={!linkedInvoice} onClick={() => linkedInvoice && onOpenInvoice?.(linkedInvoice.invoiceId)}><ReceiptText size={14} />Invoice</button><button type="button" title={payout.contract} aria-label={`查看合同 ${payout.contract}`} disabled={!linkedContract} onClick={() => linkedContract && onOpenContract?.(linkedContract.id)}><FileText size={14} />合同</button></div></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {!displayedPayouts.length ? <div className="payment-execution-table-empty"><CheckCircle2 size={22} /><strong>没有待处理的付款信息</strong><p>当前项目的付款资料已全部通过校验。</p></div> : null}
+              </div>
+            ) : (
             <div className="payment-execution-payee-list">
               {project.payouts.map((payout, index) => {
                 const informationValidated = isPayoutPaymentInformationValidated(payout);
@@ -353,6 +560,7 @@ export function PaymentExecutionWorkspace({
                 );
               })}
             </div>
+            )}
           </section>
         </main>
 
@@ -370,22 +578,42 @@ export function PaymentExecutionWorkspace({
               </header>
               <div className="payment-execution-approval-scroll" tabIndex={0} aria-label="付款审批流程">
                 {isReturned ? (
-                  <div className="payment-execution-approval-return-note">
-                    <AlertTriangle size={17} />
-                    <div>
-                      <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
-                      <p>{hasScopedReturnItems
-                        ? `${returnedPayoutCount} 笔明细需要修改，具体原因请查看左侧对应达人卡片。`
-                        : `${returnedPayoutCount} 笔明细需要修改，其余 ${passedPayoutCount} 笔已通过审核。`}</p>
+                  <>
+                    <div className="payment-execution-approval-return-note">
+                      <AlertTriangle size={17} />
+                      <div>
+                        <strong>{returnDetails?.stageLabel ?? '付款工作台'}已退回</strong>
+                        <p>{hasScopedReturnItems
+                          ? `${returnedPayoutCount} 笔明细需要修改，具体原因请查看左侧对应达人卡片。`
+                          : `${returnedPayoutCount} 笔明细需要修改，其余 ${passedPayoutCount} 笔已通过审核。`}</p>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
-                <ApprovalTimeline
-                  request={request}
-                  paymentReady={!isReturned}
-                  paymentProvider={paymentProvider}
-                  compact
-                />
+                    <ApprovalTimeline
+                      request={request}
+                      paymentReady={false}
+                      paymentProvider={paymentProvider}
+                      compact
+                    />
+                  </>
+                ) : approvalSteps.length ? (
+                  <>
+                    <ol className="payment-execution-vertical-steps">
+                      {visibleApprovalSteps.map((step) => (
+                        <li className={`is-${step.state}`} key={step.id} aria-current={step.state === 'current' ? 'step' : undefined}>
+                          <span className="payment-execution-step-node" aria-hidden="true">{step.state === 'complete' ? <CheckCircle2 size={16} /> : <Circle size={15} />}</span>
+                          <div><strong>{step.label}</strong><small>@{step.account}</small></div>
+                          <time>{step.state === 'current' ? '待执行' : formatDateTime(step.time)}</time>
+                        </li>
+                      ))}
+                    </ol>
+                    <button className="payment-execution-approval-expand" type="button" aria-expanded={approvalExpanded} onClick={() => setApprovalExpanded((current) => !current)}>
+                      {approvalExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      {approvalExpanded ? '收起审批记录' : `展开全部 ${approvalSteps.length} 个节点`}
+                    </button>
+                  </>
+                ) : (
+                  <div className="payment-execution-approval-empty"><CalendarClock size={20} /><span>暂无审批记录</span></div>
+                )}
               </div>
             </section>
 
@@ -404,12 +632,12 @@ export function PaymentExecutionWorkspace({
                 <div className="payment-execution-resource-row">
                   <span className="payment-execution-resource-icon" aria-hidden="true"><FileText size={16} /></span>
                   <strong>合同 · {linkedContracts.length} 份</strong>
-                  <button type="button" disabled={!linkedContracts.length} onClick={() => setResourceDialog('contract')}>查看合同</button>
+                  <div className="payment-execution-resource-actions"><button type="button" disabled={!linkedContracts.length} onClick={() => setResourceDialog('contract')}>查看全部</button><button type="button" title="打包下载合同" aria-label="打包下载全部合同" disabled={!linkedContracts.length || Boolean(downloadingResource)} onClick={() => { void downloadContracts(); }}><Download size={15} />{downloadingResource === 'contract' ? '生成中' : '下载'}</button></div>
                 </div>
                 <div className="payment-execution-resource-row">
                   <span className="payment-execution-resource-icon" aria-hidden="true"><ReceiptText size={16} /></span>
                   <strong>Invoice · {linkedInvoices.length} 份</strong>
-                  <button type="button" disabled={!linkedInvoices.length} onClick={() => setResourceDialog('invoice')}>查看 Invoice</button>
+                  <div className="payment-execution-resource-actions"><button type="button" disabled={!linkedInvoices.length} onClick={() => setResourceDialog('invoice')}>查看全部</button><button type="button" title="打包下载 Invoice" aria-label="打包下载全部 Invoice" disabled={!linkedInvoices.length || Boolean(downloadingResource)} onClick={() => { void downloadInvoices(); }}><Download size={15} />{downloadingResource === 'invoice' ? '生成中' : '下载'}</button></div>
                 </div>
                 <div className="payment-execution-resource-row">
                   <span className="payment-execution-resource-icon" aria-hidden="true"><Landmark size={16} /></span>
