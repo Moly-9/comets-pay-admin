@@ -1581,7 +1581,7 @@ export function MediaPaymentProjectsPage({
             <div className="media-request-payment-plan">
               <label>
                 <span className="required-field-label">成本类型 <em className="required-mark" aria-hidden="true">*</em></span>
-                <input placeholder="例如：达人合作费、内容制作费" value={costType} onChange={(event) => setCostType(event.target.value)} />
+                <input placeholder="例如：网红采买成本" value={costType} onChange={(event) => setCostType(event.target.value)} />
               </label>
               <div className="form-field">
                 <span className="form-field-label">手续费承担方 <em className="required-mark" aria-hidden="true">*</em></span>
