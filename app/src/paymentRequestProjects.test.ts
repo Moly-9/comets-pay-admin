@@ -21,6 +21,7 @@ import {
   paymentRequestAmountLabel,
   paymentRequestChannelForProvider,
   paymentRequestCreatorPresentation,
+  paymentRequestExtraDetailIssues,
   paymentRequestInvoiceIds,
   paymentRequestPaymentPlanFor,
   paymentRequestPaymentPlanIssues,
@@ -28,6 +29,7 @@ import {
   invoiceAmountLabel,
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
+  mergePaymentRequestRemarkAttachments,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
@@ -155,6 +157,29 @@ describe('payment request payment plan', () => {
     expect(paymentRequestProviderForChannel('PayPal')).toBe('PayPal');
     expect(paymentRequestProviderForChannel('Payermax')).toBe('PayMax');
     expect(paymentRequestChannelForProvider('PayMax')).toBe('Payermax');
+  });
+});
+
+describe('payment request extra details', () => {
+  it('requires a cost type and fee bearer while leaving remarks optional', () => {
+    expect(paymentRequestExtraDetailIssues({})).toEqual([
+      '请填写成本类型',
+      '请选择手续费承担方',
+    ]);
+    expect(paymentRequestExtraDetailIssues({
+      costType: '达人合作费',
+      feeBearer: '各自承担',
+    })).toEqual([]);
+  });
+
+  it('keeps file metadata and removes only exact duplicate attachments', () => {
+    const first = { name: '付款说明.pdf', size: 1024, type: 'application/pdf', lastModified: 1 };
+    const sameNameNewVersion = { ...first, size: 2048, lastModified: 2 };
+
+    expect(mergePaymentRequestRemarkAttachments([first], [first, sameNameNewVersion])).toEqual([
+      first,
+      sameNameNewVersion,
+    ]);
   });
 });
 

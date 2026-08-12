@@ -78,12 +78,26 @@ describe('request project payment presentation', () => {
     expect(projectInfo).not.toContain('<dt>付款方式</dt>');
     expect(projectInfo).toContain('<dt>付款渠道</dt>');
     expect(projectInfo).toContain('<dt>预计付款时间</dt>');
+    expect(projectInfo).toContain('<dt>成本类型</dt>');
+    expect(projectInfo).toContain('<dt>手续费承担方</dt>');
+    expect(projectInfo).toContain('<dt>备注</dt>');
+    expect(projectInfo).toContain('<dt>备注附件</dt>');
     expect(paymentTable).toContain('<th>达人</th>');
     expect(paymentTable).toContain('<th>Invoice</th>');
     expect(paymentTable).toContain('<th>请款金额</th>');
     expect(paymentTable).toContain('<th>付款渠道</th>');
     expect(paymentTable).toContain('<th>付款方式</th>');
     expect(paymentTable).toContain('<th>状态</th>');
+  });
+
+  it('keeps the extra request fields in both project detail entries', () => {
+    const myProjectsSource = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(myProjectsSource).toContain('<dt>成本类型</dt>');
+    expect(myProjectsSource).toContain('<dt>手续费承担方</dt>');
+    expect(myProjectsSource).toContain('<dt>备注</dt>');
+    expect(myProjectsSource).toContain('<dt>备注附件</dt>');
+    expect(myProjectsSource).toContain('aria-label="上传备注附件"');
   });
 
   it('maps real payment-list snapshots into the shared read-only project viewer', () => {

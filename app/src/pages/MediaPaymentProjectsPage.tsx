@@ -9,11 +9,14 @@ import {
   Circle,
   Download,
   FileText,
+  Paperclip,
   Pencil,
   Plus,
   ReceiptText,
   Search,
   Send,
+  Trash2,
+  Upload,
   Users,
   WalletCards,
   X,
@@ -51,6 +54,7 @@ import {
   invoiceCooperationProjectId,
   invoiceAmountLabel,
   myProjectStatusFor,
+  mergePaymentRequestRemarkAttachments,
   paymentRequestAmount,
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
@@ -58,12 +62,15 @@ import {
   paymentRequestListMetrics,
   paymentRequestPaymentPlanFor,
   paymentRequestPaymentPlanIssues,
+  paymentRequestExtraDetailIssues,
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
   type MyProjectStatus,
   type PaymentRequestCreatorLink,
+  type PaymentRequestFeeBearer,
   type PaymentRequestPaymentChannel,
+  type PaymentRequestRemarkAttachment,
 } from '../paymentRequestProjects';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
@@ -94,6 +101,18 @@ const PAYMENT_CHANNEL_OPTIONS = [
   { value: 'PayPal', label: 'PayPal', description: 'PayPal 账户付款' },
   { value: 'Payermax', label: 'Payermax', description: '本地支付网络' },
 ] as const;
+
+const FEE_BEARER_OPTIONS = [
+  { value: '付款方', label: '付款方', description: '手续费由付款方承担' },
+  { value: '收款方', label: '收款方', description: '手续费从收款金额中扣除' },
+  { value: '各自承担', label: '各自承担', description: '双方分别承担各自产生的费用' },
+] as const;
+
+const formatAttachmentSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 type RequestResourcePickerOption = {
   value: string;
@@ -527,7 +546,11 @@ export function MediaPaymentProjectsPage({
   const [pm, setPm] = useState(PM_USERS[0]?.name ?? '');
   const [paymentChannel, setPaymentChannel] = useState<PaymentRequestPaymentChannel | ''>('');
   const [expectedPaymentDate, setExpectedPaymentDate] = useState('');
+  const [costType, setCostType] = useState('');
+  const [feeBearer, setFeeBearer] = useState<PaymentRequestFeeBearer | ''>('');
   const [reason, setReason] = useState('');
+  const [remark, setRemark] = useState('');
+  const [remarkAttachments, setRemarkAttachments] = useState<PaymentRequestRemarkAttachment[]>([]);
   const [creatorSearch, setCreatorSearch] = useState('');
   const [creatorPickerOpen, setCreatorPickerOpen] = useState(false);
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<CreatorId[]>([]);
@@ -713,7 +736,11 @@ export function MediaPaymentProjectsPage({
     setPm(PM_USERS[0]?.name ?? '');
     setPaymentChannel('');
     setExpectedPaymentDate('');
+    setCostType('');
+    setFeeBearer('');
     setReason('');
+    setRemark('');
+    setRemarkAttachments([]);
     setCreatorSearch('');
     setCreatorPickerOpen(false);
     setSelectedCreatorIds([]);
@@ -748,7 +775,11 @@ export function MediaPaymentProjectsPage({
     setPm(request.pm);
     setPaymentChannel(paymentPlan.paymentChannel);
     setExpectedPaymentDate(paymentPlan.expectedPaymentDate);
+    setCostType(request.costType ?? '');
+    setFeeBearer(request.feeBearer ?? '');
     setReason(request.generatedDetail?.reason ?? '');
+    setRemark(request.remark ?? '');
+    setRemarkAttachments(request.remarkAttachments ?? []);
     setCreatorSearch('');
     setCreatorPickerOpen(showCreatorPicker && canAddCreatorToPaymentRequest(request));
     setSelectedCreatorIds((request.creatorLinks ?? []).map((link) => link.creatorId));
@@ -904,6 +935,7 @@ export function MediaPaymentProjectsPage({
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
     ...paymentRequestPaymentPlanIssues({ paymentChannel, expectedPaymentDate }),
+    ...paymentRequestExtraDetailIssues({ costType, feeBearer: feeBearer || undefined }),
     !reason.trim() ? '请填写付款事由' : '',
     !selectedCreators.length ? '请至少选择一位合作达人' : '',
     ...selectedCreators.flatMap((creator) => {
@@ -930,6 +962,8 @@ export function MediaPaymentProjectsPage({
     && pm
     && paymentChannel
     && expectedPaymentDate
+    && costType.trim()
+    && feeBearer
     && reason.trim()
     && creatorsReady
     && formIssues.length === 0,
@@ -941,7 +975,7 @@ export function MediaPaymentProjectsPage({
       notify('项目已锁定', '项目状态已变化，本次修改不能保存。');
       return;
     }
-    if (!selectedProject || !paymentChannel || !expectedPaymentDate || !canCreateRequest) {
+    if (!selectedProject || !paymentChannel || !expectedPaymentDate || !costType.trim() || !feeBearer || !canCreateRequest) {
       notify('请完善必填信息', formIssues[0] ?? '请检查达人和 Invoice 关联信息。');
       return;
     }
@@ -968,6 +1002,10 @@ export function MediaPaymentProjectsPage({
       pm,
       paymentChannel,
       expectedPaymentDate,
+      costType: costType.trim(),
+      feeBearer,
+      remark: remark.trim(),
+      remarkAttachments,
       amount: paymentRequestAmountLabel(validCreatorLinks, invoices),
       contracts: selectedContractIds.length,
       invoices: selectedInvoiceIds.length,
@@ -992,7 +1030,7 @@ export function MediaPaymentProjectsPage({
         payee: `${validCreatorLinks.length} 位合作达人`,
         provider: paymentChannel,
         beneficiaryId: '按付款清单账户快照',
-        feePolicy: '按合同及 Invoice 执行',
+        feePolicy: feeBearer,
       },
     };
     if (editingRequest) onUpdated(request);
@@ -1016,6 +1054,7 @@ export function MediaPaymentProjectsPage({
     const links = selectedRequest.creatorLinks ?? [];
     const submissionIssues = [
       ...paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor(selectedRequest)),
+      ...paymentRequestExtraDetailIssues(selectedRequest),
       !selectedRequest.generatedDetail?.reason?.trim() ? '请填写付款事由' : '',
       ...paymentRequestSubmissionIssues({
         creatorLinks: links,
@@ -1166,9 +1205,20 @@ export function MediaPaymentProjectsPage({
             <div><dt>负责 PM</dt><dd>{selectedRequest.pm}</dd></div>
             <div><dt>付款渠道</dt><dd>{selectedRequest.paymentChannel || '待补充'}</dd></div>
             <div><dt>预计付款时间</dt><dd>{selectedRequest.expectedPaymentDate || '待补充'}</dd></div>
+            <div><dt>成本类型</dt><dd>{selectedRequest.costType || '待补充'}</dd></div>
+            <div><dt>手续费承担方</dt><dd>{selectedRequest.feeBearer || '待补充'}</dd></div>
             <div><dt>项目媒介</dt><dd>{selectedRequest.media}</dd></div>
             <div><dt>创建时间</dt><dd>{formatCreatedAt(selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt)}</dd></div>
             <div className="project-info-wide"><dt>付款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
+            <div className="project-info-wide"><dt>备注</dt><dd>{selectedRequest.remark || '未填写'}</dd></div>
+            <div className="project-info-wide">
+              <dt>备注附件</dt>
+              <dd className="request-remark-attachment-summary">
+                {selectedRequest.remarkAttachments?.length
+                  ? selectedRequest.remarkAttachments.map((attachment) => <span key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}><FileText size={14} aria-hidden="true" />{attachment.name}</span>)
+                  : '无附件'}
+              </dd>
+            </div>
           </dl>
         </section>
         <section id="media-request-resource-section" className="project-detail-card project-workflow-card">
@@ -1528,7 +1578,64 @@ export function MediaPaymentProjectsPage({
                 />
               </div>
             </div>
+            <div className="media-request-payment-plan">
+              <label>
+                <span className="required-field-label">成本类型 <em className="required-mark" aria-hidden="true">*</em></span>
+                <input placeholder="例如：达人合作费、内容制作费" value={costType} onChange={(event) => setCostType(event.target.value)} />
+              </label>
+              <div className="form-field">
+                <span className="form-field-label">手续费承担方 <em className="required-mark" aria-hidden="true">*</em></span>
+                <SelectField<PaymentRequestFeeBearer | ''>
+                  ariaLabel="选择手续费承担方"
+                  variant="form"
+                  value={feeBearer}
+                  options={FEE_BEARER_OPTIONS}
+                  onChange={setFeeBearer}
+                  placeholder="请选择手续费承担方"
+                />
+              </div>
+            </div>
             <div className="form-field"><span id="media-request-reason-label" className="form-field-label">付款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本项目的付款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
+            <div className="form-field media-request-remark-field">
+              <span id="media-request-remark-label" className="form-field-label">备注 <small className="request-optional-label">选填</small></span>
+              <textarea aria-labelledby="media-request-remark-label" placeholder="补充付款说明、特殊要求或其他信息" value={remark} onChange={(event) => setRemark(event.target.value)} />
+              <div className="media-request-remark-upload">
+                <label className="media-request-remark-upload-trigger">
+                  <Upload size={16} aria-hidden="true" />
+                  <span>上传备注附件</span>
+                  <input
+                    className="contract-file-input"
+                    type="file"
+                    multiple
+                    aria-label="上传备注附件"
+                    onChange={(event) => {
+                      setRemarkAttachments((current) => mergePaymentRequestRemarkAttachments(
+                        current,
+                        event.target.files ?? [],
+                      ));
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+                <small>文件仅保留在当前浏览器原型中，不会上传外部服务</small>
+              </div>
+              {remarkAttachments.length ? (
+                <div className="media-request-remark-files" aria-label="已选择的备注附件">
+                  {remarkAttachments.map((attachment) => (
+                    <div key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}>
+                      <Paperclip size={15} aria-hidden="true" />
+                      <span><strong>{attachment.name}</strong><small>{formatAttachmentSize(attachment.size)}</small></span>
+                      <button
+                        type="button"
+                        aria-label={`移除附件 ${attachment.name}`}
+                        title="移除附件"
+                        onClick={() => setRemarkAttachments((current) => current.filter((item) => item !== attachment))}
+                      ><Trash2 size={15} aria-hidden="true" /></button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="form-field">
                     <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>仅展示有未占用已通过 Invoice 的达人</small></span>
               <div className="creator-picker media-request-creator-picker" data-testid="media-request-creator-picker">

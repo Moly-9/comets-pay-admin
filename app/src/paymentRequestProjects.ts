@@ -30,6 +30,29 @@ export type PaymentRequestCreatorLink = {
 
 export type PaymentRequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payermax';
 
+export type PaymentRequestFeeBearer = '付款方' | '收款方' | '各自承担';
+
+export type PaymentRequestRemarkAttachment = {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+};
+
+export const mergePaymentRequestRemarkAttachments = (
+  current: PaymentRequestRemarkAttachment[],
+  files: ArrayLike<Pick<File, 'name' | 'size' | 'type' | 'lastModified'>>,
+) => [...current, ...Array.from(files, (file) => ({
+  name: file.name,
+  size: file.size,
+  type: file.type,
+  lastModified: file.lastModified,
+}))].filter((attachment, index, all) => (
+  all.findIndex((candidate) => candidate.name === attachment.name
+    && candidate.size === attachment.size
+    && candidate.lastModified === attachment.lastModified) === index
+));
+
 export const paymentRequestProviderForChannel = (
   channel?: PaymentRequestPaymentChannel,
 ): PaymentListItemProvider | null => {
@@ -46,6 +69,13 @@ export const paymentRequestChannelForProvider = (
 export type PaymentRequestPaymentPlan = {
   paymentChannel?: PaymentRequestPaymentChannel;
   expectedPaymentDate?: string;
+};
+
+export type PaymentRequestExtraDetails = {
+  costType?: string;
+  feeBearer?: PaymentRequestFeeBearer;
+  remark?: string;
+  remarkAttachments?: PaymentRequestRemarkAttachment[];
 };
 
 export type PaymentRequestPaymentPlanForm = {
@@ -66,6 +96,14 @@ export const paymentRequestPaymentPlanIssues = ({
 }: PaymentRequestPaymentPlanForm) => [
   !paymentChannel ? '请选择付款渠道' : '',
   !expectedPaymentDate.trim() ? '请选择预计付款时间' : '',
+].filter((issue) => Boolean(issue));
+
+export const paymentRequestExtraDetailIssues = ({
+  costType,
+  feeBearer,
+}: Pick<PaymentRequestExtraDetails, 'costType' | 'feeBearer'>) => [
+  !costType?.trim() ? '请填写成本类型' : '',
+  !feeBearer ? '请选择手续费承担方' : '',
 ].filter((issue) => Boolean(issue));
 
 export type PaymentRequestCreatorInvoicePresentation = {

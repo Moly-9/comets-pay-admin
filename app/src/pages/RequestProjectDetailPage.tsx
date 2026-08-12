@@ -48,11 +48,12 @@ import {
 import {
   myProjectStatusFor,
   requestProjectStatusFor,
+  type PaymentRequestExtraDetails,
   type PaymentRequestPaymentPlan,
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
 
-export type RequestProjectSummary = PaymentRequestPaymentPlan & {
+export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestExtraDetails & {
   id: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   requestCode?: string;
@@ -893,7 +894,18 @@ export function RequestProjectDetailPage({
               <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
               <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
               <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
+              <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+              <div><dt>手续费承担方</dt><dd>{request.feeBearer || '待补充'}</dd></div>
               <div className="project-info-full"><dt>付款事由</dt><dd>{detail.reason}</dd></div>
+              <div className="project-info-full"><dt>备注</dt><dd>{request.remark || '未填写'}</dd></div>
+              <div className="project-info-full">
+                <dt>备注附件</dt>
+                <dd className="request-remark-attachment-summary">
+                  {request.remarkAttachments?.length
+                    ? request.remarkAttachments.map((attachment) => <span key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}><FileText size={14} aria-hidden="true" />{attachment.name}</span>)
+                    : '无附件'}
+                </dd>
+              </div>
             </dl>
           </section>
 
