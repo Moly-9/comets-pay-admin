@@ -28,6 +28,8 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain('进入校验后，需要逐份核对 Invoice 与付款清单。');
     expect(workspaceSource).toContain('onClick={() => changeStage(\'validation\')}');
     expect(workspaceSource).toContain('校验审核');
+    expect(workspaceSource).toContain('icon={<ArrowLeft size={16} />}');
+    expect(workspaceSource).not.toContain('ArrowRight');
   });
 
   it('returns to the overview without resetting review, page, zoom, or drawer state', () => {
@@ -59,6 +61,31 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain("onOpenContracts={() => setResourceDialog('contract')}");
     expect(workspaceSource).toContain("onOpenInvoices={() => setResourceDialog('invoice')}");
     expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
+  });
+
+  it('matches the My Projects payment information fields', () => {
+    expect(workspaceSource).toContain('aria-label="付款信息"');
+    expect(workspaceSource).toContain('<strong>付款信息</strong>');
+    expect(workspaceSource).not.toContain('aria-label="请款项目信息"');
+    for (const label of [
+      '项目编号',
+      '关联项目',
+      '品牌',
+      '负责 PM',
+      '付款渠道',
+      '预计付款时间',
+      '成本类型',
+      '手续费承担方',
+      '项目媒介',
+      '创建时间',
+      '付款事由',
+      '备注',
+      '备注附件',
+    ]) {
+      expect(workspaceSource).toContain(`<dt>${label}</dt>`);
+    }
+    expect(workspaceSource).not.toContain('<dt>提交人</dt>');
+    expect(workspaceSource).not.toContain('<dt>提交时间</dt>');
   });
 
   it('uses a right-side 520px drawer that expands in 220ms and becomes full-screen on mobile', () => {

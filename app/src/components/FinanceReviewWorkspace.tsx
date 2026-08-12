@@ -1,6 +1,6 @@
 import {
   AlertTriangle,
-  ArrowRight,
+  ArrowLeft,
   BadgeCheck,
   BriefcaseBusiness,
   Check,
@@ -419,7 +419,7 @@ function FinanceReviewProjectOverview({
   accountValidationStatus,
   accountValidationLabel,
   projectBrand,
-  submittedAt,
+  createdAt,
   paymentChannel,
   requestReason,
   exportingPaymentLists,
@@ -435,7 +435,7 @@ function FinanceReviewProjectOverview({
   accountValidationStatus: 'pending' | 'warning' | 'passed';
   accountValidationLabel: string;
   projectBrand: string;
-  submittedAt: string;
+  createdAt: string;
   paymentChannel: string;
   requestReason: string;
   exportingPaymentLists: boolean;
@@ -464,9 +464,9 @@ function FinanceReviewProjectOverview({
         </article>
       </section>
 
-      <section className="finance-review-project-section" aria-label="请款项目信息">
+      <section className="finance-review-project-section" aria-label="付款信息">
         <header>
-          <div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div>
+          <div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>付款信息</strong></div>
           <Button
             className="finance-review-project-export"
             variant="secondary"
@@ -481,14 +481,24 @@ function FinanceReviewProjectOverview({
         <dl className="finance-review-project-info">
           <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
           <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
-          <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
-          <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
+          <div><dt>品牌</dt><dd>{projectBrand}</dd></div>
           <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
-          <div><dt>提交人</dt><dd>{request.media}</dd></div>
-          <div><dt>提交时间</dt><dd>{submittedAt}</dd></div>
           <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
           <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+          <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+          <div><dt>手续费承担方</dt><dd>{request.feeBearer || '待补充'}</dd></div>
+          <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
+          <div><dt>创建时间</dt><dd>{createdAt}</dd></div>
           <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
+          <div className="is-wide"><dt>备注</dt><dd>{request.remark || '未填写'}</dd></div>
+          <div className="is-wide">
+            <dt>备注附件</dt>
+            <dd className="request-remark-attachment-summary">
+              {request.remarkAttachments?.length
+                ? request.remarkAttachments.map((attachment) => <span key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}><FileText size={14} aria-hidden="true" />{attachment.name}</span>)
+                : '无附件'}
+            </dd>
+          </div>
         </dl>
       </section>
 
@@ -664,7 +674,7 @@ export function FinanceReviewWorkspace({
   const approvalLabel = request.approval
     ? REQUEST_APPROVAL_STATUS_LABEL[request.approval.status]
     : request.status;
-  const submittedAt = request.approval?.submittedAt ?? request.createdAt ?? '待补充';
+  const createdAt = formatReviewTime(request.createdAt ?? request.approval?.submittedAt);
   const paymentChannel = request.paymentChannel
     || [...new Set(reviewPaymentLists.flatMap(paymentListProviders))].join(' / ')
     || '待补充';
@@ -770,7 +780,7 @@ export function FinanceReviewWorkspace({
             </div>
             <div className="finance-review-overview-footer-actions">
               <Button variant="secondary" onClick={() => onClose(false)}>关闭</Button>
-              <Button icon={<ArrowRight size={16} />} onClick={() => changeStage('validation')}>
+              <Button icon={<ArrowLeft size={16} />} onClick={() => changeStage('validation')}>
                 校验审核
               </Button>
             </div>
@@ -886,7 +896,7 @@ export function FinanceReviewWorkspace({
                   accountValidationStatus={accountValidationStatus}
                   accountValidationLabel={accountValidationLabel}
                   projectBrand={projectBrand}
-                  submittedAt={submittedAt}
+                  createdAt={createdAt}
                   paymentChannel={paymentChannel}
                   requestReason={requestReason}
                   exportingPaymentLists={exportingPaymentLists}
@@ -1092,7 +1102,7 @@ export function FinanceReviewWorkspace({
                   accountValidationStatus={accountValidationStatus}
                   accountValidationLabel={accountValidationLabel}
                   projectBrand={projectBrand}
-                  submittedAt={submittedAt}
+                  createdAt={createdAt}
                   paymentChannel={paymentChannel}
                   requestReason={requestReason}
                   exportingPaymentLists={exportingPaymentLists}
