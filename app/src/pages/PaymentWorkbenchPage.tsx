@@ -1,5 +1,6 @@
 import { CalendarDays, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PaymentListRecord } from '../businessWorkflow';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
@@ -510,6 +511,7 @@ export function PaymentWorkbenchPage({
   payouts,
   requests,
   generatedInvoices,
+  paymentLists = [],
   contracts = [],
   creators = [],
   onNewBatch,
@@ -527,6 +529,7 @@ export function PaymentWorkbenchPage({
   payouts: Payout[];
   requests: RequestProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  paymentLists?: PaymentListRecord[];
   contracts?: ContractRecord[];
   creators?: CreatorProfile[];
   onNewBatch: () => void;
@@ -809,6 +812,7 @@ export function PaymentWorkbenchPage({
           request={paymentExecutionRequest}
           project={paymentExecutionProject}
           generatedInvoices={generatedInvoices}
+          paymentLists={paymentLists}
           contracts={contracts}
           creators={creators}
           variant={paymentExecutionVariant}

@@ -3740,6 +3740,7 @@ export default function App() {
           payouts={payouts}
           requests={requestProjects}
           generatedInvoices={generatedInvoices}
+          paymentLists={paymentLists}
           contracts={contracts}
           creators={creators}
           initialTab={paymentWorkbenchInitialTab}

@@ -168,6 +168,7 @@ shows an input with Cancel and Save actions.
   confirmation, and list-return flow.
 
 final result: passed
+---
 
 ---
 
@@ -1430,5 +1431,43 @@ The implementation intentionally changes the source from a balanced card layout 
 ## Findings
 
 No remaining P0, P1 or P2 visual or interaction findings. The project continues to be a client-side prototype; download generation and payment transitions are not server-backed production workflows.
+
+final result: passed
+
+---
+
+# Payment Execution Two-Card Layout Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-66244cad-3789-4fd4-9160-164de01179cc.png` (1903 x 880 px).
+- Browser implementation: `design-qa-assets/payment-execution-two-cards-1280x720.png`, captured in the in-app browser at a 1280 x 720 CSS viewport and device scale factor 1.
+- Combined comparison: `design-qa-assets/payment-execution-two-cards-comparison.png`. The two screenshots are aspect-fit without cropping; they intentionally retain their different native viewports, so the comparison is structural rather than pixel-equivalent.
+- State: payment workbench, pending-payment project `REQ-202607-000006`, execution modal open.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual issue remains at the browser-supported desktop viewport.
+- Fonts and typography: the existing Noto Sans SC hierarchy is preserved. Labels, values, table headers, and row content remain at readable operational sizes with zero letter spacing and no forced viewport font scaling.
+- Spacing and layout: the modal contains exactly two large cards at approximately 7:3. The left card follows project information, five payment summary cards, validation alert, and payout list; the right card combines approval and resources with one internal divider.
+- Colors and tokens: existing neutral surfaces, purple action accents, green validation state, and orange payment state remain consistent with the system. No new gradient or decorative palette is introduced.
+- Image and icon quality: this operational screen requires no raster product imagery. Existing Lucide icons remain crisp and consistent with the surrounding application.
+- Copy and content: the five summaries are payment total, payment order, provider, payment currency, and expected payment date. The table reads the receive currency, fee bearer, payment reason, and transaction reference from the frozen payment-list data.
+- Responsive behavior: the in-app browser remained fixed at 1280 x 720 even when mobile viewport options were supplied, so a browser-rendered 390 px screenshot is unavailable. CSS and render tests verify the below-900 px card layout, nine mobile labels, zero table minimum width, and the two-column record grid below 560 px.
+
+## Interaction Verification
+
+- The all/pending filter control is absent and all waiting-payment rows remain visible.
+- Waiting-payment items are presented as validated and eligible for execution; any item outside waiting-payment remains blocking.
+- All nine table headers and first-row values are left-aligned.
+- At 1280 px, the page itself has zero horizontal overflow and the fixed footer remains visible. The dense nine-column table keeps a 1080 px readable minimum width and scrolls only inside its own list region.
+- The approval stepper can expand from the compact three-node summary, and contract/Invoice resource actions remain available.
+- Browser logs contain no application warning or error. Full Vitest passes 74 files and 471 tests; TypeScript/Vite production build and `git diff --check` pass.
+
+## Comparison History
+
+1. The initial implementation compressed nine columns into the 830 px left-card table at 1280 px, truncating the fee and transaction-reference values.
+2. The table received a 1080 px readable minimum width while the modal retained zero page overflow; post-fix measurements show all first-row values fit and the list alone owns horizontal scrolling.
+3. The execution eligibility source was unified with the workbench state: `等待付款` now directly means the row is validated for this screen, removing contradictory secondary validation states.
 
 final result: passed

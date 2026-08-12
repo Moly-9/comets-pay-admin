@@ -17,6 +17,11 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState, type CSSProperties } from 'react';
+import {
+  paymentListItemValue,
+  type PaymentListItem,
+  type PaymentListRecord,
+} from '../businessWorkflow';
 import { contractExportArchiveFilename, createContractExportArchive } from '../contractBatchOperations';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
 import { createInvoiceBatchArchive } from '../invoice/invoiceBatchArchive';
@@ -159,6 +164,7 @@ export function PaymentExecutionWorkspace({
   request,
   project,
   generatedInvoices,
+  paymentLists = [],
   contracts = [],
   creators = [],
   variant = 'execution',
@@ -172,6 +178,7 @@ export function PaymentExecutionWorkspace({
   request: RequestProjectSummary;
   project: PaymentProjectRow;
   generatedInvoices: GeneratedInvoiceRecord[];
+  paymentLists?: PaymentListRecord[];
   contracts?: ContractRecord[];
   creators?: CreatorProfile[];
   variant?: 'execution' | 'returned';
@@ -186,11 +193,12 @@ export function PaymentExecutionWorkspace({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
-  const [validationFilter, setValidationFilter] = useState<'all' | 'pending'>('all');
   const [approvalExpanded, setApprovalExpanded] = useState(false);
   const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | null>(null);
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
-  const validatedPayouts = project.payouts.filter(isPayoutPaymentInformationValidated);
+  const validatedPayouts = isReturned
+    ? project.payouts.filter(isPayoutPaymentInformationValidated)
+    : payablePayouts;
   const linkedContracts = requestLinkedContracts(request, contracts);
   const linkedInvoices = requestLinkedInvoices(request, generatedInvoices);
   const accountValidationIssueCount = Math.max(0, project.payouts.length - validatedPayouts.length);
@@ -214,8 +222,7 @@ export function PaymentExecutionWorkspace({
   const requestReturnReason = returnDetails?.reason?.trim() || '';
   const canSubmitPayment = canExecute
     && payablePayouts.length > 0
-    && payablePayouts.length === project.payouts.length
-    && validatedPayouts.length === project.payouts.length;
+    && payablePayouts.length === project.payouts.length;
   const canReturnPayment = canExecute
     && payablePayouts.length > 0
     && payablePayouts.length === project.payouts.length;
@@ -247,9 +254,27 @@ export function PaymentExecutionWorkspace({
   const visibleApprovalSteps = approvalExpanded ? approvalSteps : approvalSteps.filter((step) => (
     step.id === 'submitted' || step.id === 'FINANCE' || step.state === 'current'
   ));
-  const displayedPayouts = validationFilter === 'pending'
-    ? project.payouts.filter((payout) => !isPayoutPaymentInformationValidated(payout))
-    : project.payouts;
+  const requestPaymentListIds = new Set([
+    ...(request.paymentListIds ?? []),
+    ...(request.paymentListId ? [request.paymentListId] : []),
+  ]);
+  const requestPaymentItems = paymentLists
+    .filter((list) => (
+      Boolean(
+        request.paymentRequestProjectId
+        && list.paymentRequestProjectId === request.paymentRequestProjectId,
+      )
+      || requestPaymentListIds.has(list.paymentListId)
+    ))
+    .flatMap((list) => list.items);
+  const paymentItemForPayout = (payout: Payout): PaymentListItem | undefined => {
+    const invoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
+    return requestPaymentItems.find((item) => (
+      item.invoiceId === invoice?.invoiceId
+      || item.snapshot.invoiceNumber === payout.invoice
+    ));
+  };
+  const paymentCurrencies = [...new Set(project.payouts.map((payout) => payout.currency))].join(' / ') || '待确认';
   const validationReady = accountValidationIssueCount === 0 && project.payouts.length > 0;
 
   const executePayment = () => {
@@ -352,17 +377,17 @@ export function PaymentExecutionWorkspace({
               <div className="payment-execution-hero-heading">
                 <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
                 <div>
-                  <p>请款项目信息</p>
+                  <p>项目信息</p>
                   <h2 id="payment-execution-project-title" title={project.cooperationProjectName}>{project.cooperationProjectName}</h2>
                   <small>{project.cooperationProjectCode} · {projectBrand}</small>
                 </div>
                 <span className="payment-execution-status"><i />待打款</span>
               </div>
-              <div className="payment-execution-hero-summary">
-                <div className="is-amount"><span>请款总金额</span><strong>{project.amount}</strong></div>
+              <div className="payment-execution-hero-summary" aria-label="付款项目摘要">
+                <div className="is-amount"><span>付款总金额</span><strong>{project.amount}</strong></div>
                 <div><span>付款单号</span><strong>{project.paymentOrder}</strong></div>
                 <div><span>付款渠道</span><strong>{paymentProvider}</strong></div>
-                <div><span>付款明细</span><strong>{project.payouts.length} 笔</strong></div>
+                <div><span>支付币种</span><strong>{paymentCurrencies}</strong></div>
                 <div><span>预计付款时间</span><strong>{request.expectedPaymentDate || '待补充'}</strong></div>
               </div>
             </section>
@@ -439,14 +464,6 @@ export function PaymentExecutionWorkspace({
                   ? '收款账户、Invoice 与付款资料已通过执行前核对。'
                   : '请完成全部付款信息校验；未通过前系统不会放行执行打款。'}</p>
               </div>
-              <button
-                type="button"
-                aria-pressed={validationFilter === 'pending'}
-                disabled={validationReady}
-                onClick={() => setValidationFilter((current) => current === 'pending' ? 'all' : 'pending')}
-              >
-                {validationFilter === 'pending' ? '查看全部' : '仅看待处理'}
-              </button>
             </section>
           ) : null}
 
@@ -458,15 +475,9 @@ export function PaymentExecutionWorkspace({
                   <h2 id="payment-execution-payees-title">达人付款信息</h2>
                   <p>{isReturned
                     ? `共 ${project.payouts.length} 位达人 · ${project.invoices} 份 Invoice`
-                    : `逐笔核对收款账户、金额与关联凭证 · 已通过 ${validatedPayouts.length}/${project.payouts.length}`}</p>
+                    : `逐笔核对付款字段与收款账户 · 已通过 ${validatedPayouts.length}/${project.payouts.length}`}</p>
                 </div>
               </div>
-              {!isReturned ? (
-                <div className="payment-execution-table-filters" aria-label="付款信息筛选">
-                  <button className={validationFilter === 'all' ? 'is-active' : ''} type="button" onClick={() => setValidationFilter('all')}>全部 {project.payouts.length}</button>
-                  <button className={validationFilter === 'pending' ? 'is-active' : ''} type="button" onClick={() => setValidationFilter('pending')}>待处理 {accountValidationIssueCount}</button>
-                </div>
-              ) : null}
             </header>
 
             {!isReturned ? (
@@ -476,30 +487,46 @@ export function PaymentExecutionWorkspace({
                     <col className="is-creator" />
                     <col className="is-account" />
                     <col className="is-currency" />
+                    <col className="is-receive-currency" />
                     <col className="is-amount" />
+                    <col className="is-fee" />
+                    <col className="is-reason" />
+                    <col className="is-reference" />
                     <col className="is-validation" />
-                    <col className="is-evidence" />
                   </colgroup>
-                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>金额</th><th>校验状态</th><th>关联凭证</th></tr></thead>
+                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th></tr></thead>
                   <tbody>
-                    {displayedPayouts.map((payout) => {
-                      const informationValidated = isPayoutPaymentInformationValidated(payout);
-                      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
-                      const linkedContract = linkedContracts.find((contract) => contract.id === payout.contract || contract.contractId === payout.contract);
+                    {project.payouts.map((payout) => {
+                      const informationValidated = payout.status === '等待付款';
+                      const paymentItem = paymentItemForPayout(payout);
+                      const receiveCurrency = paymentItem
+                        ? String(paymentListItemValue(paymentItem, 'receiveCurrency') || payout.currency)
+                        : payout.currency;
+                      const paymentReason = paymentItem
+                        ? String(paymentListItemValue(paymentItem, 'paymentReason') || '影音服务')
+                        : '影音服务';
+                      const transactionReference = paymentItem
+                        ? String(paymentListItemValue(paymentItem, 'transactionReference') || payout.invoice)
+                        : payout.invoice;
+                      const feeBearer = paymentItem
+                        ? paymentListItemValue(paymentItem, 'feeBearer')
+                        : payout.feeBearer;
                       return (
                         <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
                           <td><div className="payment-execution-creator-cell"><span style={{ '--payee-accent': payout.accent } as CSSProperties}>{payout.initials}</span><div><strong>{payout.creator}</strong><small>{payout.handle || '达人账号待补充'}</small></div></div></td>
                           <td><div className="payment-execution-account-cell"><strong title={payout.account}>{maskPayoutAccount(payout.account)}</strong><small>{transferMethodLabel(payout)}</small></div></td>
                           <td><span className="payment-execution-currency">{payout.currency}</span></td>
+                          <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
                           <td className="payment-execution-amount-cell">{formatPayoutAmount(payout)}</td>
+                          <td className="payment-execution-compact-cell" title={feeBearerLabel(feeBearer)}>{feeBearerLabel(feeBearer)}</td>
+                          <td className="payment-execution-compact-cell" title={paymentReason}>{paymentReason}</td>
+                          <td className="payment-execution-compact-cell" title={transactionReference}>{transactionReference}</td>
                           <td><span className={`payment-execution-table-status is-${informationValidated ? 'valid' : 'pending'}`}>{informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{informationValidated ? '已通过' : '待校验'}</span></td>
-                          <td><div className="payment-execution-evidence-actions"><button type="button" title={payout.invoice} aria-label={`查看 Invoice ${payout.invoice}`} disabled={!linkedInvoice} onClick={() => linkedInvoice && onOpenInvoice?.(linkedInvoice.invoiceId)}><ReceiptText size={14} />Invoice</button><button type="button" title={payout.contract} aria-label={`查看合同 ${payout.contract}`} disabled={!linkedContract} onClick={() => linkedContract && onOpenContract?.(linkedContract.id)}><FileText size={14} />合同</button></div></td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-                {!displayedPayouts.length ? <div className="payment-execution-table-empty"><CheckCircle2 size={22} /><strong>没有待处理的付款信息</strong><p>当前项目的付款资料已全部通过校验。</p></div> : null}
               </div>
             ) : (
             <div className="payment-execution-payee-list">
@@ -564,8 +591,8 @@ export function PaymentExecutionWorkspace({
           </section>
         </main>
 
-          <aside className="payment-execution-side" aria-label="审批与关联资料">
-            <section className="payment-execution-approval payment-execution-board-card" aria-labelledby="payment-execution-approval-title">
+          <aside className={`payment-execution-side${isReturned ? '' : ' payment-execution-board-card'}`} aria-label="审批与关联资料">
+            <section className={`payment-execution-approval${isReturned ? ' payment-execution-board-card' : ''}`} aria-labelledby="payment-execution-approval-title">
               <header>
                 <div>
                   <span className="payment-execution-section-icon"><ShieldCheck size={18} /></span>
@@ -617,7 +644,7 @@ export function PaymentExecutionWorkspace({
               </div>
             </section>
 
-            <section className="payment-execution-resources payment-execution-board-card" aria-labelledby="payment-execution-resources-title">
+            <section className={`payment-execution-resources${isReturned ? ' payment-execution-board-card' : ''}`} aria-labelledby="payment-execution-resources-title">
               <header>
                 <div>
                   <span className="payment-execution-section-icon"><Files size={18} /></span>
