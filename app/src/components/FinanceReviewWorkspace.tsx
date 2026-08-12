@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowRight,
   BadgeCheck,
   BriefcaseBusiness,
   Check,
@@ -62,8 +63,10 @@ import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal, SelectField, type SelectOption } from './Common';
+import './FinanceReviewWorkspace.css';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
+type FinanceReviewStage = 'overview' | 'validation';
 
 const REVIEW_PANE_OPTIONS: Array<{
   id: FinanceReviewPane;
@@ -408,6 +411,111 @@ export function ApprovalTimeline({
   );
 }
 
+function FinanceReviewProjectOverview({
+  request,
+  linkedContracts,
+  linkedInvoices,
+  approvalLabel,
+  accountValidationStatus,
+  accountValidationLabel,
+  projectBrand,
+  submittedAt,
+  paymentChannel,
+  requestReason,
+  exportingPaymentLists,
+  canExportPaymentLists,
+  onExportPaymentLists,
+  onOpenContracts,
+  onOpenInvoices,
+}: {
+  request: RequestProjectSummary;
+  linkedContracts: ContractRecord[];
+  linkedInvoices: GeneratedInvoiceRecord[];
+  approvalLabel: string;
+  accountValidationStatus: 'pending' | 'warning' | 'passed';
+  accountValidationLabel: string;
+  projectBrand: string;
+  submittedAt: string;
+  paymentChannel: string;
+  requestReason: string;
+  exportingPaymentLists: boolean;
+  canExportPaymentLists: boolean;
+  onExportPaymentLists: () => void;
+  onOpenContracts: () => void;
+  onOpenInvoices: () => void;
+}) {
+  return (
+    <>
+      <section className="finance-review-metrics" aria-label="请款项目概况">
+        <article className="is-amount">
+          <span><span className="finance-review-metric-icon" aria-hidden="true"><WalletCards size={13} /></span>请款金额</span>
+          <strong>{request.amount}</strong>
+          <small>当前请款项目总额</small>
+        </article>
+        <article className="is-resources">
+          <span><span className="finance-review-metric-icon" aria-hidden="true"><FileText size={13} /></span>关联资料</span>
+          <strong>{request.contracts + request.invoices} 份</strong>
+          <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
+        </article>
+        <article className="is-status">
+          <span><span className="finance-review-metric-icon" aria-hidden="true"><ShieldCheck size={13} /></span>当前审批状态</span>
+          <strong>{approvalLabel}</strong>
+          <small>第 {request.approval?.round ?? 1} 轮审批</small>
+        </article>
+      </section>
+
+      <section className="finance-review-project-section" aria-label="请款项目信息">
+        <header>
+          <div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div>
+          <Button
+            className="finance-review-project-export"
+            variant="secondary"
+            icon={exportingPaymentLists ? <LoaderCircle className="is-spinning" size={14} /> : <Download size={14} />}
+            title="导出该项目的全部付款清单"
+            disabled={!canExportPaymentLists || exportingPaymentLists}
+            onClick={onExportPaymentLists}
+          >
+            {exportingPaymentLists ? '导出中' : '导出 Excel'}
+          </Button>
+        </header>
+        <dl className="finance-review-project-info">
+          <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
+          <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
+          <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
+          <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
+          <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
+          <div><dt>提交人</dt><dd>{request.media}</dd></div>
+          <div><dt>提交时间</dt><dd>{submittedAt}</dd></div>
+          <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
+          <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+          <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
+        </dl>
+      </section>
+
+      <section className="finance-review-project-section finance-review-linked-resources" aria-label="关联资料">
+        <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-resources" aria-hidden="true"><Files size={14} /></span><strong>关联资料</strong></div><span>项目级汇总</span></header>
+        <div className="finance-review-resource-list">
+          <div className="finance-review-resource-row">
+            <span className="finance-review-resource-icon" aria-hidden="true"><FileText size={15} /></span>
+            <strong>合同 · {linkedContracts.length} 份</strong>
+            <button type="button" onClick={onOpenContracts}>查看合同</button>
+          </div>
+          <div className="finance-review-resource-row">
+            <span className="finance-review-resource-icon" aria-hidden="true"><ReceiptText size={15} /></span>
+            <strong>Invoice · {linkedInvoices.length} 份</strong>
+            <button type="button" onClick={onOpenInvoices}>查看 Invoice</button>
+          </div>
+          <div className="finance-review-resource-row">
+            <span className="finance-review-resource-icon" aria-hidden="true"><Landmark size={15} /></span>
+            <strong>收款账户校验结果</strong>
+            <span className={`finance-review-resource-status is-${accountValidationStatus}`}>{accountValidationLabel}</span>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function FinanceReviewWorkspace({
   request,
   financeReview,
@@ -450,6 +558,7 @@ export function FinanceReviewWorkspace({
   const firstPendingIndex = Math.max(0, financeReview.pages.findIndex((page) => (
     activeSession.decisions[page.key]?.state !== 'correct'
   )));
+  const [stage, setStage] = useState<FinanceReviewStage>('overview');
   const [reviewIndex, setReviewIndex] = useState(firstPendingIndex);
   const [activePane, setActivePane] = useState<FinanceReviewPane>('invoice');
   const [approvalCollapsed, setApprovalCollapsed] = useState(false);
@@ -462,6 +571,16 @@ export function FinanceReviewWorkspace({
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
   const invoiceZoomRef = useRef(1);
+  const overviewFocusRef = useRef<HTMLDivElement>(null);
+  const validationFocusRef = useRef<HTMLButtonElement>(null);
+
+  const changeStage = (nextStage: FinanceReviewStage) => {
+    setStage(nextStage);
+    window.requestAnimationFrame(() => {
+      if (nextStage === 'validation') validationFocusRef.current?.focus();
+      else overviewFocusRef.current?.focus();
+    });
+  };
 
   const setInvoiceZoomLevel = useCallback((value: number, anchor?: { clientX: number; clientY: number }) => {
     const nextZoom = normalizeInvoiceZoom(value);
@@ -493,6 +612,7 @@ export function FinanceReviewWorkspace({
   }, [financeReview.fingerprint, financeReview.pages.length]);
 
   useEffect(() => {
+    if (stage !== 'validation') return undefined;
     const canvas = invoiceCanvasRef.current;
     if (!canvas) return undefined;
 
@@ -507,7 +627,7 @@ export function FinanceReviewWorkspace({
 
     canvas.addEventListener('wheel', handleInvoiceWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', handleInvoiceWheel);
-  }, [setInvoiceZoomLevel]);
+  }, [setInvoiceZoomLevel, stage]);
 
   const currentPage = financeReview.pages[reviewIndex];
   const currentDecision = currentPage
@@ -638,11 +758,24 @@ export function FinanceReviewWorkspace({
     <>
       <Modal
         title={`${request.requestCode ?? request.id} · 财务审核`}
-        width="100vw"
-        className="finance-review-workspace"
+        width={stage === 'overview' ? '520px' : '100vw'}
+        className={`finance-review-workspace is-${stage}`}
         onClose={() => onClose(false)}
         onBackdropMouseDown={() => undefined}
-        footer={(
+        footer={stage === 'overview' ? (
+          <div className="finance-review-overview-footer">
+            <div className="finance-review-overview-footer-note">
+              <ShieldCheck size={17} aria-hidden="true" />
+              <span>进入校验后，需要逐份核对 Invoice 与付款清单。</span>
+            </div>
+            <div className="finance-review-overview-footer-actions">
+              <Button variant="secondary" onClick={() => onClose(false)}>关闭</Button>
+              <Button icon={<ArrowRight size={16} />} onClick={() => changeStage('validation')}>
+                校验审核
+              </Button>
+            </div>
+          </div>
+        ) : (
           <div className="finance-review-footer">
             <div className="finance-review-footer-pagination">
               <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
@@ -704,8 +837,72 @@ export function FinanceReviewWorkspace({
           </div>
         )}
       >
-        <div className="finance-review-shell" data-testid="finance-review-workspace">
-          <header className="finance-review-overview">
+        <div
+          className="finance-review-shell"
+          data-stage={stage}
+          data-testid="finance-review-workspace"
+        >
+          <span className="finance-review-stage-announcement" aria-live="polite">
+            {stage === 'overview' ? '已打开请款项目概览' : '已进入 Invoice 与付款清单校验'}
+          </span>
+          {stage === 'overview' ? (
+            <div
+              ref={overviewFocusRef}
+              className="finance-review-overview-stage"
+              data-testid="finance-review-overview-stage"
+              tabIndex={-1}
+            >
+              <header className="finance-review-overview-heading">
+                <span className="finance-review-overview-heading-icon" aria-hidden="true"><BriefcaseBusiness size={19} /></span>
+                <div>
+                  <span>请款项目概览</span>
+                  <strong>{request.cooperationProjectName ?? request.project}</strong>
+                  <small>{request.requestCode ?? request.id}</small>
+                </div>
+                <span className="finance-review-overview-status">{approvalLabel}</span>
+              </header>
+              <div className="finance-review-overview-scroll">
+                <div className="finance-review-overview-intro">
+                  <ShieldCheck size={18} aria-hidden="true" />
+                  <div>
+                    <strong>先确认项目范围与关联资料</strong>
+                    <p>确认无误后进入逐份校验，审核结论只会在校验阶段提交。</p>
+                  </div>
+                </div>
+                <FinanceReviewProjectOverview
+                  request={request}
+                  linkedContracts={linkedContracts}
+                  linkedInvoices={linkedInvoices}
+                  approvalLabel={approvalLabel}
+                  accountValidationStatus={accountValidationStatus}
+                  accountValidationLabel={accountValidationLabel}
+                  projectBrand={projectBrand}
+                  submittedAt={submittedAt}
+                  paymentChannel={paymentChannel}
+                  requestReason={requestReason}
+                  exportingPaymentLists={exportingPaymentLists}
+                  canExportPaymentLists={projectPaymentLists.length > 0}
+                  onExportPaymentLists={() => { void exportProjectPaymentLists(); }}
+                  onOpenContracts={() => setResourceDialog('contract')}
+                  onOpenInvoices={() => setResourceDialog('invoice')}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="finance-review-validation-stage" data-testid="finance-review-validation-stage">
+              <div className="finance-review-validation-bar">
+                <button
+                  ref={validationFocusRef}
+                  className="finance-review-back-overview"
+                  type="button"
+                  onClick={() => changeStage('overview')}
+                >
+                  <ChevronLeft size={17} aria-hidden="true" />
+                  返回项目概览
+                </button>
+                <span>{request.cooperationProjectName ?? request.project}</span>
+              </div>
+              <header className="finance-review-overview">
             <div className="finance-review-title-group">
               <span className="finance-review-title-icon"><ShieldCheck size={19} /></span>
               <div className="finance-review-title-copy">
@@ -736,9 +933,9 @@ export function FinanceReviewWorkspace({
             <span className={`finance-review-current-state is-${currentDecision.state}`}>
               {reviewStatusLabel(currentDecision.state)}
             </span>
-          </header>
+              </header>
 
-          <div className="finance-review-mobile-tabs" role="tablist" aria-label="财务审核内容">
+              <div className="finance-review-mobile-tabs" role="tablist" aria-label="财务审核内容">
             {REVIEW_PANE_OPTIONS.map((option) => (
               <button
                 className={activePane === option.id ? 'is-active' : ''}
@@ -751,9 +948,9 @@ export function FinanceReviewWorkspace({
                 {option.label}
               </button>
             ))}
-          </div>
+              </div>
 
-          <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
+              <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><FileText size={17} /></span><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
@@ -885,77 +1082,29 @@ export function FinanceReviewWorkspace({
                 aria-label="项目与审批详情"
                 data-testid="finance-review-approval-scroll"
               >
-                <section className="finance-review-metrics" aria-label="请款项目概况">
-                  <article className="is-amount">
-                    <span><span className="finance-review-metric-icon" aria-hidden="true"><WalletCards size={13} /></span>请款金额</span>
-                    <strong>{request.amount}</strong>
-                    <small>当前请款项目总额</small>
-                  </article>
-                  <article className="is-resources">
-                    <span><span className="finance-review-metric-icon" aria-hidden="true"><FileText size={13} /></span>关联资料</span>
-                    <strong>{request.contracts + request.invoices} 份</strong>
-                    <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
-                  </article>
-                  <article className="is-status">
-                    <span><span className="finance-review-metric-icon" aria-hidden="true"><ShieldCheck size={13} /></span>当前审批状态</span>
-                    <strong>{approvalLabel}</strong>
-                    <small>第 {request.approval?.round ?? 1} 轮审批</small>
-                  </article>
-                </section>
-
-                <section className="finance-review-project-section" aria-label="请款项目信息">
-                  <header>
-                    <div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div>
-                    <Button
-                      className="finance-review-project-export"
-                      variant="secondary"
-                      icon={exportingPaymentLists ? <LoaderCircle className="is-spinning" size={14} /> : <Download size={14} />}
-                      title="导出该项目的全部付款清单"
-                      disabled={!projectPaymentLists.length || exportingPaymentLists}
-                      onClick={() => { void exportProjectPaymentLists(); }}
-                    >
-                      {exportingPaymentLists ? '导出中' : '导出 Excel'}
-                    </Button>
-                  </header>
-                  <dl className="finance-review-project-info">
-                    <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
-                    <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
-                    <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
-                    <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
-                    <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
-                    <div><dt>提交人</dt><dd>{request.media}</dd></div>
-                    <div><dt>提交时间</dt><dd>{submittedAt}</dd></div>
-                    <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
-                    <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-                    <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
-                  </dl>
-                </section>
+                <FinanceReviewProjectOverview
+                  request={request}
+                  linkedContracts={linkedContracts}
+                  linkedInvoices={linkedInvoices}
+                  approvalLabel={approvalLabel}
+                  accountValidationStatus={accountValidationStatus}
+                  accountValidationLabel={accountValidationLabel}
+                  projectBrand={projectBrand}
+                  submittedAt={submittedAt}
+                  paymentChannel={paymentChannel}
+                  requestReason={requestReason}
+                  exportingPaymentLists={exportingPaymentLists}
+                  canExportPaymentLists={projectPaymentLists.length > 0}
+                  onExportPaymentLists={() => { void exportProjectPaymentLists(); }}
+                  onOpenContracts={() => setResourceDialog('contract')}
+                  onOpenInvoices={() => setResourceDialog('invoice')}
+                />
 
                 <section className="finance-review-project-section" aria-label="当前审批流">
                   <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-workflow" aria-hidden="true"><Workflow size={14} /></span><strong>当前审批流</strong></div><span>第 {request.approval?.round ?? 1} 轮</span></header>
                   <ApprovalTimeline request={request} currentUser={currentUser} compact />
                 </section>
 
-                <section className="finance-review-project-section finance-review-linked-resources" aria-label="关联资料">
-                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-resources" aria-hidden="true"><Files size={14} /></span><strong>关联资料</strong></div><span>项目级汇总</span></header>
-                  <div className="finance-review-resource-list">
-                    <div className="finance-review-resource-row">
-                      <span className="finance-review-resource-icon" aria-hidden="true"><FileText size={15} /></span>
-                      <strong>合同 · {linkedContracts.length} 份</strong>
-                      <button type="button" onClick={() => setResourceDialog('contract')}>查看合同</button>
-                    </div>
-                    <div className="finance-review-resource-row">
-                      <span className="finance-review-resource-icon" aria-hidden="true"><ReceiptText size={15} /></span>
-                      <strong>Invoice · {linkedInvoices.length} 份</strong>
-                      <button type="button" onClick={() => setResourceDialog('invoice')}>查看 Invoice</button>
-                    </div>
-                    <div className="finance-review-resource-row">
-                      <span className="finance-review-resource-icon" aria-hidden="true"><Landmark size={15} /></span>
-                      <strong>收款账户校验结果</strong>
-                      <span className={`finance-review-resource-status is-${accountValidationStatus}`}>{accountValidationLabel}</span>
-                    </div>
-                  </div>
-                </section>
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
                     <CircleAlert size={17} />
@@ -977,7 +1126,9 @@ export function FinanceReviewWorkspace({
                 ? <PanelRightOpen size={23} strokeWidth={2.4} />
                 : <PanelRightClose size={23} strokeWidth={2.4} />}
             </button>
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 

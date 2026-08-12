@@ -1323,3 +1323,34 @@ final result: passed
 3. Post-fix mobile captures show the project card followed by the approval card without overlap, clipping, or horizontal overflow.
 
 final result: passed
+
+---
+
+# Finance Review Progressive Drawer Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-c9ca7fcb-86a8-4c4b-8244-a766a659def9.png` (1911 x 814 px).
+- Intended implementation URL: `http://127.0.0.1:5173/`.
+- Requested viewports: 1911 x 814, 1440 x 900, and 390 px wide at device scale factor 1.
+- Intended states: payment workbench with the project overview drawer open; expanded three-board validation; returned overview with preserved review state.
+
+## Findings
+
+- Browser-rendered implementation evidence is unavailable because the in-app browser opens at the account login screen and no authenticated payment-workbench state is currently accessible.
+- The source visual was opened and inspected. Code, focused tests, full Vitest, TypeScript/Vite build, and `git diff --check` pass, but these do not replace a same-state visual comparison.
+- Fonts and typography, spacing and layout rhythm, colors and visual tokens, icon fidelity, copy, desktop transition, mobile full-screen behavior, and interaction state cannot be truthfully signed off without the authenticated rendered screen.
+
+## Interaction Verification
+
+- Source-level tests verify that the workspace defaults to the overview stage, uses a 520 px right-side drawer, exposes `校验审核`, switches to validation without resetting review state, supports `返回项目概览`, and uses a full-screen overview below 900 px.
+- Full Vitest passes 74 files and 466 tests. TypeScript/Vite production build and `git diff --check` pass.
+- Actual drawer opening, expansion animation, contract/Invoice dialogs, project export, responsive layouts, focus transitions, and browser console state remain blocked by authentication.
+
+## Comparison History
+
+1. The source visual was opened at its native resolution.
+2. The local implementation was opened in the in-app browser, but it stopped at the login screen before the target payment-workbench state could be reached.
+3. No implementation screenshot was captured because a login-screen capture is not valid comparison evidence for the requested review workspace.
+
+final result: blocked

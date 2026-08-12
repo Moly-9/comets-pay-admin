@@ -15,6 +15,10 @@ const workspaceStyles = readFileSync(
   new URL('../index.css', import.meta.url),
   'utf8',
 );
+const workspaceStageStyles = readFileSync(
+  new URL('./FinanceReviewWorkspace.css', import.meta.url),
+  'utf8',
+);
 
 describe('shared payment-list finance review content', () => {
   it('limits the finance workspace comparison to the fields selected for manual review', () => {
@@ -144,6 +148,7 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStyles).toMatch(/\.finance-review-invoice-edge-nav\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;[^}]*border-radius:\s*50%;/s);
     expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-validation-stage,[\s\S]*transition:\s*none;/s);
   });
 
   it('centers the page controls in the space before the footer actions', () => {

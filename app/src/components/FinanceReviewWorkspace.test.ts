@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -8,6 +9,57 @@ import {
   FINANCE_RETURN_ISSUE_OPTIONS,
   projectPaymentListsForFinanceReview,
 } from './FinanceReviewWorkspace';
+
+const workspaceSource = readFileSync(
+  new URL('./FinanceReviewWorkspace.tsx', import.meta.url),
+  'utf8',
+);
+const workspaceStageStyles = readFileSync(
+  new URL('./FinanceReviewWorkspace.css', import.meta.url),
+  'utf8',
+);
+
+describe('FinanceReviewWorkspace progressive review stages', () => {
+  it('opens in the project overview drawer before exposing validation actions', () => {
+    expect(workspaceSource).toContain("const [stage, setStage] = useState<FinanceReviewStage>('overview')");
+    expect(workspaceSource).toContain('data-testid="finance-review-overview-stage"');
+    expect(workspaceSource).toContain('data-testid="finance-review-validation-stage"');
+    expect(workspaceSource).toContain("footer={stage === 'overview' ? (");
+    expect(workspaceSource).toContain('进入校验后，需要逐份核对 Invoice 与付款清单。');
+    expect(workspaceSource).toContain('onClick={() => changeStage(\'validation\')}');
+    expect(workspaceSource).toContain('校验审核');
+  });
+
+  it('returns to the overview without resetting review, page, zoom, or drawer state', () => {
+    expect(workspaceSource).toContain('onClick={() => changeStage(\'overview\')}');
+    expect(workspaceSource).toContain('返回项目概览');
+    expect(workspaceSource).toContain("const [reviewIndex, setReviewIndex] = useState(firstPendingIndex)");
+    expect(workspaceSource).toContain('const [approvalCollapsed, setApprovalCollapsed] = useState(false)');
+    expect(workspaceSource).toContain('const [invoiceZoom, setInvoiceZoom] = useState(1)');
+    expect(workspaceSource).toContain("if (stage !== 'validation') return undefined");
+    expect(workspaceSource).toContain('}, [setInvoiceZoomLevel, stage])');
+    expect(workspaceSource.match(/setReviewIndex\(/g)?.length).toBeGreaterThan(0);
+    expect(workspaceSource).not.toContain("changeStage = (nextStage: FinanceReviewStage) => {\n    setReviewIndex");
+  });
+
+  it('reuses the same project overview for the drawer and approval board', () => {
+    expect(workspaceSource.match(/<FinanceReviewProjectOverview/g)).toHaveLength(2);
+    expect(workspaceSource).toContain('canExportPaymentLists={projectPaymentLists.length > 0}');
+    expect(workspaceSource).toContain("onOpenContracts={() => setResourceDialog('contract')}");
+    expect(workspaceSource).toContain("onOpenInvoices={() => setResourceDialog('invoice')}");
+    expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
+  });
+
+  it('uses a right-side 520px drawer that expands in 220ms and becomes full-screen on mobile', () => {
+    expect(workspaceSource).toContain("width={stage === 'overview' ? '520px' : '100vw'}");
+    expect(workspaceSource).toContain('className={`finance-review-workspace is-${stage}`}');
+    expect(workspaceStageStyles).toMatch(/\.modal-backdrop:has\(\.finance-review-workspace\)\s*{[^}]*justify-content:\s*flex-end;/s);
+    expect(workspaceStageStyles).toMatch(/\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*min\(520px, 100vw\);/s);
+    expect(workspaceStageStyles).toMatch(/transition:\s*width 220ms ease-out, max-width 220ms ease-out/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*100vw;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.modal-panel\.finance-review-workspace,[\s\S]*transition:\s*none;/s);
+  });
+});
 
 describe('FinanceReviewWorkspace return issue types', () => {
   it('requires finance to choose the exact resource that media may modify', () => {
