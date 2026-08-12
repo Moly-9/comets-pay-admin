@@ -32,6 +32,15 @@ export type PaymentRequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payermax';
 
 export type PaymentRequestFeeBearer = '付款方' | '收款方' | '各自承担';
 
+export const paymentRequestFeeBearerToPaymentList = (
+  feeBearer?: PaymentRequestFeeBearer,
+): 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '' => {
+  if (feeBearer === '付款方') return 'ADVERTISER';
+  if (feeBearer === '收款方') return 'PUBLISHER';
+  if (feeBearer === '各自承担') return 'SHARED';
+  return '';
+};
+
 export type PaymentRequestRemarkAttachment = {
   name: string;
   size: number;
@@ -844,14 +853,12 @@ export const createPaymentRequestListItem = ({
   invoice,
   contracts,
   contractIds = [],
-  requestCode,
-  lineNumber,
+  feeBearer,
 }: {
   invoice: GeneratedInvoiceRecord;
   contracts: ContractRecord[];
   contractIds?: ContractId[];
-  requestCode: string;
-  lineNumber: number;
+  feeBearer?: PaymentRequestFeeBearer;
 }) => {
   const source = invoicePaymentListItem({
     ...invoice,
@@ -861,8 +868,8 @@ export const createPaymentRequestListItem = ({
     ...source,
     snapshot: {
       ...source.snapshot,
-      feeBearer: source.snapshot.feeBearer || (contractIds.length ? '' : 'ADVERTISER'),
-      transactionReference: `${requestCode}-${String(lineNumber).padStart(2, '0')}`,
+      feeBearer: paymentRequestFeeBearerToPaymentList(feeBearer),
+      transactionReference: '',
     },
   });
 };

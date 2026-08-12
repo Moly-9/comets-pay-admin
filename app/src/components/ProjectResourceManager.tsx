@@ -129,11 +129,16 @@ const paymentListStatusLabel = (paymentList: PaymentListRecord | null) => {
   return '草稿';
 };
 
-const PAYMENT_FEE_OPTIONS = [
-  { value: 'ADVERTISER', label: '付款方承担', description: 'SWIFT 使用 OUR' },
-  { value: 'PUBLISHER', label: '收款方承担', description: 'SWIFT 使用 SHA' },
-  { value: 'SHARED', label: '共同承担', description: 'SWIFT 使用 SHA' },
-];
+const paymentFeeBearerLabel = (value: unknown) => {
+  if (value === 'ADVERTISER') return '付款方承担';
+  if (value === 'PUBLISHER') return '收款方承担';
+  if (value === 'SHARED') return '各自承担';
+  return '待补充';
+};
+
+const requiredPaymentLabel = (label: string) => (
+  <span className="project-payment-required-label">{label}<em aria-hidden="true">*</em></span>
+);
 
 const beneficiarySummary = (value?: string) => {
   if (!value) return '缺少 beneficiary ID';
@@ -778,7 +783,7 @@ export function ProjectResourceManager({
                 </div>
                 <NoticeBanner>
                   {paymentList.status === 'draft'
-                    ? '描述保持选填；交易附言生成前必填。任一付款行选择非 Airwallex 账户时无法生成付款单。'
+                    ? '付款清单全部字段均为必填；手续费承担方由请款项目信息带入，交易附言和描述需填写后才能生成。'
                     : '当前付款单内容已锁定。页面仅展示脱敏账户快照，历史版本保持不变。'}
                 </NoticeBanner>
                 <div className="project-payment-rows">
@@ -834,7 +839,7 @@ export function ProjectResourceManager({
 
                         <div className="project-payment-fields">
                           <label className="project-payment-account-field">
-                            <span>收款账户</span>
+                            {requiredPaymentLabel('收款账户')}
                             <SelectField
                               ariaLabel={`${item.snapshot.creatorName} 收款账户`}
                               variant="form"
@@ -853,7 +858,7 @@ export function ProjectResourceManager({
                             </small>
                           </label>
                           <label>
-                            <span>支付币种</span>
+                            {requiredPaymentLabel('支付币种')}
                             <SelectField
                               ariaLabel={`${item.snapshot.creatorName} 支付币种`}
                               variant="form"
@@ -864,7 +869,7 @@ export function ProjectResourceManager({
                             />
                           </label>
                           <label>
-                            <span>收款币种</span>
+                            {requiredPaymentLabel('收款币种')}
                             <SelectField
                               ariaLabel={`${item.snapshot.creatorName} 收款币种`}
                               variant="form"
@@ -875,32 +880,24 @@ export function ProjectResourceManager({
                             />
                           </label>
                           <label>
-                            <span>金额</span>
-                            <input disabled={!paymentFieldsEditable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'amount', Number(event.target.value))} />
+                            {requiredPaymentLabel('金额')}
+                            <input required aria-required="true" disabled={!paymentFieldsEditable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'amount', Number(event.target.value))} />
                           </label>
                           <label>
-                            <span>费用承担</span>
-                            <SelectField
-                              ariaLabel={`${item.snapshot.creatorName} 手续费承担方`}
-                              variant="form"
-                              value={paymentListItemValue(item, 'feeBearer') ?? ''}
-                              options={PAYMENT_FEE_OPTIONS}
-                              placeholder="逐行确认费用承担方"
-                              disabled={!paymentFieldsEditable}
-                              onChange={(value) => onUpdatePaymentItem(item.invoiceId, 'feeBearer', value)}
-                            />
+                            {requiredPaymentLabel('手续费承担方')}
+                            <input className="project-payment-inherited-field" readOnly aria-readonly="true" value={paymentFeeBearerLabel(paymentListItemValue(item, 'feeBearer'))} />
                           </label>
                           <label>
-                            <span>付款原因</span>
-                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'paymentReason', event.target.value)} />
+                            {requiredPaymentLabel('付款原因')}
+                            <input required aria-required="true" disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'paymentReason', event.target.value)} />
                           </label>
                           <label>
-                            <span>交易附言</span>
-                            <input data-payment-required="true" disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'transactionReference', event.target.value)} />
+                            {requiredPaymentLabel('交易附言')}
+                            <input required aria-required="true" data-payment-required="true" disabled={!paymentFieldsEditable} placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'transactionReference', event.target.value)} />
                           </label>
                           <label className="project-payment-description-field">
-                            <span>描述（选填）</span>
-                            <input disabled={!paymentFieldsEditable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'description', event.target.value)} />
+                            {requiredPaymentLabel('描述')}
+                            <input required aria-required="true" disabled={!paymentFieldsEditable} placeholder="请输入付款描述" value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'description', event.target.value)} />
                           </label>
                         </div>
 

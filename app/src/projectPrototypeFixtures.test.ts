@@ -143,7 +143,7 @@ describe('project prototype fixtures', () => {
     });
   });
 
-  it('allocates every project budget exactly and keeps description blank in every payment row', () => {
+  it('allocates every project budget exactly and requires descriptions outside editable drafts', () => {
     INITIAL_PROJECTS.forEach((project) => {
       const expected = Number(project.budget.replace(/[^0-9.]/g, ''));
       const lists = ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS.filter((candidate) => (
@@ -154,7 +154,11 @@ describe('project prototype fixtures', () => {
         sum + Number(paymentListItemValue(item, 'amount'))
       ), 0);
       expect(total).toBeCloseTo(expected, 2);
-      expect(items.every((item) => paymentListItemValue(item, 'description') === '')).toBe(true);
+      expect(items.every((item) => (
+        lists[0]?.status === 'draft'
+          ? paymentListItemValue(item, 'description') === ''
+          : Boolean(paymentListItemValue(item, 'description'))
+      ))).toBe(true);
       const invalidAccounts = items.flatMap((item) => {
         const account = paymentListEffectiveAccount(item);
         return account.provider === 'Airwallex' && account.externalBeneficiaryId
@@ -227,6 +231,7 @@ describe('project prototype fixtures', () => {
     expect(item.snapshot.realName).toBe(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.from.legalName);
     expect(item.snapshot.paymentDetails).toEqual(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.payment);
     expect(item.validationIssues).toContain('交易附言未填写');
+    expect(item.validationIssues).toContain('付款描述未填写');
   });
 
   it('provides cross-module creator, contract, and Invoice fixtures for the primary project', () => {

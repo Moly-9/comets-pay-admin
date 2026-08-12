@@ -304,11 +304,16 @@ export const requestLinkedInvoices = (
   return invoices.filter((invoice) => ids.has(invoice.invoiceId));
 };
 
-const PAYMENT_FEE_OPTIONS = [
-  { value: 'ADVERTISER', label: '付款方承担', description: 'SWIFT 使用 OUR' },
-  { value: 'PUBLISHER', label: '收款方承担', description: 'SWIFT 使用 SHA' },
-  { value: 'SHARED', label: '共同承担', description: 'SWIFT 使用 SHA' },
-];
+const paymentFeeBearerLabel = (value: unknown) => {
+  if (value === 'ADVERTISER') return '付款方承担';
+  if (value === 'PUBLISHER') return '收款方承担';
+  if (value === 'SHARED') return '各自承担';
+  return '待补充';
+};
+
+const requiredPaymentLabel = (label: string) => (
+  <span className="project-payment-required-label">{label}<em aria-hidden="true">*</em></span>
+);
 
 export function RequestProjectResourceManager({
   request,
@@ -648,10 +653,10 @@ export function RequestProjectResourceManager({
             <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {request.paymentChannel || '待确认'}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
-                {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!linkedInvoices.length} onClick={generateOrRefreshPaymentList}>生成 / 刷新清单</Button> : null}
-                {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                {canEditPaymentList && currentPaymentList ? <Button variant="secondary" icon={<Pencil size={15} />} disabled={paymentListEditing} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>{paymentListEditing ? '编辑中' : hasScopedApprovalReturn ? '修改退回明细' : '编辑付款清单'}</Button> : null}
                 {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled={!paymentItemCount} onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
+                {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
+                {canEditPaymentList && currentPaymentList ? <Button variant="secondary" icon={<Pencil size={15} />} disabled={paymentListEditing} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
+                {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!linkedInvoices.length} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
               </div>
             ) : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
@@ -763,29 +768,29 @@ export function RequestProjectResourceManager({
                     ) : null}
                     <div className="project-payment-fields">
                       <label className="project-payment-account-field">
-                        <span>收款账户</span>
+                        {requiredPaymentLabel('收款账户')}
                         <SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} className="payout-account-select" menuClassName="payout-account-select-menu" menuStrategy="fixed" menuWidth={520} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} />
                       </label>
                       <label>
-                        <span>支付币种</span>
+                        {requiredPaymentLabel('支付币种')}
                         <SelectField ariaLabel={`${item.snapshot.creatorName} 支付币种`} variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', value)} />
                       </label>
                       <label>
-                        <span>收款币种</span>
+                        {requiredPaymentLabel('收款币种')}
                         <SelectField ariaLabel={`${item.snapshot.creatorName} 收款币种`} variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', value)} />
                       </label>
-                      <label><span>金额</span><input disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
-                      <label><span>费用承担</span><SelectField ariaLabel={`${item.snapshot.creatorName} 费用承担`} variant="form" value={String(paymentListItemValue(item, 'feeBearer') ?? '')} options={PAYMENT_FEE_OPTIONS} disabled={!editable} onChange={(value) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', value)} /></label>
-                      <label><span>付款原因</span><input disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label>
-                      <label><span>交易附言</span><input disabled={!editable} value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label>
-                      <label className="project-payment-description-field"><span>描述（选填）</span><input disabled={!editable} value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label>
+                      <label>{requiredPaymentLabel('金额')}<input required aria-required="true" disabled={!editable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
+                      <label>{requiredPaymentLabel('手续费承担方')}<input className="project-payment-inherited-field" readOnly aria-readonly="true" value={paymentFeeBearerLabel(paymentListItemValue(item, 'feeBearer'))} title="由请款项目信息中的手续费承担方带入" /></label>
+                      <label>{requiredPaymentLabel('付款原因')}<input required aria-required="true" disabled={!editable} value={paymentListItemValue(item, 'paymentReason')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label>
+                      <label>{requiredPaymentLabel('交易附言')}<input required aria-required="true" data-payment-required="true" disabled={!editable} placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} /></label>
+                      <label className="project-payment-description-field">{requiredPaymentLabel('描述')}<input required aria-required="true" disabled={!editable} placeholder="请输入付款描述" value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'description', event.target.value)} /></label>
                     </div>
                     <footer className="request-payment-row-footer"><span>{paymentListStatusLabel(list.status)}{list.version ? ` · v${list.version}` : ''}</span></footer>
                   </article>
                 );
               })}
               {!currentPaymentList ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单尚未生成</strong><p>请先关联 Invoice，再生成当前请款项目唯一的付款单。</p></div> : null}
-              {currentPaymentList && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单已清空</strong><p>点击“生成 / 刷新清单”可按当前关联的 Invoice 重新生成付款明细。</p></div> : null}
+              {currentPaymentList && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单已清空</strong><p>点击“生成付款清单”可按当前关联的 Invoice 重新生成付款明细。</p></div> : null}
             </div>
           </div>
         </Modal>

@@ -1179,10 +1179,12 @@ export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_
           transactionReference: historical
             ? `${project.id}-AWX-${String(invoiceIndex + 1).padStart(2, '0')}`
             : '',
-          description: '',
+          description: historical
+            ? invoice.snapshot.items.map((line) => line.description).filter(Boolean).join('；') || '达人内容合作费用'
+            : '',
         },
         requiresRevalidation: historical ? false : true,
-        validationIssues: historical ? [] : ['交易附言未填写'],
+        validationIssues: historical ? [] : ['交易附言未填写', '付款描述未填写'],
         lastValidatedAt: historical ? generatedAt : undefined,
       };
     });
@@ -1192,6 +1194,7 @@ export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_
           snapshot: {
             ...item.snapshot,
             transactionReference: `${project.id}-AWX-${String(invoiceIndex + 1).padStart(2, '0')}`,
+            description: item.snapshot.description || '达人内容合作费用',
           },
           requiresRevalidation: false,
           validationIssues: [],

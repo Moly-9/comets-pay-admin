@@ -121,7 +121,6 @@ export type PaymentListEditableField =
   | 'currency'
   | 'receiveCurrency'
   | 'amount'
-  | 'feeBearer'
   | 'paymentReason'
   | 'transactionReference'
   | 'description';
@@ -481,12 +480,15 @@ export const mergeRefreshedPaymentListItem = (
   refreshedItem: PaymentListItem,
 ): PaymentListItem => {
   const previousAccountKey = paymentListAccountVersionKey(currentItem);
+  const { feeBearer: _legacyFeeBearer, ...currentOverrides } = currentItem.overrides as (
+    PaymentListItem['overrides'] & { feeBearer?: PaymentListItemSnapshot['feeBearer'] }
+  );
   const nextItem: PaymentListItem = {
     ...currentItem,
     engagementId: refreshedItem.engagementId,
     snapshot: { ...refreshedItem.snapshot },
     accountOverride: currentItem.accountOverride ? { ...currentItem.accountOverride } : undefined,
-    overrides: { ...currentItem.overrides },
+    overrides: { ...currentOverrides },
   };
   const accountVersionChanged = previousAccountKey !== paymentListAccountVersionKey(nextItem);
   const requiresRevalidation = Boolean(
@@ -540,6 +542,7 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
   const feeBearer = String(paymentListItemValue(item, 'feeBearer'));
   const paymentReason = String(paymentListItemValue(item, 'paymentReason'));
   const transactionReference = String(paymentListItemValue(item, 'transactionReference'));
+  const description = String(paymentListItemValue(item, 'description'));
   return [
     !snapshot.creatorId ? 'Invoice 缺少 creatorId' : '',
     !snapshot.payoutAccountId ? 'Invoice 缺少 payoutAccountId' : '',
@@ -557,6 +560,7 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
     !feeBearer ? '手续费承担方未确认' : '',
     !paymentReason ? '付款原因未填写' : '',
     !transactionReference ? '交易附言未填写' : '',
+    !description ? '付款描述未填写' : '',
     !snapshot.validationStatus ? '账户快照缺少校验状态' : '',
     snapshot.validationStatus && !['VALIDATED', 'VERIFIED'].includes(snapshot.validationStatus)
       ? '账户快照未通过验证'

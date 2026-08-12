@@ -357,6 +357,7 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requ
         feeBearer: 'ADVERTISER',
         paymentReason: '影音服务',
         transactionReference: `${request.requestCode ?? request.id}-${String(itemIndex + 1).padStart(2, '0')}`,
+        description: entry.invoice.snapshot.items.map((item) => item.description).filter(Boolean).join('；') || '达人内容合作费用',
       },
     }, generatedAt);
   });

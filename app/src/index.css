@@ -7474,6 +7474,18 @@ body:has(.finance-review-workspace) {
   font-size: 10px;
 }
 
+.project-payment-required-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.project-payment-required-label em {
+  color: #db4f42;
+  font-style: normal;
+  font-weight: 700;
+}
+
 .project-payment-account-field,
 .project-payment-description-field {
   grid-column: span 2;
@@ -7565,6 +7577,14 @@ body:has(.finance-review-workspace) {
   border-color: transparent;
   padding-left: 0;
   background: transparent;
+}
+
+.project-payment-fields .project-payment-inherited-field,
+.request-payment-flat-rows .project-payment-fields .project-payment-inherited-field {
+  border-color: #e0e4ea;
+  background: #f7f8fa;
+  color: #555d69;
+  cursor: default;
 }
 
 .project-payment-row-meta {

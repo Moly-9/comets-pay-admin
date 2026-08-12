@@ -384,14 +384,31 @@ describe('media payment request submission validation', () => {
     const item = createPaymentRequestListItem({
       invoice: source,
       contracts: [],
-      requestCode: 'REQ-20260807-ABC123',
-      lineNumber: 1,
+      feeBearer: '付款方',
     });
 
     expect(item.snapshot.feeBearer).toBe('ADVERTISER');
-    expect(item.snapshot.transactionReference).toBe('REQ-20260807-ABC123-01');
-    expect(item.requiresRevalidation).toBe(false);
-    expect(item.validationIssues).toEqual([]);
+    expect(item.snapshot.transactionReference).toBe('');
+    expect(item.requiresRevalidation).toBe(true);
+    expect(item.validationIssues).toEqual(expect.arrayContaining([
+      '交易附言未填写',
+      '付款描述未填写',
+    ]));
+  });
+
+  it.each([
+    ['付款方', 'ADVERTISER'],
+    ['收款方', 'PUBLISHER'],
+    ['各自承担', 'SHARED'],
+  ] as const)('inherits request fee bearer %s into the payment row as %s', (feeBearer, expected) => {
+    const item = createPaymentRequestListItem({
+      invoice: invoice(),
+      contracts: [],
+      feeBearer,
+    });
+
+    expect(item.snapshot.feeBearer).toBe(expected);
+    expect(item.overrides).not.toHaveProperty('feeBearer');
   });
 
   it('sums multiple invoices for one creator and rejects duplicate or extra payment rows', () => {

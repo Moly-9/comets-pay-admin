@@ -192,13 +192,14 @@ describe('request project resource aggregation', () => {
       paymentDialogSource.indexOf('request-payment-flat-rows'),
     );
 
-    expect(toolbarSource).toContain('生成 / 刷新清单');
+    expect(toolbarSource).toContain('生成付款清单');
     expect(toolbarSource).toContain('导出 Excel');
     expect(toolbarSource).toContain('编辑付款清单');
     expect(toolbarSource).toContain('清空清单');
     expect(toolbarSource).not.toContain('删除清单');
-    expect(toolbarSource.indexOf('生成 / 刷新清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
+    expect(toolbarSource.indexOf('清空清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
     expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('编辑付款清单'));
+    expect(toolbarSource.indexOf('编辑付款清单')).toBeLessThan(toolbarSource.indexOf('生成付款清单'));
     expect(paymentRowsSource).not.toContain('创建编辑版本');
     expect(paymentRowsSource).not.toContain('>导出</Button>');
     expect(source).toContain("currentPaymentList?.status === 'draft'");
@@ -210,8 +211,12 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
     expect(paymentRowsSource).toContain("'paymentReason', event.target.value");
     expect(paymentRowsSource).toContain("'transactionReference', event.target.value");
+    expect(paymentRowsSource).toContain("'description', event.target.value");
+    expect(paymentRowsSource).toContain('project-payment-inherited-field');
+    expect(paymentRowsSource).not.toContain("'feeBearer', value");
+    expect(paymentRowsSource).toContain('请输入交易附言');
+    expect(paymentRowsSource).toContain("requiredPaymentLabel('描述')");
     expect(toolbarSource).toContain('canEditPaymentList && currentPaymentList');
-    expect(toolbarSource).toContain("hasScopedApprovalReturn ? '修改退回明细'");
     expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
     expect(paymentRowsSource).toContain("paymentLocked ? ' is-payment-locked' : ''");
     expect(paymentRowsSource).toContain("'校验通过 · 已付款冻结'");

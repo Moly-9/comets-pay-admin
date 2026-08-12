@@ -1748,15 +1748,14 @@ export default function App() {
       const refreshedItems = request.creatorLinks.flatMap((link) => link.invoiceIds.map((invoiceId) => ({
         link,
         invoiceId,
-      }))).map(({ link, invoiceId }, index) => {
+      }))).map(({ link, invoiceId }) => {
         const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
         if (!invoice) throw new Error(`未找到 Invoice ${invoiceId}`);
         return createPaymentRequestListItem({
           invoice,
           contracts,
           contractIds: link.contractIds,
-          requestCode: request.requestCode ?? request.id,
-          lineNumber: index + 1,
+          feeBearer: request.feeBearer,
         });
       });
       const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
