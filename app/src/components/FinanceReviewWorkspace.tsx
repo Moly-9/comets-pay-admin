@@ -572,7 +572,7 @@ export function FinanceReviewWorkspace({
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
   const invoiceZoomRef = useRef(1);
   const overviewFocusRef = useRef<HTMLDivElement>(null);
-  const validationFocusRef = useRef<HTMLButtonElement>(null);
+  const validationFocusRef = useRef<HTMLDivElement>(null);
 
   const changeStage = (nextStage: FinanceReviewStage) => {
     setStage(nextStage);
@@ -777,7 +777,7 @@ export function FinanceReviewWorkspace({
           </div>
         ) : (
           <div className="finance-review-footer">
-            <div className="finance-review-footer-pagination">
+            <div className="finance-review-footer-primary" aria-label="当前记录审核操作">
               <div className="finance-review-page-nav" role="group" aria-label="审核记录翻页">
                 <button
                   className="finance-review-page-button"
@@ -797,28 +797,30 @@ export function FinanceReviewWorkspace({
                   下一页
                 </button>
               </div>
+              <div className="finance-review-page-actions">
+                <Button
+                  variant="secondary"
+                  icon={<CircleAlert size={16} />}
+                  disabled={!currentPage}
+                  onClick={openIssueEditor}
+                >
+                  {currentDecision.state === 'incorrect' ? '编辑有误记录' : '记录有误'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon={<CheckCircle2 size={16} />}
+                  disabled={!canConfirmCurrentPage}
+                  onClick={confirmCurrentPage}
+                >
+                  确认本页无误
+                </Button>
+              </div>
               <div className="finance-review-footer-summary" aria-live="polite">
                 <strong>{counts.correct} / {financeReview.pageCount}</strong>
                 <span>{counts.incorrect ? `${counts.incorrect} 份有误` : `${counts.unreviewed} 份待核对`}</span>
               </div>
             </div>
             <div className="finance-review-footer-actions">
-              <Button
-                variant="secondary"
-                icon={<CircleAlert size={16} />}
-                disabled={!currentPage}
-                onClick={openIssueEditor}
-              >
-                {currentDecision.state === 'incorrect' ? '编辑有误记录' : '记录有误'}
-              </Button>
-              <Button
-                variant="secondary"
-                icon={<CheckCircle2 size={16} />}
-                disabled={!canConfirmCurrentPage}
-                onClick={confirmCurrentPage}
-              >
-                确认本页无误
-              </Button>
               {counts.incorrect > 0 ? (
                 <Button
                   variant="danger"
@@ -830,6 +832,13 @@ export function FinanceReviewWorkspace({
                   退回媒介修改
                 </Button>
               ) : null}
+              <Button
+                variant="secondary"
+                icon={<ChevronLeft size={16} />}
+                onClick={() => changeStage('overview')}
+              >
+                返回项目概览
+              </Button>
               <Button icon={<ShieldCheck size={16} />} disabled={!canApprove} onClick={submitApproval}>
                 通过财务审核
               </Button>
@@ -889,19 +898,12 @@ export function FinanceReviewWorkspace({
               </div>
             </div>
           ) : (
-            <div className="finance-review-validation-stage" data-testid="finance-review-validation-stage">
-              <div className="finance-review-validation-bar">
-                <button
-                  ref={validationFocusRef}
-                  className="finance-review-back-overview"
-                  type="button"
-                  onClick={() => changeStage('overview')}
-                >
-                  <ChevronLeft size={17} aria-hidden="true" />
-                  返回项目概览
-                </button>
-                <span>{request.cooperationProjectName ?? request.project}</span>
-              </div>
+            <div
+              ref={validationFocusRef}
+              className="finance-review-validation-stage"
+              data-testid="finance-review-validation-stage"
+              tabIndex={-1}
+            >
               <header className="finance-review-overview">
             <div className="finance-review-title-group">
               <span className="finance-review-title-icon"><ShieldCheck size={19} /></span>

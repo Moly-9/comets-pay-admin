@@ -148,13 +148,14 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStyles).toMatch(/\.finance-review-invoice-edge-nav\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;[^}]*border-radius:\s*50%;/s);
     expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
-    expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-validation-stage,[\s\S]*transition:\s*none;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-validation-stage\s*{[^}]*transition:\s*none;/s);
   });
 
   it('centers the page controls in the space before the footer actions', () => {
-    expect(workspaceSource).toContain('className="finance-review-footer-pagination"');
-    expect(workspaceStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
-    expect(workspaceStyles).toMatch(/\.finance-review-footer-pagination\s*{[^}]*justify-self:\s*center;/s);
+    expect(workspaceSource).toContain('className="finance-review-footer-primary"');
+    expect(workspaceSource).toContain('className="finance-review-page-actions"');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*justify-self:\s*center;/s);
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

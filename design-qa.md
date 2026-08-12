@@ -608,6 +608,38 @@ final result: blocked
 
 ---
 
+# Finance Review Footer Action Placement Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-51ce1051-1dcb-443d-a203-26afc4d33614.png` (1891 x 851 px).
+- Intended implementation URL: `http://127.0.0.1:5173/`.
+- Intended states: three-board finance validation at desktop width and the existing segmented validation view at 390 px.
+- Implementation screenshot: unavailable because every currently open in-app browser tab is at the account login screen.
+
+## Findings
+
+- Browser-rendered evidence is blocked by authentication, so typography, exact spacing, visible alignment, color fidelity, icons, copy, and responsive rendering cannot be signed off from a same-state comparison.
+- The validation-only top return row has been removed. `返回项目概览` now belongs to the final-action group beside `通过财务审核`.
+- Previous/next navigation, `记录有误`, `确认本页无误`, and the review-count summary now form one centered page-level action group.
+- Desktop uses equal flexible left and right tracks around the center group, so the group is centered against the full footer rather than offset by the width of the final actions. At 1280 px and below, the groups split into rows; at 900 px and below, page-level and final actions use full-width touch layouts.
+
+## Interaction Verification
+
+- Focused tests verify DOM ordering, action ownership, full-footer centering, and removal of the old top return row.
+- Button callbacks, disabled states, aggregate return gating, final approval gating, and review-session preservation are unchanged.
+- Browser clicking, visual overflow checks, and console inspection remain blocked by the unauthenticated local state.
+
+## Comparison History
+
+1. The supplied screenshot was opened at native resolution and the marked source and destination regions were identified.
+2. The implementation was opened in the in-app browser, but all local tabs were at the login screen and could not reproduce the requested three-board state.
+3. No implementation capture was used because a login-screen image would not be valid comparison evidence.
+
+final result: blocked
+
+---
+
 # Finance Review Approval Scroll And Account Routing QA
 
 ## Evidence

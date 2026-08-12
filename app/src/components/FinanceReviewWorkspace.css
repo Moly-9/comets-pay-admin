@@ -217,49 +217,63 @@
   min-height: 38px;
 }
 
-.finance-review-validation-bar {
-  display: flex;
-  min-height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid #e1e4e9;
-  background: #fff;
-  padding: 0 14px;
+.finance-review-validation-stage:focus {
+  outline: none;
 }
 
-.finance-review-validation-bar > span {
+.finance-review-footer {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.finance-review-footer-primary {
+  display: flex;
   min-width: 0;
-  overflow: hidden;
-  color: #7b8490;
-  font-size: 11px;
-  text-overflow: ellipsis;
+  align-items: center;
+  grid-column: 2;
+  justify-self: center;
+  gap: 14px;
+}
+
+.finance-review-page-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.finance-review-page-actions .button,
+.finance-review-footer-primary .finance-review-page-button {
+  min-height: 36px;
   white-space: nowrap;
 }
 
-.finance-review-back-overview {
-  display: inline-flex;
-  min-height: 34px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid #d7dce2;
-  border-radius: 7px;
-  background: #fff;
-  padding: 5px 9px 5px 7px;
-  color: #514061;
-  font: inherit;
+.finance-review-page-actions .button {
+  padding: 0 12px;
   font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out;
 }
 
-.finance-review-back-overview:hover,
-.finance-review-back-overview:focus-visible {
-  border-color: #675187;
-  background: #f5f1f9;
-  color: #4e3d69;
+.finance-review-footer > .finance-review-footer-actions {
+  grid-column: 3;
+  justify-self: end;
+}
+
+@media (max-width: 1280px) and (min-width: 901px) {
+  .finance-review-workspace .modal-footer {
+    min-height: 0;
+  }
+
+  .finance-review-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .finance-review-footer-primary,
+  .finance-review-footer > .finance-review-footer-actions {
+    grid-column: 1;
+  }
+
+  .finance-review-footer > .finance-review-footer-actions {
+    justify-self: end;
+  }
 }
 
 @keyframes finance-review-stage-enter {
@@ -308,9 +322,36 @@
     justify-content: center;
   }
 
-  .finance-review-validation-bar {
-    min-height: 42px;
-    padding: 0 10px;
+  .finance-review-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .finance-review-footer-primary {
+    display: grid;
+    width: 100%;
+    grid-column: 1;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 8px;
+  }
+
+  .finance-review-page-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-review-page-actions .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .finance-review-footer > .finance-review-footer-actions {
+    width: 100%;
+    grid-column: 1;
+    justify-self: stretch;
   }
 }
 
@@ -343,8 +384,7 @@
 @media (prefers-reduced-motion: reduce) {
   .modal-panel.finance-review-workspace,
   .finance-review-overview-stage,
-  .finance-review-validation-stage,
-  .finance-review-back-overview {
+  .finance-review-validation-stage {
     animation: none;
     transition: none;
   }
