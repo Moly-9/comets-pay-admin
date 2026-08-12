@@ -221,8 +221,15 @@
   outline: none;
 }
 
+.finance-review-workspace .modal-footer {
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: stretch;
+}
+
 .finance-review-footer {
-  flex: 1 1 100%;
+  width: 100%;
+  flex: none;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
 

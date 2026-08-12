@@ -162,8 +162,9 @@ describe('shared payment-list finance review content', () => {
   it('centers the complete page-review control group in the footer viewport', () => {
     expect(workspaceSource).toContain('className="finance-review-footer-primary"');
     expect(workspaceSource).toContain('className="finance-review-page-actions"');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.modal-footer\s*{[^}]*width:\s*100%;[^}]*justify-content:\s*stretch;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s);
-    expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*flex:\s*1 1 100%;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*width:\s*100%;[^}]*flex:\s*none;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*justify-self:\s*center;/s);
     expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
     expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);

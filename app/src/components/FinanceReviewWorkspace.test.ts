@@ -50,8 +50,9 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toMatch(/finance-review-footer-primary[\s\S]*上一页[\s\S]*下一页[\s\S]*记录有误[\s\S]*确认本页无误[\s\S]*finance-review-footer-summary/);
     expect(workspaceSource).toMatch(/finance-review-footer-actions[\s\S]*退回媒介修改[\s\S]*changeStage\('overview'\)[\s\S]*返回项目概览[\s\S]*通过财务审核/);
     expect(workspaceSource).not.toContain('className="finance-review-validation-bar"');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.modal-footer\s*{[^}]*width:\s*100%;[^}]*justify-content:\s*stretch;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);/s);
-    expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*flex:\s*1 1 100%;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*width:\s*100%;[^}]*flex:\s*none;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;/s);
     expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer > \.finance-review-footer-actions\s*{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s);
