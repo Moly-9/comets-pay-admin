@@ -25,6 +25,14 @@ export type SelectOption<T extends string = string> = {
   description?: string;
   disabled?: boolean;
   leading?: ReactNode;
+  badges?: Array<{
+    label: string;
+    tone?: 'neutral' | 'success' | 'warning';
+  }>;
+  details?: Array<{
+    label: string;
+    value: string;
+  }>;
 };
 
 type SelectFieldProps<T extends string> = {
@@ -38,6 +46,8 @@ type SelectFieldProps<T extends string> = {
   disabled?: boolean;
   leadingIcon?: ReactNode;
   menuStrategy?: 'absolute' | 'fixed';
+  menuClassName?: string;
+  menuWidth?: number;
 };
 
 export function SelectField<T extends string = string>({
@@ -51,6 +61,8 @@ export function SelectField<T extends string = string>({
   disabled = false,
   leadingIcon,
   menuStrategy = 'absolute',
+  menuClassName = '',
+  menuWidth,
 }: SelectFieldProps<T>) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom');
@@ -78,7 +90,10 @@ export function SelectField<T extends string = string>({
   const updatePlacement = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const estimatedMenuHeight = Math.min(options.length * 49 + 12, 340);
+    const estimatedMenuHeight = Math.min(
+      options.reduce((height, option) => height + (option.details?.length ? 148 : 49), 12),
+      340,
+    );
     const viewportMargin = 12;
     const menuGap = 7;
     const roomBelow = window.innerHeight - rect.bottom - viewportMargin - menuGap;
@@ -93,7 +108,7 @@ export function SelectField<T extends string = string>({
 
     const availableWidth = Math.max(0, window.innerWidth - viewportMargin * 2);
     const minimumWidth = variant === 'compact' ? 132 : 196;
-    const width = Math.min(Math.max(rect.width, minimumWidth), availableWidth);
+    const width = Math.min(Math.max(rect.width, menuWidth ?? minimumWidth), availableWidth);
     const preferredLeft = variant === 'compact' ? rect.right - width : rect.left;
     const left = Math.min(
       Math.max(preferredLeft, viewportMargin),
@@ -183,7 +198,7 @@ export function SelectField<T extends string = string>({
     <div
       ref={menuRef}
       id={listboxId}
-      className={`custom-select-menu custom-select-menu-${variant}${placement === 'top' ? ' custom-select-menu-top' : ''}${menuStrategy === 'fixed' ? ' custom-select-menu-fixed' : ''}`}
+      className={`custom-select-menu custom-select-menu-${variant}${placement === 'top' ? ' custom-select-menu-top' : ''}${menuStrategy === 'fixed' ? ' custom-select-menu-fixed' : ''}${menuClassName ? ` ${menuClassName}` : ''}`}
       role="listbox"
       aria-label={ariaLabel}
       style={menuStrategy === 'fixed' ? menuStyle : undefined}
@@ -194,7 +209,7 @@ export function SelectField<T extends string = string>({
           <button
             key={option.value}
             ref={(node) => { optionRefs.current[index] = node; }}
-            className={`custom-select-option${option.leading ? ' custom-select-option-with-leading' : ''}${selected ? ' custom-select-option-selected' : ''}`}
+            className={`custom-select-option${option.leading ? ' custom-select-option-with-leading' : ''}${option.details?.length ? ' custom-select-option-with-details' : ''}${selected ? ' custom-select-option-selected' : ''}`}
             type="button"
             role="option"
             aria-selected={selected}
@@ -217,8 +232,27 @@ export function SelectField<T extends string = string>({
           >
             {option.leading ? <span className="custom-select-option-leading" aria-hidden="true">{option.leading}</span> : null}
             <span className="custom-select-option-copy">
-              <span className="custom-select-option-label">{option.label}</span>
+              <span className="custom-select-option-heading">
+                <span className="custom-select-option-label">{option.label}</span>
+                {option.badges?.length ? (
+                  <span className="custom-select-option-badges">
+                    {option.badges.map((badge) => (
+                      <span className={`custom-select-option-badge is-${badge.tone ?? 'neutral'}`} key={`${badge.label}-${badge.tone ?? 'neutral'}`}>{badge.label}</span>
+                    ))}
+                  </span>
+                ) : null}
+              </span>
               {option.description ? <span className="custom-select-option-description">{option.description}</span> : null}
+              {option.details?.length ? (
+                <span className="custom-select-option-details">
+                  {option.details.map((detail) => (
+                    <span className="custom-select-option-detail" key={`${detail.label}-${detail.value}`}>
+                      <small>{detail.label}</small>
+                      <strong>{detail.value}</strong>
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </span>
             <span className="custom-select-option-check" aria-hidden="true">
               {selected ? <Check size={15} strokeWidth={2.6} /> : null}

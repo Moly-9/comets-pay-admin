@@ -740,6 +740,117 @@ export const getPayoutAccountSummary = (account: CreatorPayoutAccount) => (
     : `${account.bankDetails.accountCurrency || '待选币种'} · ${account.transferMethod}${account.transferMethod === 'LOCAL' && account.bankDetails.localClearingSystem ? ` · ${account.bankDetails.localClearingSystem}` : ''}`
 );
 
+export type PayoutAccountSelectPresentation = {
+  label: string;
+  description: string;
+  badges: Array<{ label: string; tone: 'neutral' | 'success' | 'warning' }>;
+  details: Array<{ label: string; value: string }>;
+};
+
+const maskEmail = (value: string) => {
+  const [local, domain] = value.trim().split('@');
+  if (!local || !domain) return value.trim() || '待补充';
+  return `${local.slice(0, 1)}${local.length > 1 ? '***' : ''}@${domain}`;
+};
+
+const presentDetails = (details: Array<[string, string | undefined]>) => details
+  .filter((detail): detail is [string, string] => Boolean(detail[1]?.trim()))
+  .map(([label, value]) => ({ label, value }));
+
+export const getPayoutAccountSelectPresentation = (
+  account: CreatorPayoutAccount,
+): PayoutAccountSelectPresentation => {
+  const status = getPayoutAccountStatusMeta(account.status, account.provider);
+  const badges: PayoutAccountSelectPresentation['badges'] = [
+    ...(account.isDefault ? [{ label: '默认账户', tone: 'neutral' as const }] : []),
+    {
+      label: status.label,
+      tone: status.tone === 'success'
+        ? 'success' as const
+        : status.tone === 'warning' || status.tone === 'danger'
+          ? 'warning' as const
+          : 'neutral' as const,
+    },
+  ];
+
+  if (account.provider === 'PayPal') {
+    return {
+      label: account.nickname,
+      description: `PayPal · ${maskEmail(account.paypalEmail)}`,
+      badges,
+      details: presentDetails([
+        ['PayPal 用户名', account.paypalUsername],
+        ['收款邮箱', maskEmail(account.paypalEmail)],
+        ['转账备注', account.transferNote],
+      ]),
+    };
+  }
+
+  if (account.provider === 'PayMax') {
+    return {
+      label: account.nickname,
+      description: `PayerMax · ${maskValue(account.payermaxAccountId)}`,
+      badges,
+      details: presentDetails([
+        ['收款人', account.beneficiaryName],
+        ['收款币种', account.currency],
+        ['国家 / 地区', account.countryCode],
+        ['收款账号', maskValue(account.payermaxAccountId)],
+      ['联系邮箱', account.email ? maskEmail(account.email) : ''],
+      ]),
+    };
+  }
+
+  const holder = account.entityType === 'COMPANY'
+    ? account.companyName || account.bankDetails.accountName
+    : account.bankDetails.accountName || [account.firstName, account.lastName].filter(Boolean).join(' ');
+  const beneficiaryAddress = [
+    account.address.streetAddress,
+    account.address.city,
+    account.address.state,
+    account.address.postcode,
+    account.address.countryCode,
+  ].filter(Boolean).join(' · ');
+  const bankAddress = [
+    account.bankDetails.bankStreetAddress,
+    account.bankDetails.bankState,
+  ].filter(Boolean).join(' · ');
+  const routing = [
+    account.bankDetails.accountRoutingType1 && account.bankDetails.accountRoutingValue1
+      ? `${account.bankDetails.accountRoutingType1} ${maskValue(account.bankDetails.accountRoutingValue1)}`
+      : '',
+    account.bankDetails.accountRoutingType2 && account.bankDetails.accountRoutingValue2
+      ? `${account.bankDetails.accountRoutingType2} ${maskValue(account.bankDetails.accountRoutingValue2)}`
+      : '',
+  ].filter(Boolean).join(' / ');
+  const intermediaryBank = [
+    account.bankDetails.intermediaryBankName,
+    account.bankDetails.intermediaryBankSwiftCode,
+  ].filter(Boolean).join(' · ');
+  return {
+    label: account.nickname,
+    description: `Airwallex · ${getPayoutAccountIdentifier(account)}`,
+    badges,
+    details: presentDetails([
+      ['账户主体', holder],
+      ['账户币种', account.bankDetails.accountCurrency],
+      ['付款方式', account.transferMethod === 'LOCAL' ? '本地转账' : '国际电汇'],
+      ['开户地区', account.bankDetails.bankCountryName || account.bankDetails.bankCountryCode],
+      ['银行', account.bankDetails.bankName],
+      ['银行分行', account.bankDetails.bankBranch],
+      ['银行地址', bankAddress],
+      ['账户类型', account.bankDetails.bankAccountCategory],
+      ['清算系统', account.bankDetails.localClearingSystem],
+      ['路由信息', routing],
+      ['SWIFT', account.bankDetails.swiftCode],
+      ['中间行', intermediaryBank],
+      ['收款人地址', beneficiaryAddress],
+      ['通知邮箱', account.notificationEmail ? maskEmail(account.notificationEmail) : ''],
+      ['Beneficiary', maskValue(account.beneficiaryId)],
+    ]),
+  };
+};
+
 export const createDocumentPayoutSnapshot = (
   account: CreatorPayoutAccount | null,
   creatorId?: string,

@@ -32,7 +32,6 @@ import { formatContractMoney, getContractReadiness, isConfirmedContract, type Co
 import type { SystemUser } from '../data';
 import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
-import { maskInvoiceAccountValue } from '../invoice/invoiceReviewWorkflow';
 import {
   contractCooperationProjectId,
   invoiceCooperationProjectId,
@@ -45,7 +44,7 @@ import {
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
-  getPayoutAccountIdentifier,
+  getPayoutAccountSelectPresentation,
 } from '../payoutAccounts';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
@@ -698,8 +697,7 @@ export function RequestProjectResourceManager({
                 const accountOptions = visibleAccounts
                   .map((account) => ({
                     value: getPayoutAccountId(account),
-                    label: account.nickname,
-                    description: `${account.provider} · ${maskInvoiceAccountValue(getPayoutAccountIdentifier(account))}`,
+                    ...getPayoutAccountSelectPresentation(account),
                     disabled: !eligibleAccountIds.has(getPayoutAccountId(account)),
                   }));
                 return (
@@ -766,7 +764,7 @@ export function RequestProjectResourceManager({
                     <div className="project-payment-fields">
                       <label className="project-payment-account-field">
                         <span>收款账户</span>
-                        <SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} />
+                        <SelectField ariaLabel={`${item.snapshot.creatorName} 收款账户`} variant="form" value={effectiveAccount.payoutAccountId ?? ''} options={accountOptions} placeholder={accountOptions.length ? '选择达人收款账户' : '暂无可用账户'} className="payout-account-select" menuClassName="payout-account-select-menu" menuStrategy="fixed" menuWidth={520} disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} />
                       </label>
                       <label>
                         <span>支付币种</span>

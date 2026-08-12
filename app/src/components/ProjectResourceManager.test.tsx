@@ -340,8 +340,9 @@ describe('project resource aggregation', () => {
     expect(source).toContain('默认继承 Invoice 冻结账户');
     expect(source).toContain('onChangePaymentAccount(item.invoiceId, value)');
     expect(source).toContain('data-payment-provider-warning="true"');
-    expect(source).toContain('maskInvoiceAccountValue(getPayoutAccountIdentifier(account))');
-    expect(source).toContain('`Beneficiary ${beneficiarySummary(');
+    expect(source).toContain('getPayoutAccountSelectPresentation(account)');
+    expect(source).toContain('menuClassName="payout-account-select-menu"');
+    expect(source).toContain('menuStrategy="fixed"');
     expect(source).not.toContain('project-payment-channel-tabs');
     expect(source).not.toContain('补齐渠道清单');
   });

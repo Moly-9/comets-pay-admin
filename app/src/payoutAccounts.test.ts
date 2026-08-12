@@ -10,6 +10,7 @@ import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountDocumentIssues,
   getPayoutAccountForProvider,
+  getPayoutAccountSelectPresentation,
   isPayoutAccountDocumentReady,
   normalizePayMaxStatus,
   payoutAccountToInvoicePayment,
@@ -20,6 +21,87 @@ import { setAirwallexFormValue } from './airwallexFormSchema';
 import type { CreatorProfile } from './types';
 
 describe('creator payout channels', () => {
+  it('presents complete Airwallex payment details without exposing account identifiers', () => {
+    const account = {
+      ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-select-airwallex'),
+      nickname: '日本 JPY 主账户',
+      isDefault: true,
+      status: 'VERIFIED' as const,
+      beneficiaryId: 'beneficiary-12345678',
+      transferMethod: 'LOCAL' as const,
+      bankDetails: {
+        ...createEmptyAirwallexAccount().bankDetails,
+        accountName: 'Mina Kato',
+        accountNumber: '9876543210',
+        accountCurrency: 'JPY',
+        bankCountryCode: 'JP',
+        bankCountryName: '日本',
+        bankName: 'MUFG Bank',
+        bankAccountCategory: 'SAVING',
+        localClearingSystem: 'ZENGIN',
+        swiftCode: 'BOTKJPJT',
+      },
+    };
+
+    const presentation = getPayoutAccountSelectPresentation(account);
+    expect(presentation.label).toBe('日本 JPY 主账户');
+    expect(presentation.description).toBe('Airwallex · •••• 3210');
+    expect(presentation.badges.map((badge) => badge.label)).toEqual(['默认账户', '账户已验证']);
+    expect(presentation.details).toEqual(expect.arrayContaining([
+      { label: '账户主体', value: 'Mina Kato' },
+      { label: '账户币种', value: 'JPY' },
+      { label: '付款方式', value: '本地转账' },
+      { label: '开户地区', value: '日本' },
+      { label: '银行', value: 'MUFG Bank' },
+      { label: '清算系统', value: 'ZENGIN' },
+      { label: 'SWIFT', value: 'BOTKJPJT' },
+      { label: 'Beneficiary', value: '•••• 5678' },
+    ]));
+    expect(JSON.stringify(presentation)).not.toContain('9876543210');
+    expect(JSON.stringify(presentation)).not.toContain('beneficiary-12345678');
+  });
+
+  it('presents PayPal and PayerMax details with masked email and account values', () => {
+    const paypal = {
+      ...createEmptyPayPalAccount('Mina Kato', 'mina.kato@example.com', 'creator-select-paypal'),
+      nickname: 'PayPal 主账户',
+      paypalUsername: 'mina.paypal',
+      paypalEmail: 'mina.kato@example.com',
+      transferNote: 'Campaign payment',
+      status: 'VALIDATED' as const,
+    };
+    const payermax = {
+      ...createEmptyPayMaxAccount('Mina Kato', 'mina.kato@example.com', 'creator-select-payermax'),
+      nickname: 'PayerMax 美元账户',
+      beneficiaryName: 'Mina Kato',
+      payermaxAccountId: 'payermax-87654321',
+      countryCode: 'JP',
+      currency: 'USD',
+      email: 'mina.kato@example.com',
+      status: 'VALIDATED' as const,
+    };
+
+    const presentations = [
+      getPayoutAccountSelectPresentation(paypal),
+      getPayoutAccountSelectPresentation(payermax),
+    ];
+    const serialized = JSON.stringify(presentations);
+    expect(presentations[0].details).toEqual(expect.arrayContaining([
+      { label: 'PayPal 用户名', value: 'mina.paypal' },
+      { label: '收款邮箱', value: 'm***@example.com' },
+      { label: '转账备注', value: 'Campaign payment' },
+    ]));
+    expect(presentations[1].details).toEqual(expect.arrayContaining([
+      { label: '收款人', value: 'Mina Kato' },
+      { label: '收款币种', value: 'USD' },
+      { label: '国家 / 地区', value: 'JP' },
+      { label: '收款账号', value: '•••• 4321' },
+      { label: '联系邮箱', value: 'm***@example.com' },
+    ]));
+    expect(serialized).not.toContain('mina.kato@example.com');
+    expect(serialized).not.toContain('payermax-87654321');
+  });
+
   it('creates independent Airwallex, PayPal and PayerMax account models', () => {
     const airwallex = createEmptyAirwallexAccount('Mina Kato', 'mina@example.com');
     const paypal = createEmptyPayPalAccount('Mina Kato', 'mina@example.com');

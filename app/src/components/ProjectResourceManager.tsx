@@ -38,12 +38,11 @@ import {
 import type { SystemUser } from '../data';
 import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
-import { maskInvoiceAccountValue } from '../invoice/invoiceReviewWorkflow';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
-  getPayoutAccountIdentifier,
+  getPayoutAccountSelectPresentation,
 } from '../payoutAccounts';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
@@ -788,18 +787,7 @@ export function ProjectResourceManager({
                     const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
                     const accountOptions = eligibleInvoicePayoutAccounts(creator).map((account) => ({
                       value: getPayoutAccountId(account),
-                      label: account.nickname,
-                      description: [
-                        account.provider,
-                        account.provider === 'Airwallex' ? account.bankDetails.accountCurrency : undefined,
-                        account.status,
-                        maskInvoiceAccountValue(getPayoutAccountIdentifier(account)),
-                        `Beneficiary ${beneficiarySummary(
-                          account.provider === 'Airwallex'
-                            ? account.beneficiaryId
-                            : getPayoutAccountId(account),
-                        )}`,
-                      ].filter(Boolean).join(' · '),
+                      ...getPayoutAccountSelectPresentation(account),
                     }));
                     const unsupportedProvider = effectiveAccount.provider !== 'Airwallex';
                     return (
@@ -852,6 +840,10 @@ export function ProjectResourceManager({
                               variant="form"
                               value={effectiveAccount.payoutAccountId ?? ''}
                               options={accountOptions}
+                              className="payout-account-select"
+                              menuClassName="payout-account-select-menu"
+                              menuStrategy="fixed"
+                              menuWidth={520}
                               placeholder={accountOptions.length ? '选择达人收款账户' : '达人暂无可用收款账户'}
                               disabled={!paymentFieldsEditable || !accountOptions.length}
                               onChange={(value) => onChangePaymentAccount(item.invoiceId, value)}
