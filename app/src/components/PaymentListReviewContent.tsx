@@ -433,7 +433,12 @@ export function PaymentListReviewContent({
                         <td>{field.paymentValue}</td>
                         <td>
                           <span className={`finance-match-state is-${field.state}`}>
-                            {fieldStateLabel(field)}
+                            {field.state === 'match' ? (
+                              <>
+                                <CircleCheck size={16} strokeWidth={2.4} aria-hidden="true" />
+                                <span className="sr-only">一致</span>
+                              </>
+                            ) : fieldStateLabel(field)}
                           </span>
                         </td>
                       </tr>

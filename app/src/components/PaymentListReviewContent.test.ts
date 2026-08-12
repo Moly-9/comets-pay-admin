@@ -89,6 +89,13 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');
   });
 
+  it('renders matching fields as accessible green circle-check icons', () => {
+    expect(reviewContentSource).toContain("field.state === 'match'");
+    expect(reviewContentSource).toContain('<CircleCheck size={16} strokeWidth={2.4} aria-hidden="true" />');
+    expect(reviewContentSource).toContain('<span className="sr-only">一致</span>');
+    expect(workspaceStyles).toMatch(/\.finance-match-state\.is-match\s*{[^}]*background:\s*transparent;[^}]*color:\s*#15803d;/s);
+  });
+
   it('keeps the Invoice page, payment comparison, and account snapshot synchronized', () => {
     expect(workspaceSource).toContain('pages={financeReview.pages}');
     expect(workspaceSource).toContain('paymentLists={reviewPaymentLists}');

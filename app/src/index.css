@@ -3769,8 +3769,16 @@ input[type="checkbox"]:disabled {
 }
 
 .finance-match-state.is-match {
-  background: #eaf6ef;
-  color: #2f7453;
+  min-width: 24px;
+  justify-content: center;
+  padding: 3px;
+  background: transparent;
+  color: #15803d;
+}
+
+.finance-match-state.is-match svg {
+  display: block;
+  flex: 0 0 auto;
 }
 
 .finance-match-state.is-mismatch {
