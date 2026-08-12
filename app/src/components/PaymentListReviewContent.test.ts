@@ -85,17 +85,23 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');
   });
 
-  it('keeps the Invoice page, payment comparison, account snapshot, and export target synchronized', () => {
+  it('keeps the Invoice page, payment comparison, and account snapshot synchronized', () => {
     expect(workspaceSource).toContain('pages={financeReview.pages}');
     expect(workspaceSource).toContain('paymentLists={reviewPaymentLists}');
     expect(workspaceSource).toContain('reviewPaymentListIds.has(list.paymentListId)');
     expect(workspaceSource).toContain('activeIndex={reviewIndex}');
     expect(workspaceSource).toContain('onActiveIndexChange={setReviewIndex}');
     expect(workspaceSource).toContain('accountDisplay="current-full"');
-    expect(workspaceSource).toContain('exportMode="current"');
+    expect(workspaceSource).toContain('variant="finance-workspace"');
     expect(reviewContentSource).toContain('currentReview?.paymentItems');
-    expect(reviewContentSource).toContain('currentListIds.includes(list.paymentListId)');
-    expect(reviewContentSource).toContain('disabled>导出 Excel</Button>');
+  });
+
+  it('simplifies the workspace summary and places account validation inside its status card', () => {
+    expect(reviewContentSource).toContain("{variant === 'project' ? (");
+    expect(reviewContentSource).toContain('request-payment-review-summary-action');
+    expect(reviewContentSource).toContain("{validating ? '校验中' : '校验账户完整性'}");
+    expect(workspaceSource).toContain('variant="finance-workspace"');
+    expect(workspaceSource).not.toContain('exportMode="current"');
   });
 
   it('identifies each account requiring attention and jumps to its synchronized review page', () => {
@@ -177,7 +183,7 @@ describe('shared payment-list finance review content', () => {
   it('preserves read-only validation and export behavior without payment mutation controls', () => {
     expect(reviewContentSource).toContain('validatePaymentListAccountViaApi');
     expect(reviewContentSource).toContain('reviewPaymentListAccountSnapshot');
-    expect(reviewContentSource).toContain('onExportPaymentList(list.paymentListId)');
+    expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
     expect(reviewContentSource).not.toContain('添加付款行');
     expect(reviewContentSource).not.toContain('删除清单');
     expect(reviewContentSource).not.toContain('编辑付款清单');

@@ -41,6 +41,7 @@ type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
 
 type AccountDisplayMode = 'all-summary' | 'current-full';
 type ExportMode = 'all' | 'current';
+type ReviewContentVariant = 'project' | 'finance-workspace';
 
 const FINANCE_WORKSPACE_COMPARISON_FIELD_IDS = new Set([
   'real-name',
@@ -123,6 +124,7 @@ export function PaymentListReviewContent({
   onExportPaymentList,
   accountDisplay = 'all-summary',
   exportMode = 'all',
+  variant = 'project',
   className = '',
 }: {
   paymentLists: PaymentListRecord[];
@@ -134,6 +136,7 @@ export function PaymentListReviewContent({
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   accountDisplay?: AccountDisplayMode;
   exportMode?: ExportMode;
+  variant?: ReviewContentVariant;
   className?: string;
 }) {
   const [accountChecks, setAccountChecks] = useState<Record<string, RequestPaymentAccountCheck>>({});
@@ -281,42 +284,46 @@ export function PaymentListReviewContent({
 
   return (
     <div className={`project-resource-browser payment-list-review-content ${className}`.trim()} data-testid="request-payment-list-review">
-      <div className="project-resource-browser-heading">
-        <div className="finance-review-heading-with-icon">
-          <span className="finance-review-card-title-icon is-payment" aria-hidden="true"><ListChecks size={15} /></span>
-          <div>
-            <strong>全部付款明细</strong>
-            <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
+      {variant === 'project' ? (
+        <div className="project-resource-browser-heading">
+          <div className="finance-review-heading-with-icon">
+            <span className="finance-review-card-title-icon is-payment" aria-hidden="true"><ListChecks size={15} /></span>
+            <div>
+              <strong>全部付款明细</strong>
+              <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
+            </div>
           </div>
+          <span>{rows.length} 笔</span>
         </div>
-        <span>{rows.length} 笔</span>
-      </div>
+      ) : null}
 
       {rows.length ? (
         <>
-          <div className="project-resource-browser-toolbar request-payment-review-toolbar">
-            <Button
-              variant="secondary"
-              icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
-              disabled={validating}
-              onClick={() => { void validateAccounts(); }}
-            >
-              {validating ? '校验中' : '校验账户完整性'}
-            </Button>
-            {exportLists.map((list) => (
+          {variant === 'project' ? (
+            <div className="project-resource-browser-toolbar request-payment-review-toolbar">
               <Button
                 variant="secondary"
-                icon={<Download size={15} />}
-                key={list.paymentListId}
-                onClick={() => { void onExportPaymentList(list.paymentListId); }}
+                icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
+                disabled={validating}
+                onClick={() => { void validateAccounts(); }}
               >
-                {exportLists.length === 1 ? '导出 Excel' : `导出 ${list.paymentListCode}`}
+                {validating ? '校验中' : '校验账户完整性'}
               </Button>
-            ))}
-            {exportMode === 'current' && exportLists.length === 0 ? (
-              <Button variant="secondary" icon={<Download size={15} />} disabled>导出 Excel</Button>
-            ) : null}
-          </div>
+              {exportLists.map((list) => (
+                <Button
+                  variant="secondary"
+                  icon={<Download size={15} />}
+                  key={list.paymentListId}
+                  onClick={() => { void onExportPaymentList(list.paymentListId); }}
+                >
+                  {exportLists.length === 1 ? '导出 Excel' : `导出 ${list.paymentListCode}`}
+                </Button>
+              ))}
+              {exportMode === 'current' && exportLists.length === 0 ? (
+                <Button variant="secondary" icon={<Download size={15} />} disabled>导出 Excel</Button>
+              ) : null}
+            </div>
+          ) : null}
 
           <div
             className={`request-payment-review-summary${allApiChecksPassed ? ' is-passed' : snapshotAttentionCount || apiIssueCount ? ' is-warning' : ''}`}
@@ -357,18 +364,31 @@ export function PaymentListReviewContent({
                 </ul>
               ) : null}
             </div>
+            {variant === 'finance-workspace' ? (
+              <Button
+                className="request-payment-review-summary-action"
+                variant="secondary"
+                icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
+                disabled={validating}
+                onClick={() => { void validateAccounts(); }}
+              >
+                {validating ? '校验中' : '校验账户完整性'}
+              </Button>
+            ) : null}
           </div>
 
-          <div
-            className={`request-finance-project-summary${financeReview.canApprove ? ' is-passed' : ' is-warning'}`}
-            role="status"
-          >
-            <div className="finance-review-summary-heading"><span className="finance-review-card-title-icon is-validation" aria-hidden="true"><ShieldCheck size={14} /></span><strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong></div>
-            <span>{financeReview.canApprove ? '可提交财务审批通过' : `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`}</span>
-            {financeReview.projectIssues.map((issue) => (
-              <small key={issue.id}>{issue.label}：{issue.paymentValue}</small>
-            ))}
-          </div>
+          {variant === 'project' ? (
+            <div
+              className={`request-finance-project-summary${financeReview.canApprove ? ' is-passed' : ' is-warning'}`}
+              role="status"
+            >
+              <div className="finance-review-summary-heading"><span className="finance-review-card-title-icon is-validation" aria-hidden="true"><ShieldCheck size={14} /></span><strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong></div>
+              <span>{financeReview.canApprove ? '可提交财务审批通过' : `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`}</span>
+              {financeReview.projectIssues.map((issue) => (
+                <small key={issue.id}>{issue.label}：{issue.paymentValue}</small>
+              ))}
+            </div>
+          ) : null}
 
           {currentReview ? (
             <section className="request-finance-comparison" aria-label="Invoice 与付款清单对照">

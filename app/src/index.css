@@ -3530,8 +3530,17 @@ input[type="checkbox"]:disabled {
 
 .request-payment-review-summary > div {
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
   gap: 4px;
+}
+
+.request-payment-review-summary-action.button {
+  min-width: max-content;
+  flex: 0 0 auto;
+  align-self: center;
+  border-color: #d5dce5;
+  background: #fff;
 }
 
 .request-payment-review-summary strong {
@@ -5426,6 +5435,22 @@ body:has(.finance-review-workspace) {
   font-size: 8.5px;
 }
 
+.finance-review-project-section > header .finance-review-project-export.button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-color: #d6ccdf;
+  background: #fff;
+  color: #675187;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.finance-review-project-section > header .finance-review-project-export.button:hover:not(:disabled) {
+  border-color: #675187;
+  background: #f7f3fb;
+}
+
 .finance-review-project-info {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6681,6 +6706,15 @@ body:has(.finance-review-workspace) {
   .finance-review-payment-scroll,
   .finance-review-approval-scroll {
     padding: 10px;
+  }
+
+  .request-payment-review-summary {
+    flex-wrap: wrap;
+  }
+
+  .request-payment-review-summary-action.button {
+    width: 100%;
+    justify-content: center;
   }
 
   .finance-payment-list-review-content .request-finance-comparison-table {

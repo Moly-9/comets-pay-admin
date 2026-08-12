@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { PaymentListRecord } from '../businessWorkflow';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
-import { ApprovalTimeline, FINANCE_RETURN_ISSUE_OPTIONS } from './FinanceReviewWorkspace';
+import {
+  ApprovalTimeline,
+  FINANCE_RETURN_ISSUE_OPTIONS,
+  projectPaymentListsForFinanceReview,
+} from './FinanceReviewWorkspace';
 
 describe('FinanceReviewWorkspace return issue types', () => {
   it('requires finance to choose the exact resource that media may modify', () => {
@@ -17,6 +22,29 @@ describe('FinanceReviewWorkspace return issue types', () => {
         label: '付款清单原因',
         description: '仅开放对应付款明细修改权限',
       },
+    ]);
+  });
+});
+
+describe('FinanceReviewWorkspace project payment-list export', () => {
+  it('collects every unique payment list linked to the current request', () => {
+    const lists = [
+      { paymentListId: 'list-airwallex', paymentRequestProjectId: 'request-one' },
+      { paymentListId: 'list-paypal', paymentRequestProjectId: 'request-one' },
+      { paymentListId: 'list-airwallex', paymentRequestProjectId: 'request-one' },
+      { paymentListId: 'list-explicit', paymentRequestProjectId: 'request-other' },
+      { paymentListId: 'list-unrelated', paymentRequestProjectId: 'request-other' },
+    ] as unknown as PaymentListRecord[];
+
+    const result = projectPaymentListsForFinanceReview({
+      paymentRequestProjectId: 'request-one' as RequestProjectSummary['paymentRequestProjectId'],
+      paymentListIds: ['list-explicit'] as RequestProjectSummary['paymentListIds'],
+    }, lists);
+
+    expect(result.map((list) => list.paymentListId)).toEqual([
+      'list-airwallex',
+      'list-paypal',
+      'list-explicit',
     ]);
   });
 });

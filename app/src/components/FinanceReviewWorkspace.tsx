@@ -11,10 +11,12 @@ import {
   ClipboardCheck,
   Clock3,
   CreditCard,
+  Download,
   Eye,
   FileText,
   Files,
   Landmark,
+  LoaderCircle,
   PanelRightClose,
   PanelRightOpen,
   ReceiptText,
@@ -154,6 +156,26 @@ const ACCOUNT_VALIDATION_FIELD_IDS = new Set([
 const normalizeInvoiceZoom = (value: number) => (
   Math.round(Math.min(MAX_INVOICE_ZOOM, Math.max(MIN_INVOICE_ZOOM, value)) * 100) / 100
 );
+
+export const projectPaymentListsForFinanceReview = (
+  request: Pick<RequestProjectSummary, 'paymentListId' | 'paymentListIds' | 'paymentRequestProjectId'>,
+  paymentLists: PaymentListRecord[],
+) => {
+  const explicitIds = new Set([
+    ...(request.paymentListIds ?? []),
+    ...(request.paymentListId ? [request.paymentListId] : []),
+  ]);
+  const seen = new Set<PaymentListId>();
+  return paymentLists.filter((list) => {
+    const belongsToRequest = Boolean(
+      request.paymentRequestProjectId
+      && list.paymentRequestProjectId === request.paymentRequestProjectId
+    ) || explicitIds.has(list.paymentListId);
+    if (!belongsToRequest || seen.has(list.paymentListId)) return false;
+    seen.add(list.paymentListId);
+    return true;
+  });
+};
 
 export function ApprovalTimeline({
   request,
@@ -435,6 +457,7 @@ export function FinanceReviewWorkspace({
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
+  const [exportingPaymentLists, setExportingPaymentLists] = useState(false);
   const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
@@ -497,6 +520,7 @@ export function FinanceReviewWorkspace({
     page.paymentItems.map((item) => item.paymentListId)
   )));
   const reviewPaymentLists = paymentLists.filter((list) => reviewPaymentListIds.has(list.paymentListId));
+  const projectPaymentLists = projectPaymentListsForFinanceReview(request, paymentLists);
   const linkedContracts = requestLinkedContracts(request, contracts);
   const linkedInvoices = requestLinkedInvoices(request, generatedInvoices);
   const accountValidationIssueCount = financeReview.pages.reduce((count, page) => (
@@ -596,6 +620,18 @@ export function FinanceReviewWorkspace({
 
   const submitReturn = () => {
     if (canReturn && returnReason && onReturn(returnReason)) onClose(true);
+  };
+
+  const exportProjectPaymentLists = async () => {
+    if (!projectPaymentLists.length || exportingPaymentLists) return;
+    setExportingPaymentLists(true);
+    try {
+      for (const list of projectPaymentLists) {
+        await onExportPaymentList(list.paymentListId);
+      }
+    } finally {
+      setExportingPaymentLists(false);
+    }
   };
 
   return (
@@ -831,7 +867,7 @@ export function FinanceReviewWorkspace({
                   onActiveIndexChange={setReviewIndex}
                   onExportPaymentList={onExportPaymentList}
                   accountDisplay="current-full"
-                  exportMode="current"
+                  variant="finance-workspace"
                 />
               </div>
             </section>
@@ -868,7 +904,19 @@ export function FinanceReviewWorkspace({
                 </section>
 
                 <section className="finance-review-project-section" aria-label="请款项目信息">
-                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div><span>提交时项目快照</span></header>
+                  <header>
+                    <div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-project" aria-hidden="true"><BriefcaseBusiness size={14} /></span><strong>请款项目信息</strong></div>
+                    <Button
+                      className="finance-review-project-export"
+                      variant="secondary"
+                      icon={exportingPaymentLists ? <LoaderCircle className="is-spinning" size={14} /> : <Download size={14} />}
+                      title="导出该项目的全部付款清单"
+                      disabled={!projectPaymentLists.length || exportingPaymentLists}
+                      onClick={() => { void exportProjectPaymentLists(); }}
+                    >
+                      {exportingPaymentLists ? '导出中' : '导出 Excel'}
+                    </Button>
+                  </header>
                   <dl className="finance-review-project-info">
                     <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
                     <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
