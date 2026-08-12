@@ -67,6 +67,15 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
   });
 
+  it('keeps the overview scrollable and places the approval flow before linked resources', () => {
+    expect(workspaceSource).toContain('data-testid="finance-review-overview-scroll"');
+    expect(workspaceSource).toContain('aria-label="付款信息、当前审批流与关联资料"');
+    expect(workspaceSource).toMatch(/aria-label="付款信息"[\s\S]*aria-label="当前审批流"[\s\S]*aria-label="关联资料"/);
+    expect(workspaceSource.match(/<ApprovalTimeline request=\{request\} currentUser=\{currentUser\} compact \/>/g)).toHaveLength(1);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-overview-scroll\s*{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*scroll;[^}]*scrollbar-width:\s*thin;[^}]*touch-action:\s*pan-y;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-overview-scroll:focus-visible\s*{[^}]*outline:\s*2px solid #8a72a5;/s);
+  });
+
   it('matches the My Projects payment information fields', () => {
     expect(workspaceSource).toContain('aria-label="付款信息"');
     expect(workspaceSource).toContain('<strong>付款信息</strong>');

@@ -418,6 +418,7 @@ function FinanceReviewProjectOverview({
   approvalLabel,
   accountValidationStatus,
   accountValidationLabel,
+  currentUser,
   projectBrand,
   createdAt,
   paymentChannel,
@@ -434,6 +435,7 @@ function FinanceReviewProjectOverview({
   approvalLabel: string;
   accountValidationStatus: 'pending' | 'warning' | 'passed';
   accountValidationLabel: string;
+  currentUser: SystemUser;
   projectBrand: string;
   createdAt: string;
   paymentChannel: string;
@@ -500,6 +502,11 @@ function FinanceReviewProjectOverview({
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="finance-review-project-section" aria-label="当前审批流">
+        <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-workflow" aria-hidden="true"><Workflow size={14} /></span><strong>当前审批流</strong></div><span>第 {request.approval?.round ?? 1} 轮</span></header>
+        <ApprovalTimeline request={request} currentUser={currentUser} compact />
       </section>
 
       <section className="finance-review-project-section finance-review-linked-resources" aria-label="关联资料">
@@ -880,7 +887,12 @@ export function FinanceReviewWorkspace({
                 </div>
                 <span className="finance-review-overview-status">{approvalLabel}</span>
               </header>
-              <div className="finance-review-overview-scroll">
+              <div
+                className="finance-review-overview-scroll"
+                tabIndex={0}
+                aria-label="付款信息、当前审批流与关联资料"
+                data-testid="finance-review-overview-scroll"
+              >
                 <div className="finance-review-overview-intro">
                   <ShieldCheck size={18} aria-hidden="true" />
                   <div>
@@ -895,6 +907,7 @@ export function FinanceReviewWorkspace({
                   approvalLabel={approvalLabel}
                   accountValidationStatus={accountValidationStatus}
                   accountValidationLabel={accountValidationLabel}
+                  currentUser={currentUser}
                   projectBrand={projectBrand}
                   createdAt={createdAt}
                   paymentChannel={paymentChannel}
@@ -1101,6 +1114,7 @@ export function FinanceReviewWorkspace({
                   approvalLabel={approvalLabel}
                   accountValidationStatus={accountValidationStatus}
                   accountValidationLabel={accountValidationLabel}
+                  currentUser={currentUser}
                   projectBrand={projectBrand}
                   createdAt={createdAt}
                   paymentChannel={paymentChannel}
@@ -1111,11 +1125,6 @@ export function FinanceReviewWorkspace({
                   onOpenContracts={() => setResourceDialog('contract')}
                   onOpenInvoices={() => setResourceDialog('invoice')}
                 />
-
-                <section className="finance-review-project-section" aria-label="当前审批流">
-                  <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-workflow" aria-hidden="true"><Workflow size={14} /></span><strong>当前审批流</strong></div><span>第 {request.approval?.round ?? 1} 轮</span></header>
-                  <ApprovalTimeline request={request} currentUser={currentUser} compact />
-                </section>
 
                 {currentDecision.state === 'incorrect' ? (
                   <section className="finance-review-recorded-issue">
