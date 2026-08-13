@@ -1,4 +1,5 @@
 import type { SystemUser } from './data';
+import { createClientRequestId } from './clientRequestId';
 import type {
   AirwallexTransferMethod,
   DocumentPayoutSnapshot,
@@ -245,17 +246,12 @@ const PROTOTYPE_ID_PREFIXES = {
 
 type PrototypeIdKind = keyof typeof PROTOTYPE_ID_PREFIXES;
 
-const cryptoUuid = () => {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  throw new Error('当前浏览器不支持安全的本地请求 ID，请升级浏览器后重试。');
-};
-
 /**
  * 纯前端原型没有后端 UUIDv7 服务。这里生成的 ID 仅用于本次浏览器会话，
  * 由未来后端实体 ID 替换，不作为符合 ID_STANDARD 的正式业务 ID。
  */
 export const createPrototypeId = <T extends PrototypeIdKind>(kind: T) => (
-  `${PROTOTYPE_ID_PREFIXES[kind]}_local_${cryptoUuid()}`
+  `${PROTOTYPE_ID_PREFIXES[kind]}_local_${createClientRequestId()}`
 );
 
 const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

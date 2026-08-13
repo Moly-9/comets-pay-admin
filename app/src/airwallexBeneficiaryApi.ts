@@ -10,6 +10,7 @@ import {
   type AirwallexSchemaValidationIssue,
 } from './airwallexFormSchema';
 import type { AirwallexPayoutAccount } from './types';
+import { createClientRequestId } from './clientRequestId';
 
 export const AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH =
   '/api/integrations/airwallex/beneficiaries/validate';
@@ -291,7 +292,7 @@ export const synchronizeAirwallexBeneficiary = async (
   account: AirwallexPayoutAccount,
   {
     request = fetch,
-    requestId = crypto.randomUUID(),
+    requestId = createClientRequestId(),
     now = () => new Date().toISOString(),
   }: {
     request?: typeof fetch;

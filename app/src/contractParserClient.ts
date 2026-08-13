@@ -4,6 +4,7 @@ import type {
   ParsedContractDocument,
   ContractUploadDocumentType,
 } from './contractRecognitionTypes';
+import { createClientRequestId } from './clientRequestId';
 
 export const MAX_CONTRACT_FILE_SIZE = 30 * 1024 * 1024;
 export const MAX_CONTRACT_FILE_COUNT = 10;
@@ -29,8 +30,8 @@ export const validateContractFile = (file: File) => {
 };
 
 export const createSelectedContractFiles = (files: File[]): SelectedContractFile[] => (
-  files.map((file, index) => ({
-    id: globalThis.crypto?.randomUUID?.() ?? `contract-file-${Date.now()}-${index}`,
+  files.map((file) => ({
+    id: createClientRequestId(),
     file,
     documentType: 'STANDARD_TERMS',
   }))
@@ -53,7 +54,7 @@ export const parseContractFiles = async (
   })));
 
   const worker = new Worker(new URL('./contractParser.worker.ts', import.meta.url), { type: 'module' });
-  const requestId = globalThis.crypto?.randomUUID?.() ?? `contract-parse-${Date.now()}`;
+  const requestId = createClientRequestId();
 
   return new Promise<ParsedContractDocument[]>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
