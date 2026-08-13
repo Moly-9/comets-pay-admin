@@ -352,12 +352,24 @@ export function PaymentExecutionWorkspace({
           <div className="payment-execution-overview-footer">
             <div className="payment-execution-overview-footer-note">
               <ShieldCheck size={17} aria-hidden="true" />
-              <span>进入付款清单后，可逐笔核对收款信息并执行打款。</span>
+              <span>付款信息已完成校验，可直接执行打款；也可先查看付款清单逐笔确认。</span>
             </div>
             <div className="payment-execution-overview-footer-actions">
               <Button variant="secondary" onClick={onClose}>关闭</Button>
-              <Button icon={<ArrowLeft size={16} />} onClick={() => changeStage('payment-list')}>
+              <Button
+                variant="secondary"
+                icon={<ArrowLeft size={16} />}
+                onClick={() => changeStage('payment-list')}
+              >
                 查看付款清单
+              </Button>
+              <Button
+                className="payment-execution-overview-submit-action"
+                icon={<Send size={16} />}
+                disabled={!canSubmitPayment}
+                onClick={executePayment}
+              >
+                执行打款
               </Button>
             </div>
           </div>

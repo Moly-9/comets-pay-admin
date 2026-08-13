@@ -59,11 +59,13 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('当前审批流');
     expect(html).toContain('关联资料');
     expect(html.indexOf('请款项目信息')).toBeLessThan(html.indexOf('当前审批流'));
+    expect(html).toContain('付款信息已完成校验，可直接执行打款；也可先查看付款清单逐笔确认。');
     expect(html).toContain('>查看付款清单</span>');
+    expect(html).toContain('>执行打款</span>');
     expect(html).toContain('>关闭</span>');
     expect(html).not.toContain('class="payment-execution-table"');
     expect(html).not.toContain('payment-execution-return-action');
-    expect(html).not.toContain('payment-execution-submit-action');
+    expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"(?![^>]*disabled)/);
   });
 
   it('shows five summary cards, the nine-column payout table, approval steps, and actions after entering the payment list', () => {
@@ -168,6 +170,39 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).not.toContain('付款信息筛选');
     expect(html).toContain('payment-execution-table-status is-pending');
     expect(html).toMatch(/class="button button-primary payment-execution-submit-action"[^>]*disabled=""/);
+  });
+
+  it('also blocks direct execution from the overview when a payout is not ready', () => {
+    const project = buildPaymentProjectRows({
+      tab: 'payment',
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    })[0];
+    const request = INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((candidate) => (
+      candidate.id === project.requestId
+    ));
+    const html = renderToStaticMarkup(
+      <PaymentExecutionWorkspace
+        request={request!}
+        project={{
+          ...project,
+          payouts: project.payouts.map((payout, index) => index === 0
+            ? { ...payout, status: '信息异常' as const }
+            : payout),
+        }}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        paymentLists={INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists}
+        contracts={INITIAL_COMPLETE_REQUEST_RESOURCES.contracts}
+        canExecute
+        onExecute={vi.fn(() => true)}
+        onReturn={vi.fn(() => true)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('>执行打款</span>');
+    expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"[^>]*disabled=""/);
   });
 
   it('prevents returning the whole request after any payout has started', () => {

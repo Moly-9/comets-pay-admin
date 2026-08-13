@@ -171,6 +171,34 @@ final result: passed
 
 ---
 
+# Payment Execution Direct Action Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-3dd28990-3769-4c7f-a50d-c290b97e5a1c.png`.
+- Desktop implementation: `design-qa-assets/payment-execution-direct-action-1280x720.png` at 1280 x 720 CSS px.
+- Mobile implementation: `design-qa-assets/payment-execution-direct-action-390x844.png` at 390 x 844 CSS px.
+- State: payment workbench, pending-payment project overview open before entering the payment list.
+
+## Findings
+
+- The project overview now exposes both paths in the fixed footer: optional `查看付款清单` and primary `执行打款`.
+- The helper copy makes the choice explicit without implying that opening the payment list is required.
+- Desktop keeps all three actions on one aligned row. At 390 px, `关闭` and `查看付款清单` share the first row while `执行打款` occupies the full second row.
+- Mobile measurements confirm all buttons are 44 px high; the primary action is 370 px wide within the 390 px viewport, with no overlap, clipping, or horizontal overflow.
+- The existing validation gate is shared by both execution entries, so an invalid payout disables direct execution rather than bypassing payment readiness checks.
+
+## Interaction Verification
+
+- Opened `REQ-202607-000006` from the pending-payment list and confirmed that the initial project overview contains both actions.
+- Clicked `执行打款` directly from the overview without opening the payment list. The drawer closed, the request moved out of pending payment, and its status became `付款处理中` under the paid/progress tab.
+- The existing `查看付款清单` path remains available and unchanged.
+- Browser console contains no warnings or errors. Full Vitest passes 74 files and 473 tests; TypeScript/Vite build and `git diff --check` pass.
+
+final result: passed
+
+---
+
 # Payment Execution Progressive Drawer Design QA
 
 ## Evidence

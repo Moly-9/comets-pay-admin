@@ -176,9 +176,9 @@ body:has(.payment-execution-workspace) {
   display: flex;
   width: 100%;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 9px;
 }
 
 .payment-execution-overview-footer-note {
@@ -199,11 +199,13 @@ body:has(.payment-execution-workspace) {
 .payment-execution-overview-footer-actions {
   display: flex;
   flex: 0 0 auto;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .payment-execution-overview-footer-actions .button {
   min-height: 40px;
+  white-space: nowrap;
 }
 
 @keyframes payment-execution-stage-enter {
@@ -1846,6 +1848,10 @@ body:has(.payment-execution-workspace) {
     width: 100%;
     min-height: 44px;
     justify-content: center;
+  }
+
+  .payment-execution-overview-submit-action {
+    grid-column: 1 / -1;
   }
 
   .payment-execution-shell.is-execution {
