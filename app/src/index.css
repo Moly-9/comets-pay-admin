@@ -1882,9 +1882,10 @@ input[type="checkbox"]:disabled {
   line-height: 1.45;
 }
 
-.media-request-remark-upload-trigger {
+.form-grid .media-request-remark-upload-trigger {
   display: inline-flex;
   flex: 0 0 auto;
+  flex-direction: row;
   align-items: center;
   gap: 7px;
   min-height: 36px;
@@ -1896,6 +1897,7 @@ input[type="checkbox"]:disabled {
   cursor: pointer;
   font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .media-request-remark-upload-trigger:hover {
@@ -1904,6 +1906,7 @@ input[type="checkbox"]:disabled {
 }
 
 .media-request-remark-upload-trigger svg {
+  flex: 0 0 auto;
   color: #806887;
 }
 
