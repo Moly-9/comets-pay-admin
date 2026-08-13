@@ -27,6 +27,8 @@ export type SystemUser = {
   isDemo?: boolean;
 };
 
+export const LOCAL_ADMIN_ACCOUNT = 'liuyao@company.com';
+
 export const CURRENT_USER: SystemUser = {
   account: 'xiwenhui',
   name: '奚文慧',
@@ -57,6 +59,7 @@ export const SYSTEM_USERS: SystemUser[] = [
   { account: 'wuxueni', name: '吴雪霓', email: 'wuxueni@cometspay.co', initials: 'WX', roleKey: 'finance', role: '财务账号' },
   { account: 'linyanming', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', roleKey: 'project', role: '项目负责人账号' },
   { account: 'jeff', name: 'jeff', email: 'jeff@cometspay.co', initials: 'J', roleKey: 'admin', role: '管理员账号' },
+  { account: LOCAL_ADMIN_ACCOUNT, name: 'Liu Yao', email: LOCAL_ADMIN_ACCOUNT, initials: 'LY', roleKey: 'admin', role: '管理员账号' },
   { account: 'heather', name: 'heather', email: 'heather@cometspay.co', initials: 'H', roleKey: 'owner', role: '老板账号' },
   { account: 'theo', name: 'theo', email: 'theo@cometspay.co', initials: 'T', roleKey: 'owner', role: '老板账号' },
   ...DEMO_SYSTEM_USERS,
@@ -359,10 +362,18 @@ export const resolveSystemUser = (value: string): SystemUser | undefined => {
 };
 
 const configuredDemoLoginPassword = () => import.meta.env.VITE_DEMO_LOGIN_PASSWORD?.trim();
+const configuredLocalAdminPassword = () => import.meta.env.VITE_LIUYAO_ADMIN_PASSWORD?.trim();
 
 export const authenticateSystemUser = (account: string, password: string): { user?: SystemUser; error?: string } => {
   const user = resolveSystemUser(account);
   if (!user) return { error: '账号不存在，请检查账号或工作邮箱。' };
+  if (user.account === LOCAL_ADMIN_ACCOUNT) {
+    if (!password) return { error: '请输入登录密码。' };
+    const expectedPassword = configuredLocalAdminPassword();
+    if (!expectedPassword) return { error: '管理员账号密码尚未配置，请联系管理员。' };
+    if (password !== expectedPassword) return { error: '管理员账号密码不正确，请重新输入。' };
+    return { user };
+  }
   if (!password) return user.isDemo ? { error: '请输入登录密码。' } : { user };
   if (!user.isDemo) return { error: '该账号没有可恢复的原始密码记录，请使用体验账号登录。' };
 
