@@ -32,6 +32,7 @@ import { Pagination, usePagination } from '../components/Pagination';
 import {
   CURRENT_USER,
   DEMO_SYSTEM_USERS,
+  LOCAL_ADMIN_ACCOUNT,
   ROLE_LOGIN_SESSION_POLICY,
   type LoginSessionPolicy,
   type SystemRoleKey,
@@ -191,7 +192,7 @@ const LOGIN_SESSION_POLICY_COPY: Record<LoginSessionPolicy, { label: string; des
   },
 };
 
-const INITIAL_SYSTEM_ACCOUNTS: SystemAccount[] = [
+export const INITIAL_SYSTEM_ACCOUNTS: SystemAccount[] = [
   { id: 'USR-001', name: '赖丽红', email: 'lailihong@cometspay.co', initials: 'LH', accent: '#f97316', role: 'media', permissions: [...ROLE_PERMISSION_IDS.media], status: '已启用', lastLogin: '今天 09:36' },
   { id: 'USR-002', name: '张诗雨', email: 'zhangshiyu@cometspay.co', initials: 'SY', accent: '#ef6d57', role: 'media', permissions: [...ROLE_PERMISSION_IDS.media], status: '已启用', lastLogin: '今天 08:48' },
   { id: 'USR-003', name: '龙哲心', email: 'longzhexin@cometspay.co', initials: 'ZX', accent: '#f59e0b', role: 'media', permissions: [...ROLE_PERMISSION_IDS.media], status: '已启用', lastLogin: '昨天 17:24' },
@@ -203,6 +204,7 @@ const INITIAL_SYSTEM_ACCOUNTS: SystemAccount[] = [
   { id: 'USR-006', name: '吴雪霓', email: 'wuxueni@cometspay.co', initials: 'WX', accent: '#6366f1', role: 'finance', permissions: [...ROLE_PERMISSION_IDS.finance], status: '已启用', lastLogin: '昨天 18:42' },
   { id: 'USR-007', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', accent: '#2f7ee6', role: 'project', permissions: [...ROLE_PERMISSION_IDS.project], status: '已启用', lastLogin: '今天 08:54' },
   { id: 'USR-013', name: 'jeff', email: 'jeff@cometspay.co', initials: 'J', accent: '#27805a', role: 'admin', permissions: [...ROLE_PERMISSION_IDS.admin], status: '已启用', lastLogin: '尚未登录' },
+  { id: 'USR-014', name: 'Liu Yao', email: LOCAL_ADMIN_ACCOUNT, initials: 'LY', accent: '#7c5ce7', role: 'admin', permissions: [...ROLE_PERMISSION_IDS.admin], status: '已启用', lastLogin: '尚未登录' },
   { id: 'USR-008', name: 'heather', email: 'heather@cometspay.co', initials: 'H', accent: '#d49a16', role: 'owner', permissions: [...ROLE_PERMISSION_IDS.owner], status: '已启用', lastLogin: '2026-07-24 16:20' },
   { id: 'USR-009', name: 'theo', email: 'theo@cometspay.co', initials: 'T', accent: '#b7791f', role: 'owner', permissions: [...ROLE_PERMISSION_IDS.owner], status: '已启用', lastLogin: '2026-07-23 11:08' },
   ...DEMO_SYSTEM_USERS.map((user, index) => ({
