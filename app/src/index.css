@@ -22820,3 +22820,172 @@ button:disabled {
     max-width: 100%;
   }
 }
+
+/* System-wide responsive baseline for desktop, compact PC and iPad. */
+.main-content,
+.page-stack {
+  min-width: 0;
+}
+
+.main-content {
+  overflow-x: clip;
+}
+
+.page-stack {
+  width: 100%;
+  max-width: 2200px;
+  zoom: 1;
+}
+
+.contract-template-preview.is-fullscreen {
+  zoom: 1;
+}
+
+:where(
+  .button,
+  .table-action,
+  .tab-button,
+  .pagination > button,
+  .custom-select-trigger,
+  .page-heading-actions > button,
+  .content-toolbar > button,
+  .modal-footer button,
+  .drawer-footer button
+) {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.button > span,
+.table-action > span,
+.tab-button > span {
+  white-space: nowrap;
+}
+
+:where(
+  .page-heading-actions,
+  .filter-row,
+  .content-toolbar,
+  .batch-actions,
+  .contract-bulk-actions,
+  .modal-footer,
+  .drawer-footer
+) {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+:where(
+  .table-scroll,
+  .batch-table-scroll,
+  .invoice-batch-table-wrap,
+  .finance-review-table-scroll
+) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where(
+  .data-table,
+  .batch-table,
+  .invoice-batch-table,
+  .request-finance-comparison-table,
+  .table-scroll > table,
+  .batch-table-scroll > table,
+  .invoice-batch-table-wrap > table
+) {
+  width: 100%;
+  table-layout: auto;
+  text-align: left;
+  white-space: nowrap;
+}
+
+:where(
+  .data-table,
+  .batch-table,
+  .invoice-batch-table,
+  .request-finance-comparison-table,
+  .table-scroll > table,
+  .batch-table-scroll > table,
+  .invoice-batch-table-wrap > table
+) :is(th, td):not([colspan]) {
+  overflow-wrap: normal !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+}
+
+@media (min-width: 1600px) {
+  .main-content {
+    padding-right: 76px;
+    padding-left: 76px;
+  }
+}
+
+/* iPad landscape uses the same drawer navigation as portrait to preserve content width. */
+@media (min-width: 861px) and (max-width: 1180px) {
+  .topbar {
+    height: 60px;
+    padding: 0 22px;
+  }
+
+  .mobile-menu-button {
+    display: inline-flex;
+  }
+
+  .brand-lockup {
+    gap: 10px;
+  }
+
+  .brand-divider,
+  .product-name,
+  .language-button span,
+  .language-button svg:last-child {
+    display: none;
+  }
+
+  .brand-name {
+    font-size: 18px;
+  }
+
+  .sidebar {
+    z-index: 90;
+    top: 0;
+    width: min(286px, 84vw);
+    transform: translateX(-102%);
+    transition: transform 210ms ease;
+  }
+
+  .sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-mobile-head {
+    display: flex;
+    min-height: 60px;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--soft-line);
+    padding: 0 14px 0 20px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .sidebar-scrim {
+    position: fixed;
+    z-index: 80;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgba(18, 17, 23, 0.34);
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding: 86px 22px 32px;
+  }
+}
