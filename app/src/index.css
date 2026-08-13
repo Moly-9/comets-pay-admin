@@ -12851,9 +12851,9 @@ button:disabled {
 .creator-profile-summary {
   position: relative;
   overflow: hidden;
-  border: 1px solid #eee5e3;
+  border: 1px solid rgba(214, 163, 202, 0.42);
   border-radius: 10px;
-  background: #fff9f7;
+  background: linear-gradient(118deg, rgba(255, 175, 140, 0.2) 0%, rgba(255, 141, 199, 0.14) 52%, rgba(173, 110, 231, 0.16) 100%);
   padding: 18px 20px;
 }
 
@@ -12861,7 +12861,7 @@ button:disabled {
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
-  background: #ee8e79;
+  background: var(--accent-gradient);
   content: '';
 }
 
@@ -13620,10 +13620,36 @@ button:disabled {
   color: #bd4b45;
 }
 
+.schema-field-example-after-error,
+.creator-payment-field-example,
+.creator-payment-field-error {
+  color: #9298a3;
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.creator-payment-field-error {
+  color: #bd4b45;
+}
+
+.schema-field-help-error .schema-field-example-after-error {
+  color: #8e939e;
+}
+
 .schema-field-control-error input,
-.schema-field-control-error .custom-select-trigger {
+.schema-field-control-error textarea,
+.schema-field-control-error .custom-select-trigger,
+.creator-profile-editor-modal [aria-invalid="true"] {
   border-color: #e8aaa4;
   background: #fffafa;
+  box-shadow: 0 0 0 2px rgba(189, 75, 69, 0.08);
+}
+
+.creator-profile-editor-modal [aria-invalid="true"]:focus-visible {
+  border-color: #c85f58;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(189, 75, 69, 0.14);
 }
 
 .form-grid label > span.creator-payment-field-label {
@@ -13696,6 +13722,22 @@ button:disabled {
   background: #f8f2fb;
   color: #70527e;
   box-shadow: inset 0 0 0 1px rgba(199, 165, 216, 0.24);
+}
+
+.payout-provider-tab:disabled,
+.payout-provider-tab-disabled,
+.payout-provider-tab-disabled:hover {
+  border-style: dashed;
+  border-color: #e1e3e8;
+  background: #f4f5f7;
+  color: #a2a6af;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.72;
+}
+
+.payout-provider-tab:disabled small {
+  color: #a7abb3;
 }
 
 .payout-provider-tab strong {
@@ -13941,6 +13983,14 @@ button:disabled {
   min-height: 34px;
   padding: 0 11px;
   font-size: 10.5px;
+}
+
+.payout-account-actions .button:disabled {
+  border-color: #e0e2e7;
+  background: #f3f4f6;
+  color: #a1a5ae;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .payout-account-form,

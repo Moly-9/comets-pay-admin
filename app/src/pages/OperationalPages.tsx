@@ -1522,6 +1522,18 @@ export const hasCreatorDraftContent = (profile: CreatorProfile | null) => {
   ));
 };
 
+export const getCreatorPayoutAccountValidationError = (
+  accounts: CreatorProfile['payoutAccounts'],
+) => {
+  const activeAccounts = accounts.filter((account) => account.status !== 'DISABLED');
+  const explicitDefaultAccounts = activeAccounts.filter((account) => account.isDefault);
+  const defaultAccount = getDefaultPayoutAccount(activeAccounts);
+  if (explicitDefaultAccounts.length !== 1) return '仅一个默认收款账户';
+  if (!defaultAccount || defaultAccount.provider !== 'Airwallex') return '一个默认 Airwallex 收款账户';
+  if (!isPayoutAccountVerified(defaultAccount)) return '默认 Airwallex 收款账户校验完成';
+  return '';
+};
+
 const isStoredCreatorDraft = (value: unknown): value is StoredCreatorDraft => {
   if (!value || typeof value !== 'object') return false;
   const stored = value as Partial<StoredCreatorDraft>;
@@ -2025,19 +2037,27 @@ function CreatorContactDetailsGrid({ contact }: { contact: CreatorInvoiceContact
   );
 }
 
-function CreatorContactFormGrid({ contact, onChange }: { contact: CreatorInvoiceContact; onChange: (field: keyof CreatorInvoiceContact, value: string) => void }) {
+function CreatorContactFormGrid({
+  contact,
+  onChange,
+  showErrors = false,
+}: {
+  contact: CreatorInvoiceContact;
+  onChange: (field: keyof CreatorInvoiceContact, value: string) => void;
+  showErrors?: boolean;
+}) {
   return (
     <div className="form-grid creator-payment-form-grid">
       {INVOICE_CONTACT_FIELDS.map((field) => (
-        <label className={field.fullWidth ? 'full-width' : ''} key={field.key}>
+        <label className={`${field.fullWidth ? 'full-width' : ''} ${showErrors && !field.optional && !contact[field.key].trim() ? 'creator-form-field-error' : ''}`} key={field.key}>
           <span className="creator-payment-field-label">
             <span>{field.label}{field.optional ? null : <em className="required-mark" aria-hidden="true">*</em>}</span>
             <small>{field.alias}{field.optional ? ' · 选填' : ''}</small>
           </span>
           {field.fullWidth ? (
-            <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={showErrors && !field.optional && !contact[field.key].trim() ? true : undefined} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
           ) : (
-            <input aria-label={field.optional ? `${field.label}（选填）` : field.label} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            <input aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={showErrors && !field.optional && (!contact[field.key].trim() || (field.key === 'email' && !/^\S+@\S+\.\S+$/.test(contact.email))) ? true : undefined} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
           )}
         </label>
       ))}
@@ -2102,9 +2122,11 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
 function CreatorSocialAccountsEditor({
   accounts,
   onChange,
+  showErrors = false,
 }: {
   accounts: CreatorSocialAccount[];
   onChange: (accounts: CreatorSocialAccount[]) => void;
+  showErrors?: boolean;
 }) {
   const updateAccount = (
     id: string,
@@ -2137,6 +2159,7 @@ function CreatorSocialAccountsEditor({
             </span>
             <input
               aria-label={`社媒平台 ${index + 1}`}
+              aria-invalid={showErrors && !account.platform.trim() ? true : undefined}
               placeholder="例如：Instagram"
               value={account.platform}
               onChange={(event) => updateAccount(account.id, 'platform', event.target.value)}
@@ -2149,6 +2172,7 @@ function CreatorSocialAccountsEditor({
             </span>
             <input
               aria-label={`平台账号 ${index + 1}`}
+              aria-invalid={showErrors && !account.handle.trim() ? true : undefined}
               placeholder="例如：@MinaKato"
               value={account.handle}
               onChange={(event) => updateAccount(account.id, 'handle', event.target.value)}
@@ -2161,6 +2185,7 @@ function CreatorSocialAccountsEditor({
             </span>
             <input
               aria-label={`主页链接 ${index + 1}`}
+              aria-invalid={showErrors && Boolean(account.profileUrl.trim()) && !/^https?:\/\/\S+$/i.test(account.profileUrl.trim()) ? true : undefined}
               type="url"
               placeholder="https://..."
               value={account.profileUrl}
@@ -2210,6 +2235,7 @@ export function CreatorsPage({
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [validationAttempt, setValidationAttempt] = useState(0);
   const [creatorCloseGuardOpen, setCreatorCloseGuardOpen] = useState(false);
   const selected = creators.find((creator) => creator.id === selectedId) ?? null;
 
@@ -2247,6 +2273,7 @@ export function CreatorsPage({
     setCreating(false);
     setDraft(null);
     setFormErrors([]);
+    setValidationAttempt(0);
     setCreatorCloseGuardOpen(false);
   };
 
@@ -2257,6 +2284,7 @@ export function CreatorsPage({
     setCreating(false);
     setDraft(null);
     setFormErrors([]);
+    setValidationAttempt(0);
     setCreatorCloseGuardOpen(false);
   };
 
@@ -2272,6 +2300,7 @@ export function CreatorsPage({
     setEditing(true);
     setCreating(false);
     setFormErrors([]);
+    setValidationAttempt(0);
   };
 
   const startCreating = () => {
@@ -2292,6 +2321,7 @@ export function CreatorsPage({
           setEditing(true);
           setCreating(true);
           setFormErrors([]);
+          setValidationAttempt(0);
           setCreatorCloseGuardOpen(false);
           notify('达人草稿已恢复', '已恢复当前账号在此浏览器中未完成的达人档案。');
           return;
@@ -2326,6 +2356,7 @@ export function CreatorsPage({
     setEditing(true);
     setCreating(true);
     setFormErrors([]);
+    setValidationAttempt(0);
     setCreatorCloseGuardOpen(false);
   };
 
@@ -2372,6 +2403,7 @@ export function CreatorsPage({
     setDraft(null);
     setEditing(false);
     setFormErrors([]);
+    setValidationAttempt(0);
   };
 
   const updateDraftProfile = (
@@ -2414,8 +2446,23 @@ export function CreatorsPage({
     if (!draft.contact.legalName.trim()) nextErrors.push('Invoice 真实姓名');
     if (!draft.contact.address.trim()) nextErrors.push('联系地址');
     if (!draft.contact.email.trim() || !/^\S+@\S+\.\S+$/.test(draft.contact.email)) nextErrors.push('有效联系邮箱');
+    const payoutAccountError = getCreatorPayoutAccountValidationError(draft.payoutAccounts);
+    if (payoutAccountError) nextErrors.push(payoutAccountError);
     if (nextErrors.length > 0) {
       setFormErrors(nextErrors);
+      setValidationAttempt((current) => current + 1);
+      window.requestAnimationFrame(() => {
+        const creatorField = document.querySelector<HTMLElement>(
+          '.creator-profile-editor-modal .creator-payment-editor > .creator-payment-section [aria-invalid="true"]',
+        );
+        const target = creatorField ?? document.querySelector<HTMLElement>(
+          '.creator-profile-editor-modal [data-airwallex-field-path][aria-invalid="true"], '
+          + '.creator-profile-editor-modal [data-airwallex-field-path] [aria-invalid="true"], '
+          + '.creator-profile-editor-modal .payout-account-form',
+        );
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target?.focus({ preventScroll: true });
+      });
       return;
     }
 
@@ -2468,6 +2515,7 @@ export function CreatorsPage({
     setEditing(false);
     setCreating(false);
     setFormErrors([]);
+    setValidationAttempt(0);
     const defaultAccount = getDefaultPayoutAccount(updated.payoutAccounts);
     const status = getPayoutAccountStatusMeta(defaultAccount?.status ?? 'DRAFT', defaultAccount?.provider);
     notify(
@@ -2587,7 +2635,6 @@ export function CreatorsPage({
                 <p>{[activeProfile.handle, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p>
               </div>
               <dl className="creator-profile-summary-meta">
-                <div><dt>档案编号</dt><dd>{activeProfile.id}</dd></div>
                 <div><dt>地区</dt><dd>{activeProfile.region || '待补充'}</dd></div>
                 <div><dt>合作项目</dt><dd>{activeProfile.projects} 个</dd></div>
               </dl>
@@ -2611,34 +2658,36 @@ export function CreatorsPage({
                 <div className="form-grid creator-payment-form-grid">
                   <label>
                     <span className="creator-payment-field-label"><span>达人名称<em className="required-mark" aria-hidden="true">*</em></span><small>Display name</small></span>
-                    <input aria-label="达人名称" placeholder="例如：Mina Kato" value={draft.name} onChange={(event) => updateDraftProfile('name', event.target.value)} />
+                    <input aria-label="达人名称" aria-invalid={formErrors.length > 0 && !draft.name.trim() ? true : undefined} placeholder="例如：Mina Kato" value={draft.name} onChange={(event) => updateDraftProfile('name', event.target.value)} />
                   </label>
                   <label>
                     <span className="creator-payment-field-label"><span>地区<em className="required-mark" aria-hidden="true">*</em></span><small>Creator region</small></span>
-                    <input aria-label="达人地区" placeholder="例如：日本" value={draft.region} onChange={(event) => updateDraftProfile('region', event.target.value)} />
+                    <input aria-label="达人地区" aria-invalid={formErrors.length > 0 && !draft.region.trim() ? true : undefined} placeholder="例如：美国" value={draft.region} onChange={(event) => updateDraftProfile('region', event.target.value)} />
                   </label>
                 </div>
               </CreatorPaymentSection>
               <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人填写个人信息时补充；分别维护各平台账号与主页链接">
-                <CreatorSocialAccountsEditor accounts={draft.socialAccounts} onChange={updateDraftSocialAccounts} />
+                <CreatorSocialAccountsEditor accounts={draft.socialAccounts} onChange={updateDraftSocialAccounts} showErrors={formErrors.length > 0} />
               </CreatorPaymentSection>
               <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="生成 Invoice 时使用，与银行账户名和 PayPal 邮箱独立维护">
-                <CreatorContactFormGrid contact={draft.contact} onChange={updateDraftContact} />
+                <CreatorContactFormGrid contact={draft.contact} onChange={updateDraftContact} showErrors={formErrors.length > 0} />
               </CreatorPaymentSection>
               <div className="creator-payment-note">
                 <ShieldCheck size={16} />
                 <span>
-                  <strong>保存档案不等于账户已验证</strong>
-                  <small>修改银行信息后状态会回到“待 Airwallex 校验”；接入 API 后，再由 Validate 与 Verify Account 结果更新状态。</small>
+                  <strong>完成账户校验后才能创建达人档案</strong>
+                  <small>付款信息字段由 Airwallex Form Schema 决定；修改银行信息后需要重新点击“校验账户”。</small>
                 </span>
               </div>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户，并指定一个默认账户用于新的付款">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户；全档案只能指定一个默认账户用于新的付款">
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing
                   creatorId={draft.id}
                   creatorName={draft.name}
                   creatorEmail={draft.contact.email}
+                  validationAttempt={validationAttempt}
+                  focusValidationError={formErrors.every((error) => error.includes('收款账户') || error.includes('Airwallex'))}
                   onChange={(payoutAccounts) => setDraft((current) => current ? { ...current, payoutAccounts } : current)}
                 />
               </CreatorPaymentSection>

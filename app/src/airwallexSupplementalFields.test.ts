@@ -3,6 +3,7 @@ import {
   AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG,
   getAirwallexBankPaymentFallbackFields,
   getAirwallexSupplementalFields,
+  getAirwallexUsPaymentSupplementalFields,
 } from './airwallexSupplementalFields';
 import type {
   AirwallexFormSchemaField,
@@ -144,5 +145,37 @@ describe('Airwallex supplemental field difference', () => {
 
     expect(getAirwallexBankPaymentFallbackFields(response).map((field) => field.key))
       .not.toContain('iban');
+  });
+
+  it('provides the stable simulated US payment checklist missing from Form Schema', () => {
+    const fields = getAirwallexUsPaymentSupplementalFields(schema([
+      'beneficiary.entity_type',
+      'beneficiary.bank_details.bank_country_code',
+      'beneficiary.bank_details.account_name',
+      'beneficiary.bank_details.account_number',
+      'beneficiary.bank_details.bank_name',
+    ]));
+    const keys = fields.map((field) => field.key);
+
+    expect(keys).toEqual(expect.arrayContaining([
+      'bank_account_type',
+      'swift_code',
+      'bank_street_address',
+      'bank_country',
+      'bank_state',
+      'bank_city',
+      'bank_postcode',
+      'intermediary_bank_country',
+      'intermediary_bank_code',
+      'transfer_remarks',
+      'routing_code_type',
+      'branch_code',
+      'id_document_type',
+      'beneficiary_id_number',
+      'business_registration_number',
+    ]));
+    expect(keys).not.toContain('account_name');
+    expect(keys).not.toContain('account_number');
+    expect(keys).not.toContain('bank_name');
   });
 });

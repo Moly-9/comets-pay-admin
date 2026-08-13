@@ -24,8 +24,6 @@ import {
   AIRWALLEX_CURRENCIES,
   canDeletePayoutAccount,
   createEmptyAirwallexAccount,
-  createEmptyPayMaxAccount,
-  createEmptyPayPalAccount,
   deletePayoutAccount,
   getDefaultPayoutAccount,
   getPayoutAccountIdentifier,
@@ -56,7 +54,7 @@ import {
   getAirwallexDynamicOptions,
   synchronizeAirwallexBeneficiary,
 } from '../airwallexBeneficiaryApi';
-import { getAirwallexBankPaymentFallbackFields } from '../airwallexSupplementalFields';
+import { getAirwallexUsPaymentSupplementalFields } from '../airwallexSupplementalFields';
 import type {
   AirwallexPayoutAccount,
   CreatorPayoutAccount,
@@ -71,38 +69,120 @@ type CreatorPayoutAccountsProps = {
   creatorId: string;
   creatorName: string;
   creatorEmail: string;
+  validationAttempt?: number;
+  focusValidationError?: boolean;
   onChange?: (accounts: CreatorPayoutAccount[]) => void;
 };
 
-const DOCUMENT_PAYOUT_FIELD_LABELS: Record<string, { label: string; alias: string }> = {
+const DOCUMENT_PAYOUT_FIELD_LABELS: Record<string, { label: string; alias: string; example: string }> = {
   'beneficiary.bank_details.account_name': {
     label: 'Account Name',
     alias: '账户名称',
+    example: 'Taylor Morgan',
   },
   'beneficiary.bank_details.account_number': {
     label: 'Account Number',
     alias: '银行账号',
+    example: '50001121',
+  },
+  'beneficiary.bank_details.bank_account_category': {
+    label: 'Account Type',
+    alias: '账户类型',
+    example: 'Checking',
   },
   'beneficiary.bank_details.bank_name': {
-    label: 'Beneficiary Bank Name',
+    label: "Beneficiary's Bank Name",
     alias: '收款银行名称',
+    example: 'JPMorgan Chase Bank',
   },
   'beneficiary.bank_details.bank_street_address': {
-    label: 'Beneficiary Bank Address',
+    label: "Beneficiary's Bank Address",
     alias: '收款银行地址',
+    example: '270 Park Avenue, New York, NY 10017',
   },
   'profile_supplement.beneficiary_bank_address': {
-    label: 'Beneficiary Bank Address',
+    label: "Beneficiary's Bank Address",
     alias: '收款银行地址',
+    example: '270 Park Avenue, New York, NY 10017',
   },
   'beneficiary.bank_details.swift_code': {
-    label: 'SWIFT Code',
-    alias: 'SWIFT / BIC',
+    label: "Beneficiary's Bank SWIFT Code",
+    alias: '收款银行 SWIFT / BIC',
+    example: 'CHASUS33',
   },
   'beneficiary.bank_details.iban': {
     label: 'IBAN',
     alias: '国际银行账号',
+    example: 'GB29NWBK60161331926819',
   },
+  'beneficiary.bank_details.bank_country_code': {
+    label: "Beneficiary's Bank Country",
+    alias: '收款银行国家 / 地区',
+    example: 'US',
+  },
+  'beneficiary.bank_details.bank_state': {
+    label: "Beneficiary's Bank State",
+    alias: '收款银行州 / 省',
+    example: 'New York',
+  },
+  'beneficiary.bank_details.bank_city': {
+    label: "Beneficiary's Bank City",
+    alias: '收款银行城市',
+    example: 'New York',
+  },
+  'beneficiary.bank_details.bank_postcode': {
+    label: "Beneficiary's Bank Postal Code",
+    alias: '收款银行邮政编码',
+    example: '10017',
+  },
+  'beneficiary.bank_details.intermediary_bank_country_code': {
+    label: 'Intermediary Bank Country (if any)',
+    alias: '中间行国家 / 地区 · 选填',
+    example: 'US',
+  },
+  'beneficiary.bank_details.intermediary_bank_swift_code': {
+    label: 'Intermediary Bank Code (if any)',
+    alias: '中间行代码 · 选填',
+    example: 'CHASUS33',
+  },
+  'beneficiary.additional_info.transfer_remarks': {
+    label: 'Transfer Remarks (if any)',
+    alias: '转账备注 · 选填',
+    example: 'Creator campaign payout Aug 2026',
+  },
+  'beneficiary.bank_details.account_routing_type1': {
+    label: 'Primary Routing Code Type',
+    alias: '银行一级路由号类型',
+    example: 'ABA',
+  },
+  'beneficiary.bank_details.account_routing_value2': {
+    label: 'Primary Branch Code',
+    alias: '分行代码',
+    example: '001',
+  },
+  'beneficiary.additional_info.personal_id_type': {
+    label: 'ID Document Type',
+    alias: '证件类型',
+    example: 'PASSPORT',
+  },
+  'beneficiary.additional_info.personal_id_number': {
+    label: 'Beneficiary ID Number',
+    alias: '证件号',
+    example: 'P12345678',
+  },
+  'beneficiary.additional_info.business_registration_number': {
+    label: 'Business Registration Number',
+    alias: '企业注册号码',
+    example: '12-3456789',
+  },
+};
+
+const SCENARIO_FIELD_LABELS: Record<string, { label: string; alias: string; example: string }> = {
+  'beneficiary.entity_type': { label: '收款人类型', alias: 'Beneficiary Type', example: 'PERSONAL' },
+  'beneficiary.bank_details.bank_country_code': { label: '收款国家 / 地区', alias: "Beneficiary's Bank Country/Region", example: 'US' },
+  'beneficiary.bank_details.account_currency': { label: '收款币种', alias: 'Currency', example: 'USD' },
+  transfer_method: { label: '付款方式', alias: 'Payment Method', example: 'LOCAL' },
+  [AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH]: { label: '本地清算方式', alias: 'local_clearing_system', example: 'ACH' },
 };
 
 function Section({
@@ -153,6 +233,9 @@ function TextField({
   required,
   fullWidth,
   type = 'text',
+  example,
+  issue,
+  fieldPath,
 }: {
   label: string;
   alias: string;
@@ -162,17 +245,26 @@ function TextField({
   required?: boolean;
   fullWidth?: boolean;
   type?: 'text' | 'email' | 'tel' | 'number';
+  example?: string;
+  issue?: string;
+  fieldPath?: string;
 }) {
   return (
-    <label className={fullWidth ? 'full-width' : ''}>
+    <label
+      className={`${fullWidth ? 'full-width' : ''} ${issue ? 'schema-field-control-error' : ''}`}
+      data-airwallex-field-path={fieldPath}
+    >
       <FieldLabel label={label} alias={alias} required={required} />
       <input
         aria-label={label}
         type={type}
         value={value}
+        aria-invalid={issue ? true : undefined}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
+      {issue ? <small className="creator-payment-field-error">{issue}</small> : null}
+      {example ? <small className="creator-payment-field-example">示例：{example}</small> : null}
     </label>
   );
 }
@@ -222,17 +314,12 @@ function SchemaFieldControl({
 }) {
   const { field } = item;
   const documentFieldLabel = DOCUMENT_PAYOUT_FIELD_LABELS[item.path];
+  const scenarioFieldLabel = SCENARIO_FIELD_LABELS[item.path];
   const label = {
-    'beneficiary.bank_details.bank_country_code': '收款国家 / 地区',
-    'beneficiary.bank_details.account_currency': '收款币种',
-    'beneficiary.entity_type': '收款人类型',
-    transfer_method: '转账方式',
-    [AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH]: '本地清算方式',
     'beneficiary.address.country_code': '收款人所在国家 / 地区',
-  }[item.path] ?? documentFieldLabel?.label ?? field.label;
-  const alias = documentFieldLabel
-    ? `${documentFieldLabel.alias} · ${item.path}`
-    : item.path;
+  }[item.path] ?? scenarioFieldLabel?.label ?? documentFieldLabel?.label ?? field.label;
+  const alias = scenarioFieldLabel?.alias
+    ?? (documentFieldLabel ? `${documentFieldLabel.alias} · ${item.path}` : item.path);
   const value = getAirwallexFormValue(account, item.path) || field.default;
   const options = item.path === AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH
     ? prioritizeAirwallexLocalClearingOptions(
@@ -253,13 +340,15 @@ function SchemaFieldControl({
     : field.key === 'date_of_birth'
       ? 'date'
       : 'text';
-  const help = issue
-    || field.description
-    || field.tip
-    || (field.example ? `示例：${field.example}` : '');
+  const example = scenarioFieldLabel?.example || documentFieldLabel?.example || field.example || value || '按 Airwallex Form Schema 填写';
+  const help = field.description || field.tip;
 
   return (
-    <div className={`schema-field-control ${isFullWidth ? 'full-width' : ''} ${issue ? 'schema-field-control-error' : ''}`}>
+    <div
+      className={`schema-field-control ${isFullWidth ? 'full-width' : ''} ${issue ? 'schema-field-control-error' : ''}`}
+      data-airwallex-field-path={item.path}
+      aria-invalid={issue ? true : undefined}
+    >
       <FieldLabel label={label} alias={alias} required={item.required} />
       {isChoice ? (
         <div className={`schema-choice-group ${field.type === 'TRANSFER_METHOD' ? 'schema-choice-group-wide' : ''}`} role="radiogroup" aria-label={label}>
@@ -268,6 +357,7 @@ function SchemaFieldControl({
               className={value === option.value ? 'schema-choice-active' : ''}
               type="button"
               role="radio"
+              aria-invalid={issue ? true : undefined}
               aria-checked={value === option.value}
               key={option.value}
               onClick={() => onChange(option.value)}
@@ -293,6 +383,7 @@ function SchemaFieldControl({
           field={item}
           label={label}
           value={value}
+          invalid={Boolean(issue)}
           onChange={onChange}
         />
       ) : (
@@ -300,6 +391,7 @@ function SchemaFieldControl({
           {isDynamic ? <Search size={15} aria-hidden="true" /> : null}
           <input
             aria-label={label}
+            aria-invalid={issue ? true : undefined}
             type={inputType}
             value={value}
             placeholder={field.placeholder || (field.example ? `例如：${field.example}` : `请输入${label}`)}
@@ -307,13 +399,13 @@ function SchemaFieldControl({
           />
         </div>
       )}
-      {(help || field.refresh || isDynamic) ? (
-        <div className={`schema-field-help ${issue ? 'schema-field-help-error' : ''}`}>
-          {field.refresh ? <em><RefreshCw size={10} />变更后刷新 Schema</em> : null}
-          {isDynamic ? <em><Search size={10} />动态银行搜索</em> : null}
-          {help ? <span>{help}</span> : null}
-        </div>
-      ) : null}
+      <div className={`schema-field-help ${issue ? 'schema-field-help-error' : ''}`}>
+        {field.refresh ? <em><RefreshCw size={10} />变更后刷新 Schema</em> : null}
+        {isDynamic ? <em><Search size={10} />动态银行搜索</em> : null}
+        {help ? <span>{help}</span> : null}
+        {issue ? <span>{issue}</span> : null}
+        <span className="schema-field-example-after-error">示例：{example}</span>
+      </div>
     </div>
   );
 }
@@ -323,12 +415,14 @@ function DynamicSchemaSelect({
   field,
   label,
   value,
+  invalid = false,
   onChange,
 }: {
   account: AirwallexPayoutAccount;
   field: AirwallexFormSchemaField;
   label: string;
   value: string;
+  invalid?: boolean;
   onChange: (value: string) => void;
 }) {
   const [query, setQuery] = useState(value);
@@ -384,6 +478,7 @@ function DynamicSchemaSelect({
           aria-label={label}
           aria-autocomplete="list"
           aria-expanded={showResults}
+          aria-invalid={invalid ? true : undefined}
           role="combobox"
           value={query}
           placeholder={field.field.placeholder || (field.field.example ? `例如：${field.field.example}` : `搜索${label}`)}
@@ -466,9 +561,13 @@ function StatusPanel({ account }: { account: CreatorPayoutAccount }) {
 function AirwallexAccountForm({
   account,
   onChange,
+  validationAttempt = 0,
+  focusValidationError = true,
 }: {
   account: AirwallexPayoutAccount;
   onChange: (account: AirwallexPayoutAccount) => void;
+  validationAttempt?: number;
+  focusValidationError?: boolean;
 }) {
   const fallbackSchema = useMemo(() => generateLocalAirwallexFormSchema(account), [account]);
   const [schema, setSchema] = useState(fallbackSchema);
@@ -476,11 +575,17 @@ function AirwallexAccountForm({
   const [schemaError, setSchemaError] = useState('');
   const [beneficiaryStatus, setBeneficiaryStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [beneficiaryError, setBeneficiaryError] = useState('');
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const conditionKey = getAirwallexSchemaConditionKey(account);
   const issues = useMemo(() => validateAirwallexFormSchema(account, schema), [account, schema]);
+  const accountIssues = useMemo(() => (
+    account.nickname.trim()
+      ? issues
+      : [{ path: 'nickname', code: 'REQUIRED' as const, message: '账户别名为必填项' }, ...issues]
+  ), [account.nickname, issues]);
   const issuesByPath = useMemo(
-    () => new Map(issues.map((issue) => [issue.path, issue.message])),
-    [issues],
+    () => new Map(accountIssues.map((issue) => [issue.path, issue.message])),
+    [accountIssues],
   );
   const enabledFields = schema.fields.filter((item) => item.enabled && item.path !== 'nickname');
   const requiredFields = schema.fields.filter((item) => item.enabled && item.required);
@@ -491,10 +596,40 @@ function AirwallexAccountForm({
     (item) => getAirwallexSchemaGroup(item.path) !== 'condition',
   );
   const requiredPaymentFields = paymentFields.filter((item) => item.required);
-  const fallbackFields = useMemo(
-    () => getAirwallexBankPaymentFallbackFields(schema),
+  const supplementalFields = useMemo(
+    () => getAirwallexUsPaymentSupplementalFields(schema),
     [schema],
   );
+
+  const focusFirstIssue = () => {
+    window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        '.creator-profile-editor-modal [data-airwallex-field-path][aria-invalid="true"], '
+        + '.creator-profile-editor-modal [data-airwallex-field-path] [aria-invalid="true"]',
+      );
+      const focusable = target?.matches('input, button, [tabindex]')
+        ? target
+        : target?.querySelector<HTMLElement>('input, button, [tabindex]');
+      const scroller = target?.closest<HTMLElement>('.modal-content');
+      if (target && scroller) {
+        const targetRect = target.getBoundingClientRect();
+        const scrollerRect = scroller.getBoundingClientRect();
+        scroller.scrollTo({
+          top: Math.max(0, scroller.scrollTop + targetRect.top - scrollerRect.top - 92),
+          behavior: 'smooth',
+        });
+      } else {
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      window.requestAnimationFrame(() => focusable?.focus({ preventScroll: true }));
+    });
+  };
+
+  useEffect(() => {
+    if (validationAttempt <= 0) return;
+    setShowValidationErrors(true);
+    if (focusValidationError && accountIssues.length) focusFirstIssue();
+  }, [validationAttempt]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -539,7 +674,7 @@ function AirwallexAccountForm({
       <SchemaFieldControl
         item={item}
         account={account}
-        issue={issuesByPath.get(item.path)}
+        issue={showValidationErrors ? issuesByPath.get(item.path) : undefined}
         onChange={(value) => updateSchemaField(item, value)}
         key={item.path}
       />
@@ -547,6 +682,13 @@ function AirwallexAccountForm({
   );
 
   const saveBeneficiary = async () => {
+    setShowValidationErrors(true);
+    if (accountIssues.length) {
+      setBeneficiaryStatus('error');
+      setBeneficiaryError(`请先补充 ${accountIssues.length} 项账户信息，系统已定位到第一个遗漏字段。`);
+      focusFirstIssue();
+      return;
+    }
     setBeneficiaryStatus('saving');
     setBeneficiaryError('');
     try {
@@ -587,8 +729,8 @@ function AirwallexAccountForm({
         <div className="dynamic-schema-meta">
           <em>API {AIRWALLEX_SCHEMA_API_VERSION}</em>
           <b>{enabledFields.length} 个字段 · {requiredFields.length} 个必填</b>
-          <b className={issues.length ? 'dynamic-schema-issues' : 'dynamic-schema-complete'}>
-            {issues.length ? `${issues.length} 项待完善` : 'Schema 校验完整'}
+          <b className={accountIssues.length ? 'dynamic-schema-issues' : 'dynamic-schema-complete'}>
+            {accountIssues.length ? `${accountIssues.length} 项待完善` : 'Schema 校验完整'}
           </b>
         </div>
       </div>
@@ -609,7 +751,17 @@ function AirwallexAccountForm({
 
       <Section icon={<Landmark size={19} />} title="账户配置" description="COMETS Pay 内部账户名称，不作为 Airwallex 银行资料字段">
         <div className="form-grid creator-payment-form-grid">
-          <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => commit({ ...account, nickname: value })} placeholder="例如：日本 JPY 主账户" required />
+          <TextField
+            label="账户别名"
+            alias="Internal nickname"
+            value={account.nickname}
+            onChange={(value) => commit({ ...account, nickname: value })}
+            placeholder="例如：美国 USD 主账户"
+            example="美国 USD 主账户"
+            issue={showValidationErrors ? issuesByPath.get('nickname') : undefined}
+            fieldPath="nickname"
+            required
+          />
         </div>
       </Section>
 
@@ -626,7 +778,7 @@ function AirwallexAccountForm({
         </div>
       </Section>
 
-      <Section icon={<ShieldCheck size={19} />} title="Airwallex 付款信息" description="按当前 Form Schema 展示字段、必填规则和格式校验，付款方式为银行账户">
+      <Section icon={<ShieldCheck size={19} />} title="Airwallex 付款信息" description="需要填写的付款信息字段由 Airwallex Form Schema 决定，当前使用模拟美国付款场景展示">
         <div className="airwallex-card-context">
           <span>
             <strong>Paid by Bank</strong>
@@ -643,20 +795,21 @@ function AirwallexAccountForm({
         </div>
       </Section>
 
-      {fallbackFields.length ? (
-        <Section icon={<Plus size={19} />} title="补充付款资料" description="仅补充当前 Schema 未覆盖的 Invoice 银行字段；同义字段不会重复，全部为选填">
+      {supplementalFields.length ? (
+        <Section icon={<Plus size={19} />} title="补充付款信息" description="补充模拟美国付款展示中未由当前 Airwallex Form Schema 返回的字段，均提供填写示例">
           <div className="form-grid creator-payment-form-grid airwallex-supplemental-grid">
-            {fallbackFields.map((field) => {
+            {supplementalFields.map((field) => {
               const display = DOCUMENT_PAYOUT_FIELD_LABELS[field.path];
               return (
                 <TextField
-                  label={display?.label ?? field.label}
-                  alias={`${display?.alias ?? field.sourceLabel} · 选填`}
+                  label={display?.label ?? field.sourceLabel}
+                  alias={`${(display?.alias ?? field.label).replace(/\s*·\s*选填$/, '')} · 选填`}
                   value={getAirwallexFormValue(account, field.path)}
                   onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
                   placeholder={field.placeholder}
+                  example={display?.example ?? field.placeholder.replace(/^例如：/, '')}
                   type={field.type}
-                  fullWidth={field.key === 'beneficiary_bank_address'}
+                  fullWidth={field.key.includes('address') || field.key === 'transfer_remarks'}
                   key={field.key}
                 />
               );
@@ -666,19 +819,19 @@ function AirwallexAccountForm({
       ) : null}
       <div className="airwallex-beneficiary-actions">
         <span>
-          <strong>{account.beneficiaryId ? '更新 Beneficiary' : '创建 Beneficiary'}</strong>
+          <strong>{account.beneficiaryId ? '重新校验账户' : '校验账户后创建档案'}</strong>
           <small>
             {beneficiaryStatus === 'saved'
               ? `已回写 ${account.beneficiaryId || 'beneficiary_id'}`
-              : '先按当前 Schema 校验，再通过本地 mock gateway 保存'}
+              : '先按当前 Airwallex Form Schema 校验账户，校验完成后才可创建达人档案'}
           </small>
         </span>
         <Button
           icon={beneficiaryStatus === 'saving' ? <LoaderCircle className="airwallex-schema-spinner" size={16} /> : <ShieldCheck size={16} />}
-          disabled={beneficiaryStatus === 'saving' || issues.length > 0}
+          disabled={beneficiaryStatus === 'saving'}
           onClick={saveBeneficiary}
         >
-          {beneficiaryStatus === 'saving' ? '正在校验并保存' : '校验并保存 Beneficiary'}
+          {beneficiaryStatus === 'saving' ? '正在校验账户' : '校验账户'}
         </Button>
       </div>
       {beneficiaryError ? <div className="inline-alert"><AlertCircle size={16} />{beneficiaryError}</div> : null}
@@ -867,10 +1020,11 @@ const PAYOUT_PROVIDERS: Array<{
   value: PayoutProvider;
   label: string;
   icon: typeof Landmark;
+  available: boolean;
 }> = [
-  { value: 'Airwallex', label: 'Airwallex', icon: Landmark },
-  { value: 'PayPal', label: 'PayPal', icon: Wallet },
-  { value: 'PayMax', label: 'PayerMax', icon: CircleDollarSign },
+  { value: 'Airwallex', label: 'Airwallex', icon: Landmark, available: true },
+  { value: 'PayPal', label: 'PayPal', icon: Wallet, available: false },
+  { value: 'PayMax', label: 'PayerMax', icon: CircleDollarSign, available: false },
 ];
 
 export function CreatorPayoutAccounts({
@@ -879,6 +1033,8 @@ export function CreatorPayoutAccounts({
   creatorId,
   creatorName,
   creatorEmail,
+  validationAttempt = 0,
+  focusValidationError = true,
   onChange,
 }: CreatorPayoutAccountsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -917,11 +1073,8 @@ export function CreatorPayoutAccounts({
   };
 
   const addAccount = (provider: PayoutProvider) => {
-    const next = provider === 'Airwallex'
-      ? createEmptyAirwallexAccount(creatorName, creatorEmail, creatorId)
-      : provider === 'PayPal'
-        ? createEmptyPayPalAccount(creatorName, creatorEmail, creatorId)
-        : createEmptyPayMaxAccount(creatorName, creatorEmail, creatorId);
+    if (provider !== 'Airwallex') return;
+    const next = createEmptyAirwallexAccount(creatorName, creatorEmail, creatorId);
     const normalized = { ...next, isDefault: getDefaultPayoutAccount(accounts) === null };
     onChange?.([...accounts, normalized]);
     setActiveProvider(provider);
@@ -982,11 +1135,13 @@ export function CreatorPayoutAccounts({
             const providerUsableCount = providerAccounts.filter(isPayoutAccountVerified).length;
             return (
               <button
-                className={`payout-provider-tab ${activeProvider === provider.value ? 'payout-provider-tab-active' : ''}`}
+                className={`payout-provider-tab ${activeProvider === provider.value ? 'payout-provider-tab-active' : ''} ${!provider.available ? 'payout-provider-tab-disabled' : ''}`}
                 type="button"
                 role="tab"
                 aria-selected={activeProvider === provider.value}
+                aria-disabled={!provider.available}
                 aria-controls="payout-provider-panel"
+                disabled={!provider.available}
                 key={provider.value}
                 onClick={() => {
                   const nextAccount = (
@@ -1001,7 +1156,9 @@ export function CreatorPayoutAccounts({
               >
                 <strong>{provider.label}</strong>
                 <small>
-                  {providerAccounts.length
+                  {!provider.available
+                    ? '暂未开放 · 暂不支持创建'
+                    : providerAccounts.length
                     ? `${providerAccounts.length} 个账户 · ${providerUsableCount} 个可用`
                     : '0 个账户 · 暂未开设'}
                 </small>
@@ -1091,7 +1248,7 @@ export function CreatorPayoutAccounts({
               <ActiveProviderIcon size={22} />
               <span>
                 <strong>尚未开设该渠道账户</strong>
-                <small>可在下方新建账户，三种渠道资料相互独立。</small>
+                <small>{activeProviderConfig.available ? '可在下方新建 Airwallex 账户。' : '该渠道暂未开放，暂不支持创建账户。'}</small>
               </span>
             </div>
           ) : null}
@@ -1104,9 +1261,11 @@ export function CreatorPayoutAccounts({
                 variant="secondary"
                 icon={<Plus size={15} />}
                 key={provider.value}
+                disabled={!provider.available}
+                title={provider.available ? `新建 ${provider.label} 账户` : `${provider.label} 暂未开放`}
                 onClick={() => addAccount(provider.value)}
               >
-                {provider.label} 账户
+                {provider.label} 账户{provider.available ? '' : '（暂未开放）'}
               </Button>
             ))}
           </div>
@@ -1115,7 +1274,14 @@ export function CreatorPayoutAccounts({
 
       {selectedAccount?.provider === 'Airwallex' ? (
         editing
-          ? <AirwallexAccountForm account={selectedAccount} onChange={replaceAccount} />
+          ? (
+            <AirwallexAccountForm
+              account={selectedAccount}
+              onChange={replaceAccount}
+              validationAttempt={validationAttempt}
+              focusValidationError={focusValidationError}
+            />
+          )
           : <AirwallexAccountView account={selectedAccount} />
       ) : selectedAccount?.provider === 'PayPal' ? (
         editing

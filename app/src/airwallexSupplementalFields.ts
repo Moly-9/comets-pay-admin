@@ -138,14 +138,14 @@ export const AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG: AirwallexSupplementalField[] 
   },
   {
     key: 'branch_code',
-    label: '分行代码',
-    sourceLabel: 'Branch Code',
+    label: 'Primary Branch Code',
+    sourceLabel: 'Primary Branch Code',
     path: 'beneficiary.bank_details.account_routing_value2',
     aliases: [
       'beneficiary.bank_details.branch_code',
       'beneficiary.bank_details.bank_branch',
     ],
-    placeholder: '分行代码',
+    placeholder: '例如：001',
   },
   {
     key: 'swift_code',
@@ -239,6 +239,38 @@ export const AIRWALLEX_SUPPLEMENTAL_FIELD_CATALOG: AirwallexSupplementalField[] 
     placeholder: '银行邮政编码',
   },
   {
+    key: 'intermediary_bank_country',
+    label: '中间行国家 / 地区',
+    sourceLabel: 'Intermediary Bank Country (if any)',
+    path: 'beneficiary.bank_details.intermediary_bank_country_code',
+    aliases: [
+      'beneficiary.bank_details.intermediary_bank_country',
+    ],
+    placeholder: '例如：US',
+  },
+  {
+    key: 'intermediary_bank_code',
+    label: '中间行代码',
+    sourceLabel: 'Intermediary Bank Code (if any)',
+    path: 'beneficiary.bank_details.intermediary_bank_swift_code',
+    aliases: [
+      'beneficiary.bank_details.intermediary_bank_code',
+      'beneficiary.bank_details.intermediary_bank_bic',
+    ],
+    placeholder: '例如：CHASUS33',
+  },
+  {
+    key: 'transfer_remarks',
+    label: '转账备注',
+    sourceLabel: 'Transfer Remarks (if any)',
+    path: 'beneficiary.additional_info.transfer_remarks',
+    aliases: [
+      'beneficiary.additional_info.transfer_note',
+      'beneficiary.additional_info.payment_reference',
+    ],
+    placeholder: '例如：Creator campaign payout Aug 2026',
+  },
+  {
     key: 'id_document_type',
     label: '证件类型',
     sourceLabel: 'ID Document Type',
@@ -281,6 +313,27 @@ const BANK_PAYMENT_FALLBACK_KEYS = [
   'bank_street_address',
   'swift_code',
   'iban',
+] as const;
+
+const US_PAYMENT_PRESENTATION_KEYS = [
+  'account_name',
+  'account_number',
+  'bank_account_type',
+  'swift_code',
+  'bank_name',
+  'bank_street_address',
+  'bank_country',
+  'bank_state',
+  'bank_city',
+  'bank_postcode',
+  'intermediary_bank_country',
+  'intermediary_bank_code',
+  'transfer_remarks',
+  'routing_code_type',
+  'branch_code',
+  'id_document_type',
+  'beneficiary_id_number',
+  'business_registration_number',
 ] as const;
 
 const supplementalFieldByKey = new Map(
@@ -358,3 +411,22 @@ export const getAirwallexBankPaymentFallbackFields = (
 ) => AIRWALLEX_BANK_PAYMENT_FALLBACK_FIELDS.filter(
   (field) => !isAirwallexSupplementCovered(field, schema.fields),
 );
+
+/**
+ * The profile editor shows this stable US payment-information checklist around
+ * the dynamic Form Schema. Values already exposed by an enabled Schema field
+ * stay in the Schema section; missing concepts are kept as profile supplements.
+ */
+export const getAirwallexUsPaymentSupplementalFields = (
+  schema: AirwallexFormSchemaResponse,
+) => US_PAYMENT_PRESENTATION_KEYS.flatMap<AirwallexSupplementalField>((key) => {
+  const field = supplementalFieldByKey.get(key);
+  if (!field) return [];
+  // The country selector determines the Schema and is repeated in the stable
+  // US payment checklist so the bank country remains visible with bank data.
+  if (key === 'bank_country') return [field];
+  return isAirwallexSupplementCovered(
+    field,
+    schema.fields.filter((schemaField) => schemaField.enabled),
+  ) ? [] : [field];
+});

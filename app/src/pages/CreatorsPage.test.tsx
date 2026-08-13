@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyAirwallexAccount } from '../payoutAccounts';
+import { createEmptyAirwallexAccount, createPayPalPayoutAccount } from '../payoutAccounts';
 import type { CreatorProfile } from '../types';
-import { hasCreatorDraftContent } from './OperationalPages';
+import { getCreatorPayoutAccountValidationError, hasCreatorDraftContent } from './OperationalPages';
 
 const emptyCreatorDraft = (): CreatorProfile => {
   const id = 'creator-draft-test';
@@ -44,5 +44,32 @@ describe('CreatorsPage draft exit guard', () => {
         bankDetails: { ...airwallex.bankDetails, bankCountryCode: 'JP' },
       }],
     })).toBe(true);
+  });
+});
+
+describe('CreatorsPage payout account gate', () => {
+  it('requires exactly one verified Airwallex default account', () => {
+    const airwallex = createEmptyAirwallexAccount('Taylor Morgan', 'taylor@example.com', 'creator-test');
+    const verified = { ...airwallex, status: 'VALIDATED' as const, beneficiaryId: 'bene_test' };
+
+    expect(getCreatorPayoutAccountValidationError([airwallex]))
+      .toBe('默认 Airwallex 收款账户校验完成');
+    expect(getCreatorPayoutAccountValidationError([verified])).toBe('');
+    expect(getCreatorPayoutAccountValidationError([
+      verified,
+      { ...verified, id: 'airwallex-2', payoutAccountId: 'airwallex-2', isDefault: true },
+    ])).toBe('仅一个默认收款账户');
+    expect(getCreatorPayoutAccountValidationError([
+      { ...verified, isDefault: false },
+    ])).toBe('仅一个默认收款账户');
+    expect(getCreatorPayoutAccountValidationError([
+      createPayPalPayoutAccount({
+        id: 'paypal-test',
+        isDefault: true,
+        status: 'VALIDATED',
+        paypalUsername: 'Taylor Morgan',
+        paypalEmail: 'taylor@example.com',
+      }),
+    ])).toBe('一个默认 Airwallex 收款账户');
   });
 });
