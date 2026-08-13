@@ -236,7 +236,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toMatch(/class="button button-danger payment-execution-return-action"[^>]*disabled=""/);
   });
 
-  it('renders a returned request as a read-only failure detail workspace', () => {
+  it('opens a returned request in a read-only overview with its return reason', () => {
     const project = buildPaymentProjectRows({
       tab: 'payment',
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -262,7 +262,7 @@ describe('PaymentExecutionWorkspace', () => {
     const returnedProject = {
       ...project,
       status: '已退回',
-      actionLabel: '查看原因',
+      actionLabel: '查看详情',
       payouts: project.payouts.map((payout, index) => index === 0 ? {
         ...payout,
         status: '已退回' as const,
@@ -285,23 +285,22 @@ describe('PaymentExecutionWorkspace', () => {
     );
 
     expect(html).toContain(`${project.requestCode} · 已退回详情`);
-    expect(html).toContain('payment-execution-failure-card payment-execution-content-card');
+    expect(html).toContain('is-overview is-returned');
+    expect(html).toContain('已打开退回项目概览');
+    expect(html).toContain('payment-execution-failure-card payment-execution-overview-return-card');
     expect(html).toContain('class="payment-execution-failure-summary" role="alert"');
-    expect(html).toContain('失败原因');
+    expect(html).toContain('退回原因');
     expect(html).toContain(reason);
+    expect(html.indexOf('退回原因')).toBeLessThan(html.indexOf('请款项目信息'));
     expect(html).toContain('财务审核 · 财务测试员 · 第 1 轮');
-    expect(html).toContain('payment-execution-payee-status is-error');
-    expect(html).toContain('payment-execution-account-note is-error');
-    expect(html).toContain('请款信息已退回');
-    expect(html).toContain('已通过审核');
-    expect(html).toContain('该达人请款信息已通过审核，无需修改');
-    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(1);
-    expect(html.match(/payment-execution-payee is-passed/g)).toHaveLength(project.payouts.length - 1);
-    expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
-    expect(html).toContain('class="payment-execution-approval-return-note"');
-    expect(html).toContain('>返回列表</span>');
+    expect(html).toContain('审核未通过');
+    expect(html).toContain('该项目审核未通过，可展开付款清单查看具体明细和退回原因。');
+    expect(html).toContain('>查看付款清单</span>');
+    expect(html).toContain('>关闭</span>');
+    expect(html).not.toContain('payment-execution-payee-list');
     expect(html).not.toContain('payment-execution-return-action');
     expect(html).not.toContain('payment-execution-submit-action');
+    expect(html).not.toContain('payment-execution-overview-submit-action');
   });
 
   it('marks only scoped finance-return details as rejected and keeps the rest green', () => {
@@ -347,9 +346,10 @@ describe('PaymentExecutionWorkspace', () => {
     const html = renderToStaticMarkup(
       <PaymentExecutionWorkspace
         request={returnedRequest}
-        project={{ ...project, status: '已退回', actionLabel: '查看原因' }}
+        project={{ ...project, status: '已退回', actionLabel: '查看详情' }}
         generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
         variant="returned"
+        initialStage="payment-list"
         canExecute
         onExecute={vi.fn(() => true)}
         onReturn={vi.fn(() => true)}
@@ -357,12 +357,14 @@ describe('PaymentExecutionWorkspace', () => {
       />,
     );
 
-    expect(html).toContain('付款清单已退回');
-    expect(html).toContain(`<b>退回原因：</b>${reason}`);
+    expect(html).toContain('已展开退回付款清单详情');
+    expect(html).toContain('审核未通过');
+    expect(html).toContain(`<b>具体退回原因：</b>${reason}`);
     expect(html).toContain('该达人请款信息已通过审核，无需修改');
     expect(html).toContain('payment-execution-payee is-passed');
     expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(1);
     expect(html).toContain('payment-execution-failure-card payment-execution-content-card');
     expect(html).toContain('付款清单收款账户需修正。');
+    expect(html).toContain('>返回项目</span>');
   });
 });

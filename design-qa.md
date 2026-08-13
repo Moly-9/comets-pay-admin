@@ -171,6 +171,35 @@ final result: passed
 
 ---
 
+# Returned Payment Progressive Detail Design QA
+
+## Evidence
+
+- Desktop overview: `design-qa-assets/payment-returned-progressive-overview-1280x720.png`.
+- Desktop expanded detail: `design-qa-assets/payment-returned-progressive-detail-1280x720.png`.
+- Mobile overview: `design-qa-assets/payment-returned-progressive-overview-390x844.png`.
+- Mobile expanded detail: `design-qa-assets/payment-returned-progressive-detail-390x844.png`.
+- State: a pending-payment request returned by finance with the reason `收款账户名与 Invoice 不一致，请修正付款资料后重新提交。`.
+
+## Findings
+
+- Returned payment details now use the same progressive right-drawer to full-screen transition as payment execution.
+- The returned overview leads with the rejection card before project metadata, so `审核未通过` and the complete return reason are visible in the initial desktop and mobile viewport.
+- The overview remains read-only and contains only `关闭` and `查看付款清单`; execution and return actions are absent.
+- Expanded detail retains the existing two-board layout. Every rejected payout is labeled `审核未通过` and contains `具体退回原因`, while unaffected payouts retain the approved treatment when the return is scoped.
+- At 390 px, the overview and expanded state both measure 390 px document width and scroll width, with no horizontal overflow or clipped action text.
+
+## Interaction Verification
+
+- Created a returned request through the existing finance payment return flow, then opened it from the workbench `已退回` tab using `查看详情`.
+- Verified the overview reason, expanded the payment list, checked all 15 rejected records, and returned to the overview without losing the reason.
+- Confirmed the expanded read-only detail contains no execution action.
+- Browser console contains no warnings or errors. Full Vitest passes 74 files and 474 tests; TypeScript/Vite build and `git diff --check` pass.
+
+final result: passed
+
+---
+
 # Payment Execution Direct Action Design QA
 
 ## Evidence

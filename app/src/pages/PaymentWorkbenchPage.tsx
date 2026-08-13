@@ -246,7 +246,7 @@ const requestMatchesWorkbenchTab = (
 
 const paymentProjectPresentation = (tab: WorkbenchTab, payouts: Payout[]) => {
   if (tab === 'review') return { status: '待财务审核', actionLabel: '审核' };
-  if (tab === 'returned') return { status: '已退回', actionLabel: '查看原因' };
+  if (tab === 'returned') return { status: '已退回', actionLabel: '查看详情' };
   if (tab === 'payment') return { status: '待打款', actionLabel: '执行打款' };
   const status = aggregatePaymentStatus(payouts.map((payout) => payout.status));
   if (status === '全部失败' || status === '部分失败') {

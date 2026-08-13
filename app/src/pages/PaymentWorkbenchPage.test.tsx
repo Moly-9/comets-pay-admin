@@ -197,6 +197,25 @@ describe('PaymentWorkbenchPage currency overview', () => {
       }));
   });
 
+  it('uses the detail action for returned payment projects', () => {
+    const input = {
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    };
+    const waitingRow = buildPaymentProjectRows({ ...input, tab: 'payment' })[0];
+    const returnedRequests = input.requests.map((request) => request.id === waitingRow.requestId
+      ? { ...request, lifecycle: 'RETURNED' as const }
+      : request);
+
+    expect(buildPaymentProjectRows({ ...input, requests: returnedRequests, tab: 'returned' }))
+      .toContainEqual(expect.objectContaining({
+        id: waitingRow.id,
+        status: '已退回',
+        actionLabel: '查看详情',
+      }));
+  });
+
   it('shows the complete status filter only on the paid tab and filters aggregate project states', () => {
     const input = {
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,

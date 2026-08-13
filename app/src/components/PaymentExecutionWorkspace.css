@@ -25,8 +25,7 @@ body:has(.payment-execution-workspace) {
   box-shadow: -18px 0 48px rgba(29, 24, 39, 0.18);
 }
 
-.modal-panel.payment-execution-workspace.is-payment-list,
-.modal-panel.payment-execution-workspace.is-returned {
+.modal-panel.payment-execution-workspace.is-payment-list {
   width: 100vw;
   border-radius: 0;
   box-shadow: none;
@@ -155,6 +154,7 @@ body:has(.payment-execution-workspace) {
 }
 
 .payment-execution-shell.is-overview .payment-execution-approval,
+.payment-execution-shell.is-overview .payment-execution-overview-return-card,
 .payment-execution-shell.is-overview .payment-execution-resources {
   margin: 12px 14px 0;
   overflow: hidden;
@@ -166,6 +166,10 @@ body:has(.payment-execution-workspace) {
 
 .payment-execution-shell.is-overview .payment-execution-resources {
   margin-bottom: 14px;
+}
+
+.payment-execution-shell.is-overview .payment-execution-overview-return-card {
+  margin-bottom: 0;
 }
 
 .payment-execution-shell.is-overview .payment-execution-approval-scroll {
@@ -194,6 +198,11 @@ body:has(.payment-execution-workspace) {
 .payment-execution-overview-footer-note svg {
   flex: 0 0 auto;
   color: #675187;
+}
+
+.payment-execution-overview-footer-note.is-returned,
+.payment-execution-overview-footer-note.is-returned svg {
+  color: #93443c;
 }
 
 .payment-execution-overview-footer-actions {
@@ -1970,6 +1979,7 @@ body:has(.payment-execution-workspace) {
 
 @media (max-width: 560px) {
   .payment-execution-shell.is-overview .payment-execution-overview-project,
+  .payment-execution-shell.is-overview .payment-execution-overview-return-card,
   .payment-execution-shell.is-overview .payment-execution-approval,
   .payment-execution-shell.is-overview .payment-execution-resources {
     margin-right: 10px;

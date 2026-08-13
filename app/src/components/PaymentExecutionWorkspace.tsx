@@ -195,7 +195,7 @@ export function PaymentExecutionWorkspace({
   onClose: () => void;
 }) {
   const isReturned = variant === 'returned';
-  const [stage, setStage] = useState<PaymentExecutionStage>(isReturned ? 'payment-list' : initialStage);
+  const [stage, setStage] = useState<PaymentExecutionStage>(initialStage);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
@@ -284,7 +284,7 @@ export function PaymentExecutionWorkspace({
   };
   const paymentCurrencies = [...new Set(project.payouts.map((payout) => payout.currency))].join(' / ') || '待确认';
   const validationReady = accountValidationIssueCount === 0 && project.payouts.length > 0;
-  const showOverview = !isReturned && stage === 'overview';
+  const showOverview = stage === 'overview';
 
   const changeStage = (nextStage: PaymentExecutionStage) => {
     setStage(nextStage);
@@ -345,14 +345,16 @@ export function PaymentExecutionWorkspace({
       <Modal
         title={`${project.requestCode} · ${isReturned ? '已退回详情' : '执行打款'}`}
         width={showOverview ? '520px' : '100vw'}
-        className={`payment-execution-workspace ${isReturned ? 'is-returned' : `is-${stage}`}`}
+        className={`payment-execution-workspace is-${stage}${isReturned ? ' is-returned' : ''}`}
         onClose={onClose}
         onBackdropMouseDown={() => undefined}
         footer={showOverview ? (
           <div className="payment-execution-overview-footer">
-            <div className="payment-execution-overview-footer-note">
-              <ShieldCheck size={17} aria-hidden="true" />
-              <span>付款信息已完成校验，可直接执行打款；也可先查看付款清单逐笔确认。</span>
+            <div className={`payment-execution-overview-footer-note${isReturned ? ' is-returned' : ''}`}>
+              {isReturned ? <AlertTriangle size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}
+              <span>{isReturned
+                ? '该项目审核未通过，可展开付款清单查看具体明细和退回原因。'
+                : '付款信息已完成校验，可直接执行打款；也可先查看付款清单逐笔确认。'}</span>
             </div>
             <div className="payment-execution-overview-footer-actions">
               <Button variant="secondary" onClick={onClose}>关闭</Button>
@@ -363,14 +365,16 @@ export function PaymentExecutionWorkspace({
               >
                 查看付款清单
               </Button>
-              <Button
-                className="payment-execution-overview-submit-action"
-                icon={<Send size={16} />}
-                disabled={!canSubmitPayment}
-                onClick={executePayment}
-              >
-                执行打款
-              </Button>
+              {!isReturned ? (
+                <Button
+                  className="payment-execution-overview-submit-action"
+                  icon={<Send size={16} />}
+                  disabled={!canSubmitPayment}
+                  onClick={executePayment}
+                >
+                  执行打款
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : (
@@ -382,8 +386,8 @@ export function PaymentExecutionWorkspace({
                 : `${validatedPayouts.length} 笔付款信息校验成功 · ${paymentProvider}`}</span>
             </div>
             <div>
-              <Button variant="secondary" onClick={isReturned ? onClose : () => changeStage('overview')}>
-                {isReturned ? '返回列表' : '返回项目'}
+              <Button variant="secondary" onClick={() => changeStage('overview')}>
+                返回项目
               </Button>
               {!isReturned ? (
                 <>
@@ -410,9 +414,11 @@ export function PaymentExecutionWorkspace({
           </div>
         )}
       >
-        <div className={`payment-execution-shell${isReturned ? ' is-returned' : ` is-execution is-${stage}`}`} data-testid="payment-execution-workspace">
+        <div className={`payment-execution-shell${isReturned ? ` is-returned is-${stage}` : ` is-execution is-${stage}`}`} data-testid="payment-execution-workspace">
           <span className="payment-execution-stage-announcement" aria-live="polite">
-            {showOverview ? '已打开请款项目概览' : '已进入付款清单核对'}
+            {showOverview
+              ? isReturned ? '已打开退回项目概览' : '已打开请款项目概览'
+              : isReturned ? '已展开退回付款清单详情' : '已进入付款清单核对'}
           </span>
           {!showOverview ? (
           <main
@@ -481,7 +487,7 @@ export function PaymentExecutionWorkspace({
                 <div>
                   <span className="payment-execution-section-icon is-failure"><AlertTriangle size={18} /></span>
                   <div>
-                    <h2 id="payment-execution-failure-title">失败原因</h2>
+                    <h2 id="payment-execution-failure-title">退回原因</h2>
                     <p>{returnedPayoutCount} 位达人需修改 · {passedPayoutCount} 位达人已通过审核</p>
                   </div>
                 </div>
@@ -598,11 +604,7 @@ export function PaymentExecutionWorkspace({
                       <span className={`payment-execution-payee-status ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
                         {detailReturned || (!detailPassed && !informationValidated) ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
                         {detailReturned
-                          ? returnItem?.issueType === 'PAYMENT_LIST'
-                            ? '付款清单已退回'
-                            : returnItem?.issueType === 'INVOICE_CONTENT'
-                              ? 'Invoice 已退回'
-                              : '请款信息已退回'
+                          ? '审核未通过'
                           : detailPassed
                             ? '已通过审核'
                             : informationValidated ? '付款信息校验成功' : '付款信息待校验'}
@@ -611,7 +613,7 @@ export function PaymentExecutionWorkspace({
                     <div className={`payment-execution-account-note ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
                       {detailReturned || (!detailPassed && !informationValidated) ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
                       <span>{detailReturned
-                        ? <><b>退回原因：</b>{failureReason}</>
+                        ? <><b>具体退回原因：</b>{failureReason}</>
                         : detailPassed
                           ? '该达人请款信息已通过审核，无需修改'
                           : informationValidated
@@ -644,9 +646,35 @@ export function PaymentExecutionWorkspace({
           <aside
             ref={showOverview ? overviewFocusRef : undefined}
             className={`payment-execution-side${isReturned ? '' : ' payment-execution-board-card'}`}
-            aria-label={showOverview ? '请款项目概览' : '审批与关联资料'}
+            aria-label={showOverview ? isReturned ? '已退回项目概览' : '请款项目概览' : '审批与关联资料'}
             tabIndex={showOverview ? -1 : undefined}
           >
+            {showOverview && isReturned ? (
+              <section className="payment-execution-failure-card payment-execution-overview-return-card" aria-labelledby="payment-execution-overview-failure-title">
+                <header>
+                  <div>
+                    <span className="payment-execution-section-icon is-failure"><AlertTriangle size={18} /></span>
+                    <div>
+                      <h2 id="payment-execution-overview-failure-title">退回原因</h2>
+                      <p>{returnedPayoutCount} 笔审核未通过 · {passedPayoutCount} 笔已通过审核</p>
+                    </div>
+                  </div>
+                  <span className="payment-execution-failure-count">审核未通过</span>
+                </header>
+                <div className="payment-execution-failure-summary" role="alert">
+                  <AlertTriangle size={20} />
+                  <div>
+                    <strong>{returnedReason}</strong>
+                    <small>
+                      {returnDetails
+                        ? `${returnDetails.stageLabel} · ${returnDetails.actorName} · 第 ${returnDetails.round} 轮`
+                        : '付款工作台退回'}
+                      {returnedAt ? ` · ${formatDateTime(returnedAt)}` : ''}
+                    </small>
+                  </div>
+                </div>
+              </section>
+            ) : null}
             {showOverview ? (
               <section className="payment-execution-project payment-execution-overview-project" aria-labelledby="payment-execution-project-title">
                 <header>
@@ -657,7 +685,7 @@ export function PaymentExecutionWorkspace({
                       <p title={project.cooperationProjectName}>{project.cooperationProjectName}</p>
                     </div>
                   </div>
-                  <span className="payment-execution-status"><i />待打款</span>
+                  <span className={`payment-execution-status${isReturned ? ' is-returned' : ''}`}><i />{isReturned ? '已退回' : '待打款'}</span>
                 </header>
 
                 <div className="payment-execution-metrics" aria-label="请款项目概览">
