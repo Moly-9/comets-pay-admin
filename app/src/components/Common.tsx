@@ -39,7 +39,9 @@ type SelectFieldProps<T extends string> = {
   value: T;
   options: readonly SelectOption<T>[];
   onChange: (value: T) => void;
+  onClear?: () => void;
   ariaLabel: string;
+  clearLabel?: string;
   placeholder?: string;
   className?: string;
   variant?: 'toolbar' | 'form' | 'compact';
@@ -54,7 +56,9 @@ export function SelectField<T extends string = string>({
   value,
   options,
   onChange,
+  onClear,
   ariaLabel,
+  clearLabel = '清除选择',
   placeholder = '请选择',
   className = '',
   variant = 'toolbar',
@@ -76,6 +80,7 @@ export function SelectField<T extends string = string>({
   const selectedOption = options.find((option) => option.value === value);
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedLeading = selectedOption?.leading ?? leadingIcon;
+  const canClear = Boolean(value && onClear && !disabled);
 
   const enabledIndexFrom = (start: number, direction: 1 | -1) => {
     if (!options.length) return -1;
@@ -266,7 +271,7 @@ export function SelectField<T extends string = string>({
   return (
     <div
       ref={rootRef}
-      className={`custom-select custom-select-${variant}${open ? ' custom-select-open' : ''} ${className}`.trim()}
+      className={`custom-select custom-select-${variant}${open ? ' custom-select-open' : ''}${canClear ? ' custom-select-has-clear' : ''} ${className}`.trim()}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget as Node | null;
         if (event.currentTarget.contains(nextTarget) || menuRef.current?.contains(nextTarget)) return;
@@ -302,6 +307,22 @@ export function SelectField<T extends string = string>({
         </span>
         <ChevronDown className="custom-select-chevron" size={16} strokeWidth={2.2} aria-hidden="true" />
       </button>
+      {canClear ? (
+        <button
+          className="custom-select-clear"
+          type="button"
+          aria-label={clearLabel}
+          title={clearLabel}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(false);
+            onClear?.();
+            window.requestAnimationFrame(() => triggerRef.current?.focus());
+          }}
+        >
+          <X size={14} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      ) : null}
       {menuStrategy === 'fixed' && menu && typeof document !== 'undefined'
         ? createPortal(menu, document.body)
         : menu}
@@ -322,15 +343,22 @@ export function PageHeading({ title, subtitle, actions }: { title: string; subti
 }
 
 export function NoticeBanner({ children, onClose }: PropsWithChildren<{ onClose?: () => void }>) {
+  const [visible, setVisible] = useState(true);
+
+  if (!visible) return null;
+
+  const closeNotice = () => {
+    setVisible(false);
+    onClose?.();
+  };
+
   return (
     <div className="notice-banner" role="status">
       <span className="notice-icon"><Info size={16} strokeWidth={2.4} /></span>
       <div>{children}</div>
-      {onClose ? (
-        <button className="icon-button notice-close" type="button" aria-label="关闭提示" onClick={onClose}>
-          <X size={18} />
-        </button>
-      ) : null}
+      <button className="icon-button notice-close" type="button" aria-label="关闭提示" onClick={closeNotice}>
+        <X size={18} />
+      </button>
     </div>
   );
 }

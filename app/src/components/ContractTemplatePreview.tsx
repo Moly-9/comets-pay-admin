@@ -282,7 +282,8 @@ export function ContractTemplatePreview({
                 if (event.key === 'Enter') submitPage();
               }}
             />
-            <span>/ {resolvedPageCount || pageCount || 17}</span>
+            <span className="contract-page-separator" aria-hidden="true">/</span>
+            <span className="contract-page-total">{resolvedPageCount || pageCount || 17}</span>
           </label>
           <button type="button" title="下一页" aria-label="下一页" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= resolvedPageCount}><ChevronRight size={15} /></button>
           <i />

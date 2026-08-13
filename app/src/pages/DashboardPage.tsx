@@ -17,8 +17,10 @@ import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
+  NavOptions,
   NavPage,
   Payout,
+  RequestProjectStatusFilter,
 } from '../types';
 
 type DashboardStageTone = 'peach' | 'amber' | 'lilac' | 'blue' | 'mint';
@@ -33,15 +35,25 @@ type DashboardStage = {
 type DashboardRequestMetric = DashboardStage & {
   meta: string;
   icon: LucideIcon;
+  statusFilter: RequestProjectStatusFilter;
 };
 
-function DashboardRequestCard({ metric }: { metric: DashboardRequestMetric }) {
+function DashboardRequestCard({
+  metric,
+  onOpen,
+}: {
+  metric: DashboardRequestMetric;
+  onOpen: () => void;
+}) {
   const MetricIcon = metric.icon;
 
   return (
-    <article
+    <button
       className={`dashboard-request-card dashboard-request-card-${metric.tone}`}
       data-testid={`dashboard-request-card-${metric.id}`}
+      type="button"
+      onClick={onOpen}
+      aria-label={`查看${metric.label}`}
     >
       <div className="dashboard-request-card-head">
         <span>{metric.label}</span>
@@ -51,7 +63,7 @@ function DashboardRequestCard({ metric }: { metric: DashboardRequestMetric }) {
         <strong>{metric.value.toLocaleString('zh-CN')}</strong>
         <small>{metric.meta}</small>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -139,7 +151,7 @@ export function DashboardPage({
   contracts: ContractRecord[];
   payouts: Payout[];
   generatedInvoices: GeneratedInvoiceRecord[];
-  onNavigate: (page: NavPage) => void;
+  onNavigate: (page: NavPage, options?: NavOptions) => void;
 }) {
   const metrics = useMemo(() => {
     const requestStatuses = requests.map(myProjectStatusFor);
@@ -210,6 +222,7 @@ export function DashboardPage({
       meta: '当前系统全部请款项目',
       tone: 'peach',
       icon: FolderKanban,
+      statusFilter: 'all',
     },
     {
       id: 'approving',
@@ -218,6 +231,7 @@ export function DashboardPage({
       meta: '正在流程中流转',
       tone: 'amber',
       icon: Clock3,
+      statusFilter: 'approving',
     },
     {
       id: 'approved',
@@ -226,6 +240,7 @@ export function DashboardPage({
       meta: '已完成审批节点',
       tone: 'lilac',
       icon: ClipboardCheck,
+      statusFilter: 'approved',
     },
     {
       id: 'paid',
@@ -234,6 +249,7 @@ export function DashboardPage({
       meta: '款项已完成支付',
       tone: 'mint',
       icon: CircleDollarSign,
+      statusFilter: 'paid',
     },
   ];
 
@@ -262,7 +278,11 @@ export function DashboardPage({
           </header>
           <div className="dashboard-request-card-grid" data-testid="dashboard-request-card-grid">
             {requestMetrics.map((metric) => (
-              <DashboardRequestCard key={metric.id} metric={metric} />
+              <DashboardRequestCard
+                key={metric.id}
+                metric={metric}
+                onOpen={() => onNavigate('requests', { requestStatusFilter: metric.statusFilter })}
+              />
             ))}
           </div>
         </section>

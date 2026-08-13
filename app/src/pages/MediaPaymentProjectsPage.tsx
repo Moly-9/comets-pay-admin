@@ -58,6 +58,7 @@ import {
   paymentRequestAmount,
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
+  paymentRequestDraftCreatorsReady,
   paymentRequestInvoiceIds,
   paymentRequestListMetrics,
   paymentRequestPaymentPlanFor,
@@ -929,15 +930,16 @@ export function MediaPaymentProjectsPage({
       invoiceIds: selectedInvoices.map((invoice) => invoice.invoiceId),
     }];
   });
-  const creatorsReady = selectedCreators.length > 0
-    && validCreatorLinks.length === selectedCreators.length;
+  const creatorsReady = paymentRequestDraftCreatorsReady(
+    selectedCreators.length,
+    validCreatorLinks.length,
+  );
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
     ...paymentRequestPaymentPlanIssues({ paymentChannel, expectedPaymentDate }),
     ...paymentRequestExtraDetailIssues({ costType, feeBearer: feeBearer || undefined }),
-    !reason.trim() ? '请填写付款事由' : '',
-    !selectedCreators.length ? '请至少选择一位合作达人' : '',
+    !reason.trim() ? '请填写请款事由' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
       if (!selectedInvoiceIds.length) return [`请为 ${creator.name} 至少选择一份 Invoice`];
@@ -1108,7 +1110,7 @@ export function MediaPaymentProjectsPage({
           setSelectedRequestId(null);
           onFocusCleared();
           window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}><ArrowLeft size={17} />返回我的项目</button>
+        }}><ArrowLeft size={17} />返回我的请款项目</button>
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
@@ -1420,14 +1422,14 @@ export function MediaPaymentProjectsPage({
   return (
     <div className="page-stack">
       <PageHeading
-        title="我的项目"
+        title="我的请款项目"
         subtitle="仅展示与当前账号关联的项目，集中管理合同与 Invoice、达人名单和请款进度。"
-        actions={canCreate ? <Button icon={<Plus size={17} />} onClick={openCreateForm}>新建项目</Button> : undefined}
+        actions={canCreate ? <Button icon={<Plus size={17} />} onClick={openCreateForm}>新建请款审批</Button> : undefined}
       />
       <div className="metrics-grid">
         <article className="metric-card metric-peach"><span>审核中</span><strong>{metrics.reviewTotal}</strong><small>{metrics.reviewing} 个正在审批</small></article>
         <article className="metric-card"><span>待打款</span><strong>{metrics.waitingPayment}</strong><small>已完成全部审批</small></article>
-        <article className="metric-card metric-lilac"><span>请款项目总数</span><strong>{metrics.total}</strong><small>已关联真实合作项目</small></article>
+        <article className="metric-card metric-lilac"><span>请款项目总数</span><strong>{metrics.total}</strong><small>已完成打款审批项目</small></article>
       </div>
       {pendingRequestCount ? (
         <div className="media-request-return-notice" role="status">
@@ -1454,7 +1456,7 @@ export function MediaPaymentProjectsPage({
           onClear={() => { setSearch(''); setFilters(createEmptyPaymentRequestListFilters()); }}
         />
         <div className="table-scroll">
-          <table className="data-table operational-table">
+          <table className="data-table operational-table media-payment-project-table">
             <thead><tr><th>项目编号</th><th>关联项目</th><th>品牌</th><th>负责 PM</th><th>达人</th><th>请款金额</th><th>状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {paginatedRequests.map((request) => {
@@ -1492,7 +1494,17 @@ export function MediaPaymentProjectsPage({
                     </td>
                     <td className="action-cell">
                       <div className="media-project-row-actions">
-                        <button className="text-link" type="button" onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{hasPaymentFailure ? (canCreate ? '处理失败请款' : '查看失败请款') : isReturned ? (canCreate ? '处理退回' : '查看退回') : '查看项目'}</button>
+                        <Button
+                          variant="secondary"
+                          className="table-action"
+                          onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        >
+                          {hasPaymentFailure
+                            ? (canCreate ? '处理失败请款' : '查看失败请款')
+                            : isReturned
+                              ? (canCreate ? '处理退回' : '查看退回')
+                              : '查看项目'}
+                        </Button>
                         {canShowConfirmationExport ? (
                           <>
                             <button
@@ -1520,7 +1532,7 @@ export function MediaPaymentProjectsPage({
         <div className="table-footer">
           <span>共 {filteredRequests.length} 个项目</span>
           <Pagination
-            ariaLabel="我的项目列表分页"
+            ariaLabel="我的请款项目列表分页"
             page={page}
             pageSize={pageSize}
             total={filteredRequests.length}
@@ -1637,7 +1649,7 @@ export function MediaPaymentProjectsPage({
               ) : null}
             </div>
             <div className="form-field">
-                    <span className="form-field-label form-field-label-with-meta"><span>合作达人 <em className="required-mark" aria-hidden="true">*</em></span><small>仅展示有未占用已通过 Invoice 的达人</small></span>
+              <span className="form-field-label form-field-label-with-meta"><span>合作达人 <small className="request-optional-label">选填</small></span><small>可在创建后继续添加，当前仅展示有未占用已通过 Invoice 的达人</small></span>
               <div className="creator-picker media-request-creator-picker" data-testid="media-request-creator-picker">
                 <button
                   className={`invoice-picker-trigger creator-picker-trigger ${creatorPickerOpen ? 'invoice-picker-trigger-open' : ''}`}
@@ -1650,7 +1662,7 @@ export function MediaPaymentProjectsPage({
                     setCreatorPickerOpen((current) => !current);
                   }}
                 >
-                  <span className="invoice-picker-leading"><Users size={18} /><span className="invoice-picker-copy"><strong>{selectedCreatorIds.length ? `已选择 ${selectedCreatorIds.length} 位合作达人` : '从达人档案选择合作达人'}</strong><small>{cooperationProjectId ? '已将有唯一可用 Invoice 的达人排在前面' : '请先选择关联项目'}</small></span></span>
+                  <span className="invoice-picker-leading"><Users size={18} /><span className="invoice-picker-copy"><strong>{selectedCreatorIds.length ? `已选择 ${selectedCreatorIds.length} 位合作达人` : '从达人档案选择合作达人'}</strong><small>{cooperationProjectId ? '可现在选择，也可创建项目后补充' : '请先选择关联项目'}</small></span></span>
                   <ChevronDown className="invoice-picker-chevron" size={18} />
                 </button>
                 {selectedCreators.length ? (
@@ -1770,7 +1782,7 @@ export function MediaPaymentProjectsPage({
               </section>
             ) : null}
             {!cooperationProjectId ? <NoticeBanner>请先选择关联项目，再选择达人并核对合同与 Invoice。</NoticeBanner> : null}
-            {cooperationProjectId && !selectedCreators.length ? <NoticeBanner>请至少选择一位合作达人。有唯一可用 Invoice 的达人已排在列表最前方。</NoticeBanner> : null}
+            {cooperationProjectId && !selectedCreators.length ? <NoticeBanner>合作达人为选填项，可创建项目后在详情中继续添加并关联合同与 Invoice。</NoticeBanner> : null}
             {formSubmitAttempted && formIssues.length ? <div className="media-request-form-issues" role="alert"><AlertTriangle size={17} /><div><strong>请完成以下必填项后创建项目</strong>{formIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div> : null}
           </div>
         </Modal>

@@ -92,9 +92,9 @@ describe('payment batch prototype scenario', () => {
     );
 
     expect(html).toContain('role="tablist" aria-label="交易状态"');
-    expect(html).toContain('<span>全部</span>');
-    expect(html).toContain('<span>已付款</span>');
-    expect(html).toContain('<span>付款失败</span>');
+    expect(html).toMatch(/aria-selected="true">全部<span>\d+<\/span>/);
+    expect(html).toMatch(/aria-selected="false">已付款<span>\d+<\/span>/);
+    expect(html).toMatch(/aria-selected="false">付款失败<span>\d+<\/span>/);
     expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain(`>${successRate}</strong>`);
     expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);

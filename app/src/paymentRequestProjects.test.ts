@@ -22,6 +22,7 @@ import {
   paymentRequestChannelForProvider,
   paymentRequestCreatorPresentation,
   paymentRequestExtraDetailIssues,
+  paymentRequestDraftCreatorsReady,
   paymentRequestInvoiceIds,
   paymentRequestPaymentPlanFor,
   paymentRequestPaymentPlanIssues,
@@ -157,6 +158,12 @@ describe('payment request payment plan', () => {
     expect(paymentRequestProviderForChannel('PayPal')).toBe('PayPal');
     expect(paymentRequestProviderForChannel('Payermax')).toBe('PayMax');
     expect(paymentRequestChannelForProvider('PayMax')).toBe('Payermax');
+  });
+
+  it('allows a draft project to be created before any collaborator is selected', () => {
+    expect(paymentRequestDraftCreatorsReady(0, 0)).toBe(true);
+    expect(paymentRequestDraftCreatorsReady(1, 1)).toBe(true);
+    expect(paymentRequestDraftCreatorsReady(1, 0)).toBe(false);
   });
 });
 

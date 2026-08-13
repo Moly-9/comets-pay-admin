@@ -31,6 +31,7 @@ const transactionPayout = (
 
 describe('TransactionsPage currency overview', () => {
   it('uses USD as the primary paid total and lists secondary currencies below it', () => {
+    const currencySpace = '\u00a0';
     const html = renderToStaticMarkup(
       <TransactionsPage
         payouts={[
@@ -48,14 +49,14 @@ describe('TransactionsPage currency overview', () => {
 
     expect(html).toContain('aria-label="已付款总额"');
     expect(html).toContain('summary-card summary-card-peach payment-workbench-summary-card has-details');
-    expect(html).toContain('<strong>USD 300</strong><span>已付款总额 · 6 笔</span>');
+    expect(html).toContain(`<strong>USD${currencySpace}300</strong><span>已付款总额 · 6 笔</span>`);
     expect(html).toContain('aria-label="已付款总额其他币种"');
     expect(html).toContain('aria-label="查看已付款币种详情"');
-    expect(html).toContain('>EUR<');
-    expect(html).toContain('>GBP<');
-    expect(html).toContain('>HKD<');
-    expect(html).toContain('>SGD<');
-    expect(html.indexOf('USD 300')).toBeLessThan(html.indexOf('已付款总额其他币种'));
+    expect(html).toContain(`>EUR${currencySpace}300<`);
+    expect(html).toContain(`>GBP${currencySpace}400<`);
+    expect(html).toContain(`>HKD${currencySpace}500<`);
+    expect(html).toContain(`>SGD${currencySpace}600<`);
+    expect(html.indexOf(`USD${currencySpace}300`)).toBeLessThan(html.indexOf('已付款总额其他币种'));
   });
 
   it('shows the overall success rate above each provider success rate and failure count', () => {
@@ -97,10 +98,9 @@ describe('TransactionsPage currency overview', () => {
     );
 
     expect(html).toContain('role="tablist" aria-label="交易状态"');
-    expect(html).toContain('<span>全部</span>');
-    expect(html).toContain('<span>已付款</span>');
-    expect(html).toContain('<span>付款失败</span>');
-    expect(html).not.toContain('<span>全部</span><small>');
+    expect(html).toContain('aria-selected="true">全部<span>3</span>');
+    expect(html).toContain('aria-selected="false">已付款<span>2</span>');
+    expect(html).toContain('aria-selected="false">付款失败<span>1</span>');
     expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain('INV-11');
     expect(html).toContain('INV-12');

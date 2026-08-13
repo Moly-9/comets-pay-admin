@@ -108,6 +108,11 @@ export const validatePayoutForBatch = (
   ].filter(Boolean);
 };
 
+export const selectBatchWizardPayouts = (
+  payouts: Payout[],
+  sampleSize = 4,
+) => payouts.slice(0, sampleSize);
+
 export const createMockBatchSubmission = ({
   payouts,
   provider,

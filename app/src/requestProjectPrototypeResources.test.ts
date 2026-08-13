@@ -117,6 +117,51 @@ describe('complete request project prototype resources', () => {
     });
   });
 
+  it('provides a visible multi-currency mix while keeping each project resource chain aligned', () => {
+    const expectedCurrencies = new Map([
+      ['PRJ-260727-02', 'EUR'],
+      ['PRJ-260727-03', 'GBP'],
+      ['PRJ-260727-04', 'HKD'],
+      ['PRJ-260727-05', 'SGD'],
+      ['PRJ-260727-08', 'EUR'],
+      ['PRJ-260727-09', 'GBP'],
+    ]);
+    const contractById = new Map(contracts.map((contract) => [contract.contractId, contract]));
+    const invoiceById = new Map(invoices.map((invoice) => [invoice.invoiceId, invoice]));
+
+    expect(new Set(requests.slice(0, 10).map((request) => request.amount.split(' ')[0])))
+      .toEqual(new Set(['USD', 'EUR', 'GBP', 'HKD', 'SGD']));
+
+    expectedCurrencies.forEach((currency, projectCode) => {
+      const request = requests.find((candidate) => candidate.cooperationProjectCode === projectCode);
+      expect(request?.amount).toMatch(new RegExp(`^${currency} \\d`));
+      const linkedInvoices = (request?.creatorLinks ?? []).flatMap((link) => (
+        link.invoiceIds.flatMap((invoiceId) => {
+          const invoice = invoiceById.get(invoiceId);
+          return invoice ? [invoice] : [];
+        })
+      ));
+      expect(new Set(linkedInvoices.map((invoice) => invoice.snapshot.currency)))
+        .toEqual(new Set([currency]));
+      expect(new Set((request?.creatorLinks ?? []).flatMap((link) => (
+        link.contractIds.flatMap((contractId) => {
+          const contract = contractById.get(contractId);
+          return contract ? [contract.currency] : [];
+        })
+      )))).toEqual(new Set([currency]));
+
+      const requestList = paymentLists.find((list) => (
+        list.paymentRequestProjectId === request?.paymentRequestProjectId
+      ));
+      expect(new Set((requestList?.items ?? []).map((item) => (
+        String(paymentListItemValue(item, 'currency'))
+      )))).toEqual(new Set([currency]));
+      expect(new Set(payouts.filter((payout) => (
+        payout.paymentRequestProjectId === request?.paymentRequestProjectId
+      )).map((payout) => payout.currency))).toEqual(new Set([currency]));
+    });
+  });
+
   it('provides ten zero-mismatch finance reviews and preserves both resubmission histories', () => {
     const financeRequests = requests.filter((request) => (
       request.lifecycle === 'SUBMITTED' && request.approval?.status === 'PENDING_FINANCE'

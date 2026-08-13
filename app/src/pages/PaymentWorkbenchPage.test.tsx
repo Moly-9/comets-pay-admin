@@ -54,24 +54,26 @@ const payout = (currency: InvoiceCurrency, index: number): Payout => ({
 describe('PaymentWorkbenchPage currency overview', () => {
   it('places secondary currencies below the primary amount and renders icon detail actions', () => {
     const html = renderWorkbench(INITIAL_PAYOUTS);
+    const currencySpace = '\u00a0';
 
     expect(html).toContain('summary-surface payment-workbench-summary');
     expect(html).toContain('summary-card summary-card-peach');
     expect(html).toContain('summary-card summary-card-lilac');
     expect(html).not.toContain('payment-currency-card');
-    expect(html).toContain('USD 7,840');
+    expect(html).toContain(`USD${currencySpace}7,840`);
     expect(html).toContain('待付款总额 · 3 笔');
-    expect(html).toContain('USD 4,860');
+    expect(html).toContain(`USD${currencySpace}4,860`);
     expect(html).toContain('本月已付款 · 1 笔');
     const secondaryRows = Array.from(
       html.matchAll(/<div class="payment-summary-secondary-row">([\s\S]*?)<\/div>/g),
       (match) => match[1],
     );
     expect(secondaryRows).toHaveLength(8);
-    expect(html).toContain('>EUR<');
-    expect(html).toContain('>GBP<');
-    expect(html).toContain('>HKD<');
-    expect(html).toContain('>SGD<');
+    expect(html).toMatch(new RegExp(`>EUR${currencySpace}[\\d,]+<`));
+    expect(html).toMatch(new RegExp(`>GBP${currencySpace}[\\d,]+<`));
+    expect(html).toMatch(new RegExp(`>HKD${currencySpace}[\\d,]+<`));
+    expect(html).toMatch(new RegExp(`>SGD${currencySpace}[\\d,]+<`));
+    expect(html).not.toMatch(/\b(?:USD|EUR|GBP|HKD|SGD)\d/);
     expect(secondaryRows.every((row) => !row.includes('<strong>'))).toBe(true);
     expect(html.match(/class="payment-summary-content"/g)).toHaveLength(2);
     const detailButtons = html.match(/<button class="payment-summary-details-button"[\s\S]*?<\/button>/g) ?? [];
@@ -98,15 +100,15 @@ describe('PaymentWorkbenchPage currency overview', () => {
     )));
 
     expect(html).not.toContain('查看详情');
-    expect(html).toContain('>EUR<');
-    expect(html).toContain('>GBP<');
-    expect(html).toContain('>HKD<');
+    expect(html).toContain('>EUR\u00a0200<');
+    expect(html).toContain('>GBP\u00a0300<');
+    expect(html).toContain('>HKD\u00a0400<');
   });
 
   it('renders the USD zero-value fallback when no USD payout exists', () => {
     const html = renderWorkbench([payout('EUR', 1)]);
 
-    expect(html).toContain('USD 0');
+    expect(html).toContain('USD\u00a00');
     expect(html).toContain('待付款总额 · 0 笔');
   });
 

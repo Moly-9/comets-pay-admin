@@ -31,6 +31,8 @@ const notifications: SystemNotificationItem[] = [{
   body: '测试通知',
   time: '刚刚',
   unread: true,
+  actionLabel: '进入审核',
+  target: { kind: 'invoice-review', invoiceId: 'INV-TEST' },
 }];
 
 describe('request approval reminder surfaces', () => {
@@ -49,6 +51,7 @@ describe('request approval reminder surfaces', () => {
         onExportPaymentList={vi.fn()}
         onApprovalAction={vi.fn()}
         onOpenFinanceReview={vi.fn()}
+        initialStatusFilter="all"
         focusedRequestId={null}
         onFocusCleared={vi.fn()}
       />,
@@ -70,6 +73,7 @@ describe('request approval reminder surfaces', () => {
         onReadApprovalReminder={vi.fn()}
         onMarkAllRead={vi.fn()}
         onOpenRequestApprovals={vi.fn()}
+        onOpenTarget={vi.fn()}
       />,
     );
 

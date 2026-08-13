@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Circle,
   ClipboardCheck,
   Clock3,
@@ -88,7 +89,9 @@ import type {
   PaymentFailureIssueType,
   Payout,
   PayoutAccountStatus,
+  RequestProjectStatusFilter,
 } from '../types';
+import { requestProjectStatusesForFilter } from '../requestProjectStatusFilters';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import { ProjectDetailPage, type ProjectSummary } from './ProjectDetailPage';
 import { RequestProjectDetailPage, type RequestProjectSummary } from './RequestProjectDetailPage';
@@ -345,7 +348,14 @@ type ProjectFilterSelectOption = {
   label: string;
   description?: string;
   leading?: ReactNode;
+  statuses?: string[];
+  tone?: 'all' | 'active' | 'complete';
 };
+
+const projectStatusSelectionsMatch = (current: string[], candidate: string[]) => (
+  current.length === candidate.length
+  && current.every((status) => candidate.includes(status))
+);
 
 export function ProjectInlineFilterPanel({
   search,
@@ -380,12 +390,17 @@ export function ProjectInlineFilterPanel({
     + Number(hasBudgetFilter)
     + Number(filters.statuses.length > 0);
   const hasActiveFilters = activeFilterCount > 0 || Boolean(search.trim());
-  const selectedStatus = filters.statuses[0] ?? 'all';
-  const selectedStatusTone = selectedStatus === '已完成' || selectedStatus === '已付款'
-    ? 'complete'
-    : selectedStatus === 'all'
-      ? 'all'
-      : 'active';
+  const selectedStatusOption = statusOptions.find((option) => {
+    const optionStatuses = option.value === 'all' ? [] : option.statuses ?? [option.value];
+    return projectStatusSelectionsMatch(filters.statuses, optionStatuses);
+  });
+  const selectedStatus = selectedStatusOption?.value ?? filters.statuses[0] ?? 'all';
+  const selectedStatusTone = selectedStatusOption?.tone
+    ?? (selectedStatus === '已完成' || selectedStatus === '已付款'
+      ? 'complete'
+      : selectedStatus === 'all'
+        ? 'all'
+        : 'active');
 
   return (
     <div className="project-inline-filter-panel" aria-label="项目列表筛选">
@@ -412,19 +427,22 @@ export function ProjectInlineFilterPanel({
           selected={filters.pms}
           onChange={(pms) => onFiltersChange((current) => ({ ...current, pms }))}
         />
-        <div className="project-filter-field project-inline-filter-budget">
-          <span className="project-filter-field-label">预算</span>
+        <div className="project-inline-filter-budget">
           <div className="project-budget-filter-grid">
-            <SelectField
-              ariaLabel="预算币种"
-              variant="form"
-              value={filters.currency}
-              options={currencyOptions}
-              onChange={(currency) => onFiltersChange((current) => ({ ...current, currency }))}
-            />
-            <label className="project-budget-input">
-              <span>最低金额</span>
+            <div className="project-filter-field">
+              <span className="project-filter-field-label">预算</span>
+              <SelectField
+                ariaLabel="预算币种"
+                variant="form"
+                value={filters.currency}
+                options={currencyOptions}
+                onChange={(currency) => onFiltersChange((current) => ({ ...current, currency }))}
+              />
+            </div>
+            <label className="project-filter-field">
+              <span className="project-filter-field-label">最低金额</span>
               <input
+                className="project-budget-input"
                 aria-label="最低预算"
                 inputMode="decimal"
                 min="0"
@@ -434,9 +452,10 @@ export function ProjectInlineFilterPanel({
                 onChange={(event) => onFiltersChange((current) => ({ ...current, minBudget: event.target.value }))}
               />
             </label>
-            <label className="project-budget-input">
-              <span>最高金额</span>
+            <label className="project-filter-field">
+              <span className="project-filter-field-label">最高金额</span>
               <input
+                className="project-budget-input"
                 aria-label="最高预算"
                 inputMode="decimal"
                 min="0"
@@ -457,10 +476,13 @@ export function ProjectInlineFilterPanel({
             variant="form"
             value={selectedStatus}
             options={statusOptions}
-            onChange={(status) => onFiltersChange((current) => ({
-              ...current,
-              statuses: status === 'all' ? [] : [status],
-            }))}
+            onChange={(status) => {
+              const option = statusOptions.find((candidate) => candidate.value === status);
+              onFiltersChange((current) => ({
+                ...current,
+                statuses: status === 'all' ? [] : [...(option?.statuses ?? [status])],
+              }));
+            }}
           />
         </div>
         <div className="project-inline-filter-meta">
@@ -1068,6 +1090,7 @@ export function RequestsPage({
   onExportPaymentList,
   onApprovalAction,
   onOpenFinanceReview,
+  initialStatusFilter,
   focusedRequestId,
   onFocusCleared,
 }: {
@@ -1087,11 +1110,15 @@ export function RequestsPage({
     reason?: string,
   ) => boolean;
   onOpenFinanceReview: () => void;
+  initialStatusFilter: RequestProjectStatusFilter;
   focusedRequestId: string | null;
   onFocusCleared: () => void;
 }) {
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<ProjectListFilters>(createEmptyProjectListFilters);
+  const [filters, setFilters] = useState<ProjectListFilters>(() => ({
+    ...createEmptyProjectListFilters(),
+    statuses: requestProjectStatusesForFilter(initialStatusFilter),
+  }));
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedRequestId);
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
@@ -1156,12 +1183,37 @@ export function RequestsPage({
       />
     ),
   }));
+  const approvingStatuses = requestProjectStatusesForFilter('approving');
+  const approvedStatuses = requestProjectStatusesForFilter('approved');
   const requestStatusSelectOptions = [
     {
       value: 'all',
       label: '全部状态',
       description: `共 ${relatedRequests.length} 个项目`,
       leading: <span className="project-status-select-dot project-status-select-dot-all" />,
+      tone: 'all' as const,
+    },
+    {
+      value: 'approving',
+      label: '审批中',
+      description: `${relatedRequests.filter((request) => {
+        const status = requestStatusById.get(request.id);
+        return Boolean(status && approvingStatuses.includes(status));
+      }).length} 个项目`,
+      statuses: approvingStatuses,
+      tone: 'active' as const,
+      leading: <span className="project-status-select-dot project-status-select-dot-active" />,
+    },
+    {
+      value: 'approved',
+      label: '完成审批',
+      description: `${relatedRequests.filter((request) => {
+        const status = requestStatusById.get(request.id);
+        return Boolean(status && approvedStatuses.includes(status));
+      }).length} 个项目`,
+      statuses: approvedStatuses,
+      tone: 'complete' as const,
+      leading: <span className="project-status-select-dot project-status-select-dot-complete" />,
     },
     ...requestStatusFilterOptions,
   ];
@@ -1203,6 +1255,14 @@ export function RequestsPage({
     setFilters(createEmptyProjectListFilters());
   };
 
+  useEffect(() => {
+    setSearch('');
+    setFilters({
+      ...createEmptyProjectListFilters(),
+      statuses: requestProjectStatusesForFilter(initialStatusFilter),
+    });
+  }, [initialStatusFilter]);
+
   const openRequest = (requestId: string) => {
     setSelectedRequestId(requestId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1233,7 +1293,7 @@ export function RequestsPage({
     <div className="page-stack">
       <PageHeading
         title="请款项目"
-        subtitle="系统请款项目列表，仅展示与当前账号关联项目。"
+      subtitle="媒介已提交的请款项目列表，仅展示与当前系统账号有关的项目。"
       />
       <div className="metrics-grid">
         <MetricCard
@@ -1322,11 +1382,12 @@ type ContactFieldDefinition = {
   placeholder: string;
   fullWidth?: boolean;
   inputType?: 'text' | 'email' | 'tel';
+  optional?: boolean;
 };
 
 const INVOICE_CONTACT_FIELDS: ContactFieldDefinition[] = [
   { key: 'legalName', label: '真实姓名', alias: 'Real Name', placeholder: '请输入证件或合同中的真实姓名' },
-  { key: 'phone', label: '联系电话', alias: 'Tel', placeholder: '请输入含国家区号的联系电话', inputType: 'tel' },
+  { key: 'phone', label: '联系电话', alias: 'Tel', placeholder: '选填：请输入含国家区号的联系电话', inputType: 'tel', optional: true },
   { key: 'email', label: '联系邮箱', alias: 'Email', placeholder: '请输入达人联系邮箱', inputType: 'email' },
   { key: 'address', label: '联系地址', alias: 'Address', placeholder: '请输入 Invoice 中展示的完整地址', fullWidth: true },
 ];
@@ -1970,13 +2031,13 @@ function CreatorContactFormGrid({ contact, onChange }: { contact: CreatorInvoice
       {INVOICE_CONTACT_FIELDS.map((field) => (
         <label className={field.fullWidth ? 'full-width' : ''} key={field.key}>
           <span className="creator-payment-field-label">
-            <span>{field.label}<em className="required-mark" aria-hidden="true">*</em></span>
-            <small>{field.alias}</small>
+            <span>{field.label}{field.optional ? null : <em className="required-mark" aria-hidden="true">*</em>}</span>
+            <small>{field.alias}{field.optional ? ' · 选填' : ''}</small>
           </span>
           {field.fullWidth ? (
-            <textarea aria-label={field.label} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
           ) : (
-            <input aria-label={field.label} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            <input aria-label={field.optional ? `${field.label}（选填）` : field.label} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
           )}
         </label>
       ))}
@@ -2132,21 +2193,30 @@ export function CreatorsPage({
   onSaveCreator,
   canEdit,
   currentUserAccount,
+  focusedCreatorId,
+  onFocusCleared,
 }: {
   notify: Notify;
   creators: CreatorProfile[];
   onSaveCreator: (creator: CreatorProfile) => void;
   canEdit: boolean;
   currentUserAccount: string;
+  focusedCreatorId?: string | null;
+  onFocusCleared?: () => void;
 }) {
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [creatorCloseGuardOpen, setCreatorCloseGuardOpen] = useState(false);
   const selected = creators.find((creator) => creator.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (focusedCreatorId) setSelectedId(focusedCreatorId);
+  }, [focusedCreatorId]);
+
   const normalizedSearch = search.trim().toLowerCase();
   const filteredCreators = creators.filter((creator) => (
     `${creator.name}${creator.handle}${creator.region}${creator.platform}${creator.socialAccounts.map((account) => `${account.platform}${account.handle}`).join('')}`
@@ -2172,6 +2242,7 @@ export function CreatorsPage({
 
   const openProfile = (creator: CreatorProfile) => {
     setSelectedId(creator.id);
+    onFocusCleared?.();
     setEditing(false);
     setCreating(false);
     setDraft(null);
@@ -2181,6 +2252,7 @@ export function CreatorsPage({
 
   const closeProfile = () => {
     setSelectedId(null);
+    onFocusCleared?.();
     setEditing(false);
     setCreating(false);
     setDraft(null);
@@ -2340,7 +2412,6 @@ export function CreatorsPage({
       nextErrors.push('有效的社媒主页链接');
     }
     if (!draft.contact.legalName.trim()) nextErrors.push('Invoice 真实姓名');
-    if (!draft.contact.phone.trim()) nextErrors.push('联系电话');
     if (!draft.contact.address.trim()) nextErrors.push('联系地址');
     if (!draft.contact.email.trim() || !/^\S+@\S+\.\S+$/.test(draft.contact.email)) nextErrors.push('有效联系邮箱');
     if (nextErrors.length > 0) {
@@ -2421,10 +2492,11 @@ export function CreatorsPage({
         .filter(Boolean) ?? [],
     ),
   ];
+  const requiredContactFields = INVOICE_CONTACT_FIELDS.filter((field) => !field.optional);
   const completedContactFields = activeProfile
-    ? Object.values(activeProfile.contact).filter((value) => value.trim()).length
+    ? requiredContactFields.filter((field) => activeProfile.contact[field.key].trim()).length
     : 0;
-  const contactIsComplete = completedContactFields === INVOICE_CONTACT_FIELDS.length;
+  const contactIsComplete = completedContactFields === requiredContactFields.length;
 
   return (
     <div className="page-stack">
@@ -2444,7 +2516,7 @@ export function CreatorsPage({
           <Button variant="secondary" icon={<Download size={16} />}>导出名单</Button>
         </div>
         <div className="table-scroll">
-          <table className="data-table operational-table">
+          <table className="data-table operational-table creator-directory-table">
             <thead><tr><th>达人</th><th>地区</th><th>社媒平台</th><th>收款账户</th><th>合作项目</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {visibleCreators.length > 0 ? visibleCreators.map((creator) => {
@@ -2582,7 +2654,7 @@ export function CreatorsPage({
                 <article>
                   <span>Invoice 联系资料</span>
                   <strong>{contactIsComplete ? '已完善' : '待补充'}</strong>
-                  <small>{completedContactFields}/{INVOICE_CONTACT_FIELDS.length} 项已填写</small>
+                  <small>{completedContactFields}/{requiredContactFields.length} 项必填资料已填写</small>
                 </article>
                 <article>
                   <span>收款渠道</span>
@@ -3063,6 +3135,7 @@ export function BatchesPage({
   onNewBatch,
   notify,
   canCreateBatch,
+  focusedBatchId,
   onReturnPayout,
   onOpenFailurePaymentList,
 }: {
@@ -3071,6 +3144,7 @@ export function BatchesPage({
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
+  focusedBatchId?: string | null;
   onReturnPayout?: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
 }) {
@@ -3129,6 +3203,16 @@ export function BatchesPage({
       total,
     };
   }, [batches]);
+
+  useEffect(() => {
+    if (!focusedBatchId) return;
+    const focusedBatch = batches.find((batch) => (
+      batch.paymentBatchId === focusedBatchId || batch.paymentBatchCode === focusedBatchId
+    ));
+    if (!focusedBatch) return;
+    listScrollPositionRef.current = window.scrollY;
+    setSelectedBatchId(focusedBatch.paymentBatchId);
+  }, [batches, focusedBatchId]);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -3478,6 +3562,11 @@ export function TransactionsPage({
     : null;
   const paid = transactions.filter((payout) => payout.status === '已付款');
   const failed = transactions.filter((payout) => payout.status === '付款失败');
+  const transactionTabCounts: Record<TransactionTab, number> = {
+    all: transactions.length,
+    paid: transactions.filter((payout) => ['已付款', '付款处理中'].includes(payout.status)).length,
+    failed: failed.length,
+  };
   const paidCurrencies = aggregatePayoutCurrencies(paid, true);
   const formatSuccessRate = (successfulCount: number, failedCount: number) => {
     const total = successfulCount + failedCount;
@@ -3598,9 +3687,9 @@ export function TransactionsPage({
       </section>
       <section className="content-card">
         <div className="tabs-row" role="tablist" aria-label="交易状态">
-          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => updateTab('all')}><span>全部</span></button>
-          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => updateTab('paid')}><span>已付款</span></button>
-          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => updateTab('failed')}><span>付款失败</span></button>
+          <button className={`tab-button ${tab === 'all' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'all'} onClick={() => updateTab('all')}>全部<span>{transactionTabCounts.all}</span></button>
+          <button className={`tab-button ${tab === 'paid' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'paid'} onClick={() => updateTab('paid')}>已付款<span>{transactionTabCounts.paid}</span></button>
+          <button className={`tab-button ${tab === 'failed' ? 'tab-active' : ''}`} type="button" role="tab" aria-selected={tab === 'failed'} onClick={() => updateTab('failed')}>付款失败<span>{transactionTabCounts.failed}</span></button>
         </div>
         <div className="transaction-filter-row">
           <label className="search-control transaction-search">
@@ -3764,6 +3853,13 @@ export function ChannelsPage({ notify }: { notify: Notify }) {
   return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
 }
 
+export type NotificationNavigationTarget =
+  | { kind: 'invoice-review'; invoiceId: string }
+  | { kind: 'request-review'; requestId: string }
+  | { kind: 'creator-payout'; creatorId: string }
+  | { kind: 'batch'; batchId: string }
+  | { kind: 'transaction'; payoutId: string };
+
 export type SystemNotificationItem = {
   id: number;
   icon: LucideIcon;
@@ -3771,13 +3867,51 @@ export type SystemNotificationItem = {
   body: string;
   time: string;
   unread: boolean;
+  actionLabel: string;
+  target: NotificationNavigationTarget;
 };
 
 export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
-  { id: 1, icon: FileCheck2, title: 'Invoice INV-240718 等待财务复核', body: '@MinaKato · 夏日直播计划 · USD 3,240', time: '10 分钟前', unread: true },
-  { id: 2, icon: AlertCircle, title: 'Nika 的收款资料校验失败', body: '泰国本地转账路由代码待补充，请在达人档案中更新。', time: '42 分钟前', unread: true },
-  { id: 3, icon: Send, title: '批次 BAT-20260716-007 已提交渠道', body: 'Airwallex 正在处理 12 笔付款。', time: '昨天 16:42', unread: false },
-  { id: 4, icon: CheckCircle2, title: '付款状态已回写', body: 'Kenji Mori · USD 4,100 · 已付款', time: '昨天 14:32', unread: false },
+  {
+    id: 1,
+    icon: FileCheck2,
+    title: 'Invoice INV-240718 等待媒介审核',
+    body: '@MinaKato · Once Human主机上线KOL合作项目 · USD 3,240',
+    time: '10 分钟前',
+    unread: true,
+    actionLabel: '进入审核',
+    target: { kind: 'invoice-review', invoiceId: 'INV-240718' },
+  },
+  {
+    id: 2,
+    icon: AlertCircle,
+    title: 'Nika 的收款资料校验失败',
+    body: '泰国本地转账路由代码待补充，请在达人档案中更新。',
+    time: '42 分钟前',
+    unread: true,
+    actionLabel: '更新收款资料',
+    target: { kind: 'creator-payout', creatorId: 'creator-nika' },
+  },
+  {
+    id: 3,
+    icon: Send,
+    title: '批次 BAT-20260805-013 已提交渠道',
+    body: 'Airwallex 正在处理付款。',
+    time: '昨天 16:42',
+    unread: false,
+    actionLabel: '查看批次',
+    target: { kind: 'batch', batchId: 'BAT-20260805-013' },
+  },
+  {
+    id: 4,
+    icon: CheckCircle2,
+    title: '付款状态已回写',
+    body: 'Kenji Mori · USD 4,100 · 已付款',
+    time: '昨天 14:32',
+    unread: false,
+    actionLabel: '查看付款详情',
+    target: { kind: 'transaction', payoutId: 'pay-005' },
+  },
 ];
 
 export function NotificationsPage({
@@ -3788,6 +3922,7 @@ export function NotificationsPage({
   onReadApprovalReminder,
   onMarkAllRead,
   onOpenRequestApprovals,
+  onOpenTarget,
 }: {
   items: SystemNotificationItem[];
   approvalReminder: RequestApprovalReminderSummary;
@@ -3796,6 +3931,7 @@ export function NotificationsPage({
   onReadApprovalReminder: () => void;
   onMarkAllRead: () => void;
   onOpenRequestApprovals: () => void;
+  onOpenTarget: (target: NotificationNavigationTarget) => void;
 }) {
   const hasApprovalReminder = approvalReminder.count > 0;
   const unreadCount = items.filter((item) => item.unread).length
@@ -3817,6 +3953,10 @@ export function NotificationsPage({
     onReadApprovalReminder();
     onOpenRequestApprovals();
   };
+  const openNotification = (item: SystemNotificationItem) => {
+    onRead(item.id);
+    onOpenTarget(item.target);
+  };
 
   return (
     <div className="page-stack">
@@ -3825,7 +3965,7 @@ export function NotificationsPage({
         subtitle={`你有 ${unreadCount} 条未读消息。`}
         actions={<Button variant="secondary" onClick={onMarkAllRead}>全部标为已读</Button>}
       />
-      <section className="notification-card">
+      <section className="notification-card" aria-label="消息通知列表">
         {visibleEntries.map((entry) => {
           if (entry.kind === 'approval') {
             return (
@@ -3852,12 +3992,16 @@ export function NotificationsPage({
               className={`notification-item ${item.unread ? 'notification-unread' : ''}`}
               key={item.id}
               type="button"
-              onClick={() => onRead(item.id)}
+              aria-label={`${item.title}，${item.actionLabel}`}
+              onClick={() => openNotification(item)}
             >
               <span className="notification-symbol"><Icon size={19} /></span>
               <span><strong>{item.title}</strong><small>{item.body}</small></span>
-              <time><Clock3 size={14} />{item.time}</time>
-              {item.unread ? <i className="unread-dot" /> : null}
+              <span className="notification-meta">
+                <time><Clock3 size={14} />{item.time}</time>
+                <span className="notification-action">{item.actionLabel}<ChevronRight size={14} /></span>
+              </span>
+              {item.unread ? <i className="unread-dot" aria-hidden="true" /> : null}
             </button>
           );
         })}

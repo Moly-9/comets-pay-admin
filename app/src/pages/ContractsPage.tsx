@@ -93,6 +93,12 @@ export function ContractsPage({
   const attentionCount = contracts.filter((contract) => !contract.isTemplate && !getContractReadiness(contract).ready).length;
   const templateCount = contracts.filter((contract) => contract.isTemplate).length;
   const businessContractCount = contracts.length - templateCount;
+  const contractFilterCounts: Record<ContractFilter, number> = {
+    all: contracts.length,
+    ready: readyCount,
+    attention: attentionCount,
+    template: templateCount,
+  };
   const selected = useMemo(
     () => selectedContracts(contracts, selectedIds),
     [contracts, selectedIds],
@@ -126,7 +132,11 @@ export function ContractsPage({
   };
 
   const exportSelectedContracts = async () => {
-    if (!selected.length || exporting) return;
+    if (exporting) return;
+    if (!selected.length) {
+      notify('请选择合同', '请先勾选需要导出的合同。');
+      return;
+    }
     setExporting(true);
     try {
       const archive = await createContractExportArchive(selected);
@@ -142,6 +152,17 @@ export function ContractsPage({
     } finally {
       setExporting(false);
     }
+  };
+  const requestDeleteSelectedContracts = () => {
+    if (!selected.length) {
+      notify('请选择合同', '请先勾选需要删除的合同。');
+      return;
+    }
+    if (!selectedCanBeDeleted) {
+      notify('无法删除所选合同', '所选合同中包含无权删除的记录，请重新选择。');
+      return;
+    }
+    setDeleteConfirmOpen(true);
   };
   const openContract = (contractId: string) => {
     setSelectedContractId(contractId);
@@ -197,6 +218,48 @@ export function ContractsPage({
       </div>
 
       <section className="content-card">
+        <div className="tabs-row contract-filter-tabs" role="tablist" aria-label="合同筛选">
+          {([
+            ['all', '全部'],
+            ['ready', '可付款'],
+            ['attention', '待处理'],
+            ['template', '模板'],
+          ] as Array<[ContractFilter, string]>).map(([value, label]) => (
+            <button
+              className={`tab-button ${filter === value ? 'tab-active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={filter === value}
+              key={value}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+              <span>{contractFilterCounts[value]}</span>
+            </button>
+          ))}
+          <div className="contract-bulk-actions">
+            <Button
+              variant="secondary"
+              data-testid="contract-bulk-export"
+              icon={<Download size={15} />}
+              disabled={exporting}
+              onClick={() => { void exportSelectedContracts(); }}
+            >
+              {exporting ? '导出中...' : '导出'}
+            </Button>
+            {canDelete ? (
+              <Button
+                variant="danger"
+                data-testid="contract-bulk-delete"
+                icon={<Trash2 size={15} />}
+                title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
+                onClick={requestDeleteSelectedContracts}
+              >
+                删除
+              </Button>
+            ) : null}
+          </div>
+        </div>
         <div className="content-toolbar contract-toolbar">
           <label className="search-control page-search">
             <Search size={16} />
@@ -207,49 +270,6 @@ export function ContractsPage({
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-          <div className="contract-bulk-actions">
-            <Button
-              variant="secondary"
-              data-testid="contract-bulk-export"
-              icon={<Download size={15} />}
-              disabled={!selected.length || exporting}
-              onClick={() => { void exportSelectedContracts(); }}
-            >
-              {exporting ? '导出中...' : '导出'}
-            </Button>
-            {canDelete ? (
-              <Button
-                variant="danger"
-                data-testid="contract-bulk-delete"
-                icon={<Trash2 size={15} />}
-                disabled={!selectedCanBeDeleted}
-                title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
-                onClick={() => setDeleteConfirmOpen(true)}
-              >
-                删除
-              </Button>
-            ) : null}
-          </div>
-          <div className="contract-toolbar-controls">
-            <div className="toolbar-chips" aria-label="合同筛选">
-              {([
-                ['all', '全部'],
-                ['ready', '可付款'],
-                ['attention', '待处理'],
-                ['template', '模板'],
-              ] as Array<[ContractFilter, string]>).map(([value, label]) => (
-                <button
-                  className={`chip ${filter === value ? 'chip-active' : ''}`}
-                  type="button"
-                  aria-pressed={filter === value}
-                  key={value}
-                  onClick={() => setFilter(value)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="table-scroll">

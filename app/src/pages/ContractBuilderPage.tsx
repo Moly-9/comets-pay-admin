@@ -562,10 +562,18 @@ export function ContractBuilderPage({
   return (
     <div className="page-stack contract-builder-page">
       <div className="contract-builder-top">
+        <button
+          className="project-back-button contract-builder-back-button"
+          type="button"
+          title="返回合同管理"
+          onClick={onCancel}
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          返回合同管理
+        </button>
         <PageHeading
           title="生成合同"
           subtitle="从项目、达人档案和已验证收款账户带入资料，可按需补充商业字段后生成 PDF 与可编辑 DOCX。"
-          actions={<Button variant="secondary" icon={<ArrowLeft size={17} />} title="返回合同管理" onClick={onCancel}>返回合同管理</Button>}
         />
         <NoticeBanner>当前为纯前端原型。合同与账户快照只保留在本次浏览器会话，不会上传到外部服务。</NoticeBanner>
         {Object.keys(errors).length ? (
@@ -613,12 +621,31 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`} data-contract-field="creator">
                 <span>合作达人 *</span>
-                <SelectField ariaLabel="合同合作达人" variant="form" value={creatorId} placeholder="从达人档案选择" options={creatorOptions} onChange={selectCreator} />
+                <SelectField
+                  ariaLabel="合同合作达人"
+                  clearLabel="移除已选达人"
+                  variant="form"
+                  value={creatorId}
+                  placeholder="从达人档案选择"
+                  options={creatorOptions}
+                  onChange={selectCreator}
+                  onClear={() => selectCreator('')}
+                />
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`} data-contract-field="project">
                 <span>合作项目 *</span>
-                <SelectField ariaLabel="合同合作项目" variant="form" value={engagementId} placeholder={creatorId ? '选择合作项目' : '请先选择达人'} options={projectOptions} disabled={!creatorId} onChange={selectProject} />
+                <SelectField
+                  ariaLabel="合同合作项目"
+                  clearLabel="移除已选项目"
+                  variant="form"
+                  value={engagementId}
+                  placeholder={creatorId ? '选择合作项目' : '请先选择达人'}
+                  options={projectOptions}
+                  disabled={!creatorId}
+                  onChange={selectProject}
+                  onClear={() => selectProject('')}
+                />
                 <small>{errors.project}</small>
               </div>
               <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher / 法定名称 *</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>

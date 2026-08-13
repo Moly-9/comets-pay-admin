@@ -3,6 +3,7 @@ import {
   airwallexFeeOptions,
   createMockBatchSubmission,
   executeMockBatchSubmission,
+  selectBatchWizardPayouts,
 } from './batchTransfers';
 import type { Payout } from './types';
 
@@ -131,6 +132,26 @@ describe('batch transfer contract', () => {
     expect(submission.sourceCurrency).toBe('EUR');
     expect(execution.lifecycle).toEqual(['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED']);
     expect(execution.simulated).toBe(true);
+  });
+
+  it('keeps only the four diagnostic samples in the batch wizard', () => {
+    const samples = [
+      payout({ id: 'sample-1', creatorId: undefined }),
+      payout({ id: 'sample-2', payoutAccountId: undefined }),
+      payout({ id: 'sample-3', externalBeneficiaryId: undefined }),
+      payout({ id: 'sample-4', feeBearer: '' }),
+      payout({ id: 'ready-1', invoice: 'INV-READY-001' }),
+      payout({ id: 'ready-2', invoice: 'INV-READY-002' }),
+    ];
+
+    const selected = selectBatchWizardPayouts(samples);
+
+    expect(selected.map((item) => item.id)).toEqual([
+      'sample-1',
+      'sample-2',
+      'sample-3',
+      'sample-4',
+    ]);
   });
 
   it('blocks the whole batch when providers are mixed or fee data is missing', () => {

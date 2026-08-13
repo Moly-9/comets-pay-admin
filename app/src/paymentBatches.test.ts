@@ -436,8 +436,9 @@ describe('payment batch snapshots', () => {
       expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
       expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
       expect(record.items.every((item) => item.associationIssues.length === 0)).toBe(true);
+      expect(new Set(record.items.map((item) => item.currency))).toEqual(new Set([record.sourceCurrency]));
       expect(paymentBatchAmountLabel(record)).toBe(
-        `USD ${record.items.reduce((total, item) => total + item.amount, 0).toLocaleString('en-US')}`,
+        `${record.sourceCurrency} ${record.items.reduce((total, item) => total + item.amount, 0).toLocaleString('en-US')}`,
       );
 
       const counts = paymentBatchStatusCounts(record);

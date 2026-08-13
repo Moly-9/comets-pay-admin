@@ -30,11 +30,11 @@ const NAV_ENTRIES: NavEntry[] = [
   {
     type: 'group',
     id: 'projects',
-    label: '项目协作',
+    label: '请款项目协作',
     icon: Handshake,
     items: [
       { label: '我的项目', page: 'projects' },
-      { label: '请款项目', page: 'requests' },
+      { label: '合作项目', page: 'requests' },
     ],
   },
   { type: 'item', label: '合同管理', page: 'contracts', icon: FileSignature },

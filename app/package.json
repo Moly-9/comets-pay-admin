@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5173",
+    "dev": "vite --host 127.0.0.1 --port 5174",
     "test": "vitest run",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 5173"
+    "preview": "vite preview --host 127.0.0.1 --port 5174"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "5.2.5",

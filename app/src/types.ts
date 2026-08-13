@@ -29,6 +29,12 @@ export type NavPage =
   | 'system-settings'
   | 'notifications';
 
+export type RequestProjectStatusFilter = 'all' | 'approving' | 'approved' | 'paid';
+
+export type NavOptions = {
+  requestStatusFilter?: RequestProjectStatusFilter;
+};
+
 export type Provider = 'Airwallex' | 'PayMax' | 'PayPal' | '手动打款';
 
 export type InvoiceCurrency = 'USD' | 'EUR' | 'GBP' | 'HKD' | 'SGD';

@@ -23,6 +23,7 @@ import {
   INITIAL_INVOICE_ENTITY,
   INITIAL_PAYOUTS,
   PAGE_TITLES,
+  resolveSystemUser,
   type SystemUser,
 } from './data';
 import {
@@ -97,6 +98,7 @@ import {
   NotificationsPage,
   OrganizationPage,
   RequestsPage,
+  type NotificationNavigationTarget,
   type SystemNotificationItem,
   TransactionsPage,
 } from './pages/OperationalPages';
@@ -107,9 +109,11 @@ import type {
   InvoiceDocumentModel,
   InvoiceEditContext,
   InvoiceEntity,
+  NavOptions,
   NavPage,
   PaymentFailureIssueType,
   Payout,
+  RequestProjectStatusFilter,
   ToastState,
 } from './types';
 import {
@@ -264,10 +268,16 @@ const canManageCooperationProjectFor = (user: SystemUser, project: ProjectSummar
   || (user.roleKey === 'media' && project.media === (user.scopeName ?? user.name))
 );
 
+const LOCAL_DEV_BYPASSES_AUTH = import.meta.env.DEV;
+const LOCAL_DEV_USER = LOCAL_DEV_BYPASSES_AUTH
+  ? (resolveSystemUser('jeff') ?? CURRENT_USER)
+  : CURRENT_USER;
+
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<SystemUser>(CURRENT_USER);
+  const [isAuthenticated, setIsAuthenticated] = useState(LOCAL_DEV_BYPASSES_AUTH);
+  const [currentUser, setCurrentUser] = useState<SystemUser>(LOCAL_DEV_USER);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<RequestProjectStatusFilter>('all');
   const [payouts, setPayouts] = useState<Payout[]>(() => (
     [...new Map([
       ...INITIAL_PAYOUTS,
@@ -316,6 +326,7 @@ export default function App() {
     resource: 'contract' | 'invoice';
   } | null>(null);
   const [focusedCreatorId, setFocusedCreatorId] = useState<string | null>(null);
+  const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceEditTarget, setInvoiceEditTarget] = useState<{
@@ -581,7 +592,7 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const navigate = (page: NavPage) => {
+  const navigate = (page: NavPage, options?: NavOptions) => {
     if (!canAccessPage(currentUser, page)) {
       notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
       return false;
@@ -595,6 +606,9 @@ export default function App() {
     ) {
       return false;
     }
+    if (page === 'requests') {
+      setRequestStatusFilter(options?.requestStatusFilter ?? 'all');
+    }
     setActivePage(page);
     setInvoiceEditTarget(null);
     setInvoiceEditorDirty(false);
@@ -603,6 +617,7 @@ export default function App() {
     setFocusedContractId(null);
     setFocusedProjectId(null);
     setFocusedRequestId(null);
+    setFocusedBatchId(null);
     if (page !== 'creators') setFocusedCreatorId(null);
     setSelectedPayout(null);
     setPaymentDetailRequestId(null);
@@ -2780,6 +2795,56 @@ export default function App() {
     setActivePage('invoice');
   };
 
+  const openNotificationTarget = (target: NotificationNavigationTarget) => {
+    if (target.kind === 'invoice-review') {
+      const payout = payouts.find((item) => item.invoice === target.invoiceId);
+      if (!payout) {
+        notify('未找到 Invoice', `无法定位 ${target.invoiceId} 对应的审核记录。`);
+        return;
+      }
+      if (!navigate('invoice')) return;
+      const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
+      setInvoiceTab(getInvoiceManagementView(payout, request).tab);
+      setFocusedInvoiceId(payout.id);
+    } else if (target.kind === 'request-review') {
+      const request = requestProjects.find((item) => (
+        item.id === target.requestId || item.paymentRequestProjectId === target.requestId
+      ));
+      if (!request) {
+        notify('未找到合作项目', `无法定位 ${target.requestId} 对应的审批项目。`);
+        return;
+      }
+      if (!navigate('requests', { requestStatusFilter: 'approving' })) return;
+      setFocusedRequestId(request.id);
+    } else if (target.kind === 'creator-payout') {
+      if (!creators.some((creator) => creator.id === target.creatorId)) {
+        notify('未找到达人', '通知关联的达人档案已不存在。');
+        return;
+      }
+      if (!navigate('creators')) return;
+      setFocusedCreatorId(target.creatorId);
+    } else if (target.kind === 'batch') {
+      const batch = paymentBatches.find((item) => (
+        item.paymentBatchId === target.batchId || item.paymentBatchCode === target.batchId
+      ));
+      if (!batch) {
+        notify('未找到付款批次', `无法定位 ${target.batchId} 对应的付款批次。`);
+        return;
+      }
+      if (!navigate('batches')) return;
+      setFocusedBatchId(batch.paymentBatchId);
+    } else {
+      const payout = payouts.find((item) => item.id === target.payoutId);
+      if (!payout) {
+        notify('未找到付款记录', '通知关联的付款记录已不存在。');
+        return;
+      }
+      if (!navigate('transactions')) return;
+      setSelectedPayout(payout);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const openContractFromPayout = (contract: ContractRecord) => {
     setFocusedContractId(contract.id);
     setSelectedPayout(null);
@@ -3423,6 +3488,7 @@ export default function App() {
           onExportPaymentList={requestResourceActions.onExportPaymentList}
           onApprovalAction={handleRequestApproval}
           onOpenFinanceReview={() => setActivePage('payment-workbench')}
+          initialStatusFilter={requestStatusFilter}
           focusedRequestId={focusedRequestId}
           onFocusCleared={() => setFocusedRequestId(null)}
         />
@@ -3501,6 +3567,8 @@ export default function App() {
           onSaveCreator={saveCreator}
           canEdit={canManageCreators}
           currentUserAccount={currentUser.account}
+          focusedCreatorId={focusedCreatorId}
+          onFocusCleared={() => setFocusedCreatorId(null)}
         />
       );
       break;
@@ -3672,12 +3740,25 @@ export default function App() {
       );
       break;
     case 'batches':
-      pageContent = <BatchesPage batches={paymentBatches} payouts={payouts} onNewBatch={() => setActivePage('new-batch')} notify={notify} canCreateBatch={canExecutePayouts} onReturnPayout={returnPayout} onOpenFailurePaymentList={(requestId, payoutId) => {
-        const request = requestProjects.find((candidate) => candidate.paymentRequestProjectId === requestId);
-        setFocusedProjectId(request?.id ?? requestId);
-        setFocusedPaymentFailurePayoutId(payoutId);
-        setActivePage('projects');
-      }} />;
+      pageContent = (
+        <BatchesPage
+          batches={paymentBatches}
+          payouts={payouts}
+          onNewBatch={() => setActivePage('new-batch')}
+          notify={notify}
+          canCreateBatch={canExecutePayouts}
+          focusedBatchId={focusedBatchId}
+          onReturnPayout={returnPayout}
+          onOpenFailurePaymentList={(requestId, payoutId) => {
+            const request = requestProjects.find((candidate) => (
+              candidate.paymentRequestProjectId === requestId
+            ));
+            setFocusedProjectId(request?.id ?? requestId);
+            setFocusedPaymentFailurePayoutId(payoutId);
+            setActivePage('projects');
+          }}
+        />
+      );
       break;
     case 'new-batch':
       pageContent = (
@@ -3715,7 +3796,8 @@ export default function App() {
             setNotificationItems((current) => current.map((item) => ({ ...item, unread: false })));
             setRequestApprovalReminderUnread(false);
           }}
-          onOpenRequestApprovals={() => setActivePage('requests')}
+          onOpenRequestApprovals={() => { navigate('requests', { requestStatusFilter: 'approving' }); }}
+          onOpenTarget={openNotificationTarget}
         />
       );
       break;

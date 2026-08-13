@@ -34,7 +34,7 @@ import {
   INITIAL_REQUEST_PROJECTS,
 } from './pages/OperationalPages';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
-import type { GeneratedInvoiceRecord, Payout } from './types';
+import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
 
 const FINANCE_REVIEW_PROJECT_CODES = new Set([
   'PRJ-301164',
@@ -63,6 +63,62 @@ const RESOURCE_ACTOR = {
   account: 'prototype.fixture',
   name: '原型数据生成器',
   role: '系统原型',
+};
+
+type RequestProjectMoneyProfile = {
+  currency: InvoiceCurrency;
+  amountScale: number;
+};
+
+// Keep several USD projects as a baseline while giving both pages of the request
+// project list a realistic mix of settlement currencies. The profile is applied
+// before contracts, invoices, payment lists and payouts are assembled so every
+// linked resource keeps the same currency and amount snapshot.
+const REQUEST_PROJECT_MONEY_PROFILES: Partial<Record<string, RequestProjectMoneyProfile>> = {
+  'PRJ-260727-02': { currency: 'EUR', amountScale: 0.92 },
+  'PRJ-260727-03': { currency: 'GBP', amountScale: 0.78 },
+  'PRJ-260727-04': { currency: 'HKD', amountScale: 7.8 },
+  'PRJ-260727-05': { currency: 'SGD', amountScale: 1.34 },
+  'PRJ-260727-08': { currency: 'EUR', amountScale: 0.92 },
+  'PRJ-260727-09': { currency: 'GBP', amountScale: 0.78 },
+  'PRJ-260727-11': { currency: 'HKD', amountScale: 7.8 },
+  'PRJ-260727-12': { currency: 'SGD', amountScale: 1.34 },
+  'PRJ-260801-02': { currency: 'EUR', amountScale: 0.92 },
+  'PRJ-260801-03': { currency: 'GBP', amountScale: 0.78 },
+  'PRJ-260801-05': { currency: 'HKD', amountScale: 7.8 },
+  'PRJ-260801-06': { currency: 'SGD', amountScale: 1.34 },
+  'PRJ-260801-08': { currency: 'EUR', amountScale: 0.92 },
+};
+
+const requestMoneyProfileByEngagement = new Map(INITIAL_PROJECTS.flatMap((project) => {
+  const profile = REQUEST_PROJECT_MONEY_PROFILES[project.id];
+  if (!profile) return [];
+  return (project.creatorProfiles ?? []).map((reference) => (
+    [reference.engagementId, profile] as const
+  ));
+}));
+
+const applyRequestMoneyProfile = (
+  invoice: GeneratedInvoiceRecord,
+  profile: RequestProjectMoneyProfile | undefined,
+): GeneratedInvoiceRecord => {
+  if (!profile) return invoice;
+  return {
+    ...invoice,
+    snapshot: {
+      ...invoice.snapshot,
+      currency: profile.currency,
+      items: invoice.snapshot.items.map((item) => {
+        const lineTotal = Math.max(1, Math.round(item.lineTotal * profile.amountScale));
+        const quantity = Math.max(1, item.quantity);
+        return {
+          ...item,
+          lineTotal,
+          unitPrice: Number((lineTotal / quantity).toFixed(2)),
+        };
+      }),
+    },
+  };
 };
 
 const cloneItems = (items: PaymentListItem[]) => items.map((item) => ({
@@ -120,11 +176,14 @@ const financeApprovalHistory = (
   };
 };
 
-const sourceInvoiceByEngagement = new Map(ALL_PROJECT_PROTOTYPE_INVOICES.flatMap((invoice) => (
-  invoice.snapshot.engagementId
-    ? [[invoice.snapshot.engagementId, invoice] as const]
-    : []
-)));
+const sourceInvoiceByEngagement = new Map(ALL_PROJECT_PROTOTYPE_INVOICES.flatMap((invoice) => {
+  const engagementId = invoice.snapshot.engagementId;
+  if (!engagementId) return [];
+  return [[
+    engagementId,
+    applyRequestMoneyProfile(invoice, requestMoneyProfileByEngagement.get(engagementId)),
+  ] as const];
+}));
 
 const requestSeeds: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((request) => {
   const project = INITIAL_PROJECTS.find((candidate) => (

@@ -115,6 +115,11 @@ export const paymentRequestExtraDetailIssues = ({
   !feeBearer ? '请选择手续费承担方' : '',
 ].filter((issue) => Boolean(issue));
 
+export const paymentRequestDraftCreatorsReady = (
+  selectedCreatorCount: number,
+  validCreatorLinkCount: number,
+) => selectedCreatorCount === validCreatorLinkCount;
+
 export type PaymentRequestCreatorInvoicePresentation = {
   invoiceId: InvoiceId;
   invoiceNumber: string;

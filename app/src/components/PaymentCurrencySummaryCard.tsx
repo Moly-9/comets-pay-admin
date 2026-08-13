@@ -12,6 +12,9 @@ export const CURRENCY_FLAG_PATHS: Record<string, string> = {
 };
 
 const formatOverviewAmount = (amount: number) => amount.toLocaleString('en-US');
+const formatCurrencyAmount = ({ currency, amount }: Pick<PaymentCurrencyItem, 'currency' | 'amount'>) => (
+  `${currency}\u00a0${formatOverviewAmount(amount)}`
+);
 
 export function PaymentCurrencySummaryCard({
   items,
@@ -48,7 +51,7 @@ export function PaymentCurrencySummaryCard({
         </span>
         <div className="payment-summary-content">
           <div className="payment-summary-primary">
-            <strong>USD {formatOverviewAmount(primary.amount)}</strong>
+            <strong>{formatCurrencyAmount(primary)}</strong>
             <span>{summaryLabel} · {summaryCount ?? primary.count} 笔</span>
           </div>
         </div>
@@ -67,8 +70,7 @@ export function PaymentCurrencySummaryCard({
           <div className="payment-summary-secondary" aria-label={`${summaryLabel}其他币种`}>
             {visibleSecondary.map((item) => (
               <div className="payment-summary-secondary-row" key={item.currency}>
-                <span>{item.currency}</span>
-                <span>{formatOverviewAmount(item.amount)}</span>
+                <span className="payment-summary-secondary-amount">{formatCurrencyAmount(item)}</span>
                 <small>{item.count} 笔</small>
               </div>
             ))}
@@ -99,7 +101,7 @@ export function PaymentCurrencySummaryCard({
                   <small>{item.count} 笔</small>
                 </span>
                 <strong className="payment-currency-detail-amount">
-                  {formatOverviewAmount(item.amount)} <small>{item.currency}</small>
+                  {formatCurrencyAmount(item)}
                 </strong>
               </li>
             ))}
