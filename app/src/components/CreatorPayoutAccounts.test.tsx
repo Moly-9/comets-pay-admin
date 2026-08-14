@@ -37,6 +37,15 @@ describe('CreatorPayoutAccounts profile editor', () => {
     expect(html).toContain('Intermediary Bank Country (if any)');
     expect(html).toContain('Intermediary Bank Code (if any)');
     expect(html).toContain('Transfer Remarks (if any)');
+    expect(html).toContain('Account Name');
+    expect(html).toContain('Account Number');
+    expect(html).toContain('Account Type');
+    expect(html).toContain('Beneficiary&#x27;s Bank Name');
+    expect(html).toContain('Beneficiary&#x27;s Bank Address');
+    expect(html).toContain('Beneficiary&#x27;s Bank Country');
+    expect(html).toContain('Beneficiary&#x27;s Bank State');
+    expect(html).toContain('Beneficiary&#x27;s Bank City');
+    expect(html).toContain('Beneficiary&#x27;s Bank Postal Code');
     expect(html).toContain('示例：JPMorgan Chase Bank');
     expect(html).toContain('法定名');
     expect(html).toContain('ACH routing number');

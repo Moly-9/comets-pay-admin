@@ -16,6 +16,7 @@ No actionable P0, P1 or P2 mismatch remains.
 - The profile ID is no longer displayed; region, project count and default-account status remain visible.
 - PayPal and PayerMax tabs and create buttons have a clear disabled treatment and unopened-channel copy.
 - The Airwallex section preserves the existing compact two-column rhythm while presenting the requested US payment checklist and per-field examples.
+- The requested 18-field US payment checklist remains visible across the Airwallex and supplemental cards, including when a Schema response uses an equivalent alias path.
 - Optional Schema fields outside the requested checklist are hidden; required API fields such as legal name and ACH routing number remain visible.
 - Long English field names fit without clipping in the supplemental grid.
 
