@@ -16242,12 +16242,20 @@ button:disabled {
 .invoice-paper-signature {
   display: grid;
   width: 190px;
-  gap: 24px;
   margin-top: 18px;
+}
+
+.invoice-paper-signature strong {
+  margin-bottom: 24px;
 }
 
 .invoice-paper-signature span {
   border-bottom: 1px solid #111;
+}
+
+.invoice-paper-signature p {
+  min-height: 14px;
+  margin: 6px 0 0;
 }
 
 .generated-invoice-status i {

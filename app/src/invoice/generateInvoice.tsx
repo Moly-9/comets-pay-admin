@@ -215,7 +215,8 @@ export async function generateInvoiceDocx(model: InvoiceDocumentModel) {
         new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'Payment information (choose one)', bold: true, size: 22, font: DOCX_FONT })] }),
         ...paymentParagraphs(model),
         new Paragraph({ spacing: { before: 240, after: 360 }, children: [new TextRun({ text: 'Signature:', bold: true, size: 21, font: DOCX_FONT })] }),
-        new Paragraph({ border: { bottom: THIN_BORDER }, indent: { right: 5600 }, spacing: { before: 0, after: 0 }, children: [new TextRun({ text: ' ', size: 20 })] }),
+        new Paragraph({ border: { bottom: THIN_BORDER }, indent: { right: 5600 }, spacing: { before: 0, after: 80 }, children: [new TextRun({ text: ' ', size: 20 })] }),
+        paragraph('Date', formatInvoiceDate(model.signatureDate ?? ''), { after: 0 }),
       ],
     }],
   });

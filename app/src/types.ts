@@ -272,6 +272,7 @@ export type InvoicePaymentMethod = 'bank' | 'paypal';
 export type InvoiceDocumentModel = {
   invoiceNumber: string;
   invoiceDate: string;
+  signatureDate?: string;
   billTo: InvoiceEntity;
   creatorHandle: string;
   creatorName: string;

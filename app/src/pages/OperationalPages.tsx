@@ -121,7 +121,7 @@ import {
 import type { RequestApprovalAction } from '../requestApprovalWorkflow';
 import type { RequestApprovalReminderSummary } from '../requestApprovalReminders';
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
-import { downloadBlob } from '../invoice/invoiceUtils';
+import { downloadBlob, todayInputValue } from '../invoice/invoiceUtils';
 import {
   findTransactionBatchContext,
   filterTransactionRecords,
@@ -2900,9 +2900,16 @@ export function InvoicePage({
           payout: selectedDetailPayout ?? undefined,
         }
       : null;
-  const selectedModel = selectedPayout
+  const selectedModelSnapshot = selectedPayout
     ? selectedPayout.invoiceSnapshot ?? buildInvoiceReviewModel(selectedPayout, creators, invoiceEntity)
     : selectedGenerated?.snapshot ?? null;
+  const selectedModel = selectedModelSnapshot && selectedDetailPayout?.invoiceSignedAt
+    ? {
+        ...selectedModelSnapshot,
+        signatureDate: selectedModelSnapshot.signatureDate
+          ?? todayInputValue(new Date(selectedDetailPayout.invoiceSignedAt)),
+      }
+    : selectedModelSnapshot;
   const managementViewFor = (payout: Payout): InvoiceManagementView => getInvoiceManagementView(
     payout,
     findInvoiceRequest(payout, generatedInvoices, requests),

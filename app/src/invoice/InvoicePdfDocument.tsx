@@ -62,6 +62,8 @@ const styles = StyleSheet.create({
   signature: { marginTop: 22 },
   signatureLabel: { fontFamily: 'Helvetica-Bold', marginBottom: 28 },
   signatureLine: { width: 210, borderBottomWidth: 0.7, borderBottomColor: '#111111' },
+  signatureDate: { marginTop: 6 },
+  signatureDateLabel: { fontFamily: 'Helvetica-Bold' },
   continuation: { fontSize: 8.5, color: '#666666', textAlign: 'right', marginBottom: 8 },
 });
 
@@ -113,6 +115,10 @@ function PaymentInformation({ model }: { model: InvoiceDocumentModel }) {
       <View style={styles.signature}>
         <Text style={styles.signatureLabel}>Signature:</Text>
         <View style={styles.signatureLine} />
+        <Text style={styles.signatureDate}>
+          <Text style={styles.signatureDateLabel}>Date:</Text>{' '}
+          {formatInvoiceDate(model.signatureDate ?? '')}
+        </Text>
       </View>
     </View>
   );

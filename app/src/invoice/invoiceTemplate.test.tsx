@@ -12,6 +12,7 @@ const PROJECT_NAME = 'Internal Project Alpha';
 const model: InvoiceDocumentModel = {
   invoiceNumber: 'INV-20260804-TEST01',
   invoiceDate: '2026-08-04',
+  signatureDate: '2026-08-14',
   billTo: {
     name: 'COMETS INTERNATIONAL LIMITED',
     address: 'Unit 04-05, 16th Floor, The Broadway',
@@ -71,6 +72,7 @@ describe('Invoice template project visibility', () => {
       projectName: PROJECT_NAME,
     });
     expect(html).toContain('Date of Invoice:');
+    expect(html).toContain('<b>Date:</b> 14 Aug 2026');
     expect(html).toContain('Currency:');
     expect(html).not.toContain('Project:');
     expect(html).not.toContain(PROJECT_NAME);
@@ -105,6 +107,8 @@ describe('Invoice template project visibility', () => {
     const metadataXml = await archive.file('docProps/core.xml')?.async('string');
 
     expect(documentXml).toContain('Date of Invoice');
+    expect(documentXml).toContain('Date');
+    expect(documentXml).toContain('14 Aug 2026');
     expect(documentXml).toContain('Currency');
     expect(documentXml).not.toContain('Project');
     expect(documentXml).not.toContain(PROJECT_NAME);
@@ -130,6 +134,8 @@ describe('Invoice template project visibility', () => {
       .join(' ');
 
     expect(text).toContain('Date of Invoice:');
+    expect(text).toContain('Date:');
+    expect(text).toContain('14 Aug 2026');
     expect(text).toContain('Currency:');
     expect(text).not.toContain('Project:');
     expect(text).not.toContain(PROJECT_NAME);

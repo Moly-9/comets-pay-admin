@@ -2687,7 +2687,11 @@ export default function App() {
       )));
       setGeneratedInvoices((current) => current.map((record) => (
         record.sourcePayoutId === payout.id
-          ? { ...record, status: updated.invoiceReviewStatus }
+          ? {
+              ...record,
+              status: updated.invoiceReviewStatus,
+              snapshot: updated.invoiceSnapshot ?? record.snapshot,
+            }
           : record
       )));
       setInvoiceTab(getInvoicePageTab(updated.invoiceReviewStatus));
@@ -2776,7 +2780,11 @@ export default function App() {
       )));
       setGeneratedInvoices((current) => current.map((invoice) => (
         invoice.invoiceId === record.invoiceId
-          ? { ...invoice, status: updatedPayout.invoiceReviewStatus }
+          ? {
+              ...invoice,
+              status: updatedPayout.invoiceReviewStatus,
+              snapshot: updatedPayout.invoiceSnapshot ?? invoice.snapshot,
+            }
           : invoice
       )));
       setInvoiceTab('review');

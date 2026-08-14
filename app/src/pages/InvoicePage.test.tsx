@@ -77,14 +77,22 @@ const record: GeneratedInvoiceRecord = {
   snapshot,
 };
 
-const renderInvoicePage = (canManageInvoice: boolean) => renderToStaticMarkup(
+const renderInvoicePage = (
+  canManageInvoice: boolean,
+  options: {
+    payouts?: Payout[];
+    generatedInvoices?: GeneratedInvoiceRecord[];
+    tab?: 'signature' | 'review';
+    focusedInvoiceId?: string | null;
+  } = {},
+) => renderToStaticMarkup(
   <InvoicePage
-    payouts={[payout]}
+    payouts={options.payouts ?? [payout]}
     creators={[]}
     invoiceEntity={{ name: 'COMETS', address: 'Hong Kong' }}
-    generatedInvoices={[record]}
+    generatedInvoices={options.generatedInvoices ?? [record]}
     requests={[]}
-    tab="signature"
+    tab={options.tab ?? 'signature'}
     onTabChange={vi.fn()}
     onCreateInvoice={vi.fn()}
     onCreateBatchInvoice={vi.fn()}
@@ -93,7 +101,7 @@ const renderInvoicePage = (canManageInvoice: boolean) => renderToStaticMarkup(
     canReviewMedia={false}
     canReviewFinance={false}
     canEditProjectResourceInvoice={() => false}
-    focusedInvoiceId={null}
+    focusedInvoiceId={options.focusedInvoiceId ?? null}
     onFocusCleared={vi.fn()}
     onMarkSigned={vi.fn()}
     onReviewAction={vi.fn()}
@@ -120,5 +128,22 @@ describe('InvoicePage waiting-signature actions', () => {
 
   it('hides the simulated signature action from read-only users', () => {
     expect(renderInvoicePage(false)).not.toContain('模拟达人完成签署');
+  });
+
+  it('uses the simulated signing timestamp in legacy Invoice previews without a generated snapshot', () => {
+    const signedPayout: Payout = {
+      ...payout,
+      invoiceReviewStatus: '待媒介审核',
+      invoiceSignedAt: '2026-08-14T10:00:00.000+08:00',
+      invoiceSnapshot: undefined,
+    };
+    const html = renderInvoicePage(true, {
+      payouts: [signedPayout],
+      generatedInvoices: [],
+      tab: 'review',
+      focusedInvoiceId: signedPayout.id,
+    });
+
+    expect(html).toContain('<b>Date:</b> 14 Aug 2026');
   });
 });

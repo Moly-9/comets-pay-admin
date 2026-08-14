@@ -10,6 +10,7 @@ import type {
   PayoutStatus,
 } from '../types';
 import type { InvoicePageTab } from './invoiceManagement';
+import { todayInputValue } from './invoiceUtils';
 
 export type { InvoicePageTab } from './invoiceManagement';
 
@@ -35,6 +36,10 @@ const maskNotificationEmail = (value: string) => {
   if (!localPart || !domain) return '达人档案邮箱待补充';
   return `${localPart.slice(0, 1)}***@${domain}`;
 };
+
+const signatureDateFromOccurredAt = (occurredAt: string) => (
+  todayInputValue(new Date(occurredAt))
+);
 
 export type InvoiceReviewCapabilities = {
   manage: boolean;
@@ -229,6 +234,16 @@ export const applyInvoiceReviewAction = (
   const isCreatorFeedback = action === 'RECORD_CREATOR_FEEDBACK';
   const isSigned = action === 'MARK_SIGNED';
   const invalidatesSignature = action === 'RETURN_TO_CREATOR';
+  const invoiceSnapshot = payout.invoiceSnapshot
+    ? {
+        ...payout.invoiceSnapshot,
+        signatureDate: isSigned
+          ? signatureDateFromOccurredAt(occurredAt)
+          : invalidatesSignature
+            ? undefined
+            : payout.invoiceSnapshot.signatureDate,
+      }
+    : undefined;
 
   return {
     ...payout,
@@ -242,6 +257,7 @@ export const applyInvoiceReviewAction = (
       ? (payout.invoiceSignatureRound ?? 0) + 1
       : payout.invoiceSignatureRound,
     invoiceSignedAt: isSigned ? occurredAt : invalidatesSignature ? undefined : payout.invoiceSignedAt,
+    invoiceSnapshot,
     creatorFeedback: isCreatorFeedback
       ? { reason: event.reason ?? '', actorName: actor.name, occurredAt }
       : payout.creatorFeedback,
@@ -408,7 +424,7 @@ export const applyInvoiceDocumentEdit = ({
             ? '从请款项目资料管理修改 Invoice'
             : `处理媒介复核：${payout.invoiceReviewReturn?.reason ?? '已修改 Invoice'}`
     );
-  const nextSnapshot = cloneInvoiceSnapshot(snapshot);
+  const nextSnapshot = { ...cloneInvoiceSnapshot(snapshot), signatureDate: undefined };
   const nextRecord: GeneratedInvoiceRecord = {
     ...record,
     status: '待签署',
@@ -582,10 +598,14 @@ export const markGeneratedInvoiceSigned = (
     throw new Error('生成记录与付款记录的稳定关联不一致。');
   }
   const event = createInvoiceReviewEvent(payout, 'MARK_SIGNED', actor, undefined, occurredAt);
+  const signedSnapshot = {
+    ...record.snapshot,
+    signatureDate: signatureDateFromOccurredAt(occurredAt),
+  };
   return {
     ...payout,
     invoice: record.id,
-    invoiceSnapshot: record.snapshot,
+    invoiceSnapshot: signedSnapshot,
     status: '未进入付款',
     invoiceReviewStatus: event.toStatus,
     invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
@@ -623,6 +643,9 @@ export const invalidateSignedInvoice = (
     invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
     invoiceVersion: (payout.invoiceVersion ?? 1) + 1,
     invoiceSignedAt: undefined,
+    invoiceSnapshot: payout.invoiceSnapshot
+      ? { ...payout.invoiceSnapshot, signatureDate: undefined }
+      : undefined,
     issue: event.reason,
   };
 };

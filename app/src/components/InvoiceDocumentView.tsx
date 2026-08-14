@@ -77,7 +77,11 @@ export function InvoiceDocumentView({
         <b>{model.paymentMethod === 'bank' ? 'Paid by Bank' : 'Paid by Paypal'}</b>
         {paymentLines.map(([label, value]) => <p key={label}><b>{label}:</b> {value || '—'}</p>)}
       </section>
-      <section className="invoice-paper-signature"><strong>Signature:</strong><span /></section>
+      <section className="invoice-paper-signature">
+        <strong>Signature:</strong>
+        <span />
+        <p><b>Date:</b> {formatInvoiceDate(model.signatureDate ?? '')}</p>
+      </section>
     </article>
   );
 }

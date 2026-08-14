@@ -46,6 +46,44 @@ final result: passed
 
 ---
 
+# Design QA - Invoice 达人签署日期
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-7f889bf6-afd0-4583-a8b2-247f4b2c1cf4.png` (`648 x 668`).
+- Browser implementation: `app/qa/invoice-signature-date/implementation-detail-scrolled.png` (`1265 x 712`) from a `1280 x 720` CSS viewport at device pixel ratio 1.
+- Focused source region: `app/qa/invoice-signature-date/source-signature-region.png` (`230 x 110`).
+- Focused implementation region: `app/qa/invoice-signature-date/implementation-signature-region-fixed.png` (`250 x 120`).
+- Combined comparison: `app/qa/invoice-signature-date/signature-comparison.png`; both focused regions were normalized to the same displayed width in one comparison view.
+- State: local administrator, waiting-signature Invoice `INV-240717`, immediately after clicking `模拟达人完成签署` on 14 Aug 2026.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: passed. `Date` uses the Invoice's existing serif document typography, bold label treatment, and zero additional letter spacing. The rendered value follows `Date of Invoice` as `14 Aug 2026`.
+- Spacing and layout rhythm: passed. The new field sits directly below the existing signature line in the annotated target area. Existing paper width, signature width, and surrounding payment spacing are unchanged.
+- Colors and visual tokens: passed. The field keeps the existing black-on-white document palette with no new state color or decoration.
+- Image quality and asset fidelity: passed. This change adds structured document text and requires no raster or icon asset. Browser rendering remains sharp at device pixel ratio 1.
+- Copy and content: passed. The label is `Date:`; the value is blank before signing and uses the simulated signing day after signing.
+
+## Interaction Evidence
+
+- Confirmed the waiting-signature row exposes `模拟达人完成签署`.
+- Confirmed clicking the action moves the Invoice to `待媒介审核` and records the exact signing timestamp in the audit history.
+- Confirmed the preview displays `Date: 14 Aug 2026` immediately after the action.
+- Confirmed legacy prototype Invoices without a generated snapshot derive the document date from `invoiceSignedAt`.
+- Confirmed return, document edit, and signature invalidation clear the prior signature date before re-signing.
+- Confirmed browser console warnings/errors after the final flow: none.
+
+## Comparison History
+
+1. Initial browser pass showed the `Date` label but no value for a legacy fixture without a generated Invoice snapshot. This was a P1 functional mismatch because the required click-time date was not visible.
+2. The detail model now derives the document date from the canonical `invoiceSignedAt` timestamp when a signed snapshot date is unavailable.
+3. The repeated browser flow displayed `Date: 14 Aug 2026`; the combined focused comparison found no remaining actionable P0, P1, or P2 difference.
+
+final result: passed
+
+---
+
 # Design QA - Batch Invoice 生成结果列表
 
 ## Evidence

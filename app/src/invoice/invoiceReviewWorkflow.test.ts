@@ -149,6 +149,7 @@ describe('Invoice review workflow', () => {
       ...payout,
       invoiceReviewStatus: '待媒介审核' as const,
       invoiceSignedAt: '2026-08-04T01:00:00.000Z',
+      invoiceSnapshot: { ...snapshot, signatureDate: '2026-08-04' } as never,
       invoiceVersion: 1,
     };
     const returned = applyInvoiceReviewAction(
@@ -159,6 +160,7 @@ describe('Invoice review workflow', () => {
     );
     expect(returned.invoiceReviewStatus).toBe('待签署');
     expect(returned.invoiceSignedAt).toBeUndefined();
+    expect(returned.invoiceSnapshot?.signatureDate).toBeUndefined();
     expect(returned.invoiceVersion).toBe(2);
   });
 
@@ -208,10 +210,12 @@ describe('Invoice review workflow', () => {
       ...payout,
       invoiceReviewStatus: '待媒介复核' as const,
       invoiceSignedAt: '2026-08-04T01:00:00.000Z',
+      invoiceSnapshot: { ...snapshot, signatureDate: '2026-08-04' } as never,
     };
     const invalidated = invalidateSignedInvoice(recheck, actor);
     expect(invalidated.invoiceReviewStatus).toBe('待签署');
     expect(invalidated.invoiceSignedAt).toBeUndefined();
+    expect(invalidated.invoiceSnapshot?.signatureDate).toBeUndefined();
     expect(invalidated.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('签署失效');
   });
 
@@ -274,6 +278,7 @@ describe('Invoice review workflow', () => {
       payout: returned,
       snapshot: {
         ...snapshot,
+        signatureDate: '2026-08-04',
         currency: 'EUR',
         items: [{ ...snapshot.items[0]!, unitPrice: 120, lineTotal: 120 }],
         payoutAccountId: 'paypal-synthetic',
@@ -308,6 +313,8 @@ describe('Invoice review workflow', () => {
       invoiceVersion: 2,
     });
     expect(result.payout.invoiceSignedAt).toBeUndefined();
+    expect(result.record.snapshot.signatureDate).toBeUndefined();
+    expect(result.payout.invoiceSnapshot?.signatureDate).toBeUndefined();
     expect(result.payout.paymentFailure).toBeUndefined();
     expect(result.payout.paymentFailureReturn).toBeUndefined();
   });
@@ -487,10 +494,12 @@ describe('Invoice review workflow', () => {
       validationStatus: 'valid',
       version: 1,
     };
-    const linked = markGeneratedInvoiceSigned(payout, record, actor, '2026-08-04T03:00:00.000Z');
+    const occurredAt = '2026-08-14T10:00:00.000+08:00';
+    const linked = markGeneratedInvoiceSigned(payout, record, actor, occurredAt);
     expect(linked.invoice).toBe('INV-GENERATED');
     expect(linked.invoiceReviewStatus).toBe('待媒介审核');
-    expect(linked.invoiceSnapshot).toBe(record.snapshot);
+    expect(linked.invoiceSignedAt).toBe(occurredAt);
+    expect(linked.invoiceSnapshot).toEqual({ ...record.snapshot, signatureDate: '2026-08-14' });
 
     expect(() => markGeneratedInvoiceSigned(
       payout,
