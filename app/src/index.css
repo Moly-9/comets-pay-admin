@@ -14251,27 +14251,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.airwallex-signature-boundary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid #eceff3;
-  background: #fff;
-  padding: 10px 18px;
-}
-
-.airwallex-signature-boundary span {
-  color: #4f545e;
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.airwallex-signature-boundary small {
-  color: #8a909b;
-  font-size: 9px;
-  line-height: 1.45;
-}
-
 .date-range-static {
   padding: 0 12px;
   color: #676d79;
@@ -18978,8 +18957,7 @@ button:disabled {
     white-space: normal;
   }
 
-  .airwallex-card-context,
-  .airwallex-signature-boundary {
+  .airwallex-card-context {
     align-items: flex-start;
     flex-direction: column;
   }

@@ -38,6 +38,11 @@ describe('CreatorPayoutAccounts profile editor', () => {
     expect(html).toContain('Intermediary Bank Code (if any)');
     expect(html).toContain('Transfer Remarks (if any)');
     expect(html).toContain('示例：JPMorgan Chase Bank');
+    expect(html).toContain('法定名');
+    expect(html).toContain('ACH routing number');
+    expect(html).not.toContain('出生日期');
+    expect(html).not.toContain('收款通知邮箱');
+    expect(html).not.toContain('Signature');
     expect(html).toContain('>校验账户</span>');
   });
 });

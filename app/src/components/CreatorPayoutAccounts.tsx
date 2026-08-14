@@ -177,6 +177,27 @@ const DOCUMENT_PAYOUT_FIELD_LABELS: Record<string, { label: string; alias: strin
   },
 };
 
+const REQUESTED_PAYMENT_FIELD_PATHS = new Set([
+  'beneficiary.bank_details.account_name',
+  'beneficiary.bank_details.account_number',
+  'beneficiary.bank_details.bank_account_category',
+  'beneficiary.bank_details.swift_code',
+  'beneficiary.bank_details.bank_name',
+  'beneficiary.bank_details.bank_street_address',
+  'beneficiary.bank_details.bank_country_code',
+  'beneficiary.bank_details.bank_state',
+  'beneficiary.bank_details.bank_city',
+  'beneficiary.bank_details.bank_postcode',
+  'beneficiary.bank_details.intermediary_bank_country_code',
+  'beneficiary.bank_details.intermediary_bank_swift_code',
+  'beneficiary.additional_info.transfer_remarks',
+  'beneficiary.bank_details.account_routing_type1',
+  'beneficiary.bank_details.account_routing_value2',
+  'beneficiary.additional_info.personal_id_type',
+  'beneficiary.additional_info.personal_id_number',
+  'beneficiary.additional_info.business_registration_number',
+]);
+
 const SCENARIO_FIELD_LABELS: Record<string, { label: string; alias: string; example: string }> = {
   'beneficiary.entity_type': { label: '收款人类型', alias: 'Beneficiary Type', example: 'PERSONAL' },
   'beneficiary.bank_details.bank_country_code': { label: '收款国家 / 地区', alias: "Beneficiary's Bank Country/Region", example: 'US' },
@@ -588,13 +609,15 @@ function AirwallexAccountForm({
     [accountIssues],
   );
   const enabledFields = schema.fields.filter((item) => item.enabled && item.path !== 'nickname');
-  const requiredFields = schema.fields.filter((item) => item.enabled && item.required);
   const scenarioFields = enabledFields.filter(
     (item) => getAirwallexSchemaGroup(item.path) === 'condition',
   );
   const paymentFields = enabledFields.filter(
-    (item) => getAirwallexSchemaGroup(item.path) !== 'condition',
+    (item) => getAirwallexSchemaGroup(item.path) !== 'condition'
+      && (item.required || REQUESTED_PAYMENT_FIELD_PATHS.has(item.path)),
   );
+  const displayedFields = [...scenarioFields, ...paymentFields];
+  const requiredFields = displayedFields.filter((item) => item.required);
   const requiredPaymentFields = paymentFields.filter((item) => item.required);
   const supplementalFields = useMemo(
     () => getAirwallexUsPaymentSupplementalFields(schema),
@@ -728,7 +751,7 @@ function AirwallexAccountForm({
         </span>
         <div className="dynamic-schema-meta">
           <em>API {AIRWALLEX_SCHEMA_API_VERSION}</em>
-          <b>{enabledFields.length} 个字段 · {requiredFields.length} 个必填</b>
+          <b>{displayedFields.length} 个字段 · {requiredFields.length} 个必填</b>
           <b className={accountIssues.length ? 'dynamic-schema-issues' : 'dynamic-schema-complete'}>
             {accountIssues.length ? `${accountIssues.length} 项待完善` : 'Schema 校验完整'}
           </b>
@@ -788,10 +811,6 @@ function AirwallexAccountForm({
         </div>
         <div className="form-grid creator-payment-form-grid">
           {renderFields(paymentFields)}
-        </div>
-        <div className="airwallex-signature-boundary">
-          <span>Signature</span>
-          <small>签名区由每份 Invoice 单独保留，不写入收款账户，也不提交 Airwallex。</small>
         </div>
       </Section>
 
