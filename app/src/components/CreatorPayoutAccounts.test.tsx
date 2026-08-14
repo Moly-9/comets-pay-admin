@@ -43,6 +43,7 @@ describe('CreatorPayoutAccounts profile editor', () => {
     expect(html).not.toContain('出生日期');
     expect(html).not.toContain('收款通知邮箱');
     expect(html).not.toContain('Signature');
+    expect(html).not.toContain('校验通过，已回写');
     expect(html).toContain('>校验账户</span>');
   });
 });

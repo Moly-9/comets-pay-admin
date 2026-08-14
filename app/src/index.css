@@ -7588,6 +7588,25 @@ body:has(.finance-review-workspace) {
   font-size: 11px;
 }
 
+.airwallex-beneficiary-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: -4px;
+  border: 1px solid #cce9d8;
+  border-radius: 6px;
+  background: #f1faf5;
+  padding: 8px 10px;
+  color: #258a52;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.airwallex-beneficiary-success svg {
+  flex: none;
+  margin-top: 1px;
+}
+
 .project-payment-fields input {
   width: 100%;
   min-height: 34px;

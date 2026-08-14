@@ -841,7 +841,7 @@ function AirwallexAccountForm({
           <strong>{account.beneficiaryId ? '重新校验账户' : '校验账户后创建档案'}</strong>
           <small>
             {beneficiaryStatus === 'saved'
-              ? `已回写 ${account.beneficiaryId || 'beneficiary_id'}`
+              ? '账户资料已校验，可继续创建达人档案'
               : '先按当前 Airwallex Form Schema 校验账户，校验完成后才可创建达人档案'}
           </small>
         </span>
@@ -853,6 +853,12 @@ function AirwallexAccountForm({
           {beneficiaryStatus === 'saving' ? '正在校验账户' : '校验账户'}
         </Button>
       </div>
+      {beneficiaryStatus === 'saved' ? (
+        <div className="airwallex-beneficiary-success" role="status">
+          <CheckCircle2 size={16} />
+          <span>校验通过，已回写 {account.beneficiaryId || 'beneficiary_id'}</span>
+        </div>
+      ) : null}
       {beneficiaryError ? <div className="inline-alert"><AlertCircle size={16} />{beneficiaryError}</div> : null}
     </div>
   );

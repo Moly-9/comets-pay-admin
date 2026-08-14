@@ -26,6 +26,7 @@ No actionable P0, P1 or P2 mismatch remains.
 - The save gate accepts only exactly one default account and requires that account to be a validated Airwallex account.
 - PayPal and PayerMax cannot be selected or created in the editor; existing account data remains preserved.
 - `出生日期`, `收款通知邮箱` and the unrelated Invoice signature note are not shown in payment information.
+- After account validation, the success message is rendered below the revalidation action row.
 - Browser console contained no warning or error entries.
 
 final result: passed
