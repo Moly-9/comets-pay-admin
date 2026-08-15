@@ -125,6 +125,14 @@ export type ContractLifecycle =
   | 'UPLOADED_PENDING_CONFIRMATION'
   | 'CONFIRMED';
 
+export type ContractType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
+
+export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
+  INDEPENDENT: '独立合同',
+  FRAMEWORK: '框架合同',
+  IO: 'IO 单',
+};
+
 export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
   projectId: ProjectId;
@@ -173,6 +181,8 @@ export type ContractGenerationModel = {
 export type ContractRecord = {
   contractId?: ContractId;
   id: string;
+  contractType?: ContractType;
+  frameworkContractId?: ContractId;
   ioId: string;
   name: string;
   templateFamily: string;
@@ -232,25 +242,51 @@ export type ContractRecord = {
 };
 
 export const formatContractMoney = (contract: ContractRecord) => {
+  if (contract.contractType === 'FRAMEWORK') return '无固定金额';
   if (!contract.currency || contract.totalFee === null) return '待补充';
   return `${contract.currency} ${contract.totalFee.toLocaleString('en-US')}`;
 };
+
+export const getContractType = (contract: Pick<ContractRecord, 'contractType'>): ContractType => (
+  contract.contractType ?? 'INDEPENDENT'
+);
+
+export const isFrameworkContract = (contract: Pick<ContractRecord, 'contractType'>) => (
+  getContractType(contract) === 'FRAMEWORK'
+);
+
+export const isIoContract = (contract: Pick<ContractRecord, 'contractType'>) => (
+  getContractType(contract) === 'IO'
+);
+
+export const frameworkIoContracts = (
+  framework: Pick<ContractRecord, 'contractId'>,
+  contracts: ContractRecord[],
+) => contracts.filter((contract) => (
+  isIoContract(contract)
+  && contract.frameworkContractId
+  && contract.frameworkContractId === framework.contractId
+));
 
 export const getContractReadiness = (contract: ContractRecord) => {
   const blockers = contract.issues.filter((issue) => issue.severity === 'blocker');
   const lifecycleConfirmed = contract.lifecycle
     ? contract.lifecycle === 'CONFIRMED'
     : contract.signed;
+  const contractType = getContractType(contract);
+  const requiresFinancialFields = contractType !== 'FRAMEWORK';
   const ready = (
     lifecycleConfirmed
     && !contract.isTemplate
     && blockers.length === 0
     && Boolean(contract.publisher)
-    && Boolean(contract.currency)
-    && contract.totalFee !== null
-    && contract.paymentWithinWorkingDays !== null
-    && Boolean(contract.paymentMethod)
-    && Boolean(contract.feeBearer)
+    && (!requiresFinancialFields || (
+      Boolean(contract.currency)
+      && contract.totalFee !== null
+      && contract.paymentWithinWorkingDays !== null
+      && Boolean(contract.paymentMethod)
+      && Boolean(contract.feeBearer)
+    ))
   );
 
   return {
@@ -258,7 +294,7 @@ export const getContractReadiness = (contract: ContractRecord) => {
     blockerCount: blockers.length,
     reviewCount: contract.issues.length - blockers.length,
     label: ready
-      ? '可用于付款项目'
+      ? contractType === 'FRAMEWORK' ? '可作为框架资源' : '可用于付款项目'
       : contract.lifecycle === 'GENERATED_DRAFT'
         ? '待上传签署合同'
         : contract.status === '待解析'
@@ -269,6 +305,10 @@ export const getContractReadiness = (contract: ContractRecord) => {
 
 export const isConfirmedContract = (contract: ContractRecord) => (
   contract.lifecycle ? contract.lifecycle === 'CONFIRMED' : getContractReadiness(contract).ready
+);
+
+export const isPaymentContract = (contract: ContractRecord) => (
+  !isFrameworkContract(contract) && isConfirmedContract(contract)
 );
 
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
@@ -487,6 +527,9 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
 
 export type ContractUploadInput = {
   systemContractNumber: string;
+  contractType?: ContractType;
+  frameworkContractId?: ContractId;
+  frameworkUploadKey?: string;
   projectId: ProjectId;
   cooperationProjectId?: CooperationProjectId;
   projectName: string;
@@ -495,7 +538,7 @@ export type ContractUploadInput = {
   creatorName: string;
   creatorHandle: string;
   creatorPlatform: string;
-  engagementId: EngagementId;
+  engagementId?: EngagementId;
   draftContractId?: ContractId;
   recognitionResults: ContractRecognitionField[];
   sourceDocuments: ContractSourceDocument[];
@@ -549,6 +592,7 @@ export const createGeneratedContractDraft = (
   return {
     contractId: options.existingContractId ?? createPrototypeId('contract') as ContractId,
     id: model.contractNumber,
+    contractType: 'INDEPENDENT',
     ioId: model.ioNumber || '待补充',
     name: `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,
     templateFamily: '欧美单次商单合作模板 v1',
@@ -621,6 +665,9 @@ export const createGeneratedContractDraft = (
 export const createUploadedContract = (
   {
     systemContractNumber,
+    contractType = 'INDEPENDENT',
+    frameworkContractId,
+    frameworkUploadKey,
     projectId,
     cooperationProjectId,
     projectName,
@@ -644,12 +691,18 @@ export const createUploadedContract = (
   return {
     contractId: draftContractId ?? createPrototypeId('contract') as ContractId,
     id: systemContractNumber,
+    contractType,
+    frameworkContractId,
     ioId: '待确认',
     name: displayName || '新上传合同',
     templateFamily: '待识别',
     sourceName: primaryDocument?.fileName ?? '合同文件',
     documentUrl: primaryDocument?.documentUrl ?? '',
-    documentNote: parseWarnings.join('；') || '识别结果保留原文来源，全部字段需逐项人工确认。',
+    documentNote: [
+      frameworkUploadKey && !frameworkContractId ? `待绑定本批次框架合同 ${frameworkUploadKey}` : '',
+      parseWarnings.join('；'),
+      '识别结果保留原文来源，全部字段需逐项人工确认。',
+    ].filter(Boolean).join('；'),
     pageCount: primaryDocument?.pageCount ?? undefined,
     isTemplate: false,
     project: projectName,
@@ -772,6 +825,7 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
     : normalizeMoney(fieldText(totalFees));
   const invoiceData = objectValue<{ normalizedDays?: number | null }>(invoicePeriod);
   const paymentData = objectValue<{ normalizedDays?: number | null }>(paymentTerm);
+  const frameworkContract = isFrameworkContract(contract);
 
   return {
     ...contract,
@@ -783,21 +837,21 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
     platform: channelData.platform ?? '',
     channelName: channelData.channelName || channelData.handle || '',
     channelLink: channelData.channelUrl ?? '',
-    effectiveDate: effectiveData.date ?? '',
-    campaignStart: campaignData.startDate ?? '',
-    campaignEnd: campaignData.endDate ?? '',
-    totalFee: moneyData.amount ?? null,
-    currency: moneyData.currency ?? '',
-    invoiceWithinWorkingDays: invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)),
-    paymentWithinWorkingDays: paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)),
-    paymentMethod: paymentMethod === 'AIRWALLEX'
+    effectiveDate: frameworkContract ? '' : effectiveData.date ?? '',
+    campaignStart: frameworkContract ? '' : campaignData.startDate ?? '',
+    campaignEnd: frameworkContract ? '' : campaignData.endDate ?? '',
+    totalFee: frameworkContract ? null : moneyData.amount ?? null,
+    currency: frameworkContract ? '' : moneyData.currency ?? '',
+    invoiceWithinWorkingDays: frameworkContract ? null : invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)),
+    paymentWithinWorkingDays: frameworkContract ? null : paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)),
+    paymentMethod: frameworkContract ? '' : paymentMethod === 'AIRWALLEX'
       ? 'AIRWALLEX'
       : paymentMethod === 'PAYPAL'
         ? 'PAYPAL'
         : paymentMethod === 'BANK_TRANSFER' || /bank|银行|电汇/i.test(paymentMethod)
           ? 'BANK'
           : '',
-    feeBearer: ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(transferFee)
+    feeBearer: frameworkContract ? '' : ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(transferFee)
       ? transferFee as ContractFeeBearer
       : '',
     accountName: beneficiary,

@@ -7,6 +7,8 @@ export type ContractDocumentType =
 
 export type ContractUploadDocumentType = Extract<ContractDocumentType, 'STANDARD_TERMS' | 'IO'>;
 
+export type ContractUploadRelationType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
+
 export type ContractParseStatus = 'parsed' | 'scanned' | 'encrypted' | 'corrupt';
 
 export type ContractFieldStatus = 'detected' | 'missing' | 'conflict' | 'confirmed';
@@ -82,6 +84,7 @@ export type ParsedContractDocument = {
   fileName: string;
   mimeType: string;
   documentType: ContractDocumentType;
+  contractType?: ContractUploadRelationType;
   parseStatus: ContractParseStatus;
   pageCount: number | null;
   blocks: ContractTextBlock[];

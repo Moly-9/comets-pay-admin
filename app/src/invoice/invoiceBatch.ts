@@ -7,7 +7,7 @@ import {
   type InvoiceId,
   type ProjectId,
 } from '../businessWorkflow';
-import { isConfirmedContract, type ContractRecord } from '../contracts';
+import { isPaymentContract, type ContractRecord } from '../contracts';
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
@@ -104,7 +104,7 @@ export const availableContractsForEngagement = (
   contract.engagementId === engagementId
   && contract.creatorId === association.creatorId
   && (contract.cooperationProjectId ?? contract.projectId) === association.projectId
-  && isConfirmedContract(contract)
+  && isPaymentContract(contract)
   && Boolean(contract.contractId)
 ));
 

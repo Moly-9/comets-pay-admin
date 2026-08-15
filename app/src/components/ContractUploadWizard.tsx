@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, FileText, LoaderCircle, Upload, UserRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   createSelectedContractFiles,
   MAX_CONTRACT_FILE_COUNT,
@@ -10,12 +10,18 @@ import {
 import { createPrototypeRecognitionFields } from '../contractRecognitionPrototype';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
-  CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS,
   type ContractRecognitionField,
   type ContractUploadDocumentType,
   type ParsedContractDocument,
 } from '../contractRecognitionTypes';
-import type { ContractRecord, ContractUploadInput } from '../contracts';
+import {
+  CONTRACT_TYPE_LABELS,
+  getContractType,
+  isFrameworkContract,
+  type ContractRecord,
+  type ContractType,
+  type ContractUploadInput,
+} from '../contracts';
 import {
   createPrototypeCode,
   type ContractId,
@@ -33,7 +39,13 @@ type Props = {
   creators: CreatorProfile[];
   contracts: ContractRecord[];
   onClose: () => void;
-  onSave: (input: ContractUploadInput) => void;
+  onSave: (inputs: ContractUploadInput[]) => void;
+  initialProjectId?: string;
+  initialCreatorId?: string;
+  initialContractType?: ContractType;
+  allowedContractTypes?: ContractType[];
+  title?: string;
+  submitLabel?: string;
 };
 
 const STATUS_LABELS = {
@@ -50,25 +62,31 @@ const FIELD_STATUS_LABELS = {
   confirmed: '已确认',
 } as const;
 
-export function ContractUploadWizard({ projects, creators, contracts, onClose, onSave }: Props) {
-  const [projectId, setProjectId] = useState('');
-  const [creatorId, setCreatorId] = useState('');
+export function ContractUploadWizard({
+  projects,
+  creators,
+  contracts,
+  onClose,
+  onSave,
+  initialProjectId = '',
+  initialCreatorId = '',
+  initialContractType = 'INDEPENDENT',
+  allowedContractTypes = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[],
+  title = '上传合同',
+  submitLabel = '保存待确认合同',
+}: Props) {
+  const [projectId, setProjectId] = useState(initialProjectId);
+  const [creatorId, setCreatorId] = useState(initialCreatorId);
   const [selectedFiles, setSelectedFiles] = useState<SelectedContractFile[]>([]);
   const [documents, setDocuments] = useState<ParsedContractDocument[]>([]);
+  const [frameworkSelections, setFrameworkSelections] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<ContractRecognitionField[]>([]);
   const [systemContractNumber] = useState(() => createPrototypeCode('CON'));
   const [draftContractId, setDraftContractId] = useState('');
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
   const selectedProject = projects.find((project) => cooperationProjectIdFor(project) === projectId) ?? null;
-  const projectCreators = useMemo(() => {
-    if (!selectedProject) return [];
-    const references = selectedProject.creatorProfiles ?? [];
-    return references
-      .map((reference) => creators.find((creator) => creator.id === reference.creatorId))
-      .filter((creator): creator is CreatorProfile => Boolean(creator));
-  }, [creators, selectedProject]);
-  const selectedCreator = projectCreators.find((creator) => creator.id === creatorId) ?? null;
+  const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
   const selectedProjectInternalId = selectedProject
     ? cooperationProjectIdFor(selectedProject) as ProjectId
     : null;
@@ -83,15 +101,29 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · ${project.creators} 位达人`,
   }));
-  const creatorOptions = projectCreators.map((creator) => ({
+  const creatorOptions = creators.map((creator) => ({
     value: creator.id,
     label: creator.name,
-    description: `${creator.handle} · ${creator.platform}`,
+    description: `${creator.handle} · ${creator.region} · ${creator.platform}`,
   }));
+  const frameworkOptions = contracts
+    .filter((contract) => isFrameworkContract(contract) && contract.creatorId === creatorId)
+    .map((contract) => ({
+      value: `contract:${contract.contractId ?? contract.id}`,
+      label: `${contract.id} · ${contract.name}`,
+      description: `${contract.project} · ${getContractType(contract)}`,
+    }));
+  const batchFrameworkOptions = selectedFiles
+    .filter((file) => file.contractType === 'FRAMEWORK')
+    .map((file) => ({
+      value: `upload:${file.id}`,
+      label: `本次上传：${file.file.name}`,
+      description: '保存后作为本批次可复用的框架合同',
+    }));
   const conflictCount = fields.filter((field) => field.status === 'conflict').length;
   const missingCount = fields.filter((field) => field.status === 'missing').length;
-  const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id);
-  const canSave = Boolean(selectedProject && selectedCreator && engagementReference && documents.length && !parsing);
+  const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id && creator.status !== 'removed');
+  const canSave = Boolean(selectedProject && selectedCreator && documents.length && !parsing);
 
   useEffect(() => {
     if (!documents.length) {
@@ -122,8 +154,17 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
     setParsing(true);
     try {
       const parsed = await parseContractFiles(files);
-      setSelectedFiles(files);
-      setDocuments(parsed);
+      const normalizedFiles = files.map((file) => (
+        allowedContractTypes.includes(file.contractType)
+          ? file
+          : { ...file, contractType: initialContractType }
+      ));
+      setSelectedFiles(normalizedFiles);
+      setFrameworkSelections({});
+      setDocuments(parsed.map((document) => ({
+        ...document,
+        contractType: normalizedFiles.find((file) => file.id === document.id)?.contractType ?? initialContractType,
+      })));
     } catch (reason) {
       setDocuments([]);
       setFields([]);
@@ -148,54 +189,84 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
     void parseSelection(createSelectedContractFiles(files));
   };
 
-  const changeDocumentType = (documentId: string, documentType: ContractUploadDocumentType) => {
-    const nextSelected = selectedFiles.map((item) => item.id === documentId ? { ...item, documentType } : item);
+  const changeContractType = (documentId: string, contractType: ContractType) => {
+    if (!allowedContractTypes.includes(contractType)) return;
+    const documentType: ContractUploadDocumentType = contractType === 'IO' ? 'IO' : 'STANDARD_TERMS';
+    const nextSelected = selectedFiles.map((item) => item.id === documentId
+      ? { ...item, contractType, documentType }
+      : item);
     const nextDocuments = documents.map((document) => (
-      document.id === documentId ? { ...document, documentType } : document
+      document.id === documentId ? { ...document, documentType, contractType } : document
     ));
     setSelectedFiles(nextSelected);
     setDocuments(nextDocuments);
+    if (contractType !== 'IO') {
+      setFrameworkSelections((current) => {
+        const next = { ...current };
+        delete next[documentId];
+        return next;
+      });
+    }
   };
 
   const save = () => {
     if (!selectedProject || !selectedCreator || !selectedFiles.length || !documents.length) return;
-    const reference = selectedProject.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator.id);
-    if (!reference) {
-      setError('当前项目达人缺少稳定 Engagement ID，需先在项目详情中完成关联。');
-      return;
-    }
-    const selectedDraft = draftCandidates.find((contract) => contract.contractId === draftContractId);
-    const sourceDocuments = documents.map((document) => {
+    const reference = selectedProject.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator.id && creator.status !== 'removed');
+    const selectedDraft = selectedFiles.length === 1 && selectedFiles[0].contractType === 'INDEPENDENT'
+      ? draftCandidates.find((contract) => contract.contractId === draftContractId)
+      : undefined;
+    const inputs = documents.map((document, index) => {
       const selected = selectedFiles.find((item) => item.id === document.id);
+      const contractType = selected?.contractType ?? 'INDEPENDENT';
+      const frameworkSelection = frameworkSelections[document.id] ?? '';
+      const frameworkContractId = frameworkSelection.startsWith('contract:')
+        ? frameworkSelection.slice('contract:'.length) as ContractId
+        : undefined;
+      const frameworkUploadKey = frameworkSelection.startsWith('upload:')
+        ? frameworkSelection.slice('upload:'.length)
+        : undefined;
+      const recognitionResults = createPrototypeRecognitionFields({
+        documents: [{ ...document, contractType }],
+        systemContractNumber: selectedDraft?.id ?? (index === 0 ? systemContractNumber : createPrototypeCode('CON')),
+        projectName: selectedProject.name,
+        brandName: selectedProject.brand,
+        creatorName: selectedCreator.name,
+        creatorHandle: selectedCreator.handle,
+        creatorPlatform: selectedCreator.platform,
+      });
       return {
-        ...document,
-        documentUrl: selected ? URL.createObjectURL(selected.file) : '',
-      };
+        systemContractNumber: selectedDraft?.id ?? (index === 0 ? systemContractNumber : createPrototypeCode('CON')),
+        contractType,
+        frameworkContractId,
+        frameworkUploadKey,
+        projectId: cooperationProjectIdFor(selectedProject) as ProjectId,
+        cooperationProjectId: (
+          selectedProject.cooperationProjectId
+          ?? selectedProject.projectId
+          ?? selectedProject.id
+        ) as ProjectId,
+        projectName: selectedProject.name,
+        customer: selectedProject.brand,
+        creatorId: selectedCreator.id as CreatorId,
+        creatorName: selectedCreator.name,
+        creatorHandle: selectedCreator.handle,
+        creatorPlatform: selectedCreator.platform,
+        engagementId: reference?.engagementId as EngagementId | undefined,
+        draftContractId: selectedDraft?.contractId as ContractId | undefined,
+        recognitionResults,
+        sourceDocuments: [{
+          ...document,
+          contractType,
+          documentUrl: selected ? URL.createObjectURL(selected.file) : '',
+        }],
+      } satisfies ContractUploadInput;
     });
-    onSave({
-      systemContractNumber: selectedDraft?.id ?? systemContractNumber,
-      projectId: cooperationProjectIdFor(selectedProject) as ProjectId,
-      cooperationProjectId: (
-        selectedProject.cooperationProjectId
-        ?? selectedProject.projectId
-        ?? selectedProject.id
-      ) as ProjectId,
-      projectName: selectedProject.name,
-      customer: selectedProject.brand,
-      creatorId: selectedCreator.id as CreatorId,
-      creatorName: selectedCreator.name,
-      creatorHandle: selectedCreator.handle,
-      creatorPlatform: selectedCreator.platform,
-      engagementId: reference.engagementId as EngagementId,
-      draftContractId: selectedDraft?.contractId as ContractId | undefined,
-      recognitionResults: fields,
-      sourceDocuments,
-    });
+    onSave(inputs);
   };
 
   return (
     <Modal
-      title="上传合同"
+      title={title}
       onClose={onClose}
       width="1080px"
       className="contract-upload-modal"
@@ -206,7 +277,7 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
             <small>{documents.length ? `${fields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成关联信息并上传文件后可保存'}</small>
           </div>
           <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button type="submit" form="contract-upload-form" disabled={!canSave}>保存待确认合同</Button>
+          <Button type="submit" form="contract-upload-form" disabled={!canSave}>{submitLabel}</Button>
         </>
       )}
     >
@@ -251,7 +322,7 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
                 ariaLabel="合作达人"
                 variant="form"
                 value={creatorId}
-                placeholder={selectedProject ? '选择该项目达人' : '请先选择项目'}
+                placeholder={selectedProject ? '选择全系统达人' : '请先选择项目'}
                 options={creatorOptions}
                 disabled={!selectedProject}
                 onChange={(value) => {
@@ -259,9 +330,9 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
                   setDraftContractId('');
                 }}
               />
-              <small>{selectedProject ? `仅显示 ${selectedProject.name} 已关联的达人` : '选择项目后加载关联达人'}</small>
+              <small>{selectedProject ? '显示全系统达人；未关联当前项目时保存会自动补建合作关系' : '选择项目后加载全系统达人'}</small>
             </div>
-            <div className="contract-upload-field">
+            {allowedContractTypes.includes('INDEPENDENT') ? <div className="contract-upload-field">
               <span>对应生成草稿</span>
               <SelectField
                 ariaLabel="对应生成草稿"
@@ -280,10 +351,10 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
                 onChange={setDraftContractId}
               />
               <small>选择后沿用草稿合同 ID，并保留原生成快照</small>
-            </div>
+            </div> : null}
           </div>
-          {selectedProject && projectCreators.length === 0 ? (
-            <p className="contract-upload-empty">该项目没有可验证的达人关联，请先维护项目合作达人。</p>
+          {selectedProject && selectedCreator && !engagementReference ? (
+            <p className="contract-upload-empty">该达人尚未关联当前项目，保存时会自动建立项目合作关系。</p>
           ) : null}
           {selectedProject && selectedCreator ? (
             <div className="contract-upload-association-summary">
@@ -305,7 +376,7 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
             <span><Upload size={18} /></span>
             <div>
               <h3 id="contract-upload-files-title">合同文件</h3>
-              <p>支持文字型 PDF 与标准 DOCX，每份文件由用户选择“合同”或“IO 单”。</p>
+              <p>支持文字型 PDF 与标准 DOCX，每份文件可单独选择独立合同、框架合同或 IO 单。</p>
             </div>
             {documents.length ? <em>{documents.length} 份</em> : null}
           </header>
@@ -343,15 +414,29 @@ export function ContractUploadWizard({ projects, creators, contracts, onClose, o
                   <small>{STATUS_LABELS[document.parseStatus]}{document.pageCount ? ` · ${document.pageCount} 页` : ''}</small>
                   {document.errorMessage ? <p>{document.errorMessage}</p> : null}
                 </div>
-                <select
-                  aria-label={`${document.fileName} 文档类型`}
-                  value={document.documentType}
-                  onChange={(event) => changeDocumentType(document.id, event.target.value as ContractUploadDocumentType)}
-                >
-                  {CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS.map((option) => (
-                    <option value={option.value} key={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <div className="contract-source-file-controls">
+                  <select
+                    aria-label={`${document.fileName} 合同类型`}
+                    value={document.contractType ?? 'INDEPENDENT'}
+                    onChange={(event) => changeContractType(document.id, event.target.value as ContractType)}
+                  >
+                    {allowedContractTypes.map((type) => (
+                      <option value={type} key={type}>{CONTRACT_TYPE_LABELS[type]}</option>
+                    ))}
+                  </select>
+                  {(document.contractType ?? 'INDEPENDENT') === 'IO' ? (
+                    <select
+                      aria-label={`${document.fileName} 框架合同`}
+                      value={frameworkSelections[document.id] ?? ''}
+                      onChange={(event) => setFrameworkSelections((current) => ({ ...current, [document.id]: event.target.value }))}
+                    >
+                      <option value="">不绑定框架合同</option>
+                      {[...frameworkOptions, ...batchFrameworkOptions].map((option) => (
+                        <option value={option.value} key={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
               </article>
             ))}
             </div>

@@ -8,14 +8,18 @@ import {
   ExternalLink,
   FileSearch,
   FileText,
+  Link2,
   Landmark,
   Pencil,
   ReceiptText,
   ShieldCheck,
+  Unlink,
+  Upload,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, PageHeading } from '../components/Common';
+import { Button, PageHeading, SelectField } from '../components/Common';
+import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import {
   canConfirmRecognitionFields,
@@ -33,11 +37,20 @@ import {
   type ContractSourceLocation,
 } from '../contractRecognitionTypes';
 import {
+  CONTRACT_TYPE_LABELS,
   applyConfirmedRecognitionToContract,
   formatContractMoney,
+  frameworkIoContracts,
+  getContractType,
   getContractReadiness,
+  isFrameworkContract,
+  isIoContract,
   type ContractRecord,
+  type ContractUploadInput,
 } from '../contracts';
+import type { ContractId } from '../businessWorkflow';
+import type { CreatorProfile } from '../types';
+import type { ProjectSummary } from './ProjectDetailPage';
 
 type ContractDetailTab = 'summary' | 'io' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
@@ -159,22 +172,33 @@ function RecognitionFieldList({
 
 export function ContractDetailPage({
   contract,
+  contracts = [],
+  projects = [],
+  creators = [],
   onBack,
   backLabel = '返回合同列表',
   notify,
   onUpdateContract,
+  onBindFrameworkContract,
+  onUploadContracts,
 }: {
   contract: ContractRecord;
+  contracts?: ContractRecord[];
+  projects?: ProjectSummary[];
+  creators?: CreatorProfile[];
   onBack: () => void;
   backLabel?: string;
   notify: Notify;
   onUpdateContract?: (contract: ContractRecord) => void;
+  onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
+  onUploadContracts?: (inputs: ContractUploadInput[]) => ContractRecord[];
 }) {
   const [activeTab, setActiveTab] = useState<ContractDetailTab>('summary');
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
   const [draftFields, setDraftFields] = useState(contract.recognitionResults ?? []);
   const [activeDocumentId, setActiveDocumentId] = useState(contract.sourceDocuments?.[0]?.id ?? '');
   const [focusedSource, setFocusedSource] = useState<ContractSourceLocation | null>(null);
+  const [frameworkUploadOpen, setFrameworkUploadOpen] = useState(false);
   useEffect(() => {
     setDraftFields(contract.recognitionResults ?? []);
     setActiveDocumentId(contract.sourceDocuments?.[0]?.id ?? '');
@@ -218,6 +242,24 @@ export function ContractDetailPage({
     { id: 'io', label: 'IO与履约' },
     { id: 'payment', label: '付款与Invoice' },
     { id: 'checks', label: `校验记录${visibleIssues.length ? ` ${visibleIssues.length}` : ''}` },
+  ];
+  const contractType = getContractType(contract);
+  const frameworkContracts = contracts.filter((candidate) => (
+    isFrameworkContract(candidate)
+    && candidate.contractId
+    && candidate.creatorId === contract.creatorId
+    && candidate.contractId !== contract.contractId
+  ));
+  const linkedIoContracts = isFrameworkContract(contract)
+    ? frameworkIoContracts(contract, contracts)
+    : [];
+  const frameworkRelationOptions = [
+    { value: '', label: '不绑定框架合同', description: 'IO 单保存后仍可用于 Invoice 与付款流程' },
+    ...frameworkContracts.map((candidate) => ({
+      value: candidate.contractId!,
+      label: `${candidate.id} · ${candidate.name}`,
+      description: `${candidate.project} · ${CONTRACT_TYPE_LABELS.FRAMEWORK}`,
+    })),
   ];
 
   const copyContractId = async () => {
@@ -326,6 +368,31 @@ export function ContractDetailPage({
     notify('合同资料已确认', '上传文件和结构化字段已确认为最终合同版本，现在可以参与 Invoice 校验。');
   };
 
+  const updateFrameworkRelation = (value: string) => {
+    if (!onBindFrameworkContract || !contract.contractId) return;
+    const nextId = value ? value as ContractId : undefined;
+    if (onBindFrameworkContract(contract.contractId, nextId)) {
+      notify(
+        nextId ? '框架合同已绑定' : '框架合同关系已解除',
+        nextId ? 'IO 单已关联所选框架合同，可在框架合同详情查看子单。' : 'IO 单仍可独立参与 Invoice 与付款流程。',
+      );
+    }
+  };
+
+  const saveFrameworkUpload = (inputs: ContractUploadInput[]) => {
+    if (!onUploadContracts || !contract.contractId) return;
+    const records = onUploadContracts(inputs);
+    const framework = records.find((record) => isFrameworkContract(record));
+    if (!framework?.contractId || !onBindFrameworkContract) {
+      setFrameworkUploadOpen(false);
+      notify('框架合同已保存', '框架合同已保存，稍后可从 IO 单详情中选择绑定。');
+      return;
+    }
+    onBindFrameworkContract(contract.contractId, framework.contractId);
+    setFrameworkUploadOpen(false);
+    notify('框架合同已上传并绑定', `${framework.id} 已成为当前 IO 单的框架合同。`);
+  };
+
   return (
     <div className="page-stack contract-detail-page">
       <button className="project-back-button" type="button" onClick={onBack}>
@@ -351,9 +418,11 @@ export function ContractDetailPage({
 
       <div className="contract-metric-grid">
         <article>
-          <span>付款就绪度</span>
+          <span>{isFrameworkContract(contract) ? '框架资源状态' : '付款就绪度'}</span>
           <strong className={readiness.ready ? 'contract-ready-text' : 'contract-attention-text'}>{readiness.label}</strong>
-          <small>{readiness.ready ? '可加入新建付款项目' : '完成阻断项后才能进入付款流程'}</small>
+          <small>{isFrameworkContract(contract)
+            ? readiness.ready ? '可供同一达人 IO 单选择绑定' : '确认主体和签署状态后可用于绑定'
+            : readiness.ready ? '可加入新建付款项目' : '完成阻断项后才能进入付款流程'}</small>
         </article>
         <article>
           <span>合同金额</span>
@@ -366,6 +435,58 @@ export function ContractDetailPage({
           <small>{contract.lifecycle === 'GENERATED_DRAFT' ? '等待线下补充并回传' : contract.signed ? '上传最终版本已确认' : '上传版本待人工确认'}</small>
         </article>
       </div>
+
+      <section className={`contract-relationship-panel contract-relationship-${contractType.toLowerCase()}`}>
+        <header>
+          <span className="contract-relationship-icon"><Link2 size={17} /></span>
+          <div>
+            <strong>合同关系</strong>
+            <small>{CONTRACT_TYPE_LABELS[contractType]} · {isFrameworkContract(contract) ? '一个框架合同可关联多个 IO 单' : '关系调整会记录到项目工作流'}</small>
+          </div>
+          <span className={`contract-type-badge contract-type-${contractType.toLowerCase()}`}>{CONTRACT_TYPE_LABELS[contractType]}</span>
+        </header>
+        {isFrameworkContract(contract) ? (
+          <div className="contract-relationship-content">
+            <div className="contract-relationship-summary"><strong>{linkedIoContracts.length}</strong><span>个已绑定 IO 单</span></div>
+            {linkedIoContracts.length ? (
+              <div className="contract-child-list">
+                {linkedIoContracts.map((child) => (
+                  <div key={child.contractId ?? child.id} className="contract-child-item">
+                    <span><strong>{child.id}</strong><small>{child.name}</small></span>
+                    <span className="contract-type-badge contract-type-io">IO 单</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="contract-inline-empty">当前框架合同尚未绑定 IO 单。</div>}
+          </div>
+        ) : isIoContract(contract) ? (
+          <div className="contract-relationship-content contract-io-relation-content">
+            <div className="contract-relationship-field">
+              <span>框架合同</span>
+              {onBindFrameworkContract && contract.contractId ? (
+                <SelectField
+                  ariaLabel="框架合同"
+                  variant="form"
+                  value={contract.frameworkContractId ?? ''}
+                  options={frameworkRelationOptions}
+                  onChange={updateFrameworkRelation}
+                />
+              ) : <strong>{contract.frameworkContractId ?? '待绑定框架合同'}</strong>}
+              <small>{contract.frameworkContractId ? '已绑定，可随时更换或解除' : '未绑定不影响保存、确认、Invoice 和付款流程'}</small>
+            </div>
+            {onUploadContracts && onBindFrameworkContract ? (
+              <Button variant="secondary" icon={<Upload size={15} />} onClick={() => setFrameworkUploadOpen(true)}>上传并绑定框架合同</Button>
+            ) : null}
+            {contract.frameworkContractId ? (
+              <button className="contract-unlink-action" type="button" onClick={() => updateFrameworkRelation('')}>
+                <Unlink size={14} />解除绑定
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="contract-relationship-content"><span className="contract-relationship-independent"><ShieldCheck size={16} />独立合同不需要框架合同关系。</span></div>
+        )}
+      </section>
 
       {contract.documentNote && dismissedDocumentNoteId !== contract.id ? (
         <div className="contract-document-note" role="note">
@@ -552,7 +673,7 @@ export function ContractDetailPage({
                 ) : (
                   <div className="contract-check-success">
                     <CheckCircle2 size={22} />
-                    <span><strong>关键字段检查通过</strong><small>合同可用于新建付款项目，并继续进行Invoice匹配。</small></span>
+                    <span><strong>关键字段检查通过</strong><small>{isFrameworkContract(contract) ? '框架合同可作为资源，并供同一达人 IO 单绑定。' : '合同可用于新建付款项目，并继续进行Invoice匹配。'}</small></span>
                   </div>
                 )}
               </>
@@ -560,6 +681,21 @@ export function ContractDetailPage({
           </div>
         </section>
       </div>
+      {frameworkUploadOpen ? (
+        <ContractUploadWizard
+          projects={projects}
+          creators={creators}
+          contracts={contracts}
+          initialProjectId={(contract.cooperationProjectId ?? contract.projectId ?? '') as string}
+          initialCreatorId={contract.creatorId ?? ''}
+          initialContractType="FRAMEWORK"
+          allowedContractTypes={['FRAMEWORK']}
+          title="上传并绑定框架合同"
+          submitLabel="保存并绑定框架合同"
+          onClose={() => setFrameworkUploadOpen(false)}
+          onSave={saveFrameworkUpload}
+        />
+      ) : null}
     </div>
   );
 }

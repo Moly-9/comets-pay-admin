@@ -4,6 +4,7 @@ import type {
   ParsedContractDocument,
   ContractUploadDocumentType,
 } from './contractRecognitionTypes';
+import type { ContractType } from './contracts';
 import { createClientRequestId } from './clientRequestId';
 
 export const MAX_CONTRACT_FILE_SIZE = 30 * 1024 * 1024;
@@ -13,6 +14,7 @@ export type SelectedContractFile = {
   id: string;
   file: File;
   documentType: ContractUploadDocumentType;
+  contractType: ContractType;
 };
 
 const acceptedMimeTypes = new Set([
@@ -34,6 +36,7 @@ export const createSelectedContractFiles = (files: File[]): SelectedContractFile
     id: createClientRequestId(),
     file,
     documentType: 'STANDARD_TERMS',
+    contractType: 'INDEPENDENT',
   }))
 );
 

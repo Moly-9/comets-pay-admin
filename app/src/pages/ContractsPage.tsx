@@ -11,11 +11,15 @@ import {
   toggleVisibleContractSelection,
 } from '../contractBatchOperations';
 import {
+  CONTRACT_TYPE_LABELS,
   formatContractMoney,
+  getContractType,
   getContractReadiness,
+  isPaymentContract,
   type ContractRecord,
   type ContractUploadInput,
 } from '../contracts';
+import type { ContractId } from '../businessWorkflow';
 import type { CreatorProfile } from '../types';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import { ContractDetailPage } from './ContractDetailPage';
@@ -33,7 +37,9 @@ export function ContractsPage({
   canDeleteContract,
   focusedContractId,
   onFocusCleared,
+  onUploadContracts,
   onUploadContract,
+  onBindFrameworkContract,
   onCreateContract,
   onUpdateContract,
   onDeleteContracts,
@@ -47,12 +53,19 @@ export function ContractsPage({
   canDeleteContract: (contract: ContractRecord) => boolean;
   focusedContractId: string | null;
   onFocusCleared: () => void;
-  onUploadContract: (input: ContractUploadInput) => ContractRecord;
+  onUploadContracts?: (inputs: ContractUploadInput[]) => ContractRecord[];
+  onUploadContract?: (input: ContractUploadInput) => ContractRecord;
+  onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onCreateContract?: () => void;
   onUpdateContract: (contract: ContractRecord) => void;
   onDeleteContracts: (contractIds: string[]) => number;
   notify: Notify;
 }) {
+  const handleUploadContracts = (inputs: ContractUploadInput[]) => (
+    onUploadContracts
+      ? onUploadContracts(inputs)
+      : inputs.map((input) => onUploadContract?.(input)).filter((record): record is ContractRecord => Boolean(record))
+  );
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ContractFilter>('all');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(focusedContractId);
@@ -74,7 +87,7 @@ export function ContractsPage({
         .includes(query);
       const matchesFilter = (
         filter === 'all'
-        || (filter === 'ready' && readiness.ready)
+        || (filter === 'ready' && isPaymentContract(contract))
         || (filter === 'attention' && !readiness.ready && !contract.isTemplate)
         || (filter === 'template' && contract.isTemplate)
       );
@@ -89,7 +102,7 @@ export function ContractsPage({
     setPageSize,
   } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}` });
 
-  const readyCount = contracts.filter((contract) => getContractReadiness(contract).ready).length;
+  const readyCount = contracts.filter(isPaymentContract).length;
   const attentionCount = contracts.filter((contract) => !contract.isTemplate && !getContractReadiness(contract).ready).length;
   const templateCount = contracts.filter((contract) => contract.isTemplate).length;
   const businessContractCount = contracts.length - templateCount;
@@ -173,8 +186,13 @@ export function ContractsPage({
     return (
       <ContractDetailPage
         contract={selectedContract}
+        contracts={contracts}
+        projects={projects}
+        creators={creators}
         notify={notify}
         onUpdateContract={onUpdateContract}
+        onBindFrameworkContract={onBindFrameworkContract}
+        onUploadContracts={handleUploadContracts}
         onBack={() => {
           setSelectedContractId(null);
           onFocusCleared();
@@ -325,7 +343,11 @@ export function ContractsPage({
                         }}
                       >
                         <strong>{contract.name}</strong>
+                        <span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>
+                          {CONTRACT_TYPE_LABELS[getContractType(contract)]}
+                        </span>
                         <small>{contract.id} · {contract.ioId}</small>
+                        {contract.frameworkContractId ? <small className="contract-relation-subtext">框架合同：{contract.frameworkContractId}</small> : null}
                       </button>
                     </td>
                     <td>{contract.publisher || '待补充'}</td>
@@ -366,11 +388,12 @@ export function ContractsPage({
           creators={creators}
           contracts={contracts}
           onClose={() => setUploadOpen(false)}
-          onSave={(input) => {
-            const contract = onUploadContract(input);
+          onSave={(inputs) => {
+            const records = handleUploadContracts(inputs);
             setUploadOpen(false);
-            openContract(contract.id);
-            notify('合同已保存', `${input.sourceDocuments.length} 份文件已关联 ${input.projectName} / ${input.creatorName}，等待字段人工确认。`);
+            if (records[0]) openContract(records[0].id);
+            const first = inputs[0];
+            notify('合同已保存', `${records.length} 份${records.length > 1 ? '合同' : '文件'}已关联 ${first?.projectName ?? '当前项目'} / ${first?.creatorName ?? '当前达人'}，等待字段人工确认。`);
           }}
         />
       ) : null}

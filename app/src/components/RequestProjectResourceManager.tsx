@@ -28,7 +28,7 @@ import {
   type PaymentListId,
   type PaymentListRecord,
 } from '../businessWorkflow';
-import { formatContractMoney, getContractReadiness, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
+import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractReadiness, getContractType, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
 import type { SystemUser } from '../data';
 import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
@@ -88,7 +88,7 @@ type Props = {
   onOpenInvoice: (invoiceId: InvoiceId) => void;
   onGenerateContract: () => void;
   onGenerateInvoice: () => void;
-  onUploadContract: (input: ContractUploadInput) => ContractRecord | undefined;
+  onUploadContract: (inputs: ContractUploadInput[]) => ContractRecord[];
   onDeleteContract: (contractId: ContractId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onGeneratePaymentLists: () => void;
@@ -113,7 +113,7 @@ export type RequestProjectResourceActions = {
   onOpenInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onGenerateContract: (request: RequestProjectSummary) => void;
   onGenerateInvoice: (request: RequestProjectSummary) => void;
-  onUploadContract: (request: RequestProjectSummary, input: ContractUploadInput) => ContractRecord | undefined;
+  onUploadContract: (request: RequestProjectSummary, inputs: ContractUploadInput[]) => ContractRecord[];
   onDeleteContract: (request: RequestProjectSummary, contractId: ContractId) => void;
   onDeleteInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onClearPaymentLists: (request: RequestProjectSummary) => void;
@@ -842,7 +842,7 @@ export function RequestProjectResourceManager({
               const unavailableReason = contractAssociationUnavailableReason(contract, links, creators);
               const enabled = !unavailableReason;
               const selected = selectedCandidateIds.includes(id);
-              return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={id}><label><input type="checkbox" aria-label={`选择合同 ${contract.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(id)} /><span><strong>{contract.id}</strong><small>{contract.name}</small></span></label><div className="request-resource-candidate-creator"><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>{enabled ? currentLink ? <span className="is-existing">已在请款项目</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? '可关联' : '不可关联'}</strong><small>{enabled ? `${formatContractMoney(contract)} · ${getContractReadiness(contract).label}` : unavailableReason}</small></div><button className="text-link" type="button" onClick={() => onOpenContract(contract.id)}>查看合同详情</button></article>;
+              return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={id}><label><input type="checkbox" aria-label={`选择合同 ${contract.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(id)} /><span><strong>{contract.id}</strong><small><span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>{CONTRACT_TYPE_LABELS[getContractType(contract)]}</span> {contract.name}</small>{contract.frameworkContractId ? <small>框架：{contract.frameworkContractId}</small> : null}</span></label><div className="request-resource-candidate-creator"><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>{enabled ? currentLink ? <span className="is-existing">已在请款项目</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? '可关联' : '不可关联'}</strong><small>{enabled ? `${formatContractMoney(contract)} · ${getContractReadiness(contract).label}` : unavailableReason}</small></div><button className="text-link" type="button" onClick={() => onOpenContract(contract.id)}>查看合同详情</button></article>;
             }) : filteredInvoiceCandidates.map((invoice) => {
               const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
               const currentLink = invoice.snapshot.creatorId ? linkByCreator.get(invoice.snapshot.creatorId) : undefined;
@@ -857,7 +857,7 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
-      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators.filter((creator) => linkByCreator.has(creator.id as PaymentRequestCreatorLink['creatorId']))} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(input) => { const record = onUploadContract(input); setUploadOpen(false); if (record) onOpenContract(record.id); }} /> : null}
+      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(inputs) => { const records = onUploadContract(inputs); setUploadOpen(false); if (records[0]) onOpenContract(records[0].id); }} /> : null}
 
       {confirmAction ? <Modal title={confirmAction.title} width="460px" className="project-payment-remove-modal" onClose={() => setConfirmAction(null)} footer={<><Button variant="secondary" onClick={() => setConfirmAction(null)}>取消</Button><Button variant={confirmAction.danger ? 'danger' : 'primary'} onClick={() => { confirmAction.run(); setConfirmAction(null); }}>{confirmAction.confirmLabel}</Button></>}><div className="project-payment-remove-confirmation"><span><AlertTriangle size={22} /></span><div><strong>请确认操作范围</strong><p>{confirmAction.description}</p><small>本原型的变更只保存在当前浏览器会话。</small></div></div></Modal> : null}
     </>

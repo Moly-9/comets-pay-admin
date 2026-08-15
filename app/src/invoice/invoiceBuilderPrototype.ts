@@ -1,5 +1,5 @@
 import type { ContractRecord } from '../contracts';
-import { isConfirmedContract } from '../contracts';
+import { isPaymentContract } from '../contracts';
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
@@ -75,7 +75,7 @@ export const createInvoiceBuilderPrototypeSeed = ({
       const matchingAccount = accounts.find((account) => account.provider === payout?.provider);
       const account = matchingAccount ?? accounts.find((item) => item.isDefault) ?? accounts[0];
       const confirmedContractCount = contracts.filter((contract) => (
-        contract.engagementId === reference.engagementId && isConfirmedContract(contract)
+        contract.engagementId === reference.engagementId && isPaymentContract(contract)
       )).length;
 
       return [{

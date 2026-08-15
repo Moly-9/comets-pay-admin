@@ -30,7 +30,7 @@ import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
 } from '../components/RequestProjectResourceManager';
-import { formatContractMoney, isConfirmedContract, type ContractRecord } from '../contracts';
+import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractType, isFrameworkContract, isPaymentContract, type ContractRecord } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
@@ -1249,7 +1249,7 @@ export function MediaPaymentProjectsPage({
             onOpenInvoice={(invoiceId) => resourceActions.onOpenInvoice(selectedRequest, invoiceId)}
             onGenerateContract={() => resourceActions.onGenerateContract(selectedRequest)}
             onGenerateInvoice={() => resourceActions.onGenerateInvoice(selectedRequest)}
-            onUploadContract={(input) => resourceActions.onUploadContract(selectedRequest, input)}
+            onUploadContract={(inputs) => resourceActions.onUploadContract(selectedRequest, inputs)}
             onDeleteContract={(contractId) => resourceActions.onDeleteContract(selectedRequest, contractId)}
             onDeleteInvoice={(invoiceId) => resourceActions.onDeleteInvoice(selectedRequest, invoiceId)}
             onGeneratePaymentLists={() => onGeneratePaymentList(selectedRequest)}
@@ -1718,7 +1718,7 @@ export function MediaPaymentProjectsPage({
                   });
                   const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {
                     if (!contract.contractId) return [];
-                    const enabled = isConfirmedContract(contract);
+                    const enabled = isPaymentContract(contract);
                     const selected = selectedContractIds.includes(contract.contractId);
                     const selectedSource = autoLinkedContractIds.includes(contract.contractId)
                       ? 'Invoice 自动带入'
@@ -1726,7 +1726,7 @@ export function MediaPaymentProjectsPage({
                     return [{
                       value: contract.contractId,
                       label: contract.id,
-                      description: `${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : `不可关联：${contract.status}`}`,
+                      description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]}${contract.frameworkContractId ? ` · 框架：${contract.frameworkContractId}` : ''} · ${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : isFrameworkContract(contract) ? '框架合同需通过 IO 单参与付款' : `不可关联：${contract.status}`}`,
                       selected,
                       disabled: !enabled,
                     }];

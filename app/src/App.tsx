@@ -12,6 +12,8 @@ import {
   createGeneratedContractDraft,
   createUploadedContract,
   INITIAL_CONTRACTS,
+  isFrameworkContract,
+  isIoContract,
   type ContractGeneratedFiles,
   type ContractGenerationModel,
   type ContractRecord,
@@ -452,26 +454,136 @@ export default function App() {
     };
   }, [currentUser]);
 
-  const uploadContract = useCallback((input: ContractUploadInput) => {
-    const draft = input.draftContractId
-      ? contracts.find((contract) => contract.contractId === input.draftContractId)
-      : null;
-    const record = draft
-      ? completeGeneratedContractUpload(draft, input, currentUser.account)
-      : createUploadedContract(input, currentUser.account);
-    setContracts((current) => draft
-      ? current.map((contract) => contract.contractId === draft.contractId ? record : contract)
-      : [record, ...current]);
-    registerProjectMutation({
-      projectId: input.projectId,
-      engagementId: input.engagementId,
-      entityType: 'contract',
-      entityId: record.contractId ?? record.id,
-      action: draft ? 'update' : 'create',
-      summary: draft ? `已回传合同 ${record.id}` : `已上传合同 ${record.id}`,
+  const uploadContracts = useCallback((inputs: ContractUploadInput[]) => {
+    const engagementByKey = new Map<string, EngagementId>();
+    const projectUpdates = new Map<string, ProjectSummary>();
+    const resolvedInputs = inputs.map((input) => {
+      const projectKey = String(input.cooperationProjectId ?? input.projectId);
+      const engagementKey = `${projectKey}:${input.creatorId}`;
+      const existingProject = projectUpdates.get(projectKey)
+        ?? projects.find((project) => getProjectId(project) === input.projectId);
+      let engagementId = input.engagementId;
+      if (!engagementId) {
+        engagementId = engagementByKey.get(engagementKey)
+          ?? existingProject?.creatorProfiles?.find((reference) => (
+            reference.creatorId === input.creatorId && reference.status !== 'removed'
+          ))?.engagementId;
+      }
+      if (!engagementId) {
+        engagementId = createPrototypeId('engagement') as EngagementId;
+        const creator = creators.find((candidate) => candidate.id === input.creatorId);
+        if (existingProject && creator) {
+          const occurredAt = nowIso();
+          const activeCreatorCount = existingProject.creatorProfiles?.filter((reference) => reference.status !== 'removed').length;
+          const nextProject: ProjectSummary = {
+            ...existingProject,
+            creators: (activeCreatorCount ?? existingProject.creators) + 1,
+            creatorProfiles: [
+              ...(existingProject.creatorProfiles ?? []),
+              {
+                creatorId: input.creatorId,
+                engagementId,
+                projectId: getProjectId(existingProject),
+                status: 'active',
+                createdAt: occurredAt,
+                updatedAt: occurredAt,
+                name: creator.name,
+                handle: creator.handle,
+                platform: creator.platform,
+              },
+            ],
+          };
+          projectUpdates.set(projectKey, nextProject);
+        }
+      }
+      engagementByKey.set(engagementKey, engagementId);
+      return { ...input, engagementId };
     });
-    return record;
-  }, [contracts, currentUser.account, registerProjectMutation]);
+
+    if (projectUpdates.size) {
+      setProjects((current) => current.map((project) => projectUpdates.get(String(getProjectId(project))) ?? project));
+    }
+
+    const frameworkIdsByUploadKey = new Map<string, ContractId>();
+    const orderedInputs = [...resolvedInputs].sort((left, right) => {
+      const leftFramework = left.contractType === 'FRAMEWORK' ? 0 : 1;
+      const rightFramework = right.contractType === 'FRAMEWORK' ? 0 : 1;
+      return leftFramework - rightFramework;
+    });
+    const recordsByInput = new Map<ContractUploadInput, ContractRecord>();
+    orderedInputs.forEach((input) => {
+      const draft = input.draftContractId
+        ? contracts.find((contract) => contract.contractId === input.draftContractId)
+        : null;
+      const resolvedFrameworkId = input.frameworkContractId
+        ?? (input.frameworkUploadKey ? frameworkIdsByUploadKey.get(input.frameworkUploadKey) : undefined);
+      const resolvedInput = { ...input, frameworkContractId: resolvedFrameworkId };
+      const record = draft
+        ? completeGeneratedContractUpload(draft, resolvedInput, currentUser.account)
+        : createUploadedContract(resolvedInput, currentUser.account);
+      if (input.contractType === 'FRAMEWORK' && input.sourceDocuments[0]?.id) {
+        frameworkIdsByUploadKey.set(input.sourceDocuments[0].id, record.contractId!);
+      }
+      recordsByInput.set(input, record);
+    });
+    const records = resolvedInputs.map((input) => recordsByInput.get(input)!).filter(Boolean);
+    setContracts((current) => {
+      const replaced = new Map(records.filter((record) => record.uploadedFromDraftId).map((record) => [record.contractId, record]));
+      return [
+        ...records.filter((record) => !record.uploadedFromDraftId),
+        ...current.map((contract) => replaced.get(contract.contractId) ?? contract),
+      ];
+    });
+    resolvedInputs.forEach((input, index) => {
+      const record = records[index];
+      if (!record) return;
+      registerProjectMutation({
+        projectId: input.projectId,
+        engagementId: input.engagementId,
+        entityType: 'contract',
+        entityId: record.contractId ?? record.id,
+        action: record.uploadedFromDraftId ? 'update' : 'create',
+        summary: record.uploadedFromDraftId ? `已回传合同 ${record.id}` : `已上传${input.contractType === 'FRAMEWORK' ? '框架合同' : input.contractType === 'IO' ? 'IO 单' : '独立合同'} ${record.id}`,
+      });
+    });
+    return records;
+  }, [contracts, creators, currentUser.account, projects, registerProjectMutation]);
+
+  const bindFrameworkContract = useCallback((ioContractId: ContractId, frameworkContractId?: ContractId) => {
+    const ioContract = contracts.find((contract) => (contract.contractId ?? contract.id) === ioContractId);
+    if (!ioContract || !isIoContract(ioContract)) {
+      notify('无法绑定框架合同', '只有 IO 单可以设置框架合同关系。');
+      return false;
+    }
+    const frameworkContract = frameworkContractId
+      ? contracts.find((contract) => (contract.contractId ?? contract.id) === frameworkContractId)
+      : undefined;
+    if (frameworkContractId && (!frameworkContract || !isFrameworkContract(frameworkContract))) {
+      notify('无法绑定框架合同', '请选择有效的框架合同。');
+      return false;
+    }
+    if (frameworkContract && ioContract.creatorId && frameworkContract.creatorId !== ioContract.creatorId) {
+      notify('无法绑定框架合同', '框架合同与 IO 单必须属于同一合作达人。');
+      return false;
+    }
+    const nextValue = frameworkContract?.contractId;
+    setContracts((current) => current.map((contract) => (
+      (contract.contractId ?? contract.id) === ioContractId
+        ? { ...contract, frameworkContractId: nextValue }
+        : contract
+    )));
+    registerProjectMutation({
+      projectId: (ioContract.cooperationProjectId ?? ioContract.projectId ?? '') as ProjectId,
+      engagementId: ioContract.engagementId,
+      entityType: 'contract',
+      entityId: ioContractId,
+      action: 'update',
+      summary: nextValue
+        ? `已将 IO 单 ${ioContract.id} 绑定框架合同 ${frameworkContract?.id ?? nextValue}`
+        : `已解除 IO 单 ${ioContract.id} 的框架合同关系`,
+    });
+    return true;
+  }, [contracts, notify, registerProjectMutation]);
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const existing = contracts.find((contract) => (
@@ -3082,12 +3194,12 @@ export default function App() {
       setInvoiceCreationEngagementId(null);
       setActivePage('invoice-create');
     },
-    onUploadContract: (request, input) => {
+    onUploadContract: (request, inputs) => {
       if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能上传新合同。');
-        return undefined;
+        return [];
       }
-      return uploadContract(input);
+      return uploadContracts(inputs);
     },
     onDeleteContract: (request, contractId) => {
       if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
@@ -3521,7 +3633,8 @@ export default function App() {
               setActivePage('projects');
             }
           }}
-          onUploadContract={uploadContract}
+          onUploadContracts={uploadContracts}
+          onBindFrameworkContract={bindFrameworkContract}
           onCreateContract={() => {
             setContractGenerationEngagementId(null);
             setActivePage('contract-create');

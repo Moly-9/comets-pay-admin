@@ -1,5 +1,5 @@
 import type { ContractRecord } from './contracts';
-import { isConfirmedContract } from './contracts';
+import { isPaymentContract } from './contracts';
 import type {
   ContractId,
   CooperationProjectId,
@@ -457,7 +457,7 @@ export const requestOwningInvoice = (
 ));
 
 export const selectableContractIds = (contracts: ContractRecord[]) => contracts
-  .filter(isConfirmedContract)
+  .filter(isPaymentContract)
   .map((contract) => contract.contractId)
   .filter((contractId): contractId is ContractId => Boolean(contractId));
 

@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   completeGeneratedContractUpload,
   createGeneratedContractDraft,
+  createUploadedContract,
+  frameworkIoContracts,
+  getContractReadiness,
+  isPaymentContract,
   type ContractGenerationModel,
+  type ContractRecord,
   type ContractUploadInput,
 } from './contracts';
-import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
+import type { ContractId, CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 
 const projectId = 'project-test' as ProjectId;
 const engagementId = 'engagement-test' as EngagementId;
@@ -138,5 +143,49 @@ describe('generated contract upload workflow', () => {
     expect(uploaded.uploadedFromDraftId).toBe(draft.contractId);
     expect(uploaded.uploadedByAccount).toBe('media.contract.owner');
     expect(uploaded.sourceName).toBe('synthetic-signed-contract.pdf');
+  });
+
+  it('treats a confirmed framework contract without financial fields as a resource, not a payment contract', () => {
+    const framework = {
+      ...createUploadedContract({
+        systemContractNumber: 'CON-FRAMEWORK-001',
+        contractType: 'FRAMEWORK',
+        projectId,
+        projectName: generationModel.projectName,
+        customer: generationModel.brandName,
+        creatorId: generationModel.creatorId,
+        creatorName: generationModel.creatorName,
+        creatorHandle: generationModel.creatorHandle,
+        creatorPlatform: generationModel.platform,
+        engagementId,
+        recognitionResults: [],
+        sourceDocuments: [],
+      }),
+      publisher: generationModel.publisher,
+      lifecycle: 'CONFIRMED' as const,
+      signed: true,
+      issues: [],
+    } satisfies ContractRecord;
+
+    expect(framework.totalFee).toBeNull();
+    expect(framework.currency).toBe('');
+    expect(getContractReadiness(framework).ready).toBe(true);
+    expect(getContractReadiness(framework).label).toBe('可作为框架资源');
+    expect(isPaymentContract(framework)).toBe(false);
+  });
+
+  it('supports several IO records sharing one framework contract', () => {
+    const frameworkId = 'contract-framework-parent' as ContractId;
+    const framework = {
+      ...({ id: 'CON-FRAMEWORK', contractId: frameworkId, contractType: 'FRAMEWORK' } as ContractRecord),
+    };
+    const ioOne = {
+      ...({ id: 'CON-IO-001', contractId: 'contract-io-001' as ContractId, contractType: 'IO', frameworkContractId: frameworkId } as ContractRecord),
+    };
+    const ioTwo = {
+      ...({ id: 'CON-IO-002', contractId: 'contract-io-002' as ContractId, contractType: 'IO', frameworkContractId: frameworkId } as ContractRecord),
+    };
+
+    expect(frameworkIoContracts(framework, [framework, ioOne, ioTwo])).toEqual([ioOne, ioTwo]);
   });
 });

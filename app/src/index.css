@@ -19169,6 +19169,37 @@ button:disabled {
   font-size: 10.5px;
 }
 
+.contract-type-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.contract-type-independent {
+  background: #f2effa;
+  color: #69519e;
+}
+
+.contract-type-framework {
+  background: #fff3df;
+  color: #9b641e;
+}
+
+.contract-type-io {
+  background: #e9f6f1;
+  color: #237a62;
+}
+
+.contract-relation-subtext {
+  color: #8b6c2e !important;
+}
+
 .contract-name-link:hover strong,
 .contract-name-link:focus-visible strong {
   text-decoration: underline;
@@ -19265,6 +19296,174 @@ button:disabled {
 
 .contract-attention-text {
   color: #b85c26;
+}
+
+.contract-relationship-panel {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--soft-line);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+}
+
+.contract-relationship-panel > header {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--soft-line);
+  padding: 10px 15px;
+}
+
+.contract-relationship-panel > header > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.contract-relationship-panel > header strong {
+  color: #353944;
+  font-size: 12px;
+}
+
+.contract-relationship-panel > header small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.contract-relationship-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f4eff9;
+  color: #725a92;
+}
+
+.contract-relationship-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 15px;
+}
+
+.contract-relationship-summary {
+  display: grid;
+  min-width: 92px;
+  gap: 2px;
+  border-right: 1px solid #eceef2;
+  padding-right: 15px;
+}
+
+.contract-relationship-summary strong {
+  color: #9b641e;
+  font-size: 20px;
+}
+
+.contract-relationship-summary span,
+.contract-relationship-field > span,
+.contract-relationship-field > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.contract-child-list {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 7px;
+}
+
+.contract-child-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e5eee9;
+  border-radius: 7px;
+  background: #fbfdfc;
+  padding: 7px 9px;
+}
+
+.contract-child-item > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.contract-child-item strong,
+.contract-child-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-child-item strong {
+  color: #3a4f48;
+  font-size: 10.5px;
+}
+
+.contract-child-item small {
+  color: #7d8b87;
+  font-size: 9.5px;
+}
+
+.contract-io-relation-content {
+  flex-wrap: wrap;
+}
+
+.contract-relationship-field {
+  display: grid;
+  min-width: min(420px, 100%);
+  flex: 1;
+  gap: 5px;
+}
+
+.contract-relationship-field .custom-select-trigger {
+  min-height: 38px;
+  border-color: #d9dde5;
+}
+
+.contract-relationship-field > small {
+  line-height: 1.45;
+}
+
+.contract-unlink-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #ecd9dc;
+  border-radius: 7px;
+  background: #fff8f8;
+  padding: 0 10px;
+  color: #a34c59;
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.contract-unlink-action:hover,
+.contract-unlink-action:focus-visible {
+  border-color: #d9aeb5;
+  background: #fff1f3;
+}
+
+.contract-relationship-independent {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #6b7280;
+  font-size: 10.5px;
 }
 
 .contract-document-note {
@@ -20355,6 +20554,10 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .contract-relationship-content {
+    align-items: stretch;
+  }
+
   .contract-toolbar {
     align-items: stretch;
   }
@@ -20403,6 +20606,35 @@ button:disabled {
 }
 
 @media (max-width: 560px) {
+  .contract-relationship-panel > header {
+    align-items: flex-start;
+  }
+
+  .contract-relationship-panel > header .contract-type-badge {
+    margin-left: auto;
+  }
+
+  .contract-relationship-content {
+    display: grid;
+    gap: 10px;
+  }
+
+  .contract-relationship-summary {
+    border-right: 0;
+    border-bottom: 1px solid #eceef2;
+    padding: 0 0 9px;
+  }
+
+  .contract-relationship-field {
+    min-width: 0;
+  }
+
+  .contract-relationship-content .button,
+  .contract-unlink-action {
+    width: 100%;
+    justify-content: center;
+  }
+
   .contract-table {
     min-width: 760px;
     table-layout: auto;

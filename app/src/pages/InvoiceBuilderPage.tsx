@@ -23,7 +23,7 @@ import {
   type InvoiceId,
   type ProjectId,
 } from '../businessWorkflow';
-import { formatContractMoney, isConfirmedContract, type ContractRecord } from '../contracts';
+import { formatContractMoney, isPaymentContract, type ContractRecord } from '../contracts';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -264,7 +264,7 @@ export function InvoiceBuilderPage({
   const selectableContracts = contracts.filter((contract) => (
     contract.creatorId === creatorId
     && contractCooperationProjectId(contract) === selectedProjectId
-    && isConfirmedContract(contract)
+    && isPaymentContract(contract)
     && Boolean(contract.contractId)
   ));
   const selectedContracts = selectableContracts.filter((contract) => (
