@@ -23,6 +23,7 @@ export type SelectOption<T extends string = string> = {
   value: T;
   label: string;
   description?: string;
+  title?: string;
   disabled?: boolean;
   leading?: ReactNode;
   badges?: Array<{
@@ -78,6 +79,7 @@ export function SelectField<T extends string = string>({
   const pendingFocusIndex = useRef<number | null>(null);
   const listboxId = useId();
   const selectedOption = options.find((option) => option.value === value);
+  const disabledOptionHint = options.find((option) => option.disabled && option.title)?.title;
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedLeading = selectedOption?.leading ?? leadingIcon;
   const canClear = Boolean(value && onClear && !disabled);
@@ -218,6 +220,8 @@ export function SelectField<T extends string = string>({
             type="button"
             role="option"
             aria-selected={selected}
+            aria-disabled={option.disabled ? true : undefined}
+            title={option.title}
             disabled={option.disabled}
             tabIndex={-1}
             onPointerDown={(event) => event.preventDefault()}
@@ -290,6 +294,7 @@ export function SelectField<T extends string = string>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
+        title={disabledOptionHint}
         disabled={disabled}
         onKeyDown={handleTriggerKeyDown}
         onClick={() => {

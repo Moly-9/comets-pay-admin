@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PaymentListRecord } from '../businessWorkflow';
+import type { ContractRecord } from '../contracts';
+import type { FinanceReviewPage } from '../financeReview';
+import type { GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import {
   ApprovalTimeline,
   FINANCE_RETURN_ISSUE_OPTIONS,
+  contractsForFinanceReviewPage,
   projectPaymentListsForFinanceReview,
 } from './FinanceReviewWorkspace';
 
@@ -151,6 +155,90 @@ describe('FinanceReviewWorkspace project payment-list export', () => {
       'list-paypal',
       'list-explicit',
     ]);
+  });
+});
+
+describe('FinanceReviewWorkspace document switching', () => {
+  const contract = (id: string, engagementId = 'eng-1') => ({
+    contractId: id,
+    id,
+    name: `${id} 合同`,
+    sourceName: `${id}.pdf`,
+    engagementId,
+  } as unknown as ContractRecord);
+
+  it('resolves every contract for the current creator through stable invoice and engagement links', () => {
+    const invoice = {
+      invoiceId: 'inv-1',
+      snapshot: { contractIds: ['contract-invoice'], engagementId: 'eng-1' },
+    } as unknown as GeneratedInvoiceRecord;
+    const page = {
+      invoiceId: 'inv-1',
+      paymentItems: [{ paymentListId: 'list-1', itemId: 'item-1' }],
+    } as unknown as FinanceReviewPage;
+    const paymentLists = [{
+      paymentListId: 'list-1',
+      items: [{
+        id: 'item-1',
+        engagementId: 'eng-1',
+        snapshot: { contractIds: ['contract-payment'] },
+      }],
+    }] as unknown as PaymentListRecord[];
+
+    const result = contractsForFinanceReviewPage({
+      page,
+      invoice,
+      request: {
+        creatorLinks: [{
+          creatorId: 'creator-1',
+          engagementId: 'eng-1',
+          contractIds: ['contract-request-1', 'contract-request-2'],
+          invoiceIds: ['inv-1'],
+        }],
+      } as unknown as Pick<RequestProjectSummary, 'creatorLinks'>,
+      contracts: [
+        contract('contract-invoice'),
+        contract('contract-payment'),
+        contract('contract-request-1'),
+        contract('contract-request-2'),
+        contract('contract-unrelated', 'eng-2'),
+      ],
+      paymentLists,
+    });
+
+    expect(result.map((item) => item.id)).toEqual([
+      'contract-invoice',
+      'contract-payment',
+      'contract-request-1',
+      'contract-request-2',
+    ]);
+  });
+
+  it('returns no contract options when the current page has no stable contract association', () => {
+    const result = contractsForFinanceReviewPage({
+      page: { invoiceId: 'inv-without-contract', paymentItems: [] } as unknown as FinanceReviewPage,
+      invoice: {
+        invoiceId: 'inv-without-contract',
+        snapshot: { engagementId: 'eng-without-contract' },
+      } as unknown as GeneratedInvoiceRecord,
+      request: { creatorLinks: [] },
+      contracts: [contract('contract-unrelated', 'eng-other')],
+      paymentLists: [],
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('keeps the document switcher and two-level contract selector in the invoice pane', () => {
+    expect(workspaceSource).toContain('data-testid="finance-review-validation-stage"');
+    expect(workspaceSource).toContain('aria-label="凭证快照切换"');
+    expect(workspaceSource).toContain('选择凭证类型');
+    expect(workspaceSource).toContain('选择具体合同');
+    expect(workspaceSource).toContain('没有合同');
+    expect(workspaceSource).toContain('<ContractDocumentView contract={selectedContract}');
+    expect(workspaceSource).toContain('setDocumentKind(\'invoice\')');
+    expect(workspaceStageStyles).toContain('.finance-review-document-switcher');
+    expect(workspaceStageStyles).toContain('@media (max-width: 900px)');
   });
 });
 

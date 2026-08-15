@@ -59,6 +59,7 @@ import { formatContractMoney, getContractReadiness, type ContractRecord } from '
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
+import { ContractDocumentView } from './ContractDocumentView';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
@@ -67,6 +68,7 @@ import './FinanceReviewWorkspace.css';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
 type FinanceReviewStage = 'overview' | 'validation';
+export type ReviewDocumentKind = 'invoice' | 'contract';
 
 const REVIEW_PANE_OPTIONS: Array<{
   id: FinanceReviewPane;
@@ -159,6 +161,51 @@ const ACCOUNT_VALIDATION_FIELD_IDS = new Set([
 const normalizeInvoiceZoom = (value: number) => (
   Math.round(Math.min(MAX_INVOICE_ZOOM, Math.max(MIN_INVOICE_ZOOM, value)) * 100) / 100
 );
+
+const stableContractId = (contract: ContractRecord) => contract.contractId ?? contract.id;
+
+export const contractsForFinanceReviewPage = ({
+  page,
+  invoice,
+  request,
+  contracts,
+  paymentLists,
+}: {
+  page?: FinanceReviewPage;
+  invoice?: GeneratedInvoiceRecord;
+  request: Pick<RequestProjectSummary, 'creatorLinks'>;
+  contracts: ContractRecord[];
+  paymentLists: PaymentListRecord[];
+}) => {
+  const paymentItems = (page?.paymentItems ?? []).flatMap((reference) => {
+    const list = paymentLists.find((candidate) => candidate.paymentListId === reference.paymentListId);
+    const item = list?.items.find((candidate) => candidate.id === reference.itemId);
+    return item ? [item] : [];
+  });
+  const invoiceIds = new Set<string>([
+    ...(invoice?.invoiceId ? [String(invoice.invoiceId)] : []),
+    ...(page?.invoiceId ? [String(page.invoiceId)] : []),
+  ]);
+  const engagementIds = new Set<string>([
+    ...(invoice?.snapshot.engagementId ? [String(invoice.snapshot.engagementId)] : []),
+    ...paymentItems.map((item) => String(item.engagementId)),
+  ]);
+  const contractIds = new Set<string>();
+  const addContractIds = (ids?: readonly string[]) => {
+    ids?.forEach((id) => contractIds.add(String(id)));
+  };
+
+  addContractIds(invoice?.snapshot.contractIds);
+  paymentItems.forEach((item) => addContractIds(item.snapshot.contractIds));
+  request.creatorLinks
+    ?.filter((link) => (
+      link.invoiceIds.some((id) => invoiceIds.has(String(id)))
+      || engagementIds.has(String(link.engagementId))
+    ))
+    .forEach((link) => addContractIds(link.contractIds));
+
+  return contracts.filter((contract) => contractIds.has(String(stableContractId(contract))));
+};
 
 export const projectPaymentListsForFinanceReview = (
   request: Pick<RequestProjectSummary, 'paymentListId' | 'paymentListIds' | 'paymentRequestProjectId'>,
@@ -579,6 +626,8 @@ export function FinanceReviewWorkspace({
   const [reviewIndex, setReviewIndex] = useState(firstPendingIndex);
   const [activePane, setActivePane] = useState<FinanceReviewPane>('invoice');
   const [approvalCollapsed, setApprovalCollapsed] = useState(false);
+  const [documentKind, setDocumentKind] = useState<ReviewDocumentKind>('invoice');
+  const [selectedContractId, setSelectedContractId] = useState('');
   const [invoiceZoom, setInvoiceZoom] = useState(1);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
@@ -660,6 +709,43 @@ export function FinanceReviewWorkspace({
   const projectPaymentLists = projectPaymentListsForFinanceReview(request, paymentLists);
   const linkedContracts = requestLinkedContracts(request, contracts);
   const linkedInvoices = requestLinkedInvoices(request, generatedInvoices);
+  const currentContracts = contractsForFinanceReviewPage({
+    page: currentPage,
+    invoice,
+    request,
+    contracts,
+    paymentLists,
+  });
+  const currentContractKey = currentContracts.map(stableContractId).join('|');
+  const selectedContract = currentContracts.find((contract) => stableContractId(contract) === selectedContractId);
+  const activeDocumentAvailable = documentKind === 'contract' ? Boolean(selectedContract) : Boolean(invoice);
+  const activeDocumentLabel = documentKind === 'contract' ? '合同快照' : 'Invoice 快照';
+  const activeDocumentMeta = documentKind === 'contract'
+    ? selectedContract
+      ? `${selectedContract.sourceName || selectedContract.name} · ${selectedContract.pageCount ?? 1} 页`
+      : '未关联合同'
+    : `${currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页`;
+  const documentKindOptions: readonly SelectOption<ReviewDocumentKind>[] = [
+    {
+      value: 'invoice',
+      label: 'Invoice 快照',
+      leading: <ReceiptText size={15} />,
+    },
+    {
+      value: 'contract',
+      label: '合同快照',
+      description: currentContracts.length ? `${currentContracts.length} 份可查看` : '没有合同',
+      title: currentContracts.length ? undefined : '没有合同',
+      disabled: currentContracts.length === 0,
+      leading: <Files size={15} />,
+    },
+  ];
+  const contractOptions: readonly SelectOption<string>[] = currentContracts.map((contract) => ({
+    value: stableContractId(contract),
+    label: contract.id,
+    description: [contract.name, contract.sourceName].filter(Boolean).join(' · ') || '合同快照',
+    leading: <FileText size={15} />,
+  }));
   const accountValidationIssueCount = financeReview.pages.reduce((count, page) => (
     page.kind !== 'pair'
       ? count + 1
@@ -708,8 +794,30 @@ export function FinanceReviewWorkspace({
         ? '全部核对完成，可提交财务审核。'
         : '请完成全部 Invoice 与付款清单核对后再提交审核结果。';
 
+  useEffect(() => {
+    const firstContractId = currentContracts[0] ? stableContractId(currentContracts[0]) : '';
+    setDocumentKind('invoice');
+    setSelectedContractId(firstContractId);
+    setInvoiceZoomLevel(1);
+  }, [currentPage?.key, currentContractKey, setInvoiceZoomLevel]);
+
   const goTo = (nextIndex: number) => {
     setReviewIndex(Math.min(Math.max(0, nextIndex), Math.max(0, financeReview.pages.length - 1)));
+  };
+
+  const changeDocumentKind = (nextKind: ReviewDocumentKind) => {
+    if (nextKind === 'contract' && !currentContracts.length) return;
+    setDocumentKind(nextKind);
+    setInvoiceZoomLevel(1);
+    if (nextKind === 'contract' && !selectedContractId && currentContracts[0]) {
+      setSelectedContractId(stableContractId(currentContracts[0]));
+    }
+  };
+
+  const changeContract = (nextContractId: string) => {
+    if (!currentContracts.some((contract) => stableContractId(contract) === nextContractId)) return;
+    setSelectedContractId(nextContractId);
+    setInvoiceZoomLevel(1);
   };
 
   const openIssueEditor = () => {
@@ -978,16 +1086,16 @@ export function FinanceReviewWorkspace({
               <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
-                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><FileText size={17} /></span><span><strong>Invoice 快照</strong><small>{currentPage?.invoiceNumber ?? '未关联'}.pdf · 1 页</small></span></div>
+                <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true">{documentKind === 'contract' ? <Files size={17} /> : <FileText size={17} />}</span><span><strong>{activeDocumentLabel}</strong><small title={activeDocumentMeta}>{activeDocumentMeta}</small></span></div>
                 <div className="finance-review-invoice-header-actions">
                   {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
-                  <div className="finance-review-zoom-controls" role="group" aria-label="Invoice 缩放">
+                  <div className="finance-review-zoom-controls" role="group" aria-label={`${activeDocumentLabel}缩放`}>
                     <button
                       className="icon-button"
                       type="button"
-                      title="缩小 Invoice"
-                      aria-label="缩小 Invoice"
-                      disabled={!invoice || invoiceZoom <= MIN_INVOICE_ZOOM}
+                      title={`缩小${activeDocumentLabel}`}
+                      aria-label={`缩小${activeDocumentLabel}`}
+                      disabled={!activeDocumentAvailable || invoiceZoom <= MIN_INVOICE_ZOOM}
                       onClick={() => setInvoiceZoomLevel(invoiceZoomRef.current - INVOICE_ZOOM_STEP)}
                     >
                       <ZoomOut size={16} />
@@ -997,7 +1105,7 @@ export function FinanceReviewWorkspace({
                       type="button"
                       title="恢复 100%"
                       aria-label={`当前缩放 ${Math.round(invoiceZoom * 100)}%，点击恢复 100%`}
-                      disabled={!invoice || invoiceZoom === 1}
+                      disabled={!activeDocumentAvailable || invoiceZoom === 1}
                       onClick={() => setInvoiceZoomLevel(1)}
                     >
                       {Math.round(invoiceZoom * 100)}%
@@ -1005,9 +1113,9 @@ export function FinanceReviewWorkspace({
                     <button
                       className="icon-button"
                       type="button"
-                      title="放大 Invoice"
-                      aria-label="放大 Invoice"
-                      disabled={!invoice || invoiceZoom >= MAX_INVOICE_ZOOM}
+                      title={`放大${activeDocumentLabel}`}
+                      aria-label={`放大${activeDocumentLabel}`}
+                      disabled={!activeDocumentAvailable || invoiceZoom >= MAX_INVOICE_ZOOM}
                       onClick={() => setInvoiceZoomLevel(invoiceZoomRef.current + INVOICE_ZOOM_STEP)}
                     >
                       <ZoomIn size={16} />
@@ -1015,11 +1123,43 @@ export function FinanceReviewWorkspace({
                   </div>
                 </div>
               </header>
+              <div className="finance-review-document-switcher" aria-label="凭证快照切换">
+                <label className="finance-review-document-switch-field">
+                  <span>凭证类型</span>
+                  <SelectField<ReviewDocumentKind>
+                    ariaLabel="选择凭证类型"
+                    value={documentKind}
+                    options={documentKindOptions}
+                    variant="form"
+                    menuStrategy="fixed"
+                    menuWidth={210}
+                    className="finance-review-document-kind-select"
+                    onChange={changeDocumentKind}
+                  />
+                </label>
+                {documentKind === 'contract' ? (
+                  <label className="finance-review-document-switch-field is-contract">
+                    <span>具体合同</span>
+                    <SelectField<string>
+                      ariaLabel="选择具体合同"
+                      value={selectedContractId}
+                      options={contractOptions}
+                      variant="form"
+                      menuStrategy="fixed"
+                      menuWidth={300}
+                      className="finance-review-document-contract-select"
+                      placeholder="请选择合同"
+                      disabled={!contractOptions.length}
+                      onChange={changeContract}
+                    />
+                  </label>
+                ) : null}
+              </div>
               <div
                 ref={invoiceCanvasRef}
                 className="finance-review-invoice-canvas"
                 tabIndex={0}
-                aria-label="Invoice 快照查看区"
+                aria-label={`${activeDocumentLabel}查看区`}
                 onKeyDown={(event) => {
                   if (!event.ctrlKey && !event.metaKey) return;
                   if (event.key === '+' || event.key === '=') {
@@ -1034,7 +1174,22 @@ export function FinanceReviewWorkspace({
                   }
                 }}
               >
-                {invoice ? (
+                {documentKind === 'contract' ? (
+                  selectedContract ? (
+                    <div
+                      className="finance-review-invoice-zoom-stage"
+                      style={{ '--finance-review-invoice-zoom': invoiceZoom } as CSSProperties}
+                    >
+                      <ContractDocumentView contract={selectedContract} ariaLabel={`${selectedContract.id} 合同冻结快照`} />
+                    </div>
+                  ) : (
+                    <div className="finance-review-empty">
+                      <Files size={30} />
+                      <strong>未找到合同快照</strong>
+                      <p>当前达人未关联合同，无法查看合同资料。</p>
+                    </div>
+                  )
+                ) : invoice ? (
                   <div
                     className="finance-review-invoice-zoom-stage"
                     style={{ '--finance-review-invoice-zoom': invoiceZoom } as CSSProperties}

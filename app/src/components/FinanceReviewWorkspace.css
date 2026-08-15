@@ -334,6 +334,61 @@
   }
 }
 
+.finance-review-document-switcher {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 9px;
+  border-bottom: 1px solid #e3e6ea;
+  background: #fff;
+  padding: 8px 12px 9px;
+}
+
+.finance-review-document-switch-field {
+  display: grid;
+  min-width: 0;
+  flex: 0 0 148px;
+  gap: 4px;
+}
+
+.finance-review-document-switch-field.is-contract {
+  flex: 1 1 220px;
+}
+
+.finance-review-document-switch-field > span {
+  overflow: hidden;
+  color: #77818e;
+  font-size: 10px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finance-review-document-kind-select,
+.finance-review-document-contract-select {
+  min-width: 0;
+}
+
+.finance-review-document-kind-select {
+  width: 148px;
+}
+
+.finance-review-document-contract-select {
+  width: 100%;
+}
+
+.finance-review-document-switcher .custom-select-trigger {
+  min-height: 34px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.finance-review-document-switcher .custom-select-option-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .modal-panel.finance-review-workspace.is-overview {
     width: 100vw;
@@ -366,6 +421,20 @@
     width: 100%;
     min-height: 44px;
     justify-content: center;
+  }
+
+  .finance-review-document-switcher {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .finance-review-document-switch-field,
+  .finance-review-document-switch-field.is-contract,
+  .finance-review-document-kind-select,
+  .finance-review-document-contract-select {
+    width: 100%;
+    flex-basis: auto;
   }
 
   .finance-review-footer {

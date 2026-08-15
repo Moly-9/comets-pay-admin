@@ -46,6 +46,36 @@ final result: passed
 
 ---
 
+# Design QA - 财务审核 Invoice / 合同凭证级联
+
+## Evidence
+
+- Desktop implementation: `app/design-qa/finance-review-document-switcher-desktop.png` (`1440 x 900`)。
+- Contract selector menu: `app/design-qa/finance-review-document-switcher-menu.png` (`1440 x 900`)。
+- Mobile implementation: `app/design-qa/finance-review-document-switcher-mobile.png` (`390 x 844`)。
+- State: 付款工作台待审核首个项目，已进入校验审核；左栏从 Invoice 切换到合同快照并打开具体合同下拉。
+
+## Required Fidelity Surfaces
+
+- 凭证选择：通过系统 `SelectField` 完成 Invoice / 合同一级选择，以及具体合同二级选择；没有合同时合同选项保持禁用并显示“没有合同”。
+- 文档展示：Invoice 继续使用冻结 Invoice 视图，合同使用现有合同结构化快照视图；两者共享左栏滚动、缩放和翻页容器。
+- 布局：桌面三看板仍保持原有 `4:4:2` 比例；新增选择器位于 Invoice 看板顶部，不挤压付款清单和项目审批看板。
+- 响应式：390px 下选择器纵向堆叠，页面 `scrollWidth === clientWidth`，没有水平溢出或遮挡。
+- 无障碍：禁用合同选项输出 `disabled`、`aria-disabled` 和 `title="没有合同"`；选择凭证和具体合同均有明确的 `aria-label`。
+
+## Interaction Checks
+
+- 点击审核后先进入项目概览，再点击“校验审核”进入三看板。
+- 第一级切换到合同后显示第二级合同下拉，并能打开对应合同快照。
+- 切换审核页后凭证选择重置为当前页 Invoice，付款清单页码和审核状态保持同步。
+- 合同切换不会改变中栏付款清单、右栏审批流或审核会话结论。
+- 1440px 桌面和 390px 移动端浏览器控制台无新增错误。
+- 聚焦 Vitest：16 项通过；完整构建仍受工作树已有 `ContractId` 导出错误影响，与本需求无关。
+
+final result: passed
+
+---
+
 # Design QA - Invoice 达人签署日期
 
 ## Evidence
