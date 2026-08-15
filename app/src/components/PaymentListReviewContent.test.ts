@@ -80,6 +80,7 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('付款清单');
     expect(reviewContentSource).toContain('结果');
     expect(reviewContentSource).toContain('合同信息需核对');
+    expect(reviewContentSource).toContain('<strong>{currentReview.creatorName}</strong>');
     expect(reviewContentSource).toContain('Real Name');
     expect(reviewContentSource).toContain('Account Name');
     expect(reviewContentSource).toContain('Account Number');

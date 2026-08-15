@@ -185,7 +185,7 @@ const contractFieldValue = (
 ) => {
   const values = contracts.flatMap((contract) => {
     const value = getValue(contract);
-    return hasValue(value) ? [`${contract.id}: ${display(value)}`] : [];
+    return hasValue(value) ? [display(value)] : [];
   });
   return values.length ? values.join('\n') : '—';
 };

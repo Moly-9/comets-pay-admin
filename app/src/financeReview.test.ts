@@ -185,7 +185,7 @@ describe('request finance review', () => {
     expect(review.mismatchCount).toBe(0);
     expect(review.warningCount).toBeGreaterThan(0);
     expect(review.pages[0].fields.find((field) => field.id === 'amount')).toMatchObject({
-      contractValue: 'CON-TEST: USD 120.00',
+      contractValue: 'USD 120.00',
       state: 'warning',
       warning: '合同信息需核对',
     });
@@ -200,7 +200,7 @@ describe('request finance review', () => {
     );
     expect(review.canApprove).toBe(false);
     expect(review.pages[0].fields.find((field) => field.id === 'real-name')).toMatchObject({
-      contractValue: 'CON-TEST: Different Name',
+      contractValue: 'Different Name',
       state: 'mismatch',
     });
   });
@@ -236,7 +236,7 @@ describe('request finance review', () => {
       [contract(), secondContract],
     );
     expect(review.pages[0].fields.find((field) => field.id === 'amount')).toMatchObject({
-      contractValue: 'CON-TEST: USD 100.00\nCON-TEST-2: USD 110.00',
+      contractValue: 'USD 100.00\nUSD 110.00',
       state: 'warning',
     });
   });
