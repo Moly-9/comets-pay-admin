@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import {
+  contractsForFinanceReviewPage,
   financeReviewReturnReason,
   financeReviewSessionCanApprove,
   financeReviewSessionCanReturn,
@@ -42,6 +43,7 @@ import {
   type FinanceReviewSession,
   type RequestFinanceReview,
 } from '../financeReview';
+export { contractsForFinanceReviewPage } from '../financeReview';
 import {
   type RequestApprovalReturnIssueType,
   paymentListProviders,
@@ -163,49 +165,6 @@ const normalizeInvoiceZoom = (value: number) => (
 );
 
 const stableContractId = (contract: ContractRecord) => contract.contractId ?? contract.id;
-
-export const contractsForFinanceReviewPage = ({
-  page,
-  invoice,
-  request,
-  contracts,
-  paymentLists,
-}: {
-  page?: FinanceReviewPage;
-  invoice?: GeneratedInvoiceRecord;
-  request: Pick<RequestProjectSummary, 'creatorLinks'>;
-  contracts: ContractRecord[];
-  paymentLists: PaymentListRecord[];
-}) => {
-  const paymentItems = (page?.paymentItems ?? []).flatMap((reference) => {
-    const list = paymentLists.find((candidate) => candidate.paymentListId === reference.paymentListId);
-    const item = list?.items.find((candidate) => candidate.id === reference.itemId);
-    return item ? [item] : [];
-  });
-  const invoiceIds = new Set<string>([
-    ...(invoice?.invoiceId ? [String(invoice.invoiceId)] : []),
-    ...(page?.invoiceId ? [String(page.invoiceId)] : []),
-  ]);
-  const engagementIds = new Set<string>([
-    ...(invoice?.snapshot.engagementId ? [String(invoice.snapshot.engagementId)] : []),
-    ...paymentItems.map((item) => String(item.engagementId)),
-  ]);
-  const contractIds = new Set<string>();
-  const addContractIds = (ids?: readonly string[]) => {
-    ids?.forEach((id) => contractIds.add(String(id)));
-  };
-
-  addContractIds(invoice?.snapshot.contractIds);
-  paymentItems.forEach((item) => addContractIds(item.snapshot.contractIds));
-  request.creatorLinks
-    ?.filter((link) => (
-      link.invoiceIds.some((id) => invoiceIds.has(String(id)))
-      || engagementIds.has(String(link.engagementId))
-    ))
-    .forEach((link) => addContractIds(link.contractIds));
-
-  return contracts.filter((contract) => contractIds.has(String(stableContractId(contract))));
-};
 
 export const projectPaymentListsForFinanceReview = (
   request: Pick<RequestProjectSummary, 'paymentListId' | 'paymentListIds' | 'paymentRequestProjectId'>,
@@ -1231,7 +1190,9 @@ export function FinanceReviewWorkspace({
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><WalletCards size={17} /></span><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
                 {currentPage?.mismatchCount
                   ? <span className="finance-review-warning-count"><CircleAlert size={13} />关键字段不一致 · {currentPage.mismatchCount} 项</span>
-                  : <span className="finance-review-match-count"><CheckCircle2 size={13} />关键字段一致</span>}
+                  : currentPage?.warningCount
+                    ? <span className="finance-review-warning-count"><CircleAlert size={13} />合同信息需核对 · {currentPage.warningCount} 项</span>
+                    : <span className="finance-review-match-count"><CheckCircle2 size={13} />关键字段一致</span>}
               </header>
               <div className="finance-review-payment-scroll">
                 <PaymentListReviewContent

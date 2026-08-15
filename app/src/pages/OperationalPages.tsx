@@ -1084,6 +1084,7 @@ export function RequestsPage({
   paymentLists,
   creators,
   generatedInvoices,
+  contracts = [],
   approvalReminder,
   showApprovalReminder,
   onDismissApprovalReminder,
@@ -1100,6 +1101,7 @@ export function RequestsPage({
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts?: ContractRecord[];
   approvalReminder: RequestApprovalReminderSummary;
   showApprovalReminder: boolean;
   onDismissApprovalReminder: () => void;
@@ -1275,6 +1277,7 @@ export function RequestsPage({
         paymentLists={paymentLists}
         creators={creators}
         generatedInvoices={generatedInvoices}
+        contracts={contracts}
         currentUser={currentUser}
         onExportPaymentList={onExportPaymentList}
         onApprovalAction={onApprovalAction}

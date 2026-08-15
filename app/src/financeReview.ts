@@ -5,18 +5,21 @@ import type {
   RequestApprovalReturnIssueType,
 } from './businessWorkflow';
 import { paymentListEffectiveAccount, paymentListItemValue } from './businessWorkflow';
+import type { ContractRecord } from './contracts';
 import { bankAddress, invoiceTotal } from './invoice/invoiceUtils';
 import { paymentRequestInvoiceIds, type PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
 
-export type FinanceReviewFieldState = 'match' | 'mismatch' | 'review';
+export type FinanceReviewFieldState = 'match' | 'mismatch' | 'review' | 'warning';
 
 export type FinanceReviewField = {
   id: string;
   label: string;
+  contractValue: string;
   invoiceValue: string;
   paymentValue: string;
   state: FinanceReviewFieldState;
+  warning?: string;
 };
 
 export type FinanceReviewPageKind =
@@ -42,6 +45,7 @@ export type FinanceInvoiceReview = {
   sourceVersions: string[];
   fields: FinanceReviewField[];
   mismatchCount: number;
+  warningCount: number;
 };
 
 export type FinanceReviewPage = FinanceInvoiceReview | {
@@ -54,6 +58,7 @@ export type FinanceReviewPage = FinanceInvoiceReview | {
   sourceVersions: string[];
   fields: FinanceReviewField[];
   mismatchCount: number;
+  warningCount: number;
 };
 
 export type RequestFinanceReview = {
@@ -64,6 +69,7 @@ export type RequestFinanceReview = {
   pageCount: number;
   matchedCount: number;
   mismatchCount: number;
+  warningCount: number;
   fingerprint: string;
   canApprove: boolean;
 };
@@ -96,33 +102,6 @@ const money = (currency: string, amount: number) => `${currency} ${amount.toLoca
   maximumFractionDigits: 2,
 })}`;
 
-const matchedField = (
-  id: string,
-  label: string,
-  invoiceValue: unknown,
-  paymentValue: unknown,
-  normalize: (value: unknown) => unknown = (value) => value,
-): FinanceReviewField => ({
-  id,
-  label,
-  invoiceValue: display(invoiceValue),
-  paymentValue: display(paymentValue),
-  state: normalize(invoiceValue) === normalize(paymentValue) ? 'match' : 'mismatch',
-});
-
-const reviewField = (
-  id: string,
-  label: string,
-  invoiceValue: unknown,
-  paymentValue: unknown,
-): FinanceReviewField => ({
-  id,
-  label,
-  invoiceValue: display(invoiceValue),
-  paymentValue: display(paymentValue),
-  state: 'review',
-});
-
 const normalizeText = (value: unknown) => String(value ?? '')
   .trim()
   .replace(/\s+/g, ' ')
@@ -149,9 +128,149 @@ const paymentListVersionToken = (list: PaymentListRecord) => (
   `payment-list:${list.paymentListId}:v${list.version ?? 0}:${list.updatedAt}`
 );
 
+const stableContractId = (contract: ContractRecord) => contract.contractId ?? contract.id;
+
+const contractVersionToken = (contract: ContractRecord) => (
+  `contract:${stableContractId(contract)}:v${contract.generationVersion ?? 0}:${contract.updated}`
+);
+
+export const contractsForFinanceReviewPage = ({
+  page,
+  invoice,
+  request,
+  contracts,
+  paymentLists,
+}: {
+  page?: FinanceReviewPage;
+  invoice?: GeneratedInvoiceRecord;
+  request: Pick<PaymentRequestProjectLike, 'creatorLinks'>;
+  contracts: ContractRecord[];
+  paymentLists: PaymentListRecord[];
+}) => {
+  const paymentItems = (page?.paymentItems ?? []).flatMap((reference) => {
+    const list = paymentLists.find((candidate) => candidate.paymentListId === reference.paymentListId);
+    const item = list?.items.find((candidate) => candidate.id === reference.itemId);
+    return item ? [item] : [];
+  });
+  const invoiceIds = new Set<string>([
+    ...(invoice?.invoiceId ? [String(invoice.invoiceId)] : []),
+    ...(page?.invoiceId ? [String(page.invoiceId)] : []),
+  ]);
+  const engagementIds = new Set<string>([
+    ...(invoice?.snapshot.engagementId ? [String(invoice.snapshot.engagementId)] : []),
+    ...paymentItems.map((item) => String(item.engagementId)),
+  ]);
+  const contractIds = new Set<string>();
+  const addContractIds = (ids?: readonly string[]) => {
+    ids?.forEach((id) => contractIds.add(String(id)));
+  };
+
+  addContractIds(invoice?.snapshot.contractIds);
+  paymentItems.forEach((item) => addContractIds(item.snapshot.contractIds));
+  request.creatorLinks
+    ?.filter((link) => (
+      link.invoiceIds.some((id) => invoiceIds.has(String(id)))
+      || engagementIds.has(String(link.engagementId))
+    ))
+    .forEach((link) => addContractIds(link.contractIds));
+
+  return contracts.filter((contract) => contractIds.has(String(stableContractId(contract))));
+};
+
+const hasValue = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== '';
+
+const contractFieldValue = (
+  contracts: ContractRecord[],
+  getValue: (contract: ContractRecord) => unknown,
+) => {
+  const values = contracts.flatMap((contract) => {
+    const value = getValue(contract);
+    return hasValue(value) ? [`${contract.id}: ${display(value)}`] : [];
+  });
+  return values.length ? values.join('\n') : '—';
+};
+
+const contractHasDifference = (
+  contracts: ContractRecord[],
+  getValue: (contract: ContractRecord) => unknown,
+  targets: unknown[],
+  normalize: (value: unknown) => unknown,
+) => contracts.some((contract) => {
+  const value = getValue(contract);
+  return hasValue(value) && targets.some((target) => (
+    hasValue(target) && normalize(value) !== normalize(target)
+  ));
+});
+
+const tripleField = ({
+  id,
+  label,
+  contracts,
+  getContractValue,
+  invoiceValue,
+  paymentValue,
+  normalize = (value: unknown) => value,
+  manual = false,
+  compareContract = true,
+  ignoreInvoicePayment = false,
+  reviewWhenNoContract = false,
+}: {
+  id: string;
+  label: string;
+  contracts: ContractRecord[];
+  getContractValue: (contract: ContractRecord) => unknown;
+  invoiceValue: unknown;
+  paymentValue: unknown;
+  normalize?: (value: unknown) => unknown;
+  manual?: boolean;
+  compareContract?: boolean;
+  ignoreInvoicePayment?: boolean;
+  reviewWhenNoContract?: boolean;
+}): FinanceReviewField => {
+  const invoicePaymentMismatch = !ignoreInvoicePayment
+    && normalize(invoiceValue) !== normalize(paymentValue);
+  const contractMismatch = compareContract
+    && contracts.length > 0
+    && contractHasDifference(contracts, getContractValue, [invoiceValue, paymentValue], normalize);
+  const paymentOnlyContractMismatch = compareContract
+    && contracts.length > 0
+    && contractHasDifference(contracts, getContractValue, [paymentValue], normalize);
+  const state: FinanceReviewFieldState = manual
+    ? 'review'
+    : invoicePaymentMismatch
+      ? 'mismatch'
+      : contractMismatch || paymentOnlyContractMismatch
+        ? id === 'real-name' ? 'mismatch' : 'warning'
+        : reviewWhenNoContract && !contracts.length
+          ? 'review'
+          : 'match';
+  return {
+    id,
+    label,
+    contractValue: contractFieldValue(contracts, getContractValue),
+    invoiceValue: display(invoiceValue),
+    paymentValue: display(paymentValue),
+    state,
+    ...(state === 'warning' ? { warning: '合同信息需核对' } : {}),
+  };
+};
+
+const accountSnapshotValue = (
+  getValue: (snapshot: NonNullable<ContractRecord['paymentSnapshot']>) => unknown,
+) => (contract: ContractRecord) => {
+  const snapshot = contract.paymentSnapshot;
+  return snapshot ? getValue(snapshot) : undefined;
+};
+
+const fieldCounts = (fields: FinanceReviewField[]) => ({
+  mismatchCount: fields.filter((field) => field.state === 'mismatch').length,
+  warningCount: fields.filter((field) => field.state === 'warning').length,
+});
+
 const reviewInvoice = (
   record: GeneratedInvoiceRecord,
   matches: Array<{ list: PaymentListRecord; item: PaymentListItem }>,
+  contracts: ContractRecord[],
 ): FinanceInvoiceReview => {
   const paymentItems = matches.map(({ list, item }) => ({
     paymentListId: list.paymentListId,
@@ -160,12 +279,14 @@ const reviewInvoice = (
   const sourceVersions = [
     invoiceVersionToken(record),
     ...matches.map(({ list }) => paymentListVersionToken(list)),
+    ...contracts.map(contractVersionToken),
   ];
   const first = matches[0];
   if (!first || matches.length !== 1) {
     const fields: FinanceReviewField[] = [{
       id: 'association',
       label: '付款明细关联',
+      contractValue: '—',
       invoiceValue: record.id,
       paymentValue: matches.length === 0 ? '未找到付款明细' : `找到 ${matches.length} 条付款明细`,
       state: 'mismatch',
@@ -180,6 +301,7 @@ const reviewInvoice = (
       sourceVersions,
       fields,
       mismatchCount: 1,
+      warningCount: 0,
     };
   }
 
@@ -189,46 +311,198 @@ const reviewInvoice = (
   const currency = display(paymentListItemValue(item, 'currency'));
   const amount = Number(paymentListItemValue(item, 'amount') || 0);
   const invoiceAmount = invoiceTotal(record.snapshot);
-  const invoiceProvider = record.snapshot.paymentMethod === 'paypal'
-    ? 'PayPal'
-    : record.snapshot.payoutProvider ?? 'Airwallex';
+  const invoiceRealName = record.snapshot.from.legalName;
+  const paymentRealName = item.snapshot.realName;
+  const invoiceAmountValue = money(record.snapshot.currency, invoiceAmount);
+  const paymentAmountValue = money(currency, amount);
   const fields: FinanceReviewField[] = [
-    matchedField('invoice-number', 'Invoice 编号', record.snapshot.invoiceNumber, item.snapshot.invoiceNumber),
-    matchedField('creator', '达人稳定 ID', record.snapshot.creatorId, item.snapshot.creatorId),
-    matchedField('engagement', '合作关系 ID', record.snapshot.engagementId, item.engagementId),
-    matchedField('project', '项目稳定 ID', record.snapshot.projectId, list.projectId),
-    matchedField(
-      'amount',
-      '币种与金额',
-      money(record.snapshot.currency, invoiceAmount),
-      money(currency, amount),
-    ),
-    matchedField('provider', '付款渠道', invoiceProvider, account.provider || list.provider),
-    matchedField('method', '付款方式', paymentMethodLabel(record), paymentItemMethodLabel(item, list)),
-    matchedField('account-id', '收款账户 ID', record.snapshot.payoutAccountId, account.payoutAccountId),
-    matchedField('account-version', '账户版本', record.snapshot.payoutAccountVersion, account.payoutAccountVersion),
-    matchedField('account-fingerprint', '账户指纹', record.snapshot.payoutAccountFingerprint, account.accountFingerprint),
-    matchedField('real-name', 'Real Name', record.snapshot.from.legalName, item.snapshot.realName, normalizeText),
-    matchedField('account-name', 'Account Name', record.snapshot.payment.accountName, paymentDetails?.accountName, normalizeText),
-    matchedField('account-number', 'Account Number', record.snapshot.payment.accountNumber, paymentDetails?.accountNumber, normalizeCode),
-    matchedField('bank-name', 'Beneficiary Bank Name', record.snapshot.payment.bankName, paymentDetails?.bankName, normalizeText),
-    matchedField(
-      'bank-address',
-      'Beneficiary Bank Address',
-      bankAddress(record.snapshot),
-      paymentDetails ? bankAddress({ payment: paymentDetails }) : undefined,
-      normalizeText,
-    ),
-    matchedField('swift-code', 'Swift Code', record.snapshot.payment.swiftCode, paymentDetails?.swiftCode, normalizeCode),
-    matchedField('iban', 'IBAN (optional)', record.snapshot.payment.iban, paymentDetails?.iban, normalizeCode),
-    reviewField('reason', '付款原因', '影音服务', paymentListItemValue(item, 'paymentReason')),
-    reviewField('fee', '费用承担', 'Invoice 未单列', paymentListItemValue(item, 'feeBearer')),
-    reviewField('reference', '交易附言', record.snapshot.invoiceNumber, paymentListItemValue(item, 'transactionReference')),
+    tripleField({
+      id: 'invoice-number',
+      label: 'Invoice 编号',
+      contracts,
+      getContractValue: () => undefined,
+      invoiceValue: record.snapshot.invoiceNumber,
+      paymentValue: item.snapshot.invoiceNumber,
+      compareContract: false,
+    }),
+    tripleField({
+      id: 'creator',
+      label: '达人稳定 ID',
+      contracts,
+      getContractValue: (contract) => contract.creatorId,
+      invoiceValue: record.snapshot.creatorId,
+      paymentValue: item.snapshot.creatorId,
+    }),
+    tripleField({
+      id: 'engagement',
+      label: '合作关系 ID',
+      contracts,
+      getContractValue: (contract) => contract.engagementId,
+      invoiceValue: record.snapshot.engagementId,
+      paymentValue: item.engagementId,
+    }),
+    tripleField({
+      id: 'project',
+      label: '项目稳定 ID',
+      contracts,
+      getContractValue: (contract) => contract.projectId,
+      invoiceValue: record.snapshot.projectId,
+      paymentValue: list.projectId,
+    }),
+    tripleField({
+      id: 'amount',
+      label: '币种与金额',
+      contracts,
+      getContractValue: (contract) => contract.totalFee == null ? undefined : money(contract.currency, contract.totalFee),
+      invoiceValue: invoiceAmountValue,
+      paymentValue: paymentAmountValue,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'provider',
+      label: '付款渠道',
+      contracts,
+      getContractValue: (contract) => contract.payoutProvider,
+      invoiceValue: record.snapshot.paymentMethod === 'paypal' ? 'PayPal' : record.snapshot.payoutProvider ?? 'Airwallex',
+      paymentValue: account.provider || list.provider,
+      normalize: normalizeText,
+    }),
+    tripleField({
+      id: 'method',
+      label: '付款方式',
+      contracts,
+      getContractValue: (contract) => contract.paymentMethod === 'PAYPAL' ? 'PayPal' : '银行转账',
+      invoiceValue: paymentMethodLabel(record),
+      paymentValue: paymentItemMethodLabel(item, list),
+      normalize: normalizeText,
+    }),
+    tripleField({
+      id: 'account-id',
+      label: '收款账户 ID',
+      contracts,
+      getContractValue: (contract) => contract.payoutAccountId,
+      invoiceValue: record.snapshot.payoutAccountId,
+      paymentValue: account.payoutAccountId,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'account-version',
+      label: '账户版本',
+      contracts,
+      getContractValue: (contract) => contract.payoutAccountVersion,
+      invoiceValue: record.snapshot.payoutAccountVersion,
+      paymentValue: account.payoutAccountVersion,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'account-fingerprint',
+      label: '账户指纹',
+      contracts,
+      getContractValue: (contract) => contract.payoutAccountFingerprint ?? contract.accountFingerprint,
+      invoiceValue: record.snapshot.payoutAccountFingerprint,
+      paymentValue: account.accountFingerprint,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'real-name',
+      label: 'Real Name',
+      contracts,
+      getContractValue: (contract) => contract.publisher,
+      invoiceValue: invoiceRealName,
+      paymentValue: paymentRealName,
+      normalize: normalizeText,
+    }),
+    tripleField({
+      id: 'account-name',
+      label: 'Account Name',
+      contracts,
+      getContractValue: (contract) => contract.paymentSnapshot?.accountName ?? contract.accountName,
+      invoiceValue: record.snapshot.payment.accountName,
+      paymentValue: paymentDetails?.accountName,
+      normalize: normalizeText,
+    }),
+    tripleField({
+      id: 'account-number',
+      label: 'Account Number',
+      contracts,
+      getContractValue: accountSnapshotValue((snapshot) => snapshot.accountNumber),
+      invoiceValue: record.snapshot.payment.accountNumber,
+      paymentValue: paymentDetails?.accountNumber,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'bank-name',
+      label: 'Beneficiary Bank Name',
+      contracts,
+      getContractValue: accountSnapshotValue((snapshot) => snapshot.bankName),
+      invoiceValue: record.snapshot.payment.bankName,
+      paymentValue: paymentDetails?.bankName,
+      normalize: normalizeText,
+    }),
+    tripleField({
+      id: 'bank-address',
+      label: 'Beneficiary Bank Address',
+      contracts,
+      getContractValue: accountSnapshotValue((snapshot) => bankAddress({ payment: snapshot })),
+      invoiceValue: bankAddress(record.snapshot),
+      paymentValue: paymentDetails ? bankAddress({ payment: paymentDetails }) : undefined,
+      normalize: normalizeText,
+    }),
+    tripleField({
+      id: 'swift-code',
+      label: 'Swift Code',
+      contracts,
+      getContractValue: accountSnapshotValue((snapshot) => snapshot.swiftCode),
+      invoiceValue: record.snapshot.payment.swiftCode,
+      paymentValue: paymentDetails?.swiftCode,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'iban',
+      label: 'IBAN (optional)',
+      contracts,
+      getContractValue: accountSnapshotValue((snapshot) => snapshot.iban),
+      invoiceValue: record.snapshot.payment.iban,
+      paymentValue: paymentDetails?.iban,
+      normalize: normalizeCode,
+    }),
+    tripleField({
+      id: 'reason',
+      label: '付款原因',
+      contracts,
+      getContractValue: () => undefined,
+      invoiceValue: '影音服务',
+      paymentValue: paymentListItemValue(item, 'paymentReason'),
+      manual: true,
+      compareContract: false,
+    }),
+    tripleField({
+      id: 'fee',
+      label: '费用承担',
+      contracts,
+      getContractValue: (contract) => contract.feeBearer,
+      invoiceValue: undefined,
+      paymentValue: paymentListItemValue(item, 'feeBearer'),
+      normalize: normalizeText,
+      ignoreInvoicePayment: true,
+      reviewWhenNoContract: true,
+    }),
+    tripleField({
+      id: 'reference',
+      label: '交易附言',
+      contracts,
+      getContractValue: () => undefined,
+      invoiceValue: record.snapshot.invoiceNumber,
+      paymentValue: paymentListItemValue(item, 'transactionReference'),
+      manual: true,
+      compareContract: false,
+    }),
   ];
   if (item.requiresRevalidation || item.validationIssues?.length) {
     fields.push({
       id: 'validation',
       label: '付款账户校验',
+      contractValue: '—',
       invoiceValue: '账户快照有效',
       paymentValue: item.validationIssues?.join('；') || '需要重新校验',
       state: 'mismatch',
@@ -243,7 +517,7 @@ const reviewInvoice = (
     paymentItems,
     sourceVersions,
     fields,
-    mismatchCount: fields.filter((field) => field.state === 'mismatch').length,
+    ...fieldCounts(fields),
   };
 };
 
@@ -253,18 +527,21 @@ export const financeReviewFingerprint = (pages: FinanceReviewPage[]) => pages.ma
   invoiceId: page.invoiceId,
   paymentItems: page.paymentItems,
   sourceVersions: page.sourceVersions,
-  fields: page.fields.map((field) => [
-    field.id,
-    field.invoiceValue,
-    field.paymentValue,
-    field.state,
-  ]),
+    fields: page.fields.map((field) => [
+      field.id,
+      field.contractValue,
+      field.invoiceValue,
+      field.paymentValue,
+      field.state,
+      field.warning,
+    ]),
 })).join('\n');
 
 export const buildRequestFinanceReview = (
   request: PaymentRequestProjectLike,
   invoices: GeneratedInvoiceRecord[],
   paymentLists: PaymentListRecord[],
+  contracts: ContractRecord[] = [],
 ): RequestFinanceReview => {
   const expectedIds = paymentRequestInvoiceIds(request.creatorLinks ?? []);
   const invoiceIds = expectedIds.length ? expectedIds : request.invoiceIds ?? [];
@@ -295,14 +572,23 @@ export const buildRequestFinanceReview = (
         fields: [{
           id: 'invoice-missing',
           label: 'Invoice 记录',
+          contractValue: '—',
           invoiceValue: '未找到 Invoice',
           paymentValue: '无法核对付款清单',
           state: 'mismatch' as const,
         }],
         mismatchCount: 1,
+        warningCount: 0,
       };
     }
-    return reviewInvoice(record, matches);
+    const pageContracts = contractsForFinanceReviewPage({
+      page: { paymentItems: matches.map(({ list, item }) => ({ paymentListId: list.paymentListId, itemId: item.id })), invoiceId } as FinanceReviewPage,
+      invoice: record,
+      request,
+      contracts,
+      paymentLists,
+    });
+    return reviewInvoice(record, matches, pageContracts);
   });
   const expectedInvoiceIds = new Set(invoiceIds);
   const extraPaymentPages: FinanceReviewPage[] = requestLists.flatMap((list) => list.items
@@ -318,11 +604,13 @@ export const buildRequestFinanceReview = (
       fields: [{
         id: `extra-payment-item-${list.paymentListId}-${item.id}`,
         label: '付款清单额外明细',
+        contractValue: '—',
         invoiceValue: '请款项目未关联该 Invoice',
         paymentValue: `${item.snapshot.invoiceNumber} · ${item.snapshot.creatorName}`,
         state: 'mismatch',
       }],
       mismatchCount: 1,
+      warningCount: 0,
     })));
   const emptyRequestPages: FinanceReviewPage[] = reviews.length === 0 && extraPaymentPages.length === 0
     ? [{
@@ -335,17 +623,20 @@ export const buildRequestFinanceReview = (
         fields: [{
           id: 'request-missing-invoices',
           label: '请款项目关联',
+          contractValue: '—',
           invoiceValue: '未找到 Invoice',
           paymentValue: '未找到付款明细',
           state: 'mismatch',
         }],
         mismatchCount: 1,
+        warningCount: 0,
       }]
     : [];
   const pages: FinanceReviewPage[] = [...reviews, ...extraPaymentPages, ...emptyRequestPages];
   const projectIssues = [...extraPaymentPages, ...emptyRequestPages].flatMap((page) => page.fields);
   const mismatchCount = reviews.reduce((total, review) => total + review.mismatchCount, 0)
     + projectIssues.length;
+  const warningCount = pages.reduce((total, page) => total + page.warningCount, 0);
   return {
     invoices: reviews,
     pages,
@@ -354,6 +645,7 @@ export const buildRequestFinanceReview = (
     pageCount: pages.length,
     matchedCount: reviews.filter((review) => review.mismatchCount === 0).length,
     mismatchCount,
+    warningCount,
     fingerprint: financeReviewFingerprint(pages),
     canApprove: reviews.length > 0 && mismatchCount === 0,
   };

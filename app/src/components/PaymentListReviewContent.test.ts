@@ -57,6 +57,7 @@ describe('shared payment-list finance review content', () => {
     } as unknown as FinanceReviewPage;
 
     expect(financeWorkspaceComparisonFields(page, 'current-full').map((field) => field.id)).toEqual([
+      'amount',
       'real-name',
       'account-name',
       'account-number',
@@ -74,9 +75,11 @@ describe('shared payment-list finance review content', () => {
   it('renders the selected comparison fields and the complete current account snapshot', () => {
     expect(reviewContentSource).toContain('currentReviewFields.map');
     expect(reviewContentSource).toContain('核对字段');
+    expect(reviewContentSource).toContain('合同');
     expect(reviewContentSource).toContain('Invoice');
     expect(reviewContentSource).toContain('付款清单');
     expect(reviewContentSource).toContain('结果');
+    expect(reviewContentSource).toContain('合同信息需核对');
     expect(reviewContentSource).toContain('Real Name');
     expect(reviewContentSource).toContain('Account Name');
     expect(reviewContentSource).toContain('Account Number');

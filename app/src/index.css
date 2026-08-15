@@ -3725,7 +3725,7 @@ input[type="checkbox"]:disabled {
 
 .request-finance-comparison-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 820px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -3792,6 +3792,15 @@ input[type="checkbox"]:disabled {
 .finance-match-state.is-review {
   background: #fff6e8;
   color: #875820;
+}
+
+.finance-match-state.is-warning {
+  background: #fff6e8;
+  color: #9a641d;
+}
+
+.request-finance-comparison-table td:nth-child(2) {
+  white-space: pre-line;
 }
 
 .request-payment-review-row .project-payment-row-header > div:first-child > strong {
@@ -5119,7 +5128,7 @@ body:has(.finance-review-workspace) {
 }
 
 .finance-payment-list-review-content .request-finance-comparison-table {
-  min-width: 620px;
+  min-width: 820px;
 }
 
 .finance-payment-list-review-content .request-finance-comparison-table th,
@@ -5127,6 +5136,10 @@ body:has(.finance-review-workspace) {
   padding: 8px 9px;
   font-size: 9.5px;
   line-height: 1.45;
+}
+
+.finance-payment-list-review-content .request-finance-comparison-table td:nth-child(2) {
+  white-space: pre-line;
 }
 
 .finance-payment-account-snapshots {

@@ -21,6 +21,7 @@ import type {
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
 import type { SystemUser } from '../data';
+import type { ContractRecord } from '../contracts';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { buildRequestFinanceReview, type RequestFinanceReview } from '../financeReview';
 import {
@@ -742,6 +743,7 @@ export function RequestProjectDetailPage({
   paymentLists,
   creators,
   generatedInvoices,
+  contracts = [],
   currentUser,
   onExportPaymentList,
   onApprovalAction,
@@ -753,6 +755,7 @@ export function RequestProjectDetailPage({
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  contracts?: ContractRecord[];
   currentUser: SystemUser;
   onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onApprovalAction: (
@@ -792,7 +795,7 @@ export function RequestProjectDetailPage({
     request.paymentChannel ?? payees.map((payee) => payee.channel),
   );
   const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
-  const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+  const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
   const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
   const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);

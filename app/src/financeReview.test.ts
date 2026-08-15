@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentListRecord } from './businessWorkflow';
+import type { ContractRecord } from './contracts';
 import {
   buildRequestFinanceReview,
   createFinanceReviewSession,
@@ -89,6 +90,60 @@ const paymentList = (): PaymentListRecord => ({
   createdAt: '2026-08-09T00:00:00.000Z', updatedAt: '2026-08-09T00:00:00.000Z',
 });
 
+const contract = (overrides: Partial<ContractRecord> = {}): ContractRecord => ({
+  contractId: 'contract-test' as never,
+  id: 'CON-TEST',
+  ioId: 'IO-TEST',
+  name: 'Creator · 合作合同',
+  templateFamily: 'test',
+  sourceName: 'CON-TEST.pdf',
+  documentUrl: '',
+  isTemplate: false,
+  project: 'Project',
+  brand: 'Brand',
+  advertiser: 'COMETS',
+  publisher: 'Creator',
+  channelName: '@creator',
+  channelLink: '',
+  platform: 'YouTube',
+  effectiveDate: '2026-08-09',
+  campaignStart: '2026-08-09',
+  campaignEnd: '2026-09-09',
+  currency: 'USD',
+  totalFee: 100,
+  licensePrice: null,
+  licenseIncludedInTotal: true,
+  invoiceWithinWorkingDays: 5,
+  paymentWithinWorkingDays: 45,
+  feeBearer: 'ADVERTISER',
+  paymentMethod: 'BANK',
+  accountName: 'Creator',
+  accountFingerprint: 'fingerprint-test',
+  payoutAccountId: 'account-test',
+  payoutAccountVersion: 2 as never,
+  payoutProvider: 'Airwallex',
+  payoutAccountFingerprint: 'fingerprint-test',
+  paymentSnapshot: { ...invoicePaymentDetails },
+  signed: true,
+  status: '已生效',
+  updated: '2026-08-09',
+  deliverables: [],
+  issues: [],
+  creatorId: 'creator-test' as never,
+  engagementId: 'engagement-test' as never,
+  ...overrides,
+});
+
+const requestWithContract = {
+  ...request,
+  creatorLinks: [{
+    creatorId: 'creator-test' as never,
+    engagementId: 'engagement-test' as never,
+    contractIds: ['contract-test'] as never,
+    invoiceIds: [invoice.invoiceId],
+  }],
+};
+
 describe('request finance review', () => {
   it('approves only a one-to-one matching invoice and payment row', () => {
     const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
@@ -108,6 +163,81 @@ describe('request finance review', () => {
       invoiceValue: '影音服务',
       paymentValue: 'Content service',
       state: 'review',
+    });
+  });
+
+  it('shows a dash for missing contracts without adding a blocking difference', () => {
+    const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    const amount = review.pages[0].fields.find((field) => field.id === 'amount');
+    expect(amount).toMatchObject({ contractValue: '—', state: 'match' });
+    expect(review.warningCount).toBe(0);
+    expect(review.canApprove).toBe(true);
+  });
+
+  it('treats non-name contract differences as yellow non-blocking warnings', () => {
+    const review = buildRequestFinanceReview(
+      requestWithContract,
+      [{ ...invoice, snapshot: { ...invoice.snapshot, contractIds: ['contract-test'] as never[] } }],
+      [paymentList()],
+      [contract({ totalFee: 120 })],
+    );
+    expect(review.canApprove).toBe(true);
+    expect(review.mismatchCount).toBe(0);
+    expect(review.warningCount).toBeGreaterThan(0);
+    expect(review.pages[0].fields.find((field) => field.id === 'amount')).toMatchObject({
+      contractValue: 'CON-TEST: USD 120.00',
+      state: 'warning',
+      warning: '合同信息需核对',
+    });
+  });
+
+  it('blocks a Real Name difference from the contract', () => {
+    const review = buildRequestFinanceReview(
+      requestWithContract,
+      [{ ...invoice, snapshot: { ...invoice.snapshot, contractIds: ['contract-test'] as never[] } }],
+      [paymentList()],
+      [contract({ publisher: 'Different Name' })],
+    );
+    expect(review.canApprove).toBe(false);
+    expect(review.pages[0].fields.find((field) => field.id === 'real-name')).toMatchObject({
+      contractValue: 'CON-TEST: Different Name',
+      state: 'mismatch',
+    });
+  });
+
+  it('keeps manual reason and reference checks non-blocking by default', () => {
+    const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    expect(review.pages[0].fields.filter((field) => ['reason', 'reference'].includes(field.id))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'reason', state: 'review' }),
+        expect.objectContaining({ id: 'reference', state: 'review' }),
+      ]),
+    );
+    expect(review.canApprove).toBe(true);
+  });
+
+  it('merges multiple contract values by contract number and counts their warnings', () => {
+    const secondContract = contract({
+      contractId: 'contract-test-2' as never,
+      id: 'CON-TEST-2',
+      totalFee: 110,
+    });
+    const multiContractRequest = {
+      ...requestWithContract,
+      creatorLinks: [{
+        ...requestWithContract.creatorLinks![0],
+        contractIds: ['contract-test', 'contract-test-2'] as never,
+      }],
+    };
+    const review = buildRequestFinanceReview(
+      multiContractRequest,
+      [{ ...invoice, snapshot: { ...invoice.snapshot, contractIds: ['contract-test', 'contract-test-2'] as never[] } }],
+      [paymentList()],
+      [contract(), secondContract],
+    );
+    expect(review.pages[0].fields.find((field) => field.id === 'amount')).toMatchObject({
+      contractValue: 'CON-TEST: USD 100.00\nCON-TEST-2: USD 110.00',
+      state: 'warning',
     });
   });
 

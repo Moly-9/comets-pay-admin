@@ -44,6 +44,7 @@ type ExportMode = 'all' | 'current';
 type ReviewContentVariant = 'project' | 'finance-workspace';
 
 const FINANCE_WORKSPACE_COMPARISON_FIELD_IDS = new Set([
+  'amount',
   'real-name',
   'account-name',
   'account-number',
@@ -111,6 +112,8 @@ const recipientAccountName = (
 const fieldStateLabel = (field?: FinanceReviewField) => {
   if (field?.state === 'match') return '一致';
   if (field?.state === 'mismatch') return '不一致';
+  if (field?.state === 'warning') return field.warning ?? '合同信息需核对';
+  if (field?.state === 'review') return '人工核对（默认通过）';
   return '人工核对';
 };
 
@@ -384,6 +387,7 @@ export function PaymentListReviewContent({
             >
               <div className="finance-review-summary-heading"><span className="finance-review-card-title-icon is-validation" aria-hidden="true"><ShieldCheck size={14} /></span><strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong></div>
               <span>{financeReview.canApprove ? '可提交财务审批通过' : `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`}</span>
+              {financeReview.warningCount ? <small>另有 {financeReview.warningCount} 项合同信息需核对（不阻断审批）</small> : null}
               {financeReview.projectIssues.map((issue) => (
                 <small key={issue.id}>{issue.label}：{issue.paymentValue}</small>
               ))}
@@ -391,13 +395,16 @@ export function PaymentListReviewContent({
           ) : null}
 
           {currentReview ? (
-            <section className="request-finance-comparison" aria-label="Invoice 与付款清单对照">
+            <section className="request-finance-comparison" aria-label="合同、Invoice 与付款清单三方对照">
               <header className="request-finance-comparison-header">
                 <div className="finance-review-comparison-title">
                   <span className="finance-review-card-title-icon is-invoice" aria-hidden="true"><ReceiptText size={14} /></span>
                   <div>
                     <strong>{currentReview.invoiceNumber}</strong>
-                    <span>{currentReview.creatorName} · {currentReview.mismatchCount ? `${currentReview.mismatchCount} 项不一致` : '关键字段一致'}</span>
+                    <span>
+                      {currentReview.creatorName} · {currentReview.mismatchCount ? `${currentReview.mismatchCount} 项不一致` : '关键字段一致'}
+                      {currentReview.warningCount ? ` · ${currentReview.warningCount} 项合同信息需核对` : ''}
+                    </span>
                   </div>
                 </div>
                 <div className="request-finance-navigator">
@@ -424,11 +431,12 @@ export function PaymentListReviewContent({
               </header>
               <div className="table-scroll">
                 <table className="request-finance-comparison-table">
-                  <thead><tr><th>核对字段</th><th>Invoice</th><th>付款清单</th><th>结果</th></tr></thead>
+                  <thead><tr><th>核对字段</th><th>合同</th><th>Invoice</th><th>付款清单</th><th>结果</th></tr></thead>
                   <tbody>
                     {currentReviewFields.map((field) => (
                       <tr key={field.id}>
                         <th>{field.label}</th>
+                        <td>{field.contractValue}</td>
                         <td>{field.invoiceValue}</td>
                         <td>{field.paymentValue}</td>
                         <td>

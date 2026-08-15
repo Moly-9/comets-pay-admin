@@ -2071,7 +2071,7 @@ export default function App() {
     }
     let structuredReturnItems: ReturnType<typeof financeReviewReturnItems> | undefined;
     if (action === 'APPROVE' && currentStage === 'FINANCE') {
-      const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+      const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
       const session = financeReviewSessions[financeReviewSessionKey(
         request.id,
         request.approval.round,
@@ -2093,7 +2093,7 @@ export default function App() {
       }
     }
     if (action === 'RETURN' && currentStage === 'FINANCE' && request.approval.status === 'PENDING_FINANCE') {
-      const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+      const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
       const session = financeReviewSessions[financeReviewSessionKey(
         request.id,
         request.approval.round,
@@ -2292,7 +2292,7 @@ export default function App() {
       notify('暂无审批权限', '当前账号不是该请款的财务审核人。');
       return;
     }
-    const review = buildRequestFinanceReview(request, generatedInvoices, paymentLists);
+    const review = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
     const sessionKey = financeReviewSessionKey(request.id, request.approval.round, currentUser.account);
     setFinanceReviewSessions((current) => ({
       ...current,
@@ -3602,6 +3602,7 @@ export default function App() {
           paymentLists={paymentLists}
           creators={creators}
           generatedInvoices={generatedInvoices}
+          contracts={contracts}
           approvalReminder={requestApprovalReminder}
           showApprovalReminder={showRequestApprovalReminder}
           onDismissApprovalReminder={() => setShowRequestApprovalReminder(false)}
@@ -3989,7 +3990,7 @@ export default function App() {
     ? requestProjects.find((request) => request.id === financeReviewRequestId) ?? null
     : null;
   const activeFinanceReview = financeReviewRequest
-    ? buildRequestFinanceReview(financeReviewRequest, generatedInvoices, paymentLists)
+    ? buildRequestFinanceReview(financeReviewRequest, generatedInvoices, paymentLists, contracts)
     : null;
   const activeFinanceSessionKey = financeReviewRequest?.approval
     ? financeReviewSessionKey(financeReviewRequest.id, financeReviewRequest.approval.round, currentUser.account)
