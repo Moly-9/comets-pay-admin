@@ -28,7 +28,8 @@ describe('PaymentListEditor', () => {
     expect(css).toContain('--payment-editor-inset');
     expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 2fr)');
     expect(css).toContain('min-height: 56px');
-    expect(css).toContain('grid-template-columns: minmax(360px, .9fr) minmax(520px, 1.1fr)');
+    expect(css).toContain('grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr)');
+    expect(css).toContain('overflow-y: auto');
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toContain('touch-action');
     expect(css).toContain('payment-list-editor-bulk-fill');
