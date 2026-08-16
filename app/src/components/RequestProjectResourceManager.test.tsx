@@ -189,7 +189,7 @@ describe('request project resource aggregation', () => {
       paymentDialogSource.indexOf('request-payment-flat-rows'),
     );
     const paymentRowsSource = paymentDialogSource.slice(
-      paymentDialogSource.indexOf('request-payment-flat-rows'),
+      paymentDialogSource.indexOf('payment-list-overview-rows'),
     );
 
     expect(toolbarSource).toContain('生成付款清单');
@@ -206,25 +206,26 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
     expect(source).toContain('付款单已清空');
     expect(source).toContain('run: onClearPaymentLists');
-    expect(paymentRowsSource).toContain('ariaLabel={`${item.snapshot.creatorName} 支付币种`}');
-    expect(paymentRowsSource).toContain('ariaLabel={`${item.snapshot.creatorName} 收款币种`}');
-    expect(paymentRowsSource.match(/options=\{PAYMENT_CURRENCY_OPTIONS\}/g)).toHaveLength(2);
-    expect(paymentRowsSource).toContain("'paymentReason', event.target.value");
-    expect(paymentRowsSource).toContain("'transactionReference', event.target.value");
-    expect(paymentRowsSource).toContain("'description', event.target.value");
-    expect(paymentRowsSource).toContain('project-payment-inherited-field');
-    expect(paymentRowsSource).not.toContain("'feeBearer', value");
-    expect(paymentRowsSource).toContain('请输入交易附言');
-    expect(paymentRowsSource).toContain("requiredPaymentLabel('描述')");
+    expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
+    expect(paymentRowsSource).not.toContain('SelectField');
+    const editorSource = readFileSync(new URL('./PaymentListEditor.tsx', import.meta.url), 'utf8');
+    expect(editorSource).toContain('ariaLabel="编辑付款支付币种"');
+    expect(editorSource).toContain('ariaLabel="编辑付款收款币种"');
+    expect(editorSource.match(/PAYMENT_CURRENCY_OPTIONS/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(editorSource).toContain("update('paymentReason', event.target.value)");
+    expect(editorSource).toContain("update('transactionReference', event.target.value)");
+    expect(editorSource).toContain("update('description', event.target.value)");
+    expect(editorSource).toContain('手续费承担方');
+    expect(editorSource).toContain('请输入交易附言');
+    expect(editorSource).toContain('onPointerUp');
+    expect(editorSource).toContain('ArrowRight');
     expect(toolbarSource).toContain('canEditPaymentList && currentPaymentList');
     expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
-    expect(paymentRowsSource).toContain("paymentLocked ? ' is-payment-locked' : ''");
-    expect(paymentRowsSource).toContain("'校验通过 · 已付款冻结'");
-    expect(paymentRowsSource).toContain("!paymentFailureRecoveryMode || Boolean(failurePayout)");
-    expect(paymentRowsSource).toContain("!hasScopedApprovalReturn || Boolean(paymentListReturn)");
-    expect(paymentRowsSource).toContain("paymentListReturn ? '付款清单原因 · 待修改'");
-    expect(paymentRowsSource).toContain("paymentLocked && hasScopedApprovalReturn ? '已通过 · 已锁定'");
+    expect(paymentRowsSource).toContain('payment-list-overview-state');
+    expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
+    expect(paymentRowsSource).toContain('paymentListReturn.reason');
     expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
+    expect(paymentRowsSource).toContain('编辑本笔');
   });
 });
 
