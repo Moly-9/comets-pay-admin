@@ -30,6 +30,7 @@ import {
   reviewPaymentListAccountSnapshot,
   validatePaymentListAccountViaApi,
   type PaymentAccountApiValidation,
+  type PaymentAccountFieldIssue,
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
 import { Button } from './Common';
@@ -649,6 +650,28 @@ export function PaymentListReviewContent({
                   { id: 'swift-code', label: 'Swift Code', value: details?.swiftCode },
                   { id: 'iban', label: 'IBAN (optional)', value: details?.iban },
                 ];
+                const accountFieldValidationKeys: Record<string, string> = {
+                  amount: 'amount',
+                  currency: 'currency',
+                  'receive-currency': 'receive-currency',
+                  'payment-method': 'transfer_method',
+                  'fee-bearer': 'fee-bearer',
+                  'beneficiary-type': 'beneficiary.entity_type',
+                  'bank-country': 'beneficiary.bank_details.bank_country_code',
+                  'account-currency': 'beneficiary.bank_details.account_currency',
+                  'account-name': 'beneficiary.bank_details.account_name',
+                  'account-number': 'beneficiary.bank_details.account_number',
+                  'bank-name': 'beneficiary.bank_details.bank_name',
+                  'bank-branch': 'beneficiary.bank_details.bank_branch',
+                  'bank-address': 'beneficiary.bank_details.bank_street_address',
+                  'local-clearing-system': 'beneficiary.bank_details.local_clearing_system',
+                  'swift-code': 'beneficiary.bank_details.swift_code',
+                  iban: 'beneficiary.bank_details.iban',
+                  'intermediary-bank-code': 'beneficiary.bank_details.intermediary_bank_swift_code',
+                  'notification-email': 'beneficiary.additional_info.personal_email',
+                  'payment-reason': 'payment-reason',
+                  'transaction-reference': 'transaction-reference',
+                };
                 return (
                   <article
                     className="finance-payment-account-snapshot"
@@ -664,14 +687,24 @@ export function PaymentListReviewContent({
                     <dl className={`finance-payment-account-fields${row.effectiveAccount.provider === 'Airwallex' ? ' finance-payment-airwallex-fields' : ''}`}>
                       {accountFields.map((accountField) => {
                         const reviewField = fieldById.get(accountField.id);
-                        const apiPassed = !reviewField && accountCheck?.state === 'passed';
-                        const apiBlocked = !reviewField && accountCheck?.state === 'invalid';
+                        const validationKey = accountFieldValidationKeys[accountField.id];
+                        const apiFieldIssues = accountCheck && 'fieldIssues' in accountCheck
+                          ? accountCheck.fieldIssues
+                          : undefined;
+                        const apiFieldIssue: PaymentAccountFieldIssue | undefined = validationKey
+                          ? apiFieldIssues?.find((issue) => issue.key === validationKey)
+                          : undefined;
+                        const apiPassed = !reviewField
+                          && Boolean(accountCheck)
+                          && accountCheck?.state !== 'checking'
+                          && accountCheck?.state !== 'unavailable'
+                          && !apiFieldIssue;
                         return (
-                          <div className={`is-${reviewField?.state ?? (apiPassed ? 'match' : apiBlocked ? 'mismatch' : 'review')}`} key={accountField.id}>
+                          <div className={`is-${apiFieldIssue ? 'mismatch' : reviewField?.state ?? (apiPassed ? 'match' : 'review')}`} key={accountField.id}>
                             <dt>
                               <span>{accountField.label}</span>
                               <em>
-                                {reviewField?.state === 'match' ? (
+                                {apiFieldIssue ? apiFieldIssue.message : reviewField?.state === 'match' ? (
                                   <>
                                     <CircleCheck size={16} strokeWidth={2.4} aria-hidden="true" />
                                     <span className="sr-only">一致</span>
@@ -681,7 +714,7 @@ export function PaymentListReviewContent({
                                     <CircleCheck size={14} strokeWidth={2.4} aria-hidden="true" />
                                     <span className="sr-only">Airwallex 已校验</span>
                                   </>
-                                ) : accountCheck?.state === 'checking' ? '校验中' : apiBlocked ? '需处理' : '待 API 校验'}
+                                ) : accountCheck?.state === 'checking' ? '校验中' : '待 API 校验'}
                               </em>
                             </dt>
                             <dd>{displayValue(reviewField?.paymentValue ?? accountField.value)}</dd>

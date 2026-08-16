@@ -186,6 +186,55 @@ describe('request payment account validation', () => {
     ]);
   });
 
+  it('reports a schema format error as a field-level IBAN issue', async () => {
+    const invalidIbanCreator: CreatorProfile = {
+      ...creator,
+      payoutAccounts: [{
+        ...account,
+        bankDetails: {
+          ...account.bankDetails,
+          iban: 'IT00 DEMO 0000 0000 0000 0000',
+        },
+      }],
+    };
+    const ibanSchema: AirwallexFormSchemaResponse = {
+      ...schema,
+      fields: [{
+        enabled: true,
+        field: {
+          key: 'iban',
+          label: 'IBAN',
+          type: 'INPUT',
+          default: '',
+          description: '',
+          example: '',
+          placeholder: '',
+          refresh: false,
+          tip: '',
+        },
+        path: 'beneficiary.bank_details.iban',
+        required: true,
+        rule: { type: 'string', pattern: '^[A-Z]{2}[0-9]{13,32}$' },
+      }],
+    };
+    const requestMock = vi.fn(async (input: RequestInfo | URL) => (
+      String(input) === AIRWALLEX_FORM_SCHEMA_PROXY_PATH
+        ? jsonResponse(ibanSchema)
+        : new Response('', { status: 404 })
+    ));
+
+    await expect(validatePaymentListAccountViaApi({
+      item,
+      creators: [invalidIbanCreator],
+      request: requestMock as unknown as typeof fetch,
+    })).resolves.toMatchObject({
+      state: 'invalid',
+      message: '收款账户 API 字段格式不符合要求：IBAN格式不符合当前 Schema',
+      fieldIssues: [{ key: 'beneficiary.bank_details.iban' }],
+    });
+    expect(requestMock).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks an incomplete frozen payment-list snapshot even when the profile account is complete', async () => {
     const incompleteItem: PaymentListItem = {
       ...item,

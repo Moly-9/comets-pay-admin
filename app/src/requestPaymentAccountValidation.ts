@@ -7,6 +7,7 @@ import {
 import {
   getAirwallexCountryProfile,
   validateAirwallexFormSchema,
+  type AirwallexSchemaValidationIssue,
 } from './airwallexFormSchema';
 import {
   paymentListEffectiveAccount,
@@ -28,6 +29,12 @@ export type PaymentAccountApiValidation = {
   state: 'passed' | 'invalid' | 'unavailable';
   message: string;
   checkedAt?: string;
+  fieldIssues?: PaymentAccountFieldIssue[];
+};
+
+export type PaymentAccountFieldIssue = {
+  key: string;
+  message: string;
 };
 
 const hasValue = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== '';
@@ -176,6 +183,36 @@ const paymentListTransactionIssues = (item: PaymentListItem) => {
   ].filter(Boolean);
 };
 
+const snapshotIssueFieldKeys: Array<[string, string]> = [
+  ['Account Name', 'beneficiary.bank_details.account_name'],
+  ['Account Number', 'beneficiary.bank_details.account_number'],
+  ['IBAN', 'beneficiary.bank_details.iban'],
+  ['Beneficiary Bank Name', 'beneficiary.bank_details.bank_name'],
+  ['Beneficiary Bank Address', 'beneficiary.bank_details.bank_street_address'],
+  ['Swift Code', 'beneficiary.bank_details.swift_code'],
+];
+
+const transactionIssueFieldKeys: Array<[string, string]> = [
+  ['支付币种', 'currency'],
+  ['收款币种', 'receive-currency'],
+  ['付款金额', 'amount'],
+  ['手续费承担方', 'fee-bearer'],
+  ['付款原因', 'payment-reason'],
+  ['交易附言', 'transaction-reference'],
+];
+
+const mapMessageToFieldIssues = (
+  messages: string[],
+  mappings: Array<[string, string]>,
+): PaymentAccountFieldIssue[] => messages.flatMap((message) => {
+  const match = mappings.find(([label]) => message.includes(label));
+  return match ? [{ key: match[1], message }] : [];
+});
+
+const mapSchemaIssues = (issues: AirwallexSchemaValidationIssue[]) => (
+  issues.map((issue) => ({ key: issue.path, message: issue.message }))
+);
+
 export const reviewPaymentListAccountSnapshot = (
   item: PaymentListItem,
   creators: CreatorProfile[],
@@ -229,12 +266,22 @@ export const validatePaymentListAccountViaApi = async ({
       ...paymentListSnapshotSchemaIssues(item, schema),
     ])];
     const transactionIssues = paymentListTransactionIssues(item);
+    const displayFieldIssues = [
+      ...mapSchemaIssues(fieldIssues),
+      ...mapMessageToFieldIssues(frozenSnapshotIssues, snapshotIssueFieldKeys),
+      ...mapMessageToFieldIssues(transactionIssues, transactionIssueFieldKeys),
+    ];
+    const requiredFieldIssues = fieldIssues.filter((issue) => issue.code === 'REQUIRED');
+    const patternFieldIssues = fieldIssues.filter((issue) => issue.code === 'PATTERN');
     if (fieldIssues.length || frozenSnapshotIssues.length || transactionIssues.length) {
       return {
         state: 'invalid',
         message: [
-          fieldIssues.length
-            ? `收款账户缺少 API 必填字段：${fieldIssues.map((issue) => issue.message).join('、')}`
+          requiredFieldIssues.length
+            ? `收款账户缺少 API 必填字段：${requiredFieldIssues.map((issue) => issue.message).join('、')}`
+            : '',
+          patternFieldIssues.length
+            ? `收款账户 API 字段格式不符合要求：${patternFieldIssues.map((issue) => issue.message).join('、')}`
             : '',
           frozenSnapshotIssues.length
             ? `付款清单冻结快照缺少必填字段：${frozenSnapshotIssues.join('、')}`
@@ -243,6 +290,7 @@ export const validatePaymentListAccountViaApi = async ({
             ? `付款清单交易信息不完整：${transactionIssues.join('、')}`
             : '',
         ].filter(Boolean).join('；'),
+        fieldIssues: displayFieldIssues,
       };
     }
     await validateAirwallexBeneficiary(
@@ -259,6 +307,7 @@ export const validatePaymentListAccountViaApi = async ({
       return {
         state: 'invalid',
         message: error.fieldIssues.map((issue) => issue.message).join('、'),
+        fieldIssues: mapSchemaIssues(error.fieldIssues),
       };
     }
     return {

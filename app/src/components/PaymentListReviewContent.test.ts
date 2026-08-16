@@ -99,6 +99,8 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('通知邮箱');
     expect(reviewContentSource).toContain('原型演示值');
     expect(reviewContentSource).toContain('schemaFields');
+    expect(reviewContentSource).toContain('apiFieldIssue ? apiFieldIssue.message : reviewField?.state');
+    expect(reviewContentSource).toContain('accountCheck && \'fieldIssues\' in accountCheck');
     expect(reviewContentSource).toContain('收款人地址国家 / 地区');
     expect(reviewContentSource).toContain('路由代码类型 1');
     expect(reviewContentSource).toContain("return details?.accountName || fallbackName || '未填写'");
