@@ -5,7 +5,10 @@ import {
   CircleAlert,
   GripHorizontal,
   Landmark,
+  Minus,
+  Plus,
   ReceiptText,
+  RotateCcw,
   ShieldCheck,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -98,12 +101,49 @@ export function PaymentListEditor({
   const [dragStartX, setDragStartX] = useState<number | null>(null);
   const [bulkPaymentReason, setBulkPaymentReason] = useState('');
   const [bulkTransactionReference, setBulkTransactionReference] = useState('');
+  const [invoicePdfUrl, setInvoicePdfUrl] = useState<string | null>(null);
+  const [invoicePdfError, setInvoicePdfError] = useState(false);
+  const [invoicePdfZoom, setInvoicePdfZoom] = useState(1);
   const item = list.items[activeIndex];
   const invoice = item ? invoices.find((candidate) => candidate.invoiceId === item.invoiceId) : undefined;
   const creator = item ? creators.find((candidate) => candidate.id === item.snapshot.creatorId) : undefined;
   const account = item ? paymentListEffectiveAccount(item) : null;
   const issues = item ? rowIssues(list, item) : [];
   const editorRef = useRef<HTMLDivElement>(null);
+  const snapshot = invoice?.snapshot;
+  const linkedContracts = snapshot?.contractIds?.map((contractId) => contracts.find((contract) => contract.contractId === contractId || contract.id === contractId)).filter((contract): contract is ContractRecord => Boolean(contract)) ?? [];
+  const contractFeeBearers = [...new Set(linkedContracts.map((contract) => contract.feeBearer).filter(Boolean))];
+  const feeBearerOptions = [
+    { value: 'ADVERTISER', label: '付款方' },
+    { value: 'PUBLISHER', label: '收款方' },
+    { value: 'SHARED', label: '各自承担' },
+  ] as const;
+  const transferMethodOptions = account?.provider === 'PayPal'
+    ? [{ value: 'PAYPAL', label: 'PayPal' }]
+    : [{ value: 'LOCAL', label: 'LOCAL' }, { value: 'SWIFT', label: 'SWIFT' }];
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+    setInvoicePdfUrl(null);
+    setInvoicePdfError(false);
+    setInvoicePdfZoom(1);
+    if (!snapshot) return () => undefined;
+    void import('../invoice/generateInvoice')
+      .then(({ generateInvoicePdf }) => generateInvoicePdf(snapshot))
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setInvoicePdfUrl(objectUrl);
+      })
+      .catch(() => {
+        if (active) setInvoicePdfError(true);
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [invoice?.invoiceId, snapshot]);
   const accountOptions = useMemo(() => {
     if (!creator || !item) return [];
     const eligible = eligibleInvoicePayoutAccounts(creator)
@@ -148,8 +188,10 @@ export function PaymentListEditor({
     if (Math.abs(delta) > 48) move(delta < 0 ? 1 : -1);
     setDragStartX(null);
   };
-  const snapshot = invoice?.snapshot;
   const contractCount = snapshot?.contractIds?.filter((id) => contracts.some((contract) => contract.contractId === id || contract.id === id)).length ?? item.snapshot.contractIds?.length ?? 0;
+  const transferMethod = String(paymentListItemValue(item, 'transferMethod') || account.transferMethod || '');
+  const feeBearer = String(paymentListItemValue(item, 'feeBearer') || contractFeeBearers[0] || '');
+  const feeBearerFromContract = linkedContracts.length > 0;
 
   return (
     <div
@@ -197,6 +239,18 @@ export function PaymentListEditor({
       <div className="payment-list-editor-body">
         <section className="payment-list-editor-invoice" aria-label="Invoice 快照">
           <div className="payment-list-editor-section-title"><span><ReceiptText size={16} /></span><div><strong>Invoice 快照</strong><small>付款清单使用的来源凭证</small></div></div>
+          <div className="payment-list-editor-pdf-toolbar">
+            <strong>Invoice PDF 文件快照</strong>
+            <div>
+              <Button variant="ghost" icon={<Minus size={14} />} aria-label="缩小 Invoice 快照" title="缩小" disabled={invoicePdfZoom <= 0.8} onClick={() => setInvoicePdfZoom((value) => Math.max(0.8, Number((value - 0.1).toFixed(1))))} />
+              <span>{Math.round(invoicePdfZoom * 100)}%</span>
+              <Button variant="ghost" icon={<Plus size={14} />} aria-label="放大 Invoice 快照" title="放大" disabled={invoicePdfZoom >= 1.5} onClick={() => setInvoicePdfZoom((value) => Math.min(1.5, Number((value + 0.1).toFixed(1))))} />
+              <Button variant="ghost" icon={<RotateCcw size={14} />} aria-label="重置 Invoice 快照缩放" title="重置" disabled={invoicePdfZoom === 1} onClick={() => setInvoicePdfZoom(1)} />
+            </div>
+          </div>
+          <div className="payment-list-editor-pdf-viewport">
+            {invoicePdfUrl ? <iframe title={`${item.snapshot.invoiceNumber} Invoice PDF 快照`} src={invoicePdfUrl} style={{ width: `${100 / invoicePdfZoom}%`, height: `${100 / invoicePdfZoom}%`, transform: `scale(${invoicePdfZoom})`, transformOrigin: 'top left' }} /> : <div className="payment-list-editor-pdf-state">{invoicePdfError ? 'Invoice PDF 快照生成失败，以下为结构化快照' : '正在生成 Invoice PDF 快照…'}</div>}
+          </div>
           <dl className="payment-list-editor-snapshot-grid">
             <div><dt>Invoice 编号</dt><dd>{display(snapshot?.invoiceNumber ?? item.snapshot.invoiceNumber)}</dd></div>
             <div><dt>达人</dt><dd>{display(snapshot?.creatorName ?? item.snapshot.creatorName)}<small>{display(snapshot?.creatorHandle)}</small></dd></div>
@@ -219,11 +273,11 @@ export function PaymentListEditor({
             <label>支付币种<SelectField ariaLabel="编辑付款支付币种" variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => update('currency', value)} /></label>
             <label>收款币种<SelectField ariaLabel="编辑付款收款币种" variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => update('receiveCurrency', value)} /></label>
             <label>付款金额<input aria-label="编辑付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} disabled={!editable} onChange={(event) => update('amount', Number(event.target.value))} /></label>
-            <label>转账方式<input readOnly value={display(account.transferMethod)} /></label>
-            <label>手续费承担方<input readOnly value={display(paymentListItemValue(item, 'feeBearer'))} /></label>
+            <label>转账方式<SelectField ariaLabel="编辑付款转账方式" variant="form" value={transferMethod} options={transferMethodOptions} disabled={!editable} onChange={(value) => update('transferMethod', value)} /></label>
+            <label>手续费承担方{feeBearerFromContract ? <input readOnly value={display(feeBearer)} /> : <SelectField ariaLabel="编辑付款手续费承担方" variant="form" value={feeBearer} options={feeBearerOptions} placeholder="请选择手续费承担方" disabled={!editable} onChange={(value) => update('feeBearer', value)} />}</label>
             <label>付款原因<input aria-label="编辑付款原因" value={paymentListItemValue(item, 'paymentReason')} disabled={!editable} onChange={(event) => update('paymentReason', event.target.value)} /></label>
             <label>交易附言<input aria-label="编辑交易附言" placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} disabled={!editable} onChange={(event) => update('transactionReference', event.target.value)} /></label>
-            <label className="is-wide">描述<input aria-label="编辑付款描述" placeholder="请输入付款描述" value={paymentListItemValue(item, 'description')} disabled={!editable} onChange={(event) => update('description', event.target.value)} /></label>
+            <label className="is-wide">描述<input aria-label="编辑付款描述" placeholder="请输入付款描述（选填）" value={paymentListItemValue(item, 'description')} disabled={!editable} onChange={(event) => update('description', event.target.value)} /></label>
           </div>
           <div className="payment-list-editor-account-details"><strong>账户快照</strong>{paymentDetailFields(item).map(([label, value]) => <div key={label}><span>{label}</span><b>{display(value)}</b></div>)}</div>
           <div className={`payment-list-editor-validation ${issues.length ? 'is-warning' : 'is-ready'}`} role="status"><span>{issues.length ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}</span><div><strong>{issues.length ? `还需完善 ${issues.length} 项` : '本笔付款信息完整'}</strong>{issues.length ? <ul>{issues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p>可以切换下一笔付款，所有明细完成后生成付款清单。</p>}</div>{editable && item.requiresRevalidation ? <Button variant="ghost" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}>重新校验</Button> : null}</div>

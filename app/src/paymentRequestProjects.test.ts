@@ -399,7 +399,6 @@ describe('media payment request submission validation', () => {
     expect(item.requiresRevalidation).toBe(true);
     expect(item.validationIssues).toEqual(expect.arrayContaining([
       '交易附言未填写',
-      '付款描述未填写',
     ]));
   });
 

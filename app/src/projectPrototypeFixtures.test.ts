@@ -231,7 +231,7 @@ describe('project prototype fixtures', () => {
     expect(item.snapshot.realName).toBe(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.from.legalName);
     expect(item.snapshot.paymentDetails).toEqual(ALL_PROJECT_PROTOTYPE_INVOICES[0]!.snapshot.payment);
     expect(item.validationIssues).toContain('交易附言未填写');
-    expect(item.validationIssues).toContain('付款描述未填写');
+    expect(item.validationIssues).not.toContain('付款描述未填写');
   });
 
   it('provides cross-module creator, contract, and Invoice fixtures for the primary project', () => {

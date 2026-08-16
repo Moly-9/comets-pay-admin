@@ -7,6 +7,12 @@ describe('PaymentListEditor', () => {
     const css = readFileSync(new URL('./PaymentListEditor.css', import.meta.url), 'utf8');
 
     expect(source).toContain('Invoice 快照');
+    expect(source).toContain('Invoice PDF 文件快照');
+    expect(source).toContain('generateInvoicePdf');
+    expect(source).toContain('缩放');
+    expect(source).toContain('编辑付款转账方式');
+    expect(source).toContain('编辑付款手续费承担方');
+    expect(source).toContain('付款描述（选填）');
     expect(source).toContain('Airwallex');
     expect(source).toContain('PayPal');
     expect(source).toContain('PayMax');

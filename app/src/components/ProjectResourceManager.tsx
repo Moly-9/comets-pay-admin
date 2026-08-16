@@ -783,7 +783,7 @@ export function ProjectResourceManager({
                 </div>
                 <NoticeBanner>
                   {paymentList.status === 'draft'
-                    ? '付款清单全部字段均为必填；手续费承担方由请款项目信息带入，交易附言和描述需填写后才能生成。'
+                    ? '付款清单字段中付款原因和交易附言为必填；描述为选填项。手续费承担方优先继承关联合同。'
                     : '当前付款单内容已锁定。页面仅展示脱敏账户快照，历史版本保持不变。'}
                 </NoticeBanner>
                 <div className="project-payment-rows">
@@ -896,8 +896,8 @@ export function ProjectResourceManager({
                             <input required aria-required="true" data-payment-required="true" disabled={!paymentFieldsEditable} placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'transactionReference', event.target.value)} />
                           </label>
                           <label className="project-payment-description-field">
-                            {requiredPaymentLabel('描述')}
-                            <input required aria-required="true" disabled={!paymentFieldsEditable} placeholder="请输入付款描述" value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'description', event.target.value)} />
+                            <span>描述</span>
+                            <input disabled={!paymentFieldsEditable} placeholder="请输入付款描述（选填）" value={paymentListItemValue(item, 'description')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'description', event.target.value)} />
                           </label>
                         </div>
 

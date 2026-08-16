@@ -244,7 +244,7 @@ describe('project payment list', () => {
     expect(paymentListProviderForItems([item, paypalItem])).toBe('Mixed');
   });
 
-  it('requires user-entered transaction reference and description before generating a locked payment version', () => {
+  it('requires user-entered transaction reference while leaving description optional', () => {
     const draft = {
       ...record,
       items: [{
@@ -257,11 +257,6 @@ describe('project payment list', () => {
         code: 'INVALID_ITEM',
         invoiceId,
         message: expect.stringContaining('交易附言未填写'),
-      }),
-      expect.objectContaining({
-        code: 'INVALID_ITEM',
-        invoiceId,
-        message: expect.stringContaining('付款描述未填写'),
       }),
     ]));
   });
