@@ -654,7 +654,10 @@ export function FinanceReviewWorkspace({
     return () => canvas.removeEventListener('wheel', handleInvoiceWheel);
   }, [setInvoiceZoomLevel, stage]);
 
-  const currentPage = financeReview.pages[reviewIndex];
+  const safeReviewIndex = Number.isFinite(reviewIndex)
+    ? Math.min(Math.max(0, reviewIndex), Math.max(0, financeReview.pages.length - 1))
+    : 0;
+  const currentPage = financeReview.pages[safeReviewIndex];
   const currentDecision = currentPage
     ? activeSession.decisions[currentPage.key] ?? { state: 'unreviewed' as const }
     : { state: 'unreviewed' as const };
@@ -1203,6 +1206,7 @@ export function FinanceReviewWorkspace({
                   pages={financeReview.pages}
                   activeIndex={reviewIndex}
                   onActiveIndexChange={setReviewIndex}
+                  onRequestPane={() => setActivePane('payment')}
                   onExportPaymentList={onExportPaymentList}
                   accountDisplay="current-full"
                   variant="finance-workspace"

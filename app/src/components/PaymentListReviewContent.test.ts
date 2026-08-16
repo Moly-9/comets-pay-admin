@@ -126,8 +126,12 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('收款账户：{row.accountName}');
     expect(reviewContentSource).toContain('去核对<ArrowRight');
     expect(reviewContentSource).toContain('setReviewIndex(row.reviewIndex)');
+    expect(reviewContentSource).toContain('onRequestPane?.()');
+    expect(reviewContentSource).toContain('Number.isFinite(requestedIndex)');
     expect(reviewContentSource).toContain("scrollIntoView({ behavior: 'smooth', block: 'start' })");
+    expect(reviewContentSource).toContain("scrollContainer.scrollTo({");
     expect(reviewContentSource).toContain('id={`finance-payment-account-${row.key}`}');
+    expect(reviewContentSource).toContain('暂无可定位的付款明细');
   });
 
   it('constrains the approval board to its own keyboard-scrollable viewport', () => {

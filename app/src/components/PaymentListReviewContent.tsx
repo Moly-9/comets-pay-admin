@@ -124,6 +124,7 @@ export function PaymentListReviewContent({
   pages = financeReview.invoices,
   activeIndex,
   onActiveIndexChange,
+  onRequestPane,
   onExportPaymentList,
   accountDisplay = 'all-summary',
   exportMode = 'all',
@@ -136,6 +137,7 @@ export function PaymentListReviewContent({
   pages?: FinanceReviewPage[];
   activeIndex?: number;
   onActiveIndexChange?: (index: number) => void;
+  onRequestPane?: () => void;
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   accountDisplay?: AccountDisplayMode;
   exportMode?: ExportMode;
@@ -147,7 +149,10 @@ export function PaymentListReviewContent({
   const [localIndex, setLocalIndex] = useState(0);
   const [pendingAccountFocusKey, setPendingAccountFocusKey] = useState<string | null>(null);
   const maxIndex = Math.max(0, pages.length - 1);
-  const reviewIndex = Math.min(activeIndex ?? localIndex, maxIndex);
+  const requestedIndex = activeIndex ?? localIndex;
+  const reviewIndex = Number.isFinite(requestedIndex)
+    ? Math.min(Math.max(0, requestedIndex), maxIndex)
+    : 0;
   const currentReview = pages[reviewIndex];
   const currentReviewFields = currentReview
     ? financeWorkspaceComparisonFields(currentReview, accountDisplay)
@@ -211,8 +216,20 @@ export function PaymentListReviewContent({
     if (!pendingAccountFocusKey) return undefined;
     const frame = window.requestAnimationFrame(() => {
       const target = document.getElementById(`finance-payment-account-${pendingAccountFocusKey}`);
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      target?.focus({ preventScroll: true });
+      if (target) {
+        const scrollContainer = target.closest<HTMLElement>('.finance-review-payment-scroll');
+        if (scrollContainer) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          scrollContainer.scrollTo({
+            top: Math.max(0, scrollContainer.scrollTop + targetRect.top - containerRect.top - 12),
+            behavior: 'smooth',
+          });
+        } else {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        target.focus({ preventScroll: true });
+      }
       setPendingAccountFocusKey(null);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -226,6 +243,7 @@ export function PaymentListReviewContent({
 
   const focusAccountReview = (row: (typeof accountAttentionRows)[number]) => {
     if (row.reviewIndex === undefined) return;
+    onRequestPane?.();
     setPendingAccountFocusKey(row.key);
     setReviewIndex(row.reviewIndex);
   };
@@ -455,7 +473,13 @@ export function PaymentListReviewContent({
                 </table>
               </div>
             </section>
-          ) : null}
+          ) : (
+            <div className="finance-review-empty" role="status">
+              <ShieldCheck size={30} />
+              <strong>暂无可定位的付款明细</strong>
+              <p>当前审核记录已发生变化，请使用上方翻页重新加载付款清单。</p>
+            </div>
+          )}
 
           {accountDisplay === 'current-full' ? (
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
