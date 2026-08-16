@@ -18,7 +18,9 @@ describe('PaymentListEditor', () => {
     expect(source).toContain('onPointerUp');
     expect(source).toContain('ArrowLeft');
     expect(source).toContain('ArrowRight');
-    expect(css).toContain('grid-template-columns: minmax(300px, .88fr) minmax(420px, 1.12fr)');
+    expect(css).toContain('--payment-editor-inset');
+    expect(css).toContain('min-height: 56px');
+    expect(css).toContain('grid-template-columns: minmax(360px, .9fr) minmax(520px, 1.1fr)');
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toContain('touch-action');
     expect(css).toContain('payment-list-editor-bulk-fill');

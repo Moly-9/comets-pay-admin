@@ -1,3 +1,7 @@
+.modal-panel.payment-list-editor-modal {
+  max-height: min(900px, calc(100vh - 48px));
+}
+
 .payment-list-editor-modal .modal-content {
   display: flex;
   min-height: 0;
@@ -6,8 +10,9 @@
 }
 
 .payment-list-editor {
+  --payment-editor-inset: clamp(16px, 1.8vw, 26px);
   display: flex;
-  min-height: min(760px, calc(100vh - 150px));
+  min-height: min(820px, calc(100vh - 120px));
   flex-direction: column;
   outline: none;
   background: #f5f7fa;
@@ -21,7 +26,7 @@
   gap: 16px;
   border-bottom: 1px solid #e4e8ee;
   background: #fff;
-  padding: 16px 22px;
+  padding: var(--payment-editor-inset);
 }
 
 .payment-list-editor-header > div { display: grid; min-width: 0; gap: 3px; }
@@ -32,12 +37,12 @@
 .payment-list-editor-state.is-ready { background: #eaf8f0; color: #24764a; }
 .payment-list-editor-state.is-warning { background: #fff5e8; color: #a05a21; }
 
-.payment-list-editor-progress { display: flex; gap: 7px; overflow-x: auto; border-bottom: 1px solid #e4e8ee; background: #fff; padding: 10px 22px; }
+.payment-list-editor-progress { display: flex; min-height: 56px; box-sizing: border-box; align-items: center; gap: 7px; overflow-x: auto; border-bottom: 1px solid #e4e8ee; background: #fff; padding: 12px var(--payment-editor-inset); }
 .payment-list-editor-progress button { flex: 0 0 auto; border: 0; background: transparent; padding: 0; cursor: pointer; }
 .payment-list-editor-progress button span { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid #cdd5df; border-radius: 50%; color: #6d7785; font-size: 11px; }
 .payment-list-editor-progress button span.is-warning { border-color: #e8b36e; color: #a05a21; }
 .payment-list-editor-progress button.is-active span { border-color: #2d6cdf; background: #2d6cdf; color: #fff; box-shadow: 0 0 0 3px #e5edff; }
-.payment-list-editor-bulk-fill { display: grid; gap: 10px; border-bottom: 1px solid #e4e8ee; background: #fbfcfe; padding: 12px 22px 14px; }
+.payment-list-editor-bulk-fill { display: grid; gap: 10px; border-bottom: 1px solid #e4e8ee; background: #fbfcfe; padding: var(--payment-editor-inset); }
 .payment-list-editor-bulk-fill-heading { display: flex; align-items: baseline; gap: 9px; }
 .payment-list-editor-bulk-fill-heading strong { color: #273241; font-size: 12px; }
 .payment-list-editor-bulk-fill-heading span { color: #7a8491; font-size: 11px; }
@@ -48,7 +53,7 @@
 .payment-list-editor-bulk-fill-fields input:disabled { background: #f5f7f9; color: #677382; opacity: 1; }
 .payment-list-editor-bulk-fill-fields .button { flex: 0 0 auto; min-height: 34px; padding: 0 11px; white-space: nowrap; }
 
-.payment-list-editor-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(300px, .88fr) minmax(420px, 1.12fr); gap: 16px; overflow: auto; padding: 18px 22px; }
+.payment-list-editor-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(360px, .9fr) minmax(520px, 1.1fr); gap: var(--payment-editor-inset); overflow: auto; padding: var(--payment-editor-inset); }
 .payment-list-editor-invoice, .payment-list-editor-payment { min-width: 0; border: 1px solid #e0e5eb; border-radius: 10px; background: #fff; padding: 18px; }
 .payment-list-editor-section-title { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 16px; }
 .payment-list-editor-section-title > span { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 7px; background: #f0eaff; color: #7656b6; }
@@ -89,7 +94,7 @@
 .payment-list-editor-validation ul { margin: 5px 0 0; padding-left: 16px; font-size: 11px; line-height: 1.5; }
 .payment-list-editor-validation .button { flex: 0 0 auto; min-height: 28px; padding: 0 8px; font-size: 11px; }
 
-.payment-list-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid #e1e6ec; background: #fff; padding: 12px 22px; }
+.payment-list-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid #e1e6ec; background: #fff; padding: var(--payment-editor-inset); }
 .payment-list-editor-footer > span { display: inline-flex; align-items: center; gap: 5px; color: #77818e; font-size: 11px; }
 .payment-list-editor-footer > div { display: flex; gap: 8px; }
 .payment-list-editor-empty { display: grid; min-height: 260px; place-items: center; align-content: center; gap: 12px; color: #6b7684; }
@@ -116,13 +121,17 @@
 .payment-list-overview-recovery { border-radius: 6px; background: #fff4f0; padding: 8px 10px; color: #96483d; font-size: 11px; }
 
 @media (max-width: 900px) {
+  .modal-panel.payment-list-editor-modal { max-height: calc(100vh - 32px); }
+  .payment-list-editor { --payment-editor-inset: 16px; min-height: min(760px, calc(100vh - 104px)); }
   .payment-list-editor-body { grid-template-columns: 1fr; }
   .payment-list-editor-invoice { order: 1; }
   .payment-list-editor-payment { order: 2; }
 }
 
 @media (max-width: 560px) {
-  .payment-list-editor-header, .payment-list-editor-bulk-fill, .payment-list-editor-body, .payment-list-editor-footer { padding-right: 14px; padding-left: 14px; }
+  .modal-panel.payment-list-editor-modal { max-height: calc(100vh - 16px); border-radius: 12px; }
+  .payment-list-editor { --payment-editor-inset: 14px; min-height: calc(100vh - 92px); }
+  .payment-list-editor-header, .payment-list-editor-bulk-fill, .payment-list-editor-body, .payment-list-editor-footer { padding-right: var(--payment-editor-inset); padding-left: var(--payment-editor-inset); }
   .payment-list-editor-bulk-fill-fields { grid-template-columns: 1fr; }
   .payment-list-editor-fields, .payment-list-editor-snapshot-grid, .payment-list-editor-account-details { grid-template-columns: 1fr; }
   .payment-list-editor-fields label.is-wide, .payment-list-editor-account-details > strong { grid-column: auto; }
