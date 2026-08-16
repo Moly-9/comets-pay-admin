@@ -1049,6 +1049,42 @@ export function FinanceReviewWorkspace({
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true">{documentKind === 'contract' ? <Files size={17} /> : <FileText size={17} />}</span><span><strong>{activeDocumentLabel}</strong><small title={activeDocumentMeta}>{activeDocumentMeta}</small></span></div>
+                <div
+                  className="finance-review-document-switcher finance-review-document-header-controls"
+                  aria-label="凭证快照切换"
+                  data-testid="finance-review-document-controls"
+                >
+                  <label className="finance-review-document-switch-field">
+                    <span>凭证</span>
+                    <SelectField<ReviewDocumentKind>
+                      ariaLabel="选择凭证类型"
+                      value={documentKind}
+                      options={documentKindOptions}
+                      variant="form"
+                      menuStrategy="fixed"
+                      menuWidth={210}
+                      className="finance-review-document-kind-select"
+                      onChange={changeDocumentKind}
+                    />
+                  </label>
+                  {documentKind === 'contract' ? (
+                    <label className="finance-review-document-switch-field is-contract">
+                      <span>合同</span>
+                      <SelectField<string>
+                        ariaLabel="选择具体合同"
+                        value={selectedContractId}
+                        options={contractOptions}
+                        variant="form"
+                        menuStrategy="fixed"
+                        menuWidth={300}
+                        className="finance-review-document-contract-select"
+                        placeholder="请选择合同"
+                        disabled={!contractOptions.length}
+                        onChange={changeContract}
+                      />
+                    </label>
+                  ) : null}
+                </div>
                 <div className="finance-review-invoice-header-actions">
                   {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
                   <div className="finance-review-zoom-controls" role="group" aria-label={`${activeDocumentLabel}缩放`}>
@@ -1085,38 +1121,6 @@ export function FinanceReviewWorkspace({
                   </div>
                 </div>
               </header>
-              <div className="finance-review-document-switcher" aria-label="凭证快照切换">
-                <label className="finance-review-document-switch-field">
-                  <span>凭证类型</span>
-                  <SelectField<ReviewDocumentKind>
-                    ariaLabel="选择凭证类型"
-                    value={documentKind}
-                    options={documentKindOptions}
-                    variant="form"
-                    menuStrategy="fixed"
-                    menuWidth={210}
-                    className="finance-review-document-kind-select"
-                    onChange={changeDocumentKind}
-                  />
-                </label>
-                {documentKind === 'contract' ? (
-                  <label className="finance-review-document-switch-field is-contract">
-                    <span>具体合同</span>
-                    <SelectField<string>
-                      ariaLabel="选择具体合同"
-                      value={selectedContractId}
-                      options={contractOptions}
-                      variant="form"
-                      menuStrategy="fixed"
-                      menuWidth={300}
-                      className="finance-review-document-contract-select"
-                      placeholder="请选择合同"
-                      disabled={!contractOptions.length}
-                      onChange={changeContract}
-                    />
-                  </label>
-                ) : null}
-              </div>
               <div
                 ref={invoiceCanvasRef}
                 className="finance-review-invoice-canvas"

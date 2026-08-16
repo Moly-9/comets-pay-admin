@@ -177,7 +177,7 @@ describe('request payment account validation', () => {
       now: () => '2026-08-09T00:00:00.000Z',
     })).resolves.toEqual({
       state: 'passed',
-      message: 'Airwallex API 已确认收款账户字段完整',
+      message: 'Airwallex 付款信息完整性校验通过，收款账户字段完整',
       checkedAt: '2026-08-09T00:00:00.000Z',
     });
     expect(requestMock.mock.calls.map(([input]) => String(input))).toEqual([

@@ -191,7 +191,7 @@ describe('request project payment presentation', () => {
     );
 
     expect(source).toContain('<PaymentListReviewContent');
-    expect(viewerSource).toContain('校验账户完整性');
+    expect(viewerSource).toContain('校验 Airwallex 付款信息完整性');
     expect(viewerSource).toContain('导出 Excel');
     expect(viewerSource).toContain('<dt>收款账户</dt>');
     expect(viewerSource).toContain('<dt>付款金额</dt>');

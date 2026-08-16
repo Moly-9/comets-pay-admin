@@ -120,7 +120,7 @@ describe('shared payment-list finance review content', () => {
   it('simplifies the workspace summary and places account validation inside its status card', () => {
     expect(reviewContentSource).toContain("{variant === 'project' ? (");
     expect(reviewContentSource).toContain('request-payment-review-summary-action');
-    expect(reviewContentSource).toContain("{validating ? '校验中' : '校验账户完整性'}");
+    expect(reviewContentSource).toContain("{validating ? 'Airwallex 校验中' : '校验 Airwallex 付款信息完整性'}");
     expect(workspaceSource).toContain('variant="finance-workspace"');
     expect(workspaceSource).not.toContain('exportMode="current"');
   });

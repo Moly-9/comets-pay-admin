@@ -261,14 +261,14 @@ export function PaymentListReviewContent({
   };
 
   const summaryTitle = validating
-    ? '正在校验收款账户'
+    ? '正在调用 Airwallex 校验付款信息'
     : allApiChecksPassed
-      ? '全部收款账户已通过 API 校验'
+      ? 'Airwallex 付款信息完整性校验通过'
       : apiIssueCount
-        ? `${apiIssueCount} 笔 API 校验未通过`
+        ? `${apiIssueCount} 笔 Airwallex 付款信息校验未通过`
         : snapshotAttentionCount
           ? `${snapshotAttentionCount} 笔账户快照需要处理`
-          : '账户快照完整，待 API 校验';
+          : '账户快照完整，待 Airwallex API 校验';
 
   const renderValidation = (row: (typeof rows)[number]) => {
     const check = accountChecks[row.key];
@@ -325,7 +325,7 @@ export function PaymentListReviewContent({
                 disabled={validating}
                 onClick={() => { void validateAccounts(); }}
               >
-                {validating ? '校验中' : '校验账户完整性'}
+                {validating ? 'Airwallex 校验中' : '校验 Airwallex 付款信息完整性'}
               </Button>
               {exportLists.map((list) => (
                 <Button
@@ -359,7 +359,7 @@ export function PaymentListReviewContent({
             </span>
             <div>
               <strong>{summaryTitle}</strong>
-              <p>审批前应核对付款必填字段与冻结信息；Airwallex API 会校验付款所需的账户与交易资料是否完整，不改写付款数据。</p>
+              <p>审批前应核对付款必填字段与冻结信息；点击后调用 Airwallex 付款信息完整性接口，校验付款所需的账户与交易资料，不改写付款数据。</p>
               {accountDisplay === 'current-full' && accountAttentionRows.length ? (
                 <ul className="request-payment-attention-list" aria-label="需要处理的收款账户">
                   {accountAttentionRows.map((row) => (
@@ -390,7 +390,7 @@ export function PaymentListReviewContent({
                 disabled={validating}
                 onClick={() => { void validateAccounts(); }}
               >
-                {validating ? '校验中' : '校验账户完整性'}
+                {validating ? 'Airwallex 校验中' : '校验 Airwallex 付款信息完整性'}
               </Button>
             ) : null}
           </div>

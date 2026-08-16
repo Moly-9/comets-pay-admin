@@ -243,7 +243,7 @@ export const validatePaymentListAccountViaApi = async ({
     );
     return {
       state: 'passed',
-      message: 'Airwallex API 已确认收款账户字段完整',
+      message: 'Airwallex 付款信息完整性校验通过，收款账户字段完整',
       checkedAt: now(),
     };
   } catch (error) {

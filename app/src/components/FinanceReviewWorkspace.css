@@ -338,10 +338,13 @@
   display: flex;
   min-width: 0;
   align-items: flex-end;
-  gap: 9px;
-  border-bottom: 1px solid #e3e6ea;
-  background: #fff;
-  padding: 8px 12px 9px;
+  gap: 7px;
+}
+
+.finance-review-document-header-controls {
+  flex: 0 1 auto;
+  max-width: min(42%, 330px);
+  margin-left: auto;
 }
 
 .finance-review-document-switch-field {
@@ -351,8 +354,16 @@
   gap: 4px;
 }
 
+.finance-review-document-header-controls .finance-review-document-switch-field {
+  flex-basis: 132px;
+}
+
 .finance-review-document-switch-field.is-contract {
   flex: 1 1 220px;
+}
+
+.finance-review-document-header-controls .finance-review-document-switch-field.is-contract {
+  flex-basis: 190px;
 }
 
 .finance-review-document-switch-field > span {
@@ -371,6 +382,10 @@
 
 .finance-review-document-kind-select {
   width: 148px;
+}
+
+.finance-review-document-header-controls .finance-review-document-kind-select {
+  width: 132px;
 }
 
 .finance-review-document-contract-select {
@@ -423,9 +438,20 @@
     justify-content: center;
   }
 
+  .finance-review-pane-header {
+    flex-wrap: wrap;
+    align-content: center;
+  }
+
+  .finance-review-document-header-controls {
+    order: 3;
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+
   .finance-review-document-switcher {
     align-items: stretch;
-    flex-direction: column;
     gap: 7px;
   }
 
@@ -433,8 +459,16 @@
   .finance-review-document-switch-field.is-contract,
   .finance-review-document-kind-select,
   .finance-review-document-contract-select {
-    width: 100%;
+    width: auto;
     flex-basis: auto;
+  }
+
+  .finance-review-document-switch-field:first-child {
+    flex: 0 0 132px;
+  }
+
+  .finance-review-document-switch-field.is-contract {
+    flex: 1 1 0;
   }
 
   .finance-review-footer {
@@ -471,6 +505,22 @@
 }
 
 @media (max-width: 480px) {
+  .finance-review-document-header-controls {
+    gap: 6px;
+  }
+
+  .finance-review-document-switch-field:first-child {
+    flex-basis: 124px;
+  }
+
+  .finance-review-document-kind-select {
+    width: 124px;
+  }
+
+  .finance-review-document-switch-field.is-contract {
+    min-width: 0;
+  }
+
   .finance-review-overview-heading {
     grid-template-columns: auto minmax(0, 1fr);
   }

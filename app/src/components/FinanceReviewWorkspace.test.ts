@@ -231,13 +231,17 @@ describe('FinanceReviewWorkspace document switching', () => {
 
   it('keeps the document switcher and two-level contract selector in the invoice pane', () => {
     expect(workspaceSource).toContain('data-testid="finance-review-validation-stage"');
+    expect(workspaceSource).toContain('className="finance-review-document-switcher finance-review-document-header-controls"');
+    expect(workspaceSource).toContain('data-testid="finance-review-document-controls"');
     expect(workspaceSource).toContain('aria-label="凭证快照切换"');
     expect(workspaceSource).toContain('选择凭证类型');
     expect(workspaceSource).toContain('选择具体合同');
     expect(workspaceSource).toContain('没有合同');
     expect(workspaceSource).toContain('<ContractDocumentView contract={selectedContract}');
     expect(workspaceSource).toContain('setDocumentKind(\'invoice\')');
+    expect(workspaceSource).not.toContain('<div className="finance-review-document-switcher"');
     expect(workspaceStageStyles).toContain('.finance-review-document-switcher');
+    expect(workspaceStageStyles).toContain('.finance-review-document-header-controls');
     expect(workspaceStageStyles).toContain('@media (max-width: 900px)');
   });
 });
