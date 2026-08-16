@@ -463,19 +463,25 @@ export type PaymentFailureRecoveryStatus =
   | 'READY_FOR_RETRY'
   | 'RETRY_SUBMITTED';
 
-export type PaymentFailureNotificationDelivery = {
+export type PaymentNotificationDelivery = {
   channel: 'IN_APP' | 'GMAIL';
   status: 'SIMULATED_SENT' | 'SKIPPED_MISSING_RECIPIENT';
   recipientLabel: string;
 };
 
-export type PaymentFailureNotification = {
+export type PaymentNotification = {
   message: string;
   actorAccount: string;
   actorName: string;
   occurredAt: string;
-  deliveries: PaymentFailureNotificationDelivery[];
+  deliveries: PaymentNotificationDelivery[];
 };
+
+/** @deprecated Use PaymentNotificationDelivery for new notification flows. */
+export type PaymentFailureNotificationDelivery = PaymentNotificationDelivery;
+
+/** @deprecated Use PaymentNotification for new notification flows. */
+export type PaymentFailureNotification = PaymentNotification;
 
 export type PaymentFailureRecovery = {
   status: PaymentFailureRecoveryStatus;

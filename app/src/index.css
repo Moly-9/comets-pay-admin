@@ -7587,6 +7587,7 @@ body:has(.finance-review-workspace) {
   display: flex;
   align-items: flex-start;
   gap: 7px;
+  flex-wrap: wrap;
   margin: 0 14px 12px;
   border-left: 2px solid #c85a4e;
   background: #fff5f3;
@@ -7604,6 +7605,22 @@ body:has(.finance-review-workspace) {
 .request-approval-return-item-note span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.request-approval-return-item-note .button {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.request-approval-return-item-delivery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 14px 12px;
+  color: #657384;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .project-payment-revalidate {

@@ -8,6 +8,7 @@ import type {
   Payout,
   PayoutAccountVersion,
   PayoutAccountStatus,
+  PaymentNotification,
 } from './types';
 
 declare const entityIdBrand: unique symbol;
@@ -53,6 +54,7 @@ export type RequestApprovalReturnItem = {
     paymentListId: PaymentListId;
     itemId: string;
   }>;
+  notifications?: PaymentNotification[];
 };
 
 export type RequestApprovalEvent = {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEMO_SYSTEM_USERS } from './data';
 import {
   applyRequestApprovalAction,
+  appendRequestApprovalReturnNotification,
   canReturnRequestApproval,
   canReviewRequestApproval,
   createRequestApprovalState,
@@ -158,6 +159,52 @@ describe('request approval workflow', () => {
       { ...returned, status: 'PENDING_FINANCE' },
       invoiceId,
     )).toBe(false);
+  });
+
+  it('appends a payment-list notification only to the targeted returned Invoice', () => {
+    const finance = userFor('finance');
+    const targetInvoiceId = 'invoice-notification-target' as never;
+    const otherInvoiceId = 'invoice-notification-other' as never;
+    const returned = applyRequestApprovalAction(
+      { ...createRequestApprovalState(), status: 'PENDING_FINANCE' },
+      'RETURN',
+      finance,
+      '付款账户需要修改',
+      '2026-08-10T07:00:00.000Z',
+      [
+        {
+          pageKey: 'invoice:notification-target',
+          invoiceId: targetInvoiceId,
+          invoiceNumber: 'INV-TARGET',
+          issueType: 'PAYMENT_LIST',
+          reason: '收款账户需要修改',
+          paymentItems: [],
+        },
+        {
+          pageKey: 'invoice:notification-other',
+          invoiceId: otherInvoiceId,
+          invoiceNumber: 'INV-OTHER',
+          issueType: 'PAYMENT_LIST',
+          reason: '金额需要确认',
+          paymentItems: [],
+        },
+      ],
+    );
+    const updated = appendRequestApprovalReturnNotification(returned, targetInvoiceId, {
+      message: '请更新收款账户。',
+      actorAccount: 'media@example.test',
+      actorName: '项目媒介',
+      occurredAt: '2026-08-10T08:00:00.000Z',
+      deliveries: [
+        { channel: 'IN_APP', status: 'SIMULATED_SENT', recipientLabel: '达人站内信' },
+        { channel: 'GMAIL', status: 'SIMULATED_SENT', recipientLabel: 'c***@example.test' },
+      ],
+    });
+
+    expect(updated.returnItems?.find((item) => item.invoiceId === targetInvoiceId)?.notifications).toHaveLength(1);
+    expect(updated.returnItems?.find((item) => item.invoiceId === otherInvoiceId)?.notifications).toBeUndefined();
+    expect(updated.status).toBe('RETURNED_TO_MEDIA_REVIEW');
+    expect(updated.resumeStatus).toBe('PENDING_FINANCE');
   });
 
   it('returns an approved unpaid request from payment execution back to finance review', () => {

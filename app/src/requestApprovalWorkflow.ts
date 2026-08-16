@@ -7,6 +7,7 @@ import type {
   RequestApprovalState,
   RequestApprovalStatus,
 } from './businessWorkflow';
+import type { PaymentNotification } from './types';
 
 export type RequestApprovalAction = 'APPROVE' | 'RETURN';
 
@@ -94,6 +95,35 @@ export const requestApprovalAllowsInvoicePayoutOverride = (
 ) => state?.status === 'RETURNED_TO_MEDIA_REVIEW' && Boolean(
   requestApprovalReturnItemForInvoice(state, invoiceId, 'INVOICE_CONTENT'),
 );
+
+export const appendRequestApprovalReturnNotification = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+  notification: PaymentNotification,
+): RequestApprovalState => {
+  if (!state || state.status !== 'RETURNED_TO_MEDIA_REVIEW') {
+    throw new Error('当前请款项目不在媒介修改状态。');
+  }
+  const returnEvent = [...state.history].reverse().find((event) => (
+    event.action === 'RETURN' && event.round === state.round
+  ));
+  const sourceItems = state.returnItems ?? returnEvent?.returnItems ?? [];
+  let matched = false;
+  const returnItems = sourceItems.map((item) => {
+    if (item.invoiceId !== invoiceId || item.issueType !== 'PAYMENT_LIST') return item;
+    matched = true;
+    return {
+      ...item,
+      notifications: [...(item.notifications ?? []), notification],
+    };
+  });
+  if (!matched) throw new Error('未找到可通知的付款清单退回明细。');
+  return {
+    ...state,
+    returnItems,
+    updatedAt: notification.occurredAt,
+  };
+};
 
 export const requestApprovalStage = (
   status: RequestApprovalStatus,

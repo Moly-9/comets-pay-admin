@@ -77,6 +77,7 @@ type Props = {
   canHandlePaymentFailure?: boolean;
   onFailureFocusHandled?: () => void;
   onSendPaymentFailureNotification?: (payoutId: string, message: string) => boolean;
+  onSendPaymentListReturnNotification?: (requestId: string, invoiceId: InvoiceId, message: string) => boolean;
   onSimulatePaymentFailureAccountUpdate?: (payoutId: string) => boolean;
   onRevalidatePaymentFailureAccount?: (payoutId: string) => boolean;
   currentUser: SystemUser;
@@ -326,6 +327,7 @@ export function RequestProjectResourceManager({
   canHandlePaymentFailure = false,
   onFailureFocusHandled,
   onSendPaymentFailureNotification,
+  onSendPaymentListReturnNotification,
   onSimulatePaymentFailureAccountUpdate,
   onRevalidatePaymentFailureAccount,
   currentUser,
@@ -356,6 +358,7 @@ export function RequestProjectResourceManager({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
+  const [notificationReturnInvoiceId, setNotificationReturnInvoiceId] = useState<InvoiceId | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [paymentEditorListId, setPaymentEditorListId] = useState<PaymentListId | null>(null);
   const [paymentEditorInvoiceId, setPaymentEditorInvoiceId] = useState<InvoiceId | null>(null);
@@ -403,6 +406,20 @@ export function RequestProjectResourceManager({
   const notificationPayout = notificationPayoutId
     ? payouts.find((payout) => payout.id === notificationPayoutId) ?? null
     : null;
+  const notificationReturnItem = notificationReturnInvoiceId
+    ? requestApprovalReturnItemForInvoice(request.approval, notificationReturnInvoiceId, 'PAYMENT_LIST') ?? null
+    : null;
+  const notificationReturnInvoice = notificationReturnInvoiceId
+    ? invoices.find((invoice) => invoice.invoiceId === notificationReturnInvoiceId) ?? null
+    : null;
+  const notificationReturnPaymentItem = notificationReturnInvoiceId
+    ? currentPaymentList?.items.find((item) => item.invoiceId === notificationReturnInvoiceId) ?? null
+    : null;
+  const notificationReturnCreatorId = notificationReturnInvoice?.snapshot.creatorId
+    ?? notificationReturnPaymentItem?.snapshot.creatorId;
+  const notificationReturnCreator = notificationReturnCreatorId
+    ? creators.find((creator) => creator.id === notificationReturnCreatorId) ?? null
+    : null;
 
   useEffect(() => {
     if (focusedFailurePayoutId) setResourceDialog('payment');
@@ -432,6 +449,7 @@ export function RequestProjectResourceManager({
   }, [focusedFailurePayoutId, invoices, onFailureFocusHandled, resourceDialog]);
 
   const openFailureNotification = (payout: Payout) => {
+    setNotificationReturnInvoiceId(null);
     setNotificationPayoutId(payout.id);
     setNotificationMessage(`您的 ${payout.invoice} 付款未成功，请更新收款账户后在系统中反馈，以便重新安排付款。`);
   };
@@ -441,10 +459,35 @@ export function RequestProjectResourceManager({
     setNotificationMessage('');
   };
 
+  const openPaymentListReturnNotification = (
+    invoiceId: InvoiceId,
+    returnItem: { invoiceNumber: string; reason: string },
+  ) => {
+    setNotificationPayoutId(null);
+    setNotificationReturnInvoiceId(invoiceId);
+    setNotificationMessage(`您的 ${returnItem.invoiceNumber} 付款明细已退回修改，原因：${returnItem.reason}。请登录达人端更新相关付款信息后重新提交。`);
+  };
+
+  const closePaymentListReturnNotification = () => {
+    setNotificationReturnInvoiceId(null);
+    setNotificationMessage('');
+  };
+
   const submitFailureNotification = () => {
     if (!notificationPayout || !notificationMessage.trim()) return;
     if (onSendPaymentFailureNotification?.(notificationPayout.id, notificationMessage.trim())) {
       closeFailureNotification();
+    }
+  };
+
+  const submitPaymentListReturnNotification = () => {
+    if (!notificationReturnItem || !notificationReturnInvoiceId || !notificationMessage.trim()) return;
+    if (onSendPaymentListReturnNotification?.(
+      request.paymentRequestProjectId ?? request.id,
+      notificationReturnInvoiceId,
+      notificationMessage.trim(),
+    )) {
+      closePaymentListReturnNotification();
     }
   };
 
@@ -720,6 +763,21 @@ export function RequestProjectResourceManager({
                       <div className="request-approval-return-item-note" role="note">
                         <AlertTriangle size={15} />
                         <span><strong>退回原因：</strong>{paymentListReturn.reason}</span>
+                        {canEditPaymentList && onSendPaymentListReturnNotification ? (
+                          <Button
+                            variant="ghost"
+                            icon={<Send size={14} />}
+                            onClick={() => openPaymentListReturnNotification(item.invoiceId, paymentListReturn)}
+                          >
+                            通知达人
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {paymentListReturn?.notifications?.length ? (
+                      <div className="request-approval-return-item-delivery" role="status">
+                        <Mail size={14} aria-hidden="true" />
+                        已通知 {paymentListReturn.notifications.length} 次 · 最近一次 {paymentListReturn.notifications[paymentListReturn.notifications.length - 1]?.deliveries.map((delivery) => `${delivery.channel === 'IN_APP' ? '站内信' : 'Gmail'}${delivery.status === 'SIMULATED_SENT' ? '已发送' : '未发送'}`).join(' / ')}
                       </div>
                     ) : null}
                     {failurePayout && recovery ? (
@@ -792,22 +850,33 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
-      {notificationPayout ? (
+      {notificationPayout || notificationReturnItem ? (
         <Modal
-          title="发送付款失败通知"
+          title={notificationReturnItem ? '通知达人修改付款明细' : '发送付款失败通知'}
           width="560px"
-          onClose={closeFailureNotification}
+          onClose={notificationReturnItem ? closePaymentListReturnNotification : closeFailureNotification}
           footer={(
             <>
-              <Button variant="ghost" onClick={closeFailureNotification}>取消</Button>
-              <Button icon={<Send size={16} />} disabled={!notificationMessage.trim()} onClick={submitFailureNotification}>模拟发送</Button>
+              <Button variant="ghost" onClick={notificationReturnItem ? closePaymentListReturnNotification : closeFailureNotification}>取消</Button>
+              <Button
+                icon={<Send size={16} />}
+                disabled={!notificationMessage.trim() || (Boolean(notificationReturnItem) && !onSendPaymentListReturnNotification)}
+                onClick={notificationReturnItem ? submitPaymentListReturnNotification : submitFailureNotification}
+              >
+                模拟发送
+              </Button>
             </>
           )}
         >
           <div className="payment-failure-notification-dialog">
             <div className="payment-failure-notification-recipient">
-              <strong>{notificationPayout.creator}</strong>
-              <span>{notificationPayout.invoice} · {notificationPayout.provider} · {notificationPayout.currency} {notificationPayout.amount.toLocaleString('en-US')}</span>
+              <strong>{notificationReturnCreator?.name ?? notificationPayout?.creator ?? '当前达人'}</strong>
+              <span>
+                {notificationReturnItem
+                  ? `${notificationReturnInvoice?.id ?? notificationReturnItem.invoiceNumber} · ${request.paymentChannel || '付款渠道待确认'} · 退回修改`
+                  : `${notificationPayout?.invoice} · ${notificationPayout?.provider} · ${notificationPayout?.currency} ${notificationPayout?.amount.toLocaleString('en-US')}`}
+              </span>
+              {notificationReturnItem ? <small>退回原因：{notificationReturnItem.reason}</small> : null}
             </div>
             <div className="payment-failure-notification-channels" aria-label="模拟通知渠道">
               <span><Send size={15} aria-hidden="true" />站内信</span>
@@ -818,7 +887,7 @@ export function RequestProjectResourceManager({
               <textarea
                 autoFocus
                 maxLength={300}
-                aria-label="付款失败通知内容"
+                aria-label={notificationReturnItem ? '付款清单退回通知内容' : '付款失败通知内容'}
                 value={notificationMessage}
                 onChange={(event) => setNotificationMessage(event.target.value)}
               />

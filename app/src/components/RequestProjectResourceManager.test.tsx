@@ -225,9 +225,22 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).toContain('payment-list-overview-state');
     expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
     expect(paymentRowsSource).toContain('paymentListReturn.reason');
+    expect(paymentRowsSource).toContain('通知达人');
+    expect(paymentRowsSource).toContain('paymentListReturn.notifications');
+    expect(paymentRowsSource).toContain('canEditPaymentList && onSendPaymentListReturnNotification');
     expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
     expect(paymentRowsSource).toContain('编辑本笔');
     expect(paymentRowsSource).toContain('查看本笔');
+  });
+
+  it('keeps payment-return notifications separate from Invoice-content returns', () => {
+    const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
+    const paymentRowsSource = source.slice(source.indexOf('payment-list-overview-rows'));
+    expect(paymentRowsSource).toContain("requestApprovalReturnItemForInvoice(");
+    expect(paymentRowsSource).toContain("'PAYMENT_LIST'");
+    expect(source).toContain("'INVOICE_CONTENT'");
+    expect(source).toContain('通知达人修改付款明细');
+    expect(source).toContain('当前仅模拟发送并保留通知记录');
   });
 });
 

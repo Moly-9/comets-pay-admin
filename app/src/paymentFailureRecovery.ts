@@ -1,8 +1,8 @@
 import type {
-  PaymentFailureNotificationDelivery,
   Payout,
   PayoutAccountVersion,
 } from './types';
+import { createPaymentNotification } from './paymentNotification';
 
 export type PaymentFailureRecoveryActor = {
   account: string;
@@ -46,14 +46,6 @@ const nextAccountVersion = (value?: PayoutAccountVersion): PayoutAccountVersion 
   const current = value && value !== 'legacy-v1' ? Number(value.slice(1)) : 1;
   return `v${Number.isFinite(current) ? current + 1 : 2}`;
 };
-
-const maskEmail = (value: string) => {
-  const [local, domain] = value.trim().split('@');
-  if (!local || !domain) return '达人档案邮箱待补充';
-  return `${local.slice(0, 1)}***@${domain}`;
-};
-
-const validEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
 
 export const isPaymentFailureRetryCandidate = (payout: Payout) => (
   payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
@@ -121,21 +113,12 @@ export const recordPaymentFailureNotification = (
   if (!isPaymentFailureRetryCandidate(payout)) {
     throw new Error('当前付款不在账户更新恢复流程中。');
   }
-  const normalizedMessage = message.trim();
-  if (!normalizedMessage) throw new Error('通知内容不能为空。');
-  if (normalizedMessage.length > 300) throw new Error('通知内容不能超过 300 字。');
-  const deliveries: PaymentFailureNotificationDelivery[] = [
-    {
-      channel: 'IN_APP',
-      status: 'SIMULATED_SENT',
-      recipientLabel: '达人站内信',
-    },
-    {
-      channel: 'GMAIL',
-      status: validEmail(email) ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
-      recipientLabel: maskEmail(email),
-    },
-  ];
+  const notification = createPaymentNotification(
+    actor,
+    message,
+    email,
+    occurredAt,
+  );
   return {
     ...payout,
     paymentFailureRecovery: {
@@ -150,13 +133,7 @@ export const recordPaymentFailureNotification = (
         : payout.paymentFailureRecovery!.readyReason,
       notifications: [
         ...payout.paymentFailureRecovery!.notifications,
-        {
-          message: normalizedMessage,
-          actorAccount: actor.account,
-          actorName: actor.name,
-          occurredAt,
-          deliveries,
-        },
+        notification,
       ],
     },
   };

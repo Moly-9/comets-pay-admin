@@ -207,10 +207,12 @@ import {
   requestApprovalHasScopedReturnItems,
   requestApprovalReturnItemForInvoice,
   requestApprovalStage,
+  appendRequestApprovalReturnNotification,
   returnApprovedRequestToMediaReview,
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
 import { requestApprovalReminderFor } from './requestApprovalReminders';
+import { recordPaymentListReturnNotification } from './paymentNotification';
 
 const INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -2645,6 +2647,75 @@ export default function App() {
     }
   };
 
+  const sendPaymentListReturnNotification = (
+    requestId: string,
+    invoiceId: InvoiceId,
+    message: string,
+  ) => {
+    if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
+      notify('暂无通知权限', '仅项目媒介、管理员或老板可以通知达人修改付款明细。');
+      return false;
+    }
+    const request = requestProjects.find((candidate) => (
+      candidate.id === requestId || candidate.paymentRequestProjectId === requestId
+    ));
+    if (!request?.approval) {
+      notify('无法发送通知', '未找到当前请款项目或审批记录。');
+      return false;
+    }
+    const paymentListReturn = requestApprovalReturnItemForInvoice(
+      request.approval,
+      invoiceId,
+      'PAYMENT_LIST',
+    );
+    if (!paymentListReturn) {
+      notify('无法发送通知', '当前付款明细没有可处理的付款清单退回记录。');
+      return false;
+    }
+    const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+    const paymentItem = paymentLists
+      .filter((list) => (
+        (Boolean(request.paymentRequestProjectId) && list.paymentRequestProjectId === request.paymentRequestProjectId)
+        || (!request.paymentRequestProjectId && !list.paymentRequestProjectId && list.projectId === request.projectId)
+      ))
+      .flatMap((list) => list.items)
+      .find((item) => item.invoiceId === invoiceId);
+    const creatorId = invoice?.snapshot.creatorId ?? paymentItem?.snapshot.creatorId;
+    const creator = creators.find((candidate) => candidate.id === creatorId);
+    try {
+      const updatedReturnItem = recordPaymentListReturnNotification(
+        paymentListReturn,
+        { account: currentUser.account, name: currentUser.name },
+        message,
+        creator?.contact.email ?? '',
+        nowIso(),
+      );
+      const notification = updatedReturnItem.notifications?.[updatedReturnItem.notifications.length - 1];
+      if (!notification) throw new Error('通知记录生成失败。');
+      const updatedApproval = appendRequestApprovalReturnNotification(
+        request.approval,
+        invoiceId,
+        notification,
+      );
+      setRequestProjects((current) => current.map((candidate) => (
+        candidate.id === request.id
+          ? { ...candidate, approval: updatedApproval }
+          : candidate
+      )));
+      const gmailDelivery = notification.deliveries.find((delivery) => delivery.channel === 'GMAIL');
+      notify(
+        '通知已记录',
+        gmailDelivery?.status === 'SKIPPED_MISSING_RECIPIENT'
+          ? '站内信已发送，达人档案缺少邮箱，Gmail 未发送。'
+          : '站内信与 Gmail 发送结果已按原型流程保存。',
+      );
+      return true;
+    } catch (error) {
+      notify('无法发送通知', error instanceof Error ? error.message : '当前付款明细不能通知达人。');
+      return false;
+    }
+  };
+
   const simulatePaymentFailureAccountUpdate = (payoutId: string) => {
     if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
       notify('暂无操作权限', '仅项目媒介、管理员或老板可以记录达人账户更新反馈。');
@@ -3592,6 +3663,7 @@ export default function App() {
           onSubmitRequest={submitMediaPaymentRequest}
           resourceActions={requestResourceActions}
           onSendPaymentFailureNotification={sendPaymentFailureNotification}
+          onSendPaymentListReturnNotification={sendPaymentListReturnNotification}
           onSimulatePaymentFailureAccountUpdate={simulatePaymentFailureAccountUpdate}
           onRevalidatePaymentFailureAccount={revalidatePaymentFailureAccount}
         />

@@ -513,6 +513,7 @@ export function MediaPaymentProjectsPage({
   onSubmitRequest,
   resourceActions,
   onSendPaymentFailureNotification = () => false,
+  onSendPaymentListReturnNotification = () => false,
   onSimulatePaymentFailureAccountUpdate = () => false,
   onRevalidatePaymentFailureAccount = () => false,
 }: {
@@ -536,6 +537,7 @@ export function MediaPaymentProjectsPage({
   onSubmitRequest: (request: RequestProjectSummary) => void;
   resourceActions: RequestProjectResourceActions;
   onSendPaymentFailureNotification?: (payoutId: string, message: string) => boolean;
+  onSendPaymentListReturnNotification?: (requestId: string, invoiceId: InvoiceId, message: string) => boolean;
   onSimulatePaymentFailureAccountUpdate?: (payoutId: string) => boolean;
   onRevalidatePaymentFailureAccount?: (payoutId: string) => boolean;
 }) {
@@ -1241,6 +1243,7 @@ export function MediaPaymentProjectsPage({
               onFailureFocusCleared();
             }}
             onSendPaymentFailureNotification={onSendPaymentFailureNotification}
+            onSendPaymentListReturnNotification={onSendPaymentListReturnNotification}
             onSimulatePaymentFailureAccountUpdate={onSimulatePaymentFailureAccountUpdate}
             onRevalidatePaymentFailureAccount={onRevalidatePaymentFailureAccount}
             currentUser={currentUser}
