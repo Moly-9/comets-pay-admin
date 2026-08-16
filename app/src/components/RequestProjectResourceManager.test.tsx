@@ -234,6 +234,10 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
     expect(paymentRowsSource).toContain('编辑本笔');
     expect(paymentRowsSource).toContain('查看本笔');
+    expect(source).toContain('请完成付款信息校验');
+    expect(source).toContain('paymentEditorCloseWarning');
+    expect(source).toContain("['admin', 'project', 'owner'].includes(currentUser.roleKey)");
+    expect(source).toContain('closePaymentEditor');
   });
 
   it('keeps payment-return notifications separate from Invoice-content returns', () => {

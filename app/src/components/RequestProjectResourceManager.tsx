@@ -365,6 +365,7 @@ export function RequestProjectResourceManager({
   const [paymentEditorListId, setPaymentEditorListId] = useState<PaymentListId | null>(null);
   const [paymentEditorInvoiceId, setPaymentEditorInvoiceId] = useState<InvoiceId | null>(null);
   const [paymentEditorMode, setPaymentEditorMode] = useState<'view' | 'edit'>('edit');
+  const [paymentEditorCloseWarning, setPaymentEditorCloseWarning] = useState(false);
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -405,6 +406,11 @@ export function RequestProjectResourceManager({
   const paymentEditorList = paymentEditorListId
     ? paymentLists.find((list) => list.paymentListId === paymentEditorListId) ?? null
     : null;
+  useEffect(() => {
+    if (paymentEditorCloseWarning && paymentEditorList && !paymentEditorList.items.some((item) => item.requiresRevalidation)) {
+      setPaymentEditorCloseWarning(false);
+    }
+  }, [paymentEditorCloseWarning, paymentEditorList]);
   const notificationPayout = notificationPayoutId
     ? payouts.find((payout) => payout.id === notificationPayoutId) ?? null
     : null;
@@ -510,6 +516,21 @@ export function RequestProjectResourceManager({
     setPaymentEditorListId(paymentListId);
     setPaymentEditorInvoiceId(invoiceId ?? null);
     setPaymentEditorMode(mode);
+    setPaymentEditorCloseWarning(false);
+  };
+
+  const closePaymentEditor = () => {
+    const requiresRevalidation = paymentEditorMode === 'edit'
+      && ['admin', 'project', 'owner'].includes(currentUser.roleKey)
+      && Boolean(paymentEditorList?.items.some((item) => item.requiresRevalidation));
+    if (requiresRevalidation) {
+      setPaymentEditorCloseWarning(true);
+      return;
+    }
+    setPaymentEditorCloseWarning(false);
+    setPaymentEditorListId(null);
+    setPaymentEditorInvoiceId(null);
+    setPaymentEditorMode('edit');
   };
 
   const contractCandidates = contractAssociationCandidates(contracts, cooperationProjectId);
@@ -852,7 +873,13 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {resourceDialog === 'payment' && paymentEditorList ? (
-        <Modal title={`${request.requestCode ?? request.id} · ${paymentEditorMode === 'view' ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); setPaymentEditorMode('edit'); }} footer={null}>
+        <Modal title={`${request.requestCode ?? request.id} · ${paymentEditorMode === 'view' ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={closePaymentEditor} footer={null}>
+          {paymentEditorCloseWarning ? (
+            <NoticeBanner onClose={() => setPaymentEditorCloseWarning(false)}>
+              <strong>请完成付款信息校验</strong>
+              <span>修改后的付款明细需要点击“重新校验”，校验通过后才能关闭此弹窗。</span>
+            </NoticeBanner>
+          ) : null}
           <PaymentListEditor
             list={paymentEditorList}
             initialInvoiceId={paymentEditorInvoiceId ?? undefined}
@@ -864,7 +891,7 @@ export function RequestProjectResourceManager({
             onUpdatePaymentItem={onUpdatePaymentItem}
             onChangePaymentAccount={onChangePaymentAccount}
             onRevalidatePaymentItem={onRevalidatePaymentItem}
-            onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); setPaymentEditorMode('edit'); }}
+            onClose={closePaymentEditor}
           />
         </Modal>
       ) : null}
