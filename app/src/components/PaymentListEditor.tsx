@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import {
   paymentListEffectiveAccount,
   paymentListItemValue,
@@ -28,6 +28,7 @@ import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import { eligibleInvoicePayoutAccounts, getPayoutAccountId, getPayoutAccountSelectPresentation } from '../payoutAccounts';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, SelectField } from './Common';
+import { InvoiceDocumentView } from './InvoiceDocumentView';
 import './PaymentListEditor.css';
 
 type Props = {
@@ -101,8 +102,6 @@ export function PaymentListEditor({
   const [dragStartX, setDragStartX] = useState<number | null>(null);
   const [bulkPaymentReason, setBulkPaymentReason] = useState('');
   const [bulkTransactionReference, setBulkTransactionReference] = useState('');
-  const [invoicePdfUrl, setInvoicePdfUrl] = useState<string | null>(null);
-  const [invoicePdfError, setInvoicePdfError] = useState(false);
   const [invoicePdfZoom, setInvoicePdfZoom] = useState(1);
   const item = list.items[activeIndex];
   const invoice = item ? invoices.find((candidate) => candidate.invoiceId === item.invoiceId) : undefined;
@@ -122,28 +121,7 @@ export function PaymentListEditor({
     ? [{ value: 'PAYPAL', label: 'PayPal' }]
     : [{ value: 'LOCAL', label: 'LOCAL' }, { value: 'SWIFT', label: 'SWIFT' }];
 
-  useEffect(() => {
-    let active = true;
-    let objectUrl: string | null = null;
-    setInvoicePdfUrl(null);
-    setInvoicePdfError(false);
-    setInvoicePdfZoom(1);
-    if (!snapshot) return () => undefined;
-    void import('../invoice/generateInvoice')
-      .then(({ generateInvoicePdf }) => generateInvoicePdf(snapshot))
-      .then((blob) => {
-        if (!active) return;
-        objectUrl = URL.createObjectURL(blob);
-        setInvoicePdfUrl(objectUrl);
-      })
-      .catch(() => {
-        if (active) setInvoicePdfError(true);
-      });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [invoice?.invoiceId, snapshot]);
+  useEffect(() => setInvoicePdfZoom(1), [invoice?.invoiceId]);
   const accountOptions = useMemo(() => {
     if (!creator || !item) return [];
     const eligible = eligibleInvoicePayoutAccounts(creator)
@@ -248,8 +226,29 @@ export function PaymentListEditor({
               <Button variant="ghost" icon={<RotateCcw size={14} />} aria-label="重置 Invoice 快照缩放" title="重置" disabled={invoicePdfZoom === 1} onClick={() => setInvoicePdfZoom(1)} />
             </div>
           </div>
-          <div className="payment-list-editor-pdf-viewport">
-            {invoicePdfUrl ? <iframe title={`${item.snapshot.invoiceNumber} Invoice PDF 快照`} src={invoicePdfUrl} style={{ width: `${100 / invoicePdfZoom}%`, height: `${100 / invoicePdfZoom}%`, transform: `scale(${invoicePdfZoom})`, transformOrigin: 'top left' }} /> : <div className="payment-list-editor-pdf-state">{invoicePdfError ? 'Invoice PDF 快照生成失败，以下为结构化快照' : '正在生成 Invoice PDF 快照…'}</div>}
+          <div
+            className="payment-list-editor-invoice-canvas"
+            tabIndex={0}
+            aria-label={`${item.snapshot.invoiceNumber} Invoice 快照查看区`}
+            onKeyDown={(event) => {
+              if (!event.ctrlKey && !event.metaKey) return;
+              if (event.key === '+' || event.key === '=') {
+                event.preventDefault();
+                setInvoicePdfZoom((value) => Math.min(1.5, Number((value + 0.1).toFixed(1))));
+              } else if (event.key === '-') {
+                event.preventDefault();
+                setInvoicePdfZoom((value) => Math.max(0.8, Number((value - 0.1).toFixed(1))));
+              } else if (event.key === '0') {
+                event.preventDefault();
+                setInvoicePdfZoom(1);
+              }
+            }}
+          >
+            {snapshot ? (
+              <div className="payment-list-editor-invoice-zoom-stage" style={{ '--payment-editor-invoice-zoom': invoicePdfZoom } as CSSProperties}>
+                <InvoiceDocumentView model={snapshot} ariaLabel={`${item.snapshot.invoiceNumber} Invoice 快照`} />
+              </div>
+            ) : <div className="payment-list-editor-pdf-state">未找到 Invoice 快照</div>}
           </div>
           <dl className="payment-list-editor-snapshot-grid">
             <div><dt>Invoice 编号</dt><dd>{display(snapshot?.invoiceNumber ?? item.snapshot.invoiceNumber)}</dd></div>
