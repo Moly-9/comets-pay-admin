@@ -136,6 +136,7 @@
 .payment-list-overview-row-summary b { display: block; overflow: hidden; margin-top: 3px; color: #455263; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .payment-list-overview-row-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #edf0f3; padding-top: 9px; color: #a05a21; font-size: 11px; }
 .payment-list-overview-row-footer .text-link { flex: 0 0 auto; }
+.payment-list-overview-row-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 14px; }
 .payment-list-overview-recovery { border-radius: 6px; background: #fff4f0; padding: 8px 10px; color: #96483d; font-size: 11px; }
 
 @media (max-width: 900px) {

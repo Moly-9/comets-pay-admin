@@ -359,6 +359,7 @@ export function RequestProjectResourceManager({
   const [notificationMessage, setNotificationMessage] = useState('');
   const [paymentEditorListId, setPaymentEditorListId] = useState<PaymentListId | null>(null);
   const [paymentEditorInvoiceId, setPaymentEditorInvoiceId] = useState<InvoiceId | null>(null);
+  const [paymentEditorMode, setPaymentEditorMode] = useState<'view' | 'edit'>('edit');
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -455,14 +456,15 @@ export function RequestProjectResourceManager({
     onGeneratePaymentLists();
   };
 
-  const openPaymentEditor = (paymentListId: PaymentListId, invoiceId?: InvoiceId) => {
+  const openPaymentEditor = (paymentListId: PaymentListId, invoiceId?: InvoiceId, mode: 'view' | 'edit' = 'edit') => {
     const list = paymentLists.find((candidate) => candidate.paymentListId === paymentListId);
     if (!list) return;
-    const readOnly = ['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList;
+    const readOnly = mode === 'view' || (['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList);
     if (!readOnly && !canEditPaymentList) return;
     if (!readOnly && list.status !== 'draft') onBeginEditPaymentList(paymentListId);
     setPaymentEditorListId(paymentListId);
     setPaymentEditorInvoiceId(invoiceId ?? null);
+    setPaymentEditorMode(mode);
   };
 
   const contractCandidates = contractAssociationCandidates(contracts, cooperationProjectId);
@@ -761,7 +763,7 @@ export function RequestProjectResourceManager({
                       </section>
                     ) : null}
                     {recovery ? <div className="payment-list-overview-recovery">{paymentFailureRecoveryLabel(failurePayout!)} · {recovery.status}</div> : null}
-                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><button type="button" className="text-link" onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId)}>{(['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList) || !canEditPaymentList ? '查看本笔' : '编辑本笔'}</button></footer>
+                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><span className="payment-list-overview-row-actions">{canEditPaymentList && canEditSubmittedPaymentList && ['submitted', 'approved', 'paid'].includes(list.status) ? <button type="button" className="text-link" onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId, 'view')}>查看本笔</button> : null}<button type="button" className="text-link" onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId, canEditPaymentList && (!['submitted', 'approved', 'paid'].includes(list.status) || canEditSubmittedPaymentList) ? 'edit' : 'view')}>{canEditPaymentList && (!['submitted', 'approved', 'paid'].includes(list.status) || canEditSubmittedPaymentList) ? '编辑本笔' : '查看本笔'}</button></span></footer>
                   </article>
                 );
               })}
@@ -773,19 +775,19 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {resourceDialog === 'payment' && paymentEditorList ? (
-        <Modal title={`${request.requestCode ?? request.id} · ${['submitted', 'approved', 'paid'].includes(paymentEditorList.status) && !canEditSubmittedPaymentList ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); }} footer={null}>
+        <Modal title={`${request.requestCode ?? request.id} · ${paymentEditorMode === 'view' ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); setPaymentEditorMode('edit'); }} footer={null}>
           <PaymentListEditor
             list={paymentEditorList}
             initialInvoiceId={paymentEditorInvoiceId ?? undefined}
             invoices={invoices}
             contracts={contracts}
             creators={creators}
-            editable={canEditPaymentList && paymentEditorList.status === 'draft'}
+            editable={paymentEditorMode === 'edit' && canEditPaymentList && paymentEditorList.status === 'draft'}
             requestPaymentProvider={requestPaymentProvider}
             onUpdatePaymentItem={onUpdatePaymentItem}
             onChangePaymentAccount={onChangePaymentAccount}
             onRevalidatePaymentItem={onRevalidatePaymentItem}
-            onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); }}
+            onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); setPaymentEditorMode('edit'); }}
           />
         </Modal>
       ) : null}
