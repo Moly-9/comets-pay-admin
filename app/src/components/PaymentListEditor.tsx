@@ -162,36 +162,37 @@ export function PaymentListEditor({
       aria-label="逐笔付款明细编辑器"
     >
       <header className="payment-list-editor-header">
-        <div><span className="payment-list-editor-kicker">付款明细 {activeIndex + 1} / {list.items.length}</span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {account.provider}</small></div>
-        <span className={`payment-list-editor-state ${issues.length ? 'is-warning' : 'is-ready'}`}>{issues.length ? <CircleAlert size={15} /> : <CheckCircle2 size={15} />}{issues.length ? '待完善' : '已完成'}</span>
+        <div className="payment-list-editor-header-summary"><span className="payment-list-editor-kicker">付款明细 {activeIndex + 1} / {list.items.length}</span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {account.provider}</small></div>
+        <div className="payment-list-editor-header-actions">
+          <span className={`payment-list-editor-state ${issues.length ? 'is-warning' : 'is-ready'}`}>{issues.length ? <CircleAlert size={15} /> : <CheckCircle2 size={15} />}{issues.length ? '待完善' : '已完成'}</span>
+          <section className="payment-list-editor-bulk-fill" aria-label="整单批量填入">
+            <div className="payment-list-editor-bulk-fill-heading">
+              <strong>整单批量填入</strong>
+              <span>输入内容后应用到当前付款清单的 {list.items.length} 笔付款</span>
+            </div>
+            <div className="payment-list-editor-bulk-fill-fields">
+              <label>
+                付款原因
+                <div>
+                  <input aria-label="整单付款原因" placeholder="输入后填入全部付款行" value={bulkPaymentReason} disabled={!editable} onChange={(event) => setBulkPaymentReason(event.target.value)} />
+                  <Button variant="secondary" disabled={!editable || !bulkPaymentReason.trim() || !list.items.length} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
+                </div>
+              </label>
+              <label>
+                交易附言
+                <div>
+                  <input aria-label="整单交易附言" placeholder="输入后填入全部付款行" value={bulkTransactionReference} disabled={!editable} onChange={(event) => setBulkTransactionReference(event.target.value)} />
+                  <Button variant="secondary" disabled={!editable || !bulkTransactionReference.trim() || !list.items.length} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
+                </div>
+              </label>
+            </div>
+          </section>
+        </div>
       </header>
 
       <div className="payment-list-editor-progress" aria-label="付款明细进度">
         {list.items.map((candidate, index) => <button key={candidate.id} type="button" className={index === activeIndex ? 'is-active' : ''} aria-label={`查看第 ${index + 1} 笔付款`} onClick={() => setActiveIndex(index)}><span className={rowIssues(list, candidate).length ? 'is-warning' : ''}>{index + 1}</span></button>)}
       </div>
-
-      <section className="payment-list-editor-bulk-fill" aria-label="整单批量填入">
-        <div className="payment-list-editor-bulk-fill-heading">
-          <strong>整单批量填入</strong>
-          <span>输入内容后应用到当前付款清单的 {list.items.length} 笔付款</span>
-        </div>
-        <div className="payment-list-editor-bulk-fill-fields">
-          <label>
-            付款原因
-            <div>
-              <input aria-label="整单付款原因" placeholder="输入后填入全部付款行" value={bulkPaymentReason} disabled={!editable} onChange={(event) => setBulkPaymentReason(event.target.value)} />
-              <Button variant="secondary" disabled={!editable || !bulkPaymentReason.trim() || !list.items.length} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
-            </div>
-          </label>
-          <label>
-            交易附言
-            <div>
-              <input aria-label="整单交易附言" placeholder="输入后填入全部付款行" value={bulkTransactionReference} disabled={!editable} onChange={(event) => setBulkTransactionReference(event.target.value)} />
-              <Button variant="secondary" disabled={!editable || !bulkTransactionReference.trim() || !list.items.length} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
-            </div>
-          </label>
-        </div>
-      </section>
 
       <div className="payment-list-editor-body">
         <section className="payment-list-editor-invoice" aria-label="Invoice 快照">

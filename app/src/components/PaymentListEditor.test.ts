@@ -12,6 +12,7 @@ describe('PaymentListEditor', () => {
     expect(source).toContain('PayMax');
     expect(source).toContain('onUpdatePaymentItem');
     expect(source).toContain('整单批量填入');
+    expect(source).toContain('payment-list-editor-header-actions');
     expect(source).toContain("applyBulkField('paymentReason', bulkPaymentReason)");
     expect(source).toContain("applyBulkField('transactionReference', bulkTransactionReference)");
     expect(source).toContain('list.items.forEach');
@@ -19,6 +20,7 @@ describe('PaymentListEditor', () => {
     expect(source).toContain('ArrowLeft');
     expect(source).toContain('ArrowRight');
     expect(css).toContain('--payment-editor-inset');
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 2fr)');
     expect(css).toContain('min-height: 56px');
     expect(css).toContain('grid-template-columns: minmax(360px, .9fr) minmax(520px, 1.1fr)');
     expect(css).toContain('@media (max-width: 900px)');
