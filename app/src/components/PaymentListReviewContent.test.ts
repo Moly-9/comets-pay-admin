@@ -103,6 +103,10 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('路由代码类型 1');
     expect(reviewContentSource).toContain("return details?.accountName || fallbackName || '未填写'");
     expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');
+    expect(reviewContentSource).not.toContain("id: 'bank-street-address'");
+    expect(reviewContentSource).not.toContain("id: 'bank-city'");
+    expect(reviewContentSource).not.toContain("id: 'bank-state'");
+    expect(reviewContentSource).not.toContain("id: 'bank-postal-code'");
   });
 
   it('renders matching fields as accessible green circle-check icons', () => {
