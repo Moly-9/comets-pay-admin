@@ -21,17 +21,18 @@
 
 .payment-list-editor-header {
   display: grid;
-  align-items: center;
+  align-items: stretch;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 16px;
   border-bottom: 1px solid #e4e8ee;
-  background: #fff;
-  padding: var(--payment-editor-inset);
+  background: #f5f7fa;
+  padding: 12px var(--payment-editor-inset);
 }
 
-.payment-list-editor-header-summary { display: grid; min-width: 0; align-content: center; gap: 3px; }
-.payment-list-editor-header-actions { display: grid; min-width: 0; align-content: center; gap: 9px; }
-.payment-list-editor-header-actions .payment-list-editor-state { justify-self: end; }
+.payment-list-editor-header-summary, .payment-list-editor-header-actions { min-width: 0; border: 1px solid #e0e5eb; border-radius: 9px; background: #fff; }
+.payment-list-editor-header-summary { display: grid; min-height: 78px; align-content: center; gap: 3px; padding: 12px 16px; }
+.payment-list-editor-header-actions { position: relative; display: block; padding: 10px 16px; }
+.payment-list-editor-header-actions .payment-list-editor-state { position: absolute; top: 10px; right: 16px; }
 .payment-list-editor-kicker { color: #6d7785; font-size: 11px; }
 .payment-list-editor-header strong { color: #1f2937; font-size: 18px; }
 .payment-list-editor-header small { color: #6d7785; font-size: 12px; }
@@ -44,8 +45,9 @@
 .payment-list-editor-progress button span { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid #cdd5df; border-radius: 50%; color: #6d7785; font-size: 11px; }
 .payment-list-editor-progress button span.is-warning { border-color: #e8b36e; color: #a05a21; }
 .payment-list-editor-progress button.is-active span { border-color: #2d6cdf; background: #2d6cdf; color: #fff; box-shadow: 0 0 0 3px #e5edff; }
-.payment-list-editor-bulk-fill { display: grid; gap: 8px; border: 0; background: transparent; padding: 0; }
+.payment-list-editor-bulk-fill { display: grid; gap: 8px; border: 0; background: transparent; padding: 6px 0 0; }
 .payment-list-editor-bulk-fill-heading { display: flex; align-items: baseline; gap: 9px; }
+.payment-list-editor-bulk-fill-heading { padding-right: 100px; }
 .payment-list-editor-bulk-fill-heading strong { color: #273241; font-size: 12px; }
 .payment-list-editor-bulk-fill-heading span { color: #7a8491; font-size: 11px; }
 .payment-list-editor-bulk-fill-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -126,6 +128,7 @@
   .modal-panel.payment-list-editor-modal { max-height: calc(100vh - 32px); }
   .payment-list-editor { --payment-editor-inset: 16px; min-height: min(760px, calc(100vh - 104px)); }
   .payment-list-editor-header { grid-template-columns: 1fr; align-items: stretch; }
+  .payment-list-editor-header-summary { min-height: 66px; }
   .payment-list-editor-header-actions .payment-list-editor-state { justify-self: start; }
   .payment-list-editor-body { grid-template-columns: 1fr; }
   .payment-list-editor-invoice { order: 1; }
