@@ -78,6 +78,7 @@ type Props = {
   onFailureFocusHandled?: () => void;
   onSendPaymentFailureNotification?: (payoutId: string, message: string) => boolean;
   onSendPaymentListReturnNotification?: (requestId: string, invoiceId: InvoiceId, message: string) => boolean;
+  onSimulatePaymentListReturnAccountUpdate?: (requestId: string, invoiceId: InvoiceId) => boolean;
   onSimulatePaymentFailureAccountUpdate?: (payoutId: string) => boolean;
   onRevalidatePaymentFailureAccount?: (payoutId: string) => boolean;
   currentUser: SystemUser;
@@ -328,6 +329,7 @@ export function RequestProjectResourceManager({
   onFailureFocusHandled,
   onSendPaymentFailureNotification,
   onSendPaymentListReturnNotification,
+  onSimulatePaymentListReturnAccountUpdate,
   onSimulatePaymentFailureAccountUpdate,
   onRevalidatePaymentFailureAccount,
   currentUser,
@@ -772,12 +774,29 @@ export function RequestProjectResourceManager({
                             通知达人
                           </Button>
                         ) : null}
+                        {canEditPaymentList && onSimulatePaymentListReturnAccountUpdate ? (
+                          <Button
+                            variant="ghost"
+                            icon={<UserCheck size={14} />}
+                            disabled={!paymentListReturn.notifications?.length || Boolean(paymentListReturn.accountUpdate)}
+                            title={!paymentListReturn.notifications?.length ? '请先通知达人' : paymentListReturn.accountUpdate ? '已记录达人账户更新' : '模拟达人完成账户信息修改'}
+                            onClick={() => onSimulatePaymentListReturnAccountUpdate(request.paymentRequestProjectId ?? request.id, item.invoiceId)}
+                          >
+                            {paymentListReturn.accountUpdate ? '已记录账户更新' : '模拟达人已修改账户'}
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
                     {paymentListReturn?.notifications?.length ? (
                       <div className="request-approval-return-item-delivery" role="status">
                         <Mail size={14} aria-hidden="true" />
                         已通知 {paymentListReturn.notifications.length} 次 · 最近一次 {paymentListReturn.notifications[paymentListReturn.notifications.length - 1]?.deliveries.map((delivery) => `${delivery.channel === 'IN_APP' ? '站内信' : 'Gmail'}${delivery.status === 'SIMULATED_SENT' ? '已发送' : '未发送'}`).join(' / ')}
+                      </div>
+                    ) : null}
+                    {paymentListReturn?.accountUpdate ? (
+                      <div className="request-approval-return-item-account-update" role="status">
+                        <UserCheck size={14} aria-hidden="true" />
+                        达人已完成账户修改 · {paymentListReturn.accountUpdate.payoutAccountVersion ?? '新账户版本'} · 待重新校验
                       </div>
                     ) : null}
                     {failurePayout && recovery ? (

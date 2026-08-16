@@ -3,6 +3,7 @@ import { DEMO_SYSTEM_USERS } from './data';
 import {
   applyRequestApprovalAction,
   appendRequestApprovalReturnNotification,
+  recordRequestApprovalReturnAccountUpdate,
   canReturnRequestApproval,
   canReviewRequestApproval,
   createRequestApprovalState,
@@ -205,6 +206,40 @@ describe('request approval workflow', () => {
     expect(updated.returnItems?.find((item) => item.invoiceId === otherInvoiceId)?.notifications).toBeUndefined();
     expect(updated.status).toBe('RETURNED_TO_MEDIA_REVIEW');
     expect(updated.resumeStatus).toBe('PENDING_FINANCE');
+  });
+
+  it('records a simulated creator account update only on the targeted payment return', () => {
+    const finance = userFor('finance');
+    const targetInvoiceId = 'invoice-account-update-target' as never;
+    const returned = applyRequestApprovalAction(
+      { ...createRequestApprovalState(), status: 'PENDING_FINANCE' },
+      'RETURN',
+      finance,
+      '付款账户需要修改',
+      '2026-08-10T07:00:00.000Z',
+      [{
+        pageKey: 'invoice:account-update-target',
+        invoiceId: targetInvoiceId,
+        invoiceNumber: 'INV-ACCOUNT-UPDATE',
+        issueType: 'PAYMENT_LIST',
+        reason: '收款账户需要修改',
+        paymentItems: [],
+      }],
+    );
+    const updated = recordRequestApprovalReturnAccountUpdate(returned, targetInvoiceId, {
+      status: 'UPDATED',
+      occurredAt: '2026-08-10T09:00:00.000Z',
+      payoutAccountVersion: 'v3',
+      accountFingerprint: 'fp-demo-v3',
+    });
+
+    expect(updated.returnItems?.[0]?.accountUpdate).toEqual({
+      status: 'UPDATED',
+      occurredAt: '2026-08-10T09:00:00.000Z',
+      payoutAccountVersion: 'v3',
+      accountFingerprint: 'fp-demo-v3',
+    });
+    expect(updated.status).toBe('RETURNED_TO_MEDIA_REVIEW');
   });
 
   it('returns an approved unpaid request from payment execution back to finance review', () => {

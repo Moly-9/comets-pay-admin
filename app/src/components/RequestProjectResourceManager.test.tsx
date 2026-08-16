@@ -227,6 +227,9 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).toContain('paymentListReturn.reason');
     expect(paymentRowsSource).toContain('通知达人');
     expect(paymentRowsSource).toContain('paymentListReturn.notifications');
+    expect(paymentRowsSource).toContain('模拟达人已修改账户');
+    expect(paymentRowsSource).toContain('paymentListReturn.accountUpdate');
+    expect(paymentRowsSource).toContain('待重新校验');
     expect(paymentRowsSource).toContain('canEditPaymentList && onSendPaymentListReturnNotification');
     expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
     expect(paymentRowsSource).toContain('编辑本笔');

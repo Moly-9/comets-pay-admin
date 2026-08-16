@@ -44,6 +44,13 @@ export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
 
 export type RequestApprovalReturnIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
 
+export type RequestApprovalReturnAccountUpdate = {
+  status: 'UPDATED';
+  occurredAt: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  accountFingerprint?: string;
+};
+
 export type RequestApprovalReturnItem = {
   pageKey: string;
   invoiceId?: InvoiceId;
@@ -55,6 +62,7 @@ export type RequestApprovalReturnItem = {
     itemId: string;
   }>;
   notifications?: PaymentNotification[];
+  accountUpdate?: RequestApprovalReturnAccountUpdate;
 };
 
 export type RequestApprovalEvent = {

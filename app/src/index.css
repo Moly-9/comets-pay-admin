@@ -7623,6 +7623,16 @@ body:has(.finance-review-workspace) {
   line-height: 1.4;
 }
 
+.request-approval-return-item-account-update {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 14px 12px;
+  color: #2f7a55;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .project-payment-revalidate {
   display: inline-flex;
   width: fit-content;

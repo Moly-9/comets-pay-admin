@@ -115,6 +115,7 @@ import type {
   NavPage,
   PaymentFailureIssueType,
   Payout,
+  PayoutAccountVersion,
   RequestProjectStatusFilter,
   ToastState,
 } from './types';
@@ -208,6 +209,7 @@ import {
   requestApprovalReturnItemForInvoice,
   requestApprovalStage,
   appendRequestApprovalReturnNotification,
+  recordRequestApprovalReturnAccountUpdate,
   returnApprovedRequestToMediaReview,
   type RequestApprovalAction,
 } from './requestApprovalWorkflow';
@@ -2716,6 +2718,106 @@ export default function App() {
     }
   };
 
+  const simulatePaymentListReturnAccountUpdate = (
+    requestId: string,
+    invoiceId: InvoiceId,
+  ) => {
+    if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
+      notify('暂无操作权限', '仅项目媒介、管理员或老板可以记录达人账户已完成修改。');
+      return false;
+    }
+    const request = requestProjects.find((candidate) => (
+      candidate.id === requestId || candidate.paymentRequestProjectId === requestId
+    ));
+    if (!request?.approval) {
+      notify('无法记录账户更新', '未找到当前请款项目或审批记录。');
+      return false;
+    }
+    const paymentListReturn = requestApprovalReturnItemForInvoice(
+      request.approval,
+      invoiceId,
+      'PAYMENT_LIST',
+    );
+    if (!paymentListReturn) {
+      notify('无法记录账户更新', '当前付款明细没有可处理的付款清单退回记录。');
+      return false;
+    }
+    if (!paymentListReturn.notifications?.length) {
+      notify('请先通知达人', '向达人发送付款明细修改通知后，才能记录账户更新反馈。');
+      return false;
+    }
+    if (paymentListReturn.accountUpdate) {
+      notify('账户更新已记录', '当前付款明细已经记录过达人账户更新反馈。');
+      return false;
+    }
+    const paymentList = paymentLists.find((list) => (
+      ((Boolean(request.paymentRequestProjectId) && list.paymentRequestProjectId === request.paymentRequestProjectId)
+        || (!request.paymentRequestProjectId && !list.paymentRequestProjectId && list.projectId === request.projectId))
+      && list.items.some((item) => item.invoiceId === invoiceId)
+    ));
+    const paymentItem = paymentList?.items.find((item) => item.invoiceId === invoiceId);
+    const effectiveAccount = paymentItem ? paymentListEffectiveAccount(paymentItem) : null;
+    const creator = creators.find((candidate) => candidate.id === paymentItem?.snapshot.creatorId);
+    const currentAccount = creator && effectiveAccount?.payoutAccountId
+      ? creator.payoutAccounts.find((account) => getPayoutAccountId(account) === effectiveAccount.payoutAccountId)
+      : undefined;
+    if (!paymentList || !paymentItem || !creator || !currentAccount) {
+      notify('无法记录账户更新', '未找到该达人当前付款清单关联的收款账户。');
+      return false;
+    }
+    const currentVersion = getPayoutAccountVersion(currentAccount);
+    const versionNumber = currentVersion === 'legacy-v1' ? 1 : Number(currentVersion.slice(1));
+    const nextVersion = `v${Number.isFinite(versionNumber) ? versionNumber + 1 : 2}` as PayoutAccountVersion;
+    const occurredAt = nowIso();
+    const accountFingerprint = `fp_return_${request.id}_${invoiceId}_${nextVersion}`;
+    const accountUpdate = {
+      status: 'UPDATED' as const,
+      occurredAt,
+      payoutAccountVersion: nextVersion,
+      accountFingerprint,
+    };
+    try {
+      const updatedApproval = recordRequestApprovalReturnAccountUpdate(
+        request.approval,
+        invoiceId,
+        accountUpdate,
+      );
+      setCreators((current) => current.map((candidate) => candidate.id !== creator.id ? candidate : {
+        ...candidate,
+        payoutAccounts: candidate.payoutAccounts.map((account) => (
+          getPayoutAccountId(account) !== getPayoutAccountId(currentAccount)
+            ? account
+            : {
+                ...account,
+                payoutAccountVersion: nextVersion,
+                accountFingerprint,
+                status: 'READY_FOR_VALIDATION' as const,
+              }
+        )),
+      }));
+      setPaymentLists((current) => current.map((list) => list.paymentListId !== paymentList.paymentListId ? list : {
+        ...list,
+        updatedAt: occurredAt,
+        items: list.items.map((item) => item.invoiceId !== invoiceId ? item : {
+          ...item,
+          requiresRevalidation: true,
+          validationIssues: ['达人已完成账户修改，待重新校验'],
+          lastValidatedAt: undefined,
+        }),
+      }));
+      setRequestProjects((current) => current.map((candidate) => (
+        candidate.id === request.id
+          ? { ...candidate, approval: updatedApproval }
+          : candidate
+      )));
+      notify('已记录达人账户更新', '已生成新的原型账户版本，该付款明细进入待重新校验状态。');
+      return true;
+    } catch (error) {
+      notify('无法记录账户更新', error instanceof Error ? error.message : '当前付款明细不能记录账户更新。');
+      return false;
+    }
+  };
+
   const simulatePaymentFailureAccountUpdate = (payoutId: string) => {
     if (!['media', 'admin', 'owner'].includes(currentUser.roleKey)) {
       notify('暂无操作权限', '仅项目媒介、管理员或老板可以记录达人账户更新反馈。');
@@ -3676,6 +3778,7 @@ export default function App() {
           resourceActions={requestResourceActions}
           onSendPaymentFailureNotification={sendPaymentFailureNotification}
           onSendPaymentListReturnNotification={sendPaymentListReturnNotification}
+          onSimulatePaymentListReturnAccountUpdate={simulatePaymentListReturnAccountUpdate}
           onSimulatePaymentFailureAccountUpdate={simulatePaymentFailureAccountUpdate}
           onRevalidatePaymentFailureAccount={revalidatePaymentFailureAccount}
         />

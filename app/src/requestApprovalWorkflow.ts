@@ -6,6 +6,7 @@ import type {
   RequestApprovalStage,
   RequestApprovalState,
   RequestApprovalStatus,
+  RequestApprovalReturnAccountUpdate,
 } from './businessWorkflow';
 import type { PaymentNotification } from './types';
 
@@ -122,6 +123,35 @@ export const appendRequestApprovalReturnNotification = (
     ...state,
     returnItems,
     updatedAt: notification.occurredAt,
+  };
+};
+
+export const recordRequestApprovalReturnAccountUpdate = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+  accountUpdate: RequestApprovalReturnAccountUpdate,
+): RequestApprovalState => {
+  if (!state || state.status !== 'RETURNED_TO_MEDIA_REVIEW') {
+    throw new Error('当前请款项目不在媒介修改状态。');
+  }
+  const returnEvent = [...state.history].reverse().find((event) => (
+    event.action === 'RETURN' && event.round === state.round
+  ));
+  const sourceItems = state.returnItems ?? returnEvent?.returnItems ?? [];
+  let matched = false;
+  const returnItems = sourceItems.map((item) => {
+    if (item.invoiceId !== invoiceId || item.issueType !== 'PAYMENT_LIST') return item;
+    matched = true;
+    return {
+      ...item,
+      accountUpdate,
+    };
+  });
+  if (!matched) throw new Error('未找到可更新账户的付款清单退回明细。');
+  return {
+    ...state,
+    returnItems,
+    updatedAt: accountUpdate.occurredAt,
   };
 };
 
