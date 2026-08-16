@@ -386,6 +386,7 @@ export function RequestProjectResourceManager({
   const canEditPaymentList = canEdit
     && !paymentFailureRecoveryMode
     && (!hasScopedApprovalReturn || hasScopedPaymentListReturn);
+  const canEditSubmittedPaymentList = ['admin', 'project', 'owner'].includes(currentUser.roleKey);
   const paymentItemCount = currentPaymentList?.items.length ?? 0;
   const paymentListExportable = Boolean(
     currentPaymentList
@@ -457,7 +458,7 @@ export function RequestProjectResourceManager({
   const openPaymentEditor = (paymentListId: PaymentListId, invoiceId?: InvoiceId) => {
     const list = paymentLists.find((candidate) => candidate.paymentListId === paymentListId);
     if (!list) return;
-    const readOnly = ['submitted', 'approved', 'paid'].includes(list.status);
+    const readOnly = ['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList;
     if (!readOnly && !canEditPaymentList) return;
     if (!readOnly && list.status !== 'draft') onBeginEditPaymentList(paymentListId);
     setPaymentEditorListId(paymentListId);
@@ -671,7 +672,7 @@ export function RequestProjectResourceManager({
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
                 {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                {canEditPaymentList && currentPaymentList && !['submitted', 'approved', 'paid'].includes(currentPaymentList.status) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
+                {canEditPaymentList && currentPaymentList && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
                 {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!paymentListReady || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定，请点击编辑付款清单后再修改' : paymentListReady ? '生成付款清单' : `还有 ${paymentListIssues.length} 项付款信息待完善`} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
               </div>
             ) : null}
@@ -760,7 +761,7 @@ export function RequestProjectResourceManager({
                       </section>
                     ) : null}
                     {recovery ? <div className="payment-list-overview-recovery">{paymentFailureRecoveryLabel(failurePayout!)} · {recovery.status}</div> : null}
-                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><button type="button" className="text-link" onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId)}>{['submitted', 'approved', 'paid'].includes(list.status) || !canEditPaymentList ? '查看本笔' : '编辑本笔'}</button></footer>
+                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><button type="button" className="text-link" onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId)}>{(['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList) || !canEditPaymentList ? '查看本笔' : '编辑本笔'}</button></footer>
                   </article>
                 );
               })}
@@ -772,7 +773,7 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {resourceDialog === 'payment' && paymentEditorList ? (
-        <Modal title={`${request.requestCode ?? request.id} · ${['submitted', 'approved', 'paid'].includes(paymentEditorList.status) ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); }} footer={null}>
+        <Modal title={`${request.requestCode ?? request.id} · ${['submitted', 'approved', 'paid'].includes(paymentEditorList.status) && !canEditSubmittedPaymentList ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={() => { setPaymentEditorListId(null); setPaymentEditorInvoiceId(null); }} footer={null}>
           <PaymentListEditor
             list={paymentEditorList}
             initialInvoiceId={paymentEditorInvoiceId ?? undefined}
