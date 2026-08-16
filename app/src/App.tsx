@@ -3233,6 +3233,18 @@ export default function App() {
     registerRequestResourceMutation(request, 'payment-list', request.paymentRequestProjectId ?? request.id, 'update', summary);
   };
 
+  const recordPrivilegedPaymentListEdit = (request: RequestProjectSummary, summary: string) => {
+    registerRequestResourceMutation(request, 'payment-list', request.paymentRequestProjectId ?? request.id, 'update', summary);
+  };
+
+  const markPaymentListEdit = (request: RequestProjectSummary, summary: string) => {
+    if (['admin', 'project', 'owner'].includes(currentUser.roleKey)) {
+      recordPrivilegedPaymentListEdit(request, summary);
+      return;
+    }
+    markRequestResourceChanged(request, summary);
+  };
+
   const requestResourceActions: RequestProjectResourceActions = {
     onChangeLinks: changeRequestResourceLinks,
     onOpenContract: (request, contractId) => {
@@ -3383,7 +3395,7 @@ export default function App() {
           validationIssues: ['付款字段已修改，请重新校验'],
         } : item),
       } : candidate));
-      markRequestResourceChanged(request, `已修改 Invoice ${invoiceId} 的付款字段`);
+      markPaymentListEdit(request, `已修改 Invoice ${invoiceId} 的付款字段`);
     },
     onChangePaymentAccount: (request, paymentListId, invoiceId, payoutAccountId) => {
       const list = requestListFor(request, paymentListId);
@@ -3421,7 +3433,7 @@ export default function App() {
         }, occurredAt);
         setPayouts((current) => current.map((candidate) => candidate.id === changed.id ? changed : candidate));
       }
-      markRequestResourceChanged(request, `已更换 Invoice ${invoiceId} 的收款账户`);
+      markPaymentListEdit(request, `已更换 Invoice ${invoiceId} 的收款账户`);
     },
     onRevalidatePaymentItem: (request, paymentListId, invoiceId) => {
       const list = requestListFor(request, paymentListId);
@@ -3460,7 +3472,7 @@ export default function App() {
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? beginPaymentListEdit(candidate)
         : candidate));
-      markRequestResourceChanged(request, `已从 ${list.paymentListCode} v${list.version ?? 1} 创建编辑草稿`);
+      markPaymentListEdit(request, `已从 ${list.paymentListCode} v${list.version ?? 1} 创建编辑草稿`);
     },
     onGeneratePaymentListVersion: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
