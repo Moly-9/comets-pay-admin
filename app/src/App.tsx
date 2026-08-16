@@ -132,6 +132,7 @@ import {
   nextReviewStatusAfterMutation,
   nowIso,
   paymentListEffectiveAccount,
+  paymentListItemValue,
   paymentListForProvider,
   paymentListItemProvider,
   paymentListProviderForItems,
@@ -3298,7 +3299,9 @@ export default function App() {
     },
     onUpdatePaymentItem: (request, paymentListId, invoiceId, field, value) => {
       const list = requestListFor(request, paymentListId);
+      const item = list?.items.find((candidate) => candidate.invoiceId === invoiceId);
       if (!paymentListItemEditable(request, invoiceId) || !list || list.status !== 'draft') return;
+      if (!item || String(paymentListItemValue(item, field)) === String(value)) return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
         ...candidate,
         updatedAt: nowIso(),
@@ -3317,6 +3320,7 @@ export default function App() {
       const creator = creators.find((candidate) => candidate.id === item?.snapshot.creatorId);
       const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === payoutAccountId);
       if (!paymentListItemEditable(request, invoiceId) || !list || list.status !== 'draft' || !item || !creator || !account) return;
+      if (paymentListEffectiveAccount(item).payoutAccountId === payoutAccountId) return;
       const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
       if (requestPaymentProvider && account.provider !== requestPaymentProvider) {
         notify('收款账户渠道不一致', `当前请款项目固定使用 ${request.paymentChannel}，不能选择 ${account.provider} 账户。`);

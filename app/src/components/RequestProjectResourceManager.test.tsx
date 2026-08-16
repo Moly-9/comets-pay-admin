@@ -226,6 +226,7 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).toContain('paymentListReturn.reason');
     expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
     expect(paymentRowsSource).toContain('编辑本笔');
+    expect(paymentRowsSource).toContain('查看本笔');
   });
 });
 

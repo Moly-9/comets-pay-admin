@@ -31,6 +31,7 @@ import './PaymentListEditor.css';
 
 type Props = {
   list: PaymentListRecord;
+  initialInvoiceId?: PaymentListItem['invoiceId'];
   invoices: GeneratedInvoiceRecord[];
   contracts: ContractRecord[];
   creators: CreatorProfile[];
@@ -97,6 +98,7 @@ const rowIssues = (list: PaymentListRecord, item: PaymentListItem) => (
 
 export function PaymentListEditor({
   list,
+  initialInvoiceId,
   invoices,
   contracts,
   creators,
@@ -107,7 +109,7 @@ export function PaymentListEditor({
   onRevalidatePaymentItem,
   onClose,
 }: Props) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(() => initialInvoiceId ? Math.max(0, list.items.findIndex((candidate) => candidate.invoiceId === initialInvoiceId)) : 0);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
   const [bulkPaymentReason, setBulkPaymentReason] = useState('');
   const [bulkTransactionReference, setBulkTransactionReference] = useState('');
@@ -131,6 +133,11 @@ export function PaymentListEditor({
     : [{ value: 'LOCAL', label: 'LOCAL' }, { value: 'SWIFT', label: 'SWIFT' }];
 
   useEffect(() => setInvoicePdfZoom(1), [invoice?.invoiceId]);
+  useEffect(() => {
+    if (!initialInvoiceId) return;
+    const nextIndex = list.items.findIndex((candidate) => candidate.invoiceId === initialInvoiceId);
+    if (nextIndex >= 0) setActiveIndex(nextIndex);
+  }, [initialInvoiceId, list.items]);
   const accountOptions = useMemo(() => {
     if (!creator || !item) return [];
     const eligible = eligibleInvoicePayoutAccounts(creator)
