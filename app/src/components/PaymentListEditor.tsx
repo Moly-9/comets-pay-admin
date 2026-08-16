@@ -96,6 +96,8 @@ export function PaymentListEditor({
 }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [bulkPaymentReason, setBulkPaymentReason] = useState('');
+  const [bulkTransactionReference, setBulkTransactionReference] = useState('');
   const item = list.items[activeIndex];
   const invoice = item ? invoices.find((candidate) => candidate.invoiceId === item.invoiceId) : undefined;
   const creator = item ? creators.find((candidate) => candidate.id === item.snapshot.creatorId) : undefined;
@@ -132,6 +134,12 @@ export function PaymentListEditor({
   }
 
   const update = (field: PaymentListEditableField, value: string | number) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, field, value);
+  const applyBulkField = (field: 'paymentReason' | 'transactionReference', value: string) => {
+    if (!editable || !value.trim()) return;
+    list.items.forEach((paymentItem) => {
+      onUpdatePaymentItem(list.paymentListId, paymentItem.invoiceId, field, value);
+    });
+  };
   const move = (direction: -1 | 1) => setActiveIndex((current) => Math.min(Math.max(0, current + direction), list.items.length - 1));
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => setDragStartX(event.clientX);
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -161,6 +169,29 @@ export function PaymentListEditor({
       <div className="payment-list-editor-progress" aria-label="付款明细进度">
         {list.items.map((candidate, index) => <button key={candidate.id} type="button" className={index === activeIndex ? 'is-active' : ''} aria-label={`查看第 ${index + 1} 笔付款`} onClick={() => setActiveIndex(index)}><span className={rowIssues(list, candidate).length ? 'is-warning' : ''}>{index + 1}</span></button>)}
       </div>
+
+      <section className="payment-list-editor-bulk-fill" aria-label="整单批量填入">
+        <div className="payment-list-editor-bulk-fill-heading">
+          <strong>整单批量填入</strong>
+          <span>输入内容后应用到当前付款清单的 {list.items.length} 笔付款</span>
+        </div>
+        <div className="payment-list-editor-bulk-fill-fields">
+          <label>
+            付款原因
+            <div>
+              <input aria-label="整单付款原因" placeholder="输入后填入全部付款行" value={bulkPaymentReason} disabled={!editable} onChange={(event) => setBulkPaymentReason(event.target.value)} />
+              <Button variant="secondary" disabled={!editable || !bulkPaymentReason.trim() || !list.items.length} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
+            </div>
+          </label>
+          <label>
+            交易附言
+            <div>
+              <input aria-label="整单交易附言" placeholder="输入后填入全部付款行" value={bulkTransactionReference} disabled={!editable} onChange={(event) => setBulkTransactionReference(event.target.value)} />
+              <Button variant="secondary" disabled={!editable || !bulkTransactionReference.trim() || !list.items.length} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
+            </div>
+          </label>
+        </div>
+      </section>
 
       <div className="payment-list-editor-body">
         <section className="payment-list-editor-invoice" aria-label="Invoice 快照">

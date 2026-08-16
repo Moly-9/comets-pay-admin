@@ -11,11 +11,16 @@ describe('PaymentListEditor', () => {
     expect(source).toContain('PayPal');
     expect(source).toContain('PayMax');
     expect(source).toContain('onUpdatePaymentItem');
+    expect(source).toContain('整单批量填入');
+    expect(source).toContain("applyBulkField('paymentReason', bulkPaymentReason)");
+    expect(source).toContain("applyBulkField('transactionReference', bulkTransactionReference)");
+    expect(source).toContain('list.items.forEach');
     expect(source).toContain('onPointerUp');
     expect(source).toContain('ArrowLeft');
     expect(source).toContain('ArrowRight');
     expect(css).toContain('grid-template-columns: minmax(300px, .88fr) minmax(420px, 1.12fr)');
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toContain('touch-action');
+    expect(css).toContain('payment-list-editor-bulk-fill');
   });
 });
