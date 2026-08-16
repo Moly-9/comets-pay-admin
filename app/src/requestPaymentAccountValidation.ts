@@ -41,21 +41,22 @@ const paymentListFrozenSnapshotIssues = (item: PaymentListItem) => {
   const ibanRequiredScenario = Boolean(getAirwallexCountryProfile(schemaCountryCode)?.ibanPreferred)
     || /(?:SEPA|IBAN|Spain|France|Italy|西班牙|法国|意大利)/i.test(context);
   const address = [
-    details?.bankStreetAddress,
-    details?.bankCity,
-    details?.bankState,
-    details?.bankPostalCode,
-    details?.bankCountry,
+    paymentListSnapshotValue(item, 'beneficiary.address.street_address'),
+    paymentListSnapshotValue(item, 'beneficiary.address.city'),
+    paymentListSnapshotValue(item, 'beneficiary.address.state'),
+    paymentListSnapshotValue(item, 'beneficiary.address.postcode'),
+    paymentListSnapshotValue(item, 'beneficiary.address.country_code'),
   ].filter(Boolean).join(', ');
   return [
-    !details?.accountName ? '付款清单缺少 Account Name' : '',
+    !paymentListSnapshotValue(item, 'beneficiary.bank_details.account_name') ? '付款清单缺少 Account Name' : '',
     effectiveAccount.transferMethod === 'SWIFT' || !ibanRequiredScenario
-      ? (!details?.accountNumber ? '付款清单缺少 Account Number' : '')
+      ? (!paymentListSnapshotValue(item, 'beneficiary.bank_details.account_number') ? '付款清单缺少 Account Number' : '')
       : '',
-    ibanRequiredScenario && !details?.iban ? '付款清单缺少 IBAN' : '',
-    !details?.bankName ? '付款清单缺少 Beneficiary Bank Name' : '',
+    ibanRequiredScenario && !paymentListSnapshotValue(item, 'beneficiary.bank_details.iban') ? '付款清单缺少 IBAN' : '',
+    !paymentListSnapshotValue(item, 'beneficiary.bank_details.bank_name') ? '付款清单缺少 Beneficiary Bank Name' : '',
     !address ? '付款清单缺少 Beneficiary Bank Address' : '',
-    effectiveAccount.transferMethod === 'SWIFT' && !details?.swiftCode
+    effectiveAccount.transferMethod === 'SWIFT'
+      && !paymentListSnapshotValue(item, 'beneficiary.bank_details.swift_code')
       ? '付款清单缺少 Swift Code'
       : '',
   ].filter(Boolean);
@@ -69,6 +70,8 @@ const paymentListSnapshotValue = (item: PaymentListItem, path: string): string |
   const effectiveAccount = paymentListEffectiveAccount(item);
   const details = effectiveAccount.paymentDetails;
   if (!details) return undefined;
+  const schemaValue = details.schemaValues?.[path];
+  if (hasValue(schemaValue)) return String(schemaValue);
   const fallbackRealName = item.snapshot.realName || item.snapshot.creatorName;
   const values: Record<string, unknown> = {
     'beneficiary.entity_type': details.beneficiaryType,
@@ -135,19 +138,24 @@ const PAYMENT_LIST_FROZEN_SCHEMA_PATHS = new Set([
 const paymentListSnapshotSchemaIssues = (
   item: PaymentListItem,
   schema: Awaited<ReturnType<typeof getAirwallexBeneficiaryFormSchema>>,
-) => schema.fields.flatMap((field) => {
-  // Older payment-list snapshots do not carry every dynamic routing field. The
-  // live Airwallex account is still checked by validateAirwallexFormSchema;
-  // only fields represented by the frozen snapshot are checked here.
-  const value = paymentListSnapshotValue(item, field.path);
-  if (
-    !field.required
-    || !PAYMENT_LIST_SNAPSHOT_SCHEMA_PATHS.has(field.path)
-    || PAYMENT_LIST_FROZEN_SCHEMA_PATHS.has(field.path)
-    || hasValue(value)
-  ) return [];
-  return [`${field.field.label}未填写`];
-});
+) => {
+  const hasSnapshotSchema = Boolean(item.snapshot.paymentDetails?.schemaFields?.length);
+
+  return schema.fields.flatMap((field) => {
+    // New snapshots carry the exact Form Schema used to collect the payment
+    // details, so every required field returned by the API must be present in
+    // the frozen snapshot. Older snapshots predate dynamic schema fields and
+    // keep the narrower compatibility allow-list below.
+    const value = paymentListSnapshotValue(item, field.path);
+    if (
+      !field.required
+      || (!hasSnapshotSchema && !PAYMENT_LIST_SNAPSHOT_SCHEMA_PATHS.has(field.path))
+      || (!hasSnapshotSchema && PAYMENT_LIST_FROZEN_SCHEMA_PATHS.has(field.path))
+      || hasValue(value)
+    ) return [];
+    return [`${field.field.label}未填写`];
+  });
+};
 
 const paymentListTransactionIssues = (item: PaymentListItem) => {
   const currency = String(item.overrides.currency ?? item.snapshot.currency ?? '').trim();
@@ -216,10 +224,10 @@ export const validatePaymentListAccountViaApi = async ({
   try {
     const schema = await getAirwallexBeneficiaryFormSchema(account, request);
     const fieldIssues = validateAirwallexFormSchema(account, schema);
-    const frozenSnapshotIssues = [
+    const frozenSnapshotIssues = [...new Set([
       ...paymentListFrozenSnapshotIssues(item),
       ...paymentListSnapshotSchemaIssues(item, schema),
-    ];
+    ])];
     const transactionIssues = paymentListTransactionIssues(item);
     if (fieldIssues.length || frozenSnapshotIssues.length || transactionIssues.length) {
       return {

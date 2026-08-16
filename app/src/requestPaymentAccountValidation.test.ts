@@ -233,6 +233,74 @@ describe('request payment account validation', () => {
     ]);
   });
 
+  it('uses schema-backed address values from the frozen snapshot', async () => {
+    const schemaField = (
+      path: string,
+      label: string,
+    ): AirwallexFormSchemaResponse['fields'][number] => ({
+      enabled: true,
+      field: {
+        key: path.split('.').pop() ?? path,
+        label,
+        type: 'INPUT',
+        default: '',
+        description: '',
+        example: '',
+        placeholder: '',
+        refresh: false,
+        tip: '',
+      },
+      path,
+      required: true,
+      rule: { type: 'string' },
+    });
+    const schemaBackedItem: PaymentListItem = {
+      ...item,
+      snapshot: {
+        ...item.snapshot,
+        paymentDetails: {
+          ...item.snapshot.paymentDetails!,
+          bankCity: '',
+          bankPostalCode: '',
+          schemaValues: {
+            ...(item.snapshot.paymentDetails?.schemaValues ?? {}),
+            'beneficiary.address.city': 'New York',
+            'beneficiary.address.postcode': '10001',
+          },
+          schemaFields: [
+            { path: 'beneficiary.address.city', label: '收款人城市', required: true },
+            { path: 'beneficiary.address.postcode', label: '收款人邮政编码', required: true },
+          ],
+        },
+      },
+    };
+    const addressSchema: AirwallexFormSchemaResponse = {
+      ...schema,
+      fields: [
+        schemaField('beneficiary.address.city', '收款人城市'),
+        schemaField('beneficiary.address.postcode', '收款人邮政编码'),
+      ],
+    };
+    const requestMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === AIRWALLEX_FORM_SCHEMA_PROXY_PATH) return jsonResponse(addressSchema);
+      if (String(input) === AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH) return jsonResponse({});
+      return new Response('', { status: 404 });
+    });
+
+    await expect(validatePaymentListAccountViaApi({
+      item: schemaBackedItem,
+      creators: [creator],
+      request: requestMock as unknown as typeof fetch,
+    })).resolves.toMatchObject({
+      state: 'passed',
+      message: 'Airwallex 付款信息完整性校验通过，收款账户字段完整',
+    });
+    expect(requestMock.mock.calls.map(([input]) => String(input))).toEqual([
+      AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
+      AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH,
+    ]);
+  });
+
   it('shows an unavailable reminder when the static prototype has no JSON API proxy', async () => {
     const request = vi.fn(async () => new Response('<!doctype html>', {
       status: 200,
