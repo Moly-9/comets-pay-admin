@@ -130,6 +130,7 @@ export const canEditRequestProjectResources = (
 ) => (
   user.roleKey === 'admin'
   || user.roleKey === 'owner'
+  || user.roleKey === 'project'
   || (
     user.roleKey === 'media'
     && (

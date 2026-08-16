@@ -125,6 +125,7 @@ describe('request project resource permissions', () => {
 
     expect(canEditRequestProjectResources(user('admin'), state('COMPLETED'))).toBe(true);
     expect(canEditRequestProjectResources(user('owner'), state('APPROVED'))).toBe(true);
+    expect(canEditRequestProjectResources(user('project'), state('SUBMITTED'))).toBe(true);
     expect(canEditRequestProjectResources(user('media'), state('DRAFT'))).toBe(true);
     expect(canEditRequestProjectResources(user('media'), state('SUBMITTED'))).toBe(false);
     expect(canEditRequestProjectResources(user('media'), state('APPROVED'))).toBe(false);
