@@ -6,6 +6,7 @@ import type {
 } from './businessWorkflow';
 import { paymentListEffectiveAccount, paymentListItemValue } from './businessWorkflow';
 import type { ContractRecord } from './contracts';
+import { getAirwallexCountryProfile } from './airwallexFormSchema';
 import { bankAddress, invoiceTotal } from './invoice/invoiceUtils';
 import { paymentRequestInvoiceIds, type PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
@@ -111,15 +112,6 @@ const normalizeCode = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, '')
   .toUpperCase();
 
-const paymentMethodLabel = (record: GeneratedInvoiceRecord) => (
-  record.snapshot.paymentMethod === 'paypal' ? 'PayPal' : '银行转账'
-);
-
-const paymentItemMethodLabel = (item: PaymentListItem, list: PaymentListRecord) => {
-  const account = paymentListEffectiveAccount(item);
-  return account.transferMethod === 'PAYPAL' || list.provider === 'PayPal' ? 'PayPal' : '银行转账';
-};
-
 const invoiceVersionToken = (record: GeneratedInvoiceRecord) => (
   `invoice:${record.invoiceId}:v${record.version ?? 0}:${record.generatedAt}`
 );
@@ -214,6 +206,7 @@ const tripleField = ({
   compareContract = true,
   ignoreInvoicePayment = false,
   reviewWhenNoContract = false,
+  required = false,
 }: {
   id: string;
   label: string;
@@ -226,9 +219,11 @@ const tripleField = ({
   compareContract?: boolean;
   ignoreInvoicePayment?: boolean;
   reviewWhenNoContract?: boolean;
+  required?: boolean;
 }): FinanceReviewField => {
+  const requiredValueMissing = required && (!hasValue(invoiceValue) || !hasValue(paymentValue));
   const invoicePaymentMismatch = !ignoreInvoicePayment
-    && normalize(invoiceValue) !== normalize(paymentValue);
+    && (requiredValueMissing || normalize(invoiceValue) !== normalize(paymentValue));
   const contractMismatch = compareContract
     && contracts.length > 0
     && contractHasDifference(contracts, getContractValue, [invoiceValue, paymentValue], normalize);
@@ -313,42 +308,99 @@ const reviewInvoice = (
   const invoiceAmount = invoiceTotal(record.snapshot);
   const invoiceRealName = record.snapshot.from.legalName;
   const paymentRealName = item.snapshot.realName;
-  const invoiceAmountValue = money(record.snapshot.currency, invoiceAmount);
-  const paymentAmountValue = money(currency, amount);
+  const invoiceAmountValue = invoiceAmount > 0 ? money(record.snapshot.currency, invoiceAmount) : undefined;
+  const paymentAmountValue = currency !== '未填写' && amount > 0 ? money(currency, amount) : undefined;
+  const paymentSchemaContext = [
+    account.schemaKey,
+    paymentDetails?.bankCountry,
+  ].filter(Boolean).join(' ');
+  const schemaCountryCode = account.schemaKey?.split(':')[1] ?? '';
+  const ibanRequiredScenario = Boolean(getAirwallexCountryProfile(schemaCountryCode)?.ibanPreferred)
+    || /(?:SEPA|IBAN|Spain|France|Italy|西班牙|法国|意大利)/i.test(paymentSchemaContext);
+  const accountFields: FinanceReviewField[] = account.provider === 'Airwallex'
+    ? [
+      tripleField({
+        id: 'account-name',
+        label: 'Account Name',
+        contracts,
+        getContractValue: (contract) => contract.paymentSnapshot?.accountName ?? contract.accountName,
+        invoiceValue: record.snapshot.payment.accountName,
+        paymentValue: paymentDetails?.accountName,
+        normalize: normalizeText,
+        required: true,
+      }),
+      ...(
+        hasValue(record.snapshot.payment.accountNumber)
+        || hasValue(paymentDetails?.accountNumber)
+        || account.transferMethod === 'SWIFT'
+        || !ibanRequiredScenario
+          ? [tripleField({
+            id: 'account-number',
+            label: 'Account Number',
+            contracts,
+            getContractValue: accountSnapshotValue((snapshot) => snapshot.accountNumber),
+            invoiceValue: record.snapshot.payment.accountNumber,
+            paymentValue: paymentDetails?.accountNumber,
+            normalize: normalizeCode,
+            required: true,
+          })]
+          : []
+      ),
+      tripleField({
+        id: 'bank-name',
+        label: 'Beneficiary Bank Name',
+        contracts,
+        getContractValue: accountSnapshotValue((snapshot) => snapshot.bankName),
+        invoiceValue: record.snapshot.payment.bankName,
+        paymentValue: paymentDetails?.bankName,
+        normalize: normalizeText,
+        required: true,
+      }),
+      tripleField({
+        id: 'bank-address',
+        label: 'Beneficiary Bank Address',
+        contracts,
+        getContractValue: accountSnapshotValue((snapshot) => bankAddress({ payment: snapshot })),
+        invoiceValue: bankAddress(record.snapshot),
+        paymentValue: paymentDetails ? bankAddress({ payment: paymentDetails }) : undefined,
+        normalize: normalizeText,
+        required: true,
+      }),
+      ...(
+        account.transferMethod === 'SWIFT'
+        || hasValue(record.snapshot.payment.swiftCode)
+        || hasValue(paymentDetails?.swiftCode)
+          ? [tripleField({
+            id: 'swift-code',
+            label: 'Swift Code',
+            contracts,
+            getContractValue: accountSnapshotValue((snapshot) => snapshot.swiftCode),
+            invoiceValue: record.snapshot.payment.swiftCode,
+            paymentValue: paymentDetails?.swiftCode,
+            normalize: normalizeCode,
+            required: true,
+          })]
+          : []
+      ),
+      ...(
+        hasValue(record.snapshot.payment.iban)
+        || hasValue(paymentDetails?.iban)
+        || ibanRequiredScenario
+          ? [tripleField({
+            id: 'iban',
+            label: 'IBAN',
+            contracts,
+            getContractValue: accountSnapshotValue((snapshot) => snapshot.iban),
+            invoiceValue: record.snapshot.payment.iban,
+            paymentValue: paymentDetails?.iban,
+            normalize: normalizeCode,
+            required: true,
+          })]
+          : []
+      ),
+    ]
+    : [];
   const fields: FinanceReviewField[] = [
-    tripleField({
-      id: 'invoice-number',
-      label: 'Invoice 编号',
-      contracts,
-      getContractValue: () => undefined,
-      invoiceValue: record.snapshot.invoiceNumber,
-      paymentValue: item.snapshot.invoiceNumber,
-      compareContract: false,
-    }),
-    tripleField({
-      id: 'creator',
-      label: '达人稳定 ID',
-      contracts,
-      getContractValue: (contract) => contract.creatorId,
-      invoiceValue: record.snapshot.creatorId,
-      paymentValue: item.snapshot.creatorId,
-    }),
-    tripleField({
-      id: 'engagement',
-      label: '合作关系 ID',
-      contracts,
-      getContractValue: (contract) => contract.engagementId,
-      invoiceValue: record.snapshot.engagementId,
-      paymentValue: item.engagementId,
-    }),
-    tripleField({
-      id: 'project',
-      label: '项目稳定 ID',
-      contracts,
-      getContractValue: (contract) => contract.projectId,
-      invoiceValue: record.snapshot.projectId,
-      paymentValue: list.projectId,
-    }),
     tripleField({
       id: 'amount',
       label: '币种与金额',
@@ -357,51 +409,7 @@ const reviewInvoice = (
       invoiceValue: invoiceAmountValue,
       paymentValue: paymentAmountValue,
       normalize: normalizeCode,
-    }),
-    tripleField({
-      id: 'provider',
-      label: '付款渠道',
-      contracts,
-      getContractValue: (contract) => contract.payoutProvider,
-      invoiceValue: record.snapshot.paymentMethod === 'paypal' ? 'PayPal' : record.snapshot.payoutProvider ?? 'Airwallex',
-      paymentValue: account.provider || list.provider,
-      normalize: normalizeText,
-    }),
-    tripleField({
-      id: 'method',
-      label: '付款方式',
-      contracts,
-      getContractValue: (contract) => contract.paymentMethod === 'PAYPAL' ? 'PayPal' : '银行转账',
-      invoiceValue: paymentMethodLabel(record),
-      paymentValue: paymentItemMethodLabel(item, list),
-      normalize: normalizeText,
-    }),
-    tripleField({
-      id: 'account-id',
-      label: '收款账户 ID',
-      contracts,
-      getContractValue: (contract) => contract.payoutAccountId,
-      invoiceValue: record.snapshot.payoutAccountId,
-      paymentValue: account.payoutAccountId,
-      normalize: normalizeCode,
-    }),
-    tripleField({
-      id: 'account-version',
-      label: '账户版本',
-      contracts,
-      getContractValue: (contract) => contract.payoutAccountVersion,
-      invoiceValue: record.snapshot.payoutAccountVersion,
-      paymentValue: account.payoutAccountVersion,
-      normalize: normalizeCode,
-    }),
-    tripleField({
-      id: 'account-fingerprint',
-      label: '账户指纹',
-      contracts,
-      getContractValue: (contract) => contract.payoutAccountFingerprint ?? contract.accountFingerprint,
-      invoiceValue: record.snapshot.payoutAccountFingerprint,
-      paymentValue: account.accountFingerprint,
-      normalize: normalizeCode,
+      required: true,
     }),
     tripleField({
       id: 'real-name',
@@ -411,61 +419,9 @@ const reviewInvoice = (
       invoiceValue: invoiceRealName,
       paymentValue: paymentRealName,
       normalize: normalizeText,
+      required: true,
     }),
-    tripleField({
-      id: 'account-name',
-      label: 'Account Name',
-      contracts,
-      getContractValue: (contract) => contract.paymentSnapshot?.accountName ?? contract.accountName,
-      invoiceValue: record.snapshot.payment.accountName,
-      paymentValue: paymentDetails?.accountName,
-      normalize: normalizeText,
-    }),
-    tripleField({
-      id: 'account-number',
-      label: 'Account Number',
-      contracts,
-      getContractValue: accountSnapshotValue((snapshot) => snapshot.accountNumber),
-      invoiceValue: record.snapshot.payment.accountNumber,
-      paymentValue: paymentDetails?.accountNumber,
-      normalize: normalizeCode,
-    }),
-    tripleField({
-      id: 'bank-name',
-      label: 'Beneficiary Bank Name',
-      contracts,
-      getContractValue: accountSnapshotValue((snapshot) => snapshot.bankName),
-      invoiceValue: record.snapshot.payment.bankName,
-      paymentValue: paymentDetails?.bankName,
-      normalize: normalizeText,
-    }),
-    tripleField({
-      id: 'bank-address',
-      label: 'Beneficiary Bank Address',
-      contracts,
-      getContractValue: accountSnapshotValue((snapshot) => bankAddress({ payment: snapshot })),
-      invoiceValue: bankAddress(record.snapshot),
-      paymentValue: paymentDetails ? bankAddress({ payment: paymentDetails }) : undefined,
-      normalize: normalizeText,
-    }),
-    tripleField({
-      id: 'swift-code',
-      label: 'Swift Code',
-      contracts,
-      getContractValue: accountSnapshotValue((snapshot) => snapshot.swiftCode),
-      invoiceValue: record.snapshot.payment.swiftCode,
-      paymentValue: paymentDetails?.swiftCode,
-      normalize: normalizeCode,
-    }),
-    tripleField({
-      id: 'iban',
-      label: 'IBAN (optional)',
-      contracts,
-      getContractValue: accountSnapshotValue((snapshot) => snapshot.iban),
-      invoiceValue: record.snapshot.payment.iban,
-      paymentValue: paymentDetails?.iban,
-      normalize: normalizeCode,
-    }),
+    ...accountFields,
     tripleField({
       id: 'reason',
       label: '付款原因',

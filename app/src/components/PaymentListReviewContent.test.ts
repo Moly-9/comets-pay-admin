@@ -65,10 +65,10 @@ describe('shared payment-list finance review content', () => {
       'bank-address',
       'swift-code',
       'iban',
-      'reason',
-      'fee',
-      'reference',
     ]);
+    expect(financeWorkspaceComparisonFields(page, 'current-full').some((field) => (
+      ['reason', 'fee', 'reference'].includes(field.id)
+    ))).toBe(false);
     expect(financeWorkspaceComparisonFields(page, 'all-summary')).toEqual(fields);
   });
 
@@ -88,6 +88,11 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('Beneficiary Bank Address');
     expect(reviewContentSource).toContain('Swift Code');
     expect(reviewContentSource).toContain('IBAN (optional)');
+    expect(reviewContentSource).toContain('支付币种');
+    expect(reviewContentSource).toContain('收款币种');
+    expect(reviewContentSource).toContain('费用承担');
+    expect(reviewContentSource).toContain('付款原因');
+    expect(reviewContentSource).toContain('交易附言');
     expect(reviewContentSource).toContain('当前账户字段为原型展示，具体字段需调用 Airwallex API');
     expect(reviewContentSource).toContain("return details?.accountName || fallbackName || '未填写'");
     expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');

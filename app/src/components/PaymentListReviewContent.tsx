@@ -52,9 +52,6 @@ const FINANCE_WORKSPACE_COMPARISON_FIELD_IDS = new Set([
   'bank-address',
   'swift-code',
   'iban',
-  'reason',
-  'fee',
-  'reference',
 ]);
 
 export const financeWorkspaceComparisonFields = (
@@ -362,7 +359,7 @@ export function PaymentListReviewContent({
             </span>
             <div>
               <strong>{summaryTitle}</strong>
-              <p>审批前应核对冻结账户、币种、金额、费用承担与交易附言；API 校验只检查账户字段，不改写付款数据。</p>
+              <p>审批前应核对付款必填字段与冻结信息；Airwallex API 会校验付款所需的账户与交易资料是否完整，不改写付款数据。</p>
               {accountDisplay === 'current-full' && accountAttentionRows.length ? (
                 <ul className="request-payment-attention-list" aria-label="需要处理的收款账户">
                   {accountAttentionRows.map((row) => (
@@ -484,7 +481,7 @@ export function PaymentListReviewContent({
           {accountDisplay === 'current-full' ? (
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
               <header>
-                <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人账户快照</strong><small>当前账户字段为原型展示，具体字段需调用 Airwallex API</small></span></div>
+                <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人付款信息汇总</strong><small>当前账户字段为原型展示，具体字段需调用 Airwallex API</small></span></div>
                 <span>{visibleAccountRows.length} 条</span>
               </header>
               {visibleAccountRows.length ? visibleAccountRows.map((row) => {

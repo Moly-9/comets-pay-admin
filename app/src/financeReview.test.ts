@@ -292,6 +292,22 @@ describe('request finance review', () => {
     });
   });
 
+  it('blocks a single missing payment field instead of treating two empty values as equal', () => {
+    const missing = paymentList();
+    missing.items[0].snapshot.paymentDetails = {
+      ...missing.items[0].snapshot.paymentDetails!,
+      accountNumber: '',
+    };
+
+    const review = buildRequestFinanceReview(request, [invoice], [missing]);
+    expect(review.canApprove).toBe(false);
+    expect(review.pages[0].fields.find((field) => field.id === 'account-number')).toMatchObject({
+      invoiceValue: '1234567890',
+      paymentValue: '未填写',
+      state: 'mismatch',
+    });
+  });
+
   it('blocks amount mismatches and duplicate payment rows', () => {
     const amountMismatch = paymentList();
     amountMismatch.items[0].snapshot.amount = 99;

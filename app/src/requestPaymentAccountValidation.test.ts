@@ -90,6 +90,33 @@ const item: PaymentListItem = {
     feeBearer: 'ADVERTISER',
     accountFingerprint: getPayoutAccountFingerprint(account),
     validationStatus: account.status,
+    paymentDetails: {
+      bankCountry: 'United States',
+      accountName: 'Review Creator',
+      accountType: 'Checking',
+      swiftCode: '',
+      accountNumber: '00001234',
+      iban: '',
+      beneficiaryType: 'PERSONAL',
+      bankName: 'Review Bank',
+      bankStreetAddress: '100 Review Street',
+      bankCity: 'New York',
+      bankState: 'New York',
+      bankPostalCode: '10001',
+      intermediaryBankCountry: '',
+      intermediaryBankCode: '',
+      transferRemarks: '',
+      paypalUsername: '',
+      paypalEmail: '',
+      payoutAccountId: account.id,
+      payoutAccountVersion: getPayoutAccountVersion(account),
+      payoutProvider: 'Airwallex',
+      accountFingerprint: getPayoutAccountFingerprint(account),
+      transferMethod: account.transferMethod,
+      localClearingSystem: account.bankDetails.localClearingSystem,
+      accountCurrency: account.bankDetails.accountCurrency,
+      validationStatus: account.status,
+    },
   },
   overrides: {},
   requiresRevalidation: false,
@@ -121,6 +148,20 @@ describe('request payment account validation', () => {
     });
   });
 
+  it('flags missing frozen bank fields before the API button is used', () => {
+    const incompleteItem: PaymentListItem = {
+      ...item,
+      snapshot: {
+        ...item.snapshot,
+        paymentDetails: { ...item.snapshot.paymentDetails!, accountNumber: '' },
+      },
+    };
+    expect(reviewPaymentListAccountSnapshot(incompleteItem, [creator])).toEqual({
+      state: 'attention',
+      issues: expect.arrayContaining(['付款清单缺少 Account Number']),
+    });
+  });
+
   it('runs the schema and validate-only API calls without saving the beneficiary', async () => {
     const requestMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === AIRWALLEX_FORM_SCHEMA_PROXY_PATH) return jsonResponse(schema);
@@ -142,6 +183,53 @@ describe('request payment account validation', () => {
     expect(requestMock.mock.calls.map(([input]) => String(input))).toEqual([
       AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
       AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH,
+    ]);
+  });
+
+  it('blocks an incomplete frozen payment-list snapshot even when the profile account is complete', async () => {
+    const incompleteItem: PaymentListItem = {
+      ...item,
+      snapshot: {
+        ...item.snapshot,
+        paymentDetails: { ...item.snapshot.paymentDetails!, accountNumber: '' },
+      },
+    };
+    const requiredAccountNumberSchema: AirwallexFormSchemaResponse = {
+      ...schema,
+      fields: [{
+        enabled: true,
+        field: {
+          key: 'account_number',
+          label: '银行账号',
+          type: 'INPUT',
+          default: '',
+          description: '',
+          example: '',
+          placeholder: '',
+          refresh: false,
+          tip: '',
+        },
+        path: 'beneficiary.bank_details.account_number',
+        required: true,
+        rule: { type: 'string' },
+      }],
+    };
+    const requestMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === AIRWALLEX_FORM_SCHEMA_PROXY_PATH) return jsonResponse(requiredAccountNumberSchema);
+      if (String(input) === AIRWALLEX_BENEFICIARY_VALIDATE_PROXY_PATH) return jsonResponse({});
+      return new Response('', { status: 404 });
+    });
+
+    await expect(validatePaymentListAccountViaApi({
+      item: incompleteItem,
+      creators: [creator],
+      request: requestMock as unknown as typeof fetch,
+    })).resolves.toMatchObject({
+      state: 'invalid',
+      message: '付款清单冻结快照缺少必填字段：付款清单缺少 Account Number',
+    });
+    expect(requestMock.mock.calls.map(([input]) => String(input))).toEqual([
+      AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
     ]);
   });
 
