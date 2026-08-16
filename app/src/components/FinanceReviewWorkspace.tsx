@@ -682,6 +682,7 @@ export function FinanceReviewWorkspace({
   const selectedContract = currentContracts.find((contract) => stableContractId(contract) === selectedContractId);
   const activeDocumentAvailable = documentKind === 'contract' ? Boolean(selectedContract) : Boolean(invoice);
   const activeDocumentLabel = documentKind === 'contract' ? '合同快照' : 'Invoice 快照';
+  const documentSwitcherLabel = documentKind === 'invoice' ? '切换合同快照' : '切换 Invoice 快照';
   const activeDocumentMeta = documentKind === 'contract'
     ? selectedContract
       ? `${selectedContract.sourceName || selectedContract.name} · ${selectedContract.pageCount ?? 1} 页`
@@ -1059,6 +1060,7 @@ export function FinanceReviewWorkspace({
                     <SelectField<ReviewDocumentKind>
                       ariaLabel="选择凭证类型"
                       value={documentKind}
+                      selectedLabel={documentSwitcherLabel}
                       options={documentKindOptions}
                       variant="form"
                       menuStrategy="fixed"

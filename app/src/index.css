@@ -5237,6 +5237,43 @@ body:has(.finance-review-workspace) {
   border-right: 0;
 }
 
+/* Airwallex's complete payment payload keeps every required field visible in the same snapshot card. */
+.finance-payment-airwallex-fields > div:nth-child(5) {
+  grid-column: auto;
+  border-right: 1px solid #edf0f3;
+}
+
+.finance-payment-airwallex-fields > div:nth-child(odd) {
+  border-right: 1px solid #edf0f3;
+}
+
+.finance-payment-airwallex-fields > div:nth-child(even) {
+  border-right: 0;
+}
+
+.finance-payment-airwallex-fields > div.is-review {
+  background: #fbfcfe;
+}
+
+.finance-payment-airwallex-fields > div.is-review dt em {
+  color: #7b8794;
+}
+
+.finance-payment-airwallex-fields > div.is-match dt em {
+  color: #15803d;
+}
+
+.finance-payment-airwallex-fields > div.is-match dt em svg {
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+@media (max-width: 420px) {
+  .finance-payment-airwallex-fields > div {
+    border-right: 0;
+  }
+}
+
 .finance-payment-account-fields > div.is-mismatch {
   background: #fff6f2;
   box-shadow: inset 3px 0 #d56b55;

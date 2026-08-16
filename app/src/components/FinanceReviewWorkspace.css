@@ -344,6 +344,10 @@
 .finance-review-document-header-controls {
   flex: 0 1 auto;
   max-width: min(42%, 330px);
+  margin-left: 0;
+}
+
+.finance-review-invoice-header-actions {
   margin-left: auto;
 }
 

@@ -235,6 +235,8 @@ describe('FinanceReviewWorkspace document switching', () => {
     expect(workspaceSource).toContain('data-testid="finance-review-document-controls"');
     expect(workspaceSource).toContain('aria-label="凭证快照切换"');
     expect(workspaceSource).toContain('选择凭证类型');
+    expect(workspaceSource).toContain('selectedLabel={documentSwitcherLabel}');
+    expect(workspaceSource).toContain('切换合同快照');
     expect(workspaceSource).toContain('选择具体合同');
     expect(workspaceSource).toContain('没有合同');
     expect(workspaceSource).toContain('<ContractDocumentView contract={selectedContract}');

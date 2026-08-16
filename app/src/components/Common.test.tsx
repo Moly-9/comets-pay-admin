@@ -62,4 +62,19 @@ describe('SelectField', () => {
     expect(commonSource).toContain('aria-disabled={option.disabled ? true : undefined}');
     expect(commonSource).toContain('disabled={option.disabled}');
   });
+
+  it('allows a selected option to expose an action-oriented trigger label', () => {
+    const markup = renderToStaticMarkup(
+      <SelectField
+        ariaLabel="凭证类型"
+        value="invoice"
+        selectedLabel="切换合同快照"
+        options={[{ value: 'invoice', label: 'Invoice 快照' }]}
+        onChange={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('切换合同快照');
+    expect(markup).not.toContain('Invoice 快照</span>');
+  });
 });

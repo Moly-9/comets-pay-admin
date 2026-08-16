@@ -44,6 +44,7 @@ type SelectFieldProps<T extends string> = {
   ariaLabel: string;
   clearLabel?: string;
   placeholder?: string;
+  selectedLabel?: string;
   className?: string;
   variant?: 'toolbar' | 'form' | 'compact';
   disabled?: boolean;
@@ -61,6 +62,7 @@ export function SelectField<T extends string = string>({
   ariaLabel,
   clearLabel = '清除选择',
   placeholder = '请选择',
+  selectedLabel,
   className = '',
   variant = 'toolbar',
   disabled = false,
@@ -308,7 +310,7 @@ export function SelectField<T extends string = string>({
       >
         {selectedLeading ? <span className="custom-select-leading" aria-hidden="true">{selectedLeading}</span> : null}
         <span className={`custom-select-value${selectedOption ? '' : ' custom-select-placeholder'}`}>
-          {selectedOption?.label ?? placeholder}
+          {selectedLabel ?? selectedOption?.label ?? placeholder}
         </span>
         <ChevronDown className="custom-select-chevron" size={16} strokeWidth={2.2} aria-hidden="true" />
       </button>

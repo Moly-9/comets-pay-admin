@@ -481,7 +481,7 @@ export function PaymentListReviewContent({
           {accountDisplay === 'current-full' ? (
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
               <header>
-                <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人付款信息汇总</strong><small>当前账户字段为原型展示，具体字段需调用 Airwallex API</small></span></div>
+                <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人付款信息汇总</strong><small>Airwallex 付款信息完整性字段 · 空值使用原型演示值，实际以 API 校验为准</small></span></div>
                 <span>{visibleAccountRows.length} 条</span>
               </header>
               {visibleAccountRows.length ? visibleAccountRows.map((row) => {
@@ -490,7 +490,157 @@ export function PaymentListReviewContent({
                 const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
                 const amount = Number(paymentListItemValue(row.item, 'amount') || 0);
                 const accountName = recipientAccountName(row.effectiveAccount, row.item.snapshot.realName);
-                const accountFields = [
+                const creator = creators.find((candidate) => candidate.id === row.item.snapshot.creatorId);
+                const bankCountry = String(details?.bankCountry || 'United States');
+                const isBrazil = /brazil|巴西/i.test(bankCountry);
+                const isJapan = /japan|日本/i.test(bankCountry);
+                const demoLocation = isBrazil
+                  ? {
+                      street: 'Avenida Paulista 1294',
+                      city: 'São Paulo',
+                      state: 'SP',
+                      postcode: '01310-100',
+                      beneficiaryAddress: 'Avenida Paulista 1294, São Paulo, Brazil',
+                    }
+                  : isJapan
+                    ? {
+                        street: '2-7-1 Marunouchi',
+                        city: 'Tokyo',
+                        state: 'Tokyo',
+                        postcode: '100-0005',
+                        beneficiaryAddress: '2-7-1 Marunouchi, Tokyo, Japan',
+                      }
+                  : {
+                      street: '100 Review Street',
+                      city: 'New York',
+                      state: 'NY',
+                      postcode: '10001',
+                      beneficiaryAddress: '100 Review Street, New York, NY 10001',
+                    };
+                const bankStreetAddress = details?.bankStreetAddress || demoLocation.street;
+                const bankCity = details?.bankCity || demoLocation.city;
+                const bankState = details?.bankState || demoLocation.state;
+                const bankPostalCode = details?.bankPostalCode || demoLocation.postcode;
+                const bankAddressValue = details
+                  ? bankAddress({ payment: details })
+                  : '';
+                const accountCheck = accountChecks[row.key];
+                const schemaValues = details?.schemaValues ?? {};
+                const countryCodeByName: Record<string, string> = {
+                  'United States': 'US',
+                  Japan: 'JP',
+                  '巴西': 'BR',
+                  Brazil: 'BR',
+                  '中国香港': 'HK',
+                  'Hong Kong SAR China': 'HK',
+                  Singapore: 'SG',
+                };
+                const realNameParts = String(row.item.snapshot.realName || creator?.name || 'Mina Kato').trim().split(/\s+/);
+                const schemaDemoValues: Record<string, string> = {
+                  'beneficiary.entity_type': details?.beneficiaryType || 'PERSONAL',
+                  'beneficiary.bank_details.bank_country_code': countryCodeByName[bankCountry] || bankCountry,
+                  'beneficiary.bank_details.account_currency': details?.accountCurrency || currency,
+                  transfer_method: transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem),
+                  'beneficiary.bank_details.local_clearing_system': details?.localClearingSystem || row.effectiveAccount.localClearingSystem || (isBrazil ? 'PIX' : isJapan ? 'ZENGIN' : 'ACH'),
+                  'beneficiary.address.country_code': countryCodeByName[bankCountry] || bankCountry,
+                  'beneficiary.first_name': realNameParts[0] || 'Mina',
+                  'beneficiary.last_name': realNameParts.slice(1).join(' ') || 'Kato',
+                  'beneficiary.date_of_birth': '1992-08-16',
+                  'beneficiary.company_name': creator?.name || 'COMETS Creator Studio',
+                  'beneficiary.address.street_address': bankStreetAddress,
+                  'beneficiary.address.city': bankCity,
+                  'beneficiary.address.state': bankState,
+                  'beneficiary.address.postcode': bankPostalCode,
+                  'beneficiary.additional_info.personal_email': creator?.contact.email || 'creator.demo@example.test',
+                  'beneficiary.bank_details.account_name': accountName,
+                  'beneficiary.bank_details.account_number': details?.accountNumber || '00001234',
+                  'beneficiary.bank_details.swift_code': details?.swiftCode || 'BOTKJPJT',
+                  'beneficiary.bank_details.iban': details?.iban || '—',
+                  'beneficiary.bank_details.bank_name': details?.bankName || 'Airwallex Demo Bank',
+                  'beneficiary.bank_details.bank_branch': 'Main Branch',
+                  'beneficiary.bank_details.bank_street_address': bankStreetAddress,
+                  'beneficiary.bank_details.bank_state': bankState,
+                  'beneficiary.bank_details.account_routing_type1': isJapan ? 'bank_code' : 'aba',
+                  'beneficiary.bank_details.account_routing_value1': isJapan ? '110' : '021000021',
+                  'beneficiary.bank_details.account_routing_type2': isJapan ? 'branch_code' : '—',
+                  'beneficiary.bank_details.account_routing_value2': isJapan ? '001' : '—',
+                  'beneficiary.bank_details.intermediary_bank_name': '—',
+                  'beneficiary.bank_details.intermediary_bank_swift_code': details?.intermediaryBankCode || '—',
+                };
+                const displayedSchemaPaths = new Set([
+                  'beneficiary.entity_type',
+                  'beneficiary.bank_details.bank_country_code',
+                  'beneficiary.bank_details.account_currency',
+                  'transfer_method',
+                  'beneficiary.bank_details.local_clearing_system',
+                  'beneficiary.additional_info.personal_email',
+                  'beneficiary.bank_details.account_name',
+                  'beneficiary.bank_details.account_number',
+                  'beneficiary.bank_details.swift_code',
+                  'beneficiary.bank_details.iban',
+                  'beneficiary.bank_details.bank_name',
+                  'beneficiary.bank_details.bank_branch',
+                  'beneficiary.bank_details.bank_street_address',
+                  'beneficiary.bank_details.bank_state',
+                  'beneficiary.bank_details.intermediary_bank_swift_code',
+                ]);
+                const fallbackSchemaFields = [
+                  { path: 'beneficiary.address.country_code', label: '收款人地址国家 / 地区' },
+                  { path: 'beneficiary.first_name', label: '法定名' },
+                  { path: 'beneficiary.last_name', label: '法定姓' },
+                  { path: 'beneficiary.date_of_birth', label: '出生日期' },
+                  { path: 'beneficiary.address.street_address', label: '收款人街道地址' },
+                  { path: 'beneficiary.address.city', label: '收款人城市' },
+                  { path: 'beneficiary.address.state', label: '收款人州 / 省' },
+                  { path: 'beneficiary.address.postcode', label: '收款人邮政编码' },
+                  { path: 'beneficiary.bank_details.account_routing_type1', label: '路由代码类型 1' },
+                  { path: 'beneficiary.bank_details.account_routing_value1', label: '路由代码 1' },
+                  { path: 'beneficiary.bank_details.account_routing_type2', label: '路由代码类型 2' },
+                  { path: 'beneficiary.bank_details.account_routing_value2', label: '路由代码 2' },
+                  { path: 'beneficiary.bank_details.intermediary_bank_name', label: '中间行名称' },
+                ];
+                const supplementalSchemaFields = (details?.schemaFields?.length ? details.schemaFields : fallbackSchemaFields)
+                  .filter((field) => !displayedSchemaPaths.has(field.path))
+                  .map((field) => ({
+                    id: `schema-${field.path}`,
+                    label: field.label,
+                    value: schemaValues[field.path] || schemaDemoValues[field.path] || `原型演示：${field.label}`,
+                  }));
+                const accountFields = row.effectiveAccount.provider === 'Airwallex'
+                  ? [
+                      { id: 'amount', label: '付款金额', value: formatInvoiceMoney(currency, amount) },
+                      { id: 'currency', label: '支付币种', value: currency },
+                      { id: 'receive-currency', label: '收款方币种', value: displayValue(paymentListItemValue(row.item, 'receiveCurrency')) },
+                      { id: 'payment-method', label: '付款方式', value: transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem) },
+                      { id: 'swift-charge-option', label: 'SWIFT 费用选项', value: row.effectiveAccount.transferMethod === 'SWIFT' ? 'SHA · 共同承担' : '—' },
+                      { id: 'fee-bearer', label: '手续费承担方', value: feeBearerLabel(paymentListItemValue(row.item, 'feeBearer')) },
+                      { id: 'real-name', label: 'Real Name', value: row.item.snapshot.realName || creator?.name || 'Camila Costa' },
+                      { id: 'beneficiary-type', label: '收款方类型', value: details?.beneficiaryType || 'PERSONAL' },
+                      { id: 'bank-country', label: '银行国家 / 地区', value: bankCountry },
+                      { id: 'account-currency', label: '账户币种', value: details?.accountCurrency || currency },
+                      { id: 'account-name', label: 'Account Name', value: details?.accountName || accountName },
+                      { id: 'account-number', label: 'Account Number', value: details?.accountNumber || '00001234' },
+                      { id: 'bank-name', label: 'Beneficiary Bank Name', value: details?.bankName || 'Airwallex Demo Bank' },
+                      { id: 'bank-branch', label: 'Beneficiary Bank Branch', value: 'Main Branch' },
+                      { id: 'bank-address', label: 'Beneficiary Bank Address', value: bankAddressValue || `${bankStreetAddress}, ${bankCity}, ${bankCountry}` },
+                      { id: 'bank-street-address', label: '银行街道地址', value: bankStreetAddress },
+                      { id: 'bank-city', label: '城市', value: bankCity },
+                      { id: 'bank-state', label: '洲 / 省', value: bankState },
+                      { id: 'bank-postal-code', label: '邮政编码', value: bankPostalCode },
+                      { id: 'local-clearing-system', label: '本地清算系统', value: details?.localClearingSystem || row.effectiveAccount.localClearingSystem || (isBrazil ? 'PIX' : 'ACH') },
+                      { id: 'swift-code', label: 'Swift Code', value: details?.swiftCode || '—' },
+                      { id: 'iban', label: 'IBAN (optional)', value: details?.iban || '—' },
+                      { id: 'intermediary-bank-country', label: '中间行国家 / 地区', value: details?.intermediaryBankCountry || '—' },
+                      { id: 'intermediary-bank-code', label: '中间行 Swift Code', value: details?.intermediaryBankCode || '—' },
+                      { id: 'beneficiary-address', label: '收款方地址', value: creator?.contact.address || demoLocation.beneficiaryAddress },
+                      { id: 'notification-email', label: '通知邮箱', value: creator?.contact.email || 'creator.demo@example.test' },
+                      { id: 'payment-reason', label: '付款原因', value: displayValue(paymentListItemValue(row.item, 'paymentReason')) },
+                      { id: 'transaction-reference', label: '交易附言', value: displayValue(paymentListItemValue(row.item, 'transactionReference')) },
+                      { id: 'description', label: '描述', value: row.item.snapshot.description || '影音服务付款（原型演示）' },
+                      { id: 'request-id', label: '请求编号', value: row.item.snapshot.transactionReference || row.item.snapshot.invoiceNumber },
+                      ...supplementalSchemaFields,
+                    ]
+                  : [
                   { id: 'real-name', label: 'Real Name', value: row.item.snapshot.realName },
                   { id: 'account-name', label: 'Account Name', value: details?.accountName },
                   { id: 'account-number', label: 'Account Number', value: details?.accountNumber },
@@ -515,11 +665,13 @@ export function PaymentListReviewContent({
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}
-                    <dl className="finance-payment-account-fields">
+                    <dl className={`finance-payment-account-fields${row.effectiveAccount.provider === 'Airwallex' ? ' finance-payment-airwallex-fields' : ''}`}>
                       {accountFields.map((accountField) => {
                         const reviewField = fieldById.get(accountField.id);
+                        const apiPassed = !reviewField && accountCheck?.state === 'passed';
+                        const apiBlocked = !reviewField && accountCheck?.state === 'invalid';
                         return (
-                          <div className={`is-${reviewField?.state ?? 'review'}`} key={accountField.id}>
+                          <div className={`is-${reviewField?.state ?? (apiPassed ? 'match' : apiBlocked ? 'mismatch' : 'review')}`} key={accountField.id}>
                             <dt>
                               <span>{accountField.label}</span>
                               <em>
@@ -528,7 +680,12 @@ export function PaymentListReviewContent({
                                     <CircleCheck size={16} strokeWidth={2.4} aria-hidden="true" />
                                     <span className="sr-only">一致</span>
                                   </>
-                                ) : fieldStateLabel(reviewField)}
+                                ) : reviewField ? fieldStateLabel(reviewField) : apiPassed ? (
+                                  <>
+                                    <CircleCheck size={14} strokeWidth={2.4} aria-hidden="true" />
+                                    <span className="sr-only">Airwallex 已校验</span>
+                                  </>
+                                ) : accountCheck?.state === 'checking' ? '校验中' : apiBlocked ? '需处理' : '待 API 校验'}
                               </em>
                             </dt>
                             <dd>{displayValue(reviewField?.paymentValue ?? accountField.value)}</dd>
@@ -536,7 +693,7 @@ export function PaymentListReviewContent({
                         );
                       })}
                     </dl>
-                    <dl className="request-payment-review-fields finance-payment-operational-fields">
+                    {row.effectiveAccount.provider !== 'Airwallex' ? <dl className="request-payment-review-fields finance-payment-operational-fields">
                       <div className="request-payment-review-account"><dt>收款账户</dt><dd>{displayValue(accountName)}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
                       <div><dt>支付币种</dt><dd>{currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{displayValue(paymentListItemValue(row.item, 'receiveCurrency'))}</dd></div>
@@ -544,7 +701,7 @@ export function PaymentListReviewContent({
                       <div><dt>费用承担</dt><dd>{feeBearerLabel(paymentListItemValue(row.item, 'feeBearer'))}</dd></div>
                       <div><dt>付款原因</dt><dd>{displayValue(paymentListItemValue(row.item, 'paymentReason'))}</dd></div>
                       <div className="request-payment-review-reference"><dt>交易附言</dt><dd>{displayValue(paymentListItemValue(row.item, 'transactionReference'))}</dd></div>
-                    </dl>
+                    </dl> : null}
                   </article>
                 );
               }) : (

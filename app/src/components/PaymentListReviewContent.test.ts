@@ -93,7 +93,14 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('费用承担');
     expect(reviewContentSource).toContain('付款原因');
     expect(reviewContentSource).toContain('交易附言');
-    expect(reviewContentSource).toContain('当前账户字段为原型展示，具体字段需调用 Airwallex API');
+    expect(reviewContentSource).toContain('Airwallex 付款信息完整性字段');
+    expect(reviewContentSource).toContain('银行国家 / 地区');
+    expect(reviewContentSource).toContain('本地清算系统');
+    expect(reviewContentSource).toContain('通知邮箱');
+    expect(reviewContentSource).toContain('原型演示值');
+    expect(reviewContentSource).toContain('schemaFields');
+    expect(reviewContentSource).toContain('收款人地址国家 / 地区');
+    expect(reviewContentSource).toContain('路由代码类型 1');
     expect(reviewContentSource).toContain("return details?.accountName || fallbackName || '未填写'");
     expect(reviewContentSource).not.toContain('row.effectiveAccount.accountSummary || displayValue(details?.accountName)');
   });
