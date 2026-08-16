@@ -48,6 +48,17 @@ const paymentDetailFields = (item: PaymentListItem) => {
   const account = paymentListEffectiveAccount(item);
   const detail = account.paymentDetails;
   if (account.provider === 'Airwallex') {
+    const schemaFields = detail?.schemaFields ?? [];
+    const schemaValues = detail?.schemaValues ?? {};
+    if (schemaFields.length) {
+      return [
+        ['Beneficiary ID', account.externalBeneficiaryId],
+        ...schemaFields
+          .filter((field) => field.path !== 'transfer_method')
+          .filter((field) => field.required || String(schemaValues[field.path] ?? '').trim())
+          .map((field) => [field.label, schemaValues[field.path]]),
+      ];
+    }
     return [
       ['Beneficiary ID', account.externalBeneficiaryId],
       ['账户名', detail?.accountName],
@@ -262,8 +273,8 @@ export function PaymentListEditor({
             <label>交易附言<input aria-label="编辑交易附言" placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} disabled={!editable} onChange={(event) => update('transactionReference', event.target.value)} /></label>
             <label className="is-wide">描述<input aria-label="编辑付款描述" placeholder="请输入付款描述（选填）" value={paymentListItemValue(item, 'description')} disabled={!editable} onChange={(event) => update('description', event.target.value)} /></label>
           </div>
-          <div className="payment-list-editor-account-details"><strong>账户快照</strong>{paymentDetailFields(item).map(([label, value]) => <div key={label}><span>{label}</span><b>{display(value)}</b></div>)}</div>
-          <div className={`payment-list-editor-validation ${issues.length ? 'is-warning' : 'is-ready'}`} role="status"><span>{issues.length ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}</span><div><strong>{issues.length ? `还需完善 ${issues.length} 项` : '本笔付款信息完整'}</strong>{issues.length ? <ul>{issues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p>可以切换下一笔付款，所有明细完成后生成付款清单。</p>}</div>{editable && item.requiresRevalidation ? <Button variant="ghost" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}>重新校验</Button> : null}</div>
+          <div className="payment-list-editor-account-details"><strong>账户快照</strong><small>Airwallex Form Schema 账户字段</small>{paymentDetailFields(item).map(([label, value]) => <div key={label}><span>{label}</span><b>{display(value)}</b></div>)}</div>
+          <div className={`payment-list-editor-validation ${issues.length ? 'is-warning' : 'is-ready'}`} role="status"><span>{issues.length ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}</span><div><strong>{issues.length ? `还需完善 ${issues.length} 项付款信息` : '付款信息与交易信息完整'}</strong>{issues.length ? <ul>{issues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p>可以切换下一笔付款，所有明细完成后生成付款清单。</p>}</div>{editable && item.requiresRevalidation ? <Button variant="ghost" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}>重新校验</Button> : null}</div>
         </section>
       </div>
 

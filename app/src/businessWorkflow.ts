@@ -546,6 +546,13 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
   const paymentReason = String(paymentListItemValue(item, 'paymentReason'));
   const transactionReference = String(paymentListItemValue(item, 'transactionReference'));
   const description = String(paymentListItemValue(item, 'description'));
+  const schemaFields = snapshot.paymentDetails?.schemaFields ?? [];
+  const schemaValues = snapshot.paymentDetails?.schemaValues ?? {};
+  const missingSchemaFields = provider === 'Airwallex'
+    ? schemaFields
+      .filter((field) => field.required && !String(schemaValues[field.path] ?? '').trim())
+      .map((field) => `Airwallex 账户缺少${field.label}`)
+    : [];
   return [
     !snapshot.creatorId ? 'Invoice 缺少 creatorId' : '',
     !snapshot.payoutAccountId ? 'Invoice 缺少 payoutAccountId' : '',
@@ -567,6 +574,7 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
     snapshot.validationStatus && !['VALIDATED', 'VERIFIED'].includes(snapshot.validationStatus)
       ? '账户快照未通过验证'
       : '',
+    ...missingSchemaFields,
   ].filter(Boolean);
 };
 

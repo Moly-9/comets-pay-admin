@@ -98,6 +98,7 @@
 .payment-list-editor-fields input:disabled { background: #f5f7f9; color: #677382; opacity: 1; }
 .payment-list-editor-account-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 16px; margin-top: 17px; border-top: 1px solid #edf0f3; padding-top: 14px; }
 .payment-list-editor-account-details > strong { grid-column: 1 / -1; color: #5d6876; font-size: 11px; }
+.payment-list-editor-account-details > small { grid-column: 1 / -1; margin-top: -4px; color: #89929d; font-size: 10px; }
 .payment-list-editor-account-details > div { display: flex; justify-content: space-between; gap: 8px; min-width: 0; font-size: 11px; }
 .payment-list-editor-account-details span { color: #89929d; }
 .payment-list-editor-account-details b { overflow-wrap: anywhere; color: #44505e; text-align: right; font-weight: 600; }

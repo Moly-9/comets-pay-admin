@@ -17,6 +17,7 @@ import {
   AIRWALLEX_SCHEMA_COUNTRIES,
   AIRWALLEX_SCHEMA_CURRENCIES,
   generateLocalAirwallexFormSchema,
+  getAirwallexFormValue,
   getAirwallexCountryProfile,
   validateAirwallexFormSchema,
 } from './airwallexFormSchema';
@@ -896,6 +897,15 @@ export const createDocumentPayoutSnapshot = (
       accountCurrency: account.currency,
     };
   }
+  const schema = generateLocalAirwallexFormSchema(account);
+  const schemaFields = schema.fields.map((field) => ({
+    path: field.path,
+    label: field.field.label,
+    required: field.required,
+  }));
+  const schemaValues = Object.fromEntries(
+    schema.fields.map((field) => [field.path, getAirwallexFormValue(account, field.path)]),
+  );
   return {
     ...EMPTY_INVOICE_PAYMENT,
     ...identity,
@@ -921,6 +931,8 @@ export const createDocumentPayoutSnapshot = (
     bankPostalCode: account.schemaValues['beneficiary.bank_details.bank_postcode'] || '',
     intermediaryBankCountry: account.schemaValues['beneficiary.bank_details.intermediary_bank_country_code'] || '',
     intermediaryBankCode: account.bankDetails.intermediaryBankSwiftCode,
+    schemaValues,
+    schemaFields,
   };
 };
 

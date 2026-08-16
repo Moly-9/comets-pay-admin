@@ -157,6 +157,12 @@ describe('creator payout channels', () => {
 
     expect(payoutAccountToInvoicePayment(account).bankStreetAddress)
       .toBe('1 Finance Street, Hong Kong');
+    expect(payoutAccountToInvoicePayment(account).schemaFields)
+      ?.toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: 'beneficiary.bank_details.account_number', required: true }),
+      ]));
+    expect(payoutAccountToInvoicePayment(account).schemaValues?.['beneficiary.bank_details.account_number'])
+      .toBe(account.bankDetails.accountNumber);
 
     const schemaAliasAccount = setAirwallexFormValue(
       createEmptyAirwallexAccount(),

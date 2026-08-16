@@ -223,6 +223,12 @@ export type DocumentPayoutSnapshot = CreatorPaymentDetails & {
   validationStatus?: PayoutAccountStatus;
   validatedAt?: string;
   verifiedAt?: string;
+  schemaValues?: Record<string, string>;
+  schemaFields?: Array<{
+    path: string;
+    label: string;
+    required: boolean;
+  }>;
 };
 
 export type CreatorInvoiceContact = {
