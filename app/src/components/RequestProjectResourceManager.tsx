@@ -767,7 +767,7 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {resourceDialog === 'payment' && paymentEditorList ? (
-        <Modal title={`${request.requestCode ?? request.id} · 编辑付款清单`} width="min(1560px, calc(100vw - 48px))" className="payment-list-editor-modal" onClose={() => setPaymentEditorListId(null)} footer={null}>
+        <Modal title={`${request.requestCode ?? request.id} · 编辑付款清单`} width="100%" className="payment-list-editor-modal" onClose={() => setPaymentEditorListId(null)} footer={null}>
           <PaymentListEditor
             list={paymentEditorList}
             invoices={invoices}

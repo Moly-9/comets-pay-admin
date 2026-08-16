@@ -1,5 +1,14 @@
 .modal-panel.payment-list-editor-modal {
+  width: 100%;
+  max-width: min(1873.2px, calc(100vw - 64px)) !important;
+  margin: 0 auto;
   max-height: min(900px, calc(100vh - 48px));
+}
+
+@media (min-width: 2400px) {
+  .modal-panel.payment-list-editor-modal {
+    max-width: min(2068px, calc(100vw - 64px)) !important;
+  }
 }
 
 .payment-list-editor-modal .modal-content {
@@ -145,7 +154,7 @@
 }
 
 @media (max-width: 560px) {
-  .modal-panel.payment-list-editor-modal { max-height: calc(100vh - 16px); border-radius: 12px; }
+  .modal-panel.payment-list-editor-modal { max-width: calc(100vw - 32px) !important; max-height: calc(100vh - 16px); border-radius: 12px; }
   .payment-list-editor { --payment-editor-inset: 14px; min-height: calc(100vh - 92px); }
   .payment-list-editor-header, .payment-list-editor-body, .payment-list-editor-footer { padding-right: var(--payment-editor-inset); padding-left: var(--payment-editor-inset); }
   .payment-list-editor-bulk-fill-fields { grid-template-columns: 1fr; }
