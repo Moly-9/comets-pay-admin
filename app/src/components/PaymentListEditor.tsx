@@ -9,7 +9,6 @@ import {
   Plus,
   ReceiptText,
   RotateCcw,
-  ShieldCheck,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
@@ -23,7 +22,6 @@ import {
   type PaymentListRecord,
 } from '../businessWorkflow';
 import type { ContractRecord } from '../contracts';
-import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import { eligibleInvoicePayoutAccounts, getPayoutAccountId, getPayoutAccountSelectPresentation } from '../payoutAccounts';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
@@ -166,7 +164,6 @@ export function PaymentListEditor({
     if (Math.abs(delta) > 48) move(delta < 0 ? 1 : -1);
     setDragStartX(null);
   };
-  const contractCount = snapshot?.contractIds?.filter((id) => contracts.some((contract) => contract.contractId === id || contract.id === id)).length ?? item.snapshot.contractIds?.length ?? 0;
   const transferMethod = String(paymentListItemValue(item, 'transferMethod') || account.transferMethod || '');
   const feeBearer = String(paymentListItemValue(item, 'feeBearer') || contractFeeBearers[0] || '');
   const feeBearerFromContract = linkedContracts.length > 0;
@@ -250,19 +247,6 @@ export function PaymentListEditor({
               </div>
             ) : <div className="payment-list-editor-pdf-state">未找到 Invoice 快照</div>}
           </div>
-          <dl className="payment-list-editor-snapshot-grid">
-            <div><dt>Invoice 编号</dt><dd>{display(snapshot?.invoiceNumber ?? item.snapshot.invoiceNumber)}</dd></div>
-            <div><dt>达人</dt><dd>{display(snapshot?.creatorName ?? item.snapshot.creatorName)}<small>{display(snapshot?.creatorHandle)}</small></dd></div>
-            <div><dt>Real Name</dt><dd>{display(snapshot?.from.legalName ?? item.snapshot.realName)}</dd></div>
-            <div><dt>Invoice 金额</dt><dd>{snapshot ? formatInvoiceMoney(snapshot.currency, invoiceTotal(snapshot)) : `${item.snapshot.currency} ${item.snapshot.amount.toLocaleString('en-US')}`}</dd></div>
-            <div><dt>Invoice 日期</dt><dd>{display(snapshot?.invoiceDate)}</dd></div>
-            <div><dt>关联合同</dt><dd>{contractCount ? `${contractCount} 份` : '未关联'}</dd></div>
-          </dl>
-          <div className="payment-list-editor-invoice-lines">
-            <strong>费用明细</strong>
-            {(snapshot?.items ?? []).map((line) => <div key={line.id}><span>{line.description}</span><b>{line.quantity} × {line.unitPrice.toLocaleString('en-US')} {snapshot?.currency}</b></div>)}
-          </div>
-          <div className="payment-list-editor-frozen-note"><ShieldCheck size={15} />账户和 Invoice 信息来自已冻结快照，修改源资料不会自动改写本笔付款。</div>
         </section>
 
         <section className="payment-list-editor-payment" aria-label="付款明细">
