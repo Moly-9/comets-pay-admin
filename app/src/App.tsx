@@ -353,6 +353,23 @@ export default function App() {
   const [financeReviewRequestId, setFinanceReviewRequestId] = useState<string | null>(null);
   const [financeReviewSessions, setFinanceReviewSessions] = useState<Record<string, FinanceReviewSession>>({});
 
+  const isContractUsedInRequestProject = (contract: ContractRecord) => {
+    const contractIds = new Set(
+      [contract.contractId, contract.id].filter((id): id is string => Boolean(id)),
+    );
+    return requestProjects.some((request) => request.creatorLinks?.some((link) => (
+      link.contractIds.some((contractId) => contractIds.has(contractId))
+    )));
+  };
+
+  const contractDeletionOptions = (contract: ContractRecord) => ({
+    usedInRequest: isContractUsedInRequestProject(contract),
+  });
+
+  const contractDeletionPolicyMessage = currentUser.roleKey === 'media'
+    ? '媒介只能删除本人上传且尚未用于请款项目的合同。'
+    : '管理员、项目负责人和老板可以删除任意合同；PM 和财务账号不可删除合同。';
+
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
   }, []);
@@ -923,8 +940,8 @@ export default function App() {
 
   const deleteContract = (contractId: string) => {
     const contract = contracts.find((item) => item.contractId === contractId || item.id === contractId);
-    if (contract && !canDeleteContract(currentUser, contract)) {
-      notify('暂无操作权限', '管理员可删除全部合同，媒介只能删除本人上传的合同。');
+    if (contract && !canDeleteContract(currentUser, contract, contractDeletionOptions(contract))) {
+      notify('暂无操作权限', contractDeletionPolicyMessage);
       return;
     }
     if (!contract?.projectId) return;
@@ -955,12 +972,12 @@ export default function App() {
     const selectedIds = new Set(contractIds);
     const targets = contracts.filter((contract) => selectedIds.has(contract.contractId ?? contract.id));
     if (!targets.length) return 0;
-    if (!canDeleteContractSelection(currentUser, targets)) {
+    if (!canDeleteContractSelection(currentUser, targets, contractDeletionOptions)) {
       notify(
         '暂无操作权限',
         currentUser.roleKey === 'media'
-          ? '媒介只能删除本人上传的合同，请重新选择。'
-          : '只有管理员，或合同上传媒介本人可以删除合同。',
+          ? '媒介只能删除本人上传且尚未用于请款项目的合同，请重新选择。'
+          : contractDeletionPolicyMessage,
       );
       return 0;
     }
@@ -3398,15 +3415,16 @@ export default function App() {
         return;
       }
       const contract = contracts.find((candidate) => (candidate.contractId ?? candidate.id) === contractId);
-      if (!contract || !canDeleteContract(currentUser, contract)) {
-        notify('暂无操作权限', '管理员可删除全部合同，媒介只能删除本人上传的合同。');
+      if (!contract || !canDeleteContract(currentUser, contract, contractDeletionOptions(contract))) {
+        notify('暂无操作权限', contractDeletionPolicyMessage);
         return;
       }
+      const isPrivilegedDeleter = ['admin', 'project', 'owner'].includes(currentUser.roleKey);
       const other = requestProjects.find((candidate) => (
         candidate.paymentRequestProjectId !== request.paymentRequestProjectId
         && candidate.creatorLinks?.some((link) => link.contractIds.includes(contractId))
       ));
-      if (other) {
+      if (other && !isPrivilegedDeleter) {
         notify('无法删除合同', `该合同仍被 ${other.requestCode ?? other.id} 引用，请先解除关联。`);
         return;
       }
@@ -3823,7 +3841,7 @@ export default function App() {
           canUpload={canUploadContracts}
           canEditTemplates={canEditTemplates}
           canDelete={canDeleteContracts}
-          canDeleteContract={(contract) => canDeleteContract(currentUser, contract)}
+          canDeleteContract={(contract) => canDeleteContract(currentUser, contract, contractDeletionOptions(contract))}
           focusedContractId={focusedContractId}
           onFocusCleared={() => {
             setFocusedContractId(null);

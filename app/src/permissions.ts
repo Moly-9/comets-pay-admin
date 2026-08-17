@@ -38,7 +38,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'contract_view', group: '业务资料', label: '查看合同模块', description: '查看项目合同及其关联状态。' },
   { id: 'contract_manage', group: '业务资料', label: '上传与管理合同', description: '上传合同并维护合同与项目的关联资料。' },
   { id: 'contract_template_manage', group: '业务资料', label: '编辑合同模板', description: '维护合同模板内容，仅项目负责人、老板和管理员可操作。' },
-  { id: 'contract_delete', group: '业务资料', label: '删除合同', description: '管理员可删除全部合同；媒介仅可删除本人上传的合同。' },
+  { id: 'contract_delete', group: '业务资料', label: '删除合同', description: '管理员、项目负责人和老板可删除任意合同；媒介仅可删除本人上传且尚未用于请款项目的合同。' },
   { id: 'invoice_view', group: '业务资料', label: '查看 Invoice 模块', description: '查看并选择系统内的 Invoice。' },
   { id: 'invoice_manage', group: '业务资料', label: '生成与管理 Invoice', description: '生成 Invoice 文件并维护 Invoice 业务资料。' },
   { id: 'invoice_media_review', group: '业务资料', label: '执行 Invoice 媒介审核', description: '在媒介审核阶段通过或退回 Invoice。' },
@@ -75,11 +75,12 @@ export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
   pm: ['request_list_view', 'request_material_view', 'request_review'],
   finance: ['request_material_view', 'request_review', 'invoice_finance_review', 'payout_execute', 'payment_view'],
   admin: [...ALL_PERMISSION_IDS],
-  owner: ALL_PERMISSION_IDS.filter((permission) => permission !== 'contract_delete'),
+  owner: ALL_PERMISSION_IDS,
   project: [
     'creator_records_view',
     'contract_view',
     'contract_template_manage',
+    'contract_delete',
     'invoice_view',
     'request_list_view',
     'request_material_view',
@@ -116,17 +117,32 @@ export const hasPermission = (user: SystemUser, permission: PermissionId) => (
   ROLE_PERMISSION_IDS[user.roleKey].includes(permission)
 );
 
-export const canDeleteContract = (user: SystemUser, contract: ContractRecord) => {
-  if (user.roleKey === 'admin') return true;
-  return user.roleKey === 'media' && contract.uploadedByAccount === user.account;
+export type ContractDeletionOptions = {
+  usedInRequest?: boolean;
+};
+
+export const canDeleteContract = (
+  user: SystemUser,
+  contract: ContractRecord,
+  options: ContractDeletionOptions = {},
+) => {
+  if (['admin', 'project', 'owner'].includes(user.roleKey)) return true;
+  return user.roleKey === 'media'
+    && !options.usedInRequest
+    && contract.uploadedByAccount === user.account;
 };
 
 export const canEditContractTemplate = (user: SystemUser) => (
   hasPermission(user, 'contract_template_manage')
 );
 
-export const canDeleteContractSelection = (user: SystemUser, contracts: ContractRecord[]) => (
-  contracts.length > 0 && contracts.every((contract) => canDeleteContract(user, contract))
+export const canDeleteContractSelection = (
+  user: SystemUser,
+  contracts: ContractRecord[],
+  optionsForContract?: (contract: ContractRecord) => ContractDeletionOptions,
+) => (
+  contracts.length > 0
+  && contracts.every((contract) => canDeleteContract(user, contract, optionsForContract?.(contract)))
 );
 
 export const canAccessPage = (user: SystemUser, page: NavPage) => {

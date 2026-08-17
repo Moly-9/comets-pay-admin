@@ -150,6 +150,18 @@ export const canEditRequestProjectResources = (
 
 const contractStableId = (contract: ContractRecord) => contract.contractId ?? contract.id as ContractId;
 
+const contractUsedInRequestProjects = (
+  contract: ContractRecord,
+  requests: RequestProjectSummary[],
+) => {
+  const contractIds = new Set(
+    [contract.contractId, contract.id].filter((id): id is string => Boolean(id)),
+  );
+  return requests.some((request) => request.creatorLinks?.some((link) => (
+    link.contractIds.some((contractId) => contractIds.has(contractId))
+  )));
+};
+
 const creatorFor = (creatorId: string, creators: CreatorProfile[]) => (
   creators.find((creator) => creator.id === creatorId)
 );
@@ -702,7 +714,8 @@ export function RequestProjectResourceManager({
               {linkedContracts.map((contract) => {
                 const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
                 const contractId = contractStableId(contract);
-                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>{canEditLinkedResources ? <><button type="button" onClick={() => setConfirmAction({ title: '解除合同关联', description: `合同 ${contract.id} 源记录会保留，仅从当前请款项目移除。`, confirmLabel: '确认解除', run: () => unlinkContract(contractId) })}><Unlink size={14} />解除</button>{canDeleteContract(currentUser, contract) ? <button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；若被其他请款项目引用，系统会阻止操作。`, confirmLabel: '删除合同', danger: true, run: () => onDeleteContract(contractId) })}><Trash2 size={14} />删除</button> : null}</> : null}</div></article>;
+                const usedInRequest = contractUsedInRequestProjects(contract, requests);
+                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>{canEditLinkedResources ? <><button type="button" onClick={() => setConfirmAction({ title: '解除合同关联', description: `合同 ${contract.id} 源记录会保留，仅从当前请款项目移除。`, confirmLabel: '确认解除', run: () => unlinkContract(contractId) })}><Unlink size={14} />解除</button>{canDeleteContract(currentUser, contract, { usedInRequest }) ? <button className="danger" type="button" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；系统会同步清理请款项目关联并触发重新校验。`, confirmLabel: '删除合同', danger: true, run: () => onDeleteContract(contractId) })}><Trash2 size={14} />删除</button> : null}</> : null}</div></article>;
               })}
               {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可上传、生成或关联已有记录。</p></div> : null}
             </div>
