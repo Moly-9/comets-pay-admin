@@ -106,8 +106,8 @@ export function PaymentItemDetails({
                 <div><dt>合同编号</dt><dd>{contract.contractCode}</dd></div>
                 <div><dt>合同名称</dt><dd>{contract.name}</dd></div>
                 <div><dt>合同金额</dt><dd>{money(contract.currency, contract.amount)}</dd></div>
-                <div><dt>签署 / 状态</dt><dd>{contract.signed ? '已签署' : '待签署'} · {contract.status}</dd></div>
-                <div><dt>更新时间</dt><dd>{contract.updatedAt}</dd></div>
+                <div><dt>签署人</dt><dd>{contract.signer || (contract.signed ? '已签署' : '待签署')}</dd></div>
+                <div><dt>付款账户</dt><dd>{contract.paymentAccount || item.accountSummary}</dd></div>
               </dl>
             ))}
           </div>
@@ -125,17 +125,16 @@ export function PaymentItemDetails({
           <span className="payment-batch-detail-panel-icon" aria-hidden="true"><ReceiptText size={17} /></span>
           <div>
             <h3 id={`${item.payoutId}-invoice-title`}>Invoice</h3>
-            <small>付款凭证与审核结果</small>
+            <small>{item.invoice ? `V${item.invoice.version} · ${item.invoice.reviewStatus}` : '付款凭证与审核结果'}</small>
           </div>
           <span className="payment-batch-detail-panel-badge">{item.invoice ? `V${item.invoice.version}` : '未关联'}</span>
         </header>
         {item.invoice ? (
           <dl>
-            <div><dt>Invoice 号</dt><dd>{item.invoice.invoiceNumber}</dd></div>
+            <div><dt>Invoice 编号</dt><dd>{item.invoice.invoiceNumber}</dd></div>
             <div><dt>Invoice 日期</dt><dd>{item.invoice.invoiceDate}</dd></div>
             <div><dt>Invoice 金额</dt><dd>{money(item.invoice.currency, item.invoice.amount)}</dd></div>
-            <div><dt>版本 / 状态</dt><dd>V{item.invoice.version} · {item.invoice.reviewStatus}</dd></div>
-            <div><dt>资料校验</dt><dd>{item.invoice.validationStatus === 'valid' ? '已通过' : '需要复核'}</dd></div>
+            <div><dt>付款账户</dt><dd>{item.accountSummary}</dd></div>
           </dl>
         ) : (
           <p className="payment-batch-detail-empty">
@@ -156,12 +155,10 @@ export function PaymentItemDetails({
           <span className={`payment-batch-detail-panel-badge ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
         </header>
         <dl>
-          <div><dt>付款记录 ID</dt><dd>{item.payoutId}</dd></div>
           <div><dt>付款单</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
           <div><dt>付款渠道 / 方式</dt><dd>{item.provider} · {item.transferMethod}</dd></div>
           <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
           <div><dt>收款账户</dt><dd>{item.accountSummary}</dd></div>
-          <div><dt>账户版本</dt><dd>{item.payoutAccountVersion}</dd></div>
           <div><dt>费用承担</dt><dd>{item.feeBearer}</dd></div>
           <div><dt>付款原因</dt><dd>{item.paymentReason}</dd></div>
           <div><dt>交易附言</dt><dd>{item.transactionReference}</dd></div>

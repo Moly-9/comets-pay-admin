@@ -265,6 +265,24 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('Instagram 内容合作合同');
     expect(html).toContain('INV-202608-000001');
     expect(html).toContain('V2 · 已通过');
+    expect(html).toContain('<dt>合同编号</dt>');
+    expect(html).toContain('<dt>合同名称</dt>');
+    expect(html).toContain('<dt>合同金额</dt>');
+    expect(html).toContain('<dt>签署人</dt>');
+    expect(html).toContain('<dt>付款账户</dt>');
+    expect(html).toContain('<dt>Invoice 编号</dt>');
+    expect(html).toContain('<dt>Invoice 日期</dt>');
+    expect(html).toContain('<dt>Invoice 金额</dt>');
+    expect(html).toContain('<dt>付款单</dt>');
+    expect(html).toContain('<dt>付款渠道 / 方式</dt>');
+    expect(html).toContain('<dt>支付 / 收款币种</dt>');
+    expect(html).toContain('<dt>收款账户</dt>');
+    expect(html).toContain('<dt>费用承担</dt>');
+    expect(html).toContain('<dt>付款原因</dt>');
+    expect(html).toContain('<dt>交易附言</dt>');
+    expect(html).toContain('<dt>描述</dt>');
+    expect(html).toContain('<dt>渠道结果</dt>');
+    expect(html).toContain('<dt>付款时间</dt>');
     expect(html).toContain('•••• 7890');
     expect(html).toContain('COMETS-MINA-0810');
     expect(html).toContain('BENEFICIARY_DISABLED');
@@ -274,6 +292,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('payment-batch-detail-panel is-payment');
     expect(html).toContain('付款关联文件');
     expect(html).toContain('账户快照与渠道结果');
+    expect(html).not.toContain('付款记录 ID');
+    expect(html).not.toContain('<dt>账户版本</dt>');
     expect(html).not.toContain('1234567890');
   });
 

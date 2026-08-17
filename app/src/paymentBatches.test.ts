@@ -165,6 +165,8 @@ const createContract = (contractId: ContractId): ContractRecord => ({
   contractId,
   id: 'CON-TEST-001',
   name: '内容合作合同',
+  publisher: '测试达人工作室',
+  accountName: '测试达人工作室',
   currency: 'USD',
   totalFee: 1250,
   status: '已生效',
@@ -300,6 +302,8 @@ describe('payment batch snapshots', () => {
     expect(record.request.requestCode).toBe('REQ-TEST-001');
     expect(record.items).toHaveLength(1);
     expect(record.items[0].contracts[0].contractCode).toBe('CON-TEST-001');
+    expect(record.items[0].contracts[0].signer).toBe('测试达人工作室');
+    expect(record.items[0].contracts[0].paymentAccount).toBe('测试达人工作室');
     expect(record.items[0].invoice?.invoiceNumber).toBe('INV-TEST-001');
     expect(record.items[0].paymentListCode).toBe('PAY-TEST-001');
     expect(record.items[0].accountSummary).toBe('•••• 7890');

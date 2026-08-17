@@ -33,6 +33,8 @@ export type PaymentBatchContractSnapshot = Readonly<{
   name: string;
   currency: string;
   amount: number | null;
+  signer?: string;
+  paymentAccount?: string;
   status: string;
   signed: boolean;
   updatedAt: string;
@@ -249,6 +251,11 @@ const snapshotContract = (contract: ContractRecord): PaymentBatchContractSnapsho
   name: contract.name,
   currency: contract.currency || '未记录',
   amount: contract.totalFee,
+  signer: contract.publisher || contract.advertiser || undefined,
+  paymentAccount: contract.accountName
+    || contract.paymentSnapshot?.accountName
+    || contract.paymentSnapshot?.paypalEmail
+    || undefined,
   status: contract.status,
   signed: contract.signed,
   updatedAt: contract.updated,
