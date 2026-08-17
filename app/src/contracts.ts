@@ -136,6 +136,8 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
   contractName: string;
+  /** Optional for compatibility with older generated drafts. */
+  contractType?: ContractType;
   projectId: ProjectId;
   cooperationProjectId?: CooperationProjectId;
   projectName: string;
@@ -594,7 +596,7 @@ export const createGeneratedContractDraft = (
   return {
     contractId: options.existingContractId ?? createPrototypeId('contract') as ContractId,
     id: model.contractNumber,
-    contractType: 'INDEPENDENT',
+    contractType: model.contractType ?? 'INDEPENDENT',
     ioId: model.ioNumber || '待补充',
     name: model.contractName?.trim()
       || `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,

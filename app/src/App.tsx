@@ -609,13 +609,49 @@ export default function App() {
   }, [contracts, notify, registerProjectMutation]);
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
+    const projectKey = String(model.cooperationProjectId ?? model.projectId);
+    const existingProject = projects.find((project) => getProjectId(project) === projectKey);
+    const existingReference = existingProject?.creatorProfiles?.find((reference) => (
+      reference.creatorId === model.creatorId && reference.status !== 'removed'
+    ));
+    const resolvedEngagementId = existingReference?.engagementId
+      || model.engagementId
+      || createPrototypeId('engagement') as EngagementId;
+    if (existingProject && !existingReference) {
+      const creator = creators.find((candidate) => candidate.id === model.creatorId);
+      if (creator) {
+        const occurredAt = nowIso();
+        const activeCreatorCount = existingProject.creatorProfiles?.filter((reference) => reference.status !== 'removed').length;
+        setProjects((current) => current.map((project) => getProjectId(project) === projectKey
+          ? {
+              ...project,
+              creators: (activeCreatorCount ?? project.creators) + 1,
+              creatorProfiles: [
+                ...(project.creatorProfiles ?? []),
+                {
+                  creatorId: model.creatorId,
+                  engagementId: resolvedEngagementId,
+                  projectId: getProjectId(project),
+                  status: 'active',
+                  createdAt: occurredAt,
+                  updatedAt: occurredAt,
+                  name: creator.name,
+                  handle: creator.handle,
+                  platform: creator.platform,
+                },
+              ],
+            }
+          : project));
+      }
+    }
+    const resolvedModel = { ...model, engagementId: resolvedEngagementId };
     const existing = contracts.find((contract) => (
-      contract.engagementId === model.engagementId
+      contract.engagementId === resolvedEngagementId
       && contract.lifecycle === 'GENERATED_DRAFT'
     ));
     const version = (existing?.generationVersion ?? 0) + 1;
     const documentUrl = URL.createObjectURL(files.pdfBlob);
-    const record = createGeneratedContractDraft(model, version, documentUrl, {
+    const record = createGeneratedContractDraft(resolvedModel, version, documentUrl, {
       existingContractId: existing?.contractId,
       generationVariant: files.variant,
       qualityReport: files.qualityReport,
@@ -627,15 +663,15 @@ export default function App() {
       : [record, ...current]);
     if (existing?.documentUrl.startsWith('blob:')) URL.revokeObjectURL(existing.documentUrl);
     registerProjectMutation({
-      projectId: model.projectId,
-      engagementId: model.engagementId,
+      projectId: resolvedModel.projectId,
+      engagementId: resolvedEngagementId,
       entityType: 'contract',
       entityId: record.contractId ?? record.id,
       action: existing ? 'update' : 'create',
       summary: `${existing ? '已更新' : '已生成'}合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
-  }, [contracts, registerProjectMutation]);
+  }, [contracts, creators, projects, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {

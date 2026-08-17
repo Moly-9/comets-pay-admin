@@ -10,7 +10,7 @@ import {
   resolveContractPublishingChannels,
   validateContractGenerationModel,
 } from './contractGenerationModel';
-import type { ContractGenerationModel } from './contracts';
+import { createGeneratedContractDraft, type ContractGenerationModel } from './contracts';
 import {
   createAirwallexPayoutAccount,
   createPayMaxPayoutAccount,
@@ -421,5 +421,15 @@ describe('contract generation model', () => {
     expect(model.projectId).toBe('project-synthetic');
     expect(model.creatorId).toBe('creator-synthetic');
     expect(model.engagementId).toBe('engagement-synthetic');
+  });
+
+  it('persists the selected contract type and keeps legacy models independent', () => {
+    const framework = createGeneratedContractDraft({ ...validModel(), contractType: 'FRAMEWORK' }, 1);
+    const io = createGeneratedContractDraft({ ...validModel(), contractType: 'IO' }, 1);
+    const legacy = createGeneratedContractDraft(validModel(), 1);
+
+    expect(framework.contractType).toBe('FRAMEWORK');
+    expect(io.contractType).toBe('IO');
+    expect(legacy.contractType).toBe('INDEPENDENT');
   });
 });
