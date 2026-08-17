@@ -190,7 +190,7 @@ function SearchableComboBox({
   };
 
   return (
-    <div className={`contract-search-combobox ${error ? 'has-error' : ''}`} ref={rootRef}>
+    <div className={`contract-search-combobox ${open ? 'is-open' : ''} ${error ? 'has-error' : ''}`} ref={rootRef}>
       <div className="contract-search-input-wrap">
         <Search size={15} aria-hidden="true" />
         <input

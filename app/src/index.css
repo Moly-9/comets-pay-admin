@@ -16972,8 +16972,12 @@ button:disabled {
 
 .contract-search-combobox {
   position: relative;
-  z-index: 20;
+  z-index: 1;
   min-width: 0;
+}
+
+.contract-search-combobox.is-open {
+  z-index: 200;
 }
 
 .contract-search-input-wrap {
@@ -16981,7 +16985,7 @@ button:disabled {
   min-height: 44px;
   align-items: center;
   gap: 8px;
-  border: 1px solid #d9dce3;
+  border: 1px solid #d8cce5;
   border-radius: 7px;
   background: #fff;
   padding: 0 9px;
@@ -16990,8 +16994,8 @@ button:disabled {
 }
 
 .contract-search-input-wrap:focus-within {
-  border-color: #b9a6c5;
-  box-shadow: 0 0 0 3px rgba(200, 121, 141, 0.12);
+  border-color: #b7a3c9;
+  box-shadow: 0 0 0 3px rgba(183, 163, 201, 0.18);
 }
 
 .contract-search-input-wrap input {
@@ -17038,11 +17042,11 @@ button:disabled {
   left: 0;
   max-height: min(340px, 48vh);
   overflow: auto;
-  border: 1px solid #dedfe5;
-  border-radius: 8px;
+  border: 1px solid #e1d7e8;
+  border-radius: 10px;
   background: #fff;
   padding: 5px;
-  box-shadow: 0 15px 35px rgba(37, 38, 45, 0.16);
+  box-shadow: 0 16px 34px rgba(78, 57, 91, 0.16), 0 3px 10px rgba(78, 57, 91, 0.08);
 }
 
 .contract-search-result-count {
@@ -17068,10 +17072,45 @@ button:disabled {
 
 .contract-search-option:hover,
 .contract-search-option.is-active {
-  background: #faf4fb;
+  background: #faf7fc;
 }
 
 .contract-search-option.is-selected {
+  background: #f3edf8;
+  color: #694e77;
+}
+
+/* Searchable controls and the fixed contract-type select share one lavender state system. */
+.contract-builder-card .custom-select-form .custom-select-trigger {
+  border-color: #d8cce5;
+  background: #fff;
+  color: #3f3a48;
+}
+
+.contract-builder-card .custom-select-form .custom-select-trigger:hover:not(:disabled),
+.contract-builder-card .custom-select-form.custom-select-open .custom-select-trigger,
+.contract-builder-card .custom-select-form .custom-select-trigger:focus-visible {
+  border-color: #b7a3c9;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(183, 163, 201, 0.18);
+}
+
+.contract-builder-card .custom-select-form .custom-select-menu,
+.contract-builder-card .contract-search-menu {
+  border-color: #e1d7e8;
+  border-radius: 10px;
+  box-shadow: 0 16px 34px rgba(78, 57, 91, 0.16), 0 3px 10px rgba(78, 57, 91, 0.08);
+}
+
+.contract-builder-card .custom-select-form .custom-select-option:hover:not(:disabled),
+.contract-builder-card .custom-select-form .custom-select-option:focus-visible {
+  background: #faf7fc;
+}
+
+.contract-builder-card .custom-select-form .custom-select-option-selected,
+.contract-builder-card .custom-select-form .custom-select-option-selected:hover:not(:disabled),
+.contract-builder-card .custom-select-form .custom-select-option-selected:focus-visible {
+  background: #f3edf8;
   color: #694e77;
 }
 
