@@ -28,11 +28,38 @@ import type { ProjectSummary } from './ProjectDetailPage';
 type Notify = (title: string, message: string) => void;
 type ContractFilter = 'all' | 'ready' | 'attention' | 'template';
 
+const creatorRealNameFor = (contract: ContractRecord, creators: CreatorProfile[]) => {
+  const creator = contract.creatorId
+    ? creators.find((candidate) => candidate.id === contract.creatorId)
+    : undefined;
+  return creator?.contact.legalName?.trim() || creator?.name?.trim() || contract.publisher || '待补充';
+};
+
+const projectDisplayFor = (contract: ContractRecord, projects: ProjectSummary[]) => {
+  const projectId = contract.cooperationProjectId ?? contract.projectId;
+  const project = projectId
+    ? projects.find((candidate) => (
+      (candidate.cooperationProjectId ?? candidate.projectId ?? candidate.id) === projectId
+    ))
+    : undefined;
+  return {
+    name: project?.name || contract.project || '待关联项目',
+    code: project?.cooperationProjectCode || project?.projectCode || (projectId ? String(projectId) : ''),
+  };
+};
+
+const templateReadinessFor = (contract: ContractRecord) => {
+  const blockerCount = contract.issues.filter((issue) => issue.severity === 'blocker').length;
+  return { ready: blockerCount === 0, label: blockerCount === 0 ? '可使用' : '待完善' };
+};
+
 export function ContractsPage({
   contracts,
   projects,
+  projectDirectory = projects,
   creators,
   canUpload,
+  canEditTemplates = false,
   canDelete,
   canDeleteContract,
   focusedContractId,
@@ -47,8 +74,10 @@ export function ContractsPage({
 }: {
   contracts: ContractRecord[];
   projects: ProjectSummary[];
+  projectDirectory?: ProjectSummary[];
   creators: CreatorProfile[];
   canUpload: boolean;
+  canEditTemplates?: boolean;
   canDelete: boolean;
   canDeleteContract: (contract: ContractRecord) => boolean;
   focusedContractId: string | null;
@@ -78,22 +107,33 @@ export function ContractsPage({
     ? contracts.find((contract) => contract.id === selectedContractId)
     : null;
 
+  const displayProjects = useMemo(() => {
+    const merged = new Map<string, ProjectSummary>();
+    [...projects, ...(projectDirectory ?? [])].forEach((project) => {
+      const key = String(project.cooperationProjectId ?? project.projectId ?? project.id);
+      merged.set(key, project);
+    });
+    return [...merged.values()];
+  }, [projectDirectory, projects]);
+
   const filteredContracts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return contracts.filter((contract) => {
       const readiness = getContractReadiness(contract);
-      const matchesQuery = !query || `${contract.id}${contract.ioId}${contract.name}${contract.project}${contract.brand}${contract.publisher}`
+      const realName = creatorRealNameFor(contract, creators);
+      const project = projectDisplayFor(contract, displayProjects);
+      const matchesQuery = !query || `${contract.id}${contract.ioId}${contract.name}${contract.project}${contract.brand}${contract.publisher}${realName}${project.name}${project.code}`
         .toLowerCase()
         .includes(query);
       const matchesFilter = (
-        filter === 'all'
+        (filter === 'all' && !contract.isTemplate)
         || (filter === 'ready' && isPaymentContract(contract))
         || (filter === 'attention' && !readiness.ready && !contract.isTemplate)
         || (filter === 'template' && contract.isTemplate)
       );
       return matchesQuery && matchesFilter;
     });
-  }, [contracts, filter, search]);
+  }, [contracts, creators, displayProjects, filter, search]);
   const {
     page,
     pageItems: visible,
@@ -107,7 +147,7 @@ export function ContractsPage({
   const templateCount = contracts.filter((contract) => contract.isTemplate).length;
   const businessContractCount = contracts.length - templateCount;
   const contractFilterCounts: Record<ContractFilter, number> = {
-    all: contracts.length,
+    all: businessContractCount,
     ready: readyCount,
     attention: attentionCount,
     template: templateCount,
@@ -116,7 +156,10 @@ export function ContractsPage({
     () => selectedContracts(contracts, selectedIds),
     [contracts, selectedIds],
   );
-  const visibleIds = useMemo(() => filteredContracts.map(contractSelectionId), [filteredContracts]);
+  const visibleIds = useMemo(
+    () => filter === 'template' ? [] : filteredContracts.map(contractSelectionId),
+    [filter, filteredContracts],
+  );
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
   const selectedCanBeDeleted = selected.length > 0 && selected.every(canDeleteContract);
@@ -181,6 +224,7 @@ export function ContractsPage({
     setSelectedContractId(contractId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const isTemplateTab = filter === 'template';
 
   if (selectedContract) {
     return (
@@ -189,6 +233,7 @@ export function ContractsPage({
         contracts={contracts}
         projects={projects}
         creators={creators}
+        canEditTemplate={canEditTemplates}
         notify={notify}
         onUpdateContract={onUpdateContract}
         onBindFrameworkContract={onBindFrameworkContract}
@@ -255,28 +300,30 @@ export function ContractsPage({
               <span>{contractFilterCounts[value]}</span>
             </button>
           ))}
-          <div className="contract-bulk-actions">
-            <Button
-              variant="secondary"
-              data-testid="contract-bulk-export"
-              icon={<Download size={15} />}
-              disabled={exporting}
-              onClick={() => { void exportSelectedContracts(); }}
-            >
-              {exporting ? '导出中...' : '导出'}
-            </Button>
-            {canDelete ? (
+          {!isTemplateTab ? (
+            <div className="contract-bulk-actions">
               <Button
-                variant="danger"
-                data-testid="contract-bulk-delete"
-                icon={<Trash2 size={15} />}
-                title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
-                onClick={requestDeleteSelectedContracts}
+                variant="secondary"
+                data-testid="contract-bulk-export"
+                icon={<Download size={15} />}
+                disabled={exporting}
+                onClick={() => { void exportSelectedContracts(); }}
               >
-                删除
+                {exporting ? '导出中...' : '导出'}
               </Button>
-            ) : null}
-          </div>
+              {canDelete ? (
+                <Button
+                  variant="danger"
+                  data-testid="contract-bulk-delete"
+                  icon={<Trash2 size={15} />}
+                  title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
+                  onClick={requestDeleteSelectedContracts}
+                >
+                  删除
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="content-toolbar contract-toolbar">
           <label className="search-control page-search">
@@ -291,33 +338,79 @@ export function ContractsPage({
         </div>
 
         <div className="table-scroll">
-          <table className="data-table operational-table contract-table">
+          <table className={`data-table operational-table contract-table${isTemplateTab ? ' contract-template-table' : ''}`}>
             <thead>
-              <tr>
-                <th className="contract-select-cell">
-                  <input
-                    ref={selectAllRef}
-                    type="checkbox"
-                    aria-label="全选当前列表合同"
-                    checked={allVisibleSelected}
-                    disabled={!filteredContracts.length}
-                    onChange={() => setSelectedIds((current) => toggleVisibleContractSelection(current, filteredContracts))}
-                  />
-                </th>
-                <th>合同</th>
-                <th>Publisher</th>
-                <th>项目 / 品牌</th>
-                <th>合同金额</th>
-                <th>付款就绪度</th>
-                <th className="contract-date-cell">更新日期</th>
-                <th className="action-cell">操作</th>
-              </tr>
+              {isTemplateTab ? (
+                <tr>
+                  <th>模板名称</th>
+                  <th>合同类型</th>
+                  <th className="contract-date-cell">更新日期</th>
+                  <th>使用就绪度</th>
+                  <th className="action-cell">操作</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th className="contract-select-cell">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      aria-label="全选当前列表合同"
+                      checked={allVisibleSelected}
+                      disabled={!filteredContracts.length}
+                      onChange={() => setSelectedIds((current) => toggleVisibleContractSelection(current, filteredContracts))}
+                    />
+                  </th>
+                  <th>合同名称 / IO 单名称</th>
+                  <th>Publisher</th>
+                  <th>关联项目</th>
+                  <th>合同金额</th>
+                  <th>付款就绪度</th>
+                  <th className="contract-date-cell">更新日期</th>
+                  <th className="action-cell">操作</th>
+                </tr>
+              )}
             </thead>
             <tbody>
               {visible.map((contract) => {
                 const readiness = getContractReadiness(contract);
                 const stableId = contractSelectionId(contract);
                 const rowSelected = selectedIds.has(stableId);
+                const project = projectDisplayFor(contract, displayProjects);
+                const realName = creatorRealNameFor(contract, creators);
+                const templateReadiness = templateReadinessFor(contract);
+                if (isTemplateTab) {
+                  return (
+                    <tr className="clickable-table-row" key={stableId} onClick={() => openContract(contract.id)}>
+                      <td>
+                        <button
+                          className="contract-name-link"
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}
+                        >
+                          <strong>{contract.name}</strong>
+                          <small>{contract.id}</small>
+                        </button>
+                      </td>
+                      <td>
+                        <span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>
+                          {CONTRACT_TYPE_LABELS[getContractType(contract)]}
+                        </span>
+                      </td>
+                      <td className="contract-date-cell">{contract.updated}</td>
+                      <td>
+                        <span className={`contract-readiness contract-readiness-${templateReadiness.ready ? 'ready' : 'attention'}`}>
+                          <i />
+                          {templateReadiness.label}
+                        </span>
+                      </td>
+                      <td className="action-cell">
+                        <button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>
+                          {canEditTemplates ? '编辑模板' : '查看模板'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr
                     className={`clickable-table-row${rowSelected ? ' is-selected' : ''}`}
@@ -346,12 +439,12 @@ export function ContractsPage({
                         <span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>
                           {CONTRACT_TYPE_LABELS[getContractType(contract)]}
                         </span>
-                        <small>{contract.id} · {contract.ioId}</small>
+                        <small>{contract.id}{contract.ioId ? ` · ${contract.ioId}` : ''}</small>
                         {contract.frameworkContractId ? <small className="contract-relation-subtext">框架合同：{contract.frameworkContractId}</small> : null}
                       </button>
                     </td>
-                    <td>{contract.publisher || '待补充'}</td>
-                    <td><strong className="contract-project-name">{contract.project}</strong><small className="cell-subtext">{contract.brand}</small></td>
+                    <td>{realName}</td>
+                    <td><strong className="contract-project-name">{project.name}</strong><small className="cell-subtext">{project.code || contract.brand}</small></td>
                     <td>{formatContractMoney(contract)}</td>
                     <td>
                       <span className={`contract-readiness contract-readiness-${readiness.ready ? 'ready' : contract.isTemplate ? 'template' : 'attention'}`}>
@@ -366,7 +459,7 @@ export function ContractsPage({
                   </tr>
                 );
               })}
-              {visible.length === 0 ? <tr><td className="request-project-empty" colSpan={8}>暂无符合条件的合同</td></tr> : null}
+              {visible.length === 0 ? <tr><td className="request-project-empty" colSpan={isTemplateTab ? 5 : 8}>暂无符合条件的合同</td></tr> : null}
             </tbody>
           </table>
         </div>

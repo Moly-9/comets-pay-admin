@@ -5,6 +5,7 @@ import {
   canAccessPage,
   canDeleteContract,
   canDeleteContractSelection,
+  canEditContractTemplate,
   getDefaultPageForRole,
   hasPermission,
 } from './permissions';
@@ -60,6 +61,15 @@ describe('Invoice review permissions', () => {
     expect(hasPermission(userFor('pm'), 'contract_delete')).toBe(false);
     expect(hasPermission(userFor('finance'), 'contract_delete')).toBe(false);
     expect(hasPermission(userFor('project'), 'contract_delete')).toBe(false);
+  });
+
+  it('limits contract template editing to project owners, owners, and administrators', () => {
+    expect(canEditContractTemplate(userFor('project'))).toBe(true);
+    expect(canEditContractTemplate(userFor('owner'))).toBe(true);
+    expect(canEditContractTemplate(userFor('admin'))).toBe(true);
+    expect(canEditContractTemplate(userFor('media'))).toBe(false);
+    expect(canEditContractTemplate(userFor('pm'))).toBe(false);
+    expect(canEditContractTemplate(userFor('finance'))).toBe(false);
   });
 
   it('lets administrators delete every contract and media delete only their own uploads', () => {

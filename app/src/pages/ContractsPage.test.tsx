@@ -25,10 +25,10 @@ describe('ContractsPage batch actions', () => {
     const html = renderContractsPage(false);
     const exportButton = html.match(/<button[^>]*data-testid="contract-bulk-export"[^>]*>/)?.[0];
     expect(html).toContain('class="tabs-row contract-filter-tabs" role="tablist" aria-label="合同筛选"');
-    expect(html).toContain('role="tab" aria-selected="true">全部<span>2</span>');
+    expect(html).toContain('role="tab" aria-selected="true">全部<span>1</span>');
     expect(html).toContain('role="tab" aria-selected="false">可付款<span>');
     expect(html).toContain('role="tab" aria-selected="false">待处理<span>');
-    expect(html).toContain('role="tab" aria-selected="false">模板<span>');
+    expect(html).toContain('role="tab" aria-selected="false">模板<span>1</span>');
     expect(html).toContain('aria-label="全选当前列表合同"');
     expect(html).toContain('aria-label="选择合同 CON-260724-KOL-01"');
     expect(html).toContain('data-testid="contract-bulk-export"');

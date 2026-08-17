@@ -32,6 +32,7 @@ import {
   canAccessPage,
   canDeleteContract,
   canDeleteContractSelection,
+  canEditContractTemplate,
   getDefaultPageForRole,
   hasPermission,
 } from './permissions';
@@ -620,6 +621,10 @@ export default function App() {
   }, [contracts, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
+    if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
+      notify('暂无模板编辑权限', '仅项目负责人、老板或管理员可以修改合同模板。');
+      return;
+    }
     const cooperationProjectId = updated.cooperationProjectId ?? updated.projectId;
     const project = projects.find((item) => getProjectId(item) === cooperationProjectId);
     if (project && !canManageCooperationProjectFor(currentUser, project)) {
@@ -3711,6 +3716,7 @@ export default function App() {
   const canManageCreators = hasPermission(currentUser, 'creator_records_manage');
   const canUploadContracts = hasPermission(currentUser, 'contract_manage');
   const canDeleteContracts = hasPermission(currentUser, 'contract_delete');
+  const canEditTemplates = canEditContractTemplate(currentUser);
   const canManageProjects = hasPermission(currentUser, 'project_manage');
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
@@ -3812,8 +3818,10 @@ export default function App() {
           notify={notify}
           contracts={contracts}
           projects={manageableCooperationProjects}
+          projectDirectory={projects}
           creators={creators}
           canUpload={canUploadContracts}
+          canEditTemplates={canEditTemplates}
           canDelete={canDeleteContracts}
           canDeleteContract={(contract) => canDeleteContract(currentUser, contract)}
           focusedContractId={focusedContractId}

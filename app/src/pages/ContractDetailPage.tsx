@@ -188,6 +188,7 @@ export function ContractDetailPage({
   backLabel = '返回合同列表',
   notify,
   onUpdateContract,
+  canEditTemplate = false,
   onBindFrameworkContract,
   onUploadContracts,
 }: {
@@ -199,6 +200,7 @@ export function ContractDetailPage({
   backLabel?: string;
   notify: Notify;
   onUpdateContract?: (contract: ContractRecord) => void;
+  canEditTemplate?: boolean;
   onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onUploadContracts?: (inputs: ContractUploadInput[]) => ContractRecord[];
 }) {
@@ -253,6 +255,7 @@ export function ContractDetailPage({
     { id: 'checks', label: `校验记录${visibleIssues.length ? ` ${visibleIssues.length}` : ''}` },
   ];
   const contractType = getContractType(contract);
+  const canEditCurrentContract = !contract.isTemplate || canEditTemplate;
   const pendingGeneratedUpload = Boolean(
     contract.uploadedFromDraftId
     && contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION',
@@ -281,12 +284,14 @@ export function ContractDetailPage({
   };
 
   const updateField = (fieldKey: ContractFieldKey, value: string) => {
+    if (!canEditCurrentContract) return;
     setDraftFields((current) => current.map((field) => (
       field.fieldKey === fieldKey ? editRecognitionField(field, value) : field
     )));
   };
 
   const confirmPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
+    if (!canEditCurrentContract) return;
     if (recognitionApplied) return;
     if (!canConfirmRecognitionFields(draftFields, fieldKeys)) {
       notify('本页仍有待处理字段', `${pageLabel}存在待补充或需核对字段，请处理后再确认。`);
@@ -303,6 +308,7 @@ export function ContractDetailPage({
   };
 
   const editPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
+    if (!canEditCurrentContract) return;
     if (recognitionApplied) return;
     const next = reopenRecognitionFields(draftFields, fieldKeys);
     setDraftFields(next);
@@ -320,6 +326,9 @@ export function ContractDetailPage({
     pageState: { allConfirmed: boolean; canConfirm: boolean },
   ) => {
     if (!hasRecognition || !onUpdateContract) return null;
+    if (!canEditCurrentContract) {
+      return <span className="contract-page-readonly">仅允许项目负责人、老板或管理员编辑</span>;
+    }
     if (pageState.allConfirmed) {
       return recognitionApplied ? (
         <span className="contract-page-applied">
@@ -371,6 +380,10 @@ export function ContractDetailPage({
   };
 
   const applyRecognition = () => {
+    if (!canEditCurrentContract) {
+      notify('暂无模板编辑权限', '仅项目负责人、老板或管理员可以修改合同模板。');
+      return;
+    }
     const candidate = { ...contract, recognitionResults: draftFields };
     const applied = applyConfirmedRecognitionToContract(candidate);
     if (!applied) {
@@ -587,7 +600,7 @@ export function ContractDetailPage({
                     onChange={updateField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
-                    recognitionLocked={recognitionApplied}
+                    recognitionLocked={recognitionApplied || !canEditCurrentContract}
                   />
                 ) : <ContractDefinitionList contract={contract} formalFieldsHidden={contract.lifecycle === 'GENERATED_DRAFT'} />}
                 {contract.channelLink && contract.lifecycle !== 'GENERATED_DRAFT' ? <a className="contract-channel-link" href={contract.channelLink} target="_blank" rel="noreferrer"><ExternalLink size={15} />查看达人社媒账号主页</a> : null}
@@ -648,7 +661,7 @@ export function ContractDetailPage({
                       onChange={updateField}
                       onSelectCandidate={selectCandidate}
                       onOpenSource={openSource}
-                      recognitionLocked={recognitionApplied}
+                      recognitionLocked={recognitionApplied || !canEditCurrentContract}
                     />
                   </>
                 ) : (
@@ -690,7 +703,7 @@ export function ContractDetailPage({
                       <CheckCircle2 size={17} />
                     </span>
                     <div><strong>人工确认进度</strong><small>{confirmedCount}/{draftFields.length} 项</small></div>
-                    <Button disabled={!allConfirmed || !onUpdateContract} onClick={applyRecognition}>应用到正式合同资料</Button>
+                    <Button disabled={!allConfirmed || !onUpdateContract || !canEditCurrentContract} onClick={applyRecognition}>应用到正式合同资料</Button>
                   </div>
                 ) : null}
                 {visibleIssues.length > 0 ? (
