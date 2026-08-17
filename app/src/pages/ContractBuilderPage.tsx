@@ -927,7 +927,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control full-width ${errors.payoutAccountId ? 'has-error' : ''}`} data-contract-field="payoutAccountId" onFocus={() => setActiveField('payoutAccount')}>
                 <span>合同收款账户 *</span>
-                <SelectField ariaLabel="合同收款账户" variant="form" value={payoutAccountId} placeholder={selectedCreator ? '没有可用的已验证账户' : '请先选择达人'} options={payoutOptions} disabled={!selectedCreator || !payoutOptions.length} onChange={(value) => { setPayoutAccountId(value); resetOutput(); }} />
+                <SearchableComboBox ariaLabel="合同收款账户" value={payoutAccountId} placeholder={selectedCreator ? '搜索账户名称、渠道或脱敏标识' : '请先选择达人'} options={payoutOptions} disabled={!selectedCreator || !payoutOptions.length} onChange={(value) => { setPayoutAccountId(value); resetOutput(); }} onClear={() => { setPayoutAccountId(''); resetOutput(); }} />
                 <small>{errors.payoutAccountId}</small>
               </div>
               {selectedAccount ? (() => {

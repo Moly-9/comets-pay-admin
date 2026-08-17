@@ -49,7 +49,7 @@ import {
 } from '../contracts';
 import type { ContractId } from '../businessWorkflow';
 import { invoicePaymentForCreator } from '../payoutAccounts';
-import type { CreatorProfile } from '../types';
+import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
 
 type ContractDetailTab = 'summary' | 'payment' | 'checks';
@@ -129,6 +129,46 @@ const PAYMENT_METHOD_LABELS = {
   '': '待选择',
 } as const;
 
+const createDemoAirwallexSnapshot = (contract: ContractRecord): DocumentPayoutSnapshot => {
+  const accountName = contract.accountName || contract.publisher || 'Demo Creator';
+  const accountTail = contract.id.replace(/\D/g, '').slice(-4).padStart(4, '0');
+  return {
+    creatorId: contract.creatorId,
+    payoutAccountId: `demo-awx-${accountTail}`,
+    payoutAccountVersion: 'v1',
+    payoutProvider: 'Airwallex',
+    providerAccountScope: 'mock:default',
+    externalBeneficiaryId: `mock_beneficiary_${accountTail}`,
+    accountFingerprint: contract.accountFingerprint || `fp_demo_awx_${accountTail}`,
+    schemaKey: 'BANK_ACCOUNT:US',
+    validationStatus: 'VERIFIED',
+    bankCountry: 'United States',
+    accountName,
+    accountType: 'Checking',
+    swiftCode: 'CHASUS33',
+    accountNumber: `5000${accountTail}`,
+    iban: '',
+    beneficiaryType: 'PERSONAL',
+    bankName: 'JPMorgan Chase Bank',
+    bankStreetAddress: '270 Park Avenue',
+    bankCity: 'New York',
+    bankState: 'NY',
+    bankPostalCode: '10017',
+    intermediaryBankCountry: '',
+    intermediaryBankCode: '',
+    transferRemarks: `COMETS ${contract.id} payout`,
+    paypalUsername: '',
+    paypalEmail: '',
+    transferMethod: 'LOCAL',
+    localClearingSystem: 'ACH',
+    accountCurrency: contract.currency || 'USD',
+    validatedAt: '2026-08-12T10:30:00.000Z',
+    verifiedAt: '2026-08-12T10:35:00.000Z',
+    schemaValues: {},
+    schemaFields: [],
+  };
+};
+
 const FIELD_STATUS_LABELS = {
   detected: '待确认',
   missing: '待补充',
@@ -203,11 +243,13 @@ function ContractPaymentList({
   contract,
   fields,
   paymentSnapshot,
+  projectName,
   formalFieldsHidden = false,
 }: {
   contract: ContractRecord;
   fields: ContractDetailField[];
   paymentSnapshot: ReturnType<typeof invoicePaymentForCreator> | null;
+  projectName: string;
   formalFieldsHidden?: boolean;
 }) {
   const accountName = paymentSnapshot?.accountName || contract.accountName;
@@ -222,6 +264,112 @@ function ContractPaymentList({
       ? `•••• ${paymentSnapshot.accountNumber.replace(/\s/g, '').slice(-4)}`
       : ''),
   ].filter(Boolean).join(' · ') || '待补充';
+  const snapshotValue = (value?: string | null) => value?.trim() || '待补充';
+  const maskSensitive = (value?: string | null) => {
+    const normalized = value?.trim() ?? '';
+    if (!normalized) return '待补充';
+    if (normalized.includes('••••')) return normalized;
+    const compact = normalized.replace(/\s/g, '');
+    return compact.length > 4 ? `•••• ${compact.slice(-4)}` : '••••';
+  };
+  const transferMethodLabel = (value?: string) => {
+    if (value === 'LOCAL') return '本地转账 · LOCAL';
+    if (value === 'SWIFT') return '国际电汇 · SWIFT';
+    if (value === 'PAYPAL') return 'PayPal';
+    return '待补充';
+  };
+  const statusLabel = (value?: string) => {
+    if (value === 'VERIFIED') return '已验证';
+    if (value === 'VALIDATED') return '已校验';
+    if (value === 'ACTIVE') return '已启用';
+    if (value === 'DRAFT') return '草稿';
+    if (value === 'DISABLED') return '已停用';
+    return snapshotValue(value);
+  };
+  const profileRows = (snapshot: DocumentPayoutSnapshot | null) => {
+    if (!snapshot) return [];
+    const standardPaths = new Set([
+      'beneficiary.bank_details.account_name',
+      'beneficiary.bank_details.account_number',
+      'beneficiary.bank_details.bank_account_category',
+      'beneficiary.bank_details.bank_name',
+      'beneficiary.bank_details.bank_street_address',
+      'beneficiary.bank_details.swift_code',
+      'beneficiary.bank_details.iban',
+      'beneficiary.bank_details.bank_country_code',
+      'beneficiary.bank_details.bank_state',
+      'beneficiary.bank_details.bank_city',
+      'beneficiary.bank_details.bank_postcode',
+      'beneficiary.bank_details.intermediary_bank_country_code',
+    ]);
+    return (snapshot.schemaFields ?? [])
+      .map((field) => ({
+        label: field.label,
+        value: snapshot.schemaValues?.[field.path] ?? '',
+        path: field.path,
+      }))
+      .filter((field) => field.value.trim() && !standardPaths.has(field.path));
+  };
+  const dynamicProfileRows = profileRows(paymentSnapshot);
+  const accountSections = paymentSnapshot ? [
+    {
+      title: '账户身份与校验',
+      items: [
+        ['付款渠道', snapshotValue(paymentSnapshot.payoutProvider)],
+        ['Beneficiary ID', snapshotValue(paymentSnapshot.externalBeneficiaryId)],
+        ['账户版本', snapshotValue(paymentSnapshot.payoutAccountVersion)],
+        ['账户状态', statusLabel(paymentSnapshot.validationStatus)],
+        ['最近校验', snapshotValue(paymentSnapshot.validatedAt)],
+        ['最近验证', snapshotValue(paymentSnapshot.verifiedAt)],
+      ],
+    },
+    {
+      title: '付款场景',
+      items: [
+        ['收款人类型', snapshotValue(paymentSnapshot.beneficiaryType)],
+        ['银行国家 / 地区', snapshotValue(paymentSnapshot.bankCountry)],
+        ['账户币种', snapshotValue(paymentSnapshot.accountCurrency)],
+        ['转账方式', transferMethodLabel(paymentSnapshot.transferMethod)],
+        ['本地清算系统', snapshotValue(paymentSnapshot.localClearingSystem)],
+      ],
+    },
+    {
+      title: '银行账户',
+      items: [
+        ['Account Name', snapshotValue(paymentSnapshot.accountName)],
+        ['账户类型', snapshotValue(paymentSnapshot.accountType)],
+        ['Account Number', maskSensitive(paymentSnapshot.accountNumber)],
+        ['IBAN', maskSensitive(paymentSnapshot.iban)],
+        ['收款银行名称', snapshotValue(paymentSnapshot.bankName)],
+        ['SWIFT / BIC', snapshotValue(paymentSnapshot.swiftCode)],
+        ['收款银行地址', snapshotValue(paymentSnapshot.bankStreetAddress), true],
+        ['收款银行城市', snapshotValue(paymentSnapshot.bankCity)],
+        ['收款银行州 / 省', snapshotValue(paymentSnapshot.bankState)],
+        ['收款银行邮编', snapshotValue(paymentSnapshot.bankPostalCode)],
+      ],
+    },
+    {
+      title: '中间行与附加信息',
+      items: [
+        ['中间行国家 / 地区', snapshotValue(paymentSnapshot.intermediaryBankCountry)],
+        ['中间行 SWIFT / BIC', snapshotValue(paymentSnapshot.intermediaryBankCode)],
+        ['Transfer Note', snapshotValue(paymentSnapshot.transferRemarks), true],
+        ...dynamicProfileRows.map((row) => [row.label, row.value, false] as [string, string, boolean]),
+      ],
+    },
+  ] : [];
+  const executionRows: Array<[string, string, boolean?]> = [
+    ['付款金额', formatContractMoney(contract)],
+    ['支付币种', snapshotValue(contract.currency)],
+    ['收款币种', snapshotValue(paymentSnapshot?.accountCurrency || contract.currency)],
+    ['付款渠道 / 方式', `${snapshotValue(provider)} · ${transferMethodLabel(paymentSnapshot?.transferMethod)}`],
+    ['费用承担', FEE_BEARER_LABELS[contract.feeBearer]],
+    ['付款原因', `${projectName || contract.project || '达人内容合作'} 内容合作费用`],
+    ['交易附言', `COMETS-${contract.id}-PAYOUT`],
+    ['描述', snapshotValue(contract.name)],
+    ['渠道结果', '待提交 Airwallex'],
+    ['付款时间', '待创建付款批次'],
+  ];
   const valueFor = (key: ContractFieldKey | 'paymentInfo') => {
     if (formalFieldsHidden && key !== 'paymentInfo') return '待补充';
     switch (key) {
@@ -239,14 +387,54 @@ function ContractPaymentList({
     }
   };
   return (
-    <dl className="contract-payment-list">
-      {fields.map((field) => (
-        <div key={field.key}>
-          <dt>{field.label}</dt>
-          <dd>{valueFor(field.key)}</dd>
-        </div>
-      ))}
-    </dl>
+    <div className="contract-payment-content">
+      <dl className="contract-payment-list contract-payment-rules-list">
+        {fields.map((field) => (
+          <div key={field.key}>
+            <dt>{field.label}</dt>
+            <dd>{valueFor(field.key)}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <section className="contract-payment-account-card" aria-label="达人档案付款账户快照">
+        <header>
+          <span className="contract-payment-card-icon" aria-hidden="true"><Landmark size={16} /></span>
+          <span><strong>达人档案付款账户</strong><small>已选账户的不可变快照，字段可直接映射 Airwallex Beneficiary</small></span>
+          <em>{snapshotValue(provider)}</em>
+        </header>
+        {accountSections.map((section) => (
+          <div className="contract-payment-account-section" key={section.title}>
+            <h4>{section.title}</h4>
+            <dl className="contract-payment-data-grid">
+              {section.items.map(([label, value, wide]) => (
+                <div className={wide ? 'is-wide' : ''} key={`${section.title}-${label}`}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+        {!paymentSnapshot ? <p className="contract-payment-empty">未找到达人档案付款账户，补充并验证 Airwallex 账户后才能发起付款。</p> : null}
+      </section>
+
+      <section className="contract-payment-execution-card" aria-label="Airwallex 付款准备信息">
+        <header>
+          <span className="contract-payment-card-icon" aria-hidden="true"><ShieldCheck size={16} /></span>
+          <span><strong>Airwallex 付款准备</strong><small>补齐交易信息后，可创建一笔付款请求</small></span>
+          <em>演示数据</em>
+        </header>
+        <dl className="contract-payment-data-grid">
+          {executionRows.map(([label, value, wide]) => (
+            <div className={wide ? 'is-wide' : ''} key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </div>
   );
 }
 
@@ -391,8 +579,11 @@ export function ContractDetailPage({
       : undefined;
     return mapped?.name || contract.project || '待关联项目';
   }, [contract.cooperationProjectId, contract.project, contract.projectId, projectDirectory]);
-  const creator = creators.find((candidate) => candidate.id === contract.creatorId);
-  const fallbackPaymentSnapshot = creator ? invoicePaymentForCreator(creator) : null;
+  const creator = creators.find((candidate) => candidate.id === contract.creatorId)
+    ?? creators.find((candidate) => candidate.name === contract.publisher);
+  const fallbackPaymentSnapshot = creator
+    ? invoicePaymentForCreator(creator, contract.payoutProvider ?? 'Airwallex')
+    : createDemoAirwallexSnapshot(contract);
   const paymentSnapshot = contract.paymentSnapshot
     ?? contract.generationSnapshot?.paymentSnapshot
     ?? fallbackPaymentSnapshot;
@@ -807,7 +998,7 @@ export function ContractDetailPage({
                       <strong>生成合同付款快照</strong>
                       <small>回传文件人工确认前，以生成合同中的付款与 Invoice 信息为准</small>
                     </div>
-                    <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} />
+                    <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} projectName={projectName} />
                   </div>
                 ) : null}
                 {hasRecognition ? (
@@ -824,7 +1015,7 @@ export function ContractDetailPage({
                     />
                   </>
                 ) : (
-                  <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} />
+                  <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} projectName={projectName} />
                 )}
                 <div className="contract-payment-rule">
                   <Landmark size={17} />
