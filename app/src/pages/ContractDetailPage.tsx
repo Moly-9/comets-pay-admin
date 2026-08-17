@@ -42,6 +42,7 @@ import {
   getContractReadiness,
   isFrameworkContract,
   isIoContract,
+  type ContractStatus,
   type ContractType,
   type ContractRecord,
   type ContractUploadInput,
@@ -134,6 +135,17 @@ const FIELD_STATUS_LABELS = {
   conflict: '需核对',
   confirmed: '已确认',
 } as const;
+
+const CONTRACT_STATUS_NOTES: Record<ContractStatus, string> = {
+  参考模板: '仅作为合同模板资源，不能直接进入付款流程。',
+  待解析: '合同文件尚未完成解析，暂不能进行付款校验。',
+  待补字段: '补齐必填字段并解决阻断项后，才能进入付款流程。',
+  待回传: '合同草稿等待线下签署文件回传。',
+  已生效: '合同已生效；仍需满足付款就绪规则。',
+  履约中: '合同正在履约；满足付款规则后可进入付款流程。',
+  待签署: '等待合同完成签署并通过人工确认。',
+  已归档: '合同已归档；如需付款仍需确认付款条件有效。',
+};
 
 const sourceLabel = (source: ContractSourceLocation | null) => {
   if (!source) return '未找到可靠来源';
@@ -581,17 +593,7 @@ export function ContractDetailPage({
     notify('框架合同已上传并绑定', `${framework.id} 已成为当前 IO 单的框架合同。`);
   };
 
-  const legacyConfirmed = !contract.lifecycle && contract.signed;
-  const contractStatusLabel = contract.lifecycle === 'GENERATED_DRAFT'
-    ? '待上传'
-    : (contract.lifecycle === 'CONFIRMED' || legacyConfirmed) && readiness.ready
-      ? '可用于付款'
-      : '待确认';
-  const contractStatusNote = contractStatusLabel === '待上传'
-    ? '等待线下补充并回传签署合同'
-    : contractStatusLabel === '可用于付款'
-      ? isFrameworkContract(contract) ? '确认完成，可供 IO 单绑定使用' : '确认完成，可进入付款流程'
-      : '上传版本待人工确认并应用识别字段';
+  const contractStatusNote = CONTRACT_STATUS_NOTES[contract.status];
 
   return (
     <div className="page-stack contract-detail-page">
@@ -631,7 +633,7 @@ export function ContractDetailPage({
         </article>
         <article>
           <span>合同状态</span>
-          <strong className={contractStatusLabel === '可用于付款' ? 'contract-ready-text' : 'contract-attention-text'}>{contractStatusLabel}</strong>
+          <strong className={readiness.ready ? 'contract-ready-text' : 'contract-attention-text'}>{contract.status}</strong>
           <small>{contractStatusNote}</small>
         </article>
       </div>

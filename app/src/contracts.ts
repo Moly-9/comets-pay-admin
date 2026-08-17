@@ -909,7 +909,7 @@ export const applyConfirmedRecognitionToContract = (
     lifecycle: 'CONFIRMED',
     confirmedAt: new Date().toISOString(),
     signed: true,
-    status: '已归档',
+    status: '已生效',
     issues: contract.issues.filter((issue) => !['recognition-review', 'signature'].includes(issue.id)),
   };
 };
