@@ -815,9 +815,18 @@ const fieldText = (field: ContractRecognitionField | undefined) => (
   field?.editedValue?.trim() || field?.rawValue.trim() || ''
 );
 
-export const applyConfirmedRecognitionToContract = (contract: ContractRecord): ContractRecord | null => {
+export const applyConfirmedRecognitionToContract = (
+  contract: ContractRecord,
+  requiredFieldKeys?: readonly ContractRecognitionField['fieldKey'][],
+): ContractRecord | null => {
   const fields = contract.recognitionResults ?? [];
-  if (!allRecognitionFieldsConfirmed(fields)) return null;
+  const fieldsToConfirm = requiredFieldKeys
+    ? fields.filter((field) => requiredFieldKeys.includes(field.fieldKey))
+    : fields;
+  if (!allRecognitionFieldsConfirmed(fieldsToConfirm)) return null;
+  const appliesField = (fieldKey: ContractRecognitionField['fieldKey']) => (
+    !requiredFieldKeys || requiredFieldKeys.includes(fieldKey)
+  );
 
   const projectBrand = confirmedField(contract, 'projectBrand');
   const platformChannel = confirmedField(contract, 'platformChannel');
@@ -849,7 +858,6 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
     : normalizeMoney(fieldText(totalFees));
   const invoiceData = objectValue<{ normalizedDays?: number | null }>(invoicePeriod);
   const paymentData = objectValue<{ normalizedDays?: number | null }>(paymentTerm);
-  const frameworkContract = isFrameworkContract(contract);
   const generatedPayment = contract.generationSnapshot;
   const fallbackCurrency = contract.currency || generatedPayment?.currency || '';
   const fallbackTotalFee = contract.totalFee ?? (
@@ -869,33 +877,33 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
 
   return {
     ...contract,
-    advertiser: fieldText(confirmedField(contract, 'advertiser')),
-    publisher: fieldText(confirmedField(contract, 'publisher')),
-    ioId: fieldText(confirmedField(contract, 'ioNumber')) || '待补充',
-    project: projectData.projectName || contract.project,
-    brand: projectData.brandName || contract.brand,
-    platform: channelData.platform ?? '',
-    channelName: channelData.channelName || channelData.handle || '',
-    channelLink: channelData.channelUrl ?? '',
-    effectiveDate: frameworkContract ? '' : effectiveData.date ?? '',
-    campaignStart: frameworkContract ? '' : campaignData.startDate ?? '',
-    campaignEnd: frameworkContract ? '' : campaignData.endDate ?? '',
-    totalFee: frameworkContract ? null : moneyData.amount ?? fallbackTotalFee,
-    currency: frameworkContract ? '' : moneyData.currency || fallbackCurrency,
-    invoiceWithinWorkingDays: frameworkContract ? null : invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)) ?? fallbackInvoiceDays,
-    paymentWithinWorkingDays: frameworkContract ? null : paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)) ?? fallbackPaymentDays,
-    paymentMethod: frameworkContract ? '' : paymentMethod === 'AIRWALLEX'
+    advertiser: appliesField('advertiser') ? fieldText(confirmedField(contract, 'advertiser')) : contract.advertiser,
+    publisher: appliesField('publisher') ? fieldText(confirmedField(contract, 'publisher')) : contract.publisher,
+    ioId: appliesField('ioNumber') ? fieldText(confirmedField(contract, 'ioNumber')) || '待补充' : contract.ioId,
+    project: appliesField('projectBrand') ? projectData.projectName || contract.project : contract.project,
+    brand: appliesField('projectBrand') ? projectData.brandName || contract.brand : contract.brand,
+    platform: appliesField('platformChannel') ? channelData.platform ?? '' : contract.platform,
+    channelName: appliesField('platformChannel') ? channelData.channelName || channelData.handle || '' : contract.channelName,
+    channelLink: appliesField('platformChannel') ? channelData.channelUrl ?? '' : contract.channelLink,
+    effectiveDate: appliesField('effectiveDate') ? effectiveData.date ?? '' : contract.effectiveDate,
+    campaignStart: appliesField('campaignPeriod') ? campaignData.startDate ?? '' : contract.campaignStart,
+    campaignEnd: appliesField('campaignPeriod') ? campaignData.endDate ?? '' : contract.campaignEnd,
+    totalFee: appliesField('projectTotalFees') ? moneyData.amount ?? fallbackTotalFee : contract.totalFee,
+    currency: appliesField('projectTotalFees') ? moneyData.currency || fallbackCurrency : contract.currency,
+    invoiceWithinWorkingDays: appliesField('invoiceIssuePeriod') ? invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)) ?? fallbackInvoiceDays : contract.invoiceWithinWorkingDays,
+    paymentWithinWorkingDays: appliesField('paymentTerm') ? paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)) ?? fallbackPaymentDays : contract.paymentWithinWorkingDays,
+    paymentMethod: appliesField('paymentMethod') ? paymentMethod === 'AIRWALLEX'
       ? 'AIRWALLEX'
       : paymentMethod === 'PAYPAL'
         ? 'PAYPAL'
         : paymentMethod === 'BANK_TRANSFER' || /bank|银行|电汇/i.test(paymentMethod)
           ? 'BANK'
-          : fallbackPaymentMethod,
-    feeBearer: frameworkContract ? '' : ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(transferFee)
+          : fallbackPaymentMethod : contract.paymentMethod,
+    feeBearer: appliesField('transferFee') && ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(transferFee)
       ? transferFee as ContractFeeBearer
-      : fallbackFeeBearer,
-    accountName: beneficiary || fallbackAccountName,
-    accountFingerprint: beneficiary ? '合同识别快照' : contract.accountFingerprint,
+      : appliesField('transferFee') ? fallbackFeeBearer : contract.feeBearer,
+    accountName: appliesField('beneficiaryAccount') ? beneficiary || fallbackAccountName : contract.accountName,
+    accountFingerprint: appliesField('beneficiaryAccount') && beneficiary ? '合同识别快照' : contract.accountFingerprint,
     extractionStage: 'applied',
     recognitionAppliedAt: new Date().toISOString(),
     lifecycle: 'CONFIRMED',

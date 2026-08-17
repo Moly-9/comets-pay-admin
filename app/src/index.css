@@ -19878,6 +19878,7 @@ button:disabled {
 
 .contract-tabs button {
   position: relative;
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
   padding: 0;
@@ -19961,10 +19962,14 @@ button:disabled {
 .contract-definition-list dd,
 .contract-payment-list dd {
   display: grid;
+  min-width: 0;
+  overflow: hidden;
   gap: 3px;
   margin: 0;
   font-size: 11.5px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .contract-definition-list dd small {

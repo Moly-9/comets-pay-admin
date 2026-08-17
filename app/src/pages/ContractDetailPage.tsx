@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   ArrowLeft,
-  CalendarDays,
   CheckCircle2,
   Clipboard,
   Download,
@@ -29,8 +28,6 @@ import {
 } from '../contractRecognition';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
-  PAYMENT_FIELD_KEYS,
-  SUMMARY_FIELD_KEYS,
   type ContractFieldCandidate,
   type ContractFieldKey,
   type ContractRecognitionField,
@@ -45,15 +42,77 @@ import {
   getContractReadiness,
   isFrameworkContract,
   isIoContract,
+  type ContractType,
   type ContractRecord,
   type ContractUploadInput,
 } from '../contracts';
 import type { ContractId } from '../businessWorkflow';
+import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
 
-type ContractDetailTab = 'summary' | 'io' | 'payment' | 'checks';
+type ContractDetailTab = 'summary' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
+
+type ContractDetailField = {
+  key: ContractFieldKey | 'paymentInfo';
+  label: string;
+};
+
+const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
+  INDEPENDENT: [
+    { key: 'advertiser', label: 'Advertiser' },
+    { key: 'publisher', label: 'Publisher' },
+    { key: 'contractNumber', label: '合同编号' },
+    { key: 'projectBrand', label: 'Project Name' },
+    { key: 'platformChannel', label: '平台 / 频道' },
+    { key: 'effectiveDate', label: '生效日期' },
+    { key: 'campaignPeriod', label: 'Campaign Period' },
+  ],
+  FRAMEWORK: [
+    { key: 'advertiser', label: 'Advertiser' },
+    { key: 'publisher', label: 'Publisher' },
+    { key: 'contractNumber', label: '合同编号' },
+    { key: 'effectiveDate', label: '生效日期' },
+    { key: 'campaignPeriod', label: 'Campaign Period' },
+  ],
+  IO: [
+    { key: 'advertiser', label: 'Advertiser' },
+    { key: 'publisher', label: 'Publisher' },
+    { key: 'contractNumber', label: '合同编号' },
+    { key: 'projectBrand', label: 'Project Name' },
+    { key: 'platformChannel', label: '平台 / 频道' },
+    { key: 'effectiveDate', label: '生效日期' },
+    { key: 'campaignPeriod', label: 'Campaign Period' },
+  ],
+};
+
+const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
+  INDEPENDENT: [
+    { key: 'projectTotalFees', label: '付款金额' },
+    { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
+    { key: 'paymentTerm', label: '付款期限' },
+    { key: 'paymentMethod', label: '付款方式' },
+    { key: 'transferFee', label: '手续费费用承担方' },
+    { key: 'paymentInfo', label: '付款信息' },
+  ],
+  FRAMEWORK: [
+    { key: 'transferFee', label: '手续费费用承担方' },
+    { key: 'paymentInfo', label: '付款信息' },
+  ],
+  IO: [
+    { key: 'projectTotalFees', label: '付款金额' },
+    { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
+    { key: 'paymentTerm', label: '付款期限' },
+    { key: 'paymentMethod', label: '付款方式' },
+  ],
+};
+
+const DETAIL_FIELD_LABELS: Partial<Record<ContractFieldKey, string>> = Object.fromEntries(
+  [...SUMMARY_FIELDS_BY_TYPE.INDEPENDENT, ...PAYMENT_FIELDS_BY_TYPE.INDEPENDENT]
+    .filter((field): field is { key: ContractFieldKey; label: string } => field.key !== 'paymentInfo')
+    .map((field) => [field.key, field.label]),
+) as Partial<Record<ContractFieldKey, string>>;
 
 const FEE_BEARER_LABELS = {
   ADVERTISER: 'Advertiser承担',
@@ -88,24 +147,93 @@ const sourceLabel = (source: ContractSourceLocation | null) => {
 
 function ContractDefinitionList({
   contract,
+  fields,
+  projectName,
   formalFieldsHidden = false,
 }: {
   contract: ContractRecord;
+  fields: ContractDetailField[];
+  projectName: string;
   formalFieldsHidden?: boolean;
 }) {
-  const formalValue = (value: string, fallback = '待补充') => (
-    formalFieldsHidden ? fallback : value || fallback
-  );
+  const joinedValue = (...values: string[]) => values.filter(Boolean).join(' · ') || '待补充';
+  const valueFor = (key: ContractFieldKey) => {
+    if (formalFieldsHidden && key !== 'contractNumber') return '待补充';
+    switch (key) {
+      case 'advertiser': return contract.advertiser || '待识别';
+      case 'publisher': return contract.publisher || '待补充';
+      case 'contractNumber': return contract.id;
+      case 'projectBrand': return projectName || '待补充';
+      case 'platformChannel': return joinedValue(contract.platform, contract.channelName);
+      case 'effectiveDate': return contract.effectiveDate || '待补充';
+      case 'campaignPeriod': return contract.campaignStart && contract.campaignEnd
+        ? `${contract.campaignStart} 至 ${contract.campaignEnd}`
+        : '待补充';
+      default: return '待补充';
+    }
+  };
   return (
     <dl className="contract-definition-list">
-      <div><dt>Advertiser</dt><dd>{formalValue(contract.advertiser, '待识别')}<small>Standard Terms · 第1页</small></dd></div>
-      <div><dt>Publisher</dt><dd>{formalValue(contract.publisher)}<small>Standard Terms · 第1页</small></dd></div>
-      <div><dt>合同编号</dt><dd>{contract.id}<small>系统字段</small></dd></div>
-      <div><dt>IO编号</dt><dd>{formalValue(contract.ioId)}<small>IO · 第13页</small></dd></div>
-      <div><dt>项目 / 品牌</dt><dd>{formalFieldsHidden ? '待补充' : `${contract.project || '待补充'} · ${contract.brand || '待补充'}`}<small>IO · 第13页</small></dd></div>
-      <div><dt>平台 / 频道</dt><dd>{formalFieldsHidden ? '待补充' : `${contract.platform || '待补充'} · ${contract.channelName || '待补充'}`}<small>IO · 第14页</small></dd></div>
-      <div><dt>生效日期</dt><dd>{formalValue(contract.effectiveDate)}<small>签署页 / IO</small></dd></div>
-      <div><dt>Campaign Period</dt><dd>{formalFieldsHidden ? '待补充' : contract.campaignStart && contract.campaignEnd ? `${contract.campaignStart} 至 ${contract.campaignEnd}` : '待补充'}<small>IO · 第13页</small></dd></div>
+      {fields.map((field) => (
+        <div key={field.key}>
+          <dt>{field.label}</dt>
+          <dd>
+            {valueFor(field.key as ContractFieldKey)}
+            <small>{field.key === 'contractNumber' ? '系统字段' : '合同识别 / 人工确认'}</small>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ContractPaymentList({
+  contract,
+  fields,
+  paymentSnapshot,
+  formalFieldsHidden = false,
+}: {
+  contract: ContractRecord;
+  fields: ContractDetailField[];
+  paymentSnapshot: ReturnType<typeof invoicePaymentForCreator> | null;
+  formalFieldsHidden?: boolean;
+}) {
+  const accountName = paymentSnapshot?.accountName || contract.accountName;
+  const accountFingerprint = paymentSnapshot?.accountFingerprint || contract.accountFingerprint;
+  const provider = paymentSnapshot?.payoutProvider || contract.payoutProvider;
+  const accountVersion = paymentSnapshot?.payoutAccountVersion || contract.payoutAccountVersion;
+  const paymentInfo = [
+    accountName,
+    provider,
+    accountVersion,
+    accountFingerprint || (paymentSnapshot?.accountNumber
+      ? `•••• ${paymentSnapshot.accountNumber.replace(/\s/g, '').slice(-4)}`
+      : ''),
+  ].filter(Boolean).join(' · ') || '待补充';
+  const valueFor = (key: ContractFieldKey | 'paymentInfo') => {
+    if (formalFieldsHidden && key !== 'paymentInfo') return '待补充';
+    switch (key) {
+      case 'projectTotalFees': return formatContractMoney(contract);
+      case 'invoiceIssuePeriod': return contract.invoiceWithinWorkingDays
+        ? `最终验收后${contract.invoiceWithinWorkingDays}个工作日内`
+        : '待补充';
+      case 'paymentTerm': return contract.paymentWithinWorkingDays
+        ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日`
+        : '待补充';
+      case 'paymentMethod': return PAYMENT_METHOD_LABELS[contract.paymentMethod];
+      case 'transferFee': return FEE_BEARER_LABELS[contract.feeBearer];
+      case 'paymentInfo': return paymentInfo;
+      default: return '待补充';
+    }
+  };
+  return (
+    <dl className="contract-payment-list">
+      {fields.map((field) => (
+        <div key={field.key}>
+          <dt>{field.label}</dt>
+          <dd>{valueFor(field.key)}</dd>
+        </div>
+      ))}
     </dl>
   );
 }
@@ -116,6 +244,7 @@ function RecognitionFieldList({
   onChange,
   onSelectCandidate,
   onOpenSource,
+  fieldLabels = {},
   recognitionLocked = false,
 }: {
   fields: ContractRecognitionField[];
@@ -123,6 +252,7 @@ function RecognitionFieldList({
   onChange: (fieldKey: ContractFieldKey, value: string) => void;
   onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
   onOpenSource: (source: ContractSourceLocation) => void;
+  fieldLabels?: Partial<Record<ContractFieldKey, string>>;
   recognitionLocked?: boolean;
 }) {
   return (
@@ -136,10 +266,10 @@ function RecognitionFieldList({
             className={`contract-recognition-detail contract-recognition-field-${field.status}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
             key={field.fieldKey}
           >
-            <div className="contract-recognition-label">{field.label}</div>
+            <div className="contract-recognition-label">{fieldLabels[field.fieldKey] ?? field.label}</div>
             <div className="contract-recognition-value">
               <input
-                aria-label={field.label}
+                aria-label={fieldLabels[field.fieldKey] ?? field.label}
                 value={field.rawValue}
                 placeholder="待补充"
                 readOnly={fieldLocked}
@@ -183,6 +313,7 @@ export function ContractDetailPage({
   contract,
   contracts = [],
   projects = [],
+  projectDirectory = projects,
   creators = [],
   onBack,
   backLabel = '返回合同列表',
@@ -195,6 +326,7 @@ export function ContractDetailPage({
   contract: ContractRecord;
   contracts?: ContractRecord[];
   projects?: ProjectSummary[];
+  projectDirectory?: ProjectSummary[];
   creators?: CreatorProfile[];
   onBack: () => void;
   backLabel?: string;
@@ -227,9 +359,39 @@ export function ContractDetailPage({
     ? focusedSource.pageNumber
     : null;
   const previewUrl = `${documentUrl}#page=${previewPage ?? 1}&toolbar=1&navpanes=0&view=FitH`;
+  const contractType = getContractType(contract);
+  const summaryFields = SUMMARY_FIELDS_BY_TYPE[contractType];
+  const paymentFields = PAYMENT_FIELDS_BY_TYPE[contractType];
+  const summaryFieldKeys = summaryFields
+    .map((field) => field.key)
+    .filter((key): key is ContractFieldKey => key !== 'paymentInfo');
+  const paymentFieldKeys = paymentFields
+    .map((field) => field.key)
+    .filter((key): key is ContractFieldKey => key !== 'paymentInfo');
+  const recognitionFieldKeys = Array.from(new Set([...summaryFieldKeys, ...paymentFieldKeys]));
+  const projectName = useMemo(() => {
+    const projectId = contract.cooperationProjectId ?? contract.projectId;
+    const mapped = projectId
+      ? projectDirectory.find((project) => (
+        String(project.cooperationProjectId ?? project.projectId ?? project.id) === String(projectId)
+        || String(project.id) === String(projectId)
+      ))
+      : undefined;
+    return mapped?.name || contract.project || '待关联项目';
+  }, [contract.cooperationProjectId, contract.project, contract.projectId, projectDirectory]);
+  const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+  const fallbackPaymentSnapshot = creator ? invoicePaymentForCreator(creator) : null;
+  const paymentSnapshot = contract.paymentSnapshot
+    ?? contract.generationSnapshot?.paymentSnapshot
+    ?? fallbackPaymentSnapshot;
   const hasRecognition = draftFields.length > 0;
-  const confirmedCount = draftFields.filter((field) => field.status === 'confirmed').length;
-  const allConfirmed = hasRecognition && confirmedCount === draftFields.length;
+  const applicableRecognitionFields = recognitionFieldKeys
+    .map((fieldKey) => draftFields.find((field) => field.fieldKey === fieldKey))
+    .filter((field): field is ContractRecognitionField => Boolean(field));
+  const confirmedCount = applicableRecognitionFields.filter((field) => field.status === 'confirmed').length;
+  const allConfirmed = hasRecognition
+    && applicableRecognitionFields.length > 0
+    && confirmedCount === applicableRecognitionFields.length;
   const recognitionApplied = contract.extractionStage === 'applied';
   const visibleIssues = allConfirmed
     ? contract.issues.filter((issue) => issue.id !== 'recognition-review')
@@ -246,15 +408,13 @@ export function ContractDetailPage({
       canConfirm: canConfirmRecognitionFields(draftFields, fieldKeys),
     };
   };
-  const summaryPageState = recognitionPageState(SUMMARY_FIELD_KEYS);
-  const paymentPageState = recognitionPageState(PAYMENT_FIELD_KEYS);
+  const summaryPageState = recognitionPageState(summaryFieldKeys);
+  const paymentPageState = recognitionPageState(paymentFieldKeys);
   const tabs: Array<{ id: ContractDetailTab; label: string }> = [
     { id: 'summary', label: '合同摘要' },
-    { id: 'io', label: 'IO与履约' },
     { id: 'payment', label: '付款与Invoice' },
     { id: 'checks', label: `校验记录${visibleIssues.length ? ` ${visibleIssues.length}` : ''}` },
   ];
-  const contractType = getContractType(contract);
   const canEditCurrentContract = !contract.isTemplate || canEditTemplate;
   const pendingGeneratedUpload = Boolean(
     contract.uploadedFromDraftId
@@ -302,7 +462,9 @@ export function ContractDetailPage({
     onUpdateContract?.({
       ...contract,
       recognitionResults: next,
-      extractionStage: next.every((field) => field.status === 'confirmed') ? 'confirmed' : 'review',
+      extractionStage: recognitionFieldKeys.every((fieldKey) => (
+        next.some((field) => field.fieldKey === fieldKey && field.status === 'confirmed')
+      )) ? 'confirmed' : 'review',
     });
     notify('本页字段已确认', `${pageLabel}的字段信息已统一确认。`);
   };
@@ -385,9 +547,9 @@ export function ContractDetailPage({
       return;
     }
     const candidate = { ...contract, recognitionResults: draftFields };
-    const applied = applyConfirmedRecognitionToContract(candidate);
+    const applied = applyConfirmedRecognitionToContract(candidate, recognitionFieldKeys);
     if (!applied) {
-      notify('仍有字段未确认', `已确认 ${confirmedCount}/${draftFields.length} 项，请完成各页字段确认。`);
+      notify('仍有字段未确认', `已确认 ${confirmedCount}/${applicableRecognitionFields.length} 项，请完成适用字段确认。`);
       return;
     }
     onUpdateContract?.(applied);
@@ -419,6 +581,18 @@ export function ContractDetailPage({
     notify('框架合同已上传并绑定', `${framework.id} 已成为当前 IO 单的框架合同。`);
   };
 
+  const legacyConfirmed = !contract.lifecycle && contract.signed;
+  const contractStatusLabel = contract.lifecycle === 'GENERATED_DRAFT'
+    ? '待上传'
+    : (contract.lifecycle === 'CONFIRMED' || legacyConfirmed) && readiness.ready
+      ? '可用于付款'
+      : '待确认';
+  const contractStatusNote = contractStatusLabel === '待上传'
+    ? '等待线下补充并回传签署合同'
+    : contractStatusLabel === '可用于付款'
+      ? isFrameworkContract(contract) ? '确认完成，可供 IO 单绑定使用' : '确认完成，可进入付款流程'
+      : '上传版本待人工确认并应用识别字段';
+
   return (
     <div className="page-stack contract-detail-page">
       <button className="project-back-button" type="button" onClick={onBack}>
@@ -428,7 +602,7 @@ export function ContractDetailPage({
 
       <PageHeading
         title={contract.name}
-        subtitle={`${contract.id} · ${contract.templateFamily}`}
+        subtitle={`${contract.id} · ${projectName}`}
         actions={(
           <>
             <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button>
@@ -444,7 +618,7 @@ export function ContractDetailPage({
 
       <div className="contract-metric-grid">
         <article>
-          <span>{isFrameworkContract(contract) ? '框架资源状态' : '付款就绪度'}</span>
+          <span>付款就绪度</span>
           <strong className={readiness.ready ? 'contract-ready-text' : 'contract-attention-text'}>{readiness.label}</strong>
           <small>{isFrameworkContract(contract)
             ? readiness.ready ? '可供同一达人 IO 单选择绑定' : '确认主体和签署状态后可用于绑定'
@@ -452,13 +626,13 @@ export function ContractDetailPage({
         </article>
         <article>
           <span>合同金额</span>
-          <strong>{formatContractMoney(contract)}</strong>
+          <strong>{isFrameworkContract(contract) ? '——' : formatContractMoney(contract)}</strong>
           <small>{hasRecognition && contract.extractionStage !== 'applied' ? '识别结果尚未应用到正式字段' : '以人工确认后的正式字段为准'}</small>
         </article>
         <article>
           <span>合同状态</span>
-          <strong>{contract.status}</strong>
-          <small>{contract.lifecycle === 'GENERATED_DRAFT' ? '等待线下补充并回传' : contract.signed ? '上传最终版本已确认' : '上传版本待人工确认'}</small>
+          <strong className={contractStatusLabel === '可用于付款' ? 'contract-ready-text' : 'contract-attention-text'}>{contractStatusLabel}</strong>
+          <small>{contractStatusNote}</small>
         </article>
       </div>
 
@@ -591,38 +765,27 @@ export function ContractDetailPage({
                     <strong>结构化合同信息</strong>
                     <small>{hasRecognition ? `本页已确认 ${summaryPageState.confirmedCount}/${summaryPageState.fieldCount} 项` : '每个字段保留合同来源位置'}</small>
                   </span>
-                  {renderPageAction(SUMMARY_FIELD_KEYS, '合同摘要', summaryPageState)}
+                  {renderPageAction(summaryFieldKeys, '合同摘要', summaryPageState)}
                 </div>
                 {hasRecognition ? (
                   <RecognitionFieldList
                     fields={draftFields}
-                    fieldKeys={SUMMARY_FIELD_KEYS}
+                    fieldKeys={summaryFieldKeys}
                     onChange={updateField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
+                    fieldLabels={DETAIL_FIELD_LABELS}
                     recognitionLocked={recognitionApplied || !canEditCurrentContract}
                   />
-                ) : <ContractDefinitionList contract={contract} formalFieldsHidden={contract.lifecycle === 'GENERATED_DRAFT'} />}
+                ) : (
+                  <ContractDefinitionList
+                    contract={contract}
+                    fields={summaryFields}
+                    projectName={projectName}
+                    formalFieldsHidden={contract.lifecycle === 'GENERATED_DRAFT'}
+                  />
+                )}
                 {contract.channelLink && contract.lifecycle !== 'GENERATED_DRAFT' ? <a className="contract-channel-link" href={contract.channelLink} target="_blank" rel="noreferrer"><ExternalLink size={15} />查看达人社媒账号主页</a> : null}
-              </>
-            ) : null}
-
-            {activeTab === 'io' ? (
-              <>
-                <div className="contract-section-heading">
-                  <CalendarDays size={18} />
-                  <span><strong>IO与履约要求</strong><small>用于后续验收与应付金额确认</small></span>
-                </div>
-                {contract.lifecycle !== 'GENERATED_DRAFT' && contract.deliverables.length > 0 ? (
-                  <div className="contract-deliverable-list">
-                    {contract.deliverables.map((deliverable, index) => (
-                      <article key={deliverable.id}>
-                        <span>{index + 1}</span>
-                        <div><strong>{deliverable.title}</strong><p>{deliverable.description}</p><small>{deliverable.source}</small></div>
-                      </article>
-                    ))}
-                  </div>
-                ) : <div className="contract-inline-empty">当前合同尚未录入结构化交付要求。</div>}
               </>
             ) : null}
 
@@ -634,7 +797,7 @@ export function ContractDetailPage({
                     <strong>付款与Invoice规则</strong>
                     <small>{hasRecognition ? `本页已确认 ${paymentPageState.confirmedCount}/${paymentPageState.fieldCount} 项` : '账户识别值仅用于与达人档案人工比对'}</small>
                   </span>
-                  {renderPageAction(PAYMENT_FIELD_KEYS, '付款与Invoice', paymentPageState)}
+                  {renderPageAction(paymentFieldKeys, '付款与Invoice', paymentPageState)}
                 </div>
                 {pendingGeneratedUpload ? (
                   <div className="contract-generated-payment-snapshot">
@@ -642,14 +805,7 @@ export function ContractDetailPage({
                       <strong>生成合同付款快照</strong>
                       <small>回传文件人工确认前，以生成合同中的付款与 Invoice 信息为准</small>
                     </div>
-                    <dl className="contract-payment-list">
-                      <div><dt>Project Total Fees</dt><dd>{formatContractMoney(contract)}</dd></div>
-                      <div><dt>Invoice开具期限</dt><dd>{contract.invoiceWithinWorkingDays ? `最终验收后${contract.invoiceWithinWorkingDays}个工作日内` : '待补充'}</dd></div>
-                      <div><dt>付款期限</dt><dd>{contract.paymentWithinWorkingDays ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日` : '待选择'}</dd></div>
-                      <div><dt>付款方式</dt><dd>{PAYMENT_METHOD_LABELS[contract.paymentMethod]}</dd></div>
-                      <div><dt>转账费用</dt><dd>{FEE_BEARER_LABELS[contract.feeBearer]}</dd></div>
-                      <div><dt>合同账户快照</dt><dd>{contract.accountName ? `${contract.accountName} · ${contract.accountFingerprint}` : '待补充'}</dd></div>
-                    </dl>
+                    <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} />
                   </div>
                 ) : null}
                 {hasRecognition ? (
@@ -657,32 +813,16 @@ export function ContractDetailPage({
                     {pendingGeneratedUpload ? <div className="contract-recognition-pending-note">以下为上传签署文件的识别结果，完成逐项确认并应用后才会更新正式合同字段。</div> : null}
                     <RecognitionFieldList
                       fields={draftFields}
-                      fieldKeys={PAYMENT_FIELD_KEYS}
+                      fieldKeys={paymentFieldKeys}
                       onChange={updateField}
                       onSelectCandidate={selectCandidate}
                       onOpenSource={openSource}
+                      fieldLabels={DETAIL_FIELD_LABELS}
                       recognitionLocked={recognitionApplied || !canEditCurrentContract}
                     />
                   </>
                 ) : (
-                  <dl className="contract-payment-list">
-                    <div><dt>Project Total Fees</dt><dd>{formatContractMoney(contract)}</dd></div>
-                    <div><dt>Invoice开具期限</dt><dd>{contract.invoiceWithinWorkingDays ? `最终验收后${contract.invoiceWithinWorkingDays}个工作日内` : '待补充'}</dd></div>
-                    <div><dt>付款期限</dt><dd>{contract.paymentWithinWorkingDays ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日` : '待选择'}</dd></div>
-                    <div><dt>付款方式</dt><dd>{PAYMENT_METHOD_LABELS[contract.paymentMethod]}</dd></div>
-                    <div><dt>转账费用</dt><dd>{FEE_BEARER_LABELS[contract.feeBearer]}</dd></div>
-                    <div><dt>合同账户快照</dt><dd>{contract.accountName ? `${contract.accountName} · ${contract.accountFingerprint}` : '待补充'}</dd></div>
-                    <div>
-                      <dt>账户渠道 / 版本</dt>
-                      <dd>
-                        {contract.payoutProvider
-                          ? `${contract.payoutProvider} · ${contract.payoutAccountVersion ?? 'legacy-v1'}`
-                          : contract.accountName || contract.accountFingerprint
-                            ? `渠道待补充 · ${contract.payoutAccountVersion ?? 'legacy-v1'}`
-                            : '待补充'}
-                      </dd>
-                    </div>
-                  </dl>
+                  <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} />
                 )}
                 <div className="contract-payment-rule">
                   <Landmark size={17} />
@@ -702,7 +842,7 @@ export function ContractDetailPage({
                     <span className="contract-recognition-apply-icon">
                       <CheckCircle2 size={17} />
                     </span>
-                    <div><strong>人工确认进度</strong><small>{confirmedCount}/{draftFields.length} 项</small></div>
+                    <div><strong>人工确认进度</strong><small>{confirmedCount}/{applicableRecognitionFields.length} 项</small></div>
                     <Button disabled={!allConfirmed || !onUpdateContract || !canEditCurrentContract} onClick={applyRecognition}>应用到正式合同资料</Button>
                   </div>
                 ) : null}

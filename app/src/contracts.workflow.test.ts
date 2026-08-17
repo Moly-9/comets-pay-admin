@@ -6,11 +6,13 @@ import {
   frameworkIoContracts,
   getContractReadiness,
   isPaymentContract,
+  applyConfirmedRecognitionToContract,
   type ContractGenerationModel,
   type ContractRecord,
   type ContractUploadInput,
 } from './contracts';
 import type { ContractId, CreatorId, EngagementId, ProjectId } from './businessWorkflow';
+import type { ContractFieldKey, ContractRecognitionField } from './contractRecognitionTypes';
 
 const projectId = 'project-test' as ProjectId;
 const engagementId = 'engagement-test' as EngagementId;
@@ -198,5 +200,76 @@ describe('generated contract upload workflow', () => {
     };
 
     expect(frameworkIoContracts(framework, [framework, ioOne, ioTwo])).toEqual([ioOne, ioTwo]);
+  });
+
+  it('applies only applicable recognition fields for framework contracts', () => {
+    const source = {
+      documentId: 'framework-document',
+      documentType: 'STANDARD_TERMS' as const,
+      fileName: 'framework.pdf',
+      pageNumber: 1,
+      section: 'Terms',
+      sourceText: 'Synthetic framework contract',
+      blockId: 'framework-block',
+    };
+    const field = (
+      fieldKey: ContractFieldKey,
+      rawValue: string,
+      normalizedValue: unknown = rawValue,
+    ): ContractRecognitionField => ({
+      fieldKey,
+      label: fieldKey,
+      rawValue,
+      normalizedValue,
+      source,
+      confidence: 1,
+      status: 'confirmed',
+      candidates: [],
+    });
+    const framework = {
+      ...createUploadedContract({
+        systemContractNumber: 'CON-FRAMEWORK-002',
+        contractType: 'FRAMEWORK',
+        projectId,
+        projectName: generationModel.projectName,
+        customer: generationModel.brandName,
+        creatorId: generationModel.creatorId,
+        creatorName: generationModel.creatorName,
+        creatorHandle: generationModel.creatorHandle,
+        creatorPlatform: generationModel.platform,
+        engagementId,
+        recognitionResults: [],
+        sourceDocuments: [],
+      }),
+      project: 'Keep this project',
+      platform: 'Keep this platform',
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      recognitionResults: [
+        field('advertiser', generationModel.advertiser),
+        field('publisher', generationModel.publisher),
+        field('contractNumber', 'CON-FRAMEWORK-002'),
+        field('effectiveDate', '2026-08-05', { date: '2026-08-05' }),
+        field('campaignPeriod', '2026-08-10 至 2026-08-31', { startDate: '2026-08-10', endDate: '2026-08-31' }),
+        field('transferFee', 'Advertiser', 'ADVERTISER'),
+        field('beneficiaryAccount', 'Sample Creator Limited'),
+      ],
+    } satisfies ContractRecord;
+
+    const applied = applyConfirmedRecognitionToContract(framework, [
+      'advertiser',
+      'publisher',
+      'contractNumber',
+      'effectiveDate',
+      'campaignPeriod',
+      'transferFee',
+      'beneficiaryAccount',
+    ]);
+
+    expect(applied?.lifecycle).toBe('CONFIRMED');
+    expect(applied?.feeBearer).toBe('ADVERTISER');
+    expect(applied?.project).toBe('Keep this project');
+    expect(applied?.platform).toBe('Keep this platform');
+    expect(applied?.totalFee).toBeNull();
+    expect(applied?.currency).toBe('');
   });
 });

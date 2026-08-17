@@ -232,6 +232,7 @@ export function ContractsPage({
         contract={selectedContract}
         contracts={contracts}
         projects={projects}
+        projectDirectory={displayProjects}
         creators={creators}
         canEditTemplate={canEditTemplates}
         notify={notify}
