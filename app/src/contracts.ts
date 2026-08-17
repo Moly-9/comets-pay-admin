@@ -135,6 +135,7 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 
 export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
+  contractName: string;
   projectId: ProjectId;
   cooperationProjectId?: CooperationProjectId;
   projectName: string;
@@ -527,6 +528,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
 
 export type ContractUploadInput = {
   systemContractNumber: string;
+  contractName?: string;
   contractType?: ContractType;
   frameworkContractId?: ContractId;
   frameworkUploadKey?: string;
@@ -594,7 +596,8 @@ export const createGeneratedContractDraft = (
     id: model.contractNumber,
     contractType: 'INDEPENDENT',
     ioId: model.ioNumber || '待补充',
-    name: `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,
+    name: model.contractName?.trim()
+      || `${model.projectName || '未命名项目'} · ${model.creatorName || '待补充达人'} 合同草稿`,
     templateFamily: '欧美单次商单合作模板 v1',
     sourceName: `${fileBaseName}.pdf`,
     documentUrl,
@@ -665,6 +668,7 @@ export const createGeneratedContractDraft = (
 export const createUploadedContract = (
   {
     systemContractNumber,
+    contractName,
     contractType = 'INDEPENDENT',
     frameworkContractId,
     frameworkUploadKey,
@@ -684,6 +688,7 @@ export const createUploadedContract = (
   const today = new Intl.DateTimeFormat('en-CA').format(new Date());
   const primaryDocument = sourceDocuments[0];
   const displayName = primaryDocument?.fileName.replace(/\.(pdf|docx)$/i, '').trim();
+  const resolvedContractName = contractName?.trim() || displayName || '新上传合同';
   const parseWarnings = sourceDocuments
     .filter((document) => document.parseStatus !== 'parsed')
     .map((document) => `${document.fileName}：${document.errorMessage ?? '无法解析'}`);
@@ -694,7 +699,7 @@ export const createUploadedContract = (
     contractType,
     frameworkContractId,
     ioId: '待确认',
-    name: displayName || '新上传合同',
+    name: resolvedContractName,
     templateFamily: '待识别',
     sourceName: primaryDocument?.fileName ?? '合同文件',
     documentUrl: primaryDocument?.documentUrl ?? '',
@@ -769,11 +774,30 @@ export const completeGeneratedContractUpload = (
     systemContractNumber: draft.id,
     draftContractId: draft.contractId,
   }, uploadedByAccount ?? draft.uploadedByAccount);
+  const generatedPaymentSnapshot = draft.paymentSnapshot
+    ?? draft.generationSnapshot?.paymentSnapshot;
   return {
     ...uploaded,
     contractId: draft.contractId,
     id: draft.id,
-    name: draft.name,
+    name: input.contractName?.trim() || draft.name,
+    currency: draft.currency,
+    totalFee: draft.totalFee,
+    licensePrice: draft.licensePrice,
+    licenseIncludedInTotal: draft.licenseIncludedInTotal,
+    invoiceWithinWorkingDays: draft.invoiceWithinWorkingDays,
+    paymentWithinWorkingDays: draft.paymentWithinWorkingDays,
+    feeBearer: draft.feeBearer,
+    paymentMethod: draft.paymentMethod,
+    accountName: draft.accountName,
+    accountFingerprint: draft.accountFingerprint,
+    payoutAccountId: draft.payoutAccountId,
+    payoutAccountVersion: draft.payoutAccountVersion,
+    payoutProvider: draft.payoutProvider,
+    payoutAccountFingerprint: draft.payoutAccountFingerprint,
+    paymentSnapshot: generatedPaymentSnapshot
+      ? { ...generatedPaymentSnapshot }
+      : uploaded.paymentSnapshot,
     generationSnapshot: draft.generationSnapshot,
     generationVariant: draft.generationVariant,
     qualityReport: draft.qualityReport,
@@ -826,6 +850,22 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
   const invoiceData = objectValue<{ normalizedDays?: number | null }>(invoicePeriod);
   const paymentData = objectValue<{ normalizedDays?: number | null }>(paymentTerm);
   const frameworkContract = isFrameworkContract(contract);
+  const generatedPayment = contract.generationSnapshot;
+  const fallbackCurrency = contract.currency || generatedPayment?.currency || '';
+  const fallbackTotalFee = contract.totalFee ?? (
+    generatedPayment?.totalFee.trim() ? Number(generatedPayment.totalFee) : null
+  );
+  const fallbackInvoiceDays = contract.invoiceWithinWorkingDays
+    ?? generatedPayment?.invoiceIssueWorkingDays
+    ?? null;
+  const fallbackPaymentDays = contract.paymentWithinWorkingDays
+    ?? generatedPayment?.paymentWorkingDays
+    ?? null;
+  const fallbackFeeBearer = contract.feeBearer || generatedPayment?.feeBearer || '';
+  const fallbackPaymentMethod = contract.paymentMethod || generatedPayment?.paymentMethod || '';
+  const fallbackAccountName = contract.accountName
+    || generatedPayment?.paymentSnapshot.accountName
+    || '';
 
   return {
     ...contract,
@@ -840,22 +880,22 @@ export const applyConfirmedRecognitionToContract = (contract: ContractRecord): C
     effectiveDate: frameworkContract ? '' : effectiveData.date ?? '',
     campaignStart: frameworkContract ? '' : campaignData.startDate ?? '',
     campaignEnd: frameworkContract ? '' : campaignData.endDate ?? '',
-    totalFee: frameworkContract ? null : moneyData.amount ?? null,
-    currency: frameworkContract ? '' : moneyData.currency ?? '',
-    invoiceWithinWorkingDays: frameworkContract ? null : invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)),
-    paymentWithinWorkingDays: frameworkContract ? null : paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)),
+    totalFee: frameworkContract ? null : moneyData.amount ?? fallbackTotalFee,
+    currency: frameworkContract ? '' : moneyData.currency || fallbackCurrency,
+    invoiceWithinWorkingDays: frameworkContract ? null : invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)) ?? fallbackInvoiceDays,
+    paymentWithinWorkingDays: frameworkContract ? null : paymentData.normalizedDays ?? normalizeDays(fieldText(paymentTerm)) ?? fallbackPaymentDays,
     paymentMethod: frameworkContract ? '' : paymentMethod === 'AIRWALLEX'
       ? 'AIRWALLEX'
       : paymentMethod === 'PAYPAL'
         ? 'PAYPAL'
         : paymentMethod === 'BANK_TRANSFER' || /bank|银行|电汇/i.test(paymentMethod)
           ? 'BANK'
-          : '',
+          : fallbackPaymentMethod,
     feeBearer: frameworkContract ? '' : ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(transferFee)
       ? transferFee as ContractFeeBearer
-      : '',
-    accountName: beneficiary,
-    accountFingerprint: beneficiary ? '合同识别快照' : '',
+      : fallbackFeeBearer,
+    accountName: beneficiary || fallbackAccountName,
+    accountFingerprint: beneficiary ? '合同识别快照' : contract.accountFingerprint,
     extractionStage: 'applied',
     recognitionAppliedAt: new Date().toISOString(),
     lifecycle: 'CONFIRMED',

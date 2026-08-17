@@ -2,7 +2,6 @@ import { AlertTriangle, Check, FileText, LoaderCircle, Upload, UserRound } from 
 import { useEffect, useState } from 'react';
 import {
   createSelectedContractFiles,
-  MAX_CONTRACT_FILE_COUNT,
   parseContractFiles,
   type SelectedContractFile,
   validateContractFile,
@@ -77,6 +76,7 @@ export function ContractUploadWizard({
 }: Props) {
   const [projectId, setProjectId] = useState(initialProjectId);
   const [creatorId, setCreatorId] = useState(initialCreatorId);
+  const [contractName, setContractName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<SelectedContractFile[]>([]);
   const [documents, setDocuments] = useState<ParsedContractDocument[]>([]);
   const [frameworkSelections, setFrameworkSelections] = useState<Record<string, string>>({});
@@ -123,7 +123,7 @@ export function ContractUploadWizard({
   const conflictCount = fields.filter((field) => field.status === 'conflict').length;
   const missingCount = fields.filter((field) => field.status === 'missing').length;
   const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id && creator.status !== 'removed');
-  const canSave = Boolean(selectedProject && selectedCreator && documents.length && !parsing);
+  const canSave = Boolean(selectedProject && selectedCreator && contractName.trim() && documents.length === 1 && !parsing);
 
   useEffect(() => {
     if (!documents.length) {
@@ -177,8 +177,8 @@ export function ContractUploadWizard({
   const selectFiles = (fileList: FileList | null) => {
     const files = Array.from(fileList ?? []);
     if (!files.length) return;
-    if (files.length > MAX_CONTRACT_FILE_COUNT) {
-      setError(`一次最多上传 ${MAX_CONTRACT_FILE_COUNT} 份合同文件。`);
+    if (files.length > 1) {
+      setError('一次只能上传 1 份合同文件。');
       return;
     }
     const invalid = files.map((file) => ({ file, message: validateContractFile(file) })).find((item) => item.message);
@@ -200,6 +200,7 @@ export function ContractUploadWizard({
     ));
     setSelectedFiles(nextSelected);
     setDocuments(nextDocuments);
+    if (contractType !== 'INDEPENDENT') setDraftContractId('');
     if (contractType !== 'IO') {
       setFrameworkSelections((current) => {
         const next = { ...current };
@@ -210,7 +211,7 @@ export function ContractUploadWizard({
   };
 
   const save = () => {
-    if (!selectedProject || !selectedCreator || !selectedFiles.length || !documents.length) return;
+    if (!selectedProject || !selectedCreator || !contractName.trim() || selectedFiles.length !== 1 || documents.length !== 1) return;
     const reference = selectedProject.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator.id && creator.status !== 'removed');
     const selectedDraft = selectedFiles.length === 1 && selectedFiles[0].contractType === 'INDEPENDENT'
       ? draftCandidates.find((contract) => contract.contractId === draftContractId)
@@ -236,6 +237,7 @@ export function ContractUploadWizard({
       });
       return {
         systemContractNumber: selectedDraft?.id ?? (index === 0 ? systemContractNumber : createPrototypeCode('CON')),
+        contractName: contractName.trim() || selectedDraft?.name,
         contractType,
         frameworkContractId,
         frameworkUploadKey,
@@ -273,8 +275,8 @@ export function ContractUploadWizard({
       footer={(
         <>
           <div className="contract-upload-footer-status" aria-live="polite">
-            <span>{documents.length ? `${documents.length} 份文件已解析` : '尚未选择合同文件'}</span>
-            <small>{documents.length ? `${fields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成关联信息并上传文件后可保存'}</small>
+            <span>{documents.length ? '1 份文件已解析' : '尚未选择合同文件'}</span>
+            <small>{documents.length ? `${fields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成合同名称、关联信息并上传文件后可保存'}</small>
           </div>
           <Button variant="ghost" onClick={onClose}>取消</Button>
           <Button type="submit" form="contract-upload-form" disabled={!canSave}>{submitLabel}</Button>
@@ -312,6 +314,7 @@ export function ContractUploadWizard({
                   setProjectId(value);
                   setCreatorId('');
                   setDraftContractId('');
+                  setContractName('');
                 }}
               />
               <small>用于合同、IO 与后续 Invoice 的系统关联</small>
@@ -328,10 +331,22 @@ export function ContractUploadWizard({
                 onChange={(value) => {
                   setCreatorId(value);
                   setDraftContractId('');
+                  setContractName('');
                 }}
               />
               <small>{selectedProject ? '显示全系统达人；未关联当前项目时保存会自动补建合作关系' : '选择项目后加载全系统达人'}</small>
             </div>
+            <label className={`contract-upload-field contract-upload-field-wide${!contractName.trim() ? ' contract-upload-field-required' : ''}`}>
+              <span>合同名称 *</span>
+              <input
+                aria-label="合同名称"
+                value={contractName}
+                placeholder="建议格式：达人名称-付款项目名"
+                maxLength={120}
+                onChange={(event) => setContractName(event.target.value)}
+              />
+              <small>用于合同列表、详情和签署文件回传匹配</small>
+            </label>
             {allowedContractTypes.includes('INDEPENDENT') ? <div className="contract-upload-field">
               <span>对应生成草稿</span>
               <SelectField
@@ -348,7 +363,10 @@ export function ContractUploadWizard({
                   })),
                 ]}
                 disabled={!creatorId}
-                onChange={setDraftContractId}
+                onChange={(value) => {
+                  setDraftContractId(value);
+                  setContractName(value ? draftCandidates.find((contract) => contract.contractId === value)?.name ?? '' : '');
+                }}
               />
               <small>选择后沿用草稿合同 ID，并保留原生成快照</small>
             </div> : null}
@@ -376,7 +394,7 @@ export function ContractUploadWizard({
             <span><Upload size={18} /></span>
             <div>
               <h3 id="contract-upload-files-title">合同文件</h3>
-              <p>支持文字型 PDF 与标准 DOCX，每份文件可单独选择独立合同、框架合同或 IO 单。</p>
+              <p>支持文字型 PDF 与标准 DOCX，上传后可选择独立合同、框架合同或 IO 单。</p>
             </div>
             {documents.length ? <em>{documents.length} 份</em> : null}
           </header>
@@ -384,13 +402,12 @@ export function ContractUploadWizard({
             <label className={`contract-file-drop${!selectedCreator ? ' disabled' : ''}`}>
               {parsing ? <LoaderCircle className="contract-upload-spinner" size={24} /> : <Upload size={24} />}
               <strong>{parsing ? '正在浏览器本地解析…' : selectedCreator ? '点击选择合同文件' : '请先完成项目与达人关联'}</strong>
-              <small>最多 {MAX_CONTRACT_FILE_COUNT} 份，单份不超过 30 MB</small>
+              <small>仅支持 1 份，单份不超过 30 MB</small>
               <span>{selectedFiles.length ? '重新选择文件' : '选择 PDF / DOCX'}</span>
               <input
                 className="contract-file-input"
                 type="file"
                 aria-label="选择合同文件"
-                multiple
                 accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 disabled={!selectedCreator || parsing}
                 onChange={(event) => selectFiles(event.target.files)}

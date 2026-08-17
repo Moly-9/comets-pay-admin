@@ -29,6 +29,7 @@ GlobalWorkerOptions.workerSrc = pathToFileURL(
 
 const model: ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL',
+  contractName: 'Sample Creator-Synthetic Launch Campaign',
   projectId: 'project-synthetic' as ProjectId,
   projectName: 'Synthetic Launch Campaign',
   brandName: 'Synthetic Brand',

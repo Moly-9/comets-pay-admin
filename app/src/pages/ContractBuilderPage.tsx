@@ -172,6 +172,7 @@ export function ContractBuilderPage({
   const [creatorId, setCreatorId] = useState(draftModel?.creatorId ?? initialCreator?.id ?? '');
   const [engagementId, setEngagementId] = useState(draftModel?.engagementId ?? initialEngagementId ?? '');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
+  const [contractName, setContractName] = useState(draftModel?.contractName ?? existingDraft?.name ?? '');
   const [projectName, setProjectName] = useState(draftModel?.projectName ?? initialContext?.project.name ?? '');
   const [effectiveDate, setEffectiveDate] = useState(draftModel?.effectiveDate ?? '');
   const [campaignStart, setCampaignStart] = useState(draftModel?.campaignStart ?? '');
@@ -267,6 +268,7 @@ export function ContractBuilderPage({
 
   const model = useMemo<ContractGenerationModel>(() => ({
     templateId: 'CON-TPL-2026-KOL',
+    contractName,
     projectId: (
       selectedContext?.project.cooperationProjectId
       ?? selectedContext?.project.projectId
@@ -325,6 +327,7 @@ export function ContractBuilderPage({
     channelUrl,
     contentFormat,
     contentLength,
+    contractName,
     contractNumber,
     currency,
     effectiveDate,
@@ -489,16 +492,32 @@ export function ContractBuilderPage({
     variant: ContractGeneratedFiles['variant'],
     action: 'PREVIEW' | 'SAVE',
   ) => {
-    const nextErrors = variant === 'FORMAL' ? validateContractGenerationModel(model) : {};
+    const nextErrors = variant === 'FORMAL'
+      ? validateContractGenerationModel(model)
+      : action === 'SAVE' && !model.contractName.trim()
+        ? { contractName: '请输入合同名称' }
+        : {};
     setErrors(nextErrors);
     setGenerationError('');
     const currentReport = createContractQualityReport(model);
-    if (variant === 'FORMAL' && (Object.keys(nextErrors).length || currentReport.hasBlockers)) {
+    const shouldBlock = action === 'SAVE' && (
+      Object.keys(nextErrors).length > 0
+      || (variant === 'FORMAL' && currentReport.hasBlockers)
+    );
+    if (shouldBlock) {
       const firstKey = Object.keys(nextErrors)[0];
       const firstIssue = currentReport.issues.find((issue) => issue.severity === 'BLOCKER');
       if (firstKey) {
-        const fieldKey = fieldKeyForError(firstKey);
-        if (fieldKey) focusField(fieldKey, firstKey);
+        if (firstKey === 'contractName') {
+          window.requestAnimationFrame(() => {
+            const field = document.querySelector<HTMLElement>('[data-contract-field="contractName"]');
+            field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            field?.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
+          });
+        } else {
+          const fieldKey = fieldKeyForError(firstKey);
+          if (fieldKey) focusField(fieldKey, firstKey);
+        }
       } else if (firstIssue) {
         focusIssue(firstIssue);
       }
@@ -587,7 +606,7 @@ export function ContractBuilderPage({
           <section className={`invoice-generation-success ${previewStale ? 'is-stale' : ''}`} data-testid="contract-generation-success">
             <span><CheckCircle2 size={22} /></span>
             <div>
-              <strong>{previewStale ? '草稿预览已过期' : `${generated.record.id} 已${generated.files.variant === 'FORMAL' ? '正式生成' : '保存草稿'}`}</strong>
+              <strong>{previewStale ? '草稿预览已过期' : `${generated.record.name} 已${generated.files.variant === 'FORMAL' ? '正式生成' : '保存草稿'}`}</strong>
               <p>{previewStale ? '表单已修改，请重新生成预览或保存。' : 'PDF 与 DOCX 使用同一份合同和账户快照，签名及签署日期保持空白。'}</p>
             </div>
             {!previewStale ? (
@@ -648,6 +667,16 @@ export function ContractBuilderPage({
                 />
                 <small>{errors.project}</small>
               </div>
+              <label className={`full-width ${errors.contractName ? 'has-error' : ''}`} data-contract-field="contractName">
+                <span>合同名称 *</span>
+                <input
+                  value={contractName}
+                  placeholder="建议格式：达人名称-付款项目名"
+                  maxLength={120}
+                  onChange={(event) => { setContractName(event.target.value); resetOutput(); }}
+                />
+                <small>{errors.contractName || '用于合同列表、详情和后续签署文件匹配'}</small>
+              </label>
               <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher / 法定名称 *</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>
               <label className={errors.channelName ? 'has-error' : ''} data-contract-field="channelName" {...fieldProps('channelName')}><span>频道名称 *</span><input value={channelName} readOnly /><small>{errors.channelName}</small></label>
               <div

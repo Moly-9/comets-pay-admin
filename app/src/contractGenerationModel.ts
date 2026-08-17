@@ -129,6 +129,9 @@ export const validateContractGenerationModel = (
   model: ContractGenerationModel,
 ) => {
   const errors: Record<string, string> = {};
+  if (!model.contractName?.trim()) {
+    errors.contractName = '请输入合同名称';
+  }
   const requiredSelections: Array<[string, string, string]> = [
     ['creator', '请选择合作达人', model.creatorId],
     ['project', '请选择关联项目', model.projectId],

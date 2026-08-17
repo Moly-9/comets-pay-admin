@@ -17,6 +17,7 @@ const engagementId = 'engagement-test' as EngagementId;
 
 const generationModel: ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL',
+  contractName: 'Synthetic Creator-Synthetic Campaign',
   projectId,
   projectName: 'Synthetic Campaign',
   brandName: 'Synthetic Brand',
@@ -93,6 +94,7 @@ describe('generated contract upload workflow', () => {
     expect(updatedDraft.engagementId).toBe(initialDraft.engagementId);
     expect(updatedDraft.generationVersion).toBe(2);
     expect(updatedDraft.totalFee).toBe(3600);
+    expect(updatedDraft.name).toBe(generationModel.contractName);
     expect(updatedDraft.documentUrl).toBe('blob:synthetic-contract-v2');
   });
 
@@ -103,6 +105,7 @@ describe('generated contract upload workflow', () => {
     expect(draft.accountFingerprint).toBe('•••• 1234');
     const upload: ContractUploadInput = {
       systemContractNumber: 'SHOULD-NOT-REPLACE-DRAFT',
+      contractName: '回传后更新的合同名称',
       projectId,
       projectName: generationModel.projectName,
       customer: generationModel.brandName,
@@ -143,6 +146,14 @@ describe('generated contract upload workflow', () => {
     expect(uploaded.uploadedFromDraftId).toBe(draft.contractId);
     expect(uploaded.uploadedByAccount).toBe('media.contract.owner');
     expect(uploaded.sourceName).toBe('synthetic-signed-contract.pdf');
+    expect(uploaded.name).toBe('回传后更新的合同名称');
+    expect(uploaded.currency).toBe(draft.currency);
+    expect(uploaded.totalFee).toBe(draft.totalFee);
+    expect(uploaded.invoiceWithinWorkingDays).toBe(draft.invoiceWithinWorkingDays);
+    expect(uploaded.paymentWithinWorkingDays).toBe(draft.paymentWithinWorkingDays);
+    expect(uploaded.paymentMethod).toBe(draft.paymentMethod);
+    expect(uploaded.feeBearer).toBe(draft.feeBearer);
+    expect(uploaded.paymentSnapshot).toEqual(draft.paymentSnapshot);
   });
 
   it('treats a confirmed framework contract without financial fields as a resource, not a payment contract', () => {

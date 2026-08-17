@@ -75,6 +75,7 @@ const creator = (): CreatorProfile => ({
 
 const validModel = (): ContractGenerationModel => ({
   templateId: 'CON-TPL-2026-KOL',
+  contractName: 'Sample Creator-Synthetic Campaign',
   projectId: 'project-synthetic' as ProjectId,
   projectName: 'Synthetic Campaign',
   brandName: 'Synthetic Brand',
@@ -226,6 +227,16 @@ describe('contract generation model', () => {
       releaseEnd: expect.any(String),
       payoutAccountId: expect.any(String),
     });
+  });
+
+  it('requires a contract name before a formal contract can be generated', () => {
+    const model = validModel();
+    model.contractName = '   ';
+
+    expect(validateContractGenerationModel(model).contractName).toBe('请输入合同名称');
+
+    model.contractName = 'Sample Creator-Synthetic Campaign';
+    expect(validateContractGenerationModel(model).contractName).toBeUndefined();
   });
 
   it('allows every project, content, and commercial field to remain blank', () => {

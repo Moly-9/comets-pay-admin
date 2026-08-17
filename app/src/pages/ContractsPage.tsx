@@ -393,7 +393,7 @@ export function ContractsPage({
             setUploadOpen(false);
             if (records[0]) openContract(records[0].id);
             const first = inputs[0];
-            notify('合同已保存', `${records.length} 份${records.length > 1 ? '合同' : '文件'}已关联 ${first?.projectName ?? '当前项目'} / ${first?.creatorName ?? '当前达人'}，等待字段人工确认。`);
+            notify('合同已保存', `${records[0]?.name ?? first?.contractName ?? '新上传合同'} 已关联 ${first?.projectName ?? '当前项目'} / ${first?.creatorName ?? '当前达人'}，等待字段人工确认。`);
           }}
         />
       ) : null}
