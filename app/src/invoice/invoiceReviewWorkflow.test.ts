@@ -125,11 +125,13 @@ describe('Invoice review workflow', () => {
     const signed = applyInvoiceReviewAction(edited.payout, 'MARK_SIGNED', actor);
     expect(signed.invoiceReviewStatus).toBe('待媒介审核');
     expect(signed.invoiceSignatureRound).toBe(1);
+    expect(signed.invoiceSnapshot?.signatureText).toBe('Synthetic Creator');
     expect(getInvoiceRowStatus(signed)).toBe('待审核');
 
     const mediaApproved = applyInvoiceReviewAction(signed, 'APPROVE_MEDIA', actor);
     expect(mediaApproved.invoiceReviewStatus).toBe('已通过');
     expect(mediaApproved.status).toBe('未进入付款');
+    expect(mediaApproved.invoiceSnapshot?.signatureText).toBe('Synthetic Creator');
     expect(getInvoicePageTab(mediaApproved.invoiceReviewStatus)).toBe('approved');
 
     const rechecked = applyInvoiceReviewAction(
@@ -149,7 +151,7 @@ describe('Invoice review workflow', () => {
       ...payout,
       invoiceReviewStatus: '待媒介审核' as const,
       invoiceSignedAt: '2026-08-04T01:00:00.000Z',
-      invoiceSnapshot: { ...snapshot, signatureDate: '2026-08-04' } as never,
+      invoiceSnapshot: { ...snapshot, signatureDate: '2026-08-04', signatureText: 'Synthetic Creator' } as never,
       invoiceVersion: 1,
     };
     const returned = applyInvoiceReviewAction(
@@ -161,6 +163,7 @@ describe('Invoice review workflow', () => {
     expect(returned.invoiceReviewStatus).toBe('待签署');
     expect(returned.invoiceSignedAt).toBeUndefined();
     expect(returned.invoiceSnapshot?.signatureDate).toBeUndefined();
+    expect(returned.invoiceSnapshot?.signatureText).toBeUndefined();
     expect(returned.invoiceVersion).toBe(2);
   });
 
@@ -210,12 +213,13 @@ describe('Invoice review workflow', () => {
       ...payout,
       invoiceReviewStatus: '待媒介复核' as const,
       invoiceSignedAt: '2026-08-04T01:00:00.000Z',
-      invoiceSnapshot: { ...snapshot, signatureDate: '2026-08-04' } as never,
+      invoiceSnapshot: { ...snapshot, signatureDate: '2026-08-04', signatureText: 'Synthetic Creator' } as never,
     };
     const invalidated = invalidateSignedInvoice(recheck, actor);
     expect(invalidated.invoiceReviewStatus).toBe('待签署');
     expect(invalidated.invoiceSignedAt).toBeUndefined();
     expect(invalidated.invoiceSnapshot?.signatureDate).toBeUndefined();
+    expect(invalidated.invoiceSnapshot?.signatureText).toBeUndefined();
     expect(invalidated.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('签署失效');
   });
 
@@ -279,6 +283,7 @@ describe('Invoice review workflow', () => {
       snapshot: {
         ...snapshot,
         signatureDate: '2026-08-04',
+        signatureText: 'Synthetic Creator',
         currency: 'EUR',
         items: [{ ...snapshot.items[0]!, unitPrice: 120, lineTotal: 120 }],
         payoutAccountId: 'paypal-synthetic',
@@ -314,7 +319,9 @@ describe('Invoice review workflow', () => {
     });
     expect(result.payout.invoiceSignedAt).toBeUndefined();
     expect(result.record.snapshot.signatureDate).toBeUndefined();
+    expect(result.record.snapshot.signatureText).toBeUndefined();
     expect(result.payout.invoiceSnapshot?.signatureDate).toBeUndefined();
+    expect(result.payout.invoiceSnapshot?.signatureText).toBeUndefined();
     expect(result.payout.paymentFailure).toBeUndefined();
     expect(result.payout.paymentFailureReturn).toBeUndefined();
   });
@@ -499,7 +506,11 @@ describe('Invoice review workflow', () => {
     expect(linked.invoice).toBe('INV-GENERATED');
     expect(linked.invoiceReviewStatus).toBe('待媒介审核');
     expect(linked.invoiceSignedAt).toBe(occurredAt);
-    expect(linked.invoiceSnapshot).toEqual({ ...record.snapshot, signatureDate: '2026-08-14' });
+    expect(linked.invoiceSnapshot).toEqual({
+      ...record.snapshot,
+      signatureDate: '2026-08-14',
+      signatureText: 'Signed electronically',
+    });
 
     expect(() => markGeneratedInvoiceSigned(
       payout,

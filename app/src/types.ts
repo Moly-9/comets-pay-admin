@@ -279,6 +279,7 @@ export type InvoiceDocumentModel = {
   invoiceNumber: string;
   invoiceDate: string;
   signatureDate?: string;
+  signatureText?: string;
   billTo: InvoiceEntity;
   creatorHandle: string;
   creatorName: string;

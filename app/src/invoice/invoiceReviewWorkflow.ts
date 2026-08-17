@@ -41,6 +41,10 @@ const signatureDateFromOccurredAt = (occurredAt: string) => (
   todayInputValue(new Date(occurredAt))
 );
 
+export const buildMockElectronicSignature = (creatorName?: string) => (
+  creatorName?.trim() || 'Signed electronically'
+);
+
 export type InvoiceReviewCapabilities = {
   manage: boolean;
   mediaReview: boolean;
@@ -242,6 +246,11 @@ export const applyInvoiceReviewAction = (
           : invalidatesSignature
             ? undefined
             : payout.invoiceSnapshot.signatureDate,
+        signatureText: isSigned
+          ? buildMockElectronicSignature(payout.invoiceSnapshot.creatorName || payout.creator)
+          : invalidatesSignature
+            ? undefined
+            : payout.invoiceSnapshot.signatureText,
       }
     : undefined;
 
@@ -424,7 +433,11 @@ export const applyInvoiceDocumentEdit = ({
             ? '从请款项目资料管理修改 Invoice'
             : `处理媒介复核：${payout.invoiceReviewReturn?.reason ?? '已修改 Invoice'}`
     );
-  const nextSnapshot = { ...cloneInvoiceSnapshot(snapshot), signatureDate: undefined };
+  const nextSnapshot = {
+    ...cloneInvoiceSnapshot(snapshot),
+    signatureDate: undefined,
+    signatureText: undefined,
+  };
   const nextRecord: GeneratedInvoiceRecord = {
     ...record,
     status: '待签署',
@@ -601,6 +614,7 @@ export const markGeneratedInvoiceSigned = (
   const signedSnapshot = {
     ...record.snapshot,
     signatureDate: signatureDateFromOccurredAt(occurredAt),
+    signatureText: buildMockElectronicSignature(record.snapshot.creatorName),
   };
   return {
     ...payout,
@@ -644,7 +658,7 @@ export const invalidateSignedInvoice = (
     invoiceVersion: (payout.invoiceVersion ?? 1) + 1,
     invoiceSignedAt: undefined,
     invoiceSnapshot: payout.invoiceSnapshot
-      ? { ...payout.invoiceSnapshot, signatureDate: undefined }
+      ? { ...payout.invoiceSnapshot, signatureDate: undefined, signatureText: undefined }
       : undefined,
     issue: event.reason,
   };

@@ -16345,6 +16345,22 @@ button:disabled {
   margin-bottom: 24px;
 }
 
+.invoice-paper-signature-signed strong {
+  margin-bottom: 2px;
+}
+
+.invoice-paper-signature-mark {
+  min-height: 25px;
+  color: #1f2937;
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 17px;
+  font-style: italic;
+  line-height: 1.35;
+  padding-left: 8px;
+  transform: rotate(-2deg);
+  transform-origin: left center;
+}
+
 .invoice-paper-signature span {
   border-bottom: 1px solid #111;
 }

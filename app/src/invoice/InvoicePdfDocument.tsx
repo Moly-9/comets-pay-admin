@@ -61,6 +61,9 @@ const styles = StyleSheet.create({
   paymentValue: { flexGrow: 1 },
   signature: { marginTop: 22 },
   signatureLabel: { fontFamily: 'Helvetica-Bold', marginBottom: 28 },
+  signatureLabelSigned: { marginBottom: 2 },
+  signatureMark: { fontFamily: 'Helvetica-Oblique', fontSize: 13, minHeight: 17, marginBottom: 3 },
+  signatureMarkCjk: { fontFamily: 'NotoSansSC', fontSize: 11, fontStyle: 'italic', minHeight: 17, marginBottom: 3 },
   signatureLine: { width: 210, borderBottomWidth: 0.7, borderBottomColor: '#111111' },
   signatureDate: { marginTop: 6 },
   signatureDateLabel: { fontFamily: 'Helvetica-Bold' },
@@ -113,7 +116,12 @@ function PaymentInformation({ model }: { model: InvoiceDocumentModel }) {
         </View>
       ))}
       <View style={styles.signature}>
-        <Text style={styles.signatureLabel}>Signature:</Text>
+        <Text style={model.signatureText ? [styles.signatureLabel, styles.signatureLabelSigned] : styles.signatureLabel}>Signature:</Text>
+        {model.signatureText ? (
+          <Text style={hasCjk(model.signatureText) ? styles.signatureMarkCjk : styles.signatureMark}>
+            {model.signatureText}
+          </Text>
+        ) : null}
         <View style={styles.signatureLine} />
         <Text style={styles.signatureDate}>
           <Text style={styles.signatureDateLabel}>Date:</Text>{' '}

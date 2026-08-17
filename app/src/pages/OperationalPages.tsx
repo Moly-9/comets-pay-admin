@@ -61,6 +61,7 @@ import {
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
 import {
+  buildMockElectronicSignature,
   isInvoiceApprovedForPayment,
   type InvoiceReviewAction,
   type InvoicePageTab,
@@ -2911,6 +2912,8 @@ export function InvoicePage({
         ...selectedModelSnapshot,
         signatureDate: selectedModelSnapshot.signatureDate
           ?? todayInputValue(new Date(selectedDetailPayout.invoiceSignedAt)),
+        signatureText: selectedModelSnapshot.signatureText
+          ?? buildMockElectronicSignature(selectedModelSnapshot.creatorName || selectedDetailPayout.creator),
       }
     : selectedModelSnapshot;
   const managementViewFor = (payout: Payout): InvoiceManagementView => getInvoiceManagementView(
