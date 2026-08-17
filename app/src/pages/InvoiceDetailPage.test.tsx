@@ -98,6 +98,57 @@ const renderDetail = (
 );
 
 describe('InvoiceDetailPage edit actions', () => {
+  it('enables media approval after the generated Invoice has been signed', () => {
+    const record: GeneratedInvoiceRecord = {
+      id: 'generated-synthetic',
+      invoiceId: 'invoice-synthetic' as never,
+      sourcePayoutId: basePayout.id,
+      status: '待签署',
+      generatedAt: '2026-08-05 10:00',
+      snapshot: model,
+      validationStatus: 'valid',
+      version: 1,
+    };
+    const unsignedHtml = renderToStaticMarkup(
+      <InvoiceDetailPage
+        source={{ kind: 'generated', record, payout: basePayout }}
+        model={model}
+        onBack={() => undefined}
+        onMarkSigned={() => undefined}
+        onReviewAction={() => undefined}
+        canManageInvoice={false}
+        canReviewMedia
+        canReviewFinance={false}
+        notify={() => undefined}
+      />,
+    );
+    expect(unsignedHtml).toContain('1/2项资料校验通过');
+    expect(unsignedHtml).toContain('disabled=""');
+
+    const signedModel = { ...model, signatureDate: '2026-08-14', signatureText: 'Synthetic Creator' };
+    const signedHtml = renderToStaticMarkup(
+      <InvoiceDetailPage
+        source={{
+          kind: 'generated',
+          record: { ...record, status: '待媒介审核', snapshot: signedModel },
+          payout: { ...basePayout, invoiceReviewStatus: '待媒介审核', invoiceSignedAt: '2026-08-14T02:00:00.000Z' },
+        }}
+        model={signedModel}
+        onBack={() => undefined}
+        onMarkSigned={() => undefined}
+        onReviewAction={() => undefined}
+        canManageInvoice={false}
+        canReviewMedia
+        canReviewFinance={false}
+        notify={() => undefined}
+      />,
+    );
+    expect(signedHtml).toContain('2/2项资料校验通过');
+    expect(signedHtml).toContain('aria-label="电子签名">Synthetic Creator');
+    expect(signedHtml).toContain('审核通过');
+    expect(signedHtml).not.toContain('disabled=""');
+  });
+
   it('shows the unified editor entry for creator feedback and media recheck', () => {
     const feedbackHtml = renderDetail({
       ...basePayout,

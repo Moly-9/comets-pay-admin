@@ -200,6 +200,7 @@ function buildReviewChecks(
   model: InvoiceDocumentModel,
 ): InvoiceReviewCheck[] {
   if (source.kind === 'generated') {
+    const signed = Boolean(model.signatureText || model.signatureDate || source.payout?.invoiceSignedAt);
     return [
       {
         id: 'project',
@@ -213,9 +214,9 @@ function buildReviewChecks(
         id: 'signature',
         label: '签署状态',
         contractValue: '达人签署后生效',
-        invoiceValue: '签名区域留空',
-        passed: false,
-        note: '当前文件等待达人签署，暂不可进入财务复核',
+        invoiceValue: signed ? '已完成电子签署' : '签名区域留空',
+        passed: signed,
+        note: signed ? '模拟达人签署已完成，可进入媒介审核' : '当前文件等待达人签署，暂不可进入财务复核',
       },
     ];
   }
