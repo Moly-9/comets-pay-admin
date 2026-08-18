@@ -12,6 +12,7 @@ import type {
   ProjectId,
   RequestApprovalState,
 } from './businessWorkflow';
+import type { Payout } from './types';
 import {
   invoicePaymentListItem,
   paymentListEffectiveAccount,
@@ -205,11 +206,12 @@ export type MyProjectStatus =
   | '已退回';
 
 export type RequestProjectStatus =
-  | '请款提交'
-  | 'PM审批通过'
-  | '项目负责人审批通过'
-  | '老板审批通过'
-  | '财务审批通过'
+  | 'PM审批中'
+  | '项目负责人审批中'
+  | '老板审批中'
+  | '财务审批中'
+  | '正在付款'
+  | '付款处理中'
   | '已付款'
   | '已退回';
 
@@ -223,11 +225,11 @@ const MY_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], MyProje
 };
 
 const REQUEST_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], RequestProjectStatus> = {
-  PENDING_PM: '请款提交',
-  PENDING_PROJECT_OWNER: 'PM审批通过',
-  PENDING_OWNER: '项目负责人审批通过',
-  PENDING_FINANCE: '老板审批通过',
-  APPROVED: '财务审批通过',
+  PENDING_PM: 'PM审批中',
+  PENDING_PROJECT_OWNER: '项目负责人审批中',
+  PENDING_OWNER: '老板审批中',
+  PENDING_FINANCE: '财务审批中',
+  APPROVED: '正在付款',
   RETURNED_TO_MEDIA_REVIEW: '已退回',
 };
 
@@ -255,18 +257,31 @@ export const myProjectStatusFor = (
 };
 
 export const requestProjectStatusFor = (
-  request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
+  request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status' | 'paymentRequestProjectId'>,
+  payouts: Pick<Payout, 'paymentRequestProjectId' | 'status'>[] = [],
 ): RequestProjectStatus | null => {
   if (request.lifecycle === 'DRAFT' || (!request.approval && !request.lifecycle)) return null;
   if (request.lifecycle === 'COMPLETED') return '已付款';
   if (request.lifecycle === 'RETURNED') return '已退回';
-  if (request.lifecycle === 'APPROVED') return '财务审批通过';
+  if (request.lifecycle === 'APPROVED') {
+    const linkedPayouts = request.paymentRequestProjectId
+      ? payouts.filter((payout) => payout.paymentRequestProjectId === request.paymentRequestProjectId)
+      : [];
+    if (linkedPayouts.length > 0 && linkedPayouts.every((payout) => payout.status === '已付款')) return '已付款';
+    if (linkedPayouts.some((payout) => payout.status === '付款处理中' || payout.status === '付款失败')) {
+      return '付款处理中';
+    }
+    return '正在付款';
+  }
   if (request.approval) return REQUEST_PROJECT_APPROVAL_STATUS[request.approval.status];
   const legacyStatus = legacyMyProjectStatus(request.status);
   if (legacyStatus === '已付款') return '已付款';
-  if (legacyStatus === '待打款') return '财务审批通过';
+  if (legacyStatus === '待打款') return '正在付款';
   if (legacyStatus === '已退回') return '已退回';
-  return '请款提交';
+  if (legacyStatus === '项目负责人审批中') return '项目负责人审批中';
+  if (legacyStatus === '老板审批中') return '老板审批中';
+  if (legacyStatus === '财务审批中') return '财务审批中';
+  return 'PM审批中';
 };
 
 export const MY_PROJECT_APPROVAL_STATUSES = new Set<MyProjectStatus>([

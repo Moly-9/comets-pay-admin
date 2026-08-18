@@ -38,7 +38,7 @@ import {
   type PaymentRequestListItem,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
-import type { GeneratedInvoiceRecord } from './types';
+import type { GeneratedInvoiceRecord, Payout } from './types';
 
 const cooperationProjectId = 'cooperation_project_001' as CooperationProjectId;
 const otherProjectId = 'cooperation_project_002' as CooperationProjectId;
@@ -771,11 +771,11 @@ describe('media payment request list presentation', () => {
 
 describe('payment request module status presentation', () => {
   it.each([
-    ['PENDING_PM', 'PM审批中', '请款提交'],
-    ['PENDING_PROJECT_OWNER', '项目负责人审批中', 'PM审批通过'],
-    ['PENDING_OWNER', '老板审批中', '项目负责人审批通过'],
-    ['PENDING_FINANCE', '财务审批中', '老板审批通过'],
-    ['APPROVED', '待打款', '财务审批通过'],
+    ['PENDING_PM', 'PM审批中', 'PM审批中'],
+    ['PENDING_PROJECT_OWNER', '项目负责人审批中', '项目负责人审批中'],
+    ['PENDING_OWNER', '老板审批中', '老板审批中'],
+    ['PENDING_FINANCE', '财务审批中', '财务审批中'],
+    ['APPROVED', '待打款', '正在付款'],
     ['RETURNED_TO_MEDIA_REVIEW', '已退回', '已退回'],
   ] as const)('maps %s to separate module labels', (approvalStatus, myStatus, requestStatus) => {
     const source = {
@@ -796,6 +796,16 @@ describe('payment request module status presentation', () => {
     expect(requestProjectStatusFor({ lifecycle: 'DRAFT' })).toBeNull();
     expect(myProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
     expect(requestProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
+  });
+
+  it('moves an approved request through payment execution to paid', () => {
+    const paymentRequestProjectId = 'request-status-payment' as PaymentRequestProjectId;
+    const request = { lifecycle: 'APPROVED' as const, paymentRequestProjectId };
+    const payoutFor = (status: Payout['status']) => ({ paymentRequestProjectId, status });
+
+    expect(requestProjectStatusFor(request, [payoutFor('等待付款')])).toBe('正在付款');
+    expect(requestProjectStatusFor(request, [payoutFor('付款处理中')])).toBe('付款处理中');
+    expect(requestProjectStatusFor(request, [payoutFor('已付款')])).toBe('已付款');
   });
 
   it('keeps the partial payment failure status available to My Projects filters', () => {

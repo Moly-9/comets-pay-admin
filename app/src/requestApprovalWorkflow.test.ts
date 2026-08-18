@@ -29,26 +29,26 @@ describe('request approval workflow', () => {
     const finance = userFor('finance');
     let state = createRequestApprovalState('2026-08-04T01:00:00.000Z');
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('PM审批中');
-    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('请款提交');
+    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('PM审批中');
 
     state = applyRequestApprovalAction(state, 'APPROVE', pm, undefined, '2026-08-04T02:00:00.000Z');
     expect(state.status).toBe('PENDING_PROJECT_OWNER');
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('项目负责人审批中');
-    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('PM审批通过');
+    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('项目负责人审批中');
     expect(state.submittedAt).toBe('2026-08-04T01:00:00.000Z');
     expect(state.updatedAt).toBe('2026-08-04T02:00:00.000Z');
     state = applyRequestApprovalAction(state, 'APPROVE', projectOwner);
     expect(state.status).toBe('PENDING_OWNER');
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('老板审批中');
-    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('项目负责人审批通过');
+    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('老板审批中');
     state = applyRequestApprovalAction(state, 'APPROVE', owner);
     expect(state.status).toBe('PENDING_FINANCE');
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('财务审批中');
-    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('老板审批通过');
+    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('财务审批中');
     state = applyRequestApprovalAction(state, 'APPROVE', finance);
     expect(state.status).toBe('APPROVED');
     expect(myProjectStatusFor({ lifecycle: 'APPROVED', approval: state })).toBe('待打款');
-    expect(requestProjectStatusFor({ lifecycle: 'APPROVED', approval: state })).toBe('财务审批通过');
+    expect(requestProjectStatusFor({ lifecycle: 'APPROVED', approval: state })).toBe('正在付款');
     expect(state.history.map((event) => event.stage)).toEqual([
       'PM',
       'PROJECT_OWNER',
@@ -73,7 +73,7 @@ describe('request approval workflow', () => {
     expect(nextRound.history).toHaveLength(1);
     expect(nextRound.submittedAt).toBe('2026-08-05T01:00:00.000Z');
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
-    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('请款提交');
+    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
   });
 
   it('restores a returned project-owner request to the project-owner node', () => {

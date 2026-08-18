@@ -301,6 +301,8 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '项目负责人审批通过': 'active',
   '老板审批通过': 'active',
   '财务审批通过': 'payment',
+  '正在付款': 'payment',
+  '付款处理中': 'payment',
   '付款中': 'payment',
   '待打款': 'payment',
   '等待付款': 'payment',
@@ -338,6 +340,16 @@ export const createEmptyProjectListFilters = (): ProjectListFilters => ({
   maxBudget: '',
   statuses: [],
 });
+
+export const REQUEST_PROJECT_STATUS_OPTIONS = [
+  'PM审批中',
+  '项目负责人审批中',
+  '老板审批中',
+  '财务审批中',
+  '正在付款',
+  '付款处理中',
+  '已付款',
+] as const;
 
 const parseProjectBudget = (budget: string) => ({
   currency: budget.match(/\b[A-Z]{3}\b/)?.[0] ?? '',
@@ -1082,6 +1094,7 @@ export function RequestsPage({
   notify,
   currentUser,
   requests,
+  payouts = [],
   paymentLists,
   creators,
   generatedInvoices,
@@ -1099,6 +1112,7 @@ export function RequestsPage({
   notify: Notify;
   currentUser: SystemUser;
   requests: RequestProjectSummary[];
+  payouts?: Payout[];
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   generatedInvoices: GeneratedInvoiceRecord[];
@@ -1133,7 +1147,7 @@ export function RequestsPage({
   });
   const requestStatusById = new Map(relatedRequests.map((request) => [
     request.id,
-    requestProjectStatusFor(request),
+    requestProjectStatusFor(request, payouts),
   ]));
   const requestOverview = relatedRequests.reduce((summary, request) => {
     const status = myProjectStatusFor(request);
@@ -1168,13 +1182,7 @@ export function RequestsPage({
       label: user.name,
       description: `${requestPmCounts[user.name]} 个项目 · ${user.email}`,
     }));
-  const requestStatuses = Array.from(new Set(
-    relatedRequests.flatMap((request) => {
-      const status = requestStatusById.get(request.id);
-      return status ? [status] : [];
-    }),
-  ));
-  const requestStatusFilterOptions = requestStatuses.map((status) => ({
+  const requestStatusFilterOptions = REQUEST_PROJECT_STATUS_OPTIONS.map((status) => ({
     value: status,
     label: status,
     description: `${relatedRequests.filter((request) => requestStatusById.get(request.id) === status).length} 个项目`,
@@ -1186,8 +1194,6 @@ export function RequestsPage({
       />
     ),
   }));
-  const approvingStatuses = requestProjectStatusesForFilter('approving');
-  const approvedStatuses = requestProjectStatusesForFilter('approved');
   const requestStatusSelectOptions = [
     {
       value: 'all',
@@ -1195,28 +1201,6 @@ export function RequestsPage({
       description: `共 ${relatedRequests.length} 个项目`,
       leading: <span className="project-status-select-dot project-status-select-dot-all" />,
       tone: 'all' as const,
-    },
-    {
-      value: 'approving',
-      label: '审批中',
-      description: `${relatedRequests.filter((request) => {
-        const status = requestStatusById.get(request.id);
-        return Boolean(status && approvingStatuses.includes(status));
-      }).length} 个项目`,
-      statuses: approvingStatuses,
-      tone: 'active' as const,
-      leading: <span className="project-status-select-dot project-status-select-dot-active" />,
-    },
-    {
-      value: 'approved',
-      label: '完成审批',
-      description: `${relatedRequests.filter((request) => {
-        const status = requestStatusById.get(request.id);
-        return Boolean(status && approvedStatuses.includes(status));
-      }).length} 个项目`,
-      statuses: approvedStatuses,
-      tone: 'complete' as const,
-      leading: <span className="project-status-select-dot project-status-select-dot-complete" />,
     },
     ...requestStatusFilterOptions,
   ];
@@ -1307,7 +1291,7 @@ export function RequestsPage({
           tone="peach"
         />
         <MetricCard
-          label="待打款"
+          label="正在付款"
           value={requestOverview.awaitingPayment.toString()}
           meta="已完成全部审批"
         />
@@ -1355,7 +1339,7 @@ export function RequestsPage({
                   <td>{request.contracts} 份</td>
                   <td>{request.invoices} 份</td>
                   <td className="mono-cell">{request.paymentOrder}</td>
-                  <td><ProjectStatus status={requestStatusById.get(request.id) ?? '请款提交'} /></td>
+                  <td><ProjectStatus status={requestStatusById.get(request.id) ?? 'PM审批中'} /></td>
                   <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</button></td>
                 </tr>
               ))}

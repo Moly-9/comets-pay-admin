@@ -4,6 +4,7 @@ import { AppShell } from '../components/AppShell';
 import type { SystemUser } from '../data';
 import {
   NotificationsPage,
+  REQUEST_PROJECT_STATUS_OPTIONS,
   RequestsPage,
   type SystemNotificationItem,
 } from './OperationalPages';
@@ -61,6 +62,17 @@ describe('request approval reminder surfaces', () => {
     expect(html).toContain('请及时核对请款资料并完成当前节点处理');
     expect(html).not.toContain('财务审批 2 个');
     expect(html).toContain('aria-label="关闭提示"');
+    expect(REQUEST_PROJECT_STATUS_OPTIONS).toEqual([
+      'PM审批中',
+      '项目负责人审批中',
+      '老板审批中',
+      '财务审批中',
+      '正在付款',
+      '付款处理中',
+      '已付款',
+    ]);
+    expect(html).toContain('全部状态');
+    expect(html).not.toContain('完成审批');
   });
 
   it('adds the current approval reminder to the in-app inbox', () => {

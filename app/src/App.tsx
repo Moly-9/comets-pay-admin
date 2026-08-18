@@ -3897,6 +3897,7 @@ export default function App() {
           notify={notify}
           currentUser={currentUser}
           requests={requestProjects}
+          payouts={payouts}
           paymentLists={paymentLists}
           creators={creators}
           generatedInvoices={generatedInvoices}
