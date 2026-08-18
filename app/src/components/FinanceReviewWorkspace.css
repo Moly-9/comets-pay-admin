@@ -216,6 +216,71 @@
   min-height: 48px;
 }
 
+.finance-review-linked-resource-heading {
+  align-items: center;
+}
+
+.finance-review-linked-resource-title {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.finance-review-project-section > header .finance-review-linked-resource-title > small {
+  overflow: hidden;
+  color: #7d8490;
+  font-size: 8.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finance-review-linked-resources .finance-review-resource-row {
+  min-height: 46px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 9px;
+  border-color: #dddfe7;
+  padding: 8px 10px;
+}
+
+.finance-review-linked-resources .finance-review-resource-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: #f3eef9;
+  color: #7256a0;
+}
+
+.finance-review-linked-resources .finance-review-resource-row > strong {
+  color: #303642;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.finance-review-linked-resources .finance-review-resource-actions {
+  gap: 7px;
+}
+
+.finance-review-linked-resources .finance-review-resource-actions > button {
+  min-height: 34px;
+  padding: 6px 3px;
+  color: #705299;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.finance-review-linked-resources .finance-review-resource-actions > button:hover:not(:disabled),
+.finance-review-linked-resources .finance-review-resource-actions > button:focus-visible {
+  color: #4f3576;
+}
+
+.finance-review-linked-resources .finance-review-resource-actions > button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgb(112 82 153 / 24%);
+  outline-offset: 1px;
+  text-decoration: none;
+}
+
 .finance-review-overview-footer {
   display: flex;
   width: 100%;
@@ -454,7 +519,7 @@
 
 .finance-review-resource-card {
   display: grid;
-  grid-template-columns: 44px minmax(260px, 1fr) minmax(150px, .55fr) auto auto;
+  grid-template-columns: 44px minmax(220px, 1fr) minmax(150px, .7fr) minmax(140px, .55fr) auto auto;
   min-height: 104px;
   align-items: center;
   gap: 14px;
@@ -497,6 +562,7 @@
 }
 
 .finance-review-resource-card-identity,
+.finance-review-resource-card-person,
 .finance-review-resource-card-amount {
   display: grid;
   min-width: 0;
@@ -504,6 +570,7 @@
 }
 
 .finance-review-resource-card-identity > span,
+.finance-review-resource-card-person > span,
 .finance-review-resource-card-amount > span {
   color: #818793;
   font-size: 11px;
@@ -511,6 +578,7 @@
 }
 
 .finance-review-resource-card-identity > strong,
+.finance-review-resource-card-person > strong,
 .finance-review-resource-card-amount > strong {
   overflow: hidden;
   color: #252936;
@@ -538,14 +606,19 @@
   white-space: nowrap;
 }
 
+.finance-review-resource-card-person > small {
+  overflow: hidden;
+  color: #686f7d;
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .finance-review-resource-card-identity > small b {
   color: #9297a1;
   font-size: 10.5px;
   font-weight: 550;
-}
-
-.finance-review-resource-card-identity > small.finance-review-resource-card-owner {
-  color: #8c919b;
 }
 
 .finance-review-resource-card-actions {
@@ -681,8 +754,14 @@
     gap: 11px;
   }
 
-  .finance-review-resource-card-amount {
+  .finance-review-resource-card-person {
     grid-column: 2;
+    grid-row: 2;
+  }
+
+  .finance-review-resource-card-amount {
+    grid-column: 3;
+    grid-row: 2;
   }
 
   .finance-review-resource-card > .project-record-status {
@@ -750,6 +829,10 @@
     min-height: 44px;
   }
 
+  .finance-review-linked-resources .finance-review-resource-actions > button {
+    min-height: 44px;
+  }
+
   .finance-review-resource-card {
     grid-template-columns: 38px minmax(0, 1fr);
     height: max-content;
@@ -765,6 +848,7 @@
   }
 
   .finance-review-resource-card-amount,
+  .finance-review-resource-card-person,
   .finance-review-resource-card > .project-record-status,
   .finance-review-resource-card-actions {
     grid-column: 2;

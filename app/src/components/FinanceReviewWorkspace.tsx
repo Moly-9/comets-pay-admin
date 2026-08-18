@@ -535,16 +535,25 @@ function FinanceReviewProjectOverview({
       </section>
 
       <section className="finance-review-project-section finance-review-linked-resources" aria-label="关联资料">
-        <header><div className="finance-review-section-heading"><span className="finance-review-card-title-icon is-resources" aria-hidden="true"><Files size={14} /></span><strong>关联资料</strong></div><span>项目级汇总</span></header>
+        <header>
+          <div className="finance-review-section-heading finance-review-linked-resource-heading">
+            <span className="finance-review-card-title-icon is-resources" aria-hidden="true"><Files size={14} /></span>
+            <span className="finance-review-linked-resource-title">
+              <strong>关联资料</strong>
+              <small>合同、Invoice 与收款账户校验汇总</small>
+            </span>
+          </div>
+          <span>项目级汇总</span>
+        </header>
         <div className="finance-review-resource-list">
           <div className="finance-review-resource-row">
             <span className="finance-review-resource-icon" aria-hidden="true"><FileText size={15} /></span>
             <strong>合同 · {linkedContracts.length} 份</strong>
             <div className="finance-review-resource-actions">
-              <button type="button" disabled={!linkedContracts.length} onClick={onOpenContracts}>查看合同</button>
+              <button type="button" disabled={!linkedContracts.length} onClick={onOpenContracts}>查看全部</button>
               <button
-                className="is-download"
                 type="button"
+                aria-label="打包下载全部合同"
                 disabled={!linkedContracts.length || downloadingResource !== null}
                 title="下载该请款项目的全部合同 PDF"
                 onClick={onDownloadContracts}
@@ -552,7 +561,7 @@ function FinanceReviewProjectOverview({
                 {downloadingResource === 'contract'
                   ? <LoaderCircle className="is-spinning" size={12} />
                   : <Download size={12} />}
-                {downloadingResource === 'contract' ? '打包中' : '下载 ZIP'}
+                {downloadingResource === 'contract' ? '打包中' : '下载'}
               </button>
             </div>
           </div>
@@ -560,10 +569,10 @@ function FinanceReviewProjectOverview({
             <span className="finance-review-resource-icon" aria-hidden="true"><ReceiptText size={15} /></span>
             <strong>Invoice · {linkedInvoices.length} 份</strong>
             <div className="finance-review-resource-actions">
-              <button type="button" disabled={!linkedInvoices.length} onClick={onOpenInvoices}>查看 Invoice</button>
+              <button type="button" disabled={!linkedInvoices.length} onClick={onOpenInvoices}>查看全部</button>
               <button
-                className="is-download"
                 type="button"
+                aria-label="打包下载全部 Invoice"
                 disabled={!linkedInvoices.length || downloadingResource !== null}
                 title="下载该请款项目的全部 Invoice PDF"
                 onClick={onDownloadInvoices}
@@ -571,7 +580,7 @@ function FinanceReviewProjectOverview({
                 {downloadingResource === 'invoice'
                   ? <LoaderCircle className="is-spinning" size={12} />
                   : <Download size={12} />}
-                {downloadingResource === 'invoice' ? '打包中' : '下载 ZIP'}
+                {downloadingResource === 'invoice' ? '打包中' : '下载'}
               </button>
             </div>
           </div>
@@ -1519,7 +1528,11 @@ export function FinanceReviewWorkspace({
                       <span>合同名称</span>
                       <strong title={contract.name}>{contract.name}</strong>
                       <small><b>合同编号</b>{contract.id}</small>
-                      <small className="finance-review-resource-card-owner">{creator?.name ?? '达人档案缺失'}</small>
+                    </div>
+                    <div className="finance-review-resource-card-person">
+                      <span>达人</span>
+                      <strong>{creator?.name ?? '达人档案缺失'}</strong>
+                      <small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>付款金额</span>
@@ -1596,7 +1609,11 @@ export function FinanceReviewWorkspace({
                       <span>Invoice 名称</span>
                       <strong title={invoiceName}>{invoiceName}</strong>
                       <small><b>Invoice 编号</b>{linkedInvoice.id}</small>
-                      <small className="finance-review-resource-card-owner">{creator?.name ?? linkedInvoice.snapshot.creatorName}</small>
+                    </div>
+                    <div className="finance-review-resource-card-person">
+                      <span>达人</span>
+                      <strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong>
+                      <small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small>
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>Invoice 金额</span>

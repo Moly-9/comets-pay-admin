@@ -74,6 +74,10 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource.match(/onDownloadInvoices=/g)).toHaveLength(2);
     expect(workspaceSource).toContain('下载该请款项目的全部合同 PDF');
     expect(workspaceSource).toContain('下载该请款项目的全部 Invoice PDF');
+    expect(workspaceSource).toContain('合同、Invoice 与收款账户校验汇总');
+    expect(workspaceSource.match(/>查看全部<\/button>/g)).toHaveLength(2);
+    expect(workspaceSource).toContain('aria-label="打包下载全部合同"');
+    expect(workspaceSource).toContain('aria-label="打包下载全部 Invoice"');
     expect(workspaceSource).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'contract')");
     expect(workspaceSource).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'invoice')");
     expect(workspaceSource).toContain("onOpenContracts={() => openResourceDialog('contract')}");
@@ -175,12 +179,17 @@ describe('FinanceReviewWorkspace project resource cards', () => {
     expect(workspaceSource).toContain('<span>付款金额</span>');
     expect(workspaceSource).toContain('<span>Invoice 名称</span>');
     expect(workspaceSource).toContain('<small><b>Invoice 编号</b>{linkedInvoice.id}</small>');
+    expect(workspaceSource.match(/className="finance-review-resource-card-person"/g)).toHaveLength(2);
+    expect(workspaceSource.match(/<span>达人<\/span>/g)).toHaveLength(2);
+    expect(workspaceSource).toContain('`${creator.handle} · ${creator.platform}`');
     expect(workspaceSource).toContain('invoiceDocumentName(linkedInvoice.snapshot)');
     expect(workspaceSource).toContain('contractDocumentFilename(contract)');
     expect(workspaceSource).toContain("invoiceFilename(linkedInvoice.snapshot, 'pdf')");
     expect(workspaceSource).toContain('finance-review-resource-card-actions');
     expect(workspaceSource).toContain('下载合同汇总');
     expect(workspaceSource).toContain('下载 Invoice 汇总');
+    expect(workspaceStageStyles).toContain('.finance-review-linked-resource-title');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-linked-resources \.finance-review-resource-icon\s*{[^}]*background:\s*#f3eef9;[^}]*color:\s*#7256a0;/s);
   });
 
   it('restores the resource modal, scroll position, and focus after returning from detail', () => {
@@ -195,6 +204,9 @@ describe('FinanceReviewWorkspace project resource cards', () => {
   });
 
   it('keeps cards readable without horizontal overflow on narrow screens', () => {
+    expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*44px minmax\(220px, 1fr\) minmax\(150px, \.7fr\) minmax\(140px, \.55fr\) auto auto;/s);
+    expect(workspaceStageStyles).toContain('.finance-review-resource-card-person');
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-resource-card-person\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
     expect(workspaceStageStyles).toMatch(/@media \(max-width: 480px\)[\s\S]*\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*38px minmax\(0, 1fr\);[^}]*height:\s*max-content;[^}]*min-height:\s*0;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card-actions\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
