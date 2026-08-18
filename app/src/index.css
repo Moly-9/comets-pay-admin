@@ -6658,13 +6658,13 @@ body:has(.finance-review-workspace) {
   font-size: var(--finance-review-font-xs);
 }
 
-/* The finance consistency card is a primary review surface and stays at a readable 14px. */
+/* Keep the dense finance consistency card at the requested compact 12px type step. */
 .finance-review-workspace .finance-payment-list-review-content .request-finance-comparison-header strong,
 .finance-review-workspace .finance-payment-list-review-content .request-finance-comparison-header span,
 .finance-review-workspace .finance-payment-list-review-content .request-finance-comparison-table th,
 .finance-review-workspace .finance-payment-list-review-content .request-finance-comparison-table td,
 .finance-review-workspace .finance-payment-list-review-content .finance-match-state {
-  font-size: 14px;
+  font-size: 12px;
 }
 
 @media (min-width: 1600px) {
