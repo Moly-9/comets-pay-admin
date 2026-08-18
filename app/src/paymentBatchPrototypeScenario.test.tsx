@@ -35,21 +35,21 @@ describe('payment batch prototype scenario', () => {
     expect(paymentBatchPrototypePayoutStatus('全部失败', 3)).toBe('付款失败');
   });
 
-  it('routes every batched project to the paid tab while preserving batch execution states', () => {
+  it('keeps two processing and two paid projects in their matching workbench tabs', () => {
     const input = {
       payouts: scenario.payouts,
       requests: scenario.requests,
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
 
-    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(10);
-    expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(3);
-    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(6);
+    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(2);
+    expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(4);
 
     const paidRows = buildPaymentProjectRows({ ...input, tab: 'paid' });
-    expect(paidRows.filter((row) => row.status === '付款处理中')).toHaveLength(2);
+    expect(paidRows.filter((row) => row.status === '付款处理中')).toHaveLength(1);
     expect(paidRows.filter((row) => row.status === '已付款')).toHaveLength(2);
-    expect(paidRows.filter((row) => row.status === '部分失败')).toHaveLength(2);
+    expect(paidRows.filter((row) => row.status === '部分失败')).toHaveLength(1);
     expect(paidRows.find((row) => row.status === '付款处理中')?.actionLabel).toBe('查看进度');
     expect(paidRows.find((row) => row.status === '部分失败')?.actionLabel).toBe('处理失败');
   });
@@ -59,14 +59,16 @@ describe('payment batch prototype scenario', () => {
       const batchStatus = PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE[request.requestCode ?? request.id];
       if (!batchStatus) return;
 
-      expect(request.lifecycle).toBe('COMPLETED');
-      expect(request.status).toBe('已付款');
+      expect(request.lifecycle).toBe(batchStatus === '已付款' ? 'COMPLETED' : 'APPROVED');
+      expect(request.status).toBe(batchStatus === '已付款' ? '已付款' : '待打款');
 
       const requestLists = scenario.paymentLists.filter((list) => (
         list.paymentRequestProjectId === request.paymentRequestProjectId
       ));
       expect(requestLists.length).toBeGreaterThan(0);
-      expect(requestLists.every((list) => list.status === 'paid')).toBe(true);
+      expect(requestLists.every((list) => (
+        list.status === (batchStatus === '已付款' ? 'paid' : 'approved')
+      ))).toBe(true);
 
       const requestPayouts = payoutsForRequest(request);
       expect(requestPayouts.length).toBeGreaterThan(0);
@@ -77,7 +79,6 @@ describe('payment batch prototype scenario', () => {
       } else {
         expect(requestPayouts.some((payout) => payout.status === '付款失败')).toBe(true);
         expect(requestPayouts.some((payout) => payout.status === '已付款')).toBe(true);
-        expect(requestPayouts.every((payout) => ['已付款', '付款失败'].includes(payout.status))).toBe(true);
       }
     });
   });

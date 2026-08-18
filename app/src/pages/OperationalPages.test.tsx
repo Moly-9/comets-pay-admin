@@ -211,14 +211,16 @@ describe('InvoicePage OA states', () => {
 });
 
 describe('request project fixtures', () => {
-  it('provides the agreed finance-review, payment, paid, and draft distribution', () => {
+  it('provides two projects at every visible approval and payment stage', () => {
     const requests = INITIAL_COMPLETE_REQUEST_RESOURCES.requests;
-    expect(requests.filter((request) => (
-      request.lifecycle === 'SUBMITTED' && request.approval?.status === 'PENDING_FINANCE'
-    ))).toHaveLength(10);
-    expect(requests.filter((request) => request.lifecycle === 'APPROVED')).toHaveLength(3);
-    expect(requests.filter((request) => request.lifecycle === 'COMPLETED')).toHaveLength(6);
-    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(1);
+    ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'].forEach((status) => {
+      expect(requests.filter((request) => (
+        request.lifecycle === 'SUBMITTED' && request.approval?.status === status
+      ))).toHaveLength(2);
+    });
+    expect(requests.filter((request) => request.lifecycle === 'APPROVED')).toHaveLength(4);
+    expect(requests.filter((request) => request.lifecycle === 'COMPLETED')).toHaveLength(2);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(6);
     expect(requests.some((request) => request.lifecycle === 'RETURNED')).toBe(false);
   });
 });

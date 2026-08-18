@@ -3,7 +3,7 @@ import { isConfirmedContract } from './contracts';
 import { buildRequestFinanceReview } from './financeReview';
 import { paymentListEffectiveAccount, paymentListItemValue } from './businessWorkflow';
 import { INITIAL_PROJECTS } from './pages/OperationalPages';
-import { paymentRequestProviderForChannel } from './paymentRequestProjects';
+import { paymentRequestProviderForChannel, requestProjectStatusFor } from './paymentRequestProjects';
 import {
   COMPLETE_REQUEST_FINANCE_PROJECT_CODES,
   INITIAL_COMPLETE_REQUEST_RESOURCES,
@@ -162,11 +162,11 @@ describe('complete request project prototype resources', () => {
     });
   });
 
-  it('provides ten zero-mismatch finance reviews and preserves both resubmission histories', () => {
+  it('provides two zero-mismatch finance reviews and preserves both resubmission histories', () => {
     const financeRequests = requests.filter((request) => (
       request.lifecycle === 'SUBMITTED' && request.approval?.status === 'PENDING_FINANCE'
     ));
-    expect(financeRequests).toHaveLength(10);
+    expect(financeRequests).toHaveLength(2);
     expect(new Set(financeRequests.map((request) => request.cooperationProjectCode))).toEqual(
       COMPLETE_REQUEST_FINANCE_PROJECT_CODES,
     );
@@ -178,7 +178,7 @@ describe('complete request project prototype resources', () => {
       expect(review.canApprove).toBe(true);
     });
 
-    ['PRJ-260801-07', 'PRJ-260801-08'].forEach((projectCode) => {
+    ['PRJ-260727-07', 'PRJ-260727-08'].forEach((projectCode) => {
       const request = financeRequests.find((candidate) => candidate.cooperationProjectCode === projectCode);
       expect(request?.approval?.round).toBe(2);
       expect(request?.approval?.history).toContainEqual(expect.objectContaining({
@@ -188,6 +188,26 @@ describe('complete request project prototype resources', () => {
         toStatus: 'RETURNED_TO_MEDIA_REVIEW',
       }));
     });
+  });
+
+  it('provides exactly two visible projects for every cooperation-project status', () => {
+    const visibleRequests = requests.filter((request) => request.lifecycle !== 'DRAFT');
+    const counts = visibleRequests.reduce<Record<string, number>>((result, request) => {
+      const status = requestProjectStatusFor(request, payouts);
+      if (status) result[status] = (result[status] ?? 0) + 1;
+      return result;
+    }, {});
+
+    expect(counts).toEqual({
+      PM审批中: 2,
+      项目负责人审批中: 2,
+      老板审批中: 2,
+      财务审批中: 2,
+      正在付款: 2,
+      付款处理中: 2,
+      已付款: 2,
+    });
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(6);
   });
 
   it('keeps the standalone available Invoice outside every existing request', async () => {

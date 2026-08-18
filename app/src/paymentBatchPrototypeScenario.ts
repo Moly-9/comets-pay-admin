@@ -6,12 +6,10 @@ import type { PaymentAggregateStatus } from './paymentStatusFilters';
 export type PaymentBatchPrototypeStatus = PaymentAggregateStatus;
 
 export const PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<string, PaymentBatchPrototypeStatus>> = {
-  'REQ-202607-000007': '付款处理中',
-  'REQ-202607-000009': '已付款',
   'REQ-202607-000011': '部分失败',
   'REQ-202607-000012': '付款处理中',
-  'REQ-202607-000017': '已付款',
-  'REQ-202607-000018': '部分失败',
+  'REQ-202607-000013': '已付款',
+  'REQ-202607-000014': '已付款',
 };
 
 export const paymentBatchPrototypeStatusFor = (
@@ -75,6 +73,14 @@ export const applyPaymentBatchPrototypeScenario = ({
     requests: requests.map((request): RequestProjectSummary => {
       const batchStatus = paymentBatchPrototypeStatusFor(request);
       if (!batchStatus) return request;
+      if (batchStatus !== '已付款') {
+        return {
+          ...request,
+          lifecycle: 'APPROVED',
+          status: '待打款',
+          filter: 'pending',
+        };
+      }
       return {
         ...request,
         lifecycle: 'COMPLETED',
@@ -110,9 +116,13 @@ export const applyPaymentBatchPrototypeScenario = ({
     paymentLists: paymentLists.map((paymentList): PaymentListRecord => {
       if (!paymentList.paymentRequestProjectId
         || !batchedRequestIds.has(paymentList.paymentRequestProjectId)) return paymentList;
+      const request = requests.find((candidate) => (
+        candidate.paymentRequestProjectId === paymentList.paymentRequestProjectId
+      ));
+      const batchStatus = request ? paymentBatchPrototypeStatusFor(request) : undefined;
       return {
         ...paymentList,
-        status: 'paid',
+        status: batchStatus === '已付款' ? 'paid' : 'approved',
       };
     }),
   };

@@ -9,6 +9,7 @@ import {
   type PaymentListRecord,
   type RequestApprovalEvent,
   type RequestApprovalState,
+  type RequestApprovalStatus,
 } from './businessWorkflow';
 import {
   ACTIVE_INVOICE_DEMO_INVOICES,
@@ -37,22 +38,44 @@ import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
 
 const FINANCE_REVIEW_PROJECT_CODES = new Set([
-  'PRJ-301164',
-  'PRJ-260727-02',
-  'PRJ-260727-03',
-  'PRJ-260727-04',
+  'PRJ-260727-07',
   'PRJ-260727-08',
-  'PRJ-260727-10',
-  'PRJ-260801-01',
-  'PRJ-260801-02',
-  'PRJ-260801-07',
-  'PRJ-260801-08',
 ]);
 
 const RESUBMITTED_PROJECT_CODES = new Set([
-  'PRJ-260801-07',
-  'PRJ-260801-08',
+  'PRJ-260727-07',
+  'PRJ-260727-08',
 ]);
+
+type RequestProjectDemoStage =
+  | RequestApprovalStatus
+  | 'PAYMENT_READY'
+  | 'PAYMENT_PROCESSING'
+  | 'PAID'
+  | 'DRAFT';
+
+const REQUEST_PROJECT_DEMO_STAGE_BY_CODE: Record<string, RequestProjectDemoStage> = {
+  'PRJ-301164': 'PENDING_PM',
+  'PRJ-260727-02': 'PENDING_PM',
+  'PRJ-260727-03': 'PENDING_PROJECT_OWNER',
+  'PRJ-260727-04': 'PENDING_PROJECT_OWNER',
+  'PRJ-260727-05': 'PENDING_OWNER',
+  'PRJ-260727-06': 'PENDING_OWNER',
+  'PRJ-260727-07': 'PENDING_FINANCE',
+  'PRJ-260727-08': 'PENDING_FINANCE',
+  'PRJ-260727-09': 'PAYMENT_READY',
+  'PRJ-260727-10': 'PAYMENT_READY',
+  'PRJ-260727-11': 'PAYMENT_PROCESSING',
+  'PRJ-260727-12': 'PAYMENT_PROCESSING',
+  'PRJ-260801-01': 'PAID',
+  'PRJ-260801-02': 'PAID',
+  'PRJ-260801-03': 'DRAFT',
+  'PRJ-260801-04': 'DRAFT',
+  'PRJ-260801-05': 'DRAFT',
+  'PRJ-260801-06': 'DRAFT',
+  'PRJ-260801-07': 'DRAFT',
+  'PRJ-260801-08': 'DRAFT',
+};
 
 const SPECIAL_INVOICE_IDS = new Set([
   ...ACTIVE_INVOICE_DEMO_INVOICES.map((invoice) => invoice.invoiceId),
@@ -176,6 +199,44 @@ const financeApprovalHistory = (
   };
 };
 
+const approvalAtStage = (
+  request: RequestProjectSummary,
+  status: RequestApprovalStatus,
+): RequestApprovalState => {
+  const approval = financeApprovalHistory(
+    request,
+    status === 'PENDING_FINANCE' && RESUBMITTED_PROJECT_CODES.has(request.id),
+  );
+  if (status === 'PENDING_FINANCE') return approval;
+  const historyLength = {
+    PENDING_PM: 0,
+    PENDING_PROJECT_OWNER: 1,
+    PENDING_OWNER: 2,
+    APPROVED: 4,
+    RETURNED_TO_MEDIA_REVIEW: 3,
+  }[status];
+  const history = approval.history.slice(0, historyLength);
+  if (status === 'APPROVED') {
+    history.push({
+      round: 1,
+      stage: 'FINANCE',
+      action: 'APPROVE',
+      actorAccount: 'fixture-finance',
+      actorName: '财务',
+      actorRole: '财务账号',
+      fromStatus: 'PENDING_FINANCE',
+      toStatus: 'APPROVED',
+      occurredAt: '2026-07-21T02:00:00.000Z',
+    });
+  }
+  return {
+    ...approval,
+    status,
+    history,
+    updatedAt: `2026-07-${String(18 + history.length).padStart(2, '0')}T02:00:00.000Z`,
+  };
+};
+
 const sourceInvoiceByEngagement = new Map(ALL_PROJECT_PROTOTYPE_INVOICES.flatMap((invoice) => {
   const engagementId = invoice.snapshot.engagementId;
   if (!engagementId) return [];
@@ -197,14 +258,33 @@ const requestSeeds: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((requ
     firstInvoice ? invoicePaymentListProvider(firstInvoice) : 'Airwallex',
   );
   const normalizedRequest = { ...request, paymentChannel };
-  if (!FINANCE_REVIEW_PROJECT_CODES.has(request.id)) return normalizedRequest;
-  const approval = financeApprovalHistory(normalizedRequest, RESUBMITTED_PROJECT_CODES.has(request.id));
+  const demoStage = REQUEST_PROJECT_DEMO_STAGE_BY_CODE[request.id] ?? 'DRAFT';
+  if (demoStage === 'DRAFT') {
+    return {
+      ...normalizedRequest,
+      lifecycle: 'DRAFT',
+      approval: undefined,
+      status: '草稿',
+      filter: 'pending',
+    };
+  }
+  const approvalStatus: RequestApprovalStatus = demoStage === 'PAYMENT_READY'
+    || demoStage === 'PAYMENT_PROCESSING'
+    || demoStage === 'PAID'
+    ? 'APPROVED'
+    : demoStage;
+  const approval = approvalAtStage(normalizedRequest, approvalStatus);
+  const lifecycle = demoStage === 'PAID'
+    ? 'COMPLETED' as const
+    : demoStage === 'PAYMENT_READY' || demoStage === 'PAYMENT_PROCESSING'
+      ? 'APPROVED' as const
+      : 'SUBMITTED' as const;
   return {
     ...normalizedRequest,
-    lifecycle: 'SUBMITTED',
+    lifecycle,
     approval,
-    status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED', status: request.status }),
-    filter: 'pending',
+    status: myProjectStatusFor({ approval, lifecycle, status: request.status }),
+    filter: lifecycle === 'COMPLETED' ? 'processed' : 'pending',
   };
 });
 
@@ -362,6 +442,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
   const approved = request.lifecycle === 'APPROVED';
   const paid = request.lifecycle === 'COMPLETED';
   const returned = request.lifecycle === 'RETURNED';
+  const processing = REQUEST_PROJECT_DEMO_STAGE_BY_CODE[request.id] === 'PAYMENT_PROCESSING';
   return {
     ...baseline,
     id: invoice.sourcePayoutId,
@@ -383,7 +464,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     transferMethod: invoice.snapshot.payment.transferMethod,
     localClearingSystem: invoice.snapshot.payment.localClearingSystem,
     feeBearer: 'ADVERTISER',
-    status: paid ? '已付款' : approved ? '等待付款' : returned ? '已退回' : '未进入付款',
+    status: paid ? '已付款' : processing ? '付款处理中' : approved ? '等待付款' : returned ? '已退回' : '未进入付款',
     invoiceReviewStatus: paid || approved ? '已通过' : returned ? '已退回' : '已通过',
     invoiceVersion: invoice.version,
     invoiceSignedAt: invoice.generatedAt,

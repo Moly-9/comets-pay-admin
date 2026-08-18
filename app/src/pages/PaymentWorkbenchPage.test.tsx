@@ -154,9 +154,9 @@ describe('PaymentWorkbenchPage currency overview', () => {
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
 
-    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(10);
-    expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(3);
-    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(6);
+    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(2);
+    expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(4);
     expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(0);
 
     const reviewRow = buildPaymentProjectRows({ ...input, tab: 'review' })[0];

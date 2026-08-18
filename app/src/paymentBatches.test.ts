@@ -20,6 +20,7 @@ import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
 } from './paymentBatches';
+import { paymentBatchPrototypeStatusFor } from './paymentBatchPrototypeScenario';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import type { DocumentPayoutSnapshot, GeneratedInvoiceRecord, Payout } from './types';
@@ -391,51 +392,44 @@ describe('payment batch snapshots', () => {
       paymentLists: resources.paymentLists,
       contracts: resources.contracts,
     });
-    const completedRequests = resources.requests.filter((request) => request.lifecycle === 'COMPLETED');
-    const completedInvoiceIds = new Set(completedRequests.flatMap((request) => request.invoiceIds ?? []));
+    const batchedRequests = resources.requests.filter((request) => paymentBatchPrototypeStatusFor(request));
+    const completedInvoiceIds = new Set(batchedRequests.flatMap((request) => request.invoiceIds ?? []));
     const expectedPayoutIds = resources.invoices
       .filter((invoice) => completedInvoiceIds.has(invoice.invoiceId))
       .map((invoice) => invoice.sourcePayoutId)
       .sort();
     const actualPayoutIds = records.flatMap((record) => record.items.map((item) => item.payoutId));
 
-    expect(records).toHaveLength(13);
+    expect(records).toHaveLength(8);
     expect(records.map((record) => record.paymentBatchCode)).toEqual(
-      Array.from({ length: 13 }, (_, index) => `BAT-20260805-${String(13 - index).padStart(3, '0')}`),
+      Array.from({ length: 8 }, (_, index) => `BAT-20260805-${String(8 - index).padStart(3, '0')}`),
     );
-    expect(records.map((record) => record.items.length)).toEqual([5, 5, 4, 5, 5, 3, 5, 5, 5, 5, 5, 5, 3]);
+    expect(records.map((record) => record.items.length)).toEqual([5, 5, 5, 5, 5, 1, 5, 4]);
     expect(records.map((record) => record.request.requestCode)).toEqual([
-      'REQ-202607-000007',
-      'REQ-202607-000007',
-      'REQ-202607-000007',
-      'REQ-202607-000009',
-      'REQ-202607-000009',
-      'REQ-202607-000009',
       'REQ-202607-000011',
       'REQ-202607-000012',
       'REQ-202607-000012',
-      'REQ-202607-000017',
-      'REQ-202607-000017',
-      'REQ-202607-000018',
-      'REQ-202607-000018',
+      'REQ-202607-000013',
+      'REQ-202607-000013',
+      'REQ-202607-000013',
+      'REQ-202607-000014',
+      'REQ-202607-000014',
     ]);
-    expect(actualPayoutIds).toHaveLength(60);
-    expect(new Set(actualPayoutIds).size).toBe(60);
+    expect(actualPayoutIds).toHaveLength(35);
+    expect(new Set(actualPayoutIds).size).toBe(35);
     expect([...actualPayoutIds].sort()).toEqual(expectedPayoutIds);
     expect(new Set(records.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
     expect(new Set(records.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
     expect(records.map((record) => record.status)).toEqual([
-      '付款处理中', '付款处理中', '付款处理中',
-      '已付款', '已付款', '已付款',
       '部分失败',
       '付款处理中', '付款处理中',
+      '已付款', '已付款', '已付款',
       '已付款', '已付款',
-      '部分失败', '部分失败',
     ]);
 
     records.forEach((record) => {
       expect(record.items.length).toBeLessThanOrEqual(5);
-      expect(record.request.lifecycle).toBe('COMPLETED');
+      expect(record.request.lifecycle).toBe(record.status === '已付款' ? 'COMPLETED' : 'APPROVED');
       expect(new Set(record.items.map((item) => item.provider))).toEqual(new Set([record.provider]));
       expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
       expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
