@@ -58,7 +58,17 @@ import {
 } from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
-import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
+import {
+  downloadBlob,
+  formatInvoiceMoney,
+  invoiceFilename,
+  invoiceTotal,
+} from '../invoice/invoiceUtils';
+import {
+  createFlatProjectPdfArchive,
+  projectPdfArchiveFilename,
+  type ProjectPdfArchiveKind,
+} from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { ContractDocumentView } from './ContractDocumentView';
@@ -430,8 +440,12 @@ function FinanceReviewProjectOverview({
   paymentChannel,
   requestReason,
   exportingPaymentLists,
+  downloadingResource,
+  resourceDownloadError,
   canExportPaymentLists,
   onExportPaymentLists,
+  onDownloadContracts,
+  onDownloadInvoices,
   onOpenContracts,
   onOpenInvoices,
 }: {
@@ -447,8 +461,12 @@ function FinanceReviewProjectOverview({
   paymentChannel: string;
   requestReason: string;
   exportingPaymentLists: boolean;
+  downloadingResource: ProjectPdfArchiveKind | null;
+  resourceDownloadError: string;
   canExportPaymentLists: boolean;
   onExportPaymentLists: () => void;
+  onDownloadContracts: () => void;
+  onDownloadInvoices: () => void;
   onOpenContracts: () => void;
   onOpenInvoices: () => void;
 }) {
@@ -521,12 +539,40 @@ function FinanceReviewProjectOverview({
           <div className="finance-review-resource-row">
             <span className="finance-review-resource-icon" aria-hidden="true"><FileText size={15} /></span>
             <strong>合同 · {linkedContracts.length} 份</strong>
-            <button type="button" onClick={onOpenContracts}>查看合同</button>
+            <div className="finance-review-resource-actions">
+              <button type="button" disabled={!linkedContracts.length} onClick={onOpenContracts}>查看合同</button>
+              <button
+                className="is-download"
+                type="button"
+                disabled={!linkedContracts.length || downloadingResource !== null}
+                title="下载该请款项目的全部合同 PDF"
+                onClick={onDownloadContracts}
+              >
+                {downloadingResource === 'contract'
+                  ? <LoaderCircle className="is-spinning" size={12} />
+                  : <Download size={12} />}
+                {downloadingResource === 'contract' ? '打包中' : '下载 ZIP'}
+              </button>
+            </div>
           </div>
           <div className="finance-review-resource-row">
             <span className="finance-review-resource-icon" aria-hidden="true"><ReceiptText size={15} /></span>
             <strong>Invoice · {linkedInvoices.length} 份</strong>
-            <button type="button" onClick={onOpenInvoices}>查看 Invoice</button>
+            <div className="finance-review-resource-actions">
+              <button type="button" disabled={!linkedInvoices.length} onClick={onOpenInvoices}>查看 Invoice</button>
+              <button
+                className="is-download"
+                type="button"
+                disabled={!linkedInvoices.length || downloadingResource !== null}
+                title="下载该请款项目的全部 Invoice PDF"
+                onClick={onDownloadInvoices}
+              >
+                {downloadingResource === 'invoice'
+                  ? <LoaderCircle className="is-spinning" size={12} />
+                  : <Download size={12} />}
+                {downloadingResource === 'invoice' ? '打包中' : '下载 ZIP'}
+              </button>
+            </div>
           </div>
           <div className="finance-review-resource-row">
             <span className="finance-review-resource-icon" aria-hidden="true"><Landmark size={15} /></span>
@@ -534,6 +580,9 @@ function FinanceReviewProjectOverview({
             <span className={`finance-review-resource-status is-${accountValidationStatus}`}>{accountValidationLabel}</span>
           </div>
         </div>
+        {resourceDownloadError ? (
+          <p className="finance-review-resource-error" role="alert">{resourceDownloadError}</p>
+        ) : null}
       </section>
     </>
   );
@@ -592,6 +641,8 @@ export function FinanceReviewWorkspace({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
   const [exportingPaymentLists, setExportingPaymentLists] = useState(false);
+  const [downloadingResource, setDownloadingResource] = useState<ProjectPdfArchiveKind | null>(null);
+  const [resourceDownloadError, setResourceDownloadError] = useState('');
   const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
@@ -842,6 +893,70 @@ export function FinanceReviewWorkspace({
     }
   };
 
+  const downloadProjectContracts = async () => {
+    if (!linkedContracts.length || downloadingResource) return;
+    setDownloadingResource('contract');
+    setResourceDownloadError('');
+    try {
+      const entries = await Promise.all(linkedContracts.map(async (contract) => {
+        let pdfBlob: Blob;
+        if (contract.generationSnapshot) {
+          const { generateContractPdf } = await import('../contractGeneration');
+          pdfBlob = await generateContractPdf(
+            contract.generationSnapshot,
+            undefined,
+            undefined,
+            contract.generationVariant ?? 'FORMAL',
+          );
+        } else {
+          const sourceDocument = contract.sourceDocuments?.find((document) => (
+            document.mimeType === 'application/pdf' || /\.pdf$/i.test(document.fileName)
+          ));
+          const documentUrl = sourceDocument?.documentUrl || contract.documentUrl;
+          if (!documentUrl) throw new Error(`${contract.id} 缺少可下载的 PDF 文件`);
+          const response = await fetch(documentUrl);
+          if (!response.ok) throw new Error(`${contract.id} PDF 下载失败`);
+          pdfBlob = await response.blob();
+        }
+        return {
+          filename: `${contract.id}.pdf`,
+          pdfBlob,
+        };
+      }));
+      const archive = await createFlatProjectPdfArchive(entries);
+      downloadBlob(
+        archive,
+        projectPdfArchiveFilename(request.requestCode ?? request.id, 'contract'),
+      );
+    } catch (error) {
+      setResourceDownloadError(error instanceof Error ? error.message : '合同压缩包生成失败，请稍后重试。');
+    } finally {
+      setDownloadingResource(null);
+    }
+  };
+
+  const downloadProjectInvoices = async () => {
+    if (!linkedInvoices.length || downloadingResource) return;
+    setDownloadingResource('invoice');
+    setResourceDownloadError('');
+    try {
+      const { generateInvoicePdf } = await import('../invoice/generateInvoice');
+      const entries = await Promise.all(linkedInvoices.map(async (linkedInvoice) => ({
+        filename: invoiceFilename(linkedInvoice.snapshot, 'pdf'),
+        pdfBlob: await generateInvoicePdf(linkedInvoice.snapshot),
+      })));
+      const archive = await createFlatProjectPdfArchive(entries);
+      downloadBlob(
+        archive,
+        projectPdfArchiveFilename(request.requestCode ?? request.id, 'invoice'),
+      );
+    } catch (error) {
+      setResourceDownloadError(error instanceof Error ? error.message : 'Invoice 压缩包生成失败，请稍后重试。');
+    } finally {
+      setDownloadingResource(null);
+    }
+  };
+
   return (
     <>
       <Modal
@@ -984,8 +1099,12 @@ export function FinanceReviewWorkspace({
                   paymentChannel={paymentChannel}
                   requestReason={requestReason}
                   exportingPaymentLists={exportingPaymentLists}
+                  downloadingResource={downloadingResource}
+                  resourceDownloadError={resourceDownloadError}
                   canExportPaymentLists={projectPaymentLists.length > 0}
                   onExportPaymentLists={() => { void exportProjectPaymentLists(); }}
+                  onDownloadContracts={() => { void downloadProjectContracts(); }}
+                  onDownloadInvoices={() => { void downloadProjectInvoices(); }}
                   onOpenContracts={() => setResourceDialog('contract')}
                   onOpenInvoices={() => setResourceDialog('invoice')}
                 />
@@ -1246,8 +1365,12 @@ export function FinanceReviewWorkspace({
                   paymentChannel={paymentChannel}
                   requestReason={requestReason}
                   exportingPaymentLists={exportingPaymentLists}
+                  downloadingResource={downloadingResource}
+                  resourceDownloadError={resourceDownloadError}
                   canExportPaymentLists={projectPaymentLists.length > 0}
                   onExportPaymentLists={() => { void exportProjectPaymentLists(); }}
+                  onDownloadContracts={() => { void downloadProjectContracts(); }}
+                  onDownloadInvoices={() => { void downloadProjectInvoices(); }}
                   onOpenContracts={() => setResourceDialog('contract')}
                   onOpenInvoices={() => setResourceDialog('invoice')}
                 />

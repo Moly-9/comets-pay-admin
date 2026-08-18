@@ -92,6 +92,15 @@ const transferMethodLabel = (
   return '待确认';
 };
 
+const transferMethodCode = (
+  transferMethod: ReturnType<typeof paymentListEffectiveAccount>['transferMethod'],
+) => {
+  if (transferMethod === 'LOCAL') return 'LOCAL';
+  if (transferMethod === 'SWIFT') return 'SWIFT';
+  if (transferMethod === 'PAYPAL') return 'PAYPAL';
+  return '待确认';
+};
+
 const displayValue = (value: unknown) => (
   value === undefined || value === null || value === '' ? '未填写' : String(value)
 );
@@ -680,7 +689,14 @@ export function PaymentListReviewContent({
                     tabIndex={-1}
                   >
                     <header>
-                      <div><span className="finance-review-card-title-icon is-creator" aria-hidden="true"><UserRoundCheck size={14} /></span><span><strong>{row.item.snapshot.creatorName}</strong><small>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</small></span></div>
+                      <div>
+                        <span className="finance-review-card-title-icon is-creator" aria-hidden="true"><UserRoundCheck size={14} /></span>
+                        <dl className="finance-payment-account-summary-meta">
+                          <div><dt>Account Name</dt><dd>{accountName}</dd></div>
+                          <div><dt>付款清单编号</dt><dd>{row.list.paymentListCode}</dd></div>
+                          <div><dt>支付方式</dt><dd>{transferMethodCode(row.effectiveAccount.transferMethod)}</dd></div>
+                        </dl>
+                      </div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}

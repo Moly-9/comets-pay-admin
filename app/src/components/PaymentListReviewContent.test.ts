@@ -111,6 +111,15 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).not.toContain("id: 'bank-postal-code'");
   });
 
+  it('uses readable 14px comparison text and the requested payment summary header fields', () => {
+    expect(reviewContentSource).toContain('<dt>Account Name</dt><dd>{accountName}</dd>');
+    expect(reviewContentSource).toContain('<dt>付款清单编号</dt><dd>{row.list.paymentListCode}</dd>');
+    expect(reviewContentSource).toContain('<dt>支付方式</dt><dd>{transferMethodCode(row.effectiveAccount.transferMethod)}</dd>');
+    expect(reviewContentSource).toContain("if (transferMethod === 'LOCAL') return 'LOCAL'");
+    expect(reviewContentSource).toContain("if (transferMethod === 'SWIFT') return 'SWIFT'");
+    expect(workspaceStyles).toMatch(/\.finance-review-workspace \.finance-payment-list-review-content \.request-finance-comparison-table th,[\s\S]*\.request-finance-comparison-table td,[\s\S]*font-size:\s*14px;/s);
+  });
+
   it('renders matching fields as accessible green circle-check icons', () => {
     expect(reviewContentSource).toContain("field.state === 'match'");
     expect(reviewContentSource.match(/<CircleCheck size=\{16\} strokeWidth=\{2\.4\} aria-hidden="true" \/>/g)).toHaveLength(2);

@@ -66,6 +66,12 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
   it('reuses the same project overview for the drawer and approval board', () => {
     expect(workspaceSource.match(/<FinanceReviewProjectOverview/g)).toHaveLength(2);
     expect(workspaceSource).toContain('canExportPaymentLists={projectPaymentLists.length > 0}');
+    expect(workspaceSource.match(/onDownloadContracts=/g)).toHaveLength(2);
+    expect(workspaceSource.match(/onDownloadInvoices=/g)).toHaveLength(2);
+    expect(workspaceSource).toContain('下载该请款项目的全部合同 PDF');
+    expect(workspaceSource).toContain('下载该请款项目的全部 Invoice PDF');
+    expect(workspaceSource).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'contract')");
+    expect(workspaceSource).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'invoice')");
     expect(workspaceSource).toContain("onOpenContracts={() => setResourceDialog('contract')}");
     expect(workspaceSource).toContain("onOpenInvoices={() => setResourceDialog('invoice')}");
     expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
