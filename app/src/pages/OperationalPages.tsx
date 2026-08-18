@@ -3178,6 +3178,8 @@ const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
 export function BatchesPage({
   batches,
   payouts = [],
+  contracts = [],
+  invoices = [],
   onNewBatch,
   notify,
   canCreateBatch,
@@ -3187,6 +3189,8 @@ export function BatchesPage({
 }: {
   batches: readonly PaymentBatchRecord[];
   payouts?: readonly Payout[];
+  contracts?: readonly ContractRecord[];
+  invoices?: readonly GeneratedInvoiceRecord[];
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
@@ -3231,6 +3235,20 @@ export function BatchesPage({
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
   const exportDisabled = !exportAvailability.records || exporting !== null;
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
+  const selectedProjectItems = useMemo(() => {
+    if (!selectedBatch) return [];
+    const seen = new Set<string>();
+    return batches
+      .filter((batch) => (
+        batch.request.paymentRequestProjectId === selectedBatch.request.paymentRequestProjectId
+      ))
+      .flatMap((batch) => batch.items)
+      .filter((item) => {
+        if (seen.has(item.payoutId)) return false;
+        seen.add(item.payoutId);
+        return true;
+      });
+  }, [batches, selectedBatch]);
   const batchMetrics = useMemo(() => {
     const totals = batches.reduce((result, batch) => {
       const counts = paymentBatchStatusCounts(batch);
@@ -3382,7 +3400,19 @@ export function BatchesPage({
   const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
 
   if (selectedBatchId) {
-    if (selectedBatch) return <PaymentBatchDetailPage batch={selectedBatch} payouts={payouts} canHandleFailure={canCreateBatch} onBack={closeBatchDetail} onReturnPayout={onReturnPayout} onOpenFailurePaymentList={onOpenFailurePaymentList} />;
+    if (selectedBatch) return (
+      <PaymentBatchDetailPage
+        batch={selectedBatch}
+        payouts={payouts}
+        contracts={contracts}
+        invoices={invoices}
+        projectItems={selectedProjectItems}
+        canHandleFailure={canCreateBatch}
+        onBack={closeBatchDetail}
+        onReturnPayout={onReturnPayout}
+        onOpenFailurePaymentList={onOpenFailurePaymentList}
+      />
+    );
     return (
       <div className="page-stack payment-batch-detail-page">
         <button className="project-back-button payment-batch-detail-back" type="button" onClick={closeBatchDetail}>

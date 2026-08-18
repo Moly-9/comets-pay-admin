@@ -4163,6 +4163,8 @@ export default function App() {
         <BatchesPage
           batches={paymentBatches}
           payouts={payouts}
+          contracts={contracts}
+          invoices={generatedInvoices}
           onNewBatch={() => setActivePage('new-batch')}
           notify={notify}
           canCreateBatch={canExecutePayouts}
@@ -4225,6 +4227,8 @@ export default function App() {
         <PaymentProjectPaymentDetailPage
           record={paymentDetailRecord}
           payouts={payouts}
+          contracts={contracts}
+          invoices={generatedInvoices}
           canHandleFailure={canExecutePayouts}
           onBack={() => setPaymentDetailRequestId(null)}
           onReturnPayout={returnPayout}

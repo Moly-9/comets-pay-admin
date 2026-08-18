@@ -27,6 +27,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
       <PaymentProjectPaymentDetailPage
         record={failedRecord}
         payouts={resources.payouts}
+        contracts={INITIAL_COMPLETE_REQUEST_RESOURCES.contracts}
+        invoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
         canHandleFailure
         onBack={vi.fn()}
         onReturnPayout={vi.fn(() => true)}
@@ -50,6 +52,12 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('退回媒介处理');
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('BENEFICIARY_UNAVAILABLE');
+    expect(html).toContain('下载合同');
+    expect(html).toContain('下载 Invoice');
+    expect(html).toContain('下载付款表');
+    expect(html).not.toContain('下载项目资料');
+    expect(html).toContain('查看合同附件');
+    expect(html).toContain('查看 Invoice 附件');
     expect(html).not.toContain('付款批次</span>');
     expect(html).not.toContain('请款项目付款');
   });

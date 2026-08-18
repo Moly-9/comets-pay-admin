@@ -260,7 +260,13 @@ describe('PaymentBatchDetailPage', () => {
   });
 
   it('renders expanded contract, Invoice, masked account and channel failure details', () => {
-    const html = renderToStaticMarkup(<PaymentItemDetails item={DETAIL_BATCH.items[0]} />);
+    const html = renderToStaticMarkup(
+      <PaymentItemDetails
+        item={DETAIL_BATCH.items[0]}
+        onViewContractAttachment={vi.fn()}
+        onViewInvoiceAttachment={vi.fn()}
+      />,
+    );
 
     expect(html).toContain('Instagram 内容合作合同');
     expect(html).toContain('INV-202608-000001');
@@ -290,11 +296,26 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('payment-batch-detail-panel is-contract');
     expect(html).toContain('payment-batch-detail-panel is-invoice');
     expect(html).toContain('payment-batch-detail-panel is-payment');
+    expect(html).toContain('aria-label="查看合同附件 CON-202608-000001"');
+    expect(html).toContain('aria-label="查看 Invoice 附件 INV-202608-000001"');
+    expect(html.match(/>查看附件<\/button>/g)).toHaveLength(2);
+    expect(html).toMatch(/payment-batch-detail-panel is-contract[\s\S]*?<header>[\s\S]*?查看合同附件 CON-202608-000001[\s\S]*?<\/header>/);
     expect(html).toContain('付款关联文件');
     expect(html).toContain('账户快照与渠道结果');
     expect(html).not.toContain('付款记录 ID');
     expect(html).not.toContain('<dt>账户版本</dt>');
     expect(html).not.toContain('1234567890');
+  });
+
+  it('provides separate contract, Invoice and payment workbook actions beside the payment orders', () => {
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage batch={DETAIL_BATCH} onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain('下载合同');
+    expect(html).toContain('下载 Invoice');
+    expect(html).toContain('下载付款表');
+    expect(html).not.toContain('下载项目资料');
   });
 
   it('reads the shared failure return record and exposes the payment-list deep link', () => {

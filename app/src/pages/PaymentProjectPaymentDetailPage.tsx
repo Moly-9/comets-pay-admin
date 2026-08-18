@@ -6,12 +6,19 @@ import {
   CalendarClock,
   ChevronDown,
   CircleAlert,
+  FileSpreadsheet,
+  FileText,
+  LoaderCircle,
   ReceiptText,
   RotateCcw,
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
+import {
+  PaymentAttachmentPreview,
+  type PaymentAttachmentPreviewTarget,
+} from '../components/PaymentAttachmentPreview';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
@@ -21,7 +28,17 @@ import {
   type PaymentBatchItemSnapshot,
   type PaymentProjectPaymentRecord,
 } from '../paymentBatches';
-import type { PaymentFailureIssueType, Payout } from '../types';
+import type { ContractRecord } from '../contracts';
+import { downloadBlob } from '../invoice/invoiceUtils';
+import {
+  createPaymentProjectContractArchive,
+  createPaymentProjectInvoiceArchive,
+  createPaymentProjectWorkbook,
+  paymentProjectWorkbookFilename,
+  resolvePaymentProjectDocuments,
+} from '../paymentProjectDocuments';
+import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
+import type { GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentItemDetails } from './PaymentBatchDetailPage';
 
 const displayTime = (value?: string) => value
@@ -75,6 +92,8 @@ const initialExpandedItemId = (record: PaymentProjectPaymentRecord) => (
 export function PaymentProjectPaymentDetailPage({
   record,
   payouts,
+  contracts = [],
+  invoices = [],
   canHandleFailure,
   onBack,
   onReturnPayout,
@@ -82,6 +101,8 @@ export function PaymentProjectPaymentDetailPage({
 }: {
   record: PaymentProjectPaymentRecord;
   payouts: readonly Payout[];
+  contracts?: readonly ContractRecord[];
+  invoices?: readonly GeneratedInvoiceRecord[];
   canHandleFailure: boolean;
   onBack: () => void;
   onReturnPayout: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
@@ -89,6 +110,9 @@ export function PaymentProjectPaymentDetailPage({
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(() => initialExpandedItemId(record));
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<PaymentAttachmentPreviewTarget | null>(null);
+  const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | 'workbook' | null>(null);
+  const [resourceError, setResourceError] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
   const totals = paymentBatchAmountLabel(record);
   const statusCounts = paymentBatchStatusCounts(record);
@@ -97,6 +121,62 @@ export function PaymentProjectPaymentDetailPage({
     [record.items],
   );
   const dialogItem = record.items.find((item) => item.payoutId === failureDialogPayoutId);
+  const projectDocuments = useMemo(() => resolvePaymentProjectDocuments({
+    items: record.items,
+    contracts,
+    invoices,
+  }), [contracts, invoices, record.items]);
+
+  const viewContractAttachment = (snapshot: PaymentBatchItemSnapshot['contracts'][number]) => {
+    const contract = contracts.find((candidate) => (
+      String(candidate.contractId ?? candidate.id) === String(snapshot.contractId)
+      || candidate.id === snapshot.contractCode
+    ));
+    if (!contract) {
+      setResourceError('未找到该合同的附件记录，请返回项目资料检查关联。');
+      return;
+    }
+    setResourceError('');
+    setPreviewTarget({ kind: 'contract', contract });
+  };
+
+  const viewInvoiceAttachment = (invoiceId: NonNullable<PaymentBatchItemSnapshot['invoice']>['invoiceId']) => {
+    const invoice = invoices.find((candidate) => String(candidate.invoiceId) === String(invoiceId));
+    if (!invoice) {
+      setResourceError('未找到该 Invoice 的附件记录，请返回项目资料检查关联。');
+      return;
+    }
+    setResourceError('');
+    setPreviewTarget({ kind: 'invoice', invoice });
+  };
+
+  const downloadProjectResource = async (kind: 'contract' | 'invoice' | 'workbook') => {
+    if (!record.items.length || downloadingResource) return;
+    setDownloadingResource(kind);
+    setResourceError('');
+    try {
+      if (kind === 'contract') {
+        downloadBlob(
+          await createPaymentProjectContractArchive({ items: record.items, contracts }),
+          projectPdfArchiveFilename(record.request.requestCode, 'contract'),
+        );
+      } else if (kind === 'invoice') {
+        downloadBlob(
+          await createPaymentProjectInvoiceArchive({ items: record.items, invoices }),
+          projectPdfArchiveFilename(record.request.requestCode, 'invoice'),
+        );
+      } else {
+        downloadBlob(
+          await createPaymentProjectWorkbook({ request: record.request, items: record.items }),
+          paymentProjectWorkbookFilename(record.request.requestCode),
+        );
+      }
+    } catch (error) {
+      setResourceError(error instanceof Error ? error.message : '项目资料下载失败，请稍后重试。');
+    } finally {
+      setDownloadingResource(null);
+    }
+  };
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -224,8 +304,37 @@ export function PaymentProjectPaymentDetailPage({
       <section className="payment-batch-detail-section payment-batch-items-section">
         <header>
           <div><h2>付款明细</h2><p>查看当前项目每笔付款的合同、Invoice、账户快照和渠道结果。</p></div>
-          <span>{record.items.length} 笔</span>
+          <div className="payment-project-resource-toolbar">
+            <div className="payment-project-resource-actions" aria-label="下载付款项目资料">
+              <Button
+                variant="secondary"
+                icon={downloadingResource === 'contract' ? <LoaderCircle className="is-spinning" size={15} /> : <FileText size={15} />}
+                disabled={!projectDocuments.contracts.length || downloadingResource !== null}
+                onClick={() => downloadProjectResource('contract')}
+              >
+                {downloadingResource === 'contract' ? '正在打包' : '下载合同'}
+              </Button>
+              <Button
+                variant="secondary"
+                icon={downloadingResource === 'invoice' ? <LoaderCircle className="is-spinning" size={15} /> : <ReceiptText size={15} />}
+                disabled={!projectDocuments.invoices.length || downloadingResource !== null}
+                onClick={() => downloadProjectResource('invoice')}
+              >
+                {downloadingResource === 'invoice' ? '正在打包' : '下载 Invoice'}
+              </Button>
+              <Button
+                variant="secondary"
+                icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
+                disabled={!record.items.length || downloadingResource !== null}
+                onClick={() => downloadProjectResource('workbook')}
+              >
+                {downloadingResource === 'workbook' ? '正在生成' : '下载付款表'}
+              </Button>
+            </div>
+            <span>{record.items.length} 笔</span>
+          </div>
         </header>
+        {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
         <div className="payment-batch-item-list">
           <div className="payment-batch-item-table-head" aria-hidden="true">
             <span>达人</span><span>付款渠道</span><span>Invoice</span><span>合同</span>
@@ -264,7 +373,13 @@ export function PaymentProjectPaymentDetailPage({
                   </button>
                   {expanded ? (
                     <div id={detailId}>
-                      <PaymentItemDetails item={item} payout={livePayout} onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined} />
+                      <PaymentItemDetails
+                        item={item}
+                        payout={livePayout}
+                        onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined}
+                        onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
+                        onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
+                      />
                       {item.paymentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
                         <div className="payment-project-failure-action">
                           <div>
@@ -307,6 +422,9 @@ export function PaymentProjectPaymentDetailPage({
             return payout ? onReturnPayout(payout, issueType, reason) : false;
           }}
         />
+      ) : null}
+      {previewTarget ? (
+        <PaymentAttachmentPreview target={previewTarget} onClose={() => setPreviewTarget(null)} />
       ) : null}
     </div>
   );
