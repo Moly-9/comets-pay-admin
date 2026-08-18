@@ -30,7 +30,7 @@ import {
   type PaymentListId,
   type PaymentListRecord,
 } from '../businessWorkflow';
-import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractReadiness, getContractType, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
+import { CONTRACT_TYPE_LABELS, formatContractMoney, frameworkContractLinkedToProject, getContractReadiness, getContractType, isConfirmedContract, isFrameworkContract, type ContractRecord, type ContractUploadInput } from '../contracts';
 import type { SystemUser } from '../data';
 import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
@@ -89,6 +89,8 @@ type Props = {
   onGenerateInvoice: () => void;
   onUploadContract: (inputs: ContractUploadInput[]) => ContractRecord[];
   onDeleteContract: (contractId: ContractId) => void;
+  onLinkFrameworkContractToProject: (contractId: ContractId, cooperationProjectId: string) => void;
+  onUnlinkFrameworkContractFromProject: (contractId: ContractId, cooperationProjectId: string) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
   onGeneratePaymentLists: () => void;
   onClearPaymentLists: () => void;
@@ -114,6 +116,8 @@ export type RequestProjectResourceActions = {
   onGenerateInvoice: (request: RequestProjectSummary) => void;
   onUploadContract: (request: RequestProjectSummary, inputs: ContractUploadInput[]) => ContractRecord[];
   onDeleteContract: (request: RequestProjectSummary, contractId: ContractId) => void;
+  onLinkFrameworkContractToProject?: (request: RequestProjectSummary, contractId: ContractId, cooperationProjectId: string) => void;
+  onUnlinkFrameworkContractFromProject?: (request: RequestProjectSummary, contractId: ContractId, cooperationProjectId: string) => void;
   onDeleteInvoice: (request: RequestProjectSummary, invoiceId: InvoiceId) => void;
   onClearPaymentLists: (request: RequestProjectSummary) => void;
   onRemovePaymentInvoice: (request: RequestProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
@@ -154,6 +158,9 @@ const contractUsedInRequestProjects = (
   contract: ContractRecord,
   requests: RequestProjectSummary[],
 ) => {
+  if (isFrameworkContract(contract) && contract.frameworkProjectLinks?.some((link) => link.status !== 'ENDED')) {
+    return true;
+  }
   const contractIds = new Set(
     [contract.contractId, contract.id].filter((id): id is string => Boolean(id)),
   );
@@ -183,7 +190,7 @@ export const contractAssociationCandidates = (
   cooperationProjectId: string | undefined,
 ) => cooperationProjectId ? contracts.filter((contract) => (
   !contract.isTemplate
-  && contractCooperationProjectId(contract) === cooperationProjectId
+  && (isFrameworkContract(contract) || contractCooperationProjectId(contract) === cooperationProjectId)
 )) : [];
 
 const contractStateUnavailableReason = (contract: ContractRecord) => {
@@ -197,8 +204,15 @@ export const contractAssociationUnavailableReason = (
   contract: ContractRecord,
   links: PaymentRequestCreatorLink[],
   creators: CreatorProfile[],
+  cooperationProjectId?: string,
 ) => {
   if (!contract.contractId) return '合同缺少稳定合同 ID';
+  if (isFrameworkContract(contract)) {
+    if (cooperationProjectId && frameworkContractLinkedToProject(contract, cooperationProjectId)) {
+      return '框架合同已关联当前合作项目';
+    }
+    return isConfirmedContract(contract) ? '' : contractStateUnavailableReason(contract);
+  }
   if (!contract.creatorId) return '合同缺少达人稳定 ID';
   if (!creatorFor(contract.creatorId, creators)) return '合同关联的达人档案不存在';
   if (!contract.engagementId) return '合同缺少合作关系 ID';
@@ -305,7 +319,13 @@ export const requestLinkedContracts = (
   contracts: ContractRecord[],
 ) => {
   const ids = new Set((request.creatorLinks ?? []).flatMap((link) => link.contractIds));
-  return contracts.filter((contract) => ids.has(contractStableId(contract)));
+  const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
+  return contracts.filter((contract) => (
+    ids.has(contractStableId(contract))
+    || (isFrameworkContract(contract)
+      && Boolean(cooperationProjectId)
+      && frameworkContractLinkedToProject(contract, cooperationProjectId as string))
+  ));
 };
 
 export const requestLinkedInvoices = (
@@ -352,6 +372,8 @@ export function RequestProjectResourceManager({
   onGenerateInvoice,
   onUploadContract,
   onDeleteContract,
+  onLinkFrameworkContractToProject,
+  onUnlinkFrameworkContractFromProject,
   onDeleteInvoice,
   onGeneratePaymentLists,
   onClearPaymentLists,
@@ -582,15 +604,21 @@ export function RequestProjectResourceManager({
     if (linkDialog === 'contract') {
       const additions = contractCandidates
         .filter((contract) => selectedCandidateIds.includes(contractStableId(contract)))
-        .filter((contract) => !contractAssociationUnavailableReason(contract, links, creators));
-      const next = mergeContractCandidateLinks(links, additions);
-      const addedCreatorCount = next.length - links.length;
-      onChangeLinks(
-        next,
-        addedCreatorCount
-          ? `已关联合同，并新增 ${addedCreatorCount} 位合同所属达人`
-          : '已批量关联合同',
-      );
+        .filter((contract) => !contractAssociationUnavailableReason(contract, links, creators, cooperationProjectId));
+      const frameworkAdditions = additions.filter((contract) => isFrameworkContract(contract));
+      if (frameworkAdditions.length && !cooperationProjectId) return;
+      frameworkAdditions.forEach((contract) => onLinkFrameworkContractToProject(contractStableId(contract), cooperationProjectId as string));
+      const projectContractAdditions = additions.filter((contract) => !isFrameworkContract(contract));
+      if (projectContractAdditions.length) {
+        const next = mergeContractCandidateLinks(links, projectContractAdditions);
+        const addedCreatorCount = next.length - links.length;
+        onChangeLinks(
+          next,
+          addedCreatorCount
+            ? `已关联合同，并新增 ${addedCreatorCount} 位合同所属达人`
+            : '已批量关联合同',
+        );
+      }
       setLinkDialog(null);
       setResourceDialog('contract');
       setSelectedCandidateIds([]);
@@ -613,6 +641,11 @@ export function RequestProjectResourceManager({
   };
 
   const unlinkContract = (contractId: ContractId) => {
+    const contract = contracts.find((candidate) => contractStableId(candidate) === contractId);
+    if (contract && isFrameworkContract(contract)) {
+      if (cooperationProjectId) onUnlinkFrameworkContractFromProject(contractId, cooperationProjectId);
+      return;
+    }
     onChangeLinks(links.map((link) => ({
       ...link,
       contractIds: link.contractIds.filter((id) => id !== contractId),
@@ -963,10 +996,10 @@ export function RequestProjectResourceManager({
               const id = contractStableId(contract);
               const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
               const currentLink = contract.creatorId ? linkByCreator.get(contract.creatorId) : undefined;
-              const unavailableReason = contractAssociationUnavailableReason(contract, links, creators);
+              const unavailableReason = contractAssociationUnavailableReason(contract, links, creators, cooperationProjectId);
               const enabled = !unavailableReason;
               const selected = selectedCandidateIds.includes(id);
-              return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={id}><label><input type="checkbox" aria-label={`选择合同 ${contract.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(id)} /><span><strong>{contract.id}</strong><small><span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>{CONTRACT_TYPE_LABELS[getContractType(contract)]}</span> {contract.name}</small>{contract.frameworkContractId ? <small>框架：{contract.frameworkContractId}</small> : null}</span></label><div className="request-resource-candidate-creator"><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>{enabled ? currentLink ? <span className="is-existing">已在请款项目</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? '可关联' : '不可关联'}</strong><small>{enabled ? `${formatContractMoney(contract)} · ${getContractReadiness(contract).label}` : unavailableReason}</small></div><button className="text-link" type="button" onClick={() => onOpenContract(contract.id)}>查看合同详情</button></article>;
+              return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={id}><label><input type="checkbox" aria-label={`选择合同 ${contract.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(id)} /><span><strong>{contract.id}</strong><small><span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>{CONTRACT_TYPE_LABELS[getContractType(contract)]}</span> {contract.name}</small>{contract.frameworkContractId ? <small>框架：{contract.frameworkContractId}</small> : null}</span></label><div className="request-resource-candidate-creator"><strong>{creator?.name ?? (isFrameworkContract(contract) ? '跨项目框架合同' : '达人档案缺失')}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>{enabled ? isFrameworkContract(contract) ? <span>可复用到当前项目</span> : currentLink ? <span className="is-existing">已在请款项目</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? '可关联' : '不可关联'}</strong><small>{enabled ? `${formatContractMoney(contract)} · ${getContractReadiness(contract).label}` : unavailableReason}</small></div><button className="text-link" type="button" onClick={() => onOpenContract(contract.id)}>查看合同详情</button></article>;
             }) : filteredInvoiceCandidates.map((invoice) => {
               const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
               const currentLink = invoice.snapshot.creatorId ? linkByCreator.get(invoice.snapshot.creatorId) : undefined;

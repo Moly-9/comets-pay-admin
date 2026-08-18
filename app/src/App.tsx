@@ -616,6 +616,64 @@ export default function App() {
     return true;
   }, [contracts, notify, registerProjectMutation]);
 
+  const linkFrameworkContractToProject = (
+    request: RequestProjectSummary,
+    contractId: ContractId,
+    cooperationProjectId: string,
+  ) => {
+    if (!requestWholeResourceEditable(request)) {
+      notify('项目资料已锁定', '当前项目不允许修改框架合同关联。');
+      return;
+    }
+    const framework = contracts.find((contract) => (
+      (contract.contractId ?? contract.id) === contractId && isFrameworkContract(contract)
+    ));
+    if (!framework || !framework.contractId) {
+      notify('无法关联框架合同', '未找到有效的框架合同。');
+      return;
+    }
+    if (!framework.lifecycle || framework.lifecycle !== 'CONFIRMED') {
+      notify('无法关联框架合同', '框架合同必须完成确认后才能复用。');
+      return;
+    }
+    setContracts((current) => current.map((contract) => {
+      if (contract.contractId !== contractId) return contract;
+      const links = contract.frameworkProjectLinks ?? [];
+      if (links.some((link) => link.cooperationProjectId === cooperationProjectId && link.status !== 'ENDED')) return contract;
+      return {
+        ...contract,
+        frameworkProjectLinks: [
+          ...links.filter((link) => link.cooperationProjectId !== cooperationProjectId),
+          { cooperationProjectId: cooperationProjectId as NonNullable<ContractRecord['cooperationProjectId']>, linkedAt: nowIso(), status: 'ACTIVE' },
+        ],
+      };
+    }));
+    registerRequestResourceMutation(request, 'contract', contractId, 'link', `已将框架合同 ${framework.id} 关联到当前合作项目`);
+  };
+
+  const unlinkFrameworkContractFromProject = (
+    request: RequestProjectSummary,
+    contractId: ContractId,
+    cooperationProjectId: string,
+  ) => {
+    if (!requestWholeResourceEditable(request)) {
+      notify('项目资料已锁定', '当前项目不允许解除框架合同关联。');
+      return;
+    }
+    setContracts((current) => current.map((contract) => (
+      contract.contractId === contractId
+        ? {
+            ...contract,
+            frameworkProjectLinks: [
+              ...(contract.frameworkProjectLinks ?? []).filter((link) => link.cooperationProjectId !== cooperationProjectId),
+              { cooperationProjectId: cooperationProjectId as NonNullable<ContractRecord['cooperationProjectId']>, linkedAt: nowIso(), status: 'ENDED' },
+            ],
+          }
+        : contract
+    )));
+    registerRequestResourceMutation(request, 'contract', contractId, 'unlink', `已解除框架合同 ${contractId} 与当前合作项目的关联`);
+  };
+
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const projectKey = String(model.cooperationProjectId ?? model.projectId);
     const existingProject = projects.find((project) => getProjectId(project) === projectKey);
@@ -3514,6 +3572,12 @@ export default function App() {
         contractIds: link.contractIds.filter((id) => id !== contractId),
       })), `已删除合同 ${contractId}`);
     },
+    onLinkFrameworkContractToProject: (request, contractId, cooperationProjectId) => (
+      linkFrameworkContractToProject(request, contractId, cooperationProjectId)
+    ),
+    onUnlinkFrameworkContractFromProject: (request, contractId, cooperationProjectId) => (
+      unlinkFrameworkContractFromProject(request, contractId, cooperationProjectId)
+    ),
     onDeleteInvoice: (request, invoiceId) => {
       if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能删除 Invoice。');

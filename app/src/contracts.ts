@@ -127,6 +127,12 @@ export type ContractLifecycle =
 
 export type ContractType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
 
+export type FrameworkContractProjectLink = {
+  cooperationProjectId: CooperationProjectId;
+  linkedAt?: string;
+  status?: 'ACTIVE' | 'ENDED';
+};
+
 export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
   INDEPENDENT: '独立合同',
   FRAMEWORK: '框架合同',
@@ -186,6 +192,8 @@ export type ContractRecord = {
   id: string;
   contractType?: ContractType;
   frameworkContractId?: ContractId;
+  /** Framework contracts can be reused across cooperation projects. */
+  frameworkProjectLinks?: FrameworkContractProjectLink[];
   ioId: string;
   name: string;
   templateFamily: string;
@@ -257,6 +265,29 @@ export const getContractType = (contract: Pick<ContractRecord, 'contractType'>):
 export const isFrameworkContract = (contract: Pick<ContractRecord, 'contractType'>) => (
   getContractType(contract) === 'FRAMEWORK'
 );
+
+export const frameworkContractProjectIds = (
+  contract: Pick<ContractRecord, 'contractType' | 'cooperationProjectId' | 'projectId' | 'frameworkProjectLinks'>,
+) => {
+  if (!isFrameworkContract(contract)) return [] as CooperationProjectId[];
+  const linked = contract.frameworkProjectLinks
+    ?.filter((link) => link.status !== 'ENDED')
+    .map((link) => link.cooperationProjectId)
+    ?? [];
+  const hasExplicitLink = new Set(contract.frameworkProjectLinks?.map((link) => link.cooperationProjectId) ?? []);
+  const legacyProjectId = contract.cooperationProjectId ?? contract.projectId;
+  return [...new Set([
+    ...linked,
+    ...(legacyProjectId && !hasExplicitLink.has(legacyProjectId as CooperationProjectId)
+      ? [legacyProjectId as CooperationProjectId]
+      : []),
+  ])];
+};
+
+export const frameworkContractLinkedToProject = (
+  contract: Pick<ContractRecord, 'contractType' | 'cooperationProjectId' | 'projectId' | 'frameworkProjectLinks'>,
+  cooperationProjectId: CooperationProjectId | string,
+) => frameworkContractProjectIds(contract).includes(cooperationProjectId as CooperationProjectId);
 
 export const isIoContract = (contract: Pick<ContractRecord, 'contractType'>) => (
   getContractType(contract) === 'IO'

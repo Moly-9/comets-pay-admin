@@ -280,6 +280,26 @@ describe('Invoice association workflow', () => {
     )).toEqual([existingCreatorInvoice, newCreatorInvoice]);
   });
 
+  it('allows a confirmed framework contract to be reused by another cooperation project', () => {
+    const framework = {
+      ...contract('framework-shared' as ContractId),
+      contractType: 'FRAMEWORK',
+      isTemplate: false,
+      projectId: 'cooperation-project-original',
+      lifecycle: 'CONFIRMED',
+      signed: true,
+      issues: [],
+    } as ContractRecord;
+
+    expect(contractAssociationCandidates([framework], 'cooperation-project-new')).toEqual([framework]);
+    expect(contractAssociationUnavailableReason(
+      framework,
+      [],
+      [],
+      'cooperation-project-new',
+    )).toBe('');
+  });
+
   it('adds a new Invoice owner with no contracts and keeps multiple Invoices for an existing creator', () => {
     const existingCreatorInvoice = associationInvoice({
       invoiceId: 'invoice-request-three' as InvoiceId,
