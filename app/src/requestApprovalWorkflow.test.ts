@@ -227,14 +227,14 @@ describe('request approval workflow', () => {
       }],
     );
     const updated = recordRequestApprovalReturnAccountUpdate(returned, targetInvoiceId, {
-      status: 'UPDATED',
+      status: 'VALIDATED',
       occurredAt: '2026-08-10T09:00:00.000Z',
       payoutAccountVersion: 'v3',
       accountFingerprint: 'fp-demo-v3',
     });
 
     expect(updated.returnItems?.[0]?.accountUpdate).toEqual({
-      status: 'UPDATED',
+      status: 'VALIDATED',
       occurredAt: '2026-08-10T09:00:00.000Z',
       payoutAccountVersion: 'v3',
       accountFingerprint: 'fp-demo-v3',

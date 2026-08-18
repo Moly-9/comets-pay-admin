@@ -567,9 +567,8 @@ export const paymentRequestCreatorPresentation = ({
     const validationIssues = paymentItem?.validationIssues ?? [];
     const accountNeedsReview = Boolean(paymentItem && (
       !effectiveAccount?.payoutAccountId
-      || provider !== 'Airwallex'
-      || (effectiveAccount.validationStatus
-        && !['VALIDATED', 'VERIFIED'].includes(effectiveAccount.validationStatus))
+      || !effectiveAccount.validationStatus
+      || !['VALIDATED', 'VERIFIED'].includes(effectiveAccount.validationStatus)
       || validationIssues.some((issue) => ACCOUNT_ISSUE_PATTERN.test(issue))
     ));
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyValidatedPaymentListPayoutSnapshot,
   beginPaymentListEdit,
   canEditProject,
   clearPaymentListItems,
@@ -436,6 +437,67 @@ describe('project payment list', () => {
       requiresRevalidation: false,
       validationIssues: [],
       lastValidatedAt: '2026-08-05T12:00:00.000Z',
+    });
+  });
+
+  it('replaces a returned payment account snapshot and marks the row validated', () => {
+    const paymentDetails = {
+      bankCountry: 'United States',
+      accountName: 'Synthetic Creator',
+      accountType: 'CHECKING',
+      swiftCode: 'TESTUS33',
+      accountNumber: '00001234',
+      iban: '',
+      beneficiaryType: 'PERSONAL',
+      bankName: 'Test Bank',
+      bankStreetAddress: '1 Test Street',
+      bankCity: 'New York',
+      bankState: 'NY',
+      bankPostalCode: '10001',
+      intermediaryBankCountry: '',
+      intermediaryBankCode: '',
+      transferRemarks: '',
+      paypalUsername: '',
+      paypalEmail: '',
+      creatorId: 'creator-1',
+      payoutAccountId: 'account-1',
+      payoutAccountVersion: 'v2' as const,
+      payoutProvider: 'Airwallex' as const,
+      providerAccountScope: 'mock:default',
+      externalBeneficiaryId: 'beneficiary-1',
+      accountFingerprint: 'fp_2',
+      transferMethod: 'LOCAL' as const,
+      localClearingSystem: 'ACH',
+      accountCurrency: 'USD',
+      schemaKey: 'BANK_ACCOUNT:US:USD:PERSONAL:LOCAL:ACH',
+      validationStatus: 'VALIDATED' as const,
+      validatedAt: '2026-08-10T09:00:00.000Z',
+      schemaValues: {},
+      schemaFields: [],
+    };
+    const updated = applyValidatedPaymentListPayoutSnapshot(
+      {
+        ...item,
+        requiresRevalidation: true,
+        validationIssues: [
+          '收款账户版本已变化',
+          '收款账户资料已变化',
+          '达人档案中的收款账户未通过验证',
+        ],
+      },
+      paymentDetails,
+      '2026-08-10T09:00:00.000Z',
+    );
+
+    expect(paymentListEffectiveAccount(updated)).toMatchObject({
+      payoutAccountVersion: 'v2',
+      accountFingerprint: 'fp_2',
+      validationStatus: 'VALIDATED',
+    });
+    expect(updated).toMatchObject({
+      requiresRevalidation: false,
+      validationIssues: [],
+      lastValidatedAt: '2026-08-10T09:00:00.000Z',
     });
   });
 

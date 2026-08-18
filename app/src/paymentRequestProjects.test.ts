@@ -589,7 +589,7 @@ describe('media payment request creator table presentation', () => {
     expect(invalidAccount.statuses).toEqual([{ label: '付款账户待核对', tone: 'danger' }]);
   });
 
-  it('uses the payment-list account override and keeps Invoice and request amounts separate', () => {
+  it('accepts a verified PayPal override and keeps Invoice and request amounts separate', () => {
     const second = invoice({
       id: 'INV-20260807-000002',
       invoiceId: 'invoice_002' as InvoiceId,
@@ -643,10 +643,8 @@ describe('media payment request creator table presentation', () => {
     });
     expect(result.invoiceTotalLabel).toBe('USD 100 + EUR 50');
     expect(result.requestTotalLabel).toBe('USD 120 + EUR 50');
-    expect(result.statuses.map((status) => status.label)).toEqual([
-      '付款账户待核对',
-      '付款金额已调整',
-    ]);
+    expect(result.invoices[0]?.accountNeedsReview).toBe(false);
+    expect(result.statuses.map((status) => status.label)).toEqual(['付款金额已调整']);
   });
 
   it('resolves display numbers by stable ids and flags missing contract references', () => {

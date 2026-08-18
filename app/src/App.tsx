@@ -122,6 +122,7 @@ import type {
 } from './types';
 import {
   applyPaymentListPayoutSnapshot,
+  applyValidatedPaymentListPayoutSnapshot,
   beginPaymentListEdit,
   canEditProject,
   clearPaymentListItems,
@@ -2828,8 +2829,27 @@ export default function App() {
     const nextVersion = `v${Number.isFinite(versionNumber) ? versionNumber + 1 : 2}` as PayoutAccountVersion;
     const occurredAt = nowIso();
     const accountFingerprint = `fp_return_${request.id}_${invoiceId}_${nextVersion}`;
+    const updatedAccount = currentAccount.provider === 'Airwallex'
+      ? {
+          ...currentAccount,
+          payoutAccountVersion: nextVersion,
+          accountFingerprint,
+          status: 'VALIDATED' as const,
+          validatedAt: occurredAt,
+        }
+      : {
+          ...currentAccount,
+          payoutAccountVersion: nextVersion,
+          accountFingerprint,
+          status: 'VALIDATED' as const,
+        };
+    const updatedPaymentItem = applyValidatedPaymentListPayoutSnapshot(
+      paymentItem,
+      createDocumentPayoutSnapshot(updatedAccount, creator.id),
+      occurredAt,
+    );
     const accountUpdate = {
-      status: 'UPDATED' as const,
+      status: 'VALIDATED' as const,
       occurredAt,
       payoutAccountVersion: nextVersion,
       accountFingerprint,
@@ -2845,30 +2865,20 @@ export default function App() {
         payoutAccounts: candidate.payoutAccounts.map((account) => (
           getPayoutAccountId(account) !== getPayoutAccountId(currentAccount)
             ? account
-            : {
-                ...account,
-                payoutAccountVersion: nextVersion,
-                accountFingerprint,
-                status: 'READY_FOR_VALIDATION' as const,
-              }
+            : updatedAccount
         )),
       }));
       setPaymentLists((current) => current.map((list) => list.paymentListId !== paymentList.paymentListId ? list : {
         ...list,
         updatedAt: occurredAt,
-        items: list.items.map((item) => item.invoiceId !== invoiceId ? item : {
-          ...item,
-          requiresRevalidation: true,
-          validationIssues: ['达人已完成账户修改，待重新校验'],
-          lastValidatedAt: undefined,
-        }),
+        items: list.items.map((item) => item.invoiceId !== invoiceId ? item : updatedPaymentItem),
       }));
       setRequestProjects((current) => current.map((candidate) => (
         candidate.id === request.id
           ? { ...candidate, approval: updatedApproval }
           : candidate
       )));
-      notify('已记录达人账户更新', '已生成新的原型账户版本，该付款明细进入待重新校验状态。');
+      notify('达人账户已更新', '新账户版本已同步到达人档案和付款清单，资料校验已通过。');
       return true;
     } catch (error) {
       notify('无法记录账户更新', error instanceof Error ? error.message : '当前付款明细不能记录账户更新。');

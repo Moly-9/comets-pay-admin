@@ -45,7 +45,7 @@ export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
 export type RequestApprovalReturnIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
 
 export type RequestApprovalReturnAccountUpdate = {
-  status: 'UPDATED';
+  status: 'VALIDATED';
   occurredAt: string;
   payoutAccountVersion?: PayoutAccountVersion;
   accountFingerprint?: string;
@@ -828,6 +828,24 @@ export const applyPaymentListPayoutSnapshot = (
     requiresRevalidation: true,
     validationIssues: ['收款账户已更新，请重新校验付款清单'],
   };
+};
+
+export const applyValidatedPaymentListPayoutSnapshot = (
+  item: PaymentListItem,
+  payment: DocumentPayoutSnapshot,
+  validatedAt = nowIso(),
+): PaymentListItem => {
+  const updated = applyPaymentListPayoutSnapshot(item, payment);
+  const provider = payment.payoutProvider
+    ?? (payment.transferMethod === 'PAYPAL' ? 'PayPal' : 'Airwallex');
+  return revalidatePaymentListItem(updated, validatedAt, {
+    payoutAccountId: payment.payoutAccountId ?? '',
+    payoutAccountVersion: payment.payoutAccountVersion ?? 'legacy-v1',
+    accountFingerprint: payment.accountFingerprint ?? '',
+    provider,
+    externalBeneficiaryId: payment.externalBeneficiaryId,
+    validationStatus: payment.validationStatus ?? 'DRAFT',
+  });
 };
 
 export const invoicePaymentListItem = (

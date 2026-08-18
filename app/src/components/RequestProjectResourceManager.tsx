@@ -813,10 +813,10 @@ export function RequestProjectResourceManager({
                             variant="ghost"
                             icon={<UserCheck size={14} />}
                             disabled={!paymentListReturn.notifications?.length || Boolean(paymentListReturn.accountUpdate)}
-                            title={!paymentListReturn.notifications?.length ? '请先通知达人' : paymentListReturn.accountUpdate ? '已记录达人账户更新' : '模拟达人完成账户信息修改'}
+                            title={!paymentListReturn.notifications?.length ? '请先通知达人' : paymentListReturn.accountUpdate ? '账户已更新并通过校验' : '模拟达人完成账户信息修改'}
                             onClick={() => onSimulatePaymentListReturnAccountUpdate(request.paymentRequestProjectId ?? request.id, item.invoiceId)}
                           >
-                            {paymentListReturn.accountUpdate ? '已记录账户更新' : '模拟达人已修改账户'}
+                            {paymentListReturn.accountUpdate ? '账户已更新并通过校验' : '模拟达人已修改账户'}
                           </Button>
                         ) : null}
                       </div>
@@ -830,7 +830,7 @@ export function RequestProjectResourceManager({
                     {paymentListReturn?.accountUpdate ? (
                       <div className="request-approval-return-item-account-update" role="status">
                         <UserCheck size={14} aria-hidden="true" />
-                        达人已完成账户修改 · {paymentListReturn.accountUpdate.payoutAccountVersion ?? '新账户版本'} · 待重新校验
+                        达人账户已更新 · {paymentListReturn.accountUpdate.payoutAccountVersion ?? '新账户版本'} · 校验通过
                       </div>
                     ) : null}
                     {failurePayout && recovery ? (
