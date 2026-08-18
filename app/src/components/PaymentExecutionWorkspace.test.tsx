@@ -13,6 +13,29 @@ vi.mock('react-dom', () => ({
 vi.stubGlobal('document', { body: {} });
 
 describe('PaymentExecutionWorkspace', () => {
+  it('reuses the finance-review resource cards and flat PDF archive rules', () => {
+    const source = readFileSync(new URL('./PaymentExecutionWorkspace.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain("createFlatProjectPdfArchive");
+    expect(source).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'contract')");
+    expect(source).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'invoice')");
+    expect(source).toContain('contractDocumentFilename(contract)');
+    expect(source).toContain('invoiceFilename(invoice.snapshot, \'pdf\')');
+    expect(source).not.toContain('createContractExportArchive');
+    expect(source).not.toContain('createInvoiceBatchArchive');
+    expect(source).toContain('finance-review-resource-card-list');
+    expect(source).toContain('finance-review-resource-card-identity');
+    expect(source).toContain('finance-review-resource-card-person');
+    expect(source).toContain('finance-review-resource-card-amount');
+    expect(source).toContain('finance-review-resource-card-actions');
+    expect(source).toContain('下载合同汇总');
+    expect(source).toContain('下载 Invoice 汇总');
+    expect(source).toContain('合同名称');
+    expect(source).toContain('Invoice 名称');
+    expect(source).toContain('付款金额');
+    expect(source).toContain('Invoice 金额');
+  });
+
   it('uses a right-side project overview before expanding to the 7:3 payment-list layout', () => {
     const source = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
 
@@ -110,8 +133,8 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('class="payment-execution-table"');
     expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
     expect(html).toContain(project.payouts[0].creator);
-    expect(html).toContain('REQ-202607-000006-01');
-    expect(html).toContain('>EUR</span>');
+    expect(html).toContain(`${project.requestCode}-01`);
+    expect(html).toContain(`>${project.payouts[0].currency}</span>`);
     expect(html).toContain('影音服务');
     expect(html).not.toContain('付款信息筛选');
     expect(html).not.toContain('仅看待处理');
