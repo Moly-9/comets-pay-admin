@@ -1,4 +1,5 @@
 import type { ContractRecord } from './contracts';
+import { contractDocumentFilename } from './documentFilenames';
 
 export type ContractExportFailure = {
   contractCode: string;
@@ -126,12 +127,11 @@ export const createContractExportArchive = async (
       return;
     }
     await Promise.all(documents.map(async (document, index) => {
-      const rawName = safeFileSegment(document.fileName, `${contract.id}-${index + 1}.pdf`);
-      const duplicateIndex = usedNames.has(rawName) ? index + 1 : 0;
-      const dotIndex = rawName.lastIndexOf('.');
-      const fileName = duplicateIndex > 0
-        ? `${dotIndex > 0 ? rawName.slice(0, dotIndex) : rawName}-${duplicateIndex}${dotIndex > 0 ? rawName.slice(dotIndex) : ''}`
-        : rawName;
+      const canonicalName = contractDocumentFilename(contract);
+      const dotIndex = canonicalName.lastIndexOf('.');
+      const fileName = index > 0
+        ? `${canonicalName.slice(0, dotIndex)}-${index + 1}${canonicalName.slice(dotIndex)}`
+        : canonicalName;
       usedNames.add(fileName);
       try {
         const blob = await loadDocument(document.documentUrl);

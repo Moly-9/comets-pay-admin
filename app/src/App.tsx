@@ -333,6 +333,13 @@ export default function App() {
   const [requestResourceReturn, setRequestResourceReturn] = useState<{
     requestId: string;
     resource: 'contract' | 'invoice';
+    source: 'my-project' | 'finance-review';
+    recordId?: string;
+  } | null>(null);
+  const [financeReviewResourceRestore, setFinanceReviewResourceRestore] = useState<{
+    requestId: string;
+    resource: 'contract' | 'invoice';
+    recordId: string;
   } | null>(null);
   const [focusedCreatorId, setFocusedCreatorId] = useState<string | null>(null);
   const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
@@ -2367,6 +2374,7 @@ export default function App() {
         review,
       }),
     }));
+    setFinanceReviewResourceRestore(null);
     setFinanceReviewRequestId(request.id);
   };
 
@@ -3418,14 +3426,24 @@ export default function App() {
   const requestResourceActions: RequestProjectResourceActions = {
     onChangeLinks: changeRequestResourceLinks,
     onOpenContract: (request, contractId) => {
-      setRequestResourceReturn({ requestId: request.id, resource: 'contract' });
+      setRequestResourceReturn({
+        requestId: request.id,
+        resource: 'contract',
+        source: 'my-project',
+        recordId: contractId,
+      });
       setFocusedContractId(contractId);
       setActivePage('contracts');
     },
     onOpenInvoice: (request, invoiceId) => {
       const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
       if (!invoice) return;
-      setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
+      setRequestResourceReturn({
+        requestId: request.id,
+        resource: 'invoice',
+        source: 'my-project',
+        recordId: invoiceId,
+      });
       setFocusedInvoiceId(`generated:${invoice.id}`);
       setInvoiceTab('signature');
       setActivePage('invoice');
@@ -3435,7 +3453,7 @@ export default function App() {
         notify('项目资料已锁定', '当前项目仅可查看，不能生成新合同。');
         return;
       }
-      setRequestResourceReturn({ requestId: request.id, resource: 'contract' });
+      setRequestResourceReturn({ requestId: request.id, resource: 'contract', source: 'my-project' });
       setContractGenerationEngagementId(null);
       setActivePage('contract-create');
     },
@@ -3444,7 +3462,7 @@ export default function App() {
         notify('项目资料已锁定', '当前项目仅可查看，不能生成新 Invoice。');
         return;
       }
-      setRequestResourceReturn({ requestId: request.id, resource: 'invoice' });
+      setRequestResourceReturn({ requestId: request.id, resource: 'invoice', source: 'my-project' });
       setInvoiceCreationEngagementId(null);
       setActivePage('invoice-create');
     },
@@ -3808,6 +3826,25 @@ export default function App() {
       })
     : null;
 
+  const returnFromRequestResourceDetail = (resource: 'contract' | 'invoice') => {
+    const context = requestResourceReturn?.resource === resource ? requestResourceReturn : null;
+    setRequestResourceReturn(null);
+    if (!context) return;
+    if (context.source === 'finance-review' && context.recordId) {
+      setFinanceReviewResourceRestore({
+        requestId: context.requestId,
+        resource,
+        recordId: context.recordId,
+      });
+      setPaymentWorkbenchInitialTab('review');
+      setFinanceReviewRequestId(context.requestId);
+      setActivePage('payment-workbench');
+      return;
+    }
+    setFocusedProjectId(context.requestId);
+    setActivePage('projects');
+  };
+
   let pageContent;
   switch (activePage) {
     case 'projects':
@@ -3892,9 +3929,7 @@ export default function App() {
           onFocusCleared={() => {
             setFocusedContractId(null);
             if (requestResourceReturn?.resource === 'contract') {
-              setFocusedProjectId(requestResourceReturn.requestId);
-              setRequestResourceReturn(null);
-              setActivePage('projects');
+              returnFromRequestResourceDetail('contract');
             }
           }}
           onUploadContracts={uploadContracts}
@@ -3984,9 +4019,7 @@ export default function App() {
           onFocusCleared={() => {
             setFocusedInvoiceId(null);
             if (requestResourceReturn?.resource === 'invoice') {
-              setFocusedProjectId(requestResourceReturn.requestId);
-              setRequestResourceReturn(null);
-              setActivePage('projects');
+              returnFromRequestResourceDetail('invoice');
             }
           }}
           onMarkSigned={markInvoiceSigned}
@@ -4261,6 +4294,7 @@ export default function App() {
 
   const closeFinanceReview = (completed = false) => {
     setFinanceReviewRequestId(null);
+    setFinanceReviewResourceRestore(null);
     if (!completed) return;
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -4301,13 +4335,37 @@ export default function App() {
             requestResourceActions.onExportPaymentList(financeReviewRequest, paymentListId)
           )}
           onOpenContract={(contractId) => {
+            setRequestResourceReturn({
+              requestId: financeReviewRequest.id,
+              resource: 'contract',
+              source: 'finance-review',
+              recordId: contractId,
+            });
             closeFinanceReview(false);
-            requestResourceActions.onOpenContract(financeReviewRequest, contractId);
+            setFocusedContractId(contractId);
+            setActivePage('contracts');
           }}
           onOpenInvoice={(invoiceId) => {
+            const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
+            if (!invoice) return;
+            setRequestResourceReturn({
+              requestId: financeReviewRequest.id,
+              resource: 'invoice',
+              source: 'finance-review',
+              recordId: invoiceId,
+            });
             closeFinanceReview(false);
-            requestResourceActions.onOpenInvoice(financeReviewRequest, invoiceId);
+            setFocusedInvoiceId(`generated:${invoice.id}`);
+            setInvoiceTab('signature');
+            setActivePage('invoice');
           }}
+          initialResourceDialog={financeReviewResourceRestore?.requestId === financeReviewRequest.id
+            ? financeReviewResourceRestore.resource
+            : null}
+          initialResourceRecordId={financeReviewResourceRestore?.requestId === financeReviewRequest.id
+            ? financeReviewResourceRestore.recordId
+            : null}
+          onResourceRestoreConsumed={() => setFinanceReviewResourceRestore(null)}
           onClose={closeFinanceReview}
         />
       ) : null}

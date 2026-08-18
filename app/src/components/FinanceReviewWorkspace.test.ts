@@ -22,6 +22,10 @@ const workspaceStageStyles = readFileSync(
   new URL('./FinanceReviewWorkspace.css', import.meta.url),
   'utf8',
 );
+const appSource = readFileSync(
+  new URL('../App.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('FinanceReviewWorkspace progressive review stages', () => {
   it('opens in the project overview drawer before exposing validation actions', () => {
@@ -72,8 +76,8 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain('下载该请款项目的全部 Invoice PDF');
     expect(workspaceSource).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'contract')");
     expect(workspaceSource).toContain("projectPdfArchiveFilename(request.requestCode ?? request.id, 'invoice')");
-    expect(workspaceSource).toContain("onOpenContracts={() => setResourceDialog('contract')}");
-    expect(workspaceSource).toContain("onOpenInvoices={() => setResourceDialog('invoice')}");
+    expect(workspaceSource).toContain("onOpenContracts={() => openResourceDialog('contract')}");
+    expect(workspaceSource).toContain("onOpenInvoices={() => openResourceDialog('invoice')}");
     expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
   });
 
@@ -161,6 +165,38 @@ describe('FinanceReviewWorkspace project payment-list export', () => {
       'list-paypal',
       'list-explicit',
     ]);
+  });
+});
+
+describe('FinanceReviewWorkspace project resource cards', () => {
+  it('shows contract and Invoice identity, amount, and consistent view/download actions', () => {
+    expect(workspaceSource).toContain('<span>合同名称</span>');
+    expect(workspaceSource).toContain('<small><b>合同编号</b>{contract.id}</small>');
+    expect(workspaceSource).toContain('<span>付款金额</span>');
+    expect(workspaceSource).toContain('<span>Invoice 名称</span>');
+    expect(workspaceSource).toContain('<small><b>Invoice 编号</b>{linkedInvoice.id}</small>');
+    expect(workspaceSource).toContain('invoiceDocumentName(linkedInvoice.snapshot)');
+    expect(workspaceSource).toContain('contractDocumentFilename(contract)');
+    expect(workspaceSource).toContain("invoiceFilename(linkedInvoice.snapshot, 'pdf')");
+    expect(workspaceSource).toContain('finance-review-resource-card-actions');
+    expect(workspaceSource).toContain('下载合同汇总');
+    expect(workspaceSource).toContain('下载 Invoice 汇总');
+  });
+
+  it('restores the resource modal, scroll position, and focus after returning from detail', () => {
+    expect(workspaceSource).toContain("querySelectorAll<HTMLElement>('[data-resource-record-id]')");
+    expect(workspaceSource).toContain("target?.scrollIntoView({ block: 'center' })");
+    expect(workspaceSource).toContain("target?.focus({ preventScroll: true })");
+    expect(appSource).toContain("source: 'my-project' | 'finance-review'");
+    expect(appSource).toContain("source: 'finance-review'");
+    expect(appSource).toContain("returnFromRequestResourceDetail('contract')");
+    expect(appSource).toContain("returnFromRequestResourceDetail('invoice')");
+    expect(appSource).toContain('initialResourceRecordId={financeReviewResourceRestore?.requestId === financeReviewRequest.id');
+  });
+
+  it('keeps cards readable without horizontal overflow on narrow screens', () => {
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 480px\)[\s\S]*\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*38px minmax\(0, 1fr\);[^}]*height:\s*max-content;[^}]*min-height:\s*0;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card-actions\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
 });
 

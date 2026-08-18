@@ -58,6 +58,7 @@ import {
 } from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
+import { contractDocumentFilename, invoiceDocumentName } from '../documentFilenames';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -603,6 +604,9 @@ export function FinanceReviewWorkspace({
   onExportPaymentList,
   onOpenContract,
   onOpenInvoice,
+  initialResourceDialog,
+  initialResourceRecordId,
+  onResourceRestoreConsumed,
   onClose,
 }: {
   request: RequestProjectSummary;
@@ -619,6 +623,9 @@ export function FinanceReviewWorkspace({
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
   onOpenContract: (contractId: string) => void;
   onOpenInvoice: (invoiceId: InvoiceId) => void;
+  initialResourceDialog?: 'contract' | 'invoice' | null;
+  initialResourceRecordId?: string | null;
+  onResourceRestoreConsumed?: () => void;
   onClose: (completed?: boolean) => void;
 }) {
   const activeSession = reconcileFinanceReviewSession(session, {
@@ -639,9 +646,10 @@ export function FinanceReviewWorkspace({
   const [invoiceZoom, setInvoiceZoom] = useState(1);
   const [issueEditorOpen, setIssueEditorOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
-  const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(null);
+  const [resourceDialog, setResourceDialog] = useState<'contract' | 'invoice' | null>(initialResourceDialog ?? null);
   const [exportingPaymentLists, setExportingPaymentLists] = useState(false);
   const [downloadingResource, setDownloadingResource] = useState<ProjectPdfArchiveKind | null>(null);
+  const [downloadingResourceRecord, setDownloadingResourceRecord] = useState('');
   const [resourceDownloadError, setResourceDownloadError] = useState('');
   const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
   const [issueReason, setIssueReason] = useState('');
@@ -649,6 +657,26 @@ export function FinanceReviewWorkspace({
   const invoiceZoomRef = useRef(1);
   const overviewFocusRef = useRef<HTMLDivElement>(null);
   const validationFocusRef = useRef<HTMLDivElement>(null);
+  const resourceListRef = useRef<HTMLDivElement>(null);
+  const restoredResourceRef = useRef('');
+
+  useEffect(() => {
+    if (!initialResourceDialog || !initialResourceRecordId) return;
+    const restoreKey = `${initialResourceDialog}:${initialResourceRecordId}`;
+    if (restoredResourceRef.current === restoreKey) return;
+    setResourceDialog(initialResourceDialog);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = Array.from(
+          resourceListRef.current?.querySelectorAll<HTMLElement>('[data-resource-record-id]') ?? [],
+        ).find((element) => element.dataset.resourceRecordId === initialResourceRecordId);
+        target?.scrollIntoView({ block: 'center' });
+        target?.focus({ preventScroll: true });
+        restoredResourceRef.current = restoreKey;
+        onResourceRestoreConsumed?.();
+      });
+    });
+  }, [initialResourceDialog, initialResourceRecordId, onResourceRestoreConsumed]);
 
   const changeStage = (nextStage: FinanceReviewStage) => {
     setStage(nextStage);
@@ -656,6 +684,16 @@ export function FinanceReviewWorkspace({
       if (nextStage === 'validation') validationFocusRef.current?.focus();
       else overviewFocusRef.current?.focus();
     });
+  };
+
+  const openResourceDialog = (kind: 'contract' | 'invoice') => {
+    setResourceDownloadError('');
+    setResourceDialog(kind);
+  };
+
+  const closeResourceDialog = () => {
+    setResourceDownloadError('');
+    setResourceDialog(null);
   };
 
   const setInvoiceZoomLevel = useCallback((value: number, anchor?: { clientX: number; clientY: number }) => {
@@ -893,36 +931,71 @@ export function FinanceReviewWorkspace({
     }
   };
 
+  const contractPdfBlob = async (contract: ContractRecord) => {
+    if (contract.generationSnapshot) {
+      const { generateContractPdf } = await import('../contractGeneration');
+      return generateContractPdf(
+        contract.generationSnapshot,
+        undefined,
+        undefined,
+        contract.generationVariant ?? 'FORMAL',
+      );
+    }
+    const sourceDocument = contract.sourceDocuments?.find((document) => (
+      document.mimeType === 'application/pdf' || /\.pdf$/i.test(document.fileName)
+    ));
+    const documentUrl = sourceDocument?.documentUrl || contract.documentUrl;
+    if (!documentUrl) throw new Error(`${contract.id} 缺少可下载的 PDF 文件`);
+    const response = await fetch(documentUrl);
+    if (!response.ok) throw new Error(`${contract.id} PDF 下载失败`);
+    return response.blob();
+  };
+
+  const invoicePdfBlob = async (linkedInvoice: GeneratedInvoiceRecord) => {
+    const { generateInvoicePdf } = await import('../invoice/generateInvoice');
+    return generateInvoicePdf(linkedInvoice.snapshot);
+  };
+
+  const downloadContract = async (contract: ContractRecord) => {
+    const recordKey = `contract:${stableContractId(contract)}`;
+    if (downloadingResource || downloadingResourceRecord) return;
+    setDownloadingResourceRecord(recordKey);
+    setResourceDownloadError('');
+    try {
+      downloadBlob(await contractPdfBlob(contract), contractDocumentFilename(contract));
+    } catch (error) {
+      setResourceDownloadError(error instanceof Error ? error.message : '合同下载失败，请稍后重试。');
+    } finally {
+      setDownloadingResourceRecord('');
+    }
+  };
+
+  const downloadInvoice = async (linkedInvoice: GeneratedInvoiceRecord) => {
+    const recordKey = `invoice:${linkedInvoice.invoiceId}`;
+    if (downloadingResource || downloadingResourceRecord) return;
+    setDownloadingResourceRecord(recordKey);
+    setResourceDownloadError('');
+    try {
+      downloadBlob(
+        await invoicePdfBlob(linkedInvoice),
+        invoiceFilename(linkedInvoice.snapshot, 'pdf'),
+      );
+    } catch (error) {
+      setResourceDownloadError(error instanceof Error ? error.message : 'Invoice 下载失败，请稍后重试。');
+    } finally {
+      setDownloadingResourceRecord('');
+    }
+  };
+
   const downloadProjectContracts = async () => {
-    if (!linkedContracts.length || downloadingResource) return;
+    if (!linkedContracts.length || downloadingResource || downloadingResourceRecord) return;
     setDownloadingResource('contract');
     setResourceDownloadError('');
     try {
-      const entries = await Promise.all(linkedContracts.map(async (contract) => {
-        let pdfBlob: Blob;
-        if (contract.generationSnapshot) {
-          const { generateContractPdf } = await import('../contractGeneration');
-          pdfBlob = await generateContractPdf(
-            contract.generationSnapshot,
-            undefined,
-            undefined,
-            contract.generationVariant ?? 'FORMAL',
-          );
-        } else {
-          const sourceDocument = contract.sourceDocuments?.find((document) => (
-            document.mimeType === 'application/pdf' || /\.pdf$/i.test(document.fileName)
-          ));
-          const documentUrl = sourceDocument?.documentUrl || contract.documentUrl;
-          if (!documentUrl) throw new Error(`${contract.id} 缺少可下载的 PDF 文件`);
-          const response = await fetch(documentUrl);
-          if (!response.ok) throw new Error(`${contract.id} PDF 下载失败`);
-          pdfBlob = await response.blob();
-        }
-        return {
-          filename: `${contract.id}.pdf`,
-          pdfBlob,
-        };
-      }));
+      const entries = await Promise.all(linkedContracts.map(async (contract) => ({
+        filename: contractDocumentFilename(contract),
+        pdfBlob: await contractPdfBlob(contract),
+      })));
       const archive = await createFlatProjectPdfArchive(entries);
       downloadBlob(
         archive,
@@ -936,14 +1009,13 @@ export function FinanceReviewWorkspace({
   };
 
   const downloadProjectInvoices = async () => {
-    if (!linkedInvoices.length || downloadingResource) return;
+    if (!linkedInvoices.length || downloadingResource || downloadingResourceRecord) return;
     setDownloadingResource('invoice');
     setResourceDownloadError('');
     try {
-      const { generateInvoicePdf } = await import('../invoice/generateInvoice');
       const entries = await Promise.all(linkedInvoices.map(async (linkedInvoice) => ({
         filename: invoiceFilename(linkedInvoice.snapshot, 'pdf'),
-        pdfBlob: await generateInvoicePdf(linkedInvoice.snapshot),
+        pdfBlob: await invoicePdfBlob(linkedInvoice),
       })));
       const archive = await createFlatProjectPdfArchive(entries);
       downloadBlob(
@@ -1105,8 +1177,8 @@ export function FinanceReviewWorkspace({
                   onExportPaymentLists={() => { void exportProjectPaymentLists(); }}
                   onDownloadContracts={() => { void downloadProjectContracts(); }}
                   onDownloadInvoices={() => { void downloadProjectInvoices(); }}
-                  onOpenContracts={() => setResourceDialog('contract')}
-                  onOpenInvoices={() => setResourceDialog('invoice')}
+                  onOpenContracts={() => openResourceDialog('contract')}
+                  onOpenInvoices={() => openResourceDialog('invoice')}
                 />
               </div>
             </div>
@@ -1371,8 +1443,8 @@ export function FinanceReviewWorkspace({
                   onExportPaymentLists={() => { void exportProjectPaymentLists(); }}
                   onDownloadContracts={() => { void downloadProjectContracts(); }}
                   onDownloadInvoices={() => { void downloadProjectInvoices(); }}
-                  onOpenContracts={() => setResourceDialog('contract')}
-                  onOpenInvoices={() => setResourceDialog('invoice')}
+                  onOpenContracts={() => openResourceDialog('contract')}
+                  onOpenInvoices={() => openResourceDialog('invoice')}
                 />
 
                 {currentDecision.state === 'incorrect' ? (
@@ -1407,23 +1479,69 @@ export function FinanceReviewWorkspace({
           title={`${request.requestCode ?? request.id} · 合同资料`}
           width="1120px"
           className="project-resource-modal request-resource-modal finance-review-resource-modal"
-          onClose={() => setResourceDialog(null)}
-          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+          onClose={closeResourceDialog}
+          footer={<Button variant="secondary" onClick={closeResourceDialog}>关闭</Button>}
         >
           <div className="project-resource-browser">
-            <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
-            <div className="request-resource-flat-list">
+            <div className="project-resource-browser-heading finance-review-resource-heading">
+              <div><strong>全部合同</strong><p>合同名称、编号和付款金额集中展示，可逐份查看或下载。</p></div>
+              <div className="finance-review-resource-heading-actions">
+                <span>{linkedContracts.length} 份</span>
+                <Button
+                  variant="secondary"
+                  icon={downloadingResource === 'contract'
+                    ? <LoaderCircle className="is-spinning" size={15} />
+                    : <Download size={15} />}
+                  disabled={!linkedContracts.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  onClick={() => { void downloadProjectContracts(); }}
+                >
+                  {downloadingResource === 'contract' ? '打包中' : '下载合同汇总'}
+                </Button>
+              </div>
+            </div>
+            {resourceDownloadError ? <p className="finance-review-resource-dialog-error" role="alert">{resourceDownloadError}</p> : null}
+            <div className="finance-review-resource-card-list" ref={resourceListRef}>
               {linkedContracts.map((contract) => {
                 const creator = creators.find((candidate) => candidate.id === contract.creatorId);
                 const contractId = contract.contractId ?? contract.id;
+                const recordKey = `contract:${contractId}`;
+                const isDownloading = downloadingResourceRecord === recordKey;
                 return (
-                  <article className="request-resource-flat-row" key={contractId}>
-                    <span className="project-contract-record-icon"><FileText size={18} /></span>
-                    <div><strong>{contract.id}</strong><small>{contract.name}</small></div>
-                    <div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div>
-                    <div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div>
+                  <article
+                    className="finance-review-resource-card"
+                    key={contractId}
+                    data-resource-record-id={contract.id}
+                    tabIndex={-1}
+                    aria-label={`${contract.name}，合同编号 ${contract.id}`}
+                  >
+                    <span className="finance-review-resource-card-icon" aria-hidden="true"><FileText size={19} /></span>
+                    <div className="finance-review-resource-card-identity">
+                      <span>合同名称</span>
+                      <strong title={contract.name}>{contract.name}</strong>
+                      <small><b>合同编号</b>{contract.id}</small>
+                      <small className="finance-review-resource-card-owner">{creator?.name ?? '达人档案缺失'}</small>
+                    </div>
+                    <div className="finance-review-resource-card-amount">
+                      <span>付款金额</span>
+                      <strong>{formatContractMoney(contract)}</strong>
+                    </div>
                     <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
-                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button></div>
+                    <div className="finance-review-resource-card-actions">
+                      <Button
+                        className="finance-review-resource-view"
+                        variant="secondary"
+                        icon={<Eye size={15} />}
+                        onClick={() => onOpenContract(contract.id)}
+                      >查看</Button>
+                      <Button
+                        className="finance-review-resource-download"
+                        icon={isDownloading
+                          ? <LoaderCircle className="is-spinning" size={15} />
+                          : <Download size={15} />}
+                        disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        onClick={() => { void downloadContract(contract); }}
+                      >{isDownloading ? '下载中' : '下载'}</Button>
+                    </div>
                   </article>
                 );
               })}
@@ -1438,22 +1556,69 @@ export function FinanceReviewWorkspace({
           title={`${request.requestCode ?? request.id} · Invoice`}
           width="1080px"
           className="project-resource-modal request-resource-modal finance-review-resource-modal"
-          onClose={() => setResourceDialog(null)}
-          footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}
+          onClose={closeResourceDialog}
+          footer={<Button variant="secondary" onClick={closeResourceDialog}>关闭</Button>}
         >
           <div className="project-resource-browser">
-            <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
-            <div className="request-resource-flat-list">
+            <div className="project-resource-browser-heading finance-review-resource-heading">
+              <div><strong>全部 Invoice</strong><p>Invoice 名称由收款账户名和关联项目名称组成，可逐份查看或下载。</p></div>
+              <div className="finance-review-resource-heading-actions">
+                <span>{linkedInvoices.length} 份</span>
+                <Button
+                  variant="secondary"
+                  icon={downloadingResource === 'invoice'
+                    ? <LoaderCircle className="is-spinning" size={15} />
+                    : <Download size={15} />}
+                  disabled={!linkedInvoices.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  onClick={() => { void downloadProjectInvoices(); }}
+                >
+                  {downloadingResource === 'invoice' ? '打包中' : '下载 Invoice 汇总'}
+                </Button>
+              </div>
+            </div>
+            {resourceDownloadError ? <p className="finance-review-resource-dialog-error" role="alert">{resourceDownloadError}</p> : null}
+            <div className="finance-review-resource-card-list" ref={resourceListRef}>
               {linkedInvoices.map((linkedInvoice) => {
                 const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                const invoiceName = invoiceDocumentName(linkedInvoice.snapshot);
+                const recordKey = `invoice:${linkedInvoice.invoiceId}`;
+                const isDownloading = downloadingResourceRecord === recordKey;
                 return (
-                  <article className="request-resource-flat-row request-resource-invoice-row" key={linkedInvoice.invoiceId}>
-                    <span className="project-contract-record-icon"><ReceiptText size={18} /></span>
-                    <div><strong>{linkedInvoice.id}</strong><small>{linkedInvoice.status}</small></div>
-                    <div><span>达人</span><strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small></div>
-                    <div><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong><small>{linkedInvoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div>
+                  <article
+                    className="finance-review-resource-card"
+                    key={linkedInvoice.invoiceId}
+                    data-resource-record-id={linkedInvoice.invoiceId}
+                    tabIndex={-1}
+                    aria-label={`${invoiceName}，Invoice 编号 ${linkedInvoice.id}`}
+                  >
+                    <span className="finance-review-resource-card-icon is-invoice" aria-hidden="true"><ReceiptText size={19} /></span>
+                    <div className="finance-review-resource-card-identity">
+                      <span>Invoice 名称</span>
+                      <strong title={invoiceName}>{invoiceName}</strong>
+                      <small><b>Invoice 编号</b>{linkedInvoice.id}</small>
+                      <small className="finance-review-resource-card-owner">{creator?.name ?? linkedInvoice.snapshot.creatorName}</small>
+                    </div>
+                    <div className="finance-review-resource-card-amount">
+                      <span>Invoice 金额</span>
+                      <strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong>
+                    </div>
                     <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>
-                    <div className="project-contract-record-actions"><Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenInvoice(linkedInvoice.invoiceId)}>查看</Button></div>
+                    <div className="finance-review-resource-card-actions">
+                      <Button
+                        className="finance-review-resource-view"
+                        variant="secondary"
+                        icon={<Eye size={15} />}
+                        onClick={() => onOpenInvoice(linkedInvoice.invoiceId)}
+                      >查看</Button>
+                      <Button
+                        className="finance-review-resource-download"
+                        icon={isDownloading
+                          ? <LoaderCircle className="is-spinning" size={15} />
+                          : <Download size={15} />}
+                        disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        onClick={() => { void downloadInvoice(linkedInvoice); }}
+                      >{isDownloading ? '下载中' : '下载'}</Button>
+                    </div>
                   </article>
                 );
               })}

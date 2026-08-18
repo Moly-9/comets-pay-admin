@@ -60,8 +60,8 @@ describe('contract batch export', () => {
     expect(result.failures).toEqual([]);
     expect(loadDocument).toHaveBeenCalledTimes(2);
     expect(files).toContain('contracts.csv');
-    expect(files.some((file) => file.endsWith('/CON-TEST-001.pdf'))).toBe(true);
-    expect(files.some((file) => file.endsWith('/CON-TEST-002.pdf'))).toBe(true);
+    expect(files.some((file) => file.endsWith('/CON-TEST-001 Synthetic Contract-CON-TEST-001.pdf'))).toBe(true);
+    expect(files.some((file) => file.endsWith('/CON-TEST-002 Synthetic Contract-CON-TEST-002.pdf'))).toBe(true);
     expect(manifest).toContain('contract-test-001');
     expect(manifest).toContain('CON-TEST-002');
   });

@@ -47,6 +47,7 @@ import {
   type ContractRecord,
   type ContractUploadInput,
 } from '../contracts';
+import { contractDocumentFilename } from '../documentFilenames';
 import type { ContractId } from '../businessWorkflow';
 import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
@@ -778,7 +779,11 @@ export function ContractDetailPage({
           <>
             <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button>
             {documentUrl ? (
-              <a className="button button-primary contract-file-action" href={documentUrl} download={sourceName}>
+              <a
+                className="button button-primary contract-file-action"
+                href={documentUrl}
+                download={contractDocumentFilename(contract)}
+              >
                 <Download size={16} />
                 <span>下载当前文件</span>
               </a>

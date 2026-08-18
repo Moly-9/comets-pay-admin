@@ -33,6 +33,7 @@ import {
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
 import { contractGenerationFilename } from '../contractGenerationFilename';
+import { contractDocumentFilename } from '../documentFilenames';
 import {
   contractPublishingChannelsForCreator,
   contractPaymentMethodForAccount,
@@ -706,7 +707,9 @@ export function ContractBuilderPage({
     if (!blob) return;
     downloadBlob(
       blob,
-      contractGenerationFilename(model, generated?.record.generationVersion ?? 1, extension),
+      generated?.record
+        ? contractDocumentFilename(generated.record, extension)
+        : contractGenerationFilename(model, 1, extension),
     );
   };
 

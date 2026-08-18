@@ -1,4 +1,5 @@
 import type { GeneratedInvoiceRecord, InvoiceDocumentModel, InvoiceLineItem } from '../types';
+import { invoiceDocumentFilename } from '../documentFilenames';
 
 export const calculateLineTotal = (unitPrice: number, quantity: number) => {
   const safePrice = Number.isFinite(unitPrice) ? unitPrice : 0;
@@ -53,8 +54,7 @@ export const bankAddress = (model: Pick<InvoiceDocumentModel, 'payment'>) => (
 );
 
 export const invoiceFilename = (model: InvoiceDocumentModel, extension: 'pdf' | 'docx') => {
-  const safeName = model.creatorName.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
-  return `${model.invoiceNumber}-${safeName || 'creator'}.${extension}`;
+  return invoiceDocumentFilename(model, extension);
 };
 
 export const downloadBlob = (blob: Blob, filename: string) => {

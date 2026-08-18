@@ -263,8 +263,8 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('合同 · {linkedContracts.length} 份');
     expect(workspaceSource).toContain('Invoice · {linkedInvoices.length} 份');
     expect(workspaceSource).toContain('收款账户校验结果');
-    expect(workspaceSource).toContain("setResourceDialog('contract')");
-    expect(workspaceSource).toContain("setResourceDialog('invoice')");
+    expect(workspaceSource).toContain("openResourceDialog('contract')");
+    expect(workspaceSource).toContain("openResourceDialog('invoice')");
     expect(workspaceSource).toContain('title={`${request.requestCode ?? request.id} · 合同资料`}');
     expect(workspaceSource).toContain('title={`${request.requestCode ?? request.id} · Invoice`}');
   });
