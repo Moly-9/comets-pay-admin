@@ -52,7 +52,6 @@ import {
   cooperationProjectIdFor,
   createEmptyPaymentRequestListFilters,
   filterPaymentRequestList,
-  invoiceCooperationProjectId,
   invoiceAmountLabel,
   myProjectStatusFor,
   mergePaymentRequestRemarkAttachments,
@@ -652,20 +651,17 @@ export function MediaPaymentProjectsPage({
         })
       : null,
   ])), [contracts, cooperationProjectId, creators, editingRequest?.paymentRequestProjectId, invoices, requests]);
-  const occupiedInvoiceIds = new Set(requests.flatMap((request) => (
-    request.paymentRequestProjectId === editingRequest?.paymentRequestProjectId
-      ? []
-      : [...(request.invoiceIds ?? []), ...(request.creatorLinks ?? []).flatMap((link) => link.invoiceIds)]
-  )));
-  const eligibleProjectIds = new Set(invoices.flatMap((invoice) => (
-    invoice.status === '已通过' && !occupiedInvoiceIds.has(invoice.invoiceId)
-      ? [invoiceCooperationProjectId(invoice)]
-      : []
-  )));
-  const selectableCooperationProjects = cooperationProjects.filter((project) => (
-    eligibleProjectIds.has(cooperationProjectIdFor(project))
-    || cooperationProjectIdFor(project) === cooperationProjectId
-  ));
+  const requestCountByCooperationProject = useMemo(() => requests.reduce<Map<string, number>>((counts, request) => {
+    const projectId = String(request.cooperationProjectId ?? request.projectId ?? '');
+    if (!projectId) return counts;
+    counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
+    return counts;
+  }, new Map()), [requests]);
+  const selectableCooperationProjects = cooperationProjects;
+  const selectedProjectRequestCount = requestCountByCooperationProject.get(cooperationProjectId) ?? 0;
+  const selectedProjectAvailableInvoiceCount = [...resolutions.values()].reduce((count, resolution) => (
+    count + (resolution?.availableInvoices.length ?? 0)
+  ), 0);
   const visibleCreators = creators
     .filter((creator) => (
       !query || `${creator.name}${creator.handle}${creator.region}${creator.platform}`.toLowerCase().includes(query)
@@ -1073,7 +1069,7 @@ export function MediaPaymentProjectsPage({
     setCreating(false);
     setSelectedRequestId(request.id);
     notify(
-      editingRequest ? '项目已更新' : '项目已创建',
+      editingRequest ? '请款已更新' : '请款已创建',
       `${requestCode} 已${editingRequest ? '更新并清除旧付款清单' : '保存为草稿'}，可在详情中完成校验后提交申请。`,
     );
   };
@@ -1602,10 +1598,10 @@ export function MediaPaymentProjectsPage({
       </section>
       {creating ? (
         <Modal
-          title={editingRequest ? `编辑项目 · ${requestCodeFor(editingRequest)}` : '新建项目'}
+          title={editingRequest ? `编辑请款 · ${requestCodeFor(editingRequest)}` : '新建请款'}
           onClose={closeForm}
           width="820px"
-          footer={<><Button variant="ghost" onClick={closeForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建项目'}</Button></>}
+          footer={<><Button variant="ghost" onClick={closeForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建请款'}</Button></>}
         >
           <div className="form-grid single-column project-create-form media-request-create-form">
             <div className="form-field">
@@ -1615,11 +1611,15 @@ export function MediaPaymentProjectsPage({
                 variant="form"
                 value={cooperationProjectId}
                 disabled={!creatorSelectionEditable}
-                options={selectableCooperationProjects.map((project) => ({
-                  value: cooperationProjectIdFor(project),
-                  label: project.name,
-                  description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · 来自飞书`,
-                }))}
+                options={selectableCooperationProjects.map((project) => {
+                  const projectId = cooperationProjectIdFor(project);
+                  const requestCount = requestCountByCooperationProject.get(projectId) ?? 0;
+                  return {
+                    value: projectId,
+                    label: project.name,
+                    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${requestCount ? `已有 ${requestCount} 个请款记录` : '暂无请款记录'}`,
+                  };
+                })}
                 onChange={changeProject}
                 placeholder="请选择飞书合作项目"
               />
@@ -1721,7 +1721,7 @@ export function MediaPaymentProjectsPage({
                     setCreatorPickerOpen((current) => !current);
                   }}
                 >
-                  <span className="invoice-picker-leading"><Users size={18} /><span className="invoice-picker-copy"><strong>{selectedCreatorIds.length ? `已选择 ${selectedCreatorIds.length} 位合作达人` : '从达人档案选择合作达人'}</strong><small>{cooperationProjectId ? '可现在选择，也可创建项目后补充' : '请先选择关联项目'}</small></span></span>
+                  <span className="invoice-picker-leading"><Users size={18} /><span className="invoice-picker-copy"><strong>{selectedCreatorIds.length ? `已选择 ${selectedCreatorIds.length} 位合作达人` : '从达人档案选择合作达人'}</strong><small>{cooperationProjectId ? '可现在选择，也可创建请款后补充' : '请先选择关联项目'}</small></span></span>
                   <ChevronDown className="invoice-picker-chevron" size={18} />
                 </button>
                 {selectedCreators.length ? (
@@ -1740,7 +1740,7 @@ export function MediaPaymentProjectsPage({
                         const selected = selectedCreatorIds.includes(creator.id as CreatorId);
                         const resolution = resolutions.get(creator.id);
                         const ready = resolution?.status === 'READY';
-                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><span className="creator-option-profile"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></span><span className="creator-option-meta"><strong>{ready ? '可创建项目' : creator.region}</strong><small>{ready ? `${resolution?.availableInvoices.length ?? 0} 份 Invoice 可多选` : `${creator.platform} · ${resolution ? STATUS_COPY[resolution.status] : '待选择项目'}`}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
+                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><span className="creator-option-profile"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></span><span className="creator-option-meta"><strong>{ready ? '可加入请款' : creator.region}</strong><small>{ready ? `${resolution?.availableInvoices.length ?? 0} 份 Invoice 可多选` : `${creator.platform} · ${resolution ? STATUS_COPY[resolution.status] : '待选择项目'}`}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
                       })}
                       {!visibleCreators.length ? <div className="creator-picker-empty">没有找到匹配的达人档案</div> : null}
                     </div>
@@ -1841,8 +1841,12 @@ export function MediaPaymentProjectsPage({
               </section>
             ) : null}
             {!cooperationProjectId ? <NoticeBanner>请先选择关联项目，再选择达人并核对合同与 Invoice。</NoticeBanner> : null}
-            {cooperationProjectId && !selectedCreators.length ? <NoticeBanner>合作达人为选填项，可创建项目后在详情中继续添加并关联合同与 Invoice。</NoticeBanner> : null}
-            {formSubmitAttempted && formIssues.length ? <div className="media-request-form-issues" role="alert"><AlertTriangle size={17} /><div><strong>请完成以下必填项后创建项目</strong>{formIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div> : null}
+            {cooperationProjectId && !selectedCreators.length ? (
+              <NoticeBanner>
+                历史请款 {selectedProjectRequestCount} 个，当前有 {selectedProjectAvailableInvoiceCount} 份未占用且已通过的 Invoice 可用于新请款。
+              </NoticeBanner>
+            ) : null}
+            {formSubmitAttempted && formIssues.length ? <div className="media-request-form-issues" role="alert"><AlertTriangle size={17} /><div><strong>请完成以下必填项后创建请款</strong>{formIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div> : null}
           </div>
         </Modal>
       ) : null}

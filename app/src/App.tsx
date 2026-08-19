@@ -66,7 +66,6 @@ import {
   getAvailableInvoiceReviewActions,
   getInvoiceEditContext,
   getInvoicePageTab,
-  getPaymentListResubmissionState,
   isInvoiceApprovedForPayment,
   isPayoutPaymentInformationValidated,
   isPayoutEligibleForBatch,
@@ -148,7 +147,6 @@ import {
   refreshPaymentListItemSnapshot,
   removePaymentListItem,
   upsertPaymentListItem,
-  validateProjectSubmission,
   type EngagementId,
   type ContractId,
   type InvoiceId,
@@ -169,12 +167,12 @@ import {
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
   paymentRequestAmountLabel,
-  paymentRequestChannelForProvider,
   paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   paymentRequestCancellationIssue,
+  requestOwningInvoice,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import { downloadBlob } from './invoice/invoiceUtils';
@@ -1792,198 +1790,6 @@ export default function App() {
     ]);
   };
 
-  const submitProjectReview = (project: ProjectSummary) => {
-    const projectId = getProjectId(project);
-    const references = (project.creatorProfiles ?? []).filter((item) => item.status !== 'removed');
-    const projectInvoices = generatedInvoices.filter((invoice) => (
-      invoice.snapshot.projectId === projectId && invoice.snapshot.engagementId
-    ));
-    const lists = paymentLists.filter((item) => item.projectId === projectId);
-    if (lists.length > 1) {
-      notify('付款单关联异常', '一个请款项目只能关联一张付款单，请先合并历史付款单后再提交。');
-      return;
-    }
-    const projectPaymentProviders = lists[0] ? paymentListProviders(lists[0]) : [];
-    if (projectPaymentProviders.length !== 1) {
-      notify('付款渠道不一致', '一个请款项目只能选择一个付款渠道，请先统一付款单中的收款账户渠道。');
-      return;
-    }
-    const projectPaymentProvider = projectPaymentProviders[0];
-    const projectPaymentChannel = paymentRequestChannelForProvider(projectPaymentProvider);
-    const invalidPaymentItems = lists.flatMap((list) => (
-      list.items.filter((item) => item.requiresRevalidation)
-    ));
-    const linkedPayouts = projectInvoices.map((invoice) => (
-      payouts.find((payout) => payout.id === invoice.sourcePayoutId)
-    ));
-    const paymentListResubmissionState = getPaymentListResubmissionState(linkedPayouts);
-    const isPaymentListResubmission = paymentListResubmissionState === 'ELIGIBLE';
-    if (paymentListResubmissionState === 'INVALID') {
-      notify('暂不能重新提交付款清单', '本轮 Invoice 状态不一致，请核对项目稳定关联和付款失败分类。');
-      return;
-    }
-    const paymentListsNotReady = isPaymentListResubmission
-      ? !lists.some((list) => list.status === 'generated')
-        || lists.some((list) => list.status === 'draft')
-      : lists.some((list) => list.status !== 'generated');
-    if (!lists.length || paymentListsNotReady) {
-      notify('请先生成付款单', '项目付款清单必须完成校验并生成锁定版本后，才能提交请款审核。');
-      return;
-    }
-    if (
-      linkedPayouts.some((payout) => !payout)
-      || (
-        !isPaymentListResubmission
-        && linkedPayouts.some((payout) => payout?.invoiceReviewStatus !== '已通过')
-      )
-    ) {
-      notify('暂不能发起请款', '项目内全部 Invoice 必须先完成达人签署和媒介审核。');
-      return;
-    }
-    if (invalidPaymentItems.length > 0) {
-      notify(
-        '付款清单需要重新校验',
-        `${invalidPaymentItems.length} 笔账户快照未通过校验：${invalidPaymentItems[0].validationIssues?.[0] ?? '请检查账户版本与付款资料。'}`,
-      );
-      return;
-    }
-    const submissionIssues = validateProjectSubmission({
-      engagementIds: references.map((reference) => reference.engagementId),
-      invoices: projectInvoices.map((invoice) => ({
-        invoiceId: invoice.invoiceId,
-        engagementId: invoice.snapshot.engagementId as EngagementId | undefined,
-        validationStatus: invoice.validationStatus,
-      })),
-      paymentListInvoiceIds: lists.flatMap((list) => list.items.map((item) => item.invoiceId)),
-    });
-    if (submissionIssues.length) {
-      notify(
-        '暂不能提交审核',
-        submissionIssues.includes('NO_ENGAGEMENT')
-          ? '项目至少需要一位达人。'
-          : submissionIssues.includes('INVOICE_MISSING')
-            ? '每位项目达人至少需要一份 Invoice。'
-            : submissionIssues.includes('PAYMENT_LIST_MISSING')
-              ? '项目付款清单必须包含项目内全部 Invoice。'
-              : '存在需要重新校验的 Invoice。',
-      );
-      return;
-    }
-    const submittedAt = nowIso();
-    const previousRequest = requestProjects.find((item) => item.projectId === projectId);
-    const approval = createRequestApprovalState(submittedAt, previousRequest?.approval);
-    const paymentListVersionByInvoice = new Map(
-      lists.flatMap((list) => list.items.map((item) => [item.invoiceId, list.version ?? 1] as const)),
-    );
-    const invoiceIds = projectInvoices.map((invoice) => invoice.invoiceId);
-    const sourcePayoutIds = new Set(projectInvoices.map((invoice) => invoice.sourcePayoutId));
-    setProjects((current) => current.map((item) => getProjectId(item) === projectId
-      ? { ...item, reviewStatus: 'submitted', submittedAt, reviewUpdatedAt: submittedAt, status: '待审批' }
-      : item));
-    setPaymentLists((current) => current.map((item) => item.projectId === projectId
-      ? {
-          ...item,
-          status: 'submitted',
-          updatedAt: submittedAt,
-        }
-      : item));
-    setPayouts((current) => current.map((payout) => sourcePayoutIds.has(payout.id)
-      ? {
-          ...payout,
-          provider: projectPaymentProvider,
-          status: '未进入付款',
-          requestApprovalRound: approval.round,
-          paymentListVersion: projectInvoices
-            .find((invoice) => invoice.sourcePayoutId === payout.id)
-            ? paymentListVersionByInvoice.get(
-                projectInvoices.find((invoice) => invoice.sourcePayoutId === payout.id)!.invoiceId,
-              ) ?? 1
-            : payout.paymentListVersion,
-          invoiceReviewHistory: [
-            ...(payout.invoiceReviewHistory ?? []),
-            {
-              stage: 'REQUEST',
-              action: '提交请款',
-              actorAccount: currentUser.account,
-              actorName: currentUser.name,
-              actorRole: currentUser.role,
-              fromStatus: payout.invoiceReviewStatus,
-              toStatus: payout.invoiceReviewStatus,
-              occurredAt: submittedAt,
-              approvalRound: approval.round,
-            },
-          ],
-          issue: undefined,
-          returnReason: undefined,
-          paymentFailure: payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
-            ? undefined
-            : payout.paymentFailure,
-          paymentFailureReturn: payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
-            ? undefined
-            : payout.paymentFailureReturn,
-        }
-      : payout));
-    const requestId = previousRequest?.id ?? createPrototypeCode('REQ');
-    const requestAmount = lists.flatMap((list) => list.items).reduce<Record<string, number>>((result, item) => {
-      const currency = String(item.overrides.currency ?? item.snapshot.currency);
-      const amount = Number(item.overrides.amount ?? item.snapshot.amount);
-      return { ...result, [currency]: (result[currency] ?? 0) + amount };
-    }, {});
-    const amountLabel = Object.entries(requestAmount)
-      .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
-      .join(' + ');
-    const request: RequestProjectSummary = {
-      id: requestId,
-      projectId,
-      invoiceIds,
-      paymentListId: lists[0]?.paymentListId,
-      paymentListIds: lists[0] ? [lists[0].paymentListId] : [],
-      approval,
-      createdAt: approval.submittedAt,
-      project: project.name,
-      brand: project.brand,
-      media: project.media,
-      pm: project.pm,
-      paymentChannel: projectPaymentChannel,
-      amount: amountLabel,
-      contracts: contracts.filter((contract) => contract.projectId === projectId && contract.lifecycle !== 'GENERATED_DRAFT').length,
-      invoices: projectInvoices.length,
-      paymentOrder: lists[0]?.paymentListCode ?? '待生成',
-      status: myProjectStatusFor({ approval, lifecycle: 'SUBMITTED' }),
-      filter: 'pending',
-      generatedDetail: {
-        brand: project.brand,
-        reason: project.requestReason || '项目达人费用请款',
-        contractId: projectInvoices.flatMap((invoice) => invoice.snapshot.contractIds ?? []).join('、') || '未关联',
-        contractName: '按项目达人 Engagement 关联',
-        contractAmount: '按所选合同与 Invoice 校验',
-        contractStatus: projectInvoices.some((invoice) => invoice.snapshot.contractIds?.length) ? '已匹配' : '未关联',
-        invoiceId: projectInvoices.map((invoice) => invoice.id).join('、'),
-        invoiceAmount: amountLabel,
-        invoiceStatus: '已校验',
-        paymentListId: lists[0]?.paymentListCode ?? '待生成',
-        paymentListStatus: '已提交',
-        payee: `${references.length} 位项目达人`,
-        provider: projectPaymentChannel,
-        beneficiaryId: '按付款清单账户快照',
-        feePolicy: '按合同及付款清单执行',
-      },
-    };
-    setRequestProjects((current) => [
-      request,
-      ...current.filter((item) => item.id !== request.id && item.projectId !== projectId),
-    ]);
-    appendReviewAudit(
-      project,
-      'submit',
-      `${isPaymentListResubmission ? '已重新提交付款清单并创建' : '已提交'}第 ${approval.round} 轮项目请款审批`,
-    );
-    notify(
-      isPaymentListResubmission ? '付款清单已重新提交' : '已提交项目请款',
-      `${project.name} 已进入第 ${approval.round} 轮${REQUEST_APPROVAL_STATUS_LABEL[approval.status]}。Invoice 签署版本保持不变。`,
-    );
-  };
-
   const generateMediaRequestPaymentLists = (request: RequestProjectSummary) => {
     if (!request.paymentRequestProjectId || !request.cooperationProjectId || !request.creatorLinks?.length) {
       notify('无法生成付款清单', '请款项目缺少稳定项目 ID 或达人 Invoice 关联。');
@@ -2078,11 +1884,9 @@ export default function App() {
       issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道、成本类型、手续费承担方和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
-    const duplicateInvoiceId = invoiceIds.find((invoiceId) => requestProjects.some((candidate) => (
-      candidate.paymentRequestProjectId !== request.paymentRequestProjectId
-      && candidate.lifecycle !== 'CANCELLED'
-      && candidate.creatorLinks?.some((candidateLink) => candidateLink.invoiceIds.includes(invoiceId))
-    )));
+    const duplicateInvoiceId = invoiceIds.find((invoiceId) => (
+      requestOwningInvoice(requestProjects, invoiceId, request.paymentRequestProjectId)
+    ));
     if (duplicateInvoiceId) issues.push(`Invoice ${duplicateInvoiceId} 已关联其他请款项目`);
     if (issues.length) {
       notify('暂不能提交申请', issues[0]);

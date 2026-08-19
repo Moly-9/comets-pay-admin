@@ -301,6 +301,41 @@ describe('media payment request document resolution', () => {
     expect(used.invoiceOwners[0]?.owner.requestCode).toBe('REQ-USED');
   });
 
+  it('allows another request for the same cooperation project when it uses a different Invoice', () => {
+    const firstInvoice = invoice();
+    const secondInvoice = invoice({
+      id: 'INV-20260807-000002',
+      invoiceId: 'invoice_002' as InvoiceId,
+    });
+    const firstRequest = {
+      id: 'REQ-FIRST',
+      paymentRequestProjectId: 'request_first' as PaymentRequestProjectId,
+      requestCode: 'REQ-FIRST',
+      lifecycle: 'SUBMITTED' as const,
+      creatorLinks: [{
+        creatorId,
+        engagementId,
+        contractIds: [],
+        invoiceIds: [firstInvoice.invoiceId],
+      }],
+    };
+
+    const result = resolveCreatorDocuments({
+      cooperationProjectId,
+      creatorId,
+      contracts: [],
+      invoices: [firstInvoice, secondInvoice],
+      requests: [firstRequest],
+    });
+
+    expect(result.status).toBe('READY');
+    expect(result.availableInvoices.map((item) => item.invoiceId)).toEqual([secondInvoice.invoiceId]);
+    expect(result.invoiceOwners).toEqual([{
+      invoiceId: firstInvoice.invoiceId,
+      owner: firstRequest,
+    }]);
+  });
+
   it('releases only invoices owned by cancelled requests', () => {
     const invoiceId = 'invoice_cancel_release' as InvoiceId;
     const linkedRequest = (lifecycle: 'DRAFT' | 'RETURNED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED') => ({
