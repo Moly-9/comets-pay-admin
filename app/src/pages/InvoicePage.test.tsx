@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { GeneratedInvoiceRecord, Payout } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { InvoicePage } from './OperationalPages';
 
 const snapshot = {
@@ -9,6 +9,7 @@ const snapshot = {
   billTo: { name: 'COMETS', address: 'Hong Kong' },
   creatorHandle: '@signature-demo',
   creatorName: 'Signature Demo Creator',
+  creatorId: 'creator_signature_demo',
   projectId: 'project_signature_demo',
   projectName: 'Signature Demo Project',
   contractIds: [],
@@ -60,12 +61,27 @@ const payout: Payout = {
   provider: 'Airwallex',
   currency: 'USD',
   amount: 100,
+  creatorId: 'creator_signature_demo' as Payout['creatorId'],
   account: '•••• 0000',
   status: '未进入付款',
   invoiceReviewStatus: '待签署',
   invoiceSnapshot: snapshot,
   accent: '#64748b',
 };
+
+const creator = {
+  id: 'creator_signature_demo',
+  initials: 'SC',
+  accent: '#0f766e',
+  name: 'Signature Demo Display Name',
+  handle: '@signature-fallback',
+  socialAccounts: [{
+    id: 'social_signature_demo',
+    platform: 'YouTube',
+    handle: '@signature-channel-id',
+    profileUrl: 'https://example.test/signature-channel-id',
+  }],
+} as CreatorProfile;
 
 const record: GeneratedInvoiceRecord = {
   id: 'INV-SIGNATURE-DEMO',
@@ -82,13 +98,14 @@ const renderInvoicePage = (
   options: {
     payouts?: Payout[];
     generatedInvoices?: GeneratedInvoiceRecord[];
+    creators?: CreatorProfile[];
     tab?: 'signature' | 'review';
     focusedInvoiceId?: string | null;
   } = {},
 ) => renderToStaticMarkup(
   <InvoicePage
     payouts={options.payouts ?? [payout]}
-    creators={[]}
+    creators={options.creators ?? [creator]}
     invoiceEntity={{ name: 'COMETS', address: 'Hong Kong' }}
     generatedInvoices={options.generatedInvoices ?? [record]}
     requests={[]}
@@ -117,9 +134,10 @@ const renderInvoicePage = (
 );
 
 describe('InvoicePage waiting-signature actions', () => {
-  it('shows a direct simulated signature action beside the detail action', () => {
+  it('shows detail and simulated signature actions and keeps the Invoice number linked to detail', () => {
     const html = renderInvoicePage(true);
 
+    expect(html).toContain('aria-label="查看 Invoice INV-SIGNATURE-DEMO"');
     expect(html).toContain('查看详情');
     expect(html).toContain('模拟达人完成签署');
     expect(html).toContain('aria-label="模拟达人完成签署：INV-SIGNATURE-DEMO"');
@@ -145,5 +163,23 @@ describe('InvoicePage waiting-signature actions', () => {
     });
 
     expect(html).toContain('<b>Date:</b> 14 Aug 2026');
+  });
+});
+
+describe('InvoicePage list columns', () => {
+  it('renders the requested data columns plus operations and resolves creator identity by stable ID', () => {
+    const html = renderInvoicePage(true);
+
+    expect(html.match(/<th(?:\s|>)/g)).toHaveLength(7);
+    expect(html).toContain('<th>达人</th>');
+    expect(html).toContain('<th>关联项目</th>');
+    expect(html).toContain('<th>Invoice 编号</th>');
+    expect(html).toContain('<th>付款渠道</th>');
+    expect(html).toContain('<th>状态</th>');
+    expect(html).toContain('>金额</th>');
+    expect(html).toContain('>操作</th>');
+    expect(html).toContain('Signature Demo Display Name');
+    expect(html).toContain('@signature-channel-id');
+    expect(html).toContain('Signature Demo Project');
   });
 });

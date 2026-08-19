@@ -29,6 +29,9 @@ export function PayoutTable({
   additionalActionLabelFor,
   additionalActionIcon,
   onAdditionalAction,
+  identityFor,
+  projectNameFor,
+  invoiceNumberFor,
 }: {
   payouts: Payout[];
   onSelect: (payout: Payout) => void;
@@ -42,6 +45,14 @@ export function PayoutTable({
   additionalActionLabelFor?: (payout: Payout) => string;
   additionalActionIcon?: ReactNode;
   onAdditionalAction?: (payout: Payout) => void;
+  identityFor?: (payout: Payout) => {
+    displayName: string;
+    channelId: string;
+    initials: string;
+    accent: string;
+  };
+  projectNameFor?: (payout: Payout) => string;
+  invoiceNumberFor?: (payout: Payout) => string;
 }) {
   const {
     page,
@@ -57,9 +68,10 @@ export function PayoutTable({
         <table className="data-table payout-table">
           <thead>
             <tr>
-              <th>达人 / 项目</th>
-              <th>Invoice</th>
-              <th>渠道</th>
+              <th>达人</th>
+              <th>关联项目</th>
+              <th>Invoice 编号</th>
+              <th>付款渠道</th>
               <th>状态</th>
               <th className="amount-cell">金额</th>
               <th className="action-cell">操作</th>
@@ -68,7 +80,16 @@ export function PayoutTable({
           <tbody>
             {visiblePayouts.length ? visiblePayouts.map((payout) => {
               const displayStatus = statusFor?.(payout) ?? payout.status;
+              const identity = identityFor?.(payout) ?? {
+                displayName: payout.creator,
+                channelId: payout.handle,
+                initials: payout.initials,
+                accent: payout.accent,
+              };
+              const invoiceNumber = invoiceNumberFor?.(payout) ?? payout.invoice;
               const additionalActionLabel = additionalActionLabelFor?.(payout);
+              const primaryActionLabel = actionLabelFor?.(payout) ?? ACTION_LABELS[payout.status];
+              const showPrimaryAction = Boolean(primaryActionFor?.(payout));
               const showAdditionalAction = Boolean(
                 onAdditionalAction
                 && additionalActionLabel
@@ -78,31 +99,45 @@ export function PayoutTable({
               <tr key={payout.id} onClick={() => onSelect(payout)}>
                 <td>
                   <div className="creator-cell">
-                    <Avatar initials={payout.initials} accent={payout.accent} size="sm" />
-                    <span><strong>{payout.creator}</strong><small>{payout.project}</small></span>
+                    <Avatar initials={identity.initials} accent={identity.accent} size="sm" />
+                    <span><strong>{identity.displayName}</strong><small>{identity.channelId}</small></span>
                   </div>
                 </td>
-                <td className="mono-cell">{payout.invoice}</td>
+                <td className="invoice-project-cell">{projectNameFor?.(payout) ?? payout.project}</td>
+                <td className="mono-cell">
+                  <button
+                    className="invoice-number-link"
+                    type="button"
+                    aria-label={`查看 Invoice ${invoiceNumber}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect(payout);
+                    }}
+                  >
+                    {invoiceNumber}
+                  </button>
+                </td>
                 <td><PaymentProviderBadge compact provider={payout.provider} /></td>
                 <td><StatusMark status={displayStatus} label={statusLabelFor?.(payout) ?? statusLabels?.[payout.status]} /></td>
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
                   <div className="table-action-group">
                     <Button
-                      variant={primaryActionFor?.(payout) ? 'primary' : 'secondary'}
+                      variant={showPrimaryAction ? 'primary' : 'secondary'}
                       className="table-action"
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelect(payout);
                       }}
                     >
-                      {actionLabelFor?.(payout) ?? ACTION_LABELS[payout.status]}
+                      {primaryActionLabel}
                     </Button>
                     {showAdditionalAction ? (
                       <Button
                         icon={additionalActionIcon}
-                        className="table-action"
-                        aria-label={`${additionalActionLabel}：${payout.invoice}`}
+                        className="table-action invoice-quick-action"
+                        aria-label={`${additionalActionLabel}：${invoiceNumber}`}
+                        title={additionalActionLabel}
                         onClick={(event) => {
                           event.stopPropagation();
                           onAdditionalAction?.(payout);
@@ -117,7 +152,7 @@ export function PayoutTable({
               );
             }) : (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="empty-table">{emptyText}</div>
                 </td>
               </tr>

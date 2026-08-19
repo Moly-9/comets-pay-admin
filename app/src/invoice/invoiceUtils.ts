@@ -36,11 +36,15 @@ export const nextInvoiceNumber = (records: GeneratedInvoiceRecord[], now = new D
   const datePart = todayInputValue(now).replace(/-/g, '');
   const prefix = `INV-${datePart}-`;
   const maxSequence = records.reduce((max, record) => {
-    if (!record.id.startsWith(prefix)) return max;
-    const sequence = Number(record.id.slice(prefix.length));
-    return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+    const sequence = [record.snapshot?.invoiceNumber, record.id].reduce((recordMax, value) => {
+      if (!value?.startsWith(prefix)) return recordMax;
+      const suffix = value.slice(prefix.length);
+      if (!/^\d+$/.test(suffix)) return recordMax;
+      return Math.max(recordMax, Number(suffix));
+    }, 0);
+    return Math.max(max, sequence);
   }, 0);
-  return `${prefix}${String(maxSequence + 1).padStart(3, '0')}`;
+  return `${prefix}${String(maxSequence + 1).padStart(5, '0')}`;
 };
 
 export const bankAddress = (model: Pick<InvoiceDocumentModel, 'payment'>) => (

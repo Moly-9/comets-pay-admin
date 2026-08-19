@@ -9670,8 +9670,68 @@ button:disabled {
   min-width: 850px;
 }
 
-.payout-table {
-  min-width: 800px;
+.data-table.payout-table {
+  min-width: 900px;
+  table-layout: fixed;
+}
+
+.payout-table th:nth-child(1) { width: 18%; }
+.payout-table th:nth-child(2) { width: 17%; }
+.payout-table th:nth-child(3) { width: 15%; }
+.payout-table th:nth-child(4) { width: 11%; }
+.payout-table th:nth-child(5) { width: 11%; }
+.payout-table th:nth-child(6) { width: 9%; }
+.payout-table th:nth-child(7) { width: 19%; }
+
+.payout-table .creator-cell {
+  min-width: 0;
+}
+
+.payout-table .creator-cell > span,
+.payout-table .creator-cell strong,
+.payout-table .creator-cell small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invoice-project-cell {
+  max-width: 280px;
+  overflow: hidden;
+  color: #4e5668 !important;
+  text-overflow: ellipsis;
+}
+
+.invoice-number-link {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  color: #215fba;
+  font: inherit;
+  cursor: pointer;
+}
+
+.invoice-number-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.invoice-number-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid rgba(33, 95, 186, 0.32);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1399px) {
+  .payout-table .invoice-quick-action {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+  }
+
+  .payout-table .invoice-quick-action > span {
+    display: none;
+  }
 }
 
 .request-project-table {

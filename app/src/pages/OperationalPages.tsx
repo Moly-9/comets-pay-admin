@@ -2905,6 +2905,28 @@ export function InvoicePage({
     payout,
     findInvoiceRequest(payout, generatedInvoices, requests),
   );
+  const generatedInvoiceByPayoutId = useMemo(() => new Map(
+    generatedInvoices.map((record) => [record.sourcePayoutId, record]),
+  ), [generatedInvoices]);
+  const invoiceSnapshotFor = (payout: Payout) => (
+    generatedInvoiceByPayoutId.get(payout.id)?.snapshot ?? payout.invoiceSnapshot
+  );
+  const invoiceIdentityFor = (payout: Payout) => {
+    const snapshot = invoiceSnapshotFor(payout);
+    const creatorId = snapshot?.creatorId ?? payout.creatorId;
+    const creator = creatorId
+      ? creators.find((candidate) => candidate.id === creatorId)
+      : undefined;
+    return {
+      displayName: creator?.name ?? snapshot?.creatorName ?? payout.creator,
+      channelId: creator?.socialAccounts.find((account) => account.handle.trim())?.handle
+        ?? creator?.handle
+        ?? snapshot?.creatorHandle
+        ?? payout.handle,
+      initials: creator?.initials ?? payout.initials,
+      accent: creator?.accent ?? payout.accent,
+    };
+  };
   const groupedPayouts = useMemo(() => {
     const groups = {
       signature: [] as Payout[],
@@ -3047,6 +3069,9 @@ export function InvoicePage({
           additionalActionLabelFor={() => '模拟达人完成签署'}
           additionalActionIcon={<CheckCircle2 size={15} />}
           onAdditionalAction={simulateCreatorSignature}
+          identityFor={invoiceIdentityFor}
+          projectNameFor={(payout) => invoiceSnapshotFor(payout)?.projectName ?? payout.project}
+          invoiceNumberFor={(payout) => invoiceSnapshotFor(payout)?.invoiceNumber ?? payout.invoice}
         />
       </section>
     </div>
