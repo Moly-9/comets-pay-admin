@@ -448,12 +448,6 @@ export function InvoiceBuilderPage({
         setPaymentMethod(snapshot.payoutProvider === 'PayPal' ? 'paypal' : 'bank');
         setPayment({ ...snapshot });
       }
-      setItems(nextContracts.map((contract, index) => normalizeLineItem({
-        id: `line-contract-${contract.contractId ?? index}`,
-        description: `${contract.project} · ${contract.ioId || contract.id}`,
-        unitPrice: contract.totalFee ?? 0,
-        quantity: 1,
-      })));
     } else {
       const account = selectedPayout
         ? eligiblePayoutAccounts.find((candidate) => candidate.provider === selectedPayout.provider) ?? null
@@ -463,7 +457,6 @@ export function InvoiceBuilderPage({
       setPayment(account
         ? payoutAccountToInvoicePayment(account, selectedCreator?.id)
         : { ...EMPTY_PAYMENT });
-      if (!selectedPayout) setItems([createBlankLine(0)]);
     }
     setGeneratedFiles(null);
   };

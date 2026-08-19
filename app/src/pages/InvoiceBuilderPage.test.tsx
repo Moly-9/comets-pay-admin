@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { INITIAL_CONTRACTS } from '../contracts';
@@ -10,6 +11,8 @@ import {
 } from '../prototypeResourceFixtures';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
 import { InvoiceBuilderPage } from './InvoiceBuilderPage';
+
+const invoiceBuilderSource = readFileSync(new URL('./InvoiceBuilderPage.tsx', import.meta.url), 'utf8');
 
 describe('InvoiceBuilderPage create mode', () => {
   it('keeps every fee-detail input blank until the user enters it', () => {
@@ -31,6 +34,17 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
     expect(html).toContain('data-testid="invoice-fill-demo"');
     expect(html).toContain('填充演示数据');
+  });
+
+  it('keeps user-entered fee details independent from contract selection', () => {
+    const contractSelectionHandler = invoiceBuilderSource.match(
+      /const toggleContract = [\s\S]*?const selectPayoutAccount =/,
+    )?.[0];
+
+    expect(contractSelectionHandler).toBeDefined();
+    expect(contractSelectionHandler).not.toContain('setItems(');
+    expect(contractSelectionHandler).not.toContain('contract.totalFee');
+    expect(contractSelectionHandler).not.toContain('line-contract-');
   });
 });
 
