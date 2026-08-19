@@ -1,4 +1,3 @@
-import { validateContractCoverage } from '../businessWorkflow';
 import type { ContractRecord } from '../contracts';
 import type { DocumentPayoutSnapshot, InvoiceDocumentModel } from '../types';
 
@@ -35,20 +34,6 @@ export const validateInvoiceDocumentModel = (
     errors.payoutAccountId = '必须选择达人档案中的已验证收款账户';
   }
 
-  const contractSnapshots = selectedContracts
-    .map(payoutSnapshotForContract)
-    .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
-  const contractSnapshotKeys = new Set(contractSnapshots.map(payoutSnapshotKey));
-  if (!options.allowContractPayoutOverride && contractSnapshotKeys.size > 1) {
-    errors.payoutAccountId = '所选合同冻结了不同的收款账户版本，不能合并生成同一张 Invoice';
-  } else if (
-    !options.allowContractPayoutOverride
-    && contractSnapshots[0]
-    && payoutSnapshotKey(contractSnapshots[0]) !== payoutSnapshotKey(model.payment)
-  ) {
-    errors.payoutAccountId = 'Invoice 收款账户与合同冻结版本不一致，请重新选择合同或账户';
-  }
-
   model.items.forEach((item, index) => {
     if (!item.description.trim()) {
       errors[`item-${item.id}-description`] = `第 ${index + 1} 项缺少费用描述`;
@@ -75,28 +60,6 @@ export const validateInvoiceDocumentModel = (
       errors.paypalEmail = '请填写有效 PayPal Email';
     }
   }
-
-  validateContractCoverage(
-    selectedContracts.map((contract) => ({
-      contractId: contract.contractId!,
-      advertiser: contract.advertiser,
-      publisher: contract.publisher,
-      currency: contract.currency,
-      totalFee: contract.totalFee,
-      paymentMethod: contract.paymentMethod === 'PAYPAL' ? 'PAYPAL' : 'BANK',
-    })),
-    {
-      billTo: model.billTo.name,
-      publisher: model.from.legalName,
-      currency: model.currency,
-      amount: model.items.reduce((total, item) => total + item.lineTotal, 0),
-      paymentMethod: model.paymentMethod === 'paypal' ? 'PAYPAL' : 'BANK',
-    },
-  ).filter((issue) => (
-    !options.allowContractPayoutOverride || issue.field !== 'paymentMethod'
-  )).forEach((issue) => {
-    errors[`contract-${issue.field}`] = issue.message;
-  });
 
   return errors;
 };

@@ -1,5 +1,5 @@
 import type { ContractRecord } from './contracts';
-import { isPaymentContract } from './contracts';
+import { contractLinkedToProject, isPaymentContract } from './contracts';
 import type {
   ContractId,
   CooperationProjectId,
@@ -187,11 +187,55 @@ export type PaymentRequestProjectLike = {
   id: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   requestCode?: string;
-  lifecycle?: 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'COMPLETED';
+  lifecycle?: PaymentRequestLifecycle;
   approval?: RequestApprovalState;
   creatorLinks?: PaymentRequestCreatorLink[];
   invoiceIds?: InvoiceId[];
   status?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
+};
+
+export type PaymentRequestLifecycle = 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED';
+
+export type PaymentRequestCancellationContext = {
+  roleKey: string;
+  lifecycle?: PaymentRequestLifecycle;
+  ownsRequest: boolean;
+  hasPaymentActivity: boolean;
+};
+
+export const paymentRequestHasPaymentActivity = (
+  paymentRequestProjectId: PaymentRequestProjectId | undefined,
+  payouts: Array<Pick<Payout, 'paymentRequestProjectId' | 'paymentFailureRecovery' | 'status'>>,
+) => Boolean(paymentRequestProjectId) && payouts.some((payout) => (
+  payout.paymentRequestProjectId === paymentRequestProjectId
+  && (Boolean(payout.paymentFailureRecovery) || ['等待付款', '付款处理中', '已付款'].includes(payout.status))
+));
+
+export const canCancelPaymentRequest = ({
+  roleKey,
+  lifecycle,
+  ownsRequest,
+  hasPaymentActivity,
+}: PaymentRequestCancellationContext) => (
+  ['media', 'admin'].includes(roleKey)
+  && ['DRAFT', 'RETURNED'].includes(lifecycle ?? '')
+  && (roleKey === 'admin' || ownsRequest)
+  && !hasPaymentActivity
+);
+
+export const paymentRequestCancellationIssue = (
+  context: PaymentRequestCancellationContext,
+  reason: string,
+) => {
+  if (context.hasPaymentActivity) return '项目已进入付款或失败恢复流程，不能取消。';
+  if (!canCancelPaymentRequest(context)) {
+    return '仅项目媒介或管理员可取消草稿、已退回的请款项目。审批中的项目需先退回。';
+  }
+  if (!reason.trim()) return '请填写取消原因。';
+  return '';
 };
 
 export type MyProjectStatus =
@@ -203,7 +247,8 @@ export type MyProjectStatus =
   | '待打款'
   | '部分打款失败'
   | '已付款'
-  | '已退回';
+  | '已退回'
+  | '已取消';
 
 export type RequestProjectStatus =
   | 'PM审批中'
@@ -234,6 +279,7 @@ const REQUEST_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], Re
 };
 
 const legacyMyProjectStatus = (status?: string): MyProjectStatus => {
+  if (status === '已取消') return '已取消';
   if (status === '已完成' || status === '已付款') return '已付款';
   if (status === '待打款' || status === '已通过') return '待打款';
   if (status === '已退回' || status === '待补资料' || status === '待媒介复核') return '已退回';
@@ -247,6 +293,7 @@ const legacyMyProjectStatus = (status?: string): MyProjectStatus => {
 export const myProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status'>,
 ): MyProjectStatus => {
+  if (request.lifecycle === 'CANCELLED') return '已取消';
   if (request.lifecycle === 'COMPLETED') return '已付款';
   if (request.lifecycle === 'RETURNED' && request.status === '部分打款失败') return '部分打款失败';
   if (request.lifecycle === 'RETURNED') return '已退回';
@@ -260,7 +307,7 @@ export const requestProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status' | 'paymentRequestProjectId'>,
   payouts: Pick<Payout, 'paymentRequestProjectId' | 'status'>[] = [],
 ): RequestProjectStatus | null => {
-  if (request.lifecycle === 'DRAFT' || (!request.approval && !request.lifecycle)) return null;
+  if (request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED' || (!request.approval && !request.lifecycle)) return null;
   if (request.lifecycle === 'COMPLETED') return '已付款';
   if (request.lifecycle === 'RETURNED') return '已退回';
   if (request.lifecycle === 'APPROVED') {
@@ -421,7 +468,7 @@ export const contractsForCooperationCreator = (
   cooperationProjectId: CooperationProjectId,
   creatorId: CreatorId,
 ) => contracts.filter((contract) => (
-  contractCooperationProjectId(contract) === cooperationProjectId
+  contractLinkedToProject(contract, cooperationProjectId)
   && contract.creatorId === creatorId
 ));
 
@@ -464,6 +511,8 @@ export const requestOwningInvoice = (
   invoiceId: InvoiceId,
   excludeRequestId?: PaymentRequestProjectId,
 ) => requests.find((request) => (
+  request.lifecycle !== 'CANCELLED'
+  &&
   (!excludeRequestId || request.paymentRequestProjectId !== excludeRequestId)
   && (
     request.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
@@ -516,6 +565,7 @@ const lockedRequestStatus = (
   status: string | undefined,
 ): PaymentRequestCreatorPresentationStatus | null => {
   if (!lifecycle || lifecycle === 'DRAFT' || lifecycle === 'RETURNED') return null;
+  if (lifecycle === 'CANCELLED') return { label: status || '已取消', tone: 'info' };
   if (lifecycle === 'COMPLETED') return { label: status || '已完成', tone: 'success' };
   if (lifecycle === 'APPROVED') return { label: status || '已通过', tone: 'info' };
   return { label: status || '已提交', tone: 'info' };
@@ -529,6 +579,7 @@ export const paymentRequestCreatorPresentation = ({
   paymentRequestProjectId,
   requestLifecycle,
   requestStatus,
+  cooperationProjectId,
 }: {
   link: PaymentRequestCreatorLink;
   invoices: GeneratedInvoiceRecord[];
@@ -537,6 +588,7 @@ export const paymentRequestCreatorPresentation = ({
   paymentRequestProjectId?: PaymentRequestProjectId;
   requestLifecycle?: PaymentRequestProjectLike['lifecycle'];
   requestStatus?: string;
+  cooperationProjectId?: CooperationProjectId;
 }): PaymentRequestCreatorPresentation => {
   const requestLists = paymentLists.filter((list) => (
     !paymentRequestProjectId || list.paymentRequestProjectId === paymentRequestProjectId
@@ -621,7 +673,7 @@ export const paymentRequestCreatorPresentation = ({
       relationshipValid: Boolean(
         record
         && (!record.creatorId || record.creatorId === link.creatorId)
-        && (!record.engagementId || record.engagementId === link.engagementId)
+        && (!cooperationProjectId || contractLinkedToProject(record, cooperationProjectId))
       ),
     };
   });
@@ -691,8 +743,7 @@ export const addInvoiceToPaymentRequestSelection = ({
     return Boolean(
       contract
       && contract.creatorId === invoice.snapshot.creatorId
-      && contractCooperationProjectId(contract) === invoiceCooperationProjectId(invoice)
-      && contract.engagementId === invoice.snapshot.engagementId,
+      && contractLinkedToProject(contract, invoiceCooperationProjectId(invoice)),
     );
   });
   const selectedInvoices = [...new Set([...selectedInvoiceIds, invoice.invoiceId])];

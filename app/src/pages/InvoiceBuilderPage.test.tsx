@@ -183,7 +183,7 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(paymentMethodTrigger).not.toContain('disabled');
   });
 
-  it('keeps contract payout fields locked without a scoped finance override', () => {
+  it('keeps payout fields editable independently from the selected contracts', () => {
     const record = PROJECT_DEMO_INVOICES[0]!;
     const html = renderToStaticMarkup(
       <InvoiceBuilderPage
@@ -201,8 +201,8 @@ describe('InvoiceBuilderPage edit mode', () => {
       />,
     );
 
-    expect(html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0]).toContain('disabled');
-    expect(html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0]).toContain('disabled');
-    expect(html).toContain('已锁定，不能静默切换到达人最新账户');
+    expect(html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0]).not.toContain('disabled');
+    expect(html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0]).not.toContain('disabled');
+    expect(html).toContain('选择达人档案中的已验证账户后');
   });
 });

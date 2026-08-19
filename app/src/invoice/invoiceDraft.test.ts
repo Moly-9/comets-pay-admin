@@ -3,7 +3,7 @@ import { PROJECT_DEMO_CONTRACTS, PROJECT_DEMO_INVOICES } from '../prototypeResou
 import { validateInvoiceDocumentModel } from './invoiceDraft';
 
 describe('validateInvoiceDocumentModel contract payout override', () => {
-  it('keeps the contract payout snapshot frozen by default', () => {
+  it('allows a verified Invoice account to differ from the selected contract snapshot', () => {
     const source = PROJECT_DEMO_INVOICES[0]!.snapshot;
     const selectedContracts = PROJECT_DEMO_CONTRACTS.filter((contract) => (
       contract.contractId && source.contractIds?.includes(contract.contractId)
@@ -19,8 +19,7 @@ describe('validateInvoiceDocumentModel contract payout override', () => {
       },
     };
 
-    expect(validateInvoiceDocumentModel(changed, selectedContracts).payoutAccountId)
-      .toContain('与合同冻结版本不一致');
+    expect(validateInvoiceDocumentModel(changed, selectedContracts).payoutAccountId).toBeUndefined();
   });
 
   it('accepts a verified replacement account and its payment method for a finance return', () => {

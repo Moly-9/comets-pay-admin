@@ -33,7 +33,9 @@ export const findInvoiceRequest = (
 ) => {
   const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
   if (!invoice) return undefined;
-  return requests.find((request) => requestInvoiceIds(request).has(invoice.invoiceId));
+  return requests.find((request) => (
+    request.lifecycle !== 'CANCELLED' && requestInvoiceIds(request).has(invoice.invoiceId)
+  ));
 };
 
 export const getInvoiceManagementView = (

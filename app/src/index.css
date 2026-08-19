@@ -7464,6 +7464,52 @@ body:has(.finance-review-workspace) {
   font-size: 12px;
 }
 
+.invoice-contract-warning {
+  border: 1px solid #efd4c8;
+  border-left: 3px solid #cf633e;
+  border-radius: 6px;
+}
+
+.contract-project-links > span:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contract-project-links > span:first-child small {
+  color: #7a8190;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.media-request-cancel-form textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.media-request-cancel-form textarea:focus-visible {
+  border-color: #c96958;
+  box-shadow: 0 0 0 3px rgba(201, 105, 88, 0.14);
+  outline: 0;
+}
+
+@media (max-width: 640px) {
+  .contract-project-links > span:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .contract-project-links .invoice-contract-options label {
+    min-height: 48px;
+  }
+
+  .media-request-cancel-form textarea {
+    min-height: 144px;
+  }
+}
+
 /* Project workflow resources */
 .project-workflow-card {
   overflow: visible;

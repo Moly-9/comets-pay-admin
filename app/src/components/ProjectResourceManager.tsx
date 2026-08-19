@@ -432,7 +432,7 @@ export function ProjectResourceManager({
       title: linkedInvoices.length ? `${linkedInvoices.length} 份 Invoice` : '尚未关联 Invoice',
       description: linkedInvoices.length
         ? `覆盖 ${invoiceCreatorCount} 位达人 · 项目金额 ${formatProjectInvoiceAmount(linkedInvoices)}`
-        : '提交审核前，每位项目达人必须有且仅有一份 Invoice',
+        : '提交审核前，每位项目达人至少需要一份 Invoice',
       status: !linkedInvoices.length
         ? '未关联'
         : linkedInvoices.every((invoice) => invoice.validationStatus === 'valid')

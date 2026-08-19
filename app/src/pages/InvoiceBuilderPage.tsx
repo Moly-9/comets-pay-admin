@@ -16,14 +16,14 @@ import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Co
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
   createPrototypeId,
-  hasInvoiceForEngagement,
+  validateContractCoverage,
   type CreatorId,
   type ContractId,
   type EngagementId,
   type InvoiceId,
   type ProjectId,
 } from '../businessWorkflow';
-import { formatContractMoney, isPaymentContract, type ContractRecord } from '../contracts';
+import { contractLinkedToProject, formatContractMoney, isPaymentContract, type ContractRecord } from '../contracts';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -54,7 +54,6 @@ import {
   payoutAccountToInvoicePayment,
 } from '../payoutAccounts';
 import {
-  contractCooperationProjectId,
   cooperationProjectIdFor,
   findExistingEngagementId,
 } from '../paymentRequestProjects';
@@ -263,27 +262,13 @@ export function InvoiceBuilderPage({
     : null;
   const selectableContracts = contracts.filter((contract) => (
     contract.creatorId === creatorId
-    && contractCooperationProjectId(contract) === selectedProjectId
+    && contractLinkedToProject(contract, selectedProjectId)
     && isPaymentContract(contract)
     && Boolean(contract.contractId)
   ));
   const selectedContracts = selectableContracts.filter((contract) => (
     contract.contractId && contractIds.includes(contract.contractId)
   ));
-  const selectedContractPayoutSnapshots = selectedContracts
-    .map(payoutSnapshotForContract)
-    .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
-  const contractPayoutLocked = selectedContractPayoutSnapshots.length > 0 && !allowPayoutAccountChange;
-  const engagementInvoiceReferences = generatedInvoices.map((record) => ({
-    invoiceId: record.invoiceId,
-    engagementId: record.snapshot.engagementId as EngagementId | undefined,
-  }));
-  const existingInvoice = !isEditing && hasInvoiceForEngagement(
-    engagementInvoiceReferences,
-    engagementId as EngagementId | '',
-  )
-    ? generatedInvoices.find((record) => record.snapshot.engagementId === engagementId)
-    : undefined;
   const creatorOptions = creators.map((creator) => ({
     value: creator.id,
     label: creator.name,
@@ -328,6 +313,29 @@ export function InvoiceBuilderPage({
     paymentMethod,
     payment,
   }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, payoutAccountId, selectedCreator, selectedProject]);
+  const contractComparisonWarnings = [
+    ...validateContractCoverage(
+      selectedContracts.map((contract) => ({
+        contractId: contract.contractId!,
+        advertiser: contract.advertiser,
+        publisher: contract.publisher,
+        currency: contract.currency,
+        totalFee: contract.totalFee,
+        paymentMethod: contract.paymentMethod === 'PAYPAL' ? 'PAYPAL' : 'BANK',
+      })),
+      {
+        billTo: model.billTo.name,
+        publisher: model.from.legalName,
+        currency: model.currency,
+        amount: invoiceTotal(model),
+        paymentMethod: model.paymentMethod === 'paypal' ? 'PAYPAL' : 'BANK',
+      },
+    ).map((issue) => issue.message),
+    ...(selectedContracts.some((contract) => {
+      const snapshot = payoutSnapshotForContract(contract);
+      return Boolean(snapshot?.payoutAccountId && payoutSnapshotKey(snapshot) !== payoutSnapshotKey(model.payment));
+    }) ? ['所选合同的收款账户快照与本次 Invoice 不一致；系统仅提示，Invoice 仍使用当前达人账户。'] : []),
+  ];
   const isDirty = Boolean(editSnapshot && invoiceDocumentChanged(editSnapshot, model));
 
   useEffect(() => {
@@ -425,39 +433,7 @@ export function InvoiceBuilderPage({
     const nextIds = contractIds.includes(contractId)
       ? contractIds.filter((id) => id !== contractId)
       : [...contractIds, contractId];
-    const nextContracts = selectableContracts.filter((contract) => (
-      contract.contractId && nextIds.includes(contract.contractId)
-    ));
-    const contractSnapshots = nextContracts
-      .map(payoutSnapshotForContract)
-      .filter((snapshot): snapshot is DocumentPayoutSnapshot => Boolean(snapshot?.payoutAccountId));
     setContractIds(nextIds);
-    if (nextContracts.length) {
-      const first = nextContracts[0];
-      if (first.currency && ['USD', 'EUR', 'GBP', 'HKD', 'SGD'].includes(first.currency)) {
-        setCurrency(first.currency as InvoiceCurrency);
-      }
-      if (first.advertiser) setBillTo((current) => ({ ...current, name: first.advertiser }));
-      if (first.publisher) setFrom((current) => ({ ...current, legalName: first.publisher }));
-      if (first.paymentMethod) {
-        setPaymentMethod(first.paymentMethod === 'PAYPAL' ? 'paypal' : 'bank');
-      }
-      if (contractSnapshots.length && new Set(contractSnapshots.map(payoutSnapshotKey)).size === 1) {
-        const snapshot = contractSnapshots[0];
-        setPayoutAccountId(snapshot.payoutAccountId ?? '');
-        setPaymentMethod(snapshot.payoutProvider === 'PayPal' ? 'paypal' : 'bank');
-        setPayment({ ...snapshot });
-      }
-    } else {
-      const account = selectedPayout
-        ? eligiblePayoutAccounts.find((candidate) => candidate.provider === selectedPayout.provider) ?? null
-        : eligiblePayoutAccounts[0] ?? null;
-      setPayoutAccountId(account ? getPayoutAccountId(account) : '');
-      setPaymentMethod(account?.provider === 'PayPal' ? 'paypal' : 'bank');
-      setPayment(account
-        ? payoutAccountToInvoicePayment(account, selectedCreator?.id)
-        : { ...EMPTY_PAYMENT });
-    }
     setGeneratedFiles(null);
   };
 
@@ -501,7 +477,6 @@ export function InvoiceBuilderPage({
     });
     if (!creatorId) nextErrors.creator = '请选择达人';
     if (!selectedProjectId || !engagementId) nextErrors.project = '请选择飞书合作项目';
-    if (existingInvoice) nextErrors.project = `该项目达人已有 Invoice ${existingInvoice.id}，请先解除旧关联。`;
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -630,7 +605,7 @@ export function InvoiceBuilderPage({
                 <div className="invoice-contract-coverage-head">
                   <div>
                     <strong id="invoice-contract-coverage-label">关联合同（非必填）</strong>
-                    <span>仅显示该项目达人已上传并确认的合同；多份合同按合计金额校验。</span>
+                    <span>显示该项目达人全部已确认合同；差异仅提示，不会覆盖 Invoice 字段或阻止生成。</span>
                   </div>
                   <em>{contractIds.length ? `已选 ${contractIds.length} 份` : '未关联合同（非必填）'}</em>
                 </div>
@@ -657,10 +632,11 @@ export function InvoiceBuilderPage({
                 ) : (
                   <p>当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。</p>
                 )}
-                {Object.entries(errors).some(([key]) => key.startsWith('contract-')) ? (
-                  <div className="invoice-contract-conflict" role="alert">
-                    {Object.entries(errors).filter(([key]) => key.startsWith('contract-')).map(([key, message]) => (
-                      <span key={key}>{message}</span>
+                {contractComparisonWarnings.length ? (
+                  <div className="invoice-contract-conflict invoice-contract-warning" role="status">
+                    <strong>合同字段与 Invoice 存在差异，仅供核对</strong>
+                    {contractComparisonWarnings.map((message) => (
+                      <span key={message}>{message}</span>
                     ))}
                   </div>
                 ) : null}
@@ -716,9 +692,7 @@ export function InvoiceBuilderPage({
                     ? '财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。'
                     : requiresPayoutAccountSelection
                     ? '付款失败重新发起时，必须从达人档案中重新选择已验证账户。'
-                    : contractPayoutLocked
-                      ? '已继承关联合同冻结的账户版本；付款字段仅供核对。'
-                      : '从达人档案选择已验证账户，付款字段只读并冻结到本次 Invoice。'}
+                    : '从达人档案选择已验证账户，付款字段只读并冻结到本次 Invoice。'}
                 </p>
               </div>
             </header>
@@ -731,15 +705,13 @@ export function InvoiceBuilderPage({
                   value={payoutAccountId}
                   placeholder={selectedCreator ? '请选择已验证付款账户' : '未找到关联达人'}
                   options={payoutAccountOptions}
-                  disabled={!selectedCreator || !payoutAccountOptions.length || contractPayoutLocked}
+                  disabled={!selectedCreator || !payoutAccountOptions.length}
                   onChange={selectPayoutAccount}
                 />
                 <small>{errors.payoutAccountId}</small>
                 <p className="invoice-payout-account-note">
                   {allowPayoutAccountChange
                     ? '保存后将冻结新的账户 ID、版本与付款快照，并同步刷新对应付款明细。'
-                    : contractPayoutLocked
-                    ? `合同账户版本 ${payment.payoutAccountVersion ?? 'legacy-v1'} 已锁定，不能静默切换到达人最新账户。`
                     : '选择达人档案中的已验证账户后，将冻结账户 ID、版本与付款快照。'}
                 </p>
               </div>
@@ -750,7 +722,7 @@ export function InvoiceBuilderPage({
                   variant="form"
                   value={paymentMethod}
                   options={PAYMENT_OPTIONS}
-                  disabled={requiresPayoutAccountSelection || contractPayoutLocked}
+                  disabled={requiresPayoutAccountSelection}
                   onChange={selectPaymentMethod}
                 />
               </div>

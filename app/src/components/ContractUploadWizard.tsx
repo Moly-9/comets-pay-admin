@@ -15,6 +15,7 @@ import {
 } from '../contractRecognitionTypes';
 import {
   CONTRACT_TYPE_LABELS,
+  contractLinkedToProject,
   getContractType,
   isFrameworkContract,
   type ContractRecord,
@@ -29,7 +30,7 @@ import {
   type ProjectId,
 } from '../businessWorkflow';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
-import { contractCooperationProjectId, cooperationProjectIdFor } from '../paymentRequestProjects';
+import { cooperationProjectIdFor } from '../paymentRequestProjects';
 import type { CreatorProfile } from '../types';
 import { Button, Modal, SelectField } from './Common';
 
@@ -75,6 +76,7 @@ export function ContractUploadWizard({
   submitLabel = '保存待确认合同',
 }: Props) {
   const [projectId, setProjectId] = useState(initialProjectId);
+  const [projectLinkIds, setProjectLinkIds] = useState<string[]>(initialProjectId ? [initialProjectId] : []);
   const [creatorId, setCreatorId] = useState(initialCreatorId);
   const [contractName, setContractName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<SelectedContractFile[]>([]);
@@ -93,7 +95,7 @@ export function ContractUploadWizard({
   const draftCandidates = contracts.filter((contract) => (
     contract.lifecycle === 'GENERATED_DRAFT'
     && Boolean(contract.contractId)
-    && contractCooperationProjectId(contract) === selectedProjectInternalId
+    && Boolean(selectedProjectInternalId && contractLinkedToProject(contract, selectedProjectInternalId))
     && contract.creatorId === creatorId
   ));
   const projectOptions = projects.map((project) => ({
@@ -123,6 +125,9 @@ export function ContractUploadWizard({
   const conflictCount = fields.filter((field) => field.status === 'conflict').length;
   const missingCount = fields.filter((field) => field.status === 'missing').length;
   const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id && creator.status !== 'removed');
+  const creatorProjectOptions = projects.filter((project) => project.creatorProfiles?.some((reference) => (
+    reference.creatorId === creatorId && reference.status !== 'removed'
+  )));
   const canSave = Boolean(selectedProject && selectedCreator && contractName.trim() && documents.length === 1 && !parsing);
 
   useEffect(() => {
@@ -247,6 +252,10 @@ export function ContractUploadWizard({
           ?? selectedProject.projectId
           ?? selectedProject.id
         ) as ProjectId,
+        projectLinks: [...new Set([...projectLinkIds, cooperationProjectIdFor(selectedProject)])].map((cooperationProjectId) => ({
+          cooperationProjectId: cooperationProjectId as ProjectId,
+          status: 'ACTIVE' as const,
+        })),
         projectName: selectedProject.name,
         customer: selectedProject.brand,
         creatorId: selectedCreator.id as CreatorId,
@@ -312,6 +321,7 @@ export function ContractUploadWizard({
                 options={projectOptions}
                 onChange={(value) => {
                   setProjectId(value);
+                  setProjectLinkIds(value ? [value] : []);
                   setCreatorId('');
                   setDraftContractId('');
                   setContractName('');
@@ -330,6 +340,13 @@ export function ContractUploadWizard({
                 disabled={!selectedProject}
                 onChange={(value) => {
                   setCreatorId(value);
+                  const eligibleIds = new Set(projects.filter((project) => project.creatorProfiles?.some((reference) => (
+                    reference.creatorId === value && reference.status !== 'removed'
+                  ))).map((project) => String(cooperationProjectIdFor(project))));
+                  setProjectLinkIds((current) => [...new Set([
+                    ...current.filter((id) => eligibleIds.has(id)),
+                    ...(projectId ? [projectId] : []),
+                  ])]);
                   setDraftContractId('');
                   setContractName('');
                 }}
@@ -370,6 +387,32 @@ export function ContractUploadWizard({
               />
               <small>选择后沿用草稿合同 ID，并保留原生成快照</small>
             </div> : null}
+            {selectedProject && selectedCreator ? (
+              <div className="contract-upload-field contract-upload-field-wide contract-project-links">
+                <span>覆盖合作项目 <small>可多选</small></span>
+                <div className="invoice-contract-options" role="group" aria-label="上传合同覆盖合作项目">
+                  {creatorProjectOptions.map((project) => {
+                    const id = String(cooperationProjectIdFor(project));
+                    const primary = id === projectId;
+                    const checked = primary || projectLinkIds.includes(id);
+                    return (
+                      <label key={id}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={primary}
+                          onChange={() => setProjectLinkIds((current) => current.includes(id)
+                            ? current.filter((projectId) => projectId !== id)
+                            : [...current, id])}
+                        />
+                        <span><strong>{project.name}</strong><small>{primary ? '主合作项目' : project.cooperationProjectCode ?? project.projectCode ?? project.id}</small></span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <small>只展示该达人已参与的合作项目；IO 单无需绑定框架合同。</small>
+              </div>
+            ) : null}
           </div>
           {selectedProject && selectedCreator && !engagementReference ? (
             <p className="contract-upload-empty">该达人尚未关联当前项目，保存时会自动建立项目合作关系。</p>

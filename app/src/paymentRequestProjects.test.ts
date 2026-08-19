@@ -13,6 +13,7 @@ import type {
 } from './businessWorkflow';
 import {
   canAddCreatorToPaymentRequest,
+  canCancelPaymentRequest,
   addInvoiceToPaymentRequestSelection,
   createEmptyPaymentRequestListFilters,
   createPaymentRequestListItem,
@@ -23,6 +24,7 @@ import {
   paymentRequestCreatorPresentation,
   paymentRequestExtraDetailIssues,
   paymentRequestDraftCreatorsReady,
+  paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
   paymentRequestPaymentPlanFor,
   paymentRequestPaymentPlanIssues,
@@ -33,8 +35,10 @@ import {
   mergePaymentRequestRemarkAttachments,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
+  paymentRequestCancellationIssue,
   resolveCreatorDocuments,
   requestProjectStatusFor,
+  requestOwningInvoice,
   type PaymentRequestListItem,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
@@ -222,8 +226,14 @@ describe('media payment request document resolution', () => {
 
     expect(invoiceAmountLabel(sourceInvoice)).toBe('USD 1,250.50');
     expect(result.invoiceIds).toEqual([sourceInvoice.invoiceId]);
-    expect(result.contractIds).toEqual([validContract.contractId]);
-    expect(result.autoLinkedContractIds).toEqual([validContract.contractId]);
+    expect(result.contractIds).toEqual([
+      validContract.contractId,
+      foreignEngagementContract.contractId,
+    ]);
+    expect(result.autoLinkedContractIds).toEqual([
+      validContract.contractId,
+      foreignEngagementContract.contractId,
+    ]);
   });
 
   it('normalizes legacy single-invoice links and de-duplicates invoice ids', () => {
@@ -289,6 +299,20 @@ describe('media payment request document resolution', () => {
     });
     expect(used.status).toBe('INVOICE_IN_USE');
     expect(used.invoiceOwners[0]?.owner.requestCode).toBe('REQ-USED');
+  });
+
+  it('releases only invoices owned by cancelled requests', () => {
+    const invoiceId = 'invoice_cancel_release' as InvoiceId;
+    const linkedRequest = (lifecycle: 'DRAFT' | 'RETURNED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED') => ({
+      id: `request-${lifecycle.toLowerCase()}`,
+      lifecycle,
+      creatorLinks: [{ creatorId, engagementId, contractIds: [], invoiceIds: [invoiceId] }],
+    });
+
+    expect(requestOwningInvoice([linkedRequest('CANCELLED')], invoiceId)).toBeUndefined();
+    (['DRAFT', 'RETURNED', 'APPROVED', 'COMPLETED'] as const).forEach((lifecycle) => {
+      expect(requestOwningInvoice([linkedRequest(lifecycle)], invoiceId)?.lifecycle).toBe(lifecycle);
+    });
   });
 
   it('does not expose unsigned or unreviewed invoices to a payment request', () => {
@@ -806,6 +830,45 @@ describe('payment request module status presentation', () => {
     expect(requestProjectStatusFor(request, [payoutFor('等待付款')])).toBe('正在付款');
     expect(requestProjectStatusFor(request, [payoutFor('付款处理中')])).toBe('付款处理中');
     expect(requestProjectStatusFor(request, [payoutFor('已付款')])).toBe('已付款');
+  });
+
+  it('keeps cancelled requests out of approval views and requires an authorized reason', () => {
+    const context = {
+      roleKey: 'media',
+      lifecycle: 'RETURNED' as const,
+      ownsRequest: true,
+      hasPaymentActivity: false,
+    };
+
+    expect(canCancelPaymentRequest(context)).toBe(true);
+    expect(paymentRequestCancellationIssue(context, '')).toBe('请填写取消原因。');
+    expect(paymentRequestCancellationIssue(context, '资料重复，取消后重新整理')).toBe('');
+    expect(canCancelPaymentRequest({ ...context, lifecycle: 'SUBMITTED' })).toBe(false);
+    expect(canCancelPaymentRequest({ ...context, ownsRequest: false })).toBe(false);
+    expect(canCancelPaymentRequest({ ...context, roleKey: 'finance' })).toBe(false);
+    expect(paymentRequestCancellationIssue({ ...context, hasPaymentActivity: true }, '取消'))
+      .toBe('项目已进入付款或失败恢复流程，不能取消。');
+    expect(myProjectStatusFor({ lifecycle: 'CANCELLED' })).toBe('已取消');
+    expect(requestProjectStatusFor({ lifecycle: 'CANCELLED' })).toBeNull();
+  });
+
+  it('detects every payout state that locks request cancellation', () => {
+    const requestId = 'request-cancel-lock' as PaymentRequestProjectId;
+    const payout = (status: Payout['status'], paymentFailureRecovery?: Payout['paymentFailureRecovery']) => ({
+      paymentRequestProjectId: requestId,
+      status,
+      paymentFailureRecovery,
+    });
+
+    expect(paymentRequestHasPaymentActivity(requestId, [payout('未进入付款')])).toBe(false);
+    expect(paymentRequestHasPaymentActivity(requestId, [payout('等待付款')])).toBe(true);
+    expect(paymentRequestHasPaymentActivity(requestId, [payout('付款处理中')])).toBe(true);
+    expect(paymentRequestHasPaymentActivity(requestId, [payout('已付款')])).toBe(true);
+    expect(paymentRequestHasPaymentActivity(requestId, [payout('付款失败', {
+      status: 'AWAITING_CREATOR_UPDATE',
+      notifications: [],
+    })])).toBe(true);
+    expect(paymentRequestHasPaymentActivity('another-request' as PaymentRequestProjectId, [payout('已付款')])).toBe(false);
   });
 
   it('keeps the partial payment failure status available to My Projects filters', () => {

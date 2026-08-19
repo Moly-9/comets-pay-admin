@@ -94,6 +94,8 @@ type DemoContractSpec = {
   lifecycle?: ContractRecord['lifecycle'];
   signed?: boolean;
   status?: ContractRecord['status'];
+  contractType?: ContractRecord['contractType'];
+  frameworkContractId?: ContractId;
 };
 
 const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
@@ -105,6 +107,7 @@ const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
     amount: 2800,
     includeInInvoice: true,
     title: '短视频制作与发布',
+    contractType: 'FRAMEWORK',
   },
   {
     contractId: 'contract_fixture_301164_02' as ContractId,
@@ -114,6 +117,8 @@ const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
     amount: 2000,
     includeInInvoice: true,
     title: '内容授权补充协议',
+    contractType: 'IO',
+    frameworkContractId: 'contract_fixture_301164_01' as ContractId,
   },
   {
     contractId: 'contract_fixture_301164_03' as ContractId,
@@ -132,6 +137,7 @@ const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
     amount: 2800,
     includeInInvoice: false,
     title: 'TikTok 短视频合作',
+    contractType: 'IO',
   },
   {
     contractId: 'contract_fixture_301164_05' as ContractId,
@@ -227,6 +233,8 @@ const creatorById = new Map(INITIAL_CREATORS.map((creator) => [creator.id, creat
 if (!demoProject || demoReferences.length !== DEMO_INVOICE_AMOUNTS.length) {
   throw new Error(`${DEMO_PROJECT_CODE} 原型项目的达人关系与 Invoice fixture 数量不一致`);
 }
+
+const demoCooperationProjectId = (demoProject.cooperationProjectId ?? demoProject.projectId) as NonNullable<ContractRecord['cooperationProjectId']>;
 
 const creatorForReference = (creatorId: CreatorId): CreatorProfile => {
   const creator = creatorById.get(creatorId);
@@ -377,6 +385,8 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
   return {
     contractId: spec.contractId,
     id: spec.contractCode,
+    contractType: spec.contractType ?? 'INDEPENDENT',
+    frameworkContractId: spec.frameworkContractId,
     ioId: spec.ioNumber,
     name: `${creator.name} · ${spec.title}`,
     templateFamily: '2026 KOL 社交媒体推广服务合同',
@@ -395,8 +405,8 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     effectiveDate: '2026-04-01',
     campaignStart: '2026-04-01',
     campaignEnd: '2026-06-30',
-    currency: 'USD',
-    totalFee: spec.amount,
+    currency: spec.contractType === 'FRAMEWORK' ? '' : 'USD',
+    totalFee: spec.contractType === 'FRAMEWORK' ? null : spec.amount,
     licensePrice: null,
     licenseIncludedInTotal: true,
     invoiceWithinWorkingDays: 5,
@@ -421,6 +431,13 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     }],
     issues: [],
     projectId: demoProject.projectId as ProjectId,
+    cooperationProjectId: demoCooperationProjectId,
+    projectLinks: [
+      { cooperationProjectId: demoCooperationProjectId, status: 'ACTIVE' },
+      ...(spec.creatorIndex === 0
+        ? [{ cooperationProjectId: 'PRJ-260727-04' as NonNullable<ContractRecord['cooperationProjectId']>, status: 'ACTIVE' as const }]
+        : []),
+    ],
     creatorId: reference.creatorId,
     creatorHandle: creator.handle,
     engagementId: reference.engagementId,

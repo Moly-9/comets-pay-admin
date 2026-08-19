@@ -315,6 +315,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '草稿': 'draft',
   '未关联': 'draft',
   '已退回': 'draft',
+  '已取消': 'draft',
   '暂停': 'draft',
 };
 
@@ -1140,7 +1141,7 @@ export function RequestsPage({
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const relatedRequests = requests.filter((request) => {
-    if (!request.approval || request.lifecycle === 'DRAFT') return false;
+    if (!request.approval || request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED') return false;
     if (currentUser.roleKey === 'media') return request.media === currentScopeName;
     if (currentUser.roleKey === 'pm') return request.pm === currentScopeName;
     return true;

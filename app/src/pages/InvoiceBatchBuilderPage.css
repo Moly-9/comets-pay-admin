@@ -677,6 +677,91 @@
   color: #6f7582;
 }
 
+.invoice-batch-contract-picker {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.invoice-batch-contract-picker > summary {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  color: #474d57;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.invoice-batch-contract-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.invoice-batch-contract-picker > summary::after {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-right: 1.5px solid #767d88;
+  border-bottom: 1.5px solid #767d88;
+  content: '';
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 160ms ease;
+}
+
+.invoice-batch-contract-picker[open] > summary::after {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+
+.invoice-batch-contract-picker > summary:focus-visible {
+  outline: 3px solid rgba(255, 157, 135, 0.18);
+  outline-offset: 2px;
+}
+
+.invoice-batch-contract-picker > div {
+  display: grid;
+  max-height: 190px;
+  overflow-y: auto;
+  border-top: 1px solid #eceef2;
+  padding: 5px;
+}
+
+.invoice-batch-contract-picker label {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 6px 7px;
+  cursor: pointer;
+}
+
+.invoice-batch-contract-picker label:hover,
+.invoice-batch-contract-picker label:focus-within {
+  background: #f7f8fa;
+}
+
+.invoice-batch-contract-picker label > span,
+.invoice-batch-contract-picker label strong,
+.invoice-batch-contract-picker label small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.invoice-batch-contract-picker label small {
+  margin-top: 2px;
+  color: #858b98;
+  font-size: 9.5px;
+  font-weight: 500;
+}
+
 .invoice-batch-line-stack {
   display: grid;
   gap: 7px;
@@ -1539,6 +1624,11 @@
   .invoice-batch-payment-accounts button {
     padding-right: 7px;
     padding-left: 7px;
+  }
+
+  .invoice-batch-contract-picker > summary {
+    min-height: 44px;
+    font-size: 12px;
   }
 
   .invoice-batch-form {

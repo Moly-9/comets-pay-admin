@@ -19,6 +19,7 @@ import {
   REQUEST_INVOICE_ASSOCIATION_PAYOUTS,
 } from './prototypeResourceFixtures';
 import { INITIAL_PAYOUTS } from './data';
+import { contractLinkedToProject, isPaymentContract } from './contracts';
 import { resolveCreatorDocuments } from './paymentRequestProjects';
 import {
   invoicePaymentListItem,
@@ -248,6 +249,16 @@ describe('project prototype fixtures', () => {
     expect(PROJECT_DEMO_CONTRACTS).toHaveLength(12);
     expect(PROJECT_DEMO_INITIAL_REQUEST_CONTRACT_IDS).toHaveLength(9);
     expect(PROJECT_DEMO_TOTAL).toBe(48000);
+    const framework = PROJECT_DEMO_CONTRACTS.find((contract) => contract.contractType === 'FRAMEWORK');
+    const linkedIo = PROJECT_DEMO_CONTRACTS.find((contract) => contract.frameworkContractId === framework?.contractId);
+    const independentIo = PROJECT_DEMO_CONTRACTS.find((contract) => (
+      contract.contractType === 'IO' && !contract.frameworkContractId
+    ));
+    expect(framework).toBeDefined();
+    expect(framework && isPaymentContract(framework)).toBe(true);
+    expect(linkedIo).toBeDefined();
+    expect(independentIo).toBeDefined();
+    expect(framework && contractLinkedToProject(framework, 'PRJ-260727-04')).toBe(true);
 
     PROJECT_DEMO_CONTRACTS.forEach((contract) => {
       const reference = referenceByEngagement.get(contract.engagementId!);

@@ -95,6 +95,8 @@ const confirmedContractFor = (
 ): ContractRecord => {
   const account = eligibleInvoicePayoutAccounts(creator)[0];
   const payment = payoutAccountToInvoicePayment(account, creator.id);
+  const contractProjectId = (overrides.cooperationProjectId ?? overrides.projectId
+    ?? context.project.cooperationProjectId ?? context.project.projectId) as ProjectId;
   return {
     ...PROJECT_DEMO_CONTRACTS[0],
     contractId: 'contract_batch_test' as ContractId,
@@ -111,7 +113,9 @@ const confirmedContractFor = (
     paymentMethod: account.provider === 'PayPal' ? 'PAYPAL' : 'BANK',
     payoutAccountId: payment.payoutAccountId,
     paymentSnapshot: payment,
+    contractType: 'INDEPENDENT',
     ...overrides,
+    projectLinks: overrides.projectLinks ?? [{ cooperationProjectId: contractProjectId, status: 'ACTIVE' }],
   };
 };
 
@@ -401,7 +405,7 @@ describe('Invoice batch rows', () => {
     expect(row.issues).toContain('所选合同不属于当前项目达人');
   });
 
-  it('blocks an engagement that already has an Invoice', () => {
+  it('allows the same engagement to generate another independent Invoice', () => {
     const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
     const context = createContext({ creator });
     const engagementId = context.project.creatorProfiles![0].engagementId;
@@ -419,7 +423,7 @@ describe('Invoice batch rows', () => {
     context.generatedInvoices = [createGeneratedInvoiceRecord(row, snapshot)];
 
     const duplicate = validateInvoiceBatchRow({ ...row, generated: undefined }, context);
-    expect(duplicate.status).toBe('CONFLICT');
-    expect(duplicate.issues).toContain('该项目达人已有有效 Invoice，不能重复生成');
+    expect(duplicate.status).toBe('READY');
+    expect(duplicate.issues).not.toContain('该项目达人已有有效 Invoice，不能重复生成');
   });
 });

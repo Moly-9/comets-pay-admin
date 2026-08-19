@@ -9,9 +9,12 @@ import {
 } from './components/RequestProjectResourceManager';
 import {
   completeGeneratedContractUpload,
+  contractLinkedToProject,
+  contractProjectLinksFor,
   createGeneratedContractDraft,
   createUploadedContract,
   INITIAL_CONTRACTS,
+  isConfirmedContract,
   isFrameworkContract,
   isIoContract,
   type ContractGeneratedFiles,
@@ -129,7 +132,6 @@ import {
   createAuditEvent,
   createPrototypeCode,
   createPrototypeId,
-  hasInvoiceForEngagement,
   generatePaymentListVersion,
   invoicePaymentListItem,
   nextReviewStatusAfterMutation,
@@ -162,14 +164,17 @@ import {
 } from './businessWorkflow';
 import {
   contractCooperationProjectId,
+  canCancelPaymentRequest,
   createPaymentRequestListItem,
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
   paymentRequestAmountLabel,
   paymentRequestChannelForProvider,
+  paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
+  paymentRequestCancellationIssue,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import { downloadBlob } from './invoice/invoiceUtils';
@@ -616,62 +621,69 @@ export default function App() {
     return true;
   }, [contracts, notify, registerProjectMutation]);
 
-  const linkFrameworkContractToProject = (
+  const linkContractToProject = (
     request: RequestProjectSummary,
     contractId: ContractId,
     cooperationProjectId: string,
   ) => {
     if (!requestWholeResourceEditable(request)) {
-      notify('项目资料已锁定', '当前项目不允许修改框架合同关联。');
+      notify('项目资料已锁定', '当前项目不允许修改合同项目关联。');
       return;
     }
-    const framework = contracts.find((contract) => (
-      (contract.contractId ?? contract.id) === contractId && isFrameworkContract(contract)
+    const target = contracts.find((contract) => (
+      (contract.contractId ?? contract.id) === contractId
     ));
-    if (!framework || !framework.contractId) {
-      notify('无法关联框架合同', '未找到有效的框架合同。');
+    if (!target || !target.contractId) {
+      notify('无法关联合同', '未找到有效合同。');
       return;
     }
-    if (!framework.lifecycle || framework.lifecycle !== 'CONFIRMED') {
-      notify('无法关联框架合同', '框架合同必须完成确认后才能复用。');
+    if (!isConfirmedContract(target)) {
+      notify('无法关联合同', '合同必须完成确认后才能关联合作项目。');
+      return;
+    }
+    const project = projects.find((candidate) => getProjectId(candidate) === cooperationProjectId);
+    if (!target.creatorId || !project?.creatorProfiles?.some((reference) => (
+      reference.creatorId === target.creatorId && reference.status !== 'removed'
+    ))) {
+      notify('无法关联合同', '该合同达人不在当前合作项目中。');
       return;
     }
     setContracts((current) => current.map((contract) => {
       if (contract.contractId !== contractId) return contract;
-      const links = contract.frameworkProjectLinks ?? [];
+      const links = contractProjectLinksFor(contract);
       if (links.some((link) => link.cooperationProjectId === cooperationProjectId && link.status !== 'ENDED')) return contract;
       return {
         ...contract,
-        frameworkProjectLinks: [
+        projectLinks: [
           ...links.filter((link) => link.cooperationProjectId !== cooperationProjectId),
           { cooperationProjectId: cooperationProjectId as NonNullable<ContractRecord['cooperationProjectId']>, linkedAt: nowIso(), status: 'ACTIVE' },
         ],
       };
     }));
-    registerRequestResourceMutation(request, 'contract', contractId, 'link', `已将框架合同 ${framework.id} 关联到当前合作项目`);
+    registerRequestResourceMutation(request, 'contract', contractId, 'link', `已将合同 ${target.id} 关联到当前合作项目`);
   };
 
-  const unlinkFrameworkContractFromProject = (
+  const unlinkContractFromProject = (
     request: RequestProjectSummary,
     contractId: ContractId,
     cooperationProjectId: string,
   ) => {
     if (!requestWholeResourceEditable(request)) {
-      notify('项目资料已锁定', '当前项目不允许解除框架合同关联。');
+      notify('项目资料已锁定', '当前项目不允许解除合同项目关联。');
       return;
     }
     setContracts((current) => current.map((contract) => (
       contract.contractId === contractId
         ? {
             ...contract,
-            frameworkProjectLinks: [
-              ...(contract.frameworkProjectLinks ?? []).filter((link) => link.cooperationProjectId !== cooperationProjectId),
+            projectLinks: [
+              ...contractProjectLinksFor(contract).filter((link) => link.cooperationProjectId !== cooperationProjectId),
               { cooperationProjectId: cooperationProjectId as NonNullable<ContractRecord['cooperationProjectId']>, linkedAt: nowIso(), status: 'ENDED' },
             ],
           }
         : contract
     )));
-    registerRequestResourceMutation(request, 'contract', contractId, 'unlink', `已解除框架合同 ${contractId} 与当前合作项目的关联`);
+    registerRequestResourceMutation(request, 'contract', contractId, 'unlink', `已解除合同 ${contractId} 与当前合作项目的关联`);
   };
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
@@ -711,30 +723,20 @@ export default function App() {
       }
     }
     const resolvedModel = { ...model, engagementId: resolvedEngagementId };
-    const existing = contracts.find((contract) => (
-      contract.engagementId === resolvedEngagementId
-      && contract.lifecycle === 'GENERATED_DRAFT'
-    ));
-    const version = (existing?.generationVersion ?? 0) + 1;
     const documentUrl = URL.createObjectURL(files.pdfBlob);
-    const record = createGeneratedContractDraft(resolvedModel, version, documentUrl, {
-      existingContractId: existing?.contractId,
+    const record = createGeneratedContractDraft(resolvedModel, 1, documentUrl, {
       generationVariant: files.variant,
       qualityReport: files.qualityReport,
       pageCount: files.pageCount,
     });
-    if (existing) record.id = existing.id;
-    setContracts((current) => existing
-      ? current.map((contract) => contract.contractId === existing.contractId ? record : contract)
-      : [record, ...current]);
-    if (existing?.documentUrl.startsWith('blob:')) URL.revokeObjectURL(existing.documentUrl);
+    setContracts((current) => [record, ...current]);
     registerProjectMutation({
       projectId: resolvedModel.projectId,
       engagementId: resolvedEngagementId,
       entityType: 'contract',
       entityId: record.contractId ?? record.id,
-      action: existing ? 'update' : 'create',
-      summary: `${existing ? '已更新' : '已生成'}合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
+      action: 'create',
+      summary: `已生成合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
   }, [contracts, creators, projects, registerProjectMutation]);
@@ -995,7 +997,7 @@ export default function App() {
     const contract = contracts.find((item) => item.contractId === contractId || item.id === contractId);
     if (!context || !contract) return;
     const projectId = getProjectId(context.project);
-    if (contract.projectId !== projectId || contract.creatorId !== context.reference.creatorId) {
+    if (!contractLinkedToProject(contract, projectId) || contract.creatorId !== context.reference.creatorId) {
       notify('无法关联合同', '合同与当前项目达人不一致，系统已阻止跨项目或跨达人关联。');
       return;
     }
@@ -1157,18 +1159,6 @@ export default function App() {
     const invoice = generatedInvoices.find((item) => item.invoiceId === invoiceId);
     if (!context || !invoice) return;
     const projectId = getProjectId(context.project);
-    const hasExisting = hasInvoiceForEngagement(
-      generatedInvoices.map((item) => ({
-        invoiceId: item.invoiceId,
-        engagementId: item.snapshot.engagementId as EngagementId | undefined,
-      })),
-      engagementId,
-      invoiceId,
-    );
-    if (hasExisting) {
-      notify('无法关联 Invoice', '当前项目达人已有一份 Invoice，请先解除旧关联。');
-      return;
-    }
     if (invoice.snapshot.projectId !== projectId || invoice.snapshot.creatorId !== context.reference.creatorId) {
       notify('无法关联 Invoice', 'Invoice 与当前项目达人不一致，系统已阻止跨项目或跨达人关联。');
       return;
@@ -1871,8 +1861,8 @@ export default function App() {
         '暂不能提交审核',
         submissionIssues.includes('NO_ENGAGEMENT')
           ? '项目至少需要一位达人。'
-          : submissionIssues.includes('INVOICE_COUNT')
-            ? '每位项目达人必须有且仅有一份 Invoice。'
+          : submissionIssues.includes('INVOICE_MISSING')
+            ? '每位项目达人至少需要一份 Invoice。'
             : submissionIssues.includes('PAYMENT_LIST_MISSING')
               ? '项目付款清单必须包含项目内全部 Invoice。'
               : '存在需要重新校验的 Invoice。',
@@ -2090,6 +2080,7 @@ export default function App() {
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => requestProjects.some((candidate) => (
       candidate.paymentRequestProjectId !== request.paymentRequestProjectId
+      && candidate.lifecycle !== 'CANCELLED'
       && candidate.creatorLinks?.some((candidateLink) => candidateLink.invoiceIds.includes(invoiceId))
     )));
     if (duplicateInvoiceId) issues.push(`Invoice ${duplicateInvoiceId} 已关联其他请款项目`);
@@ -2163,6 +2154,49 @@ export default function App() {
       ...current,
     ]);
     notify('申请已提交', `${request.requestCode ?? request.id} 已进入 PM 审批。`);
+  };
+
+  const cancelMediaPaymentRequest = (request: RequestProjectSummary, reason: string) => {
+    const hasPaymentActivity = paymentRequestHasPaymentActivity(request.paymentRequestProjectId, payouts);
+    const cancellationContext = {
+      roleKey: currentUser.roleKey,
+      lifecycle: request.lifecycle,
+      ownsRequest: request.media === (currentUser.scopeName ?? currentUser.name),
+      hasPaymentActivity,
+    };
+    const issue = paymentRequestCancellationIssue(cancellationContext, reason);
+    if (!canCancelPaymentRequest(cancellationContext) || issue) {
+      notify('无法取消请款', issue);
+      return false;
+    }
+    const cancelledAt = nowIso();
+    setRequestProjects((current) => current.map((candidate) => (
+      candidate.paymentRequestProjectId === request.paymentRequestProjectId
+        ? {
+            ...candidate,
+            lifecycle: 'CANCELLED',
+            status: '已取消',
+            filter: 'processed',
+            cancelledAt,
+            cancelledBy: currentUser.name,
+            cancelReason: reason.trim(),
+          }
+        : candidate
+    )));
+    setWorkflowAuditEvents((current) => [
+      createAuditEvent({
+        projectId: request.cooperationProjectId as ProjectId,
+        paymentRequestProjectId: request.paymentRequestProjectId,
+        entityType: 'request-project',
+        entityId: request.paymentRequestProjectId ?? request.id,
+        action: 'cancel',
+        actor: `${currentUser.name}（${currentUser.role}）`,
+        summary: `已取消请款项目 ${request.requestCode ?? request.id}：${reason.trim()}`,
+      }),
+      ...current,
+    ]);
+    notify('请款已取消', `${request.requestCode ?? request.id} 已保留为只读历史，关联 Invoice 已释放。`);
+    return true;
   };
 
   const handleRequestApproval = (
@@ -3282,7 +3316,7 @@ export default function App() {
   const openProjectFromInvoice = (payout: Payout) => {
     const invoice = generatedInvoices.find((item) => item.sourcePayoutId === payout.id);
     const request = invoice
-      ? requestProjects.find((item) => item.creatorLinks?.some((link) => link.invoiceIds.includes(invoice.invoiceId)))
+      ? requestProjects.find((item) => item.lifecycle !== 'CANCELLED' && item.creatorLinks?.some((link) => link.invoiceIds.includes(invoice.invoiceId)))
       : undefined;
     if (!request) {
       setFocusedProjectId(null);
@@ -3299,9 +3333,9 @@ export default function App() {
   const openRequestFromInvoice = (payout: Payout) => {
     const invoice = generatedInvoices.find((item) => item.sourcePayoutId === payout.id);
     const directRequest = invoice
-      ? requestProjects.find((request) => request.invoiceIds?.includes(invoice.invoiceId))
+      ? requestProjects.find((request) => request.lifecycle !== 'CANCELLED' && request.invoiceIds?.includes(invoice.invoiceId))
       : undefined;
-    const projectRequests = requestProjects.filter((request) => request.projectId === payout.projectId);
+    const projectRequests = requestProjects.filter((request) => request.lifecycle !== 'CANCELLED' && request.projectId === payout.projectId);
     const linkedRequest = directRequest ?? (projectRequests.length === 1 ? projectRequests[0] : undefined);
     if (!linkedRequest) {
       notify(
@@ -3572,11 +3606,11 @@ export default function App() {
         contractIds: link.contractIds.filter((id) => id !== contractId),
       })), `已删除合同 ${contractId}`);
     },
-    onLinkFrameworkContractToProject: (request, contractId, cooperationProjectId) => (
-      linkFrameworkContractToProject(request, contractId, cooperationProjectId)
+    onLinkContractToProject: (request, contractId, cooperationProjectId) => (
+      linkContractToProject(request, contractId, cooperationProjectId)
     ),
-    onUnlinkFrameworkContractFromProject: (request, contractId, cooperationProjectId) => (
-      unlinkFrameworkContractFromProject(request, contractId, cooperationProjectId)
+    onUnlinkContractFromProject: (request, contractId, cooperationProjectId) => (
+      unlinkContractFromProject(request, contractId, cooperationProjectId)
     ),
     onDeleteInvoice: (request, invoiceId) => {
       if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
@@ -3946,6 +3980,7 @@ export default function App() {
           }}
           onGeneratePaymentList={generateMediaRequestPaymentLists}
           onSubmitRequest={submitMediaPaymentRequest}
+          onCancelRequest={cancelMediaPaymentRequest}
           resourceActions={requestResourceActions}
           onSendPaymentFailureNotification={sendPaymentFailureNotification}
           onSendPaymentListReturnNotification={sendPaymentListReturnNotification}

@@ -1,5 +1,5 @@
 import type { ContractRecord } from '../contracts';
-import { isPaymentContract } from '../contracts';
+import { contractLinkedToProject, isPaymentContract } from '../contracts';
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
@@ -51,17 +51,10 @@ export const createInvoiceBuilderPrototypeSeed = ({
   contracts,
   generatedInvoices,
 }: InvoiceBuilderPrototypeSeedOptions): InvoiceBuilderPrototypeSeed | null => {
-  const occupiedEngagementIds = new Set(
-    generatedInvoices.flatMap((invoice) => (
-      invoice.snapshot.engagementId ? [invoice.snapshot.engagementId] : []
-    )),
-  );
-
   const candidates = projects.flatMap((project) => (
     (project.creatorProfiles ?? []).flatMap((reference) => {
       if (
         reference.status === 'removed'
-        || occupiedEngagementIds.has(reference.engagementId)
       ) return [];
 
       const creator = creators.find((item) => item.id === reference.creatorId);
@@ -75,7 +68,9 @@ export const createInvoiceBuilderPrototypeSeed = ({
       const matchingAccount = accounts.find((account) => account.provider === payout?.provider);
       const account = matchingAccount ?? accounts.find((item) => item.isDefault) ?? accounts[0];
       const confirmedContractCount = contracts.filter((contract) => (
-        contract.engagementId === reference.engagementId && isPaymentContract(contract)
+        contract.creatorId === reference.creatorId
+        && contractLinkedToProject(contract, projectIdFor(project))
+        && isPaymentContract(contract)
       )).length;
 
       return [{

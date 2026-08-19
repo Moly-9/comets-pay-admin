@@ -7,7 +7,6 @@ import {
   createAuditEvent,
   generatePaymentListVersion,
   getPaymentListAccess,
-  hasInvoiceForEngagement,
   nextReviewStatusAfterMutation,
   paymentListEffectiveAccount,
   paymentListItemValue,
@@ -547,18 +546,12 @@ describe('project payment list', () => {
   });
 });
 
-describe('engagement invoice constraints', () => {
+describe('engagement invoice requirements', () => {
   const engagementId = 'engagement-1' as EngagementId;
   const invoiceId = 'invoice-1' as InvoiceId;
   const secondInvoiceId = 'invoice-2' as InvoiceId;
 
-  it('allows only one linked invoice per engagement while excluding the current record', () => {
-    const invoices = [{ invoiceId, engagementId, validationStatus: 'valid' as const }];
-    expect(hasInvoiceForEngagement(invoices, engagementId)).toBe(true);
-    expect(hasInvoiceForEngagement(invoices, engagementId, invoiceId)).toBe(false);
-  });
-
-  it('requires one valid invoice per engagement and every invoice in the payment list', () => {
+  it('allows multiple invoices per engagement and requires every selected invoice in the payment list', () => {
     const validInvoices = [{ invoiceId, engagementId, validationStatus: 'valid' as const }];
     expect(validateProjectSubmission({
       engagementIds: [engagementId],
@@ -572,11 +565,15 @@ describe('engagement invoice constraints', () => {
         ...validInvoices,
         { invoiceId: secondInvoiceId, engagementId, validationStatus: 'needs_review' as const },
       ],
-      paymentListInvoiceIds: [invoiceId],
+      paymentListInvoiceIds: [invoiceId, secondInvoiceId],
     })).toEqual(expect.arrayContaining([
-      'INVOICE_COUNT',
-      'PAYMENT_LIST_MISSING',
       'INVOICE_NEEDS_REVIEW',
     ]));
+
+    expect(validateProjectSubmission({
+      engagementIds: [engagementId, 'engagement-2' as EngagementId],
+      invoices: validInvoices,
+      paymentListInvoiceIds: [invoiceId],
+    })).toContain('INVOICE_MISSING');
   });
 });

@@ -52,6 +52,7 @@ type RequestProjectDemoStage =
   | 'PAYMENT_READY'
   | 'PAYMENT_PROCESSING'
   | 'PAID'
+  | 'CANCELLED'
   | 'DRAFT';
 
 const REQUEST_PROJECT_DEMO_STAGE_BY_CODE: Record<string, RequestProjectDemoStage> = {
@@ -74,7 +75,7 @@ const REQUEST_PROJECT_DEMO_STAGE_BY_CODE: Record<string, RequestProjectDemoStage
   'PRJ-260801-05': 'DRAFT',
   'PRJ-260801-06': 'DRAFT',
   'PRJ-260801-07': 'DRAFT',
-  'PRJ-260801-08': 'DRAFT',
+  'PRJ-260801-08': 'CANCELLED',
 };
 
 const SPECIAL_INVOICE_IDS = new Set([
@@ -259,6 +260,18 @@ const requestSeeds: RequestProjectSummary[] = INITIAL_REQUEST_PROJECTS.map((requ
   );
   const normalizedRequest = { ...request, paymentChannel };
   const demoStage = REQUEST_PROJECT_DEMO_STAGE_BY_CODE[request.id] ?? 'DRAFT';
+  if (demoStage === 'CANCELLED') {
+    return {
+      ...normalizedRequest,
+      lifecycle: 'CANCELLED' as const,
+      approval: undefined,
+      status: '已取消',
+      filter: 'processed' as const,
+      cancelledAt: '2026-08-07T09:20:00.000Z',
+      cancelledBy: request.media,
+      cancelReason: '原请款资料重复创建，保留历史后重新整理。',
+    };
+  }
   if (demoStage === 'DRAFT') {
     return {
       ...normalizedRequest,
@@ -477,7 +490,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
 });
 
 const paymentListStatusFor = (request: RequestProjectSummary): PaymentListRecord['status'] => {
-  if (request.lifecycle === 'DRAFT') return 'draft';
+  if (request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED') return 'draft';
   if (request.lifecycle === 'APPROVED') return 'approved';
   if (request.lifecycle === 'COMPLETED') return 'paid';
   if (request.lifecycle === 'RETURNED') return 'generated';

@@ -131,11 +131,31 @@ const renderPage = (
     onUpdated={vi.fn()}
     onGeneratePaymentList={vi.fn()}
     onSubmitRequest={vi.fn()}
+    onCancelRequest={vi.fn(() => true)}
     resourceActions={resourceActions}
   />,
 );
 
 describe('media returned payment request handling', () => {
+  it('shows cancellation only for an owned draft or returned request and preserves cancelled history', () => {
+    const returnedHtml = renderPage(returnedRequest.id);
+    const cancelledRequest = {
+      ...returnedRequest,
+      lifecycle: 'CANCELLED' as const,
+      status: '已取消',
+      cancelReason: '重复创建，请保留历史后释放 Invoice。',
+      cancelledAt: '2026-08-11T08:00:00.000Z',
+      cancelledBy: mediaUser.name,
+    };
+    const cancelledHtml = renderPage(cancelledRequest.id, [], [cancelledRequest]);
+
+    expect(returnedHtml).toContain('取消请款');
+    expect(cancelledHtml).not.toContain('>取消请款<');
+    expect(cancelledHtml).toContain('重复创建，请保留历史后释放 Invoice。');
+    expect(cancelledHtml).toContain('关联 Invoice 已释放');
+    expect(cancelledHtml).toContain('请款已取消，不再进入审批与付款');
+  });
+
   it('keeps a submitted media project strictly read-only', () => {
     const submittedRequest: RequestProjectSummary = {
       ...returnedRequest,

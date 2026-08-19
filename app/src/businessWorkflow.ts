@@ -224,7 +224,8 @@ export type WorkflowAuditAction =
   | 'delete'
   | 'submit'
   | 'return'
-  | 'approve';
+  | 'approve'
+  | 'cancel';
 
 export type WorkflowAuditEvent = {
   id: string;
@@ -232,7 +233,7 @@ export type WorkflowAuditEvent = {
   paymentRequestProjectId?: PaymentRequestProjectId;
   creatorId?: CreatorId;
   engagementId?: EngagementId;
-  entityType: 'project' | 'contract' | 'invoice' | 'payment-list';
+  entityType: 'project' | 'request-project' | 'contract' | 'invoice' | 'payment-list';
   entityId: string;
   action: WorkflowAuditAction;
   actor: string;
@@ -963,18 +964,9 @@ export type EngagementInvoiceReference = {
   validationStatus?: 'valid' | 'needs_review';
 };
 
-export const hasInvoiceForEngagement = (
-  invoices: EngagementInvoiceReference[],
-  engagementId: EngagementId | '',
-  excludeInvoiceId?: InvoiceId,
-) => Boolean(engagementId) && invoices.some((invoice) => (
-  invoice.engagementId === engagementId
-  && invoice.invoiceId !== excludeInvoiceId
-));
-
 export type ProjectSubmissionIssue =
   | 'NO_ENGAGEMENT'
-  | 'INVOICE_COUNT'
+  | 'INVOICE_MISSING'
   | 'PAYMENT_LIST_MISSING'
   | 'INVOICE_NEEDS_REVIEW';
 
@@ -990,9 +982,9 @@ export const validateProjectSubmission = ({
   const issues: ProjectSubmissionIssue[] = [];
   if (!engagementIds.length) issues.push('NO_ENGAGEMENT');
   if (engagementIds.some((engagementId) => (
-    invoices.filter((invoice) => invoice.engagementId === engagementId).length !== 1
+    invoices.filter((invoice) => invoice.engagementId === engagementId).length === 0
   ))) {
-    issues.push('INVOICE_COUNT');
+    issues.push('INVOICE_MISSING');
   }
   if (
     !paymentListInvoiceIds

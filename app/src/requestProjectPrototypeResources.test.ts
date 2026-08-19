@@ -207,7 +207,8 @@ describe('complete request project prototype resources', () => {
       付款处理中: 2,
       已付款: 2,
     });
-    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(6);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(5);
+    expect(requests.filter((request) => request.lifecycle === 'CANCELLED')).toHaveLength(1);
   });
 
   it('keeps the standalone available Invoice outside every existing request', async () => {

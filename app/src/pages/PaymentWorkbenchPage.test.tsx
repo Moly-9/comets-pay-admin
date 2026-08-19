@@ -147,6 +147,24 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html).toContain('<span>审核</span>');
   });
 
+  it('does not route a cancelled request into any payment workbench tab', () => {
+    const cancelled = {
+      ...INITIAL_COMPLETE_REQUEST_RESOURCES.requests[0],
+      id: 'request-cancelled-test',
+      lifecycle: 'CANCELLED' as const,
+      status: '已取消',
+    };
+    const input = {
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: [cancelled],
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    };
+
+    (['review', 'payment', 'paid', 'returned'] as const).forEach((tab) => {
+      expect(buildPaymentProjectRows({ ...input, tab })).toEqual([]);
+    });
+  });
+
   it('routes all complete request fixtures into workbench tabs by request lifecycle', () => {
     const input = {
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,

@@ -125,16 +125,12 @@ export const filterInvoiceBatchCreatorReferences = (
 
 export const selectableInvoiceBatchEngagementIds = (
   references: ProjectCreatorReference[],
-  generatedInvoices: GeneratedInvoiceRecord[],
+  _generatedInvoices: GeneratedInvoiceRecord[],
   limit: number,
 ): EngagementId[] => {
-  const existingEngagementIds = new Set(
-    generatedInvoices.map((record) => record.snapshot.engagementId).filter(Boolean),
-  );
   return references
     .filter((reference) => (
       reference.status !== 'removed'
-      && !existingEngagementIds.has(reference.engagementId)
     ))
     .slice(0, limit)
     .map((reference) => reference.engagementId);

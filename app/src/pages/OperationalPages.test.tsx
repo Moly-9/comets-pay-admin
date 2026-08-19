@@ -220,7 +220,8 @@ describe('request project fixtures', () => {
     });
     expect(requests.filter((request) => request.lifecycle === 'APPROVED')).toHaveLength(4);
     expect(requests.filter((request) => request.lifecycle === 'COMPLETED')).toHaveLength(2);
-    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(6);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(5);
+    expect(requests.filter((request) => request.lifecycle === 'CANCELLED')).toHaveLength(1);
     expect(requests.some((request) => request.lifecycle === 'RETURNED')).toBe(false);
   });
 });

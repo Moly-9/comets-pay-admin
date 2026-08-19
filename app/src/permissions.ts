@@ -44,7 +44,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'invoice_media_review', group: '业务资料', label: '执行 Invoice 媒介审核', description: '在媒介审核阶段通过或退回 Invoice。' },
   { id: 'invoice_finance_review', group: '财务与付款', label: '执行 Invoice 财务审核', description: '在财务审核阶段通过或退回 Invoice。' },
   { id: 'request_project_view', group: '业务资料', label: '查看我的项目', description: '查看当前媒介创建的请款草稿与提交进度。' },
-  { id: 'project_manage', group: '业务资料', label: '新建与维护请款项目', description: '关联飞书合作项目、达人、合同与唯一 Invoice。' },
+  { id: 'project_manage', group: '业务资料', label: '新建与维护请款项目', description: '关联飞书合作项目、达人、合同与多份 Invoice。' },
   { id: 'request_list_view', group: '业务资料', label: '查看请款清单', description: '查看已提交的请款明细与状态。' },
   { id: 'request_create', group: '业务资料', label: '新建并提交请款项目', description: '关联合同与 Invoice，生成付款清单并提交审批。' },
   { id: 'request_material_view', group: '财务与付款', label: '查看请款审核资料', description: '查看合同、Invoice 与请款单信息。' },

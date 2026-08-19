@@ -30,7 +30,7 @@ import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
 } from '../components/RequestProjectResourceManager';
-import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractType, isFrameworkContract, isPaymentContract, type ContractRecord } from '../contracts';
+import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractType, isPaymentContract, type ContractRecord } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
@@ -48,6 +48,7 @@ import {
 import {
   addInvoiceToPaymentRequestSelection,
   canAddCreatorToPaymentRequest,
+  canCancelPaymentRequest,
   cooperationProjectIdFor,
   createEmptyPaymentRequestListFilters,
   filterPaymentRequestList,
@@ -59,6 +60,7 @@ import {
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
   paymentRequestDraftCreatorsReady,
+  paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
   paymentRequestListMetrics,
   paymentRequestPaymentPlanFor,
@@ -312,7 +314,14 @@ export const buildMyProjectRequestProgress = ({
   }
 
   let approvalStep: MyProjectRequestProgressStep;
-  if (approvalCompleted) {
+  if (request.lifecycle === 'CANCELLED') {
+    approvalStep = {
+      label: '提交审核',
+      description: `请款已取消：${request.cancelReason ?? '未记录原因'}`,
+      time: formatCreatedAt(request.cancelledAt),
+      state: 'current',
+    };
+  } else if (approvalCompleted) {
     approvalStep = {
       label: '提交审核',
       description: hasPaymentFailureRecovery ? '审批已完成，失败款正在恢复处理' : 'PM、项目负责人、老板及财务均已通过',
@@ -350,7 +359,14 @@ export const buildMyProjectRequestProgress = ({
   }
 
   let paymentStep: MyProjectRequestProgressStep;
-  if (allPayoutsPaid) {
+  if (request.lifecycle === 'CANCELLED') {
+    paymentStep = {
+      label: '渠道打款',
+      description: '请款已取消，不再进入审批与付款',
+      time: '已终止',
+      state: 'pending',
+    };
+  } else if (allPayoutsPaid) {
     const paidTimes = paidPayouts
       .map((payout) => payout.paidAt)
       .filter((value): value is string => Boolean(value))
@@ -511,6 +527,7 @@ export function MediaPaymentProjectsPage({
   onUpdated,
   onGeneratePaymentList,
   onSubmitRequest,
+  onCancelRequest = () => false,
   resourceActions,
   onSendPaymentFailureNotification = () => false,
   onSendPaymentListReturnNotification = () => false,
@@ -536,6 +553,7 @@ export function MediaPaymentProjectsPage({
   onUpdated: (request: RequestProjectSummary) => void;
   onGeneratePaymentList: (request: RequestProjectSummary) => void;
   onSubmitRequest: (request: RequestProjectSummary) => void;
+  onCancelRequest?: (request: RequestProjectSummary, reason: string) => boolean;
   resourceActions: RequestProjectResourceActions;
   onSendPaymentFailureNotification?: (payoutId: string, message: string) => boolean;
   onSendPaymentListReturnNotification?: (requestId: string, invoiceId: InvoiceId, message: string) => boolean;
@@ -568,6 +586,8 @@ export function MediaPaymentProjectsPage({
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
   const [exportingRequestId, setExportingRequestId] = useState<string | null>(null);
   const [focusedFailurePayoutId, setFocusedFailurePayoutId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<RequestProjectSummary | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   useEffect(() => {
     if (initialFocusedFailurePayoutId) setFocusedFailurePayoutId(initialFocusedFailurePayoutId);
@@ -596,6 +616,14 @@ export function MediaPaymentProjectsPage({
     failurePayoutsForRequest(request).length > 0
       ? '部分打款失败'
       : myProjectStatusFor(request)
+  );
+  const canCancelRequest = (request: RequestProjectSummary) => (
+    canCancelPaymentRequest({
+      roleKey: currentUser.roleKey,
+      lifecycle: request.lifecycle,
+      ownsRequest: request.media === currentScopeName,
+      hasPaymentActivity: paymentRequestHasPaymentActivity(request.paymentRequestProjectId, payouts),
+    })
   );
   const editingRequest = editingRequestId
     ? visibleRequests.find((request) => request.id === editingRequestId) ?? null
@@ -1050,6 +1078,25 @@ export function MediaPaymentProjectsPage({
     );
   };
 
+  const cancelRequestModal = cancelTarget ? (
+    <Modal
+      title={`取消请款 · ${requestCodeFor(cancelTarget)}`}
+      width="520px"
+      onClose={() => { setCancelTarget(null); setCancelReason(''); }}
+      footer={<><Button variant="ghost" onClick={() => { setCancelTarget(null); setCancelReason(''); }}>返回</Button><Button variant="danger" disabled={!cancelReason.trim()} onClick={() => {
+        if (!onCancelRequest(cancelTarget, cancelReason.trim())) return;
+        setSelectedRequestId(cancelTarget.id);
+        setCancelTarget(null);
+        setCancelReason('');
+      }}>确认取消</Button></>}
+    >
+      <div className="form-grid single-column media-request-cancel-form">
+        <NoticeBanner>取消后项目保留为只读历史，所占用的 Invoice 会立即释放并可用于新的请款项目。</NoticeBanner>
+        <label><span>取消原因 *</span><textarea autoFocus value={cancelReason} placeholder="请填写取消原因，便于后续审计和追溯" onChange={(event) => setCancelReason(event.target.value)} /></label>
+      </div>
+    </Modal>
+  ) : null;
+
   if (selectedRequest) {
     const failedPayouts = failurePayoutsForRequest(selectedRequest);
     const hasPaymentFailureRecovery = failedPayouts.length > 0;
@@ -1094,6 +1141,7 @@ export function MediaPaymentProjectsPage({
     });
     const latestPaymentList = requestPaymentLists[0];
     const isReturned = selectedRequest.lifecycle === 'RETURNED';
+    const isCancelled = selectedRequest.lifecycle === 'CANCELLED';
     const canHandlePaymentFailure = ['media', 'admin', 'owner'].includes(currentUser.roleKey);
     const returnDetails = requestApprovalReturnDetails(selectedRequest.approval);
     const returnHeading = returnDetails?.stage === 'FINANCE'
@@ -1118,13 +1166,14 @@ export function MediaPaymentProjectsPage({
         <PageHeading
           title={requestCodeFor(selectedRequest)}
           subtitle={`关联项目 ${selectedRequest.cooperationProjectName ?? selectedRequest.project} · 创建媒介 ${selectedRequest.media}`}
-          actions={<>{requestContentEditable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned && !hasPaymentFailureRecovery ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}<span className="project-detail-status" data-tone={hasPaymentFailureRecovery ? 'failure' : undefined}><i />{selectedMyProjectStatus}</span></>}
+          actions={<>{requestContentEditable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned && !hasPaymentFailureRecovery ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}{canCancelRequest(selectedRequest) ? <Button variant="ghost" icon={<X size={16} />} onClick={() => { setCancelTarget(selectedRequest); setCancelReason(''); }}>取消请款</Button> : null}<span className="project-detail-status" data-tone={hasPaymentFailureRecovery ? 'failure' : undefined}><i />{selectedMyProjectStatus}</span></>}
         />
         <div className="metrics-grid project-detail-metrics">
           <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
           <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong>{hasPaymentFailureRecovery ? null : <small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small>}</article>
         </div>
+        {isCancelled ? <NoticeBanner>此请款已于 {formatCreatedAt(selectedRequest.cancelledAt)} 取消。原因：{selectedRequest.cancelReason ?? '未记录'}。关联 Invoice 已释放，可用于新的请款项目。</NoticeBanner> : null}
         {hasPaymentFailureRecovery ? (
           <section className="media-request-return-panel media-request-payment-failure-panel" aria-labelledby="media-request-payment-failure-heading">
             <div className="media-request-return-panel-icon"><AlertTriangle size={21} aria-hidden="true" /></div>
@@ -1257,8 +1306,8 @@ export function MediaPaymentProjectsPage({
             onGenerateInvoice={() => resourceActions.onGenerateInvoice(selectedRequest)}
             onUploadContract={(inputs) => resourceActions.onUploadContract(selectedRequest, inputs)}
             onDeleteContract={(contractId) => resourceActions.onDeleteContract(selectedRequest, contractId)}
-            onLinkFrameworkContractToProject={(contractId, cooperationProjectId) => resourceActions.onLinkFrameworkContractToProject?.(selectedRequest, contractId, cooperationProjectId)}
-            onUnlinkFrameworkContractFromProject={(contractId, cooperationProjectId) => resourceActions.onUnlinkFrameworkContractFromProject?.(selectedRequest, contractId, cooperationProjectId)}
+            onLinkContractToProject={(contractId, cooperationProjectId) => resourceActions.onLinkContractToProject?.(selectedRequest, contractId, cooperationProjectId)}
+            onUnlinkContractFromProject={(contractId, cooperationProjectId) => resourceActions.onUnlinkContractFromProject?.(selectedRequest, contractId, cooperationProjectId)}
             onDeleteInvoice={(invoiceId) => resourceActions.onDeleteInvoice(selectedRequest, invoiceId)}
             onGeneratePaymentLists={() => onGeneratePaymentList(selectedRequest)}
             onClearPaymentLists={() => resourceActions.onClearPaymentLists(selectedRequest)}
@@ -1287,6 +1336,7 @@ export function MediaPaymentProjectsPage({
                     paymentRequestProjectId: selectedRequest.paymentRequestProjectId,
                     requestLifecycle: selectedRequest.lifecycle,
                     requestStatus: selectedMyProjectStatus,
+                    cooperationProjectId: selectedRequest.cooperationProjectId,
                   });
                   const creatorPayouts = link.invoiceIds.map((invoiceId) => {
                     const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
@@ -1423,6 +1473,7 @@ export function MediaPaymentProjectsPage({
             </div>
           </aside>
         </div>
+        {cancelRequestModal}
       </div>
     );
   }
@@ -1734,7 +1785,7 @@ export function MediaPaymentProjectsPage({
                     return [{
                       value: contract.contractId,
                       label: contract.id,
-                      description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]}${contract.frameworkContractId ? ` · 框架：${contract.frameworkContractId}` : ''} · ${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : isFrameworkContract(contract) ? '框架合同需通过 IO 单参与付款' : `不可关联：${contract.status}`}`,
+                      description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]}${contract.frameworkContractId ? ` · 框架：${contract.frameworkContractId}` : ''} · ${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : `不可关联：${contract.status}`}`,
                       selected,
                       disabled: !enabled,
                     }];
@@ -1795,6 +1846,7 @@ export function MediaPaymentProjectsPage({
           </div>
         </Modal>
       ) : null}
+      {cancelRequestModal}
     </div>
   );
 }

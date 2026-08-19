@@ -289,13 +289,15 @@ describe('Invoice association workflow', () => {
       lifecycle: 'CONFIRMED',
       signed: true,
       issues: [],
+      creatorId,
+      engagementId,
     } as ContractRecord;
 
     expect(contractAssociationCandidates([framework], 'cooperation-project-new')).toEqual([framework]);
     expect(contractAssociationUnavailableReason(
       framework,
-      [],
-      [],
+      request.creatorLinks ?? [],
+      creators,
       'cooperation-project-new',
     )).toBe('');
   });
@@ -366,7 +368,7 @@ describe('contract association workflow', () => {
     { id: secondCreatorId, name: 'New Creator' },
   ] as unknown as CreatorProfile[];
 
-  it('returns every non-template contract under the cooperation project', () => {
+  it('returns every non-template contract so a selected creator contract can gain project coverage', () => {
     const sameProject = associationContract({
       contractId: contractOneId,
       creatorId: secondCreatorId,
@@ -383,10 +385,10 @@ describe('contract association workflow', () => {
     expect(contractAssociationCandidates(
       [sameProject, otherProject, template],
       'cooperation-project-one',
-    )).toEqual([sameProject]);
+    )).toEqual([sameProject, otherProject]);
   });
 
-  it('adds a contract owner to the request with no Invoice when the creator is new', () => {
+  it('does not add a new creator through contract selection alone', () => {
     const newContract = associationContract({
       contractId: contractTwoId,
       creatorId: secondCreatorId,
@@ -394,16 +396,10 @@ describe('contract association workflow', () => {
     });
     const next = mergeContractCandidateLinks(request.creatorLinks ?? [], [newContract]);
 
-    expect(next).toHaveLength(2);
-    expect(next[1]).toEqual({
-      creatorId: secondCreatorId,
-      engagementId: secondEngagementId,
-      contractIds: [contractTwoId],
-      invoiceIds: [],
-    });
+    expect(next).toEqual(request.creatorLinks);
   });
 
-  it('keeps a mismatched engagement disabled and does not merge it', () => {
+  it('allows a selected creator contract from another engagement and merges by creator', () => {
     const mismatched = associationContract({
       contractId: contractTwoId,
       creatorId,
@@ -414,8 +410,9 @@ describe('contract association workflow', () => {
       mismatched,
       request.creatorLinks ?? [],
       creators,
-    )).toBe('达人已通过其他合作关系加入当前请款项目');
-    expect(mergeContractCandidateLinks(request.creatorLinks ?? [], [mismatched])).toEqual(request.creatorLinks);
+    )).toBe('');
+    expect(mergeContractCandidateLinks(request.creatorLinks ?? [], [mismatched])[0]?.contractIds)
+      .toEqual([contractOneId, contractTwoId]);
   });
 
   it('keeps pending contracts visible but unavailable', () => {
@@ -426,6 +423,10 @@ describe('contract association workflow', () => {
       lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
     });
 
-    expect(contractAssociationUnavailableReason(pending, [], creators)).toBe('已上传，待人工确认');
+    expect(contractAssociationUnavailableReason(
+      pending,
+      [{ creatorId: secondCreatorId, engagementId: secondEngagementId, contractIds: [], invoiceIds: [] }],
+      creators,
+    )).toBe('已上传，待人工确认');
   });
 });

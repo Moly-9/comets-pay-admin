@@ -41,6 +41,7 @@ export const requestApprovalReminderFor = (
 ): RequestApprovalReminderSummary => {
   const reviewable = requests.filter((request) => (
     request.lifecycle !== 'DRAFT'
+    && request.lifecycle !== 'CANCELLED'
     && Boolean(request.approval)
     && canReviewRequestApproval(user, request.approval!, request.pm)
   ));

@@ -76,7 +76,7 @@ describe('Invoice batch prototype defaults', () => {
       .toEqual(references.filter((reference) => reference.platform.toLowerCase().includes('twitch')));
   });
 
-  it('selects all project creators up to the limit and skips existing Invoices', () => {
+  it('selects project creators up to the limit even when an engagement already has an Invoice', () => {
     const references = INITIAL_PROJECTS[0].creatorProfiles!;
     const existingReference = references[1];
     const generatedInvoices = [{
@@ -90,7 +90,7 @@ describe('Invoice batch prototype defaults', () => {
     );
 
     expect(selected).toHaveLength(5);
-    expect(selected).not.toContain(existingReference.engagementId);
+    expect(selected).toContain(existingReference.engagementId);
     expect(selected[0]).toBe(references[0].engagementId);
   });
 
@@ -101,10 +101,10 @@ describe('Invoice batch prototype defaults', () => {
     );
 
     expect(seed).toMatchObject({
-      projectId: 'PRJ-260801-07',
       currency: INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY,
       description: INVOICE_BATCH_PROTOTYPE_DEMO_DESCRIPTION,
     });
+    expect(INITIAL_PROJECTS.some((project) => project.id === seed?.projectId)).toBe(true);
     expect(seed?.rows).toHaveLength(5);
     expect(new Set(seed?.rows.map((row) => row.engagementId)).size).toBe(5);
     expect(seed?.rows.map((row) => row.payoutProvider)).toEqual([

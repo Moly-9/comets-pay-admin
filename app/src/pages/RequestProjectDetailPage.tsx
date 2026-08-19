@@ -49,6 +49,7 @@ import {
 import {
   myProjectStatusFor,
   requestProjectStatusFor,
+  type PaymentRequestLifecycle,
   type PaymentRequestExtraDetails,
   type PaymentRequestPaymentPlan,
 } from '../paymentRequestProjects';
@@ -61,7 +62,10 @@ export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestEx
   cooperationProjectId?: CooperationProjectId;
   cooperationProjectCode?: string;
   cooperationProjectName?: string;
-  lifecycle?: 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'COMPLETED';
+  lifecycle?: PaymentRequestLifecycle;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
   creatorLinks?: Array<{
     creatorId: CreatorId;
     engagementId: EngagementId;

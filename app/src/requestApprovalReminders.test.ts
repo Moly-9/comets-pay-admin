@@ -22,6 +22,7 @@ const requests: RequestApprovalReminderCandidate[] = [
   { id: 'finance-one', pm: '张咏诗', lifecycle: 'SUBMITTED', approval: approval('PENDING_FINANCE') },
   { id: 'approved', pm: '张咏诗', lifecycle: 'APPROVED', approval: approval('APPROVED') },
   { id: 'draft', pm: '张咏诗', lifecycle: 'DRAFT', approval: approval('PENDING_PM') },
+  { id: 'cancelled', pm: '张咏诗', lifecycle: 'CANCELLED', approval: approval('PENDING_FINANCE') },
 ];
 
 const user = (

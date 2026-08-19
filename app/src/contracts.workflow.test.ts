@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   completeGeneratedContractUpload,
+  contractLinkedToProject,
+  contractProjectLinksFor,
+  contractProjectIds,
   createGeneratedContractDraft,
   createUploadedContract,
   frameworkIoContracts,
@@ -158,7 +161,7 @@ describe('generated contract upload workflow', () => {
     expect(uploaded.paymentSnapshot).toEqual(draft.paymentSnapshot);
   });
 
-  it('treats a confirmed framework contract without financial fields as a resource, not a payment contract', () => {
+  it('allows a confirmed framework contract without fixed financial fields to support payment requests', () => {
     const framework = {
       ...createUploadedContract({
         systemContractNumber: 'CON-FRAMEWORK-001',
@@ -183,8 +186,34 @@ describe('generated contract upload workflow', () => {
     expect(framework.totalFee).toBeNull();
     expect(framework.currency).toBe('');
     expect(getContractReadiness(framework).ready).toBe(true);
-    expect(getContractReadiness(framework).label).toBe('可作为框架资源');
-    expect(isPaymentContract(framework)).toBe(false);
+    expect(getContractReadiness(framework).label).toBe('可用于付款项目');
+    expect(isPaymentContract(framework)).toBe(true);
+  });
+
+  it('normalizes active project coverage from new and legacy contract fields', () => {
+    const linkedProject = 'project-linked' as ProjectId;
+    const endedProject = 'project-ended' as ProjectId;
+    const contract = {
+      cooperationProjectId: projectId,
+      projectLinks: [
+        { cooperationProjectId: linkedProject, status: 'ACTIVE' as const },
+        { cooperationProjectId: endedProject, status: 'ENDED' as const },
+      ],
+    };
+
+    expect(contractProjectIds(contract)).toEqual([linkedProject, projectId]);
+    expect(contractLinkedToProject(contract, linkedProject)).toBe(true);
+    expect(contractLinkedToProject(contract, projectId)).toBe(true);
+    expect(contractLinkedToProject(contract, endedProject)).toBe(false);
+    expect(contractProjectIds({
+      projectId,
+      frameworkProjectLinks: [{ cooperationProjectId: linkedProject, status: 'ACTIVE' }],
+    })).toEqual([linkedProject, projectId]);
+    expect(contractProjectLinksFor({
+      projectId,
+      frameworkProjectLinks: [{ cooperationProjectId: linkedProject, status: 'ACTIVE' }],
+      projectLinks: [{ cooperationProjectId: linkedProject, status: 'ENDED' }],
+    })).toEqual([{ cooperationProjectId: linkedProject, status: 'ENDED' }]);
   });
 
   it('supports several IO records sharing one framework contract', () => {
@@ -200,6 +229,37 @@ describe('generated contract upload workflow', () => {
     };
 
     expect(frameworkIoContracts(framework, [framework, ioOne, ioTwo])).toEqual([ioOne, ioTwo]);
+  });
+
+  it('keeps an IO contract usable when it has no framework contract', () => {
+    const independentIo = {
+      ...createUploadedContract({
+        systemContractNumber: 'CON-IO-INDEPENDENT-001',
+        contractType: 'IO',
+        projectId,
+        projectName: generationModel.projectName,
+        customer: generationModel.brandName,
+        creatorId: generationModel.creatorId,
+        creatorName: generationModel.creatorName,
+        creatorHandle: generationModel.creatorHandle,
+        creatorPlatform: generationModel.platform,
+        engagementId,
+        recognitionResults: [],
+        sourceDocuments: [],
+      }),
+      publisher: generationModel.publisher,
+      currency: 'USD',
+      totalFee: 1200,
+      paymentWithinWorkingDays: 45,
+      paymentMethod: 'BANK' as const,
+      feeBearer: 'ADVERTISER' as const,
+      lifecycle: 'CONFIRMED' as const,
+      signed: true,
+      issues: [],
+    } satisfies ContractRecord;
+
+    expect(independentIo.frameworkContractId).toBeUndefined();
+    expect(isPaymentContract(independentIo)).toBe(true);
   });
 
   it('applies only applicable recognition fields for framework contracts', () => {

@@ -761,27 +761,33 @@ function BatchRowTable({
                 <td data-label="合同">
                   {availableContracts.length === 0 ? (
                     <span className="invoice-batch-empty-value">未关联合同</span>
-                  ) : availableContracts.length === 1 ? (
-                    <span className="invoice-batch-locked-value">{availableContracts[0].id}</span>
                   ) : (
-                    <select
-                      aria-label={`${row.creatorName} 合同`}
-                      value={row.contractIds[0] ?? ''}
-                      disabled={rowLocked}
-                      onChange={(event) => onChange(row.engagementId, {
-                        contractIds: event.target.value
-                          ? [event.target.value as ContractId]
-                          : [],
-                        payoutAccountLocked: false,
-                      })}
-                    >
-                      <option value="">待选择</option>
-                      {availableContracts.map((contract) => (
-                        <option key={contract.contractId} value={contract.contractId}>
-                          {contract.id}
-                        </option>
-                      ))}
-                    </select>
+                    <details className="invoice-batch-contract-picker">
+                      <summary aria-label={`${row.creatorName} 合同`}>
+                        {row.contractIds.length ? `已选 ${row.contractIds.length} 份` : '未选择（非必填）'}
+                      </summary>
+                      <div role="group" aria-label={`${row.creatorName} 可关联合同`}>
+                        {availableContracts.map((contract) => {
+                          const selected = row.contractIds.includes(contract.contractId);
+                          return (
+                            <label key={contract.contractId}>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                disabled={rowLocked}
+                                onChange={() => onChange(row.engagementId, {
+                                  contractIds: selected
+                                    ? row.contractIds.filter((id) => id !== contract.contractId)
+                                    : [...row.contractIds, contract.contractId as ContractId],
+                                  payoutAccountLocked: false,
+                                })}
+                              />
+                              <span><strong>{contract.id}</strong><small>{contract.name}</small></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
                   )}
                 </td>
                 <td data-label="状态">
@@ -1039,10 +1045,6 @@ export function InvoiceBatchBuilderPage({
 
   const toggleEngagement = (engagementId: EngagementId) => {
     if (lockedEngagementIds.includes(engagementId)) return;
-    const existing = generatedInvoices.some(
-      (record) => record.snapshot.engagementId === engagementId,
-    );
-    if (existing) return;
     const nextIds = selectedEngagementIds.includes(engagementId)
       ? selectedEngagementIds.filter((id) => id !== engagementId)
       : selectedEngagementIds.length < INVOICE_BATCH_MAX_ROWS
@@ -1424,14 +1426,12 @@ export function InvoiceBatchBuilderPage({
 
               <div className="invoice-batch-creator-grid">
                 {filteredProjectReferences.map((reference) => {
-                  const existing = generatedInvoices.find(
+                  const existingCount = generatedInvoices.filter(
                     (invoice) => invoice.snapshot.engagementId === reference.engagementId,
-                  );
+                  ).length;
                   const selected = selectedEngagementIds.includes(reference.engagementId);
                   const locked = lockedEngagementIds.includes(reference.engagementId);
-                  const disabled = Boolean(existing) || (
-                    !selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS
-                  );
+                  const disabled = !selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS;
                   return (
                     <label
                       className={[
@@ -1452,8 +1452,8 @@ export function InvoiceBatchBuilderPage({
                         <strong>{reference.name}</strong>
                         <small>{reference.handle} · {reference.platform}</small>
                       </span>
-                      {existing ? (
-                        <em>已有 {existing.id}</em>
+                      {existingCount ? (
+                        <em className="is-ready">已有 {existingCount} 份，可继续生成</em>
                       ) : (
                         <em className="is-ready">默认空中云汇</em>
                       )}

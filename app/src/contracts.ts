@@ -127,11 +127,14 @@ export type ContractLifecycle =
 
 export type ContractType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
 
-export type FrameworkContractProjectLink = {
+export type ContractProjectLink = {
   cooperationProjectId: CooperationProjectId;
   linkedAt?: string;
   status?: 'ACTIVE' | 'ENDED';
 };
+
+/** @deprecated Use ContractProjectLink and ContractRecord.projectLinks. */
+export type FrameworkContractProjectLink = ContractProjectLink;
 
 export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
   INDEPENDENT: '独立合同',
@@ -146,6 +149,7 @@ export type ContractGenerationModel = {
   contractType?: ContractType;
   projectId: ProjectId;
   cooperationProjectId?: CooperationProjectId;
+  projectLinks?: ContractProjectLink[];
   projectName: string;
   brandName: string;
   creatorId: CreatorId;
@@ -192,7 +196,9 @@ export type ContractRecord = {
   id: string;
   contractType?: ContractType;
   frameworkContractId?: ContractId;
-  /** Framework contracts can be reused across cooperation projects. */
+  /** Active and historical cooperation-project coverage for every contract type. */
+  projectLinks?: ContractProjectLink[];
+  /** @deprecated Legacy framework-only project coverage. */
   frameworkProjectLinks?: FrameworkContractProjectLink[];
   ioId: string;
   name: string;
@@ -266,15 +272,23 @@ export const isFrameworkContract = (contract: Pick<ContractRecord, 'contractType
   getContractType(contract) === 'FRAMEWORK'
 );
 
-export const frameworkContractProjectIds = (
-  contract: Pick<ContractRecord, 'contractType' | 'cooperationProjectId' | 'projectId' | 'frameworkProjectLinks'>,
+export const contractProjectLinksFor = (
+  contract: Pick<ContractRecord, 'cooperationProjectId' | 'projectId' | 'projectLinks' | 'frameworkProjectLinks'>,
 ) => {
-  if (!isFrameworkContract(contract)) return [] as CooperationProjectId[];
-  const linked = contract.frameworkProjectLinks
-    ?.filter((link) => link.status !== 'ENDED')
-    .map((link) => link.cooperationProjectId)
-    ?? [];
-  const hasExplicitLink = new Set(contract.frameworkProjectLinks?.map((link) => link.cooperationProjectId) ?? []);
+  const linksByProject = new Map<CooperationProjectId, ContractProjectLink>();
+  [...(contract.frameworkProjectLinks ?? []), ...(contract.projectLinks ?? [])]
+    .forEach((link) => linksByProject.set(link.cooperationProjectId, { ...link }));
+  return [...linksByProject.values()];
+};
+
+export const contractProjectIds = (
+  contract: Pick<ContractRecord, 'cooperationProjectId' | 'projectId' | 'projectLinks' | 'frameworkProjectLinks'>,
+) => {
+  const explicitLinks = contractProjectLinksFor(contract);
+  const linked = explicitLinks
+    .filter((link) => link.status !== 'ENDED')
+    .map((link) => link.cooperationProjectId);
+  const hasExplicitLink = new Set(explicitLinks.map((link) => link.cooperationProjectId));
   const legacyProjectId = contract.cooperationProjectId ?? contract.projectId;
   return [...new Set([
     ...linked,
@@ -284,10 +298,18 @@ export const frameworkContractProjectIds = (
   ])];
 };
 
-export const frameworkContractLinkedToProject = (
-  contract: Pick<ContractRecord, 'contractType' | 'cooperationProjectId' | 'projectId' | 'frameworkProjectLinks'>,
+export const contractLinkedToProject = (
+  contract: Pick<ContractRecord, 'cooperationProjectId' | 'projectId' | 'projectLinks' | 'frameworkProjectLinks'>,
   cooperationProjectId: CooperationProjectId | string,
-) => frameworkContractProjectIds(contract).includes(cooperationProjectId as CooperationProjectId);
+) => contractProjectIds(contract).includes(cooperationProjectId as CooperationProjectId);
+
+/** @deprecated Use contractProjectIds. */
+export const frameworkContractProjectIds = contractProjectIds;
+
+export const frameworkContractLinkedToProject = (
+  contract: Pick<ContractRecord, 'cooperationProjectId' | 'projectId' | 'projectLinks' | 'frameworkProjectLinks'>,
+  cooperationProjectId: CooperationProjectId | string,
+) => contractLinkedToProject(contract, cooperationProjectId);
 
 export const isIoContract = (contract: Pick<ContractRecord, 'contractType'>) => (
   getContractType(contract) === 'IO'
@@ -328,7 +350,7 @@ export const getContractReadiness = (contract: ContractRecord) => {
     blockerCount: blockers.length,
     reviewCount: contract.issues.length - blockers.length,
     label: ready
-      ? contractType === 'FRAMEWORK' ? '可作为框架资源' : '可用于付款项目'
+      ? '可用于付款项目'
       : contract.lifecycle === 'GENERATED_DRAFT'
         ? '待上传签署合同'
         : contract.status === '待解析'
@@ -342,7 +364,7 @@ export const isConfirmedContract = (contract: ContractRecord) => (
 );
 
 export const isPaymentContract = (contract: ContractRecord) => (
-  !isFrameworkContract(contract) && isConfirmedContract(contract)
+  !contract.isTemplate && isConfirmedContract(contract)
 );
 
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
@@ -567,6 +589,7 @@ export type ContractUploadInput = {
   frameworkUploadKey?: string;
   projectId: ProjectId;
   cooperationProjectId?: CooperationProjectId;
+  projectLinks?: ContractProjectLink[];
   projectName: string;
   customer: string;
   creatorId: CreatorId;
@@ -682,6 +705,9 @@ export const createGeneratedContractDraft = (
     issues: blankFieldIssues(model),
     projectId: model.projectId,
     cooperationProjectId: model.cooperationProjectId ?? model.projectId,
+    projectLinks: model.projectLinks?.length
+      ? model.projectLinks.map((link) => ({ ...link }))
+      : [{ cooperationProjectId: model.cooperationProjectId ?? model.projectId, status: 'ACTIVE' }],
     creatorId: model.creatorId,
     creatorHandle: model.creatorHandle,
     engagementId: model.engagementId,
@@ -707,6 +733,7 @@ export const createUploadedContract = (
     frameworkUploadKey,
     projectId,
     cooperationProjectId,
+    projectLinks,
     projectName,
     customer,
     creatorId,
@@ -785,6 +812,9 @@ export const createUploadedContract = (
     ],
     projectId,
     cooperationProjectId: cooperationProjectId ?? projectId,
+    projectLinks: projectLinks?.length
+      ? projectLinks.map((link) => ({ ...link }))
+      : [{ cooperationProjectId: cooperationProjectId ?? projectId, status: 'ACTIVE' }],
     creatorId,
     creatorHandle,
     engagementId,
@@ -837,6 +867,7 @@ export const completeGeneratedContractUpload = (
     generationVersion: draft.generationVersion,
     generatedFileBaseName: draft.generatedFileBaseName,
     uploadedFromDraftId: draft.contractId,
+    projectLinks: draft.projectLinks ?? uploaded.projectLinks,
   };
 };
 
