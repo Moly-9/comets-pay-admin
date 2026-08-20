@@ -190,6 +190,45 @@ describe('generated contract upload workflow', () => {
     expect(isPaymentContract(framework)).toBe(true);
   });
 
+  it('blocks an unsigned confirmed contract even when legacy data has no signature issue', () => {
+    const unsigned = {
+      ...createGeneratedContractDraft(generationModel, 1),
+      lifecycle: 'CONFIRMED' as const,
+      signed: false,
+      status: '已生效' as const,
+      issues: [],
+    } satisfies ContractRecord;
+
+    const readiness = getContractReadiness(unsigned);
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockerCount).toBe(1);
+    expect(readiness.label).toBe('1 项待处理');
+    expect(isPaymentContract(unsigned)).toBe(false);
+  });
+
+  it('does not retain a stale signature issue after signature is confirmed', () => {
+    const signed = {
+      ...createGeneratedContractDraft(generationModel, 1),
+      lifecycle: 'CONFIRMED' as const,
+      signed: true,
+      status: '已生效' as const,
+      issues: [{
+        id: 'signature' as const,
+        label: '合同尚未完成签署',
+        description: '历史签署提示',
+        severity: 'blocker' as const,
+        source: '签署页',
+      }],
+    } satisfies ContractRecord;
+
+    const readiness = getContractReadiness(signed);
+
+    expect(readiness.ready).toBe(true);
+    expect(readiness.blockerCount).toBe(0);
+    expect(readiness.label).toBe('可用于付款项目');
+  });
+
   it('normalizes active project coverage from new and legacy contract fields', () => {
     const linkedProject = 'project-linked' as ProjectId;
     const endedProject = 'project-ended' as ProjectId;

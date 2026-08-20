@@ -5,6 +5,7 @@ import {
   Clipboard,
   Download,
   ExternalLink,
+  FileSignature,
   FileSearch,
   FileText,
   Link2,
@@ -575,10 +576,15 @@ export function ContractDetailPage({
     && applicableRecognitionFields.length > 0
     && confirmedCount === applicableRecognitionFields.length;
   const recognitionApplied = contract.extractionStage === 'applied';
+  const nonSignatureIssues = contract.issues.filter((issue) => issue.id !== 'signature');
   const visibleIssues = allConfirmed
-    ? contract.issues.filter((issue) => issue.id !== 'recognition-review')
-    : contract.issues;
+    ? nonSignatureIssues.filter((issue) => issue.id !== 'recognition-review')
+    : nonSignatureIssues;
   const readiness = getContractReadiness({ ...contract, issues: visibleIssues });
+  const signatureConfirmed = contract.signed === true
+    || (contract.signed == null && contract.lifecycle === 'CONFIRMED');
+  const signaturePending = !contract.isTemplate && !signatureConfirmed;
+  const checkIssueCount = visibleIssues.length + (signaturePending ? 1 : 0);
   const recognitionPageState = (fieldKeys: readonly ContractFieldKey[]) => {
     const pageFields = fieldKeys
       .map((fieldKey) => draftFields.find((field) => field.fieldKey === fieldKey))
@@ -595,7 +601,7 @@ export function ContractDetailPage({
   const tabs: Array<{ id: ContractDetailTab; label: string }> = [
     { id: 'summary', label: '合同摘要' },
     { id: 'payment', label: '付款与Invoice' },
-    { id: 'checks', label: `校验记录${visibleIssues.length ? ` ${visibleIssues.length}` : ''}` },
+    { id: 'checks', label: `校验记录${checkIssueCount ? ` ${checkIssueCount}` : ''}` },
   ];
   const canEditCurrentContract = !contract.isTemplate || canEditTemplate;
   const pendingGeneratedUpload = Boolean(
@@ -1022,6 +1028,18 @@ export function ContractDetailPage({
                     <Button disabled={!allConfirmed || !onUpdateContract || !canEditCurrentContract} onClick={applyRecognition}>应用到正式合同资料</Button>
                   </div>
                 ) : null}
+                <article className={`contract-signature-check${contract.isTemplate ? ' is-not-applicable' : signatureConfirmed ? ' is-complete' : ' is-pending'}`}>
+                  <span>{contract.isTemplate || signatureConfirmed ? <CheckCircle2 size={18} /> : <FileSignature size={18} />}</span>
+                  <div>
+                    <strong>{contract.isTemplate ? '参考模板无需签署' : signatureConfirmed ? '合同已完成签署' : '合同尚未完成签署'}</strong>
+                    <p>{contract.isTemplate
+                      ? '该记录为参考模板，不参与签署和付款校验。'
+                      : signatureConfirmed
+                        ? '签署状态已确认，可继续进行付款资料校验。'
+                        : '请确认双方签署完成；未签署合同不能加入付款项目。'}</p>
+                    <small>签署状态</small>
+                  </div>
+                </article>
                 {visibleIssues.length > 0 ? (
                   <div className="contract-issue-list">
                     {visibleIssues.map((issue) => (
@@ -1031,12 +1049,12 @@ export function ContractDetailPage({
                       </article>
                     ))}
                   </div>
-                ) : (
+                ) : !signaturePending ? (
                   <div className="contract-check-success">
                     <CheckCircle2 size={22} />
                     <span><strong>关键字段检查通过</strong><small>{isFrameworkContract(contract) ? '框架合同可作为资源，并供同一达人 IO 单绑定。' : '合同可用于新建付款项目，并继续进行Invoice匹配。'}</small></span>
                   </div>
-                )}
+                ) : null}
               </>
             ) : null}
           </div>

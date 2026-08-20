@@ -325,7 +325,12 @@ export const frameworkIoContracts = (
 ));
 
 export const getContractReadiness = (contract: ContractRecord) => {
-  const blockers = contract.issues.filter((issue) => issue.severity === 'blocker');
+  const nonSignatureIssues = contract.issues.filter((issue) => issue.id !== 'signature');
+  const signatureConfirmed = contract.signed === true
+    || (contract.signed == null && contract.lifecycle === 'CONFIRMED');
+  const signaturePending = !contract.isTemplate && !signatureConfirmed;
+  const blockers = nonSignatureIssues.filter((issue) => issue.severity === 'blocker');
+  const blockerCount = blockers.length + (signaturePending ? 1 : 0);
   const lifecycleConfirmed = contract.lifecycle
     ? contract.lifecycle === 'CONFIRMED'
     : contract.signed;
@@ -334,7 +339,7 @@ export const getContractReadiness = (contract: ContractRecord) => {
   const ready = (
     lifecycleConfirmed
     && !contract.isTemplate
-    && blockers.length === 0
+    && blockerCount === 0
     && Boolean(contract.publisher)
     && (!requiresFinancialFields || (
       Boolean(contract.currency)
@@ -347,20 +352,22 @@ export const getContractReadiness = (contract: ContractRecord) => {
 
   return {
     ready,
-    blockerCount: blockers.length,
-    reviewCount: contract.issues.length - blockers.length,
+    blockerCount,
+    reviewCount: nonSignatureIssues.length - blockers.length,
     label: ready
       ? '可用于付款项目'
       : contract.lifecycle === 'GENERATED_DRAFT'
         ? '待上传签署合同'
         : contract.status === '待解析'
           ? '等待解析'
-          : `${blockers.length} 项待处理`,
+          : `${blockerCount} 项待处理`,
   };
 };
 
 export const isConfirmedContract = (contract: ContractRecord) => (
-  contract.lifecycle ? contract.lifecycle === 'CONFIRMED' : getContractReadiness(contract).ready
+  contract.lifecycle
+    ? contract.lifecycle === 'CONFIRMED' && contract.signed !== false
+    : contract.signed
 );
 
 export const isPaymentContract = (contract: ContractRecord) => (
