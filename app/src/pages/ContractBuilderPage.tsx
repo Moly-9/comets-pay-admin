@@ -319,10 +319,6 @@ export function ContractBuilderPage({
   const [creatorId, setCreatorId] = useState(draftModel?.creatorId ?? initialCreator?.id ?? '');
   const [engagementId, setEngagementId] = useState(draftModel?.engagementId ?? initialEngagementId ?? '');
   const [projectSelectionId, setProjectSelectionId] = useState(initialProjectId);
-  const [projectLinkIds, setProjectLinkIds] = useState<string[]>(() => {
-    const saved = draftModel?.projectLinks?.filter((link) => link.status !== 'ENDED').map((link) => String(link.cooperationProjectId)) ?? [];
-    return [...new Set([...saved, ...(initialProjectId ? [initialProjectId] : [])])];
-  });
   const [contractType, setContractType] = useState<NonNullable<ContractGenerationModel['contractType']>>(draftModel?.contractType ?? existingDraft?.contractType ?? 'INDEPENDENT');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
   const [contractName, setContractName] = useState(draftModel?.contractName ?? existingDraft?.name ?? '');
@@ -437,10 +433,10 @@ export function ContractBuilderPage({
     contractType,
     projectId: resolvedProjectId as ProjectId,
     cooperationProjectId: resolvedProjectId as ProjectId,
-    projectLinks: [...new Set([...projectLinkIds, resolvedProjectId].filter(Boolean))].map((cooperationProjectId) => ({
-      cooperationProjectId: cooperationProjectId as ProjectId,
+    projectLinks: resolvedProjectId ? [{
+      cooperationProjectId: resolvedProjectId as ProjectId,
       status: 'ACTIVE' as const,
-    })),
+    }] : [],
     projectName,
     brandName: selectedProject?.brand ?? '',
     creatorId: (selectedCreator?.id ?? '') as CreatorId,
@@ -508,7 +504,6 @@ export function ContractBuilderPage({
     payoutProvider,
     platform,
     publishingChannels,
-    projectLinkIds,
     projectName,
     promotedProduct,
     publisher,
@@ -588,10 +583,6 @@ export function ContractBuilderPage({
     const creator = creators.find((item) => item.id === id) ?? null;
     const account = defaultContractPayoutAccount(creator);
     setCreatorId(id);
-    const eligibleProjectIds = new Set(projects.filter((project) => project.creatorProfiles?.some((reference) => (
-      reference.creatorId === id && reference.status !== 'removed'
-    ))).map((project) => String(project.cooperationProjectId ?? project.projectId ?? project.id)));
-    setProjectLinkIds((current) => current.filter((projectId) => eligibleProjectIds.has(projectId)));
     const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === id && reference.status !== 'removed');
     setEngagementId(currentProjectReference?.engagementId ?? '');
     if (!currentProjectReference) {
@@ -626,7 +617,6 @@ export function ContractBuilderPage({
     const project = projects.find((item) => String(item.cooperationProjectId ?? item.projectId ?? item.id) === id);
     const reference = project?.creatorProfiles?.find((item) => item.creatorId === creatorId && item.status !== 'removed');
     setProjectSelectionId(id);
-    setProjectLinkIds((current) => id ? [...new Set([...current, id])] : current);
     setEngagementId(reference?.engagementId ?? '');
     setProjectName(project?.name ?? '');
     setPromotedProduct(project?.brand ?? '');
@@ -830,32 +820,6 @@ export function ContractBuilderPage({
                 <SearchableComboBox ariaLabel="合同合作项目" value={projectSelectionId} placeholder={creatorId ? '搜索项目名称、编号或品牌' : '请先选择达人'} options={projectOptions} disabled={!creatorId} onChange={selectProject} onClear={() => selectProject('')} />
                 <small>{errors.project}</small>
               </div>
-              {projectSelectionId ? (
-                <div className="invoice-form-control full-width contract-project-links">
-                  <span>覆盖合作项目 <small>可多选</small></span>
-                  <div className="invoice-contract-options" role="group" aria-label="合同覆盖合作项目">
-                    {creatorProjects.map((project) => {
-                      const id = String(project.cooperationProjectId ?? project.projectId ?? project.id);
-                      const primary = id === projectSelectionId;
-                      const checked = projectLinkIds.includes(id) || primary;
-                      return (
-                        <label key={id}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={primary}
-                            onChange={() => setProjectLinkIds((current) => current.includes(id)
-                              ? current.filter((projectId) => projectId !== id)
-                              : [...current, id])}
-                          />
-                          <span><strong>{project.name}</strong><small>{primary ? '主合作项目' : project.cooperationProjectCode ?? project.projectCode ?? project.id}</small></span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <small>合同可覆盖同一达人参与的多个合作项目，主项目始终保留。</small>
-                </div>
-              ) : null}
               <label className={`full-width ${errors.contractName ? 'has-error' : ''}`} data-contract-field="contractName">
                 <span>合同名称 *</span>
                 <input

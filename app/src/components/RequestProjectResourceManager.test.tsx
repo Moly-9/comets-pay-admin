@@ -179,6 +179,18 @@ describe('request project resource aggregation', () => {
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
   });
 
+  it('removes multi-project coverage controls from contract generation and upload', () => {
+    const builderSource = readFileSync(new URL('../pages/ContractBuilderPage.tsx', import.meta.url), 'utf8');
+    const uploadSource = readFileSync(new URL('./ContractUploadWizard.tsx', import.meta.url), 'utf8');
+
+    expect(builderSource).not.toContain('覆盖合作项目');
+    expect(builderSource).not.toContain('projectLinkIds');
+    expect(uploadSource).not.toContain('覆盖合作项目');
+    expect(uploadSource).not.toContain('projectLinkIds');
+    expect(builderSource).toContain('projectLinks: resolvedProjectId ? [{');
+    expect(uploadSource).toContain('projectLinks: [{');
+  });
+
   it('keeps payment-list editing and Excel export at list level', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     const paymentDialogSource = source.slice(
@@ -280,7 +292,7 @@ describe('Invoice association workflow', () => {
     )).toEqual([existingCreatorInvoice, newCreatorInvoice]);
   });
 
-  it('allows a confirmed framework contract to be reused by another cooperation project', () => {
+  it('does not expose a framework contract to another cooperation project', () => {
     const framework = {
       ...contract('framework-shared' as ContractId),
       contractType: 'FRAMEWORK',
@@ -293,13 +305,13 @@ describe('Invoice association workflow', () => {
       engagementId,
     } as ContractRecord;
 
-    expect(contractAssociationCandidates([framework], 'cooperation-project-new')).toEqual([framework]);
+    expect(contractAssociationCandidates([framework], 'cooperation-project-new')).toEqual([]);
     expect(contractAssociationUnavailableReason(
       framework,
       request.creatorLinks ?? [],
       creators,
       'cooperation-project-new',
-    )).toBe('');
+    )).toBe('合同不属于当前合作项目');
   });
 
   it('adds a new Invoice owner with no contracts and keeps multiple Invoices for an existing creator', () => {
@@ -368,24 +380,29 @@ describe('contract association workflow', () => {
     { id: secondCreatorId, name: 'New Creator' },
   ] as unknown as CreatorProfile[];
 
-  it('returns every non-template contract so a selected creator contract can gain project coverage', () => {
-    const sameProject = associationContract({
+  it('returns multiple contracts from the current project and excludes other projects', () => {
+    const sameProjectOne = associationContract({
       contractId: contractOneId,
-      creatorId: secondCreatorId,
-      engagementId: secondEngagementId,
+      creatorId,
+      engagementId,
+    });
+    const sameProjectTwo = associationContract({
+      contractId: contractTwoId,
+      creatorId,
+      engagementId,
     });
     const otherProject = associationContract({
-      contractId: contractTwoId,
+      contractId: 'contract-other-project' as ContractId,
       creatorId,
       engagementId,
       projectId: 'cooperation-project-two',
     });
-    const template = { ...sameProject, contractId: 'contract-template' as ContractId, isTemplate: true };
+    const template = { ...sameProjectOne, contractId: 'contract-template' as ContractId, isTemplate: true };
 
     expect(contractAssociationCandidates(
-      [sameProject, otherProject, template],
+      [sameProjectOne, sameProjectTwo, otherProject, template],
       'cooperation-project-one',
-    )).toEqual([sameProject, otherProject]);
+    )).toEqual([sameProjectOne, sameProjectTwo]);
   });
 
   it('does not add a new creator through contract selection alone', () => {

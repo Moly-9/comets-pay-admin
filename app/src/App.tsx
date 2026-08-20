@@ -10,11 +10,9 @@ import {
 import {
   completeGeneratedContractUpload,
   contractLinkedToProject,
-  contractProjectLinksFor,
   createGeneratedContractDraft,
   createUploadedContract,
   INITIAL_CONTRACTS,
-  isConfirmedContract,
   isFrameworkContract,
   isIoContract,
   type ContractGeneratedFiles,
@@ -618,71 +616,6 @@ export default function App() {
     });
     return true;
   }, [contracts, notify, registerProjectMutation]);
-
-  const linkContractToProject = (
-    request: RequestProjectSummary,
-    contractId: ContractId,
-    cooperationProjectId: string,
-  ) => {
-    if (!requestWholeResourceEditable(request)) {
-      notify('项目资料已锁定', '当前项目不允许修改合同项目关联。');
-      return;
-    }
-    const target = contracts.find((contract) => (
-      (contract.contractId ?? contract.id) === contractId
-    ));
-    if (!target || !target.contractId) {
-      notify('无法关联合同', '未找到有效合同。');
-      return;
-    }
-    if (!isConfirmedContract(target)) {
-      notify('无法关联合同', '合同必须完成确认后才能关联合作项目。');
-      return;
-    }
-    const project = projects.find((candidate) => getProjectId(candidate) === cooperationProjectId);
-    if (!target.creatorId || !project?.creatorProfiles?.some((reference) => (
-      reference.creatorId === target.creatorId && reference.status !== 'removed'
-    ))) {
-      notify('无法关联合同', '该合同达人不在当前合作项目中。');
-      return;
-    }
-    setContracts((current) => current.map((contract) => {
-      if (contract.contractId !== contractId) return contract;
-      const links = contractProjectLinksFor(contract);
-      if (links.some((link) => link.cooperationProjectId === cooperationProjectId && link.status !== 'ENDED')) return contract;
-      return {
-        ...contract,
-        projectLinks: [
-          ...links.filter((link) => link.cooperationProjectId !== cooperationProjectId),
-          { cooperationProjectId: cooperationProjectId as NonNullable<ContractRecord['cooperationProjectId']>, linkedAt: nowIso(), status: 'ACTIVE' },
-        ],
-      };
-    }));
-    registerRequestResourceMutation(request, 'contract', contractId, 'link', `已将合同 ${target.id} 关联到当前合作项目`);
-  };
-
-  const unlinkContractFromProject = (
-    request: RequestProjectSummary,
-    contractId: ContractId,
-    cooperationProjectId: string,
-  ) => {
-    if (!requestWholeResourceEditable(request)) {
-      notify('项目资料已锁定', '当前项目不允许解除合同项目关联。');
-      return;
-    }
-    setContracts((current) => current.map((contract) => (
-      contract.contractId === contractId
-        ? {
-            ...contract,
-            projectLinks: [
-              ...contractProjectLinksFor(contract).filter((link) => link.cooperationProjectId !== cooperationProjectId),
-              { cooperationProjectId: cooperationProjectId as NonNullable<ContractRecord['cooperationProjectId']>, linkedAt: nowIso(), status: 'ENDED' },
-            ],
-          }
-        : contract
-    )));
-    registerRequestResourceMutation(request, 'contract', contractId, 'unlink', `已解除合同 ${contractId} 与当前合作项目的关联`);
-  };
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const projectKey = String(model.cooperationProjectId ?? model.projectId);
@@ -3410,12 +3343,6 @@ export default function App() {
         contractIds: link.contractIds.filter((id) => id !== contractId),
       })), `已删除合同 ${contractId}`);
     },
-    onLinkContractToProject: (request, contractId, cooperationProjectId) => (
-      linkContractToProject(request, contractId, cooperationProjectId)
-    ),
-    onUnlinkContractFromProject: (request, contractId, cooperationProjectId) => (
-      unlinkContractFromProject(request, contractId, cooperationProjectId)
-    ),
     onDeleteInvoice: (request, invoiceId) => {
       if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能删除 Invoice。');
