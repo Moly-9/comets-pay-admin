@@ -24,6 +24,11 @@ import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import type { ContractRecord } from '../contracts';
+import {
+  currentInvoiceContractMatchReview,
+  evaluateInvoiceContractMatch,
+} from '../invoice/invoiceContractMatching';
 import {
   getInvoiceContractReference,
   invoiceAccountSummary,
@@ -355,6 +360,7 @@ function InvoiceSummary({ model }: { model: InvoiceDocumentModel }) {
 export function InvoiceDetailPage({
   source,
   model,
+  contracts = [],
   onBack,
   backLabel = '返回Invoice列表',
   onMarkSigned,
@@ -375,6 +381,7 @@ export function InvoiceDetailPage({
 }: {
   source: InvoiceDetailSource;
   model: InvoiceDocumentModel;
+  contracts?: ContractRecord[];
   onBack: () => void;
   backLabel?: string;
   onMarkSigned: (record: GeneratedInvoiceRecord) => void;
@@ -412,6 +419,11 @@ export function InvoiceDetailPage({
     : source.kind === 'generated'
       ? source.payout ?? null
       : null;
+  const generatedRecord = source.kind === 'generated'
+    ? source.record
+    : source.kind === 'payout'
+      ? source.record
+      : undefined;
   const invoiceReviewStatus = source.kind === 'payout'
     ? source.payout.invoiceReviewStatus
     : source.kind === 'generated'
@@ -437,9 +449,35 @@ export function InvoiceDetailPage({
     : source.kind === 'project'
       ? source.provider
       : '尚未指定付款渠道';
-  const checks = useMemo(() => buildReviewChecks(source, model), [model, source]);
+  const selectedContracts = useMemo(() => contracts.filter((contract) => (
+    Boolean(contract.contractId && model.contractIds?.includes(contract.contractId))
+  )), [contracts, model.contractIds]);
+  const storedContractMatchReview = generatedRecord
+    ? currentInvoiceContractMatchReview(generatedRecord)
+    : undefined;
+  const contractMatch = useMemo(() => generatedRecord
+    ? evaluateInvoiceContractMatch(
+        selectedContracts,
+        model,
+        storedContractMatchReview?.reason ?? '',
+      )
+    : null, [generatedRecord, model, selectedContracts, storedContractMatchReview?.reason]);
+  const checks = useMemo<InvoiceReviewCheck[]>(() => contractMatch
+    ? contractMatch.checks.map((check) => ({
+        id: check.field.toLowerCase(),
+        label: check.label,
+        contractValue: check.contractValue,
+        invoiceValue: check.invoiceValue,
+        passed: ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state),
+        note: check.message,
+      }))
+    : buildReviewChecks(source, model), [contractMatch, model, source]);
   const passedCount = checks.filter((check) => check.passed).length;
   const allPassed = checks.length > 0 && passedCount === checks.length;
+  const signedForMediaReview = Boolean(model.signatureText || model.signatureDate || payout?.invoiceSignedAt);
+  const contractMatchEnforced = Boolean(storedContractMatchReview);
+  const mediaApprovalReady = signedForMediaReview
+    && (!contractMatchEnforced || Boolean(contractMatch?.canProceed));
   const availableActions = invoiceReviewStatus
     ? getInvoiceDetailReviewActions(invoiceReviewStatus, {
         manage: canManageInvoice,
@@ -548,11 +586,6 @@ export function InvoiceDetailPage({
 
   const runPrimaryAction = () => {
     if (!primaryAction) return;
-    const generatedRecord = source.kind === 'generated'
-      ? source.record
-      : source.kind === 'payout'
-        ? source.record
-        : undefined;
     if (primaryAction === 'MARK_SIGNED' && generatedRecord) {
       onMarkSigned(generatedRecord);
       return;
@@ -767,6 +800,18 @@ export function InvoiceDetailPage({
                     </article>
                   ))}
                 </div>
+                {storedContractMatchReview?.reason ? (
+                  <div className="invoice-contract-match-audit">
+                    <strong>媒介差异说明</strong>
+                    <p>{storedContractMatchReview.reason}</p>
+                    <small>{storedContractMatchReview.actorName || '系统记录'} · {storedContractMatchReview.reviewedAt ? formatReviewTime(storedContractMatchReview.reviewedAt) : '时间未记录'}</small>
+                  </div>
+                ) : generatedRecord && !contractMatchEnforced ? (
+                  <div className="invoice-contract-match-audit is-historical">
+                    <strong>历史 Invoice</strong>
+                    <p>当前结果仅供只读核对；新匹配规则不会改变原签署、审批或付款状态。</p>
+                  </div>
+                ) : null}
               </>
             ) : null}
 
@@ -934,7 +979,7 @@ export function InvoiceDetailPage({
               {returnAction ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>{ACTION_LABEL[returnAction]}</Button> : null}
               {primaryAction ? (
                 <Button
-                  disabled={primaryAction === 'APPROVE_MEDIA' && !allPassed}
+                  disabled={primaryAction === 'APPROVE_MEDIA' && !mediaApprovalReady}
                   onClick={runPrimaryAction}
                 >
                   {primaryAction === 'APPROVE_MEDIA' && payout?.invoiceReviewStatus === '待媒介复核'

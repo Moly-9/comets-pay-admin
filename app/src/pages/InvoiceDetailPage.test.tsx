@@ -122,7 +122,7 @@ describe('InvoiceDetailPage edit actions', () => {
         notify={() => undefined}
       />,
     );
-    expect(unsignedHtml).toContain('1/2项资料校验通过');
+    expect(unsignedHtml).toContain('5/5项资料校验通过');
     expect(unsignedHtml).toContain('disabled=""');
 
     const signedModel = { ...model, signatureDate: '2026-08-14', signatureText: 'Synthetic Creator' };
@@ -143,7 +143,7 @@ describe('InvoiceDetailPage edit actions', () => {
         notify={() => undefined}
       />,
     );
-    expect(signedHtml).toContain('2/2项资料校验通过');
+    expect(signedHtml).toContain('5/5项资料校验通过');
     expect(signedHtml).toContain('aria-label="电子签名">Synthetic Creator');
     expect(signedHtml).toContain('审核通过');
     expect(signedHtml).not.toContain('disabled=""');

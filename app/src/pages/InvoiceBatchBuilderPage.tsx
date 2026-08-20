@@ -20,7 +20,7 @@ import {
   Users,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -57,6 +57,10 @@ import {
   selectableInvoiceBatchEngagementIds,
   withInvoiceBatchPrototypeAccounts,
 } from '../invoice/invoiceBatchPrototype';
+import {
+  createInvoiceContractMatchReview,
+  type InvoiceContractMatchActor,
+} from '../invoice/invoiceContractMatching';
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
@@ -101,6 +105,7 @@ type InvoiceBatchBuilderPageProps = {
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
   onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
+  contractMatchActor?: InvoiceContractMatchActor;
 };
 
 const STATUS_META = {
@@ -646,9 +651,12 @@ function BatchRowTable({
             const selectedAccount = payoutAccounts.find((account) => (
               getPayoutAccountId(account) === row.payoutAccountId
             ));
+            const needsMatchReason = row.contractMatchReview?.issues.some((issue) => (
+              issue.severity === 'REASON_REQUIRED'
+            ));
             return (
+              <Fragment key={row.engagementId}>
               <tr
-                key={row.engagementId}
                 className={row.status === 'GENERATED' ? 'is-generated' : ''}
                 data-engagement-id={row.engagementId}
                 data-creator-id={row.creatorId}
@@ -810,6 +818,25 @@ function BatchRowTable({
                   </button>
                 </td>
               </tr>
+              {needsMatchReason && !rowLocked ? (
+                <tr className="invoice-batch-match-reason-row">
+                  <td colSpan={10}>
+                    <label>
+                      <span><AlertTriangle size={15} /><strong>{row.creatorName} · 合同差异说明 *</strong></span>
+                      <textarea
+                        value={row.contractMatchReason}
+                        maxLength={300}
+                        placeholder="说明金额、币种或付款账户与合同不一致的业务原因"
+                        onChange={(event) => onChange(row.engagementId, {
+                          contractMatchReason: event.target.value,
+                        })}
+                      />
+                      <small>{row.contractMatchReason.trim().length}/300</small>
+                    </label>
+                  </td>
+                </tr>
+              ) : null}
+              </Fragment>
             );
           })}
         </tbody>
@@ -835,6 +862,7 @@ export function InvoiceBatchBuilderPage({
   onCancel,
   onOpenInvoiceManagement,
   onOpenCreatorPaymentInformation,
+  contractMatchActor,
 }: InvoiceBatchBuilderPageProps) {
   const [mode, setMode] = useState<InvoiceBatchMode>('SHARED_DESCRIPTION');
   const [projectId, setProjectId] = useState('');
@@ -1218,11 +1246,26 @@ export function InvoiceBatchBuilderPage({
       ));
       setRows([...workingRows]);
       try {
-        const invoiceNumber = nextInvoiceNumber([...generatedInvoices, ...successfulRecords]);
+        const invoiceNumber = nextInvoiceNumber(
+          [...generatedInvoices, ...successfulRecords],
+          candidate.invoiceDate,
+        );
         const snapshot = buildInvoiceDocumentForBatchRow(candidate, context, invoiceNumber);
+        const selectedContracts = availableContractsForEngagement(
+          candidate.engagementId,
+          contracts,
+          { projectId: candidate.projectId, creatorId: candidate.creatorId },
+        ).filter((contract) => candidate.contractIds.includes(contract.contractId));
+        const contractMatchReview = createInvoiceContractMatchReview({
+          contracts: selectedContracts,
+          model: snapshot,
+          version: 1,
+          reason: candidate.contractMatchReason,
+          actor: contractMatchActor,
+        });
         const { generateInvoiceFiles } = await import('../invoice/generateInvoice');
         const { pdfBlob, docxBlob } = await generateInvoiceFiles(snapshot);
-        const record = createGeneratedInvoiceRecord(candidate, snapshot);
+        const record = createGeneratedInvoiceRecord(candidate, snapshot, contractMatchReview);
         successfulRecords.push(record);
         workingRows = workingRows.map((row) => (
           row.engagementId === candidate.engagementId
@@ -1283,7 +1326,10 @@ export function InvoiceBatchBuilderPage({
       const model = row.generated?.record.snapshot ?? buildInvoiceDocumentForBatchRow(
         row,
         context,
-        `INV-PREVIEW-${row.creatorId}`,
+        nextInvoiceNumber([
+          ...generatedInvoices,
+          ...rows.flatMap((candidate) => candidate.generated ? [candidate.generated.record] : []),
+        ], row.invoiceDate),
       );
       setPreview({ creatorName: row.creatorName, model });
     } catch (error) {

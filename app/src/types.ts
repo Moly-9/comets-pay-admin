@@ -318,6 +318,36 @@ export type InvoiceReviewStage =
   | 'FINANCE'
   | 'PAYMENT';
 
+export type InvoiceContractMatchField =
+  | 'PUBLISHER'
+  | 'ADVERTISER'
+  | 'AMOUNT'
+  | 'CURRENCY'
+  | 'PAYMENT_ACCOUNT';
+
+export type InvoiceContractMatchIssue = {
+  field: InvoiceContractMatchField;
+  label: string;
+  severity: 'BLOCKER' | 'REASON_REQUIRED';
+  contractIds: ContractId[];
+  contractValue: string;
+  invoiceValue: string;
+  message: string;
+};
+
+export type InvoiceContractMatchReview = {
+  version: number;
+  contractIds: ContractId[];
+  result: 'MATCHED' | 'NOT_APPLICABLE' | 'BLOCKED' | 'APPROVED_WITH_REASON' | 'REASON_REQUIRED';
+  issues: InvoiceContractMatchIssue[];
+  reason?: string;
+  actorAccount?: string;
+  actorName?: string;
+  actorRole?: string;
+  reviewedAt?: string;
+  historicalMigration?: boolean;
+};
+
 export type InvoiceNotificationDelivery = {
   channel: 'IN_APP' | 'EMAIL';
   status: 'SIMULATED_SENT' | 'SKIPPED_MISSING_RECIPIENT';
@@ -361,6 +391,7 @@ export type GeneratedInvoiceRecord = {
   validationStatus: 'valid' | 'needs_review';
   version?: number;
   revisions?: GeneratedInvoiceRevision[];
+  contractMatchReviews?: InvoiceContractMatchReview[];
 };
 
 export type InvoiceBatchMode = 'SHARED_DESCRIPTION' | 'XLSX_IMPORT';
@@ -397,6 +428,8 @@ export type InvoiceBatchRow = {
   payoutAccountLocked: boolean;
   contractIds: ContractId[];
   availableContractIds: ContractId[];
+  contractMatchReview?: InvoiceContractMatchReview;
+  contractMatchReason: string;
   status: InvoiceBatchRowStatus;
   issues: string[];
   generated?: InvoiceBatchGeneratedFiles;

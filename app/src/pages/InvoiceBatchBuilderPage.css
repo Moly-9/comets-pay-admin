@@ -1735,6 +1735,60 @@
   }
 }
 
+.invoice-batch-table .invoice-batch-match-reason-row td {
+  padding: 0 12px 12px;
+  border-top: 0;
+  background: #fffdf7;
+}
+
+.invoice-batch-match-reason-row label {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) minmax(280px, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.invoice-batch-match-reason-row label > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8b681c;
+  font-size: 11px;
+}
+
+.invoice-batch-match-reason-row textarea {
+  min-height: 54px;
+  resize: vertical;
+}
+
+.invoice-batch-match-reason-row small {
+  color: #7b818c;
+  font-size: 10px;
+  text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .invoice-batch-table .invoice-batch-match-reason-row {
+    display: block;
+    padding: 0 11px 11px;
+  }
+
+  .invoice-batch-table .invoice-batch-match-reason-row td {
+    display: block;
+    padding: 11px;
+    border: 1px solid #ead8aa;
+    border-radius: 6px;
+  }
+
+  .invoice-batch-match-reason-row label {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-batch-match-reason-row small {
+    text-align: left;
+  }
+}
+
 @media (min-width: 1181px) {
   .invoice-batch-table-wrap {
     margin-right: auto;

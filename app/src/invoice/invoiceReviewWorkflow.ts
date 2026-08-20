@@ -1,5 +1,6 @@
 import type {
   GeneratedInvoiceRecord,
+  InvoiceContractMatchReview,
   InvoiceDocumentModel,
   InvoiceEditContext,
   InvoiceReviewEvent,
@@ -401,6 +402,7 @@ export const applyInvoiceDocumentEdit = ({
   record,
   payout,
   snapshot,
+  contractMatchReview,
   context,
   actor,
   reason,
@@ -409,6 +411,7 @@ export const applyInvoiceDocumentEdit = ({
   record: GeneratedInvoiceRecord;
   payout: Payout;
   snapshot: InvoiceDocumentModel;
+  contractMatchReview?: InvoiceContractMatchReview;
   context: InvoiceEditContext;
   actor: InvoiceReviewActor;
   reason?: string;
@@ -456,6 +459,10 @@ export const applyInvoiceDocumentEdit = ({
         actorRole: actor.role,
         occurredAt,
       },
+    ],
+    contractMatchReviews: [
+      ...(record.contractMatchReviews ?? []),
+      ...(contractMatchReview ? [contractMatchReview] : []),
     ],
   };
   const accountValue = nextSnapshot.paymentMethod === 'paypal'

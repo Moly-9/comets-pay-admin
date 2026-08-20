@@ -2805,6 +2805,7 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
 export function InvoicePage({
   payouts,
   creators,
+  contracts = [],
   invoiceEntity,
   generatedInvoices,
   requests,
@@ -2832,6 +2833,7 @@ export function InvoicePage({
 }: {
   payouts: Payout[];
   creators: CreatorProfile[];
+  contracts?: ContractRecord[];
   invoiceEntity: InvoiceEntity;
   generatedInvoices: GeneratedInvoiceRecord[];
   requests: RequestProjectSummary[];
@@ -2881,7 +2883,11 @@ export function InvoicePage({
       ? payouts.find((payout) => payout.id === selectedGenerated.sourcePayoutId) ?? null
       : null);
   const selectedSource: InvoiceDetailSource | null = selectedPayout
-    ? { kind: 'payout', payout: selectedPayout }
+    ? {
+        kind: 'payout',
+        payout: selectedPayout,
+        record: generatedInvoices.find((record) => record.sourcePayoutId === selectedPayout.id),
+      }
     : selectedGenerated
       ? {
           kind: 'generated',
@@ -3000,6 +3006,7 @@ export function InvoicePage({
       <InvoiceDetailPage
         source={selectedSource}
         model={selectedModel}
+        contracts={contracts}
         notify={notify}
         onMarkSigned={markSignedAndOpenReview}
         onReviewAction={onReviewAction}
@@ -3977,12 +3984,12 @@ export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
   {
     id: 1,
     icon: FileCheck2,
-    title: 'Invoice INV-240718 等待媒介审核',
+    title: 'Invoice 等待媒介审核',
     body: '@MinaKato · Once Human主机上线KOL合作项目 · USD 3,240',
     time: '10 分钟前',
     unread: true,
     actionLabel: '进入审核',
-    target: { kind: 'invoice-review', invoiceId: 'INV-240718' },
+    target: { kind: 'invoice-review', invoiceId: 'invoice_fixture_301164_01' as InvoiceId },
   },
   {
     id: 2,

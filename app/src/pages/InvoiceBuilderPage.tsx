@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   CheckCircle2,
@@ -11,12 +12,11 @@ import {
   WalletCards,
   WandSparkles,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
   createPrototypeId,
-  validateContractCoverage,
   type CreatorId,
   type ContractId,
   type EngagementId,
@@ -34,10 +34,14 @@ import {
   todayInputValue,
 } from '../invoice/invoiceUtils';
 import {
-  payoutSnapshotForContract,
-  payoutSnapshotKey,
   validateInvoiceDocumentModel,
 } from '../invoice/invoiceDraft';
+import {
+  createInvoiceContractMatchReview,
+  evaluateInvoiceContractMatch,
+  invoiceContractMatchFingerprint,
+  type InvoiceContractMatchActor,
+} from '../invoice/invoiceContractMatching';
 import { createInvoiceBuilderPrototypeSeed } from '../invoice/invoiceBuilderPrototype';
 import {
   invoiceDocumentChanged,
@@ -62,6 +66,7 @@ import type {
   CreatorProfile,
   DocumentPayoutSnapshot,
   GeneratedInvoiceRecord,
+  InvoiceContractMatchReview,
   InvoiceCurrency,
   InvoiceDocumentModel,
   InvoiceEditContext,
@@ -83,7 +88,11 @@ type InvoiceBuilderPageProps = {
   editRecord?: GeneratedInvoiceRecord;
   editContext?: InvoiceEditContext;
   allowPayoutAccountChange?: boolean;
-  onEdited?: (snapshot: InvoiceDocumentModel) => GeneratedInvoiceRecord;
+  contractMatchActor?: InvoiceContractMatchActor;
+  onEdited?: (
+    snapshot: InvoiceDocumentModel,
+    contractMatchReview: InvoiceContractMatchReview,
+  ) => GeneratedInvoiceRecord;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
@@ -149,6 +158,7 @@ export function InvoiceBuilderPage({
   editRecord,
   editContext,
   allowPayoutAccountChange = false,
+  contractMatchActor,
   onEdited,
   onDirtyChange,
   onCancel,
@@ -157,6 +167,7 @@ export function InvoiceBuilderPage({
 }: InvoiceBuilderPageProps) {
   const isEditing = Boolean(editRecord && editContext);
   const editSnapshot = editRecord?.snapshot;
+  const initialInvoiceDate = editSnapshot?.invoiceDate ?? todayInputValue();
   const initialContext = projects
     .flatMap((project) => (project.creatorProfiles ?? []).map((reference) => ({ project, reference })))
     .find((item) => item.reference.engagementId === (editSnapshot?.engagementId ?? initialEngagementId));
@@ -191,11 +202,11 @@ export function InvoiceBuilderPage({
   const [contractIds, setContractIds] = useState<ContractId[]>(() => (
     editSnapshot?.contractIds ? [...editSnapshot.contractIds] : []
   ));
+  const [invoiceDate, setInvoiceDate] = useState(initialInvoiceDate);
   const [invoiceNumber, setInvoiceNumber] = useState(() => (
-    editSnapshot?.invoiceNumber ?? nextInvoiceNumber(generatedInvoices)
+    editSnapshot?.invoiceNumber ?? nextInvoiceNumber(generatedInvoices, initialInvoiceDate)
   ));
   const [prototypePayoutId] = useState(() => createPrototypeId('payout'));
-  const [invoiceDate, setInvoiceDate] = useState(() => editSnapshot?.invoiceDate ?? todayInputValue());
   const [billTo, setBillTo] = useState<InvoiceEntity>(
     editSnapshot ? { ...editSnapshot.billTo } : { ...invoiceEntity },
   );
@@ -230,6 +241,7 @@ export function InvoiceBuilderPage({
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
+  const [contractMatchReason, setContractMatchReason] = useState('');
   const prototypeSeed = useMemo(() => createInvoiceBuilderPrototypeSeed({
     creators,
     payouts,
@@ -313,30 +325,24 @@ export function InvoiceBuilderPage({
     paymentMethod,
     payment,
   }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, payoutAccountId, selectedCreator, selectedProject]);
-  const contractComparisonWarnings = [
-    ...validateContractCoverage(
-      selectedContracts.map((contract) => ({
-        contractId: contract.contractId!,
-        advertiser: contract.advertiser,
-        publisher: contract.publisher,
-        currency: contract.currency,
-        totalFee: contract.totalFee,
-        paymentMethod: contract.paymentMethod === 'PAYPAL' ? 'PAYPAL' : 'BANK',
-      })),
-      {
-        billTo: model.billTo.name,
-        publisher: model.from.legalName,
-        currency: model.currency,
-        amount: invoiceTotal(model),
-        paymentMethod: model.paymentMethod === 'paypal' ? 'PAYPAL' : 'BANK',
-      },
-    ).map((issue) => issue.message),
-    ...(selectedContracts.some((contract) => {
-      const snapshot = payoutSnapshotForContract(contract);
-      return Boolean(snapshot?.payoutAccountId && payoutSnapshotKey(snapshot) !== payoutSnapshotKey(model.payment));
-    }) ? ['所选合同的收款账户快照与本次 Invoice 不一致；系统仅提示，Invoice 仍使用当前达人账户。'] : []),
-  ];
+  const contractMatch = useMemo(() => evaluateInvoiceContractMatch(
+    selectedContracts,
+    model,
+    contractMatchReason,
+  ), [contractMatchReason, model, selectedContracts]);
+  const contractMatchFingerprint = useMemo(() => invoiceContractMatchFingerprint(
+    selectedContracts,
+    model,
+  ), [model, selectedContracts]);
+  const previousContractMatchFingerprint = useRef(contractMatchFingerprint);
   const isDirty = Boolean(editSnapshot && invoiceDocumentChanged(editSnapshot, model));
+
+  useEffect(() => {
+    if (previousContractMatchFingerprint.current === contractMatchFingerprint) return;
+    previousContractMatchFingerprint.current = contractMatchFingerprint;
+    setContractMatchReason('');
+    setGeneratedFiles(null);
+  }, [contractMatchFingerprint]);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -368,6 +374,7 @@ export function InvoiceBuilderPage({
       : invoicePaymentForCreator(creator, paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex'));
     setItems([createBlankLine(0)]);
     setErrors({});
+    setContractMatchReason('');
     setGeneratedFiles(null);
   };
 
@@ -381,8 +388,9 @@ export function InvoiceBuilderPage({
     setSelectedProjectId(project ? cooperationProjectIdFor(project) : '');
     setEngagementId(prototypeSeed.engagementId);
     setContractIds([]);
-    setInvoiceNumber(nextInvoiceNumber(generatedInvoices));
-    setInvoiceDate(todayInputValue());
+    const demoDate = todayInputValue();
+    setInvoiceNumber(nextInvoiceNumber(generatedInvoices, demoDate));
+    setInvoiceDate(demoDate);
     setBillTo({ ...invoiceEntity });
     setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
     setCurrency(prototypeSeed.currency);
@@ -394,6 +402,7 @@ export function InvoiceBuilderPage({
     setPaymentMethod(prototypeSeed.paymentMethod);
     setPayment({ ...prototypeSeed.payment });
     setErrors({});
+    setContractMatchReason('');
     setGenerationError('');
     setGeneratedFiles(null);
   };
@@ -477,6 +486,13 @@ export function InvoiceBuilderPage({
     });
     if (!creatorId) nextErrors.creator = '请选择达人';
     if (!selectedProjectId || !engagementId) nextErrors.project = '请选择飞书合作项目';
+    if (contractMatch.blockerIssues.length) {
+      nextErrors.contractMatch = contractMatch.blockerIssues[0].message;
+    } else if (contractMatch.reasonRequiredIssues.length && !contractMatch.reasonValid) {
+      nextErrors.contractMatch = contractMatchReason.trim().length > 300
+        ? '差异说明不能超过 300 个字符'
+        : '请填写 1–300 个字符的合同差异说明';
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -493,17 +509,28 @@ export function InvoiceBuilderPage({
     }
     setGenerating(true);
     try {
+      const allocatedInvoiceNumber = isEditing
+        ? model.invoiceNumber
+        : nextInvoiceNumber(generatedInvoices, model.invoiceDate);
       const snapshot: InvoiceDocumentModel = {
         ...model,
+        invoiceNumber: allocatedInvoiceNumber,
         billTo: { ...model.billTo },
         from: { ...model.from },
         payment: { ...model.payment },
         items: model.items.map((item) => ({ ...item })),
       };
+      const contractMatchReview = createInvoiceContractMatchReview({
+        contracts: selectedContracts,
+        model: snapshot,
+        version: isEditing ? (editRecord?.version ?? 1) + 1 : 1,
+        reason: contractMatchReason,
+        actor: contractMatchActor,
+      });
       const { generateInvoiceFiles } = await import('../invoice/generateInvoice');
       const { pdfBlob, docxBlob } = await generateInvoiceFiles(snapshot);
       const record = isEditing
-        ? onEdited?.(snapshot)
+        ? onEdited?.(snapshot, contractMatchReview)
         : {
             id: snapshot.invoiceNumber,
             invoiceId: createPrototypeId('invoice') as InvoiceId,
@@ -512,11 +539,13 @@ export function InvoiceBuilderPage({
             generatedAt: new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(new Date()),
             snapshot,
             validationStatus: 'valid' as const,
+            version: 1,
+            contractMatchReviews: [contractMatchReview],
           };
       if (!record) throw new Error(isEditing ? '修改记录保存失败。' : 'Invoice 生成回调未配置。');
       if (!isEditing) onGenerated?.(record);
       setGeneratedFiles({ record, pdfBlob, docxBlob });
-      if (!isEditing) setInvoiceNumber(nextInvoiceNumber([record, ...generatedInvoices]));
+      if (!isEditing) setInvoiceNumber(nextInvoiceNumber([record, ...generatedInvoices], invoiceDate));
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '文件生成失败，请稍后重试');
     } finally {
@@ -605,7 +634,7 @@ export function InvoiceBuilderPage({
                 <div className="invoice-contract-coverage-head">
                   <div>
                     <strong id="invoice-contract-coverage-label">关联合同（非必填）</strong>
-                    <span>显示该项目达人全部已确认合同；差异仅提示，不会覆盖 Invoice 字段或阻止生成。</span>
+                    <span>主体必须一致；金额、币种或付款账户差异填写说明后可继续。</span>
                   </div>
                   <em>{contractIds.length ? `已选 ${contractIds.length} 份` : '未关联合同（非必填）'}</em>
                 </div>
@@ -632,14 +661,60 @@ export function InvoiceBuilderPage({
                 ) : (
                   <p>当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。</p>
                 )}
-                {contractComparisonWarnings.length ? (
-                  <div className="invoice-contract-conflict invoice-contract-warning" role="status">
-                    <strong>合同字段与 Invoice 存在差异，仅供核对</strong>
-                    {contractComparisonWarnings.map((message) => (
-                      <span key={message}>{message}</span>
+                <div className="invoice-contract-match-panel" data-result={contractMatch.result}>
+                  <div className="invoice-contract-match-head">
+                    <span>
+                      {contractMatch.result === 'BLOCKED' ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
+                      <strong>{
+                        contractMatch.result === 'NOT_APPLICABLE'
+                          ? '未关联合同，匹配不适用'
+                          : contractMatch.result === 'BLOCKED'
+                            ? '主体不一致，暂不能生成'
+                            : contractMatch.result === 'REASON_REQUIRED'
+                              ? '存在可放行差异，请填写说明'
+                              : contractMatch.result === 'APPROVED_WITH_REASON'
+                                ? '差异说明已填写，可以生成'
+                                : '合同与 Invoice 已匹配'
+                      }</strong>
+                    </span>
+                    <em>{contractMatch.result === 'NOT_APPLICABLE'
+                      ? '不适用'
+                      : `${contractMatch.checks.filter((check) => (
+                          ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state)
+                        )).length}/${contractMatch.checks.length} 已确认`}</em>
+                  </div>
+                  <div className="invoice-contract-match-grid">
+                    {contractMatch.checks.map((check) => (
+                      <article data-state={check.state} key={check.field}>
+                        <span>{
+                          check.state === 'MATCH' || check.state === 'APPROVED_WITH_REASON'
+                            ? <CheckCircle2 size={15} />
+                            : check.state === 'NOT_APPLICABLE'
+                              ? <FileText size={15} />
+                              : <AlertTriangle size={15} />
+                        }</span>
+                        <div><strong>{check.label}</strong><small>{check.message}</small></div>
+                      </article>
                     ))}
                   </div>
-                ) : null}
+                  {contractMatch.reasonRequiredIssues.length ? (
+                    <label className={`invoice-contract-match-reason ${errors.contractMatch ? 'has-error' : ''}`}>
+                      <span>合同差异说明 *</span>
+                      <textarea
+                        value={contractMatchReason}
+                        maxLength={300}
+                        placeholder="说明金额、币种或付款账户与合同不一致的业务原因"
+                        onChange={(event) => {
+                          setContractMatchReason(event.target.value);
+                          setGeneratedFiles(null);
+                        }}
+                      />
+                      <small>{errors.contractMatch || `${contractMatchReason.trim().length}/300`}</small>
+                    </label>
+                  ) : contractMatch.blockerIssues.length ? (
+                    <p className="invoice-contract-match-blocker" role="alert">{contractMatch.blockerIssues.map((item) => item.message).join('；')}</p>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
@@ -648,7 +723,12 @@ export function InvoiceBuilderPage({
             <header><span><FileText size={19} /></span><div><h2>2. Invoice 信息</h2><p>编号由系统生成，日期、币种与费用内容可编辑。</p></div></header>
             <div className="invoice-form-grid">
               <label className={errors.invoiceNumber ? 'has-error' : ''}><span>Invoice 编号 *</span><input value={invoiceNumber} readOnly /><small>{errors.invoiceNumber}</small></label>
-              <label className={errors.invoiceDate ? 'has-error' : ''}><span>Invoice 日期 *</span><input type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); setGeneratedFiles(null); }} /><small>{errors.invoiceDate}</small></label>
+              <label className={errors.invoiceDate ? 'has-error' : ''}><span>Invoice 日期 *</span><input type="date" value={invoiceDate} onChange={(event) => {
+                const value = event.target.value;
+                setInvoiceDate(value);
+                if (!isEditing && value) setInvoiceNumber(nextInvoiceNumber(generatedInvoices, value));
+                setGeneratedFiles(null);
+              }} /><small>{errors.invoiceDate}</small></label>
               <div className="invoice-form-control"><span>币种 *</span><SelectField ariaLabel="Invoice 币种" variant="form" value={currency} options={CURRENCY_OPTIONS} onChange={(value) => { setCurrency(value); setGeneratedFiles(null); }} /></div>
             </div>
             <div className="invoice-line-items">
@@ -747,7 +827,7 @@ export function InvoiceBuilderPage({
 
           <div className="invoice-builder-footer">
             <Button variant="ghost" onClick={cancel}>取消</Button>
-            <Button icon={<WandSparkles size={17} />} disabled={generating || (isEditing && !isDirty)} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
+            <Button icon={<WandSparkles size={17} />} disabled={generating || (isEditing && !isDirty) || !contractMatch.canProceed} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
           </div>
         </section>
 

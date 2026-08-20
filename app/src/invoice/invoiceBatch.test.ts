@@ -339,7 +339,7 @@ describe('Invoice batch rows', () => {
     expect(row.status).toBe('READY');
   });
 
-  it('allows Invoice amount, currency, payout account, and payment method to differ from the contract', () => {
+  it('allows Invoice amount, currency, payout account, and payment method to differ after a reason', () => {
     const bankAccount = { ...baseAccount, isDefault: true };
     const paypalAccount = createPayPalPayoutAccount({
       id: 'paypal-batch-mismatch',
@@ -362,11 +362,14 @@ describe('Invoice batch rows', () => {
       currency: 'EUR',
       lineItems: lineItemSeeds('Creator Service'),
     });
-    const row = updateAndValidateInvoiceBatchRow(initial, {
+    const unresolved = updateAndValidateInvoiceBatchRow(initial, {
       items: updateLineItemAmounts(initial, [{ unitPrice: 3_200, quantity: 1 }]),
       currency: 'EUR',
       payoutAccountId: 'paypal-batch-mismatch',
       payoutAccountLocked: false,
+    }, context);
+    const row = updateAndValidateInvoiceBatchRow(unresolved, {
+      contractMatchReason: '合同为预算金额，Invoice 使用达人本次指定的实际结算资料。',
     }, context);
     const model = buildInvoiceDocumentForBatchRow(row, context, 'INV-BATCH-MISMATCH');
 
@@ -377,6 +380,13 @@ describe('Invoice batch rows', () => {
     expect(model.items[0].lineTotal).toBe(3_200);
     expect(model.payoutAccountId).toBe('paypal-batch-mismatch');
     expect(model.paymentMethod).toBe('paypal');
+    expect(row.contractMatchReview?.result).toBe('APPROVED_WITH_REASON');
+
+    const changedAgain = updateAndValidateInvoiceBatchRow(row, {
+      items: updateLineItemAmounts(row, [{ unitPrice: 3_300, quantity: 1 }]),
+    }, context);
+    expect(changedAgain.contractMatchReason).toBe('');
+    expect(changedAgain.status).toBe('NEEDS_INPUT');
   });
 
   it.each([

@@ -405,9 +405,9 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     invoice: { id: '6 份 Invoice', meta: '请款金额 USD 18,420', status: '已校验' },
     payment: { id: 'PAY-260718-04', meta: '多渠道 · 分组付款', status: '待打款' },
     payees: [
-      { name: '@MinaKato', invoice: 'INV-240718', amount: 'USD 3,240', channel: 'Airwallex', status: '待打款' },
-      { name: 'Yuki Tanaka', invoice: 'INV-240719', amount: 'USD 2,180', channel: 'PayPal', status: '待打款' },
-      { name: 'Camila Costa', invoice: 'INV-240720', amount: 'USD 2,760', channel: 'PayMax', status: '待打款' },
+      { name: '@MinaKato', invoice: 'INV-20240718-00001', amount: 'USD 3,240', channel: 'Airwallex', status: '待打款' },
+      { name: 'Yuki Tanaka', invoice: 'INV-20240719-00001', amount: 'USD 2,180', channel: 'PayPal', status: '待打款' },
+      { name: 'Camila Costa', invoice: 'INV-20240720-00001', amount: 'USD 2,760', channel: 'PayMax', status: '待打款' },
     ],
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已提交', time: '07-18 09:36', state: 'complete' },
@@ -429,9 +429,9 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     invoice: { id: '3 份 Invoice', meta: '请款金额 EUR 6,200', status: '已校验' },
     payment: { id: '待生成', meta: '审批通过后自动生成付款单', status: '未生成' },
     payees: [
-      { name: 'Alex Ruiz', invoice: 'INV-240716-A', amount: 'EUR 2,450', channel: 'PayMax', status: '待审批' },
-      { name: 'Hannah Lee', invoice: 'INV-240716-B', amount: 'EUR 1,850', channel: 'PayPal', status: '待审批' },
-      { name: 'Luca Bianchi', invoice: 'INV-240716-C', amount: 'EUR 1,900', channel: 'PayMax', status: '待审批' },
+      { name: 'Alex Ruiz', invoice: 'INV-20240716-00001', amount: 'EUR 2,450', channel: 'PayMax', status: '待审批' },
+      { name: 'Hannah Lee', invoice: 'INV-20240716-00002', amount: 'EUR 1,850', channel: 'PayPal', status: '待审批' },
+      { name: 'Luca Bianchi', invoice: 'INV-20240716-00003', amount: 'EUR 1,900', channel: 'PayMax', status: '待审批' },
     ],
     progress: [
       { label: '请款提交', description: '项目资料已提交', time: '07-16 14:20', state: 'complete' },
@@ -453,9 +453,9 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     invoice: { id: '5 份 Invoice', meta: '其中 1 份收款账号待补充', status: '待补资料' },
     payment: { id: '待生成', meta: '资料补齐且审批通过后生成', status: '未生成' },
     payees: [
-      { name: '@Luna_J', invoice: 'INV-240711-A', amount: 'USD 4,200', channel: 'Airwallex', status: '资料完整' },
-      { name: 'Emily Wong', invoice: 'INV-240711-B', amount: 'USD 3,600', channel: 'Airwallex', status: '资料完整' },
-      { name: 'Marc O.', invoice: 'INV-240711-C', amount: 'USD 2,100', channel: 'PayPal', status: '待补资料' },
+      { name: '@Luna_J', invoice: 'INV-20240711-00001', amount: 'USD 4,200', channel: 'Airwallex', status: '资料完整' },
+      { name: 'Emily Wong', invoice: 'INV-20240711-00002', amount: 'USD 3,600', channel: 'Airwallex', status: '资料完整' },
+      { name: 'Marc O.', invoice: 'INV-20240711-00003', amount: 'USD 2,100', channel: 'PayPal', status: '待补资料' },
     ],
     progress: [
       { label: '请款提交', description: '发现 1 份 PayPal 收款资料不完整，等待媒介补充', time: '07-18 17:40', state: 'current' },
@@ -477,9 +477,9 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     invoice: { id: '16 份 Invoice', meta: '请款金额 USD 41,200', status: '已通过' },
     payment: { id: 'PAY-260625-12', meta: 'Airwallex · 16 笔付款', status: '已完成' },
     payees: [
-      { name: 'Kenji Mori', invoice: 'INV-240625-A', amount: 'USD 3,800', channel: 'Airwallex', status: '已付款' },
-      { name: '@MinaKato', invoice: 'INV-240625-B', amount: 'USD 3,240', channel: 'Airwallex', status: '已付款' },
-      { name: 'Nika', invoice: 'INV-240625-C', amount: 'USD 2,980', channel: 'PayPal', status: '已付款' },
+      { name: 'Kenji Mori', invoice: 'INV-20240625-00001', amount: 'USD 3,800', channel: 'Airwallex', status: '已付款' },
+      { name: '@MinaKato', invoice: 'INV-20240625-00002', amount: 'USD 3,240', channel: 'Airwallex', status: '已付款' },
+      { name: 'Nika', invoice: 'INV-20240625-00003', amount: 'USD 2,980', channel: 'PayPal', status: '已付款' },
     ],
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已提交', time: '06-25 14:00', state: 'complete' },

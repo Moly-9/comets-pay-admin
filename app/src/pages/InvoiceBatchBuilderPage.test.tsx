@@ -68,6 +68,7 @@ describe('InvoiceBatchBuilderPage layout', () => {
       payoutAccountLocked: false,
       contractIds: [],
       availableContractIds: [],
+      contractMatchReason: '',
       status: 'GENERATED',
       issues: [],
       generated: {

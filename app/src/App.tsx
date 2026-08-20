@@ -110,6 +110,7 @@ import type {
   CreatorProfile,
   GeneratedInvoiceRecord,
   InvoiceDocumentModel,
+  InvoiceContractMatchReview,
   InvoiceEditContext,
   InvoiceEntity,
   NavOptions,
@@ -174,6 +175,7 @@ import {
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import { downloadBlob } from './invoice/invoiceUtils';
+import { normalizeInvoiceResourceNumbers } from './invoice/invoiceNumberMigration';
 import {
   createDocumentPayoutSnapshot,
   getPayoutAccountFingerprint,
@@ -219,12 +221,28 @@ import {
 import { requestApprovalReminderFor } from './requestApprovalReminders';
 import { recordPaymentListReturnNotification } from './paymentNotification';
 
-const INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES = applyPaymentBatchPrototypeScenario({
+const RAW_PAYMENT_BATCH_PROTOTYPE_RESOURCES = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
   requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
   generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
   paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
 });
+
+const NORMALIZED_INITIAL_INVOICE_RESOURCES = normalizeInvoiceResourceNumbers({
+  invoices: [...INITIAL_COMPLETE_REQUEST_RESOURCES.invoices],
+  payouts: [...new Map([
+    ...INITIAL_PAYOUTS,
+    ...RAW_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts,
+  ].map((payout) => [payout.id, payout])).values()],
+  paymentLists: [...RAW_PAYMENT_BATCH_PROTOTYPE_RESOURCES.paymentLists],
+});
+
+const INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES = {
+  ...RAW_PAYMENT_BATCH_PROTOTYPE_RESOURCES,
+  invoices: NORMALIZED_INITIAL_INVOICE_RESOURCES.invoices,
+  payouts: NORMALIZED_INITIAL_INVOICE_RESOURCES.payouts,
+  paymentLists: NORMALIZED_INITIAL_INVOICE_RESOURCES.paymentLists,
+};
 
 const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   等待付款: '付款处理中',
@@ -288,12 +306,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<SystemUser>(LOCAL_DEV_USER);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
   const [requestStatusFilter, setRequestStatusFilter] = useState<RequestProjectStatusFilter>('all');
-  const [payouts, setPayouts] = useState<Payout[]>(() => (
-    [...new Map([
-      ...INITIAL_PAYOUTS,
-      ...INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts,
-    ].map((payout) => [payout.id, payout])).values()]
-  ));
+  const [payouts, setPayouts] = useState<Payout[]>(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [contracts, setContracts] = useState<ContractRecord[]>(() => [
@@ -305,7 +318,7 @@ export default function App() {
   })));
   const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
-    INITIAL_COMPLETE_REQUEST_RESOURCES.invoices.map((invoice) => ({
+    INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.invoices.map((invoice) => ({
       ...invoice,
       snapshot: {
         ...invoice.snapshot,
@@ -356,7 +369,16 @@ export default function App() {
   const [paymentDetailRequestId, setPaymentDetailRequestId] = useState<string | null>(null);
   const [paymentWorkbenchInitialTab, setPaymentWorkbenchInitialTab] = useState<WorkbenchTab>('review');
   const [toast, setToast] = useState<ToastState>(null);
-  const [notificationItems, setNotificationItems] = useState<SystemNotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [notificationItems, setNotificationItems] = useState<SystemNotificationItem[]>(() => (
+    INITIAL_NOTIFICATIONS.map((item) => {
+      if (item.target.kind !== 'invoice-review') return item;
+      const invoiceId = item.target.invoiceId;
+      const invoice = NORMALIZED_INITIAL_INVOICE_RESOURCES.invoices.find((candidate) => (
+        candidate.invoiceId === invoiceId
+      ));
+      return invoice ? { ...item, title: `Invoice ${invoice.id} 等待媒介审核` } : item;
+    })
+  ));
   const [showRequestApprovalReminder, setShowRequestApprovalReminder] = useState(true);
   const [requestApprovalReminderUnread, setRequestApprovalReminderUnread] = useState(true);
   const [financeReviewRequestId, setFinanceReviewRequestId] = useState<string | null>(null);
@@ -1161,7 +1183,10 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const saveInvoiceEdit = (snapshot: InvoiceDocumentModel) => {
+  const saveInvoiceEdit = (
+    snapshot: InvoiceDocumentModel,
+    contractMatchReview: InvoiceContractMatchReview,
+  ) => {
     if (!invoiceEditTarget) throw new Error('Invoice 修改上下文已失效，请返回详情后重试。');
     const record = generatedInvoices.find((invoice) => invoice.invoiceId === invoiceEditTarget.invoiceId);
     if (!record) throw new Error('未找到需要修改的 Invoice 生成记录。');
@@ -1188,6 +1213,7 @@ export default function App() {
       record,
       payout,
       snapshot,
+      contractMatchReview,
       context: invoiceEditTarget.context,
       actor: {
         account: currentUser.account,
@@ -2996,9 +3022,12 @@ export default function App() {
 
   const openNotificationTarget = (target: NotificationNavigationTarget) => {
     if (target.kind === 'invoice-review') {
-      const payout = payouts.find((item) => item.invoice === target.invoiceId);
-      if (!payout) {
-        notify('未找到 Invoice', `无法定位 ${target.invoiceId} 对应的审核记录。`);
+      const invoice = generatedInvoices.find((item) => item.invoiceId === target.invoiceId);
+      const payout = invoice
+        ? payouts.find((item) => item.id === invoice.sourcePayoutId)
+        : undefined;
+      if (!invoice || !payout) {
+        notify('未找到 Invoice', '无法通过稳定 Invoice ID 定位对应的审核记录。');
         return;
       }
       if (!navigate('invoice')) return;
@@ -3831,6 +3860,7 @@ export default function App() {
         <InvoicePage
           payouts={payouts}
           creators={creators}
+          contracts={contracts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}
           requests={requestProjects}
@@ -3904,6 +3934,7 @@ export default function App() {
               editRecord.invoiceId,
             )
           )}
+          contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onEdited={saveInvoiceEdit}
           onDirtyChange={setInvoiceEditorDirty}
           onCancel={() => {
@@ -3933,6 +3964,7 @@ export default function App() {
           contracts={contracts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}
+          contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={(record) => {
             addGeneratedInvoice(record);
             setInvoiceCreationEngagementId(null);
@@ -3971,6 +4003,7 @@ export default function App() {
           contracts={contracts}
           invoiceEntity={invoiceEntity}
           generatedInvoices={generatedInvoices}
+          contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={addGeneratedInvoices}
           onDirtyChange={setInvoiceBatchDirty}
           onCancel={() => {

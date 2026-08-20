@@ -24,7 +24,8 @@ import type {
   Payout,
 } from '../types';
 import { validateInvoiceDocumentModel } from './invoiceDraft';
-import { normalizeLineItem } from './invoiceUtils';
+import { createInvoiceContractMatchReview, evaluateInvoiceContractMatch } from './invoiceContractMatching';
+import { formatInvoiceNumber, normalizeLineItem } from './invoiceUtils';
 
 export const INVOICE_BATCH_SCHEMA_VERSION = '1.0' as const;
 export const INVOICE_BATCH_MAX_ROWS = 50;
@@ -158,6 +159,7 @@ export const createInvoiceBatchRow = ({
     payoutAccountLocked: false,
     contractIds,
     availableContractIds: availableContracts.map((contract) => contract.contractId),
+    contractMatchReason: '',
     status: 'NEEDS_INPUT',
     issues: [],
   };
@@ -258,6 +260,7 @@ export const validateInvoiceBatchRow = (
   if (!account) issues.push('请选择唯一、已验证且资料完整的收款账户');
 
   if (!row.currency) issues.push('缺少支持的 Invoice 币种');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(row.invoiceDate)) issues.push('缺少有效 Invoice 日期');
   if (!row.items.length) issues.push('至少需要 1 条费用明细');
   row.items.forEach((item, index) => {
     const prefix = row.items.length > 1 ? `第 ${index + 1} 条 ` : '';
@@ -282,17 +285,37 @@ export const validateInvoiceBatchRow = (
     creator
     && account
     && row.currency
+    && /^\d{4}-\d{2}-\d{2}$/.test(row.invoiceDate)
     && lineItemsReady
   ) {
     const model = buildInvoiceDocumentForBatchRow(
       row,
       context,
-      'INV-BATCH-VALIDATION',
+      formatInvoiceNumber(row.invoiceDate, 1),
     );
     Object.values(validateInvoiceDocumentModel(model, [])).forEach((message) => {
       if (message.includes('不一致') || message.includes('应等于')) conflictIssues.push(message);
       else issues.push(message);
     });
+    const selectedContracts = availableContracts.filter((contract) => (
+      row.contractIds.includes(contract.contractId)
+    ));
+    const match = evaluateInvoiceContractMatch(selectedContracts, model, row.contractMatchReason);
+    match.blockerIssues.forEach((matchIssue) => conflictIssues.push(matchIssue.message));
+    if (match.reasonRequiredIssues.length && !match.reasonValid) {
+      issues.push(row.contractMatchReason.trim().length > 300
+        ? '合同差异说明不能超过 300 个字符'
+        : '合同金额、币种或付款账户存在差异，请填写 1–300 个字符的说明');
+    }
+    row = {
+      ...row,
+      contractMatchReview: createInvoiceContractMatchReview({
+        contracts: selectedContracts,
+        model,
+        version: 1,
+        reason: row.contractMatchReason,
+      }),
+    };
   }
 
   const uniqueIssues = [...new Set([...conflictIssues, ...issues])];
@@ -317,18 +340,27 @@ export const updateAndValidateInvoiceBatchRow = (
     | 'payoutAccountId'
     | 'contractIds'
     | 'payoutAccountLocked'
+    | 'contractMatchReason'
   >>,
   context: InvoiceBatchContext,
-) => validateInvoiceBatchRow({
-  ...row,
-  ...patch,
-  status: 'NEEDS_INPUT',
-  issues: [],
-}, context);
+) => {
+  const resetsMatchReason = Object.keys(patch).some((field) => field !== 'contractMatchReason');
+  return validateInvoiceBatchRow({
+    ...row,
+    ...patch,
+    contractMatchReason: resetsMatchReason && patch.contractMatchReason === undefined
+      ? ''
+      : patch.contractMatchReason ?? row.contractMatchReason,
+    contractMatchReview: undefined,
+    status: 'NEEDS_INPUT',
+    issues: [],
+  }, context);
+};
 
 export const createGeneratedInvoiceRecord = (
   row: InvoiceBatchRow,
   snapshot: InvoiceDocumentModel,
+  contractMatchReview = row.contractMatchReview,
 ): GeneratedInvoiceRecord => ({
   id: snapshot.invoiceNumber,
   invoiceId: createPrototypeId('invoice') as InvoiceId,
@@ -342,4 +374,5 @@ export const createGeneratedInvoiceRecord = (
   snapshot,
   validationStatus: 'valid',
   version: 1,
+  contractMatchReviews: contractMatchReview ? [contractMatchReview] : undefined,
 });
