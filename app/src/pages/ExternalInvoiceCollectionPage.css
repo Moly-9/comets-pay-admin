@@ -73,16 +73,20 @@
   gap: 18px;
 }
 
-.external-collection-card {
+.external-invoice-page .content-card.external-collection-card {
   display: grid;
-  gap: 18px;
-  padding: 18px 20px 20px;
+  gap: 20px;
+  padding: 24px 20px 22px;
 }
 
 .external-collection-card > .external-section-heading {
+  align-items: center;
   border-bottom: 1px solid var(--external-line);
-  padding-bottom: 15px;
+  min-height: 28px;
+  padding-bottom: 16px;
 }
+
+.external-collection-card > .external-section-heading p { max-width: 58%; }
 
 .external-form-grid,
 .external-simulator-form {
@@ -344,7 +348,9 @@
   .external-summary-grid,
   .external-critical-checks { grid-template-columns: 1fr; }
   .external-form-span { grid-column: auto; }
-  .external-collection-card { padding: 15px 13px 16px; }
+  .external-invoice-page .content-card.external-collection-card { padding: 18px 13px; }
+  .external-collection-card > .external-section-heading { align-items: stretch; gap: 10px; }
+  .external-collection-card > .external-section-heading p { max-width: none; }
   .external-form-footer { align-items: stretch; grid-template-columns: 1fr; }
   .external-progress-section { overflow-x: auto; }
   .external-progress-list { min-width: 680px; }
