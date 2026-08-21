@@ -1,6 +1,8 @@
 import {
   ArrowLeft,
+  BriefcaseBusiness,
   CheckCircle2,
+  CircleDollarSign,
   Clock3,
   FileSearch,
   FileText,
@@ -9,9 +11,10 @@ import {
   Send,
   ShieldCheck,
   Upload,
+  WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading } from '../components/Common';
+import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import {
   CONTRACT_TYPE_LABELS,
   contractLinkedToProject,
@@ -100,6 +103,27 @@ export function ExternalInvoiceCollectionCreatePage({
   const creatorReferences = selectedProject?.creatorProfiles?.filter((reference) => reference.status !== 'removed') ?? [];
   const selectedReference = creatorReferences.find((reference) => String(reference.creatorId) === creatorId);
   const selectedCreator = creators.find((creator) => String(creator.id) === creatorId);
+  const projectOptions = useMemo(() => projects.map((project) => ({
+    value: String(project.projectId ?? project.id),
+    label: project.name,
+    description: [project.projectCode ?? project.cooperationProjectCode ?? project.id, project.brand].filter(Boolean).join(' · '),
+    leading: <BriefcaseBusiness size={17} />,
+  })), [projects]);
+  const creatorOptions = useMemo(() => creatorReferences.map((reference) => {
+    const creator = creators.find((item) => String(item.id) === String(reference.creatorId));
+    return {
+      value: String(reference.creatorId),
+      label: reference.name,
+      description: [reference.platform, reference.handle].filter(Boolean).join(' · '),
+      leading: (
+        <Avatar
+          initials={creator?.initials ?? reference.name.slice(0, 2)}
+          accent={creator?.accent}
+          size="sm"
+        />
+      ),
+    };
+  }), [creatorReferences, creators]);
   const eligibleContracts = useMemo(() => contracts.filter((contract) => (
     contract.lifecycle === 'CONFIRMED'
     && Boolean(contract.contractId)
@@ -145,75 +169,101 @@ export function ExternalInvoiceCollectionCreatePage({
         title="发起外部 Invoice 收集"
         subtitle="先固定合作项目、达人和预期业务信息，再向对应达人档案发布上传任务。"
       />
-      <section className="content-card external-collection-form">
-        <div className="external-section-heading">
-          <div><span className="external-section-kicker">01</span><h2>任务对象</h2></div>
-          <p>MCN 与达人共用同一份达人档案和收款账户。</p>
-        </div>
-        <div className="form-grid external-form-grid">
-          <label>
-            <span className="required-field-label">合作项目 <em className="required-mark">*</em></span>
-            <select value={projectId} onChange={(event) => {
-              setProjectId(event.target.value);
-              setCreatorId('');
-              setContractIds([]);
-            }}>
-              <option value="">请选择合作项目</option>
-              {projects.map((project) => <option key={project.id} value={String(project.projectId ?? project.id)}>{project.name}</option>)}
-            </select>
-          </label>
-          <label>
-            <span className="required-field-label">达人档案 <em className="required-mark">*</em></span>
-            <select value={creatorId} disabled={!selectedProject} onChange={(event) => {
-              setCreatorId(event.target.value);
-              setContractIds([]);
-            }}>
-              <option value="">请选择项目内达人</option>
-              {creatorReferences.map((reference) => (
-                <option key={String(reference.creatorId)} value={String(reference.creatorId)}>{reference.name} · {reference.handle}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+      <div className="external-collection-form">
+        <section className="content-card external-collection-card">
+          <div className="external-section-heading">
+            <div><span className="external-section-kicker">01</span><h2>任务对象</h2></div>
+            <p>MCN 与达人共用同一份达人档案和收款账户。</p>
+          </div>
+          <div className="form-grid external-form-grid">
+            <div className="form-control">
+              <span className="required-field-label">合作项目 <em className="required-mark">*</em></span>
+              <SelectField
+                ariaLabel="选择合作项目"
+                variant="form"
+                menuStrategy="fixed"
+                value={projectId}
+                placeholder="请选择合作项目"
+                options={projectOptions}
+                onChange={(value) => {
+                  setProjectId(value);
+                  setCreatorId('');
+                  setContractIds([]);
+                }}
+              />
+            </div>
+            <div className="form-control">
+              <span className="required-field-label">达人档案 <em className="required-mark">*</em></span>
+              <SelectField
+                ariaLabel="选择项目内达人"
+                variant="form"
+                menuStrategy="fixed"
+                value={creatorId}
+                placeholder={selectedProject ? '请选择项目内达人' : '请先选择合作项目'}
+                options={creatorOptions}
+                disabled={!selectedProject}
+                onChange={(value) => {
+                  setCreatorId(value);
+                  setContractIds([]);
+                }}
+              />
+            </div>
+          </div>
+        </section>
 
-        <div className="external-section-divider" />
-        <div className="external-section-heading">
-          <div><span className="external-section-kicker">02</span><h2>关联合同</h2></div>
-          <p>支持不关联合同，也可同时关联多份独立合同、框架合同或 IO 单。</p>
-        </div>
-        <div className="external-contract-picker">
-          {eligibleContracts.length ? eligibleContracts.map((contract) => {
-            const contractId = contract.contractId!;
-            const checked = contractIds.includes(contractId);
-            return (
-              <label key={String(contractId)} className={checked ? 'is-selected' : ''}>
-                <input type="checkbox" checked={checked} onChange={() => setContractIds((current) => (
-                  checked ? current.filter((id) => id !== contractId) : [...current, contractId]
-                ))} />
-                <span><strong>{contract.id}</strong><small>{CONTRACT_TYPE_LABELS[contract.contractType ?? 'INDEPENDENT']} · {contract.name}</small></span>
-              </label>
-            );
-          }) : <div className="external-empty-inline">选择达人后展示该达人在当前项目下的已确认合同；无合同也可继续。</div>}
-        </div>
+        <section className="content-card external-collection-card">
+          <div className="external-section-heading">
+            <div><span className="external-section-kicker">02</span><h2>关联合同</h2></div>
+            <p>支持不关联合同，也可同时关联多份独立合同、框架合同或 IO 单。</p>
+          </div>
+          <div className="external-contract-picker">
+            {eligibleContracts.length ? eligibleContracts.map((contract) => {
+              const contractId = contract.contractId!;
+              const checked = contractIds.includes(contractId);
+              return (
+                <label key={String(contractId)} className={checked ? 'is-selected' : ''}>
+                  <input type="checkbox" checked={checked} onChange={() => setContractIds((current) => (
+                    checked ? current.filter((id) => id !== contractId) : [...current, contractId]
+                  ))} />
+                  <span><strong>{contract.id}</strong><small>{CONTRACT_TYPE_LABELS[contract.contractType ?? 'INDEPENDENT']} · {contract.name}</small></span>
+                </label>
+              );
+            }) : <div className="external-empty-inline">选择达人后展示该达人在当前项目下的已确认合同；无合同也可继续。</div>}
+          </div>
+        </section>
 
-        <div className="external-section-divider" />
-        <div className="external-section-heading">
-          <div><span className="external-section-kicker">03</span><h2>预期业务信息</h2></div>
-          <p>达人上传后，系统将以这些字段及达人档案账户进行校验。</p>
-        </div>
-        <div className="form-grid external-form-grid">
-          <label><span className="required-field-label">预期金额 <em className="required-mark">*</em></span><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
-          <label><span className="required-field-label">币种 <em className="required-mark">*</em></span><select value={currency} onChange={(event) => setCurrency(event.target.value as InvoiceCurrency)}>{CURRENCIES.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label><span className="required-field-label">付款主体 <em className="required-mark">*</em></span><input value={advertiser} onChange={(event) => setAdvertiser(event.target.value)} /></label>
-          <label><span className="required-field-label">截止时间 <em className="required-mark">*</em></span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
-          <label className="external-form-span"><span className="required-field-label">合作内容 <em className="required-mark">*</em></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        </div>
-        <NoticeBanner>保存草稿后列表显示“待发布”；正式发布后才会出现在对应 C 端达人档案的待上传任务中。</NoticeBanner>
-        <div className="external-form-actions">
-          <Button variant="secondary" disabled={!complete} onClick={() => submit(false)}>保存草稿</Button>
-          <Button icon={<Send size={16} />} disabled={!complete} onClick={() => submit(true)}>发布收集任务</Button>
-        </div>
-      </section>
+        <section className="content-card external-collection-card external-collection-card-final">
+          <div className="external-section-heading">
+            <div><span className="external-section-kicker">03</span><h2>预期业务信息</h2></div>
+            <p>达人上传后，系统将以这些字段及达人档案账户进行校验。</p>
+          </div>
+          <div className="form-grid external-form-grid">
+            <label><span className="required-field-label">预期金额 <em className="required-mark">*</em></span><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
+            <div className="form-control">
+              <span className="required-field-label">币种 <em className="required-mark">*</em></span>
+              <SelectField<InvoiceCurrency>
+                ariaLabel="选择 Invoice 币种"
+                variant="form"
+                menuStrategy="fixed"
+                value={currency}
+                options={CURRENCIES.map((item) => ({ value: item, label: item }))}
+                leadingIcon={<CircleDollarSign size={17} />}
+                onChange={setCurrency}
+              />
+            </div>
+            <label><span className="required-field-label">付款主体 <em className="required-mark">*</em></span><input value={advertiser} onChange={(event) => setAdvertiser(event.target.value)} /></label>
+            <label><span className="required-field-label">截止时间 <em className="required-mark">*</em></span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+            <label className="external-form-span"><span className="required-field-label">合作内容 <em className="required-mark">*</em></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          </div>
+          <div className="external-form-footer">
+            <NoticeBanner>保存草稿后列表显示“待发布”；正式发布后才会出现在对应 C 端达人档案的待上传任务中。</NoticeBanner>
+            <div className="external-form-actions">
+              <Button variant="secondary" disabled={!complete} onClick={() => submit(false)}>保存草稿</Button>
+              <Button icon={<Send size={16} />} disabled={!complete} onClick={() => submit(true)}>发布收集任务</Button>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -257,6 +307,12 @@ export function ExternalInvoiceCollectionDetailPage({
   const [correctionValue, setCorrectionValue] = useState('');
   const [returnDialog, setReturnDialog] = useState<'CORRECTION' | 'REUPLOAD' | null>(null);
   const [returnReason, setReturnReason] = useState('');
+  const payoutAccountOptions = accounts.map((account) => ({
+    value: getPayoutAccountId(account),
+    label: account.nickname,
+    description: getPayoutAccountSummary(account),
+    leading: <WalletCards size={17} />,
+  }));
   const issues = externalInvoiceValidationIssues({ record, creator, contracts });
   const blockers = issues.filter((issue) => issue.severity === 'BLOCKER');
   const contractAccounts = contractAccountReminder(record, contracts);
@@ -334,7 +390,19 @@ export function ExternalInvoiceCollectionDetailPage({
             <section className="content-card external-simulator-panel">
               <div className="external-section-heading"><div><RefreshCw size={18} /><h2>模拟 C 端回传</h2></div><p>仅用于当前管理端前端原型演示</p></div>
               <div className="form-grid external-simulator-form">
-                <label><span>达人已验证收款账户</span><select value={payoutAccountId} onChange={(event) => setPayoutAccountId(event.target.value)}><option value="">请选择账户</option>{accounts.map((account) => <option key={getPayoutAccountId(account)} value={getPayoutAccountId(account)}>{account.nickname} · {getPayoutAccountSummary(account)}</option>)}</select></label>
+                <div className="form-control">
+                  <span>达人已验证收款账户</span>
+                  <SelectField
+                    ariaLabel="选择达人已验证收款账户"
+                    variant="form"
+                    menuStrategy="fixed"
+                    menuClassName="payout-account-select-menu"
+                    value={payoutAccountId}
+                    placeholder="请选择账户"
+                    options={payoutAccountOptions}
+                    onChange={setPayoutAccountId}
+                  />
+                </div>
                 <label><span>Date of Invoice</span><input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} /></label>
               </div>
               {!accounts.length ? <NoticeBanner>达人档案没有已验证且可用于 Invoice 的账户，当前不能提交。</NoticeBanner> : null}
@@ -350,9 +418,15 @@ export function ExternalInvoiceCollectionDetailPage({
                   <div className="external-correction-editor">
                     <strong>{correctionCandidate ? '发现可纠正的 OCR 差异' : '按退回原因重新确认识别值'}</strong>
                     <div>
-                      <select value={activeCorrectionField} disabled={Boolean(correctionCandidate)} onChange={(event) => { setCorrectionField(event.target.value as ExternalInvoiceFieldKey); setCorrectionValue(''); }}>
-                        {EXTERNAL_INVOICE_FIELD_ORDER.map((field) => <option key={field} value={field}>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</option>)}
-                      </select>
+                      <SelectField<ExternalInvoiceFieldKey>
+                        ariaLabel="选择需要纠正的识别字段"
+                        variant="form"
+                        menuStrategy="fixed"
+                        value={activeCorrectionField}
+                        options={EXTERNAL_INVOICE_FIELD_ORDER.map((field) => ({ value: field, label: EXTERNAL_INVOICE_FIELD_LABEL[field] }))}
+                        disabled={Boolean(correctionCandidate)}
+                        onChange={(value) => { setCorrectionField(value); setCorrectionValue(''); }}
+                      />
                       <input value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)} placeholder={`原文件证据：${activeCorrectionEvidence}`} />
                     </div>
                     <span>纠正值必须能在原始文件证据中找到；否则请改用重新上传。</span>
