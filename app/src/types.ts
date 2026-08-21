@@ -275,6 +275,8 @@ export type InvoiceLineItem = {
 
 export type InvoicePaymentMethod = 'bank' | 'paypal';
 
+export type InvoiceType = 'INTERNAL' | 'EXTERNAL';
+
 export type InvoiceDocumentModel = {
   invoiceNumber: string;
   invoiceDate: string;
@@ -384,6 +386,7 @@ export type InvoiceReviewEvent = {
 export type GeneratedInvoiceRecord = {
   id: string;
   invoiceId: InvoiceId;
+  invoiceType?: InvoiceType;
   sourcePayoutId: string;
   status: InvoiceReviewStatus;
   generatedAt: string;

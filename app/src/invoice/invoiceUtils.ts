@@ -68,10 +68,11 @@ export const parseInvoiceNumber = (value: string) => {
 export const nextInvoiceNumber = (
   records: GeneratedInvoiceRecord[],
   invoiceDate: string | Date = todayInputValue(),
+  reservedNumbers: string[] = [],
 ) => {
   const datePart = invoiceDatePart(invoiceDate);
   const prefix = `INV-${datePart}-`;
-  const maxSequence = records.reduce((max, record) => {
+  const recordMaxSequence = records.reduce((max, record) => {
     const sequence = [record.snapshot?.invoiceNumber, record.id].reduce((recordMax, value) => {
       if (!value?.startsWith(prefix)) return recordMax;
       const suffix = value.slice(prefix.length);
@@ -80,9 +81,15 @@ export const nextInvoiceNumber = (
     }, 0);
     return Math.max(max, sequence);
   }, 0);
+  const reservedMaxSequence = reservedNumbers.reduce((max, value) => {
+    if (!value.startsWith(prefix)) return max;
+    const suffix = value.slice(prefix.length);
+    if (!/^\d+$/.test(suffix)) return max;
+    return Math.max(max, Number(suffix));
+  }, 0);
   return formatInvoiceNumber(
     invoiceDate instanceof Date ? invoiceDate : invoiceDate,
-    maxSequence + 1,
+    Math.max(recordMaxSequence, reservedMaxSequence) + 1,
   );
 };
 

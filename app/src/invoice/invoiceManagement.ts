@@ -1,11 +1,15 @@
 import type { RequestApprovalStatus } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
-import type { GeneratedInvoiceRecord, Payout } from '../types';
+import type { GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
 
-export type InvoicePageTab = 'signature' | 'review' | 'approved' | 'returned';
+export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
 
 export type InvoiceManagementStatus =
   | '待签署'
+  | '待发布'
+  | '待上传'
+  | '待重新上传'
+  | '待发起请款'
   | '达人反馈'
   | '待审核'
   | '待复核'
@@ -14,6 +18,26 @@ export type InvoiceManagementStatus =
   | '付款中'
   | '已付款'
   | '已退回';
+
+export type InvoiceManagementRow = {
+  rowId: string;
+  invoiceId: string;
+  invoiceType: InvoiceType;
+  creatorName: string;
+  channelId: string;
+  initials: string;
+  accent: string;
+  projectName: string;
+  invoiceNumber: string;
+  provider?: Exclude<Provider, '手动打款'>;
+  status: InvoiceManagementStatus;
+  currency: string;
+  amount: number;
+  actionLabel: string;
+  primaryAction?: boolean;
+  source: { kind: 'payout'; payout: Payout } | { kind: 'external'; externalInvoiceId: string };
+  additionalActionLabel?: string;
+};
 
 export type InvoiceManagementView = {
   tab: InvoicePageTab;

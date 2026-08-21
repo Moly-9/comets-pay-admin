@@ -170,10 +170,11 @@ describe('InvoicePage list columns', () => {
   it('renders the requested data columns plus operations and resolves creator identity by stable ID', () => {
     const html = renderInvoicePage(true);
 
-    expect(html.match(/<th(?:\s|>)/g)).toHaveLength(7);
+    expect(html.match(/<th(?:\s|>)/g)).toHaveLength(8);
     expect(html).toContain('<th>达人</th>');
     expect(html).toContain('<th>关联项目</th>');
     expect(html).toContain('<th>Invoice 编号</th>');
+    expect(html).toContain('<th>Invoice 类型</th>');
     expect(html).toContain('<th>付款渠道</th>');
     expect(html).toContain('<th>状态</th>');
     expect(html).toContain('>金额</th>');
@@ -181,5 +182,16 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('Signature Demo Display Name');
     expect(html).toContain('@signature-channel-id');
     expect(html).toContain('Signature Demo Project');
+    expect(html).toContain('内部 Invoice');
+  });
+
+  it('renders five tabs in the required order', () => {
+    const html = renderInvoicePage(true);
+    const labels = ['待签署', '待上传', '待审核', '已通过', '已退回'];
+    labels.reduce((previousIndex, label) => {
+      const index = html.indexOf(`>${label} <span>`);
+      expect(index).toBeGreaterThan(previousIndex);
+      return index;
+    }, -1);
   });
 });

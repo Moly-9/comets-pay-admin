@@ -76,6 +76,20 @@ import {
 } from './invoice/invoiceReviewWorkflow';
 import { findInvoiceRequest, getInvoiceManagementView } from './invoice/invoiceManagement';
 import {
+  buildApprovedExternalInvoice,
+  correctExternalInvoiceRecognition,
+  createExternalInvoiceCollection,
+  publishExternalInvoiceCollection,
+  returnExternalInvoice,
+  simulateExternalInvoiceUpload,
+  submitExternalInvoiceForReview,
+  type ExternalInvoiceActor,
+  type ExternalInvoiceCollectionInput,
+  type ExternalInvoiceFieldKey,
+  type ExternalInvoiceScenario,
+} from './invoice/externalInvoiceCollection';
+import { createInitialExternalInvoiceCollections } from './invoice/externalInvoiceFixtures';
+import {
   updateCreatorProjectCounts,
   upsertGeneratedInvoiceEngagements,
 } from './invoice/invoiceEngagements';
@@ -326,6 +340,18 @@ export default function App() {
       },
     }))
   ));
+  const [externalInvoices, setExternalInvoices] = useState(() => createInitialExternalInvoiceCollections({
+    projects,
+    creators,
+    contracts,
+    generatedInvoices,
+    invoiceEntity,
+    actor: {
+      account: currentUser.account,
+      name: currentUser.name,
+      role: currentUser.role,
+    },
+  }));
   const [paymentLists, setPaymentLists] = useState<PaymentListRecord[]>(
     INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.paymentLists,
   );
@@ -2878,6 +2904,163 @@ export default function App() {
     }
   };
 
+  const externalInvoiceActor = (): ExternalInvoiceActor => ({
+    account: currentUser.account,
+    name: currentUser.name,
+    role: currentUser.role,
+  });
+
+  const createExternalInvoiceTask = (input: ExternalInvoiceCollectionInput, publish: boolean) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能发起外部 Invoice 收集。`);
+      return;
+    }
+    try {
+      const record = createExternalInvoiceCollection({
+        ...input,
+        actor: externalInvoiceActor(),
+        publish,
+      });
+      setExternalInvoices((current) => [record, ...current]);
+      setInvoiceTab('upload');
+      notify(
+        publish ? '外部 Invoice 收集已发布' : '外部 Invoice 收集草稿已保存',
+        `${input.creatorName} / ${input.projectName} 已进入“${publish ? '待上传' : '待发布'}”。`,
+      );
+    } catch (error) {
+      notify('无法创建收集任务', error instanceof Error ? error.message : '外部 Invoice 收集创建失败。');
+    }
+  };
+
+  const publishExternalInvoiceTask = (invoiceId: string) => {
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    if (!record) return;
+    try {
+      const updated = publishExternalInvoiceCollection(record, externalInvoiceActor());
+      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
+      setInvoiceTab('upload');
+      notify('收集任务已发布', `${record.creatorName} 的 C 端待上传任务已生成。`);
+    } catch (error) {
+      notify('发布失败', error instanceof Error ? error.message : '当前收集任务无法发布。');
+    }
+  };
+
+  const simulateExternalInvoiceReturn = (
+    invoiceId: string,
+    scenario: ExternalInvoiceScenario,
+    payoutAccountId: string,
+    invoiceDate: string,
+  ) => {
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
+    if (!record || !creator) {
+      notify('模拟回传失败', '未找到外部 Invoice 对应的达人档案。');
+      return;
+    }
+    try {
+      const updated = simulateExternalInvoiceUpload({
+        record,
+        creator,
+        payoutAccountId,
+        scenario,
+        invoiceDate,
+        actor: { account: 'creator.demo', name: `${creator.name}（C 端）`, role: '达人账号' },
+      });
+      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
+      notify(
+        scenario === 'NORMAL' ? '已模拟正常上传' : scenario === 'OCR_ERROR' ? '已模拟 OCR 识别错误' : '已模拟原文件错误',
+        '新文件版本、首次识别值与达人确认层已分别保存。',
+      );
+    } catch (error) {
+      notify('模拟回传失败', error instanceof Error ? error.message : '当前状态不能上传文件。');
+    }
+  };
+
+  const correctExternalInvoiceField = (invoiceId: string, fieldKey: ExternalInvoiceFieldKey, value: string) => {
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    if (!record) return;
+    try {
+      const updated = correctExternalInvoiceRecognition(
+        record,
+        fieldKey,
+        value,
+        { account: 'creator.demo', name: `${record.creatorName}（C 端）`, role: '达人账号' },
+      );
+      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
+      notify('识别结果已纠正', '系统首次识别值保持不变，达人确认值和修改前后差异已保存。');
+    } catch (error) {
+      notify('无法纠正识别结果', error instanceof Error ? error.message : '纠正值无法匹配原文件证据。');
+    }
+  };
+
+  const submitExternalInvoiceTask = (invoiceId: string) => {
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
+    if (!record || !creator) return;
+    try {
+      const updated = submitExternalInvoiceForReview({
+        record,
+        creator,
+        contracts,
+        occupiedInvoices: generatedInvoices,
+        reservedInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
+          .flatMap((candidate) => candidate.invoiceNumber ? [candidate.invoiceNumber] : []),
+        reservedSourceInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
+          .flatMap((candidate) => candidate.sourceInvoiceNumber ? [candidate.sourceInvoiceNumber] : []),
+        actor: { account: 'creator.demo', name: `${creator.name}（C 端）`, role: '达人账号' },
+      });
+      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
+      setInvoiceTab('review');
+      notify('已提交媒介审核', `${updated.invoiceNumber} 已按达人确认的 Date of Invoice 分配候选编号。`);
+    } catch (error) {
+      notify('无法提交媒介审核', error instanceof Error ? error.message : '任务或档案校验未通过。');
+    }
+  };
+
+  const returnExternalInvoiceTask = (
+    invoiceId: string,
+    returnType: 'CORRECTION' | 'REUPLOAD',
+    reason: string,
+  ) => {
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    if (!record) return;
+    try {
+      const updated = returnExternalInvoice(record, returnType, reason, externalInvoiceActor());
+      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
+      setInvoiceTab('upload');
+      notify('外部 Invoice 已退回', '列表统一显示“待重新上传”，详情保留具体处理方式和原因。');
+    } catch (error) {
+      notify('退回失败', error instanceof Error ? error.message : '当前外部 Invoice 无法退回。');
+    }
+  };
+
+  const approveExternalInvoiceTask = (invoiceId: string) => {
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
+    if (!record || !creator) return;
+    try {
+      const result = buildApprovedExternalInvoice({
+        record,
+        creator,
+        contracts,
+        invoiceEntity,
+        occupiedInvoices: generatedInvoices,
+        reservedInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
+          .flatMap((candidate) => candidate.invoiceNumber ? [candidate.invoiceNumber] : []),
+        reservedSourceInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
+          .flatMap((candidate) => candidate.sourceInvoiceNumber ? [candidate.sourceInvoiceNumber] : []),
+        actor: externalInvoiceActor(),
+      });
+      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? result.collection : candidate));
+      setGeneratedInvoices((current) => [result.invoice, ...current]);
+      setPayouts((current) => [result.payout, ...current]);
+      setInvoiceTab('approved');
+      notify('外部 Invoice 审核通过', `${result.invoice.id} 已跳过签署并进入“待发起请款”。`);
+    } catch (error) {
+      notify('审核通过失败', error instanceof Error ? error.message : '外部 Invoice 尚不满足审核条件。');
+    }
+  };
+
   const updateInvoiceReview = (
     payout: Payout,
     action: InvoiceReviewAction,
@@ -3862,12 +4045,21 @@ export default function App() {
           creators={creators}
           contracts={contracts}
           invoiceEntity={invoiceEntity}
+          projects={projects}
           generatedInvoices={generatedInvoices}
+          externalInvoices={externalInvoices}
           requests={requestProjects}
           tab={invoiceTab}
           onTabChange={setInvoiceTab}
           onCreateInvoice={() => setActivePage('invoice-create')}
           onCreateBatchInvoice={() => setActivePage('invoice-batch-create')}
+          onCreateExternalInvoice={createExternalInvoiceTask}
+          onPublishExternalInvoice={publishExternalInvoiceTask}
+          onSimulateExternalUpload={simulateExternalInvoiceReturn}
+          onCorrectExternalRecognition={correctExternalInvoiceField}
+          onSubmitExternalInvoice={submitExternalInvoiceTask}
+          onReturnExternalInvoice={returnExternalInvoiceTask}
+          onApproveExternalInvoice={approveExternalInvoiceTask}
           canCreateInvoice={canGenerateInvoices}
           canManageInvoice={canGenerateInvoices}
           canReviewMedia={canReviewInvoiceMedia}
