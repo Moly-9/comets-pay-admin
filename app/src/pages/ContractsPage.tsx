@@ -12,12 +12,16 @@ import {
 } from '../contractBatchOperations';
 import {
   CONTRACT_TYPE_LABELS,
+  contractMatchesValidityFilter,
+  currentContractReferenceDate,
   formatContractMoney,
   getContractType,
   getContractReadiness,
-  isPaymentContract,
+  getContractValidity,
+  isContractAvailableForNewAssociation,
   type ContractRecord,
   type ContractUploadInput,
+  type ContractValidityFilter,
 } from '../contracts';
 import type { ContractId } from '../businessWorkflow';
 import type { CreatorProfile } from '../types';
@@ -27,6 +31,14 @@ import type { ProjectSummary } from './ProjectDetailPage';
 
 type Notify = (title: string, message: string) => void;
 type ContractFilter = 'all' | 'ready' | 'attention' | 'template';
+
+const CONTRACT_VALIDITY_FILTERS: Array<{ value: ContractValidityFilter; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'expiring', label: '即将到期' },
+  { value: 'expired', label: '已到期' },
+  { value: 'long-term', label: '长期有效' },
+  { value: 'unset', label: '未设置' },
+];
 
 const creatorRealNameFor = (contract: ContractRecord, creators: CreatorProfile[]) => {
   const creator = contract.creatorId
@@ -52,6 +64,37 @@ const templateReadinessFor = (contract: ContractRecord) => {
   const blockerCount = contract.issues.filter((issue) => issue.severity === 'blocker').length;
   return { ready: blockerCount === 0, label: blockerCount === 0 ? '可使用' : '待完善' };
 };
+
+function ContractValidityCell({ contract, referenceDate }: { contract: ContractRecord; referenceDate: string }) {
+  const validity = getContractValidity(contract, referenceDate);
+  if (validity.status === 'ACTIVE') {
+    return <span className="contract-validity-date">{validity.endDate}</span>;
+  }
+  if (validity.status === 'LONG_TERM') {
+    return <span className="contract-validity-badge is-long-term">长期有效</span>;
+  }
+  if (validity.status === 'UNSET') {
+    return <span className="contract-validity-badge is-unset">未设置</span>;
+  }
+
+  const label = validity.status === 'EXPIRES_TODAY'
+    ? '今日到期'
+    : validity.status === 'EXPIRED'
+      ? `已到期 · ${Math.abs(validity.daysRemaining ?? 0)}天`
+      : `即将到期 · ${validity.daysRemaining}天`;
+  const tone = validity.status === 'EXPIRING'
+    ? 'is-warning'
+    : validity.status === 'EXPIRING_URGENT'
+      ? 'is-urgent'
+      : 'is-expired';
+
+  return (
+    <span className="contract-validity-stack">
+      <span className="contract-validity-date">{validity.endDate}</span>
+      <span className={`contract-validity-badge ${tone}`}>{label}</span>
+    </span>
+  );
+}
 
 export function ContractsPage({
   contracts,
@@ -97,6 +140,7 @@ export function ContractsPage({
   );
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ContractFilter>('all');
+  const [validityFilter, setValidityFilter] = useState<ContractValidityFilter>('all');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(focusedContractId);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -106,6 +150,7 @@ export function ContractsPage({
   const selectedContract = selectedContractId
     ? contracts.find((contract) => contract.id === selectedContractId)
     : null;
+  const referenceDate = currentContractReferenceDate();
 
   const displayProjects = useMemo(() => {
     const merged = new Map<string, ProjectSummary>();
@@ -120,6 +165,7 @@ export function ContractsPage({
     const query = search.trim().toLowerCase();
     return contracts.filter((contract) => {
       const readiness = getContractReadiness(contract);
+      const validity = getContractValidity(contract, referenceDate);
       const realName = creatorRealNameFor(contract, creators);
       const project = projectDisplayFor(contract, displayProjects);
       const matchesQuery = !query || `${contract.id}${contract.ioId}${contract.name}${contract.project}${contract.brand}${contract.publisher}${realName}${project.name}${project.code}`
@@ -127,23 +173,30 @@ export function ContractsPage({
         .includes(query);
       const matchesFilter = (
         (filter === 'all' && !contract.isTemplate)
-        || (filter === 'ready' && isPaymentContract(contract))
-        || (filter === 'attention' && !readiness.ready && !contract.isTemplate)
+        || (filter === 'ready' && isContractAvailableForNewAssociation(contract, referenceDate))
+        || (filter === 'attention' && (!readiness.ready || validity.expired) && !contract.isTemplate)
         || (filter === 'template' && contract.isTemplate)
       );
-      return matchesQuery && matchesFilter;
+      const matchesValidity = contract.isTemplate
+        || contractMatchesValidityFilter(contract, validityFilter, referenceDate);
+      return matchesQuery && matchesFilter && matchesValidity;
     });
-  }, [contracts, creators, displayProjects, filter, search]);
+  }, [contracts, creators, displayProjects, filter, referenceDate, search, validityFilter]);
   const {
     page,
     pageItems: visible,
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}` });
+  } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}\u0000${validityFilter}` });
 
-  const readyCount = contracts.filter(isPaymentContract).length;
-  const attentionCount = contracts.filter((contract) => !contract.isTemplate && !getContractReadiness(contract).ready).length;
+  const readyCount = contracts.filter((contract) => (
+    isContractAvailableForNewAssociation(contract, referenceDate)
+  )).length;
+  const attentionCount = contracts.filter((contract) => (
+    !contract.isTemplate
+    && (!getContractReadiness(contract).ready || getContractValidity(contract, referenceDate).expired)
+  )).length;
   const templateCount = contracts.filter((contract) => contract.isTemplate).length;
   const businessContractCount = contracts.length - templateCount;
   const contractFilterCounts: Record<ContractFilter, number> = {
@@ -326,6 +379,24 @@ export function ContractsPage({
             </div>
           ) : null}
         </div>
+        {!isTemplateTab ? (
+          <div className="contract-validity-filter-row">
+            <span>有效期：</span>
+            <div role="group" aria-label="有效期筛选">
+              {CONTRACT_VALIDITY_FILTERS.map((item) => (
+                <button
+                  className={validityFilter === item.value ? 'is-active' : ''}
+                  type="button"
+                  aria-pressed={validityFilter === item.value}
+                  key={item.value}
+                  onClick={() => setValidityFilter(item.value)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="content-toolbar contract-toolbar">
           <label className="search-control page-search">
             <Search size={16} />
@@ -365,8 +436,8 @@ export function ContractsPage({
                   <th>Publisher</th>
                   <th>关联项目</th>
                   <th>合同金额</th>
+                  <th>有效期</th>
                   <th>付款就绪度</th>
-                  <th className="contract-date-cell">更新日期</th>
                   <th className="action-cell">操作</th>
                 </tr>
               )}
@@ -374,6 +445,7 @@ export function ContractsPage({
             <tbody>
               {visible.map((contract) => {
                 const readiness = getContractReadiness(contract);
+                const validity = getContractValidity(contract, referenceDate);
                 const stableId = contractSelectionId(contract);
                 const rowSelected = selectedIds.has(stableId);
                 const project = projectDisplayFor(contract, displayProjects);
@@ -431,6 +503,7 @@ export function ContractsPage({
                       <button
                         className="contract-name-link"
                         type="button"
+                        title={`${contract.name} · ${contract.id}${contract.ioId ? ` · ${contract.ioId}` : ''}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           openContract(contract.id);
@@ -444,16 +517,16 @@ export function ContractsPage({
                         {contract.frameworkContractId ? <small className="contract-relation-subtext">框架合同：{contract.frameworkContractId}</small> : null}
                       </button>
                     </td>
-                    <td>{realName}</td>
-                    <td><strong className="contract-project-name">{project.name}</strong><small className="cell-subtext">{project.code || contract.brand}</small></td>
+                    <td title={realName}>{realName}</td>
+                    <td title={[project.name, project.code || contract.brand].filter(Boolean).join(' · ')}><strong className="contract-project-name">{project.name}</strong><small className="cell-subtext">{project.code || contract.brand}</small></td>
                     <td>{formatContractMoney(contract)}</td>
+                    <td><ContractValidityCell contract={contract} referenceDate={referenceDate} /></td>
                     <td>
-                      <span className={`contract-readiness contract-readiness-${readiness.ready ? 'ready' : contract.isTemplate ? 'template' : 'attention'}`}>
+                      <span className={`contract-readiness contract-readiness-${validity.expired ? 'expired' : readiness.ready ? 'ready' : contract.isTemplate ? 'template' : 'attention'}`}>
                         <i />
-                        {contract.isTemplate ? '参考模板' : readiness.label}
+                        {validity.expired ? '已失效' : contract.isTemplate ? '参考模板' : readiness.label}
                       </span>
                     </td>
-                    <td className="contract-date-cell">{contract.updated}</td>
                     <td className="action-cell">
                       <button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>查看合同</button>
                     </td>

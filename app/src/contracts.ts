@@ -126,6 +126,15 @@ export type ContractLifecycle =
   | 'CONFIRMED';
 
 export type ContractType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
+export type ContractValidityStatus =
+  | 'ACTIVE'
+  | 'EXPIRING'
+  | 'EXPIRING_URGENT'
+  | 'EXPIRES_TODAY'
+  | 'EXPIRED'
+  | 'LONG_TERM'
+  | 'UNSET';
+export type ContractValidityFilter = 'all' | 'expiring' | 'expired' | 'long-term' | 'unset';
 
 export type ContractProjectLink = {
   cooperationProjectId: CooperationProjectId;
@@ -218,6 +227,7 @@ export type ContractRecord = {
   effectiveDate: string;
   campaignStart: string;
   campaignEnd: string;
+  isLongTerm?: boolean;
   currency: string;
   totalFee: number | null;
   licensePrice: number | null;
@@ -373,6 +383,106 @@ export const isConfirmedContract = (contract: ContractRecord) => (
 export const isPaymentContract = (contract: ContractRecord) => (
   !contract.isTemplate && isConfirmedContract(contract)
 );
+
+const CONTRACT_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const shanghaiDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const isoDateToDayNumber = (value?: string) => {
+  if (typeof value !== 'string') return null;
+  const match = CONTRACT_DATE_PATTERN.exec(value.trim());
+  if (!match) return null;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+  ) return null;
+  return timestamp / MILLISECONDS_PER_DAY;
+};
+
+export const currentContractReferenceDate = () => {
+  const parts = Object.fromEntries(
+    shanghaiDateFormatter
+      .formatToParts(new Date())
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+export const getContractValidity = (
+  contract: Pick<ContractRecord, 'campaignEnd' | 'isLongTerm'>,
+  referenceDate = currentContractReferenceDate(),
+) => {
+  if (contract.isLongTerm) {
+    return {
+      status: 'LONG_TERM' as const,
+      endDate: '',
+      daysRemaining: null,
+      expired: false,
+    };
+  }
+
+  const endDay = isoDateToDayNumber(contract.campaignEnd);
+  const referenceDay = isoDateToDayNumber(referenceDate);
+  if (endDay === null || referenceDay === null) {
+    return {
+      status: 'UNSET' as const,
+      endDate: '',
+      daysRemaining: null,
+      expired: false,
+    };
+  }
+
+  const daysRemaining = endDay - referenceDay;
+  const status: ContractValidityStatus = daysRemaining < 0
+    ? 'EXPIRED'
+    : daysRemaining === 0
+      ? 'EXPIRES_TODAY'
+      : daysRemaining <= 7
+        ? 'EXPIRING_URGENT'
+        : daysRemaining <= 30
+          ? 'EXPIRING'
+          : 'ACTIVE';
+
+  return {
+    status,
+    endDate: contract.campaignEnd,
+    daysRemaining,
+    expired: status === 'EXPIRED',
+  };
+};
+
+export const contractMatchesValidityFilter = (
+  contract: Pick<ContractRecord, 'campaignEnd' | 'isLongTerm'>,
+  filter: ContractValidityFilter,
+  referenceDate = currentContractReferenceDate(),
+) => {
+  if (filter === 'all') return true;
+  const { status } = getContractValidity(contract, referenceDate);
+  if (filter === 'expiring') {
+    return status === 'EXPIRING' || status === 'EXPIRING_URGENT' || status === 'EXPIRES_TODAY';
+  }
+  if (filter === 'expired') return status === 'EXPIRED';
+  if (filter === 'long-term') return status === 'LONG_TERM';
+  return status === 'UNSET';
+};
+
+export const isContractAvailableForNewAssociation = (
+  contract: ContractRecord,
+  referenceDate = currentContractReferenceDate(),
+) => isPaymentContract(contract) && !getContractValidity(contract, referenceDate).expired;
 
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
 

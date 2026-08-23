@@ -92,7 +92,7 @@ const contract = ({
   platform: 'YouTube',
   effectiveDate: '2026-08-01',
   campaignStart: '2026-08-01',
-  campaignEnd: '2026-08-31',
+  campaignEnd: '2099-08-31',
   currency: 'USD',
   totalFee: id.endsWith('01') ? 300 : 200,
   licensePrice: null,
@@ -412,6 +412,33 @@ describe('project resource link candidates', () => {
     });
     expect(options[0].label).toContain(eligible.ioId);
     expect(options[0].description).toContain('Creator One');
+  });
+
+  it('keeps expired contracts visible but disables new project links with a clear reason', () => {
+    const expired = {
+      ...contract({
+        contractId: 'expired-contract' as ContractId,
+        creatorId: creatorOneId,
+        id: 'CON-EXPIRED',
+      }),
+      campaignEnd: '2000-01-01',
+      isLongTerm: false,
+    };
+
+    const options = getProjectLinkOptions({
+      kind: 'contract',
+      project,
+      references: project.creatorProfiles ?? [],
+      contracts: [expired],
+      invoices: [],
+    });
+
+    expect(options).toHaveLength(1);
+    expect(options[0]).toMatchObject({
+      value: expired.contractId,
+      disabled: true,
+    });
+    expect(options[0].description).toContain('合同已失效');
   });
 
   it('excludes an unlinked Invoice when that engagement already has another Invoice', () => {

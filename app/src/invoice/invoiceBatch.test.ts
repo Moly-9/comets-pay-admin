@@ -18,6 +18,7 @@ import { PROJECT_DEMO_CONTRACTS } from '../prototypeResourceFixtures';
 import type { CreatorProfile } from '../types';
 import {
   buildInvoiceDocumentForBatchRow,
+  availableContractsForEngagement,
   clearInvoiceBatchDescriptionOverride,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
@@ -123,6 +124,30 @@ const confirmedContractFor = (
 };
 
 describe('Invoice batch rows', () => {
+  it('excludes expired contracts from new batch Invoice associations', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const association = {
+      projectId: (context.project.cooperationProjectId ?? context.project.projectId)!,
+      creatorId: creator.id as CreatorId,
+    };
+    const active = confirmedContractFor(context, creator, {
+      contractId: 'contract_batch_active' as ContractId,
+      isLongTerm: true,
+    });
+    const expired = confirmedContractFor(context, creator, {
+      contractId: 'contract_batch_expired' as ContractId,
+      campaignEnd: '2000-01-01',
+      isLongTerm: false,
+    });
+
+    expect(availableContractsForEngagement(
+      context.project.creatorProfiles![0].engagementId,
+      [active, expired],
+      association,
+    ).map((contract) => contract.contractId)).toEqual([active.contractId]);
+  });
+
   it('builds multiple line items and calculates Price x Amount for the Invoice total', () => {
     const creator = creatorWithAccounts([{
       ...baseAccount,

@@ -30,7 +30,7 @@ import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
 } from '../components/RequestProjectResourceManager';
-import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractType, isPaymentContract, type ContractRecord } from '../contracts';
+import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractType, getContractValidity, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
@@ -1775,7 +1775,8 @@ export function MediaPaymentProjectsPage({
                   });
                   const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {
                     if (!contract.contractId) return [];
-                    const enabled = isPaymentContract(contract);
+                    const enabled = isContractAvailableForNewAssociation(contract);
+                    const expired = getContractValidity(contract).expired;
                     const selected = selectedContractIds.includes(contract.contractId);
                     const selectedSource = autoLinkedContractIds.includes(contract.contractId)
                       ? 'Invoice 自动带入'
@@ -1783,7 +1784,7 @@ export function MediaPaymentProjectsPage({
                     return [{
                       value: contract.contractId,
                       label: contract.id,
-                      description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]}${contract.frameworkContractId ? ` · 框架：${contract.frameworkContractId}` : ''} · ${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : `不可关联：${contract.status}`}`,
+                      description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]}${contract.frameworkContractId ? ` · 框架：${contract.frameworkContractId}` : ''} · ${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : expired ? '不可关联：合同已失效' : `不可关联：${contract.status}`}`,
                       selected,
                       disabled: !enabled,
                     }];

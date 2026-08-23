@@ -451,4 +451,22 @@ describe('contract association workflow', () => {
       creators,
     )).toBe('已上传，待人工确认');
   });
+
+  it('keeps expired contracts visible but blocks new request-project associations', () => {
+    const expired = {
+      ...associationContract({
+        contractId: contractTwoId,
+        creatorId: secondCreatorId,
+        engagementId: secondEngagementId,
+      }),
+      campaignEnd: '2000-01-01',
+      isLongTerm: false,
+    };
+
+    expect(contractAssociationUnavailableReason(
+      expired,
+      [{ creatorId: secondCreatorId, engagementId: secondEngagementId, contractIds: [], invoiceIds: [] }],
+      creators,
+    )).toBe('合同已失效');
+  });
 });

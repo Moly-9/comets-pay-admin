@@ -15,6 +15,8 @@ import { Button, NoticeBanner, PageHeading } from '../components/Common';
 import {
   formatContractMoney,
   getContractReadiness,
+  getContractValidity,
+  isContractAvailableForNewAssociation,
   type ContractRecord,
 } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
@@ -66,7 +68,7 @@ export function RequestProjectCreatePage({
     : null;
 
   const selectContract = (contract: ContractRecord) => {
-    if (!getContractReadiness(contract).ready) return;
+    if (!getContractReadiness(contract).ready || !isContractAvailableForNewAssociation(contract)) return;
     setSelectedContractId(contract.id);
     setSelectedInvoiceId('');
     setProjectName(contract.project);
@@ -166,13 +168,15 @@ export function RequestProjectCreatePage({
             <div className="payment-contract-options">
               {contracts.map((contract) => {
                 const readiness = getContractReadiness(contract);
+                const validity = getContractValidity(contract);
+                const available = readiness.ready && isContractAvailableForNewAssociation(contract);
                 const selected = selectedContractId === contract.id;
                 return (
                   <button
-                    className={`payment-contract-option ${selected ? 'is-selected' : ''} ${readiness.ready ? '' : 'is-disabled'}`}
+                    className={`payment-contract-option ${selected ? 'is-selected' : ''} ${available ? '' : 'is-disabled'}`}
                     type="button"
                     aria-pressed={selected}
-                    disabled={!readiness.ready}
+                    disabled={!available}
                     key={contract.id}
                     onClick={() => selectContract(contract)}
                   >
@@ -182,7 +186,7 @@ export function RequestProjectCreatePage({
                       <span><small>Publisher</small><strong>{contract.publisher || '待补充'}</strong></span>
                       <span><small>项目金额</small><strong>{formatContractMoney(contract)}</strong></span>
                     </span>
-                    <span className={`payment-contract-state ${readiness.ready ? 'is-ready' : ''}`}>{readiness.ready ? '可选择' : contract.isTemplate ? '参考模板' : readiness.label}</span>
+                    <span className={`payment-contract-state ${available ? 'is-ready' : ''}`}>{available ? '可选择' : validity.expired ? '合同已失效' : contract.isTemplate ? '参考模板' : readiness.label}</span>
                   </button>
                 );
               })}

@@ -33,6 +33,8 @@ import {
 import {
   formatContractMoney,
   getContractReadiness,
+  getContractValidity,
+  isContractAvailableForNewAssociation,
   type ContractRecord,
 } from '../contracts';
 import type { SystemUser } from '../data';
@@ -58,6 +60,7 @@ type LinkOption = {
   label: string;
   description: string;
   engagementId: EngagementId;
+  disabled?: boolean;
 };
 
 type Props = {
@@ -200,11 +203,19 @@ export const getProjectLinkOptions = ({
       ) {
         return [];
       }
+      const validity = getContractValidity(contract);
+      const available = isContractAvailableForNewAssociation(contract);
+      const unavailableReason = validity.expired
+        ? '合同已失效'
+        : available
+          ? ''
+          : getContractReadiness(contract).label;
       return [{
         value: contractStableId(contract),
         label: `${contract.id} · ${contract.ioId || 'IO 待补充'}`,
-        description: `${reference.name} · ${contract.name} · ${formatContractMoney(contract)}`,
+        description: `${reference.name} · ${contract.name} · ${formatContractMoney(contract)}${unavailableReason ? ` · ${unavailableReason}` : ''}`,
         engagementId: reference.engagementId,
+        disabled: !available,
       }];
     });
   }
@@ -1042,6 +1053,7 @@ export function ProjectResourceManager({
                   type="button"
                   role="listitem"
                   aria-pressed={linkId === option.value}
+                  disabled={option.disabled}
                   key={option.value}
                   onClick={() => setLinkId(option.value)}
                 >

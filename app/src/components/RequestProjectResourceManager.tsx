@@ -30,7 +30,7 @@ import {
   type PaymentListId,
   type PaymentListRecord,
 } from '../businessWorkflow';
-import { CONTRACT_TYPE_LABELS, contractLinkedToProject, formatContractMoney, getContractReadiness, getContractType, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
+import { CONTRACT_TYPE_LABELS, contractLinkedToProject, formatContractMoney, getContractReadiness, getContractType, getContractValidity, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
 import type { SystemUser } from '../data';
 import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
@@ -188,6 +188,7 @@ export const contractAssociationCandidates = (
 )) : [];
 
 const contractStateUnavailableReason = (contract: ContractRecord) => {
+  if (getContractValidity(contract).expired) return '合同已失效';
   if (contract.lifecycle === 'GENERATED_DRAFT') return '草稿尚未回传签署文件';
   if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '已上传，待人工确认';
   if (!contract.signed) return '合同尚未完成签署';
@@ -208,6 +209,7 @@ export const contractAssociationUnavailableReason = (
   }
   const existingLink = links.find((link) => link.creatorId === contract.creatorId);
   if (!existingLink) return '请先将该合同达人加入当前请款项目';
+  if (getContractValidity(contract).expired) return '合同已失效';
   return isConfirmedContract(contract) ? '' : contractStateUnavailableReason(contract);
 };
 

@@ -95,6 +95,7 @@ type DemoContractSpec = {
   signed?: boolean;
   status?: ContractRecord['status'];
   contractType?: ContractRecord['contractType'];
+  isLongTerm?: boolean;
   frameworkContractId?: ContractId;
 };
 
@@ -108,6 +109,7 @@ const DEMO_CONTRACT_SPECS: DemoContractSpec[] = [
     includeInInvoice: true,
     title: '短视频制作与发布',
     contractType: 'FRAMEWORK',
+    isLongTerm: true,
   },
   {
     contractId: 'contract_fixture_301164_02' as ContractId,
@@ -404,7 +406,8 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     platform: creator.platform,
     effectiveDate: '2026-04-01',
     campaignStart: '2026-04-01',
-    campaignEnd: '2026-06-30',
+    campaignEnd: spec.isLongTerm ? '' : '2026-06-30',
+    isLongTerm: spec.isLongTerm,
     currency: spec.contractType === 'FRAMEWORK' ? '' : 'USD',
     totalFee: spec.contractType === 'FRAMEWORK' ? null : spec.amount,
     licensePrice: null,

@@ -1,5 +1,5 @@
 import type { ContractRecord } from '../contracts';
-import { contractLinkedToProject, isPaymentContract } from '../contracts';
+import { contractLinkedToProject, isContractAvailableForNewAssociation } from '../contracts';
 import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
@@ -70,7 +70,7 @@ export const createInvoiceBuilderPrototypeSeed = ({
       const confirmedContractCount = contracts.filter((contract) => (
         contract.creatorId === reference.creatorId
         && contractLinkedToProject(contract, projectIdFor(project))
-        && isPaymentContract(contract)
+        && isContractAvailableForNewAssociation(contract)
       )).length;
 
       return [{
