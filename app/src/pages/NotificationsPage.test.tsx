@@ -30,7 +30,7 @@ describe('NotificationsPage', () => {
       kind: 'invoice-review',
       invoiceId: 'invoice_fixture_301164_01',
     });
-    expect(markup).toContain('aria-label="Invoice 等待媒介审核，进入审核"');
+    expect(markup).toContain('aria-label="Invoice 待审核，进入审核"');
     expect(markup).toContain('更新收款资料');
     expect(markup).toContain('查看批次');
     expect(markup).toContain('查看付款详情');

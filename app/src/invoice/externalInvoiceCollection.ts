@@ -414,7 +414,7 @@ export const reviewExternalInvoiceField = (
   occurredAt = new Date().toISOString(),
 ): ExternalInvoiceCollectionRecord => {
   if (record.status !== 'WAITING_MEDIA_REVIEW') {
-    throw new Error('只有待媒介审核的外部 Invoice 可以记录字段复核结果。');
+    throw new Error('只有待审核的外部 Invoice 可以记录字段复核结果。');
   }
   const recognition = currentExternalInvoiceRecognition(record);
   const confirmation = currentExternalInvoiceConfirmation(record);
@@ -733,7 +733,7 @@ export const externalInvoiceReviewReadiness = ({
     ...(!recognition || !confirmation ? ['识别结果或达人确认值不完整'] : []),
     ...validationBlockers.map((issue) => `${issue.label}：${issue.message}`),
     ...contractSubjectBlockers,
-    ...pendingCriticalFields.map((fieldKey) => `${EXTERNAL_INVOICE_FIELD_LABEL[fieldKey]}的达人纠正值待媒介确认`),
+    ...pendingCriticalFields.map((fieldKey) => `${EXTERNAL_INVOICE_FIELD_LABEL[fieldKey]}的达人纠正值待确认`),
     ...reviewBlockers,
     ...(!currentFileVersionId ? ['当前文件版本无效'] : []),
   ];
@@ -775,7 +775,7 @@ export const submitExternalInvoiceForReview = ({
   occurredAt?: string;
 }): ExternalInvoiceCollectionRecord => {
   if (record.status !== 'WAITING_CONFIRMATION') {
-    throw new Error('当前状态不能提交媒介审核。');
+    throw new Error('当前状态不能提交审核。');
   }
   const blockers = externalInvoiceValidationIssues({ record, creator, contracts })
     .filter((issue) => issue.severity === 'BLOCKER');
@@ -852,7 +852,7 @@ export const buildApprovedExternalInvoice = ({
 } => {
   if (record.status !== 'WAITING_MEDIA_REVIEW') throw new Error('只有待审核的外部 Invoice 可以审核通过。');
   const readiness = externalInvoiceReviewReadiness({ record, creator, contracts });
-  if (!readiness.canApprove) throw new Error(readiness.blockers[0] ?? '外部 Invoice 尚未完成媒介复核。');
+  if (!readiness.canApprove) throw new Error(readiness.blockers[0] ?? '外部 Invoice 尚未完成复核。');
   const confirmation = currentExternalInvoiceConfirmation(record);
   if (!confirmation) throw new Error('外部 Invoice 缺少达人确认数据。');
   const sourceInvoiceNumber = confirmation.values.SOURCE_INVOICE_NUMBER.trim();

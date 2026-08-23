@@ -161,7 +161,7 @@ describe('external Invoice collection workflow', () => {
       invoiceEntity,
       occupiedInvoices: [],
       actor,
-    })).toThrow('达人纠正值待媒介确认');
+    })).toThrow('达人纠正值待确认');
 
     const reviewed = reviewExternalInvoiceField(
       submitted,

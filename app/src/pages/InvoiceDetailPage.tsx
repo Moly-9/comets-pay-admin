@@ -218,7 +218,7 @@ function buildReviewChecks(
         contractValue: '达人签署后生效',
         invoiceValue: signed ? '已完成电子签署' : '签名区域留空',
         passed: signed,
-        note: signed ? '模拟达人签署已完成，可进入媒介审核' : '当前文件等待达人签署，暂不可进入财务复核',
+        note: signed ? '模拟达人签署已完成，可进入审核' : '当前文件等待达人签署，暂不可进入财务复核',
       },
     ];
   }
@@ -509,7 +509,7 @@ export function InvoiceDetailPage({
     ? 4
     : invoiceTimelineState?.currentIndex ?? projectTimelineIndex;
   const steps = invoiceReviewStatus
-    ? ['Invoice 已生成', '达人签署', '媒介审核 / 复核', '项目请款审批', '进入付款']
+    ? ['Invoice 已生成', '达人签署', '审核 / 复核', '项目请款审批', '进入付款']
     : source.kind === 'project'
       ? ['Invoice 已关联', '合同一一匹配', '项目审批', '财务复核', '渠道付款']
       : ['Invoice 已生成', '达人签署', '项目关联', '财务复核', '进入付款'];
@@ -699,7 +699,7 @@ export function InvoiceDetailPage({
     }));
   const workspaceBlockingReasons = [
     ...(isPaymentListReturn ? ['等待项目付款清单重新提交'] : []),
-    ...(primaryAction === 'APPROVE_MEDIA' && !signedForMediaReview ? ['达人尚未完成签署，不能进行媒介审核'] : []),
+    ...(primaryAction === 'APPROVE_MEDIA' && !signedForMediaReview ? ['达人尚未完成签署，不能进行审核'] : []),
     ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatch?.canProceed
       ? ['合同与 Invoice 存在未处理的阻断项']
       : []),
@@ -772,7 +772,7 @@ export function InvoiceDetailPage({
       <InvoiceReviewWorkspace
         sourceType="INTERNAL_GENERATED"
         issueCount={Math.max(checks.length - passedCount, workspaceBlockingReasons.length)}
-        sourceStatusText={invoiceReviewStatus ?? displayStatus}
+        sourceStatusText={displayStatus}
         documentName={`${model.invoiceNumber}.pdf`}
         documentMeta={`Invoice 全文 · 1 页 · 冻结版本 V${payout?.invoiceVersion ?? generatedRecord?.version ?? 1}`}
         documentContent={<InvoiceDocumentView model={model} ariaLabel={`${model.invoiceNumber} Invoice全文`} />}
@@ -789,7 +789,7 @@ export function InvoiceDetailPage({
         returnDialogTitle={returnAction === 'RECORD_CREATOR_FEEDBACK' ? '记录达人反馈' : '退回达人修改'}
         onReturn={payout && returnAction ? (reason) => onReviewAction(payout, returnAction, reason) : undefined}
         onSave={primaryAction === 'APPROVE_MEDIA' && canReviewMedia
-          ? () => notify('审核进度已保存', `${model.invoiceNumber} 的媒介审核进度已保留在当前前端原型中。`)
+          ? () => notify('审核进度已保存', `${model.invoiceNumber} 的审核进度已保留在当前前端原型中。`)
           : undefined}
         approveLabel={primaryAction
           ? primaryAction === 'APPROVE_MEDIA' && payout?.invoiceReviewStatus === '待媒介复核'

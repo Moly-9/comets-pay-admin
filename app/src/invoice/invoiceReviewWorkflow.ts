@@ -75,8 +75,8 @@ export const INVOICE_REVIEW_STATUS_META: Record<
 > = {
   待签署: { label: '待签署', color: '#8b5cf6' },
   达人反馈: { label: '达人反馈', color: '#e8792e' },
-  待媒介审核: { label: '待媒介审核', color: '#f59e0b' },
-  待媒介复核: { label: '待媒介复核', color: '#f97316' },
+  待媒介审核: { label: '待审核', color: '#f59e0b' },
+  待媒介复核: { label: '待复核', color: '#f97316' },
   已通过: { label: '已通过', color: '#22c55e' },
   已退回: { label: '已退回', color: '#ef4444' },
 };

@@ -107,6 +107,8 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(html).toContain('Invoice金额');
     expect(html).toContain('付款方式');
     expect(html).toContain('invoice-review-workspace is-internal');
+    expect(html).toContain('待复核');
+    expect(html).not.toContain('待媒介复核');
     expect(html.indexOf('Invoice类型')).toBeLessThan(html.indexOf('当前状态'));
     expect(html.indexOf('contract-metric-grid')).toBeLessThan(html.indexOf('invoice-review-workspace'));
   });
@@ -159,6 +161,8 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(signedHtml).toContain('5/5项资料校验通过');
     expect(signedHtml).toContain('aria-label="电子签名">Synthetic Creator');
     expect(signedHtml).toContain('审核通过');
+    expect(signedHtml).toContain('待审核');
+    expect(signedHtml).not.toContain('待媒介审核');
     expect(signedHtml).toMatch(/<button class="button button-primary " type="button">[\s\S]*?<span>审核通过<\/span>/);
   });
 

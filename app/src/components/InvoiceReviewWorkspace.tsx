@@ -364,7 +364,7 @@ export function InvoiceReviewWorkspace({
             <div><span>原始 Invoice 原文</span><strong>{field.evidence.sourceValue}</strong><small>第 {field.evidence.pageNumber ?? 1} 页</small></div>
             <div><span>系统首次 OCR</span><strong>{field.evidence.recognizedValue}</strong><small>首次识别值不可覆盖</small></div>
             <div><span>达人最终确认值</span><strong>{field.evidence.confirmedValue}</strong><small>{field.evidence.correctionReason ?? '达人确认识别结果'}</small></div>
-            <div><span>纠正与媒介复核</span><strong>{field.evidence.mediaReview ?? '待媒介复核'}</strong><small>{field.evidence.correctedBy ? `${field.evidence.correctedBy} · ${formatEvidenceTime(field.evidence.correctedAt)}` : '该字段未发生达人纠正'}</small></div>
+            <div><span>纠正与复核</span><strong>{field.evidence.mediaReview ?? '待复核'}</strong><small>{field.evidence.correctedBy ? `${field.evidence.correctedBy} · ${formatEvidenceTime(field.evidence.correctedAt)}` : '该字段未发生达人纠正'}</small></div>
           </div>
         ) : null}
       </article>
@@ -455,7 +455,7 @@ export function InvoiceReviewWorkspace({
           </div>
           <span className={`invoice-review-issue-count ${issueCount ? 'has-issues' : 'is-clear'}`}>
             {issueCount ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
-            {issueCount ? `${issueCount}项待媒介复核` : '系统字段已校验'}
+            {issueCount ? `${issueCount}项待复核` : '系统字段已校验'}
           </span>
         </header>
 
@@ -512,7 +512,7 @@ export function InvoiceReviewWorkspace({
               {exceptionFields.length ? (
                 <div className="invoice-review-exception-summary" role="status">
                   <AlertTriangle size={17} />
-                  <span><strong>{exceptionFields.length} 项需要关注</strong><small>逐项查看原文证据并完成媒介复核</small></span>
+                  <span><strong>{exceptionFields.length} 项需要关注</strong><small>逐项查看原文证据并完成复核</small></span>
                 </div>
               ) : (
                 <div className="invoice-review-clear-summary" role="status"><CheckCircle2 size={17} />全部识别字段与校验基准一致</div>

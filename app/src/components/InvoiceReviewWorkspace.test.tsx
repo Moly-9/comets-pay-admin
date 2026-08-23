@@ -4,7 +4,7 @@ import { InvoiceReviewWorkspace } from './InvoiceReviewWorkspace';
 
 const baseProps = {
   issueCount: 0,
-  sourceStatusText: '等待媒介审核',
+  sourceStatusText: '待审核',
   documentName: 'invoice.pdf',
   documentMeta: '1 页',
   documentContent: <div data-review-evidence="AMOUNT">USD 4,800</div>,
@@ -47,7 +47,7 @@ describe('InvoiceReviewWorkspace', () => {
           baselineValue: '4800.00',
           confirmedValue: '4800.00',
           status: 'PENDING_REVIEW',
-          statusLabel: '待媒介复核',
+          statusLabel: '待复核',
           evidenceTarget: 'AMOUNT',
           evidence: {
             sourceValue: '4800.00',
@@ -56,7 +56,7 @@ describe('InvoiceReviewWorkspace', () => {
           },
           allowConfirmCorrection: true,
         }]}
-        blockingReasons={['总金额的达人纠正值待媒介确认']}
+        blockingReasons={['总金额的达人纠正值待确认']}
         completion={{ completed: 3, total: 4 }}
         canReview
         onFieldAction={vi.fn()}
@@ -66,8 +66,9 @@ describe('InvoiceReviewWorkspace', () => {
       />,
     );
     expect(html).toContain('外部上传');
-    expect(html).toContain('1项待媒介复核');
-    expect(html).toContain('总金额的达人纠正值待媒介确认');
+    expect(html).toContain('1项待复核');
+    expect(html).toContain('总金额的达人纠正值待确认');
+    expect(html).not.toContain('待媒介复核');
     expect(html).toContain('确认纠正');
     expect(html).toContain('disabled=""');
     expect(html).toContain('invoice-review-field-list');

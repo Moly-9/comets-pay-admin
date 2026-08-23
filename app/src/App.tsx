@@ -404,7 +404,7 @@ export default function App() {
       const invoice = NORMALIZED_INITIAL_INVOICE_RESOURCES.invoices.find((candidate) => (
         candidate.invoiceId === invoiceId
       ));
-      return invoice ? { ...item, title: `Invoice ${invoice.id} 等待媒介审核` } : item;
+      return invoice ? { ...item, title: `Invoice ${invoice.id} 待审核` } : item;
     })
   ));
   const [showRequestApprovalReminder, setShowRequestApprovalReminder] = useState(true);
@@ -3051,9 +3051,9 @@ export default function App() {
       });
       setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
       setInvoiceTab('review');
-      notify('已提交媒介审核', `${updated.invoiceNumber} 已按达人确认的 Date of Invoice 分配候选编号。`);
+      notify('已提交审核', `${updated.invoiceNumber} 已按达人确认的 Date of Invoice 分配候选编号。`);
     } catch (error) {
-      notify('无法提交媒介审核', error instanceof Error ? error.message : '任务或档案校验未通过。');
+      notify('无法提交审核', error instanceof Error ? error.message : '任务或档案校验未通过。');
     }
   };
 
@@ -3229,7 +3229,7 @@ export default function App() {
       )));
       setInvoiceTab('review');
       setFocusedInvoiceId(linkedPayout.id);
-      notify('已提交媒介审核', `${record.id} 已标记签署完成，当前状态为“待媒介审核”。`);
+      notify('已提交审核', `${record.id} 已标记签署完成，当前状态为“待审核”。`);
     } catch (error) {
       notify('提交失败', error instanceof Error ? error.message : '当前 Invoice 无法提交审核。');
     }

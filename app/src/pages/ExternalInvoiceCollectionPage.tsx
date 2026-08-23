@@ -64,10 +64,10 @@ const TECHNICAL_STATUS_LABEL: Record<ExternalInvoiceCollectionRecord['status'], 
   WAITING_UPLOAD: '等待 C 端上传',
   RECOGNIZING: 'OCR 识别中',
   WAITING_CONFIRMATION: '等待达人确认识别结果',
-  WAITING_MEDIA_REVIEW: '等待媒介审核',
+  WAITING_MEDIA_REVIEW: '待审核',
   RETURNED_FOR_CORRECTION: '已退回纠正识别结果',
   RETURNED_FOR_REUPLOAD: '已要求重新上传',
-  APPROVED: '媒介审核通过',
+  APPROVED: '审核通过',
   RECOGNITION_FAILED: 'OCR 识别失败',
   CANCELLED: '已取消',
 };
@@ -398,7 +398,7 @@ export function ExternalInvoiceCollectionDetailPage({
           : status === 'CORRECTED'
             ? review?.decision === 'CONFIRMED_CORRECTION' ? '达人已纠正 · 已复核' : '达人已纠正'
             : status === 'PENDING_REVIEW'
-              ? '待媒介复核'
+              ? '待复核'
               : status === 'REUPLOAD_REQUIRED'
                 ? '必须重新上传'
                 : status === 'MISSING'
@@ -420,13 +420,13 @@ export function ExternalInvoiceCollectionDetailPage({
             correctedBy: correction?.correctedBy.name,
             correctedAt: correction?.correctedAt,
             mediaReview: review?.decision === 'CONFIRMED_CORRECTION'
-              ? '媒介已确认纠正'
+              ? '已确认纠正'
               : review?.decision === 'REUPLOAD_REQUIRED'
-                ? '媒介要求重新上传'
+                ? '已要求重新上传'
                 : review?.decision === 'ANOMALY'
-                  ? '媒介已标记异常'
+                  ? '已标记异常'
                   : corrected && EXTERNAL_INVOICE_CRITICAL_FIELDS.includes(field)
-                    ? '待媒介复核'
+                    ? '待复核'
                     : '无需额外复核',
             pageNumber: recognized.evidence.pageNumber,
           },
@@ -530,8 +530,8 @@ export function ExternalInvoiceCollectionDetailPage({
     PUBLISHED: '任务发布',
     FILE_UPLOADED: '达人上传原始 Invoice',
     RECOGNITION_CORRECTED: '达人纠正识别结果',
-    FIELD_REVIEWED: '媒介字段复核',
-    SUBMITTED: '提交媒介审核',
+    FIELD_REVIEWED: '字段复核',
+    SUBMITTED: '提交审核',
     RETURNED_FOR_CORRECTION: '退回纠正识别结果',
     RETURNED_FOR_REUPLOAD: '要求重新上传',
     APPROVED: '审核通过',
@@ -613,7 +613,7 @@ export function ExternalInvoiceCollectionDetailPage({
         <InvoiceReviewWorkspace
           sourceType="EXTERNAL_UPLOADED"
           issueCount={workspaceIssueCount}
-          sourceStatusText={record.status === 'APPROVED' ? '媒介审核已通过' : TECHNICAL_STATUS_LABEL[record.status]}
+          sourceStatusText={record.status === 'APPROVED' ? '审核已通过' : TECHNICAL_STATUS_LABEL[record.status]}
           documentName={currentFile?.fileName ?? '外部 Invoice 原始文件'}
           documentMeta={`原始文件 v${currentFile?.version ?? 1} · OCR ${recognition.engineVersion} · 前端原型预览`}
           documentContent={(
@@ -751,7 +751,7 @@ export function ExternalInvoiceCollectionDetailPage({
                   <Button variant="secondary" onClick={() => onCorrect(activeCorrectionField, correctionValue.trim() || activeCorrectionEvidence)}>保存纠正值</Button>
                 </div>
               ) : null}
-              <div className="external-simulator-submit"><Button disabled={!canSubmit} icon={<Send size={16} />} onClick={onSubmit}>提交媒介审核</Button></div>
+              <div className="external-simulator-submit"><Button disabled={!canSubmit} icon={<Send size={16} />} onClick={onSubmit}>提交审核</Button></div>
             </section>
           ) : null}
 

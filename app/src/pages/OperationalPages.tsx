@@ -4164,7 +4164,7 @@ export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
   {
     id: 1,
     icon: FileCheck2,
-    title: 'Invoice 等待媒介审核',
+    title: 'Invoice 待审核',
     body: '@MinaKato · Once Human主机上线KOL合作项目 · USD 3,240',
     time: '10 分钟前',
     unread: true,
