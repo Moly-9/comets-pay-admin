@@ -68,6 +68,7 @@ import {
   type ExternalInvoiceCollectionInput,
   type ExternalInvoiceCollectionRecord,
   type ExternalInvoiceFieldKey,
+  type ExternalInvoiceMediaReviewDecision,
   type ExternalInvoiceScenario,
 } from '../invoice/externalInvoiceCollection';
 import {
@@ -2834,6 +2835,7 @@ export function InvoicePage({
   onSimulateExternalUpload = () => undefined,
   onCorrectExternalRecognition = () => undefined,
   onSubmitExternalInvoice = () => undefined,
+  onReviewExternalInvoiceField = () => undefined,
   onReturnExternalInvoice = () => undefined,
   onApproveExternalInvoice = () => undefined,
   canCreateInvoice,
@@ -2876,6 +2878,12 @@ export function InvoicePage({
   ) => void;
   onCorrectExternalRecognition?: (invoiceId: string, fieldKey: ExternalInvoiceFieldKey, value: string) => void;
   onSubmitExternalInvoice?: (invoiceId: string) => void;
+  onReviewExternalInvoiceField?: (
+    invoiceId: string,
+    fieldKey: ExternalInvoiceFieldKey,
+    decision: ExternalInvoiceMediaReviewDecision,
+    note?: string,
+  ) => void;
   onReturnExternalInvoice?: (invoiceId: string, returnType: 'CORRECTION' | 'REUPLOAD', reason: string) => void;
   onApproveExternalInvoice?: (invoiceId: string) => void;
   canCreateInvoice: boolean;
@@ -3166,12 +3174,22 @@ export function InvoicePage({
           value,
         )}
         onSubmit={() => onSubmitExternalInvoice(String(selectedExternalInvoice.invoiceId))}
+        onReviewField={(fieldKey, decision, note) => onReviewExternalInvoiceField(
+          String(selectedExternalInvoice.invoiceId),
+          fieldKey,
+          decision,
+          note,
+        )}
         onReturn={(returnType, reason) => onReturnExternalInvoice(
           String(selectedExternalInvoice.invoiceId),
           returnType,
           reason,
         )}
         onApprove={() => onApproveExternalInvoice(String(selectedExternalInvoice.invoiceId))}
+        onSaveReviewProgress={() => notify(
+          '审核进度已保存',
+          `${selectedExternalInvoice.invoiceNumber ?? '当前外部 Invoice'} 的字段复核结果已保留在当前前端原型中。`,
+        )}
         onBack={() => {
           setSelectedExternalInvoiceId(null);
           window.scrollTo({ top: 0, behavior: 'smooth' });

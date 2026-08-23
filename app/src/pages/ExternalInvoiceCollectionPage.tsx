@@ -14,7 +14,14 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Avatar, Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import {
+  InvoiceReviewWorkspace,
+  type InvoiceReviewAccountRow,
+  type InvoiceReviewContractCheck,
+  type InvoiceReviewOverviewField,
+  type InvoiceReviewTimelineItem,
+} from '../components/InvoiceReviewWorkspace';
 import {
   CONTRACT_TYPE_LABELS,
   contractLinkedToProject,
@@ -25,18 +32,22 @@ import {
   EXTERNAL_INVOICE_FIELD_LABEL,
   EXTERNAL_INVOICE_FIELD_ORDER,
   contractAccountReminder,
+  currentExternalInvoiceFieldReview,
   currentExternalInvoiceConfirmation,
   currentExternalInvoiceRecognition,
   externalInvoiceListStatus,
   externalInvoicePageTab,
+  externalInvoiceReviewReadiness,
   externalInvoiceValidationIssues,
   type ExternalInvoiceCollectionInput,
   type ExternalInvoiceCollectionRecord,
   type ExternalInvoiceFieldKey,
+  type ExternalInvoiceMediaReviewDecision,
   type ExternalInvoiceScenario,
 } from '../invoice/externalInvoiceCollection';
 import { todayInputValue } from '../invoice/invoiceUtils';
 import {
+  createDocumentPayoutSnapshot,
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
   getPayoutAccountSummary,
@@ -278,8 +289,10 @@ export function ExternalInvoiceCollectionDetailPage({
   onSimulateUpload,
   onCorrect,
   onSubmit,
+  onReviewField,
   onReturn,
   onApprove,
+  onSaveReviewProgress,
   onBack,
 }: {
   record: ExternalInvoiceCollectionRecord;
@@ -291,8 +304,10 @@ export function ExternalInvoiceCollectionDetailPage({
   onSimulateUpload: (scenario: ExternalInvoiceScenario, payoutAccountId: string, invoiceDate: string) => void;
   onCorrect: (fieldKey: ExternalInvoiceFieldKey, value: string) => void;
   onSubmit: () => void;
+  onReviewField: (fieldKey: ExternalInvoiceFieldKey, decision: ExternalInvoiceMediaReviewDecision, note?: string) => void;
   onReturn: (returnType: 'CORRECTION' | 'REUPLOAD', reason: string) => void;
   onApprove: () => void;
+  onSaveReviewProgress: () => void;
   onBack: () => void;
 }) {
   const recognition = currentExternalInvoiceRecognition(record);
@@ -302,11 +317,8 @@ export function ExternalInvoiceCollectionDetailPage({
     record.selectedPayoutAccountId ?? (accounts[0] ? getPayoutAccountId(accounts[0]) : ''),
   );
   const [invoiceDate, setInvoiceDate] = useState(confirmation?.values.INVOICE_DATE ?? todayInputValue());
-  const [criticalChecks, setCriticalChecks] = useState<ExternalInvoiceFieldKey[]>([]);
   const [correctionField, setCorrectionField] = useState<ExternalInvoiceFieldKey>('AMOUNT');
   const [correctionValue, setCorrectionValue] = useState('');
-  const [returnDialog, setReturnDialog] = useState<'CORRECTION' | 'REUPLOAD' | null>(null);
-  const [returnReason, setReturnReason] = useState('');
   const payoutAccountOptions = accounts.map((account) => ({
     value: getPayoutAccountId(account),
     label: account.nickname,
@@ -319,7 +331,6 @@ export function ExternalInvoiceCollectionDetailPage({
   const stepIndex = stepIndexFor(record);
   const canUpload = ['WAITING_UPLOAD', 'RETURNED_FOR_REUPLOAD', 'WAITING_CONFIRMATION'].includes(record.status);
   const canSubmit = Boolean(confirmation && blockers.length === 0 && record.status === 'WAITING_CONFIRMATION');
-  const allCriticalReviewed = EXTERNAL_INVOICE_CRITICAL_FIELDS.every((field) => criticalChecks.includes(field));
   const displayInvoiceNumber = externalInvoicePageTab(record.status) === 'upload'
     ? '待生成'
     : record.invoiceNumber ?? '待生成';
@@ -328,6 +339,241 @@ export function ExternalInvoiceCollectionDetailPage({
   ));
   const activeCorrectionField = correctionCandidate ?? correctionField;
   const activeCorrectionEvidence = recognition?.fields[activeCorrectionField].evidence.sourceValue ?? '';
+  const reviewWorkspaceVisible = Boolean(
+    recognition
+    && confirmation
+    && (record.status === 'WAITING_MEDIA_REVIEW' || record.status === 'APPROVED'),
+  );
+  const currentFile = record.sourceFileVersions[record.sourceFileVersions.length - 1];
+  const selectedAccount = accounts.find((account) => getPayoutAccountId(account) === confirmation?.payoutAccountId);
+  const accountSnapshot = selectedAccount
+    ? createDocumentPayoutSnapshot(selectedAccount, record.creatorId)
+    : undefined;
+  const profileAccountValue = selectedAccount?.provider === 'PayPal'
+    ? `${accountSnapshot?.paypalUsername || '待补充'} / ${accountSnapshot?.paypalEmail || '待补充'}`
+    : `${accountSnapshot?.accountName || '待补充'} / ${accountSnapshot?.iban || accountSnapshot?.accountNumber || '待补充'}`;
+  const expectedPublisher = selectedAccount?.provider === 'PayPal'
+    ? accountSnapshot?.paypalUsername || '达人档案账户主体待补充'
+    : accountSnapshot?.accountName || '达人档案账户主体待补充';
+  const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
+    if (field === 'SOURCE_INVOICE_NUMBER') return '非空且未被其他 Invoice 使用';
+    if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
+    if (field === 'PUBLISHER') return expectedPublisher;
+    if (field === 'ADVERTISER') return record.expected.advertiser;
+    if (field === 'DESCRIPTION') return record.expected.description;
+    if (field === 'AMOUNT') return record.expected.amount.toFixed(2);
+    if (field === 'CURRENCY') return record.expected.currency;
+    return profileAccountValue;
+  };
+  const reviewFields: InvoiceReviewOverviewField[] = recognition && confirmation
+    ? EXTERNAL_INVOICE_FIELD_ORDER.map((field) => {
+        const recognized = recognition.fields[field];
+        const confirmedValue = confirmation.values[field];
+        const correction = confirmation.corrections.find((item) => item.fieldKey === field);
+        const review = currentExternalInvoiceFieldReview(record, field);
+        const validationIssue = issues.find((issue) => issue.fieldKey === field && issue.severity === 'BLOCKER');
+        const corrected = recognized.value.trim() !== confirmedValue.trim();
+        const needsCriticalReview = Boolean(
+          corrected
+          && EXTERNAL_INVOICE_CRITICAL_FIELDS.includes(field)
+          && review?.decision !== 'CONFIRMED_CORRECTION',
+        );
+        const sourceRequiresReupload = currentFile?.scenario === 'SOURCE_FILE_ERROR' && Boolean(validationIssue);
+        const status: InvoiceReviewOverviewField['status'] = review?.decision === 'REUPLOAD_REQUIRED'
+          ? 'REUPLOAD_REQUIRED'
+          : review?.decision === 'ANOMALY'
+            ? 'MISMATCH'
+            : sourceRequiresReupload
+              ? 'REUPLOAD_REQUIRED'
+              : validationIssue
+                ? 'MISMATCH'
+                : needsCriticalReview
+                  ? 'PENDING_REVIEW'
+                  : corrected
+                    ? 'CORRECTED'
+                    : confirmedValue
+                      ? 'MATCHED'
+                      : 'MISSING';
+        const statusLabel = status === 'MATCHED'
+          ? '一致'
+          : status === 'CORRECTED'
+            ? review?.decision === 'CONFIRMED_CORRECTION' ? '达人已纠正 · 已复核' : '达人已纠正'
+            : status === 'PENDING_REVIEW'
+              ? '待媒介复核'
+              : status === 'REUPLOAD_REQUIRED'
+                ? '必须重新上传'
+                : status === 'MISSING'
+                  ? '未识别'
+                  : '不一致';
+        return {
+          id: field,
+          label: EXTERNAL_INVOICE_FIELD_LABEL[field],
+          baselineValue: baselineValueFor(field),
+          confirmedValue: confirmedValue || '未识别',
+          status,
+          statusLabel,
+          evidenceTarget: field,
+          evidence: {
+            sourceValue: recognized.evidence.sourceValue,
+            recognizedValue: recognized.value,
+            confirmedValue,
+            correctionReason: correction ? '系统识别错误，达人已按原文件纠正' : undefined,
+            correctedBy: correction?.correctedBy.name,
+            correctedAt: correction?.correctedAt,
+            mediaReview: review?.decision === 'CONFIRMED_CORRECTION'
+              ? '媒介已确认纠正'
+              : review?.decision === 'REUPLOAD_REQUIRED'
+                ? '媒介要求重新上传'
+                : review?.decision === 'ANOMALY'
+                  ? '媒介已标记异常'
+                  : corrected && EXTERNAL_INVOICE_CRITICAL_FIELDS.includes(field)
+                    ? '待媒介复核'
+                    : '无需额外复核',
+            pageNumber: recognized.evidence.pageNumber,
+          },
+          allowConfirmCorrection: canReview
+            && record.status === 'WAITING_MEDIA_REVIEW'
+            && needsCriticalReview
+            && correction?.evidenceMatched,
+          allowExceptionActions: canReview && record.status === 'WAITING_MEDIA_REVIEW',
+        };
+      })
+    : [];
+  const selectedContracts = contracts.filter((contract) => (
+    contract.contractId && record.contractIds.includes(contract.contractId)
+  ));
+  const normalized = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const contractValueList = (values: Array<string | undefined>) => (
+    values.map((value) => value?.trim()).filter(Boolean).join('；') || '合同未填写'
+  );
+  const contractPublishers = selectedContracts.map((contract) => contract.publisher).filter(Boolean);
+  const contractAdvertisers = selectedContracts.map((contract) => contract.advertiser).filter(Boolean);
+  const contractCurrencies = [...new Set(selectedContracts.map((contract) => contract.currency).filter(Boolean))];
+  const contractAmounts = selectedContracts.map((contract) => contract.totalFee).filter((value): value is number => value !== null);
+  const contractAccountIds = selectedContracts.map((contract) => (
+    contract.payoutAccountId || contract.paymentSnapshot?.payoutAccountId
+  )).filter(Boolean);
+  const contractChecks: InvoiceReviewContractCheck[] = selectedContracts.length && confirmation ? [
+    {
+      id: 'advertiser',
+      label: '付款主体',
+      contractValue: contractValueList(contractAdvertisers),
+      invoiceValue: confirmation.values.ADVERTISER,
+      state: contractAdvertisers.length && contractAdvertisers.every((value) => normalized(value) === normalized(confirmation.values.ADVERTISER)) ? 'PASS' : contractAdvertisers.length ? 'FAIL' : 'NOT_APPLICABLE',
+      note: contractAdvertisers.length ? '付款主体需要逐份合同一致。' : '合同未填写付款主体，不参与匹配。',
+      evidenceTarget: 'ADVERTISER',
+    },
+    {
+      id: 'publisher',
+      label: '开票 / 收款主体',
+      contractValue: contractValueList(contractPublishers),
+      invoiceValue: confirmation.values.PUBLISHER,
+      state: contractPublishers.length && contractPublishers.every((value) => normalized(value) === normalized(confirmation.values.PUBLISHER)) ? 'PASS' : contractPublishers.length ? 'FAIL' : 'NOT_APPLICABLE',
+      note: contractPublishers.length ? 'Publisher 与达人最终确认的开票主体对照。' : '合同未填写 Publisher，不参与匹配。',
+      evidenceTarget: 'PUBLISHER',
+    },
+    {
+      id: 'account',
+      label: '收款信息',
+      contractValue: contractAccountIds.join('；') || '合同未绑定账户',
+      invoiceValue: confirmation.values.PAYMENT_ACCOUNT,
+      state: !contractAccountIds.length ? 'NOT_APPLICABLE' : contractAccountIds.every((value) => value === confirmation.payoutAccountId) ? 'PASS' : 'WARNING',
+      note: '合同账户差异只提示，不自动替换达人本次选择的已审核账户。',
+      evidenceTarget: 'PAYMENT_ACCOUNT',
+    },
+    {
+      id: 'amount',
+      label: '金额',
+      contractValue: contractAmounts.length ? contractAmounts.reduce((sum, value) => sum + value, 0).toFixed(2) : '合同未填写金额',
+      invoiceValue: confirmation.values.AMOUNT,
+      state: !contractAmounts.length ? 'NOT_APPLICABLE' : contractAmounts.reduce((sum, value) => sum + value, 0) === Number(confirmation.values.AMOUNT) ? 'PASS' : 'WARNING',
+      note: '金额差异需要媒介关注，但不改变 Invoice 与任务基准的严格校验。',
+      evidenceTarget: 'AMOUNT',
+    },
+    {
+      id: 'currency',
+      label: '币种',
+      contractValue: contractCurrencies.join('；') || '合同未填写币种',
+      invoiceValue: confirmation.values.CURRENCY,
+      state: !contractCurrencies.length ? 'NOT_APPLICABLE' : contractCurrencies.every((value) => normalized(value) === normalized(confirmation.values.CURRENCY)) ? 'PASS' : 'WARNING',
+      note: '合同币种差异作为审核提醒展示。',
+      evidenceTarget: 'CURRENCY',
+    },
+    {
+      id: 'signature',
+      label: '签名完整性',
+      contractValue: '外部票据文件需完整有效',
+      invoiceValue: currentFile ? `文件 v${currentFile.version} 已归档` : '当前文件缺失',
+      state: currentFile ? 'PASS' : 'FAIL',
+      note: currentFile ? '当前原文件版本有效，可追溯历史版本。' : '缺少有效原文件。',
+    },
+  ] : [];
+  const maskTail = (value?: string) => {
+    const normalizedValue = value?.replace(/\s/g, '') ?? '';
+    return normalizedValue ? `•••• ${normalizedValue.slice(-4)}` : '待补充';
+  };
+  const accountRows: InvoiceReviewAccountRow[] = [
+    { label: '付款方式', value: selectedAccount?.provider ?? '待选择' },
+    { label: 'Account Name', value: selectedAccount?.provider === 'PayPal' ? accountSnapshot?.paypalUsername || '待补充' : accountSnapshot?.accountName || '待补充' },
+    { label: 'Account Number 尾号', value: selectedAccount?.provider === 'PayPal' ? '不适用' : maskTail(accountSnapshot?.accountNumber) },
+    { label: 'Bank Name', value: accountSnapshot?.bankName || (selectedAccount?.provider === 'PayPal' ? '不适用' : '待补充') },
+    { label: 'SWIFT / BIC', value: accountSnapshot?.swiftCode || (selectedAccount?.provider === 'PayPal' ? '不适用' : '待补充') },
+    { label: 'IBAN', value: accountSnapshot?.iban ? maskTail(accountSnapshot.iban) : '不适用' },
+    { label: 'PayPal Email', value: selectedAccount?.provider === 'PayPal' ? accountSnapshot?.paypalEmail || '待补充' : '不适用' },
+    { label: '账户审核状态', value: accountSnapshot?.validationStatus === 'VERIFIED' ? '已审核通过' : accountSnapshot?.validationStatus || '待审核' },
+  ];
+  const accountMatched = Boolean(
+    confirmation
+    && normalized(confirmation.values.PAYMENT_ACCOUNT) === normalized(profileAccountValue),
+  );
+  const eventLabel: Record<ExternalInvoiceCollectionRecord['reviewHistory'][number]['action'], string> = {
+    CREATED: '任务创建',
+    PUBLISHED: '任务发布',
+    FILE_UPLOADED: '达人上传原始 Invoice',
+    RECOGNITION_CORRECTED: '达人纠正识别结果',
+    FIELD_REVIEWED: '媒介字段复核',
+    SUBMITTED: '提交媒介审核',
+    RETURNED_FOR_CORRECTION: '退回纠正识别结果',
+    RETURNED_FOR_REUPLOAD: '要求重新上传',
+    APPROVED: '审核通过',
+  };
+  const reviewTimeline: InvoiceReviewTimelineItem[] = [
+    ...record.reviewHistory.map((event) => ({
+      id: event.eventId,
+      title: event.fieldKey ? `${eventLabel[event.action]} · ${EXTERNAL_INVOICE_FIELD_LABEL[event.fieldKey]}` : eventLabel[event.action],
+      description: event.reason ?? `${event.fromStatus ? `${TECHNICAL_STATUS_LABEL[event.fromStatus]} → ` : ''}${TECHNICAL_STATUS_LABEL[event.toStatus]}`,
+      meta: `${event.actor.name} · ${event.actor.role} · ${new Date(event.occurredAt).toLocaleString('zh-CN')}`,
+      state: event.action === 'RETURNED_FOR_CORRECTION' || event.action === 'RETURNED_FOR_REUPLOAD' ? 'RETURNED' as const : 'COMPLETE' as const,
+    })),
+    ...(record.status === 'APPROVED' ? [
+      { id: 'request-pending', title: '进入请款', description: '等待媒介在合作项目中发起请款', state: 'CURRENT' as const },
+      { id: 'payment-pending', title: '进入付款', description: '请款审批通过后进入付款工作台', state: 'PENDING' as const },
+    ] : []),
+  ];
+  const readiness = externalInvoiceReviewReadiness({ record, creator, contracts });
+  const contractBlockers = contractChecks.filter((check) => check.state === 'FAIL').map((check) => `${check.label}与合同不一致`);
+  const workspaceBlockers = [...readiness.blockers, ...contractBlockers];
+  const workspaceIssueCount = reviewFields.filter((field) => (
+    field.status === 'PENDING_REVIEW'
+    || field.status === 'MISMATCH'
+    || field.status === 'MISSING'
+    || field.status === 'REUPLOAD_REQUIRED'
+  )).length + contractBlockers.length;
+
+  const downloadPrototypeSource = () => {
+    if (!currentFile || !recognition) return;
+    const content = [
+      'COMETS Pay front-end prototype evidence export',
+      `Source file metadata: ${currentFile.fileName}`,
+      ...EXTERNAL_INVOICE_FIELD_ORDER.map((field) => `${EXTERNAL_INVOICE_FIELD_LABEL[field]}: ${recognition.fields[field].evidence.sourceValue}`),
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${currentFile.fileName.replace(/\.[^.]+$/, '')}-prototype-evidence.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="page-stack external-invoice-page">
@@ -352,6 +598,65 @@ export function ExternalInvoiceCollectionDetailPage({
         <p className="external-progress-note"><Clock3 size={15} />OCR 识别中和待确认识别结果只在这里作为步骤展示，不进入列表状态。</p>
       </section>
 
+      {reviewWorkspaceVisible && recognition && confirmation ? (
+        <InvoiceReviewWorkspace
+          sourceType="EXTERNAL_UPLOADED"
+          issueCount={workspaceIssueCount}
+          sourceStatusText={record.status === 'APPROVED' ? '媒介审核已通过' : TECHNICAL_STATUS_LABEL[record.status]}
+          documentName={currentFile?.fileName ?? '外部 Invoice 原始文件'}
+          documentMeta={`原始文件 v${currentFile?.version ?? 1} · OCR ${recognition.engineVersion} · 前端原型预览`}
+          documentContent={(
+            <article className="external-document-preview invoice-review-external-document" aria-label="外部 Invoice 原始文件证据预览">
+              <div className="external-document-title"><strong>INVOICE</strong><small>{currentFile?.fileName}</small></div>
+              {EXTERNAL_INVOICE_FIELD_ORDER.map((field) => (
+                <div data-review-evidence={field} key={field}>
+                  <span>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</span>
+                  <strong>{recognition.fields[field].evidence.sourceValue}</strong>
+                </div>
+              ))}
+            </article>
+          )}
+          onDownload={downloadPrototypeSource}
+          overviewFields={reviewFields}
+          contractChecks={contractChecks}
+          noContract={selectedContracts.length === 0}
+          accountRows={accountRows}
+          accountComparison={{
+            invoiceValue: confirmation.values.PAYMENT_ACCOUNT,
+            profileValue: profileAccountValue,
+            matched: accountMatched,
+            message: accountMatched
+              ? 'Invoice 文件账户与达人档案中的已审核账户一致。'
+              : '账户不一致，不能直接使用 Invoice 文件中的新账户付款。',
+            evidenceTarget: 'PAYMENT_ACCOUNT',
+          }}
+          timeline={reviewTimeline}
+          completion={record.status === 'APPROVED'
+            ? { completed: readiness.total, total: readiness.total }
+            : { completed: readiness.completed, total: readiness.total }}
+          blockingReasons={record.status === 'APPROVED' ? [] : workspaceBlockers}
+          onFieldAction={record.status === 'WAITING_MEDIA_REVIEW' ? (fieldId, action, note) => {
+            const decision: ExternalInvoiceMediaReviewDecision = action === 'CONFIRM_CORRECTION'
+              ? 'CONFIRMED_CORRECTION'
+              : action;
+            onReviewField(fieldId as ExternalInvoiceFieldKey, decision, note);
+          } : undefined}
+          returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人' : undefined}
+          returnDialogTitle="退回外部 Invoice"
+          returnOptions={[
+            { value: 'CORRECTION', label: '退回纠正识别结果', description: '原文件正确，达人需按原文重新确认识别值' },
+            { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容有误，达人必须提交新文件版本' },
+          ]}
+          onReturn={record.status === 'WAITING_MEDIA_REVIEW'
+            ? (reason, option) => onReturn(option === 'REUPLOAD' ? 'REUPLOAD' : 'CORRECTION', reason)
+            : undefined}
+          onSave={record.status === 'WAITING_MEDIA_REVIEW' ? onSaveReviewProgress : undefined}
+          approveLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '审核通过' : undefined}
+          onApprove={record.status === 'WAITING_MEDIA_REVIEW' ? onApprove : undefined}
+          approveDisabled={!readiness.canApprove || contractBlockers.length > 0}
+          canReview={canReview && record.status === 'WAITING_MEDIA_REVIEW'}
+        />
+      ) : (
       <div className="external-detail-layout">
         <section className="content-card external-source-panel">
           <div className="external-section-heading"><div><FileText size={18} /><h2>原始 Invoice 文件</h2></div><p>{record.sourceFileVersions.length ? `${record.sourceFileVersions.length} 个不可覆盖版本` : '等待 C 端上传'}</p></div>
@@ -411,6 +716,7 @@ export function ExternalInvoiceCollectionDetailPage({
                   <Button disabled={!payoutAccountId || !invoiceDate} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
                   <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
                   <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
+                  <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
                 </div>
               ) : null}
               {(correctionCandidate || record.status === 'RETURNED_FOR_CORRECTION') && recognition ? (
@@ -460,19 +766,6 @@ export function ExternalInvoiceCollectionDetailPage({
             </section>
           ) : null}
 
-          {record.status === 'WAITING_MEDIA_REVIEW' ? (
-            <section className="content-card external-media-review">
-              <div className="external-section-heading"><div><ShieldCheck size={18} /><h2>媒介人工复核</h2></div><p>审核通过后直接进入可请款状态</p></div>
-              <div className="external-critical-checks">
-                {EXTERNAL_INVOICE_CRITICAL_FIELDS.map((field) => <label key={field}><input type="checkbox" checked={criticalChecks.includes(field)} onChange={() => setCriticalChecks((current) => current.includes(field) ? current.filter((item) => item !== field) : [...current, field])} /><span><strong>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</strong><small>已对照原文件、达人确认值和档案数据</small></span></label>)}
-              </div>
-              <div className="external-review-actions">
-                <Button variant="secondary" disabled={!canReview} onClick={() => setReturnDialog('CORRECTION')}>退回纠正识别结果</Button>
-                <Button variant="secondary" disabled={!canReview} onClick={() => setReturnDialog('REUPLOAD')}>要求重新上传</Button>
-                <Button icon={<CheckCircle2 size={16} />} disabled={!canReview || blockers.length > 0 || !allCriticalReviewed} onClick={onApprove}>审核通过</Button>
-              </div>
-            </section>
-          ) : null}
 
           <section className="content-card external-history-panel">
             <div className="external-section-heading"><div><History size={18} /><h2>操作历史</h2></div><p>记录实际操作账号与每次状态变化</p></div>
@@ -480,17 +773,8 @@ export function ExternalInvoiceCollectionDetailPage({
           </section>
         </div>
       </div>
+      )}
 
-      {returnDialog ? (
-        <Modal
-          title={returnDialog === 'CORRECTION' ? '退回纠正识别结果' : '要求重新上传 Invoice'}
-          width="520px"
-          onClose={() => setReturnDialog(null)}
-          footer={<><Button variant="ghost" onClick={() => setReturnDialog(null)}>取消</Button><Button variant="danger" disabled={!returnReason.trim()} onClick={() => { onReturn(returnDialog, returnReason); setReturnDialog(null); setReturnReason(''); }}>确认退回</Button></>}
-        >
-          <div className="form-grid single-column"><label><span className="required-field-label">退回原因 <em className="required-mark">*</em></span><textarea autoFocus value={returnReason} onChange={(event) => setReturnReason(event.target.value)} placeholder="说明具体字段、原文件证据和需要达人处理的内容" /></label></div>
-        </Modal>
-      ) : null}
     </div>
   );
 }

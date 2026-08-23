@@ -37,13 +37,18 @@ export type ExternalInvoiceCollectionStatus =
 
 export type ExternalInvoiceListStatus = '待发布' | '待上传' | '待重新上传' | '待审核' | '已通过';
 
-export type ExternalInvoiceScenario = 'NORMAL' | 'OCR_ERROR' | 'SOURCE_FILE_ERROR';
+export type ExternalInvoiceScenario =
+  | 'NORMAL'
+  | 'OCR_ERROR'
+  | 'SOURCE_FILE_ERROR'
+  | 'ACCOUNT_MISMATCH';
 
 export type ExternalInvoiceFieldKey =
   | 'SOURCE_INVOICE_NUMBER'
   | 'INVOICE_DATE'
   | 'PUBLISHER'
   | 'ADVERTISER'
+  | 'DESCRIPTION'
   | 'AMOUNT'
   | 'CURRENCY'
   | 'PAYMENT_ACCOUNT';
@@ -53,6 +58,7 @@ export const EXTERNAL_INVOICE_FIELD_ORDER: ExternalInvoiceFieldKey[] = [
   'INVOICE_DATE',
   'PUBLISHER',
   'ADVERTISER',
+  'DESCRIPTION',
   'AMOUNT',
   'CURRENCY',
   'PAYMENT_ACCOUNT',
@@ -63,12 +69,14 @@ export const EXTERNAL_INVOICE_FIELD_LABEL: Record<ExternalInvoiceFieldKey, strin
   INVOICE_DATE: 'Date of Invoice',
   PUBLISHER: '开票主体',
   ADVERTISER: '付款主体',
+  DESCRIPTION: 'Description',
   AMOUNT: '总金额',
   CURRENCY: '币种',
   PAYMENT_ACCOUNT: '收款账户',
 };
 
 export const EXTERNAL_INVOICE_CRITICAL_FIELDS: ExternalInvoiceFieldKey[] = [
+  'SOURCE_INVOICE_NUMBER',
   'PUBLISHER',
   'AMOUNT',
   'CURRENCY',
@@ -108,6 +116,21 @@ export type ExternalInvoiceFileVersion = {
   supersedesFileVersionId?: string;
 };
 
+export type ExternalInvoiceMediaReviewDecision =
+  | 'CONFIRMED_CORRECTION'
+  | 'ANOMALY'
+  | 'REUPLOAD_REQUIRED';
+
+export type ExternalInvoiceMediaFieldReview = {
+  reviewId: string;
+  fieldKey: ExternalInvoiceFieldKey;
+  fileVersionId: string;
+  decision: ExternalInvoiceMediaReviewDecision;
+  note?: string;
+  reviewedBy: ExternalInvoiceActor;
+  reviewedAt: string;
+};
+
 export type ExternalInvoiceRecognitionSnapshot = {
   recognitionId: string;
   fileVersionId: string;
@@ -140,6 +163,7 @@ export type ExternalInvoiceReviewAction =
   | 'PUBLISHED'
   | 'FILE_UPLOADED'
   | 'RECOGNITION_CORRECTED'
+  | 'FIELD_REVIEWED'
   | 'SUBMITTED'
   | 'RETURNED_FOR_CORRECTION'
   | 'RETURNED_FOR_REUPLOAD'
@@ -151,6 +175,8 @@ export type ExternalInvoiceReviewEvent = {
   actor: ExternalInvoiceActor;
   occurredAt: string;
   reason?: string;
+  fieldKey?: ExternalInvoiceFieldKey;
+  fieldDecision?: ExternalInvoiceMediaReviewDecision;
   fromStatus?: ExternalInvoiceCollectionStatus;
   toStatus: ExternalInvoiceCollectionStatus;
 };
@@ -192,6 +218,7 @@ export type ExternalInvoiceCollectionRecord = {
   sourceFileVersions: ExternalInvoiceFileVersion[];
   recognitionSnapshots: ExternalInvoiceRecognitionSnapshot[];
   confirmedSnapshots: ExternalInvoiceConfirmedSnapshot[];
+  mediaFieldReviews: ExternalInvoiceMediaFieldReview[];
   reviewHistory: ExternalInvoiceReviewEvent[];
   createdBy: ExternalInvoiceActor;
   createdAt: string;
@@ -206,6 +233,14 @@ export type ExternalInvoiceValidationIssue = {
   expectedValue: string;
   actualValue: string;
   message: string;
+};
+
+export type ExternalInvoiceReviewReadiness = {
+  canApprove: boolean;
+  completed: number;
+  total: number;
+  blockers: string[];
+  pendingCriticalFields: ExternalInvoiceFieldKey[];
 };
 
 const normalizeText = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
@@ -244,6 +279,16 @@ export const currentExternalInvoiceConfirmation = (record: ExternalInvoiceCollec
   record.confirmedSnapshots[record.confirmedSnapshots.length - 1]
 );
 
+export const currentExternalInvoiceFieldReview = (
+  record: ExternalInvoiceCollectionRecord,
+  fieldKey: ExternalInvoiceFieldKey,
+) => {
+  const currentFileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
+  return [...(record.mediaFieldReviews ?? [])].reverse().find((review) => (
+    review.fieldKey === fieldKey && review.fileVersionId === currentFileVersionId
+  ));
+};
+
 export const createExternalInvoiceCollection = ({
   projectId,
   projectName,
@@ -277,6 +322,7 @@ export const createExternalInvoiceCollection = ({
     sourceFileVersions: [],
     recognitionSnapshots: [],
     confirmedSnapshots: [],
+    mediaFieldReviews: [],
     reviewHistory: [{
       eventId: createPrototypeId('audit'),
       action: 'CREATED',
@@ -347,10 +393,63 @@ const sourceValuesForScenario = (
     INVOICE_DATE: invoiceDate,
     PUBLISHER: payoutAccountPublisher(account, record.creatorId),
     ADVERTISER: record.expected.advertiser,
+    DESCRIPTION: record.expected.description,
     AMOUNT: sourceAmount.toFixed(2),
     CURRENCY: record.expected.currency,
-    PAYMENT_ACCOUNT: payoutAccountSourceValue(account, record.creatorId),
+    PAYMENT_ACCOUNT: scenario === 'ACCOUNT_MISMATCH'
+      ? 'Unverified account / **** 0917'
+      : payoutAccountSourceValue(account, record.creatorId),
   } satisfies Record<ExternalInvoiceFieldKey, string>;
+};
+
+export const reviewExternalInvoiceField = (
+  record: ExternalInvoiceCollectionRecord,
+  fieldKey: ExternalInvoiceFieldKey,
+  decision: ExternalInvoiceMediaReviewDecision,
+  actor: ExternalInvoiceActor,
+  note = '',
+  occurredAt = new Date().toISOString(),
+): ExternalInvoiceCollectionRecord => {
+  if (record.status !== 'WAITING_MEDIA_REVIEW') {
+    throw new Error('只有待媒介审核的外部 Invoice 可以记录字段复核结果。');
+  }
+  const recognition = currentExternalInvoiceRecognition(record);
+  const confirmation = currentExternalInvoiceConfirmation(record);
+  const fileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
+  if (!recognition || !confirmation || !fileVersionId) {
+    throw new Error('当前 Invoice 缺少有效的文件、识别或达人确认数据。');
+  }
+  const correction = confirmation.corrections.find((item) => item.fieldKey === fieldKey);
+  if (decision === 'CONFIRMED_CORRECTION' && !correction?.evidenceMatched) {
+    throw new Error('只有能在原文件中找到证据的达人纠正值才可以确认。');
+  }
+  if (decision !== 'CONFIRMED_CORRECTION' && !note.trim()) {
+    throw new Error('标记异常或要求重新上传时必须填写说明。');
+  }
+  const review: ExternalInvoiceMediaFieldReview = {
+    reviewId: createPrototypeId('audit'),
+    fieldKey,
+    fileVersionId,
+    decision,
+    note: note.trim() || undefined,
+    reviewedBy: actor,
+    reviewedAt: occurredAt,
+  };
+  return {
+    ...record,
+    mediaFieldReviews: [...(record.mediaFieldReviews ?? []), review],
+    reviewHistory: [...record.reviewHistory, {
+      eventId: createPrototypeId('audit'),
+      action: 'FIELD_REVIEWED',
+      actor,
+      occurredAt,
+      reason: review.note,
+      fieldKey,
+      fieldDecision: decision,
+      fromStatus: record.status,
+      toStatus: record.status,
+    }],
+  };
 };
 
 const recognitionValuesForScenario = (
@@ -546,6 +645,9 @@ export const externalInvoiceValidationIssues = ({
   if (!sameText(confirmation.values.ADVERTISER, record.expected.advertiser)) {
     addMismatch('ADVERTISER', record.expected.advertiser, confirmation.values.ADVERTISER, '付款主体与媒介发起时的付款主体不一致。');
   }
+  if (!sameText(confirmation.values.DESCRIPTION, record.expected.description)) {
+    addMismatch('DESCRIPTION', record.expected.description, confirmation.values.DESCRIPTION, '合作内容与媒介发起时的校验基准不一致。');
+  }
   if (!account) {
     issues.push({
       fieldKey: 'PAYOUT_ACCOUNT_STATUS',
@@ -583,6 +685,72 @@ export const externalInvoiceValidationIssues = ({
     });
   }
   return issues;
+};
+
+export const externalInvoiceReviewReadiness = ({
+  record,
+  creator,
+  contracts = [],
+}: {
+  record: ExternalInvoiceCollectionRecord;
+  creator?: CreatorProfile;
+  contracts?: ContractRecord[];
+}): ExternalInvoiceReviewReadiness => {
+  const recognition = currentExternalInvoiceRecognition(record);
+  const confirmation = currentExternalInvoiceConfirmation(record);
+  const validationBlockers = externalInvoiceValidationIssues({ record, creator, contracts })
+    .filter((issue) => issue.severity === 'BLOCKER');
+  const selectedContracts = contracts.filter((contract) => (
+    contract.contractId && record.contractIds.includes(contract.contractId)
+  ));
+  const contractSubjectBlockers = confirmation ? selectedContracts.flatMap((contract) => [
+    ...(contract.publisher && !sameText(contract.publisher, confirmation.values.PUBLISHER)
+      ? [`合同 ${contract.id} 的开票主体与 Invoice 不一致`]
+      : []),
+    ...(contract.advertiser && !sameText(contract.advertiser, confirmation.values.ADVERTISER)
+      ? [`合同 ${contract.id} 的付款主体与 Invoice 不一致`]
+      : []),
+  ]) : [];
+  const correctedCriticalFields = confirmation?.corrections
+    .filter((correction) => (
+      correction.evidenceMatched && EXTERNAL_INVOICE_CRITICAL_FIELDS.includes(correction.fieldKey)
+    ))
+    .map((correction) => correction.fieldKey) ?? [];
+  const pendingCriticalFields = correctedCriticalFields.filter((fieldKey) => (
+    currentExternalInvoiceFieldReview(record, fieldKey)?.decision !== 'CONFIRMED_CORRECTION'
+  ));
+  const currentFileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
+  const currentFieldReviews = (record.mediaFieldReviews ?? []).filter((review) => (
+    review.fileVersionId === currentFileVersionId
+  ));
+  const reviewBlockers = currentFieldReviews
+    .filter((review) => review.decision === 'ANOMALY' || review.decision === 'REUPLOAD_REQUIRED')
+    .map((review) => `${EXTERNAL_INVOICE_FIELD_LABEL[review.fieldKey]}：${review.note ?? '需要处理'}`);
+  const blockers = [
+    ...(!recognition || !confirmation ? ['识别结果或达人确认值不完整'] : []),
+    ...validationBlockers.map((issue) => `${issue.label}：${issue.message}`),
+    ...contractSubjectBlockers,
+    ...pendingCriticalFields.map((fieldKey) => `${EXTERNAL_INVOICE_FIELD_LABEL[fieldKey]}的达人纠正值待媒介确认`),
+    ...reviewBlockers,
+    ...(!currentFileVersionId ? ['当前文件版本无效'] : []),
+  ];
+  const total = 6;
+  const incompleteGroups = [
+    !recognition || !confirmation,
+    validationBlockers.some((issue) => issue.fieldKey === 'AMOUNT' || issue.fieldKey === 'CURRENCY'),
+    validationBlockers.some((issue) => issue.fieldKey === 'PUBLISHER' || issue.fieldKey === 'ADVERTISER')
+      || contractSubjectBlockers.length > 0,
+    validationBlockers.some((issue) => issue.fieldKey === 'PAYMENT_ACCOUNT' || issue.fieldKey === 'PAYOUT_ACCOUNT_STATUS'),
+    pendingCriticalFields.length > 0 || reviewBlockers.length > 0,
+    !currentFileVersionId,
+  ].filter(Boolean).length;
+  return {
+    canApprove: record.status === 'WAITING_MEDIA_REVIEW' && blockers.length === 0,
+    completed: total - incompleteGroups,
+    total,
+    blockers,
+    pendingCriticalFields,
+  };
 };
 
 export const submitExternalInvoiceForReview = ({
@@ -685,9 +853,8 @@ export const buildApprovedExternalInvoice = ({
   payout: Payout;
 } => {
   if (record.status !== 'WAITING_MEDIA_REVIEW') throw new Error('只有待审核的外部 Invoice 可以审核通过。');
-  const blockers = externalInvoiceValidationIssues({ record, creator, contracts })
-    .filter((issue) => issue.severity === 'BLOCKER');
-  if (blockers.length) throw new Error(blockers[0].message);
+  const readiness = externalInvoiceReviewReadiness({ record, creator, contracts });
+  if (!readiness.canApprove) throw new Error(readiness.blockers[0] ?? '外部 Invoice 尚未完成媒介复核。');
   const confirmation = currentExternalInvoiceConfirmation(record);
   if (!confirmation) throw new Error('外部 Invoice 缺少达人确认数据。');
   const sourceInvoiceNumber = confirmation.values.SOURCE_INVOICE_NUMBER.trim();
@@ -728,7 +895,7 @@ export const buildApprovedExternalInvoice = ({
     currency: confirmation.values.CURRENCY as InvoiceCurrency,
     items: [{
       id: createPrototypeId('item'),
-      description: record.expected.description,
+      description: confirmation.values.DESCRIPTION,
       unitPrice: amount,
       quantity: 1,
       lineTotal: amount,

@@ -1,29 +1,26 @@
 import {
-  AlertTriangle,
   ArrowLeft,
-  Check,
-  CheckCircle2,
   Clipboard,
   Download,
-  FileCheck2,
   FileSearch,
-  FileText,
-  History,
   Info,
-  Landmark,
   Mail,
   MessageSquareText,
-  ReceiptText,
   Send,
-  ShieldCheck,
   UserRound,
-  WalletCards,
   X,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import {
+  InvoiceReviewWorkspace,
+  type InvoiceReviewAccountRow,
+  type InvoiceReviewContractCheck,
+  type InvoiceReviewSummaryField,
+  type InvoiceReviewTimelineItem,
+} from '../components/InvoiceReviewWorkspace';
 import type { ContractRecord } from '../contracts';
 import {
   currentInvoiceContractMatchReview,
@@ -68,7 +65,6 @@ export type InvoiceDetailSource =
     provider: string;
   };
 
-type InvoiceDetailTab = 'summary' | 'matching' | 'account' | 'history';
 type Notify = (title: string, message: string) => void;
 
 type InvoiceReviewCheck = {
@@ -344,19 +340,6 @@ function buildReviewChecks(
   ];
 }
 
-function InvoiceSummary({ model }: { model: InvoiceDocumentModel }) {
-  return (
-    <dl className="contract-definition-list">
-      <div><dt>Invoice编号</dt><dd>{model.invoiceNumber}<small>Invoice原文</small></dd></div>
-      <div><dt>Invoice From</dt><dd>{model.from.legalName || '待补充'}<small>{model.from.email || '联系邮箱待补充'}</small></dd></div>
-      <div><dt>Bill To</dt><dd>{model.billTo.name || '待补充'}<small>{model.billTo.address || '地址待补充'}</small></dd></div>
-      <div><dt>项目</dt><dd>{model.projectName || '待关联'}<small>{model.projectId || '项目编号待关联'}</small></dd></div>
-      <div><dt>Invoice日期</dt><dd>{model.invoiceDate || '待补充'}<small>Invoice原文</small></dd></div>
-      <div><dt>币种与总额</dt><dd>{formatInvoiceMoney(model.currency, invoiceTotal(model))}<small>{model.items.length}项费用明细</small></dd></div>
-    </dl>
-  );
-}
-
 export function InvoiceDetailPage({
   source,
   model,
@@ -404,10 +387,7 @@ export function InvoiceDetailPage({
   managementView?: InvoiceManagementView;
   notify: Notify;
 }) {
-  const [activeTab, setActiveTab] = useState<InvoiceDetailTab>('summary');
   const [downloading, setDownloading] = useState<'pdf' | 'docx' | ''>('');
-  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
-  const [returnReason, setReturnReason] = useState('');
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
   const [signatureReminderDialogOpen, setSignatureReminderDialogOpen] = useState(false);
@@ -527,31 +507,11 @@ export function InvoiceDetailPage({
   const currentIndex = managementView && ['付款中', '已付款'].includes(managementView.status)
     ? 4
     : invoiceTimelineState?.currentIndex ?? projectTimelineIndex;
-  const requestApprovalRound = payout?.requestApprovalRound
-    ?? Math.max(0, ...(payout?.invoiceReviewHistory ?? []).map((event) => event.approvalRound ?? 0));
-  const paymentListVersion = payout?.paymentListVersion
-    ?? (
-      managementView && (
-        managementView.status === 'OA审批中'
-        || managementView.status === '付款中'
-        || managementView.status === '已付款'
-        || managementView.status === '已退回'
-      )
-        ? 1
-        : null
-    );
   const steps = invoiceReviewStatus
     ? ['Invoice 已生成', '达人签署', '媒介审核 / 复核', '项目请款审批', '进入付款']
     : source.kind === 'project'
       ? ['Invoice 已关联', '合同一一匹配', '项目审批', '财务复核', '渠道付款']
       : ['Invoice 已生成', '达人签署', '项目关联', '财务复核', '进入付款'];
-  const tabs: Array<{ id: InvoiceDetailTab; label: string }> = [
-    { id: 'summary', label: 'Invoice摘要' },
-    { id: 'matching', label: `合同匹配 ${passedCount}/${checks.length}` },
-    { id: 'account', label: '收款账户' },
-    { id: 'history', label: '审核记录' },
-  ];
-  const normalizedReturnReason = returnReason.trim();
   const normalizedReplyMessage = replyMessage.trim();
   const normalizedSignatureReminderMessage = signatureReminderMessage.trim();
   const canSendSignatureReminder = invoiceReviewStatus === '待签署'
@@ -575,13 +535,6 @@ export function InvoiceDetailPage({
     } finally {
       setDownloading('');
     }
-  };
-
-  const submitReturn = () => {
-    if (!payout || !returnAction || !normalizedReturnReason) return;
-    onReviewAction(payout, returnAction, normalizedReturnReason);
-    setReturnDialogOpen(false);
-    setReturnReason('');
   };
 
   const runPrimaryAction = () => {
@@ -675,6 +628,83 @@ export function InvoiceDetailPage({
             ? '付款操作统一在付款详情完成'
             : `${passedCount}/${checks.length}项资料校验通过`;
 
+  const summaryFields: InvoiceReviewSummaryField[] = [
+    { id: 'invoice-number', label: 'Invoice Number', value: model.invoiceNumber, secondary: '系统业务编号', evidenceTarget: '.invoice-paper-number' },
+    { id: 'invoice-date', label: 'Invoice Date', value: model.invoiceDate || '待补充', secondary: 'Date of Invoice', evidenceTarget: '.invoice-paper-meta > section:nth-child(2)' },
+    { id: 'invoice-from', label: 'Invoice From', value: model.from.legalName || '待补充', secondary: model.from.email || '联系邮箱待补充', evidenceTarget: '.invoice-paper-meta > section:first-child' },
+    { id: 'bill-to', label: 'Bill To', value: model.billTo.name || '待补充', secondary: model.billTo.address || '地址待补充', evidenceTarget: '.invoice-paper-bill-to' },
+    { id: 'project', label: '项目及合作项', value: model.projectName || '待关联', secondary: model.projectId || '项目编号待关联', evidenceTarget: '.invoice-paper-table-wrap' },
+    { id: 'description', label: 'Description', value: model.items.map((item) => item.description).filter(Boolean).join('；') || '待补充', secondary: `${model.items.length} 项费用明细`, evidenceTarget: '.invoice-paper-table-wrap' },
+    { id: 'amount', label: '金额和币种', value: formatInvoiceMoney(model.currency, invoiceTotal(model)), secondary: model.currency, evidenceTarget: '.invoice-paper-total' },
+    { id: 'payment', label: '付款方式与账户', value: model.paymentMethod === 'bank' ? '银行转账' : 'PayPal', secondary: invoiceAccountSummary(model), evidenceTarget: '.invoice-paper-payment' },
+  ];
+  const workspaceContractChecks: InvoiceReviewContractCheck[] = checks.map((check) => ({
+    id: check.id,
+    label: check.label,
+    contractValue: check.contractValue,
+    invoiceValue: check.invoiceValue,
+    state: check.passed ? 'PASS' : 'FAIL',
+    note: check.note,
+    evidenceTarget: check.id.includes('account')
+      ? '.invoice-paper-payment'
+      : check.id.includes('amount')
+        ? '.invoice-paper-total'
+        : check.id.includes('bill')
+          ? '.invoice-paper-bill-to'
+          : check.id.includes('party') || check.id.includes('publisher')
+            ? '.invoice-paper-meta > section:first-child'
+            : check.id.includes('signature')
+              ? '.invoice-paper-signature'
+              : '.invoice-paper-table-wrap',
+  }));
+  const workspaceAccountRows: InvoiceReviewAccountRow[] = [
+    { label: '付款方式', value: model.paymentMethod === 'bank' ? 'Bank transfer' : 'PayPal' },
+    { label: 'Account Name', value: model.paymentMethod === 'bank' ? model.payment.accountName || '待补充' : model.payment.paypalUsername || '待补充' },
+    { label: 'Account Number / IBAN', value: invoiceAccountSummary(model) },
+    { label: 'Bank Name', value: model.paymentMethod === 'bank' ? model.payment.bankName || '待补充' : '不适用' },
+    { label: 'SWIFT / BIC', value: model.paymentMethod === 'bank' ? model.payment.swiftCode || '待补充' : '不适用' },
+    { label: 'PayPal Email', value: model.paymentMethod === 'paypal' ? model.payment.paypalEmail || '待补充' : '不适用' },
+    { label: '账户版本', value: model.payoutAccountVersion ?? model.payment.payoutAccountVersion ?? 'legacy-v1' },
+    { label: '账户审核状态', value: checks.find((check) => check.id.includes('account'))?.passed ? '已审核通过' : '待复核' },
+  ];
+  const processTimeline: InvoiceReviewTimelineItem[] = steps.map((step, index) => {
+    const complete = invoiceReviewStatus
+      ? index < currentIndex || (invoiceReviewStatus === '已通过' && payout?.status === '已付款')
+      : source.kind === 'project'
+        ? index < currentIndex || /已完成|已付款/.test(source.status)
+        : index === 0;
+    const current = invoiceReviewStatus
+      ? index === currentIndex && !(invoiceReviewStatus === '已通过' && payout?.status === '已付款')
+      : source.kind === 'project'
+        ? index === currentIndex && !/已完成|已付款/.test(source.status)
+        : index === 1;
+    return {
+      id: `process-${index}`,
+      title: step,
+      description: complete ? '当前流程节点已完成' : current ? invoiceTimelineState?.currentStepText ?? '当前处理节点' : '等待上一节点完成',
+      state: complete ? 'COMPLETE' : current ? 'CURRENT' : 'PENDING',
+    };
+  });
+  const auditTimeline: InvoiceReviewTimelineItem[] = [...(payout?.invoiceReviewHistory ?? [])]
+    .reverse()
+    .map((event, index) => ({
+      id: `audit-${event.occurredAt}-${index}`,
+      title: event.action,
+      description: event.reason ?? `${event.fromStatus} → ${event.toStatus}`,
+      meta: `${event.actorName} · ${event.actorRole} · ${formatReviewTime(event.occurredAt)}`,
+      state: event.action === '退回' || event.action === '退回媒介' || event.action === '达人反馈'
+        ? 'RETURNED'
+        : 'COMPLETE',
+    }));
+  const workspaceBlockingReasons = [
+    ...(isPaymentListReturn ? ['等待项目付款清单重新提交'] : []),
+    ...(primaryAction === 'APPROVE_MEDIA' && !signedForMediaReview ? ['达人尚未完成签署，不能进行媒介审核'] : []),
+    ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatch?.canProceed
+      ? ['合同与 Invoice 存在未处理的阻断项']
+      : []),
+    ...(!primaryAction && !allPassed ? [`${checks.length - passedCount} 项资料需要关注`] : []),
+  ];
+
   return (
     <div className="page-stack contract-detail-page invoice-detail-page">
       <button className="project-back-button" type="button" onClick={onBack}>
@@ -735,266 +765,61 @@ export function InvoiceDetailPage({
         </div>
       ) : null}
 
-      <div className="contract-reader-layout">
-        <section className="contract-document-panel invoice-document-panel">
-          <header>
-            <div>
-              <FileText size={19} />
-              <span><strong>Invoice全文</strong><small>{model.invoiceNumber}.pdf · 1页</small></span>
-            </div>
-            <button className="invoice-document-download" type="button" disabled={Boolean(downloading)} onClick={() => downloadInvoice('pdf')}>
-              <Download size={15} />
-              下载PDF
-            </button>
-          </header>
-          <div className="invoice-document-canvas">
-            <InvoiceDocumentView model={model} ariaLabel={`${model.invoiceNumber} Invoice全文`} />
-          </div>
-        </section>
-
-        <section className="contract-inspector invoice-review-inspector">
-          <div className="contract-tabs" role="tablist" aria-label="Invoice详情分类">
-            {tabs.map((tab) => (
-              <button
-                className={activeTab === tab.id ? 'contract-tab-active' : ''}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="contract-inspector-content">
-            {activeTab === 'summary' ? (
-              <>
-                <div className="contract-section-heading">
-                  <ReceiptText size={18} />
-                  <span><strong>结构化Invoice信息</strong><small>点击左侧可查看整份Invoice内容</small></span>
-                </div>
-                <InvoiceSummary model={model} />
-              </>
+      <InvoiceReviewWorkspace
+        sourceType="INTERNAL_GENERATED"
+        issueCount={Math.max(checks.length - passedCount, workspaceBlockingReasons.length)}
+        sourceStatusText={invoiceReviewStatus ?? displayStatus}
+        documentName={`${model.invoiceNumber}.pdf`}
+        documentMeta={`Invoice 全文 · 1 页 · 冻结版本 V${payout?.invoiceVersion ?? generatedRecord?.version ?? 1}`}
+        documentContent={<InvoiceDocumentView model={model} ariaLabel={`${model.invoiceNumber} Invoice全文`} />}
+        onDownload={() => downloadInvoice('pdf')}
+        downloadDisabled={Boolean(downloading)}
+        summaryFields={summaryFields}
+        contractChecks={workspaceContractChecks}
+        noContract={Boolean(generatedRecord && selectedContracts.length === 0)}
+        accountRows={workspaceAccountRows}
+        timeline={[...processTimeline, ...auditTimeline]}
+        completion={{ completed: passedCount, total: checks.length }}
+        blockingReasons={workspaceBlockingReasons}
+        returnLabel={returnAction ? ACTION_LABEL[returnAction] : undefined}
+        returnDialogTitle={returnAction === 'RECORD_CREATOR_FEEDBACK' ? '记录达人反馈' : '退回达人修改'}
+        onReturn={payout && returnAction ? (reason) => onReviewAction(payout, returnAction, reason) : undefined}
+        onSave={primaryAction === 'APPROVE_MEDIA' && canReviewMedia
+          ? () => notify('审核进度已保存', `${model.invoiceNumber} 的媒介审核进度已保留在当前前端原型中。`)
+          : undefined}
+        approveLabel={primaryAction
+          ? primaryAction === 'APPROVE_MEDIA' && payout?.invoiceReviewStatus === '待媒介复核'
+            ? '复核通过并重新提交'
+            : ACTION_LABEL[primaryAction]
+          : undefined}
+        onApprove={primaryAction ? runPrimaryAction : undefined}
+        approveDisabled={primaryAction === 'APPROVE_MEDIA' && !mediaApprovalReady}
+        canReview={Boolean(primaryAction || returnAction)}
+        additionalFooterActions={(
+          <>
+            {source.kind !== 'payout' ? (
+              <Button variant="secondary" disabled={Boolean(downloading)} onClick={() => downloadInvoice('docx')}>
+                {downloading === 'docx' ? '生成中…' : '下载DOCX'}
+              </Button>
             ) : null}
-
-            {activeTab === 'matching' ? (
-              <>
-                <div className="contract-section-heading">
-                  <ShieldCheck size={18} />
-                  <span><strong>合同与Invoice匹配</strong><small>并列展示合同值、Invoice值与校验结果</small></span>
-                </div>
-                <div className="invoice-review-checks">
-                  {checks.map((check) => (
-                    <article className={check.passed ? 'is-passed' : 'is-failed'} key={check.id}>
-                      <span>{check.passed ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}</span>
-                      <div>
-                        <strong>{check.label}</strong>
-                        <dl>
-                          <div><dt>合同/系统</dt><dd>{check.contractValue}</dd></div>
-                          <div><dt>Invoice</dt><dd>{check.invoiceValue}</dd></div>
-                        </dl>
-                        <small>{check.note}</small>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-                {storedContractMatchReview?.reason ? (
-                  <div className="invoice-contract-match-audit">
-                    <strong>媒介差异说明</strong>
-                    <p>{storedContractMatchReview.reason}</p>
-                    <small>{storedContractMatchReview.actorName || '系统记录'} · {storedContractMatchReview.reviewedAt ? formatReviewTime(storedContractMatchReview.reviewedAt) : '时间未记录'}</small>
-                  </div>
-                ) : generatedRecord && !contractMatchEnforced ? (
-                  <div className="invoice-contract-match-audit is-historical">
-                    <strong>历史 Invoice</strong>
-                    <p>当前结果仅供只读核对；新匹配规则不会改变原签署、审批或付款状态。</p>
-                  </div>
-                ) : null}
-              </>
+            {invoiceReviewStatus === '达人反馈' ? (
+              <Button variant="secondary" icon={<MessageSquareText size={16} />} onClick={openFeedbackDialog}>查看反馈</Button>
             ) : null}
-
-            {activeTab === 'account' ? (
-              <>
-                <div className="contract-section-heading">
-                  <Landmark size={18} />
-                  <span><strong>收款账户快照</strong><small>与达人档案中的付款账户分开保存</small></span>
-                </div>
-                <dl className="contract-payment-list">
-                  <div><dt>付款方式</dt><dd>{model.paymentMethod === 'bank' ? 'Bank transfer' : 'PayPal'}</dd></div>
-                  <div><dt>账户名称</dt><dd>{model.paymentMethod === 'bank' ? model.payment.accountName || '待补充' : model.payment.paypalUsername || '待补充'}</dd></div>
-                  <div><dt>收款账户</dt><dd>{invoiceAccountSummary(model)}</dd></div>
-                  <div><dt>付款渠道</dt><dd>{provider}</dd></div>
-                  <div><dt>账户版本</dt><dd>{model.payoutAccountVersion ?? model.payment.payoutAccountVersion ?? 'legacy-v1'}</dd></div>
-                  {model.paymentMethod === 'paypal' ? <div><dt>Transfer Note</dt><dd>{model.payment.transferRemarks || '未填写'}</dd></div> : null}
-                  <div><dt>账户校验</dt><dd>{checks.find((check) => check.id === 'account')?.passed ? '已通过' : '待复核'}</dd></div>
-                </dl>
-                <div className="contract-payment-rule">
-                  <WalletCards size={17} />
-                  <span>Invoice保留提交时的账户快照；实际付款仍使用达人档案中的已验证Beneficiary。</span>
-                </div>
-              </>
+            {editContext && payout ? (
+              <Button onClick={() => onEditInvoice?.(payout, editContext)}>
+                {editContext === 'CREATOR_FEEDBACK'
+                  ? '修改并重新发送达人'
+                  : editContext === 'MEDIA_RECHECK'
+                    ? '修改 Invoice'
+                    : editContext === 'PROJECT_RESOURCE'
+                      ? '修改 Invoice 并重新签署'
+                      : '修改并重新发起'}
+              </Button>
             ) : null}
-
-            {activeTab === 'history' ? (
-              <>
-                <div className="contract-section-heading">
-                  <History size={18} />
-                  <span><strong>审核与付款记录</strong><small>展示当前Invoice所处流程</small></span>
-                </div>
-                {payout ? (
-                  <dl className="contract-payment-list">
-                    <div><dt>Invoice 版本</dt><dd>V{payout.invoiceVersion ?? 1}</dd></div>
-                    <div><dt>签署轮次</dt><dd>第 {payout.invoiceSignatureRound ?? 0} 轮</dd></div>
-                    <div><dt>项目审批轮次</dt><dd>{requestApprovalRound > 0 ? `第 ${requestApprovalRound} 轮` : '未发起'}</dd></div>
-                    <div><dt>付款清单版本</dt><dd>{paymentListVersion ? `V${paymentListVersion}` : '未生成'}</dd></div>
-                    <div><dt>最近签署时间</dt><dd>{payout.invoiceSignedAt ? formatReviewTime(payout.invoiceSignedAt) : '待签署'}</dd></div>
-                    <div><dt>达人反馈</dt><dd>{payout.creatorFeedback?.reason ?? '无待处理反馈'}</dd></div>
-                    {payout.paymentFailure ? (
-                      <>
-                        <div><dt>付款失败渠道</dt><dd>{payout.paymentFailure.provider}</dd></div>
-                        <div><dt>渠道错误码</dt><dd>{payout.paymentFailure.errorCode}</dd></div>
-                      </>
-                    ) : null}
-                    {payout.paymentFailureReturn ? (
-                      <>
-                        <div><dt>财务问题分类</dt><dd>{payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT' ? 'Invoice 内容问题' : '付款账户问题'}</dd></div>
-                        <div><dt>下一步起点</dt><dd>{payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT' ? '修改 Invoice 后达人重新签署' : '更新收款账户并重新校验后进入新付款批次'}</dd></div>
-                      </>
-                    ) : null}
-                  </dl>
-                ) : null}
-                <div className="invoice-detail-timeline">
-                  {steps.map((step, index) => {
-                    const complete = invoiceReviewStatus
-                      ? index < currentIndex || (invoiceReviewStatus === '已通过' && payout?.status === '已付款')
-                      : source.kind === 'project'
-                        ? index < currentIndex || /已完成|已付款/.test(source.status)
-                        : index === 0;
-                    const current = invoiceReviewStatus
-                      ? index === currentIndex && !(invoiceReviewStatus === '已通过' && payout?.status === '已付款')
-                      : source.kind === 'project'
-                        ? index === currentIndex && !/已完成|已付款/.test(source.status)
-                        : index === 1;
-                    const stepState = complete
-                      ? '已完成'
-                      : current
-                        ? invoiceTimelineState?.currentStepText ?? '当前步骤'
-                        : '待处理';
-                    return (
-                      <div className={`${complete ? 'is-complete' : ''} ${current ? 'is-current' : ''}`} key={step}>
-                        <span>{complete ? <Check size={14} /> : index + 1}</span>
-                        <div><strong>{step}</strong><small>{stepState}</small></div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {payout?.invoiceReviewHistory?.length ? (
-                  <div className="invoice-review-history-list">
-                    {[...payout.invoiceReviewHistory].reverse().map((event, index) => (
-                      <article key={`${event.occurredAt}-${event.action}-${index}`}>
-                        <span>{
-                          event.action === '通知达人签署'
-                            ? '签署提醒'
-                            : event.stage === 'MEDIA'
-                            ? '媒介审核'
-                            : event.stage === 'REQUEST'
-                              ? '项目请款'
-                              : event.stage === 'PM'
-                                ? 'PM 审批'
-                                : event.stage === 'PROJECT_OWNER'
-                                  ? '项目负责人审批'
-                                  : event.stage === 'OWNER'
-                                    ? '老板审批'
-                                    : event.stage === 'FINANCE'
-                                      ? '财务审批'
-                                      : event.stage === 'PAYMENT'
-                                        ? '付款处理'
-                                        : '签署提交'
-                        }</span>
-                        <div>
-                          <strong>{event.action === '通知达人签署' ? '已发送签署提醒 · 状态保持待签署' : `${event.action}：${event.fromStatus} → ${event.toStatus}`}</strong>
-                          <small>{event.approvalRound ? `第 ${event.approvalRound} 轮 · ` : ''}{event.actorName} · {event.actorRole} · {formatReviewTime(event.occurredAt)}</small>
-                          {event.reason ? <p>{event.reason}</p> : null}
-                          {event.notificationDeliveries?.length ? (
-                            <div className="invoice-notification-delivery-results">
-                              {event.notificationDeliveries.map((delivery) => (
-                                <span key={delivery.channel}>
-                                  {delivery.channel === 'IN_APP' ? '站内信' : '邮件'} · {delivery.status === 'SIMULATED_SENT' ? '模拟已发送' : '未发送'} · {delivery.recipientLabel}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="invoice-review-history-empty">暂无人工审核操作记录。</p>
-                )}
-              </>
-            ) : null}
-          </div>
-
-          <footer className="invoice-review-actions">
-            <div>
-              <FileCheck2 size={16} />
-              <span>{
-                isPaymentListReturn
-                  ? '等待项目付款清单重新提交'
-                  : invoiceReviewStatus === '待签署'
-                  ? '等待达人签署'
-                  : allPassed
-                    ? '关键资料已匹配'
-                    : `${checks.length - passedCount}项需要处理`
-              }</span>
-            </div>
-            <span>
-              {source.kind !== 'payout' ? (
-                <Button variant="secondary" disabled={Boolean(downloading)} onClick={() => downloadInvoice('docx')}>
-                  {downloading === 'docx' ? '生成中…' : '下载DOCX'}
-                </Button>
-              ) : null}
-              {invoiceReviewStatus === '达人反馈' ? (
-                <Button
-                  variant="secondary"
-                  icon={<MessageSquareText size={16} />}
-                  onClick={openFeedbackDialog}
-                >
-                  查看反馈
-                </Button>
-              ) : null}
-              {editContext && payout ? (
-                <Button onClick={() => onEditInvoice?.(payout, editContext)}>
-                  {editContext === 'CREATOR_FEEDBACK'
-                    ? '修改并重新发送达人'
-                    : editContext === 'MEDIA_RECHECK'
-                      ? '修改 Invoice'
-                      : editContext === 'PROJECT_RESOURCE'
-                        ? '修改 Invoice 并重新签署'
-                        : '修改并重新发起'}
-                </Button>
-              ) : null}
-              {returnAction ? <Button variant="secondary" onClick={() => setReturnDialogOpen(true)}>{ACTION_LABEL[returnAction]}</Button> : null}
-              {primaryAction ? (
-                <Button
-                  disabled={primaryAction === 'APPROVE_MEDIA' && !mediaApprovalReady}
-                  onClick={runPrimaryAction}
-                >
-                  {primaryAction === 'APPROVE_MEDIA' && payout?.invoiceReviewStatus === '待媒介复核'
-                    ? '复核通过并重新提交'
-                  : ACTION_LABEL[primaryAction]}
-                </Button>
-              ) : null}
-              {navigationTarget && payout ? (
-                <Button onClick={runNavigationAction}>{navigationActionLabel}</Button>
-              ) : null}
-            </span>
-          </footer>
-        </section>
-      </div>
-
+            {navigationTarget && payout ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
+          </>
+        )}
+      />
       {signatureReminderDialogOpen && payout ? (
         <Modal
           title="通知达人签署"
@@ -1101,43 +926,6 @@ export function InvoiceDetailPage({
         </Modal>
       ) : null}
 
-      {returnDialogOpen ? (
-        <Modal
-          title={returnAction === 'RECORD_CREATOR_FEEDBACK' ? '记录达人反馈' : '退回达人修改'}
-          width="520px"
-          onClose={() => setReturnDialogOpen(false)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!normalizedReturnReason} onClick={submitReturn}>确认退回</Button>
-            </>
-          )}
-        >
-          <div className="return-review-dialog">
-            <div className="return-review-summary">
-              <span><UserRound size={19} /></span>
-              <div>
-                <strong>请填写退回原因</strong>
-                <p>{model.from.legalName} · {model.invoiceNumber} · {formatInvoiceMoney(model.currency, invoiceTotal(model))}</p>
-              </div>
-            </div>
-            <label className="return-review-field">
-              <span>退回原因 <em className="required-mark" aria-hidden="true">*</em><small>{returnReason.length}/300</small></span>
-              <textarea
-                autoFocus
-                maxLength={300}
-                aria-label="退回原因"
-                placeholder={returnAction === 'RECORD_CREATOR_FEEDBACK'
-                  ? '请输入达人提出的修改意见'
-                  : '请说明需要达人修改的内容，例如：签署页信息错误'}
-                value={returnReason}
-                onChange={(event) => setReturnReason(event.target.value)}
-              />
-              <small>原因会同步给相关人员，并记录审核阶段、操作人和时间。</small>
-            </label>
-          </div>
-        </Modal>
-      ) : null}
     </div>
   );
 }

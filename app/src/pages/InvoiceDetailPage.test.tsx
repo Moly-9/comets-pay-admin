@@ -98,6 +98,16 @@ const renderDetail = (
 );
 
 describe('InvoiceDetailPage edit actions', () => {
+  it('preserves the existing Invoice heading and three metric cards above the shared review workspace', () => {
+    const html = renderDetail(basePayout, { manage: false, media: true });
+    expect(html).toContain('INV-SYNTHETIC');
+    expect(html).toContain('当前状态');
+    expect(html).toContain('Invoice金额');
+    expect(html).toContain('付款方式');
+    expect(html).toContain('invoice-review-workspace is-internal');
+    expect(html.indexOf('contract-metric-grid')).toBeLessThan(html.indexOf('invoice-review-workspace'));
+  });
+
   it('enables media approval after the generated Invoice has been signed', () => {
     const record: GeneratedInvoiceRecord = {
       id: 'generated-synthetic',
@@ -146,7 +156,7 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(signedHtml).toContain('5/5项资料校验通过');
     expect(signedHtml).toContain('aria-label="电子签名">Synthetic Creator');
     expect(signedHtml).toContain('审核通过');
-    expect(signedHtml).not.toContain('disabled=""');
+    expect(signedHtml).toMatch(/<button class="button button-primary " type="button">[\s\S]*?<span>审核通过<\/span>/);
   });
 
   it('shows the unified editor entry for creator feedback and media recheck', () => {

@@ -6,11 +6,14 @@ import {
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
   currentExternalInvoiceConfirmation,
+  currentExternalInvoiceFieldReview,
   currentExternalInvoiceRecognition,
   externalInvoiceListStatus,
   externalInvoicePageTab,
+  externalInvoiceReviewReadiness,
   externalInvoiceValidationIssues,
   publishExternalInvoiceCollection,
+  reviewExternalInvoiceField,
   returnExternalInvoice,
   simulateExternalInvoiceUpload,
   submitExternalInvoiceForReview,
@@ -67,7 +70,7 @@ const createRecord = (publish = true) => createExternalInvoiceCollection({
   occurredAt: '2026-08-20T01:00:00.000Z',
 });
 
-const upload = (scenario: 'NORMAL' | 'OCR_ERROR' | 'SOURCE_FILE_ERROR' = 'NORMAL') => (
+const upload = (scenario: 'NORMAL' | 'OCR_ERROR' | 'SOURCE_FILE_ERROR' | 'ACCOUNT_MISMATCH' = 'NORMAL') => (
   simulateExternalInvoiceUpload({
     record: createRecord(),
     creator,
@@ -126,6 +129,79 @@ describe('external Invoice collection workflow', () => {
   it('rejects a correction that cannot be found in source evidence', () => {
     expect(() => correctExternalInvoiceRecognition(upload('NORMAL'), 'AMOUNT', '5200.00', creatorActor))
       .toThrow('请修改原文件后重新上传');
+  });
+
+  it('requires media confirmation for corrected critical fields before approval', () => {
+    const corrected = correctExternalInvoiceRecognition(
+      upload('OCR_ERROR'),
+      'AMOUNT',
+      '4800.00',
+      creatorActor,
+      '2026-08-20T02:15:00.000Z',
+    );
+    const submitted = submitExternalInvoiceForReview({
+      record: corrected,
+      creator,
+      contracts: [],
+      occupiedInvoices: [],
+      actor: creatorActor,
+      occurredAt: '2026-08-20T03:00:00.000Z',
+    });
+    expect(externalInvoiceReviewReadiness({ record: submitted, creator }).pendingCriticalFields)
+      .toEqual(['AMOUNT']);
+    expect(() => buildApprovedExternalInvoice({
+      record: submitted,
+      creator,
+      invoiceEntity,
+      occupiedInvoices: [],
+      actor,
+    })).toThrow('达人纠正值待媒介确认');
+
+    const reviewed = reviewExternalInvoiceField(
+      submitted,
+      'AMOUNT',
+      'CONFIRMED_CORRECTION',
+      actor,
+      '',
+      '2026-08-20T03:20:00.000Z',
+    );
+    expect(currentExternalInvoiceFieldReview(reviewed, 'AMOUNT')).toMatchObject({
+      decision: 'CONFIRMED_CORRECTION',
+      fileVersionId: reviewed.sourceFileVersions[0].fileVersionId,
+    });
+    expect(externalInvoiceReviewReadiness({ record: reviewed, creator }).canApprove).toBe(true);
+  });
+
+  it('blocks an Invoice-file account that differs from the selected verified profile account', () => {
+    const mismatched = upload('ACCOUNT_MISMATCH');
+    expect(externalInvoiceValidationIssues({ record: mismatched, creator }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({
+        fieldKey: 'PAYMENT_ACCOUNT',
+        severity: 'BLOCKER',
+      })]));
+    expect(() => submitExternalInvoiceForReview({
+      record: mismatched,
+      creator,
+      contracts: [],
+      occupiedInvoices: [],
+      actor: creatorActor,
+    })).toThrow('票面收款账户');
+  });
+
+  it('requires a note when media marks a field anomalous or requiring reupload', () => {
+    const submitted = submitExternalInvoiceForReview({
+      record: upload('NORMAL'),
+      creator,
+      contracts: [],
+      occupiedInvoices: [],
+      actor: creatorActor,
+    });
+    expect(() => reviewExternalInvoiceField(
+      submitted,
+      'SOURCE_INVOICE_NUMBER',
+      'REUPLOAD_REQUIRED',
+      actor,
+    )).toThrow('必须填写说明');
   });
 
   it('retains old files when the creator uploads a new version', () => {

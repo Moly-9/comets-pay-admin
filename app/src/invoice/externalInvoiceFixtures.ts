@@ -7,7 +7,6 @@ import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import {
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
-  returnExternalInvoice,
   simulateExternalInvoiceUpload,
   submitExternalInvoiceForReview,
   type ExternalInvoiceActor,
@@ -55,7 +54,7 @@ export const createInitialExternalInvoiceCollections = ({
       creatorId: reference.creatorId,
       creatorName: creator.name,
       creatorHandle: creator.socialAccounts.find((account) => account.handle.trim())?.handle ?? creator.handle,
-      contractIds,
+      contractIds: index === 2 ? [] : contractIds,
       expected: {
         amount: 3600 + index * 600,
         currency: index % 2 === 0 ? 'USD' : 'EUR',
@@ -99,15 +98,6 @@ export const createInitialExternalInvoiceCollections = ({
         actor: { account: 'creator.demo', name: `${creator.name}（C 端）`, role: '达人账号' },
         occurredAt: `2026-08-${String(20 + index).padStart(2, '0')}T05:00:00.000Z`,
       });
-      if (index === 2) {
-        record = returnExternalInvoice(
-          record,
-          'REUPLOAD',
-          '票面付款账户信息不清晰，请更新原 Invoice 后重新上传。',
-          actor,
-          '2026-08-22T06:10:00.000Z',
-        );
-      }
     }
     records.push(record);
   });

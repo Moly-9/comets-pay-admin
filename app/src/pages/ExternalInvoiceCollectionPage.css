@@ -235,6 +235,12 @@
   padding: 34px 30px;
 }
 
+.invoice-review-external-document.external-document-preview {
+  width: min(100%, 760px);
+  box-sizing: border-box;
+  margin: 0 auto;
+}
+
 .external-document-title { border-bottom: 2px solid #252932; display: grid; gap: 4px; padding-bottom: 20px; }
 .external-document-title strong { font-size: 26px; letter-spacing: 0; }
 .external-document-title small { color: var(--external-muted); overflow-wrap: anywhere; }

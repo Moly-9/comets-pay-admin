@@ -80,12 +80,14 @@ import {
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
   publishExternalInvoiceCollection,
+  reviewExternalInvoiceField,
   returnExternalInvoice,
   simulateExternalInvoiceUpload,
   submitExternalInvoiceForReview,
   type ExternalInvoiceActor,
   type ExternalInvoiceCollectionInput,
   type ExternalInvoiceFieldKey,
+  type ExternalInvoiceMediaReviewDecision,
   type ExternalInvoiceScenario,
 } from './invoice/externalInvoiceCollection';
 import { createInitialExternalInvoiceCollections } from './invoice/externalInvoiceFixtures';
@@ -2968,7 +2970,13 @@ export default function App() {
       });
       setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
       notify(
-        scenario === 'NORMAL' ? '已模拟正常上传' : scenario === 'OCR_ERROR' ? '已模拟 OCR 识别错误' : '已模拟原文件错误',
+        scenario === 'NORMAL'
+          ? '已模拟正常上传'
+          : scenario === 'OCR_ERROR'
+            ? '已模拟 OCR 识别错误'
+            : scenario === 'ACCOUNT_MISMATCH'
+              ? '已模拟收款账户不一致'
+              : '已模拟原文件错误',
         '新文件版本、首次识别值与达人确认层已分别保存。',
       );
     } catch (error) {
@@ -2990,6 +2998,38 @@ export default function App() {
       notify('识别结果已纠正', '系统首次识别值保持不变，达人确认值和修改前后差异已保存。');
     } catch (error) {
       notify('无法纠正识别结果', error instanceof Error ? error.message : '纠正值无法匹配原文件证据。');
+    }
+  };
+
+  const reviewExternalInvoiceTaskField = (
+    invoiceId: string,
+    fieldKey: ExternalInvoiceFieldKey,
+    decision: ExternalInvoiceMediaReviewDecision,
+    note?: string,
+  ) => {
+    if (!hasPermission(currentUser, 'invoice_media_review')) {
+      notify('暂无审核权限', `${currentUser.role}不能记录外部 Invoice 字段复核结果。`);
+      return;
+    }
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    if (!record) return;
+    try {
+      const updated = reviewExternalInvoiceField(
+        record,
+        fieldKey,
+        decision,
+        externalInvoiceActor(),
+        note,
+      );
+      setExternalInvoices((current) => current.map((candidate) => (
+        candidate.invoiceId === record.invoiceId ? updated : candidate
+      )));
+      notify(
+        decision === 'CONFIRMED_CORRECTION' ? '达人纠正已确认' : decision === 'REUPLOAD_REQUIRED' ? '已记录重新上传要求' : '字段异常已记录',
+        '媒介复核结果、操作人和时间已写入当前 Invoice 审核记录。',
+      );
+    } catch (error) {
+      notify('字段复核失败', error instanceof Error ? error.message : '当前字段无法记录复核结果。');
     }
   };
 
@@ -4058,6 +4098,7 @@ export default function App() {
           onSimulateExternalUpload={simulateExternalInvoiceReturn}
           onCorrectExternalRecognition={correctExternalInvoiceField}
           onSubmitExternalInvoice={submitExternalInvoiceTask}
+          onReviewExternalInvoiceField={reviewExternalInvoiceTaskField}
           onReturnExternalInvoice={returnExternalInvoiceTask}
           onApproveExternalInvoice={approveExternalInvoiceTask}
           canCreateInvoice={canGenerateInvoices}
