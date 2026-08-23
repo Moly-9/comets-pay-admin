@@ -54,6 +54,50 @@ final result: passed
 
 ---
 
+# Design QA - Invoice 达人反馈详情操作
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ed3182b4-cf50-45a1-988e-a93da77437b6.png` (`686 x 533`).
+- Implementation screenshot: `app/design-qa-invoice-feedback-scrolled.png` (`1265 x 713`).
+- Full comparison: `app/design-qa-invoice-feedback-comparison.png` (`1400 x 760`).
+- Focused action comparison: `app/design-qa-invoice-feedback-actions-comparison.png` (`1000 x 250`).
+- Browser viewport: `1280 x 720` CSS px at device pixel ratio `1`.
+- State: internal Invoice `INV-20240801-00001`, `达人反馈`, `审核概览`, page scrolled to the review footer.
+
+## Comparison evidence
+
+- The source and implementation were combined in one comparison image before review. The source is a crop of the right review panel; the implementation intentionally preserves the existing COMETS Pay navigation and 4:6 document/review workspace.
+- A focused comparison verifies the requested action region at readable scale. Both versions place `查看反馈` first as a bordered secondary action and `修改并重新发送达人` second as the dark primary action.
+- Button order, hierarchy, spacing, rounded corners and bottom-right alignment match the reference intent without overflow.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed. The implementation uses the existing Noto Sans SC stack, with matching weight hierarchy and no clipped labels.
+- Spacing and layout rhythm: passed. The action pair uses the existing 7px footer gap and remains inside the review footer.
+- Colors and visual tokens: passed. Secondary and primary actions reuse the current COMETS Pay button tokens and preserve sufficient contrast.
+- Image quality and asset fidelity: passed. No raster asset is required; the feedback action uses the existing Lucide icon library.
+- Copy and content: passed. `查看反馈` and `修改并重新发送达人` match the requested labels exactly.
+
+## Interaction and technical checks
+
+- The `达人反馈` list row opens Invoice details through `查看详情`.
+- `查看反馈` opens and closes the existing feedback dialog.
+- `修改并重新发送达人` opens the existing Invoice editor, including for the historical prototype Invoice that previously lacked a maintainable generated record.
+- The editor retains the stable Invoice number and shows `保存并重新发送达人`.
+- Browser console warning/error log: empty.
+- Focused Vitest: 4 files and 44 tests passed. TypeScript/Vite production build passed with only the existing chunk-size advisory.
+
+## Findings and comparison history
+
+1. Initial functional P1: the historical `INV-20240801-00001` row had a feedback action but no maintainable `GeneratedInvoiceRecord`, so entering the editor failed.
+   - Fix: on first edit, the prototype now derives a stable internal Invoice record from the existing Payout, creator, project and frozen Invoice data.
+2. Post-fix list, feedback dialog, edit navigation, action layout and console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - 达人请款名单数量层级与列宽
 
 ## Reference and environment

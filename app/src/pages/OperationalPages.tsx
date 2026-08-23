@@ -3020,7 +3020,7 @@ export function InvoicePage({
       ? '查看草稿'
       : canAct
       ? payout.invoiceReviewStatus === '达人反馈'
-        ? '处理反馈'
+        ? '查看详情'
         : payout.invoiceReviewStatus === '待媒介复核'
           ? '复核'
           : payout.invoiceReviewStatus === '已退回'
@@ -3045,7 +3045,9 @@ export function InvoicePage({
       currency: payout.currency,
       amount: payout.amount,
       actionLabel,
-      primaryAction: canAct || (payout.invoiceReviewStatus === '草稿' && canManageInvoice),
+      primaryAction: (
+        canAct && payout.invoiceReviewStatus !== '达人反馈'
+      ) || (payout.invoiceReviewStatus === '草稿' && canManageInvoice),
       source: { kind: 'payout' as const, payout },
       returnReason: returnInfo?.reason,
       returnSourceLabel: returnInfo?.sourceLabel,

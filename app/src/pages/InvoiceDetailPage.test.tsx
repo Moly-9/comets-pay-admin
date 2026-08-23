@@ -214,6 +214,7 @@ describe('InvoiceDetailPage edit actions', () => {
       },
     }, { manage: true, media: false });
     expect(feedbackHtml).toContain('查看反馈');
+    expect(feedbackHtml).toContain('修改并重新发送达人');
     expect(feedbackHtml).toMatch(/title="编辑 Invoice"[\s\S]*?<span>编辑<\/span>/);
     expect(feedbackHtml).toContain('达人尚未完成签署');
     expect(getInvoiceTimelineState('达人反馈')).toEqual({

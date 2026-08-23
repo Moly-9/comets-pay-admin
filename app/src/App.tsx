@@ -167,6 +167,7 @@ import {
   removePaymentListItem,
   upsertPaymentListItem,
   type EngagementId,
+  type CreatorId,
   type ContractId,
   type InvoiceId,
   type PaymentListEditableField,
@@ -195,6 +196,7 @@ import {
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
 import { downloadBlob } from './invoice/invoiceUtils';
+import { buildInvoiceReviewModel } from './invoice/invoiceReview';
 import { normalizeInvoiceResourceNumbers } from './invoice/invoiceNumberMigration';
 import {
   createDocumentPayoutSnapshot,
@@ -1229,7 +1231,42 @@ export default function App() {
   };
 
   const openInvoiceEditor = (payout: Payout, context: InvoiceEditContext) => {
-    const record = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+    let record = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+    if (!record && payout.invoiceReviewStatus === '达人反馈') {
+      const creator = creators.find((candidate) => (
+        candidate.id === payout.creatorId || candidate.handle === payout.handle
+      ));
+      const project = projects.find((candidate) => getProjectId(candidate) === payout.projectId);
+      const engagement = project?.creatorProfiles?.find((candidate) => candidate.creatorId === creator?.id);
+      if (creator && project) {
+        const snapshot = payout.invoiceSnapshot ?? buildInvoiceReviewModel(payout, creators, invoiceEntity);
+        const legacyProjectId = getProjectId(project);
+        const migratedRecord: GeneratedInvoiceRecord = {
+          id: snapshot.invoiceNumber,
+          invoiceId: `invoice_legacy_${payout.id}` as InvoiceId,
+          invoiceType: 'INTERNAL',
+          sourcePayoutId: payout.id,
+          status: payout.invoiceReviewStatus,
+          generatedAt: payout.creatorFeedback?.occurredAt ?? nowIso(),
+          snapshot: {
+            ...snapshot,
+            creatorId: creator.id as CreatorId,
+            engagementId: engagement?.engagementId
+              ?? `engagement_legacy_${payout.id}` as EngagementId,
+            projectId: legacyProjectId,
+            cooperationProjectId: legacyProjectId,
+          },
+          validationStatus: 'valid',
+          version: payout.invoiceVersion ?? 1,
+        };
+        record = migratedRecord;
+        setGeneratedInvoices((current) => (
+          current.some((invoice) => invoice.sourcePayoutId === payout.id)
+            ? current
+            : [migratedRecord, ...current]
+        ));
+      }
+    }
     if (!record) {
       notify('无法修改 Invoice', '未找到通过 sourcePayoutId 关联的可维护生成记录。');
       return;

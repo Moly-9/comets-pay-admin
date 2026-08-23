@@ -954,7 +954,12 @@ export function InvoiceDetailPage({
               </Button>
             ) : null}
             {invoiceReviewStatus === '达人反馈' ? (
-              <Button variant="secondary" icon={<MessageSquareText size={16} />} onClick={openFeedbackDialog}>查看反馈</Button>
+              <>
+                <Button variant="secondary" icon={<MessageSquareText size={16} />} onClick={openFeedbackDialog}>查看反馈</Button>
+                {canManageInvoice && payout && editContext === 'CREATOR_FEEDBACK' ? (
+                  <Button onClick={() => onEditInvoice?.(payout, editContext)}>修改并重新发送达人</Button>
+                ) : null}
+              </>
             ) : null}
             {navigationTarget && payout ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
           </>

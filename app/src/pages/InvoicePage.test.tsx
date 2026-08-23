@@ -105,7 +105,7 @@ const renderInvoicePage = (
     payouts?: Payout[];
     generatedInvoices?: GeneratedInvoiceRecord[];
     creators?: CreatorProfile[];
-    tab?: 'signature' | 'review';
+    tab?: 'signature' | 'review' | 'returned';
     focusedInvoiceId?: string | null;
   } = {},
 ) => renderToStaticMarkup(
@@ -212,5 +212,47 @@ describe('InvoicePage list columns', () => {
       expect(index).toBeGreaterThan(previousIndex);
       return index;
     }, -1);
+  });
+
+  it('keeps creator feedback rows on the detail-first flow', () => {
+    const feedbackPayout: Payout = {
+      ...payout,
+      invoiceReviewStatus: '达人反馈',
+      creatorFeedback: {
+        reason: '请修改 Invoice 地址后重新发起签署。',
+        actorName: '达人',
+        occurredAt: '2026-08-11T11:00:00.000Z',
+      },
+    };
+    const html = renderInvoicePage(true, {
+      payouts: [feedbackPayout],
+      tab: 'review',
+    });
+
+    expect(html).toContain('查看详情');
+    expect(html).not.toContain('修改并重新发布');
+  });
+
+  it('shows only the return source label below a returned status', () => {
+    const returnedPayout: Payout = {
+      ...payout,
+      status: '已退回',
+      invoiceReviewStatus: '已退回',
+      paymentFailureReturn: {
+        issueType: 'INVOICE_CONTENT',
+        reason: 'Invoice 金额填写错误，请修改后重新发起。',
+        actorAccount: 'finance',
+        actorName: '财务',
+        occurredAt: '2026-08-11T12:00:00.000Z',
+        restartStage: 'SIGNATURE',
+      },
+    };
+    const html = renderInvoicePage(true, {
+      payouts: [returnedPayout],
+      tab: 'returned',
+    });
+
+    expect(html).toContain('付款失败退回 · Invoice');
+    expect(html).not.toContain('Invoice 金额填写错误，请修改后重新发起。');
   });
 });

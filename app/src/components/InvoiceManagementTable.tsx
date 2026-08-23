@@ -148,9 +148,9 @@ export function InvoiceManagementTable({
                 <td>
                   <div className="invoice-status-cell">
                     <span className={`invoice-row-status is-${STATUS_CLASS[row.status]}`}>{row.status}</span>
-                    {row.status === '已退回' && row.returnReason ? (
-                      <small title={`${row.returnSourceLabel ?? '退回原因'}：${row.returnReason}`}>
-                        <b>{row.returnSourceLabel ?? '退回原因'}</b>：{row.returnReason}
+                    {row.status === '已退回' && row.returnSourceLabel ? (
+                      <small title={row.returnSourceLabel}>
+                        <b>{row.returnSourceLabel}</b>
                       </small>
                     ) : null}
                   </div>
