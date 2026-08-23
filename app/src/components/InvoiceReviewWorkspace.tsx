@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  Clock3,
   Download,
   Eye,
   FileCheck2,
@@ -139,15 +140,25 @@ type InvoiceReviewWorkspaceProps = {
   pageCount?: number;
   onDownload?: () => void;
   downloadDisabled?: boolean;
+  documentUnavailable?: boolean;
   summaryFields?: InvoiceReviewSummaryField[];
+  externalSummary?: boolean;
   overviewFields?: InvoiceReviewOverviewField[];
   contractChecks: InvoiceReviewContractCheck[];
   noContract?: boolean;
+  contractPending?: boolean;
   accountRows: InvoiceReviewAccountRow[];
   accountComparison?: InvoiceReviewAccountComparison;
+  accountDescription?: string;
   timeline: InvoiceReviewTimelineItem[];
   completion: { completed: number; total: number };
   blockingReasons: string[];
+  issueStatusText?: string;
+  footerStatus?: {
+    title: string;
+    message: string;
+    tone?: 'neutral' | 'success' | 'danger';
+  };
   onFieldAction?: (fieldId: string, action: InvoiceReviewFieldAction, note?: string) => void;
   returnLabel?: string;
   returnDialogTitle?: string;
@@ -208,15 +219,21 @@ export function InvoiceReviewWorkspace({
   pageCount = 1,
   onDownload,
   downloadDisabled = false,
+  documentUnavailable = false,
   summaryFields = [],
+  externalSummary = false,
   overviewFields = [],
   contractChecks,
   noContract = false,
+  contractPending = false,
   accountRows,
   accountComparison,
+  accountDescription,
   timeline,
   completion,
   blockingReasons,
+  issueStatusText,
+  footerStatus,
   onFieldAction,
   returnLabel,
   returnDialogTitle,
@@ -254,6 +271,8 @@ export function InvoiceReviewWorkspace({
   )).length;
   const contractLabel = noContract
     ? '合同匹配 · 无合同'
+    : contractPending
+      ? '合同匹配 · 待上传'
     : contractPassed === contractChecks.length
       ? `合同匹配 ${contractPassed}/${contractChecks.length}`
       : `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractChecks.length - contractPassed}项异常`;
@@ -392,7 +411,7 @@ export function InvoiceReviewWorkspace({
 
   return (
     <div
-      className={`invoice-review-workspace is-${sourceType === 'INTERNAL_GENERATED' ? 'internal' : 'external'} ${dragging ? 'is-resizing' : ''}`}
+      className={`invoice-review-workspace is-${sourceType === 'INTERNAL_GENERATED' ? 'internal' : 'external'} ${documentUnavailable ? 'is-document-unavailable' : ''} ${dragging ? 'is-resizing' : ''}`}
       ref={workspaceRef}
       style={workspaceStyle}
     >
@@ -403,15 +422,15 @@ export function InvoiceReviewWorkspace({
             <span><strong>{documentName}</strong><small>{documentMeta}</small></span>
           </div>
           <div className="invoice-review-document-controls">
-            <span className="invoice-review-page-control" aria-label={`第 1 页，共 ${pageCount} 页`}>
+            <span className="invoice-review-page-control" aria-label={documentUnavailable ? '尚未上传 Invoice 文件' : `第 1 页，共 ${pageCount} 页`}>
               <button type="button" aria-label="上一页" disabled><ChevronLeft size={16} /></button>
-              <b>1 / {pageCount}</b>
-              <button type="button" aria-label="下一页" disabled={pageCount <= 1}><ChevronRight size={16} /></button>
+              <b>{documentUnavailable ? '-- / --' : `1 / ${pageCount}`}</b>
+              <button type="button" aria-label="下一页" disabled={documentUnavailable || pageCount <= 1}><ChevronRight size={16} /></button>
             </span>
             <span className="invoice-review-zoom-control">
-              <button type="button" aria-label="缩小 Invoice" disabled={zoom <= 0.6} onClick={() => setZoom((value) => Math.max(0.6, Math.round((value - 0.1) * 10) / 10))}><ZoomOut size={16} /></button>
-              <b>{Math.round(zoom * 100)}%</b>
-              <button type="button" aria-label="放大 Invoice" disabled={zoom >= 1.6} onClick={() => setZoom((value) => Math.min(1.6, Math.round((value + 0.1) * 10) / 10))}><ZoomIn size={16} /></button>
+              <button type="button" aria-label="缩小 Invoice" disabled={documentUnavailable || zoom <= 0.6} onClick={() => setZoom((value) => Math.max(0.6, Math.round((value - 0.1) * 10) / 10))}><ZoomOut size={16} /></button>
+              <b>{documentUnavailable ? '--' : `${Math.round(zoom * 100)}%`}</b>
+              <button type="button" aria-label="放大 Invoice" disabled={documentUnavailable || zoom >= 1.6} onClick={() => setZoom((value) => Math.min(1.6, Math.round((value + 0.1) * 10) / 10))}><ZoomIn size={16} /></button>
             </span>
             {onDownload ? (
               <button type="button" aria-label="下载 Invoice 原始文件" disabled={downloadDisabled} onClick={onDownload}><Download size={16} /></button>
@@ -453,9 +472,9 @@ export function InvoiceReviewWorkspace({
             </span>
             <strong>{sourceStatusText}</strong>
           </div>
-          <span className={`invoice-review-issue-count ${issueCount ? 'has-issues' : 'is-clear'}`}>
-            {issueCount ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
-            {issueCount ? `${issueCount}项待复核` : '系统字段已校验'}
+          <span className={`invoice-review-issue-count ${issueCount ? 'has-issues' : issueStatusText ? 'is-pending' : 'is-clear'}`}>
+            {issueCount ? <AlertTriangle size={15} /> : issueStatusText ? <Clock3 size={15} /> : <CheckCircle2 size={15} />}
+            {issueCount ? `${issueCount}项待复核` : issueStatusText ?? '系统字段已校验'}
           </span>
         </header>
 
@@ -504,7 +523,23 @@ export function InvoiceReviewWorkspace({
             </div>
           ) : null}
 
-          {activeTab === 'overview' && sourceType === 'EXTERNAL_UPLOADED' ? (
+          {activeTab === 'overview' && sourceType === 'EXTERNAL_UPLOADED' && externalSummary ? (
+            <div className="invoice-review-overview-section">
+              <div className="invoice-review-section-heading">
+                <div><FileCheck2 size={18} /><span><strong>收集任务与校验基准</strong><small>任务创建时固定，将用于上传后的识别与审核</small></span></div>
+              </div>
+              <dl className="invoice-review-summary-list">
+                {summaryFields.map((field) => (
+                  <div key={field.id}>
+                    <dt>{field.label}</dt>
+                    <dd>{field.value}{field.secondary ? <small>{field.secondary}</small> : null}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
+
+          {activeTab === 'overview' && sourceType === 'EXTERNAL_UPLOADED' && !externalSummary ? (
             <div className="invoice-review-overview-section">
               <div className="invoice-review-section-heading">
                 <div><FileCheck2 size={18} /><span><strong>收集任务基准与达人最终确认值</strong><small>异常项优先展示，正常匹配项默认展开且可按需收起</small></span></div>
@@ -536,6 +571,8 @@ export function InvoiceReviewWorkspace({
               </div>
               {noContract ? (
                 <div className="invoice-review-no-contract"><CheckCircle2 size={20} /><span><strong>无合同</strong><small>当前 Invoice 按无合同流程发起，不构成审核异常。</small></span></div>
+              ) : contractPending ? (
+                <div className="invoice-review-pending-state"><Clock3 size={20} /><span><strong>待达人上传 Invoice 后进行匹配</strong><small>上传后将校验主体、币种和金额、收款信息及签名完整性。</small></span></div>
               ) : (
                 <div className="invoice-review-contract-list">
                   {contractChecks.map((check) => (
@@ -557,7 +594,7 @@ export function InvoiceReviewWorkspace({
           {activeTab === 'account' ? (
             <div className="invoice-review-account-section">
               <div className="invoice-review-section-heading">
-                <div><Landmark size={18} /><span><strong>达人档案已审核账户</strong><small>付款只能使用当前达人档案中的有效账户</small></span></div>
+                <div><Landmark size={18} /><span><strong>达人档案已审核账户</strong><small>{accountDescription ?? '付款只能使用当前达人档案中的有效账户'}</small></span></div>
               </div>
               {accountComparison ? (
                 <div className={`invoice-review-account-comparison ${accountComparison.matched ? 'is-matched' : 'is-blocked'}`}>
@@ -593,8 +630,10 @@ export function InvoiceReviewWorkspace({
 
         <footer className="invoice-review-sticky-actions">
           <div className="invoice-review-completion">
-            <span><FileCheck2 size={17} /><strong>已完成 {completion.completed}/{completion.total} 项</strong></span>
-            {blockingReasons.length ? (
+            <span><FileCheck2 size={17} /><strong>{footerStatus?.title ?? `已完成 ${completion.completed}/${completion.total} 项`}</strong></span>
+            {footerStatus ? (
+              <p className={`is-${footerStatus.tone ?? 'neutral'}`} role={footerStatus.tone === 'danger' ? 'alert' : undefined}>{footerStatus.message}</p>
+            ) : blockingReasons.length ? (
               <p role="alert">{blockingReasons[0]}{blockingReasons.length > 1 ? `，另有 ${blockingReasons.length - 1} 项待处理` : ''}</p>
             ) : <p>当前没有阻断项，可以继续审核流程。</p>}
           </div>

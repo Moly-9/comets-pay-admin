@@ -96,4 +96,30 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('<details class="invoice-review-matched-details" open="">');
     expect(html).toContain('正常匹配项（1）');
   });
+
+  it('renders the collection baseline and pending contract state before a file is uploaded', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="EXTERNAL_UPLOADED"
+        documentUnavailable
+        downloadDisabled
+        externalSummary
+        issueStatusText="等待达人上传"
+        summaryFields={[
+          { id: 'creator', label: '达人', value: 'Alicia Lin', secondary: '@alicia' },
+          { id: 'amount', label: '预计币种&金额', value: 'USD 4,800.00' },
+        ]}
+        contractChecks={[]}
+        noContract={false}
+        contractPending
+        footerStatus={{ title: '等待达人上传 Invoice', message: '任务基准已固定。' }}
+      />,
+    );
+
+    expect(html).toContain('收集任务与校验基准');
+    expect(html).toContain('合同匹配 · 待上传');
+    expect(html).toContain('-- / --');
+    expect(html).toContain('is-document-unavailable');
+  });
 });

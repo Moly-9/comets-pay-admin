@@ -212,6 +212,35 @@
 .external-file-empty strong { color: var(--external-ink); }
 .external-file-empty span { font-size: 12px; }
 
+.invoice-review-file-empty {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 9px;
+  border: 1px dashed #cfd5de;
+  border-radius: 7px;
+  background: #fafbfc;
+  padding: 30px;
+  color: var(--external-muted);
+  text-align: center;
+}
+
+.invoice-review-file-empty > span {
+  display: flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: #f0edf3;
+  color: #755879;
+}
+
+.invoice-review-file-empty strong { color: #343945; font-size: 13px; }
+.invoice-review-file-empty p { max-width: 360px; margin: 0; font-size: 11px; line-height: 1.55; }
+
 .external-version-list { border-top: 1px solid var(--external-line); display: grid; gap: 10px; margin-top: 18px; padding-top: 16px; }
 .external-version-list h3,
 .external-contract-accounts h3 { align-items: center; display: flex; font-size: 13px; gap: 6px; margin: 0; }
@@ -225,6 +254,8 @@
 .external-summary-grid dd { align-items: center; display: flex; font-size: 13px; gap: 9px; margin: 0; overflow-wrap: anywhere; }
 
 .external-simulator-panel { border-left: 3px solid #b982aa; }
+.external-simulator-modal .modal-content { max-height: min(68vh, 660px); overflow-y: auto; }
+.external-simulator-dialog { display: grid; gap: 18px; }
 .external-simulator-actions { justify-content: flex-start; margin-top: 14px; }
 .external-simulator-submit { border-top: 1px solid var(--external-line); display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 16px; }
 .external-correction-callout { align-items: center; background: #fff8ed; border: 1px solid #ecd8b8; border-radius: 7px; display: flex; gap: 16px; justify-content: space-between; margin-top: 14px; padding: 12px; }

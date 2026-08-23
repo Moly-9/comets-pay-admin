@@ -2,23 +2,20 @@ import {
   ArrowLeft,
   BriefcaseBusiness,
   CircleDollarSign,
-  FileSearch,
-  FileText,
-  History,
   RefreshCw,
   Send,
-  ShieldCheck,
   Upload,
   WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Avatar, Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import {
   InvoiceReviewMetricGrid,
   InvoiceReviewWorkspace,
   type InvoiceReviewAccountRow,
   type InvoiceReviewContractCheck,
   type InvoiceReviewOverviewField,
+  type InvoiceReviewSummaryField,
   type InvoiceReviewTimelineItem,
 } from '../components/InvoiceReviewWorkspace';
 import {
@@ -31,7 +28,6 @@ import {
   EXTERNAL_INVOICE_FIELD_LABEL,
   EXTERNAL_INVOICE_FIELD_ORDER,
   EXTERNAL_INVOICE_REVIEW_FIELD_ORDER,
-  contractAccountReminder,
   currentExternalInvoiceFieldReview,
   currentExternalInvoiceConfirmation,
   currentExternalInvoiceRecognition,
@@ -70,11 +66,6 @@ const TECHNICAL_STATUS_LABEL: Record<ExternalInvoiceCollectionRecord['status'], 
   APPROVED: '审核通过',
   RECOGNITION_FAILED: 'OCR 识别失败',
   CANCELLED: '已取消',
-};
-
-const valueResult = (recognized?: string, confirmed?: string) => {
-  if (!recognized || !confirmed) return '待确认';
-  return recognized.trim() === confirmed.trim() ? '识别一致' : '达人已纠正';
 };
 
 export function ExternalInvoiceCollectionCreatePage({
@@ -132,6 +123,11 @@ export function ExternalInvoiceCollectionCreatePage({
     && String(contract.creatorId) === creatorId
     && contractLinkedToProject(contract, projectId as CooperationProjectId)
   )), [contracts, creatorId, projectId]);
+  const defaultPayoutAccount = eligibleInvoicePayoutAccounts(selectedCreator).find((account) => account.isDefault);
+  const presetPayoutAccountId = defaultPayoutAccount ? getPayoutAccountId(defaultPayoutAccount) : '';
+  const presetPayoutAccountSnapshot = defaultPayoutAccount
+    ? createDocumentPayoutSnapshot(defaultPayoutAccount, selectedCreator?.id)
+    : undefined;
   const validAmount = Number(amount) > 0;
   const complete = Boolean(
     selectedProject
@@ -140,11 +136,19 @@ export function ExternalInvoiceCollectionCreatePage({
     && validAmount
     && advertiser.trim()
     && description.trim()
-    && dueDate,
+    && dueDate
+    && presetPayoutAccountId
+    && presetPayoutAccountSnapshot,
   );
 
   const submit = (publish: boolean) => {
-    if (!complete || !selectedProject || !selectedReference || !selectedCreator) return;
+    if (
+      !complete
+      || !selectedProject
+      || !selectedReference
+      || !selectedCreator
+      || !presetPayoutAccountSnapshot
+    ) return;
     onCreate({
       projectId: (selectedProject.projectId ?? selectedProject.id) as ProjectId,
       projectName: selectedProject.name,
@@ -154,6 +158,8 @@ export function ExternalInvoiceCollectionCreatePage({
       creatorHandle: selectedCreator.socialAccounts.find((account) => account.handle.trim())?.handle
         ?? selectedCreator.handle,
       contractIds,
+      presetPayoutAccountId,
+      presetPayoutAccountSnapshot,
       expected: {
         amount: Number(amount),
         currency,
@@ -258,7 +264,13 @@ export function ExternalInvoiceCollectionCreatePage({
             <label className="external-form-span"><span className="required-field-label">合作内容 <em className="required-mark">*</em></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
           </div>
           <div className="external-form-footer">
-            <NoticeBanner>保存草稿后列表显示“待发布”；正式发布后才会出现在对应 C 端达人档案的待上传任务中。</NoticeBanner>
+            <NoticeBanner>
+              {selectedCreator && !defaultPayoutAccount
+                ? '该达人没有默认且已审核的收款账户，请先完善达人档案后再创建采集任务。'
+                : defaultPayoutAccount
+                  ? `任务将预设默认已审核账户：${defaultPayoutAccount.nickname}。发布后由 C 端达人上传 Invoice。`
+                  : '保存草稿后列表显示“待发布”；正式发布后才会出现在 C 端待办中。'}
+            </NoticeBanner>
             <div className="external-form-actions">
               <Button variant="secondary" disabled={!complete} onClick={() => submit(false)}>保存草稿</Button>
               <Button icon={<Send size={16} />} disabled={!complete} onClick={() => submit(true)}>发布收集任务</Button>
@@ -304,8 +316,9 @@ export function ExternalInvoiceCollectionDetailPage({
   const recognition = currentExternalInvoiceRecognition(record);
   const confirmation = currentExternalInvoiceConfirmation(record);
   const accounts = eligibleInvoicePayoutAccounts(creator);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [payoutAccountId, setPayoutAccountId] = useState(
-    record.selectedPayoutAccountId ?? (accounts[0] ? getPayoutAccountId(accounts[0]) : ''),
+    record.selectedPayoutAccountId ?? record.presetPayoutAccountId,
   );
   const [invoiceDate, setInvoiceDate] = useState(confirmation?.values.INVOICE_DATE ?? todayInputValue());
   const [correctionField, setCorrectionField] = useState<ExternalInvoiceFieldKey>('AMOUNT');
@@ -318,7 +331,6 @@ export function ExternalInvoiceCollectionDetailPage({
   }));
   const issues = externalInvoiceValidationIssues({ record, creator, contracts });
   const blockers = issues.filter((issue) => issue.severity === 'BLOCKER');
-  const contractAccounts = contractAccountReminder(record, contracts);
   const canUpload = ['WAITING_UPLOAD', 'RETURNED_FOR_REUPLOAD', 'WAITING_CONFIRMATION'].includes(record.status);
   const canSubmit = Boolean(confirmation && blockers.length === 0 && record.status === 'WAITING_CONFIRMATION');
   const displayInvoiceNumber = externalInvoicePageTab(record.status) === 'upload'
@@ -329,32 +341,34 @@ export function ExternalInvoiceCollectionDetailPage({
   ));
   const activeCorrectionField = correctionCandidate ?? correctionField;
   const activeCorrectionEvidence = recognition?.fields[activeCorrectionField].evidence.sourceValue ?? '';
-  const reviewWorkspaceVisible = Boolean(
-    recognition
-    && confirmation
-    && (record.status === 'WAITING_MEDIA_REVIEW' || record.status === 'APPROVED'),
-  );
   const currentFile = record.sourceFileVersions[record.sourceFileVersions.length - 1];
+  const hasUploadedEvidence = Boolean(recognition && confirmation && currentFile);
   const selectedAccount = accounts.find((account) => getPayoutAccountId(account) === confirmation?.payoutAccountId);
-  const accountSnapshot = selectedAccount
+  const selectedAccountSnapshot = selectedAccount
     ? createDocumentPayoutSnapshot(selectedAccount, record.creatorId)
     : undefined;
-  const profileAccountValue = selectedAccount?.provider === 'PayPal'
-    ? `${accountSnapshot?.paypalUsername || '待补充'} / ${accountSnapshot?.paypalEmail || '待补充'}`
-    : `${accountSnapshot?.accountName || '待补充'} / ${accountSnapshot?.iban || accountSnapshot?.accountNumber || '待补充'}`;
-  const expectedPublisher = selectedAccount?.provider === 'PayPal'
-    ? accountSnapshot?.paypalUsername || '达人档案账户主体待补充'
-    : accountSnapshot?.accountName || '达人档案账户主体待补充';
+  const accountSnapshot = selectedAccountSnapshot ?? record.presetPayoutAccountSnapshot;
+  const accountProvider = selectedAccountSnapshot?.payoutProvider
+    ?? record.presetPayoutAccountSnapshot.payoutProvider;
+  const profileAccountValue = accountProvider === 'PayPal'
+    ? `${accountSnapshot.paypalUsername || '待补充'} / ${accountSnapshot.paypalEmail || '待补充'}`
+    : `${accountSnapshot.accountName || '待补充'} / ${accountSnapshot.iban || accountSnapshot.accountNumber || '待补充'}`;
+  const expectedPublisher = accountProvider === 'PayPal'
+    ? accountSnapshot.paypalUsername || '达人档案账户主体待补充'
+    : accountSnapshot.accountName || '达人档案账户主体待补充';
   const displayCurrency = confirmation?.values.CURRENCY || record.expected.currency;
   const displayAmount = Number(confirmation?.values.AMOUNT ?? record.expected.amount);
-  const displayPaymentMethod = selectedAccount?.provider === 'PayPal'
+  const displayPaymentMethod = accountProvider === 'PayPal'
     ? 'PayPal'
-    : selectedAccount
+    : accountProvider
       ? '银行转账'
       : '待选择';
+  const presetAccount = accounts.find((account) => getPayoutAccountId(account) === record.presetPayoutAccountId);
   const displayPaymentSummary = selectedAccount
     ? `${selectedAccount.provider} · ${getPayoutAccountSummary(selectedAccount)}`
-    : '等待达人选择已验证收款账户';
+    : presetAccount
+      ? `${presetAccount.provider} · ${getPayoutAccountSummary(presetAccount)}`
+      : `${accountProvider ?? '已审核账户'} · 任务预设快照`;
   const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
     if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
     if (field === 'PUBLISHER') return expectedPublisher;
@@ -512,14 +526,14 @@ export function ExternalInvoiceCollectionDetailPage({
     return normalizedValue ? `•••• ${normalizedValue.slice(-4)}` : '待补充';
   };
   const accountRows: InvoiceReviewAccountRow[] = [
-    { label: '付款方式', value: selectedAccount?.provider ?? '待选择' },
-    { label: 'Account Name', value: selectedAccount?.provider === 'PayPal' ? accountSnapshot?.paypalUsername || '待补充' : accountSnapshot?.accountName || '待补充' },
-    { label: 'Account Number 尾号', value: selectedAccount?.provider === 'PayPal' ? '不适用' : maskTail(accountSnapshot?.accountNumber) },
-    { label: 'Bank Name', value: accountSnapshot?.bankName || (selectedAccount?.provider === 'PayPal' ? '不适用' : '待补充') },
-    { label: 'SWIFT / BIC', value: accountSnapshot?.swiftCode || (selectedAccount?.provider === 'PayPal' ? '不适用' : '待补充') },
-    { label: 'IBAN', value: accountSnapshot?.iban ? maskTail(accountSnapshot.iban) : '不适用' },
-    { label: 'PayPal Email', value: selectedAccount?.provider === 'PayPal' ? accountSnapshot?.paypalEmail || '待补充' : '不适用' },
-    { label: '账户审核状态', value: accountSnapshot?.validationStatus === 'VERIFIED' ? '已审核通过' : accountSnapshot?.validationStatus || '待审核' },
+    { label: '付款方式', value: accountProvider ?? '待选择' },
+    { label: 'Account Name', value: accountProvider === 'PayPal' ? accountSnapshot.paypalUsername || '待补充' : accountSnapshot.accountName || '待补充' },
+    { label: 'Account Number 尾号', value: accountProvider === 'PayPal' ? '不适用' : maskTail(accountSnapshot.accountNumber) },
+    { label: 'Bank Name', value: accountSnapshot.bankName || (accountProvider === 'PayPal' ? '不适用' : '待补充') },
+    { label: 'SWIFT / BIC', value: accountSnapshot.swiftCode || (accountProvider === 'PayPal' ? '不适用' : '待补充') },
+    { label: 'IBAN', value: accountSnapshot.iban ? maskTail(accountSnapshot.iban) : '不适用' },
+    { label: 'PayPal Email', value: accountProvider === 'PayPal' ? accountSnapshot.paypalEmail || '待补充' : '不适用' },
+    { label: '账户审核状态', value: ['VALIDATED', 'VERIFIED'].includes(accountSnapshot.validationStatus ?? '') ? '已审核通过' : accountSnapshot.validationStatus || '待审核' },
   ];
   const accountMatched = Boolean(
     confirmation
@@ -558,6 +572,30 @@ export function ExternalInvoiceCollectionDetailPage({
     || field.status === 'MISSING'
     || field.status === 'REUPLOAD_REQUIRED'
   )).length + contractBlockers.length;
+  const collectionSummaryFields: InvoiceReviewSummaryField[] = [
+    { id: 'creator', label: '达人', value: record.creatorName, secondary: record.creatorHandle },
+    { id: 'project', label: '关联项目', value: record.projectName },
+    {
+      id: 'expected-amount',
+      label: '预计币种&金额',
+      value: formatInvoiceMoney(record.expected.currency, record.expected.amount),
+    },
+    { id: 'advertiser', label: '付款主体', value: record.expected.advertiser },
+    { id: 'description', label: '合作内容', value: record.expected.description },
+    { id: 'due-date', label: '截止时间', value: record.expected.dueDate },
+  ];
+  const pendingIssueStatus = record.status === 'DRAFT'
+    ? '采集任务待发布'
+    : !hasUploadedEvidence
+      ? '等待达人上传'
+      : undefined;
+  const pendingFooterStatus = record.status === 'DRAFT'
+    ? { title: '采集任务尚未发布', message: '发布后将生成 C 端待上传任务。', tone: 'neutral' as const }
+    : !hasUploadedEvidence
+      ? { title: '等待达人上传 Invoice', message: '已固定任务基准与预设收款账户。', tone: 'neutral' as const }
+      : record.status === 'WAITING_CONFIRMATION'
+        ? { title: '等待达人确认并提交', message: '可通过模拟 C 端回传完成纠正或提交审核。', tone: 'neutral' as const }
+        : undefined;
 
   const downloadPrototypeSource = () => {
     if (!currentFile || !recognition) return;
@@ -609,182 +647,152 @@ export function ExternalInvoiceCollectionDetailPage({
         },
       ]} />
 
-      {reviewWorkspaceVisible && recognition && confirmation ? (
-        <InvoiceReviewWorkspace
-          sourceType="EXTERNAL_UPLOADED"
-          issueCount={workspaceIssueCount}
-          sourceStatusText={record.status === 'APPROVED' ? '审核已通过' : TECHNICAL_STATUS_LABEL[record.status]}
-          documentName={currentFile?.fileName ?? '外部 Invoice 原始文件'}
-          documentMeta={`原始文件 v${currentFile?.version ?? 1} · OCR ${recognition.engineVersion} · 前端原型预览`}
-          documentContent={(
-            <article className="external-document-preview invoice-review-external-document" aria-label="外部 Invoice 原始文件证据预览">
-              <div className="external-document-title"><strong>INVOICE</strong><small>{currentFile?.fileName}</small></div>
-              {EXTERNAL_INVOICE_FIELD_ORDER.map((field) => (
-                <div data-review-evidence={field} key={field}>
-                  <span>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</span>
-                  <strong>{recognition.fields[field].evidence.sourceValue}</strong>
-                </div>
-              ))}
-            </article>
-          )}
-          onDownload={downloadPrototypeSource}
-          overviewFields={reviewFields}
-          contractChecks={contractChecks}
-          noContract={selectedContracts.length === 0}
-          accountRows={accountRows}
-          accountComparison={{
-            invoiceValue: confirmation.values.PAYMENT_ACCOUNT,
-            profileValue: profileAccountValue,
-            matched: accountMatched,
-            message: accountMatched
-              ? 'Invoice 文件账户与达人档案中的已审核账户一致。'
-              : '账户不一致，不能直接使用 Invoice 文件中的新账户付款。',
-            evidenceTarget: 'PAYMENT_ACCOUNT',
-          }}
-          timeline={reviewTimeline}
-          completion={record.status === 'APPROVED'
-            ? { completed: readiness.total, total: readiness.total }
-            : { completed: readiness.completed, total: readiness.total }}
-          blockingReasons={record.status === 'APPROVED' ? [] : workspaceBlockers}
-          onFieldAction={record.status === 'WAITING_MEDIA_REVIEW' ? (fieldId, action, note) => {
-            const decision: ExternalInvoiceMediaReviewDecision = action === 'CONFIRM_CORRECTION'
-              ? 'CONFIRMED_CORRECTION'
-              : action;
-            onReviewField(fieldId as ExternalInvoiceFieldKey, decision, note);
-          } : undefined}
-          returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人' : undefined}
-          returnDialogTitle="退回外部 Invoice"
-          returnOptions={[
-            { value: 'CORRECTION', label: '退回纠正识别结果', description: '原文件正确，达人需按原文重新确认识别值' },
-            { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容有误，达人必须提交新文件版本' },
-          ]}
-          onReturn={record.status === 'WAITING_MEDIA_REVIEW'
-            ? (reason, option) => onReturn(option === 'REUPLOAD' ? 'REUPLOAD' : 'CORRECTION', reason)
-            : undefined}
-          onSave={record.status === 'WAITING_MEDIA_REVIEW' ? onSaveReviewProgress : undefined}
-          approveLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '审核通过' : undefined}
-          onApprove={record.status === 'WAITING_MEDIA_REVIEW' ? onApprove : undefined}
-          approveDisabled={!readiness.canApprove || contractBlockers.length > 0}
-          canReview={canReview && record.status === 'WAITING_MEDIA_REVIEW'}
-        />
-      ) : (
-      <div className="external-detail-layout">
-        <section className="content-card external-source-panel">
-          <div className="external-section-heading"><div><FileText size={18} /><h2>原始 Invoice 文件</h2></div><p>{record.sourceFileVersions.length ? `${record.sourceFileVersions.length} 个不可覆盖版本` : '等待 C 端上传'}</p></div>
-          {recognition ? (
-            <div className="external-document-preview">
-              <div className="external-document-title"><strong>INVOICE</strong><small>{record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileName}</small></div>
-              {EXTERNAL_INVOICE_FIELD_ORDER.map((field) => (
-                <div key={field}><span>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</span><strong>{recognition.fields[field].evidence.sourceValue}</strong></div>
-              ))}
-            </div>
-          ) : (
-            <div className="external-file-empty"><Upload size={30} /><strong>尚未上传文件</strong><span>发布后由 C 端上传 PDF、JPG 或 PNG。</span></div>
-          )}
-          {record.sourceFileVersions.length ? (
-            <div className="external-version-list">
-              <h3><History size={16} />文件版本</h3>
-              {record.sourceFileVersions.map((version) => <div key={version.fileVersionId}><strong>v{version.version} · {version.fileName}</strong><small>{version.uploadedBy.name} · {new Date(version.uploadedAt).toLocaleString('zh-CN')}</small></div>)}
-            </div>
-          ) : null}
-        </section>
-
-        <div className="external-detail-main">
-          <section className="content-card external-task-summary">
-            <div className="external-section-heading"><div><FileSearch size={18} /><h2>收集任务与校验基准</h2></div><p>发布时固定，作为识别与审核基准</p></div>
-            <dl className="external-summary-grid">
-              <div><dt>达人</dt><dd><Avatar initials={creator?.initials ?? record.creatorName.slice(0, 2)} accent={creator?.accent} size="sm" /><span>{record.creatorName}<small>{record.creatorHandle}</small></span></dd></div>
-              <div><dt>关联项目</dt><dd>{record.projectName}</dd></div>
-              <div><dt>预期金额</dt><dd>{record.expected.currency} {record.expected.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</dd></div>
-              <div><dt>付款主体</dt><dd>{record.expected.advertiser}</dd></div>
-              <div><dt>合作内容</dt><dd>{record.expected.description}</dd></div>
-              <div><dt>截止时间</dt><dd>{record.expected.dueDate}</dd></div>
-            </dl>
-          </section>
-
-          {canManage && record.status !== 'DRAFT' && record.status !== 'WAITING_MEDIA_REVIEW' && record.status !== 'APPROVED' ? (
-            <section className="content-card external-simulator-panel">
-              <div className="external-section-heading"><div><RefreshCw size={18} /><h2>模拟 C 端回传</h2></div><p>仅用于当前管理端前端原型演示</p></div>
-              <div className="form-grid external-simulator-form">
-                <div className="form-control">
-                  <span>达人已验证收款账户</span>
-                  <SelectField
-                    ariaLabel="选择达人已验证收款账户"
-                    variant="form"
-                    menuStrategy="fixed"
-                    menuClassName="payout-account-select-menu"
-                    value={payoutAccountId}
-                    placeholder="请选择账户"
-                    options={payoutAccountOptions}
-                    onChange={setPayoutAccountId}
-                  />
-                </div>
-                <label><span>Date of Invoice</span><input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} /></label>
+      <InvoiceReviewWorkspace
+        sourceType="EXTERNAL_UPLOADED"
+        issueCount={hasUploadedEvidence ? workspaceIssueCount : 0}
+        issueStatusText={pendingIssueStatus}
+        sourceStatusText={record.status === 'APPROVED' ? '审核已通过' : TECHNICAL_STATUS_LABEL[record.status]}
+        documentName={currentFile?.fileName ?? '外部 Invoice 原始文件'}
+        documentMeta={recognition && currentFile
+          ? `原始文件 v${currentFile.version} · OCR ${recognition.engineVersion} · 前端原型预览`
+          : '尚未上传 · 支持 PDF、JPG 和 PNG'}
+        documentUnavailable={!hasUploadedEvidence}
+        downloadDisabled={!hasUploadedEvidence}
+        documentContent={recognition && currentFile ? (
+          <article className="external-document-preview invoice-review-external-document" aria-label="外部 Invoice 原始文件证据预览">
+            <div className="external-document-title"><strong>INVOICE</strong><small>{currentFile.fileName}</small></div>
+            {EXTERNAL_INVOICE_FIELD_ORDER.map((field) => (
+              <div data-review-evidence={field} key={field}>
+                <span>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</span>
+                <strong>{recognition.fields[field].evidence.sourceValue}</strong>
               </div>
-              {!accounts.length ? <NoticeBanner>达人档案没有已验证且可用于 Invoice 的账户，当前不能提交。</NoticeBanner> : null}
-              {canUpload ? (
-                <div className="external-simulator-actions">
-                  <Button disabled={!payoutAccountId || !invoiceDate} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
-                  <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
-                  <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
-                  <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
-                </div>
-              ) : null}
-              {(correctionCandidate || record.status === 'RETURNED_FOR_CORRECTION') && recognition ? (
-                <div className="external-correction-callout">
-                  <div className="external-correction-editor">
-                    <strong>{correctionCandidate ? '发现可纠正的 OCR 差异' : '按退回原因重新确认识别值'}</strong>
-                    <div>
-                      <SelectField<ExternalInvoiceFieldKey>
-                        ariaLabel="选择需要纠正的识别字段"
-                        variant="form"
-                        menuStrategy="fixed"
-                        value={activeCorrectionField}
-                        options={EXTERNAL_INVOICE_FIELD_ORDER.map((field) => ({ value: field, label: EXTERNAL_INVOICE_FIELD_LABEL[field] }))}
-                        disabled={Boolean(correctionCandidate)}
-                        onChange={(value) => { setCorrectionField(value); setCorrectionValue(''); }}
-                      />
-                      <input value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)} placeholder={`原文件证据：${activeCorrectionEvidence}`} />
-                    </div>
-                    <span>纠正值必须能在原始文件证据中找到；否则请改用重新上传。</span>
+            ))}
+          </article>
+        ) : (
+          <div className="invoice-review-file-empty" role="status">
+            <span><Upload size={26} /></span>
+            <strong>尚未上传 Invoice 文件</strong>
+            <p>{record.status === 'DRAFT' ? '发布采集任务后，由 C 端达人上传原始文件。' : '已等待 C 端达人上传 PDF、JPG 或 PNG。'}</p>
+          </div>
+        )}
+        onDownload={downloadPrototypeSource}
+        externalSummary={!hasUploadedEvidence}
+        summaryFields={collectionSummaryFields}
+        overviewFields={reviewFields}
+        contractChecks={contractChecks}
+        contractPending={!hasUploadedEvidence && selectedContracts.length > 0}
+        noContract={selectedContracts.length === 0}
+        accountRows={accountRows}
+        accountDescription={!hasUploadedEvidence
+          ? '任务创建时固定的默认已审核收款账户'
+          : undefined}
+        accountComparison={confirmation ? {
+          invoiceValue: confirmation.values.PAYMENT_ACCOUNT,
+          profileValue: profileAccountValue,
+          matched: accountMatched,
+          message: accountMatched
+            ? 'Invoice 文件账户与达人档案中的已审核账户一致。'
+            : '账户不一致，不能直接使用 Invoice 文件中的新账户付款。',
+          evidenceTarget: 'PAYMENT_ACCOUNT',
+        } : undefined}
+        timeline={reviewTimeline}
+        completion={record.status === 'APPROVED'
+          ? { completed: readiness.total, total: readiness.total }
+          : { completed: readiness.completed, total: readiness.total }}
+        footerStatus={pendingFooterStatus}
+        blockingReasons={record.status === 'APPROVED' ? [] : workspaceBlockers}
+        additionalFooterActions={canManage
+          && record.status !== 'DRAFT'
+          && record.status !== 'WAITING_MEDIA_REVIEW'
+          && record.status !== 'APPROVED' ? (
+            <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={() => setSimulatorOpen(true)}>模拟 C 端回传</Button>
+          ) : undefined}
+        onFieldAction={record.status === 'WAITING_MEDIA_REVIEW' ? (fieldId, action, note) => {
+          const decision: ExternalInvoiceMediaReviewDecision = action === 'CONFIRM_CORRECTION'
+            ? 'CONFIRMED_CORRECTION'
+            : action;
+          onReviewField(fieldId as ExternalInvoiceFieldKey, decision, note);
+        } : undefined}
+        returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人' : undefined}
+        returnDialogTitle="退回外部 Invoice"
+        returnOptions={[
+          { value: 'CORRECTION', label: '退回纠正识别结果', description: '原文件正确，达人需按原文重新确认识别值' },
+          { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容有误，达人必须提交新文件版本' },
+        ]}
+        onReturn={record.status === 'WAITING_MEDIA_REVIEW'
+          ? (reason, option) => onReturn(option === 'REUPLOAD' ? 'REUPLOAD' : 'CORRECTION', reason)
+          : undefined}
+        onSave={record.status === 'WAITING_MEDIA_REVIEW' ? onSaveReviewProgress : undefined}
+        approveLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '审核通过' : undefined}
+        onApprove={record.status === 'WAITING_MEDIA_REVIEW' ? onApprove : undefined}
+        approveDisabled={!readiness.canApprove || contractBlockers.length > 0}
+        canReview={canReview && record.status === 'WAITING_MEDIA_REVIEW'}
+      />
+
+      {simulatorOpen ? (
+        <Modal
+          title="模拟 C 端回传"
+          width="680px"
+          className="external-simulator-modal"
+          onClose={() => setSimulatorOpen(false)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setSimulatorOpen(false)}>关闭</Button>
+              {confirmation ? <Button disabled={!canSubmit} icon={<Send size={16} />} onClick={() => { onSubmit(); setSimulatorOpen(false); }}>提交审核</Button> : null}
+            </>
+          )}
+        >
+          <div className="external-simulator-dialog">
+            <NoticeBanner>仅用于当前管理端前端原型演示，不会触发真实文件上传或 OCR 服务。</NoticeBanner>
+            <div className="form-grid external-simulator-form">
+              <div className="form-control">
+                <span>达人已验证收款账户</span>
+                <SelectField
+                  ariaLabel="选择达人已验证收款账户"
+                  variant="form"
+                  menuStrategy="fixed"
+                  menuClassName="payout-account-select-menu"
+                  value={payoutAccountId}
+                  placeholder="请选择账户"
+                  options={payoutAccountOptions}
+                  onChange={setPayoutAccountId}
+                />
+              </div>
+              <label><span>Date of Invoice</span><input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} /></label>
+            </div>
+            {!accounts.length ? <NoticeBanner>达人档案没有已验证且可用于 Invoice 的账户，当前不能提交。</NoticeBanner> : null}
+            {canUpload ? (
+              <div className="external-simulator-actions">
+                <Button disabled={!payoutAccountId || !invoiceDate} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
+              </div>
+            ) : null}
+            {(correctionCandidate || record.status === 'RETURNED_FOR_CORRECTION') && recognition ? (
+              <div className="external-correction-callout">
+                <div className="external-correction-editor">
+                  <strong>{correctionCandidate ? '发现可纠正的 OCR 差异' : '按退回原因重新确认识别值'}</strong>
+                  <div>
+                    <SelectField<ExternalInvoiceFieldKey>
+                      ariaLabel="选择需要纠正的识别字段"
+                      variant="form"
+                      menuStrategy="fixed"
+                      value={activeCorrectionField}
+                      options={EXTERNAL_INVOICE_FIELD_ORDER.map((field) => ({ value: field, label: EXTERNAL_INVOICE_FIELD_LABEL[field] }))}
+                      disabled={Boolean(correctionCandidate)}
+                      onChange={(value) => { setCorrectionField(value); setCorrectionValue(''); }}
+                    />
+                    <input value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)} placeholder={`原文件证据：${activeCorrectionEvidence}`} />
                   </div>
-                  <Button variant="secondary" onClick={() => onCorrect(activeCorrectionField, correctionValue.trim() || activeCorrectionEvidence)}>保存纠正值</Button>
+                  <span>纠正值必须能在原始文件证据中找到；否则请改用重新上传。</span>
                 </div>
-              ) : null}
-              <div className="external-simulator-submit"><Button disabled={!canSubmit} icon={<Send size={16} />} onClick={onSubmit}>提交审核</Button></div>
-            </section>
-          ) : null}
-
-          {recognition && confirmation ? (
-            <section className="content-card external-recognition-panel">
-              <div className="external-section-heading"><div><FileSearch size={18} /><h2>识别结果与达人确认值</h2></div><p>三层数据独立保存，不相互覆盖</p></div>
-              <div className="table-scroll"><table className="data-table external-compare-table"><thead><tr><th>字段</th><th>原文件证据</th><th>系统首次识别</th><th>达人确认值</th><th>结果</th></tr></thead><tbody>{EXTERNAL_INVOICE_FIELD_ORDER.map((field) => {
-                const recognized = recognition.fields[field];
-                const confirmed = confirmation.values[field];
-                const changed = recognized.value.trim() !== confirmed.trim();
-                return <tr key={field} className={changed ? 'is-corrected' : ''}><td><strong>{EXTERNAL_INVOICE_FIELD_LABEL[field]}</strong></td><td>{recognized.evidence.sourceValue}</td><td>{recognized.value}</td><td>{confirmed}</td><td><span className={`external-compare-result ${changed ? 'is-corrected' : 'is-matched'}`}>{valueResult(recognized.value, confirmed)}</span></td></tr>;
-              })}</tbody></table></div>
-            </section>
-          ) : null}
-
-          {confirmation ? (
-            <section className="content-card external-validation-panel">
-              <div className="external-section-heading"><div><ShieldCheck size={18} /><h2>任务、档案与账户校验</h2></div><p>{blockers.length ? `${blockers.length} 项阻断` : '关键字段已匹配'}</p></div>
-              <div className="external-validation-list">
-                {issues.length ? issues.map((issue, index) => <div key={`${issue.fieldKey}-${index}`} className={`is-${issue.severity.toLowerCase()}`}><span>{issue.severity === 'BLOCKER' ? '阻断' : '提醒'}</span><div><strong>{issue.label}</strong><p>{issue.message}</p><small>预期：{issue.expectedValue} · 当前：{issue.actualValue}</small></div></div>) : <div className="is-passed"><span>通过</span><div><strong>任务字段与达人档案一致</strong><p>金额、币种、付款主体、开票主体和收款账户均已通过。</p></div></div>}
+                <Button variant="secondary" onClick={() => onCorrect(activeCorrectionField, correctionValue.trim() || activeCorrectionEvidence)}>保存纠正值</Button>
               </div>
-              {contractAccounts.length ? <div className="external-contract-accounts"><h3>关联合同账户</h3>{contractAccounts.map((item) => <p key={String(item.contractId)}><strong>{item.contractNumber}</strong><span>{item.accountName} · {item.accountReference}</span></p>)}</div> : null}
-            </section>
-          ) : null}
-
-
-          <section className="content-card external-history-panel">
-            <div className="external-section-heading"><div><History size={18} /><h2>操作历史</h2></div><p>记录实际操作账号与每次状态变化</p></div>
-            <div className="external-history-list">{[...record.reviewHistory].reverse().map((event) => <div key={event.eventId}><span className="external-history-dot" /><div><strong>{event.actor.name} · {event.action}</strong><p>{event.reason ?? `${event.fromStatus ? `${TECHNICAL_STATUS_LABEL[event.fromStatus]} → ` : ''}${TECHNICAL_STATUS_LABEL[event.toStatus]}`}</p><small>{new Date(event.occurredAt).toLocaleString('zh-CN')} · {event.actor.role}</small></div></div>)}</div>
-          </section>
-        </div>
-      </div>
-      )}
+            ) : null}
+          </div>
+        </Modal>
+      ) : null}
 
     </div>
   );

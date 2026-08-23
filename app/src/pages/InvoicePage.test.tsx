@@ -187,7 +187,7 @@ describe('InvoicePage list columns', () => {
 
   it('renders five tabs in the required order', () => {
     const html = renderInvoicePage(true);
-    const labels = ['待签署', '待上传', '待审核', '已通过', '已退回'];
+    const labels = ['待签署', '待采集', '待审核', '已通过', '已退回'];
     labels.reduce((previousIndex, label) => {
       const index = html.indexOf(`>${label} <span>`);
       expect(index).toBeGreaterThan(previousIndex);

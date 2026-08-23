@@ -19,6 +19,7 @@ import type {
   InvoiceCurrency,
   InvoiceDocumentModel,
   InvoiceEntity,
+  DocumentPayoutSnapshot,
   Payout,
 } from '../types';
 import { formatInvoiceNumber, invoiceDatePart, nextInvoiceNumber } from './invoiceUtils';
@@ -200,6 +201,8 @@ export type ExternalInvoiceCollectionInput = {
   creatorName: string;
   creatorHandle: string;
   contractIds: ContractId[];
+  presetPayoutAccountId: string;
+  presetPayoutAccountSnapshot: DocumentPayoutSnapshot;
   expected: ExternalInvoiceExpectedValues;
 };
 
@@ -215,6 +218,8 @@ export type ExternalInvoiceCollectionRecord = {
   creatorName: string;
   creatorHandle: string;
   contractIds: ContractId[];
+  presetPayoutAccountId: string;
+  presetPayoutAccountSnapshot: DocumentPayoutSnapshot;
   expected: ExternalInvoiceExpectedValues;
   status: ExternalInvoiceCollectionStatus;
   selectedPayoutAccountId?: string;
@@ -300,6 +305,8 @@ export const createExternalInvoiceCollection = ({
   creatorName,
   creatorHandle,
   contractIds,
+  presetPayoutAccountId,
+  presetPayoutAccountSnapshot,
   expected,
   actor,
   publish,
@@ -309,6 +316,13 @@ export const createExternalInvoiceCollection = ({
   publish: boolean;
   occurredAt?: string;
 }): ExternalInvoiceCollectionRecord => {
+  if (
+    !presetPayoutAccountId
+    || presetPayoutAccountSnapshot.payoutAccountId !== presetPayoutAccountId
+    || !['VALIDATED', 'VERIFIED'].includes(presetPayoutAccountSnapshot.validationStatus ?? '')
+  ) {
+    throw new Error('请先在达人档案中设置默认且已审核的收款账户。');
+  }
   const status: ExternalInvoiceCollectionStatus = publish ? 'WAITING_UPLOAD' : 'DRAFT';
   return {
     invoiceId: createPrototypeId('invoice') as InvoiceId,
@@ -320,6 +334,8 @@ export const createExternalInvoiceCollection = ({
     creatorName,
     creatorHandle,
     contractIds,
+    presetPayoutAccountId,
+    presetPayoutAccountSnapshot: { ...presetPayoutAccountSnapshot },
     expected,
     status,
     sourceFileVersions: [],

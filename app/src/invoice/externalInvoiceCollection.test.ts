@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import type { CreatorProfile, InvoiceEntity } from '../types';
+import { createDocumentPayoutSnapshot } from '../payoutAccounts';
 import {
   EXTERNAL_INVOICE_REVIEW_FIELD_ORDER,
   buildApprovedExternalInvoice,
@@ -50,6 +51,8 @@ const creator: CreatorProfile = {
 const actor = { account: 'media.demo', name: 'Media Reviewer', role: '媒介' };
 const creatorActor = { account: 'creator.demo', name: 'Alicia Lin', role: '达人账号' };
 const invoiceEntity: InvoiceEntity = { name: 'Comets Global Ltd.', address: 'Hong Kong' };
+const presetPayoutAccount = creator.payoutAccounts[0];
+const presetPayoutAccountId = 'payout-account-alicia';
 
 const createRecord = (publish = true) => createExternalInvoiceCollection({
   projectId: 'project-external-1' as ProjectId,
@@ -59,6 +62,8 @@ const createRecord = (publish = true) => createExternalInvoiceCollection({
   creatorName: creator.name,
   creatorHandle: creator.handle,
   contractIds: [],
+  presetPayoutAccountId,
+  presetPayoutAccountSnapshot: createDocumentPayoutSnapshot(presetPayoutAccount, creatorId),
   expected: {
     amount: 4800,
     currency: 'USD',
@@ -102,11 +107,42 @@ describe('external Invoice collection workflow', () => {
   it('saves a draft before publishing it to the creator', () => {
     const draft = createRecord(false);
     expect(draft.invoiceNumber).toBeUndefined();
+    expect(draft.presetPayoutAccountId).toBe(presetPayoutAccountId);
+    expect(draft.presetPayoutAccountSnapshot).toMatchObject({
+      payoutAccountId: presetPayoutAccountId,
+      validationStatus: 'VERIFIED',
+    });
     expect(draft.reviewHistory.map((event) => event.action)).toEqual(['CREATED']);
 
     const published = publishExternalInvoiceCollection(draft, actor, '2026-08-20T01:15:00.000Z');
     expect(published.status).toBe('WAITING_UPLOAD');
     expect(published.reviewHistory[published.reviewHistory.length - 1]?.action).toBe('PUBLISHED');
+  });
+
+  it('rejects a collection without a verified preset payout account snapshot', () => {
+    expect(() => createExternalInvoiceCollection({
+      projectId: 'project-external-1' as ProjectId,
+      projectName: 'Global Creator Campaign',
+      engagementId: 'engagement-external-1' as EngagementId,
+      creatorId,
+      creatorName: creator.name,
+      creatorHandle: creator.handle,
+      contractIds: [],
+      presetPayoutAccountId,
+      presetPayoutAccountSnapshot: {
+        ...createDocumentPayoutSnapshot(presetPayoutAccount, creatorId),
+        validationStatus: 'READY_FOR_VALIDATION',
+      },
+      expected: {
+        amount: 4800,
+        currency: 'USD',
+        advertiser: invoiceEntity.name,
+        description: 'Creator production service',
+        dueDate: '2026-09-05',
+      },
+      actor,
+      publish: false,
+    })).toThrow('默认且已审核的收款账户');
   });
 
   it('preserves source, first recognition and corrected confirmation as separate layers', () => {

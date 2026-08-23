@@ -120,6 +120,12 @@
   transform: scale(var(--invoice-review-zoom));
   transform-origin: top left;
 }
+.invoice-review-workspace.is-document-unavailable .invoice-review-document-stage {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  transform: none;
+}
 .invoice-review-document-stage .invoice-paper { max-width: none; }
 .invoice-review-document-stage [data-review-evidence],
 .invoice-review-document-stage .invoice-paper-number,
@@ -173,6 +179,7 @@
 .invoice-review-status-chip.is-warning { border-color: #ecd3ad; background: #fff6e8; color: #8a511d; }
 .invoice-review-issue-count.is-clear,
 .invoice-review-status-chip.is-success { border-color: #c9e2d6; background: #edf8f3; color: #2c7156; }
+.invoice-review-issue-count.is-pending { border-color: #d9dde4; background: #f4f5f7; color: #656d7a; }
 .invoice-review-status-chip.is-danger { border-color: #ecc8cc; background: #fcedef; color: #a43e48; }
 
 .invoice-review-tabs {
@@ -271,6 +278,19 @@
 .invoice-review-no-contract small { font-size: 10.5px; line-height: 1.4; }
 .invoice-review-clear-summary,
 .invoice-review-no-contract { border-color: #cbe3d7; background: #f0f8f4; color: #2c7156; font-size: 11.5px; }
+.invoice-review-pending-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #d9dde4;
+  border-radius: 7px;
+  background: #f7f8fa;
+  padding: 12px;
+  color: #68717e;
+}
+.invoice-review-pending-state > span { display: grid; gap: 3px; }
+.invoice-review-pending-state strong { color: #414853; font-size: 12px; }
+.invoice-review-pending-state small { font-size: 10.5px; line-height: 1.5; }
 
 .invoice-review-field-list { display: grid; border-top: 1px solid #e4e7ec; }
 .invoice-review-field-row {
@@ -361,6 +381,9 @@
 .invoice-review-completion strong { font-size: 11px; }
 .invoice-review-completion p { max-width: 420px; margin: 0; color: #a13e47; font-size: 9.5px; line-height: 1.4; }
 .invoice-review-completion p:not([role='alert']) { color: #39735a; }
+.invoice-review-completion p.is-neutral { color: #68717e; }
+.invoice-review-completion p.is-danger { color: #a13e47; }
+.invoice-review-completion p.is-success { color: #39735a; }
 .invoice-review-footer-buttons { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .invoice-review-footer-buttons .button { min-height: 36px; padding: 0 11px; font-size: 10.5px; }
 
