@@ -337,7 +337,7 @@
 .invoice-row-status.is-review { background: #fff5d9; color: #8a6414; }
 .invoice-row-status.is-recheck { background: #f9e9f4; color: #984e7e; }
 .invoice-row-status.is-request { background: #e9f1fd; color: #34649b; }
-.invoice-row-status.is-approved { background: #e8f6ee; color: #207a55; }
+.invoice-row-status.is-approved { background: #e9f1fd; color: #34649b; }
 .invoice-row-status.is-oa { background: #e9ebf8; color: #454f8f; }
 .invoice-row-status.is-paying { background: #fff5d9; color: #8a6414; }
 .invoice-row-status.is-paid { background: #dff1e7; color: #1e6848; }
