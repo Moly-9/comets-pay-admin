@@ -43,7 +43,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
@@ -56,9 +56,12 @@ import { Pagination, usePagination } from '../components/Pagination';
 import { InvoiceManagementTable } from '../components/InvoiceManagementTable';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
+  filterInvoiceManagementRows,
   findInvoiceRequest,
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
+  INVOICE_MANAGEMENT_STATUSES_BY_TAB,
+  type InvoiceManagementFilters,
   type InvoiceManagementRow,
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
@@ -2818,6 +2821,23 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
   );
 }
 
+const INVOICE_PROVIDER_FILTER_OPTIONS: SelectOption<InvoiceManagementFilters['provider']>[] = [
+  { value: 'all', label: '全部付款渠道' },
+  { value: 'Airwallex', label: 'Airwallex' },
+  { value: 'PayPal', label: 'PayPal' },
+  { value: 'PayMax', label: 'Payer Max' },
+];
+
+const INVOICE_TYPE_FILTER_OPTIONS: SelectOption<InvoiceManagementFilters['invoiceType']>[] = [
+  { value: 'all', label: '全部 Invoice 类型' },
+  { value: 'INTERNAL', label: '内部 Invoice' },
+  { value: 'EXTERNAL', label: '外部 Invoice' },
+];
+
+const invoiceTypeFilterVisible = (tab: InvoicePageTab) => (
+  tab === 'review' || tab === 'approved' || tab === 'returned'
+);
+
 export function InvoicePage({
   payouts,
   creators,
@@ -2916,6 +2936,10 @@ export function InvoicePage({
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
+  const [selectedProjectKeys, setSelectedProjectKeys] = useState<string[]>([]);
+  const [providerFilter, setProviderFilter] = useState<InvoiceManagementFilters['provider']>('all');
+  const [statusFilter, setStatusFilter] = useState<InvoiceManagementFilters['status']>('all');
+  const [invoiceTypeFilter, setInvoiceTypeFilter] = useState<InvoiceManagementFilters['invoiceType']>('all');
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedExternalInvoiceId, setSelectedExternalInvoiceId] = useState<string | null>(null);
   const [showExternalCreate, setShowExternalCreate] = useState(false);
@@ -3036,6 +3060,7 @@ export function InvoicePage({
         ?? '待补充',
       initials: identity.initials,
       accent: identity.accent,
+      projectKey: String(snapshot?.projectId ?? payout.projectId ?? snapshot?.projectName ?? payout.project),
       projectName: snapshot?.projectName ?? payout.project,
       invoiceNumber: snapshot?.invoiceNumber ?? payout.invoice,
       provider: payout.provider,
@@ -3072,6 +3097,7 @@ export function InvoicePage({
       initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
       accent: creator?.accent ?? '#9c6f93',
       issuerName: creator?.contact.legalName ?? '待补充',
+      projectKey: String(record.projectId ?? record.projectName),
       projectName: record.projectName,
       invoiceNumber: externalInvoicePageTab(record.status) === 'upload'
         ? '待生成'
@@ -3107,17 +3133,65 @@ export function InvoicePage({
   internalRows.forEach((row) => {
     if (row.source.kind === 'payout') groupedRows[managementViewFor(row.source.payout).tab].push(row);
   });
-  const query = search.trim().toLowerCase();
-  const visibleRows = query
-    ? groupedRows[tab].filter((row) => (
-        `${row.creatorName} ${row.channelId} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
-          .toLowerCase()
-          .includes(query)
-      ))
-    : groupedRows[tab];
+  const currentTabRows = groupedRows[tab];
+  const projectCounts = new Map<string, { label: string; count: number }>();
+  currentTabRows.forEach((row) => {
+    const current = projectCounts.get(row.projectKey);
+    projectCounts.set(row.projectKey, {
+      label: row.projectName,
+      count: (current?.count ?? 0) + 1,
+    });
+  });
+  const projectFilterOptions: SearchableMultiFilterOption[] = [...projectCounts.entries()]
+    .map(([value, project]) => ({
+      value,
+      label: project.label,
+      description: `${project.count} 个 Invoice`,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'));
+  const validProjectKeys = new Set(projectFilterOptions.map((option) => option.value));
+  const effectiveProjectKeys = selectedProjectKeys.filter((projectKey) => validProjectKeys.has(projectKey));
+  const effectiveStatusFilter = statusFilter === 'all'
+    || INVOICE_MANAGEMENT_STATUSES_BY_TAB[tab].includes(statusFilter)
+    ? statusFilter
+    : 'all';
+  const showInvoiceTypeFilter = invoiceTypeFilterVisible(tab);
+  const statusFilterOptions: SelectOption<InvoiceManagementFilters['status']>[] = [
+    { value: 'all', label: '全部状态' },
+    ...INVOICE_MANAGEMENT_STATUSES_BY_TAB[tab].map((status) => ({ value: status, label: status })),
+  ];
+  const visibleRows = filterInvoiceManagementRows(currentTabRows, {
+    search,
+    projectKeys: effectiveProjectKeys,
+    provider: providerFilter,
+    status: effectiveStatusFilter,
+    invoiceType: showInvoiceTypeFilter ? invoiceTypeFilter : 'all',
+  });
+  const hasActiveFilters = Boolean(
+    search.trim()
+    || effectiveProjectKeys.length
+    || providerFilter !== 'all'
+    || effectiveStatusFilter !== 'all'
+    || (showInvoiceTypeFilter && invoiceTypeFilter !== 'all')
+  );
+
+  const resetInvoiceFilters = () => {
+    setSearch('');
+    setSelectedProjectKeys([]);
+    setProviderFilter('all');
+    setStatusFilter('all');
+    setInvoiceTypeFilter('all');
+  };
+
+  useEffect(() => {
+    setSelectedProjectKeys([]);
+    setProviderFilter('all');
+    setStatusFilter('all');
+    setInvoiceTypeFilter('all');
+  }, [tab]);
   useEffect(() => {
     setSelectedRowIds(new Set());
-  }, [search, tab]);
+  }, [invoiceTypeFilter, providerFilter, search, selectedProjectKeys, statusFilter, tab]);
   const selectionEnabled = tab === 'signature' || tab === 'upload';
   const selectableRowIds = new Set(visibleRows.filter((row) => (
     (tab === 'signature' && row.invoiceType === 'INTERNAL' && row.status === '草稿')
@@ -3293,19 +3367,76 @@ export function InvoicePage({
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedRows.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedRows.returned.length}</span></button>
         </div>
-        <div className="content-toolbar compact-toolbar">
-          <SearchBar value={search} onChange={setSearch} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
-          <div className="invoice-list-toolbar-actions">
-            {selectionEnabled ? (
-              <Button
-                icon={<Send size={16} />}
-                disabled={!selectedPublishRows.length}
-                onClick={publishSelectedRows}
-              >
-                一键发布{selectedPublishRows.length ? `（${selectedPublishRows.length}）` : ''}
-              </Button>
+        <div className="invoice-list-filter-panel" aria-label="Invoice 列表筛选">
+          <div className="invoice-list-filter-fields">
+            <div className="project-filter-field invoice-list-filter-search">
+              <span className="project-filter-field-label">搜索</span>
+              <SearchBar value={search} onChange={setSearch} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
+            </div>
+            <SearchableMultiFilter
+              className="invoice-list-filter-project"
+              label="关联项目"
+              placeholder="全部关联项目"
+              searchPlaceholder="搜索关联项目"
+              options={projectFilterOptions}
+              selected={effectiveProjectKeys}
+              onChange={setSelectedProjectKeys}
+            />
+            <div className="project-filter-field invoice-list-filter-provider">
+              <span className="project-filter-field-label">付款渠道</span>
+              <SelectField
+                ariaLabel="付款渠道筛选"
+                variant="form"
+                menuStrategy="fixed"
+                value={providerFilter}
+                options={INVOICE_PROVIDER_FILTER_OPTIONS}
+                onChange={setProviderFilter}
+              />
+            </div>
+            <div className="project-filter-field invoice-list-filter-status">
+              <span className="project-filter-field-label">状态</span>
+              <SelectField
+                ariaLabel="Invoice 状态筛选"
+                variant="form"
+                menuStrategy="fixed"
+                value={effectiveStatusFilter}
+                options={statusFilterOptions}
+                onChange={setStatusFilter}
+              />
+            </div>
+            {showInvoiceTypeFilter ? (
+              <div className="project-filter-field invoice-list-filter-type">
+                <span className="project-filter-field-label">Invoice 类型</span>
+                <SelectField
+                  ariaLabel="Invoice 类型筛选"
+                  variant="form"
+                  menuStrategy="fixed"
+                  value={invoiceTypeFilter}
+                  options={INVOICE_TYPE_FILTER_OPTIONS}
+                  onChange={setInvoiceTypeFilter}
+                />
+              </div>
             ) : null}
-            <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
+          </div>
+          <div className="invoice-list-filter-footer">
+            <div className="invoice-list-filter-summary">
+              <span>已显示 <strong>{visibleRows.length}</strong> / {currentTabRows.length} 条</span>
+              {hasActiveFilters ? (
+                <button type="button" onClick={resetInvoiceFilters}><X size={13} />重置筛选</button>
+              ) : null}
+            </div>
+            <div className="invoice-list-toolbar-actions">
+              {selectionEnabled ? (
+                <Button
+                  icon={<Send size={16} />}
+                  disabled={!selectedPublishRows.length}
+                  onClick={publishSelectedRows}
+                >
+                  一键发布{selectedPublishRows.length ? `（${selectedPublishRows.length}）` : ''}
+                </Button>
+              ) : null}
+              <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
+            </div>
           </div>
         </div>
         <InvoiceManagementTable

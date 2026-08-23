@@ -3,8 +3,10 @@ import type { RequestApprovalState } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import type { Payout } from '../types';
 import {
+  filterInvoiceManagementRows,
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
+  type InvoiceManagementRow,
 } from './invoiceManagement';
 
 const payout = (invoiceReviewStatus: Payout['invoiceReviewStatus'], status: Payout['status'] = '未进入付款') => ({
@@ -46,6 +48,27 @@ const fullPayout = (overrides: Partial<Payout> = {}): Payout => ({
   ...overrides,
 });
 
+const managementRow = (overrides: Partial<InvoiceManagementRow> = {}): InvoiceManagementRow => ({
+  rowId: 'payout:payout-test',
+  invoiceId: 'invoice-test',
+  invoiceType: 'INTERNAL',
+  creatorName: 'Test Creator',
+  channelId: '@test',
+  issuerName: 'Test Creator Limited',
+  initials: 'TC',
+  accent: '#64748b',
+  projectKey: 'project-test',
+  projectName: 'Test Project',
+  invoiceNumber: 'INV-TEST',
+  provider: 'Airwallex',
+  status: '已通过',
+  currency: 'USD',
+  amount: 100,
+  actionLabel: '查看详情',
+  source: { kind: 'payout', payout: fullPayout() },
+  ...overrides,
+});
+
 const returnedRequest = (issueType?: 'INVOICE_CONTENT' | 'PAYMENT_LIST'): PaymentRequestProjectLike => {
   const base = request('RETURNED_TO_MEDIA_REVIEW', 'RETURNED');
   if (!issueType || !base.approval) return base;
@@ -82,6 +105,46 @@ const returnedRequest = (issueType?: 'INVOICE_CONTENT' | 'PAYMENT_LIST'): Paymen
 };
 
 describe('Invoice management presentation', () => {
+  it('combines project, provider, status and Invoice type filters', () => {
+    const rows = [
+      managementRow(),
+      managementRow({
+        rowId: 'payout:payout-paypal',
+        invoiceId: 'invoice-paypal',
+        invoiceType: 'EXTERNAL',
+        projectKey: 'project-other',
+        projectName: 'Other Project',
+        invoiceNumber: 'INV-PAYPAL',
+        provider: 'PayPal',
+        status: '付款中',
+      }),
+      managementRow({
+        rowId: 'payout:payout-paymax',
+        invoiceId: 'invoice-paymax',
+        projectKey: 'project-test',
+        invoiceNumber: 'INV-PAYMAX',
+        provider: 'PayMax',
+        status: '已付款',
+      }),
+    ];
+
+    expect(filterInvoiceManagementRows(rows, {
+      search: '',
+      projectKeys: ['project-other'],
+      provider: 'PayPal',
+      status: '付款中',
+      invoiceType: 'EXTERNAL',
+    }).map((row) => row.invoiceId)).toEqual(['invoice-paypal']);
+
+    expect(filterInvoiceManagementRows(rows, {
+      search: 'paymax',
+      projectKeys: ['project-test', 'project-other'],
+      provider: 'all',
+      status: 'all',
+      invoiceType: 'all',
+    }).map((row) => row.invoiceId)).toEqual(['invoice-paymax']);
+  });
+
   it('uses the expected management groups without an approval tab', () => {
     expect(getInvoiceManagementView(payout('草稿'))).toMatchObject({ tab: 'signature', status: '草稿' });
     expect(getInvoiceManagementView(payout('待签署'))).toMatchObject({ tab: 'signature', status: '待签署' });

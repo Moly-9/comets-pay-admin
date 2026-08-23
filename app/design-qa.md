@@ -244,6 +244,51 @@ final result: passed for the Batch Invoice result-list scope
 
 ---
 
+# Design QA - Invoice 列表组合筛选
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-623a3b25-25e9-445f-acd9-a30e3fff2483.png` (`409 x 402`).
+- Browser-rendered desktop implementation: `app/design-qa-invoice-filters-desktop.png` (`1280 x 720`).
+- Browser-rendered responsive implementation: `app/design-qa-invoice-filters-mobile.png` (`375 x 1228` full-page capture from a `390 x 844` viewport override).
+- Desktop state: Invoice 管理“待签署”，关联项目筛选展开。
+- Responsive state: Invoice 管理“已退回”，展示搜索、关联项目、付款渠道、状态和 Invoice 类型五个筛选项。
+- Density normalization: source and implementation were inspected at device pixel ratio `1`; the source is a focused component crop, so no full-page pixel alignment was inferred from it.
+
+## Comparison evidence
+
+- The source reference, desktop implementation and responsive implementation were opened together in one comparison input.
+- The focused source demonstrates the required labeled searchable dropdown: bordered trigger, highlighted open state, in-menu search, selectable project rows and secondary counts.
+- The implementation reuses the system's existing `SearchableMultiFilter`, preserving the same trigger radius, subtle coral focus ring, searchable popup, circular selection marker and per-project Invoice counts.
+- A separate focused-region crop was not required because the source itself is already a focused filter-component crop and the desktop screenshot keeps the matching implementation readable at full size.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; existing Noto Sans SC typography and compact label hierarchy are preserved without viewport-scaled type or clipped labels.
+- Spacing and layout rhythm: passed; desktop filters align in one wrapping row, labels share a baseline, and the popup is anchored directly below the project trigger. At 390px all filter fields become equal-width single-column controls.
+- Colors and visual tokens: passed; neutral borders, white surfaces, muted placeholder text and coral open-state focus follow the supplied reference and current COMETS Pay tokens.
+- Image quality and asset fidelity: passed; this interaction requires no raster assets. Search and chevron controls use the project's existing icon library.
+- Copy and content: passed; the page exposes关联项目、付款渠道、状态，以及指定页签下的 Invoice 类型；付款渠道包含 Airwallex、PayPal 和 Payer Max.
+
+## Interaction, responsive and technical checks
+
+- 关联项目支持菜单内搜索、多选、按项目展示 Invoice 数量、组合筛选和一键重置。
+- 五个页签的状态选项分别符合各自生命周期；Invoice 类型只在待审核、已通过、已退回显示。
+- 页签切换会恢复默认筛选，避免上一页签的状态条件污染新页签。
+- 390px 下每个筛选控件宽 `317px`，均位于筛选面板边界内；document `scrollWidth === clientWidth === 375px`，没有页面级横向溢出。
+- 浏览器控制台无 warning/error；仅有 Vite 连接与 React DevTools 开发提示。
+- TypeScript 检查通过；完整 Vitest 为 `92` 个文件、`629` 项测试通过；Vite 生产构建通过，仅保留既有 chunk-size 提示。
+
+## Findings and comparison history
+
+1. 初始实现没有剩余 P0/P1/P2 视觉问题；参考图对应的项目搜索下拉已由系统现有组件完整复用。
+2. 验收中清理了一处 390px 工具栏重复 CSS 声明，不改变视觉行为。
+3. 最终桌面、五页签交互和 390px 复查未发现可执行的 P0、P1 或 P2 问题。
+
+final result: passed
+
+---
+
 # Design QA - Batch Invoice 演示数据与宽松合同校验
 
 ## Evidence

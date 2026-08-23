@@ -107,7 +107,7 @@ const renderInvoicePage = (
     generatedInvoices?: GeneratedInvoiceRecord[];
     creators?: CreatorProfile[];
     requests?: RequestProjectSummary[];
-    tab?: 'signature' | 'review' | 'approved' | 'returned';
+    tab?: 'signature' | 'upload' | 'review' | 'approved' | 'returned';
     focusedInvoiceId?: string | null;
     canEditProjectResourceInvoice?: boolean;
   } = {},
@@ -215,6 +215,30 @@ describe('InvoicePage list columns', () => {
       expect(index).toBeGreaterThan(previousIndex);
       return index;
     }, -1);
+  });
+
+  it('shows common filters on every tab and limits Invoice type to review result tabs', () => {
+    const signatureHtml = renderInvoicePage(true);
+    expect(signatureHtml).toContain('aria-label="Invoice 列表筛选"');
+    expect(signatureHtml).toContain('aria-label="关联项目筛选"');
+    expect(signatureHtml).toContain('全部关联项目');
+    expect(signatureHtml).toContain('aria-label="付款渠道筛选"');
+    expect(signatureHtml).toContain('全部付款渠道');
+    expect(signatureHtml).toContain('aria-label="Invoice 状态筛选"');
+    expect(signatureHtml).toContain('全部状态');
+    expect(signatureHtml).not.toContain('aria-label="Invoice 类型筛选"');
+
+    const reviewHtml = renderInvoicePage(true, {
+      payouts: [{ ...payout, invoiceReviewStatus: '待媒介审核' }],
+      generatedInvoices: [{ ...record, status: '待媒介审核' }],
+      tab: 'review',
+    });
+    expect(reviewHtml).toContain('aria-label="Invoice 类型筛选"');
+    expect(reviewHtml).toContain('全部 Invoice 类型');
+
+    const uploadHtml = renderInvoicePage(true, { tab: 'upload' });
+    expect(uploadHtml).toContain('aria-label="关联项目筛选"');
+    expect(uploadHtml).not.toContain('aria-label="Invoice 类型筛选"');
   });
 
   it('keeps creator feedback rows on the detail-first flow', () => {

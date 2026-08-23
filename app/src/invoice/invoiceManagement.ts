@@ -30,6 +30,7 @@ export type InvoiceManagementRow = {
   issuerName: string;
   initials: string;
   accent: string;
+  projectKey: string;
   projectName: string;
   invoiceNumber: string;
   provider?: Exclude<Provider, '手动打款'>;
@@ -42,6 +43,43 @@ export type InvoiceManagementRow = {
   additionalActionLabel?: string;
   returnReason?: string;
   returnSourceLabel?: string;
+};
+
+export type InvoiceManagementFilters = {
+  search: string;
+  projectKeys: string[];
+  provider: 'all' | Exclude<Provider, '手动打款'>;
+  status: 'all' | InvoiceManagementStatus;
+  invoiceType: 'all' | InvoiceType;
+};
+
+export const INVOICE_MANAGEMENT_STATUSES_BY_TAB: Record<InvoicePageTab, InvoiceManagementStatus[]> = {
+  signature: ['草稿', '待签署'],
+  upload: ['待发布', '待上传', '待重新上传'],
+  review: ['达人反馈', '待审核', '待复核'],
+  approved: ['待发起请款', '已通过', 'OA审批中', '付款中', '已付款'],
+  returned: ['已退回'],
+};
+
+export const filterInvoiceManagementRows = (
+  rows: InvoiceManagementRow[],
+  filters: InvoiceManagementFilters,
+) => {
+  const query = filters.search.trim().toLowerCase();
+  const selectedProjects = new Set(filters.projectKeys);
+
+  return rows.filter((row) => {
+    const matchesSearch = !query || (
+      `${row.creatorName} ${row.channelId} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
+        .toLowerCase()
+        .includes(query)
+    );
+    const matchesProject = selectedProjects.size === 0 || selectedProjects.has(row.projectKey);
+    const matchesProvider = filters.provider === 'all' || row.provider === filters.provider;
+    const matchesStatus = filters.status === 'all' || row.status === filters.status;
+    const matchesInvoiceType = filters.invoiceType === 'all' || row.invoiceType === filters.invoiceType;
+    return matchesSearch && matchesProject && matchesProvider && matchesStatus && matchesInvoiceType;
+  });
 };
 
 export type InvoiceManagementView = {
