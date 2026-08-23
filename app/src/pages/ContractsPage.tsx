@@ -1,6 +1,8 @@
-import { AlertTriangle, Download, FilePlus2, Search, Trash2, Upload } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Modal, PageHeading } from '../components/Common';
+import { AlertTriangle, CalendarDays, Check, ChevronDown, Download, FilePlus2, FolderKanban, Search, Trash2, Upload, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, Modal, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { Pagination, usePagination } from '../components/Pagination';
 import {
@@ -59,6 +61,237 @@ const projectDisplayFor = (contract: ContractRecord, projects: ProjectSummary[])
     code: project?.cooperationProjectCode || project?.projectCode || (projectId ? String(projectId) : ''),
   };
 };
+
+const projectFilterKeyFor = (contract: ContractRecord, projects: ProjectSummary[]) => {
+  const projectId = contract.cooperationProjectId ?? contract.projectId;
+  if (projectId) return `project:${String(projectId)}`;
+  return `name:${projectDisplayFor(contract, projects).name.trim().toLowerCase()}`;
+};
+
+type ContractProjectFilterOption = {
+  value: string;
+  label: string;
+  description?: string;
+  searchText?: string;
+};
+
+function ContractProjectFilter({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: ContractProjectFilterOption[];
+  onChange: (value: string) => void;
+}) {
+  const listboxId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>();
+  const selected = options.find((option) => option.value === value) ?? options[0];
+  const visibleOptions = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return options;
+    return options.filter((option) => (
+      `${option.label} ${option.description ?? ''} ${option.searchText ?? ''}`
+        .toLowerCase()
+        .includes(normalized)
+    ));
+  }, [options, query]);
+
+  const updateMenuStyle = () => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const margin = 12;
+    const gap = 7;
+    const availableWidth = Math.max(0, window.innerWidth - margin * 2);
+    const width = Math.min(Math.max(rect.width, 320), availableWidth);
+    const left = Math.min(
+      Math.max(rect.left, margin),
+      Math.max(margin, window.innerWidth - margin - width),
+    );
+    const estimatedHeight = Math.min(320, 44 + options.length * 49);
+    const roomBelow = window.innerHeight - rect.bottom - margin - gap;
+    const roomAbove = rect.top - margin - gap;
+    const placeAbove = roomBelow < estimatedHeight && roomAbove > roomBelow;
+    const availableHeight = placeAbove ? roomAbove : roomBelow;
+    setMenuStyle({
+      bottom: placeAbove ? window.innerHeight - rect.top + gap : undefined,
+      left,
+      maxHeight: Math.max(96, Math.min(320, availableHeight)),
+      top: placeAbove ? undefined : rect.bottom + gap,
+      width,
+    });
+  };
+
+  const openMenu = () => {
+    if (open) return;
+    setQuery('');
+    setActiveIndex(Math.max(options.findIndex((option) => option.value === value), 0));
+    updateMenuStyle();
+    setOpen(true);
+  };
+
+  const closeMenu = () => {
+    setQuery('');
+    setOpen(false);
+  };
+
+  const choose = (option: ContractProjectFilterOption) => {
+    onChange(option.value);
+    closeMenu();
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) closeMenu();
+    };
+    window.addEventListener('resize', updateMenuStyle);
+    window.addEventListener('scroll', updateMenuStyle, true);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      window.removeEventListener('resize', updateMenuStyle);
+      window.removeEventListener('scroll', updateMenuStyle, true);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [open, options.length]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!open) {
+        openMenu();
+        return;
+      }
+      setActiveIndex((index) => {
+        const lastIndex = Math.max(visibleOptions.length - 1, 0);
+        return event.key === 'ArrowDown' ? Math.min(index + 1, lastIndex) : Math.max(index - 1, 0);
+      });
+    } else if (event.key === 'Enter' && open) {
+      event.preventDefault();
+      const option = visibleOptions[activeIndex];
+      if (option) choose(option);
+    } else if (event.key === 'Escape' && open) {
+      event.preventDefault();
+      closeMenu();
+    }
+  };
+
+  const menu = open ? (
+    <div
+      ref={menuRef}
+      id={listboxId}
+      className="custom-select-menu custom-select-menu-toolbar custom-select-menu-fixed contract-project-filter-menu"
+      role="listbox"
+      aria-label="关联项目选项"
+      style={menuStyle}
+    >
+      <div className="contract-project-filter-count">{visibleOptions.length} 个项目选项</div>
+      {visibleOptions.map((option, index) => {
+        const optionSelected = option.value === value;
+        return (
+          <button
+            id={`${listboxId}-option-${index}`}
+            className={`custom-select-option${optionSelected ? ' custom-select-option-selected' : ''}${activeIndex === index ? ' contract-project-filter-option-active' : ''}`}
+            type="button"
+            role="option"
+            aria-selected={optionSelected}
+            tabIndex={-1}
+            key={option.value || 'all-projects'}
+            onPointerDown={(event) => event.preventDefault()}
+            onMouseEnter={() => setActiveIndex(index)}
+            onClick={() => choose(option)}
+          >
+            <span className="custom-select-option-copy">
+              <span className="custom-select-option-label">{option.label}</span>
+              {option.description ? <span className="custom-select-option-description">{option.description}</span> : null}
+            </span>
+            <span className="custom-select-option-check" aria-hidden="true">
+              {optionSelected ? <Check size={15} strokeWidth={2.6} /> : null}
+            </span>
+          </button>
+        );
+      })}
+      {!visibleOptions.length ? <div className="contract-project-filter-empty" role="status">没有匹配的关联项目</div> : null}
+    </div>
+  ) : null;
+
+  return (
+    <div
+      ref={rootRef}
+      className={`contract-project-filter${open ? ' is-open' : ''}`}
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget as Node | null;
+        if (event.currentTarget.contains(nextTarget) || menuRef.current?.contains(nextTarget)) return;
+        closeMenu();
+      }}
+    >
+      <div className="search-control contract-project-filter-input">
+        <FolderKanban size={16} aria-hidden="true" />
+        <input
+          ref={inputRef}
+          role="combobox"
+          aria-label="筛选关联项目"
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-expanded={open}
+          aria-activedescendant={open && visibleOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
+          autoComplete="off"
+          placeholder="输入项目名称或编号"
+          value={open ? query : selected?.label ?? ''}
+          onFocus={openMenu}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            if (!open) openMenu();
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {value ? (
+          <button
+            className="contract-project-filter-clear"
+            type="button"
+            aria-label="清除关联项目筛选"
+            title="清除关联项目筛选"
+            onClick={() => {
+              onChange('');
+              closeMenu();
+              window.requestAnimationFrame(() => inputRef.current?.focus());
+            }}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        ) : null}
+        <button
+          className="contract-project-filter-toggle"
+          type="button"
+          aria-label={open ? '收起关联项目选项' : '展开关联项目选项'}
+          title={open ? '收起关联项目选项' : '展开关联项目选项'}
+          onClick={() => {
+            if (open) closeMenu();
+            else {
+              openMenu();
+              window.requestAnimationFrame(() => inputRef.current?.focus());
+            }
+          }}
+        >
+          <ChevronDown size={16} aria-hidden="true" />
+        </button>
+      </div>
+      {menu && typeof document !== 'undefined' ? createPortal(menu, document.body) : null}
+    </div>
+  );
+}
 
 const templateReadinessFor = (contract: ContractRecord) => {
   const blockerCount = contract.issues.filter((issue) => issue.severity === 'blocker').length;
@@ -140,6 +373,7 @@ export function ContractsPage({
   );
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ContractFilter>('all');
+  const [projectFilter, setProjectFilter] = useState('');
   const [validityFilter, setValidityFilter] = useState<ContractValidityFilter>('all');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(focusedContractId);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -161,6 +395,31 @@ export function ContractsPage({
     return [...merged.values()];
   }, [projectDirectory, projects]);
 
+  const projectFilterOptions = useMemo<ContractProjectFilterOption[]>(() => {
+    const optionsByValue = new Map<string, ContractProjectFilterOption>();
+    contracts.filter((contract) => !contract.isTemplate).forEach((contract) => {
+      const display = projectDisplayFor(contract, displayProjects);
+      const value = projectFilterKeyFor(contract, displayProjects);
+      if (optionsByValue.has(value)) return;
+      optionsByValue.set(value, {
+        value,
+        label: display.name,
+        description: display.code || contract.brand || undefined,
+        searchText: `${display.name} ${display.code} ${contract.brand}`,
+      });
+    });
+    return [
+      { value: '', label: '全部关联项目', description: '不限制关联项目', searchText: '全部' },
+      ...[...optionsByValue.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
+    ];
+  }, [contracts, displayProjects]);
+
+  useEffect(() => {
+    if (projectFilter && !projectFilterOptions.some((option) => option.value === projectFilter)) {
+      setProjectFilter('');
+    }
+  }, [projectFilter, projectFilterOptions]);
+
   const filteredContracts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return contracts.filter((contract) => {
@@ -179,16 +438,19 @@ export function ContractsPage({
       );
       const matchesValidity = contract.isTemplate
         || contractMatchesValidityFilter(contract, validityFilter, referenceDate);
-      return matchesQuery && matchesFilter && matchesValidity;
+      const matchesProject = contract.isTemplate
+        || !projectFilter
+        || projectFilterKeyFor(contract, displayProjects) === projectFilter;
+      return matchesQuery && matchesFilter && matchesProject && matchesValidity;
     });
-  }, [contracts, creators, displayProjects, filter, referenceDate, search, validityFilter]);
+  }, [contracts, creators, displayProjects, filter, projectFilter, referenceDate, search, validityFilter]);
   const {
     page,
     pageItems: visible,
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}\u0000${validityFilter}` });
+  } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}\u0000${projectFilter}\u0000${validityFilter}` });
 
   const readyCount = contracts.filter((contract) => (
     isContractAvailableForNewAssociation(contract, referenceDate)
@@ -379,24 +641,6 @@ export function ContractsPage({
             </div>
           ) : null}
         </div>
-        {!isTemplateTab ? (
-          <div className="contract-validity-filter-row">
-            <span>有效期：</span>
-            <div role="group" aria-label="有效期筛选">
-              {CONTRACT_VALIDITY_FILTERS.map((item) => (
-                <button
-                  className={validityFilter === item.value ? 'is-active' : ''}
-                  type="button"
-                  aria-pressed={validityFilter === item.value}
-                  key={item.value}
-                  onClick={() => setValidityFilter(item.value)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
         <div className="content-toolbar contract-toolbar">
           <label className="search-control page-search">
             <Search size={16} />
@@ -407,6 +651,27 @@ export function ContractsPage({
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
+          {!isTemplateTab ? (
+            <div className="contract-toolbar-filters">
+              <ContractProjectFilter
+                value={projectFilter}
+                options={projectFilterOptions}
+                onChange={setProjectFilter}
+              />
+              <SelectField
+                ariaLabel="筛选合同有效期"
+                className="contract-validity-select"
+                menuClassName="contract-validity-select-menu"
+                menuStrategy="fixed"
+                menuWidth={196}
+                options={CONTRACT_VALIDITY_FILTERS}
+                selectedLabel={`有效期：${CONTRACT_VALIDITY_FILTERS.find((item) => item.value === validityFilter)?.label ?? '全部'}`}
+                value={validityFilter}
+                leadingIcon={<CalendarDays size={16} />}
+                onChange={setValidityFilter}
+              />
+            </div>
+          ) : null}
         </div>
 
         <div className="table-scroll">

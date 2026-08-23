@@ -67,9 +67,12 @@ describe('ContractsPage batch actions', () => {
     expect(html).toContain('<th>合同金额</th><th>有效期</th><th>付款就绪度</th>');
     expect(html).not.toContain('<th class="contract-date-cell">更新日期</th>');
     expect(source).toContain('<th className="contract-date-cell">更新日期</th>');
-    expect(html).toContain('role="group" aria-label="有效期筛选"');
-    expect(html).toContain('aria-pressed="true">全部</button>');
-    expect(html).toContain('aria-pressed="false">即将到期</button>');
+    expect(html).toContain('role="combobox" aria-label="筛选关联项目"');
+    expect(html).toContain('value="全部关联项目"');
+    expect(html).toContain('role="combobox" aria-label="筛选合同有效期"');
+    expect(html).toContain('有效期：全部');
+    expect(source).toContain('matchesQuery && matchesFilter && matchesProject && matchesValidity');
+    expect(source).toContain('${projectFilter}\\u0000${validityFilter}');
     expect(html).toContain('即将到期 · 7天');
   });
 
