@@ -428,8 +428,6 @@ export type GeneratedInvoiceRecord = {
   contractMatchReviews?: InvoiceContractMatchReview[];
 };
 
-export type InvoiceBatchMode = 'SHARED_DESCRIPTION' | 'XLSX_IMPORT';
-
 export type InvoiceBatchRowStatus =
   | 'READY'
   | 'NEEDS_INPUT'
@@ -457,6 +455,7 @@ export type InvoiceBatchRow = {
   sourcePayoutId: string;
   invoiceDate: string;
   items: InvoiceBatchLineItem[];
+  descriptionOverrideKeys: string[];
   currency: InvoiceCurrency | '';
   payoutAccountId: string;
   payoutAccountLocked: boolean;
@@ -472,7 +471,6 @@ export type InvoiceBatchRow = {
 export type InvoiceBatchDraft = {
   batchId: string;
   schemaVersion: '1.0';
-  mode: InvoiceBatchMode;
   projectId: ProjectId | '';
   invoiceDate: string;
   selectedEngagementIds: EngagementId[];

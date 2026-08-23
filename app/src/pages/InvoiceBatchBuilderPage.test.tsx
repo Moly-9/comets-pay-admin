@@ -27,7 +27,7 @@ describe('InvoiceBatchBuilderPage layout', () => {
 
     expect(html.match(/data-batch-section=/g)).toHaveLength(5);
     expect(html.match(/invoice-builder-section invoice-batch-card/g)).toHaveLength(5);
-    expect(html).toContain('data-batch-section="mode"');
+    expect(html).toContain('data-batch-section="project"');
     expect(html).toContain('data-batch-section="creators"');
     expect(html).toContain('data-batch-section="common"');
     expect(html).toContain('data-batch-section="validation"');
@@ -38,6 +38,9 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(html).toContain('<dt>需处理条数</dt>');
     expect(html).toContain('<dt>批次总金额</dt>');
     expect(html).toContain('暂无生成结果');
+    expect(html).toContain('统一 Description');
+    expect(html).not.toContain('分别填写 Description');
+    expect(html).not.toContain('逐人费用模板');
   });
 
   it('renders generated results with creator avatars, reference columns, and file actions', () => {
@@ -63,6 +66,7 @@ describe('InvoiceBatchBuilderPage layout', () => {
         quantity: 1,
         lineTotal: 1680,
       }],
+      descriptionOverrideKeys: [],
       currency: 'EUR',
       payoutAccountId: '',
       payoutAccountLocked: false,

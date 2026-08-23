@@ -18,8 +18,11 @@ import { PROJECT_DEMO_CONTRACTS } from '../prototypeResourceFixtures';
 import type { CreatorProfile } from '../types';
 import {
   buildInvoiceDocumentForBatchRow,
+  clearInvoiceBatchDescriptionOverride,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
+  setInvoiceBatchDescriptionOverride,
+  synchronizeInvoiceBatchDescriptions,
   synchronizeInvoiceBatchLineItems,
   updateInvoiceBatchLineItem,
   updateAndValidateInvoiceBatchRow,
@@ -186,6 +189,60 @@ describe('Invoice batch rows', () => {
     expect(synchronized.map((item) => item.description)).toEqual(['Video', 'License']);
     expect(synchronized.map((item) => item.unitPrice)).toEqual([100, 300]);
     expect(synchronized.map((item) => item.quantity)).toEqual([1, 3]);
+  });
+
+  it('preserves individual Description overrides until they are reset to the shared value', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Shared Video', 'Shared License'),
+    });
+    const overridden = setInvoiceBatchDescriptionOverride(
+      row,
+      row.items[0].id,
+      'Creator-specific Video',
+    );
+    const changedSharedValues = lineItemSeeds('Updated Shared Video', 'Updated Shared License');
+    const synchronized = synchronizeInvoiceBatchDescriptions(overridden, changedSharedValues);
+
+    expect(synchronized.descriptionOverrideKeys).toEqual(['template_batch_1']);
+    expect(synchronized.items.map((item) => item.description)).toEqual([
+      'Creator-specific Video',
+      'Updated Shared License',
+    ]);
+
+    const reset = clearInvoiceBatchDescriptionOverride(
+      synchronized,
+      changedSharedValues,
+      'template_batch_1',
+    );
+    expect(reset.descriptionOverrideKeys).toEqual([]);
+    expect(reset.items.map((item) => item.description)).toEqual([
+      'Updated Shared Video',
+      'Updated Shared License',
+    ]);
+  });
+
+  it('removes stale override keys when a shared Description is deleted', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Video', 'License'),
+    });
+    const overridden = setInvoiceBatchDescriptionOverride(row, row.items[1].id, 'Custom License');
+    const synchronized = synchronizeInvoiceBatchDescriptions(
+      overridden,
+      lineItemSeeds('Video'),
+    );
+
+    expect(synchronized.items).toHaveLength(1);
+    expect(synchronized.descriptionOverrideKeys).toEqual([]);
   });
 
   it('identifies the exact invalid Description, Price and Amount in a multi-item row', () => {

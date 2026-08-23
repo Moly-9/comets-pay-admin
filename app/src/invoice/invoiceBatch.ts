@@ -27,9 +27,7 @@ import { validateInvoiceDocumentModel } from './invoiceDraft';
 import { createInvoiceContractMatchReview, evaluateInvoiceContractMatch } from './invoiceContractMatching';
 import { formatInvoiceNumber, normalizeLineItem } from './invoiceUtils';
 
-export const INVOICE_BATCH_SCHEMA_VERSION = '1.0' as const;
 export const INVOICE_BATCH_MAX_ROWS = 50;
-export const INVOICE_BATCH_MAX_FILE_SIZE = 5 * 1024 * 1024;
 export const INVOICE_BATCH_CURRENCIES: InvoiceCurrency[] = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'];
 
 export type InvoiceBatchContext = {
@@ -62,10 +60,58 @@ const createBatchLineItem = (
 export const synchronizeInvoiceBatchLineItems = (
   current: InvoiceBatchLineItem[],
   seeds: InvoiceBatchLineItemSeed[],
-) => seeds.map((seed) => createBatchLineItem(
-  seed,
-  current.find((item) => item.templateKey === seed.templateKey),
-));
+  descriptionOverrideKeys: string[] = [],
+  forceTemplateKeys: string[] = [],
+) => seeds.map((seed) => {
+  const existing = current.find((item) => item.templateKey === seed.templateKey);
+  const preservesOverride = existing
+    && descriptionOverrideKeys.includes(seed.templateKey)
+    && !forceTemplateKeys.includes(seed.templateKey);
+  return createBatchLineItem(
+    preservesOverride ? { ...seed, description: existing.description } : seed,
+    existing,
+  );
+});
+
+export const synchronizeInvoiceBatchDescriptions = (
+  row: Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'>,
+  seeds: InvoiceBatchLineItemSeed[],
+  forceTemplateKeys: string[] = [],
+): Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'> => {
+  const availableKeys = new Set(seeds.map((seed) => seed.templateKey));
+  const forcedKeys = new Set(forceTemplateKeys);
+  const descriptionOverrideKeys = row.descriptionOverrideKeys.filter((key) => (
+    availableKeys.has(key) && !forcedKeys.has(key)
+  ));
+  return {
+    items: synchronizeInvoiceBatchLineItems(
+      row.items,
+      seeds,
+      descriptionOverrideKeys,
+      forceTemplateKeys,
+    ),
+    descriptionOverrideKeys,
+  };
+};
+
+export const setInvoiceBatchDescriptionOverride = (
+  row: Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'>,
+  lineItemId: string,
+  description: string,
+): Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'> => {
+  const item = row.items.find((candidate) => candidate.id === lineItemId);
+  if (!item) return row;
+  return {
+    items: updateInvoiceBatchLineItem(row.items, lineItemId, { description }),
+    descriptionOverrideKeys: [...new Set([...row.descriptionOverrideKeys, item.templateKey])],
+  };
+};
+
+export const clearInvoiceBatchDescriptionOverride = (
+  row: Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'>,
+  seeds: InvoiceBatchLineItemSeed[],
+  templateKey: string,
+) => synchronizeInvoiceBatchDescriptions(row, seeds, [templateKey]);
 
 export const updateInvoiceBatchLineItem = (
   items: InvoiceBatchLineItem[],
@@ -154,6 +200,7 @@ export const createInvoiceBatchRow = ({
     sourcePayoutId: payout?.id ?? createPrototypeId('payout'),
     invoiceDate,
     items: synchronizeInvoiceBatchLineItems([], lineItems),
+    descriptionOverrideKeys: [],
     currency,
     payoutAccountId: selectedAccount ? getPayoutAccountId(selectedAccount) : '',
     payoutAccountLocked: false,
@@ -336,6 +383,7 @@ export const updateAndValidateInvoiceBatchRow = (
     InvoiceBatchRow,
     | 'invoiceDate'
     | 'items'
+    | 'descriptionOverrideKeys'
     | 'currency'
     | 'payoutAccountId'
     | 'contractIds'
