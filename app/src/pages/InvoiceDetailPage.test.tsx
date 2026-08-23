@@ -98,13 +98,16 @@ const renderDetail = (
 );
 
 describe('InvoiceDetailPage edit actions', () => {
-  it('preserves the existing Invoice heading and three metric cards above the shared review workspace', () => {
+  it('preserves the existing Invoice heading and shows Invoice type first in the four metric cards', () => {
     const html = renderDetail(basePayout, { manage: false, media: true });
     expect(html).toContain('INV-SYNTHETIC');
+    expect(html).toContain('Invoice类型');
+    expect(html).toContain('内部 Invoice');
     expect(html).toContain('当前状态');
     expect(html).toContain('Invoice金额');
     expect(html).toContain('付款方式');
     expect(html).toContain('invoice-review-workspace is-internal');
+    expect(html.indexOf('Invoice类型')).toBeLessThan(html.indexOf('当前状态'));
     expect(html.indexOf('contract-metric-grid')).toBeLessThan(html.indexOf('invoice-review-workspace'));
   });
 

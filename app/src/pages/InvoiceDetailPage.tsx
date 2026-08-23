@@ -15,6 +15,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import {
+  InvoiceReviewMetricGrid,
   InvoiceReviewWorkspace,
   type InvoiceReviewAccountRow,
   type InvoiceReviewContractCheck,
@@ -730,25 +731,28 @@ export function InvoiceDetailPage({
         )}
       />
 
-      <div className="contract-metric-grid">
-        <article>
-          <span>当前状态</span>
-          <strong className="invoice-detail-current-status">
-            <StatusMark status={displayStatusKey} label={displayStatus} />
-          </strong>
-          <small>{statusHint}</small>
-        </article>
-        <article>
-          <span>Invoice金额</span>
-          <strong>{formatInvoiceMoney(model.currency, invoiceTotal(model))}</strong>
-          <small>{model.items.length}项费用明细 · {model.currency}</small>
-        </article>
-        <article>
-          <span>付款方式</span>
-          <strong>{model.paymentMethod === 'bank' ? '银行转账' : 'PayPal'}</strong>
-          <small>{provider} · {invoiceAccountSummary(model)}</small>
-        </article>
-      </div>
+      <InvoiceReviewMetricGrid items={[
+        {
+          label: 'Invoice类型',
+          value: '内部 Invoice',
+          secondary: '系统生成 · 保留结构化字段与签署版本',
+        },
+        {
+          label: '当前状态',
+          value: <span className="invoice-detail-current-status"><StatusMark status={displayStatusKey} label={displayStatus} /></span>,
+          secondary: statusHint,
+        },
+        {
+          label: 'Invoice金额',
+          value: formatInvoiceMoney(model.currency, invoiceTotal(model)),
+          secondary: `${model.items.length}项费用明细 · ${model.currency}`,
+        },
+        {
+          label: '付款方式',
+          value: model.paymentMethod === 'bank' ? '银行转账' : 'PayPal',
+          secondary: `${provider} · ${invoiceAccountSummary(model)}`,
+        },
+      ]} />
 
       {dismissedDocumentNoteId !== model.invoiceNumber ? (
         <div className="contract-document-note" role="note">

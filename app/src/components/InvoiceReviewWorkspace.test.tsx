@@ -31,6 +31,8 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('收款账户');
     expect(html).toContain('审核记录');
     expect(html).toContain('系统字段已校验');
+    expect(html).toContain('invoice-review-summary-list');
+    expect(html).toContain('--invoice-review-left:40%');
   });
 
   it('shows external exceptions first and explains why approval is disabled', () => {
@@ -68,5 +70,7 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('总金额的达人纠正值待媒介确认');
     expect(html).toContain('确认纠正');
     expect(html).toContain('disabled=""');
+    expect(html).toContain('invoice-review-field-list');
+    expect(html).not.toContain('invoice-review-compare-table');
   });
 });

@@ -1,9 +1,7 @@
 import {
   ArrowLeft,
   BriefcaseBusiness,
-  CheckCircle2,
   CircleDollarSign,
-  Clock3,
   FileSearch,
   FileText,
   History,
@@ -16,6 +14,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Avatar, Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import {
+  InvoiceReviewMetricGrid,
   InvoiceReviewWorkspace,
   type InvoiceReviewAccountRow,
   type InvoiceReviewContractCheck,
@@ -45,7 +44,7 @@ import {
   type ExternalInvoiceMediaReviewDecision,
   type ExternalInvoiceScenario,
 } from '../invoice/externalInvoiceCollection';
-import { todayInputValue } from '../invoice/invoiceUtils';
+import { formatInvoiceMoney, todayInputValue } from '../invoice/invoiceUtils';
 import {
   createDocumentPayoutSnapshot,
   eligibleInvoicePayoutAccounts,
@@ -70,15 +69,6 @@ const TECHNICAL_STATUS_LABEL: Record<ExternalInvoiceCollectionRecord['status'], 
   APPROVED: '媒介审核通过',
   RECOGNITION_FAILED: 'OCR 识别失败',
   CANCELLED: '已取消',
-};
-
-const stepIndexFor = (record: ExternalInvoiceCollectionRecord) => {
-  if (record.status === 'APPROVED') return 5;
-  if (record.status === 'WAITING_MEDIA_REVIEW') return 4;
-  if (record.confirmedSnapshots.length) return 3;
-  if (record.sourceFileVersions.length) return 2;
-  if (record.status !== 'DRAFT') return 1;
-  return 0;
 };
 
 const valueResult = (recognized?: string, confirmed?: string) => {
@@ -328,7 +318,6 @@ export function ExternalInvoiceCollectionDetailPage({
   const issues = externalInvoiceValidationIssues({ record, creator, contracts });
   const blockers = issues.filter((issue) => issue.severity === 'BLOCKER');
   const contractAccounts = contractAccountReminder(record, contracts);
-  const stepIndex = stepIndexFor(record);
   const canUpload = ['WAITING_UPLOAD', 'RETURNED_FOR_REUPLOAD', 'WAITING_CONFIRMATION'].includes(record.status);
   const canSubmit = Boolean(confirmation && blockers.length === 0 && record.status === 'WAITING_CONFIRMATION');
   const displayInvoiceNumber = externalInvoicePageTab(record.status) === 'upload'
@@ -355,6 +344,16 @@ export function ExternalInvoiceCollectionDetailPage({
   const expectedPublisher = selectedAccount?.provider === 'PayPal'
     ? accountSnapshot?.paypalUsername || '达人档案账户主体待补充'
     : accountSnapshot?.accountName || '达人档案账户主体待补充';
+  const displayCurrency = confirmation?.values.CURRENCY || record.expected.currency;
+  const displayAmount = Number(confirmation?.values.AMOUNT ?? record.expected.amount);
+  const displayPaymentMethod = selectedAccount?.provider === 'PayPal'
+    ? 'PayPal'
+    : selectedAccount
+      ? '银行转账'
+      : '待选择';
+  const displayPaymentSummary = selectedAccount
+    ? `${selectedAccount.provider} · ${getPayoutAccountSummary(selectedAccount)}`
+    : '等待达人选择已验证收款账户';
   const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
     if (field === 'SOURCE_INVOICE_NUMBER') return '非空且未被其他 Invoice 使用';
     if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
@@ -587,16 +586,28 @@ export function ExternalInvoiceCollectionDetailPage({
         {record.status === 'DRAFT' && canManage ? <Button icon={<Send size={16} />} onClick={onPublish}>发布收集任务</Button> : null}
       </div>
 
-      <section className="content-card external-progress-section">
-        <ol className="external-progress-list">
-          {['创建任务', '发布待办', '文件上传', '识别确认', '媒介审核', '审核通过'].map((label, index) => (
-            <li key={label} className={index < stepIndex ? 'is-complete' : index === stepIndex ? 'is-current' : ''}>
-              <span>{index < stepIndex ? <CheckCircle2 size={16} /> : index + 1}</span><strong>{label}</strong>
-            </li>
-          ))}
-        </ol>
-        <p className="external-progress-note"><Clock3 size={15} />OCR 识别中和待确认识别结果只在这里作为步骤展示，不进入列表状态。</p>
-      </section>
+      <InvoiceReviewMetricGrid items={[
+        {
+          label: 'Invoice类型',
+          value: '外部 Invoice',
+          secondary: '达人上传 · 保留原始文件与识别版本',
+        },
+        {
+          label: '当前状态',
+          value: externalInvoiceListStatus(record.status),
+          secondary: TECHNICAL_STATUS_LABEL[record.status],
+        },
+        {
+          label: 'Invoice金额',
+          value: formatInvoiceMoney(displayCurrency, Number.isFinite(displayAmount) ? displayAmount : record.expected.amount),
+          secondary: `任务基准 · ${displayCurrency}`,
+        },
+        {
+          label: '付款方式',
+          value: displayPaymentMethod,
+          secondary: displayPaymentSummary,
+        },
+      ]} />
 
       {reviewWorkspaceVisible && recognition && confirmation ? (
         <InvoiceReviewWorkspace

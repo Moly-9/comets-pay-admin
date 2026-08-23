@@ -109,6 +109,26 @@ export type InvoiceReviewReturnOption = {
   description?: string;
 };
 
+export type InvoiceReviewMetricItem = {
+  label: string;
+  value: ReactNode;
+  secondary: ReactNode;
+};
+
+export function InvoiceReviewMetricGrid({ items }: { items: InvoiceReviewMetricItem[] }) {
+  return (
+    <div className="contract-metric-grid invoice-review-metric-grid">
+      {items.map((item) => (
+        <article key={item.label}>
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+          <small>{item.secondary}</small>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 type InvoiceReviewWorkspaceProps = {
   sourceType: InvoiceReviewSourceType;
   issueCount: number;
@@ -211,7 +231,7 @@ export function InvoiceReviewWorkspace({
 }: InvoiceReviewWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<InvoiceReviewWorkspaceTab>('overview');
   const [zoom, setZoom] = useState(0.82);
-  const [leftPercent, setLeftPercent] = useState(53);
+  const [leftPercent, setLeftPercent] = useState(40);
   const [dragging, setDragging] = useState(false);
   const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -226,7 +246,7 @@ export function InvoiceReviewWorkspace({
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const documentScrollRef = useRef<HTMLDivElement | null>(null);
   const activeEvidenceElementRef = useRef<HTMLElement | null>(null);
-  const dragStartRef = useRef({ clientX: 0, leftPercent: 53 });
+  const dragStartRef = useRef({ clientX: 0, leftPercent: 40 });
   const tabIdPrefix = useId().replace(/:/g, '');
 
   const contractPassed = contractChecks.filter((check) => (
@@ -289,58 +309,66 @@ export function InvoiceReviewWorkspace({
     locateEvidence(field.evidenceTarget);
   };
 
-  const renderExternalRows = (fields: InvoiceReviewOverviewField[]) => fields.flatMap((field) => {
+  const renderExternalRows = (fields: InvoiceReviewOverviewField[]) => fields.map((field) => {
     const meta = FIELD_STATUS_META[field.status];
     const StatusIcon = meta.icon;
     const expanded = expandedEvidenceId === field.id;
-    return [
-      <tr className={`invoice-review-field-row is-${meta.tone}`} key={field.id}>
-        <th scope="row">{field.label}</th>
-        <td>{field.baselineValue}</td>
-        <td>{field.confirmedValue}</td>
-        <td>
+    return (
+      <article className={`invoice-review-field-row is-${meta.tone}`} key={field.id}>
+        <div className="invoice-review-field-name">
+          <strong>{field.label}</strong>
           <span className={`invoice-review-status-chip is-${meta.tone}`}>
             <StatusIcon size={14} />{field.statusLabel}
           </span>
-        </td>
-        <td>
-          <div className="invoice-review-row-actions">
-            {field.evidence ? (
-              <button type="button" onClick={() => toggleEvidence(field)} aria-expanded={expanded}>
-                <Eye size={14} />查看证据<ChevronDown size={13} />
-              </button>
-            ) : null}
-            {field.allowConfirmCorrection && onFieldAction ? (
-              <button type="button" onClick={() => onFieldAction(field.id, 'CONFIRM_CORRECTION')}>
-                <CheckCircle2 size={14} />确认纠正
-              </button>
-            ) : null}
-            {field.allowExceptionActions && onFieldAction ? (
-              <button type="button" onClick={() => setFieldDialog({ fieldId: field.id, fieldLabel: field.label, action: 'REUPLOAD_REQUIRED' })}>
-                要求重传
-              </button>
-            ) : null}
-            {field.allowExceptionActions && onFieldAction ? (
-              <button type="button" onClick={() => setFieldDialog({ fieldId: field.id, fieldLabel: field.label, action: 'ANOMALY' })}>
-                标记异常
-              </button>
-            ) : null}
+        </div>
+        <div className="invoice-review-field-values">
+          <div><span>系统校验基准</span><strong>{field.baselineValue}</strong></div>
+          <div><span>达人最终确认值</span><strong>{field.confirmedValue}</strong></div>
+        </div>
+        <div className="invoice-review-row-actions">
+          {field.evidence ? (
+            <button type="button" onClick={() => toggleEvidence(field)} aria-expanded={expanded}>
+              <Eye size={14} />查看证据<ChevronDown size={13} />
+            </button>
+          ) : null}
+          {field.allowConfirmCorrection && onFieldAction ? (
+            <button type="button" onClick={() => onFieldAction(field.id, 'CONFIRM_CORRECTION')}>
+              <CheckCircle2 size={14} />确认纠正
+            </button>
+          ) : null}
+          {field.allowExceptionActions && onFieldAction ? (
+            <button
+              type="button"
+              onClick={() => {
+                setFieldNote('');
+                setFieldDialog({ fieldId: field.id, fieldLabel: field.label, action: 'REUPLOAD_REQUIRED' });
+              }}
+            >
+              要求重传
+            </button>
+          ) : null}
+          {field.allowExceptionActions && onFieldAction ? (
+            <button
+              type="button"
+              onClick={() => {
+                setFieldNote('');
+                setFieldDialog({ fieldId: field.id, fieldLabel: field.label, action: 'ANOMALY' });
+              }}
+            >
+              标记异常
+            </button>
+          ) : null}
+        </div>
+        {expanded && field.evidence ? (
+          <div className="invoice-review-evidence-grid">
+            <div><span>原始 Invoice 原文</span><strong>{field.evidence.sourceValue}</strong><small>第 {field.evidence.pageNumber ?? 1} 页</small></div>
+            <div><span>系统首次 OCR</span><strong>{field.evidence.recognizedValue}</strong><small>首次识别值不可覆盖</small></div>
+            <div><span>达人最终确认值</span><strong>{field.evidence.confirmedValue}</strong><small>{field.evidence.correctionReason ?? '达人确认识别结果'}</small></div>
+            <div><span>纠正与媒介复核</span><strong>{field.evidence.mediaReview ?? '待媒介复核'}</strong><small>{field.evidence.correctedBy ? `${field.evidence.correctedBy} · ${formatEvidenceTime(field.evidence.correctedAt)}` : '该字段未发生达人纠正'}</small></div>
           </div>
-        </td>
-      </tr>,
-      ...(expanded && field.evidence ? [
-        <tr className="invoice-review-evidence-row" key={`${field.id}-evidence`}>
-          <td colSpan={5}>
-            <div className="invoice-review-evidence-grid">
-              <div><span>原始 Invoice 原文</span><strong>{field.evidence.sourceValue}</strong><small>第 {field.evidence.pageNumber ?? 1} 页</small></div>
-              <div><span>系统首次 OCR</span><strong>{field.evidence.recognizedValue}</strong><small>首次识别值不可覆盖</small></div>
-              <div><span>达人最终确认值</span><strong>{field.evidence.confirmedValue}</strong><small>{field.evidence.correctionReason ?? '达人确认识别结果'}</small></div>
-              <div><span>纠正与媒介复核</span><strong>{field.evidence.mediaReview ?? '待媒介复核'}</strong><small>{field.evidence.correctedBy ? `${field.evidence.correctedBy} · ${formatEvidenceTime(field.evidence.correctedAt)}` : '该字段未发生达人纠正'}</small></div>
-            </div>
-          </td>
-        </tr>,
-      ] : []),
-    ];
+        ) : null}
+      </article>
+    );
   });
 
   const workspaceStyle = {
@@ -356,7 +384,7 @@ export function InvoiceReviewWorkspace({
   };
 
   const submitFieldAction = () => {
-    if (!fieldDialog || !fieldNote.trim() || !onFieldAction) return;
+    if (!fieldDialog || fieldNote.trim().length < 5 || !onFieldAction) return;
     onFieldAction(fieldDialog.fieldId, fieldDialog.action, fieldNote.trim());
     setFieldDialog(null);
     setFieldNote('');
@@ -464,7 +492,7 @@ export function InvoiceReviewWorkspace({
               <div className="invoice-review-section-heading">
                 <div><FileCheck2 size={18} /><span><strong>结构化 Invoice 摘要</strong><small>核对项目、主体、金额、币种和付款信息</small></span></div>
               </div>
-              <dl className="invoice-review-summary-grid">
+              <dl className="invoice-review-summary-list">
                 {summaryFields.map((field) => (
                   <div key={field.id}>
                     <dt>{field.label}</dt>
@@ -490,22 +518,12 @@ export function InvoiceReviewWorkspace({
                 <div className="invoice-review-clear-summary" role="status"><CheckCircle2 size={17} />全部识别字段与校验基准一致</div>
               )}
               {exceptionFields.length ? (
-                <div className="invoice-review-compare-table-wrap">
-                  <table className="invoice-review-compare-table">
-                    <thead><tr><th>字段</th><th>系统校验基准</th><th>达人最终确认值</th><th>校验状态</th><th>操作</th></tr></thead>
-                    <tbody>{renderExternalRows(exceptionFields)}</tbody>
-                  </table>
-                </div>
+                <div className="invoice-review-field-list">{renderExternalRows(exceptionFields)}</div>
               ) : null}
               {matchedFields.length ? (
                 <details className="invoice-review-matched-details">
                   <summary><CheckCircle2 size={16} />正常匹配项（{matchedFields.length}）<ChevronDown size={15} /></summary>
-                  <div className="invoice-review-compare-table-wrap">
-                    <table className="invoice-review-compare-table">
-                      <thead><tr><th>字段</th><th>系统校验基准</th><th>达人最终确认值</th><th>校验状态</th><th>操作</th></tr></thead>
-                      <tbody>{renderExternalRows(matchedFields)}</tbody>
-                    </table>
-                  </div>
+                  <div className="invoice-review-field-list is-matched-list">{renderExternalRows(matchedFields)}</div>
                 </details>
               ) : null}
             </div>
@@ -629,14 +647,57 @@ export function InvoiceReviewWorkspace({
       {fieldDialog ? (
         <Modal
           title={fieldDialog.action === 'REUPLOAD_REQUIRED' ? `要求重新上传 · ${fieldDialog.fieldLabel}` : `标记异常 · ${fieldDialog.fieldLabel}`}
-          width="520px"
-          onClose={() => setFieldDialog(null)}
+          width="560px"
+          className="invoice-review-field-modal"
+          onClose={() => {
+            setFieldDialog(null);
+            setFieldNote('');
+          }}
           footer={(
-            <><Button variant="ghost" onClick={() => setFieldDialog(null)}>取消</Button><Button variant="danger" disabled={!fieldNote.trim()} onClick={submitFieldAction}>保存复核结果</Button></>
+            <>
+              <Button variant="ghost" onClick={() => {
+                setFieldDialog(null);
+                setFieldNote('');
+              }}>取消</Button>
+              <Button variant="danger" disabled={fieldNote.trim().length < 5} onClick={submitFieldAction}>
+                {fieldDialog.action === 'REUPLOAD_REQUIRED' ? '确认要求重新上传' : '保存异常结果'}
+              </Button>
+            </>
           )}
         >
-          <div className="invoice-review-return-form">
-            <label><span className="required-field-label">复核说明 <em className="required-mark">*</em><small>{fieldNote.length}/300</small></span><textarea autoFocus maxLength={300} value={fieldNote} onChange={(event) => setFieldNote(event.target.value)} placeholder="说明原文件证据、当前值和建议处理方式" /></label>
+          <div className="invoice-review-field-dialog">
+            <div className={`invoice-review-field-dialog-intro is-${fieldDialog.action === 'REUPLOAD_REQUIRED' ? 'reupload' : 'anomaly'}`}>
+              <span><CircleAlert size={19} /></span>
+              <div>
+                <strong>{fieldDialog.action === 'REUPLOAD_REQUIRED' ? '原文件内容需要达人重新处理' : '记录该字段的审核异常'}</strong>
+                <p>{fieldDialog.action === 'REUPLOAD_REQUIRED'
+                  ? '请明确指出票面错误及重新上传要求，达人将在 C 端看到这段说明。'
+                  : '请写明原文件证据、当前确认值和建议处理方式，便于后续追溯。'}</p>
+              </div>
+            </div>
+            <label className="invoice-review-field-note" htmlFor={`${tabIdPrefix}-field-note`}>
+              <span>
+                <b>复核说明 <em className="required-mark">*</em></b>
+                <small>{fieldNote.length}/300</small>
+              </span>
+              <textarea
+                id={`${tabIdPrefix}-field-note`}
+                autoFocus
+                maxLength={300}
+                aria-invalid={Boolean(fieldNote.length && fieldNote.trim().length < 5)}
+                aria-describedby={`${tabIdPrefix}-field-note-help`}
+                value={fieldNote}
+                onChange={(event) => setFieldNote(event.target.value)}
+                placeholder="例如：票面总金额为 USD 4,600，与任务金额不一致，请核对原文件后重新处理。"
+              />
+              <small
+                id={`${tabIdPrefix}-field-note-help`}
+                className={fieldNote.length && fieldNote.trim().length < 5 ? 'is-error' : ''}
+                role={fieldNote.length && fieldNote.trim().length < 5 ? 'alert' : undefined}
+              >
+                {fieldNote.length && fieldNote.trim().length < 5 ? '请至少填写 5 个字的具体说明。' : '说明会写入当前 Invoice 的审核记录。'}
+              </small>
+            </label>
           </div>
         </Modal>
       ) : null}

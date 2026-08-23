@@ -160,59 +160,6 @@
 .external-detail-header p { color: var(--external-muted); margin: 0; }
 .external-detail-badges { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.external-progress-section { display: grid; gap: 14px; }
-.external-progress-list {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.external-progress-list li {
-  align-items: center;
-  color: #9299a6;
-  display: flex;
-  gap: 8px;
-  min-width: 0;
-  position: relative;
-}
-
-.external-progress-list li:not(:last-child)::after {
-  background: #dfe3e9;
-  content: '';
-  height: 1px;
-  left: 30px;
-  position: absolute;
-  right: 8px;
-  top: 14px;
-  z-index: 0;
-}
-
-.external-progress-list li > span {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #d8dde5;
-  border-radius: 50%;
-  display: inline-flex;
-  flex: none;
-  font-size: 11px;
-  font-weight: 750;
-  height: 28px;
-  justify-content: center;
-  position: relative;
-  width: 28px;
-  z-index: 1;
-}
-
-.external-progress-list li strong { font-size: 12px; font-weight: 650; position: relative; z-index: 1; }
-.external-progress-list li.is-complete,
-.external-progress-list li.is-current { color: var(--external-success); }
-.external-progress-list li.is-complete > span { background: #e9f6ef; border-color: #b9dcc9; }
-.external-progress-list li.is-current > span { border-color: var(--external-success); box-shadow: 0 0 0 3px rgba(32, 122, 85, 0.11); }
-.external-progress-list li.is-complete::after { background: #a9d5bd; }
-.external-progress-note { align-items: center; color: var(--external-muted); display: flex; font-size: 12px; gap: 6px; margin: 0; }
-
 .external-detail-layout {
   align-items: start;
   display: grid;
@@ -358,8 +305,6 @@
   .external-collection-card > .external-section-heading { align-items: stretch; gap: 10px; }
   .external-collection-card > .external-section-heading p { max-width: none; }
   .external-form-footer { align-items: stretch; grid-template-columns: 1fr; }
-  .external-progress-section { overflow-x: auto; }
-  .external-progress-list { min-width: 680px; }
   .external-document-preview { min-height: 0; padding: 24px 20px; }
   .external-correction-callout,
   .external-contract-accounts p { align-items: stretch; flex-direction: column; }

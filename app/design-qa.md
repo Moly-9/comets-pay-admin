@@ -1,3 +1,59 @@
+# Design QA - Invoice 审核详情四卡与 4:6 逐行审核布局
+
+## Reference and environment
+
+- Source visual truth:
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-4b5bd31d-1394-4209-bc2a-b70afffdacb2.png` (`1588 x 763`)，内部 Invoice 顶部与审核区参考。
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ca87719d-a21b-446a-8226-bafa2f3727cb.png` (`1549 x 775`)，外部 Invoice 原页面及待移除步骤状态栏参考。
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-15affcd8-f2a5-4cc7-8bd0-0de34a1b0b24.png`，右侧逐行摘要样式参考。
+  - `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-0a073e92-67a3-4efa-8b91-cfaeeabc1687.png` (`692 x 456`)，标记异常弹窗参考。
+- Browser-rendered implementation:
+  - `/var/tmp/comets-pay-invoice-review-qa/invoice-review-internal-desktop.png` (`1535 x 891`).
+  - `/var/tmp/comets-pay-invoice-review-qa/invoice-review-external-desktop.png` (`1535 x 891`).
+  - `/var/tmp/comets-pay-invoice-review-qa/invoice-review-anomaly-modal.png` (`1535 x 891`).
+  - `/var/tmp/comets-pay-invoice-review-qa/invoice-review-external-mobile.png` (`375 x 812`).
+- Combined comparison: `/var/tmp/comets-pay-invoice-review-qa/invoice-review-comparison-board.png` (`1464 x 1422`).
+- Implementation URL: `http://127.0.0.1:5175/`.
+- Desktop CSS viewport override: `1550 x 900`; responsive CSS viewport override: `390 x 844`; device pixel ratio: `1`.
+- State: 管理员账号；内部待签署 Invoice `INV-20240717-00001`；外部待媒介审核 Invoice `INV-20260823-00001`，总金额字段待复核。
+
+## Comparison evidence
+
+- 三组参考与实现已放入同一张对照图，分别检查内部详情、外部详情和异常弹窗。
+- 内部 Invoice 保留原标题、操作区和摘要位置；按本次要求将三张摘要卡扩展为四张，`Invoice类型` 位于第一张。
+- 外部 Invoice 删除六步状态栏，并使用与内部 Invoice 一致的 `Invoice类型 / 当前状态 / Invoice金额 / 付款方式` 四张卡片。
+- 审核工作区默认左 `40%`、右 `60%`；参考图受侧边栏和截图裁切影响，因此以内容区实际比例与同屏信息密度作为归一化判断依据。
+- 右侧概览恢复为逐行信息结构；外部异常行仍在同一行保留证据、纠正确认、重新上传和异常标记操作。
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed；继续使用现有 Noto Sans SC，卡片标签、数值、行标签和帮助文案层级稳定，未增加负字距或视口缩放字体。
+- Spacing and layout rhythm: passed；四张卡片等宽，审核区为 4:6，逐行信息使用统一分隔线和 4/8px 间距节奏；390px 下改为单列且页面无横向溢出。
+- Colors and visual tokens: passed；沿用 COMETS Pay 中性表面、紫灰主色和现有成功/警告/异常语义色，状态同时使用图标和文字表达。
+- Image quality and asset fidelity: passed；本次没有新增位图或品牌资产，页面与弹窗图标均使用项目现有 Lucide 图标库。
+- Copy and content: passed；四张卡片字段完全一致，外部技术状态只保留在状态卡片和审核记录，不再展示顶部步骤状态栏。
+
+## Interaction, responsive and technical checks
+
+- `查看证据` 可展开四层证据并高亮左侧原文；页面检测到 1 个证据面板和 1 个高亮原文字段。
+- 分隔线初始值为 `40%`，键盘 `ArrowRight` 可调整为 `42%`，原拖动和键盘交互保留。
+- 标记异常弹窗有可见字段标签、处理说明、字数统计和就地错误；少于 5 个字时 `aria-invalid=true` 且保存不可用，完整说明后保存按钮可用。
+- `390 x 844` 下四张卡片全部存在，分隔线隐藏，工作区上下排列；document `scrollWidth === clientWidth === 375px`。
+- 浏览器控制台 warning/error 日志为空。
+- 聚焦 Vitest：3 个文件、11 项测试通过；全量 Vitest：91 个文件、585 项测试通过；TypeScript/Vite 构建通过，仅保留既有 chunk-size 提示。
+
+## Findings and comparison history
+
+1. 初始参考中的外部详情保留六步状态栏，且右侧使用横向表格单元格，均与本次目标不一致。
+   - Fix: 删除外部步骤状态栏；将内外部顶部统一为四张卡片；右侧改为逐行信息结构。
+2. 初始异常弹窗只有标题、文本框和按钮，缺少处理语境、持久帮助及就地校验反馈。
+   - Fix: 增加字段级说明区、持久帮助、最小有效长度、`aria-invalid` 和具体保存动作文案。
+3. 最终桌面、390px、证据定位、键盘分隔线、弹窗校验和控制台复查未发现剩余可执行的 P0、P1 或 P2 问题。
+
+final result: passed
+
+---
+
 # Design QA - 达人请款名单数量层级与列宽
 
 ## Reference and environment
