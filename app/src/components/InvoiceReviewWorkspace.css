@@ -352,6 +352,34 @@
 .invoice-review-account-comparison.is-blocked p { color: #a43e48; }
 .invoice-review-account-comparison button { grid-column: 1 / -1; justify-self: start; min-height: 28px; padding: 2px 6px; font-size: 9.5px; }
 
+.invoice-review-history-summary {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid #e7eaf0;
+}
+
+.invoice-review-history-summary > div {
+  display: grid;
+  grid-template-columns: minmax(118px, 0.72fr) minmax(0, 2fr);
+  gap: 16px;
+  border-bottom: 1px solid #e7eaf0;
+  padding: 11px 0;
+}
+
+.invoice-review-history-summary dt {
+  color: var(--review-muted);
+  font-size: 10.5px;
+}
+
+.invoice-review-history-summary dd {
+  margin: 0;
+  color: #313642;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .invoice-review-timeline { display: grid; }
 .invoice-review-timeline article { position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; padding-bottom: 17px; }
 .invoice-review-timeline article:not(:last-child)::before { position: absolute; top: 23px; bottom: 0; left: 11px; width: 1px; background: #dce1e7; content: ''; }
@@ -363,6 +391,81 @@
 .invoice-review-timeline strong { color: #363b46; font-size: 11.5px; }
 .invoice-review-timeline p { margin: 0; color: var(--review-muted); font-size: 10.5px; line-height: 1.45; }
 .invoice-review-timeline small { color: #8a919d; font-size: 9.5px; }
+
+.invoice-review-current-task {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #d9dde5;
+  border-radius: 7px;
+  background: #fafbfc;
+  padding: 12px;
+}
+
+.invoice-review-current-task > strong {
+  color: #654c69;
+  font-size: 11px;
+}
+
+.invoice-review-current-task dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.invoice-review-current-task dl > div {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.invoice-review-current-task dt {
+  color: #7c8390;
+  font-size: 9.5px;
+}
+
+.invoice-review-current-task dd {
+  margin: 0;
+  color: #3f4551;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.invoice-review-current-task p {
+  margin: 0;
+  border-top: 1px solid #e7e9ee;
+  padding-top: 8px;
+  color: #666e7b;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.invoice-review-current-task.is-warning {
+  border-color: #ead2af;
+  background: #fffaf2;
+}
+
+.invoice-review-current-task.is-danger {
+  border-color: #e8c4c8;
+  background: #fff7f8;
+}
+
+.invoice-review-current-task.is-danger > strong,
+.invoice-review-current-task.is-danger p {
+  color: #98414a;
+}
+
+.invoice-review-history-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid #e7eaf0;
+  padding-top: 12px;
+  color: #5e5068;
+  font-size: 10.5px;
+  font-weight: 650;
+}
 
 .invoice-review-sticky-actions {
   display: flex;
@@ -562,6 +665,7 @@
   .invoice-review-row-actions { grid-column: auto; justify-content: flex-start; padding-left: 5px; }
   .invoice-review-evidence-grid { grid-column: auto; margin: 0 5px; }
   .invoice-review-account-comparison { grid-template-columns: minmax(0, 1fr); }
+  .invoice-review-history-summary > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .invoice-review-account-arrow { justify-self: start; }
   .invoice-review-sticky-actions { position: sticky; bottom: 0; z-index: 3; }
   .invoice-review-footer-buttons .button { flex: 1 1 140px; }

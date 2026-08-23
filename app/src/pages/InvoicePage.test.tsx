@@ -75,6 +75,12 @@ const creator = {
   accent: '#0f766e',
   name: 'Signature Demo Display Name',
   handle: '@signature-fallback',
+  contact: {
+    legalName: 'Signature Demo Company Ltd.',
+    address: 'Singapore',
+    phone: '+65 6000 0000',
+    email: 'signature@example.test',
+  },
   socialAccounts: [{
     id: 'social_signature_demo',
     platform: 'YouTube',
@@ -148,6 +154,17 @@ describe('InvoicePage waiting-signature actions', () => {
     expect(renderInvoicePage(false)).not.toContain('模拟达人完成签署');
   });
 
+  it('only marks internal drafts as publishable in the waiting-signature list', () => {
+    const draftPayout = { ...payout, invoiceReviewStatus: '草稿' as const };
+    const draftRecord = { ...record, status: '草稿' as const };
+    const html = renderInvoicePage(true, { payouts: [draftPayout], generatedInvoices: [draftRecord] });
+
+    expect(html).toContain('一键发布');
+    expect(html).toContain('title="选择并发布"');
+    expect(html).toContain('草稿');
+    expect(html).not.toContain('模拟达人完成签署');
+  });
+
   it('uses the simulated signing timestamp in legacy Invoice previews without a generated snapshot', () => {
     const signedPayout: Payout = {
       ...payout,
@@ -170,8 +187,9 @@ describe('InvoicePage list columns', () => {
   it('renders the requested data columns plus operations and resolves creator identity by stable ID', () => {
     const html = renderInvoicePage(true);
 
-    expect(html.match(/<th(?:\s|>)/g)).toHaveLength(8);
+    expect(html.match(/<th(?:\s|>)/g)).toHaveLength(10);
     expect(html).toContain('<th>达人</th>');
+    expect(html).toContain('<th>开票主体</th>');
     expect(html).toContain('<th>关联项目</th>');
     expect(html).toContain('<th>Invoice 编号</th>');
     expect(html).toContain('<th>Invoice 类型</th>');
@@ -181,6 +199,7 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('>操作</th>');
     expect(html).toContain('Signature Demo Display Name');
     expect(html).toContain('@signature-channel-id');
+    expect(html).toContain('Signature Demo Company Ltd.');
     expect(html).toContain('Signature Demo Project');
     expect(html).toContain('内部 Invoice');
   });

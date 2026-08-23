@@ -550,19 +550,106 @@ export function ExternalInvoiceCollectionDetailPage({
     RETURNED_FOR_REUPLOAD: '要求重新上传',
     APPROVED: '审核通过',
   };
-  const reviewTimeline: InvoiceReviewTimelineItem[] = [
-    ...record.reviewHistory.map((event) => ({
-      id: event.eventId,
-      title: event.fieldKey ? `${eventLabel[event.action]} · ${EXTERNAL_INVOICE_FIELD_LABEL[event.fieldKey]}` : eventLabel[event.action],
-      description: event.reason ?? `${event.fromStatus ? `${TECHNICAL_STATUS_LABEL[event.fromStatus]} → ` : ''}${TECHNICAL_STATUS_LABEL[event.toStatus]}`,
-      meta: `${event.actor.name} · ${event.actor.role} · ${new Date(event.occurredAt).toLocaleString('zh-CN')}`,
-      state: event.action === 'RETURNED_FOR_CORRECTION' || event.action === 'RETURNED_FOR_REUPLOAD' ? 'RETURNED' as const : 'COMPLETE' as const,
-    })),
-    ...(record.status === 'APPROVED' ? [
-      { id: 'request-pending', title: '进入请款', description: '等待媒介在合作项目中发起请款', state: 'CURRENT' as const },
-      { id: 'payment-pending', title: '进入付款', description: '请款审批通过后进入付款工作台', state: 'PENDING' as const },
-    ] : []),
+  const latestEvent = (...actions: ExternalInvoiceCollectionRecord['reviewHistory'][number]['action'][]) => (
+    [...record.reviewHistory].reverse().find((event) => actions.includes(event.action))
+  );
+  const formatEventMeta = (event?: ExternalInvoiceCollectionRecord['reviewHistory'][number]) => event
+    ? `${event.actor.name} · ${event.actor.role} · ${new Date(event.occurredAt).toLocaleString('zh-CN')}`
+    : undefined;
+  const uploadEvent = latestEvent('FILE_UPLOADED');
+  const confirmationEvent = latestEvent('SUBMITTED', 'RECOGNITION_CORRECTED');
+  const mediaReviewEvent = latestEvent('APPROVED', 'RETURNED_FOR_CORRECTION', 'RETURNED_FOR_REUPLOAD', 'FIELD_REVIEWED');
+  const externalCurrentIndex = record.status === 'DRAFT'
+    ? 0
+    : record.status === 'WAITING_UPLOAD' || record.status === 'RETURNED_FOR_REUPLOAD'
+      ? 1
+      : record.status === 'RECOGNIZING' || record.status === 'WAITING_CONFIRMATION' || record.status === 'RETURNED_FOR_CORRECTION' || record.status === 'RECOGNITION_FAILED'
+        ? 2
+        : record.status === 'WAITING_MEDIA_REVIEW'
+          ? 3
+          : 4;
+  const isReturnedStage = (index: number) => (
+    (record.status === 'RETURNED_FOR_REUPLOAD' && index === 1)
+    || (record.status === 'RETURNED_FOR_CORRECTION' && index === 2)
+  );
+  const externalStages = [
+    {
+      title: '收集任务已创建',
+      description: record.status === 'DRAFT' ? '任务信息已保存，等待媒介发布' : '任务基准、达人和预设账户已固定',
+      meta: formatEventMeta(latestEvent('PUBLISHED') ?? latestEvent('CREATED')),
+    },
+    {
+      title: '达人上传 Invoice',
+      description: currentFile ? `原始文件 V${currentFile.version} 已归档` : '等待达人上传 PDF、JPG 或 PNG',
+      meta: formatEventMeta(uploadEvent),
+    },
+    {
+      title: '识别结果确认',
+      description: confirmation
+        ? `达人已确认 ${EXTERNAL_INVOICE_FIELD_ORDER.length} 个识别字段`
+        : recognition
+          ? 'OCR 已完成，等待达人确认识别结果'
+          : '等待原始文件上传后进行识别',
+      meta: formatEventMeta(confirmationEvent),
+    },
+    {
+      title: '媒介审核',
+      description: record.status === 'APPROVED'
+        ? '关键字段、合同与收款账户已完成审核'
+        : record.status === 'WAITING_MEDIA_REVIEW'
+          ? '等待媒介核对票据证据与达人最终确认值'
+          : '达人提交后进入媒介审核',
+      meta: formatEventMeta(mediaReviewEvent),
+    },
+    {
+      title: '进入请款与付款',
+      description: record.status === 'APPROVED' ? '可在合作项目中选择该 Invoice 发起请款' : '审核通过后进入可请款状态',
+    },
   ];
+  const reviewTimeline: InvoiceReviewTimelineItem[] = externalStages.map((stage, index) => ({
+    id: `external-stage-${index}`,
+    ...stage,
+    state: isReturnedStage(index)
+      ? 'RETURNED'
+      : index < externalCurrentIndex
+        ? 'COMPLETE'
+        : index === externalCurrentIndex
+          ? 'CURRENT'
+          : 'PENDING',
+  }));
+  const lastReturnEvent = latestEvent('RETURNED_FOR_CORRECTION', 'RETURNED_FOR_REUPLOAD');
+  const externalHistorySummary = [
+    { label: '原始文件版本', value: currentFile ? `V${currentFile.version}` : '未上传' },
+    { label: 'OCR 识别版本', value: recognition ? `V${record.recognitionSnapshots.length}` : '未生成' },
+    { label: '达人确认轮次', value: confirmation ? `第 ${record.confirmedSnapshots.length} 轮` : '未确认' },
+    { label: '媒介复核字段', value: `${record.mediaFieldReviews.length} 项` },
+    { label: '最近上传时间', value: currentFile ? new Date(currentFile.uploadedAt).toLocaleString('zh-CN') : '待上传' },
+    { label: '退回说明', value: lastReturnEvent?.reason ?? '无待处理退回' },
+  ];
+  const externalCurrentTask = {
+    title: record.status === 'APPROVED' ? '待发起请款' : '执行当前采集任务',
+    transition: `${eventLabel[record.reviewHistory[record.reviewHistory.length - 1]?.action ?? 'CREATED']} → ${TECHNICAL_STATUS_LABEL[record.status]}`,
+    assignee: record.status === 'WAITING_MEDIA_REVIEW'
+      ? '媒介审核人'
+      : record.status === 'DRAFT'
+        ? record.createdBy.name
+        : record.status === 'APPROVED'
+          ? '媒介请款人'
+          : record.creatorName,
+    updatedAt: new Date(record.reviewHistory[record.reviewHistory.length - 1]?.occurredAt ?? record.createdAt).toLocaleString('zh-CN'),
+    instruction: record.status === 'DRAFT'
+      ? '发布采集任务后，达人端才会收到上传待办。'
+      : record.status === 'WAITING_MEDIA_REVIEW'
+        ? '核对原文件证据、达人确认值、合同和收款账户后完成审核。'
+        : record.status === 'APPROVED'
+          ? '在合作项目中选择该 Invoice 发起请款。'
+          : lastReturnEvent?.reason ?? '按当前步骤完成上传、识别确认或重新提交。',
+    tone: lastReturnEvent && ['RETURNED_FOR_CORRECTION', 'RETURNED_FOR_REUPLOAD'].includes(record.status)
+      ? 'danger' as const
+      : record.status === 'WAITING_MEDIA_REVIEW'
+        ? 'warning' as const
+        : 'neutral' as const,
+  };
   const readiness = externalInvoiceReviewReadiness({ record, creator, contracts });
   const contractBlockers = contractChecks.filter((check) => check.state === 'FAIL').map((check) => `${check.label}与合同不一致`);
   const workspaceBlockers = [...readiness.blockers, ...contractBlockers];
@@ -696,6 +783,9 @@ export function ExternalInvoiceCollectionDetailPage({
           evidenceTarget: 'PAYMENT_ACCOUNT',
         } : undefined}
         timeline={reviewTimeline}
+        historySummary={externalHistorySummary}
+        currentTask={externalCurrentTask}
+        historyStatusText={`当前状态：${externalInvoiceListStatus(record.status)} · ${TECHNICAL_STATUS_LABEL[record.status]}`}
         completion={record.status === 'APPROVED'
           ? { completed: readiness.total, total: readiness.total }
           : { completed: readiness.completed, total: readiness.total }}

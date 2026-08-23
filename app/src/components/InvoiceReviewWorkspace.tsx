@@ -104,6 +104,20 @@ export type InvoiceReviewTimelineItem = {
   state: 'COMPLETE' | 'CURRENT' | 'PENDING' | 'RETURNED';
 };
 
+export type InvoiceReviewHistorySummaryItem = {
+  label: string;
+  value: string;
+};
+
+export type InvoiceReviewCurrentTask = {
+  title: string;
+  transition: string;
+  assignee: string;
+  updatedAt: string;
+  instruction: string;
+  tone?: 'neutral' | 'warning' | 'danger';
+};
+
 export type InvoiceReviewReturnOption = {
   value: string;
   label: string;
@@ -151,6 +165,9 @@ type InvoiceReviewWorkspaceProps = {
   accountComparison?: InvoiceReviewAccountComparison;
   accountDescription?: string;
   timeline: InvoiceReviewTimelineItem[];
+  historySummary?: InvoiceReviewHistorySummaryItem[];
+  currentTask?: InvoiceReviewCurrentTask;
+  historyStatusText?: string;
   completion: { completed: number; total: number };
   blockingReasons: string[];
   issueStatusText?: string;
@@ -230,6 +247,9 @@ export function InvoiceReviewWorkspace({
   accountComparison,
   accountDescription,
   timeline,
+  historySummary = [],
+  currentTask,
+  historyStatusText,
   completion,
   blockingReasons,
   issueStatusText,
@@ -614,16 +634,36 @@ export function InvoiceReviewWorkspace({
           {activeTab === 'history' ? (
             <div className="invoice-review-history-section">
               <div className="invoice-review-section-heading">
-                <div><History size={18} /><span><strong>审核与流转记录</strong><small>按当前 Invoice 来源隐藏不适用节点</small></span></div>
+                <div><History size={18} /><span><strong>审核与流转记录</strong><small>展示当前 Invoice 的版本摘要与完整流程</small></span></div>
               </div>
+              {historySummary.length ? (
+                <dl className="invoice-review-history-summary">
+                  {historySummary.map((item) => (
+                    <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>
+                  ))}
+                </dl>
+              ) : null}
               <div className="invoice-review-timeline">
-                {timeline.map((item) => (
+                {timeline.map((item, index) => (
                   <article className={`is-${item.state.toLowerCase()}`} key={item.id}>
-                    <span>{item.state === 'COMPLETE' ? <CheckCircle2 size={15} /> : item.state === 'RETURNED' ? <AlertTriangle size={15} /> : null}</span>
+                    <span>{item.state === 'COMPLETE' ? <CheckCircle2 size={15} /> : item.state === 'RETURNED' ? <AlertTriangle size={15} /> : index + 1}</span>
                     <div><strong>{item.title}</strong><p>{item.description}</p>{item.meta ? <small>{item.meta}</small> : null}</div>
                   </article>
                 ))}
               </div>
+              {currentTask ? (
+                <article className={`invoice-review-current-task is-${currentTask.tone ?? 'neutral'}`}>
+                  <strong>{currentTask.title}</strong>
+                  <dl>
+                    <div><dt>流转</dt><dd>{currentTask.transition}</dd></div>
+                    <div><dt>跟踪</dt><dd>{currentTask.assignee} · {currentTask.updatedAt}</dd></div>
+                  </dl>
+                  <p>{currentTask.instruction}</p>
+                </article>
+              ) : null}
+              {historyStatusText ? (
+                <div className="invoice-review-history-status"><Clock3 size={15} />{historyStatusText}</div>
+              ) : null}
             </div>
           ) : null}
         </div>

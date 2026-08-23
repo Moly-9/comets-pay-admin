@@ -58,6 +58,7 @@ import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import {
   findInvoiceRequest,
   getInvoiceManagementView,
+  getInvoiceManagementReturnInfo,
   type InvoiceManagementRow,
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
@@ -2832,6 +2833,9 @@ export function InvoicePage({
   onCreateBatchInvoice,
   onCreateExternalInvoice = () => undefined,
   onPublishExternalInvoice = () => undefined,
+  onPublishExternalInvoices = () => false,
+  onPublishGeneratedInvoices = () => false,
+  onWithdrawGeneratedInvoice = () => false,
   onSimulateExternalUpload = () => undefined,
   onCorrectExternalRecognition = () => undefined,
   onSubmitExternalInvoice = () => undefined,
@@ -2870,6 +2874,9 @@ export function InvoicePage({
   onCreateBatchInvoice: () => void;
   onCreateExternalInvoice?: (input: ExternalInvoiceCollectionInput, publish: boolean) => void;
   onPublishExternalInvoice?: (invoiceId: string) => void;
+  onPublishExternalInvoices?: (invoiceIds: string[]) => boolean;
+  onPublishGeneratedInvoices?: (invoiceIds: string[]) => boolean;
+  onWithdrawGeneratedInvoice?: (invoiceId: string) => boolean;
   onSimulateExternalUpload?: (
     invoiceId: string,
     scenario: ExternalInvoiceScenario,
@@ -2912,6 +2919,7 @@ export function InvoicePage({
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedExternalInvoiceId, setSelectedExternalInvoiceId] = useState<string | null>(null);
   const [showExternalCreate, setShowExternalCreate] = useState(false);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
   const effectiveSourceKey = selectedSourceKey ?? (
     focusedInvoiceId
       ? focusedInvoiceId.startsWith('generated:') || focusedInvoiceId.startsWith('payout:')
@@ -3003,8 +3011,14 @@ export function InvoicePage({
     const snapshot = invoiceSnapshotFor(payout);
     const identity = invoiceIdentityFor(payout);
     const view = managementViewFor(payout);
+    const request = findInvoiceRequest(payout, generatedInvoices, requests);
+    const returnInfo = view.status === '已退回' && generated
+      ? getInvoiceManagementReturnInfo(payout, generated.invoiceId, request)
+      : undefined;
     const canAct = canActOnInvoice(payout);
-    const actionLabel = canAct
+    const actionLabel = payout.invoiceReviewStatus === '草稿'
+      ? '查看草稿'
+      : canAct
       ? payout.invoiceReviewStatus === '达人反馈'
         ? '处理反馈'
         : payout.invoiceReviewStatus === '待媒介复核'
@@ -3019,6 +3033,9 @@ export function InvoicePage({
       invoiceType: generated?.invoiceType ?? 'INTERNAL',
       creatorName: identity.displayName,
       channelId: identity.channelId,
+      issuerName: creators.find((creator) => creator.id === snapshot?.creatorId)?.contact?.legalName
+        ?? snapshot?.from.legalName
+        ?? '待补充',
       initials: identity.initials,
       accent: identity.accent,
       projectName: snapshot?.projectName ?? payout.project,
@@ -3028,8 +3045,10 @@ export function InvoicePage({
       currency: payout.currency,
       amount: payout.amount,
       actionLabel,
-      primaryAction: canAct,
+      primaryAction: canAct || (payout.invoiceReviewStatus === '草稿' && canManageInvoice),
       source: { kind: 'payout' as const, payout },
+      returnReason: returnInfo?.reason,
+      returnSourceLabel: returnInfo?.sourceLabel,
       additionalActionLabel: view.tab === 'signature' && canManageInvoice && payout.invoiceReviewStatus === '待签署'
         ? '模拟达人完成签署'
         : undefined,
@@ -3050,6 +3069,7 @@ export function InvoicePage({
         ?? record.creatorHandle,
       initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
       accent: creator?.accent ?? '#9c6f93',
+      issuerName: creator?.contact.legalName ?? '待补充',
       projectName: record.projectName,
       invoiceNumber: externalInvoicePageTab(record.status) === 'upload'
         ? '待生成'
@@ -3088,11 +3108,29 @@ export function InvoicePage({
   const query = search.trim().toLowerCase();
   const visibleRows = query
     ? groupedRows[tab].filter((row) => (
-        `${row.creatorName} ${row.channelId} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
+        `${row.creatorName} ${row.channelId} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
           .toLowerCase()
           .includes(query)
       ))
     : groupedRows[tab];
+  useEffect(() => {
+    setSelectedRowIds(new Set());
+  }, [search, tab]);
+  const selectionEnabled = tab === 'signature' || tab === 'upload';
+  const selectableRowIds = new Set(visibleRows.filter((row) => (
+    (tab === 'signature' && row.invoiceType === 'INTERNAL' && row.status === '草稿')
+    || (tab === 'upload' && row.invoiceType === 'EXTERNAL' && row.status === '待发布')
+  )).map((row) => row.rowId));
+  const selectedPublishRows = visibleRows.filter((row) => selectedRowIds.has(row.rowId));
+
+  const publishSelectedRows = () => {
+    if (!selectedPublishRows.length) return;
+    const invoiceIds = selectedPublishRows.map((row) => row.invoiceId);
+    const published = tab === 'signature'
+      ? onPublishGeneratedInvoices(invoiceIds)
+      : onPublishExternalInvoices(invoiceIds);
+    if (published) setSelectedRowIds(new Set());
+  };
   const selectedExternalInvoice = externalInvoices.find((record) => (
     String(record.invoiceId) === selectedExternalInvoiceId
   ));
@@ -3135,6 +3173,9 @@ export function InvoicePage({
 
   const selectedManagementView = selectedDetailPayout
     ? managementViewFor(selectedDetailPayout)
+    : undefined;
+  const selectedRequest = selectedDetailPayout
+    ? findInvoiceRequest(selectedDetailPayout, generatedInvoices, requests)
     : undefined;
 
   if (showExternalCreate) {
@@ -3209,6 +3250,8 @@ export function InvoicePage({
         onReviewAction={onReviewAction}
         onReplyFeedback={onReplyFeedback}
         onSendSignatureReminder={onSendSignatureReminder}
+        onPublishDraft={(record) => onPublishGeneratedInvoices([String(record.invoiceId)])}
+        onWithdrawDraft={(record) => onWithdrawGeneratedInvoice(String(record.invoiceId))}
         onEditInvoice={onEditInvoice}
         onOpenProject={onOpenProject}
         onOpenRequest={onOpenRequest}
@@ -3221,6 +3264,7 @@ export function InvoicePage({
         )}
         canExecutePayout={canExecutePayout}
         managementView={selectedManagementView}
+        request={selectedRequest}
         onBack={closeInvoiceDetail}
       />
     );
@@ -3249,13 +3293,27 @@ export function InvoicePage({
         </div>
         <div className="content-toolbar compact-toolbar">
           <SearchBar value={search} onChange={setSearch} placeholder={tab === 'signature' ? '搜索待签署 Invoice、达人或项目' : '搜索 Invoice 或达人'} />
-          <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
+          <div className="invoice-list-toolbar-actions">
+            {selectionEnabled ? (
+              <Button
+                icon={<Send size={16} />}
+                disabled={!selectedPublishRows.length}
+                onClick={publishSelectedRows}
+              >
+                一键发布{selectedPublishRows.length ? `（${selectedPublishRows.length}）` : ''}
+              </Button>
+            ) : null}
+            <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
+          </div>
         </div>
         <InvoiceManagementTable
           rows={visibleRows}
           onSelect={openInvoiceRow}
           emptyText="当前筛选条件下没有 Invoice 记录"
           additionalActionIcon={<CheckCircle2 size={15} />}
+          selectableRowIds={selectionEnabled ? selectableRowIds : undefined}
+          selectedRowIds={selectionEnabled ? selectedRowIds : undefined}
+          onSelectionChange={selectionEnabled ? setSelectedRowIds : undefined}
           onAdditionalAction={(row) => {
             if (row.source.kind === 'payout') simulateCreatorSignature(row.source.payout);
           }}

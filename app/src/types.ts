@@ -322,6 +322,7 @@ export type InvoicePaymentFreezeSnapshot = {
 };
 
 export type InvoiceReviewStatus =
+  | '草稿'
   | '待签署'
   | '达人反馈'
   | '待媒介审核'
@@ -378,6 +379,9 @@ export type InvoiceNotificationDelivery = {
 export type InvoiceReviewEvent = {
   stage: InvoiceReviewStage;
   action:
+    | '生成草稿'
+    | '编辑草稿'
+    | '发布达人签署'
     | '签署完成'
     | '通知达人签署'
     | '达人反馈'
@@ -409,6 +413,13 @@ export type GeneratedInvoiceRecord = {
   sourcePayoutId: string;
   status: InvoiceReviewStatus;
   generatedAt: string;
+  draftUpdatedAt?: string;
+  publishedAt?: string;
+  publishedBy?: {
+    account: string;
+    name: string;
+    role: string;
+  };
   snapshot: InvoiceDocumentModel;
   paymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   validationStatus: 'valid' | 'needs_review';
@@ -470,6 +481,7 @@ export type InvoiceBatchDraft = {
 };
 
 export type InvoiceEditContext =
+  | 'DRAFT'
   | 'CREATOR_FEEDBACK'
   | 'MEDIA_RECHECK'
   | 'PAYMENT_FAILURE_CONTENT'

@@ -113,6 +113,43 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(html.indexOf('contract-metric-grid')).toBeLessThan(html.indexOf('invoice-review-workspace'));
   });
 
+  it('shows the five fixed header actions and enables publish, edit and withdraw for a draft', () => {
+    const draftRecord: GeneratedInvoiceRecord = {
+      id: 'INV-SYNTHETIC',
+      invoiceId: 'invoice-synthetic' as never,
+      sourcePayoutId: basePayout.id,
+      status: '草稿',
+      generatedAt: '2026-08-05T10:00:00.000Z',
+      snapshot: model,
+      validationStatus: 'valid',
+      version: 1,
+    };
+    const html = renderToStaticMarkup(
+      <InvoiceDetailPage
+        source={{ kind: 'generated', record: draftRecord, payout: { ...basePayout, invoiceReviewStatus: '草稿' } }}
+        model={model}
+        onBack={() => undefined}
+        onMarkSigned={() => undefined}
+        onReviewAction={() => undefined}
+        onPublishDraft={() => true}
+        onWithdrawDraft={() => true}
+        onEditInvoice={() => undefined}
+        canManageInvoice
+        canReviewMedia={false}
+        canReviewFinance={false}
+        notify={() => undefined}
+      />,
+    );
+
+    ['复制编号', '发布达人签署', '编辑', '撤销', '下载PDF'].reduce((previousIndex, label) => {
+      const index = html.indexOf(`<span>${label}</span>`);
+      expect(index).toBeGreaterThan(previousIndex);
+      return index;
+    }, -1);
+    expect(html).toContain('title="发布并通知达人签署"');
+    expect(html).toContain('title="撤销并删除当前草稿"');
+  });
+
   it('enables media approval after the generated Invoice has been signed', () => {
     const record: GeneratedInvoiceRecord = {
       id: 'generated-synthetic',
@@ -177,7 +214,7 @@ describe('InvoiceDetailPage edit actions', () => {
       },
     }, { manage: true, media: false });
     expect(feedbackHtml).toContain('查看反馈');
-    expect(feedbackHtml).toContain('修改并重新发送达人');
+    expect(feedbackHtml).toMatch(/title="编辑 Invoice"[\s\S]*?<span>编辑<\/span>/);
     expect(feedbackHtml).toContain('达人尚未完成签署');
     expect(getInvoiceTimelineState('达人反馈')).toEqual({
       currentIndex: 1,
@@ -185,7 +222,7 @@ describe('InvoiceDetailPage edit actions', () => {
     });
 
     const recheckHtml = renderDetail(basePayout, { manage: false, media: true });
-    expect(recheckHtml).toContain('修改 Invoice');
+    expect(recheckHtml).toContain('<span>编辑</span>');
     expect(recheckHtml).toContain('复核通过并重新提交');
   });
 
@@ -204,7 +241,7 @@ describe('InvoiceDetailPage edit actions', () => {
       },
     };
     expect(renderDetail(contentReturn, { manage: true, media: false }))
-      .toContain('修改并重新发起');
+      .toMatch(/title="编辑 Invoice"[\s\S]*?<span>编辑<\/span>/);
 
     const paymentListHtml = renderDetail({
       ...contentReturn,
@@ -215,7 +252,7 @@ describe('InvoiceDetailPage edit actions', () => {
       },
     }, { manage: true, media: true });
     expect(paymentListHtml).toContain('等待项目付款清单重新提交');
-    expect(paymentListHtml).not.toContain('修改并重新发起');
+    expect(paymentListHtml).toContain('title="当前状态不可编辑"');
     expect(paymentListHtml).not.toContain('复核通过并重新提交');
   });
 
@@ -224,7 +261,7 @@ describe('InvoiceDetailPage edit actions', () => {
       ...basePayout,
       invoiceReviewStatus: '已通过',
     }, { manage: true, media: false }, true);
-    expect(html).toContain('修改 Invoice 并重新签署');
+    expect(html).toMatch(/title="编辑 Invoice"[\s\S]*?<span>编辑<\/span>/);
   });
 
   it('explains the prototype delivery channels for feedback replies', () => {
@@ -250,9 +287,10 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(manageableHtml).toContain('可通知达人登录系统签署');
 
     const readOnlyHtml = renderDetail(waitingPayout, { manage: false, media: false });
-    expect(readOnlyHtml).not.toContain('通知达人签署');
+    expect(readOnlyHtml).toContain('通知达人签署');
+    expect(readOnlyHtml).toContain('title="仅待签署状态可以发送提醒"');
     expect(renderDetail(basePayout, { manage: true, media: true }))
-      .not.toContain('通知达人签署');
+      .toContain('title="仅待签署状态可以发送提醒"');
   });
 
   it('builds the editable reminder copy and explains both simulated channels', () => {

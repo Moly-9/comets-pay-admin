@@ -6,6 +6,7 @@ import {
   Download,
   FileText,
   Plus,
+  Send,
   Sparkles,
   Trash2,
   UserRound,
@@ -96,6 +97,7 @@ type InvoiceBuilderPageProps = {
   onDirtyChange?: (dirty: boolean) => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
+  onPublishGenerated?: (record: GeneratedInvoiceRecord) => boolean;
   initialEngagementId?: EngagementId | null;
 };
 
@@ -163,6 +165,7 @@ export function InvoiceBuilderPage({
   onDirtyChange,
   onCancel,
   onOpenInvoiceManagement,
+  onPublishGenerated,
   initialEngagementId,
 }: InvoiceBuilderPageProps) {
   const isEditing = Boolean(editRecord && editContext);
@@ -523,7 +526,7 @@ export function InvoiceBuilderPage({
       const contractMatchReview = createInvoiceContractMatchReview({
         contracts: selectedContracts,
         model: snapshot,
-        version: isEditing ? (editRecord?.version ?? 1) + 1 : 1,
+        version: isEditing && editContext !== 'DRAFT' ? (editRecord?.version ?? 1) + 1 : editRecord?.version ?? 1,
         reason: contractMatchReason,
         actor: contractMatchActor,
       });
@@ -534,8 +537,8 @@ export function InvoiceBuilderPage({
         : {
             id: snapshot.invoiceNumber,
             invoiceId: createPrototypeId('invoice') as InvoiceId,
-            sourcePayoutId: selectedPayout?.id ?? prototypePayoutId,
-            status: '待签署' as const,
+            sourcePayoutId: prototypePayoutId,
+            status: '草稿' as const,
             generatedAt: new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(new Date()),
             snapshot,
             validationStatus: 'valid' as const,
@@ -558,7 +561,9 @@ export function InvoiceBuilderPage({
     onCancel();
   };
 
-  const saveLabel = editContext === 'CREATOR_FEEDBACK'
+  const saveLabel = editContext === 'DRAFT'
+    ? '保存草稿'
+    : editContext === 'CREATOR_FEEDBACK'
     ? '保存并重新发送达人'
     : editContext === 'MEDIA_RECHECK'
       ? '保存修改并重新签署'
@@ -568,10 +573,16 @@ export function InvoiceBuilderPage({
 
   return (
     <div className="page-stack invoice-builder-page">
+      <button className="project-back-button" type="button" onClick={cancel}>
+        <ArrowLeft size={17} />
+        {isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}
+      </button>
       <PageHeading
         title={isEditing ? '修改 Invoice' : '生成 Invoice'}
         subtitle={isEditing
-          ? '保留稳定关联并生成新文件版本；保存后原签署失效，重新进入待签署。'
+          ? editContext === 'DRAFT'
+            ? '修改尚未发布的 Invoice 草稿；保存后保持当前版本，不会通知达人。'
+            : '保留稳定关联并生成新文件版本；保存后原签署失效，重新进入待签署。'
           : '从达人档案与项目费用中自动带入资料，确认后同时生成 PDF 与 DOCX。'}
         actions={(
           <>
@@ -586,9 +597,6 @@ export function InvoiceBuilderPage({
                 填充演示数据
               </Button>
             ) : null}
-            <Button variant="secondary" icon={<ArrowLeft size={17} />} onClick={cancel}>
-              {isEditing ? '返回 Invoice 详情' : '返回 Invoice 管理'}
-            </Button>
           </>
         )}
       />
@@ -604,11 +612,29 @@ export function InvoiceBuilderPage({
       {generatedFiles ? (
         <section className="invoice-generation-success" data-testid="invoice-generation-success">
           <span><CheckCircle2 size={22} /></span>
-          <div><strong>{generatedFiles.record.id} 已生成</strong><p>PDF 与 DOCX 使用同一份数据快照，状态为“待签署”。</p></div>
+          <div>
+            <strong>{generatedFiles.record.id} {generatedFiles.record.status === '草稿' ? '草稿已生成' : '已发布待签署'}</strong>
+            <p>{generatedFiles.record.status === '草稿' ? 'PDF 与 DOCX 使用同一份数据快照，发布后才会通知达人签署。' : '已生成达人端签署待办，并记录模拟通知。'}</p>
+          </div>
           <div className="invoice-generation-actions">
             <Button variant="secondary" icon={<Download size={16} />} onClick={() => downloadBlob(generatedFiles.pdfBlob, invoiceFilename(generatedFiles.record.snapshot, 'pdf'))}>下载 PDF</Button>
             <Button variant="secondary" icon={<Download size={16} />} onClick={() => downloadBlob(generatedFiles.docxBlob, invoiceFilename(generatedFiles.record.snapshot, 'docx'))}>下载 DOCX</Button>
-            <Button onClick={onOpenInvoiceManagement}>查看待签署列表</Button>
+            {onPublishGenerated ? (
+              <Button
+                icon={<Send size={16} />}
+                disabled={generatedFiles.record.status !== '草稿'}
+                onClick={() => {
+                  if (!onPublishGenerated(generatedFiles.record)) return;
+                  setGeneratedFiles((current) => current ? {
+                    ...current,
+                    record: { ...current.record, status: '待签署' },
+                  } : current);
+                }}
+              >
+                {generatedFiles.record.status === '草稿' ? '发布达人签署' : '已发布'}
+              </Button>
+            ) : null}
+            <Button onClick={onOpenInvoiceManagement}>查看 Invoice 草稿</Button>
           </div>
         </section>
       ) : null}

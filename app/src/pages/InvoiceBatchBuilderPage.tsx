@@ -15,6 +15,7 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  Send,
   Sparkles,
   Upload,
   Users,
@@ -104,6 +105,7 @@ type InvoiceBatchBuilderPageProps = {
   onDirtyChange: (dirty: boolean) => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
+  onPublishGenerated?: (records: GeneratedInvoiceRecord[]) => boolean;
   onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
   contractMatchActor?: InvoiceContractMatchActor;
 };
@@ -138,6 +140,7 @@ type InvoiceBatchResultSectionProps = {
   contracts: ContractRecord[];
   fallbackCurrency: InvoiceCurrency;
   onDownloadZip: () => void;
+  onPublishAll?: () => void;
 };
 
 export function InvoiceBatchResultSection({
@@ -146,6 +149,7 @@ export function InvoiceBatchResultSection({
   contracts,
   fallbackCurrency,
   onDownloadZip,
+  onPublishAll,
 }: InvoiceBatchResultSectionProps) {
   const resultRows = rows.filter((row) => row.status === 'GENERATED' || row.status === 'FAILED');
   const generatedRows = resultRows.filter((row) => row.status === 'GENERATED');
@@ -159,7 +163,7 @@ export function InvoiceBatchResultSection({
         <span><PackageCheck size={18} /></span>
         <div>
           <h2>生成结果</h2>
-          <p>成功记录将进入“待签署”，可在这里查看结果并下载文件。</p>
+          <p>成功记录将保存为草稿，可在这里查看结果并下载文件，发布后才会通知达人。</p>
         </div>
       </header>
 
@@ -181,6 +185,11 @@ export function InvoiceBatchResultSection({
               <Button icon={<Download size={16} />} onClick={onDownloadZip}>
                 下载整批 ZIP
               </Button>
+              {onPublishAll ? (
+                <Button icon={<Send size={16} />} onClick={onPublishAll}>
+                  一键发布草稿
+                </Button>
+              ) : null}
             </div>
           ) : null}
 
@@ -861,6 +870,7 @@ export function InvoiceBatchBuilderPage({
   onDirtyChange,
   onCancel,
   onOpenInvoiceManagement,
+  onPublishGenerated,
   onOpenCreatorPaymentInformation,
   contractMatchActor,
 }: InvoiceBatchBuilderPageProps) {
@@ -1735,6 +1745,18 @@ export function InvoiceBatchBuilderPage({
           contracts={contracts}
           fallbackCurrency={currency}
           onDownloadZip={() => void downloadZip()}
+          onPublishAll={onPublishGenerated && generatedRows.some((row) => row.generated?.record.status === '草稿')
+            ? () => {
+                const records = generatedRows
+                  .map((row) => row.generated?.record)
+                  .filter((record): record is GeneratedInvoiceRecord => Boolean(record && record.status === '草稿'));
+                if (!records.length || !onPublishGenerated(records)) return;
+                const publishedIds = new Set(records.map((record) => record.invoiceId));
+                setRows((current) => current.map((row) => row.generated && publishedIds.has(row.generated.record.invoiceId)
+                  ? { ...row, generated: { ...row.generated, record: { ...row.generated.record, status: '待签署' } } }
+                  : row));
+              }
+            : undefined}
         />
 
         <footer className="invoice-builder-footer invoice-batch-footer">

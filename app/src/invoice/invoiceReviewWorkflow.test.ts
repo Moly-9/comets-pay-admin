@@ -18,6 +18,7 @@ import {
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   maskInvoiceAccountValue,
+  publishGeneratedInvoiceDraft,
   recordInvoiceSignatureReminder,
   replyToCreatorFeedback,
 } from './invoiceReviewWorkflow';
@@ -140,6 +141,56 @@ describe('Invoice review workflow', () => {
       actor,
     );
     expect(rechecked.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('复核通过并重新提交');
+  });
+
+  it('keeps draft edits at V1 and only creates signature notifications after publishing', () => {
+    const draftRecord: GeneratedInvoiceRecord = { ...generatedRecord, status: '草稿' };
+    const draftPayout: Payout = {
+      ...payout,
+      invoiceReviewStatus: '草稿',
+      invoiceVersion: 1,
+      invoiceSnapshot: snapshot,
+    };
+    const edited = applyInvoiceDocumentEdit({
+      record: draftRecord,
+      payout: draftPayout,
+      snapshot: { ...snapshot, invoiceDate: '2026-08-06' },
+      context: 'DRAFT',
+      actor,
+      occurredAt: '2026-08-06T01:00:00.000Z',
+    });
+
+    expect(edited.record.status).toBe('草稿');
+    expect(edited.record.version).toBe(1);
+    expect(edited.record.revisions).toBeUndefined();
+    expect(edited.payout.invoiceReviewStatus).toBe('草稿');
+    expect(edited.payout.invoiceReviewHistory?.slice(-1)[0]?.action).toBe('编辑草稿');
+
+    const published = publishGeneratedInvoiceDraft(
+      edited.record,
+      edited.payout,
+      actor,
+      snapshot.from.email,
+      '2026-08-06T02:00:00.000Z',
+    );
+    expect(published.record.status).toBe('待签署');
+    expect(published.record.publishedAt).toBe('2026-08-06T02:00:00.000Z');
+    expect(published.payout.invoiceReviewStatus).toBe('待签署');
+    expect(published.payout.invoiceReviewHistory?.slice(-1)[0]).toMatchObject({
+      action: '发布达人签署',
+      fromStatus: '草稿',
+      toStatus: '待签署',
+      notificationDeliveries: [
+        { channel: 'IN_APP', status: 'SIMULATED_SENT' },
+        { channel: 'EMAIL', status: 'SIMULATED_SENT' },
+      ],
+    });
+    expect(() => publishGeneratedInvoiceDraft(
+      published.record,
+      published.payout,
+      actor,
+      snapshot.from.email,
+    )).toThrow(/只有草稿/);
   });
 
   it('groups media-approved Invoices under the approved business tab', () => {

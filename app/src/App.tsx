@@ -69,6 +69,7 @@ import {
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   paymentFailureRestartStage,
+  publishGeneratedInvoiceDraft,
   recordInvoiceSignatureReminder,
   replyToCreatorFeedback,
   type InvoiceReviewAction,
@@ -922,7 +923,18 @@ export default function App() {
         localClearingSystem: record.snapshot.payment.localClearingSystem,
         feeBearer: feeBearers.length === 1 ? feeBearers[0] : '',
         status: '未进入付款',
-        invoiceReviewStatus: '待签署',
+        invoiceReviewStatus: record.status,
+        invoiceReviewHistory: existing?.invoiceReviewHistory ?? (record.status === '草稿' ? [{
+          stage: 'SIGNATURE',
+          action: '生成草稿',
+          actorAccount: currentUser.account,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          fromStatus: '草稿',
+          toStatus: '草稿',
+          reason: 'Invoice 文件已生成，尚未发布至达人端。',
+          occurredAt: nowIso(),
+        }] : undefined),
         invoiceVersion: record.version ?? 1,
         invoiceSignatureRound: 0,
         invoiceSnapshot: record.snapshot,
@@ -983,8 +995,8 @@ export default function App() {
     notify(
       records.length === 1 ? 'Invoice 已生成' : '批量 Invoice 已生成',
       records.length === 1
-        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，签名区域保持为空。`
-        : `${records.length} 张 Invoice 已进入待签署，PDF 与 DOCX 文件已准备完成。`,
+        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，当前保存为草稿，尚未通知达人。`
+        : `${records.length} 张 Invoice 已保存为草稿，发布后才会通知对应达人。`,
     );
   };
 
@@ -1277,13 +1289,34 @@ export default function App() {
       },
     });
     const projectId = result.record.snapshot.projectId as ProjectId;
-    const refreshedPaymentItem = invoicePaymentListItem(result.record, contracts);
     setGeneratedInvoices((current) => current.map((invoice) => (
       invoice.invoiceId === result.record.invoiceId ? result.record : invoice
     )));
     setPayouts((current) => current.map((item) => (
       item.id === result.payout.id ? result.payout : item
     )));
+    if (invoiceEditTarget.context === 'DRAFT') {
+      setWorkflowAuditEvents((current) => [
+        createAuditEvent({
+          projectId,
+          engagementId: result.record.snapshot.engagementId as EngagementId | undefined,
+          entityType: 'invoice',
+          entityId: result.record.invoiceId,
+          action: 'update',
+          actor: `${currentUser.name}（${currentUser.role}）`,
+          summary: `已更新 Invoice 草稿 ${result.record.id}，仍保持 v${result.record.version ?? 1}`,
+        }),
+        ...current,
+      ]);
+      setInvoiceEditTarget(null);
+      setInvoiceEditorDirty(false);
+      setFocusedInvoiceId(`generated:${result.record.id}`);
+      setInvoiceTab('signature');
+      setActivePage('invoice');
+      notify('Invoice 草稿已保存', `${result.record.id} 仍为 v${result.record.version ?? 1}，尚未发布给达人。`);
+      return result.record;
+    }
+    const refreshedPaymentItem = invoicePaymentListItem(result.record, contracts);
     setPaymentLists((current) => current.map((list) => (
       list.projectId === projectId && list.items.some((item) => item.invoiceId === result.record.invoiceId)
         ? { ...refreshPaymentListItemSnapshot(list, refreshedPaymentItem), status: 'draft' }
@@ -3015,18 +3048,39 @@ export default function App() {
     }
   };
 
-  const publishExternalInvoiceTask = (invoiceId: string) => {
-    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
-    if (!record) return;
+  const publishExternalInvoiceTasks = (invoiceIds: string[]) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能发布外部 Invoice 收集任务。`);
+      return false;
+    }
+    const selectedIds = new Set(invoiceIds);
+    const records = externalInvoices.filter((candidate) => selectedIds.has(String(candidate.invoiceId)));
+    if (!records.length || records.length !== selectedIds.size) {
+      notify('发布失败', '部分外部 Invoice 收集任务已不存在，请刷新列表后重试。');
+      return false;
+    }
     try {
-      const updated = publishExternalInvoiceCollection(record, externalInvoiceActor());
-      setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
+      const occurredAt = nowIso();
+      const updated = records.map((record) => publishExternalInvoiceCollection(
+        record,
+        externalInvoiceActor(),
+        occurredAt,
+      ));
+      const updatedById = new Map(updated.map((record) => [record.invoiceId, record]));
+      setExternalInvoices((current) => current.map((candidate) => updatedById.get(candidate.invoiceId) ?? candidate));
       setInvoiceTab('upload');
-      notify('收集任务已发布', `${record.creatorName} 的 C 端待上传任务已生成。`);
+      notify(
+        records.length === 1 ? '收集任务已发布' : '收集任务已批量发布',
+        `${records.length} 个 C 端待上传任务已生成。`,
+      );
+      return true;
     } catch (error) {
       notify('发布失败', error instanceof Error ? error.message : '当前收集任务无法发布。');
+      return false;
     }
   };
+
+  const publishExternalInvoiceTask = (invoiceId: string) => publishExternalInvoiceTasks([invoiceId]);
 
   const simulateExternalInvoiceReturn = (
     invoiceId: string,
@@ -3279,6 +3333,77 @@ export default function App() {
       notify('通知发送失败', error instanceof Error ? error.message : '当前 Invoice 无法发送签署提醒。');
       return false;
     }
+  };
+
+  const publishInternalInvoiceDrafts = (invoiceIds: string[]) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能发布 Invoice 草稿。`);
+      return false;
+    }
+    const selectedIds = new Set(invoiceIds);
+    const records = generatedInvoices.filter((record) => selectedIds.has(String(record.invoiceId)));
+    if (!records.length || records.length !== selectedIds.size) {
+      notify('发布失败', '部分 Invoice 草稿已不存在，请刷新列表后重试。');
+      return false;
+    }
+    const occurredAt = nowIso();
+    const actor = { account: currentUser.account, name: currentUser.name, role: currentUser.role };
+    try {
+      const results = records.map((record) => {
+        const payout = payouts.find((candidate) => candidate.id === record.sourcePayoutId);
+        if (!payout) throw new Error(`${record.id} 缺少关联付款记录。`);
+        return publishGeneratedInvoiceDraft(record, payout, actor, record.snapshot.from.email, occurredAt);
+      });
+      const recordsById = new Map(results.map((result) => [result.record.invoiceId, result.record]));
+      const payoutsById = new Map(results.map((result) => [result.payout.id, result.payout]));
+      setGeneratedInvoices((current) => current.map((record) => recordsById.get(record.invoiceId) ?? record));
+      setPayouts((current) => current.map((payout) => payoutsById.get(payout.id) ?? payout));
+      setInvoiceTab('signature');
+      notify(
+        records.length === 1 ? 'Invoice 已发布' : 'Invoice 已批量发布',
+        `${records.length} 张 Invoice 已发送至达人端签署，并记录站内信与邮件模拟通知。`,
+      );
+      return true;
+    } catch (error) {
+      notify('发布失败', error instanceof Error ? error.message : 'Invoice 草稿暂时无法发布。');
+      return false;
+    }
+  };
+
+  const withdrawInternalInvoiceDraft = (invoiceId: string) => {
+    if (!hasPermission(currentUser, 'invoice_manage')) {
+      notify('暂无操作权限', `${currentUser.role}不能撤销 Invoice 草稿。`);
+      return false;
+    }
+    const record = generatedInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    const payout = record ? payouts.find((candidate) => candidate.id === record.sourcePayoutId) : undefined;
+    if (!record || !payout) {
+      notify('撤销失败', '未找到完整的 Invoice 草稿记录。');
+      return false;
+    }
+    if (record.status !== '草稿' || payout.invoiceReviewStatus !== '草稿') {
+      notify('无法撤销', '只有尚未发布的 Invoice 草稿可以撤销。');
+      return false;
+    }
+    if (findInvoiceRequest(payout, generatedInvoices, requestProjects)) {
+      notify('无法撤销', '该 Invoice 已被请款项目占用，不能删除。');
+      return false;
+    }
+    setGeneratedInvoices((current) => current.filter((candidate) => candidate.invoiceId !== record.invoiceId));
+    setPayouts((current) => current.filter((candidate) => candidate.id !== payout.id));
+    setPaymentLists((current) => current.map((list) => removePaymentListItem(list, record.invoiceId)));
+    registerProjectMutation({
+      projectId: record.snapshot.projectId as ProjectId,
+      engagementId: record.snapshot.engagementId,
+      entityType: 'invoice',
+      entityId: record.invoiceId,
+      action: 'delete',
+      summary: `已撤销并删除 Invoice 草稿 ${record.id}`,
+    });
+    setFocusedInvoiceId(null);
+    setInvoiceTab('signature');
+    notify('Invoice 草稿已撤销', `${record.id} 已从当前前端会话中删除。`);
+    return true;
   };
 
   const markInvoiceSigned = (record: GeneratedInvoiceRecord) => {
@@ -4204,6 +4329,9 @@ export default function App() {
           onCreateBatchInvoice={() => setActivePage('invoice-batch-create')}
           onCreateExternalInvoice={createExternalInvoiceTask}
           onPublishExternalInvoice={publishExternalInvoiceTask}
+          onPublishExternalInvoices={publishExternalInvoiceTasks}
+          onPublishGeneratedInvoices={publishInternalInvoiceDrafts}
+          onWithdrawGeneratedInvoice={withdrawInternalInvoiceDraft}
           onSimulateExternalUpload={simulateExternalInvoiceReturn}
           onCorrectExternalRecognition={correctExternalInvoiceField}
           onSubmitExternalInvoice={submitExternalInvoiceTask}
@@ -4311,6 +4439,7 @@ export default function App() {
             addGeneratedInvoice(record);
             setInvoiceCreationEngagementId(null);
           }}
+          onPublishGenerated={(record) => publishInternalInvoiceDrafts([String(record.invoiceId)])}
           onCancel={() => {
             setInvoiceCreationEngagementId(null);
             if (requestResourceReturn?.resource === 'invoice') {
@@ -4347,6 +4476,7 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={addGeneratedInvoices}
+          onPublishGenerated={(records) => publishInternalInvoiceDrafts(records.map((record) => String(record.invoiceId)))}
           onDirtyChange={setInvoiceBatchDirty}
           onCancel={() => {
             setInvoiceBatchDirty(false);

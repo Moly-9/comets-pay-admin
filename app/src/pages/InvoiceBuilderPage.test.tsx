@@ -46,6 +46,16 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(contractSelectionHandler).not.toContain('contract.totalFee');
     expect(contractSelectionHandler).not.toContain('line-contract-');
   });
+
+  it('creates an independent payout resource for every new Invoice', () => {
+    const generationHandler = invoiceBuilderSource.match(
+      /const generate = async \(\) => \{[\s\S]*?const cancel = \(\) => \{/,
+    )?.[0];
+
+    expect(generationHandler).toBeDefined();
+    expect(generationHandler).toContain('sourcePayoutId: prototypePayoutId');
+    expect(generationHandler).not.toContain('sourcePayoutId: selectedPayout?.id');
+  });
 });
 
 describe('InvoiceBuilderPage edit mode', () => {

@@ -1,10 +1,15 @@
 import type { RequestApprovalStatus } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import type { GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
+import {
+  REQUEST_APPROVAL_STAGE_LABEL,
+  requestApprovalReturnItemForInvoice,
+} from '../requestApprovalWorkflow';
 
 export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
 
 export type InvoiceManagementStatus =
+  | '草稿'
   | '待签署'
   | '待发布'
   | '待上传'
@@ -25,6 +30,7 @@ export type InvoiceManagementRow = {
   invoiceType: InvoiceType;
   creatorName: string;
   channelId: string;
+  issuerName: string;
   initials: string;
   accent: string;
   projectName: string;
@@ -37,6 +43,8 @@ export type InvoiceManagementRow = {
   primaryAction?: boolean;
   source: { kind: 'payout'; payout: Payout } | { kind: 'external'; externalInvoiceId: string };
   additionalActionLabel?: string;
+  returnReason?: string;
+  returnSourceLabel?: string;
 };
 
 export type InvoiceManagementView = {
@@ -76,6 +84,10 @@ export const getInvoiceManagementView = (
     return { tab: 'returned', status: '已退回', requestApprovalStatus: request?.approval?.status };
   }
 
+  if (payout.invoiceReviewStatus === '草稿') {
+    return { tab: 'signature', status: '草稿', requestApprovalStatus: request?.approval?.status };
+  }
+
   if (payout.invoiceReviewStatus === '待签署') {
     return { tab: 'signature', status: '待签署', requestApprovalStatus: request?.approval?.status };
   }
@@ -110,4 +122,49 @@ export const getInvoiceManagementView = (
     return { tab: 'approved', status: '付款中', requestApprovalStatus: request?.approval?.status };
   }
   return { tab: 'approved', status: '已通过', requestApprovalStatus: request?.approval?.status };
+};
+
+export const getInvoiceManagementReturnInfo = (
+  payout: Payout,
+  invoiceId: GeneratedInvoiceRecord['invoiceId'],
+  request?: PaymentRequestProjectLike,
+) => {
+  const scopedReturn = requestApprovalReturnItemForInvoice(request?.approval, invoiceId);
+  if (scopedReturn) {
+    return {
+      sourceLabel: scopedReturn.issueType === 'INVOICE_CONTENT' ? '财务退回 · Invoice' : '财务退回 · 付款清单',
+      reason: scopedReturn.reason,
+    };
+  }
+  if (request?.approval?.status === 'RETURNED_TO_MEDIA_REVIEW') {
+    const stage = request.approval.returnedFromStage;
+    return {
+      sourceLabel: stage ? `${REQUEST_APPROVAL_STAGE_LABEL[stage]}退回` : '请款审批退回',
+      reason: request.approval.returnReason?.trim() || '未记录退回原因',
+    };
+  }
+  if (payout.paymentFailureReturn) {
+    return {
+      sourceLabel: payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT'
+        ? '付款失败退回 · Invoice'
+        : '付款失败退回 · 付款账户',
+      reason: payout.paymentFailureReturn.reason,
+    };
+  }
+  if (payout.invoiceReviewReturn) {
+    return {
+      sourceLabel: payout.invoiceReviewReturn.stage === 'MEDIA' ? '媒介审核退回' : 'Invoice 审核退回',
+      reason: payout.invoiceReviewReturn.reason,
+    };
+  }
+  if (payout.returnReason?.trim()) {
+    return { sourceLabel: '业务退回', reason: payout.returnReason.trim() };
+  }
+  if (payout.paymentFailure) {
+    return {
+      sourceLabel: '渠道付款失败',
+      reason: payout.paymentFailure.providerResponse || payout.paymentFailure.errorCode,
+    };
+  }
+  return undefined;
 };

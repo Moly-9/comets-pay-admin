@@ -74,6 +74,7 @@ export const INVOICE_REVIEW_STATUS_META: Record<
   InvoiceReviewStatus,
   { label: string; color: string }
 > = {
+  草稿: { label: '草稿', color: '#6b7280' },
   待签署: { label: '待签署', color: '#8b5cf6' },
   达人反馈: { label: '达人反馈', color: '#e8792e' },
   待媒介审核: { label: '待审核', color: '#f59e0b' },
@@ -120,7 +121,7 @@ const STATIC_TRANSITIONS: Partial<Record<InvoiceReviewAction, Transition>> = {
 };
 
 export const getInvoicePageTab = (status: InvoiceReviewStatus): InvoicePageTab => {
-  if (status === '待签署') return 'signature';
+  if (status === '草稿' || status === '待签署') return 'signature';
   if (status === '达人反馈' || status === '待媒介审核' || status === '待媒介复核') {
     return 'review';
   }
@@ -149,6 +150,7 @@ export const getApprovedInvoicePaymentStatus = (
 };
 
 export const getInvoiceRowStatus = (payout: Pick<Payout, 'invoiceReviewStatus' | 'status'>) => {
+  if (payout.invoiceReviewStatus === '草稿') return '草稿';
   if (payout.invoiceReviewStatus === '待签署') return '待签署';
   if (payout.invoiceReviewStatus === '达人反馈') return '达人反馈';
   if (payout.invoiceReviewStatus === '待媒介审核') return '待审核';
@@ -163,6 +165,7 @@ export const getAvailableInvoiceReviewActions = (
   status: InvoiceReviewStatus,
   capabilities: InvoiceReviewCapabilities,
 ): InvoiceReviewAction[] => {
+  if (status === '草稿') return [];
   if (status === '待签署') {
     return capabilities.manage ? ['MARK_SIGNED', 'RECORD_CREATOR_FEEDBACK'] : [];
   }
@@ -182,7 +185,7 @@ export const getInvoiceDetailReviewActions = (
   status: InvoiceReviewStatus,
   capabilities: InvoiceReviewCapabilities,
 ) => (
-  status === '待签署'
+  status === '草稿' || status === '待签署'
     ? []
     : getAvailableInvoiceReviewActions(status, capabilities)
 );
@@ -298,6 +301,9 @@ export const getInvoiceEditContext = (
   payout: Pick<Payout, 'invoiceReviewStatus' | 'paymentFailureReturn'>,
   capabilities: InvoiceReviewCapabilities,
 ): InvoiceEditContext | null => {
+  if (payout.invoiceReviewStatus === '草稿' && capabilities.manage) {
+    return 'DRAFT';
+  }
   if (payout.invoiceReviewStatus === '达人反馈' && capabilities.manage) {
     return 'CREATOR_FEEDBACK';
   }
@@ -389,7 +395,9 @@ const assertStableInvoiceIdentity = (
 
 const assertInvoiceEditContext = (payout: Payout, context: InvoiceEditContext) => {
   if (context === 'PROJECT_RESOURCE') return;
-  const expected = payout.invoiceReviewStatus === '达人反馈'
+  const expected = payout.invoiceReviewStatus === '草稿'
+    ? 'DRAFT'
+    : payout.invoiceReviewStatus === '达人反馈'
     ? 'CREATOR_FEEDBACK'
     : payout.invoiceReviewStatus === '待媒介复核'
       ? 'MEDIA_RECHECK'
@@ -426,6 +434,72 @@ export const applyInvoiceDocumentEdit = ({
   const changedFields = invoiceDocumentChangedFields(record.snapshot, snapshot);
   if (!changedFields.length) {
     throw new Error('尚未修改任何 Invoice 字段。');
+  }
+
+  if (context === 'DRAFT') {
+    const version = record.version ?? payout.invoiceVersion ?? 1;
+    const nextSnapshot = {
+      ...cloneInvoiceSnapshot(snapshot),
+      signatureDate: undefined,
+      signatureText: undefined,
+    };
+    const accountValue = nextSnapshot.paymentMethod === 'paypal'
+      ? nextSnapshot.payment.paypalEmail || nextSnapshot.payment.paypalUsername
+      : nextSnapshot.payment.iban || nextSnapshot.payment.accountNumber;
+    const event: InvoiceReviewEvent = {
+      stage: 'SIGNATURE',
+      action: '编辑草稿',
+      actorAccount: actor.account,
+      actorName: actor.name,
+      actorRole: actor.role,
+      fromStatus: '草稿',
+      toStatus: '草稿',
+      reason: `更新字段：${changedFields.join('、')}`,
+      occurredAt,
+    };
+    return {
+      record: {
+        ...record,
+        status: '草稿',
+        snapshot: nextSnapshot,
+        draftUpdatedAt: occurredAt,
+        paymentFreezeSnapshot: undefined,
+        validationStatus: 'valid',
+        version,
+        contractMatchReviews: contractMatchReview
+          ? [
+              ...(record.contractMatchReviews ?? []).filter((review) => review.version !== version),
+              { ...contractMatchReview, version },
+            ]
+          : record.contractMatchReviews,
+      },
+      payout: {
+        ...payout,
+        invoice: record.id,
+        provider: nextSnapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
+        currency: nextSnapshot.currency,
+        amount: nextSnapshot.items.reduce((total, item) => total + item.lineTotal, 0),
+        account: maskInvoiceAccountValue(accountValue),
+        creatorId: nextSnapshot.creatorId,
+        payoutAccountId: nextSnapshot.payoutAccountId,
+        payoutAccountVersion: nextSnapshot.payoutAccountVersion ?? nextSnapshot.payment.payoutAccountVersion,
+        payoutAccountFingerprint: nextSnapshot.payoutAccountFingerprint ?? nextSnapshot.payment.accountFingerprint,
+        externalBeneficiaryId: nextSnapshot.payment.externalBeneficiaryId,
+        transferMethod: nextSnapshot.payment.transferMethod,
+        localClearingSystem: nextSnapshot.payment.localClearingSystem,
+        deliverable: nextSnapshot.items.map((item) => item.description).filter(Boolean).join('；'),
+        contract: nextSnapshot.contractIds?.join('、') || '未关联合同',
+        status: '未进入付款',
+        invoiceReviewStatus: '草稿',
+        invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
+        invoiceVersion: version,
+        invoiceSignedAt: undefined,
+        invoiceSnapshot: nextSnapshot,
+        invoicePaymentFreezeSnapshot: undefined,
+        issue: undefined,
+        returnReason: undefined,
+      },
+    };
   }
 
   const previousVersion = record.version ?? payout.invoiceVersion ?? 1;
@@ -612,6 +686,60 @@ export const recordInvoiceSignatureReminder = (
   return {
     ...payout,
     invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
+  };
+};
+
+export const publishGeneratedInvoiceDraft = (
+  record: GeneratedInvoiceRecord,
+  payout: Payout,
+  actor: InvoiceReviewActor,
+  email: string,
+  occurredAt = new Date().toISOString(),
+): { record: GeneratedInvoiceRecord; payout: Payout } => {
+  if (record.sourcePayoutId !== payout.id) {
+    throw new Error('Invoice 草稿与付款记录的稳定关联不一致。');
+  }
+  if (record.status !== '草稿' || payout.invoiceReviewStatus !== '草稿') {
+    throw new Error('只有草稿状态的内部 Invoice 可以发布。');
+  }
+  const hasValidEmail = notificationEmailIsValid(email);
+  const event: InvoiceReviewEvent = {
+    stage: 'SIGNATURE',
+    action: '发布达人签署',
+    actorAccount: actor.account,
+    actorName: actor.name,
+    actorRole: actor.role,
+    fromStatus: '草稿',
+    toStatus: '待签署',
+    reason: 'Invoice 已发布至达人端并生成签署待办。',
+    occurredAt,
+    notificationDeliveries: [
+      {
+        channel: 'IN_APP',
+        status: 'SIMULATED_SENT',
+        recipientLabel: '达人端 Invoice 消息中心',
+      },
+      {
+        channel: 'EMAIL',
+        status: hasValidEmail ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
+        recipientLabel: hasValidEmail ? maskNotificationEmail(email) : '达人档案邮箱待补充',
+      },
+    ],
+  };
+  return {
+    record: {
+      ...record,
+      status: '待签署',
+      publishedAt: occurredAt,
+      publishedBy: { ...actor },
+    },
+    payout: {
+      ...payout,
+      invoiceReviewStatus: '待签署',
+      invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
+      issue: undefined,
+      returnReason: undefined,
+    },
   };
 };
 

@@ -365,7 +365,7 @@ export const createGeneratedInvoiceRecord = (
   id: snapshot.invoiceNumber,
   invoiceId: createPrototypeId('invoice') as InvoiceId,
   sourcePayoutId: row.sourcePayoutId,
-  status: '待签署',
+  status: '草稿',
   generatedAt: new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
     timeStyle: 'short',

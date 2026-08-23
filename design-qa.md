@@ -1569,3 +1569,36 @@ final result: passed
 3. The execution eligibility source was unified with the workbench state: `等待付款` now directly means the row is validated for this screen, removing contradictory secondary validation states.
 
 final result: passed
+
+---
+
+# Invoice 草稿、批量发布与审核记录设计验收
+
+验收日期：2026-08-24
+
+final result: passed
+
+## 覆盖范围
+
+- 桌面端 Invoice 五页签、开票主体列、状态颜色与已退回原因展示。
+- 内部 Invoice 草稿生成、独立付款记录、发布、通知记录与撤销二次确认。
+- 待签署内部草稿及待采集外部任务的勾选、一键发布和不可发布项禁用。
+- 内部、外部 Invoice 统一审核记录骨架：版本摘要、五阶段时间线、当前待办和当前状态。
+- 内部详情顶部五按钮及 390px 窄屏换行；页面无横向整体溢出。
+
+## 浏览器结果
+
+- 桌面端：内部与外部详情、审核记录、待采集发布、已退回原因均正常。
+- 390px：四张指标卡、文件区、审核区和顶部五按钮均可用，无页面级横向溢出。
+- 浏览器控制台：无 warning 或 error。
+
+## 验收中修复
+
+- 新 Invoice 改为始终使用独立的原型付款记录 ID，避免复用同达人同项目历史付款记录并继承旧电子签或签署时间。
+- 窄屏顶部操作按钮组跨满外层网格，保持两列排列，下载按钮独占整行。
+
+## 自动化验证
+
+- `npm test`：91 个测试文件、596 项测试通过。
+- `npm run build`：TypeScript 检查与 Vite 生产构建通过。
+- `git diff --check`：通过。

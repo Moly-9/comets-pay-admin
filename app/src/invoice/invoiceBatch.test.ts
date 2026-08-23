@@ -430,7 +430,9 @@ describe('Invoice batch rows', () => {
       currency: 'USD',
     }, context);
     const snapshot = buildInvoiceDocumentForBatchRow(row, context, 'INV-20260806-001');
-    context.generatedInvoices = [createGeneratedInvoiceRecord(row, snapshot)];
+    const generated = createGeneratedInvoiceRecord(row, snapshot);
+    expect(generated.status).toBe('草稿');
+    context.generatedInvoices = [generated];
 
     const duplicate = validateInvoiceBatchRow({ ...row, generated: undefined }, context);
     expect(duplicate.status).toBe('READY');
