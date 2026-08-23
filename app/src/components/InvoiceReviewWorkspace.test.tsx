@@ -142,4 +142,33 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('-- / --');
     expect(html).toContain('is-document-unavailable');
   });
+
+  it('shows the generation note inside each approved contract mismatch card', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="INTERNAL_GENERATED"
+        initialTab="contract"
+        noContract={false}
+        contractChecks={[{
+          id: 'amount',
+          label: '应付金额',
+          contractValue: 'USD 4,600.00',
+          invoiceValue: 'USD 4,800.00',
+          state: 'WARNING',
+          note: '合同金额与 Invoice 明细总额不一致。',
+        }]}
+        contractMismatchReview={{
+          reason: '合同为预算金额，Invoice 按实际验收金额结算。',
+          meta: '生成 Invoice 时填写 · 媒介测试 · 2026/08/24 10:00',
+        }}
+      />,
+    );
+
+    expect(html).toContain('合同匹配 0/1 · 1项需关注');
+    expect(html).toContain('invoice-review-contract-mismatch-reason');
+    expect(html).toContain('不一致原因');
+    expect(html).toContain('合同为预算金额，Invoice 按实际验收金额结算。');
+    expect(html).toContain('生成 Invoice 时填写 · 媒介测试');
+  });
 });

@@ -679,7 +679,11 @@ export function InvoiceDetailPage({
     label: check.label,
     contractValue: check.contractValue,
     invoiceValue: check.invoiceValue,
-    state: check.passed ? 'PASS' : 'FAIL',
+    state: contractMatch?.checks.find((candidate) => (
+      candidate.field.toLowerCase() === check.id
+    ))?.state === 'APPROVED_WITH_REASON'
+      ? 'WARNING'
+      : check.passed ? 'PASS' : 'FAIL',
     note: check.note,
     evidenceTarget: check.id.includes('account')
       ? '.invoice-paper-payment'
@@ -938,6 +942,16 @@ export function InvoiceDetailPage({
         } : undefined}
         summaryFields={summaryFields}
         contractChecks={workspaceContractChecks}
+        contractMismatchReview={storedContractMatchReview?.reason ? {
+          reason: storedContractMatchReview.reason,
+          meta: [
+            '生成 Invoice 时填写',
+            storedContractMatchReview.actorName ?? '操作人未记录',
+            storedContractMatchReview.reviewedAt
+              ? formatReviewTime(storedContractMatchReview.reviewedAt)
+              : '时间未记录',
+          ].join(' · '),
+        } : undefined}
         noContract={Boolean(generatedRecord && selectedContracts.length === 0)}
         accountRows={workspaceAccountRows}
         timeline={processTimeline}

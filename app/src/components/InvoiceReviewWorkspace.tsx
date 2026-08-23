@@ -90,6 +90,11 @@ export type InvoiceReviewContractCheck = {
   evidenceTarget?: string;
 };
 
+export type InvoiceReviewContractMismatchReview = {
+  reason: string;
+  meta?: string;
+};
+
 export type InvoiceReviewAccountRow = {
   label: string;
   value: string;
@@ -167,6 +172,7 @@ type InvoiceReviewWorkspaceProps = {
   externalSummary?: boolean;
   overviewFields?: InvoiceReviewOverviewField[];
   contractChecks: InvoiceReviewContractCheck[];
+  contractMismatchReview?: InvoiceReviewContractMismatchReview;
   noContract?: boolean;
   contractPending?: boolean;
   accountRows: InvoiceReviewAccountRow[];
@@ -195,6 +201,7 @@ type InvoiceReviewWorkspaceProps = {
   approveDisabled?: boolean;
   canReview?: boolean;
   additionalFooterActions?: ReactNode;
+  initialTab?: InvoiceReviewWorkspaceTab;
 };
 
 const SOURCE_LABEL: Record<InvoiceReviewSourceType, string> = {
@@ -250,6 +257,7 @@ export function InvoiceReviewWorkspace({
   externalSummary = false,
   overviewFields = [],
   contractChecks,
+  contractMismatchReview,
   noContract = false,
   contractPending = false,
   accountRows,
@@ -274,8 +282,9 @@ export function InvoiceReviewWorkspace({
   approveDisabled = false,
   canReview = false,
   additionalFooterActions,
+  initialTab = 'overview',
 }: InvoiceReviewWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<InvoiceReviewWorkspaceTab>('overview');
+  const [activeTab, setActiveTab] = useState<InvoiceReviewWorkspaceTab>(initialTab);
   const [zoom, setZoom] = useState(0.82);
   const [leftPercent, setLeftPercent] = useState(40);
   const [dragging, setDragging] = useState(false);
@@ -298,13 +307,17 @@ export function InvoiceReviewWorkspace({
   const contractPassed = contractChecks.filter((check) => (
     check.state === 'PASS' || check.state === 'NOT_APPLICABLE'
   )).length;
+  const contractWarnings = contractChecks.filter((check) => check.state === 'WARNING').length;
+  const contractFailures = contractChecks.filter((check) => check.state === 'FAIL').length;
   const contractLabel = noContract
     ? '合同匹配 · 无合同'
     : contractPending
       ? '合同匹配 · 待上传'
     : contractPassed === contractChecks.length
       ? `合同匹配 ${contractPassed}/${contractChecks.length}`
-      : `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractChecks.length - contractPassed}项异常`;
+      : contractFailures
+        ? `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractFailures}项异常${contractWarnings ? ` · ${contractWarnings}项需关注` : ''}`
+        : `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractWarnings}项需关注`;
   const tabs: Array<{ id: InvoiceReviewWorkspaceTab; label: string; icon: typeof ShieldCheck }> = [
     { id: 'overview', label: '审核概览', icon: FileCheck2 },
     { id: 'contract', label: contractLabel, icon: ShieldCheck },
@@ -621,6 +634,16 @@ export function InvoiceReviewWorkspace({
                         <header><strong>{check.label}</strong><small>{contractStateLabel(check.state)}</small></header>
                         <dl><div><dt>合同 / 系统</dt><dd>{check.contractValue}</dd></div><div><dt>Invoice</dt><dd>{check.invoiceValue}</dd></div></dl>
                         <p>{check.note}</p>
+                        {check.state === 'WARNING' && contractMismatchReview?.reason ? (
+                          <div className="invoice-review-contract-mismatch-reason" role="note">
+                            <CircleAlert size={16} />
+                            <span>
+                              <strong>不一致原因</strong>
+                              <p>{contractMismatchReview.reason}</p>
+                              {contractMismatchReview.meta ? <small>{contractMismatchReview.meta}</small> : null}
+                            </span>
+                          </div>
+                        ) : null}
                         {check.evidenceTarget ? <button type="button" onClick={() => locateEvidence(check.evidenceTarget)}><Eye size={14} />定位原文</button> : null}
                       </div>
                     </article>

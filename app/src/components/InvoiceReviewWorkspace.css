@@ -359,6 +359,12 @@
 .invoice-review-contract-list dd { margin: 0; color: #404651; font-size: 10.5px; overflow-wrap: anywhere; }
 .invoice-review-contract-list p { margin: 0; color: var(--review-muted); font-size: 10.5px; line-height: 1.5; }
 .invoice-review-contract-list button { justify-self: start; min-height: 27px; padding: 2px 6px; font-size: 9.5px; }
+.invoice-review-contract-mismatch-reason { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; border-left: 3px solid #d49a42; background: #fff9ee; padding: 9px 10px; color: #966321; }
+.invoice-review-contract-mismatch-reason > svg { margin-top: 1px; }
+.invoice-review-contract-mismatch-reason > span { display: grid; min-width: 0; gap: 3px; }
+.invoice-review-contract-mismatch-reason strong { color: #784c16; font-size: 10.5px; }
+.invoice-review-contract-list .invoice-review-contract-mismatch-reason p { color: #694d2a; overflow-wrap: anywhere; }
+.invoice-review-contract-mismatch-reason small { color: #8d7557; font-size: 9.5px; line-height: 1.45; }
 
 .invoice-review-account-comparison { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; border: 1px solid #cce3d7; border-radius: 7px; background: #f4faf7; padding: 12px; }
 .invoice-review-account-comparison.is-blocked { border-color: #ecc6ca; background: #fff7f8; }
