@@ -1,10 +1,7 @@
-import type { RequestApprovalStatus } from '../businessWorkflow';
+import type { InvoiceId, RequestApprovalStatus } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import type { GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
-import {
-  REQUEST_APPROVAL_STAGE_LABEL,
-  requestApprovalReturnItemForInvoice,
-} from '../requestApprovalWorkflow';
+import { requestApprovalReturnItemForInvoice } from '../requestApprovalWorkflow';
 
 export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
 
@@ -53,6 +50,14 @@ export type InvoiceManagementView = {
   requestApprovalStatus?: RequestApprovalStatus;
 };
 
+export type InvoiceManagementReturnContext = {
+  source: 'APPROVAL_INVOICE' | 'PAYMENT_FAILURE_INVOICE';
+  sourceLabel: string;
+  reason: string;
+  actorName?: string;
+  occurredAt?: string;
+};
+
 const requestInvoiceIds = (request: PaymentRequestProjectLike) => new Set([
   ...(request.invoiceIds ?? []),
   ...(request.creatorLinks ?? []).flatMap((link) => link.invoiceIds),
@@ -71,16 +76,11 @@ export const findInvoiceRequest = (
 };
 
 export const getInvoiceManagementView = (
-  payout: Pick<Payout, 'invoiceReviewStatus' | 'status'>,
+  payout: Pick<Payout, 'invoiceReviewStatus' | 'status' | 'paymentFailureReturn' | 'paymentFailureRecovery'>,
   request?: PaymentRequestProjectLike,
+  returnContext?: InvoiceManagementReturnContext | null,
 ): InvoiceManagementView => {
-  const requestReturned = request?.lifecycle === 'RETURNED'
-    || request?.approval?.status === 'RETURNED_TO_MEDIA_REVIEW';
-  if (
-    payout.invoiceReviewStatus === '已退回'
-    || payout.status === '已退回'
-    || payout.status === '付款失败'
-  ) {
+  if (returnContext) {
     return { tab: 'returned', status: '已退回', requestApprovalStatus: request?.approval?.status };
   }
 
@@ -100,10 +100,6 @@ export const getInvoiceManagementView = (
   if (payout.invoiceReviewStatus === '待媒介复核') {
     return { tab: 'review', status: '待复核', requestApprovalStatus: request?.approval?.status };
   }
-  if (requestReturned) {
-    return { tab: 'returned', status: '已退回', requestApprovalStatus: request?.approval?.status };
-  }
-
   if (payout.status === '已付款' || request?.lifecycle === 'COMPLETED') {
     return { tab: 'approved', status: '已付款', requestApprovalStatus: request?.approval?.status };
   }
@@ -116,6 +112,9 @@ export const getInvoiceManagementView = (
   if (
     payout.status === '等待付款'
     || payout.status === '付款处理中'
+    || payout.status === '付款失败'
+    || payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
+    || Boolean(payout.paymentFailureRecovery)
     || request?.lifecycle === 'APPROVED'
     || request?.approval?.status === 'APPROVED'
   ) {
@@ -124,47 +123,50 @@ export const getInvoiceManagementView = (
   return { tab: 'approved', status: '已通过', requestApprovalStatus: request?.approval?.status };
 };
 
-export const getInvoiceManagementReturnInfo = (
+export const getInvoiceManagementReturnContext = (
   payout: Payout,
-  invoiceId: GeneratedInvoiceRecord['invoiceId'],
+  invoiceId?: InvoiceId,
   request?: PaymentRequestProjectLike,
-) => {
-  const scopedReturn = requestApprovalReturnItemForInvoice(request?.approval, invoiceId);
-  if (scopedReturn) {
+): InvoiceManagementReturnContext | null => {
+  if (
+    payout.invoiceReviewStatus === '已退回'
+    && payout.paymentFailureReturn?.issueType === 'INVOICE_CONTENT'
+  ) {
     return {
-      sourceLabel: scopedReturn.issueType === 'INVOICE_CONTENT' ? '财务退回 · Invoice' : '财务退回 · 付款清单',
-      reason: scopedReturn.reason,
-    };
-  }
-  if (request?.approval?.status === 'RETURNED_TO_MEDIA_REVIEW') {
-    const stage = request.approval.returnedFromStage;
-    return {
-      sourceLabel: stage ? `${REQUEST_APPROVAL_STAGE_LABEL[stage]}退回` : '请款审批退回',
-      reason: request.approval.returnReason?.trim() || '未记录退回原因',
-    };
-  }
-  if (payout.paymentFailureReturn) {
-    return {
-      sourceLabel: payout.paymentFailureReturn.issueType === 'INVOICE_CONTENT'
-        ? '付款失败退回 · Invoice'
-        : '付款失败退回 · 付款账户',
+      source: 'PAYMENT_FAILURE_INVOICE',
+      sourceLabel: '付款失败退回 · Invoice',
       reason: payout.paymentFailureReturn.reason,
+      actorName: payout.paymentFailureReturn.actorName,
+      occurredAt: payout.paymentFailureReturn.occurredAt,
     };
   }
-  if (payout.invoiceReviewReturn) {
-    return {
-      sourceLabel: payout.invoiceReviewReturn.stage === 'MEDIA' ? '媒介审核退回' : 'Invoice 审核退回',
-      reason: payout.invoiceReviewReturn.reason,
-    };
-  }
-  if (payout.returnReason?.trim()) {
-    return { sourceLabel: '业务退回', reason: payout.returnReason.trim() };
-  }
-  if (payout.paymentFailure) {
-    return {
-      sourceLabel: '渠道付款失败',
-      reason: payout.paymentFailure.providerResponse || payout.paymentFailure.errorCode,
-    };
-  }
-  return undefined;
+
+  if (!invoiceId || request?.approval?.status !== 'RETURNED_TO_MEDIA_REVIEW') return null;
+  const scopedReturn = requestApprovalReturnItemForInvoice(
+    request.approval,
+    invoiceId,
+    'INVOICE_CONTENT',
+  );
+  if (!scopedReturn) return null;
+  const returnEvent = [...request.approval.history].reverse().find((event) => (
+    event.action === 'RETURN'
+    && event.round === request.approval?.round
+    && (event.returnItems ?? request.approval?.returnItems)?.some((item) => (
+      item.invoiceId === invoiceId && item.issueType === 'INVOICE_CONTENT'
+    ))
+  ));
+  const returnTime = Date.parse(returnEvent?.occurredAt ?? request.approval.updatedAt);
+  const invoiceWasModifiedAfterReturn = [...(payout.invoiceReviewHistory ?? [])].reverse().some((event) => (
+    event.action === '修改 Invoice'
+    && Number.isFinite(returnTime)
+    && Date.parse(event.occurredAt) > returnTime
+  ));
+  if (invoiceWasModifiedAfterReturn) return null;
+  return {
+    source: 'APPROVAL_INVOICE',
+    sourceLabel: '财务退回 · Invoice',
+    reason: scopedReturn.reason,
+    actorName: returnEvent?.actorName,
+    occurredAt: returnEvent?.occurredAt ?? request.approval.updatedAt,
+  };
 };

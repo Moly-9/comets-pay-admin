@@ -251,16 +251,29 @@ describe('request approval workflow', () => {
     const returned = returnApprovedRequestToMediaReview(
       approved,
       finance,
-      '收款账户需要媒介重新确认',
+      'Invoice 内容需要媒介重新确认',
       '2026-08-10T06:00:00.000Z',
+      [{
+        pageKey: 'invoice:payment-failure-return',
+        invoiceId: 'payment-failure-return' as never,
+        invoiceNumber: 'INV-PAYMENT-FAILURE',
+        issueType: 'INVOICE_CONTENT',
+        reason: 'Invoice 内容需要媒介重新确认',
+        paymentItems: [],
+      }],
     );
 
     expect(returned.status).toBe('RETURNED_TO_MEDIA_REVIEW');
     expect(returned.resumeStatus).toBe('PENDING_FINANCE');
     expect(requestApprovalReturnDetails(returned)).toMatchObject({
       stage: 'FINANCE',
-      reason: '收款账户需要媒介重新确认',
+      reason: 'Invoice 内容需要媒介重新确认',
+      items: [expect.objectContaining({
+        invoiceId: 'payment-failure-return',
+        issueType: 'INVOICE_CONTENT',
+      })],
     });
+    expect(returned.history[returned.history.length - 1]?.returnItems).toEqual(returned.returnItems);
     expect(createRequestApprovalState('2026-08-10T07:00:00.000Z', returned)).toMatchObject({
       status: 'PENDING_FINANCE',
       round: 2,

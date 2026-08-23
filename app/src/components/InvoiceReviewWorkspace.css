@@ -230,6 +230,24 @@
 .invoice-review-section-heading strong { color: var(--review-ink); font-size: 13px; }
 .invoice-review-section-heading small { color: var(--review-muted); font-size: 10.5px; line-height: 1.45; }
 
+.invoice-review-overview-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #ead2af;
+  border-radius: 7px;
+  background: #fff9f0;
+  padding: 11px 12px;
+  color: #81501f;
+}
+.invoice-review-overview-notice > svg { flex: 0 0 auto; margin-top: 1px; }
+.invoice-review-overview-notice > span { display: grid; min-width: 0; gap: 3px; }
+.invoice-review-overview-notice strong { font-size: 12px; }
+.invoice-review-overview-notice p { margin: 0; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.invoice-review-overview-notice small { color: #986d47; font-size: 10px; line-height: 1.4; }
+.invoice-review-overview-notice.is-danger { border-color: #e8c4c8; background: #fff7f8; color: #98414a; }
+.invoice-review-overview-notice.is-danger small { color: #a76a71; }
+
 .invoice-review-summary-list {
   display: grid;
   margin: 0;

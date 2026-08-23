@@ -241,8 +241,11 @@ describe('InvoiceDetailPage edit actions', () => {
         restartStage: 'SIGNATURE' as const,
       },
     };
-    expect(renderDetail(contentReturn, { manage: true, media: false }))
-      .toMatch(/title="编辑 Invoice"[\s\S]*?<span>编辑<\/span>/);
+    const contentReturnHtml = renderDetail(contentReturn, { manage: true, media: false });
+    expect(contentReturnHtml).toMatch(/title="编辑 Invoice"[\s\S]*?<span>编辑<\/span>/);
+    expect(contentReturnHtml).toContain('付款失败退回 · Invoice');
+    expect(contentReturnHtml).toContain('Invoice 金额错误');
+    expect(contentReturnHtml).toContain('修改并重新发起');
 
     const paymentListHtml = renderDetail({
       ...contentReturn,
@@ -252,7 +255,7 @@ describe('InvoiceDetailPage edit actions', () => {
         restartStage: 'PAYMENT_LIST_RESUBMISSION',
       },
     }, { manage: true, media: true });
-    expect(paymentListHtml).toContain('等待项目付款清单重新提交');
+    expect(paymentListHtml).not.toContain('等待项目付款清单重新提交');
     expect(paymentListHtml).toContain('title="当前状态不可编辑"');
     expect(paymentListHtml).not.toContain('复核通过并重新提交');
   });

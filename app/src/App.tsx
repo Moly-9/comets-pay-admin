@@ -75,7 +75,11 @@ import {
   type InvoiceReviewAction,
   type InvoicePageTab,
 } from './invoice/invoiceReviewWorkflow';
-import { findInvoiceRequest, getInvoiceManagementView } from './invoice/invoiceManagement';
+import {
+  findInvoiceRequest,
+  getInvoiceManagementReturnContext,
+  getInvoiceManagementView,
+} from './invoice/invoiceManagement';
 import {
   buildApprovedExternalInvoice,
   correctExternalInvoiceRecognition,
@@ -176,6 +180,7 @@ import {
   type PaymentRequestProjectId,
   type ProjectId,
   type RequestApprovalState,
+  type RequestApprovalReturnItem,
   type RequestApprovalStatus,
   type WorkflowAuditAction,
   type WorkflowAuditEvent,
@@ -279,6 +284,7 @@ const returnPaymentFailureApproval = (
   actor: Pick<SystemUser, 'account' | 'name' | 'role'>,
   reason: string,
   occurredAt: string,
+  returnItems?: RequestApprovalReturnItem[],
 ): RequestApprovalState => {
   if (issueType === 'PAYMENT_LIST' && state.status === 'APPROVED') {
     return {
@@ -303,11 +309,19 @@ const returnPaymentFailureApproval = (
     };
   }
   if (state.status === 'APPROVED') {
-    return returnApprovedRequestToMediaReview(state, actor, reason, occurredAt);
+    return returnApprovedRequestToMediaReview(state, actor, reason, occurredAt, returnItems);
   }
   if (state.status !== 'RETURNED_TO_MEDIA_REVIEW') {
     throw new Error('当前请款项目不在可退回的付款执行状态。');
   }
+  const mergedReturnItems = returnItems?.length
+    ? [
+        ...(state.returnItems ?? []).filter((existing) => !returnItems.some((item) => (
+          item.invoiceId === existing.invoiceId && item.issueType === existing.issueType
+        ))),
+        ...returnItems,
+      ]
+    : state.returnItems;
   return {
     ...state,
     history: [
@@ -322,12 +336,14 @@ const returnPaymentFailureApproval = (
         fromStatus: state.status,
         toStatus: 'RETURNED_TO_MEDIA_REVIEW',
         reason,
+        returnItems: returnItems?.length ? returnItems : undefined,
         occurredAt,
       },
     ],
     returnedFromStage: 'FINANCE',
     resumeStatus: 'PENDING_FINANCE',
     returnReason: reason,
+    returnItems: mergedReturnItems,
     updatedAt: occurredAt,
   };
 };
@@ -2562,7 +2578,9 @@ export default function App() {
           actorName: currentUser.name,
           actorRole: currentUser.role,
           fromStatus: payout.invoiceReviewStatus,
-          toStatus: '已退回',
+          toStatus: issueType === 'INVOICE_CONTENT'
+            ? '已退回'
+            : payout.invoiceReviewStatus,
           reason: normalizedReason,
           occurredAt,
         },
@@ -2576,6 +2594,32 @@ export default function App() {
       || request.projectId === payout.projectId
       || request.cooperationProjectId === payout.projectId
     ));
+    const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+    if (issueType === 'INVOICE_CONTENT' && !linkedInvoice) {
+      notify('无法退回 Invoice', '未找到该失败款通过稳定 invoiceId 关联的 Invoice 记录。');
+      return false;
+    }
+    const scopedReturnItems: RequestApprovalReturnItem[] | undefined = linkedInvoice
+      && issueType === 'INVOICE_CONTENT'
+      ? [{
+          pageKey: `invoice:${linkedInvoice.invoiceId}`,
+          invoiceId: linkedInvoice.invoiceId,
+          invoiceNumber: linkedInvoice.snapshot.invoiceNumber,
+          issueType: 'INVOICE_CONTENT',
+          reason: normalizedReason,
+          paymentItems: paymentLists.flatMap((list) => (
+            (
+              payout.paymentRequestProjectId
+                ? list.paymentRequestProjectId === payout.paymentRequestProjectId
+                : list.projectId === payout.projectId
+            )
+              ? list.items
+              .filter((item) => item.invoiceId === linkedInvoice.invoiceId)
+              .map((item) => ({ paymentListId: list.paymentListId, itemId: item.id }))
+              : []
+          )),
+        }]
+      : undefined;
     let returnedApproval: RequestApprovalState | undefined;
     if (linkedRequest?.approval) {
       try {
@@ -2585,6 +2629,7 @@ export default function App() {
           { account: currentUser.account, name: currentUser.name, role: currentUser.role },
           normalizedReason,
           occurredAt,
+          scopedReturnItems,
         );
       } catch (error) {
         notify('无法退回媒介', error instanceof Error ? error.message : '请款项目审批状态不允许退回。');
@@ -2593,7 +2638,6 @@ export default function App() {
     }
     if (issueType === 'PAYMENT_LIST') {
       const updated = beginPaymentFailureAccountRecovery(returnedPayout);
-      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
       setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
       if (linkedInvoice) {
         setPaymentLists((current) => current.map((list) => (
@@ -3483,7 +3527,9 @@ export default function App() {
 
   const openInvoiceFromPayout = (payout: Payout) => {
     const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
-    setInvoiceTab(getInvoiceManagementView(payout, request).tab);
+    const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
+    const returnContext = getInvoiceManagementReturnContext(payout, invoice?.invoiceId, request);
+    setInvoiceTab(getInvoiceManagementView(payout, request, returnContext).tab);
     setFocusedInvoiceId(payout.id);
     setSelectedPayout(null);
     setActivePage('invoice');
@@ -3501,7 +3547,8 @@ export default function App() {
       }
       if (!navigate('invoice')) return;
       const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
-      setInvoiceTab(getInvoiceManagementView(payout, request).tab);
+      const returnContext = getInvoiceManagementReturnContext(payout, invoice.invoiceId, request);
+      setInvoiceTab(getInvoiceManagementView(payout, request, returnContext).tab);
       setFocusedInvoiceId(payout.id);
     } else if (target.kind === 'request-review') {
       const request = requestProjects.find((item) => (

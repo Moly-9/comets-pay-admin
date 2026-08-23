@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { InvoicePage } from './OperationalPages';
+import type { RequestProjectSummary } from './RequestProjectDetailPage';
 
 const snapshot = {
   invoiceNumber: 'INV-SIGNATURE-DEMO',
@@ -105,8 +106,10 @@ const renderInvoicePage = (
     payouts?: Payout[];
     generatedInvoices?: GeneratedInvoiceRecord[];
     creators?: CreatorProfile[];
-    tab?: 'signature' | 'review' | 'returned';
+    requests?: RequestProjectSummary[];
+    tab?: 'signature' | 'review' | 'approved' | 'returned';
     focusedInvoiceId?: string | null;
+    canEditProjectResourceInvoice?: boolean;
   } = {},
 ) => renderToStaticMarkup(
   <InvoicePage
@@ -114,7 +117,7 @@ const renderInvoicePage = (
     creators={options.creators ?? [creator]}
     invoiceEntity={{ name: 'COMETS', address: 'Hong Kong' }}
     generatedInvoices={options.generatedInvoices ?? [record]}
-    requests={[]}
+    requests={options.requests ?? []}
     tab={options.tab ?? 'signature'}
     onTabChange={vi.fn()}
     onCreateInvoice={vi.fn()}
@@ -123,7 +126,7 @@ const renderInvoicePage = (
     canManageInvoice={canManageInvoice}
     canReviewMedia={false}
     canReviewFinance={false}
-    canEditProjectResourceInvoice={() => false}
+    canEditProjectResourceInvoice={() => options.canEditProjectResourceInvoice ?? false}
     focusedInvoiceId={options.focusedInvoiceId ?? null}
     onFocusCleared={vi.fn()}
     onMarkSigned={vi.fn()}
@@ -254,5 +257,106 @@ describe('InvoicePage list columns', () => {
 
     expect(html).toContain('付款失败退回 · Invoice');
     expect(html).not.toContain('Invoice 金额填写错误，请修改后重新发起。');
+    expect(html).toContain('查看详情');
+    expect(html).not.toContain('修改并重新发起');
+  });
+
+  it('keeps a payment-account failure in the approved payment flow', () => {
+    const accountFailure: Payout = {
+      ...payout,
+      status: '已退回',
+      invoiceReviewStatus: '已通过',
+      paymentFailureReturn: {
+        issueType: 'PAYMENT_LIST',
+        reason: '请更新付款账户后重新执行付款。',
+        actorAccount: 'finance',
+        actorName: '财务',
+        occurredAt: '2026-08-11T12:00:00.000Z',
+        restartStage: 'PAYMENT_LIST_RESUBMISSION',
+      },
+      paymentFailureRecovery: {
+        status: 'AWAITING_CREATOR_UPDATE',
+        notifications: [],
+      },
+    };
+    const html = renderInvoicePage(true, {
+      payouts: [accountFailure],
+      generatedInvoices: [{ ...record, status: '已通过' }],
+      tab: 'approved',
+    });
+
+    expect(html).toContain('付款中');
+    expect(html).toContain('查看详情');
+    expect(html).not.toContain('付款失败退回 · 付款账户');
+  });
+
+  it('shows only a finance-scoped Invoice-content return in the returned tab', () => {
+    const returnItems = [{
+      pageKey: `invoice:${record.invoiceId}`,
+      invoiceId: record.invoiceId,
+      invoiceNumber: record.snapshot.invoiceNumber,
+      issueType: 'INVOICE_CONTENT' as const,
+      reason: 'Invoice 主体需要修改',
+      paymentItems: [],
+    }];
+    const returnedRequest = {
+      id: 'request-returned-invoice',
+      lifecycle: 'RETURNED',
+      invoiceIds: [record.invoiceId],
+      project: 'Signature Demo Project',
+      brand: 'Demo Brand',
+      media: 'Jeff',
+      pm: 'PM',
+      amount: 'USD 100.00',
+      contracts: 0,
+      invoices: 1,
+      paymentOrder: '已生成',
+      status: '已退回',
+      filter: 'pending',
+      approval: {
+        status: 'RETURNED_TO_MEDIA_REVIEW',
+        round: 1,
+        history: [{
+          round: 1,
+          stage: 'FINANCE',
+          action: 'RETURN',
+          actorAccount: 'finance',
+          actorName: '财务审核人',
+          actorRole: '财务',
+          fromStatus: 'PENDING_FINANCE',
+          toStatus: 'RETURNED_TO_MEDIA_REVIEW',
+          reason: returnItems[0].reason,
+          returnItems,
+          occurredAt: '2026-08-11T13:00:00.000Z',
+        }],
+        submittedAt: '2026-08-11T10:00:00.000Z',
+        returnedFromStage: 'FINANCE',
+        resumeStatus: 'PENDING_FINANCE',
+        returnReason: returnItems[0].reason,
+        returnItems,
+        updatedAt: '2026-08-11T13:00:00.000Z',
+      },
+    } as RequestProjectSummary;
+    const html = renderInvoicePage(true, {
+      payouts: [{ ...payout, invoiceReviewStatus: '已通过' }],
+      generatedInvoices: [{ ...record, status: '已通过' }],
+      requests: [returnedRequest],
+      tab: 'returned',
+    });
+
+    expect(html).toContain('财务退回 · Invoice');
+    expect(html).toContain('查看详情');
+
+    const detailHtml = renderInvoicePage(true, {
+      payouts: [{ ...payout, invoiceReviewStatus: '已通过' }],
+      generatedInvoices: [{ ...record, status: '已通过' }],
+      requests: [returnedRequest],
+      tab: 'returned',
+      focusedInvoiceId: payout.id,
+      canEditProjectResourceInvoice: true,
+    });
+    expect(detailHtml).toContain('Invoice 主体需要修改');
+    expect(detailHtml).toContain('财务审核人');
+    expect(detailHtml).toContain('修改并重新发起');
   });
 });

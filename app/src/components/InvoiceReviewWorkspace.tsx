@@ -73,6 +73,13 @@ export type InvoiceReviewSummaryField = {
   evidenceTarget?: string;
 };
 
+export type InvoiceReviewOverviewNotice = {
+  title: string;
+  message: string;
+  meta?: string;
+  tone?: 'warning' | 'danger';
+};
+
 export type InvoiceReviewContractCheck = {
   id: string;
   label: string;
@@ -155,6 +162,7 @@ type InvoiceReviewWorkspaceProps = {
   onDownload?: () => void;
   downloadDisabled?: boolean;
   documentUnavailable?: boolean;
+  overviewNotice?: InvoiceReviewOverviewNotice;
   summaryFields?: InvoiceReviewSummaryField[];
   externalSummary?: boolean;
   overviewFields?: InvoiceReviewOverviewField[];
@@ -237,6 +245,7 @@ export function InvoiceReviewWorkspace({
   onDownload,
   downloadDisabled = false,
   documentUnavailable = false,
+  overviewNotice,
   summaryFields = [],
   externalSummary = false,
   overviewFields = [],
@@ -528,6 +537,16 @@ export function InvoiceReviewWorkspace({
         >
           {activeTab === 'overview' && sourceType === 'INTERNAL_GENERATED' ? (
             <div className="invoice-review-overview-section">
+              {overviewNotice ? (
+                <div className={`invoice-review-overview-notice is-${overviewNotice.tone ?? 'warning'}`} role="status">
+                  <AlertTriangle size={17} />
+                  <span>
+                    <strong>{overviewNotice.title}</strong>
+                    <p>{overviewNotice.message}</p>
+                    {overviewNotice.meta ? <small>{overviewNotice.meta}</small> : null}
+                  </span>
+                </div>
+              ) : null}
               <div className="invoice-review-section-heading">
                 <div><FileCheck2 size={18} /><span><strong>结构化 Invoice 摘要</strong><small>核对项目、主体、金额、币种和付款信息</small></span></div>
               </div>

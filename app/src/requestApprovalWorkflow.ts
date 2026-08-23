@@ -250,6 +250,7 @@ export const returnApprovedRequestToMediaReview = (
   actor: Pick<SystemUser, 'account' | 'name' | 'role'>,
   reason: string,
   occurredAt = new Date().toISOString(),
+  returnItems?: RequestApprovalReturnItem[],
 ): RequestApprovalState => {
   if (state.status !== 'APPROVED') {
     throw new Error('只有已完成财务审批且尚未付款的请款可以从付款执行页退回。');
@@ -267,6 +268,7 @@ export const returnApprovedRequestToMediaReview = (
     fromStatus: state.status,
     toStatus: 'RETURNED_TO_MEDIA_REVIEW',
     reason: normalizedReason,
+    returnItems: returnItems?.length ? returnItems : undefined,
     occurredAt,
   };
   return {
@@ -277,6 +279,7 @@ export const returnApprovedRequestToMediaReview = (
     returnedFromStage: 'FINANCE',
     resumeStatus: 'PENDING_FINANCE',
     returnReason: normalizedReason,
+    returnItems: returnItems?.length ? returnItems : undefined,
     updatedAt: occurredAt,
   };
 };

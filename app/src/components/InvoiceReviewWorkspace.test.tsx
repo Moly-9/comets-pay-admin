@@ -75,6 +75,26 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).not.toContain('invoice-review-compare-table');
   });
 
+  it('shows an Invoice return reason at the top of the overview', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="INTERNAL_GENERATED"
+        overviewNotice={{
+          title: '财务退回 · Invoice',
+          message: 'Invoice 主体需要修改',
+          meta: '财务审核人 · 2026/08/11 13:00',
+          tone: 'danger',
+        }}
+      />,
+    );
+
+    expect(html).toContain('invoice-review-overview-notice is-danger');
+    expect(html).toContain('财务退回 · Invoice');
+    expect(html).toContain('Invoice 主体需要修改');
+    expect(html.indexOf('财务退回 · Invoice')).toBeLessThan(html.indexOf('结构化 Invoice 摘要'));
+  });
+
   it('expands correctly matched fields by default while keeping the disclosure collapsible', () => {
     const html = renderToStaticMarkup(
       <InvoiceReviewWorkspace

@@ -55,7 +55,10 @@ import type {
   InvoiceReviewStatus,
   Payout,
 } from '../types';
-import type { InvoiceManagementView } from '../invoice/invoiceManagement';
+import {
+  getInvoiceManagementReturnContext,
+  type InvoiceManagementView,
+} from '../invoice/invoiceManagement';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 
 export type InvoiceDetailSource =
@@ -497,8 +500,9 @@ export function InvoiceDetailPage({
         projectResourceEdit: canEditProjectResource,
       })
     : null;
-  const isPaymentListReturn = payout?.invoiceReviewStatus === '已退回'
-    && payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST';
+  const managementReturnContext = payout
+    ? getInvoiceManagementReturnContext(payout, generatedRecord?.invoiceId, request)
+    : null;
   const navigationTarget = managementView?.status === 'OA审批中'
     ? 'REQUEST'
     : managementView?.status === '已通过'
@@ -818,7 +822,6 @@ export function InvoiceDetailPage({
     };
   })();
   const workspaceBlockingReasons = [
-    ...(isPaymentListReturn ? ['等待项目付款清单重新提交'] : []),
     ...(primaryAction === 'APPROVE_MEDIA' && !signedForMediaReview ? ['达人尚未完成签署，不能进行审核'] : []),
     ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatch?.canProceed
       ? ['合同与 Invoice 存在未处理的阻断项']
@@ -922,6 +925,17 @@ export function InvoiceDetailPage({
         documentContent={<InvoiceDocumentView model={model} ariaLabel={`${model.invoiceNumber} Invoice全文`} />}
         onDownload={() => downloadInvoice('pdf')}
         downloadDisabled={Boolean(downloading)}
+        overviewNotice={managementReturnContext ? {
+          title: managementReturnContext.sourceLabel,
+          message: managementReturnContext.reason,
+          meta: [
+            managementReturnContext.actorName ?? '审批人未记录',
+            managementReturnContext.occurredAt
+              ? formatReviewTime(managementReturnContext.occurredAt)
+              : '退回时间未记录',
+          ].join(' · '),
+          tone: 'danger',
+        } : undefined}
         summaryFields={summaryFields}
         contractChecks={workspaceContractChecks}
         noContract={Boolean(generatedRecord && selectedContracts.length === 0)}
@@ -960,6 +974,9 @@ export function InvoiceDetailPage({
                   <Button onClick={() => onEditInvoice?.(payout, editContext)}>修改并重新发送达人</Button>
                 ) : null}
               </>
+            ) : null}
+            {managementReturnContext && canManageInvoice && payout && editContext ? (
+              <Button onClick={() => onEditInvoice?.(payout, editContext)}>修改并重新发起</Button>
             ) : null}
             {navigationTarget && payout ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
           </>
