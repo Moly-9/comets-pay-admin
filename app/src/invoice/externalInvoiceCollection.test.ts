@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import type { CreatorProfile, InvoiceEntity } from '../types';
 import {
+  EXTERNAL_INVOICE_REVIEW_FIELD_ORDER,
   buildApprovedExternalInvoice,
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
@@ -83,6 +84,11 @@ const upload = (scenario: 'NORMAL' | 'OCR_ERROR' | 'SOURCE_FILE_ERROR' | 'ACCOUN
 );
 
 describe('external Invoice collection workflow', () => {
+  it('keeps the source file number as audit data instead of a review match field', () => {
+    expect(EXTERNAL_INVOICE_REVIEW_FIELD_ORDER).not.toContain('SOURCE_INVOICE_NUMBER');
+    expect(EXTERNAL_INVOICE_REVIEW_FIELD_ORDER).toContain('INVOICE_DATE');
+  });
+
   it('maps internal workflow states to only the three upload-list statuses', () => {
     expect(externalInvoiceListStatus(createRecord(false).status)).toBe('待发布');
     expect(externalInvoiceListStatus(createRecord(true).status)).toBe('待上传');
@@ -248,15 +254,18 @@ describe('external Invoice collection workflow', () => {
     expect(submitted.status).toBe('WAITING_MEDIA_REVIEW');
   });
 
-  it('rejects a duplicate source Invoice Number before media review', () => {
-    expect(() => submitExternalInvoiceForReview({
+  it('uses the system Invoice number even when a source file number is duplicated', () => {
+    const submitted = submitExternalInvoiceForReview({
       record: upload('NORMAL'),
       creator,
       contracts: [],
       occupiedInvoices: [],
       reservedSourceInvoiceNumbers: ['mcn-20260820-01'],
       actor: creatorActor,
-    })).toThrow('票面 Invoice Number');
+    });
+
+    expect(submitted.invoiceNumber).toBe('INV-20260820-00001');
+    expect(submitted.sourceInvoiceNumber).toBe('MCN-20260820-01');
   });
 
   it('returns to upload handling and approves into a request-eligible external Invoice', () => {

@@ -507,7 +507,7 @@ export function InvoiceReviewWorkspace({
           {activeTab === 'overview' && sourceType === 'EXTERNAL_UPLOADED' ? (
             <div className="invoice-review-overview-section">
               <div className="invoice-review-section-heading">
-                <div><FileCheck2 size={18} /><span><strong>收集任务基准与达人最终确认值</strong><small>异常项优先展示，正常匹配项默认折叠</small></span></div>
+                <div><FileCheck2 size={18} /><span><strong>收集任务基准与达人最终确认值</strong><small>异常项优先展示，正常匹配项默认展开且可按需收起</small></span></div>
               </div>
               {exceptionFields.length ? (
                 <div className="invoice-review-exception-summary" role="status">
@@ -521,7 +521,7 @@ export function InvoiceReviewWorkspace({
                 <div className="invoice-review-field-list">{renderExternalRows(exceptionFields)}</div>
               ) : null}
               {matchedFields.length ? (
-                <details className="invoice-review-matched-details">
+                <details className="invoice-review-matched-details" open>
                   <summary><CheckCircle2 size={16} />正常匹配项（{matchedFields.length}）<ChevronDown size={15} /></summary>
                   <div className="invoice-review-field-list is-matched-list">{renderExternalRows(matchedFields)}</div>
                 </details>

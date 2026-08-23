@@ -73,4 +73,26 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('invoice-review-field-list');
     expect(html).not.toContain('invoice-review-compare-table');
   });
+
+  it('expands correctly matched fields by default while keeping the disclosure collapsible', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="EXTERNAL_UPLOADED"
+        issueCount={0}
+        overviewFields={[{
+          id: 'CURRENCY',
+          label: '币种',
+          baselineValue: 'USD',
+          confirmedValue: 'USD',
+          status: 'MATCHED',
+          statusLabel: '一致',
+          evidenceTarget: 'CURRENCY',
+        }]}
+      />,
+    );
+
+    expect(html).toContain('<details class="invoice-review-matched-details" open="">');
+    expect(html).toContain('正常匹配项（1）');
+  });
 });

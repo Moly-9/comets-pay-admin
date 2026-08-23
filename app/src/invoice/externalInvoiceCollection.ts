@@ -64,6 +64,10 @@ export const EXTERNAL_INVOICE_FIELD_ORDER: ExternalInvoiceFieldKey[] = [
   'PAYMENT_ACCOUNT',
 ];
 
+export const EXTERNAL_INVOICE_REVIEW_FIELD_ORDER = EXTERNAL_INVOICE_FIELD_ORDER.filter(
+  (field): field is Exclude<ExternalInvoiceFieldKey, 'SOURCE_INVOICE_NUMBER'> => field !== 'SOURCE_INVOICE_NUMBER',
+);
+
 export const EXTERNAL_INVOICE_FIELD_LABEL: Record<ExternalInvoiceFieldKey, string> = {
   SOURCE_INVOICE_NUMBER: '票面 Invoice Number',
   INVOICE_DATE: 'Date of Invoice',
@@ -76,7 +80,6 @@ export const EXTERNAL_INVOICE_FIELD_LABEL: Record<ExternalInvoiceFieldKey, strin
 };
 
 export const EXTERNAL_INVOICE_CRITICAL_FIELDS: ExternalInvoiceFieldKey[] = [
-  'SOURCE_INVOICE_NUMBER',
   'PUBLISHER',
   'AMOUNT',
   'CURRENCY',
@@ -759,7 +762,6 @@ export const submitExternalInvoiceForReview = ({
   contracts,
   occupiedInvoices,
   reservedInvoiceNumbers = [],
-  reservedSourceInvoiceNumbers = [],
   actor,
   occurredAt = new Date().toISOString(),
 }: {
@@ -780,9 +782,6 @@ export const submitExternalInvoiceForReview = ({
   if (blockers.length) throw new Error(blockers[0].message);
   const confirmation = currentExternalInvoiceConfirmation(record)!;
   const sourceInvoiceNumber = confirmation.values.SOURCE_INVOICE_NUMBER.trim();
-  if (reservedSourceInvoiceNumbers.some((value) => sameText(value, sourceInvoiceNumber))) {
-    throw new Error(`票面 Invoice Number ${sourceInvoiceNumber} 已被其他外部 Invoice 使用。`);
-  }
   const invoiceDate = confirmation.values.INVOICE_DATE;
   const candidateNumber = nextInvoiceNumber(occupiedInvoices, invoiceDate, reservedInvoiceNumbers);
   const submitter = nowActor(actor);
@@ -834,7 +833,6 @@ export const buildApprovedExternalInvoice = ({
   invoiceEntity,
   occupiedInvoices,
   reservedInvoiceNumbers = [],
-  reservedSourceInvoiceNumbers = [],
   actor,
   occurredAt = new Date().toISOString(),
 }: {
@@ -858,9 +856,6 @@ export const buildApprovedExternalInvoice = ({
   const confirmation = currentExternalInvoiceConfirmation(record);
   if (!confirmation) throw new Error('外部 Invoice 缺少达人确认数据。');
   const sourceInvoiceNumber = confirmation.values.SOURCE_INVOICE_NUMBER.trim();
-  if (reservedSourceInvoiceNumbers.some((value) => sameText(value, sourceInvoiceNumber))) {
-    throw new Error(`票面 Invoice Number ${sourceInvoiceNumber} 已被其他外部 Invoice 使用。`);
-  }
   const account = eligibleInvoicePayoutAccounts(creator).find((candidate) => (
     getPayoutAccountId(candidate) === confirmation.payoutAccountId
   ));

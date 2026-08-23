@@ -30,6 +30,7 @@ import {
   EXTERNAL_INVOICE_CRITICAL_FIELDS,
   EXTERNAL_INVOICE_FIELD_LABEL,
   EXTERNAL_INVOICE_FIELD_ORDER,
+  EXTERNAL_INVOICE_REVIEW_FIELD_ORDER,
   contractAccountReminder,
   currentExternalInvoiceFieldReview,
   currentExternalInvoiceConfirmation,
@@ -355,7 +356,6 @@ export function ExternalInvoiceCollectionDetailPage({
     ? `${selectedAccount.provider} · ${getPayoutAccountSummary(selectedAccount)}`
     : '等待达人选择已验证收款账户';
   const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
-    if (field === 'SOURCE_INVOICE_NUMBER') return '非空且未被其他 Invoice 使用';
     if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
     if (field === 'PUBLISHER') return expectedPublisher;
     if (field === 'ADVERTISER') return record.expected.advertiser;
@@ -365,7 +365,7 @@ export function ExternalInvoiceCollectionDetailPage({
     return profileAccountValue;
   };
   const reviewFields: InvoiceReviewOverviewField[] = recognition && confirmation
-    ? EXTERNAL_INVOICE_FIELD_ORDER.map((field) => {
+    ? EXTERNAL_INVOICE_REVIEW_FIELD_ORDER.map((field) => {
         const recognized = recognition.fields[field];
         const confirmedValue = confirmation.values[field];
         const correction = confirmation.corrections.find((item) => item.fieldKey === field);
