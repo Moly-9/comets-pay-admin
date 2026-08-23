@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
+  confirmPaymentFailureAccountChange,
   recordPaymentFailureNotification,
   simulateCreatorAccountUpdated,
 } from '../paymentFailureRecovery';
@@ -64,7 +65,7 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" checked=""');
   });
 
-  it('keeps a revalidated retry unchecked but makes it selectable', () => {
+  it('keeps a revalidated account blocked until finance confirms it', () => {
     const started = beginPaymentFailureAccountRecovery(retryPayout());
     const notified = recordPaymentFailureNotification(
       started,
@@ -73,6 +74,28 @@ describe('BatchWizardPage payment failure retries', () => {
       'creator@example.com',
     );
     const ready = completePaymentFailureRevalidation(simulateCreatorAccountUpdated(notified));
+    const html = renderToStaticMarkup(
+      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+    );
+
+    expect(html).toContain('账户已校验，待财务确认');
+    expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
+    expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" checked=""');
+  });
+
+  it('makes a revalidated retry selectable after finance confirmation', () => {
+    const started = beginPaymentFailureAccountRecovery(retryPayout());
+    const notified = recordPaymentFailureNotification(
+      started,
+      { account: 'media', name: '项目媒介' },
+      '请更新收款账户',
+      'creator@example.com',
+    );
+    const pendingFinance = completePaymentFailureRevalidation(simulateCreatorAccountUpdated(notified));
+    const ready = confirmPaymentFailureAccountChange(
+      pendingFinance,
+      { account: 'finance', name: '财务审核人' },
+    );
     const html = renderToStaticMarkup(
       <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
     );

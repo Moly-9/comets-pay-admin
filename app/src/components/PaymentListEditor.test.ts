@@ -10,7 +10,11 @@ describe('PaymentListEditor', () => {
     expect(source).toContain('Invoice PDF 文件快照');
     expect(source).toContain('InvoiceDocumentView');
     expect(source).toContain('缩放');
-    expect(source).toContain('编辑付款转账方式');
+    expect(source).toContain('金额、币种和收款账户来自 Invoice 签署冻结快照');
+    expect(source).toContain('本次执行账户');
+    expect(source).toContain('accountEditableInvoiceIds');
+    expect(source).toContain('accountOverrideOnly');
+    expect(source).toContain('paymentFieldsEditable = editable && !accountOverrideOnly');
     expect(source).toContain('编辑付款手续费承担方');
     expect(source).toContain('付款描述（选填）');
     expect(source).toContain('Airwallex');
@@ -33,5 +37,7 @@ describe('PaymentListEditor', () => {
     expect(css).toContain('@media (max-width: 900px)');
     expect(css).toContain('touch-action');
     expect(css).toContain('payment-list-editor-bulk-fill');
+    expect(css).toContain('payment-list-editor-source-lock');
+    expect(css).toContain('payment-list-editor-source-lock.is-warning');
   });
 });

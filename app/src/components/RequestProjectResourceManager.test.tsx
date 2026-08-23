@@ -222,8 +222,13 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
     expect(paymentRowsSource).not.toContain('SelectField');
     const editorSource = readFileSync(new URL('./PaymentListEditor.tsx', import.meta.url), 'utf8');
-    expect(editorSource).toContain('ariaLabel="编辑付款支付币种"');
-    expect(editorSource).toContain('ariaLabel="编辑付款收款币种"');
+    expect(editorSource).toContain('ariaLabel="付款支付币种"');
+    expect(editorSource).toContain('ariaLabel="付款收款币种"');
+    expect(editorSource).toContain('金额、币种和收款账户来自 Invoice 签署冻结快照，当前保持只读');
+    expect(editorSource).toContain('aria-label="付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, \'amount\')} disabled');
+    expect(editorSource).toContain('ariaLabel="付款转账方式"');
+    expect(source).toContain('accountOverrideOnly={paymentFailureRecoveryMode}');
+    expect(source).toContain("payout.paymentFailureRecovery?.status !== 'RETRY_SUBMITTED'");
     expect(editorSource.match(/PAYMENT_CURRENCY_OPTIONS/g)?.length).toBeGreaterThanOrEqual(2);
     expect(editorSource).toContain("update('paymentReason', event.target.value)");
     expect(editorSource).toContain("update('transactionReference', event.target.value)");

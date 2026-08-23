@@ -91,6 +91,10 @@
 .payment-list-editor-frozen-note svg { flex: 0 0 auto; margin-top: 1px; }
 
 .payment-list-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.payment-list-editor-source-lock { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 13px; border: 1px solid #dbe5ef; border-radius: 7px; background: #f5f8fb; padding: 9px 10px; color: #526577; font-size: 11px; line-height: 1.45; }
+.payment-list-editor-source-lock svg { flex: 0 0 auto; margin-top: 1px; color: #347653; }
+.payment-list-editor-source-lock.is-warning { border-color: #ead9ad; background: #fffaf0; color: #735e2e; }
+.payment-list-editor-source-lock.is-warning svg { color: #a66b12; }
 .payment-list-editor-fields label { display: grid; min-width: 0; gap: 5px; color: #606b79; font-size: 11px; }
 .payment-list-editor-fields label.is-wide { grid-column: 1 / -1; }
 .payment-list-editor-fields input { box-sizing: border-box; width: 100%; min-height: 36px; border: 1px solid #d7dee7; border-radius: 6px; padding: 7px 9px; background: #fff; color: #273241; font-size: 12px; }

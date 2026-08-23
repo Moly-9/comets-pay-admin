@@ -10491,6 +10491,47 @@ button:disabled {
   gap: 3px;
 }
 
+.drawer-account-override {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px solid #dce5ed;
+  border-radius: 8px;
+  background: #f7f9fb;
+  padding: 12px;
+}
+
+.drawer-account-override > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.drawer-account-override span,
+.drawer-account-override small {
+  color: #74808d;
+  font-size: 11px;
+}
+
+.drawer-account-override strong {
+  overflow-wrap: anywhere;
+  color: #344252;
+  font-size: 12px;
+}
+
+.drawer-account-override > i {
+  color: #8b96a2;
+  font-style: normal;
+}
+
+.drawer-account-override > small {
+  grid-column: 1 / -1;
+  border-top: 1px solid #e5eaf0;
+  padding-top: 8px;
+}
+
 .drawer-section {
   margin-top: 26px;
 }

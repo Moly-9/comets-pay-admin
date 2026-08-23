@@ -302,6 +302,25 @@ export type InvoiceDocumentModel = {
   payment: DocumentPayoutSnapshot;
 };
 
+export type InvoicePaymentFreezeSnapshot = {
+  invoiceId: InvoiceId;
+  invoiceVersion: number;
+  creatorId?: CreatorId;
+  currency: InvoiceCurrency;
+  amount: number;
+  payoutAccountId?: string;
+  payoutAccountVersion?: PayoutAccountVersion;
+  payoutAccountFingerprint?: string;
+  payoutProvider: Exclude<Provider, '手动打款'>;
+  paymentMethod: InvoicePaymentMethod;
+  payment: DocumentPayoutSnapshot;
+  frozenAt: string;
+  frozenByAccount: string;
+  frozenByName: string;
+  frozenByRole: string;
+  freezeStage: 'CREATOR_SIGNED' | 'EXTERNAL_APPROVED' | 'HISTORICAL_MIGRATION';
+};
+
 export type InvoiceReviewStatus =
   | '待签署'
   | '达人反馈'
@@ -391,6 +410,7 @@ export type GeneratedInvoiceRecord = {
   status: InvoiceReviewStatus;
   generatedAt: string;
   snapshot: InvoiceDocumentModel;
+  paymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   validationStatus: 'valid' | 'needs_review';
   version?: number;
   revisions?: GeneratedInvoiceRevision[];
@@ -458,6 +478,7 @@ export type InvoiceEditContext =
 export type GeneratedInvoiceRevision = {
   version: number;
   snapshot: InvoiceDocumentModel;
+  paymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   changedFields: string[];
   reason: string;
   actorAccount: string;
@@ -497,6 +518,7 @@ export type PaymentFailureReturn = {
 export type PaymentFailureRecoveryStatus =
   | 'AWAITING_CREATOR_UPDATE'
   | 'CREATOR_UPDATED'
+  | 'PENDING_FINANCE_CONFIRMATION'
   | 'READY_FOR_RETRY'
   | 'RETRY_SUBMITTED';
 
@@ -533,6 +555,9 @@ export type PaymentFailureRecovery = {
   reportedExternalBeneficiaryId?: string;
   revalidatedAt?: string;
   revalidationIssues?: string[];
+  financeConfirmedAt?: string;
+  financeConfirmedByAccount?: string;
+  financeConfirmedByName?: string;
   retryBatchId?: string;
   retryBatchCode?: string;
   previousAttempts?: Array<{
@@ -540,10 +565,13 @@ export type PaymentFailureRecovery = {
     notifications: PaymentFailureNotification[];
     failureCode?: string;
     returnReason?: string;
-    creatorUpdatedAt?: string;
-    revalidatedAt?: string;
-    retryBatchId?: string;
-    retryBatchCode?: string;
+      creatorUpdatedAt?: string;
+      revalidatedAt?: string;
+      financeConfirmedAt?: string;
+      financeConfirmedByAccount?: string;
+      financeConfirmedByName?: string;
+      retryBatchId?: string;
+      retryBatchCode?: string;
   }>;
 };
 
@@ -602,6 +630,7 @@ export type Payout = {
   paymentFailureReturn?: PaymentFailureReturn;
   paymentFailureRecovery?: PaymentFailureRecovery;
   invoiceSnapshot?: InvoiceDocumentModel;
+  invoicePaymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   accent: string;
   issue?: string;
   returnReason?: string;

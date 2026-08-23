@@ -5,11 +5,13 @@ import type {
   DocumentPayoutSnapshot,
   GeneratedInvoiceRecord,
   InvoiceCurrency,
+  InvoicePaymentFreezeSnapshot,
   Payout,
   PayoutAccountVersion,
   PayoutAccountStatus,
   PaymentNotification,
 } from './types';
+import { invoicePaymentFreezeSnapshot } from './invoicePaymentFreeze';
 
 declare const entityIdBrand: unique symbol;
 
@@ -138,6 +140,17 @@ export type PaymentListEditableField =
   | 'transactionReference'
   | 'description';
 
+export const PAYMENT_LIST_INVOICE_DERIVED_FIELDS = new Set<PaymentListEditableField>([
+  'currency',
+  'receiveCurrency',
+  'amount',
+  'transferMethod',
+]);
+
+export const isInvoiceDerivedPaymentListField = (field: PaymentListEditableField) => (
+  PAYMENT_LIST_INVOICE_DERIVED_FIELDS.has(field)
+);
+
 export type PaymentListAccountSnapshot = Pick<
   PaymentListItemSnapshot,
   | 'provider'
@@ -156,11 +169,29 @@ export type PaymentListAccountSnapshot = Pick<
   | 'paymentDetails'
 >;
 
+export type PaymentExecutionAccountOverride = {
+  source: 'PAYMENT_FAILURE';
+  failurePayoutId: string;
+  reason: string;
+  account: PaymentListAccountSnapshot;
+  status: 'PENDING_REVALIDATION' | 'VALIDATED' | 'FINANCE_CONFIRMED';
+  changedAt: string;
+  changedByAccount: string;
+  changedByName: string;
+  validatedAt?: string;
+  financeConfirmedAt?: string;
+  financeConfirmedByAccount?: string;
+  financeConfirmedByName?: string;
+};
+
 export type PaymentListItem = {
   id: string;
   engagementId: EngagementId;
   invoiceId: InvoiceId;
   snapshot: PaymentListItemSnapshot;
+  sourceInvoicePaymentSnapshot?: InvoicePaymentFreezeSnapshot;
+  executionAccountOverride?: PaymentExecutionAccountOverride;
+  /** @deprecated Legacy prototype account override. */
   accountOverride?: PaymentListAccountSnapshot;
   overrides: Partial<Pick<PaymentListItemSnapshot, PaymentListEditableField>>;
   requiresRevalidation?: boolean;
@@ -349,7 +380,7 @@ export const paymentListEffectiveAccount = (
 ): PaymentListItemSnapshot => {
   const account = {
     ...item.snapshot,
-    ...(item.accountOverride ?? {}),
+    ...(item.executionAccountOverride?.account ?? item.accountOverride ?? {}),
   };
   const overrides = item.overrides as Partial<PaymentListItemSnapshot>;
   return {
@@ -413,6 +444,7 @@ export const paymentListItemValue = <K extends keyof PaymentListItemSnapshot>(
   key: K,
 ) => (
   (item.overrides as Partial<PaymentListItemSnapshot>)[key]
+  ?? (item.executionAccountOverride?.account as Partial<PaymentListItemSnapshot> | undefined)?.[key]
   ?? (item.accountOverride as Partial<PaymentListItemSnapshot> | undefined)?.[key]
   ?? item.snapshot[key]
 ) as PaymentListItemSnapshot[K];
@@ -501,6 +533,15 @@ export const mergeRefreshedPaymentListItem = (
     ...currentItem,
     engagementId: refreshedItem.engagementId,
     snapshot: { ...refreshedItem.snapshot },
+    sourceInvoicePaymentSnapshot: refreshedItem.sourceInvoicePaymentSnapshot
+      ? { ...refreshedItem.sourceInvoicePaymentSnapshot, payment: { ...refreshedItem.sourceInvoicePaymentSnapshot.payment } }
+      : currentItem.sourceInvoicePaymentSnapshot,
+    executionAccountOverride: currentItem.executionAccountOverride
+      ? {
+          ...currentItem.executionAccountOverride,
+          account: { ...currentItem.executionAccountOverride.account },
+        }
+      : undefined,
     accountOverride: currentItem.accountOverride ? { ...currentItem.accountOverride } : undefined,
     overrides: { ...currentItem.overrides },
   };
@@ -595,6 +636,12 @@ const clonePaymentListItems = (items: PaymentListItem[]) => items.map((item) => 
     ...item.snapshot,
     contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
   },
+  sourceInvoicePaymentSnapshot: item.sourceInvoicePaymentSnapshot
+    ? { ...item.sourceInvoicePaymentSnapshot, payment: { ...item.sourceInvoicePaymentSnapshot.payment } }
+    : undefined,
+  executionAccountOverride: item.executionAccountOverride
+    ? { ...item.executionAccountOverride, account: { ...item.executionAccountOverride.account } }
+    : undefined,
   accountOverride: item.accountOverride ? { ...item.accountOverride } : undefined,
   overrides: { ...item.overrides },
   validationIssues: item.validationIssues ? [...item.validationIssues] : undefined,
@@ -787,6 +834,17 @@ export const revalidatePaymentListItem = (
   ];
   return {
     ...item,
+    executionAccountOverride: item.executionAccountOverride
+      ? {
+          ...item.executionAccountOverride,
+          status: validationIssues.length
+            ? 'PENDING_REVALIDATION'
+            : item.executionAccountOverride.status === 'FINANCE_CONFIRMED'
+              ? 'FINANCE_CONFIRMED'
+              : 'VALIDATED',
+          validatedAt: validationIssues.length ? undefined : validatedAt,
+        }
+      : undefined,
     requiresRevalidation: validationIssues.length > 0,
     validationIssues,
     lastValidatedAt: validatedAt,
@@ -831,6 +889,89 @@ export const applyPaymentListPayoutSnapshot = (
   };
 };
 
+const paymentListAccountSnapshotFromPayment = (
+  item: PaymentListItem,
+  payment: DocumentPayoutSnapshot,
+): PaymentListAccountSnapshot => {
+  const provider = payment.payoutProvider
+    ?? (payment.transferMethod === 'PAYPAL' ? 'PayPal' : 'Airwallex');
+  const rawAccount = provider === 'PayPal'
+    ? payment.paypalEmail || payment.paypalUsername
+    : payment.iban || payment.accountNumber;
+  return {
+    provider,
+    accountSummary: rawAccount
+      ? maskPaymentAccount(rawAccount)
+      : provider === 'PayPal'
+        ? '待补充 PayPal'
+        : '待补充银行账户',
+    receiveCurrency: payment.accountCurrency || item.snapshot.currency,
+    payoutAccountId: payment.payoutAccountId,
+    payoutAccountVersion: payment.payoutAccountVersion ?? 'legacy-v1',
+    externalBeneficiaryId: payment.externalBeneficiaryId,
+    providerAccountScope: payment.providerAccountScope,
+    transferMethod: payment.transferMethod,
+    localClearingSystem: payment.localClearingSystem,
+    accountFingerprint: payment.accountFingerprint,
+    schemaKey: payment.schemaKey,
+    validationStatus: payment.validationStatus,
+    transferNote: payment.transferRemarks,
+    paymentDetails: { ...payment },
+  };
+};
+
+export const applyPaymentExecutionAccountOverride = (
+  item: PaymentListItem,
+  payment: DocumentPayoutSnapshot,
+  context: {
+    failurePayoutId: string;
+    reason: string;
+    actor: Pick<PaymentListActor, 'account' | 'name'>;
+    changedAt?: string;
+  },
+): PaymentListItem => {
+  const changedAt = context.changedAt ?? nowIso();
+  const { receiveCurrency: _receiveCurrency, transferMethod: _transferMethod, ...overrides } = item.overrides;
+  return {
+    ...item,
+    executionAccountOverride: {
+      source: 'PAYMENT_FAILURE',
+      failurePayoutId: context.failurePayoutId,
+      reason: context.reason.trim(),
+      account: paymentListAccountSnapshotFromPayment(item, payment),
+      status: 'PENDING_REVALIDATION',
+      changedAt,
+      changedByAccount: context.actor.account,
+      changedByName: context.actor.name,
+    },
+    accountOverride: undefined,
+    overrides,
+    requiresRevalidation: true,
+    validationIssues: ['执行账户已更换，请重新校验并由财务确认'],
+  };
+};
+
+export const confirmPaymentExecutionAccountOverride = (
+  item: PaymentListItem,
+  actor: Pick<PaymentListActor, 'account' | 'name'>,
+  confirmedAt = nowIso(),
+): PaymentListItem => {
+  const override = item.executionAccountOverride;
+  if (!override || override.status !== 'VALIDATED') {
+    throw new Error('执行账户尚未完成重新校验。');
+  }
+  return {
+    ...item,
+    executionAccountOverride: {
+      ...override,
+      status: 'FINANCE_CONFIRMED',
+      financeConfirmedAt: confirmedAt,
+      financeConfirmedByAccount: actor.account,
+      financeConfirmedByName: actor.name,
+    },
+  };
+};
+
 export const applyValidatedPaymentListPayoutSnapshot = (
   item: PaymentListItem,
   payment: DocumentPayoutSnapshot,
@@ -853,11 +994,10 @@ export const invoicePaymentListItem = (
   invoice: GeneratedInvoiceRecord,
   contracts: PaymentListContractReference[] = [],
 ): PaymentListItem => {
-  const payment = invoice.snapshot.payment;
-  const provider = invoice.snapshot.payoutProvider
-    ?? payment.payoutProvider
-    ?? (invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex');
-  const rawAccount = invoice.snapshot.paymentMethod === 'paypal'
+  const frozen = invoicePaymentFreezeSnapshot(invoice);
+  const payment = frozen.payment;
+  const provider = frozen.payoutProvider;
+  const rawAccount = frozen.paymentMethod === 'paypal'
     ? payment.paypalEmail || payment.paypalUsername
     : payment.iban || payment.accountNumber;
   const contractReferences = contracts.filter((contract) => (
@@ -867,12 +1007,9 @@ export const invoicePaymentListItem = (
   ));
   const feeBearers = [...new Set(contractReferences.map((contract) => contract.feeBearer).filter(Boolean))];
   const feeBearer = feeBearers.length === 1 ? feeBearers[0] : '';
-  const payoutAccountId = invoice.snapshot.payoutAccountId ?? payment.payoutAccountId;
-  const payoutAccountVersion = invoice.snapshot.payoutAccountVersion
-    ?? payment.payoutAccountVersion
-    ?? 'legacy-v1';
-  const accountFingerprint = invoice.snapshot.payoutAccountFingerprint
-    ?? payment.accountFingerprint;
+  const payoutAccountId = frozen.payoutAccountId;
+  const payoutAccountVersion = frozen.payoutAccountVersion ?? 'legacy-v1';
+  const accountFingerprint = frozen.payoutAccountFingerprint;
   const item: PaymentListItem = {
     id: createPrototypeId('item'),
     engagementId: invoice.snapshot.engagementId as EngagementId,
@@ -881,13 +1018,13 @@ export const invoicePaymentListItem = (
       invoiceNumber: invoice.id,
       creatorName: invoice.snapshot.creatorName,
       realName: invoice.snapshot.from.legalName,
-      currency: invoice.snapshot.currency,
-      receiveCurrency: payment.accountCurrency || invoice.snapshot.currency,
-      amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
+      currency: frozen.currency,
+      receiveCurrency: payment.accountCurrency || frozen.currency,
+      amount: frozen.amount,
       provider,
       accountSummary: rawAccount
         ? maskPaymentAccount(rawAccount)
-        : invoice.snapshot.paymentMethod === 'paypal'
+        : frozen.paymentMethod === 'paypal'
           ? '待补充 PayPal'
           : '待补充银行账户',
       paymentReason: '影音服务',
@@ -908,6 +1045,7 @@ export const invoicePaymentListItem = (
       transferNote: payment.transferRemarks,
       paymentDetails: { ...payment },
     },
+    sourceInvoicePaymentSnapshot: frozen,
     overrides: {},
   };
   return revalidatePaymentListItem(item);
@@ -922,6 +1060,8 @@ export const payoutWithPaymentListSnapshot = (
   const currency = String(paymentListItemValue(item, 'currency'));
   return {
     ...payout,
+    invoicePaymentFreezeSnapshot: item.sourceInvoicePaymentSnapshot
+      ?? payout.invoicePaymentFreezeSnapshot,
     creatorId: item.snapshot.creatorId,
     provider: ['Airwallex', 'PayPal', 'PayMax'].includes(provider)
       ? provider as Payout['provider']

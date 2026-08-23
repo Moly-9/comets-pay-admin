@@ -335,9 +335,10 @@ describe('project resource aggregation', () => {
     expect(source).toContain('setRemovePaymentInvoiceId(null)');
   });
 
-  it('keeps account selection on each payment row and removes channel tabs', () => {
+  it('keeps the signed account visible on each payment row and removes channel tabs', () => {
     const source = readFileSync(new URL('./ProjectResourceManager.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('默认继承 Invoice 冻结账户');
+    expect(source).toContain('继承 Invoice 签署冻结账户');
+    expect(source).toContain('付款失败换户在请款详情处理');
     expect(source).toContain('onChangePaymentAccount(item.invoiceId, value)');
     expect(source).toContain('data-payment-provider-warning="true"');
     expect(source).toContain('getPayoutAccountSelectPresentation(account)');

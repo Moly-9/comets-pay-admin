@@ -738,7 +738,7 @@ export function ProjectResourceManager({
             <div className="project-resource-browser-heading">
               <div>
                 <strong>项目付款清单</strong>
-                <p>每位达人默认继承 Invoice 冻结账户，付款清单可独立选择其他收款账户。</p>
+                <p>金额、币种和收款账户继承 Invoice 签署冻结快照；付款失败换户在请款详情处理。</p>
               </div>
               <span>{paymentList?.paymentListCode ?? projectCode}</span>
             </div>
@@ -850,11 +850,11 @@ export function ProjectResourceManager({
                               menuStrategy="fixed"
                               menuWidth={520}
                               placeholder={accountOptions.length ? '选择达人收款账户' : '达人暂无可用收款账户'}
-                              disabled={!paymentFieldsEditable || !accountOptions.length}
+                              disabled
                               onChange={(value) => onChangePaymentAccount(item.invoiceId, value)}
                             />
                             <small className="project-payment-account-origin">
-                              {item.accountOverride ? '付款清单已覆盖，Invoice 原账户快照保留' : '默认继承 Invoice 冻结账户'}
+                              {item.executionAccountOverride || item.accountOverride ? '本次执行账户已覆盖，Invoice 原账户快照保留' : '继承 Invoice 签署冻结账户'}
                             </small>
                           </label>
                           <label>
@@ -864,7 +864,7 @@ export function ProjectResourceManager({
                               variant="form"
                               value={String(paymentListItemValue(item, 'currency'))}
                               options={PAYMENT_CURRENCY_OPTIONS}
-                              disabled={!paymentFieldsEditable}
+                              disabled
                               onChange={(value) => onUpdatePaymentItem(item.invoiceId, 'currency', value)}
                             />
                           </label>
@@ -875,13 +875,13 @@ export function ProjectResourceManager({
                               variant="form"
                               value={String(paymentListItemValue(item, 'receiveCurrency'))}
                               options={PAYMENT_CURRENCY_OPTIONS}
-                              disabled={!paymentFieldsEditable}
+                              disabled
                               onChange={(value) => onUpdatePaymentItem(item.invoiceId, 'receiveCurrency', value)}
                             />
                           </label>
                           <label>
                             {requiredPaymentLabel('金额')}
-                            <input required aria-required="true" disabled={!paymentFieldsEditable} type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(item.invoiceId, 'amount', Number(event.target.value))} />
+                            <input required aria-required="true" disabled type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} />
                           </label>
                           <label>
                             {requiredPaymentLabel('手续费承担方')}

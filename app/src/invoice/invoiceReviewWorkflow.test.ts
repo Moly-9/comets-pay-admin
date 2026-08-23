@@ -497,7 +497,7 @@ describe('Invoice review workflow', () => {
       sourcePayoutId: payout.id,
       status: '待签署',
       generatedAt: '2026-08-04 10:00',
-      snapshot: {} as never,
+      snapshot,
       validationStatus: 'valid',
       version: 1,
     };
@@ -509,7 +509,14 @@ describe('Invoice review workflow', () => {
     expect(linked.invoiceSnapshot).toEqual({
       ...record.snapshot,
       signatureDate: '2026-08-14',
-      signatureText: 'Signed electronically',
+      signatureText: 'Synthetic Creator',
+    });
+    expect(linked.invoicePaymentFreezeSnapshot).toMatchObject({
+      invoiceId: record.invoiceId,
+      invoiceVersion: 1,
+      amount: 100,
+      payoutAccountId: 'awx-synthetic',
+      freezeStage: 'CREATOR_SIGNED',
     });
 
     expect(() => markGeneratedInvoiceSigned(

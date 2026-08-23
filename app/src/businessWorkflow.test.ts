@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyPaymentExecutionAccountOverride,
   applyValidatedPaymentListPayoutSnapshot,
   beginPaymentListEdit,
   canEditProject,
   clearPaymentListItems,
+  confirmPaymentExecutionAccountOverride,
   createAuditEvent,
   generatePaymentListVersion,
   getPaymentListAccess,
   nextReviewStatusAfterMutation,
+  invoicePaymentListItem,
   paymentListEffectiveAccount,
   paymentListItemValue,
   paymentListProviderForItems,
@@ -28,6 +31,7 @@ import {
   type PaymentRequestProjectId,
   type ProjectId,
 } from './businessWorkflow';
+import type { GeneratedInvoiceRecord } from './types';
 
 const roles = {
   admin: { roleKey: 'admin' as const },
@@ -191,6 +195,109 @@ describe('project payment list', () => {
     const withItem = upsertPaymentListItem(record, item);
     expect(upsertPaymentListItem(withItem, item).items).toHaveLength(1);
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
+  });
+
+  it('builds the first payment row from the signed freeze instead of mutable invoice fields', () => {
+    const frozenPayment = {
+      payoutAccountId: 'account-signed',
+      payoutAccountVersion: 'v2' as const,
+      accountFingerprint: 'fp-signed',
+      payoutProvider: 'Airwallex' as const,
+      accountCurrency: 'USD',
+      accountNumber: '00001111',
+      externalBeneficiaryId: 'beneficiary-signed',
+      transferMethod: 'LOCAL' as const,
+      localClearingSystem: 'ACH',
+      validationStatus: 'VALIDATED' as const,
+    };
+    const invoice = {
+      id: 'INV-20260823-00001',
+      invoiceId,
+      sourcePayoutId: 'payout-signed',
+      status: '已通过',
+      generatedAt: '2026-08-23T08:00:00.000Z',
+      version: 2,
+      validationStatus: 'valid',
+      snapshot: {
+        invoiceNumber: 'INV-20260823-00001',
+        creatorName: 'Synthetic Creator',
+        from: { legalName: 'Synthetic Creator' },
+        currency: 'EUR',
+        items: [{ lineTotal: 999 }],
+        paymentMethod: 'bank',
+        payment: { ...frozenPayment, accountNumber: '99992222' },
+      },
+      paymentFreezeSnapshot: {
+        invoiceId,
+        invoiceVersion: 1,
+        creatorId: 'creator-1' as CreatorId,
+        currency: 'USD',
+        amount: 300,
+        payoutAccountId: 'account-signed',
+        payoutAccountVersion: 'v2',
+        payoutAccountFingerprint: 'fp-signed',
+        payoutProvider: 'Airwallex',
+        paymentMethod: 'bank',
+        payment: frozenPayment,
+        frozenAt: '2026-08-22T08:00:00.000Z',
+        frozenByAccount: 'creator.test',
+        frozenByName: 'Synthetic Creator',
+        frozenByRole: '达人',
+        freezeStage: 'CREATOR_SIGNED',
+      },
+    } as unknown as GeneratedInvoiceRecord;
+
+    const paymentItem = invoicePaymentListItem(invoice);
+
+    expect(paymentItem.snapshot).toMatchObject({
+      currency: 'USD',
+      amount: 300,
+      payoutAccountId: 'account-signed',
+      accountFingerprint: 'fp-signed',
+    });
+    expect(paymentItem.sourceInvoicePaymentSnapshot).toEqual(invoice.paymentFreezeSnapshot);
+  });
+
+  it('keeps the signed source account while validating and confirming a failure execution override', () => {
+    const changed = applyPaymentExecutionAccountOverride(item, {
+      payoutAccountId: 'account-retry',
+      payoutAccountVersion: 'v4',
+      accountFingerprint: 'fp-retry',
+      payoutProvider: 'Airwallex',
+      accountCurrency: 'USD',
+      accountNumber: '00009999',
+      externalBeneficiaryId: 'beneficiary-retry',
+      transferMethod: 'LOCAL',
+      localClearingSystem: 'ACH',
+      schemaKey: 'BANK_ACCOUNT:US:USD:PERSONAL:LOCAL:ACH',
+      validationStatus: 'VALIDATED',
+    } as never, {
+      failurePayoutId: 'payout-failed',
+      reason: '原账户已失效',
+      actor: { account: 'media.test', name: '项目媒介' },
+      changedAt: '2026-08-23T09:00:00.000Z',
+    });
+    const validated = revalidatePaymentListItem(changed, '2026-08-23T09:05:00.000Z', {
+      payoutAccountId: 'account-retry',
+      payoutAccountVersion: 'v4',
+      accountFingerprint: 'fp-retry',
+      provider: 'Airwallex',
+      externalBeneficiaryId: 'beneficiary-retry',
+      validationStatus: 'VALIDATED',
+    });
+    const confirmed = confirmPaymentExecutionAccountOverride(
+      validated,
+      { account: 'finance.test', name: '财务审核人' },
+      '2026-08-23T09:10:00.000Z',
+    );
+
+    expect(changed.snapshot.payoutAccountId).toBe('account-1');
+    expect(paymentListEffectiveAccount(changed).payoutAccountId).toBe('account-retry');
+    expect(validated.executionAccountOverride?.status).toBe('VALIDATED');
+    expect(confirmed.executionAccountOverride).toMatchObject({
+      status: 'FINANCE_CONFIRMED',
+      financeConfirmedByAccount: 'finance.test',
+    });
   });
 
   it('clears payment rows while preserving the list identity and generated history', () => {

@@ -12,6 +12,7 @@ import type {
 } from '../types';
 import type { InvoicePageTab } from './invoiceManagement';
 import { todayInputValue } from './invoiceUtils';
+import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
 
 export type { InvoicePageTab } from './invoiceManagement';
 
@@ -268,6 +269,9 @@ export const applyInvoiceReviewAction = (
       : payout.invoiceSignatureRound,
     invoiceSignedAt: isSigned ? occurredAt : invalidatesSignature ? undefined : payout.invoiceSignedAt,
     invoiceSnapshot,
+    invoicePaymentFreezeSnapshot: invalidatesSignature
+      ? undefined
+      : payout.invoicePaymentFreezeSnapshot,
     creatorFeedback: isCreatorFeedback
       ? { reason: event.reason ?? '', actorName: actor.name, occurredAt }
       : payout.creatorFeedback,
@@ -445,6 +449,7 @@ export const applyInvoiceDocumentEdit = ({
     ...record,
     status: '待签署',
     snapshot: nextSnapshot,
+    paymentFreezeSnapshot: undefined,
     validationStatus: 'valid',
     version: nextVersion,
     revisions: [
@@ -452,6 +457,7 @@ export const applyInvoiceDocumentEdit = ({
       {
         version: previousVersion,
         snapshot: cloneInvoiceSnapshot(record.snapshot),
+        paymentFreezeSnapshot: record.paymentFreezeSnapshot,
         changedFields,
         reason: normalizedReason,
         actorAccount: actor.account,
@@ -508,6 +514,7 @@ export const applyInvoiceDocumentEdit = ({
       ? undefined
       : payout.paymentFailureReturn,
     invoiceSnapshot: nextSnapshot,
+    invoicePaymentFreezeSnapshot: undefined,
     issue: undefined,
     returnReason: undefined,
   };
@@ -623,10 +630,19 @@ export const markGeneratedInvoiceSigned = (
     signatureDate: signatureDateFromOccurredAt(occurredAt),
     signatureText: buildMockElectronicSignature(record.snapshot.creatorName),
   };
+  const paymentFreezeSnapshot = createInvoicePaymentFreezeSnapshot({
+    invoiceId: record.invoiceId,
+    invoiceVersion: record.version ?? payout.invoiceVersion ?? 1,
+    snapshot: signedSnapshot,
+    actor,
+    freezeStage: 'CREATOR_SIGNED',
+    frozenAt: occurredAt,
+  });
   return {
     ...payout,
     invoice: record.id,
     invoiceSnapshot: signedSnapshot,
+    invoicePaymentFreezeSnapshot: paymentFreezeSnapshot,
     status: '未进入付款',
     invoiceReviewStatus: event.toStatus,
     invoiceReviewHistory: [...(payout.invoiceReviewHistory ?? []), event],
@@ -667,6 +683,7 @@ export const invalidateSignedInvoice = (
     invoiceSnapshot: payout.invoiceSnapshot
       ? { ...payout.invoiceSnapshot, signatureDate: undefined, signatureText: undefined }
       : undefined,
+    invoicePaymentFreezeSnapshot: undefined,
     issue: event.reason,
   };
 };

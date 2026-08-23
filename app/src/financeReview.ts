@@ -301,7 +301,8 @@ const reviewInvoice = (
   }
 
   const { item, list } = first;
-  const account = paymentListEffectiveAccount(item);
+  const effectiveAccount = paymentListEffectiveAccount(item);
+  const account = item.executionAccountOverride ? item.snapshot : effectiveAccount;
   const paymentDetails = account.paymentDetails;
   const currency = display(paymentListItemValue(item, 'currency'));
   const amount = Number(paymentListItemValue(item, 'amount') || 0);
@@ -422,6 +423,17 @@ const reviewInvoice = (
       required: true,
     }),
     ...accountFields,
+    ...(item.executionAccountOverride ? [{
+      id: 'execution-account-override',
+      label: '付款失败执行账户覆盖',
+      contractValue: '—',
+      invoiceValue: item.snapshot.accountSummary,
+      paymentValue: `${effectiveAccount.accountSummary} · ${item.executionAccountOverride.reason}`,
+      state: item.executionAccountOverride.status === 'FINANCE_CONFIRMED' ? 'match' as const : 'mismatch' as const,
+      warning: item.executionAccountOverride.status === 'FINANCE_CONFIRMED'
+        ? 'Invoice 签署账户保持不变；本次执行账户已由财务确认。'
+        : '新执行账户尚未完成财务确认。',
+    }] : []),
     tripleField({
       id: 'reason',
       label: '付款原因',

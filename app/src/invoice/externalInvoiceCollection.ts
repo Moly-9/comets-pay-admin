@@ -23,6 +23,7 @@ import type {
   Payout,
 } from '../types';
 import { formatInvoiceNumber, invoiceDatePart, nextInvoiceNumber } from './invoiceUtils';
+import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
 
 export type ExternalInvoiceCollectionStatus =
   | 'DRAFT'
@@ -919,6 +920,14 @@ export const buildApprovedExternalInvoice = ({
     payment,
   };
   const payoutId = createPrototypeId('payout');
+  const paymentFreezeSnapshot = createInvoicePaymentFreezeSnapshot({
+    invoiceId: record.invoiceId,
+    invoiceVersion: record.sourceFileVersions.length,
+    snapshot,
+    actor,
+    freezeStage: 'EXTERNAL_APPROVED',
+    frozenAt: occurredAt,
+  });
   const invoice: GeneratedInvoiceRecord = {
     id: invoiceNumber,
     invoiceId: record.invoiceId,
@@ -927,6 +936,7 @@ export const buildApprovedExternalInvoice = ({
     status: '已通过',
     generatedAt: occurredAt,
     snapshot,
+    paymentFreezeSnapshot,
     validationStatus: 'valid',
     version: record.sourceFileVersions.length,
   };
@@ -960,6 +970,7 @@ export const buildApprovedExternalInvoice = ({
     invoiceVersion: record.sourceFileVersions.length,
     invoiceSignatureRound: 0,
     invoiceSnapshot: snapshot,
+    invoicePaymentFreezeSnapshot: paymentFreezeSnapshot,
     accent: creator.accent,
   };
   const collection: ExternalInvoiceCollectionRecord = {

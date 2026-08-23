@@ -373,5 +373,13 @@ describe('external Invoice collection workflow', () => {
     expect(approved.payout.invoiceReviewStatus).toBe('已通过');
     expect(approved.payout.invoiceSignatureRound).toBe(0);
     expect(approved.invoice.invoiceId).toBe(submitted.invoiceId);
+    expect(approved.invoice.paymentFreezeSnapshot).toMatchObject({
+      invoiceId: submitted.invoiceId,
+      freezeStage: 'EXTERNAL_APPROVED',
+      amount: 4800,
+    });
+    expect(approved.payout.invoicePaymentFreezeSnapshot).toEqual(
+      approved.invoice.paymentFreezeSnapshot,
+    );
   });
 });

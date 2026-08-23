@@ -38,6 +38,9 @@ export const markPaymentFailureAccountChanged = (
       reportedAccountFingerprint: account.accountFingerprint,
       reportedExternalBeneficiaryId: account.externalBeneficiaryId,
       revalidationIssues: [],
+      financeConfirmedAt: undefined,
+      financeConfirmedByAccount: undefined,
+      financeConfirmedByName: undefined,
     },
   };
 };
@@ -56,11 +59,16 @@ export const isPaymentFailureRetryCandidate = (payout: Payout) => (
 export const isPaymentFailureRetryReady = (payout: Payout) => (
   isPaymentFailureRetryCandidate(payout)
   && payout.paymentFailureRecovery?.status === 'READY_FOR_RETRY'
+  && (
+    payout.paymentFailureRecovery.readyReason === 'ACCOUNT_UNCHANGED'
+    || Boolean(payout.paymentFailureRecovery.financeConfirmedAt)
+  )
 );
 
 export const paymentFailureRecoveryLabel = (payout: Payout) => {
   const status = payout.paymentFailureRecovery?.status;
   if (status === 'CREATOR_UPDATED') return '达人已更新，待重新校验';
+  if (status === 'PENDING_FINANCE_CONFIRMATION') return '账户已校验，待财务确认';
   if (status === 'READY_FOR_RETRY') {
     return payout.paymentFailureRecovery?.readyReason === 'ACCOUNT_UNCHANGED'
       ? '已通知，可重试'
@@ -95,6 +103,9 @@ export const beginPaymentFailureAccountRecovery = (
           returnReason: previous.returnReason,
           creatorUpdatedAt: previous.creatorUpdatedAt,
           revalidatedAt: previous.revalidatedAt,
+          financeConfirmedAt: previous.financeConfirmedAt,
+          financeConfirmedByAccount: previous.financeConfirmedByAccount,
+          financeConfirmedByName: previous.financeConfirmedByName,
           retryBatchId: previous.retryBatchId,
           retryBatchCode: previous.retryBatchCode,
         },
@@ -211,10 +222,32 @@ export const completePaymentFailureRevalidation = (
     paymentListValidationIssues: [],
     paymentFailureRecovery: {
       ...recovery,
-      status: 'READY_FOR_RETRY',
-      readyReason: 'REVALIDATED',
+      status: 'PENDING_FINANCE_CONFIRMATION',
+      readyReason: undefined,
       revalidatedAt: occurredAt,
       revalidationIssues: [],
+    },
+  };
+};
+
+export const confirmPaymentFailureAccountChange = (
+  payout: Payout,
+  actor: PaymentFailureRecoveryActor,
+  occurredAt = new Date().toISOString(),
+): Payout => {
+  const recovery = payout.paymentFailureRecovery;
+  if (!recovery || recovery.status !== 'PENDING_FINANCE_CONFIRMATION') {
+    throw new Error('执行账户尚未完成重新校验，不能由财务确认。');
+  }
+  return {
+    ...payout,
+    paymentFailureRecovery: {
+      ...recovery,
+      status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
+      financeConfirmedAt: occurredAt,
+      financeConfirmedByAccount: actor.account,
+      financeConfirmedByName: actor.name,
     },
   };
 };
@@ -243,14 +276,19 @@ export const markPaymentFailureRetrySubmitted = (
   payout: Payout,
   batchId: string,
   batchCode: string,
-): Payout => ({
-  ...payout,
-  status: '付款处理中',
-  issue: undefined,
-  paymentFailureRecovery: payout.paymentFailureRecovery ? {
-    ...payout.paymentFailureRecovery,
-    status: 'RETRY_SUBMITTED',
-    retryBatchId: batchId,
-    retryBatchCode: batchCode,
-  } : undefined,
-});
+): Payout => {
+  if (!isPaymentFailureRetryReady(payout)) {
+    throw new Error('失败款尚未完成账户校验和财务确认。');
+  }
+  return {
+    ...payout,
+    status: '付款处理中',
+    issue: undefined,
+    paymentFailureRecovery: payout.paymentFailureRecovery ? {
+      ...payout.paymentFailureRecovery,
+      status: 'RETRY_SUBMITTED',
+      retryBatchId: batchId,
+      retryBatchCode: batchCode,
+    } : undefined,
+  };
+};

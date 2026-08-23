@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
+  confirmPaymentFailureAccountChange,
   isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
   markPaymentFailureRetrySubmitted,
@@ -126,14 +127,22 @@ describe('payment failure recovery', () => {
     expect(isPaymentFailureRetryReady(blocked)).toBe(false);
 
     const recovery = updated.paymentFailureRecovery!;
-    const ready = completePaymentFailureRevalidation(updated, '2026-08-10T10:31:00.000Z', paymentFailureRevalidationIssues(updated, {
+    const pendingFinance = completePaymentFailureRevalidation(updated, '2026-08-10T10:31:00.000Z', paymentFailureRevalidationIssues(updated, {
       payoutAccountId: updated.payoutAccountId,
       payoutAccountVersion: recovery.reportedPayoutAccountVersion,
       accountFingerprint: recovery.reportedAccountFingerprint,
       externalBeneficiaryId: recovery.reportedExternalBeneficiaryId,
     }));
+    const ready = confirmPaymentFailureAccountChange(
+      pendingFinance,
+      { account: 'finance', name: '财务人员' },
+      '2026-08-10T10:32:00.000Z',
+    );
 
+    expect(pendingFinance.paymentFailureRecovery?.status).toBe('PENDING_FINANCE_CONFIRMATION');
+    expect(isPaymentFailureRetryReady(pendingFinance)).toBe(false);
     expect(ready.paymentFailureRecovery?.status).toBe('READY_FOR_RETRY');
+    expect(ready.paymentFailureRecovery?.financeConfirmedByAccount).toBe('finance');
     expect(ready.paymentListValidationIssues).toEqual([]);
     expect(isPaymentFailureRetryReady(ready)).toBe(true);
   });
@@ -146,7 +155,11 @@ describe('payment failure recovery', () => {
       'mina@example.com',
     );
     const creatorUpdated = simulateCreatorAccountUpdated(notified);
-    const ready = completePaymentFailureRevalidation(creatorUpdated);
+    const pendingFinance = completePaymentFailureRevalidation(creatorUpdated);
+    const ready = confirmPaymentFailureAccountChange(
+      pendingFinance,
+      { account: 'finance', name: '财务人员' },
+    );
     const submitted = markPaymentFailureRetrySubmitted(ready, 'batch_retry_1', 'BAT-RETRY-001');
     const failedAgain = beginPaymentFailureAccountRecovery({ ...submitted, status: '付款失败' });
 

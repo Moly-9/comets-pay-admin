@@ -36,6 +36,8 @@ type Props = {
   contracts: ContractRecord[];
   creators: CreatorProfile[];
   editable: boolean;
+  accountEditableInvoiceIds?: PaymentListItem['invoiceId'][];
+  accountOverrideOnly?: boolean;
   requestPaymentProvider?: string | null;
   onUpdatePaymentItem: (paymentListId: PaymentListId, invoiceId: PaymentListItem['invoiceId'], field: PaymentListEditableField, value: string | number) => void;
   onChangePaymentAccount: (paymentListId: PaymentListId, invoiceId: PaymentListItem['invoiceId'], payoutAccountId: string) => void;
@@ -103,6 +105,8 @@ export function PaymentListEditor({
   contracts,
   creators,
   editable,
+  accountEditableInvoiceIds = [],
+  accountOverrideOnly = false,
   requestPaymentProvider,
   onUpdatePaymentItem,
   onChangePaymentAccount,
@@ -168,8 +172,9 @@ export function PaymentListEditor({
   }
 
   const update = (field: PaymentListEditableField, value: string | number) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, field, value);
+  const paymentFieldsEditable = editable && !accountOverrideOnly;
   const applyBulkField = (field: 'paymentReason' | 'transactionReference', value: string) => {
-    if (!editable || !value.trim()) return;
+    if (!paymentFieldsEditable || !value.trim()) return;
     list.items.forEach((paymentItem) => {
       onUpdatePaymentItem(list.paymentListId, paymentItem.invoiceId, field, value);
     });
@@ -185,6 +190,7 @@ export function PaymentListEditor({
   const transferMethod = String(paymentListItemValue(item, 'transferMethod') || account.transferMethod || '');
   const feeBearer = String(paymentListItemValue(item, 'feeBearer') || contractFeeBearers[0] || '');
   const feeBearerFromContract = linkedContracts.length > 0;
+  const accountEditable = editable && accountEditableInvoiceIds.includes(item.invoiceId);
 
   return (
     <div
@@ -209,15 +215,15 @@ export function PaymentListEditor({
               <label>
                 付款原因
                 <div>
-                  <input aria-label="整单付款原因" placeholder="输入后填入全部付款行" value={bulkPaymentReason} disabled={!editable} onChange={(event) => setBulkPaymentReason(event.target.value)} />
-                  <Button variant="secondary" disabled={!editable || !bulkPaymentReason.trim() || !list.items.length} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
+                  <input aria-label="整单付款原因" placeholder="输入后填入全部付款行" value={bulkPaymentReason} disabled={!paymentFieldsEditable} onChange={(event) => setBulkPaymentReason(event.target.value)} />
+                  <Button variant="secondary" disabled={!paymentFieldsEditable || !bulkPaymentReason.trim() || !list.items.length} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
                 </div>
               </label>
               <label>
                 交易附言
                 <div>
-                  <input aria-label="整单交易附言" placeholder="输入后填入全部付款行" value={bulkTransactionReference} disabled={!editable} onChange={(event) => setBulkTransactionReference(event.target.value)} />
-                  <Button variant="secondary" disabled={!editable || !bulkTransactionReference.trim() || !list.items.length} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
+                  <input aria-label="整单交易附言" placeholder="输入后填入全部付款行" value={bulkTransactionReference} disabled={!paymentFieldsEditable} onChange={(event) => setBulkTransactionReference(event.target.value)} />
+                  <Button variant="secondary" disabled={!paymentFieldsEditable || !bulkTransactionReference.trim() || !list.items.length} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
                 </div>
               </label>
             </div>
@@ -269,16 +275,20 @@ export function PaymentListEditor({
 
         <section className="payment-list-editor-payment" aria-label="付款明细">
           <div className="payment-list-editor-section-title"><span className="is-payment"><Landmark size={16} /></span><div><strong>{account.provider} 付款明细</strong><small>完成渠道支付所需的信息</small></div></div>
+          <div className={`payment-list-editor-source-lock${accountEditable ? ' is-warning' : ''}`} role="note">
+            {accountEditable ? <CircleAlert size={15} aria-hidden="true" /> : <CheckCircle2 size={15} aria-hidden="true" />}
+            <span>{accountEditable ? '当前为付款失败明细，仅允许更换本次实际执行账户；Invoice 签署账户保持不变。' : '金额、币种和收款账户来自 Invoice 签署冻结快照，当前保持只读。'}</span>
+          </div>
           <div className="payment-list-editor-fields">
-            <label className="is-wide">收款账户<SelectField ariaLabel="编辑付款收款账户" variant="form" value={account.payoutAccountId ?? ''} options={accountOptions} placeholder="选择收款账户" disabled={!editable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label>
-            <label>支付币种<SelectField ariaLabel="编辑付款支付币种" variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => update('currency', value)} /></label>
-            <label>收款币种<SelectField ariaLabel="编辑付款收款币种" variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled={!editable} onChange={(value) => update('receiveCurrency', value)} /></label>
-            <label>付款金额<input aria-label="编辑付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} disabled={!editable} onChange={(event) => update('amount', Number(event.target.value))} /></label>
-            <label>转账方式<SelectField ariaLabel="编辑付款转账方式" variant="form" value={transferMethod} options={transferMethodOptions} disabled={!editable} onChange={(value) => update('transferMethod', value)} /></label>
-            <label>手续费承担方{feeBearerFromContract ? <input readOnly value={display(feeBearer)} /> : <SelectField ariaLabel="编辑付款手续费承担方" variant="form" value={feeBearer} options={feeBearerOptions} placeholder="请选择手续费承担方" disabled={!editable} onChange={(value) => update('feeBearer', value)} />}</label>
-            <label>付款原因<input aria-label="编辑付款原因" value={paymentListItemValue(item, 'paymentReason')} disabled={!editable} onChange={(event) => update('paymentReason', event.target.value)} /></label>
-            <label>交易附言<input aria-label="编辑交易附言" placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} disabled={!editable} onChange={(event) => update('transactionReference', event.target.value)} /></label>
-            <label className="is-wide">描述<input aria-label="编辑付款描述" placeholder="请输入付款描述（选填）" value={paymentListItemValue(item, 'description')} disabled={!editable} onChange={(event) => update('description', event.target.value)} /></label>
+            <label className="is-wide">{accountEditable ? '本次执行账户' : 'Invoice 签署账户'}<SelectField ariaLabel="付款收款账户" variant="form" value={account.payoutAccountId ?? ''} options={accountOptions} placeholder="选择收款账户" disabled={!accountEditable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label>
+            <label>支付币种<SelectField ariaLabel="付款支付币种" variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled onChange={(value) => update('currency', value)} /></label>
+            <label>收款币种<SelectField ariaLabel="付款收款币种" variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled onChange={(value) => update('receiveCurrency', value)} /></label>
+            <label>付款金额<input aria-label="付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} disabled /></label>
+            <label>转账方式<SelectField ariaLabel="付款转账方式" variant="form" value={transferMethod} options={transferMethodOptions} disabled onChange={(value) => update('transferMethod', value)} /></label>
+            <label>手续费承担方{feeBearerFromContract ? <input readOnly value={display(feeBearer)} /> : <SelectField ariaLabel="编辑付款手续费承担方" variant="form" value={feeBearer} options={feeBearerOptions} placeholder="请选择手续费承担方" disabled={!paymentFieldsEditable} onChange={(value) => update('feeBearer', value)} />}</label>
+            <label>付款原因<input aria-label="编辑付款原因" value={paymentListItemValue(item, 'paymentReason')} disabled={!paymentFieldsEditable} onChange={(event) => update('paymentReason', event.target.value)} /></label>
+            <label>交易附言<input aria-label="编辑交易附言" placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} disabled={!paymentFieldsEditable} onChange={(event) => update('transactionReference', event.target.value)} /></label>
+            <label className="is-wide">描述<input aria-label="编辑付款描述" placeholder="请输入付款描述（选填）" value={paymentListItemValue(item, 'description')} disabled={!paymentFieldsEditable} onChange={(event) => update('description', event.target.value)} /></label>
           </div>
           <div className="payment-list-editor-account-details"><strong>账户快照</strong><small>Airwallex Form Schema 账户字段</small>{paymentDetailFields(item).map(([label, value]) => <div key={label}><span>{label}</span><b>{display(value)}</b></div>)}</div>
           <div className={`payment-list-editor-validation ${issues.length ? 'is-warning' : 'is-ready'}`} role="status"><span>{issues.length ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}</span><div><strong>{issues.length ? `还需完善 ${issues.length} 项付款信息` : '付款信息与交易信息完整'}</strong>{issues.length ? <ul>{issues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p>可以切换下一笔付款，所有明细完成后生成付款清单。</p>}</div>{editable && item.requiresRevalidation ? <Button variant="ghost" onClick={() => onRevalidatePaymentItem(list.paymentListId, item.invoiceId)}>重新校验</Button> : null}</div>

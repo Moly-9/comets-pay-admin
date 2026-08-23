@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, X } from 'lucide-react';
+import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, Button, Modal, StatusMark } from './Common';
 import { formatAmount, getProjectFixture, SYSTEM_USERS, type SystemUser } from '../data';
@@ -98,13 +98,27 @@ const ACTION_LABEL: Partial<Record<Payout['status'], string>> = {
   付款处理中: '模拟状态回写成功',
 };
 
+const frozenAccountLabel = (payout: Payout) => {
+  const frozen = payout.invoicePaymentFreezeSnapshot;
+  const payment = frozen?.payment ?? payout.invoiceSnapshot?.payment;
+  const paymentMethod = frozen?.paymentMethod ?? payout.invoiceSnapshot?.paymentMethod;
+  const raw = paymentMethod === 'paypal'
+    ? payment?.paypalEmail || payment?.paypalUsername
+    : payment?.iban || payment?.accountNumber;
+  if (!raw) return '历史签署账户';
+  const compact = raw.replace(/\s/g, '');
+  return raw.includes('@') ? `${raw.slice(0, 1)}***${raw.slice(raw.indexOf('@'))}` : `•••• ${compact.slice(-4)}`;
+};
+
 export function PayoutDrawer({
   payout,
   onClose,
   onAdvance,
   onPaymentFailed,
   onReturn,
+  onConfirmAccountChange,
   canExecutePayout,
+  canConfirmAccountChange,
   contract,
   onViewContract,
   onViewInvoice,
@@ -114,7 +128,9 @@ export function PayoutDrawer({
   onAdvance: (payout: Payout) => void;
   onPaymentFailed: (payout: Payout) => void;
   onReturn: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => void;
+  onConfirmAccountChange: (payoutId: string) => boolean;
   canExecutePayout: boolean;
+  canConfirmAccountChange: boolean;
   contract: ContractRecord | null;
   onViewContract: (contract: ContractRecord) => void;
   onViewInvoice: (payout: Payout) => void;
@@ -224,6 +240,18 @@ export function PayoutDrawer({
                   </span>
                 </div>
               ) : null}
+              {payout.paymentFailureRecovery ? (
+                <div className="drawer-account-override" role="status">
+                  <div><span>Invoice 签署账户</span><strong>{frozenAccountLabel(payout)}</strong></div>
+                  <i aria-hidden="true">→</i>
+                  <div><span>本次执行账户</span><strong>{payout.account}</strong></div>
+                  <small>{payout.paymentFailureRecovery.status === 'PENDING_FINANCE_CONFIRMATION'
+                    ? '新账户资料已校验，等待财务确认'
+                    : payout.paymentFailureRecovery.financeConfirmedAt
+                      ? `财务已确认 · ${payout.paymentFailureRecovery.financeConfirmedByName ?? '财务审核人'}`
+                      : 'Invoice 原账户快照保持不变'}</small>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -270,6 +298,9 @@ export function PayoutDrawer({
             ) : null}
             {actionLabel && canAdvance ? <Button onClick={() => onAdvance(payout)}>{actionLabel}</Button> : null}
             {canReturnFailure ? <Button variant="danger" onClick={openReturnDialog}>退回媒介</Button> : null}
+            {payout.paymentFailureRecovery?.status === 'PENDING_FINANCE_CONFIRMATION' ? (
+              <Button icon={<ShieldCheck size={16} />} disabled={!canConfirmAccountChange} title={canConfirmAccountChange ? '确认新执行账户并解锁重试' : '需要财务账号确认'} onClick={() => onConfirmAccountChange(payout.id)}>确认新执行账户</Button>
+            ) : null}
             {payout.status === '飞书审批中' ? <Button disabled>等待飞书审批</Button> : null}
             {(payout.status === '已付款' || payout.status === '已退回') ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
           </footer>
@@ -328,7 +359,7 @@ export function PayoutDrawer({
               issueType === 'INVOICE_CONTENT'
                 ? '确认后进入“已退回”，必须先修改 Invoice 并从达人签署开始。'
                 : issueType === 'PAYMENT_LIST'
-                  ? '确认后进入“已退回”，只能在项目付款清单修正并重新提交后从 PM 审批开始，无需重新签署。'
+                  ? '确认后仅开放失败明细的执行账户；新账户校验并由财务确认后可重新付款，无需修改或重签 Invoice。'
                   : '确认后，该笔付款将进入“已退回”，且不能直接重试付款。'
             }</span></div>
           </div>

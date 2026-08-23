@@ -387,8 +387,17 @@ export function RequestProjectResourceManager({
   const paymentFailureRecoveryMode = payouts.some((payout) => (
     payout.paymentRequestProjectId === request.paymentRequestProjectId
     && Boolean(payout.paymentFailureRecovery)
+    && payout.paymentFailureRecovery?.status !== 'RETRY_SUBMITTED'
     && payout.status !== '已付款'
   ));
+  const failureEditableInvoiceIds = invoices.filter((invoice) => payouts.some((payout) => (
+    payout.id === invoice.sourcePayoutId
+    && payout.paymentRequestProjectId === request.paymentRequestProjectId
+    && payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
+    && Boolean(payout.paymentFailureRecovery)
+    && payout.paymentFailureRecovery?.status !== 'RETRY_SUBMITTED'
+    && payout.status !== '已付款'
+  ))).map((invoice) => invoice.invoiceId);
   const canEdit = canEditRequestProjectResources(
     currentUser,
     request,
@@ -400,8 +409,11 @@ export function RequestProjectResourceManager({
   )));
   const canEditLinkedResources = canEdit && !paymentFailureRecoveryMode && !hasScopedApprovalReturn;
   const canEditPaymentList = canEdit
-    && !paymentFailureRecoveryMode
-    && (!hasScopedApprovalReturn || hasScopedPaymentListReturn);
+    && (
+      paymentFailureRecoveryMode
+      || !hasScopedApprovalReturn
+      || hasScopedPaymentListReturn
+    );
   const canEditSubmittedPaymentList = ['admin', 'project', 'owner'].includes(currentUser.roleKey);
   const paymentItemCount = currentPaymentList?.items.length ?? 0;
   const paymentListExportable = Boolean(
@@ -858,10 +870,10 @@ export function RequestProjectResourceManager({
                             <Button
                               variant="ghost"
                               icon={<UserCheck size={15} />}
-                              disabled={!recovery.notifications.length || !['AWAITING_CREATOR_UPDATE', 'READY_FOR_RETRY'].includes(recovery.status)}
-                              onClick={() => onSimulatePaymentFailureAccountUpdate?.(failurePayout.id)}
+                              disabled={!['AWAITING_CREATOR_UPDATE', 'CREATOR_UPDATED'].includes(recovery.status)}
+                              onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId, 'edit')}
                             >
-                              模拟达人已更新账户
+                              更换执行账户
                             </Button>
                             <Button
                               icon={<RefreshCw size={15} />}
@@ -901,6 +913,8 @@ export function RequestProjectResourceManager({
             contracts={contracts}
             creators={creators}
             editable={paymentEditorMode === 'edit' && canEditPaymentList && paymentEditorList.status === 'draft'}
+            accountEditableInvoiceIds={failureEditableInvoiceIds}
+            accountOverrideOnly={paymentFailureRecoveryMode}
             requestPaymentProvider={requestPaymentProvider}
             onUpdatePaymentItem={onUpdatePaymentItem}
             onChangePaymentAccount={onChangePaymentAccount}
