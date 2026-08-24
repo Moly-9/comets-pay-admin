@@ -204,8 +204,8 @@ export const createPrototypeRecognitionFields = ({
     },
     {
       fieldKey: 'beneficiaryAccount',
-      rawValue: `${creatorName} Studio · Example Bank · 账户尾号 4826`,
-      normalizedValue: `${creatorName} Studio · Example Bank · 账户尾号 4826`,
+      rawValue: `${creatorName} Studio · Example Bank · Account Number 0000004826`,
+      normalizedValue: `${creatorName} Studio · Example Bank · Account Number 0000004826`,
       preferredDocumentType: 'STANDARD_TERMS',
       pageNumber: 5,
       section: 'Remittance Information',

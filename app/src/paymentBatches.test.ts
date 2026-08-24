@@ -16,7 +16,6 @@ import {
   createPaymentBatchRecord,
   createPaymentExecutionBatchRecord,
   createPaymentProjectPaymentRecord,
-  maskPaymentAccount,
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
 } from './paymentBatches';
@@ -307,7 +306,7 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].contracts[0].paymentAccount).toBe('测试达人工作室');
     expect(record.items[0].invoice?.invoiceNumber).toBe('INV-TEST-001');
     expect(record.items[0].paymentListCode).toBe('PAY-TEST-001');
-    expect(record.items[0].accountSummary).toBe('•••• 7890');
+    expect(record.items[0].accountSummary).toBe('1234567890');
     expect(record.items[0].paidAt).toBe('2026-08-10T10:30');
   });
 
@@ -341,12 +340,6 @@ describe('payment batch snapshots', () => {
     expect(record.request.cooperationProjectName).toBe('合作项目 TEST-001');
     expect(record.items[0].invoice?.amount).toBe(1250);
     expect(record.items[0].contracts[0].name).toBe('内容合作合同');
-  });
-
-  it('masks bank accounts and email recipients', () => {
-    expect(maskPaymentAccount('1234 5678 9012')).toBe('•••• 9012');
-    expect(maskPaymentAccount('creator.payment@example.com')).toBe('cr***@example.com');
-    expect(maskPaymentAccount('')).toBe('待补充');
   });
 
   it('builds a project-level payment record without including payouts from other requests', () => {

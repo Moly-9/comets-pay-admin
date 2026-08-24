@@ -760,9 +760,9 @@ export const createGeneratedContractDraft = (
   const accountName = model.payoutProvider === 'PayPal'
     ? model.paymentSnapshot.paypalUsername
     : model.paymentSnapshot.accountName;
-  const accountFingerprint = rawAccount
+  const accountFingerprint = model.paymentSnapshot.accountFingerprint || (rawAccount
     ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}`
-    : '';
+    : '');
   const fileBaseName = `${model.contractNumber || 'contract'}-${model.creatorHandle.replace(/^@/, '') || 'creator'}-v${version}`;
   return {
     contractId: options.existingContractId ?? createPrototypeId('contract') as ContractId,

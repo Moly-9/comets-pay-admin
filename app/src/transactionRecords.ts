@@ -1,6 +1,6 @@
 import { isInvoiceApprovedForPayment } from './invoice/invoiceReviewWorkflow';
+import { accountDisplayValue } from './accountPresentation';
 import {
-  maskPaymentAccount,
   type PaymentBatchContractSnapshot,
   type PaymentBatchInvoiceSnapshot,
   type PaymentBatchItemSnapshot,
@@ -214,7 +214,7 @@ const historicalTransactionDetails = (
     batchStatus: failed ? '部分失败' : '已付款',
     receiveCurrency: payout.currency,
     transferMethod: seed.transferMethod,
-    accountSummary: maskPaymentAccount(payout.account),
+    accountSummary: accountDisplayValue(payout.account),
     feeBearer: '广告主承担',
     transactionReference: `${seed.requestCode}-01`,
     paymentListCode: seed.paymentListCode,
@@ -276,7 +276,7 @@ export const transactionRecordDetails = (
     batchStatus: payout.status,
     receiveCurrency: payout.currency,
     transferMethod: payout.provider,
-    accountSummary: maskPaymentAccount(payout.account),
+    accountSummary: accountDisplayValue(payout.account),
     feeBearer: '历史数据待补全',
     transactionReference: '历史数据待补全',
     paymentListCode: '历史数据待补全',

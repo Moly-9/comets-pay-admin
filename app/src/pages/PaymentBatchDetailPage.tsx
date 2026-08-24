@@ -18,6 +18,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import { Avatar, Button } from '../components/Common';
 import {
   PaymentAttachmentPreview,
@@ -147,7 +148,7 @@ export function PaymentItemDetails({
                   <div><dt>合同名称</dt><dd>{contract.name}</dd></div>
                   <div><dt>合同金额</dt><dd>{money(contract.currency, contract.amount)}</dd></div>
                   <div><dt>签署人</dt><dd>{contract.signer || (contract.signed ? '已签署' : '待签署')}</dd></div>
-                  <div><dt>付款账户</dt><dd>{contract.paymentAccount || item.accountSummary}</dd></div>
+                  <div><dt>付款账户</dt><dd>{accountDisplayValue(contract.paymentAccount || item.accountSummary)}</dd></div>
                 </dl>
               </article>
             ))}
@@ -190,7 +191,7 @@ export function PaymentItemDetails({
             <div><dt>Invoice 编号</dt><dd>{item.invoice.invoiceNumber}</dd></div>
             <div><dt>Invoice 日期</dt><dd>{item.invoice.invoiceDate}</dd></div>
             <div><dt>Invoice 金额</dt><dd>{money(item.invoice.currency, item.invoice.amount)}</dd></div>
-            <div><dt>付款账户</dt><dd>{item.accountSummary}</dd></div>
+            <div><dt>付款账户</dt><dd>{accountDisplayValue(item.accountSummary)}</dd></div>
           </dl>
         ) : (
           <p className="payment-batch-detail-empty">
@@ -214,7 +215,7 @@ export function PaymentItemDetails({
           <div><dt>付款单</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
           <div><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
           <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
-          <div><dt>收款账户</dt><dd>{item.accountSummary}</dd></div>
+          <div><dt>收款账户</dt><dd>{accountDisplayValue(item.accountSummary)}</dd></div>
           <div><dt>费用承担</dt><dd>{item.feeBearer}</dd></div>
           <div><dt>付款原因</dt><dd>{item.paymentReason}</dd></div>
           <div><dt>交易附言</dt><dd>{item.transactionReference}</dd></div>

@@ -1,4 +1,5 @@
 import type { ContractRecord } from '../contracts';
+import { accountDisplayValue } from '../accountPresentation';
 import type {
   DocumentPayoutSnapshot,
   InvoiceContractMatchField,
@@ -44,17 +45,6 @@ const contractReference = (contract: ContractRecord) => contract.id || String(co
 const contractIds = (contracts: ContractRecord[]) => contracts.flatMap((contract) => (
   contract.contractId ? [contract.contractId] : []
 ));
-
-const maskAccountValue = (value: string) => {
-  const normalized = value.trim();
-  if (!normalized) return '';
-  if (normalized.includes('@')) {
-    const [local, domain = ''] = normalized.split('@');
-    return `${local.slice(0, 1) || '*'}***@${domain}`;
-  }
-  const compact = normalized.replace(/\s/g, '');
-  return compact.length <= 4 ? compact : `•••• ${compact.slice(-4)}`;
-};
 
 const paymentMethodForContract = (contract: ContractRecord, snapshot: DocumentPayoutSnapshot | null) => {
   const method = contract.paymentMethod || snapshot?.payoutProvider || '';
@@ -130,8 +120,8 @@ const accountFields = (
 };
 
 const accountSummary = (model: InvoiceDocumentModel) => model.paymentMethod === 'paypal'
-  ? [model.payment.paypalUsername, maskAccountValue(model.payment.paypalEmail)].filter(Boolean).join(' / ') || '未填写'
-  : [model.payment.accountName, maskAccountValue(model.payment.iban || model.payment.accountNumber)].filter(Boolean).join(' / ') || '未填写';
+  ? [model.payment.paypalUsername, accountDisplayValue(model.payment.paypalEmail, '')].filter(Boolean).join(' / ') || '未填写'
+  : [model.payment.accountName, accountDisplayValue(model.payment.iban || model.payment.accountNumber, '')].filter(Boolean).join(' / ') || '未填写';
 
 const contractAccountSummary = (contract: ContractRecord) => {
   const snapshot = payoutSnapshotForContract(contract);
@@ -139,12 +129,12 @@ const contractAccountSummary = (contract: ContractRecord) => {
   if (method === 'PAYPAL') {
     return `${contractReference(contract)}：${[
       snapshot?.paypalUsername || contract.accountName,
-      maskAccountValue(snapshot?.paypalEmail ?? ''),
+      accountDisplayValue(snapshot?.paypalEmail, ''),
     ].filter(Boolean).join(' / ') || '未填写'}`;
   }
   return `${contractReference(contract)}：${[
     snapshot?.accountName || contract.accountName,
-    maskAccountValue(snapshot?.iban || snapshot?.accountNumber || ''),
+    accountDisplayValue(snapshot?.iban || snapshot?.accountNumber, ''),
   ].filter(Boolean).join(' / ') || '未填写'}`;
 };
 

@@ -1,4 +1,5 @@
 import type { Payout } from './types';
+import { accountDisplayValue } from './accountPresentation';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
 import { transactionCreatorLabel, transactionOccurredAt } from './transactionRecords';
 
@@ -14,6 +15,7 @@ const TRANSACTION_RECORD_HEADERS = [
   '付款金额',
   '状态',
   '余额',
+  '收款账户',
 ] as const;
 
 const excelDate = (value: string) => {
@@ -42,17 +44,21 @@ export const createTransactionRecordsWorkbook = async (
   const worksheet = workbook.getWorksheet(TRANSACTION_RECORDS_SHEET_NAME) ?? workbook.worksheets[0];
   if (!worksheet) throw new Error('交易流水模版缺少工作表');
 
-  const headers = TRANSACTION_RECORD_HEADERS.map((_, index) => worksheet.getRow(1).getCell(index + 1).text.trim());
-  if (headers.some((header, index) => header !== TRANSACTION_RECORD_HEADERS[index])) {
+  const templateHeaders = TRANSACTION_RECORD_HEADERS.slice(0, 8);
+  const headers = templateHeaders.map((_, index) => worksheet.getRow(1).getCell(index + 1).text.trim());
+  if (headers.some((header, index) => header !== templateHeaders[index])) {
     throw new Error('交易流水模版字段与系统版本不一致');
   }
 
   if (worksheet.rowCount > 1) worksheet.spliceRows(2, worksheet.rowCount - 1);
-  [32, 22, 52, 21, 16, 18, 14, 18].forEach((width, index) => {
+  const headerRow = worksheet.getRow(1);
+  headerRow.getCell(9).value = TRANSACTION_RECORD_HEADERS[8];
+  headerRow.getCell(9).style = { ...headerRow.getCell(8).style };
+  [32, 22, 52, 21, 16, 18, 14, 18, 30].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-  worksheet.autoFilter = { from: 'A1', to: 'H1' };
+  worksheet.autoFilter = { from: 'A1', to: 'I1' };
 
   payouts.forEach((payout) => {
     const row = worksheet.addRow([
@@ -64,6 +70,7 @@ export const createTransactionRecordsWorkbook = async (
       payout.amount,
       payout.status,
       null,
+      accountDisplayValue(payout.account),
     ]);
 
     row.height = 22;
@@ -80,7 +87,7 @@ export const createTransactionRecordsWorkbook = async (
     row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
   });
 
-  if (payouts.length) worksheet.autoFilter = { from: 'A1', to: `H${payouts.length + 1}` };
+  if (payouts.length) worksheet.autoFilter = { from: 'A1', to: `I${payouts.length + 1}` };
   workbook.creator = 'COMETS Pay';
   workbook.lastModifiedBy = 'COMETS Pay';
 

@@ -1,4 +1,5 @@
 import type { ContractRecord } from './contracts';
+import { accountDisplayValue } from './accountPresentation';
 import { contractDocumentFilename } from './documentFilenames';
 import { invoiceFilename } from './invoice/invoiceUtils';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
@@ -151,7 +152,7 @@ export const createPaymentProjectWorkbook = async ({
       currency: item.currency,
       receiveCurrency: item.receiveCurrency,
       amount: item.amount,
-      accountSummary: item.accountSummary,
+      accountSummary: accountDisplayValue(item.accountSummary),
       feeBearer: item.feeBearer,
       paymentReason: item.paymentReason,
       transactionReference: item.transactionReference,

@@ -518,7 +518,7 @@ const buildLocalBankFields = (
       path: 'beneficiary.bank_details.account_number',
       label: '银行账号',
       required: true,
-      description: '仅保存结构化值；展示时默认掩码',
+      description: '保存结构化值，并在现有权限页面完整展示',
       example: '50001121',
       pattern: '^[0-9A-Za-z\\-]{1,34}$',
     }),

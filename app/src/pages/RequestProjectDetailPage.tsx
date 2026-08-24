@@ -10,6 +10,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
@@ -240,7 +241,7 @@ export const paymentRecordsFromLists = (
         { label: '收款币种', value: receiveCurrency },
         { label: '付款金额', value: formatInvoiceMoney(currency, amount) },
         { label: '费用承担', value: requestFeeBearerLabel(paymentListItemValue(item, 'feeBearer')) },
-        { label: '收款账户', value: effectiveAccount.accountSummary || '待补充' },
+        { label: '收款账户', value: accountDisplayValue(effectiveAccount.accountSummary) },
         { label: '付款原因', value: String(paymentListItemValue(item, 'paymentReason') || '未填写') },
         { label: '交易附言', value: String(paymentListItemValue(item, 'transactionReference') || '未填写') },
         { label: '描述', value: String(paymentListItemValue(item, 'description') || '未填写') },

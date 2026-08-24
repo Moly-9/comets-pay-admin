@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import { Button, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
@@ -258,13 +259,6 @@ function ContractPaymentList({
     || paymentSnapshot?.paypalUsername
     || contract.accountName;
   const snapshotValue = (value?: string | null) => value?.trim() || '待补充';
-  const maskSensitive = (value?: string | null) => {
-    const normalized = value?.trim() ?? '';
-    if (!normalized) return '待补充';
-    if (normalized.includes('••••')) return normalized;
-    const compact = normalized.replace(/\s/g, '');
-    return compact.length > 4 ? `•••• ${compact.slice(-4)}` : '••••';
-  };
   const transferMethodLabel = (value?: string) => {
     if (value === 'LOCAL') return '本地转账 · LOCAL';
     if (value === 'SWIFT') return '国际电汇 · SWIFT';
@@ -305,10 +299,10 @@ function ContractPaymentList({
     provider === 'PayPal'
       ? paymentSnapshot?.paypalEmail || paymentSnapshot?.paypalUsername
       : provider === 'PayMax'
-        ? maskSensitive(paymentSnapshot?.accountNumber)
+        ? accountDisplayValue(paymentSnapshot?.accountNumber)
         : paymentSnapshot?.iban
-          ? `IBAN ${maskSensitive(paymentSnapshot.iban)}`
-          : maskSensitive(paymentSnapshot?.accountNumber),
+          ? `IBAN ${accountDisplayValue(paymentSnapshot.iban)}`
+          : accountDisplayValue(paymentSnapshot?.accountNumber),
   ].filter(Boolean).join(' · ') || '待补充';
   const accountSections: Array<{ title: string; items: PaymentAccountRow[] }> = paymentSnapshot ? [
     {
@@ -350,8 +344,8 @@ function ContractPaymentList({
           items: [
             ['Account Name', snapshotValue(paymentSnapshot.accountName)],
             ['账户类型', snapshotValue(paymentSnapshot.accountType)],
-            ['Account Number', maskSensitive(paymentSnapshot.accountNumber)],
-            ['IBAN', maskSensitive(paymentSnapshot.iban)],
+            ['Account Number', accountDisplayValue(paymentSnapshot.accountNumber)],
+            ['IBAN', accountDisplayValue(paymentSnapshot.iban)],
             ['收款银行名称', snapshotValue(paymentSnapshot.bankName)],
             ['SWIFT / BIC', snapshotValue(paymentSnapshot.swiftCode)],
             ['收款银行地址', snapshotValue(paymentSnapshot.bankStreetAddress), true],

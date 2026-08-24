@@ -198,7 +198,7 @@ describe('request approval workflow', () => {
       occurredAt: '2026-08-10T08:00:00.000Z',
       deliveries: [
         { channel: 'IN_APP', status: 'SIMULATED_SENT', recipientLabel: '达人站内信' },
-        { channel: 'GMAIL', status: 'SIMULATED_SENT', recipientLabel: 'c***@example.test' },
+        { channel: 'GMAIL', status: 'SIMULATED_SENT', recipientLabel: 'creator@example.test' },
       ],
     });
 

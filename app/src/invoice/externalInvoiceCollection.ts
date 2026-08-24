@@ -1,4 +1,5 @@
 import type { ContractRecord } from '../contracts';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   createPrototypeId,
   type ContractId,
@@ -417,7 +418,7 @@ const sourceValuesForScenario = (
     AMOUNT: sourceAmount.toFixed(2),
     CURRENCY: record.expected.currency,
     PAYMENT_ACCOUNT: scenario === 'ACCOUNT_MISMATCH'
-      ? 'Unverified account / **** 0917'
+      ? 'Unverified account / DEMO-0917'
       : payoutAccountSourceValue(account, record.creatorId),
   } satisfies Record<ExternalInvoiceFieldKey, string>;
 };
@@ -957,7 +958,7 @@ export const buildApprovedExternalInvoice = ({
     provider,
     currency: snapshot.currency,
     amount,
-    account: rawAccount ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}` : '待补充',
+    account: accountDisplayValue(rawAccount),
     creatorId: record.creatorId,
     payoutAccountId: payment.payoutAccountId,
     payoutAccountVersion: payment.payoutAccountVersion,

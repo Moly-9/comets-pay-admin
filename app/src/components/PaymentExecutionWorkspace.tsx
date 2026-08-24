@@ -41,6 +41,7 @@ import {
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
+import { accountDisplayValue } from '../accountPresentation';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
@@ -73,18 +74,6 @@ const transferMethodLabel = (payout: Payout) => {
   if (payout.transferMethod === 'PAYPAL') return 'PayPal 账户';
   if (payout.localClearingSystem) return `本地转账 · ${payout.localClearingSystem}`;
   return payout.transferMethod ? `银行转账 · ${payout.transferMethod}` : '银行转账';
-};
-
-const maskPayoutAccount = (value: string) => {
-  const normalized = value.trim();
-  if (!normalized) return '账户待补充';
-  if (/[•*]/.test(normalized)) return normalized;
-  if (normalized.includes('@')) {
-    const [name, domain] = normalized.split('@');
-    return `${name.slice(0, Math.min(2, name.length))}${name.length > 2 ? '•••' : ''}@${domain}`;
-  }
-  const compact = normalized.replace(/\s+/g, '');
-  return compact.length > 4 ? `•••• ${compact.slice(-4)}` : compact;
 };
 
 const feeBearerLabel = (value?: Payout['feeBearer']) => {
@@ -648,7 +637,7 @@ export function PaymentExecutionWorkspace({
                       return (
                         <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
                           <td><div className="payment-execution-creator-cell"><span style={{ '--payee-accent': payout.accent } as CSSProperties}>{payout.initials}</span><div><strong>{payout.creator}</strong><small>{payout.handle || '达人账号待补充'}</small></div></div></td>
-                          <td><div className="payment-execution-account-cell"><strong title={payout.account}>{maskPayoutAccount(payout.account)}</strong><small>{transferMethodLabel(payout)}</small></div></td>
+                          <td><div className="payment-execution-account-cell"><strong title={payout.account}>{accountDisplayValue(payout.account, '账户待补充')}</strong><small>{transferMethodLabel(payout)}</small></div></td>
                           <td><span className="payment-execution-currency">{payout.currency}</span></td>
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
                           <td className="payment-execution-amount-cell">{formatPayoutAmount(payout)}</td>
@@ -700,7 +689,7 @@ export function PaymentExecutionWorkspace({
                             : '付款信息尚未完成校验，暂不能执行打款'}</span>
                     </div>
                     <dl>
-                      <div className="is-account"><dt>收款账户</dt><dd>{payout.account}<small>{transferMethodLabel(payout)}</small></dd></div>
+                      <div className="is-account"><dt>收款账户</dt><dd>{accountDisplayValue(payout.account)}<small>{transferMethodLabel(payout)}</small></dd></div>
                       <div><dt>支付币种</dt><dd>{payout.currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{payout.currency}</dd></div>
                       <div className="is-money"><dt>付款金额</dt><dd>{formatPayoutAmount(payout)}</dd></div>

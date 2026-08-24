@@ -19,6 +19,7 @@ import type {
   PayoutAccountVersion,
   Provider,
 } from './types';
+import { accountDisplayValue } from './accountPresentation';
 import {
   applyPaymentBatchPrototypeScenario,
   paymentBatchPrototypeStatusFor,
@@ -191,19 +192,6 @@ const transferMethodLabel = (value: unknown, provider: PaymentBatchItemSnapshot[
   return provider;
 };
 
-export const maskPaymentAccount = (value: string) => {
-  const normalized = value.trim();
-  if (!normalized || normalized === '待补充') return '待补充';
-  if (normalized.includes('•')) return normalized;
-  if (normalized.includes('@')) {
-    const [local, domain] = normalized.split('@');
-    if (!domain) return '已脱敏';
-    return `${local.slice(0, Math.min(2, local.length))}***@${domain}`;
-  }
-  const compact = normalized.replace(/\s/g, '');
-  return compact.length > 4 ? `•••• ${compact.slice(-4)}` : '已脱敏';
-};
-
 const requestForPayout = (
   payout: Payout,
   requests: readonly RequestProjectSummary[],
@@ -347,7 +335,7 @@ const snapshotItem = ({
       effectiveAccount?.transferMethod ?? payout.transferMethod ?? documentPayment?.transferMethod,
       payout.provider,
     ),
-    accountSummary: maskPaymentAccount(rawAccountSummary),
+    accountSummary: accountDisplayValue(rawAccountSummary),
     payoutAccountId: effectiveAccount?.payoutAccountId
       ?? payout.payoutAccountId
       ?? invoice?.snapshot.payoutAccountId,

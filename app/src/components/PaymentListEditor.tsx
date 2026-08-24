@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   paymentListEffectiveAccount,
   paymentListItemValue,
@@ -82,13 +83,13 @@ const paymentDetailFields = (item: PaymentListItem) => {
   }
   if (account.provider === 'PayMax') {
     return [
-      ['Payer Max 收款账户', account.accountSummary],
+      ['Payer Max 收款账户', accountDisplayValue(account.accountSummary)],
       ['Payer Max 账户币种', account.receiveCurrency],
       ['收款人', detail?.accountName],
     ];
   }
   return [
-    ['收款账户', account.accountSummary],
+    ['收款账户', accountDisplayValue(account.accountSummary)],
     ['账户币种', account.receiveCurrency],
   ];
 };

@@ -62,7 +62,7 @@ const item = {
   currency: 'USD',
   receiveCurrency: 'USD',
   transferMethod: '本地转账',
-  accountSummary: '•••• 2401',
+  accountSummary: '0000002401',
   payoutAccountVersion: 'v2',
   feeBearer: '广告主承担',
   paymentReason: '达人内容合作费用',
@@ -138,6 +138,7 @@ describe('payment project documents', () => {
     expect(sheet?.getCell('G2').value).toBe('INV-202608-000019');
     expect(sheet?.getCell('H2').value).toBe('Payer Max');
     expect(sheet?.getCell('L2').value).toBe(1250);
+    expect(sheet?.getCell('M2').value).toBe('0000002401');
   });
 
   it('uses stable project filenames', () => {

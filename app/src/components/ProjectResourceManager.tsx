@@ -13,6 +13,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   canEditProject,
   getPaymentListAccess,
@@ -794,7 +795,7 @@ export function ProjectResourceManager({
                 <NoticeBanner>
                   {paymentList.status === 'draft'
                     ? '付款清单字段中付款原因和交易附言为必填；描述为选填项。手续费承担方优先继承关联合同。'
-                    : '当前付款单内容已锁定。页面仅展示脱敏账户快照，历史版本保持不变。'}
+                    : '当前付款单内容已锁定。页面展示完整的冻结账户快照，历史版本保持不变。'}
                 </NoticeBanner>
                 <div className="project-payment-rows">
                   {paymentList.items.map((item) => {
@@ -910,7 +911,7 @@ export function ProjectResourceManager({
                         </div>
 
                         <footer className="project-payment-row-meta">
-                          <span>账户 {effectiveAccount.accountSummary}</span>
+                          <span>账户 {accountDisplayValue(effectiveAccount.accountSummary)}</span>
                           <span>{effectiveAccount.provider === 'Airwallex'
                             ? beneficiarySummary(effectiveAccount.externalBeneficiaryId)
                             : `账户 ID ${effectiveAccount.payoutAccountId ?? '待补充'}`}</span>

@@ -574,13 +574,12 @@ function DynamicSchemaSelect({
 function DetailGrid({
   items,
 }: {
-  items: Array<{ label: string; alias: string; value: string; wide?: boolean; mask?: boolean }>;
+  items: Array<{ label: string; alias: string; value: string; wide?: boolean }>;
 }) {
   return (
     <div className="creator-payment-grid">
       {items.map((item) => {
-        const normalized = item.value.replace(/\s/g, '');
-        const value = item.mask && normalized ? `•••• ${normalized.slice(-4)}` : item.value;
+        const value = item.value;
         return (
           <div className={`creator-payment-value ${item.wide ? 'creator-payment-value-wide' : ''}`} key={`${item.alias}-${item.label}`}>
             <span>{item.label}<small>{item.alias}</small></span>
@@ -1010,12 +1009,12 @@ function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) 
           { label: '本地清算方式', alias: 'local_clearing_system', value: account.transferMethod === 'LOCAL' ? account.bankDetails.localClearingSystem : '不适用' },
         ]} />
       </Section>
-      <Section icon={<Landmark size={19} />} title="Airwallex 付款信息" description="银行账号默认掩码展示；字段是否必填由当前 Form Schema 决定">
+      <Section icon={<Landmark size={19} />} title="Airwallex 付款信息" description="完整展示当前账户资料；字段是否必填由当前 Form Schema 决定">
         <DetailGrid items={[
           { label: 'Account Name', alias: '账户名称 · account_name', value: account.bankDetails.accountName },
           { label: '账户类型', alias: 'bank_account_category', value: account.bankDetails.bankAccountCategory },
-          { label: 'Account Number', alias: '银行账号 · account_number', value: account.bankDetails.accountNumber, mask: true },
-          { label: 'IBAN', alias: '国际银行账号 · iban', value: account.bankDetails.iban, mask: true },
+          { label: 'Account Number', alias: '银行账号 · account_number', value: account.bankDetails.accountNumber },
+          { label: 'IBAN', alias: '国际银行账号 · iban', value: account.bankDetails.iban },
           { label: '本地路由', alias: 'account_routing_type / value', value: routing, wide: true },
           { label: 'Beneficiary Bank Name', alias: '收款银行名称 · bank_name', value: account.bankDetails.bankName },
           { label: 'Beneficiary Bank Address', alias: '收款银行地址', value: bankAddress, wide: true },
@@ -1060,7 +1059,7 @@ function PayMaxAccountView({ account }: { account: PayMaxPayoutAccount }) {
         <DetailGrid items={[
           { label: '账户别名', alias: 'nickname', value: account.nickname },
           { label: '收款人名称', alias: 'beneficiaryName', value: account.beneficiaryName },
-          { label: 'Payer Max 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId, mask: true },
+          { label: 'Payer Max 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId },
           { label: '国家 / 地区', alias: 'countryCode', value: account.countryCode },
           { label: '收款币种', alias: 'currency', value: account.currency },
           { label: '联系邮箱', alias: 'email', value: account.email },

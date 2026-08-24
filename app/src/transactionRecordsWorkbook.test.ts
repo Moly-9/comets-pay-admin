@@ -50,6 +50,7 @@ describe('transaction records workbook', () => {
       '付款金额',
       '状态',
       '余额',
+      '收款账户',
     ]);
     expect(worksheet?.getRow(2).getCell(1).value).toBe('Mina Kato (@MinaKato)');
     expect(worksheet?.getRow(2).getCell(2).value).toBe('INV-20260801-TEST01');
@@ -59,6 +60,7 @@ describe('transaction records workbook', () => {
     expect(worksheet?.getRow(2).getCell(6).value).toBe(1980);
     expect(worksheet?.getRow(2).getCell(6).numFmt).toContain('USD');
     expect(worksheet?.getRow(2).getCell(8).value).toBeNull();
+    expect(worksheet?.getRow(2).getCell(9).value).toBe('test-account');
   });
 
   it('creates a stable date-based filename', () => {

@@ -2,6 +2,7 @@ import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareT
 import { useState } from 'react';
 import { Avatar, Button, Modal, StatusMark } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
+import { accountDisplayValue } from '../accountPresentation';
 import { formatAmount, getProjectFixture, SYSTEM_USERS, type SystemUser } from '../data';
 import type { ContractRecord } from '../contracts';
 import type { PaymentFailureIssueType, Payout } from '../types';
@@ -106,9 +107,7 @@ const frozenAccountLabel = (payout: Payout) => {
   const raw = paymentMethod === 'paypal'
     ? payment?.paypalEmail || payment?.paypalUsername
     : payment?.iban || payment?.accountNumber;
-  if (!raw) return '历史签署账户';
-  const compact = raw.replace(/\s/g, '');
-  return raw.includes('@') ? `${raw.slice(0, 1)}***${raw.slice(raw.indexOf('@'))}` : `•••• ${compact.slice(-4)}`;
+  return accountDisplayValue(raw, '历史签署账户');
 };
 
 export function PayoutDrawer({
@@ -210,7 +209,7 @@ export function PayoutDrawer({
             <dl className="detail-grid">
               <div><dt>付款金额</dt><dd>{formatAmount(payout)}</dd></div>
               <div><dt>打款渠道</dt><dd>{paymentProviderDisplayName(payout.provider)}</dd></div>
-              <div><dt>收款账户</dt><dd className="detail-account-full">{payout.account}</dd></div>
+              <div><dt>收款账户</dt><dd className="detail-account-full">{accountDisplayValue(payout.account)}</dd></div>
               <div><dt>付款方式</dt><dd>批量打款</dd></div>
             </dl>
           </section>
@@ -245,7 +244,7 @@ export function PayoutDrawer({
                 <div className="drawer-account-override" role="status">
                   <div><span>Invoice 签署账户</span><strong>{frozenAccountLabel(payout)}</strong></div>
                   <i aria-hidden="true">→</i>
-                  <div><span>本次执行账户</span><strong>{payout.account}</strong></div>
+                  <div><span>本次执行账户</span><strong>{accountDisplayValue(payout.account)}</strong></div>
                   <small>{payout.paymentFailureRecovery.status === 'PENDING_FINANCE_CONFIRMATION'
                     ? '新账户资料已校验，等待财务确认'
                     : payout.paymentFailureRecovery.financeConfirmedAt

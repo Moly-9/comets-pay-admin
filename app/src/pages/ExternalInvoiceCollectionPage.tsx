@@ -8,6 +8,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
@@ -522,17 +523,13 @@ export function ExternalInvoiceCollectionDetailPage({
       note: currentFile ? '当前原文件版本有效，可追溯历史版本。' : '缺少有效原文件。',
     },
   ] : [];
-  const maskTail = (value?: string) => {
-    const normalizedValue = value?.replace(/\s/g, '') ?? '';
-    return normalizedValue ? `•••• ${normalizedValue.slice(-4)}` : '待补充';
-  };
   const accountRows: InvoiceReviewAccountRow[] = [
     { label: '付款方式', value: accountProvider ?? '待选择' },
     { label: 'Account Name', value: accountProvider === 'PayPal' ? accountSnapshot.paypalUsername || '待补充' : accountSnapshot.accountName || '待补充' },
-    { label: 'Account Number 尾号', value: accountProvider === 'PayPal' ? '不适用' : maskTail(accountSnapshot.accountNumber) },
+    { label: 'Account Number', value: accountProvider === 'PayPal' ? '不适用' : accountDisplayValue(accountSnapshot.accountNumber) },
     { label: 'Bank Name', value: accountSnapshot.bankName || (accountProvider === 'PayPal' ? '不适用' : '待补充') },
     { label: 'SWIFT / BIC', value: accountSnapshot.swiftCode || (accountProvider === 'PayPal' ? '不适用' : '待补充') },
-    { label: 'IBAN', value: accountSnapshot.iban ? maskTail(accountSnapshot.iban) : '不适用' },
+    { label: 'IBAN', value: accountSnapshot.iban ? accountDisplayValue(accountSnapshot.iban) : '不适用' },
     { label: 'PayPal Email', value: accountProvider === 'PayPal' ? accountSnapshot.paypalEmail || '待补充' : '不适用' },
     { label: '账户审核状态', value: ['VALIDATED', 'VERIFIED'].includes(accountSnapshot.validationStatus ?? '') ? '已审核通过' : accountSnapshot.validationStatus || '待审核' },
   ];

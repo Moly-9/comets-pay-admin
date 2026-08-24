@@ -17,7 +17,6 @@ import {
   isPayoutPaymentInformationValidated,
   isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
-  maskInvoiceAccountValue,
   publishGeneratedInvoiceDraft,
   recordInvoiceSignatureReminder,
   replyToCreatorFeedback,
@@ -377,11 +376,7 @@ describe('Invoice review workflow', () => {
     expect(result.payout.paymentFailureReturn).toBeUndefined();
   });
 
-  it('stores only masked bank and PayPal account summaries outside the document snapshot', () => {
-    expect(maskInvoiceAccountValue('0000 1111 2222 3456')).toBe('•••• 3456');
-    expect(maskInvoiceAccountValue('creator@example.test')).toBe('c***@example.test');
-    expect(maskInvoiceAccountValue('')).toBe('待补充');
-
+  it('stores complete bank and PayPal account values outside the document snapshot', () => {
     const feedbackPayout: Payout = {
       ...payout,
       invoiceReviewStatus: '达人反馈',
@@ -408,7 +403,7 @@ describe('Invoice review workflow', () => {
       context: 'CREATOR_FEEDBACK',
       actor,
     });
-    expect(result.payout.account).toBe('c***@example.test');
+    expect(result.payout.account).toBe('creator@example.test');
     expect(result.record.snapshot.payment.paypalEmail).toBe('creator@example.test');
   });
 
@@ -499,7 +494,7 @@ describe('Invoice review workflow', () => {
         {
           channel: 'EMAIL',
           status: 'SIMULATED_SENT',
-          recipientLabel: 'c***@example.test',
+          recipientLabel: 'creator@example.test',
         },
       ],
     });

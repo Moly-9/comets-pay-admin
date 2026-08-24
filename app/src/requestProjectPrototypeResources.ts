@@ -1,4 +1,5 @@
 import type { ContractRecord } from './contracts';
+import { accountDisplayValue } from './accountPresentation';
 import { INITIAL_PAYOUTS } from './data';
 import {
   invoicePaymentListItem,
@@ -476,7 +477,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
       ?? invoicePaymentListProvider(invoice),
     currency: invoice.snapshot.currency,
     amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
-    account: account ? `•••• ${account.replace(/\s/g, '').slice(-4)}` : '待补充',
+    account: accountDisplayValue(account),
     creatorId: invoice.snapshot.creatorId,
     payoutAccountId: invoice.snapshot.payoutAccountId,
     payoutAccountVersion: invoice.snapshot.payoutAccountVersion,

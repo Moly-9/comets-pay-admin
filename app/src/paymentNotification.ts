@@ -1,5 +1,6 @@
 import type { PaymentNotification, PaymentNotificationDelivery } from './types';
 import type { RequestApprovalReturnItem } from './businessWorkflow';
+import { emailDisplayValue } from './accountPresentation';
 
 export type PaymentNotificationActor = {
   account: string;
@@ -7,12 +8,6 @@ export type PaymentNotificationActor = {
 };
 
 const validEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
-
-const maskEmail = (value: string) => {
-  const [local, domain] = value.trim().split('@');
-  if (!local || !domain) return '达人档案邮箱待补充';
-  return `${local.slice(0, 1)}***@${domain}`;
-};
 
 export const createPaymentNotification = (
   actor: PaymentNotificationActor,
@@ -33,7 +28,7 @@ export const createPaymentNotification = (
     {
       channel: 'GMAIL',
       status: validEmail(email) ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
-      recipientLabel: maskEmail(email),
+      recipientLabel: emailDisplayValue(email),
     },
   ];
 

@@ -44,9 +44,9 @@ import {
   type InvoiceContractMatchActor,
 } from '../invoice/invoiceContractMatching';
 import { createInvoiceBuilderPrototypeSeed } from '../invoice/invoiceBuilderPrototype';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   invoiceDocumentChanged,
-  maskInvoiceAccountValue,
 } from '../invoice/invoiceReviewWorkflow';
 import {
   eligibleInvoicePayoutAccounts,
@@ -260,7 +260,7 @@ export function InvoiceBuilderPage({
     label: `${account.nickname}${account.isDefault ? ' · 默认' : ''}`,
     description: [
       getPayoutAccountSummary(account),
-      maskInvoiceAccountValue(getPayoutAccountIdentifier(account)),
+      accountDisplayValue(getPayoutAccountIdentifier(account)),
       getPayoutAccountVersion(account),
       getPayoutAccountStatusMeta(account.status, account.provider).label,
     ].join(' · '),

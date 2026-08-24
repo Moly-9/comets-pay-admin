@@ -14,6 +14,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   paymentListEffectiveAccount,
   paymentListItemValue,
@@ -775,7 +776,7 @@ export function PaymentListReviewContent({
                     </header>
                     {renderValidation(row)}
                     <dl className="request-payment-review-fields">
-                      <div className="request-payment-review-account"><dt>收款账户</dt><dd>{row.effectiveAccount.accountSummary || '待补充'}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
+                      <div className="request-payment-review-account"><dt>收款账户</dt><dd>{accountDisplayValue(row.effectiveAccount.accountSummary)}</dd><small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small></div>
                       <div><dt>支付币种</dt><dd>{currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{displayValue(paymentListItemValue(row.item, 'receiveCurrency'))}</dd></div>
                       <div><dt>付款金额</dt><dd>{formatInvoiceMoney(currency, amount)}</dd></div>

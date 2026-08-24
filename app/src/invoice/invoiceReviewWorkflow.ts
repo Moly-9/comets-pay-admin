@@ -13,6 +13,7 @@ import type {
 import type { InvoicePageTab } from './invoiceManagement';
 import { todayInputValue } from './invoiceUtils';
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
+import { accountDisplayValue, emailDisplayValue } from '../accountPresentation';
 
 export type { InvoicePageTab } from './invoiceManagement';
 
@@ -31,12 +32,6 @@ export type InvoiceReviewActor = {
 const notificationEmailIsValid = (value: string) => {
   const [localPart, domain] = value.trim().split('@');
   return Boolean(localPart && domain?.includes('.'));
-};
-
-const maskNotificationEmail = (value: string) => {
-  const [localPart, domain] = value.trim().split('@');
-  if (!localPart || !domain) return '达人档案邮箱待补充';
-  return `${localPart.slice(0, 1)}***@${domain}`;
 };
 
 const signatureDateFromOccurredAt = (occurredAt: string) => (
@@ -360,17 +355,6 @@ export const invoiceDocumentChanged = (
   next: InvoiceDocumentModel,
 ) => invoiceDocumentChangedFields(previous, next).length > 0;
 
-export const maskInvoiceAccountValue = (value: string) => {
-  const normalized = value.trim();
-  if (!normalized) return '待补充';
-  if (normalized.includes('@')) {
-    const [localPart, domain = ''] = normalized.split('@');
-    return `${localPart.slice(0, 1) || '*'}***@${domain}`;
-  }
-  const compact = normalized.replace(/\s/g, '');
-  return `•••• ${compact.slice(-4)}`;
-};
-
 const assertStableInvoiceIdentity = (
   record: GeneratedInvoiceRecord,
   payout: Payout,
@@ -479,7 +463,7 @@ export const applyInvoiceDocumentEdit = ({
         provider: nextSnapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
         currency: nextSnapshot.currency,
         amount: nextSnapshot.items.reduce((total, item) => total + item.lineTotal, 0),
-        account: maskInvoiceAccountValue(accountValue),
+        account: accountDisplayValue(accountValue),
         creatorId: nextSnapshot.creatorId,
         payoutAccountId: nextSnapshot.payoutAccountId,
         payoutAccountVersion: nextSnapshot.payoutAccountVersion ?? nextSnapshot.payment.payoutAccountVersion,
@@ -548,7 +532,7 @@ export const applyInvoiceDocumentEdit = ({
   const accountValue = nextSnapshot.paymentMethod === 'paypal'
     ? nextSnapshot.payment.paypalEmail || nextSnapshot.payment.paypalUsername
     : nextSnapshot.payment.iban || nextSnapshot.payment.accountNumber;
-  const account = maskInvoiceAccountValue(accountValue);
+  const account = accountDisplayValue(accountValue);
   const event: InvoiceReviewEvent = {
     stage: 'SIGNATURE',
     action: '修改 Invoice',
@@ -677,7 +661,7 @@ export const recordInvoiceSignatureReminder = (
         channel: 'EMAIL',
         status: hasValidEmail ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
         recipientLabel: hasValidEmail
-          ? maskNotificationEmail(email)
+          ? emailDisplayValue(email)
           : '达人档案邮箱待补充',
       },
     ],
@@ -722,7 +706,7 @@ export const publishGeneratedInvoiceDraft = (
       {
         channel: 'EMAIL',
         status: hasValidEmail ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
-        recipientLabel: hasValidEmail ? maskNotificationEmail(email) : '达人档案邮箱待补充',
+        recipientLabel: hasValidEmail ? emailDisplayValue(email) : '达人档案邮箱待补充',
       },
     ],
   };

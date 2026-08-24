@@ -11,6 +11,7 @@ import type {
   PayoutAccountStatus,
   PaymentNotification,
 } from './types';
+import { accountDisplayValue } from './accountPresentation';
 import { invoicePaymentFreezeSnapshot } from './invoicePaymentFreeze';
 
 declare const entityIdBrand: unique symbol;
@@ -583,11 +584,6 @@ export type PaymentListContractReference = {
   feeBearer: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
 };
 
-const maskPaymentAccount = (value: string) => {
-  const normalized = value.replace(/\s/g, '');
-  return normalized ? `•••• ${normalized.slice(-4)}` : '';
-};
-
 const paymentListItemValidationIssues = (item: PaymentListItem) => {
   const snapshot = paymentListEffectiveAccount(item);
   const provider = snapshot.provider;
@@ -866,7 +862,7 @@ export const applyPaymentListPayoutSnapshot = (
     accountOverride: {
       provider,
       accountSummary: rawAccount
-        ? maskPaymentAccount(rawAccount)
+        ? accountDisplayValue(rawAccount)
         : provider === 'PayPal'
           ? '待补充 PayPal'
           : '待补充银行账户',
@@ -901,7 +897,7 @@ const paymentListAccountSnapshotFromPayment = (
   return {
     provider,
     accountSummary: rawAccount
-      ? maskPaymentAccount(rawAccount)
+      ? accountDisplayValue(rawAccount)
       : provider === 'PayPal'
         ? '待补充 PayPal'
         : '待补充银行账户',
@@ -1023,7 +1019,7 @@ export const invoicePaymentListItem = (
       amount: frozen.amount,
       provider,
       accountSummary: rawAccount
-        ? maskPaymentAccount(rawAccount)
+        ? accountDisplayValue(rawAccount)
         : frozen.paymentMethod === 'paypal'
           ? '待补充 PayPal'
           : '待补充银行账户',

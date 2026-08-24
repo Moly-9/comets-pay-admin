@@ -942,7 +942,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control full-width ${errors.payoutAccountId ? 'has-error' : ''}`} data-contract-field="payoutAccountId" onFocus={() => setActiveField('payoutAccount')}>
                 <span>合同收款账户 *</span>
-                <SearchableComboBox ariaLabel="合同收款账户" value={payoutAccountId} placeholder={selectedCreator ? '搜索账户名称、渠道或脱敏标识' : '请先选择达人'} options={payoutOptions} disabled={!selectedCreator || !payoutOptions.length} onChange={(value) => { setPayoutAccountId(value); resetOutput(); }} onClear={() => { setPayoutAccountId(''); resetOutput(); }} />
+                <SearchableComboBox ariaLabel="合同收款账户" value={payoutAccountId} placeholder={selectedCreator ? '搜索账户名称、渠道或完整账号' : '请先选择达人'} options={payoutOptions} disabled={!selectedCreator || !payoutOptions.length} onChange={(value) => { setPayoutAccountId(value); resetOutput(); }} onClear={() => { setPayoutAccountId(''); resetOutput(); }} />
                 <small>{errors.payoutAccountId}</small>
               </div>
               {selectedAccount ? (() => {
@@ -954,7 +954,7 @@ export function ContractBuilderPage({
                   { label: '账户状态', value: statusBadge?.label ?? selectedAccount.status },
                   { label: '默认账户', value: selectedAccount.isDefault ? '是' : '否' },
                   { label: '账户版本', value: selectedAccount.payoutAccountVersion ?? 'legacy-v1' },
-                  { label: '稳定账户 ID（脱敏）', value: presentation.description },
+                  { label: '账户标识', value: presentation.description },
                   ...(selectedAccount.provider === 'Airwallex' ? [{ label: '实体类型', value: selectedAccount.entityType === 'COMPANY' ? '公司' : '个人' }] : []),
                 ];
                 return (

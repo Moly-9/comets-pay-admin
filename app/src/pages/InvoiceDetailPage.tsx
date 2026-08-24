@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import { accountDisplayValue, emailDisplayValue, isLegacyMaskedAccountValue } from '../accountPresentation';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
@@ -40,7 +41,6 @@ import {
   getInvoiceDetailNavigationTarget,
   getInvoiceDetailReviewActions,
   getInvoiceRowStatus,
-  maskInvoiceAccountValue,
   type InvoiceReviewAction,
 } from '../invoice/invoiceReviewWorkflow';
 import {
@@ -122,12 +122,6 @@ const deliveryEmailIsValid = (value: string) => {
   return Boolean(localPart && domain?.includes('.'));
 };
 
-const maskDeliveryEmail = (value: string) => {
-  const [localPart, domain] = value.trim().split('@');
-  if (!localPart || !domain) return '达人档案邮箱待补充';
-  return `${localPart.slice(0, 1)}***@${domain}`;
-};
-
 export const buildInvoiceSignatureReminderMessage = (model: InvoiceDocumentModel) => {
   const creatorName = model.creatorName || model.from.legalName || '达人';
   return `Hi ${creatorName}，Invoice ${model.invoiceNumber} 已准备好，请登录达人端系统，在 Invoice 中心查看并完成签署。如有疑问，可通过站内信反馈。`;
@@ -167,7 +161,7 @@ function InvoiceDeliveryNotice({
           <Mail size={16} />
           <span>
             <strong>邮件（站外信）</strong>
-            <small>{hasEmail ? `发送至达人档案邮箱：${maskDeliveryEmail(email)}` : '未发送 · 达人档案邮箱待补充'}</small>
+            <small>{hasEmail ? `发送至达人档案邮箱：${emailDisplayValue(email)}` : '未发送 · 达人档案邮箱待补充'}</small>
           </span>
         </li>
       </ul>
@@ -194,21 +188,10 @@ const sameText = (left: string, right: string) => (
   left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
 );
 
-const maskedAccountSummary = (value: string) => {
-  if (!value) return '待补充';
-  if (value.includes('@')) return value;
-  const normalized = value.replace(/\s/g, '');
-  return `•••• ${normalized.slice(-4)}`;
-};
-
 const sameAccount = (left: string, right: string) => {
   if (!left || !right || right === '待补充') return false;
-  if (left.includes('@') || right.includes('@')) {
-    return sameText(left, right)
-      || sameText(maskInvoiceAccountValue(left), right)
-      || sameText(left, maskInvoiceAccountValue(right));
-  }
-  return left.replace(/\s/g, '').slice(-4) === right.replace(/\s/g, '').slice(-4);
+  if (isLegacyMaskedAccountValue(left) || isLegacyMaskedAccountValue(right)) return false;
+  return sameText(left.replace(/\s/g, ''), right.replace(/\s/g, ''));
 };
 
 function buildReviewChecks(
@@ -339,7 +322,7 @@ function buildReviewChecks(
     {
       id: 'account',
       label: '收款账户',
-      contractValue: maskedAccountSummary(payout.account),
+      contractValue: accountDisplayValue(payout.account),
       invoiceValue: accountSummary,
       passed: !accountIssue && sameAccount(payout.account, accountSummary),
       note: accountIssue ? payout.issue ?? '收款账户需复核' : 'Invoice账户与已验证账户一致',

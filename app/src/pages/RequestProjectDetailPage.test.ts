@@ -143,7 +143,7 @@ describe('request project payment presentation', () => {
     expect(records[0].fields).toEqual(expect.arrayContaining([
       { label: '关联 Invoice', value: 'INV-301164-01' },
       { label: '付款方式', value: '银行转账' },
-      { label: '收款账户', value: '•••• 3011' },
+      { label: '收款账户', value: '历史记录未保存完整账号' },
       { label: '清单版本', value: 'v2' },
     ]));
   });

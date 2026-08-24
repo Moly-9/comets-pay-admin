@@ -21,6 +21,7 @@ import {
   getAirwallexCountryProfile,
   validateAirwallexFormSchema,
 } from './airwallexFormSchema';
+import { accountDisplayValue, emailDisplayValue } from './accountPresentation';
 import { createPrototypeId } from './businessWorkflow';
 
 export const AIRWALLEX_COUNTRIES = AIRWALLEX_SCHEMA_COUNTRIES;
@@ -719,18 +720,12 @@ export const getPayoutAccountStatusMeta = (
   return ACCOUNT_STATUS_META[status];
 };
 
-const maskValue = (value: string) => {
-  const normalized = value.replace(/\s/g, '');
-  if (!normalized) return '待补充';
-  return `•••• ${normalized.slice(-4)}`;
-};
-
 export const getPayoutAccountIdentifier = (account: CreatorPayoutAccount) => (
   account.provider === 'PayPal'
-    ? account.paypalEmail || '待补充 PayPal 邮箱'
+    ? emailDisplayValue(account.paypalEmail, '待补充 PayPal 邮箱')
     : account.provider === 'PayMax'
-      ? account.payermaxAccountId || '待补充 Payer Max 账号'
-    : maskValue(account.bankDetails.iban || account.bankDetails.accountNumber)
+      ? accountDisplayValue(account.payermaxAccountId, '待补充 Payer Max 账号')
+      : accountDisplayValue(account.bankDetails.iban || account.bankDetails.accountNumber)
 );
 
 export const getPayoutAccountSummary = (account: CreatorPayoutAccount) => (
@@ -746,12 +741,6 @@ export type PayoutAccountSelectPresentation = {
   description: string;
   badges: Array<{ label: string; tone: 'neutral' | 'success' | 'warning' }>;
   details: Array<{ label: string; value: string }>;
-};
-
-const maskEmail = (value: string) => {
-  const [local, domain] = value.trim().split('@');
-  if (!local || !domain) return value.trim() || '待补充';
-  return `${local.slice(0, 1)}${local.length > 1 ? '***' : ''}@${domain}`;
 };
 
 const presentDetails = (details: Array<[string, string | undefined]>) => details
@@ -777,11 +766,11 @@ export const getPayoutAccountSelectPresentation = (
   if (account.provider === 'PayPal') {
     return {
       label: account.nickname,
-      description: `PayPal · ${maskEmail(account.paypalEmail)}`,
+      description: `PayPal · ${emailDisplayValue(account.paypalEmail, '待补充')}`,
       badges,
       details: presentDetails([
         ['PayPal 用户名', account.paypalUsername],
-        ['收款邮箱', maskEmail(account.paypalEmail)],
+        ['收款邮箱', emailDisplayValue(account.paypalEmail, '待补充')],
         ['转账备注', account.transferNote],
       ]),
     };
@@ -790,14 +779,14 @@ export const getPayoutAccountSelectPresentation = (
   if (account.provider === 'PayMax') {
     return {
       label: account.nickname,
-      description: `Payer Max · ${maskValue(account.payermaxAccountId)}`,
+      description: `Payer Max · ${accountDisplayValue(account.payermaxAccountId)}`,
       badges,
       details: presentDetails([
         ['收款人', account.beneficiaryName],
         ['收款币种', account.currency],
         ['国家 / 地区', account.countryCode],
-        ['收款账号', maskValue(account.payermaxAccountId)],
-      ['联系邮箱', account.email ? maskEmail(account.email) : ''],
+        ['收款账号', accountDisplayValue(account.payermaxAccountId)],
+        ['联系邮箱', account.email ? emailDisplayValue(account.email) : ''],
       ]),
     };
   }
@@ -818,10 +807,10 @@ export const getPayoutAccountSelectPresentation = (
   ].filter(Boolean).join(' · ');
   const routing = [
     account.bankDetails.accountRoutingType1 && account.bankDetails.accountRoutingValue1
-      ? `${account.bankDetails.accountRoutingType1} ${maskValue(account.bankDetails.accountRoutingValue1)}`
+      ? `${account.bankDetails.accountRoutingType1} ${accountDisplayValue(account.bankDetails.accountRoutingValue1)}`
       : '',
     account.bankDetails.accountRoutingType2 && account.bankDetails.accountRoutingValue2
-      ? `${account.bankDetails.accountRoutingType2} ${maskValue(account.bankDetails.accountRoutingValue2)}`
+      ? `${account.bankDetails.accountRoutingType2} ${accountDisplayValue(account.bankDetails.accountRoutingValue2)}`
       : '',
   ].filter(Boolean).join(' / ');
   const intermediaryBank = [
@@ -846,8 +835,8 @@ export const getPayoutAccountSelectPresentation = (
       ['SWIFT', account.bankDetails.swiftCode],
       ['中间行', intermediaryBank],
       ['收款人地址', beneficiaryAddress],
-      ['通知邮箱', account.notificationEmail ? maskEmail(account.notificationEmail) : ''],
-      ['Beneficiary', maskValue(account.beneficiaryId)],
+      ['通知邮箱', account.notificationEmail ? emailDisplayValue(account.notificationEmail) : ''],
+      ['Beneficiary', accountDisplayValue(account.beneficiaryId)],
     ]),
   };
 };

@@ -259,7 +259,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('已提交渠道');
   });
 
-  it('renders expanded contract, Invoice, masked account and channel failure details', () => {
+  it('renders expanded contract, Invoice, legacy account warning and channel failure details', () => {
     const html = renderToStaticMarkup(
       <PaymentItemDetails
         item={DETAIL_BATCH.items[0]}
@@ -289,7 +289,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('<dt>描述</dt>');
     expect(html).toContain('<dt>渠道结果</dt>');
     expect(html).toContain('<dt>付款时间</dt>');
-    expect(html).toContain('•••• 7890');
+    expect(html).toContain('历史记录未保存完整账号');
     expect(html).toContain('COMETS-MINA-0810');
     expect(html).toContain('BENEFICIARY_DISABLED');
     expect(html).toContain('关联资料缺失');

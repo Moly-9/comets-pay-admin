@@ -17,6 +17,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   invoicePaymentListProvider,
   paymentListEffectiveAccount,
@@ -808,7 +809,7 @@ export function RequestProjectResourceManager({
                       <div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {paymentProviderDisplayName(effectiveAccount.provider)}</span></div>
                       <span className={`payment-list-overview-state ${itemIssues.length ? 'is-warning' : 'is-ready'}`}>{itemIssues.length ? '待完善' : '已完成'}</span>
                     </header>
-                    <div className="payment-list-overview-row-summary"><span>付款账户 <b>{effectiveAccount.accountSummary || '待选择'}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>交易附言 <b>{paymentListItemValue(item, 'transactionReference') || '待填写'}</b></span></div>
+                    <div className="payment-list-overview-row-summary"><span>付款账户 <b>{accountDisplayValue(effectiveAccount.accountSummary, '待选择')}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>交易附言 <b>{paymentListItemValue(item, 'transactionReference') || '待填写'}</b></span></div>
                     {paymentListReturn ? (
                       <div className="request-approval-return-item-note" role="note">
                         <AlertTriangle size={15} />

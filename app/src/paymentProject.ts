@@ -164,7 +164,7 @@ export function matchInvoiceToContract(
       ) ? 'match' : 'mismatch',
       message: contract.accountName === invoice.accountName && contract.accountFingerprint === invoice.accountFingerprint
         ? '合同与Invoice账户快照一致'
-        : '账户名称或账号尾号不一致',
+        : '账户名称或完整账号不一致',
     },
   ];
 

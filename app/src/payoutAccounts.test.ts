@@ -21,7 +21,7 @@ import { setAirwallexFormValue } from './airwallexFormSchema';
 import type { CreatorProfile } from './types';
 
 describe('creator payout channels', () => {
-  it('presents complete Airwallex payment details without exposing account identifiers', () => {
+  it('presents complete Airwallex payment details and account identifiers', () => {
     const account = {
       ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-select-airwallex'),
       nickname: '日本 JPY 主账户',
@@ -45,7 +45,7 @@ describe('creator payout channels', () => {
 
     const presentation = getPayoutAccountSelectPresentation(account);
     expect(presentation.label).toBe('日本 JPY 主账户');
-    expect(presentation.description).toBe('Airwallex · •••• 3210');
+    expect(presentation.description).toBe('Airwallex · 9876543210');
     expect(presentation.badges.map((badge) => badge.label)).toEqual(['默认账户', '账户已验证']);
     expect(presentation.details).toEqual(expect.arrayContaining([
       { label: '账户主体', value: 'Mina Kato' },
@@ -55,13 +55,13 @@ describe('creator payout channels', () => {
       { label: '银行', value: 'MUFG Bank' },
       { label: '清算系统', value: 'ZENGIN' },
       { label: 'SWIFT', value: 'BOTKJPJT' },
-      { label: 'Beneficiary', value: '•••• 5678' },
+      { label: 'Beneficiary', value: 'beneficiary-12345678' },
     ]));
-    expect(JSON.stringify(presentation)).not.toContain('9876543210');
-    expect(JSON.stringify(presentation)).not.toContain('beneficiary-12345678');
+    expect(JSON.stringify(presentation)).toContain('9876543210');
+    expect(JSON.stringify(presentation)).toContain('beneficiary-12345678');
   });
 
-  it('presents PayPal and PayerMax details with masked email and account values', () => {
+  it('presents PayPal and PayerMax details with complete email and account values', () => {
     const paypal = {
       ...createEmptyPayPalAccount('Mina Kato', 'mina.kato@example.com', 'creator-select-paypal'),
       nickname: 'PayPal 主账户',
@@ -88,18 +88,18 @@ describe('creator payout channels', () => {
     const serialized = JSON.stringify(presentations);
     expect(presentations[0].details).toEqual(expect.arrayContaining([
       { label: 'PayPal 用户名', value: 'mina.paypal' },
-      { label: '收款邮箱', value: 'm***@example.com' },
+      { label: '收款邮箱', value: 'mina.kato@example.com' },
       { label: '转账备注', value: 'Campaign payment' },
     ]));
     expect(presentations[1].details).toEqual(expect.arrayContaining([
       { label: '收款人', value: 'Mina Kato' },
       { label: '收款币种', value: 'USD' },
       { label: '国家 / 地区', value: 'JP' },
-      { label: '收款账号', value: '•••• 4321' },
-      { label: '联系邮箱', value: 'm***@example.com' },
+      { label: '收款账号', value: 'payermax-87654321' },
+      { label: '联系邮箱', value: 'mina.kato@example.com' },
     ]));
-    expect(serialized).not.toContain('mina.kato@example.com');
-    expect(serialized).not.toContain('payermax-87654321');
+    expect(serialized).toContain('mina.kato@example.com');
+    expect(serialized).toContain('payermax-87654321');
   });
 
   it('creates independent Airwallex, PayPal and PayerMax account models', () => {

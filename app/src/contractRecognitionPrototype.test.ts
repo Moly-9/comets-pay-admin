@@ -61,11 +61,10 @@ describe('prototype contract recognition results', () => {
     expect(fields.find((field) => field.fieldKey === 'contractNumber')?.source?.documentId).toBe('system-contract');
   });
 
-  it('uses only a masked synthetic account snapshot and syncs the same fields to contract details', () => {
+  it('uses a complete synthetic account snapshot and syncs the same fields to contract details', () => {
     const beneficiary = fields.find((field) => field.fieldKey === 'beneficiaryAccount');
     expect(beneficiary?.rawValue).toContain('Example Bank');
-    expect(beneficiary?.rawValue).toContain('4826');
-    expect(beneficiary?.rawValue).not.toMatch(/\d{8,}/);
+    expect(beneficiary?.rawValue).toContain('0000004826');
 
     const contract = createUploadedContract({
       systemContractNumber: 'CON-20260804-DEMO01',

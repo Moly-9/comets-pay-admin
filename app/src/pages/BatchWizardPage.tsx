@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Search, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { accountDisplayValue } from '../accountPresentation';
 import {
   createMockBatchSubmission,
   validatePayoutForBatch,
@@ -81,7 +82,7 @@ export function BatchWizardPage({
     return {
       eligible: issues.length === 0,
       label: issues[0] ?? (retryCandidate ? paymentFailureRecoveryLabel(payout) : '冻结快照校验通过'),
-      description: `${paymentProviderDisplayName(payout.provider)} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${payout.account}`,
+      description: `${paymentProviderDisplayName(payout.provider)} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${accountDisplayValue(payout.account)}`,
     };
   };
   const selectedChecks = selectedPayouts.map((payout) => getAccountCheck(payout));

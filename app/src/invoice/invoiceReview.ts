@@ -1,4 +1,5 @@
 import { invoicePaymentForCreator } from '../payoutAccounts';
+import { accountDisplayValue } from '../accountPresentation';
 import type { ProjectId } from '../businessWorkflow';
 import type {
   CreatorInvoiceContact,
@@ -79,7 +80,5 @@ export const invoiceAccountSummary = (model: InvoiceDocumentModel) => {
     return model.payment.paypalEmail || model.payment.paypalUsername || '待补充';
   }
   const accountValue = model.payment.accountNumber || model.payment.iban;
-  if (!accountValue) return '待补充';
-  const normalized = accountValue.replace(/\s/g, '');
-  return `•••• ${normalized.slice(-4)}`;
+  return accountDisplayValue(accountValue);
 };

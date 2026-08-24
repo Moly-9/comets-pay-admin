@@ -1,4 +1,5 @@
 import type { ContractRecord } from './contracts';
+import { accountDisplayValue } from './accountPresentation';
 import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS, PROJECT_FIXTURES } from './data';
 import {
   createDocumentPayoutSnapshot,
@@ -1081,7 +1082,7 @@ export const ALL_PROJECT_PROTOTYPE_PAYOUTS: Payout[] = ALL_PROJECT_PROTOTYPE_INV
     provider: invoice.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
     currency: invoice.snapshot.currency,
     amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
-    account: rawAccount ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}` : '待补充',
+    account: accountDisplayValue(rawAccount),
     creatorId: invoice.snapshot.creatorId,
     payoutAccountId: invoice.snapshot.payoutAccountId,
     payoutAccountVersion: invoice.snapshot.payoutAccountVersion,

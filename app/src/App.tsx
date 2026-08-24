@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { accountDisplayValue } from './accountPresentation';
 import { AppShell } from './components/AppShell';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
@@ -932,7 +933,7 @@ export default function App() {
         provider: record.snapshot.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex',
         currency: record.snapshot.currency,
         amount: record.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
-        account: rawAccount ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}` : '待补充',
+        account: accountDisplayValue(rawAccount),
         creatorId: record.snapshot.creatorId,
         payoutAccountId: record.snapshot.payoutAccountId ?? record.snapshot.payment.payoutAccountId,
         payoutAccountVersion: record.snapshot.payoutAccountVersion ?? record.snapshot.payment.payoutAccountVersion,
