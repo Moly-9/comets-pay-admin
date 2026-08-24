@@ -1,3 +1,49 @@
+# Design QA - Invoice 列表发布与待签署操作布局
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-b6b2805a-9aa3-4b6d-9eb8-8176bd17e185.png` (`1575 x 805`).
+- Browser implementation: `app/design-qa-invoice-list-actions-desktop.jpg` (`1575 x 805`) and `app/design-qa-invoice-list-actions-mobile.png` (`375 x 812`).
+- Focused comparison: `app/design-qa-invoice-list-actions-source-focus.png` and `app/design-qa-invoice-list-actions-implementation-focus.jpg` (both `450 x 220`).
+- Desktop CSS viewport: `1835 x 869`; the application content was normalized to the source's `1575 x 805` frame by cropping the persistent navigation and top bar at device pixel ratio `1`.
+- Responsive CSS viewport: `390 x 844`; the in-app browser content viewport measured `375 x 812` at device pixel ratio `1`.
+- State: administrator account, Invoice management, `待签署`, one selectable PayPal Invoice, publish action disabled.
+
+## Comparison evidence
+
+- The full source and implementation views were opened together in one comparison input; a second focused comparison isolates the toolbar, operation header and waiting-signature row actions at readable scale.
+- The current implementation includes four existing KPI cards above the list that are outside this scoped annotation. The Invoice list typography, filters, table density, semantic colors and copy remain unchanged.
+- The publish action now ends `12px` before the table viewport's right edge. The row action group ends `11px` before the operation column edge.
+- `查看详情` and `模拟达人完成签署` share the same top and bottom coordinates, with an `8px` gap and `flex-wrap: nowrap`.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; the existing Noto Sans SC hierarchy, button labels and weights are unchanged and untruncated.
+- Spacing and layout rhythm: passed; the operation column is `248px`, both actions remain on one line, and the publish group is inset from the list boundary.
+- Colors and visual tokens: passed; existing neutral, disabled, PayPal and waiting-signature colors are unchanged.
+- Image quality and asset fidelity: passed; no raster or brand asset was added to the product UI, and existing Lucide icons remain unchanged.
+- Copy and content: passed; all action labels, lifecycle note and Invoice data remain identical.
+
+## Interaction, responsive and technical checks
+
+- At `390 x 844`, document `scrollWidth === clientWidth === 375px`; the table owns its horizontal overflow (`302px` client width, `850px` scroll width).
+- The two row actions remain on the same vertical line at the responsive breakpoint, while the existing toolbar controls stack within the card.
+- Browser console warning/error log is empty.
+- Focused Vitest: 2 files and 7 tests passed; full Vitest: 95 files and 652 tests passed.
+- TypeScript/Vite production build passed with only the existing chunk-size advisory.
+
+## Findings and comparison history
+
+1. Initial P2: the publish action visually exceeded the list's right boundary.
+   - Fix: constrained the filter footer and toolbar to the content width and added a `12px` right-side safety inset.
+2. Initial P2: the two waiting-signature row actions wrapped vertically because the operation column was only `178px` wide.
+   - Fix: expanded the operation column to `248px`, adjusted the table minimum width, and disabled wrapping for this table's action group.
+3. Post-fix desktop, focused, responsive, overflow and console checks found no remaining actionable P0, P1 or P2 issue.
+
+final result: passed
+
+---
+
 # Design QA - Invoice 列表说明文案与发布按钮顺序
 
 ## Reference and environment
