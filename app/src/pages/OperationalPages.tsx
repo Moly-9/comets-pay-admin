@@ -3426,6 +3426,7 @@ export function InvoicePage({
               ) : null}
             </div>
             <div className="invoice-list-toolbar-actions">
+              <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
               {selectionEnabled ? (
                 <Button
                   icon={<Send size={16} />}
@@ -3435,7 +3436,6 @@ export function InvoicePage({
                   一键发布{selectedPublishRows.length ? `（${selectedPublishRows.length}）` : ''}
                 </Button>
               ) : null}
-              <span className="toolbar-note"><FileCheck2 size={16} /> {tab === 'approved' ? 'OA 审批操作统一在请款项目详情完成' : '列表、详情和审核记录使用同一生命周期'}</span>
             </div>
           </div>
         </div>

@@ -1,3 +1,37 @@
+# Design QA - Invoice 列表说明文案与发布按钮顺序
+
+## Reference and environment
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ac62b32f-712a-428f-b3ad-1fcddee6b477.png` (`1640 x 761`).
+- Intended implementation state: Invoice 管理“待签署”页签，右侧工具栏同时展示生命周期说明与“一键发布”按钮。
+- Intended order: 生命周期说明在左，“一键发布”按钮在右；没有发布按钮的页签保持单独展示说明。
+- Browser-rendered implementation screenshot: unavailable because the in-app browser URL policy rejected reloading the local preview after the server was restarted.
+
+## Verification evidence
+
+- The toolbar DOM now renders the lifecycle note before the conditional publish button.
+- A focused server-rendered regression test confirms the note appears before `一键发布` when the action is visible.
+- TypeScript checking passed immediately after the scoped edit.
+- A later full build is blocked by unrelated concurrent workspace changes that removed the exported `maskInvoiceAccountValue` and `maskPaymentAccount` helpers.
+
+## Required fidelity surfaces
+
+- Fonts and typography: unchanged by this edit.
+- Spacing and layout rhythm: source order is corrected in code, but browser-rendered desktop and responsive evidence could not be captured.
+- Colors and visual tokens: unchanged by this edit.
+- Image quality and asset fidelity: no image or icon assets were changed.
+- Copy and content: lifecycle note and action labels are unchanged; only their visual order changes.
+
+## Findings and comparison history
+
+1. Source screenshot shows the lifecycle note to the right of the publish button, conflicting with the requested hierarchy.
+2. The implementation swaps the DOM order so the note precedes the action and stacks above it at the existing mobile breakpoint.
+3. Post-fix visual comparison is blocked by the local URL browser policy, so no browser-rendered screenshot is available for a passing QA decision.
+
+final result: blocked
+
+---
+
 # Design QA - Invoice 审核详情四卡与 4:6 逐行审核布局
 
 ## Reference and environment

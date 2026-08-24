@@ -241,6 +241,12 @@ describe('InvoicePage list columns', () => {
     expect(uploadHtml).not.toContain('aria-label="Invoice 类型筛选"');
   });
 
+  it('places the lifecycle note before the publish action when the action is visible', () => {
+    const signatureHtml = renderInvoicePage(true);
+    expect(signatureHtml.indexOf('列表、详情和审核记录使用同一生命周期'))
+      .toBeLessThan(signatureHtml.indexOf('一键发布'));
+  });
+
   it('keeps creator feedback rows on the detail-first flow', () => {
     const feedbackPayout: Payout = {
       ...payout,
