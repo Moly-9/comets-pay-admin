@@ -20121,6 +20121,7 @@ button:disabled {
   align-items: flex-end;
   flex-wrap: nowrap;
   justify-content: flex-start;
+  margin-bottom: 20px;
 }
 
 .contract-toolbar-field {
