@@ -402,7 +402,7 @@ export const createPayPalPayoutAccount = ({
 
 export const createPayMaxPayoutAccount = ({
   id,
-  nickname = 'PayerMax 账户',
+  nickname = 'Payer Max 账户',
   isDefault = false,
   status = 'DRAFT',
   beneficiaryName = '',
@@ -479,7 +479,7 @@ export const createEmptyPayMaxAccount = (
   id: createPrototypeId('payout-account'),
   creatorId,
   payoutAccountVersion: 'v1',
-  nickname: '新的 PayerMax 账户',
+  nickname: '新的 Payer Max 账户',
   beneficiaryName: creatorName,
   email,
 });
@@ -711,8 +711,8 @@ export const getPayoutAccountStatusMeta = (
   }
   if (status === 'READY_FOR_VALIDATION' && provider === 'PayMax') {
     return {
-      label: '待 PayerMax 确认',
-      description: '收款账号资料已完整，付款前仍需由 PayerMax 服务端校验',
+      label: '待 Payer Max 确认',
+      description: '收款账号资料已完整，付款前仍需由 Payer Max 服务端校验',
       tone: 'pending',
     } satisfies PayoutAccountStatusMeta;
   }
@@ -729,7 +729,7 @@ export const getPayoutAccountIdentifier = (account: CreatorPayoutAccount) => (
   account.provider === 'PayPal'
     ? account.paypalEmail || '待补充 PayPal 邮箱'
     : account.provider === 'PayMax'
-      ? account.payermaxAccountId || '待补充 PayerMax 账号'
+      ? account.payermaxAccountId || '待补充 Payer Max 账号'
     : maskValue(account.bankDetails.iban || account.bankDetails.accountNumber)
 );
 
@@ -737,7 +737,7 @@ export const getPayoutAccountSummary = (account: CreatorPayoutAccount) => (
   account.provider === 'PayPal'
     ? 'PayPal · 邮箱账户'
     : account.provider === 'PayMax'
-      ? `PayerMax · ${account.currency || '待选币种'}${account.countryCode ? ` · ${account.countryCode}` : ''}`
+      ? `Payer Max · ${account.currency || '待选币种'}${account.countryCode ? ` · ${account.countryCode}` : ''}`
     : `${account.bankDetails.accountCurrency || '待选币种'} · ${account.transferMethod}${account.transferMethod === 'LOCAL' && account.bankDetails.localClearingSystem ? ` · ${account.bankDetails.localClearingSystem}` : ''}`
 );
 
@@ -790,7 +790,7 @@ export const getPayoutAccountSelectPresentation = (
   if (account.provider === 'PayMax') {
     return {
       label: account.nickname,
-      description: `PayerMax · ${maskValue(account.payermaxAccountId)}`,
+      description: `Payer Max · ${maskValue(account.payermaxAccountId)}`,
       badges,
       details: presentDetails([
         ['收款人', account.beneficiaryName],

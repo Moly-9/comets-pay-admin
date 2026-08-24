@@ -77,6 +77,7 @@ import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal, SelectField, type SelectOption } from './Common';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './FinanceReviewWorkspace.css';
 
 type FinanceReviewPane = 'invoice' | 'payment' | 'approval';
@@ -510,7 +511,7 @@ function FinanceReviewProjectOverview({
           <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
           <div><dt>品牌</dt><dd>{projectBrand}</dd></div>
           <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
-          <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
+          <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(paymentChannel)}</dd></div>
           <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
           <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
           <div><dt>手续费承担方</dt><dd>{request.feeBearer || '待补充'}</dd></div>

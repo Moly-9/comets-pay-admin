@@ -24,7 +24,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   canEditRequestProjectResources,
   RequestProjectResourceManager,
@@ -101,7 +101,7 @@ const STATUS_COPY = {
 const PAYMENT_CHANNEL_OPTIONS = [
   { value: 'Airwallex', label: 'Airwallex', description: '跨境银行转账' },
   { value: 'PayPal', label: 'PayPal', description: 'PayPal 账户付款' },
-  { value: 'Payermax', label: 'Payermax', description: '本地支付网络' },
+  { value: 'Payermax', label: 'Payer Max', description: '本地支付网络' },
 ] as const;
 
 const FEE_BEARER_OPTIONS = [
@@ -906,7 +906,7 @@ export function MediaPaymentProjectsPage({
     if (expectedProvider && invoiceProvider !== expectedProvider) {
       notify(
         'Invoice 付款渠道不一致',
-        `当前请款项目选择 ${paymentChannel}，不能关联使用 ${invoiceProvider} 收款账户的 Invoice。`,
+        `当前请款项目选择 ${paymentProviderDisplayName(paymentChannel)}，不能关联使用 ${paymentProviderDisplayName(invoiceProvider)} 收款账户的 Invoice。`,
       );
       return;
     }
@@ -979,7 +979,7 @@ export function MediaPaymentProjectsPage({
         ? selectedInvoices.find((invoice) => invoicePaymentListProvider(invoice) !== expectedProvider)
         : undefined;
       if (incompatibleInvoice) {
-        return [`${creator.name} 的 ${incompatibleInvoice.id} 与付款渠道 ${paymentChannel} 不一致`];
+        return [`${creator.name} 的 ${incompatibleInvoice.id} 与付款渠道 ${paymentProviderDisplayName(paymentChannel)} 不一致`];
       }
       if (new Set(selectedInvoices.map((invoice) => invoice.snapshot.engagementId)).size > 1) {
         return [`${creator.name} 的 Invoice 分属不同合作关系，不能合并到同一达人记录`];
@@ -1190,7 +1190,7 @@ export function MediaPaymentProjectsPage({
                         <span className="media-payment-failure-account-icon" aria-hidden="true"><WalletCards size={18} /></span>
                         <div>
                           <strong>{payout.creator}</strong>
-                          <span>{payout.invoice} · {payout.provider} · {payout.currency} {payout.amount.toLocaleString('en-US')}</span>
+                          <span>{payout.invoice} · {paymentProviderDisplayName(payout.provider)} · {payout.currency} {payout.amount.toLocaleString('en-US')}</span>
                         </div>
                       </div>
                       <p className="media-payment-failure-reason">
@@ -1254,7 +1254,7 @@ export function MediaPaymentProjectsPage({
             <div><dt>关联项目</dt><dd>{cooperationProject?.name ?? selectedRequest.cooperationProjectName ?? selectedRequest.project}<small className="cell-subtext">{selectedRequest.cooperationProjectCode ?? cooperationProject?.cooperationProjectCode ?? '待同步'}</small></dd></div>
             <div><dt>品牌</dt><dd>{selectedRequest.brand || '未填写（非必填）'}</dd></div>
             <div><dt>负责 PM</dt><dd>{selectedRequest.pm}</dd></div>
-            <div><dt>付款渠道</dt><dd>{selectedRequest.paymentChannel || '待补充'}</dd></div>
+            <div><dt>付款渠道</dt><dd>{selectedRequest.paymentChannel ? paymentProviderDisplayName(selectedRequest.paymentChannel) : '待补充'}</dd></div>
             <div><dt>预计付款时间</dt><dd>{selectedRequest.expectedPaymentDate || '待补充'}</dd></div>
             <div><dt>成本类型</dt><dd>{selectedRequest.costType || '待补充'}</dd></div>
             <div><dt>手续费承担方</dt><dd>{selectedRequest.feeBearer || '待补充'}</dd></div>

@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   normalizePaymentProviderBadgeName,
+  paymentProviderDisplayName,
   PaymentProviderBadge,
   PaymentProviderBadges,
 } from './PaymentProviderBadge';
@@ -12,6 +13,8 @@ describe('PaymentProviderBadge', () => {
     expect(normalizePaymentProviderBadgeName('PayPal')).toBe('PayPal');
     expect(normalizePaymentProviderBadgeName('Payermax')).toBe('PayMax');
     expect(normalizePaymentProviderBadgeName('payer max')).toBe('PayMax');
+    expect(paymentProviderDisplayName('PayMax')).toBe('Payer Max');
+    expect(paymentProviderDisplayName('PayerMax')).toBe('Payer Max');
   });
 
   it('renders a provider-specific tone and visible label', () => {
@@ -19,6 +22,14 @@ describe('PaymentProviderBadge', () => {
     expect(html).toContain('is-paypal');
     expect(html).toContain('data-payment-provider="PayPal"');
     expect(html).toContain('PayPal');
+  });
+
+  it('renders the standardized Payer Max brand label', () => {
+    const html = renderToStaticMarkup(<PaymentProviderBadge provider="PayMax" />);
+    expect(html).toContain('data-payment-provider="PayMax"');
+    expect(html).toContain('Payer Max');
+    expect(html).not.toContain('>PayMax<');
+    expect(html).not.toContain('>PayerMax<');
   });
 
   it('renders multiple providers as separate highlighted labels', () => {

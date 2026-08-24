@@ -1,6 +1,7 @@
 import type { ContractRecord } from './contracts';
 import { contractDocumentFilename } from './documentFilenames';
 import { invoiceFilename } from './invoice/invoiceUtils';
+import { paymentProviderDisplayName } from './paymentProviderPresentation';
 import { createFlatProjectPdfArchive } from './projectResourcePdfArchive';
 import type {
   PaymentBatchItemSnapshot,
@@ -145,7 +146,7 @@ export const createPaymentProjectWorkbook = async ({
       creatorHandle: item.creatorHandle,
       contracts: item.contracts.map((contract) => contract.contractCode).join('、') || item.legacyContractReference || '未关联',
       invoice: item.invoice?.invoiceNumber || item.legacyInvoiceReference || '未关联',
-      provider: item.provider,
+      provider: paymentProviderDisplayName(item.provider),
       transferMethod: item.transferMethod,
       currency: item.currency,
       receiveCurrency: item.receiveCurrency,

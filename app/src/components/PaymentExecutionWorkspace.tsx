@@ -45,6 +45,7 @@ import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal } from './Common';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './PaymentExecutionWorkspace.css';
 
 const formatDateTime = (value?: string) => {
@@ -677,7 +678,7 @@ export function PaymentExecutionWorkspace({
                       </span>
                       <div>
                         <strong>{payout.creator}</strong>
-                        <small>{payout.invoice} · {project.paymentOrder} · {payout.provider}</small>
+                        <small>{payout.invoice} · {project.paymentOrder} · {paymentProviderDisplayName(payout.provider)}</small>
                       </div>
                       <span className={`payment-execution-payee-status ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
                         {detailReturned || (!detailPassed && !informationValidated) ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
@@ -710,7 +711,7 @@ export function PaymentExecutionWorkspace({
                     <footer>
                       <span><ReceiptText size={13} />Invoice {payout.invoice}</span>
                       <span><FileText size={13} />合同 {payout.contract}</span>
-                      <span><Landmark size={13} />{payout.provider}</span>
+                      <span><Landmark size={13} />{paymentProviderDisplayName(payout.provider)}</span>
                     </footer>
                   </article>
                 );

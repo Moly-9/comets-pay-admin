@@ -19,7 +19,7 @@ const records: Payout[] = [{
   project: '夏季新品推广',
   contract: 'CON-20260801-TEST01',
   invoice: 'INV-20260801-TEST01',
-  provider: 'Airwallex',
+  provider: 'PayMax',
   currency: 'USD',
   amount: 1980,
   account: 'test-account',
@@ -55,6 +55,7 @@ describe('transaction records workbook', () => {
     expect(worksheet?.getRow(2).getCell(2).value).toBe('INV-20260801-TEST01');
     expect(worksheet?.getRow(2).getCell(4).value).toBeInstanceOf(Date);
     expect((worksheet?.getRow(2).getCell(4).value as Date).getUTCHours()).toBe(16);
+    expect(worksheet?.getRow(2).getCell(5).value).toBe('Payer Max');
     expect(worksheet?.getRow(2).getCell(6).value).toBe(1980);
     expect(worksheet?.getRow(2).getCell(6).numFmt).toContain('USD');
     expect(worksheet?.getRow(2).getCell(8).value).toBeNull();

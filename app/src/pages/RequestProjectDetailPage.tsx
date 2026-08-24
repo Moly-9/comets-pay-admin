@@ -12,6 +12,7 @@ import {
 import { useState } from 'react';
 import { Button, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -144,13 +145,13 @@ type RequestProjectDetail = {
 
 type Notify = (title: string, message: string) => void;
 
-type RequestPaymentChannel = 'Airwallex' | 'PayPal' | 'PayMax' | '待确认';
+type RequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payer Max' | '待确认';
 
 const paymentChannelFromValue = (value: string): RequestPaymentChannel => {
   const match = value.match(/airwallex|paypal|pay(?:er)?\s*max/i)?.[0].toLowerCase();
   if (match === 'airwallex') return 'Airwallex';
   if (match === 'paypal') return 'PayPal';
-  if (match?.startsWith('pay')) return 'PayMax';
+  if (match?.startsWith('pay')) return 'Payer Max';
   return '待确认';
 };
 
@@ -162,7 +163,7 @@ export const requestPaymentChannelLabel = (channels: string | string[]) => {
 export const requestPaymentMethodLabel = (channel: string) => {
   const normalizedChannel = requestPaymentChannelLabel(channel);
   if (normalizedChannel === 'PayPal') return 'PayPal';
-  if (normalizedChannel === 'Airwallex' || normalizedChannel === 'PayMax') return '银行转账';
+  if (normalizedChannel === 'Airwallex' || normalizedChannel === 'Payer Max') return '银行转账';
   return '待确认';
 };
 
@@ -210,7 +211,7 @@ export const paymentRecordsFromLists = (
 ): ProjectResourceRecord[] => paymentLists.flatMap((list) => (
   list.items.map((item, index) => {
     const effectiveAccount = paymentListEffectiveAccount(item);
-    const provider = effectiveAccount.provider || list.provider || '待确认';
+    const provider = paymentProviderDisplayName(effectiveAccount.provider || list.provider);
     const currency = String(paymentListItemValue(item, 'currency') || '待确认');
     const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency') || '待确认');
     const amount = Number(paymentListItemValue(item, 'amount') || 0);
@@ -262,7 +263,7 @@ export const requestPayeesFromPaymentLists = (
       name: item.snapshot.creatorName,
       invoice: item.snapshot.invoiceNumber,
       amount: formatInvoiceMoney(currency, amount),
-      channel: account.provider || list.provider || '待确认',
+      channel: paymentProviderDisplayName(account.provider || list.provider),
       status: requestPaymentListStatusLabel(list),
     };
   })
@@ -522,7 +523,7 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
       },
       payment: {
         id: generated.paymentListId,
-        meta: `${generated.provider} · ${generated.beneficiaryId} · ${generated.feePolicy}`,
+        meta: `${paymentProviderDisplayName(generated.provider)} · ${generated.beneficiaryId} · ${generated.feePolicy}`,
         status: generated.paymentListStatus,
       },
       payees: [
@@ -530,7 +531,7 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
           name: generated.payee,
           invoice: generated.invoiceId,
           amount: generated.invoiceAmount,
-          channel: generated.provider,
+          channel: paymentProviderDisplayName(generated.provider),
           status: '待审批',
         },
       ],
@@ -547,7 +548,7 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
         { label: '项目负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
         { label: '老板审批', description: '项目负责人审批通过后进入', time: '待开始', state: 'pending' },
         { label: '财务审批', description: '老板审批通过后进入', time: '待开始', state: 'pending' },
-        { label: '渠道付款', description: `审批完成后通过${generated.provider}执行`, time: '待开始', state: 'pending' },
+        { label: '渠道付款', description: `审批完成后通过${paymentProviderDisplayName(generated.provider)}执行`, time: '待开始', state: 'pending' },
       ],
     };
   }

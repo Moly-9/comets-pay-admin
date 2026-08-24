@@ -15,7 +15,7 @@ describe('request project payment presentation', () => {
   it('keeps one standard payment channel across the request', () => {
     expect(requestPaymentChannelLabel('Airwallex、PayPal')).toBe('Airwallex');
     expect(requestPaymentChannelLabel(['PayPal', 'Airwallex'])).toBe('PayPal');
-    expect(requestPaymentChannelLabel('payer Max')).toBe('PayMax');
+    expect(requestPaymentChannelLabel('payer Max')).toBe('Payer Max');
     expect(normalizeRequestPaymentChannels([
       { id: 'one', channel: 'Airwallex' },
       { id: 'two', channel: 'PayPal' },

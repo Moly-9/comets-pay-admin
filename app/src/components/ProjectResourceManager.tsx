@@ -49,6 +49,7 @@ import {
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
 type CreateDialogKind = 'invoice';
@@ -816,7 +817,7 @@ export function ProjectResourceManager({
                         <header className="project-payment-row-header">
                           <div>
                             <strong>{item.snapshot.creatorName}</strong>
-                            <span>{item.snapshot.invoiceNumber} · {effectiveAccount.provider}</span>
+                            <span>{item.snapshot.invoiceNumber} · {paymentProviderDisplayName(effectiveAccount.provider)}</span>
                           </div>
                           <div className="project-payment-row-actions">
                             {paymentFieldsEditable && item.requiresRevalidation ? (
@@ -835,7 +836,7 @@ export function ProjectResourceManager({
                         {unsupportedProvider ? (
                           <div className="project-payment-provider-warning" data-payment-provider-warning="true" role="alert" tabIndex={-1}>
                             <AlertTriangle size={15} />
-                            <span>{item.snapshot.creatorName} 当前选择 {effectiveAccount.provider || '未指定渠道'}，付款单仅支持 Airwallex。</span>
+                            <span>{item.snapshot.creatorName} 当前选择 {paymentProviderDisplayName(effectiveAccount.provider)}，付款单仅支持 Airwallex。</span>
                           </div>
                         ) : null}
 

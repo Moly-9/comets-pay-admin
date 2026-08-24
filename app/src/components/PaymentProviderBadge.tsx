@@ -1,6 +1,11 @@
 import './PaymentProviderBadge.css';
+import {
+  normalizePaymentProviderName,
+  paymentProviderDisplayName,
+  type PaymentProviderName,
+} from '../paymentProviderPresentation';
 
-export type PaymentProviderBadgeName = 'Airwallex' | 'PayMax' | 'PayPal';
+export type PaymentProviderBadgeName = PaymentProviderName;
 
 const PAYMENT_PROVIDER_META: Record<PaymentProviderBadgeName, { monogram: string; tone: string }> = {
   Airwallex: { monogram: 'A', tone: 'airwallex' },
@@ -9,12 +14,10 @@ const PAYMENT_PROVIDER_META: Record<PaymentProviderBadgeName, { monogram: string
 };
 
 export const normalizePaymentProviderBadgeName = (provider?: string | null): PaymentProviderBadgeName | null => {
-  const normalized = provider?.trim().toLowerCase().replace(/[\s_-]+/g, '') ?? '';
-  if (normalized === 'airwallex') return 'Airwallex';
-  if (normalized === 'paypal') return 'PayPal';
-  if (normalized === 'paymax' || normalized === 'payermax') return 'PayMax';
-  return null;
+  return normalizePaymentProviderName(provider);
 };
+
+export { paymentProviderDisplayName };
 
 export function PaymentProviderBadge({
   provider,
@@ -26,7 +29,7 @@ export function PaymentProviderBadge({
   className?: string;
 }) {
   const normalizedProvider = normalizePaymentProviderBadgeName(provider);
-  const label = (normalizedProvider ?? provider?.trim()) || '待确认';
+  const label = paymentProviderDisplayName(provider);
   const meta = normalizedProvider ? PAYMENT_PROVIDER_META[normalizedProvider] : null;
 
   return (

@@ -25,7 +25,7 @@ import {
 } from '../components/PaymentAttachmentPreview';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -51,7 +51,7 @@ const fundingAccountLabel = (value: string) => {
   if (value === 'mock-awx-operating') return 'Airwallex 运营资金账户';
   if (value === 'mock-awx-reserve') return 'Airwallex 备用资金账户';
   if (value === 'mock-paypal-balance') return 'PayPal Business Balance';
-  if (value === 'mock-paymax-operating') return 'PayMax 运营资金账户';
+  if (value === 'mock-paymax-operating') return 'Payer Max 运营资金账户';
   return value || '未记录';
 };
 
@@ -212,7 +212,7 @@ export function PaymentItemDetails({
         </header>
         <dl>
           <div><dt>付款单</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
-          <div><dt>付款渠道 / 方式</dt><dd>{item.provider} · {item.transferMethod}</dd></div>
+          <div><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
           <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
           <div><dt>收款账户</dt><dd>{item.accountSummary}</dd></div>
           <div><dt>费用承担</dt><dd>{item.feeBearer}</dd></div>
@@ -415,7 +415,7 @@ export function PaymentBatchDetailPage({
         </div>
         <div>
           <span className="payment-batch-summary-icon is-provider" aria-hidden="true"><Landmark size={18} /></span>
-          <span className="payment-batch-summary-content"><span>付款渠道</span><strong>{batch.provider}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></span>
+          <span className="payment-batch-summary-content"><span>付款渠道</span><strong>{paymentProviderDisplayName(batch.provider)}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></span>
         </div>
         <div>
           <span className="payment-batch-summary-icon is-currency" aria-hidden="true"><Coins size={18} /></span>

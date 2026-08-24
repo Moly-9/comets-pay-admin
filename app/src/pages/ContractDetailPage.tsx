@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
   canConfirmRecognitionFields,
   confirmRecognitionFields,
@@ -300,7 +301,7 @@ function ContractPaymentList({
     : [];
   const paymentInfo = [
     accountName,
-    provider,
+    paymentProviderDisplayName(provider),
     provider === 'PayPal'
       ? paymentSnapshot?.paypalEmail || paymentSnapshot?.paypalUsername
       : provider === 'PayMax'
@@ -313,7 +314,7 @@ function ContractPaymentList({
     {
       title: '付款路由',
       items: [
-        ['付款渠道', snapshotValue(paymentSnapshot.payoutProvider)],
+        ['付款渠道', paymentProviderDisplayName(paymentSnapshot.payoutProvider)],
         ['Beneficiary ID', snapshotValue(paymentSnapshot.externalBeneficiaryId)],
         ['收款人类型', snapshotValue(paymentSnapshot.beneficiaryType)],
         ['银行国家 / 地区', snapshotValue(paymentSnapshot.bankCountry)],
@@ -336,10 +337,10 @@ function ContractPaymentList({
       }]
       : provider === 'PayMax'
         ? [{
-          title: 'PayMax 账户',
+          title: 'Payer Max 账户',
           items: [
             ['收款账户名称', snapshotValue(paymentSnapshot.accountName)],
-            ['PayMax 账户 ID', snapshotValue(paymentSnapshot.accountNumber)],
+            ['Payer Max 账户 ID', snapshotValue(paymentSnapshot.accountNumber)],
             ['付款国家 / 地区', snapshotValue(paymentSnapshot.bankCountry)],
             ['付款备注', snapshotValue(paymentSnapshot.transferRemarks), true],
           ] as PaymentAccountRow[],

@@ -80,7 +80,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('<strong>75.0%</strong><span>全部渠道成功率 · 2 笔失败</span>');
     expect(html).toContain('<span>Airwallex</span><span>66.7%</span><small>1 笔失败</small>');
     expect(html).toContain('<span>PayPal</span><span>50.0%</span><small>1 笔失败</small>');
-    expect(html).toContain('<span>PayMax</span><span>100.0%</span><small>0 笔失败</small>');
+    expect(html).toContain('<span>Payer Max</span><span>100.0%</span><small>0 笔失败</small>');
     expect(html.indexOf('全部渠道成功率')).toBeLessThan(html.indexOf('各渠道付款成功率'));
   });
 

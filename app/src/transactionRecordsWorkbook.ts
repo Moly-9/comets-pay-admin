@@ -1,4 +1,5 @@
 import type { Payout } from './types';
+import { paymentProviderDisplayName } from './paymentProviderPresentation';
 import { transactionCreatorLabel, transactionOccurredAt } from './transactionRecords';
 
 export const TRANSACTION_RECORDS_TEMPLATE_PATH = '/export-assets/transactions/transaction-records-template.xlsx';
@@ -59,7 +60,7 @@ export const createTransactionRecordsWorkbook = async (
       payout.invoice,
       `${payout.projectId} · ${payout.project}`,
       excelDate(transactionOccurredAt(payout)),
-      payout.provider,
+      paymentProviderDisplayName(payout.provider),
       payout.amount,
       payout.status,
       null,

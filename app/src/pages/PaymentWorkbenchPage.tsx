@@ -85,7 +85,7 @@ type PaymentProviderFilter = typeof ALL_PAYMENT_PROVIDERS | Payout['provider'];
 const PAYMENT_PROVIDER_OPTIONS = [
   { value: ALL_PAYMENT_PROVIDERS, label: ALL_PAYMENT_PROVIDERS, description: '显示所有付款渠道' },
   { value: 'Airwallex', label: 'Airwallex', description: '国际银行转账' },
-  { value: 'PayMax', label: 'PayMax', description: '本地银行网络' },
+  { value: 'PayMax', label: 'Payer Max', description: '本地银行网络' },
   { value: 'PayPal', label: 'PayPal', description: '邮箱账户付款' },
 ] as const;
 
@@ -678,7 +678,7 @@ export function PaymentWorkbenchPage({
 
       {showNotice ? (
         <NoticeBanner onClose={() => setShowNotice(false)}>
-          付款将通过已配置的 Airwallex、PayMax 或 PayPal 渠道执行。提交前请确认 Invoice、收款主体与银行资料一致。
+          付款将通过已配置的 Airwallex、Payer Max 或 PayPal 渠道执行。提交前请确认 Invoice、收款主体与银行资料一致。
         </NoticeBanner>
       ) : null}
 

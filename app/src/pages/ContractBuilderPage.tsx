@@ -32,6 +32,7 @@ import {
 } from '../businessWorkflow';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { contractGenerationFilename } from '../contractGenerationFilename';
 import { contractDocumentFilename } from '../documentFilenames';
 import {
@@ -949,7 +950,7 @@ export function ContractBuilderPage({
                 const statusBadge = presentation.badges.find((badge) => badge.label !== '默认账户');
                 const identityDetails = [
                   { label: '账户昵称', value: selectedAccount.nickname },
-                  { label: '渠道', value: selectedAccount.provider },
+                  { label: '渠道', value: paymentProviderDisplayName(selectedAccount.provider) },
                   { label: '账户状态', value: statusBadge?.label ?? selectedAccount.status },
                   { label: '默认账户', value: selectedAccount.isDefault ? '是' : '否' },
                   { label: '账户版本', value: selectedAccount.payoutAccountVersion ?? 'legacy-v1' },
@@ -959,7 +960,7 @@ export function ContractBuilderPage({
                 return (
                   <div className="contract-account-details full-width">
                     <div className="contract-account-detail-group"><strong>账户身份</strong><div className="contract-account-detail-grid">{identityDetails.map((detail) => <div key={detail.label}><span>{detail.label}</span><strong>{detail.value || '待补充'}</strong></div>)}</div></div>
-                    <div className="contract-account-detail-group"><strong>{selectedAccount.provider === 'PayPal' ? 'PayPal 收款信息' : 'Airwallex 收款信息'}</strong><div className="contract-account-detail-grid">{presentation.details.map((detail) => <div key={detail.label}><span>{detail.label}</span><strong>{detail.value || '待补充'}</strong></div>)}</div></div>
+                    <div className="contract-account-detail-group"><strong>{paymentProviderDisplayName(selectedAccount.provider)} 收款信息</strong><div className="contract-account-detail-grid">{presentation.details.map((detail) => <div key={detail.label}><span>{detail.label}</span><strong>{detail.value || '待补充'}</strong></div>)}</div></div>
                   </div>
                 );
               })() : <div className="contract-account-empty full-width">达人档案没有可用于合同的已验证 Airwallex 或 PayPal 账户。</div>}

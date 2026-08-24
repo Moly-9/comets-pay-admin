@@ -123,7 +123,10 @@ describe('payment project documents', () => {
   });
 
   it('writes every payment item to a single Excel worksheet', async () => {
-    const workbookBlob = await createPaymentProjectWorkbook({ request, items: [item] });
+    const workbookBlob = await createPaymentProjectWorkbook({
+      request,
+      items: [{ ...item, provider: 'PayMax' }],
+    });
     const { Workbook } = await import('exceljs');
     const workbook = new Workbook();
     await workbook.xlsx.load(await workbookBlob.arrayBuffer());
@@ -133,6 +136,7 @@ describe('payment project documents', () => {
     expect(sheet?.getCell('B2').value).toBe('REQ-202608-000019');
     expect(sheet?.getCell('D2').value).toBe('Mina Kato');
     expect(sheet?.getCell('G2').value).toBe('INV-202608-000019');
+    expect(sheet?.getCell('H2').value).toBe('Payer Max');
     expect(sheet?.getCell('L2').value).toBe(1250);
   });
 

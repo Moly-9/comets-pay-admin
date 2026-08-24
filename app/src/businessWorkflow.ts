@@ -700,7 +700,7 @@ export const validatePaymentListGeneration = (
       issues.push({
         code: 'UNSUPPORTED_PROVIDER',
         invoiceId: item.invoiceId,
-        message: `${item.snapshot.creatorName} 当前选择 ${effectiveAccount.provider || '未指定渠道'}，付款单仅支持 Airwallex、PayPal 或 PayMax。`,
+        message: `${item.snapshot.creatorName} 当前选择 ${effectiveAccount.provider === 'PayMax' ? 'Payer Max' : effectiveAccount.provider || '未指定渠道'}，付款单仅支持 Airwallex、PayPal 或 Payer Max。`,
       });
     }
   });

@@ -35,6 +35,7 @@ import {
 } from '../businessWorkflow';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
@@ -260,7 +261,7 @@ export function InvoiceBatchResultSection({
                             data-provider={provider}
                           >
                             <i aria-hidden="true">{provider.slice(0, 1)}</i>
-                            {provider}
+                            {paymentProviderDisplayName(provider)}
                           </span>
                         ) : <span className="invoice-batch-result-muted">-</span>}
                       </td>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from './components/AppShell';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
+import { paymentProviderDisplayName } from './components/PaymentProviderBadge';
 import { Toast } from './components/Common';
 import {
   canEditRequestProjectResources,
@@ -1690,7 +1691,7 @@ export default function App() {
       entityType: 'payment-list',
       entityId: invoiceId,
       action: 'update',
-      summary: `已为 ${item.snapshot.invoiceNumber} 选择 ${account.provider} 收款账户，Invoice 原始快照保持不变`,
+      summary: `已为 ${item.snapshot.invoiceNumber} 选择 ${paymentProviderDisplayName(account.provider)} 收款账户，Invoice 原始快照保持不变`,
     });
   };
 
@@ -1818,7 +1819,7 @@ export default function App() {
       throw new PaymentListWorkbookError(['付款单没有可导出的渠道付款明细']);
     }
     if (providers.includes('PayMax')) {
-      throw new PaymentListWorkbookError(['PayMax 付款模板尚未配置，暂不能导出该渠道明细']);
+      throw new PaymentListWorkbookError(['Payer Max 付款模板尚未配置，暂不能导出该渠道明细']);
     }
     const files = await Promise.all(providers.map(async (provider) => {
       const providerList = paymentListForProvider(list, provider);
@@ -1940,7 +1941,7 @@ export default function App() {
       ));
       if (mismatchedEntry) {
         throw new Error(
-          `${mismatchedEntry.snapshot.invoiceNumber} 的收款账户渠道与请款项目付款渠道 ${request.paymentChannel} 不一致`,
+          `${mismatchedEntry.snapshot.invoiceNumber} 的收款账户渠道与请款项目付款渠道 ${paymentProviderDisplayName(request.paymentChannel)} 不一致`,
         );
       }
       setPaymentLists((current) => [
@@ -3988,7 +3989,7 @@ export default function App() {
       if (paymentListEffectiveAccount(item).payoutAccountId === payoutAccountId) return;
       const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
       if (requestPaymentProvider && account.provider !== requestPaymentProvider) {
-        notify('收款账户渠道不一致', `当前请款项目固定使用 ${request.paymentChannel}，不能选择 ${account.provider} 账户。`);
+        notify('收款账户渠道不一致', `当前请款项目固定使用 ${paymentProviderDisplayName(request.paymentChannel)}，不能选择 ${paymentProviderDisplayName(account.provider)} 账户。`);
         return;
       }
       const occurredAt = nowIso();
@@ -4101,7 +4102,7 @@ export default function App() {
           '付款单已导出',
           providers.length > 1
             ? `已按 ${providers.length} 个渠道导出执行文件，所有文件共用 ${list.paymentListCode}。`
-            : `已使用 ${providers[0]} 对应的 Excel 模板生成审批文件。`,
+            : `已使用 ${paymentProviderDisplayName(providers[0])} 对应的 Excel 模板生成审批文件。`,
         );
       } catch (error) {
         const message = error instanceof PaymentListWorkbookError
@@ -4166,7 +4167,7 @@ export default function App() {
     setActivePage('batches');
     notify(
       '模拟付款批次已提交',
-      `${selected.length} 笔 ${execution.provider} 付款已完成 create → add_items → quote → submit 契约模拟。`,
+      `${selected.length} 笔 ${paymentProviderDisplayName(execution.provider)} 付款已完成 create → add_items → quote → submit 契约模拟。`,
     );
   };
 

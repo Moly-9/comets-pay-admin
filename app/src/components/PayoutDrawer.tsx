@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, Button, Modal, StatusMark } from './Common';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { formatAmount, getProjectFixture, SYSTEM_USERS, type SystemUser } from '../data';
 import type { ContractRecord } from '../contracts';
 import type { PaymentFailureIssueType, Payout } from '../types';
@@ -151,7 +152,7 @@ export function PayoutDrawer({
       description: '按付款清单执行付款',
       actor: {
         account: payout.provider.toLowerCase(),
-        name: payout.provider,
+        name: paymentProviderDisplayName(payout.provider),
         initials: payout.provider === 'Airwallex' ? 'AW' : payout.provider === 'PayPal' ? 'PP' : 'PX',
         role: '付款渠道',
       },
@@ -208,7 +209,7 @@ export function PayoutDrawer({
             <h3>付款信息</h3>
             <dl className="detail-grid">
               <div><dt>付款金额</dt><dd>{formatAmount(payout)}</dd></div>
-              <div><dt>打款渠道</dt><dd>{payout.provider}</dd></div>
+              <div><dt>打款渠道</dt><dd>{paymentProviderDisplayName(payout.provider)}</dd></div>
               <div><dt>收款账户</dt><dd className="detail-account-full">{payout.account}</dd></div>
               <div><dt>付款方式</dt><dd>批量打款</dd></div>
             </dl>
@@ -218,7 +219,7 @@ export function PayoutDrawer({
             <section className="drawer-section">
               <h3>付款失败结果</h3>
               <dl className="detail-grid">
-                <div><dt>失败渠道</dt><dd>{payout.paymentFailure.provider}</dd></div>
+                <div><dt>失败渠道</dt><dd>{paymentProviderDisplayName(payout.paymentFailure.provider)}</dd></div>
                 <div><dt>错误码</dt><dd>{payout.paymentFailure.errorCode}</dd></div>
                 <div><dt>失败时间</dt><dd>{payout.paymentFailure.occurredAt}</dd></div>
                 <div><dt>渠道响应</dt><dd>{payout.paymentFailure.providerResponse}</dd></div>

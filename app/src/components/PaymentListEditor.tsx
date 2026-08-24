@@ -27,6 +27,7 @@ import { eligibleInvoicePayoutAccounts, getPayoutAccountId, getPayoutAccountSele
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, SelectField } from './Common';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './PaymentListEditor.css';
 
 type Props = {
@@ -81,8 +82,8 @@ const paymentDetailFields = (item: PaymentListItem) => {
   }
   if (account.provider === 'PayMax') {
     return [
-      ['PayMax 收款账户', account.accountSummary],
-      ['PayMax 账户币种', account.receiveCurrency],
+      ['Payer Max 收款账户', account.accountSummary],
+      ['Payer Max 账户币种', account.receiveCurrency],
       ['收款人', detail?.accountName],
     ];
   }
@@ -203,7 +204,7 @@ export function PaymentListEditor({
       aria-label="逐笔付款明细编辑器"
     >
       <header className="payment-list-editor-header">
-        <div className="payment-list-editor-header-summary"><span className="payment-list-editor-kicker">付款明细 {activeIndex + 1} / {list.items.length}</span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {account.provider}</small></div>
+        <div className="payment-list-editor-header-summary"><span className="payment-list-editor-kicker">付款明细 {activeIndex + 1} / {list.items.length}</span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {paymentProviderDisplayName(account.provider)}</small></div>
         <div className="payment-list-editor-header-actions">
           <span className={`payment-list-editor-state ${issues.length ? 'is-warning' : 'is-ready'}`}>{issues.length ? <CircleAlert size={15} /> : <CheckCircle2 size={15} />}{issues.length ? '待完善' : '已完成'}</span>
           <section className="payment-list-editor-bulk-fill" aria-label="整单批量填入">
@@ -274,7 +275,7 @@ export function PaymentListEditor({
         </section>
 
         <section className="payment-list-editor-payment" aria-label="付款明细">
-          <div className="payment-list-editor-section-title"><span className="is-payment"><Landmark size={16} /></span><div><strong>{account.provider} 付款明细</strong><small>完成渠道支付所需的信息</small></div></div>
+          <div className="payment-list-editor-section-title"><span className="is-payment"><Landmark size={16} /></span><div><strong>{paymentProviderDisplayName(account.provider)} 付款明细</strong><small>完成渠道支付所需的信息</small></div></div>
           <div className={`payment-list-editor-source-lock${accountEditable ? ' is-warning' : ''}`} role="note">
             {accountEditable ? <CircleAlert size={15} aria-hidden="true" /> : <CheckCircle2 size={15} aria-hidden="true" />}
             <span>{accountEditable ? '当前为付款失败明细，仅允许更换本次实际执行账户；Invoice 签署账户保持不变。' : '金额、币种和收款账户来自 Invoice 签署冻结快照，当前保持只读。'}</span>

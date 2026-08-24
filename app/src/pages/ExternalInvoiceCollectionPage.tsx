@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
   InvoiceReviewMetricGrid,
   InvoiceReviewWorkspace,
@@ -365,10 +366,10 @@ export function ExternalInvoiceCollectionDetailPage({
       : '待选择';
   const presetAccount = accounts.find((account) => getPayoutAccountId(account) === record.presetPayoutAccountId);
   const displayPaymentSummary = selectedAccount
-    ? `${selectedAccount.provider} · ${getPayoutAccountSummary(selectedAccount)}`
+    ? `${paymentProviderDisplayName(selectedAccount.provider)} · ${getPayoutAccountSummary(selectedAccount)}`
     : presetAccount
-      ? `${presetAccount.provider} · ${getPayoutAccountSummary(presetAccount)}`
-      : `${accountProvider ?? '已审核账户'} · 任务预设快照`;
+      ? `${paymentProviderDisplayName(presetAccount.provider)} · ${getPayoutAccountSummary(presetAccount)}`
+      : `${accountProvider ? paymentProviderDisplayName(accountProvider) : '已审核账户'} · 任务预设快照`;
   const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
     if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
     if (field === 'PUBLISHER') return expectedPublisher;

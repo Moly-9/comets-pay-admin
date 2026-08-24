@@ -7,6 +7,7 @@ import {
   type MockBatchSubmission,
 } from '../batchTransfers';
 import { Avatar, Button, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import {
   isPaymentFailureRetryCandidate,
@@ -24,7 +25,7 @@ const PROVIDERS: Array<{
 }> = [
   { id: 'Airwallex', title: 'Airwallex', description: 'LOCAL 与 SWIFT 按冻结快照执行' },
   { id: 'PayPal', title: 'PayPal', description: 'PayPal 独立成批，不进入 Airwallex' },
-  { id: 'PayMax', title: 'PayerMax', description: '渠道保留，当前阶段不可执行', disabled: true },
+  { id: 'PayMax', title: 'Payer Max', description: '渠道保留，当前阶段不可执行', disabled: true },
 ];
 
 const SOURCE_CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'].map((currency) => ({
@@ -73,14 +74,14 @@ export function BatchWizardPage({
       return {
         eligible: false,
         label: paymentFailureRecoveryLabel(payout),
-        description: `${payout.provider} · ${payout.paymentFailureRecovery?.reportedPayoutAccountVersion ?? payout.payoutAccountVersion ?? 'legacy-v1'} · 失败重试款`,
+        description: `${paymentProviderDisplayName(payout.provider)} · ${payout.paymentFailureRecovery?.reportedPayoutAccountVersion ?? payout.payoutAccountVersion ?? 'legacy-v1'} · 失败重试款`,
       };
     }
     const issues = validatePayoutForBatch(payout, provider);
     return {
       eligible: issues.length === 0,
       label: issues[0] ?? (retryCandidate ? paymentFailureRecoveryLabel(payout) : '冻结快照校验通过'),
-      description: `${payout.provider} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${payout.account}`,
+      description: `${paymentProviderDisplayName(payout.provider)} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${payout.account}`,
     };
   };
   const selectedChecks = selectedPayouts.map((payout) => getAccountCheck(payout));

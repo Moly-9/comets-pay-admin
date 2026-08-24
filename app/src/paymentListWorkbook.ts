@@ -5,6 +5,7 @@ import {
   type PaymentListItemProvider,
   type PaymentListRecord,
 } from './businessWorkflow';
+import { paymentProviderDisplayName } from './paymentProviderPresentation';
 import { getAirwallexCountryProfile } from './airwallexFormSchema';
 import { airwallexFeeOptions } from './batchTransfers';
 import {
@@ -129,7 +130,7 @@ export const paymentListItemAccountIssues = (
   const invoiceLabel = item.snapshot.invoiceNumber || String(item.invoiceId);
   const prefix = `${invoiceLabel}：`;
   return [
-    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板与校验 API 不支持 ${effectiveAccount.provider || '未指定'} 收款账户` : '',
+    effectiveAccount.provider !== 'Airwallex' ? `${prefix}Airwallex 模板与校验 API 不支持 ${paymentProviderDisplayName(effectiveAccount.provider)} 收款账户` : '',
     !account ? `${prefix}达人档案中未找到关联的 Airwallex 收款账户` : '',
     account && getPayoutAccountVersion(account) !== effectiveAccount.payoutAccountVersion
       ? `${prefix}收款账户版本已变化`
@@ -197,7 +198,7 @@ export const buildAirwallexPaymentListRows = ({
 }): AirwallexPaymentListRow[] => {
   const issues = [
     !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
-    paymentList.provider !== 'Airwallex' ? `${paymentList.provider} 付款清单不能使用 Airwallex 模板导出` : '',
+    paymentList.provider !== 'Airwallex' ? `${paymentProviderDisplayName(paymentList.provider)} 付款清单不能使用 Airwallex 模板导出` : '',
     paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
     paymentList.status === 'submitted' && !allowSubmitted ? '付款清单审批中，暂不能导出' : '',
   ].filter(Boolean);
@@ -353,7 +354,7 @@ export const buildPayPalPaymentListRows = ({
 }): PayPalPaymentListRow[] => {
   const issues = [
     !paymentList.items.length ? '付款清单没有可导出的付款行' : '',
-    paymentList.provider !== 'PayPal' ? `${paymentList.provider} 付款清单不能使用 PayPal 模板导出` : '',
+    paymentList.provider !== 'PayPal' ? `${paymentProviderDisplayName(paymentList.provider)} 付款清单不能使用 PayPal 模板导出` : '',
     paymentList.status === 'draft' ? '付款清单尚未生成锁定版本，暂不能导出' : '',
     paymentList.status === 'submitted' && !allowSubmitted ? '付款清单审批中，暂不能导出' : '',
   ].filter(Boolean);
@@ -455,4 +456,4 @@ export const paymentListWorkbookFilename = (
   projectCode: string,
   paymentList: PaymentListRecord,
   provider?: PaymentListItemProvider,
-) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}${provider ? `-${provider.toUpperCase()}` : ''}.xlsx`;
+) => `${['approved', 'paid'].includes(paymentList.status) ? '' : 'DRAFT-'}COMETS-PAY-${safeFilenamePart(projectCode)}-${safeFilenamePart(paymentList.paymentListCode)}${provider ? `-${safeFilenamePart(paymentProviderDisplayName(provider)).toUpperCase()}` : ''}.xlsx`;

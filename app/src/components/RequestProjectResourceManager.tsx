@@ -53,6 +53,7 @@ import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { Button, Modal, NoticeBanner, SelectField } from './Common';
 import { ContractUploadWizard } from './ContractUploadWizard';
 import { PaymentListEditor } from './PaymentListEditor';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type ResourceKind = 'contract' | 'invoice' | 'payment';
 type ConfirmAction = {
@@ -571,7 +572,7 @@ export function RequestProjectResourceManager({
       request.paymentRequestProjectId,
     ) || (
       requestPaymentProvider && invoicePaymentListProvider(invoice) !== requestPaymentProvider
-        ? `Invoice 收款账户渠道与请款项目付款渠道 ${request.paymentChannel} 不一致`
+        ? `Invoice 收款账户渠道与请款项目付款渠道 ${paymentProviderDisplayName(request.paymentChannel)} 不一致`
         : ''
     )
   );
@@ -763,7 +764,7 @@ export function RequestProjectResourceManager({
       {resourceDialog === 'payment' && !paymentEditorList ? (
         <Modal title={`${request.requestCode ?? request.id} · 付款单`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
-            <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {request.paymentChannel || '待确认'}。</p></div><span>{paymentItemCount} 笔</span></div>
+            <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {paymentProviderDisplayName(request.paymentChannel)}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
@@ -806,7 +807,7 @@ export function RequestProjectResourceManager({
                     tabIndex={focused ? -1 : undefined}
                   >
                     <header className="payment-list-overview-row-header">
-                      <div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {effectiveAccount.provider}</span></div>
+                      <div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {paymentProviderDisplayName(effectiveAccount.provider)}</span></div>
                       <span className={`payment-list-overview-state ${itemIssues.length ? 'is-warning' : 'is-ready'}`}>{itemIssues.length ? '待完善' : '已完成'}</span>
                     </header>
                     <div className="payment-list-overview-row-summary"><span>付款账户 <b>{effectiveAccount.accountSummary || '待选择'}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>交易附言 <b>{paymentListItemValue(item, 'transactionReference') || '待填写'}</b></span></div>
@@ -949,8 +950,8 @@ export function RequestProjectResourceManager({
               <strong>{notificationReturnCreator?.name ?? notificationPayout?.creator ?? '当前达人'}</strong>
               <span>
                 {notificationReturnItem
-                  ? `${notificationReturnInvoice?.id ?? notificationReturnItem.invoiceNumber} · ${request.paymentChannel || '付款渠道待确认'} · 退回修改`
-                  : `${notificationPayout?.invoice} · ${notificationPayout?.provider} · ${notificationPayout?.currency} ${notificationPayout?.amount.toLocaleString('en-US')}`}
+                  ? `${notificationReturnInvoice?.id ?? notificationReturnItem.invoiceNumber} · ${paymentProviderDisplayName(request.paymentChannel)} · 退回修改`
+                  : `${notificationPayout?.invoice} · ${paymentProviderDisplayName(notificationPayout?.provider)} · ${notificationPayout?.currency} ${notificationPayout?.amount.toLocaleString('en-US')}`}
               </span>
               {notificationReturnItem ? <small>退回原因：{notificationReturnItem.reason}</small> : null}
             </div>

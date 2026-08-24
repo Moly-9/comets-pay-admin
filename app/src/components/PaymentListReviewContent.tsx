@@ -34,6 +34,7 @@ import {
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
 import { Button } from './Common';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
   state: 'checking';
@@ -769,7 +770,7 @@ export function PaymentListReviewContent({
                 return (
                   <article className="project-payment-row request-payment-review-row" key={row.key}>
                     <header className="project-payment-row-header">
-                      <div><strong>{row.item.snapshot.creatorName}</strong><span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {row.effectiveAccount.provider}</span></div>
+                      <div><strong>{row.item.snapshot.creatorName}</strong><span>{row.item.snapshot.invoiceNumber} · {row.list.paymentListCode} · {paymentProviderDisplayName(row.effectiveAccount.provider)}</span></div>
                       <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
                     </header>
                     {renderValidation(row)}

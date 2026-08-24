@@ -47,7 +47,7 @@ import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMa
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
 import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
@@ -2734,7 +2734,7 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
                 <CreatorContactDetailsGrid contact={activeProfile.contact} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 PayerMax，默认账户决定付款时的预选资料">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 Payer Max，默认账户决定付款时的预选资料">
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
                   creatorId={activeProfile.id}
@@ -3868,7 +3868,7 @@ export function BatchesPage({
               { value: 'all', label: '全部付款渠道' },
               { value: 'Airwallex', label: 'Airwallex' },
               { value: 'PayPal', label: 'PayPal' },
-              { value: 'PayMax', label: 'PayMax' },
+              { value: 'PayMax', label: 'Payer Max' },
             ]}
             onChange={setProvider}
           />
@@ -4000,7 +4000,7 @@ const TRANSACTION_PROVIDER_OPTIONS = [
   { value: 'all', label: '全部付款渠道' },
   { value: 'Airwallex', label: 'Airwallex' },
   { value: 'PayPal', label: 'PayPal' },
-  { value: 'PayMax', label: 'PayMax' },
+  { value: 'PayMax', label: 'Payer Max' },
 ] as const;
 
 const TRANSACTION_PAID_STATUS_OPTIONS = [
@@ -4157,7 +4157,7 @@ export function TransactionsPage({
           <ul className="payment-summary-secondary transaction-channel-summary-details" aria-label="各渠道付款成功率">
             {providerSuccessRates.map((item) => (
               <li className="transaction-channel-summary-row" key={item.provider}>
-                <span>{item.provider}</span>
+                <span>{paymentProviderDisplayName(item.provider)}</span>
                 <span>{item.successRate}</span>
                 <small>{item.failedCount} 笔失败</small>
               </li>
@@ -4317,7 +4317,7 @@ export function OrganizationPage({
 
 const CHANNELS = [
   { name: 'Airwallex', tag: '国际银行转账', description: '支持本地转账、SWIFT 与批量付款', currencies: 'USD · EUR · GBP · HKD · SGD', state: '已连接', color: '#6d5ce7' },
-  { name: 'PayMax', tag: '本地银行网络', description: '俄罗斯、泰国及区域本地银行模板', currencies: 'USD · EUR · THB', state: '已连接', color: '#ff765d' },
+  { name: 'Payer Max', tag: '本地银行网络', description: '俄罗斯、泰国及区域本地银行模板', currencies: 'USD · EUR · THB', state: '已连接', color: '#ff765d' },
   { name: 'PayPal', tag: '数字钱包', description: '通过达人 PayPal 邮箱快速付款', currencies: 'USD · EUR', state: '已连接', color: '#1689e5' },
 ];
 

@@ -16,6 +16,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
   InvoiceReviewMetricGrid,
   InvoiceReviewWorkspace,
@@ -279,7 +280,7 @@ function buildReviewChecks(
         contractValue: accountSummary,
         invoiceValue: accountSummary,
         passed: accountSummary !== '待补充',
-        note: `已使用${source.provider}账户快照`,
+        note: `已使用${paymentProviderDisplayName(source.provider)}账户快照`,
       },
       {
         id: 'signature',
@@ -901,7 +902,7 @@ export function InvoiceDetailPage({
         {
           label: '付款方式',
           value: model.paymentMethod === 'bank' ? '银行转账' : 'PayPal',
-          secondary: `${provider} · ${invoiceAccountSummary(model)}`,
+          secondary: `${paymentProviderDisplayName(provider)} · ${invoiceAccountSummary(model)}`,
         },
       ]} />
 

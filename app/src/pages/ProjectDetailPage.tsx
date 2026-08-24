@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Avatar, Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import type { ContractRecord } from '../contracts';
 import type {
   ProjectResourceKind,
@@ -214,19 +215,20 @@ function createInvoiceRecords({
   const projectCode = projectId.replace('PRJ-', '');
   return rows.map((row, index) => {
     const id = `INV-${projectCode}-${String(index + 1).padStart(2, '0')}`;
+    const channel = paymentProviderDisplayName(row.channel);
     return {
       id,
       title: row.creator,
-      subtitle: `${invoiceDate} · ${row.channel}`,
+      subtitle: `${invoiceDate} · ${channel}`,
       amount: row.amount,
       status,
-      channel: row.channel,
+      channel,
       fields: [
         { label: 'Invoice 编号', value: id },
         { label: '达人 / 收款人', value: row.creator },
         { label: '关联项目', value: projectName },
         { label: 'Invoice 日期', value: invoiceDate },
-        { label: '付款渠道', value: row.channel },
+        { label: '付款渠道', value: channel },
         { label: '金额', value: row.amount },
         { label: '审核状态', value: status },
       ],

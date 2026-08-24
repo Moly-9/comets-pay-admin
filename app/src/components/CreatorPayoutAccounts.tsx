@@ -62,6 +62,7 @@ import type {
   PayPalPayoutAccount,
 } from '../types';
 import { Button, Modal, SelectField } from './Common';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type CreatorPayoutAccountsProps = {
   accounts: CreatorPayoutAccount[];
@@ -937,11 +938,11 @@ function PayMaxAccountForm({
   return (
     <div className="creator-payment-editor payout-account-form">
       <StatusPanel account={account} />
-      <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="PayerMax 收款账号与 Airwallex、PayPal 资料独立维护">
+      <Section icon={<CircleDollarSign size={19} />} title="Payer Max 账户" description="Payer Max 收款账号与 Airwallex、PayPal 资料独立维护">
         <div className="form-grid creator-payment-form-grid">
-          <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：PayerMax 主账户" required />
+          <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：Payer Max 主账户" required />
           <TextField label="收款人名称" alias="beneficiaryName" value={account.beneficiaryName} onChange={(value) => commit({ ...account, beneficiaryName: value })} placeholder="个人姓名或公司法定名称" required />
-          <TextField label="PayerMax 收款账号" alias="payermaxAccountId" value={account.payermaxAccountId} onChange={(value) => commit({ ...account, payermaxAccountId: value })} placeholder="PayerMax 返回的收款账号" required />
+          <TextField label="Payer Max 收款账号" alias="payermaxAccountId" value={account.payermaxAccountId} onChange={(value) => commit({ ...account, payermaxAccountId: value })} placeholder="Payer Max 返回的收款账号" required />
           <TextField label="联系邮箱" alias="email · 选填" value={account.email} onChange={(value) => commit({ ...account, email: value })} placeholder="creator@example.com" type="email" />
           <SelectFormField
             label="收款国家 / 地区"
@@ -1055,11 +1056,11 @@ function PayMaxAccountView({ account }: { account: PayMaxPayoutAccount }) {
   return (
     <div className="creator-profile-content payout-account-view">
       <StatusPanel account={account} />
-      <Section icon={<CircleDollarSign size={19} />} title="PayerMax 账户" description="与 Airwallex 和 PayPal 收款账户独立维护">
+      <Section icon={<CircleDollarSign size={19} />} title="Payer Max 账户" description="与 Airwallex 和 PayPal 收款账户独立维护">
         <DetailGrid items={[
           { label: '账户别名', alias: 'nickname', value: account.nickname },
           { label: '收款人名称', alias: 'beneficiaryName', value: account.beneficiaryName },
-          { label: 'PayerMax 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId, mask: true },
+          { label: 'Payer Max 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId, mask: true },
           { label: '国家 / 地区', alias: 'countryCode', value: account.countryCode },
           { label: '收款币种', alias: 'currency', value: account.currency },
           { label: '联系邮箱', alias: 'email', value: account.email },
@@ -1079,7 +1080,7 @@ const PAYOUT_PROVIDERS: Array<{
 }> = [
   { value: 'Airwallex', label: 'Airwallex', icon: Landmark, available: true },
   { value: 'PayPal', label: 'PayPal', icon: Wallet, available: false },
-  { value: 'PayMax', label: 'PayerMax', icon: CircleDollarSign, available: false },
+  { value: 'PayMax', label: 'Payer Max', icon: CircleDollarSign, available: false },
 ];
 
 export function CreatorPayoutAccounts({
@@ -1365,7 +1366,7 @@ export function CreatorPayoutAccounts({
             <span><AlertTriangle size={22} /></span>
             <div>
               <strong>{deleteTarget.nickname}</strong>
-              <p>{deleteTarget.provider} · {getPayoutAccountIdentifier(deleteTarget)}</p>
+              <p>{paymentProviderDisplayName(deleteTarget.provider)} · {getPayoutAccountIdentifier(deleteTarget)}</p>
               <small>删除后，该账户将从当前达人档案中移除。已有历史业务关联的账户不会开放删除，合同、Invoice 和付款快照不受影响。</small>
             </div>
           </div>

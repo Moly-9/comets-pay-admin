@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, Button, Modal, StatusMark } from '../components/Common';
-import { PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import type { TransactionBatchContext } from '../transactionRecords';
 import { transactionOccurredAt, transactionRecordDetails } from '../transactionRecords';
@@ -139,7 +139,7 @@ export function TransactionDetailPage({
           </article>
           <article className="is-payment-batch">
             <span className="transaction-association-icon" aria-hidden="true"><ReceiptText size={19} /></span>
-            <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{payout.provider} · {details.batchStatus}</span></div>
+            <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{paymentProviderDisplayName(payout.provider)} · {details.batchStatus}</span></div>
           </article>
         </div>
       </section>
@@ -276,7 +276,7 @@ export function TransactionDetailPage({
               <div><dt>清单状态</dt><dd>{details.paymentListStatus}</dd></div>
               <div><dt>付款达人</dt><dd>{payout.creator}</dd></div>
               <div><dt>付款金额</dt><dd>{formatAmount(payout)}</dd></div>
-              <div><dt>付款渠道</dt><dd>{payout.provider}</dd></div>
+              <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(payout.provider)}</dd></div>
               <div><dt>付款方式</dt><dd>{details.transferMethod}</dd></div>
               <div><dt>付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
               <div className="transaction-resource-modal-full"><dt>付款事由</dt><dd>{details.requestReason}</dd></div>
