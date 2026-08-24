@@ -10070,6 +10070,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -10078,6 +10079,150 @@ button:disabled {
   min-height: 31px;
   padding: 0 11px;
   font-size: 11.5px;
+}
+
+.list-action-button {
+  display: inline-flex;
+  min-width: 0;
+  height: 32px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 11px;
+  color: #424b5a;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.list-action-button:hover:not(:disabled) {
+  border-color: #b9c4d3;
+  background: #f7f9fc;
+  color: #263142;
+}
+
+.list-action-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(78, 110, 154, 0.42);
+}
+
+.list-action-button:active:not(:disabled) {
+  background: #eef2f7;
+  transform: translateY(1px);
+}
+
+.list-action-button:disabled {
+  cursor: not-allowed;
+  border-color: #e2e6ec;
+  background: #f8f9fb;
+  color: #a2a9b3;
+}
+
+.list-action-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.list-action-review,
+.list-action-execute {
+  border-color: #cdd9ec;
+  background: #f8faff;
+  color: #385c91;
+}
+
+.list-action-review:hover:not(:disabled),
+.list-action-execute:hover:not(:disabled) {
+  border-color: #a9bddc;
+  background: #eef4fc;
+  color: #284e84;
+}
+
+.list-action-danger {
+  border-color: #edcfcc;
+  background: #fffafa;
+  color: #a34a43;
+}
+
+.list-action-danger:hover:not(:disabled) {
+  border-color: #dca9a5;
+  background: #fff2f1;
+  color: #903b35;
+}
+
+.list-action-button.is-loading .list-action-icon {
+  animation: list-action-spin 800ms linear infinite;
+}
+
+.action-cell .list-action-button {
+  vertical-align: middle;
+}
+
+.project-contract-record-actions > .list-action-button {
+  min-height: 32px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 11px;
+  color: #424b5a;
+  font-size: 11.5px;
+}
+
+.project-contract-record-actions > .list-action-review,
+.project-contract-record-actions > .list-action-execute {
+  border-color: #cdd9ec;
+  background: #f8faff;
+  color: #385c91;
+}
+
+.project-contract-record-actions > .list-action-danger {
+  border-color: #edcfcc;
+  background: #fffafa;
+  color: #a34a43;
+}
+
+.payment-list-overview-row-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-payment-row-actions > button:not(.project-payment-revalidate) {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #edcfcc;
+  border-radius: 8px;
+  background: #fffafa;
+}
+
+.project-payment-row-actions > button:not(.project-payment-revalidate):hover {
+  border-color: #dca9a5;
+  background: #fff2f1;
+}
+
+.project-payment-row-actions > button:not(.project-payment-revalidate):focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(163, 74, 67, 0.32);
+}
+
+@keyframes list-action-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list-action-button { transition: none; }
+  .list-action-button:active:not(:disabled) { transform: none; }
+  .list-action-button.is-loading .list-action-icon { animation-duration: 1600ms; }
 }
 
 .status-mark,

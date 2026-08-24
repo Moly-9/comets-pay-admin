@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Avatar, Button, StatusMark } from './Common';
+import { Avatar, ListActionButton, StatusMark } from './Common';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
 import { formatAmount } from '../data';
@@ -16,6 +16,14 @@ const ACTION_LABELS: Record<Payout['status'], string> = {
   已退回: '查看原因',
 };
 
+const actionKindFor = (label: string | undefined, status: Payout['status']) => {
+  if (status === '付款失败' || status === '信息异常' || status === '已退回') return 'danger' as const;
+  if (label?.includes('执行') || label?.includes('提交')) return 'execute' as const;
+  if (label?.includes('审核') || label?.includes('复核')) return 'review' as const;
+  if (label?.includes('编辑') || label?.includes('处理') || label?.includes('修改')) return 'edit' as const;
+  return 'view' as const;
+};
+
 export function PayoutTable({
   payouts,
   onSelect,
@@ -27,7 +35,6 @@ export function PayoutTable({
   primaryActionFor,
   additionalActionFor,
   additionalActionLabelFor,
-  additionalActionIcon,
   onAdditionalAction,
   identityFor,
   projectNameFor,
@@ -122,20 +129,19 @@ export function PayoutTable({
                 <td className="amount-cell">{formatAmount(payout)}</td>
                 <td className="action-cell">
                   <div className="table-action-group">
-                    <Button
-                      variant={showPrimaryAction ? 'primary' : 'secondary'}
-                      className="table-action"
+                    <ListActionButton
+                      kind={actionKindFor(primaryActionLabel, payout.status)}
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelect(payout);
                       }}
                     >
                       {primaryActionLabel}
-                    </Button>
+                    </ListActionButton>
                     {showAdditionalAction ? (
-                      <Button
-                        icon={additionalActionIcon}
-                        className="table-action invoice-quick-action"
+                      <ListActionButton
+                        kind={actionKindFor(additionalActionLabel, payout.status)}
+                        className="invoice-quick-action"
                         aria-label={`${additionalActionLabel}：${invoiceNumber}`}
                         title={additionalActionLabel}
                         onClick={(event) => {
@@ -144,7 +150,7 @@ export function PayoutTable({
                         }}
                       >
                         {additionalActionLabel}
-                      </Button>
+                      </ListActionButton>
                     ) : null}
                   </div>
                 </td>

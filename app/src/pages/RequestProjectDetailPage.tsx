@@ -10,7 +10,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Button, Modal, PageHeading } from '../components/Common';
+import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import type {
@@ -937,14 +937,13 @@ export function RequestProjectDetailPage({
                     </span>
                     <div className="project-resource-copy"><small>{resource.label}</small><strong>{resource.data.id}</strong><span>{resource.data.meta}</span></div>
                     <span className="project-resource-status"><i />{resource.data.status}</span>
-                    <button
-                      className="text-link"
-                      type="button"
+                    <ListActionButton
+                      kind="view"
                       data-testid={`open-request-${resource.kind}`}
                       onClick={() => setViewer({ kind: resource.kind, recordId: null })}
                     >
                       {resource.action}
-                    </button>
+                    </ListActionButton>
                   </article>
                 );
               })}

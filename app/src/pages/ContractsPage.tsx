@@ -2,7 +2,7 @@ import { AlertTriangle, CalendarDays, ChevronDown, Download, FilePlus2, Search, 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { Button, ListActionButton, Modal, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { Pagination, usePagination } from '../components/Pagination';
 import {
@@ -758,9 +758,9 @@ export function ContractsPage({
                         </span>
                       </td>
                       <td className="action-cell">
-                        <button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>
+                        <ListActionButton kind={canEditTemplates ? 'edit' : 'view'} onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>
                           {canEditTemplates ? '编辑模板' : '查看模板'}
-                        </button>
+                        </ListActionButton>
                       </td>
                     </tr>
                   );
@@ -809,7 +809,7 @@ export function ContractsPage({
                       </span>
                     </td>
                     <td className="action-cell">
-                      <button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>查看合同</button>
+                      <ListActionButton kind="view" onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>查看合同</ListActionButton>
                     </td>
                   </tr>
                 );

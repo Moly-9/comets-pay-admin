@@ -7,7 +7,6 @@ import {
   ChevronDown,
   Clock3,
   Circle,
-  Download,
   FileText,
   Paperclip,
   Pencil,
@@ -22,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
@@ -1547,9 +1546,8 @@ export function MediaPaymentProjectsPage({
                     </td>
                     <td className="action-cell">
                       <div className="media-project-row-actions">
-                        <Button
-                          variant="secondary"
-                          className="table-action"
+                        <ListActionButton
+                          kind={hasPaymentFailure || isReturned ? 'danger' : 'view'}
                           onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                         >
                           {hasPaymentFailure
@@ -1557,19 +1555,19 @@ export function MediaPaymentProjectsPage({
                             : isReturned
                               ? (canCreate ? '处理退回' : '查看退回')
                               : '查看项目'}
-                        </Button>
+                        </ListActionButton>
                         {canShowConfirmationExport ? (
                           <>
-                            <button
+                            <ListActionButton
+                              kind="download"
                               className="media-project-confirmation-action"
-                              type="button"
                               disabled={!confirmationItems.length || Boolean(exportingRequestId)}
+                              loading={isExporting}
                               title={!confirmationItems.length ? '没有已付款的 Airwallex 付款明细' : undefined}
                               onClick={() => { void exportProjectConfirmations(request, confirmationItems); }}
                             >
-                              <Download size={14} aria-hidden="true" />
                               {isExporting ? '导出中...' : '导出确认函'}
-                            </button>
+                            </ListActionButton>
                             {!confirmationItems.length ? <small>无已付款 Airwallex 明细</small> : null}
                           </>
                         ) : null}

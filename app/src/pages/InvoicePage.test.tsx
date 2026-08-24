@@ -150,7 +150,7 @@ describe('InvoicePage waiting-signature actions', () => {
     expect(html).toContain('查看详情');
     expect(html).toContain('模拟达人完成签署');
     expect(html).toContain('aria-label="模拟达人完成签署：INV-SIGNATURE-DEMO"');
-    expect(html).toContain('lucide-circle-check');
+    expect(html).toContain('lucide-wallet-cards');
   });
 
   it('hides the simulated signature action from read-only users', () => {

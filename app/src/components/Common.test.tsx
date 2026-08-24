@@ -1,9 +1,53 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { NoticeBanner, SelectField } from './Common';
+import { ListActionButton, NoticeBanner, SelectField } from './Common';
 
 const commonSource = readFileSync(new URL('./Common.tsx', import.meta.url), 'utf8');
+
+describe('ListActionButton', () => {
+  it.each([
+    ['view', 'lucide-eye'],
+    ['review', 'lucide-clipboard-check'],
+    ['execute', 'lucide-wallet-cards'],
+    ['edit', 'lucide-pencil-line'],
+    ['manage', 'lucide-user-cog'],
+    ['download', 'lucide-download'],
+    ['retry', 'lucide-rotate-ccw'],
+    ['danger', 'lucide-circle-alert'],
+  ] as const)('renders the %s semantic icon and style', (kind, iconClass) => {
+    const markup = renderToStaticMarkup(<ListActionButton kind={kind}>执行操作</ListActionButton>);
+
+    expect(markup).toContain(`list-action-${kind}`);
+    expect(markup).toContain(iconClass);
+    expect(markup).toContain('执行操作');
+  });
+
+  it('disables repeated clicks and exposes busy state while loading', () => {
+    const markup = renderToStaticMarkup(
+      <ListActionButton kind="download" loading aria-label="导出确认函">导出中...</ListActionButton>,
+    );
+
+    expect(markup).toContain('is-loading');
+    expect(markup).toContain('lucide-loader-circle');
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('aria-label="导出确认函"');
+  });
+
+  it('passes native button properties and preserves an explicit disabled state', () => {
+    const markup = renderToStaticMarkup(
+      <ListActionButton kind="manage" disabled title="账号不可管理" data-account-id="user-1">
+        管理账号
+      </ListActionButton>,
+    );
+
+    expect(markup).toContain('type="button"');
+    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('title="账号不可管理"');
+    expect(markup).toContain('data-account-id="user-1"');
+  });
+});
 
 describe('NoticeBanner', () => {
   it('always renders an accessible close action', () => {

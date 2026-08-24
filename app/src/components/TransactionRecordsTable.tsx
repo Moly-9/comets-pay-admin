@@ -1,4 +1,3 @@
-import { Eye } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { formatAmount } from '../data';
 import type { PaymentBatchRecord } from '../paymentBatches';
@@ -7,7 +6,7 @@ import {
   transactionRecordDetails,
 } from '../transactionRecords';
 import type { Payout } from '../types';
-import { Avatar, Button, StatusMark } from './Common';
+import { Avatar, ListActionButton, StatusMark } from './Common';
 import { Pagination, usePagination } from './Pagination';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 
@@ -122,15 +121,13 @@ export function TransactionRecordsTable({
                     </span>
                   </td>
                   <td className="action-cell">
-                    <Button
-                      variant="secondary"
-                      className="table-action"
-                      icon={<Eye size={14} />}
+                    <ListActionButton
+                      kind="view"
                       data-transaction-detail={payout.id}
                       onClick={() => onOpenDetail(payout)}
                     >
                       查看详情
-                    </Button>
+                    </ListActionButton>
                   </td>
                 </tr>
               );

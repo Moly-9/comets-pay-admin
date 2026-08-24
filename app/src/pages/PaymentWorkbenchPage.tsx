@@ -1,7 +1,7 @@
 import { CalendarDays, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PaymentListRecord } from '../businessWorkflow';
-import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Button, ListActionButton, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { PaymentExecutionWorkspace } from '../components/PaymentExecutionWorkspace';
@@ -55,6 +55,13 @@ const TAB_SUMMARY_LABELS: Record<WorkbenchTab, string> = {
   payment: '待打款合计',
   paid: '已付款总金额',
   returned: '已退回总金额',
+};
+
+const workbenchActionKind = (label: string) => {
+  if (label === '审核') return 'review' as const;
+  if (label === '执行打款') return 'execute' as const;
+  if (label.includes('失败')) return 'danger' as const;
+  return 'view' as const;
 };
 
 const TAB_STATUSES: Record<WorkbenchTab, Payout['status'][]> = {
@@ -471,16 +478,15 @@ function PaymentProjectTable({
                   </td>
                   <td><span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span></td>
                   <td className="action-cell">
-                    <Button
-                      variant={project.actionLabel === '审核' ? 'primary' : 'secondary'}
-                      className="table-action"
+                    <ListActionButton
+                      kind={workbenchActionKind(project.actionLabel)}
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelect(project);
                       }}
                     >
                       {project.actionLabel}
-                    </Button>
+                    </ListActionButton>
                   </td>
                 </tr>
               );

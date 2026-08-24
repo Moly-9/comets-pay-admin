@@ -1,5 +1,19 @@
-import { Check, ChevronDown, Info, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  Check,
+  ChevronDown,
+  CircleAlert,
+  ClipboardCheck,
+  Download,
+  Eye,
+  Info,
+  LoaderCircle,
+  PencilLine,
+  RotateCcw,
+  UserCog,
+  WalletCards,
+  X,
+} from 'lucide-react';
+import { forwardRef, useEffect, useId, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes, CSSProperties, KeyboardEvent, PropsWithChildren, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { INVOICE_REVIEW_STATUS_META } from '../invoice/invoiceReviewWorkflow';
@@ -18,6 +32,58 @@ export function Button({ children, className = '', variant = 'primary', icon, ..
     </button>
   );
 }
+
+export type ListActionKind =
+  | 'view'
+  | 'review'
+  | 'execute'
+  | 'edit'
+  | 'manage'
+  | 'download'
+  | 'retry'
+  | 'danger';
+
+export type ListActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  kind: ListActionKind;
+  loading?: boolean;
+};
+
+const LIST_ACTION_ICONS = {
+  view: Eye,
+  review: ClipboardCheck,
+  execute: WalletCards,
+  edit: PencilLine,
+  manage: UserCog,
+  download: Download,
+  retry: RotateCcw,
+  danger: CircleAlert,
+} satisfies Record<ListActionKind, typeof Eye>;
+
+export const ListActionButton = forwardRef<HTMLButtonElement, ListActionButtonProps>(function ListActionButton({
+  children,
+  className = '',
+  disabled = false,
+  kind,
+  loading = false,
+  type = 'button',
+  ...props
+}, ref) {
+  const Icon = loading ? LoaderCircle : LIST_ACTION_ICONS[kind];
+
+  return (
+    <button
+      ref={ref}
+      className={`list-action-button list-action-${kind}${loading ? ' is-loading' : ''}${className ? ` ${className}` : ''}`}
+      type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...props}
+    >
+      <Icon className="list-action-icon" size={14} strokeWidth={2.15} aria-hidden="true" />
+      <span>{children}</span>
+    </button>
+  );
+});
 
 export type SelectOption<T extends string = string> = {
   value: T;

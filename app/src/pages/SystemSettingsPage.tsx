@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import {
   CURRENT_USER,
@@ -745,7 +745,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
                           </button>
                         </td>
                         <td>{account.lastLogin}</td>
-                        <td className="action-cell"><button className="text-link" type="button" onClick={() => setSelectedAccount(account)}>管理账号</button></td>
+                        <td className="action-cell"><ListActionButton kind="manage" onClick={() => setSelectedAccount(account)}>管理账号</ListActionButton></td>
                       </tr>
                     );
                   })}

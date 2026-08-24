@@ -1,5 +1,4 @@
 import {
-  Eye,
   Download,
   AlertTriangle,
   FilePlus2,
@@ -11,7 +10,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
-  Unlink,
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -48,7 +46,7 @@ import {
 } from '../payoutAccounts';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
-import { Button, Modal, NoticeBanner, SelectField } from './Common';
+import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
@@ -505,14 +503,14 @@ export function ProjectResourceManager({
                 <p>{row.description}</p>
               </div>
               <span className="project-resource-summary-status"><i />{row.status}</span>
-              <button
+              <ListActionButton
                 className="project-resource-summary-open"
-                type="button"
+                kind="view"
                 data-testid={`open-project-${row.kind}`}
                 onClick={() => setResourceDialog(row.kind)}
               >
                 {row.action}
-              </button>
+              </ListActionButton>
             </article>
           );
         })}
@@ -598,21 +596,21 @@ export function ProjectResourceManager({
                         <span className="project-record-status"><i />{contractStatusLabel(contract)}</span>
                       </div>
                       <div className="project-contract-record-actions">
-                        <Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenContract(contract.id)}>查看</Button>
+                        <ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>
                         {canEdit ? (
                           <>
-                            <button type="button" onClick={() => onOpenContract(contract.id)}><Pencil size={14} />编辑</button>
-                            <button type="button" onClick={() => {
+                            <ListActionButton kind="edit" onClick={() => onOpenContract(contract.id)}>编辑</ListActionButton>
+                            <ListActionButton kind="edit" onClick={() => {
                               if (window.confirm(`确认解除合同 ${contract.id} 与当前项目达人的关联？合同源记录会保留。`)) {
                                 onUnlinkContract(contractStableId(contract));
                               }
-                            }}><Unlink size={14} />解除</button>
+                            }}>解除</ListActionButton>
                             {canDeleteContract(currentUser, contract) ? (
-                              <button className="danger" type="button" onClick={() => {
+                              <ListActionButton kind="danger" onClick={() => {
                                 if (window.confirm(`确认删除合同 ${contract.id}？源记录会同步从合同管理删除。`)) {
                                   onDeleteContract(contractStableId(contract));
                                 }
-                              }}><Trash2 size={14} />删除</button>
+                              }}>删除</ListActionButton>
                             ) : null}
                           </>
                         ) : null}
@@ -688,19 +686,19 @@ export function ProjectResourceManager({
                         <i />{invoice.validationStatus === 'valid' ? '已校验' : '需重新校验'}
                       </span>
                       <div className="project-contract-record-actions">
-                        <Button variant="secondary" icon={<Eye size={14} />} onClick={() => onOpenInvoice(invoice.invoiceId)}>查看</Button>
+                        <ListActionButton kind="view" onClick={() => onOpenInvoice(invoice.invoiceId)}>查看</ListActionButton>
                         {canEdit ? (
                           <>
-                            <button type="button" onClick={() => {
+                            <ListActionButton kind="edit" onClick={() => {
                               if (window.confirm(`确认解除 Invoice ${invoice.id} 与当前项目达人的关联？Invoice 源记录会保留，并从付款清单移除。`)) {
                                 onUnlinkInvoice(invoice.invoiceId);
                               }
-                            }}><Unlink size={14} />解除</button>
-                            <button className="danger" type="button" onClick={() => {
+                            }}>解除</ListActionButton>
+                            <ListActionButton kind="danger" onClick={() => {
                               if (window.confirm(`确认删除 Invoice ${invoice.id}？源记录会同步从 Invoice 管理删除。`)) {
                                 onDeleteInvoice(invoice.invoiceId);
                               }
-                            }}><Trash2 size={14} />删除</button>
+                            }}>删除</ListActionButton>
                           </>
                         ) : null}
                       </div>
@@ -821,12 +819,10 @@ export function ProjectResourceManager({
                           </div>
                           <div className="project-payment-row-actions">
                             {paymentFieldsEditable && item.requiresRevalidation ? (
-                              <button className="project-payment-revalidate" type="button" onClick={() => onRevalidatePaymentItem?.(item.invoiceId)}>
-                                <RefreshCw size={12} />重新校验
-                              </button>
+                              <ListActionButton className="project-payment-revalidate" kind="retry" onClick={() => onRevalidatePaymentItem?.(item.invoiceId)}>重新校验</ListActionButton>
                             ) : null}
                             {paymentFieldsEditable ? (
-                              <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => {
+                              <button type="button" aria-label={`移除 ${item.snapshot.invoiceNumber}`} title={`移除 ${item.snapshot.invoiceNumber}`} onClick={() => {
                                 setRemovePaymentInvoiceId(item.invoiceId);
                               }}><Trash2 size={15} /></button>
                             ) : null}

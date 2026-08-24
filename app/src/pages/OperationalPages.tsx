@@ -43,7 +43,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
+import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
@@ -935,7 +935,7 @@ export function ProjectsPage({
                   <td>{project.creators} 位</td>
                   <td>{project.budget}</td>
                   <td><ProjectStatus status={project.status} /></td>
-                  <td className="action-cell"><button className="text-link" type="button" onClick={() => { setSelectedProjectId(project.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</button></td>
+                  <td className="action-cell"><ListActionButton kind="view" onClick={() => { setSelectedProjectId(project.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>查看项目</ListActionButton></td>
                 </tr>
               ))}
               {filteredProjects.length === 0 ? <tr><td className="project-list-empty" colSpan={7}>暂无符合当前搜索与筛选条件的项目</td></tr> : null}
@@ -1360,7 +1360,7 @@ export function RequestsPage({
                   <td>{request.invoices} 份</td>
                   <td className="mono-cell">{request.paymentOrder}</td>
                   <td><ProjectStatus status={requestStatusById.get(request.id) ?? 'PM审批中'} /></td>
-                  <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</button></td>
+                  <td className="action-cell"><ListActionButton kind="view" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}>查看</ListActionButton></td>
                 </tr>
               ))}
               {filteredRequests.length === 0 ? <tr><td className="request-project-empty" colSpan={10}>暂无符合条件的请款项目</td></tr> : null}
@@ -2598,7 +2598,7 @@ export function CreatorsPage({
                       </span>
                     </td>
                     <td>{creator.projects} 个</td>
-                    <td className="action-cell"><button className="text-link" type="button" onClick={(event) => { event.stopPropagation(); openProfile(creator); }}>查看档案</button></td>
+                    <td className="action-cell"><ListActionButton kind="view" onClick={(event) => { event.stopPropagation(); openProfile(creator); }}>查看档案</ListActionButton></td>
                   </tr>
                 );
               }) : (
@@ -2798,7 +2798,7 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
                   <td>{item.deliverable}</td>
                   <td>{item.invoice}</td>
                   <td><ProjectStatus status={item.payment} /></td>
-                  <td className="action-cell"><button className="text-link" type="button" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</button></td>
+                  <td className="action-cell"><ListActionButton kind="view" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</ListActionButton></td>
                 </tr>
               ))}
               {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={6}>暂无符合条件的合作记录</td></tr> : null}
@@ -3963,15 +3963,14 @@ export function BatchesPage({
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
                     <td><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
                     <td className="action-cell">
-                      <button
+                      <ListActionButton
                         ref={(node) => { if (node) detailTriggerRefs.current.set(batch.paymentBatchId, node); }}
-                        className="text-link"
-                        type="button"
+                        kind="view"
                         data-batch-detail-trigger={batch.paymentBatchId}
                         onClick={() => openBatchDetail(batch.paymentBatchId)}
                       >
                         查看明细
-                      </button>
+                      </ListActionButton>
                     </td>
                   </tr>
                 );

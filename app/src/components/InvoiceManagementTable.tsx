@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Avatar, Button } from './Common';
+import { Avatar, ListActionButton } from './Common';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
 import type { InvoiceManagementRow } from '../invoice/invoiceManagement';
@@ -25,11 +25,18 @@ const formatAmount = (row: InvoiceManagementRow) => (
   `${row.currency} ${row.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 );
 
+const actionKindFor = (row: InvoiceManagementRow) => {
+  if (row.status === '已退回') return 'danger' as const;
+  if (row.actionLabel.includes('审核') || row.actionLabel.includes('复核')) return 'review' as const;
+  if (row.actionLabel.includes('发布') || row.actionLabel.includes('签署')) return 'execute' as const;
+  if (row.actionLabel.includes('处理') || row.actionLabel.includes('草稿')) return 'edit' as const;
+  return 'view' as const;
+};
+
 export function InvoiceManagementTable({
   rows,
   onSelect,
   onAdditionalAction,
-  additionalActionIcon,
   selectableRowIds,
   selectedRowIds,
   onSelectionChange,
@@ -158,20 +165,19 @@ export function InvoiceManagementTable({
                 <td className="amount-cell">{formatAmount(row)}</td>
                 <td className="action-cell">
                   <div className="table-action-group">
-                    <Button
-                      variant={row.primaryAction ? 'primary' : 'secondary'}
-                      className="table-action"
+                    <ListActionButton
+                      kind={actionKindFor(row)}
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelect(row);
                       }}
                     >
                       {row.actionLabel}
-                    </Button>
+                    </ListActionButton>
                     {row.additionalActionLabel && onAdditionalAction ? (
-                      <Button
-                        icon={additionalActionIcon}
-                        className="table-action invoice-quick-action"
+                      <ListActionButton
+                        kind="execute"
+                        className="invoice-quick-action"
                         aria-label={`${row.additionalActionLabel}：${row.invoiceNumber}`}
                         title={row.additionalActionLabel}
                         onClick={(event) => {
@@ -180,7 +186,7 @@ export function InvoiceManagementTable({
                         }}
                       >
                         {row.additionalActionLabel}
-                      </Button>
+                      </ListActionButton>
                     ) : null}
                   </div>
                 </td>

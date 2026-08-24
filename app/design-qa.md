@@ -88,6 +88,43 @@ final result: passed
 
 ---
 
+# 全系统列表操作按钮 Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-62942115-874c-4931-871b-ecde4f13aad9.png`.
+- Desktop implementation: `app/qa/list-action-buttons/payment-batches-desktop.png`, captured from the payment-batch list at a `1284 x 902` viewport.
+- Focused comparison: `app/qa/list-action-buttons/focused-reference-match.png`; the source crop and implementation crop were inspected together at their native density.
+- Mobile implementation: `app/qa/list-action-buttons/payment-workbench-mobile.png`, captured from the paid-project list at a `390 x 844` viewport.
+
+## Required Fidelity Surfaces
+
+- Typography and spacing: passed. Computed values are `11.5px / 600`, `6px` icon gap and `11px` horizontal padding.
+- Shape and border: passed. Every shared list action measures `32px` high with an `8px` radius, white background and `1px #d8dde6` border.
+- Icons: passed. The shared Lucide icons render at `14px`; view, review, execute, edit, manage, download, retry and danger semantics use the agreed mappings.
+- Colors: passed. View actions remain neutral; review and execute actions use a restrained blue outline; failure and destructive actions use a light danger outline.
+- Content: passed. Existing labels, permissions, disabled reasons, loading text and row click behavior remain unchanged.
+
+## Interaction And Responsive Checks
+
+- Desktop payment-batch rows contain one icon and one text label per action, with no button-to-cell overlap and no page-level horizontal overflow.
+- Payment-workbench review, execution, failure and view states render the correct semantic class and icon.
+- At `390px`, single-action buttons remain `90 x 32px`; every button stays inside its table cell and the existing table wrapper owns horizontal scrolling.
+- A two-action Invoice row wraps with an `8px` gap; both labels remain untruncated and both buttons retain one icon.
+- Project resource cards use the same `32px`, `8px` radius and outlined treatment as table rows.
+- Targeted staged-snapshot Vitest: 6 files and 56 tests passed, including component semantics, loading/disabled behavior, representative page coverage and the legacy-action source audit.
+- Full staged-snapshot Vitest: 93 files and 644 tests passed.
+- Staged-snapshot TypeScript/Vite build passed; only the existing chunk-size advisory was emitted.
+
+## Findings
+
+- No actionable P0, P1 or P2 visual, responsive or interaction issue remains for the list-action-button scope.
+- Concurrent Invoice billing-entity and account-presentation edits were preserved and excluded from this focused change.
+
+final result: passed
+
+---
+
 # Design QA - Invoice 达人反馈详情操作
 
 ## Reference and environment
