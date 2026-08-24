@@ -67,7 +67,7 @@ const createRecord = (publish = true) => createExternalInvoiceCollection({
   expected: {
     amount: 4800,
     currency: 'USD',
-    advertiser: invoiceEntity.name,
+    billTo: invoiceEntity,
     description: 'Creator production service',
     dueDate: '2026-09-05',
   },
@@ -112,6 +112,8 @@ describe('external Invoice collection workflow', () => {
       payoutAccountId: presetPayoutAccountId,
       validationStatus: 'VERIFIED',
     });
+    expect(draft.expected.billTo).toEqual(invoiceEntity);
+    expect(draft.expected.billTo).not.toBe(invoiceEntity);
     expect(draft.reviewHistory.map((event) => event.action)).toEqual(['CREATED']);
 
     const published = publishExternalInvoiceCollection(draft, actor, '2026-08-20T01:15:00.000Z');
@@ -136,7 +138,7 @@ describe('external Invoice collection workflow', () => {
       expected: {
         amount: 4800,
         currency: 'USD',
-        advertiser: invoiceEntity.name,
+        billTo: invoiceEntity,
         description: 'Creator production service',
         dueDate: '2026-09-05',
       },
@@ -194,7 +196,6 @@ describe('external Invoice collection workflow', () => {
     expect(() => buildApprovedExternalInvoice({
       record: submitted,
       creator,
-      invoiceEntity,
       occupiedInvoices: [],
       actor,
     })).toThrow('达人纠正值待确认');
@@ -362,7 +363,6 @@ describe('external Invoice collection workflow', () => {
     const approved = buildApprovedExternalInvoice({
       record: submitted,
       creator,
-      invoiceEntity,
       occupiedInvoices: [],
       actor,
       occurredAt: '2026-08-20T04:00:00.000Z',
@@ -370,6 +370,8 @@ describe('external Invoice collection workflow', () => {
     expect(approved.collection.status).toBe('APPROVED');
     expect(approved.invoice.invoiceType).toBe('EXTERNAL');
     expect(approved.invoice.status).toBe('已通过');
+    expect(approved.invoice.snapshot.billTo).toEqual(submitted.expected.billTo);
+    expect(approved.invoice.snapshot.billTo).not.toBe(submitted.expected.billTo);
     expect(approved.payout.invoiceReviewStatus).toBe('已通过');
     expect(approved.payout.invoiceSignatureRound).toBe(0);
     expect(approved.invoice.invoiceId).toBe(submitted.invoiceId);

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { INITIAL_INVOICE_BILLING_SETTINGS } from '../data';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { InvoicePage } from './OperationalPages';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
@@ -115,7 +116,7 @@ const renderInvoicePage = (
   <InvoicePage
     payouts={options.payouts ?? [payout]}
     creators={options.creators ?? [creator]}
-    invoiceEntity={{ name: 'COMETS', address: 'Hong Kong' }}
+    invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
     generatedInvoices={options.generatedInvoices ?? [record]}
     requests={options.requests ?? []}
     tab={options.tab ?? 'signature'}

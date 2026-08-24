@@ -47,7 +47,10 @@ const record = createExternalInvoiceCollection({
   expected: {
     amount: 5400,
     currency: 'USD',
-    advertiser: 'COMETS INTERNATIONAL LIMITED',
+    billTo: {
+      name: 'COMETS INTERNATIONAL LIMITED',
+      address: 'Hong Kong',
+    },
     description: 'Social content publishing',
     dueDate: '2026-09-10',
   },

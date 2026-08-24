@@ -190,7 +190,7 @@ export type ExternalInvoiceReviewEvent = {
 export type ExternalInvoiceExpectedValues = {
   amount: number;
   currency: InvoiceCurrency;
-  advertiser: string;
+  billTo: InvoiceEntity;
   description: string;
   dueDate: string;
 };
@@ -338,7 +338,7 @@ export const createExternalInvoiceCollection = ({
     contractIds,
     presetPayoutAccountId,
     presetPayoutAccountSnapshot: { ...presetPayoutAccountSnapshot },
-    expected,
+    expected: { ...expected, billTo: { ...expected.billTo } },
     status,
     sourceFileVersions: [],
     recognitionSnapshots: [],
@@ -413,7 +413,7 @@ const sourceValuesForScenario = (
     SOURCE_INVOICE_NUMBER: `MCN-${invoiceDate.replace(/-/g, '')}-${String(record.sourceFileVersions.length + 1).padStart(2, '0')}`,
     INVOICE_DATE: invoiceDate,
     PUBLISHER: payoutAccountPublisher(account, record.creatorId),
-    ADVERTISER: record.expected.advertiser,
+    ADVERTISER: record.expected.billTo.name,
     DESCRIPTION: record.expected.description,
     AMOUNT: sourceAmount.toFixed(2),
     CURRENCY: record.expected.currency,
@@ -663,8 +663,8 @@ export const externalInvoiceValidationIssues = ({
   if (!sameText(confirmation.values.CURRENCY, record.expected.currency)) {
     addMismatch('CURRENCY', record.expected.currency, confirmation.values.CURRENCY, '币种与媒介发起时的预期币种不一致。');
   }
-  if (!sameText(confirmation.values.ADVERTISER, record.expected.advertiser)) {
-    addMismatch('ADVERTISER', record.expected.advertiser, confirmation.values.ADVERTISER, '付款主体与媒介发起时的付款主体不一致。');
+  if (!sameText(confirmation.values.ADVERTISER, record.expected.billTo.name)) {
+    addMismatch('ADVERTISER', record.expected.billTo.name, confirmation.values.ADVERTISER, '付款主体与媒介发起时的付款主体不一致。');
   }
   if (!sameText(confirmation.values.DESCRIPTION, record.expected.description)) {
     addMismatch('DESCRIPTION', record.expected.description, confirmation.values.DESCRIPTION, '合作内容与媒介发起时的校验基准不一致。');
@@ -848,7 +848,6 @@ export const buildApprovedExternalInvoice = ({
   record,
   creator,
   contracts = [],
-  invoiceEntity,
   occupiedInvoices,
   reservedInvoiceNumbers = [],
   actor,
@@ -857,7 +856,6 @@ export const buildApprovedExternalInvoice = ({
   record: ExternalInvoiceCollectionRecord;
   creator: CreatorProfile;
   contracts?: ContractRecord[];
-  invoiceEntity: InvoiceEntity;
   occupiedInvoices: GeneratedInvoiceRecord[];
   reservedInvoiceNumbers?: string[];
   reservedSourceInvoiceNumbers?: string[];
@@ -892,7 +890,7 @@ export const buildApprovedExternalInvoice = ({
   const snapshot: InvoiceDocumentModel = {
     invoiceNumber,
     invoiceDate,
-    billTo: { ...invoiceEntity, name: confirmation.values.ADVERTISER },
+    billTo: { ...record.expected.billTo },
     creatorHandle: record.creatorHandle,
     creatorName: record.creatorName,
     creatorId: record.creatorId,

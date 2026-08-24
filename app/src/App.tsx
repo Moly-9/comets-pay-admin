@@ -25,7 +25,7 @@ import {
 import {
   authenticateSystemUser,
   CURRENT_USER,
-  INITIAL_INVOICE_ENTITY,
+  INITIAL_INVOICE_BILLING_SETTINGS,
   INITIAL_PAYOUTS,
   PAGE_TITLES,
   resolveSystemUser,
@@ -99,6 +99,10 @@ import {
 } from './invoice/externalInvoiceCollection';
 import { createInitialExternalInvoiceCollections } from './invoice/externalInvoiceFixtures';
 import {
+  defaultInvoiceBillingEntity,
+  invoiceEntitySnapshot,
+} from './invoice/invoiceBillingEntities';
+import {
   updateCreatorProjectCounts,
   upsertGeneratedInvoiceEngagements,
 } from './invoice/invoiceEngagements';
@@ -135,7 +139,7 @@ import type {
   InvoiceDocumentModel,
   InvoiceContractMatchReview,
   InvoiceEditContext,
-  InvoiceEntity,
+  InvoiceBillingSettings,
   NavOptions,
   NavPage,
   PaymentFailureIssueType,
@@ -380,7 +384,13 @@ export default function App() {
     ...contract,
     cooperationProjectId: (contract.cooperationProjectId ?? contract.projectId) as ContractRecord['cooperationProjectId'],
   })));
-  const [invoiceEntity, setInvoiceEntity] = useState<InvoiceEntity>(INITIAL_INVOICE_ENTITY);
+  const [invoiceBillingSettings, setInvoiceBillingSettings] = useState<InvoiceBillingSettings>(
+    INITIAL_INVOICE_BILLING_SETTINGS,
+  );
+  const invoiceEntity = invoiceEntitySnapshot(
+    defaultInvoiceBillingEntity(invoiceBillingSettings)
+      ?? INITIAL_INVOICE_BILLING_SETTINGS.entities[0],
+  );
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceRecord[]>(() => (
     INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.invoices.map((invoice) => ({
       ...invoice,
@@ -3301,7 +3311,6 @@ export default function App() {
         record,
         creator,
         contracts,
-        invoiceEntity,
         occupiedInvoices: generatedInvoices,
         reservedInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
           .flatMap((candidate) => candidate.invoiceNumber ? [candidate.invoiceNumber] : []),
@@ -4404,7 +4413,7 @@ export default function App() {
           payouts={payouts}
           creators={creators}
           contracts={contracts}
-          invoiceEntity={invoiceEntity}
+          invoiceBillingSettings={invoiceBillingSettings}
           projects={projects}
           generatedInvoices={generatedInvoices}
           externalInvoices={externalInvoices}
@@ -4479,7 +4488,7 @@ export default function App() {
           payouts={payouts}
           projects={projects}
           contracts={contracts}
-          invoiceEntity={invoiceEntity}
+          invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
           editRecord={editRecord}
           editContext={invoiceEditTarget.context}
@@ -4518,7 +4527,7 @@ export default function App() {
           payouts={payouts}
           projects={manageableCooperationProjects}
           contracts={contracts}
-          invoiceEntity={invoiceEntity}
+          invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={(record) => {
@@ -4558,7 +4567,7 @@ export default function App() {
           payouts={payouts}
           projects={manageableCooperationProjects}
           contracts={contracts}
-          invoiceEntity={invoiceEntity}
+          invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={addGeneratedInvoices}
@@ -4616,7 +4625,13 @@ export default function App() {
       pageContent = <TransactionsPage payouts={payouts} paymentBatches={paymentBatches} />;
       break;
     case 'organization':
-      pageContent = <OrganizationPage notify={notify} invoiceEntity={invoiceEntity} onInvoiceEntityChange={setInvoiceEntity} />;
+      pageContent = (
+        <OrganizationPage
+          notify={notify}
+          invoiceBillingSettings={invoiceBillingSettings}
+          onInvoiceBillingSettingsChange={setInvoiceBillingSettings}
+        />
+      );
       break;
     case 'channels':
       pageContent = <ChannelsPage notify={notify} />;

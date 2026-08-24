@@ -43,6 +43,10 @@ import {
   type ExternalInvoiceMediaReviewDecision,
   type ExternalInvoiceScenario,
 } from '../invoice/externalInvoiceCollection';
+import {
+  defaultInvoiceBillingEntity,
+  invoiceEntitySnapshot,
+} from '../invoice/invoiceBillingEntities';
 import { formatInvoiceMoney, todayInputValue } from '../invoice/invoiceUtils';
 import {
   createDocumentPayoutSnapshot,
@@ -51,7 +55,7 @@ import {
   getPayoutAccountSummary,
 } from '../payoutAccounts';
 import type { CooperationProjectId, ContractId, CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
-import type { CreatorProfile, InvoiceCurrency } from '../types';
+import type { CreatorProfile, InvoiceBillingSettings, InvoiceCurrency } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
 import './ExternalInvoiceCollectionPage.css';
 
@@ -74,14 +78,14 @@ export function ExternalInvoiceCollectionCreatePage({
   projects,
   creators,
   contracts,
-  invoiceEntityName,
+  invoiceBillingSettings,
   onCreate,
   onBack,
 }: {
   projects: ProjectSummary[];
   creators: CreatorProfile[];
   contracts: ContractRecord[];
-  invoiceEntityName: string;
+  invoiceBillingSettings: InvoiceBillingSettings;
   onCreate: (input: ExternalInvoiceCollectionInput, publish: boolean) => void;
   onBack: () => void;
 }) {
@@ -90,7 +94,9 @@ export function ExternalInvoiceCollectionCreatePage({
   const [contractIds, setContractIds] = useState<ContractId[]>([]);
   const [amount, setAmount] = useState('4800');
   const [currency, setCurrency] = useState<InvoiceCurrency>('USD');
-  const [advertiser, setAdvertiser] = useState(invoiceEntityName);
+  const [billingEntityId, setBillingEntityId] = useState(
+    () => defaultInvoiceBillingEntity(invoiceBillingSettings)!.id,
+  );
   const [description, setDescription] = useState('Creator content production and publishing services');
   const [dueDate, setDueDate] = useState('2026-09-05');
 
@@ -98,6 +104,17 @@ export function ExternalInvoiceCollectionCreatePage({
   const creatorReferences = selectedProject?.creatorProfiles?.filter((reference) => reference.status !== 'removed') ?? [];
   const selectedReference = creatorReferences.find((reference) => String(reference.creatorId) === creatorId);
   const selectedCreator = creators.find((creator) => String(creator.id) === creatorId);
+  const selectedBillingEntity = invoiceBillingSettings.entities.find((entity) => (
+    entity.id === billingEntityId
+  )) ?? defaultInvoiceBillingEntity(invoiceBillingSettings)!;
+  const billingEntityOptions = useMemo(() => invoiceBillingSettings.entities.map((entity) => ({
+    value: entity.id,
+    label: entity.name,
+    description: entity.address,
+    badges: entity.id === invoiceBillingSettings.defaultEntityId
+      ? [{ label: '默认', tone: 'success' as const }]
+      : undefined,
+  })), [invoiceBillingSettings]);
   const projectOptions = useMemo(() => projects.map((project) => ({
     value: String(project.projectId ?? project.id),
     label: project.name,
@@ -136,7 +153,7 @@ export function ExternalInvoiceCollectionCreatePage({
     && selectedReference
     && selectedCreator
     && validAmount
-    && advertiser.trim()
+    && selectedBillingEntity
     && description.trim()
     && dueDate
     && presetPayoutAccountId
@@ -165,7 +182,7 @@ export function ExternalInvoiceCollectionCreatePage({
       expected: {
         amount: Number(amount),
         currency,
-        advertiser: advertiser.trim(),
+        billTo: invoiceEntitySnapshot(selectedBillingEntity),
         description: description.trim(),
         dueDate,
       },
@@ -261,7 +278,17 @@ export function ExternalInvoiceCollectionCreatePage({
                 onChange={setCurrency}
               />
             </div>
-            <label><span className="required-field-label">付款主体 <em className="required-mark">*</em></span><input value={advertiser} onChange={(event) => setAdvertiser(event.target.value)} /></label>
+            <div className="form-control">
+              <span className="required-field-label">付款主体 <em className="required-mark">*</em></span>
+              <SelectField
+                ariaLabel="选择外部 Invoice 付款主体"
+                variant="form"
+                menuStrategy="fixed"
+                value={billingEntityId}
+                options={billingEntityOptions}
+                onChange={setBillingEntityId}
+              />
+            </div>
             <label><span className="required-field-label">截止时间 <em className="required-mark">*</em></span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
             <label className="external-form-span"><span className="required-field-label">合作内容 <em className="required-mark">*</em></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
           </div>
@@ -374,7 +401,7 @@ export function ExternalInvoiceCollectionDetailPage({
   const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
     if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
     if (field === 'PUBLISHER') return expectedPublisher;
-    if (field === 'ADVERTISER') return record.expected.advertiser;
+    if (field === 'ADVERTISER') return record.expected.billTo.name;
     if (field === 'DESCRIPTION') return record.expected.description;
     if (field === 'AMOUNT') return record.expected.amount.toFixed(2);
     if (field === 'CURRENCY') return record.expected.currency;
@@ -665,7 +692,7 @@ export function ExternalInvoiceCollectionDetailPage({
       label: '预计币种&金额',
       value: formatInvoiceMoney(record.expected.currency, record.expected.amount),
     },
-    { id: 'advertiser', label: '付款主体', value: record.expected.advertiser },
+    { id: 'advertiser', label: '付款主体', value: record.expected.billTo.name },
     { id: 'description', label: '合作内容', value: record.expected.description },
     { id: 'due-date', label: '截止时间', value: record.expected.dueDate },
   ];

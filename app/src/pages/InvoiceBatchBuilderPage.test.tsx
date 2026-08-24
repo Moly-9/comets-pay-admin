@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, InvoiceId, ProjectId } from '../businessWorkflow';
 import { INITIAL_CONTRACTS } from '../contracts';
-import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from '../data';
+import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import type { GeneratedInvoiceRecord, InvoiceBatchRow } from '../types';
 import { InvoiceBatchBuilderPage, InvoiceBatchResultSection } from './InvoiceBatchBuilderPage';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
@@ -15,7 +15,7 @@ describe('InvoiceBatchBuilderPage layout', () => {
         payouts={INITIAL_PAYOUTS}
         projects={INITIAL_PROJECTS}
         contracts={INITIAL_CONTRACTS}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={[]}
         onGenerated={() => undefined}
         onDirtyChange={() => undefined}

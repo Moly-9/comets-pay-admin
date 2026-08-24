@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from '../data';
+import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
 import { InvoicePage, INITIAL_CREATORS, TransactionsPage } from './OperationalPages';
@@ -176,7 +176,7 @@ describe('InvoicePage OA states', () => {
       <InvoicePage
         payouts={[financePayout!]}
         creators={INITIAL_CREATORS}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={[invoice]}
         requests={[request]}
         tab="approved"

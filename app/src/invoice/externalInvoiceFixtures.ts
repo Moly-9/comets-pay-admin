@@ -66,7 +66,7 @@ export const createInitialExternalInvoiceCollections = ({
       expected: {
         amount: 3600 + index * 600,
         currency: index % 2 === 0 ? 'USD' : 'EUR',
-        advertiser: invoiceEntity.name,
+        billTo: { ...invoiceEntity },
         description: ['Short-form video production', 'Creator licensing fee', 'Campaign content package', 'Social content publishing'][index],
         dueDate: `2026-09-${String(3 + index).padStart(2, '0')}`,
       },

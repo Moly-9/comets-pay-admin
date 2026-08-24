@@ -3,6 +3,7 @@ import type {
   ContractId,
   CreatorId,
   EngagementId,
+  InvoiceBillingEntityId,
   InvoiceId,
   PaymentRequestProjectId,
   ProjectId,
@@ -261,8 +262,20 @@ export type CreatorProfile = {
 };
 
 export type InvoiceEntity = {
+  billingEntityId?: InvoiceBillingEntityId;
   name: string;
   address: string;
+};
+
+export type InvoiceBillingEntity = {
+  id: InvoiceBillingEntityId;
+  name: string;
+  address: string;
+};
+
+export type InvoiceBillingSettings = {
+  entities: InvoiceBillingEntity[];
+  defaultEntityId: InvoiceBillingEntityId;
 };
 
 export type InvoiceLineItem = {

@@ -25,6 +25,7 @@ export type CreatorId = EntityId<'creator'>;
 export type EngagementId = EntityId<'engagement'>;
 export type ContractId = EntityId<'contract'>;
 export type InvoiceId = EntityId<'invoice'>;
+export type InvoiceBillingEntityId = EntityId<'invoice-billing-entity'>;
 export type PaymentListId = EntityId<'payment-list'>;
 export type PaymentBatchId = EntityId<'payment-batch'>;
 
@@ -281,6 +282,7 @@ const PROTOTYPE_ID_PREFIXES = {
   engagement: 'col',
   contract: 'con',
   invoice: 'inv',
+  'invoice-billing-entity': 'ibe',
   payout: 'payout',
   'payout-account': 'pac',
   batch: 'bat',

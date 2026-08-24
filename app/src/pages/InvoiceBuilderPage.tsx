@@ -46,6 +46,11 @@ import {
 import { createInvoiceBuilderPrototypeSeed } from '../invoice/invoiceBuilderPrototype';
 import { accountDisplayValue } from '../accountPresentation';
 import {
+  defaultInvoiceBillingEntity,
+  findInvoiceBillingEntityForSnapshot,
+  invoiceEntitySnapshot,
+} from '../invoice/invoiceBillingEntities';
+import {
   invoiceDocumentChanged,
 } from '../invoice/invoiceReviewWorkflow';
 import {
@@ -67,6 +72,7 @@ import type {
   CreatorProfile,
   DocumentPayoutSnapshot,
   GeneratedInvoiceRecord,
+  InvoiceBillingSettings,
   InvoiceContractMatchReview,
   InvoiceCurrency,
   InvoiceDocumentModel,
@@ -83,7 +89,7 @@ type InvoiceBuilderPageProps = {
   payouts: Payout[];
   projects: ProjectSummary[];
   contracts: ContractRecord[];
-  invoiceEntity: InvoiceEntity;
+  invoiceBillingSettings: InvoiceBillingSettings;
   generatedInvoices: GeneratedInvoiceRecord[];
   onGenerated?: (record: GeneratedInvoiceRecord) => void;
   editRecord?: GeneratedInvoiceRecord;
@@ -154,7 +160,7 @@ export function InvoiceBuilderPage({
   payouts,
   projects,
   contracts,
-  invoiceEntity,
+  invoiceBillingSettings,
   generatedInvoices,
   onGenerated,
   editRecord,
@@ -170,6 +176,12 @@ export function InvoiceBuilderPage({
 }: InvoiceBuilderPageProps) {
   const isEditing = Boolean(editRecord && editContext);
   const editSnapshot = editRecord?.snapshot;
+  const defaultBillingEntity = defaultInvoiceBillingEntity(invoiceBillingSettings)!;
+  const matchedBillingEntity = findInvoiceBillingEntityForSnapshot(
+    invoiceBillingSettings,
+    editSnapshot?.billTo,
+  );
+  const historicalBillingEntityValue = '__current_invoice_snapshot__';
   const initialInvoiceDate = editSnapshot?.invoiceDate ?? todayInputValue();
   const initialContext = projects
     .flatMap((project) => (project.creatorProfiles ?? []).map((reference) => ({ project, reference })))
@@ -210,8 +222,12 @@ export function InvoiceBuilderPage({
     editSnapshot?.invoiceNumber ?? nextInvoiceNumber(generatedInvoices, initialInvoiceDate)
   ));
   const [prototypePayoutId] = useState(() => createPrototypeId('payout'));
+  const [selectedBillingEntityId, setSelectedBillingEntityId] = useState<string>(
+    matchedBillingEntity?.id
+      ?? (editSnapshot ? historicalBillingEntityValue : defaultBillingEntity.id),
+  );
   const [billTo, setBillTo] = useState<InvoiceEntity>(
-    editSnapshot ? { ...editSnapshot.billTo } : { ...invoiceEntity },
+    editSnapshot ? { ...editSnapshot.billTo } : invoiceEntitySnapshot(defaultBillingEntity),
   );
   const [from, setFrom] = useState<CreatorInvoiceContact>(
     editSnapshot
@@ -297,6 +313,22 @@ export function InvoiceBuilderPage({
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
   }));
+  const billingEntityOptions = [
+    ...(!matchedBillingEntity && editSnapshot ? [{
+      value: historicalBillingEntityValue,
+      label: editSnapshot.billTo.name || '当前 Invoice 快照',
+      description: editSnapshot.billTo.address || '地址待补充',
+      badges: [{ label: '历史快照', tone: 'warning' as const }],
+    }] : []),
+    ...invoiceBillingSettings.entities.map((entity) => ({
+      value: entity.id,
+      label: entity.name,
+      description: entity.address,
+      badges: entity.id === invoiceBillingSettings.defaultEntityId
+        ? [{ label: '默认', tone: 'success' as const }]
+        : undefined,
+    })),
+  ];
 
   const model = useMemo<InvoiceDocumentModel>(() => ({
     invoiceNumber,
@@ -397,7 +429,8 @@ export function InvoiceBuilderPage({
     const demoDate = todayInputValue();
     setInvoiceNumber(nextInvoiceNumber(generatedInvoices, demoDate));
     setInvoiceDate(demoDate);
-    setBillTo({ ...invoiceEntity });
+    setSelectedBillingEntityId(defaultBillingEntity.id);
+    setBillTo(invoiceEntitySnapshot(defaultBillingEntity));
     setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
     setCurrency(prototypeSeed.currency);
     setItems(prototypeSeed.lineItems.map((item, index) => normalizeLineItem({
@@ -779,8 +812,33 @@ export function InvoiceBuilderPage({
             <header><span><Building2 size={19} /></span><div><h2>3. 主体与联系资料</h2><p>Bill To 来自账户中心，From 来自达人档案；这里的修改仅影响本次 Invoice。</p></div></header>
             <div className="invoice-form-subtitle">Bill to</div>
             <div className="invoice-form-grid">
-              <label className={`full-width ${errors.billToName ? 'has-error' : ''}`}><span>公司名称 *</span><input value={billTo.name} onChange={(event) => setBillTo((current) => ({ ...current, name: event.target.value }))} /><small>{errors.billToName}</small></label>
-              <label className={`full-width ${errors.billToAddress ? 'has-error' : ''}`}><span>公司地址 *</span><textarea value={billTo.address} onChange={(event) => setBillTo((current) => ({ ...current, address: event.target.value }))} /><small>{errors.billToAddress}</small></label>
+              <div className={`invoice-form-control full-width ${errors.billToName ? 'has-error' : ''}`}>
+                <span>公司名称 *</span>
+                <SelectField
+                  ariaLabel="选择 Bill To 开票主体"
+                  variant="form"
+                  menuStrategy="fixed"
+                  value={selectedBillingEntityId}
+                  options={billingEntityOptions}
+                  onChange={(value) => {
+                    setSelectedBillingEntityId(value);
+                    const entity = invoiceBillingSettings.entities.find((candidate) => candidate.id === value);
+                    if (entity) setBillTo(invoiceEntitySnapshot(entity));
+                    setGeneratedFiles(null);
+                    setErrors((current) => ({ ...current, billToName: '' }));
+                  }}
+                />
+                <small>{errors.billToName || (
+                  !matchedBillingEntity && editSnapshot
+                    ? '当前 Invoice 快照：来源主体已删除，保留原 Bill To 资料。'
+                    : ''
+                )}</small>
+              </div>
+              <label className={`full-width ${errors.billToAddress ? 'has-error' : ''}`}>
+                <span>公司地址 *</span>
+                <textarea value={billTo.address} onChange={(event) => setBillTo((current) => ({ ...current, address: event.target.value }))} />
+                <small>{errors.billToAddress || '从所选主体带入，可仅针对本张 Invoice 临时修改。'}</small>
+              </label>
             </div>
             <div className="invoice-form-subtitle">From</div>
             <div className="invoice-form-grid">

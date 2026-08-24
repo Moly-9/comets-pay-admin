@@ -66,6 +66,10 @@ import {
   type InvoiceContractMatchActor,
 } from '../invoice/invoiceContractMatching';
 import {
+  defaultInvoiceBillingEntity,
+  invoiceEntitySnapshot,
+} from '../invoice/invoiceBillingEntities';
+import {
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
   getPayoutAccountIdentifier,
@@ -95,9 +99,9 @@ import type {
   CreatorPayoutAccount,
   GeneratedInvoiceRecord,
   InvoiceBatchRow,
+  InvoiceBillingSettings,
   InvoiceCurrency,
   InvoiceDocumentModel,
-  InvoiceEntity,
   Payout,
 } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -108,7 +112,7 @@ type InvoiceBatchBuilderPageProps = {
   payouts: Payout[];
   projects: ProjectSummary[];
   contracts: ContractRecord[];
-  invoiceEntity: InvoiceEntity;
+  invoiceBillingSettings: InvoiceBillingSettings;
   generatedInvoices: GeneratedInvoiceRecord[];
   onGenerated: (records: GeneratedInvoiceRecord[]) => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -906,7 +910,7 @@ export function InvoiceBatchBuilderPage({
   payouts,
   projects,
   contracts,
-  invoiceEntity,
+  invoiceBillingSettings,
   generatedInvoices,
   onGenerated,
   onDirtyChange,
@@ -926,6 +930,9 @@ export function InvoiceBatchBuilderPage({
   const [importingCreators, setImportingCreators] = useState(false);
   const [forceDescriptionKey, setForceDescriptionKey] = useState<string | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(todayInputValue());
+  const [selectedBillingEntityId, setSelectedBillingEntityId] = useState(
+    () => defaultInvoiceBillingEntity(invoiceBillingSettings)!.id,
+  );
   const [currency, setCurrency] = useState<InvoiceCurrency>(INVOICE_BATCH_PROTOTYPE_CURRENCY);
   const [sharedDescriptions, setSharedDescriptions] = useState<InvoiceBatchLineItemSeed[]>(
     () => [createSharedDescription()],
@@ -976,19 +983,26 @@ export function InvoiceBatchBuilderPage({
     };
   }), [creators, draftEngagementIds, projects]);
   const selectedProject = invoiceProjects.find((project) => projectIdFor(project) === projectId) ?? null;
+  const selectedBillingEntity = invoiceBillingSettings.entities.find((entity) => (
+    entity.id === selectedBillingEntityId
+  )) ?? defaultInvoiceBillingEntity(invoiceBillingSettings)!;
+  const selectedInvoiceEntity = useMemo(
+    () => invoiceEntitySnapshot(selectedBillingEntity),
+    [selectedBillingEntity],
+  );
   const context = useMemo<InvoiceBatchContext | null>(() => selectedProject ? ({
     project: selectedProject,
     creators: prototypeCreators,
     payouts,
     contracts,
     generatedInvoices,
-    invoiceEntity,
+    invoiceEntity: selectedInvoiceEntity,
   }) : null, [
     contracts,
     generatedInvoices,
-    invoiceEntity,
     payouts,
     prototypeCreators,
+    selectedInvoiceEntity,
     selectedProject,
   ]);
   const projectReferences = selectedProject?.creatorProfiles ?? [];
@@ -1029,6 +1043,7 @@ export function InvoiceBatchBuilderPage({
     || selectedEngagementIds.length
     || sharedDescriptions.some((item) => item.description.trim())
     || currency !== INVOICE_BATCH_PROTOTYPE_CURRENCY
+    || selectedBillingEntityId !== invoiceBillingSettings.defaultEntityId
   );
 
   useEffect(() => {
@@ -1049,6 +1064,14 @@ export function InvoiceBatchBuilderPage({
     value: projectIdFor(project),
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${creators.length} 位达人可选 · 飞书合作项目`,
+  }));
+  const billingEntityOptions = invoiceBillingSettings.entities.map((entity) => ({
+    value: entity.id,
+    label: entity.name,
+    description: entity.address,
+    badges: entity.id === invoiceBillingSettings.defaultEntityId
+      ? [{ label: '默认', tone: 'success' as const }]
+      : undefined,
   }));
 
   const setProject = (value: string) => {
@@ -1081,7 +1104,7 @@ export function InvoiceBatchBuilderPage({
       payouts,
       contracts,
       generatedInvoices,
-      invoiceEntity,
+      invoiceEntity: selectedInvoiceEntity,
     };
     const demoRows = prototypeSeed.rows.map((seed) => {
       const initial = createInvoiceBatchRow({
@@ -1211,6 +1234,19 @@ export function InvoiceBatchBuilderPage({
       row.status === 'GENERATED'
         ? row
         : updateAndValidateInvoiceBatchRow(row, patch, context)
+    )));
+  };
+
+  const changeBillingEntity = (value: string) => {
+    const entity = invoiceBillingSettings.entities.find((candidate) => candidate.id === value);
+    if (!entity) return;
+    setSelectedBillingEntityId(entity.id);
+    if (!context) return;
+    const nextContext = { ...context, invoiceEntity: invoiceEntitySnapshot(entity) };
+    setRows((current) => current.map((row) => (
+      row.status === 'GENERATED'
+        ? row
+        : updateAndValidateInvoiceBatchRow(row, {}, nextContext)
     )));
   };
 
@@ -1640,6 +1676,21 @@ export function InvoiceBatchBuilderPage({
             </NoticeBanner>
           </div>
           <div className="invoice-form-grid invoice-batch-common-grid">
+            <div className="invoice-form-control">
+              <span>Bill to *</span>
+              <SelectField
+                ariaLabel="批量 Invoice Bill To 开票主体"
+                variant="form"
+                menuStrategy="fixed"
+                value={selectedBillingEntityId}
+                options={billingEntityOptions}
+                disabled={generating || hasGeneratedRows}
+                onChange={changeBillingEntity}
+              />
+              <p className="invoice-batch-currency-note">
+                {hasGeneratedRows ? '已有生成结果，Bill to 已锁定' : '整批 Invoice 使用同一开票主体'}
+              </p>
+            </div>
             <label>
               <span>Invoice 日期 *</span>
               <input

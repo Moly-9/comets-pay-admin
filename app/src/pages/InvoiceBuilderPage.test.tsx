@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { INITIAL_CONTRACTS } from '../contracts';
-import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS } from '../data';
+import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import {
   INVOICE_EDIT_REQUEST_INVOICES,
   PROJECT_DEMO_CONTRACTS,
@@ -22,7 +22,7 @@ describe('InvoiceBuilderPage create mode', () => {
         payouts={[...INITIAL_PAYOUTS, ...PROJECT_DEMO_PAYOUTS]}
         projects={INITIAL_PROJECTS}
         contracts={[...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS]}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={[]}
         onCancel={() => undefined}
         onOpenInvoiceManagement={() => undefined}
@@ -67,7 +67,7 @@ describe('InvoiceBuilderPage edit mode', () => {
         payouts={PROJECT_DEMO_PAYOUTS}
         projects={INITIAL_PROJECTS}
         contracts={PROJECT_DEMO_CONTRACTS}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={PROJECT_DEMO_INVOICES}
         editRecord={record}
         editContext="CREATOR_FEEDBACK"
@@ -100,7 +100,7 @@ describe('InvoiceBuilderPage edit mode', () => {
         payouts={[...INITIAL_PAYOUTS, ...PROJECT_DEMO_PAYOUTS]}
         projects={INITIAL_PROJECTS}
         contracts={[...INITIAL_CONTRACTS, ...PROJECT_DEMO_CONTRACTS]}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={[record, ...PROJECT_DEMO_INVOICES]}
         editRecord={record}
         editContext="MEDIA_RECHECK"
@@ -116,6 +116,40 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).not.toContain('pay-013');
     expect(html).toContain('value="2440"');
     expect(html).toContain('保存修改并重新签署');
+  });
+
+  it('keeps a deleted Bill To source visible as the current Invoice snapshot', () => {
+    const sourceRecord = PROJECT_DEMO_INVOICES[0]!;
+    const record = {
+      ...sourceRecord,
+      snapshot: {
+        ...sourceRecord.snapshot,
+        billTo: {
+          billingEntityId: 'ibe_deleted' as typeof INITIAL_INVOICE_BILLING_SETTINGS.defaultEntityId,
+          name: 'Archived Billing Entity Ltd.',
+          address: 'Historical billing address',
+        },
+      },
+    };
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="CREATOR_FEEDBACK"
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Archived Billing Entity Ltd.');
+    expect(html).toContain('Historical billing address');
+    expect(html).toContain('当前 Invoice 快照：来源主体已删除，保留原 Bill To 资料。');
   });
 
   it('shows stable payout-account selection for an Invoice content payment failure', () => {
@@ -149,7 +183,7 @@ describe('InvoiceBuilderPage edit mode', () => {
         payouts={PROJECT_DEMO_PAYOUTS}
         projects={INITIAL_PROJECTS}
         contracts={PROJECT_DEMO_CONTRACTS}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={PROJECT_DEMO_INVOICES}
         editRecord={record}
         editContext="PAYMENT_FAILURE_CONTENT"
@@ -174,7 +208,7 @@ describe('InvoiceBuilderPage edit mode', () => {
         payouts={PROJECT_DEMO_PAYOUTS}
         projects={INITIAL_PROJECTS}
         contracts={PROJECT_DEMO_CONTRACTS}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={PROJECT_DEMO_INVOICES}
         editRecord={record}
         editContext="PROJECT_RESOURCE"
@@ -201,7 +235,7 @@ describe('InvoiceBuilderPage edit mode', () => {
         payouts={PROJECT_DEMO_PAYOUTS}
         projects={INITIAL_PROJECTS}
         contracts={PROJECT_DEMO_CONTRACTS}
-        invoiceEntity={INITIAL_INVOICE_ENTITY}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         generatedInvoices={PROJECT_DEMO_INVOICES}
         editRecord={record}
         editContext="PROJECT_RESOURCE"
