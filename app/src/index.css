@@ -20107,24 +20107,43 @@ button:disabled {
   letter-spacing: -0.025em;
 }
 
-.contract-toolbar .page-search {
+.contract-toolbar-search-field {
   width: auto;
   max-width: 430px;
   flex: 1 1 320px;
 }
 
+.contract-toolbar .page-search {
+  width: 100%;
+}
+
 .contract-toolbar {
+  align-items: flex-end;
   flex-wrap: nowrap;
   justify-content: flex-start;
+}
+
+.contract-toolbar-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.contract-toolbar-field-label {
+  color: #55505c;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
 .contract-toolbar-filters {
   display: flex;
   width: 372px;
-  height: 39px;
+  height: auto;
   min-width: 0;
   flex: 0 0 372px;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
 }
 
@@ -20134,39 +20153,46 @@ button:disabled {
   flex: 1 1 auto;
 }
 
-.contract-project-filter-input {
+.contract-project-filter-trigger {
+  display: flex;
   width: 100%;
-  gap: 7px;
+  height: 39px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8cce5;
+  border-radius: 9px;
+  outline: 0;
+  background: #fff;
   border-color: #d8cce5;
-  padding: 0 6px 0 11px;
+  padding: 0 10px 0 12px;
+  color: #4b4552;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
   transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 
-.contract-project-filter-input > svg {
-  flex: none;
-  color: #85788f;
-}
-
-.contract-project-filter-input input {
+.contract-project-filter-trigger > span {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #3f3a48;
-  font-family: inherit;
-  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.contract-project-filter-input input::placeholder {
-  color: #9ba0aa;
+.contract-project-filter-trigger > svg {
+  flex: none;
+  color: #85788f;
+  transition: transform 160ms ease;
 }
 
-.contract-project-filter.is-open .contract-project-filter-input,
-.contract-project-filter-input:focus-within,
+.contract-project-filter-trigger:hover {
+  border-color: #c8b9d4;
+  background: #fdfbfe;
+}
+
+.contract-project-filter.is-open .contract-project-filter-trigger,
+.contract-project-filter-trigger:focus-visible,
 .contract-validity-select.custom-select-open .custom-select-trigger,
 .contract-validity-select .custom-select-trigger:focus-visible {
   border-color: #b7a3c9;
@@ -20174,37 +20200,16 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(183, 163, 201, 0.18);
 }
 
-.contract-project-filter-toggle,
-.contract-project-filter-clear {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  outline: 0;
-  background: transparent;
-  color: #817489;
-}
-
-.contract-project-filter-toggle:hover,
-.contract-project-filter-clear:hover,
-.contract-project-filter-toggle:focus-visible,
-.contract-project-filter-clear:focus-visible {
-  background: #f3edf8;
-  color: #694e77;
-}
-
-.contract-project-filter.is-open .contract-project-filter-toggle svg {
+.contract-project-filter.is-open .contract-project-filter-trigger > svg {
   transform: rotate(180deg);
 }
 
-.contract-project-filter-toggle svg {
-  transition: transform 160ms ease;
+.contract-validity-select.custom-select-toolbar {
+  width: 178px;
+  flex: 0 0 178px;
 }
 
-.contract-validity-select.custom-select-toolbar {
+.contract-validity-filter-field {
   width: 178px;
   flex: 0 0 178px;
 }
@@ -20213,11 +20218,120 @@ button:disabled {
   border-color: #d8cce5;
 }
 
-.contract-project-filter-menu .custom-select-option-label,
-.contract-project-filter-menu .custom-select-option-description {
+.contract-project-filter-menu {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border-color: #e2d9e7;
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 16px 34px rgba(54, 42, 62, 0.15), 0 3px 9px rgba(54, 42, 62, 0.08);
+}
+
+.contract-project-filter-search {
+  display: flex;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dcdfe7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 10px;
+  color: #9196a1;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.contract-project-filter-search:focus-within {
+  border-color: #b7a3c9;
+  box-shadow: 0 0 0 3px rgba(183, 163, 201, 0.15);
+}
+
+.contract-project-filter-search > svg {
+  flex: none;
+}
+
+.contract-project-filter-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #403a46;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.contract-project-filter-search input::placeholder {
+  color: #9a9faa;
+}
+
+.contract-project-filter-options {
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 7px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.contract-project-filter-menu .custom-select-option {
+  min-height: 52px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+}
+
+.contract-project-filter-menu .custom-select-option-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.contract-project-filter-radio {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #c9cdd6;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.contract-project-filter-menu .custom-select-option-selected .contract-project-filter-radio {
+  border-color: #a982bb;
+  background: #f7f1fa;
+}
+
+.contract-project-filter-menu .custom-select-option-selected .contract-project-filter-radio::after {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #9b70ad;
+  content: "";
+}
+
+.contract-project-filter-option-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: #8b909b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.contract-project-filter-option-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-project-filter-option-meta > span + span::before {
+  margin-right: 6px;
+  color: #c2c5cc;
+  content: "·";
 }
 
 .contract-project-filter-menu .custom-select-option-selected,
@@ -20232,12 +20346,6 @@ button:disabled {
 
 .contract-project-filter-option-active:not(.custom-select-option-selected) {
   background: #faf7fc;
-}
-
-.contract-project-filter-count {
-  padding: 5px 9px 7px;
-  color: #8a909c;
-  font-size: 10px;
 }
 
 .contract-project-filter-empty {
@@ -22087,7 +22195,7 @@ button:disabled {
     flex-wrap: wrap;
   }
 
-  .contract-toolbar .page-search {
+  .contract-toolbar-search-field {
     max-width: none;
     flex: 1 1 100%;
     width: 100%;
@@ -22095,7 +22203,7 @@ button:disabled {
 
   .contract-toolbar-filters {
     width: 100%;
-    height: 39px;
+    height: auto;
     flex: 1 1 100%;
   }
 
@@ -22146,12 +22254,13 @@ button:disabled {
   }
 
   .contract-toolbar .page-search,
-  .contract-project-filter-input,
+  .contract-project-filter-trigger,
   .contract-validity-select .custom-select-trigger {
     height: 44px;
   }
 
   .contract-project-filter,
+  .contract-validity-filter-field,
   .contract-validity-select.custom-select-toolbar {
     width: 100%;
     min-width: 0;

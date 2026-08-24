@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, Check, ChevronDown, Download, FilePlus2, FolderKanban, Search, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronDown, Download, FilePlus2, Search, Trash2, Upload } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -73,6 +73,7 @@ type ContractProjectFilterOption = {
   label: string;
   description?: string;
   searchText?: string;
+  contractCount?: number;
 };
 
 function ContractProjectFilter({
@@ -86,7 +87,8 @@ function ContractProjectFilter({
 }) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -114,7 +116,7 @@ function ContractProjectFilter({
       Math.max(rect.left, margin),
       Math.max(margin, window.innerWidth - margin - width),
     );
-    const estimatedHeight = Math.min(320, 44 + options.length * 49);
+    const estimatedHeight = Math.min(360, 64 + options.length * 54);
     const roomBelow = window.innerHeight - rect.bottom - margin - gap;
     const roomAbove = rect.top - margin - gap;
     const placeAbove = roomBelow < estimatedHeight && roomAbove > roomBelow;
@@ -122,7 +124,7 @@ function ContractProjectFilter({
     setMenuStyle({
       bottom: placeAbove ? window.innerHeight - rect.top + gap : undefined,
       left,
-      maxHeight: Math.max(96, Math.min(320, availableHeight)),
+      maxHeight: Math.max(148, Math.min(360, availableHeight)),
       top: placeAbove ? undefined : rect.bottom + gap,
       width,
     });
@@ -134,6 +136,7 @@ function ContractProjectFilter({
     setActiveIndex(Math.max(options.findIndex((option) => option.value === value), 0));
     updateMenuStyle();
     setOpen(true);
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
   };
 
   const closeMenu = () => {
@@ -144,7 +147,7 @@ function ContractProjectFilter({
   const choose = (option: ContractProjectFilterOption) => {
     onChange(option.value);
     closeMenu();
-    window.requestAnimationFrame(() => inputRef.current?.focus());
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
   useEffect(() => {
@@ -167,127 +170,121 @@ function ContractProjectFilter({
     setActiveIndex(0);
   }, [query]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      if (!open) {
-        openMenu();
-        return;
-      }
       setActiveIndex((index) => {
-        const lastIndex = Math.max(visibleOptions.length - 1, 0);
-        return event.key === 'ArrowDown' ? Math.min(index + 1, lastIndex) : Math.max(index - 1, 0);
+        if (!visibleOptions.length) return 0;
+        return event.key === 'ArrowDown'
+          ? (index + 1) % visibleOptions.length
+          : (index - 1 + visibleOptions.length) % visibleOptions.length;
       });
-    } else if (event.key === 'Enter' && open) {
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      setActiveIndex(event.key === 'Home' ? 0 : Math.max(visibleOptions.length - 1, 0));
+    } else if (event.key === 'Enter') {
       event.preventDefault();
       const option = visibleOptions[activeIndex];
       if (option) choose(option);
-    } else if (event.key === 'Escape' && open) {
+    } else if (event.key === 'Escape') {
       event.preventDefault();
       closeMenu();
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
   };
 
   const menu = open ? (
     <div
       ref={menuRef}
-      id={listboxId}
       className="custom-select-menu custom-select-menu-toolbar custom-select-menu-fixed contract-project-filter-menu"
-      role="listbox"
-      aria-label="关联项目选项"
       style={menuStyle}
     >
-      <div className="contract-project-filter-count">{visibleOptions.length} 个项目选项</div>
-      {visibleOptions.map((option, index) => {
-        const optionSelected = option.value === value;
-        return (
-          <button
-            id={`${listboxId}-option-${index}`}
-            className={`custom-select-option${optionSelected ? ' custom-select-option-selected' : ''}${activeIndex === index ? ' contract-project-filter-option-active' : ''}`}
-            type="button"
-            role="option"
-            aria-selected={optionSelected}
-            tabIndex={-1}
-            key={option.value || 'all-projects'}
-            onPointerDown={(event) => event.preventDefault()}
-            onMouseEnter={() => setActiveIndex(index)}
-            onClick={() => choose(option)}
-          >
-            <span className="custom-select-option-copy">
-              <span className="custom-select-option-label">{option.label}</span>
-              {option.description ? <span className="custom-select-option-description">{option.description}</span> : null}
-            </span>
-            <span className="custom-select-option-check" aria-hidden="true">
-              {optionSelected ? <Check size={15} strokeWidth={2.6} /> : null}
-            </span>
-          </button>
-        );
-      })}
-      {!visibleOptions.length ? <div className="contract-project-filter-empty" role="status">没有匹配的关联项目</div> : null}
+      <label className="contract-project-filter-search">
+        <Search size={15} aria-hidden="true" />
+        <input
+          ref={searchInputRef}
+          type="search"
+          role="searchbox"
+          aria-label="搜索关联项目"
+          aria-controls={listboxId}
+          aria-activedescendant={visibleOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
+          autoComplete="off"
+          placeholder="搜索关联项目"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={handleSearchKeyDown}
+        />
+      </label>
+      <div id={listboxId} className="contract-project-filter-options" role="listbox" aria-label="关联项目选项">
+        {visibleOptions.map((option, index) => {
+          const optionSelected = option.value === value;
+          return (
+            <button
+              id={`${listboxId}-option-${index}`}
+              className={`custom-select-option${optionSelected ? ' custom-select-option-selected' : ''}${activeIndex === index ? ' contract-project-filter-option-active' : ''}`}
+              type="button"
+              role="option"
+              aria-selected={optionSelected}
+              tabIndex={-1}
+              key={option.value || 'all-projects'}
+              onPointerDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => choose(option)}
+            >
+              <span className="contract-project-filter-radio" aria-hidden="true" />
+              <span className="custom-select-option-copy">
+                <span className="custom-select-option-label" title={option.label}>{option.label}</span>
+                <span className="contract-project-filter-option-meta">
+                  {option.description ? <span>{option.description}</span> : null}
+                  {typeof option.contractCount === 'number' ? <span>{option.contractCount} 份合同</span> : null}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+        {!visibleOptions.length ? <div className="contract-project-filter-empty" role="status">没有匹配的关联项目</div> : null}
+      </div>
     </div>
   ) : null;
 
   return (
     <div
       ref={rootRef}
-      className={`contract-project-filter${open ? ' is-open' : ''}`}
+      className={`contract-project-filter contract-toolbar-field${open ? ' is-open' : ''}`}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget as Node | null;
         if (event.currentTarget.contains(nextTarget) || menuRef.current?.contains(nextTarget)) return;
         closeMenu();
       }}
     >
-      <div className="search-control contract-project-filter-input">
-        <FolderKanban size={16} aria-hidden="true" />
-        <input
-          ref={inputRef}
-          role="combobox"
-          aria-label="筛选关联项目"
-          aria-autocomplete="list"
-          aria-controls={listboxId}
-          aria-expanded={open}
-          aria-activedescendant={open && visibleOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
-          autoComplete="off"
-          placeholder="输入项目名称或编号"
-          value={open ? query : selected?.label ?? ''}
-          onFocus={openMenu}
-          onChange={(event) => {
-            setQuery(event.target.value);
+      <span className="contract-toolbar-field-label">关联项目</span>
+      <button
+        ref={triggerRef}
+        className="contract-project-filter-trigger"
+        type="button"
+        role="combobox"
+        aria-label="筛选关联项目"
+        aria-haspopup="listbox"
+        aria-controls={listboxId}
+        aria-expanded={open}
+        title={selected?.label}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
             if (!open) openMenu();
-          }}
-          onKeyDown={handleKeyDown}
-        />
-        {value ? (
-          <button
-            className="contract-project-filter-clear"
-            type="button"
-            aria-label="清除关联项目筛选"
-            title="清除关联项目筛选"
-            onClick={() => {
-              onChange('');
-              closeMenu();
-              window.requestAnimationFrame(() => inputRef.current?.focus());
-            }}
-          >
-            <X size={14} aria-hidden="true" />
-          </button>
-        ) : null}
-        <button
-          className="contract-project-filter-toggle"
-          type="button"
-          aria-label={open ? '收起关联项目选项' : '展开关联项目选项'}
-          title={open ? '收起关联项目选项' : '展开关联项目选项'}
-          onClick={() => {
-            if (open) closeMenu();
-            else {
-              openMenu();
-              window.requestAnimationFrame(() => inputRef.current?.focus());
-            }
-          }}
-        >
-          <ChevronDown size={16} aria-hidden="true" />
-        </button>
-      </div>
+          } else if (event.key === 'Escape' && open) {
+            event.preventDefault();
+            closeMenu();
+          }
+        }}
+        onClick={() => {
+          if (open) closeMenu();
+          else openMenu();
+        }}
+      >
+        <span>{selected?.label ?? '全部关联项目'}</span>
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
       {menu && typeof document !== 'undefined' ? createPortal(menu, document.body) : null}
     </div>
   );
@@ -400,16 +397,27 @@ export function ContractsPage({
     contracts.filter((contract) => !contract.isTemplate).forEach((contract) => {
       const display = projectDisplayFor(contract, displayProjects);
       const value = projectFilterKeyFor(contract, displayProjects);
-      if (optionsByValue.has(value)) return;
+      const existing = optionsByValue.get(value);
+      if (existing) {
+        existing.contractCount = (existing.contractCount ?? 0) + 1;
+        return;
+      }
       optionsByValue.set(value, {
         value,
         label: display.name,
         description: display.code || contract.brand || undefined,
         searchText: `${display.name} ${display.code} ${contract.brand}`,
+        contractCount: 1,
       });
     });
     return [
-      { value: '', label: '全部关联项目', description: '不限制关联项目', searchText: '全部' },
+      {
+        value: '',
+        label: '全部关联项目',
+        description: '不限制关联项目',
+        searchText: '全部',
+        contractCount: contracts.filter((contract) => !contract.isTemplate).length,
+      },
       ...[...optionsByValue.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
     ];
   }, [contracts, displayProjects]);
@@ -642,14 +650,17 @@ export function ContractsPage({
           ) : null}
         </div>
         <div className="content-toolbar contract-toolbar">
-          <label className="search-control page-search">
-            <Search size={16} />
-            <input
-              aria-label="搜索合同、项目或Publisher"
-              placeholder="搜索合同、项目、品牌或Publisher"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+          <label className="contract-toolbar-field contract-toolbar-search-field">
+            <span className="contract-toolbar-field-label">关键词</span>
+            <span className="search-control page-search">
+              <Search size={16} />
+              <input
+                aria-label="搜索合同、项目或Publisher"
+                placeholder="搜索合同、项目、品牌或Publisher"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </span>
           </label>
           {!isTemplateTab ? (
             <div className="contract-toolbar-filters">
@@ -658,18 +669,23 @@ export function ContractsPage({
                 options={projectFilterOptions}
                 onChange={setProjectFilter}
               />
-              <SelectField
-                ariaLabel="筛选合同有效期"
-                className="contract-validity-select"
-                menuClassName="contract-validity-select-menu"
-                menuStrategy="fixed"
-                menuWidth={196}
-                options={CONTRACT_VALIDITY_FILTERS}
-                selectedLabel={`有效期：${CONTRACT_VALIDITY_FILTERS.find((item) => item.value === validityFilter)?.label ?? '全部'}`}
-                value={validityFilter}
-                leadingIcon={<CalendarDays size={16} />}
-                onChange={setValidityFilter}
-              />
+              <div className="contract-toolbar-field contract-validity-filter-field">
+                <span className="contract-toolbar-field-label">有效期</span>
+                <SelectField
+                  ariaLabel="筛选合同有效期"
+                  className="contract-validity-select"
+                  menuClassName="contract-validity-select-menu"
+                  menuStrategy="fixed"
+                  menuWidth={196}
+                  options={CONTRACT_VALIDITY_FILTERS}
+                  selectedLabel={validityFilter === 'all'
+                    ? '全部有效期'
+                    : CONTRACT_VALIDITY_FILTERS.find((item) => item.value === validityFilter)?.label ?? '全部有效期'}
+                  value={validityFilter}
+                  leadingIcon={<CalendarDays size={16} />}
+                  onChange={setValidityFilter}
+                />
+              </div>
             </div>
           ) : null}
         </div>
