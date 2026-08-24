@@ -217,6 +217,19 @@ describe('InvoicePage list columns', () => {
     }, -1);
   });
 
+  it('renders four lifecycle overview cards above the Invoice list', () => {
+    const html = renderInvoicePage(true);
+
+    expect(html).toContain('aria-label="Invoice 概览"');
+    expect(html.match(/invoice-overview-card invoice-overview-card-/g)).toHaveLength(4);
+    expect(html).toContain('Invoice 总数');
+    expect(html).toContain('待达人处理');
+    expect(html).toContain('待内部处理');
+    expect(html).toContain('已通过 Invoice');
+    expect(html).toContain('1 内部 · 0 外部');
+    expect(html).toContain('1 待签署 · 0 待采集');
+  });
+
   it('shows common filters on every tab and limits Invoice type to review result tabs', () => {
     const signatureHtml = renderInvoicePage(true);
     expect(signatureHtml).toContain('aria-label="Invoice 列表筛选"');

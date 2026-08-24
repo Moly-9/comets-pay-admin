@@ -3133,6 +3133,15 @@ export function InvoicePage({
   internalRows.forEach((row) => {
     if (row.source.kind === 'payout') groupedRows[managementViewFor(row.source.payout).tab].push(row);
   });
+  const invoiceOverview = {
+    total: internalRows.length + externalRows.length,
+    internal: internalRows.length,
+    external: externalRows.length,
+    creatorPending: groupedRows.signature.length + groupedRows.upload.length,
+    reviewPending: groupedRows.review.length + groupedRows.returned.length,
+    approved: groupedRows.approved.length,
+    readyForRequest: groupedRows.approved.filter((row) => row.status === '待发起请款').length,
+  };
   const currentTabRows = groupedRows[tab];
   const projectCounts = new Map<string, { label: string; count: number }>();
   currentTabRows.forEach((row) => {
@@ -3359,6 +3368,28 @@ export function InvoicePage({
           </>
         ) : undefined}
       />
+      <section className="invoice-overview-strip" aria-label="Invoice 概览">
+        <article className="invoice-overview-card invoice-overview-card-peach">
+          <span>Invoice 总数</span>
+          <strong>{invoiceOverview.total}</strong>
+          <small>{invoiceOverview.internal} 内部 · {invoiceOverview.external} 外部</small>
+        </article>
+        <article className="invoice-overview-card invoice-overview-card-mint">
+          <span>待达人处理</span>
+          <strong>{invoiceOverview.creatorPending}</strong>
+          <small>{groupedRows.signature.length} 待签署 · {groupedRows.upload.length} 待采集</small>
+        </article>
+        <article className="invoice-overview-card invoice-overview-card-amber">
+          <span>待内部处理</span>
+          <strong>{invoiceOverview.reviewPending}</strong>
+          <small>{groupedRows.review.length} 待审核 · {groupedRows.returned.length} 已退回</small>
+        </article>
+        <article className="invoice-overview-card invoice-overview-card-lilac">
+          <span>已通过 Invoice</span>
+          <strong>{invoiceOverview.approved}</strong>
+          <small>{invoiceOverview.readyForRequest} 待发起请款 · {invoiceOverview.approved - invoiceOverview.readyForRequest} 已进入后续流程</small>
+        </article>
+      </section>
       <section className="content-card">
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedRows.signature.length}</span></button>
