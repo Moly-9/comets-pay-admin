@@ -90,17 +90,25 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<th>状态</th>');
   });
 
-  it('keeps the extra request fields in both project detail entries', () => {
+  it('keeps editable remark screenshots but simplifies the my-project detail fields', () => {
     const myProjectsSource = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+    const myProjectInfoStart = myProjectsSource.indexOf('<dl className="project-info-grid">');
+    const myProjectInfo = myProjectsSource.slice(
+      myProjectInfoStart,
+      myProjectsSource.indexOf('</dl>', myProjectInfoStart),
+    );
 
-    expect(myProjectsSource).toContain('<dt>成本类型</dt>');
-    expect(myProjectsSource).toContain('<dt>手续费承担方</dt>');
-    expect(myProjectsSource).toContain('<dt>备注</dt>');
-    expect(myProjectsSource).toContain('<dt>备注附件</dt>');
+    expect(myProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(myProjectInfo).not.toContain('<dt>手续费承担方</dt>');
+    expect(myProjectInfo).toContain('<dt>备注</dt>');
+    expect(myProjectInfo).not.toContain('<dt>备注附件</dt>');
     expect(myProjectsSource).not.toContain('aria-label="上传备注附件"');
     expect(myProjectsSource).toContain('onPaste={handleRemarkPaste}');
     expect(myProjectsSource).toContain('<RequestRemarkAttachments');
+    expect(myProjectsSource).toContain('className="metric-card metric-blue"');
+    expect(myProjectsSource).toContain('审批处理请前往“合作项目”工作台');
+    expect(myProjectsSource).not.toContain('审批处理请前往“请款项目”工作台');
     expect(appSource).not.toContain('!request.feeBearer');
     expect(appSource).not.toContain('feeBearer: request.feeBearer');
   });

@@ -1357,7 +1357,7 @@ export function MediaPaymentProjectsPage({
           actions={<>{requestContentEditable ? <Button variant="secondary" icon={<Pencil size={16} />} onClick={() => openEditForm(selectedRequest)}>{isReturned ? '修改请款内容' : '编辑项目'}</Button> : null}{isReturned && !hasPaymentFailureRecovery ? <Button variant="ghost" icon={<ArrowDown size={16} />} onClick={() => scrollToSection('media-request-submit-section')}>查看重新提交要求</Button> : null}{canCancelRequest(selectedRequest) ? <Button variant="ghost" icon={<X size={16} />} onClick={() => { setCancelTarget(selectedRequest); setCancelReason(''); }}>取消请款</Button> : null}<span className="project-detail-status" data-tone={hasPaymentFailureRecovery ? 'failure' : undefined}><i />{selectedMyProjectStatus}</span></>}
         />
         <div className="metrics-grid project-detail-metrics">
-          <article className="metric-card"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
+          <article className="metric-card metric-blue"><span>请款金额</span><strong>{selectedRequest.amount}</strong><small>按关联 Invoice 汇总</small></article>
           <article className="metric-card metric-lilac"><span>合作达人</span><strong>{links.length || selectedRequest.invoices} 位</strong><small>{selectedRequest.contracts} 份合同 · {selectedRequest.invoices} 份 Invoice</small></article>
           <article className="metric-card metric-peach"><span>当前状态</span><strong>{selectedMyProjectStatus}</strong>{hasPaymentFailureRecovery ? null : <small>{selectedRequest.approval ? '已进入审批流' : '尚未提交审批'}</small>}</article>
         </div>
@@ -1449,17 +1449,10 @@ export function MediaPaymentProjectsPage({
             <div><dt>付款渠道</dt><dd>{selectedRequest.paymentChannel ? paymentProviderDisplayName(selectedRequest.paymentChannel) : '待补充'}</dd></div>
             <div><dt>预计付款时间</dt><dd>{selectedRequest.expectedPaymentDate || '待补充'}</dd></div>
             <div><dt>成本类型</dt><dd>{selectedRequest.costType || '待补充'}</dd></div>
-            <div><dt>手续费承担方</dt><dd>按合同约定；未约定时在付款清单填写</dd></div>
             <div><dt>项目媒介</dt><dd>{selectedRequest.media}</dd></div>
             <div><dt>创建时间</dt><dd>{formatCreatedAt(selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt)}</dd></div>
             <div className="project-info-wide"><dt>付款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
             <div className="project-info-wide"><dt>备注</dt><dd>{selectedRequest.remark || '未填写'}</dd></div>
-            <div className="project-info-wide">
-              <dt>备注附件</dt>
-              <dd>{selectedRequest.remarkAttachments?.length
-                ? <RequestRemarkAttachments attachments={selectedRequest.remarkAttachments} />
-                : '无附件'}</dd>
-            </div>
           </dl>
         </section>
         <section id="media-request-resource-section" className="project-detail-card project-workflow-card">
@@ -1597,11 +1590,11 @@ export function MediaPaymentProjectsPage({
           ) : <div className="project-detail-empty"><Users size={20} /><span><strong>尚未添加达人</strong><small>当前项目为只读状态</small></span></div>}
         </section>
         {!hasPaymentFailureRecovery ? <section id="media-request-submit-section" className="project-detail-card media-request-submit-card">
-          <header className="project-detail-card-header"><div><h2>{editable ? (isReturned ? '重新提交申请' : '提交申请') : '申请状态'}</h2><p>{editable ? (isReturned ? '请先按退回意见完成请款内容和付款清单修正；重新提交后将回到原退回审批节点。' : '提交后进入“请款项目”审批工作台，草稿不会出现在审批列表。') : '该项目已进入“请款项目”审批工作台，当前页面保留关联资料快照。'}</p></div></header>
+          <header className="project-detail-card-header"><div><h2>{editable ? (isReturned ? '重新提交申请' : '提交申请') : '申请状态'}</h2><p>{editable ? (isReturned ? '请先按退回意见完成请款内容和付款清单修正；重新提交后将回到原退回审批节点。' : '提交后进入“合作项目”审批工作台，草稿不会出现在审批列表。') : '该项目已进入“合作项目”审批工作台，当前页面保留关联资料快照。'}</p></div></header>
           {editable ? submissionIssues.length ? (
             <div className="media-request-issue-list"><AlertTriangle size={18} /><div><strong>暂不能提交</strong>{submissionIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div>
           ) : <NoticeBanner>资料与付款账户快照校验通过，可以提交审批。</NoticeBanner> : (
-            <NoticeBanner>申请当前状态：{selectedMyProjectStatus}。审批处理请前往“请款项目”工作台。</NoticeBanner>
+            <NoticeBanner>申请当前状态：{selectedMyProjectStatus}。审批处理请前往“合作项目”工作台。</NoticeBanner>
           )}
           {editable ? <div className="media-request-submit-actions">
             <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>

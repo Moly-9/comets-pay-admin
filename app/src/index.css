@@ -11683,6 +11683,20 @@ button:disabled {
   box-shadow: var(--shadow-soft);
 }
 
+.metric-blue {
+  border-color: #c9dff3;
+  background: linear-gradient(125deg, #eef7ff, #edf9f7);
+}
+
+.metric-blue strong {
+  color: #183f68;
+}
+
+.metric-blue span,
+.metric-blue small {
+  color: #526f8b;
+}
+
 .metric-peach {
   background: linear-gradient(125deg, #fff5e6, #fff1ed);
 }
