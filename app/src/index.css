@@ -3657,6 +3657,7 @@ input[type="checkbox"]:disabled {
 .request-resource-candidate:last-child { border-bottom: 0; }
 .request-resource-flat-row:hover { background: #fafbfc; }
 
+.request-resource-contract-card-list,
 .request-resource-invoice-card-list {
   display: grid;
   overflow: visible;
@@ -3666,6 +3667,7 @@ input[type="checkbox"]:disabled {
   background: transparent;
 }
 
+.request-resource-contract-card-list .request-resource-contract-row,
 .request-resource-invoice-card-list .request-resource-invoice-row {
   overflow: hidden;
   border: 1px solid #e5e9f0;
@@ -3674,9 +3676,19 @@ input[type="checkbox"]:disabled {
   box-shadow: 0 4px 14px rgba(35, 42, 55, .04);
 }
 
+.request-resource-contract-card-list .request-resource-contract-row:hover,
 .request-resource-invoice-card-list .request-resource-invoice-row:hover {
   border-color: #d7dce5;
   box-shadow: 0 7px 20px rgba(35, 42, 55, .07);
+}
+
+.request-contract-record-icon {
+  width: 40px;
+  height: 40px;
+  border-color: #dcd2f1;
+  background: linear-gradient(145deg, #f6f3fc, #ece6f8);
+  color: #62498f;
+  box-shadow: 0 5px 14px rgba(92, 67, 140, .12);
 }
 
 .request-resource-flat-row > div:not(.project-contract-record-actions) { min-width: 0; }
@@ -3697,6 +3709,23 @@ input[type="checkbox"]:disabled {
   color: #222936;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.request-resource-flat-row .request-contract-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.request-resource-contract-row .project-record-status.is-success {
+  color: #287a50;
+}
+
+.request-resource-contract-row .project-record-status.is-success i {
+  background: currentColor;
 }
 
 .request-resource-select {

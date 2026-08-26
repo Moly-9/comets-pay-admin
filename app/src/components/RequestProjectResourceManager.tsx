@@ -3,6 +3,7 @@ import {
   CircleAlert,
   Download,
   Eraser,
+  FileSignature,
   FileText,
   Link2,
   Mail,
@@ -695,11 +696,13 @@ export function RequestProjectResourceManager({
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
             {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
-            <div className="request-resource-flat-list">
+            <div className="request-resource-flat-list request-resource-contract-card-list">
               {linkedContracts.map((contract) => {
                 const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
                 const contractId = contractStableId(contract);
-                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.name || '合同名称待补充'}</strong><small>{contract.id}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同金额</span><strong>{formatContractMoney(contract)}</strong></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton> : null}</div></article>;
+                const readiness = getContractReadiness(contract);
+                const contractName = contract.name || '合同名称待补充';
+                return <article className="request-resource-flat-row request-resource-contract-row" key={contractId}><span className="project-contract-record-icon request-contract-record-icon" aria-hidden="true"><FileSignature size={19} strokeWidth={2} /></span><div><strong className="request-contract-name" title={contractName}>{contractName}</strong><small>{contract.id}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同金额</span><strong>{formatContractMoney(contract)}</strong></div><span className={`project-record-status${readiness.ready ? ' is-success' : ''}`}><i />{readiness.label}</span><div className="project-contract-record-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="danger" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton> : null}</div></article>;
               })}
               {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可关联当前合作项目下的已有记录。</p></div> : null}
             </div>

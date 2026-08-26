@@ -175,7 +175,13 @@ describe('request project resource aggregation', () => {
     expect(contractDialogSource).not.toContain('>编辑</button>');
     expect(contractDialogSource).toContain('关联已有合同');
     expect(contractDialogSource).toContain("contract.name || '合同名称待补充'");
+    expect(contractDialogSource).toContain('request-resource-contract-card-list');
+    expect(contractDialogSource).toContain('request-resource-contract-row');
+    expect(contractDialogSource).toContain('request-contract-record-icon');
+    expect(contractDialogSource).toContain('request-contract-name" title={contractName}');
+    expect(contractDialogSource).toContain("readiness.ready ? ' is-success' : ''");
     expect(contractDialogSource).toContain('<span>合同金额</span><strong>{formatContractMoney(contract)}</strong>');
+    expect(contractDialogSource).toContain('kind="danger"');
     expect(contractDialogSource).toContain('移出请款');
     expect(contractDialogSource).not.toContain('生成合同');
     expect(contractDialogSource).not.toContain('上传合同');
@@ -199,6 +205,9 @@ describe('request project resource aggregation', () => {
     expect(styles).toContain('min-height: min(240px, calc(100dvh - 24px))');
     expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
     expect(styles).toContain('.request-resource-invoice-card-list .request-resource-invoice-row');
+    expect(styles).toContain('.request-resource-contract-card-list .request-resource-contract-row');
+    expect(styles).toContain('-webkit-line-clamp: 2');
+    expect(styles).toContain('.request-resource-contract-row .project-record-status.is-success');
   });
 
   it('removes multi-project coverage controls from contract generation and upload', () => {
