@@ -17,8 +17,11 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ClipboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { ContractDocumentView } from '../components/ContractDocumentView';
+import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { Pagination, usePagination } from '../components/Pagination';
 import { RequestRemarkAttachments } from '../components/RequestRemarkAttachments';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
@@ -27,7 +30,7 @@ import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
 } from '../components/RequestProjectResourceManager';
-import { CONTRACT_TYPE_LABELS, formatContractMoney, getContractType, getContractValidity, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
+import { formatContractMoney, getContractValidity, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
@@ -124,10 +127,53 @@ type RequestResourcePickerOption = {
   description: string;
   selected: boolean;
   disabled?: boolean;
+  resource: RequestResourceDocument;
 };
 
-export const sortRequestResourcePickerOptions = (
-  options: RequestResourcePickerOption[],
+type RequestResourceDocument =
+  | { kind: 'invoice'; invoice: GeneratedInvoiceRecord }
+  | { kind: 'contract'; contract: ContractRecord };
+
+type RequestResourceAnchor = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>;
+
+type RequestResourcePreview = {
+  resource: RequestResourceDocument;
+  anchor: RequestResourceAnchor;
+};
+
+const REQUEST_RESOURCE_PREVIEW_DELAY_MS = 300;
+const REQUEST_RESOURCE_PREVIEW_WIDTH = 344;
+const REQUEST_RESOURCE_PREVIEW_HEIGHT = 430;
+const REQUEST_RESOURCE_PREVIEW_GAP = 12;
+
+export const invoiceRequestResourceTitle = (
+  invoice: Pick<GeneratedInvoiceRecord, 'id'> & { snapshot: Pick<GeneratedInvoiceRecord['snapshot'], 'projectName'> },
+  fallbackProjectName?: string,
+) => `${invoice.id} · ${(invoice.snapshot.projectName ?? '').trim() || fallbackProjectName?.trim() || '未关联项目'}`;
+
+export const contractRequestResourceTitle = (contract: Pick<ContractRecord, 'name'>) => (
+  (contract.name ?? '').trim() || '未命名合同'
+);
+
+export const positionRequestResourcePreview = (
+  anchor: RequestResourceAnchor,
+  viewport: { width: number; height: number },
+) => {
+  const margin = REQUEST_RESOURCE_PREVIEW_GAP;
+  const preferredRight = anchor.right + REQUEST_RESOURCE_PREVIEW_GAP;
+  const preferredLeft = anchor.left - REQUEST_RESOURCE_PREVIEW_WIDTH - REQUEST_RESOURCE_PREVIEW_GAP;
+  const left = preferredRight + REQUEST_RESOURCE_PREVIEW_WIDTH <= viewport.width - margin
+    ? preferredRight
+    : Math.max(margin, Math.min(preferredLeft, viewport.width - REQUEST_RESOURCE_PREVIEW_WIDTH - margin));
+  const top = Math.max(
+    margin,
+    Math.min(anchor.top, viewport.height - REQUEST_RESOURCE_PREVIEW_HEIGHT - margin),
+  );
+  return { left, top };
+};
+
+export const sortRequestResourcePickerOptions = <T extends Pick<RequestResourcePickerOption, 'selected' | 'disabled'>>(
+  options: T[],
 ) => options
   .map((option, index) => ({ option, index }))
   .sort((left, right) => {
@@ -148,6 +194,9 @@ function RequestResourcePicker({
   emptyCopy,
   onOpenChange,
   onToggle,
+  onPreview,
+  onPreviewClose,
+  onOpenDocument,
 }: {
   id: string;
   kind: 'invoice' | 'contract';
@@ -158,7 +207,11 @@ function RequestResourcePicker({
   emptyCopy: string;
   onOpenChange: (open: boolean) => void;
   onToggle: (value: string, selected: boolean) => void;
+  onPreview: (resource: RequestResourceDocument, anchor: DOMRect) => void;
+  onPreviewClose: () => void;
+  onOpenDocument: (resource: RequestResourceDocument) => void;
 }) {
+  const previewTimerRef = useRef<number | null>(null);
   const isInvoice = kind === 'invoice';
   const label = isInvoice ? 'Invoice' : '合同';
   const ResourceIcon = isInvoice ? ReceiptText : FileText;
@@ -169,6 +222,41 @@ function RequestResourcePicker({
     ? `已选择 ${selectedCount} 份${isInvoice ? ' Invoice' : '合同'}`
     : helper;
   const sortedOptions = sortRequestResourcePickerOptions(options);
+
+  const cancelPreviewTimer = () => {
+    if (previewTimerRef.current === null) return;
+    window.clearTimeout(previewTimerRef.current);
+    previewTimerRef.current = null;
+  };
+
+  const closePreview = () => {
+    cancelPreviewTimer();
+    onPreviewClose();
+  };
+
+  const schedulePreview = (option: RequestResourcePickerOption, target: HTMLElement) => {
+    cancelPreviewTimer();
+    previewTimerRef.current = window.setTimeout(() => {
+      onPreview(option.resource, target.getBoundingClientRect());
+      previewTimerRef.current = null;
+    }, REQUEST_RESOURCE_PREVIEW_DELAY_MS);
+  };
+
+  useEffect(() => {
+    if (!open) closePreview();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const dismissPreview = () => closePreview();
+    window.addEventListener('scroll', dismissPreview, true);
+    window.addEventListener('resize', dismissPreview);
+    return () => {
+      cancelPreviewTimer();
+      window.removeEventListener('scroll', dismissPreview, true);
+      window.removeEventListener('resize', dismissPreview);
+    };
+  }, [open]);
 
   return (
     <div className="invoice-picker media-request-resource-picker">
@@ -194,33 +282,83 @@ function RequestResourcePicker({
         <div
           id={id}
           className="invoice-options"
-          role="listbox"
-          aria-label={`为 ${creatorName} 选择${label}`}
-          aria-multiselectable="true"
+          role="list"
+          aria-label={`为 ${creatorName} 查看或选择${label}`}
         >
-          {sortedOptions.map((option) => (
-            <button
-              className={`invoice-option ${option.selected ? 'invoice-option-selected' : ''}`}
-              type="button"
-              role="option"
-              aria-selected={option.selected}
-              disabled={option.disabled && !option.selected}
-              key={option.value}
-              onClick={() => onToggle(option.value, option.selected)}
-            >
-              <ResourceIcon className="invoice-option-icon" size={15} aria-hidden="true" />
-              <span className="invoice-option-copy">
-                <strong>{option.label}</strong>
-                <small>{option.description}</small>
-              </span>
-              {option.selected
-                ? <CheckCircle2 className="invoice-option-mark invoice-option-mark-selected" size={16} aria-hidden="true" />
-                : <Circle className="invoice-option-mark" size={16} aria-hidden="true" />}
-            </button>
-          ))}
+          {sortedOptions.map((option) => {
+            const selectionDisabled = Boolean(option.disabled && !option.selected);
+            return (
+              <div
+                className={`invoice-option ${option.selected ? 'invoice-option-selected' : ''} ${selectionDisabled ? 'invoice-option-unavailable' : ''}`}
+                role="listitem"
+                key={option.value}
+                onMouseEnter={(event) => schedulePreview(option, event.currentTarget)}
+                onMouseLeave={closePreview}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) closePreview();
+                }}
+              >
+                <button
+                  className="invoice-option-view"
+                  type="button"
+                  aria-label={`查看${label}：${option.label}`}
+                  title={option.label}
+                  onFocus={(event) => {
+                    cancelPreviewTimer();
+                    onPreview(option.resource, event.currentTarget.closest('.invoice-option')?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect());
+                  }}
+                  onClick={() => {
+                    closePreview();
+                    onOpenDocument(option.resource);
+                  }}
+                >
+                  <ResourceIcon className="invoice-option-icon" size={15} aria-hidden="true" />
+                  <span className="invoice-option-copy">
+                    <strong title={option.label}>{option.label}</strong>
+                    <small title={option.description}>{option.description}</small>
+                  </span>
+                </button>
+                <button
+                  className="invoice-option-select"
+                  type="button"
+                  aria-label={`${option.selected ? '取消选择' : '选择'}${label}：${option.label}`}
+                  aria-pressed={option.selected}
+                  disabled={selectionDisabled}
+                  onClick={() => onToggle(option.value, option.selected)}
+                >
+                  {option.selected
+                    ? <CheckCircle2 className="invoice-option-mark invoice-option-mark-selected" size={18} aria-hidden="true" />
+                    : <Circle className="invoice-option-mark" size={18} aria-hidden="true" />}
+                </button>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function RequestResourceDocumentContent({
+  resource,
+  preview = false,
+}: {
+  resource: RequestResourceDocument;
+  preview?: boolean;
+}) {
+  if (resource.kind === 'invoice') {
+    return (
+      <InvoiceDocumentView
+        model={resource.invoice.snapshot}
+        ariaLabel={preview ? 'Invoice 文档缩略预览' : `${resource.invoice.id} Invoice 全文`}
+      />
+    );
+  }
+  return (
+    <ContractDocumentView
+      contract={resource.contract}
+      ariaLabel={preview ? '合同文档缩略预览' : `${contractRequestResourceTitle(resource.contract)} 合同全文`}
+    />
   );
 }
 
@@ -594,6 +732,8 @@ export function MediaPaymentProjectsPage({
   const [invoiceIdsByCreator, setInvoiceIdsByCreator] = useState<Record<string, InvoiceId[]>>({});
   const [autoLinkedContractIdsByCreator, setAutoLinkedContractIdsByCreator] = useState<Record<string, ContractId[]>>({});
   const [openDocumentPicker, setOpenDocumentPicker] = useState<string | null>(null);
+  const [resourcePreview, setResourcePreview] = useState<RequestResourcePreview | null>(null);
+  const [resourceDocumentDialog, setResourceDocumentDialog] = useState<RequestResourceDocument | null>(null);
   const [formSubmitAttempted, setFormSubmitAttempted] = useState(false);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
@@ -790,6 +930,8 @@ export function MediaPaymentProjectsPage({
     setInvoiceIdsByCreator({});
     setAutoLinkedContractIdsByCreator({});
     setOpenDocumentPicker(null);
+    setResourcePreview(null);
+    setResourceDocumentDialog(null);
     setFormSubmitAttempted(false);
     setEditingRequestId(null);
   };
@@ -832,6 +974,8 @@ export function MediaPaymentProjectsPage({
     ));
     setAutoLinkedContractIdsByCreator({});
     setOpenDocumentPicker(null);
+    setResourcePreview(null);
+    setResourceDocumentDialog(null);
     setFormSubmitAttempted(false);
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
@@ -845,6 +989,8 @@ export function MediaPaymentProjectsPage({
     setInvoiceIdsByCreator({});
     setAutoLinkedContractIdsByCreator({});
     setOpenDocumentPicker(null);
+    setResourcePreview(null);
+    setResourceDocumentDialog(null);
     setFormSubmitAttempted(false);
   };
 
@@ -858,7 +1004,10 @@ export function MediaPaymentProjectsPage({
       notify('暂无可请款 Invoice', '该达人在当前合作项目下没有未占用的已通过 Invoice。');
       return;
     }
-    if (removing && openDocumentPicker?.startsWith(`${creatorId}:`)) setOpenDocumentPicker(null);
+    if (removing && openDocumentPicker?.startsWith(`${creatorId}:`)) {
+      setOpenDocumentPicker(null);
+      setResourcePreview(null);
+    }
     setSelectedCreatorIds((current) => removing
       ? current.filter((id) => id !== creatorId)
       : [...current, creatorId]);
@@ -1710,6 +1859,7 @@ export function MediaPaymentProjectsPage({
                   aria-controls="media-request-creator-options"
                   onClick={() => {
                     setOpenDocumentPicker(null);
+                    setResourcePreview(null);
                     setCreatorPickerOpen((current) => !current);
                   }}
                 >
@@ -1721,7 +1871,7 @@ export function MediaPaymentProjectsPage({
                     {selectedCreators.map((creator) => creatorSelectionEditable ? (
                       <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span><X size={13} aria-hidden="true" /></button>
                     ) : <span className="creator-selection-chip is-readonly" key={creator.id}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span></span>)}
-                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); setOpenDocumentPicker(null); }}>清除已选</button> : null}
+                    {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); setOpenDocumentPicker(null); setResourcePreview(null); }}>清除已选</button> : null}
                   </div>
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
@@ -1761,10 +1911,11 @@ export function MediaPaymentProjectsPage({
                     const invoiceNotApproved = invoice.status !== '已通过';
                     return {
                       value: invoice.invoiceId,
-                      label: invoice.id,
+                      label: invoiceRequestResourceTitle(invoice, selectedProject?.name),
                       description: `${creator.handle} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
                       selected,
                       disabled: Boolean(owner || invoiceNotApproved || channelMismatch),
+                      resource: { kind: 'invoice', invoice },
                     };
                   });
                   const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {
@@ -1777,10 +1928,11 @@ export function MediaPaymentProjectsPage({
                       : '已选择';
                     return [{
                       value: contract.contractId,
-                      label: contract.id,
-                      description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]}${contract.frameworkContractId ? ` · 框架：${contract.frameworkContractId}` : ''} · ${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : expired ? '不可关联：合同已失效' : `不可关联：${contract.status}`}`,
+                      label: contractRequestResourceTitle(contract),
+                      description: `${creator.handle} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : expired ? '不可关联：合同已失效' : `不可关联：${contract.status}`}`,
                       selected,
                       disabled: !enabled,
+                      resource: { kind: 'contract', contract },
                     }];
                   });
                   return (
@@ -1799,11 +1951,21 @@ export function MediaPaymentProjectsPage({
                             emptyCopy={STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE']}
                             onOpenChange={(open) => {
                               setCreatorPickerOpen(false);
+                              setResourcePreview(null);
                               setOpenDocumentPicker(open ? invoicePickerKey : null);
                             }}
                             onToggle={(invoiceId, selected) => {
                               if (selected) removeInvoice(creator.id as CreatorId, invoiceId as InvoiceId);
                               else addInvoice(creator.id as CreatorId, invoiceId as InvoiceId);
+                            }}
+                            onPreview={(resource, anchor) => setResourcePreview({
+                              resource,
+                              anchor: { top: anchor.top, right: anchor.right, bottom: anchor.bottom, left: anchor.left },
+                            })}
+                            onPreviewClose={() => setResourcePreview(null)}
+                            onOpenDocument={(resource) => {
+                              setResourcePreview(null);
+                              setResourceDocumentDialog(resource);
                             }}
                           />
                         </div>
@@ -1819,11 +1981,21 @@ export function MediaPaymentProjectsPage({
                             emptyCopy="该合作项目下暂无合同，可不关联"
                             onOpenChange={(open) => {
                               setCreatorPickerOpen(false);
+                              setResourcePreview(null);
                               setOpenDocumentPicker(open ? contractPickerKey : null);
                             }}
                             onToggle={(contractId, selected) => {
                               if (selected) removeContract(creator.id as CreatorId, contractId as ContractId);
                               else addContract(creator.id as CreatorId, contractId as ContractId);
+                            }}
+                            onPreview={(resource, anchor) => setResourcePreview({
+                              resource,
+                              anchor: { top: anchor.top, right: anchor.right, bottom: anchor.bottom, left: anchor.left },
+                            })}
+                            onPreviewClose={() => setResourcePreview(null)}
+                            onOpenDocument={(resource) => {
+                              setResourcePreview(null);
+                              setResourceDocumentDialog(resource);
                             }}
                           />
                         </div>
@@ -1840,6 +2012,39 @@ export function MediaPaymentProjectsPage({
               </NoticeBanner>
             ) : null}
             {formSubmitAttempted && formIssues.length ? <div className="media-request-form-issues" role="alert"><AlertTriangle size={17} /><div><strong>请完成以下必填项后创建请款</strong>{formIssues.map((issue) => <span key={issue}>{issue}</span>)}</div></div> : null}
+          </div>
+        </Modal>
+      ) : null}
+      {resourcePreview && typeof document !== 'undefined' ? createPortal((() => {
+        const position = positionRequestResourcePreview(resourcePreview.anchor, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+        return (
+          <aside
+            className={`request-resource-preview request-resource-preview-${resourcePreview.resource.kind}`}
+            role="tooltip"
+            aria-label={resourcePreview.resource.kind === 'invoice' ? 'Invoice 文档预览' : '合同文档预览'}
+            style={{ left: position.left, top: position.top }}
+          >
+            <div className="request-resource-preview-page" aria-hidden="true">
+              <RequestResourceDocumentContent resource={resourcePreview.resource} preview />
+            </div>
+          </aside>
+        );
+      })(), document.body) : null}
+      {resourceDocumentDialog ? (
+        <Modal
+          title={resourceDocumentDialog.kind === 'invoice'
+            ? `${resourceDocumentDialog.invoice.id} · Invoice`
+            : contractRequestResourceTitle(resourceDocumentDialog.contract)}
+          width="860px"
+          className="request-resource-document-modal"
+          onClose={() => setResourceDocumentDialog(null)}
+          footer={<Button variant="ghost" onClick={() => setResourceDocumentDialog(null)}>关闭</Button>}
+        >
+          <div className={`request-resource-document-canvas is-${resourceDocumentDialog.kind}`}>
+            <RequestResourceDocumentContent resource={resourceDocumentDialog} />
           </div>
         </Modal>
       ) : null}

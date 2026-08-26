@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { sortRequestResourcePickerOptions } from './MediaPaymentProjectsPage';
+import {
+  contractRequestResourceTitle,
+  invoiceRequestResourceTitle,
+  positionRequestResourcePreview,
+  sortRequestResourcePickerOptions,
+} from './MediaPaymentProjectsPage';
 
 describe('new payment request resource picker', () => {
   it('shows selectable and selected resources before disabled resources', () => {
@@ -33,5 +38,63 @@ describe('new payment request resource picker', () => {
     expect(searchStyles).toContain('height: 40px');
     expect(searchStyles).toContain('line-height: 40px');
     expect(searchStyles).toContain('white-space: nowrap');
+  });
+
+  it('formats Invoice and contract titles with explicit fallbacks', () => {
+    expect(invoiceRequestResourceTitle({
+      id: 'INV-20260826-00001',
+      snapshot: { projectName: 'Creator Launch' },
+    })).toBe('INV-20260826-00001 · Creator Launch');
+    expect(invoiceRequestResourceTitle({
+      id: 'INV-20260826-00002',
+      snapshot: { projectName: '' },
+    }, 'Fallback Project')).toBe('INV-20260826-00002 · Fallback Project');
+    expect(invoiceRequestResourceTitle({
+      id: 'INV-20260826-00003',
+      snapshot: { projectName: '' },
+    })).toBe('INV-20260826-00003 · 未关联项目');
+    expect(contractRequestResourceTitle({ name: '  Mina Campaign Agreement  ' })).toBe('Mina Campaign Agreement');
+    expect(contractRequestResourceTitle({ name: '' })).toBe('未命名合同');
+  });
+
+  it('places the document preview to the right and flips it inside the viewport', () => {
+    expect(positionRequestResourcePreview(
+      { top: 80, right: 280, bottom: 130, left: 80 },
+      { width: 1000, height: 800 },
+    )).toEqual({ left: 292, top: 80 });
+    expect(positionRequestResourcePreview(
+      { top: 700, right: 980, bottom: 750, left: 700 },
+      { width: 1000, height: 800 },
+    )).toEqual({ left: 344, top: 358 });
+  });
+
+  it('separates document viewing from selection and keeps disabled rows viewable', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const pickerSource = source.slice(
+      source.indexOf('function RequestResourcePicker({'),
+      source.indexOf('function RequestResourceDocumentContent({'),
+    );
+
+    expect(pickerSource).toContain('className="invoice-option-view"');
+    expect(pickerSource).toContain('onOpenDocument(option.resource)');
+    expect(pickerSource).toContain('className="invoice-option-select"');
+    expect(pickerSource).toContain('disabled={selectionDisabled}');
+    expect(pickerSource).not.toContain('disabled={option.disabled && !option.selected}');
+  });
+
+  it('keeps resource titles and status lines on one line without exposing contract type', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const contractOptionsSource = source.slice(
+      source.indexOf('const contractOptions ='),
+      source.indexOf('return (', source.indexOf('const contractOptions =')),
+    );
+
+    expect(css).toMatch(/\.invoice-option-copy strong \{[\s\S]*?overflow: hidden;[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
+    expect(css).toMatch(/\.invoice-option-copy small \{[\s\S]*?overflow: hidden;[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap;/);
+    expect(css).toContain('.request-resource-preview');
+    expect(contractOptionsSource).toContain('label: contractRequestResourceTitle(contract)');
+    expect(contractOptionsSource).not.toContain('CONTRACT_TYPE_LABELS');
+    expect(contractOptionsSource).not.toContain('contract.id');
   });
 });
