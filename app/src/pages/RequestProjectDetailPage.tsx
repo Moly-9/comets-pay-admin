@@ -11,9 +11,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
+import { Avatar, Button, ListActionButton, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
-import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { PaymentProviderBadge, paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
 import type {
   ProjectResourceKind,
@@ -25,7 +25,7 @@ import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceViewer } from './ProjectDetailPage';
 import type { SystemUser } from '../data';
 import type { ContractRecord } from '../contracts';
-import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, Payout, PayoutStatus } from '../types';
 import { buildRequestFinanceReview, type RequestFinanceReview } from '../financeReview';
 import {
   paymentListEffectiveAccount,
@@ -118,9 +118,15 @@ type RequestResource = {
 
 type RequestPayee = {
   name: string;
+  creatorId?: CreatorId;
+  handle?: string;
+  platform?: string;
+  initials?: string;
+  accent?: string;
   invoice: string;
   amount: string;
   channel: string;
+  paymentMethod?: string;
   status: string;
 };
 
@@ -167,6 +173,35 @@ export const requestPaymentMethodLabel = (channel: string) => {
   if (normalizedChannel === 'PayPal') return 'PayPal';
   if (normalizedChannel === 'Airwallex' || normalizedChannel === 'Payer Max') return '银行转账';
   return '待确认';
+};
+
+export type RequestPaymentStatus = '未付款' | '付款处理中' | '已付款' | '付款失败';
+
+export const requestTransferMethodLabel = (
+  transferMethod?: ReturnType<typeof paymentListEffectiveAccount>['transferMethod'],
+  provider?: string,
+) => {
+  if (transferMethod === 'LOCAL') return 'Local';
+  if (transferMethod === 'SWIFT') return 'Swift';
+  if (transferMethod === 'PAYPAL' || requestPaymentChannelLabel(provider ?? '') === 'PayPal') return 'PayPal';
+  return '待确认';
+};
+
+export const requestPaymentStatusLabel = (
+  payoutStatus?: PayoutStatus | string,
+  paymentListStatus?: PaymentListRecord['status'],
+): RequestPaymentStatus => {
+  if (payoutStatus === '付款失败' || payoutStatus === '已退回') return '付款失败';
+  if (payoutStatus === '付款处理中') return '付款处理中';
+  if (payoutStatus === '已付款' || paymentListStatus === 'paid') return '已付款';
+  return '未付款';
+};
+
+const requestPaymentStatusTone = (status: RequestPaymentStatus) => {
+  if (status === '已付款') return 'is-success';
+  if (status === '付款处理中') return 'is-processing';
+  if (status === '付款失败') return 'is-danger';
+  return '';
 };
 
 export const normalizeRequestPaymentChannels = <T extends { channel: string }>(items: T[]): T[] => {
@@ -256,20 +291,41 @@ export const paymentRecordsFromLists = (
 
 export const requestPayeesFromPaymentLists = (
   paymentLists: PaymentListRecord[],
-): RequestPayee[] => paymentLists.flatMap((list) => (
-  list.items.map((item) => {
-    const account = paymentListEffectiveAccount(item);
-    const currency = String(paymentListItemValue(item, 'currency') || '待确认');
-    const amount = Number(paymentListItemValue(item, 'amount') || 0);
-    return {
-      name: item.snapshot.creatorName,
-      invoice: item.snapshot.invoiceNumber,
-      amount: formatInvoiceMoney(currency, amount),
-      channel: paymentProviderDisplayName(account.provider || list.provider),
-      status: requestPaymentListStatusLabel(list),
-    };
-  })
-));
+  creators: CreatorProfile[] = [],
+  generatedInvoices: GeneratedInvoiceRecord[] = [],
+  payouts: Payout[] = [],
+): RequestPayee[] => {
+  const creatorById = new Map(creators.map((creator) => [String(creator.id), creator]));
+  const invoiceById = new Map(generatedInvoices.map((invoice) => [String(invoice.invoiceId), invoice]));
+  const payoutById = new Map(payouts.map((payout) => [payout.id, payout]));
+  return paymentLists.flatMap((list) => (
+    list.items.map((item) => {
+      const account = paymentListEffectiveAccount(item);
+      const currency = String(paymentListItemValue(item, 'currency') || '待确认');
+      const amount = Number(paymentListItemValue(item, 'amount') || 0);
+      const creator = item.snapshot.creatorId
+        ? creatorById.get(String(item.snapshot.creatorId))
+        : creators.find((candidate) => candidate.name === item.snapshot.creatorName);
+      const invoice = invoiceById.get(String(item.invoiceId));
+      const payout = invoice?.sourcePayoutId
+        ? payoutById.get(invoice.sourcePayoutId)
+        : payouts.find((candidate) => candidate.invoice === item.snapshot.invoiceNumber);
+      return {
+        name: item.snapshot.creatorName,
+        creatorId: item.snapshot.creatorId,
+        handle: creator?.handle ?? item.snapshot.creatorHandle,
+        platform: creator?.platform,
+        initials: creator?.initials,
+        accent: creator?.accent,
+        invoice: item.snapshot.invoiceNumber,
+        amount: formatInvoiceMoney(currency, amount),
+        channel: paymentProviderDisplayName(account.provider || list.provider),
+        paymentMethod: requestTransferMethodLabel(account.transferMethod, account.provider || list.provider),
+        status: requestPaymentStatusLabel(payout?.status, list.status),
+      };
+    })
+  ));
+};
 
 const parsedRequestDate = (value?: string) => {
   const parts = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -747,6 +803,7 @@ function RequestPaymentListReviewViewer({
 
 export function RequestProjectDetailPage({
   request,
+  payouts = [],
   paymentLists,
   creators,
   generatedInvoices,
@@ -759,6 +816,7 @@ export function RequestProjectDetailPage({
   notify,
 }: {
   request: RequestProjectSummary;
+  payouts?: Payout[];
   paymentLists: PaymentListRecord[];
   creators: CreatorProfile[];
   generatedInvoices: GeneratedInvoiceRecord[];
@@ -796,7 +854,12 @@ export function RequestProjectDetailPage({
     : requestProjectStatusFor(request) ?? '请款提交';
   const normalizedReturnReason = returnReason.trim();
   const requestPaymentLists = paymentListsForRequest(request, paymentLists);
-  const paymentListPayees = requestPayeesFromPaymentLists(requestPaymentLists);
+  const paymentListPayees = requestPayeesFromPaymentLists(
+    requestPaymentLists,
+    creators,
+    generatedInvoices,
+    payouts,
+  );
   const payees = paymentListPayees.length ? paymentListPayees : getRequestPayees(request, detail);
   const paymentChannel = requestPaymentChannelLabel(
     request.paymentChannel ?? payees.map((payee) => payee.channel),
@@ -944,7 +1007,16 @@ export function RequestProjectDetailPage({
             <div className="table-scroll">
               <table className="data-table request-detail-payment-table">
                 <thead><tr><th>达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>付款方式</th><th>状态</th></tr></thead>
-                <tbody>{payees.map((payee) => <tr key={`${request.id}${payee.invoice}`}><td><strong>{payee.name}</strong></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td>{payee.channel}</td><td>{requestPaymentMethodLabel(payee.channel)}</td><td><span className="simple-status"><i />{payee.status}</span></td></tr>)}</tbody>
+                <tbody>{payees.map((payee) => {
+                  const creator = payee.creatorId
+                    ? creators.find((candidate) => String(candidate.id) === String(payee.creatorId))
+                    : creators.find((candidate) => candidate.name === payee.name);
+                  const initials = payee.initials ?? creator?.initials ?? payee.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+                  const handle = payee.handle ?? creator?.handle ?? 'Handle 待补充';
+                  const platform = payee.platform ?? creator?.platform ?? '社媒平台待补充';
+                  const status = requestPaymentStatusLabel(payee.status);
+                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle} · {platform}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className={`simple-status ${requestPaymentStatusTone(status)}`.trim()}><i />{status}</span></td></tr>;
+                })}</tbody>
               </table>
             </div>
           </section>

@@ -1291,6 +1291,7 @@ export function RequestsPage({
     return (
       <RequestProjectDetailPage
         request={selectedRequest}
+        payouts={payouts}
         paymentLists={paymentLists}
         creators={creators}
         generatedInvoices={generatedInvoices}

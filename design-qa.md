@@ -171,6 +171,36 @@ final result: passed
 
 ---
 
+# 合作项目付款明细展示验收
+
+验收日期：2026-08-27
+
+## Evidence
+
+- Desktop implementation: `design-qa-request-payment-details.png`.
+- Mobile implementation: `design-qa-request-payment-details-390.png`.
+- State: 管理员查看合作项目 `REQ-202607-000001` 的付款明细。
+
+## Findings
+
+- 达人列使用系统头像组件，并同时展示 account name、handle 与社媒平台；缺少稳定达人 ID 的旧数据才按名称回退匹配。
+- 付款渠道复用系统 `PaymentProviderBadge`，Airwallex、PayPal 与 PayMax 保持系统统一图标样式。
+- 付款方式读取付款账户冻结快照中的 `transferMethod`，按数据展示 `Local`、`Swift` 或 `PayPal`。
+- 单笔付款状态通过 `paymentListItem.invoiceId → GeneratedInvoiceRecord.sourcePayoutId → Payout.id` 关联，只显示未付款、付款处理中、已付款、付款失败四种状态。
+- 390px 视口没有页面级横向溢出；表格在卡片内部独立横向滚动，达人信息保持可读。
+- 浏览器控制台没有新增 warning 或 error。
+
+## Automated Verification
+
+- 定向 Vitest：`RequestProjectDetailPage.test.ts` 与 `RequestProjectDetailPage.workflow.test.tsx` 共 12 项通过。
+- 完整 Vitest：97 个测试文件、669 项测试通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+
+final result: passed
+
+---
+
 # Returned Payment Progressive Detail Design QA
 
 ## Evidence

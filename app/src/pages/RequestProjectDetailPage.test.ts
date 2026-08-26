@@ -9,6 +9,8 @@ import {
   requestExpectedPaymentDateLabel,
   requestPaymentChannelLabel,
   requestPaymentMethodLabel,
+  requestPaymentStatusLabel,
+  requestTransferMethodLabel,
 } from './RequestProjectDetailPage';
 
 describe('request project payment presentation', () => {
@@ -31,6 +33,17 @@ describe('request project payment presentation', () => {
     expect(requestPaymentMethodLabel('PayPal')).toBe('PayPal');
     expect(requestPaymentMethodLabel('Airwallex、PayPal')).toBe('银行转账');
     expect(requestPaymentMethodLabel('按 Invoice 账户快照')).toBe('待确认');
+    expect(requestTransferMethodLabel('LOCAL', 'Airwallex')).toBe('Local');
+    expect(requestTransferMethodLabel('SWIFT', 'Airwallex')).toBe('Swift');
+    expect(requestTransferMethodLabel('PAYPAL', 'PayPal')).toBe('PayPal');
+  });
+
+  it('normalizes payment rows to the four supported payout states', () => {
+    expect(requestPaymentStatusLabel('等待付款', 'approved')).toBe('未付款');
+    expect(requestPaymentStatusLabel('付款处理中', 'approved')).toBe('付款处理中');
+    expect(requestPaymentStatusLabel('已付款', 'paid')).toBe('已付款');
+    expect(requestPaymentStatusLabel('付款失败', 'paid')).toBe('付款失败');
+    expect(requestPaymentStatusLabel('已退回', 'generated')).toBe('付款失败');
   });
 
   it('selects payment lists by stable request and explicit list IDs', () => {
@@ -94,6 +107,11 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<th>付款渠道</th>');
     expect(paymentTable).toContain('<th>付款方式</th>');
     expect(paymentTable).toContain('<th>状态</th>');
+    expect(paymentTable).toContain('<Avatar');
+    expect(paymentTable).toContain('<PaymentProviderBadge compact provider={payee.channel} />');
+    expect(paymentTable).toContain('request-detail-transfer-method');
+    expect(paymentTable).toContain('{handle} · {platform}');
+    expect(styles).toContain('.request-detail-creator-cell');
     expect(viewerSource).toContain("viewer.kind === 'contract' ? record.title : record.id");
     expect(viewerSource).toContain("viewer.kind === 'contract' ? record.id : record.title");
     expect(viewerSource).toContain("viewer.kind === 'contract' && record.status === '已签署'");
@@ -199,17 +217,41 @@ describe('request project payment presentation', () => {
           currency: 'USD',
           amount: 1250,
           provider: 'Airwallex',
+          creatorId: 'creator-mina',
+          creatorHandle: '@MinaKato',
+          transferMethod: 'LOCAL',
+          localClearingSystem: 'ZENGIN',
         },
         overrides: {},
       }],
-    } as unknown as PaymentListRecord]);
+    } as unknown as PaymentListRecord], [{
+      id: 'creator-mina',
+      name: 'Mina Kato',
+      handle: '@MinaKato',
+      platform: 'Instagram · TikTok',
+      initials: 'MK',
+      accent: '#f59e0b',
+    }] as never, [{
+      invoiceId: 'invoice-one',
+      sourcePayoutId: 'payout-one',
+    }] as never, [{
+      id: 'payout-one',
+      invoice: 'INV-301164-19',
+      status: '付款处理中',
+    }] as never);
 
     expect(payees).toEqual([{
       name: 'Mina Kato',
+      creatorId: 'creator-mina',
+      handle: '@MinaKato',
+      platform: 'Instagram · TikTok',
+      initials: 'MK',
+      accent: '#f59e0b',
       invoice: 'INV-301164-19',
       amount: 'USD 1,250.00',
       channel: 'Airwallex',
-      status: '已提交',
+      paymentMethod: 'Local',
+      status: '付款处理中',
     }]);
   });
 
