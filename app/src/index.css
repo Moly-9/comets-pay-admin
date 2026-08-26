@@ -3657,6 +3657,28 @@ input[type="checkbox"]:disabled {
 .request-resource-candidate:last-child { border-bottom: 0; }
 .request-resource-flat-row:hover { background: #fafbfc; }
 
+.request-resource-invoice-card-list {
+  display: grid;
+  overflow: visible;
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.request-resource-invoice-card-list .request-resource-invoice-row {
+  overflow: hidden;
+  border: 1px solid #e5e9f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(35, 42, 55, .04);
+}
+
+.request-resource-invoice-card-list .request-resource-invoice-row:hover {
+  border-color: #d7dce5;
+  box-shadow: 0 7px 20px rgba(35, 42, 55, .07);
+}
+
 .request-resource-flat-row > div:not(.project-contract-record-actions) { min-width: 0; }
 
 .request-resource-flat-row > div:not(.project-contract-record-actions) > span,

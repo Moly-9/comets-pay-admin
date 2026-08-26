@@ -187,12 +187,18 @@ describe('request project resource aggregation', () => {
       source.indexOf("resourceDialog === 'payment'"),
     );
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
+    expect(invoiceDialogSource).toContain('request-resource-invoice-card-list');
+    expect(invoiceDialogSource).toContain('关联已有 Invoice');
+    expect(invoiceDialogSource).toContain('解除');
+    expect(invoiceDialogSource).not.toContain('生成 Invoice');
+    expect(invoiceDialogSource).not.toContain('删除 Invoice 源记录');
     expect(contractDialogSource).toContain('width="920px"');
     expect(invoiceDialogSource).toContain('width="920px"');
     expect(contractDialogSource).toContain('request-document-list-modal');
     expect(invoiceDialogSource).toContain('request-document-list-modal');
     expect(styles).toContain('min-height: min(240px, calc(100dvh - 24px))');
     expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
+    expect(styles).toContain('.request-resource-invoice-card-list .request-resource-invoice-row');
   });
 
   it('removes multi-project coverage controls from contract generation and upload', () => {
