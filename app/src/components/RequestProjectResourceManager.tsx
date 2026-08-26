@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import {
   invoicePaymentListProvider,
+  isValidPaymentTransactionReference,
   paymentListEffectiveAccount,
   paymentListItemValue,
   validatePaymentListGeneration,
@@ -41,16 +42,18 @@ import {
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
+import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import {
   requestApprovalHasScopedReturnItems,
   requestApprovalReturnItemForInvoice,
 } from '../requestApprovalWorkflow';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
-import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
+import { Avatar, Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
 import { PaymentListEditor } from './PaymentListEditor';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type ResourceKind = 'contract' | 'invoice' | 'payment';
+type ExpandedPaymentRow = { invoiceId: InvoiceId; mode: 'view' | 'edit' } | null;
 type ConfirmAction = {
   title: string;
   description: string;
@@ -348,6 +351,10 @@ export function RequestProjectResourceManager({
   const [paymentEditorInvoiceId, setPaymentEditorInvoiceId] = useState<InvoiceId | null>(null);
   const [paymentEditorMode, setPaymentEditorMode] = useState<'view' | 'edit'>('edit');
   const [paymentEditorCloseWarning, setPaymentEditorCloseWarning] = useState(false);
+  const [expandedPaymentRow, setExpandedPaymentRow] = useState<ExpandedPaymentRow>(null);
+  const [bulkPaymentReason, setBulkPaymentReason] = useState('');
+  const [bulkTransactionReference, setBulkTransactionReference] = useState('');
+  const [bulkPaymentNotice, setBulkPaymentNotice] = useState('');
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -397,6 +404,11 @@ export function RequestProjectResourceManager({
     ? validatePaymentListGeneration(currentPaymentList, paymentRequestInvoiceIds(request.creatorLinks ?? []))
     : [{ code: 'NO_ITEMS' as const, message: '付款清单尚未生成。' }];
   const paymentListReady = Boolean(currentPaymentList && paymentListIssues.length === 0);
+  const canBulkEditPaymentFields = Boolean(
+    canEditPaymentList
+    && currentPaymentList?.status === 'draft'
+    && !paymentFailureRecoveryMode,
+  );
   const paymentEditorList = paymentEditorListId
     ? paymentLists.find((list) => list.paymentListId === paymentEditorListId) ?? null
     : null;
@@ -497,6 +509,32 @@ export function RequestProjectResourceManager({
     if (currentPaymentList?.status === 'draft' && currentPaymentList.items.length) {
       void onGeneratePaymentListVersion(currentPaymentList.paymentListId);
     }
+  };
+
+  const applyBulkPaymentField = (field: 'paymentReason' | 'transactionReference', rawValue: string) => {
+    const value = rawValue.trim();
+    if (!currentPaymentList || !canBulkEditPaymentFields || !value) return;
+    if (field === 'transactionReference' && !isValidPaymentTransactionReference(value)) {
+      setBulkPaymentNotice('交易附言仅支持 1–140 位英文、数字和常用英文标点。');
+      return;
+    }
+    currentPaymentList.items.forEach((item) => {
+      onUpdatePaymentItem(currentPaymentList.paymentListId, item.invoiceId, field, value);
+    });
+    setBulkPaymentNotice(`已将${field === 'paymentReason' ? '付款原因' : '交易附言'}填入 ${currentPaymentList.items.length} 笔付款明细。`);
+  };
+
+  const togglePaymentRow = (
+    list: PaymentListRecord,
+    invoiceId: InvoiceId,
+    mode: 'view' | 'edit',
+  ) => {
+    if (expandedPaymentRow?.invoiceId === invoiceId && expandedPaymentRow.mode === mode) {
+      setExpandedPaymentRow(null);
+      return;
+    }
+    if (mode === 'edit' && list.status !== 'draft') onBeginEditPaymentList(list.paymentListId);
+    setExpandedPaymentRow({ invoiceId, mode });
   };
 
   const openPaymentEditor = (paymentListId: PaymentListId, invoiceId?: InvoiceId, mode: 'view' | 'edit' = 'edit') => {
@@ -734,12 +772,19 @@ export function RequestProjectResourceManager({
             <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {paymentProviderDisplayName(request.paymentChannel)}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
-                {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
-                {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                {canEditPaymentList && currentPaymentList && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
-                {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!paymentListReady || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定，请点击编辑付款清单后再修改' : paymentListReady ? '生成付款清单' : `还有 ${paymentListIssues.length} 项付款信息待完善`} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
+                <div className="request-payment-bulk-fields">
+                  <label><span>一键输入付款原因</span><span className="request-payment-bulk-control"><input aria-label="一键输入付款原因" value={bulkPaymentReason} disabled={!canBulkEditPaymentFields} placeholder="输入所有明细的付款原因" onChange={(event) => { setBulkPaymentReason(event.target.value); setBulkPaymentNotice(''); }} /><Button variant="secondary" disabled={!canBulkEditPaymentFields || !bulkPaymentReason.trim()} onClick={() => applyBulkPaymentField('paymentReason', bulkPaymentReason)}>填入全部</Button></span></label>
+                  <label><span>一键输入交易附言 <small>请使用英文</small></span><span className="request-payment-bulk-control"><input aria-label="一键输入交易附言" value={bulkTransactionReference} maxLength={140} disabled={!canBulkEditPaymentFields} placeholder="English only, max 140 characters" onChange={(event) => { setBulkTransactionReference(event.target.value); setBulkPaymentNotice(''); }} /><Button variant="secondary" disabled={!canBulkEditPaymentFields || !bulkTransactionReference.trim()} onClick={() => applyBulkPaymentField('transactionReference', bulkTransactionReference)}>填入全部</Button></span></label>
+                </div>
+                <div className="request-payment-toolbar-actions">
+                  {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
+                  {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
+                  {canEditPaymentList && currentPaymentList && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
+                  {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!paymentListReady || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定，请点击编辑付款清单后再修改' : paymentListReady ? '生成付款清单' : `还有 ${paymentListIssues.length} 项付款信息待完善`} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
+                </div>
               </div>
             ) : null}
+            {bulkPaymentNotice ? <div className="request-payment-bulk-notice" role="status">{bulkPaymentNotice}</div> : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
             {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务标记为“付款清单原因”的明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
             {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>请点击“编辑付款清单”逐笔完善付款明细，完成 {paymentListIssues.length} 项校验后才能生成。</span></div></div> : null}
@@ -747,6 +792,13 @@ export function RequestProjectResourceManager({
               {currentPaymentList?.items.map((item) => {
                 const list = currentPaymentList;
                 const effectiveAccount = paymentListEffectiveAccount(item);
+                const creator = creators.find((candidate) => candidate.id === item.snapshot.creatorId);
+                const accountName = effectiveAccount.paymentDetails?.accountName
+                  || effectiveAccount.paymentDetails?.paypalUsername
+                  || accountDisplayValue(effectiveAccount.accountSummary, '待补充');
+                const expandedMode = expandedPaymentRow?.invoiceId === item.invoiceId
+                  ? expandedPaymentRow.mode
+                  : null;
                 const invoice = invoices.find((candidate) => candidate.invoiceId === item.invoiceId);
                 const linkedPayout = invoice
                   ? payouts.find((payout) => (
@@ -766,6 +818,11 @@ export function RequestProjectResourceManager({
                 const itemIssues = validatePaymentListGeneration({ ...list, items: [item] }, [item.invoiceId])
                   .filter((issue) => issue.code === 'INVALID_ITEM')
                   .map((issue) => issue.message.replace(`${item.snapshot.invoiceNumber}：`, ''));
+                const rowCanEdit = canEditPaymentList
+                  && !paymentFailureRecoveryMode
+                  && (!hasScopedApprovalReturn || Boolean(paymentListReturn))
+                  && (list.status === 'draft' || canEditSubmittedPaymentList);
+                const transactionReference = String(paymentListItemValue(item, 'transactionReference') || '');
                 return (
                   <article
                     className={`payment-list-overview-row${failurePayout ? ' is-payment-failure' : ''}${focused ? ' is-failure-focused' : ''}`}
@@ -774,10 +831,10 @@ export function RequestProjectResourceManager({
                     tabIndex={focused ? -1 : undefined}
                   >
                     <header className="payment-list-overview-row-header">
-                      <div><strong>{item.snapshot.creatorName}</strong><span>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {paymentProviderDisplayName(effectiveAccount.provider)}</span></div>
+                      <div className="payment-list-overview-creator"><Avatar initials={creator?.initials ?? item.snapshot.creatorName.slice(0, 2).toUpperCase()} accent={creator?.accent ?? '#60758f'} size="sm" /><span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {paymentProviderDisplayName(effectiveAccount.provider)}</small></span></div>
                       <span className={`payment-list-overview-state ${itemIssues.length ? 'is-warning' : 'is-ready'}`}>{itemIssues.length ? '待完善' : '已完成'}</span>
                     </header>
-                    <div className="payment-list-overview-row-summary"><span>付款账户 <b>{accountDisplayValue(effectiveAccount.accountSummary, '待选择')}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>交易附言 <b>{paymentListItemValue(item, 'transactionReference') || '待填写'}</b></span></div>
+                    <div className="payment-list-overview-row-summary"><span>收款账户名 <b title={accountName}>{accountName}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>付款原因 <b title={String(paymentListItemValue(item, 'paymentReason') || '')}>{paymentListItemValue(item, 'paymentReason') || '待填写'}</b></span><span>交易附言 <b title={transactionReference}>{transactionReference || '待填写'}</b></span></div>
                     {paymentListReturn ? (
                       <div className="request-approval-return-item-note" role="note">
                         <AlertTriangle size={15} />
@@ -857,7 +914,44 @@ export function RequestProjectResourceManager({
                       </section>
                     ) : null}
                     {recovery ? <div className="payment-list-overview-recovery">{paymentFailureRecoveryLabel(failurePayout!)} · {recovery.status}</div> : null}
-                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><span className="payment-list-overview-row-actions">{canEditPaymentList && canEditSubmittedPaymentList && ['submitted', 'approved', 'paid'].includes(list.status) ? <ListActionButton kind="view" onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId, 'view')}>查看本笔</ListActionButton> : null}<ListActionButton kind={canEditPaymentList && (!['submitted', 'approved', 'paid'].includes(list.status) || canEditSubmittedPaymentList) ? 'edit' : 'view'} onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId, canEditPaymentList && (!['submitted', 'approved', 'paid'].includes(list.status) || canEditSubmittedPaymentList) ? 'edit' : 'view')}>{canEditPaymentList && (!['submitted', 'approved', 'paid'].includes(list.status) || canEditSubmittedPaymentList) ? '编辑本笔' : '查看本笔'}</ListActionButton></span></footer>
+                    {expandedMode ? (
+                      <section className={`payment-list-inline-panel is-${expandedMode}`} aria-label={`${expandedMode === 'edit' ? '编辑' : '查看'}${item.snapshot.creatorName}付款明细`}>
+                        <div className="payment-list-inline-section">
+                          <div className="payment-list-inline-heading"><strong>收款信息</strong><span>来自 Invoice 签署冻结快照，不可修改</span></div>
+                          <dl className="payment-list-inline-details">
+                            <div><dt>收款账户名</dt><dd>{accountName}</dd></div>
+                            <div><dt>收款账户</dt><dd>{accountDisplayValue(effectiveAccount.accountSummary, '待补充')}</dd></div>
+                            <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(effectiveAccount.provider)}</dd></div>
+                            <div><dt>转账方式</dt><dd>{String(paymentListItemValue(item, 'transferMethod') || effectiveAccount.transferMethod || '待补充')}</dd></div>
+                            <div><dt>账户校验</dt><dd>{effectiveAccount.validationStatus === 'VERIFIED' ? '已验证' : effectiveAccount.validationStatus || '待验证'}</dd></div>
+                            <div><dt>账户收款币种</dt><dd>{effectiveAccount.paymentDetails?.accountCurrency || paymentListItemValue(item, 'receiveCurrency') || '待补充'}</dd></div>
+                          </dl>
+                        </div>
+                        <div className="payment-list-inline-section">
+                          <div className="payment-list-inline-heading"><strong>交易信息</strong><span>{expandedMode === 'edit' ? '修改后需重新生成付款清单' : '当前付款明细'}</span></div>
+                          {expandedMode === 'view' ? (
+                            <dl className="payment-list-inline-details">
+                              <div><dt>Invoice</dt><dd>{item.snapshot.invoiceNumber}</dd></div>
+                              <div><dt>付款金额</dt><dd>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</dd></div>
+                              <div><dt>收款币种</dt><dd>{paymentListItemValue(item, 'receiveCurrency') || '待补充'}</dd></div>
+                              <div><dt>手续费承担方</dt><dd>{paymentFeeBearerLabel(paymentListItemValue(item, 'feeBearer'))}</dd></div>
+                              <div><dt>付款原因</dt><dd>{paymentListItemValue(item, 'paymentReason') || '待填写'}</dd></div>
+                              <div><dt>交易附言</dt><dd>{transactionReference || '待填写'}</dd></div>
+                            </dl>
+                          ) : (
+                            <div className="payment-list-inline-form">
+                              <label>付款金额<input aria-label="行内编辑付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
+                              <label>支付币种<select aria-label="行内编辑支付币种" value={String(paymentListItemValue(item, 'currency'))} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value)}>{PAYMENT_CURRENCY_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+                              <label>收款币种<select aria-label="行内编辑收款币种" value={String(paymentListItemValue(item, 'receiveCurrency'))} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value)}>{PAYMENT_CURRENCY_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+                              <label>手续费承担方<select aria-label="行内编辑手续费承担方" value={String(paymentListItemValue(item, 'feeBearer') || '')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', event.target.value)}><option value="">请选择</option><option value="ADVERTISER">付款方承担</option><option value="PUBLISHER">收款方承担</option><option value="SHARED">各自承担</option></select></label>
+                              <label className="is-wide">付款原因<input aria-label="行内编辑付款原因" value={String(paymentListItemValue(item, 'paymentReason') || '')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'paymentReason', event.target.value)} /></label>
+                              <label className="is-wide">交易附言 <small>请使用英文</small><input className={transactionReference && !isValidPaymentTransactionReference(transactionReference) ? 'is-invalid' : ''} aria-label="行内编辑交易附言" value={transactionReference} maxLength={140} placeholder="English only, max 140 characters" onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'transactionReference', event.target.value)} />{transactionReference && !isValidPaymentTransactionReference(transactionReference) ? <em>仅支持英文、数字和常用英文标点</em> : null}</label>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    ) : null}
+                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><span className="payment-list-overview-row-actions"><ListActionButton kind="view" onClick={() => togglePaymentRow(list, item.invoiceId, 'view')}>{expandedMode === 'view' ? '收起详情' : '查看本笔'}</ListActionButton>{rowCanEdit ? <ListActionButton kind="edit" onClick={() => togglePaymentRow(list, item.invoiceId, 'edit')}>{expandedMode === 'edit' ? '收起编辑' : '编辑本笔'}</ListActionButton> : null}</span></footer>
                   </article>
                 );
               })}
