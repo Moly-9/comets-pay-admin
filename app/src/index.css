@@ -3592,6 +3592,102 @@ input[type="checkbox"]:disabled {
 
 .request-resource-modal .modal-content { padding: 20px; }
 
+.project-resource-modal.request-contract-list-modal {
+  min-height: min(200px, calc(100dvh - 24px));
+  max-height: min(560px, calc(100dvh - 24px));
+}
+
+.request-contract-list-modal .modal-content {
+  overscroll-behavior: contain;
+}
+
+.request-contract-card-list {
+  display: grid;
+  gap: 10px;
+}
+
+.request-contract-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1.15fr) minmax(0, 1fr) minmax(120px, .7fr) auto;
+  min-height: 92px;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #e4e8ef;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+  box-shadow: 0 4px 14px rgba(35, 42, 55, .04);
+}
+
+.request-contract-card:hover {
+  border-color: #d7dce5;
+  box-shadow: 0 7px 20px rgba(35, 42, 55, .07);
+}
+
+.request-contract-card > div:not(.request-contract-card-actions) {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+}
+
+.request-contract-card > div:not(.request-contract-card-actions) > span {
+  color: #7b8493;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.request-contract-card > div:not(.request-contract-card-actions) > strong {
+  color: #222936;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.request-contract-card > div:not(.request-contract-card-actions) > small {
+  color: #697383;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.request-contract-card-amount strong {
+  white-space: nowrap;
+}
+
+.request-contract-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.request-contract-card-actions > button {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .request-contract-card {
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 12px;
+    padding: 13px;
+  }
+
+  .request-contract-card-document,
+  .request-contract-card-creator,
+  .request-contract-card-amount,
+  .request-contract-card-actions {
+    grid-column: 2;
+  }
+
+  .request-contract-card-actions {
+    justify-content: flex-start;
+    padding-top: 2px;
+  }
+}
+
 .request-resource-candidate-filter {
   display: flex;
   min-height: 62px;

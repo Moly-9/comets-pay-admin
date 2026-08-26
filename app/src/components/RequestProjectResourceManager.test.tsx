@@ -179,6 +179,34 @@ describe('request project resource aggregation', () => {
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
   });
 
+  it('renders the contract viewer as a compact read-focused card list', () => {
+    const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const contractDialogSource = source.slice(
+      source.indexOf("resourceDialog === 'contract'"),
+      source.indexOf("resourceDialog === 'invoice'"),
+    );
+
+    expect(contractDialogSource).toContain('width="820px"');
+    expect(contractDialogSource).toContain('request-contract-card-list');
+    expect(contractDialogSource).toContain('request-contract-card-document');
+    expect(contractDialogSource).toContain('request-contract-card-creator');
+    expect(contractDialogSource).toContain('request-contract-card-amount');
+    expect(contractDialogSource).toContain('contract.name || \'合同名称待补充\'');
+    expect(contractDialogSource).toContain('contract.generationSnapshot?.creatorName');
+    expect(contractDialogSource).toContain('formatContractMoney(contract)');
+    expect(contractDialogSource).toContain('关联已有合同');
+    expect(contractDialogSource).toContain('移出请款');
+    expect(contractDialogSource).toContain('>查看</ListActionButton>');
+    expect(contractDialogSource).not.toContain('生成合同');
+    expect(contractDialogSource).not.toContain('上传合同');
+    expect(contractDialogSource).not.toContain('删除合同源记录');
+    expect(contractDialogSource).not.toContain('合同 / IO');
+    expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
+    expect(styles).toContain('min-height: min(200px, calc(100dvh - 24px))');
+    expect(styles).toContain('@media (max-width: 760px)');
+  });
+
   it('removes multi-project coverage controls from contract generation and upload', () => {
     const builderSource = readFileSync(new URL('../pages/ContractBuilderPage.tsx', import.meta.url), 'utf8');
     const uploadSource = readFileSync(new URL('./ContractUploadWizard.tsx', import.meta.url), 'utf8');
