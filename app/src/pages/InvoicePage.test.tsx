@@ -193,7 +193,7 @@ describe('InvoicePage list columns', () => {
 
     expect(html.match(/<th(?:\s|>)/g)).toHaveLength(10);
     expect(html).toContain('<th>达人</th>');
-    expect(html).toContain('<th>开票主体</th>');
+    expect(html).toContain('<th>收款主体</th>');
     expect(html).toContain('<th>关联项目</th>');
     expect(html).toContain('<th>Invoice 编号</th>');
     expect(html).toContain('<th>Invoice 类型</th>');

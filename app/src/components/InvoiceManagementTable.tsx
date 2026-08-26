@@ -94,7 +94,7 @@ export function InvoiceManagementTable({
                 </th>
               ) : null}
               <th>达人</th>
-              <th>开票主体</th>
+              <th>收款主体</th>
               <th>关联项目</th>
               <th>Invoice 编号</th>
               <th>Invoice 类型</th>
