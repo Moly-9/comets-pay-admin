@@ -237,11 +237,13 @@ export const validatePaymentListAccountViaApi = async ({
   creators,
   request = fetch,
   now = () => new Date().toISOString(),
+  scope = 'full',
 }: {
   item: PaymentListItem;
   creators: CreatorProfile[];
   request?: typeof fetch;
   now?: () => string;
+  scope?: 'full' | 'completeness';
 }): Promise<PaymentAccountApiValidation> => {
   const effectiveAccount = paymentListEffectiveAccount(item);
   if (effectiveAccount.provider !== 'Airwallex') {
@@ -260,7 +262,10 @@ export const validatePaymentListAccountViaApi = async ({
 
   try {
     const schema = await getAirwallexBeneficiaryFormSchema(account, request);
-    const fieldIssues = validateAirwallexFormSchema(account, schema);
+    const schemaFieldIssues = validateAirwallexFormSchema(account, schema);
+    const fieldIssues = scope === 'completeness'
+      ? schemaFieldIssues.filter((issue) => issue.code === 'REQUIRED')
+      : schemaFieldIssues;
     const frozenSnapshotIssues = [...new Set([
       ...paymentListFrozenSnapshotIssues(item),
       ...paymentListSnapshotSchemaIssues(item, schema),
@@ -293,13 +298,17 @@ export const validatePaymentListAccountViaApi = async ({
         fieldIssues: displayFieldIssues,
       };
     }
-    await validateAirwallexBeneficiary(
-      buildAirwallexBeneficiaryPayload(account, schema),
-      request,
-    );
+    if (scope === 'full') {
+      await validateAirwallexBeneficiary(
+        buildAirwallexBeneficiaryPayload(account, schema),
+        request,
+      );
+    }
     return {
       state: 'passed',
-      message: 'Airwallex 付款信息完整性校验通过，收款账户字段完整',
+      message: scope === 'completeness'
+        ? 'Airwallex 付款必填信息完整性校验通过'
+        : 'Airwallex 付款信息完整性校验通过，收款账户字段完整',
       checkedAt: now(),
     };
   } catch (error) {

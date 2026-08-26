@@ -186,7 +186,7 @@ describe('request payment account validation', () => {
     ]);
   });
 
-  it('reports a schema format error as a field-level IBAN issue', async () => {
+  it('keeps format checks in full validation but skips them during payment-list completeness review', async () => {
     const invalidIbanCreator: CreatorProfile = {
       ...creator,
       payoutAccounts: [{
@@ -232,7 +232,19 @@ describe('request payment account validation', () => {
       message: '收款账户 API 字段格式不符合要求：IBAN格式不符合当前 Schema',
       fieldIssues: [{ key: 'beneficiary.bank_details.iban' }],
     });
-    expect(requestMock).toHaveBeenCalledTimes(1);
+    await expect(validatePaymentListAccountViaApi({
+      item,
+      creators: [invalidIbanCreator],
+      request: requestMock as unknown as typeof fetch,
+      scope: 'completeness',
+    })).resolves.toMatchObject({
+      state: 'passed',
+      message: 'Airwallex 付款必填信息完整性校验通过',
+    });
+    expect(requestMock.mock.calls.map(([input]) => String(input))).toEqual([
+      AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
+      AIRWALLEX_FORM_SCHEMA_PROXY_PATH,
+    ]);
   });
 
   it('blocks an incomplete frozen payment-list snapshot even when the profile account is complete', async () => {

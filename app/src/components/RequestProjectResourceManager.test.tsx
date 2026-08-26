@@ -259,7 +259,7 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).not.toContain('>导出</Button>');
     expect(source).toContain("currentPaymentList?.status === 'draft'");
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
-    expect(source).toContain('validatePaymentListAccountViaApi({ item, creators })');
+    expect(source).toContain("validatePaymentListAccountViaApi({ item, creators, scope: 'completeness' })");
     expect(source).toContain('Airwallex 付款信息完整性校验未通过');
     expect(source).toContain('paymentGenerationIssues.map');
     expect(source).toContain('openPaymentGenerationIssue(group)');

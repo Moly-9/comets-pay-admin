@@ -546,7 +546,7 @@ export function RequestProjectResourceManager({
       const apiChecks = await Promise.all(currentPaymentList.items.map(async (item) => {
         const effectiveAccount = paymentListEffectiveAccount(item);
         if (effectiveAccount.provider !== 'Airwallex') return null;
-        return validatePaymentListAccountViaApi({ item, creators });
+        return validatePaymentListAccountViaApi({ item, creators, scope: 'completeness' });
       }));
       const issueGroups: PaymentGenerationIssueGroup[] = currentPaymentList.items.flatMap((item, index) => {
         const localMessages = localIssues
