@@ -13363,11 +13363,11 @@ button:disabled {
 }
 
 .creator-picker-search {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
   height: 42px;
   align-items: center;
-  flex: 1;
   gap: 8px;
   border: 1px solid #d9dde5;
   border-radius: 10px;
@@ -13378,6 +13378,11 @@ button:disabled {
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
+.creator-picker-search > svg {
+  align-self: center;
+  flex: none;
+}
+
 .creator-picker-search:focus-within {
   border-color: #ff9e87;
   background: #fffdfc;
@@ -13386,10 +13391,10 @@ button:disabled {
 }
 
 .creator-picker-search input {
+  display: block;
   width: 100%;
   min-width: 0;
-  height: 100%;
-  flex: 1;
+  height: 40px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -13397,6 +13402,7 @@ button:disabled {
   font-family: inherit;
   color: #34373f;
   font-size: 12px;
+  line-height: 40px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

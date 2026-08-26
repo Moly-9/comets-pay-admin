@@ -126,6 +126,18 @@ type RequestResourcePickerOption = {
   disabled?: boolean;
 };
 
+export const sortRequestResourcePickerOptions = (
+  options: RequestResourcePickerOption[],
+) => options
+  .map((option, index) => ({ option, index }))
+  .sort((left, right) => {
+    const leftDisabled = Boolean(left.option.disabled && !left.option.selected);
+    const rightDisabled = Boolean(right.option.disabled && !right.option.selected);
+    if (leftDisabled !== rightDisabled) return leftDisabled ? 1 : -1;
+    return left.index - right.index;
+  })
+  .map(({ option }) => option);
+
 function RequestResourcePicker({
   id,
   kind,
@@ -156,6 +168,7 @@ function RequestResourcePicker({
   const selectedCopy = selectedCount
     ? `已选择 ${selectedCount} 份${isInvoice ? ' Invoice' : '合同'}`
     : helper;
+  const sortedOptions = sortRequestResourcePickerOptions(options);
 
   return (
     <div className="invoice-picker media-request-resource-picker">
@@ -185,7 +198,7 @@ function RequestResourcePicker({
           aria-label={`为 ${creatorName} 选择${label}`}
           aria-multiselectable="true"
         >
-          {options.map((option) => (
+          {sortedOptions.map((option) => (
             <button
               className={`invoice-option ${option.selected ? 'invoice-option-selected' : ''}`}
               type="button"
