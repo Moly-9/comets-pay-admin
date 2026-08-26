@@ -173,6 +173,7 @@ export function PaymentListReviewContent({
     effectiveAccount: paymentListEffectiveAccount(item),
     snapshotReview: reviewPaymentListAccountSnapshot(item, creators),
   }))), [creators, paymentLists]);
+  const validationScopeKey = JSON.stringify({ paymentLists, creators });
   const rowByReference = useMemo(() => new Map(rows.map((row) => [
     `${row.list.paymentListId}:${row.item.id}`,
     row,
@@ -190,6 +191,9 @@ export function PaymentListReviewContent({
   const visibleAccountRows = accountDisplay === 'current-full' ? currentRows : rows;
   const snapshotAttentionCount = rows.filter((row) => row.snapshotReview.state !== 'ready').length;
   const apiPassedCount = rows.filter((row) => accountChecks[row.key]?.state === 'passed').length;
+  const fullyValidatedCount = rows.filter((row) => (
+    accountChecks[row.key]?.state === 'passed' && row.snapshotReview.state === 'ready'
+  )).length;
   const apiIssueCount = rows.filter((row) => (
     ['invalid', 'unavailable'].includes(accountChecks[row.key]?.state ?? '')
   )).length;
@@ -257,20 +261,28 @@ export function PaymentListReviewContent({
     setReviewIndex(row.reviewIndex);
   };
 
-  const validateAccounts = async () => {
-    if (!rows.length || validating) return;
+  useEffect(() => {
+    let cancelled = false;
+    if (!rows.length) {
+      setAccountChecks({});
+      setValidating(false);
+      return undefined;
+    }
     setValidating(true);
     setAccountChecks(Object.fromEntries(rows.map((row) => [row.key, {
       state: 'checking',
       message: '正在请求收款账户校验 API',
     }])));
-    const results = await Promise.all(rows.map(async (row) => [
+    void Promise.all(rows.map(async (row) => [
       row.key,
       await validatePaymentListAccountViaApi({ item: row.item, creators }),
-    ] as const));
-    setAccountChecks(Object.fromEntries(results));
-    setValidating(false);
-  };
+    ] as const)).then((results) => {
+      if (cancelled) return;
+      setAccountChecks(Object.fromEntries(results));
+      setValidating(false);
+    });
+    return () => { cancelled = true; };
+  }, [validationScopeKey]);
 
   const summaryTitle = validating
     ? '正在调用 Airwallex 校验付款信息'
@@ -280,7 +292,7 @@ export function PaymentListReviewContent({
         ? `${apiIssueCount} 笔 Airwallex 付款信息校验未通过`
         : snapshotAttentionCount
           ? `${snapshotAttentionCount} 笔账户快照需要处理`
-          : '账户快照完整，待 Airwallex API 校验';
+          : '付款信息等待自动校验';
 
   const renderValidation = (row: (typeof rows)[number]) => {
     const check = accountChecks[row.key];
@@ -323,39 +335,28 @@ export function PaymentListReviewContent({
               <p>每张 Invoice 保留独立付款行，内容来自“我的项目”提交时的冻结快照。</p>
             </div>
           </div>
-          <span>{rows.length} 笔</span>
+          <div className="request-payment-review-heading-actions">
+            <span>{rows.length} 笔</span>
+            {exportLists.map((list) => (
+              <Button
+                variant="secondary"
+                icon={<Download size={15} />}
+                key={list.paymentListId}
+                onClick={() => { void onExportPaymentList(list.paymentListId); }}
+              >
+                {exportLists.length === 1 ? '导出 Excel' : `导出 ${list.paymentListCode}`}
+              </Button>
+            ))}
+            {exportMode === 'current' && exportLists.length === 0 ? (
+              <Button variant="secondary" icon={<Download size={15} />} disabled>导出 Excel</Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
       {rows.length ? (
         <>
-          {variant === 'project' ? (
-            <div className="project-resource-browser-toolbar request-payment-review-toolbar">
-              <Button
-                variant="secondary"
-                icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
-                disabled={validating}
-                onClick={() => { void validateAccounts(); }}
-              >
-                {validating ? 'Airwallex 校验中' : '校验 Airwallex 付款信息完整性'}
-              </Button>
-              {exportLists.map((list) => (
-                <Button
-                  variant="secondary"
-                  icon={<Download size={15} />}
-                  key={list.paymentListId}
-                  onClick={() => { void onExportPaymentList(list.paymentListId); }}
-                >
-                  {exportLists.length === 1 ? '导出 Excel' : `导出 ${list.paymentListCode}`}
-                </Button>
-              ))}
-              {exportMode === 'current' && exportLists.length === 0 ? (
-                <Button variant="secondary" icon={<Download size={15} />} disabled>导出 Excel</Button>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div
+          {variant === 'finance-workspace' ? <div
             className={`request-payment-review-summary${allApiChecksPassed ? ' is-passed' : snapshotAttentionCount || apiIssueCount ? ' is-warning' : ''}`}
             role="status"
             aria-live="polite"
@@ -371,7 +372,7 @@ export function PaymentListReviewContent({
             </span>
             <div>
               <strong>{summaryTitle}</strong>
-              <p>审批前应核对付款必填字段与冻结信息；点击后调用 Airwallex 付款信息完整性接口，校验付款所需的账户与交易资料，不改写付款数据。</p>
+              <p>付款清单打开后自动调用 Airwallex 付款信息完整性接口，校验付款所需的账户与交易资料，不改写付款数据。</p>
               {accountDisplay === 'current-full' && accountAttentionRows.length ? (
                 <ul className="request-payment-attention-list" aria-label="需要处理的收款账户">
                   {accountAttentionRows.map((row) => (
@@ -394,18 +395,7 @@ export function PaymentListReviewContent({
                 </ul>
               ) : null}
             </div>
-            {variant === 'finance-workspace' ? (
-              <Button
-                className="request-payment-review-summary-action"
-                variant="secondary"
-                icon={validating ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldCheck size={15} />}
-                disabled={validating}
-                onClick={() => { void validateAccounts(); }}
-              >
-                {validating ? 'Airwallex 校验中' : '校验 Airwallex 付款信息完整性'}
-              </Button>
-            ) : null}
-          </div>
+          </div> : null}
 
           {variant === 'project' ? (
             <div
@@ -421,7 +411,89 @@ export function PaymentListReviewContent({
             </div>
           ) : null}
 
-          {currentReview ? (
+          {variant === 'project' ? (
+            <section className="request-payment-payee-table-section" aria-labelledby="request-payment-payee-table-title">
+              <header>
+                <span className="finance-review-card-title-icon is-account" aria-hidden="true"><UserRoundCheck size={16} /></span>
+                <div>
+                  <strong id="request-payment-payee-table-title">达人付款信息</strong>
+                  <p>逐笔核对付款字段与收款账户 · {validating ? '正在自动校验' : `已通过 ${fullyValidatedCount}/${rows.length}`}</p>
+                </div>
+              </header>
+              <div className="table-scroll request-payment-payee-table-scroll">
+                <table className="request-payment-payee-table">
+                  <colgroup>
+                    <col className="is-creator" />
+                    <col className="is-account" />
+                    <col className="is-currency" />
+                    <col className="is-currency" />
+                    <col className="is-amount" />
+                    <col className="is-fee" />
+                    <col className="is-validation" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>达人名称</th>
+                      <th>收款账户</th>
+                      <th>支付币种</th>
+                      <th>收款方币种</th>
+                      <th>Invoice 金额</th>
+                      <th>手续费承担方</th>
+                      <th>API 校验结果</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => {
+                      const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
+                      const receiveCurrency = displayValue(paymentListItemValue(row.item, 'receiveCurrency'));
+                      const invoiceCurrency = String(row.item.snapshot.currency || currency);
+                      const invoiceAmount = Number(row.item.snapshot.amount || 0);
+                      const check = accountChecks[row.key];
+                      const passed = check?.state === 'passed' && row.snapshotReview.state === 'ready';
+                      const checking = !check || check.state === 'checking';
+                      const validationLabel = checking ? '校验中' : passed ? '已通过' : '未通过';
+                      const validationMessage = row.snapshotReview.issues[0]
+                        || (check && 'message' in check ? check.message : '正在自动校验付款信息');
+                      const creatorInitials = row.item.snapshot.creatorName
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0]?.toUpperCase())
+                        .join('') || '—';
+                      return (
+                        <tr key={row.key}>
+                          <td data-label="达人名称">
+                            <div className="request-payment-payee-creator">
+                              <span className={`is-tone-${(index % 4) + 1}`} aria-hidden="true">{creatorInitials}</span>
+                              <strong>{row.item.snapshot.creatorName}</strong>
+                            </div>
+                          </td>
+                          <td data-label="收款账户">
+                            <strong>{accountDisplayValue(row.effectiveAccount.accountSummary)}</strong>
+                            <small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small>
+                          </td>
+                          <td data-label="支付币种"><span className="request-payment-currency-badge">{currency}</span></td>
+                          <td data-label="收款方币种"><span className="request-payment-currency-badge">{receiveCurrency}</span></td>
+                          <td data-label="Invoice 金额"><strong>{formatInvoiceMoney(invoiceCurrency, invoiceAmount)}</strong></td>
+                          <td data-label="手续费承担方">{feeBearerLabel(paymentListItemValue(row.item, 'feeBearer'))}</td>
+                          <td data-label="API 校验结果">
+                            <span
+                              className={`request-payment-api-result is-${checking ? 'checking' : passed ? 'passed' : 'failed'}`}
+                              role="status"
+                              title={validationMessage}
+                            >
+                              {checking ? <LoaderCircle className="is-spinning" size={14} /> : passed ? <CircleCheck size={14} /> : <CircleAlert size={14} />}
+                              {validationLabel}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : currentReview ? (
             <section className="request-finance-comparison" aria-label="合同、Invoice 与付款清单三方对照">
               <header className="request-finance-comparison-header">
                 <div className="finance-review-comparison-title">
@@ -490,7 +562,7 @@ export function PaymentListReviewContent({
             </div>
           )}
 
-          {accountDisplay === 'current-full' ? (
+          {variant === 'finance-workspace' ? (accountDisplay === 'current-full' ? (
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
               <header>
                 <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人付款信息汇总</strong><small>Airwallex 付款信息完整性字段 · 空值使用原型演示值，实际以 API 校验为准</small></span></div>
@@ -794,7 +866,7 @@ export function PaymentListReviewContent({
                 );
               })}
             </div>
-          )}
+          )) : null}
         </>
       ) : (
         <div className="project-resource-browser-empty">

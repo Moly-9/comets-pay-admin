@@ -1602,3 +1602,56 @@ final result: passed
 - `npm test`：91 个测试文件、596 项测试通过。
 - `npm run build`：TypeScript 检查与 Vite 生产构建通过。
 - `git diff --check`：通过。
+
+---
+
+# 请款项目付款清单七列表格设计验收
+
+验收日期：2026-08-27
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-8e32ac75-4ca6-4a88-8394-46ba9f5b2d6a.png`.
+- Desktop implementation: `design-qa-payment-list-desktop.png`.
+- Mobile implementation: `design-qa-payment-list-mobile.png`.
+- Full comparison: `design-qa-payment-list-comparison.png`.
+- State: 管理员账号打开请款项目 `REQ-202607-000001` 的已提交付款清单，自动 Airwallex 校验完成。
+
+## Normalization
+
+- Source image: 1253 x 373 px.
+- Desktop capture: 1265 x 712 px at the in-app browser default 1265 x 712 CSS viewport and device scale factor 1.
+- Mobile capture: 375 x 812 px while testing a 390 x 844 CSS viewport; the browser image excludes its outer chrome.
+- The comparison keeps the unchanged source at native width and uses a focused crop of the desktop modal. The source contains nine example columns, while the implementation intentionally keeps only the seven columns explicitly requested by the user.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual or interaction issue remains.
+- Fonts and typography: the table inherits the existing Noto Sans SC hierarchy; labels, figures and compact helper text match the surrounding system without introducing a foreign type scale.
+- Spacing and layout: the existing “全部付款明细”和“项目核对”区域保留，导出操作移至标题右上角；七列表格使用固定表头和独立纵向滚动。
+- Colors and tokens: neutral table surfaces, restrained purple icon treatment and green/red validation states follow the existing COMETS Pay palette. Validation uses icon plus text, not color alone.
+- Image and icon quality: the reference contains no product imagery. The implementation uses the existing Lucide icon set and does not add handcrafted or placeholder assets.
+- Copy and content: the table contains only 达人名称、收款账户、支付币种、收款方币种、Invoice 金额、手续费承担方和 API 校验结果。
+- Responsive behavior: below 640 px, each payment becomes a two-column card; the 390 px test measured modal `clientWidth === scrollWidth === 335`, so there is no horizontal overflow.
+
+## Interaction Verification
+
+- Opening the payment list automatically starts Airwallex validation; no manual validation button is rendered.
+- The legacy “账户快照完整，待 Airwallex API 校验”提示卡 is absent in the project view.
+- Automatic validation settles at `已通过 16/17`; the one failed fixture exposes the specific IBAN Schema error instead of remaining in a loading state.
+- The seven visible header labels exactly match the requested fields, and “导出 Excel” remains visible in the heading action area.
+- No new browser console errors were recorded during desktop and mobile verification.
+
+## Comparison History
+
+1. The first browser pass remained on “校验中” because a parent-created `creators` array repeatedly restarted and cancelled the validation effect.
+2. The effect now keys off a stable serialized payment/creator data signature, so identity-only parent rerenders do not restart validation.
+3. Post-fix desktop and mobile captures show a settled API result, consistent table hierarchy and no mobile horizontal overflow.
+
+## Automated Verification
+
+- Full Vitest: 97 files, 668 tests passed.
+- TypeScript and Vite production build passed.
+- `git diff --check` passed.
+
+final result: passed

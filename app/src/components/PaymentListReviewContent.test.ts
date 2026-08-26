@@ -139,12 +139,32 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('currentReview?.paymentItems');
   });
 
-  it('simplifies the workspace summary and places account validation inside its status card', () => {
+  it('runs account validation automatically and keeps the finance workspace summary read-only', () => {
     expect(reviewContentSource).toContain("{variant === 'project' ? (");
-    expect(reviewContentSource).toContain('request-payment-review-summary-action');
-    expect(reviewContentSource).toContain("{validating ? 'Airwallex 校验中' : '校验 Airwallex 付款信息完整性'}");
+    expect(reviewContentSource).toContain('void Promise.all(rows.map(async (row) => [');
+    expect(reviewContentSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators })');
+    expect(reviewContentSource).toContain('const validationScopeKey = JSON.stringify({ paymentLists, creators });');
+    expect(reviewContentSource).toContain('}, [validationScopeKey]);');
+    expect(reviewContentSource).toContain('付款清单打开后自动调用 Airwallex');
+    expect(reviewContentSource).not.toContain('request-payment-review-summary-action');
+    expect(reviewContentSource).not.toContain('校验 Airwallex 付款信息完整性</Button>');
     expect(workspaceSource).toContain('variant="finance-workspace"');
     expect(workspaceSource).not.toContain('exportMode="current"');
+  });
+
+  it('renders the project payment list as the requested seven-column payee table', () => {
+    expect(reviewContentSource).toContain('request-payment-payee-table-section');
+    expect(reviewContentSource).toContain('<th>达人名称</th>');
+    expect(reviewContentSource).toContain('<th>收款账户</th>');
+    expect(reviewContentSource).toContain('<th>支付币种</th>');
+    expect(reviewContentSource).toContain('<th>收款方币种</th>');
+    expect(reviewContentSource).toContain('<th>Invoice 金额</th>');
+    expect(reviewContentSource).toContain('<th>手续费承担方</th>');
+    expect(reviewContentSource).toContain('<th>API 校验结果</th>');
+    expect(reviewContentSource).toContain('request-payment-review-heading-actions');
+    expect(reviewContentSource).toContain("variant === 'finance-workspace' ? (accountDisplay");
+    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*900px;/s);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 640px\)[\s\S]*\.request-payment-payee-table tr\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
 
   it('identifies each account requiring attention and jumps to its synchronized review page', () => {
