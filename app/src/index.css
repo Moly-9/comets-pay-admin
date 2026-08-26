@@ -12026,10 +12026,6 @@ button:disabled {
   padding: 14px 16px;
 }
 
-.project-record-browser-heading.is-invoice {
-  background: linear-gradient(145deg, #f2f8fd, #e4f0fa);
-}
-
 .project-record-browser-heading strong {
   color: #252830;
   font-size: 14px;
@@ -12089,17 +12085,15 @@ button:disabled {
 }
 
 .project-record-item-icon.is-contract {
-  border-color: #dcd2f1;
-  background: linear-gradient(145deg, #f6f3fc, #ece6f8);
-  color: #62498f;
-  box-shadow: 0 5px 14px rgba(92, 67, 140, .12);
+  border-color: #d9e8f8;
+  background: #eef6ff;
+  color: #3474b9;
 }
 
 .project-record-item-icon.is-invoice {
-  border-color: #cddff0;
-  background: linear-gradient(145deg, #f2f8fd, #e4f0fa);
-  color: #3f719f;
-  box-shadow: 0 5px 14px rgba(47, 101, 151, .12);
+  border-color: #e4dafa;
+  background: #f4efff;
+  color: #7656b7;
 }
 
 .project-record-item-copy,

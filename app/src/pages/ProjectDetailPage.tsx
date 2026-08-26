@@ -905,7 +905,7 @@ export function ProjectResourceViewer({
         </div>
       ) : (
         <div className="project-record-browser" data-testid={`project-${viewer.kind}-list`}>
-          <div className={`project-record-browser-heading is-${viewer.kind}`}>
+          <div className="project-record-browser-heading">
             <div>
               <strong>{copy.title}</strong>
               <p>

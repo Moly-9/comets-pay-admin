@@ -99,10 +99,11 @@ describe('request project payment presentation', () => {
     expect(viewerSource).toContain("viewer.kind === 'contract' && record.status === '已签署'");
     expect(viewerSource).toContain("viewer.kind === 'invoice' && record.status === '已校验'");
     expect(viewerSource).toContain('project-record-item-icon is-${viewer.kind}');
-    expect(viewerSource).toContain('project-record-browser-heading is-${viewer.kind}');
     expect(styles).toContain('.project-record-item-icon.is-contract');
     expect(styles).toContain('.project-record-item-icon.is-invoice');
-    expect(styles).toContain('.project-record-browser-heading.is-invoice');
+    expect(styles).not.toContain('.project-record-browser-heading.is-invoice');
+    expect(styles).toContain('background: #eef6ff;');
+    expect(styles).toContain('background: #f4efff;');
     expect(styles).toContain('.project-record-item .project-record-status.is-success');
   });
 
