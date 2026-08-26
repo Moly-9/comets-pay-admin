@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Send,
   Unlink,
-  Upload,
   UserCheck,
   WalletCards,
 } from 'lucide-react';
@@ -31,7 +30,6 @@ import {
 } from '../businessWorkflow';
 import { CONTRACT_TYPE_LABELS, contractLinkedToProject, formatContractMoney, getContractReadiness, getContractType, getContractValidity, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
 import type { SystemUser } from '../data';
-import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import {
   invoiceCooperationProjectId,
@@ -50,7 +48,6 @@ import {
 } from '../requestApprovalWorkflow';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
-import { ContractUploadWizard } from './ContractUploadWizard';
 import { PaymentListEditor } from './PaymentListEditor';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
@@ -147,21 +144,6 @@ export const canEditRequestProjectResources = (
 );
 
 const contractStableId = (contract: ContractRecord) => contract.contractId ?? contract.id as ContractId;
-
-const contractUsedInRequestProjects = (
-  contract: ContractRecord,
-  requests: RequestProjectSummary[],
-) => {
-  if (contract.projectLinks?.some((link) => link.status !== 'ENDED')) {
-    return true;
-  }
-  const contractIds = new Set(
-    [contract.contractId, contract.id].filter((id): id is string => Boolean(id)),
-  );
-  return requests.some((request) => request.creatorLinks?.some((link) => (
-    link.contractIds.some((contractId) => contractIds.has(contractId))
-  )));
-};
 
 const creatorFor = (creatorId: string, creators: CreatorProfile[]) => (
   creators.find((creator) => creator.id === creatorId)
@@ -327,7 +309,6 @@ const requiredPaymentLabel = (label: string) => (
 
 export function RequestProjectResourceManager({
   request,
-  cooperationProject,
   requests,
   creators,
   contracts,
@@ -346,10 +327,7 @@ export function RequestProjectResourceManager({
   onChangeLinks,
   onOpenContract,
   onOpenInvoice,
-  onGenerateContract,
   onGenerateInvoice,
-  onUploadContract,
-  onDeleteContract,
   onDeleteInvoice,
   onClearPaymentLists,
   onRemovePaymentInvoice,
@@ -366,7 +344,6 @@ export function RequestProjectResourceManager({
   const [invoiceCreatorFilter, setInvoiceCreatorFilter] = useState('ALL');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [selectedLinkedInvoiceIds, setSelectedLinkedInvoiceIds] = useState<InvoiceId[]>([]);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
   const [notificationReturnInvoiceId, setNotificationReturnInvoiceId] = useState<InvoiceId | null>(null);
@@ -720,15 +697,14 @@ export function RequestProjectResourceManager({
         <Modal title={`${request.requestCode ?? request.id} · 合同资料`} width="920px" className="project-resource-modal request-resource-modal request-document-list-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
-            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateContract}>生成合同</Button><Button variant="ghost" icon={<Upload size={15} />} onClick={() => { setResourceDialog(null); setUploadOpen(true); }}>上传合同</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
+            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
             <div className="request-resource-flat-list">
               {linkedContracts.map((contract) => {
                 const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
                 const contractId = contractStableId(contract);
-                const usedInRequest = contractUsedInRequestProjects(contract, requests);
-                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <><ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton>{canDeleteContract(currentUser, contract, { usedInRequest }) ? <ListActionButton kind="danger" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；系统会同步清理请款项目关联并触发重新校验。`, confirmLabel: '确认删除', danger: true, run: () => onDeleteContract(contractId) })}>删除</ListActionButton> : null}</> : null}</div></article>;
+                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.name || '合同名称待补充'}</strong><small>{contract.id}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同金额</span><strong>{formatContractMoney(contract)}</strong></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton> : null}</div></article>;
               })}
-              {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可上传、生成或关联已有记录。</p></div> : null}
+              {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可关联当前合作项目下的已有记录。</p></div> : null}
             </div>
           </div>
         </Modal>
@@ -993,8 +969,6 @@ export function RequestProjectResourceManager({
           </div></div>
         </Modal>
       ) : null}
-
-      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(inputs) => { const records = onUploadContract(inputs); setUploadOpen(false); if (records[0]) onOpenContract(records[0].id); }} /> : null}
 
       {confirmAction ? <Modal title={confirmAction.title} width="460px" className="project-payment-remove-modal" onClose={() => setConfirmAction(null)} footer={<><Button variant="secondary" onClick={() => setConfirmAction(null)}>取消</Button><Button variant={confirmAction.danger ? 'danger' : 'primary'} onClick={() => { confirmAction.run(); setConfirmAction(null); }}>{confirmAction.confirmLabel}</Button></>}><div className="project-payment-remove-confirmation"><span><AlertTriangle size={22} /></span><div><strong>请确认操作范围</strong><p>{confirmAction.description}</p><small>本原型的变更只保存在当前浏览器会话。</small></div></div></Modal> : null}
     </>

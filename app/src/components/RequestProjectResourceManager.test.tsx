@@ -173,6 +173,15 @@ describe('request project resource aggregation', () => {
       source.indexOf("resourceDialog === 'invoice'"),
     );
     expect(contractDialogSource).not.toContain('>编辑</button>');
+    expect(contractDialogSource).toContain('关联已有合同');
+    expect(contractDialogSource).toContain("contract.name || '合同名称待补充'");
+    expect(contractDialogSource).toContain('<span>合同金额</span><strong>{formatContractMoney(contract)}</strong>');
+    expect(contractDialogSource).toContain('移出请款');
+    expect(contractDialogSource).not.toContain('生成合同');
+    expect(contractDialogSource).not.toContain('上传合同');
+    expect(contractDialogSource).not.toContain('删除合同源记录');
+    expect(contractDialogSource).not.toContain('合同 / IO');
+    expect(contractDialogSource).not.toContain('contract.ioId');
     const invoiceDialogSource = source.slice(
       source.indexOf("resourceDialog === 'invoice'"),
       source.indexOf("resourceDialog === 'payment'"),
