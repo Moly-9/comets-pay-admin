@@ -97,4 +97,24 @@ describe('new payment request resource picker', () => {
     expect(contractOptionsSource).not.toContain('CONTRACT_TYPE_LABELS');
     expect(contractOptionsSource).not.toContain('contract.id');
   });
+
+  it('simplifies the creator table and adds the actual paid amount after request amount', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const tableSource = source.slice(
+      source.indexOf('<table className="data-table project-creator-table media-request-creator-table">'),
+      source.indexOf('</table>', source.indexOf('<table className="data-table project-creator-table media-request-creator-table">')),
+    );
+    const headingSource = tableSource.slice(tableSource.indexOf('<thead>'), tableSource.indexOf('</thead>'));
+
+    expect(headingSource).toContain('Invoice 金额');
+    expect(headingSource).toContain('请款金额');
+    expect(headingSource).toContain('实际付款金额');
+    expect(headingSource.indexOf('请款金额')).toBeLessThan(headingSource.indexOf('实际付款金额'));
+    expect(headingSource).not.toContain('<th>Invoice</th>');
+    expect(headingSource).not.toContain('<th>合同</th>');
+    expect(tableSource).not.toContain('invoice.invoiceNumber');
+    expect(tableSource).not.toContain('contract.contractNumber');
+    expect(tableSource).not.toContain('付款清单${');
+    expect(tableSource).toContain('actualPayoutAmountLabel(payout)');
+  });
 });

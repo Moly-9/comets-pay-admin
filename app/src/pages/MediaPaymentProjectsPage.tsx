@@ -114,6 +114,14 @@ const COST_TYPE_OPTIONS = PAYMENT_REQUEST_COST_TYPES.map((costType) => ({
 
 const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
+const actualPayoutAmountLabel = (payout?: Payout) => {
+  if (!payout || payout.status !== '已付款') return '—';
+  return `${payout.currency} ${payout.amount.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(payout.amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
 const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result ?? ''));
@@ -1496,11 +1504,11 @@ export function MediaPaymentProjectsPage({
           />
         </section>
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、关联单据与实际请款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => openEditForm(selectedRequest, true)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
+          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与实际付款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => openEditForm(selectedRequest, true)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
           {links.length ? (
             <div className="table-scroll">
               <table className="data-table project-creator-table media-request-creator-table">
-                <thead><tr><th>达人</th><th>付款渠道</th><th>Invoice</th><th>合同</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
+                <thead><tr><th>达人</th><th>付款渠道</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th className="media-request-money-heading">实际付款金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
                 <tbody>{links.map((link) => {
                   const creator = creators.find((item) => item.id === link.creatorId);
                   const presentation = paymentRequestCreatorPresentation({
@@ -1535,48 +1543,6 @@ export function MediaPaymentProjectsPage({
                           )) : <span className="media-request-record-empty">—</span>}
                         </div>
                       </td>
-                      <td>
-                        <div className="media-request-document-summary">
-                          <strong>{presentation.invoices.length} 份 Invoice</strong>
-                          <div className="media-request-document-ids">
-                            {presentation.invoices.length ? presentation.invoices.map((invoice) => (
-                              invoice.missing ? (
-                                <span className="media-request-record-error" key={invoice.invoiceId}>{invoice.invoiceNumber}</span>
-                              ) : (
-                                <button
-                                  className="media-request-document-link"
-                                  type="button"
-                                  key={invoice.invoiceId}
-                                  onClick={() => resourceActions.onOpenInvoice(selectedRequest, invoice.invoiceId)}
-                                >
-                                  {invoice.invoiceNumber}
-                                </button>
-                              )
-                            )) : <span className="media-request-record-empty">待补 Invoice</span>}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="media-request-document-summary">
-                          <strong>{presentation.contracts.length} 份合同</strong>
-                          <div className="media-request-document-ids">
-                            {presentation.contracts.length ? presentation.contracts.map((contract) => (
-                              contract.missing || !contract.relationshipValid ? (
-                                <span className="media-request-record-error" key={contract.contractId}>{contract.contractNumber}</span>
-                              ) : (
-                                <button
-                                  className="media-request-document-link"
-                                  type="button"
-                                  key={contract.contractId}
-                                  onClick={() => resourceActions.onOpenContract(selectedRequest, contract.contractId)}
-                                >
-                                  {contract.contractNumber}
-                                </button>
-                              )
-                            )) : <span className="media-request-record-empty">—</span>}
-                          </div>
-                        </div>
-                      </td>
                       <td className="media-request-money-cell">
                         <div className="media-request-record-stack">
                           {presentation.invoices.length ? presentation.invoices.map((invoice) => (
@@ -1590,10 +1556,19 @@ export function MediaPaymentProjectsPage({
                           {presentation.invoices.length ? presentation.invoices.map((invoice) => (
                             <span className="media-request-record-line media-request-request-amount" key={invoice.invoiceId}>
                               <strong>{invoice.requestAmountLabel}</strong>
-                              <small>{invoice.requestAmountSource === 'PAYMENT_LIST' ? `付款清单${invoice.amountAdjusted ? ' · 已调整' : ''}` : '按 Invoice'}</small>
+                              {invoice.amountAdjusted ? <small>已调整</small> : null}
                             </span>
                           )) : <span className="media-request-record-empty">—</span>}
                           {presentation.invoices.length > 1 ? <small>合计 {presentation.requestTotalLabel}</small> : null}
+                        </div>
+                      </td>
+                      <td className="media-request-money-cell">
+                        <div className="media-request-record-stack">
+                          {creatorPayouts.length ? creatorPayouts.map((payout, index) => (
+                            <span className="media-request-record-line media-request-actual-amount" key={`${link.invoiceIds[index]}-actual-amount`}>
+                              <strong>{actualPayoutAmountLabel(payout)}</strong>
+                            </span>
+                          )) : <span className="media-request-record-empty">—</span>}
                         </div>
                       </td>
                       <td>
