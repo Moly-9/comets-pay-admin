@@ -11,7 +11,6 @@ import {
   ReceiptText,
   RefreshCw,
   Send,
-  Unlink,
   UserCheck,
   WalletCards,
 } from 'lucide-react';
@@ -341,7 +340,6 @@ export function RequestProjectResourceManager({
   const [contractCreatorFilter, setContractCreatorFilter] = useState('ALL');
   const [invoiceCreatorFilter, setInvoiceCreatorFilter] = useState('ALL');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
-  const [selectedLinkedInvoiceIds, setSelectedLinkedInvoiceIds] = useState<InvoiceId[]>([]);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
   const [notificationReturnInvoiceId, setNotificationReturnInvoiceId] = useState<InvoiceId | null>(null);
@@ -612,7 +610,6 @@ export function RequestProjectResourceManager({
       ...link,
       invoiceIds: link.invoiceIds.filter((id) => !idSet.has(id)),
     })), `已解除 ${invoiceIds.length} 份 Invoice 与当前请款项目的关联`);
-    setSelectedLinkedInvoiceIds([]);
   };
 
   const linkedContractIds = new Set(linkedContracts.map(contractStableId));
@@ -714,17 +711,16 @@ export function RequestProjectResourceManager({
         <Modal title={`${request.requestCode ?? request.id} · Invoice`} width="920px" className="project-resource-modal request-resource-modal request-document-list-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
-            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('invoice')}>关联已有 Invoice</Button>{selectedLinkedInvoiceIds.length ? <Button variant="danger" icon={<Unlink size={15} />} onClick={() => setConfirmAction({ title: '批量解除 Invoice 关联', description: `将从当前请款项目移除 ${selectedLinkedInvoiceIds.length} 份 Invoice，源记录保留。`, confirmLabel: '确认解除', run: () => unlinkInvoices(selectedLinkedInvoiceIds) })}>解除已选</Button> : null}</div> : null}
+            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('invoice')}>关联已有 Invoice</Button></div> : null}
             <div className="request-resource-flat-list request-resource-invoice-card-list">
               {linkedInvoices.map((invoice) => {
                 const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
-                const selected = selectedLinkedInvoiceIds.includes(invoice.invoiceId);
                 const invoiceReturn = requestApprovalReturnItemForInvoice(
                   request.approval,
                   invoice.invoiceId,
                   'INVOICE_CONTENT',
                 );
-                return <article className="request-resource-flat-row request-resource-invoice-row" key={invoice.invoiceId}>{canEditLinkedResources ? <label className="request-resource-select"><input type="checkbox" checked={selected} aria-label={`选择 ${invoice.id}`} onChange={() => setSelectedLinkedInvoiceIds((current) => selected ? current.filter((id) => id !== invoice.invoiceId) : [...current, invoice.invoiceId])} /></label> : <span className="project-contract-record-icon"><ReceiptText size={18} /></span>}<div><strong>{invoice.id}</strong><small>{invoice.status}</small></div><div><span>达人</span><strong>{creator?.name ?? invoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small></div><div><span>Invoice 金额</span><strong>{formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div><span className={`project-record-status${invoiceReturn ? ' is-warning' : ''}`}><i />{invoiceReturn ? '需修改 Invoice' : invoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span><div className="project-contract-record-actions"><ListActionButton kind={invoiceReturn ? 'edit' : 'view'} onClick={() => onOpenInvoice(invoice.invoiceId)}>{invoiceReturn ? '打开修改' : '查看'}</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '解除 Invoice 关联', description: `${invoice.id} 源记录会保留，对应付款行将移除。`, confirmLabel: '确认解除', run: () => unlinkInvoices([invoice.invoiceId]) })}>解除</ListActionButton> : null}</div></article>;
+                return <article className="request-resource-flat-row request-resource-invoice-row" key={invoice.invoiceId}><span className="project-contract-record-icon request-invoice-record-icon" aria-hidden="true"><ReceiptText size={19} strokeWidth={2} /></span><div><strong>{invoice.id}</strong><small>{invoice.status}</small></div><div><span>达人</span><strong>{creator?.name ?? invoice.snapshot.creatorName}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small></div><div><span>Invoice 金额</span><strong>{formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div><span className={`project-record-status${invoiceReturn ? ' is-warning' : ''}`}><i />{invoiceReturn ? '需修改 Invoice' : invoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span><div className="project-contract-record-actions"><ListActionButton kind={invoiceReturn ? 'edit' : 'view'} onClick={() => onOpenInvoice(invoice.invoiceId)}>{invoiceReturn ? '打开修改' : '查看'}</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '解除 Invoice 关联', description: `${invoice.id} 源记录会保留，对应付款行将移除。`, confirmLabel: '确认解除', run: () => unlinkInvoices([invoice.invoiceId]) })}>解除</ListActionButton> : null}</div></article>;
               })}
               {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款项目未关联 Invoice</strong><p>每位达人提交审批前至少需要一份 Invoice。</p></div> : null}
             </div>

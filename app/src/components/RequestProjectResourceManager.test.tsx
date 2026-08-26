@@ -194,8 +194,13 @@ describe('request project resource aggregation', () => {
     );
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
     expect(invoiceDialogSource).toContain('request-resource-invoice-card-list');
+    expect(invoiceDialogSource).toContain('request-invoice-record-icon');
+    expect(invoiceDialogSource).toContain('<ReceiptText size={19} strokeWidth={2} />');
     expect(invoiceDialogSource).toContain('关联已有 Invoice');
     expect(invoiceDialogSource).toContain('解除');
+    expect(invoiceDialogSource).not.toContain('request-resource-select');
+    expect(invoiceDialogSource).not.toContain('type="checkbox"');
+    expect(invoiceDialogSource).not.toContain('解除已选');
     expect(invoiceDialogSource).not.toContain('生成 Invoice');
     expect(invoiceDialogSource).not.toContain('删除 Invoice 源记录');
     expect(contractDialogSource).toContain('width="920px"');
@@ -205,6 +210,7 @@ describe('request project resource aggregation', () => {
     expect(styles).toContain('min-height: min(240px, calc(100dvh - 24px))');
     expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
     expect(styles).toContain('.request-resource-invoice-card-list .request-resource-invoice-row');
+    expect(styles).toContain('.request-invoice-record-icon');
     expect(styles).toContain('.request-resource-contract-card-list .request-resource-contract-row');
     expect(styles).toContain('grid-template-columns: 40px minmax(260px, 1.8fr) minmax(150px, 1fr) minmax(120px, .65fr) auto');
     expect(styles).toContain('-webkit-line-clamp: 2');
