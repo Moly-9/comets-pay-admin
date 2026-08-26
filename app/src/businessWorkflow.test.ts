@@ -11,6 +11,8 @@ import {
   getPaymentListAccess,
   nextReviewStatusAfterMutation,
   invoicePaymentListItem,
+  isValidPaymentTransactionReference,
+  mockValidatePaymentList,
   paymentListEffectiveAccount,
   paymentListContractFeeBearer,
   paymentListItemValue,
@@ -211,6 +213,24 @@ describe('project payment list', () => {
     const withItem = upsertPaymentListItem(record, item);
     expect(upsertPaymentListItem(withItem, item).items).toHaveLength(1);
     expect(removePaymentListItem(withItem, invoiceId).items).toEqual([]);
+  });
+
+  it('validates transaction references through the asynchronous adapter with field errors', async () => {
+    expect(isValidPaymentTransactionReference('Creator payout #301')).toBe(true);
+    expect(isValidPaymentTransactionReference('达人付款')).toBe(false);
+    expect(isValidPaymentTransactionReference('x'.repeat(141))).toBe(false);
+    const invalidItem = { ...item, overrides: { ...item.overrides, transactionReference: '达人付款' } };
+    const response = await mockValidatePaymentList({
+      paymentRequestProjectId: 'request_001' as PaymentRequestProjectId,
+      paymentListId: record.paymentListId,
+      draftVersion: 1,
+      expectedInvoiceIds: [invoiceId],
+      items: [invalidItem],
+    });
+    expect(response.valid).toBe(false);
+    expect(response.rows[0]?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'transactionReference' }),
+    ]));
   });
 
   it('builds the first payment row from the signed freeze instead of mutable invoice fields', () => {
@@ -500,11 +520,11 @@ describe('project payment list', () => {
     expect(refreshed).toMatchObject({
       paymentListId: currentList.paymentListId,
       paymentListCode: currentList.paymentListCode,
-      status: 'generated',
-      version: 2,
+      status: 'draft',
+      version: 1,
       updatedAt: '2026-08-05T09:00:00.000Z',
     });
-    expect(refreshed.versions).toHaveLength(2);
+    expect(refreshed.versions).toHaveLength(1);
     expect(refreshed.items).toHaveLength(2);
     expect(paymentListItemValue(refreshed.items[0]!, 'currency')).toBe('HKD');
     expect(paymentListItemValue(refreshed.items[0]!, 'receiveCurrency')).toBe('JPY');

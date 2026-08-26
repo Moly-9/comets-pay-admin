@@ -89,7 +89,6 @@ type Props = {
   onUploadContract: (inputs: ContractUploadInput[]) => ContractRecord[];
   onDeleteContract: (contractId: ContractId) => void;
   onDeleteInvoice: (invoiceId: InvoiceId) => void;
-  onGeneratePaymentLists: () => void;
   onClearPaymentLists: () => void;
   onRemovePaymentInvoice: (paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onUpdatePaymentItem: (
@@ -101,7 +100,7 @@ type Props = {
   onChangePaymentAccount: (paymentListId: PaymentListId, invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onBeginEditPaymentList: (paymentListId: PaymentListId) => void;
-  onGeneratePaymentListVersion: (paymentListId: PaymentListId) => void;
+  onGeneratePaymentListVersion: (paymentListId: PaymentListId) => Promise<void>;
   onExportPaymentList: (paymentListId: PaymentListId) => Promise<void>;
 };
 
@@ -120,7 +119,7 @@ export type RequestProjectResourceActions = {
   onChangePaymentAccount: (request: RequestProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId, payoutAccountId: string) => void;
   onRevalidatePaymentItem: (request: RequestProjectSummary, paymentListId: PaymentListId, invoiceId: InvoiceId) => void;
   onBeginEditPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => void;
-  onGeneratePaymentListVersion: (request: RequestProjectSummary, paymentListId: PaymentListId) => void;
+  onGeneratePaymentListVersion: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
   onExportPaymentList: (request: RequestProjectSummary, paymentListId: PaymentListId) => Promise<void>;
 };
 
@@ -352,7 +351,6 @@ export function RequestProjectResourceManager({
   onUploadContract,
   onDeleteContract,
   onDeleteInvoice,
-  onGeneratePaymentLists,
   onClearPaymentLists,
   onRemovePaymentInvoice,
   onUpdatePaymentItem,
@@ -373,10 +371,6 @@ export function RequestProjectResourceManager({
   const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
   const [notificationReturnInvoiceId, setNotificationReturnInvoiceId] = useState<InvoiceId | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
-  const [paymentEditorListId, setPaymentEditorListId] = useState<PaymentListId | null>(null);
-  const [paymentEditorInvoiceId, setPaymentEditorInvoiceId] = useState<InvoiceId | null>(null);
-  const [paymentEditorMode, setPaymentEditorMode] = useState<'view' | 'edit'>('edit');
-  const [paymentEditorCloseWarning, setPaymentEditorCloseWarning] = useState(false);
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -426,14 +420,6 @@ export function RequestProjectResourceManager({
     ? validatePaymentListGeneration(currentPaymentList, paymentRequestInvoiceIds(request.creatorLinks ?? []))
     : [{ code: 'NO_ITEMS' as const, message: '付款清单尚未生成。' }];
   const paymentListReady = Boolean(currentPaymentList && paymentListIssues.length === 0);
-  const paymentEditorList = paymentEditorListId
-    ? paymentLists.find((list) => list.paymentListId === paymentEditorListId) ?? null
-    : null;
-  useEffect(() => {
-    if (paymentEditorCloseWarning && paymentEditorList && !paymentEditorList.items.some((item) => item.requiresRevalidation)) {
-      setPaymentEditorCloseWarning(false);
-    }
-  }, [paymentEditorCloseWarning, paymentEditorList]);
   const notificationPayout = notificationPayoutId
     ? payouts.find((payout) => payout.id === notificationPayoutId) ?? null
     : null;
@@ -522,39 +508,11 @@ export function RequestProjectResourceManager({
     }
   };
 
-  const generateOrRefreshPaymentList = () => {
-    if (currentPaymentList?.status === 'draft' && currentPaymentList.items.length) {
-      onGeneratePaymentListVersion(currentPaymentList.paymentListId);
-      return;
-    }
-    onGeneratePaymentLists();
+  const openPaymentEditor = (_paymentListId: PaymentListId, invoiceId?: InvoiceId, mode: 'view' | 'edit' = 'edit') => {
+    if (mode === 'edit' && currentPaymentList?.status !== 'draft') onBeginEditPaymentList(_paymentListId);
+    document.getElementById(`request-payment-row-${invoiceId}`)?.scrollIntoView({ block: 'center' });
   };
 
-  const openPaymentEditor = (paymentListId: PaymentListId, invoiceId?: InvoiceId, mode: 'view' | 'edit' = 'edit') => {
-    const list = paymentLists.find((candidate) => candidate.paymentListId === paymentListId);
-    if (!list) return;
-    const readOnly = mode === 'view' || (['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList);
-    if (!readOnly && !canEditPaymentList) return;
-    if (!readOnly && list.status !== 'draft') onBeginEditPaymentList(paymentListId);
-    setPaymentEditorListId(paymentListId);
-    setPaymentEditorInvoiceId(invoiceId ?? null);
-    setPaymentEditorMode(mode);
-    setPaymentEditorCloseWarning(false);
-  };
-
-  const closePaymentEditor = () => {
-    const requiresRevalidation = paymentEditorMode === 'edit'
-      && ['admin', 'project', 'owner'].includes(currentUser.roleKey)
-      && Boolean(paymentEditorList?.items.some((item) => item.requiresRevalidation));
-    if (requiresRevalidation) {
-      setPaymentEditorCloseWarning(true);
-      return;
-    }
-    setPaymentEditorCloseWarning(false);
-    setPaymentEditorListId(null);
-    setPaymentEditorInvoiceId(null);
-    setPaymentEditorMode('edit');
-  };
 
   const contractCandidates = contractAssociationCandidates(contracts, cooperationProjectId).filter((contract) => (
     Boolean(contract.creatorId && linkByCreator.has(contract.creatorId))
@@ -760,22 +718,37 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
-      {resourceDialog === 'payment' && !paymentEditorList ? (
-        <Modal title={`${request.requestCode ?? request.id} · 付款单`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
+      {resourceDialog === 'payment' ? (
+        <Modal title={`${request.requestCode ?? request.id} · 付款单`} width="100%" className="payment-list-editor-modal" onClose={() => setResourceDialog(null)} footer={null}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {paymentProviderDisplayName(request.paymentChannel)}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
                 {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                {canEditPaymentList && currentPaymentList && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
-                {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!paymentListReady || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定，请点击编辑付款清单后再修改' : paymentListReady ? '生成付款清单' : `还有 ${paymentListIssues.length} 项付款信息待完善`} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
+                {canEditPaymentList && currentPaymentList && currentPaymentList.status !== 'draft' && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>创建编辑草稿</Button> : null}
               </div>
             ) : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
             {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务标记为“付款清单原因”的明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
             {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>请点击“编辑付款清单”逐笔完善付款明细，完成 {paymentListIssues.length} 项校验后才能生成。</span></div></div> : null}
-            <div className="payment-list-overview-rows">
+            {currentPaymentList ? <PaymentListEditor
+              list={currentPaymentList}
+              initialInvoiceId={focusedFailurePayoutId ? invoices.find((invoice) => invoice.sourcePayoutId === focusedFailurePayoutId)?.invoiceId : undefined}
+              invoices={invoices}
+              contracts={contracts}
+              creators={creators}
+              editable={canEditPaymentList && currentPaymentList.status === 'draft'}
+              accountEditableInvoiceIds={failureEditableInvoiceIds}
+              accountOverrideOnly={paymentFailureRecoveryMode}
+              requestPaymentProvider={requestPaymentProvider}
+              onUpdatePaymentItem={onUpdatePaymentItem}
+              onChangePaymentAccount={onChangePaymentAccount}
+              onRevalidatePaymentItem={onRevalidatePaymentItem}
+              onGenerate={canEditPaymentList && currentPaymentList.status === 'draft' ? () => onGeneratePaymentListVersion(currentPaymentList.paymentListId) : undefined}
+              onClose={() => setResourceDialog(null)}
+            /> : null}
+            <div className="payment-list-overview-rows" hidden>
               {currentPaymentList?.items.map((item) => {
                 const list = currentPaymentList;
                 const effectiveAccount = paymentListEffectiveAccount(item);
@@ -897,32 +870,6 @@ export function RequestProjectResourceManager({
               {currentPaymentList && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单已清空</strong><p>点击“生成付款清单”可按当前关联的 Invoice 重新生成付款明细。</p></div> : null}
             </div>
           </div>
-        </Modal>
-      ) : null}
-
-      {resourceDialog === 'payment' && paymentEditorList ? (
-        <Modal title={`${request.requestCode ?? request.id} · ${paymentEditorMode === 'view' ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={closePaymentEditor} footer={null}>
-          {paymentEditorCloseWarning ? (
-            <NoticeBanner onClose={() => setPaymentEditorCloseWarning(false)}>
-              <strong>请完成付款信息校验</strong>
-              <span>修改后的付款明细需要点击“重新校验”，校验通过后才能关闭此弹窗。</span>
-            </NoticeBanner>
-          ) : null}
-          <PaymentListEditor
-            list={paymentEditorList}
-            initialInvoiceId={paymentEditorInvoiceId ?? undefined}
-            invoices={invoices}
-            contracts={contracts}
-            creators={creators}
-            editable={paymentEditorMode === 'edit' && canEditPaymentList && paymentEditorList.status === 'draft'}
-            accountEditableInvoiceIds={failureEditableInvoiceIds}
-            accountOverrideOnly={paymentFailureRecoveryMode}
-            requestPaymentProvider={requestPaymentProvider}
-            onUpdatePaymentItem={onUpdatePaymentItem}
-            onChangePaymentAccount={onChangePaymentAccount}
-            onRevalidatePaymentItem={onRevalidatePaymentItem}
-            onClose={closePaymentEditor}
-          />
         </Modal>
       ) : null}
 

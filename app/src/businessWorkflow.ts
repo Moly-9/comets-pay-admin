@@ -107,6 +107,7 @@ export type ProjectEngagement = {
 export type PaymentListItemSnapshot = {
   invoiceNumber: string;
   creatorName: string;
+  creatorHandle?: string;
   realName?: string;
   currency: string;
   receiveCurrency: string;
@@ -125,6 +126,8 @@ export type PaymentListItemSnapshot = {
   transferMethod?: AirwallexTransferMethod | 'PAYPAL';
   localClearingSystem?: string;
   feeBearer?: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
+  feeBearerSource?: 'CONTRACT' | 'MANUAL' | 'CONTRACT_OVERRIDE' | 'CONTRACT_CONFLICT';
+  feeBearerContractIds?: ContractId[];
   accountFingerprint?: string;
   schemaKey?: string;
   validationStatus?: PayoutAccountStatus;
@@ -143,9 +146,6 @@ export type PaymentListEditableField =
   | 'description';
 
 export const PAYMENT_LIST_INVOICE_DERIVED_FIELDS = new Set<PaymentListEditableField>([
-  'currency',
-  'receiveCurrency',
-  'amount',
   'transferMethod',
 ]);
 
@@ -247,7 +247,33 @@ export type PaymentListGenerationIssue = {
   code: PaymentListGenerationIssueCode;
   message: string;
   invoiceId?: InvoiceId;
+  field?: keyof PaymentListItemSnapshot;
 };
+
+export type PaymentListValidationRequest = {
+  paymentRequestProjectId: PaymentRequestProjectId;
+  paymentListId: PaymentListId;
+  draftVersion: number;
+  expectedInvoiceIds: InvoiceId[];
+  items: PaymentListItem[];
+};
+
+export type PaymentListValidationRowResult = {
+  invoiceId: InvoiceId;
+  passed: boolean;
+  issues: PaymentListGenerationIssue[];
+};
+
+export type PaymentListValidationResponse = {
+  valid: boolean;
+  validatedAt: string;
+  rows: PaymentListValidationRowResult[];
+  issues: PaymentListGenerationIssue[];
+};
+
+export type PaymentListValidationAdapter = (
+  request: PaymentListValidationRequest,
+) => Promise<PaymentListValidationResponse>;
 
 export type WorkflowAuditAction =
   | 'create'
@@ -535,7 +561,14 @@ export const mergeRefreshedPaymentListItem = (
   const nextItem: PaymentListItem = {
     ...currentItem,
     engagementId: refreshedItem.engagementId,
-    snapshot: { ...refreshedItem.snapshot },
+    snapshot: {
+      ...refreshedItem.snapshot,
+      feeBearerSource: currentItem.overrides.feeBearer !== undefined
+        ? refreshedItem.snapshot.feeBearerSource === 'CONTRACT'
+          ? 'CONTRACT_OVERRIDE'
+          : 'MANUAL'
+        : refreshedItem.snapshot.feeBearerSource,
+    },
     sourceInvoicePaymentSnapshot: refreshedItem.sourceInvoicePaymentSnapshot
       ? { ...refreshedItem.sourceInvoicePaymentSnapshot, payment: { ...refreshedItem.sourceInvoicePaymentSnapshot.payment } }
       : currentItem.sourceInvoicePaymentSnapshot,
@@ -597,6 +630,12 @@ export const paymentListContractFeeBearer = (
   } as const;
 };
 
+export const isValidPaymentTransactionReference = (value: string) => (
+  value.length >= 1
+  && value.length <= 140
+  && /^[\x20-\x7E]+$/.test(value)
+);
+
 const paymentListItemValidationIssues = (item: PaymentListItem) => {
   const snapshot = paymentListEffectiveAccount(item);
   const provider = snapshot.provider;
@@ -631,6 +670,9 @@ const paymentListItemValidationIssues = (item: PaymentListItem) => {
     !feeBearer ? '手续费承担方未确认' : '',
     !paymentReason ? '付款原因未填写' : '',
     !transactionReference ? '交易附言未填写' : '',
+    transactionReference && !isValidPaymentTransactionReference(transactionReference)
+      ? '交易附言仅支持 1–140 位英文、数字、空格及常用英文标点'
+      : '',
     !snapshot.validationStatus ? '账户快照缺少校验状态' : '',
     snapshot.validationStatus && !['VALIDATED', 'VERIFIED'].includes(snapshot.validationStatus)
       ? '账户快照未通过验证'
@@ -644,6 +686,7 @@ const clonePaymentListItems = (items: PaymentListItem[]) => items.map((item) => 
   snapshot: {
     ...item.snapshot,
     contractIds: item.snapshot.contractIds ? [...item.snapshot.contractIds] : undefined,
+    feeBearerContractIds: item.snapshot.feeBearerContractIds ? [...item.snapshot.feeBearerContractIds] : undefined,
   },
   sourceInvoicePaymentSnapshot: item.sourceInvoicePaymentSnapshot
     ? { ...item.sourceInvoicePaymentSnapshot, payment: { ...item.sourceInvoicePaymentSnapshot.payment } }
@@ -659,7 +702,7 @@ const clonePaymentListItems = (items: PaymentListItem[]) => items.map((item) => 
 export const refreshPaymentListFromInvoices = ({
   list,
   refreshedItems,
-  actor,
+  actor: _actor,
   refreshedAt = nowIso(),
 }: {
   list: PaymentListRecord;
@@ -668,24 +711,12 @@ export const refreshPaymentListFromInvoices = ({
   refreshedAt?: string;
 }): PaymentListRecord => {
   const items = mergeRefreshedPaymentListItems(list.items, refreshedItems);
-  const version = (list.version ?? 0) + 1;
-  const snapshot: PaymentListVersionSnapshot = {
-    version,
-    generatedAt: refreshedAt,
-    generatedBy: { ...actor },
-    items: clonePaymentListItems(items),
-  };
-
   return {
     ...list,
     provider: paymentListProviderForItems(items, list.provider),
-    status: 'generated',
-    version,
-    generatedAt: refreshedAt,
-    generatedBy: { ...actor },
-    draftFromVersion: undefined,
+    status: 'draft',
+    draftFromVersion: list.status === 'draft' ? list.draftFromVersion : list.version,
     items: clonePaymentListItems(items),
-    versions: [...(list.versions ?? []), snapshot],
     updatedAt: refreshedAt,
   };
 };
@@ -755,6 +786,47 @@ export const validatePaymentListGeneration = (
       && candidate.message === issue.message
     )) === index
   ));
+};
+
+const paymentListIssueField = (message: string): keyof PaymentListItemSnapshot | undefined => {
+  if (message.includes('支付币种')) return 'currency';
+  if (message.includes('收款币种')) return 'receiveCurrency';
+  if (message.includes('金额')) return 'amount';
+  if (message.includes('手续费承担方')) return 'feeBearer';
+  if (message.includes('付款原因')) return 'paymentReason';
+  if (message.includes('交易附言')) return 'transactionReference';
+  if (message.includes('转账方式') || message.includes('清算方式')) return 'transferMethod';
+  if (message.includes('账户') || message.includes('beneficiary') || message.includes('Schema')) return 'accountSummary';
+  return undefined;
+};
+
+/**
+ * Local asynchronous stand-in for the future payment-list validation API.
+ * Its request/response contract is deliberately backend-ready; the prototype
+ * only adds a small deterministic delay and performs no network request.
+ */
+export const mockValidatePaymentList: PaymentListValidationAdapter = async (request) => {
+  await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 180));
+  const list: PaymentListRecord = {
+    paymentListId: request.paymentListId,
+    paymentListCode: 'DRAFT',
+    projectId: '' as ProjectId,
+    paymentRequestProjectId: request.paymentRequestProjectId,
+    provider: paymentListProviderForItems(request.items),
+    status: 'draft',
+    version: request.draftVersion,
+    items: request.items,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  const validatedAt = nowIso();
+  const issues = validatePaymentListGeneration(list, request.expectedInvoiceIds)
+    .map((issue) => ({ ...issue, field: issue.field ?? paymentListIssueField(issue.message) }));
+  const rows = request.items.map((item) => {
+    const rowIssues = issues.filter((issue) => issue.invoiceId === item.invoiceId);
+    return { invoiceId: item.invoiceId, passed: rowIssues.length === 0, issues: rowIssues };
+  });
+  return { valid: issues.length === 0, validatedAt, rows, issues };
 };
 
 export const generatePaymentListVersion = ({
@@ -1014,7 +1086,8 @@ export const invoicePaymentListItem = (
       contract.contractId === contractId || contract.id === contractId
     ))
   ));
-  const feeBearer = paymentListContractFeeBearer(contractReferences).value;
+  const contractFeeBearer = paymentListContractFeeBearer(contractReferences);
+  const feeBearer = contractFeeBearer.value;
   const payoutAccountId = frozen.payoutAccountId;
   const payoutAccountVersion = frozen.payoutAccountVersion ?? 'legacy-v1';
   const accountFingerprint = frozen.payoutAccountFingerprint;
@@ -1025,6 +1098,7 @@ export const invoicePaymentListItem = (
     snapshot: {
       invoiceNumber: invoice.id,
       creatorName: invoice.snapshot.creatorName,
+      creatorHandle: invoice.snapshot.creatorHandle,
       realName: invoice.snapshot.from.legalName,
       currency: frozen.currency,
       receiveCurrency: payment.accountCurrency || frozen.currency,
@@ -1047,6 +1121,14 @@ export const invoicePaymentListItem = (
       transferMethod: payment.transferMethod,
       localClearingSystem: payment.localClearingSystem,
       feeBearer,
+      feeBearerSource: contractFeeBearer.conflicting
+        ? 'CONTRACT_CONFLICT'
+        : contractFeeBearer.value
+          ? 'CONTRACT'
+          : undefined,
+      feeBearerContractIds: contractReferences.map((contract) => (
+        (contract.contractId ?? contract.id) as ContractId
+      )),
       accountFingerprint,
       schemaKey: payment.schemaKey,
       validationStatus: payment.validationStatus,

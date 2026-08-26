@@ -677,7 +677,6 @@ export function MediaPaymentProjectsPage({
   onFailureFocusCleared = () => undefined,
   onCreated,
   onUpdated,
-  onGeneratePaymentList,
   onSubmitRequest,
   onCancelRequest = () => false,
   resourceActions,
@@ -703,7 +702,8 @@ export function MediaPaymentProjectsPage({
   onFailureFocusCleared?: () => void;
   onCreated: (request: RequestProjectSummary) => void;
   onUpdated: (request: RequestProjectSummary) => void;
-  onGeneratePaymentList: (request: RequestProjectSummary) => void;
+  /** @deprecated 付款草稿现已在 Invoice 关联变化时自动同步。 */
+  onGeneratePaymentList?: (request: RequestProjectSummary) => void;
   onSubmitRequest: (request: RequestProjectSummary) => void;
   onCancelRequest?: (request: RequestProjectSummary, reason: string) => boolean;
   resourceActions: RequestProjectResourceActions;
@@ -1254,7 +1254,7 @@ export function MediaPaymentProjectsPage({
     setSelectedRequestId(request.id);
     notify(
       editingRequest ? '请款已更新' : '请款已创建',
-      `${requestCode} 已${editingRequest ? '更新并清除旧付款清单' : '保存为草稿'}，可在详情中完成校验后提交申请。`,
+      `${requestCode} 已保存，所选 Invoice 的付款草稿将自动同步；可在详情中完成校验后提交申请。`,
     );
   };
 
@@ -1485,7 +1485,6 @@ export function MediaPaymentProjectsPage({
             onUploadContract={(inputs) => resourceActions.onUploadContract(selectedRequest, inputs)}
             onDeleteContract={(contractId) => resourceActions.onDeleteContract(selectedRequest, contractId)}
             onDeleteInvoice={(invoiceId) => resourceActions.onDeleteInvoice(selectedRequest, invoiceId)}
-            onGeneratePaymentLists={() => onGeneratePaymentList(selectedRequest)}
             onClearPaymentLists={() => resourceActions.onClearPaymentLists(selectedRequest)}
             onRemovePaymentInvoice={(paymentListId, invoiceId) => resourceActions.onRemovePaymentInvoice(selectedRequest, paymentListId, invoiceId)}
             onUpdatePaymentItem={(paymentListId, invoiceId, field, value) => resourceActions.onUpdatePaymentItem(selectedRequest, paymentListId, invoiceId, field, value)}
@@ -1630,7 +1629,6 @@ export function MediaPaymentProjectsPage({
             <NoticeBanner>申请当前状态：{selectedMyProjectStatus}。审批处理请前往“请款项目”工作台。</NoticeBanner>
           )}
           {editable ? <div className="media-request-submit-actions">
-            <Button variant="secondary" onClick={() => onGeneratePaymentList(selectedRequest)}>生成 / 刷新付款清单</Button>
             <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>
           </div> : null}
         </section> : null}

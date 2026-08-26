@@ -162,6 +162,7 @@ import {
   generatePaymentListVersion,
   invoicePaymentListItem,
   isInvoiceDerivedPaymentListField,
+  mockValidatePaymentList,
   nextReviewStatusAfterMutation,
   nowIso,
   paymentListEffectiveAccount,
@@ -1909,16 +1910,12 @@ export default function App() {
     }
     try {
       const createdAt = nowIso();
-      const refreshedItems = request.creatorLinks.flatMap((link) => link.invoiceIds.map((invoiceId) => ({
-        link,
-        invoiceId,
-      }))).map(({ link, invoiceId }) => {
+      const refreshedItems = request.creatorLinks.flatMap((link) => link.invoiceIds).map((invoiceId) => {
         const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
         if (!invoice) throw new Error(`未找到 Invoice ${invoiceId}`);
         return createPaymentRequestListItem({
           invoice,
           contracts,
-          contractIds: link.contractIds,
         });
       });
       const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
@@ -1968,15 +1965,12 @@ export default function App() {
               ? {
                   ...candidate.generatedDetail,
                   paymentListId: list.paymentListCode,
-                  paymentListStatus: '已生成',
+                  paymentListStatus: '草稿待校验',
                 }
               : candidate.generatedDetail,
           }
         : candidate));
-      notify(
-        existingList ? '付款单已刷新' : '付款单已生成',
-        `${list.paymentListCode} 已包含当前请款项目的 ${list.items.length} 份 Invoice 付款明细。`,
-      );
+      notify('付款草稿已同步', `${list.paymentListCode} 已自动同步 ${list.items.length} 份 Invoice 付款明细。`);
     } catch (error) {
       notify('无法生成付款清单', error instanceof Error ? error.message : 'Invoice 账户快照校验失败。');
     }
@@ -3778,7 +3772,16 @@ export default function App() {
       ? { ...invoice, validationStatus: 'needs_review' }
       : invoice));
     registerRequestResourceMutation(request, 'project', request.paymentRequestProjectId ?? request.id, 'update', summary);
-    notify('项目资料已更新', `${summary}。付款清单和审批结果需要重新校验。`);
+    if (invoiceIds.length) {
+      generateMediaRequestPaymentLists({ ...request, creatorLinks: links });
+    } else {
+      setPaymentLists((current) => current.map((list) => (
+        list.paymentRequestProjectId === request.paymentRequestProjectId
+          ? { ...beginPaymentListEdit(list), items: [], updatedAt: nowIso() }
+          : list
+      )));
+      notify('项目资料已更新', `${summary}。当前没有关联 Invoice，付款草稿已清空。`);
+    }
   };
 
   const requestListFor = (request: RequestProjectSummary, paymentListId: PaymentListRecord['paymentListId']) => (
@@ -3964,20 +3967,42 @@ export default function App() {
         return;
       }
       if (isInvoiceDerivedPaymentListField(field)) {
-        notify('Invoice 冻结字段不可修改', '金额、币种和付款方式来自达人签署时的 Invoice 快照。');
+        notify('转账方式不可修改', '转账方式来自达人签署时的付款账户快照。');
         return;
       }
       if (!item || String(paymentListItemValue(item, field)) === String(value)) return;
-      setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
-        ...candidate,
-        updatedAt: nowIso(),
-        items: candidate.items.map((item) => item.invoiceId === invoiceId ? {
-          ...item,
-          overrides: { ...item.overrides, [field]: value },
-          requiresRevalidation: true,
-          validationIssues: ['付款字段已修改，请重新校验'],
-        } : item),
-      } : candidate));
+      setPaymentLists((current) => current.map((candidate) => {
+        if (candidate.paymentListId !== paymentListId) return candidate;
+        const updatedList = {
+          ...candidate,
+          updatedAt: nowIso(),
+          items: candidate.items.map((paymentItem) => paymentItem.invoiceId === invoiceId ? {
+            ...paymentItem,
+            snapshot: field === 'feeBearer' ? {
+              ...paymentItem.snapshot,
+              feeBearerSource: paymentItem.snapshot.feeBearerSource === 'CONTRACT'
+                ? 'CONTRACT_OVERRIDE' as const
+                : 'MANUAL' as const,
+            } : paymentItem.snapshot,
+            overrides: { ...paymentItem.overrides, [field]: value },
+            requiresRevalidation: true,
+            validationIssues: ['付款字段已修改，请重新校验'],
+          } : paymentItem),
+        };
+        setRequestProjects((requests) => requests.map((candidateRequest) => (
+          candidateRequest.paymentRequestProjectId === request.paymentRequestProjectId
+            ? {
+                ...candidateRequest,
+                amount: paymentRequestAmountLabel(candidateRequest.creatorLinks ?? [], generatedInvoices, updatedList),
+                generatedDetail: candidateRequest.generatedDetail ? {
+                  ...candidateRequest.generatedDetail,
+                  invoiceAmount: paymentRequestAmountLabel(candidateRequest.creatorLinks ?? [], generatedInvoices, updatedList),
+                } : candidateRequest.generatedDetail,
+              }
+            : candidateRequest
+        )));
+        return updatedList;
+      }));
       markPaymentListEdit(request, `已修改 Invoice ${invoiceId} 的付款字段`);
     },
     onChangePaymentAccount: (request, paymentListId, invoiceId, payoutAccountId) => {
@@ -4072,7 +4097,7 @@ export default function App() {
         : candidate));
       markPaymentListEdit(request, `已从 ${list.paymentListCode} v${list.version ?? 1} 创建编辑草稿`);
     },
-    onGeneratePaymentListVersion: (request, paymentListId) => {
+    onGeneratePaymentListVersion: async (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
       const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
         item.issueType === 'PAYMENT_LIST'
@@ -4085,15 +4110,51 @@ export default function App() {
         || list.status !== 'draft'
         || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
       ) return;
-      const result = generatePaymentListVersion({
-        list,
-        expectedInvoiceIds: paymentRequestInvoiceIds(request.creatorLinks ?? []),
-        actor: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+      const expectedInvoiceIds = paymentRequestInvoiceIds(request.creatorLinks ?? []);
+      const validation = await mockValidatePaymentList({
+        paymentRequestProjectId: request.paymentRequestProjectId ?? request.id as PaymentRequestProjectId,
+        paymentListId,
+        draftVersion: (list.version ?? 0) + 1,
+        expectedInvoiceIds,
+        items: list.items.map((item) => ({
+          ...item,
+          requiresRevalidation: false,
+          validationIssues: [],
+        })),
       });
-      if (result.issues.length) {
-        notify('付款清单生成失败', result.issues[0].message);
+      if (!validation.valid) {
+        setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? {
+          ...candidate,
+          status: 'draft',
+          updatedAt: validation.validatedAt,
+          items: candidate.items.map((item) => {
+            const row = validation.rows.find((result) => result.invoiceId === item.invoiceId);
+            return {
+              ...item,
+              requiresRevalidation: Boolean(row?.issues.length),
+              validationIssues: row?.issues.map((issue) => issue.message.replace(`${item.snapshot.invoiceNumber}：`, '')) ?? [],
+              lastValidatedAt: validation.validatedAt,
+            };
+          }),
+        } : candidate));
+        notify('付款清单生成失败', validation.issues[0]?.message ?? '付款清单校验未通过。');
         return;
       }
+      const validatedList: PaymentListRecord = {
+        ...list,
+        items: list.items.map((item) => ({
+          ...item,
+          requiresRevalidation: false,
+          validationIssues: [],
+          lastValidatedAt: validation.validatedAt,
+        })),
+      };
+      const result = generatePaymentListVersion({
+        list: validatedList,
+        expectedInvoiceIds,
+        actor: { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        generatedAt: validation.validatedAt,
+      });
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId ? result.record : candidate));
       registerRequestResourceMutation(request, 'payment-list', paymentListId, 'update', `已生成 ${list.paymentListCode} v${result.record.version ?? 1}`);
       notify('付款清单版本已生成', `${list.paymentListCode} v${result.record.version ?? 1} 已锁定。`);
@@ -4273,7 +4334,10 @@ export default function App() {
           onFocusCleared={() => setFocusedProjectId(null)}
           initialFocusedFailurePayoutId={focusedPaymentFailurePayoutId}
           onFailureFocusCleared={() => setFocusedPaymentFailurePayoutId(null)}
-          onCreated={(request) => setRequestProjects((current) => [request, ...current])}
+          onCreated={(request) => {
+            setRequestProjects((current) => [request, ...current]);
+            generateMediaRequestPaymentLists(request);
+          }}
           onUpdated={(request) => {
             const currentRequest = requestProjects.find((candidate) => (
               candidate.paymentRequestProjectId === request.paymentRequestProjectId
@@ -4285,11 +4349,8 @@ export default function App() {
             setRequestProjects((current) => current.map((candidate) => (
               candidate.paymentRequestProjectId === request.paymentRequestProjectId ? request : candidate
             )));
-            setPaymentLists((current) => current.filter((list) => (
-              list.paymentRequestProjectId !== request.paymentRequestProjectId
-            )));
+            generateMediaRequestPaymentLists(request);
           }}
-          onGeneratePaymentList={generateMediaRequestPaymentLists}
           onSubmitRequest={submitMediaPaymentRequest}
           onCancelRequest={cancelMediaPaymentRequest}
           resourceActions={requestResourceActions}

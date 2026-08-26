@@ -489,10 +489,11 @@ describe('media payment request submission validation', () => {
 
   it('inherits one unique linked-contract fee bearer into the payment row', () => {
     const linkedContract = contract('CON-FEE');
+    const sourceInvoice = invoice();
+    sourceInvoice.snapshot = { ...sourceInvoice.snapshot, contractIds: [linkedContract.contractId!] };
     const item = createPaymentRequestListItem({
-      invoice: invoice(),
+      invoice: sourceInvoice,
       contracts: [linkedContract],
-      contractIds: [linkedContract.contractId!],
     });
 
     expect(item.snapshot.feeBearer).toBe('ADVERTISER');
@@ -502,10 +503,11 @@ describe('media payment request submission validation', () => {
   it('leaves the fee bearer editable when linked contracts conflict', () => {
     const advertiserContract = contract('CON-ADVERTISER');
     const publisherContract = { ...contract('CON-PUBLISHER'), feeBearer: 'PUBLISHER' as const };
+    const sourceInvoice = invoice();
+    sourceInvoice.snapshot = { ...sourceInvoice.snapshot, contractIds: [advertiserContract.contractId!, publisherContract.contractId!] };
     const item = createPaymentRequestListItem({
-      invoice: invoice(),
+      invoice: sourceInvoice,
       contracts: [advertiserContract, publisherContract],
-      contractIds: [advertiserContract.contractId!, publisherContract.contractId!],
     });
 
     expect(item.snapshot.feeBearer).toBe('');

@@ -925,14 +925,23 @@ export const paymentRequestSubmissionIssues = ({
 export const paymentRequestAmountLabel = (
   links: PaymentRequestCreatorLink[],
   invoices: GeneratedInvoiceRecord[],
+  paymentList?: PaymentListRecord | null,
 ) => {
-  const totals = paymentRequestInvoiceIds(links).reduce<Record<string, number>>((result, invoiceId) => {
-    const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
-    if (!invoice) return result;
-    const total = invoice.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0);
-    result[invoice.snapshot.currency] = (result[invoice.snapshot.currency] ?? 0) + total;
-    return result;
-  }, {});
+  const linkedInvoiceIds = paymentRequestInvoiceIds(links);
+  const effectivePaymentItems = paymentList?.items.filter((item) => linkedInvoiceIds.includes(item.invoiceId)) ?? [];
+  const totals = effectivePaymentItems.length
+    ? effectivePaymentItems.reduce<Record<string, number>>((result, item) => {
+        const currency = String(paymentListItemValue(item, 'currency'));
+        result[currency] = (result[currency] ?? 0) + Number(paymentListItemValue(item, 'amount'));
+        return result;
+      }, {})
+    : linkedInvoiceIds.reduce<Record<string, number>>((result, invoiceId) => {
+        const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);
+        if (!invoice) return result;
+        const total = invoice.snapshot.items.reduce((sum, item) => sum + item.lineTotal, 0);
+        result[invoice.snapshot.currency] = (result[invoice.snapshot.currency] ?? 0) + total;
+        return result;
+      }, {});
   return Object.entries(totals)
     .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
     .join(' + ') || '待核算';
@@ -941,16 +950,14 @@ export const paymentRequestAmountLabel = (
 export const createPaymentRequestListItem = ({
   invoice,
   contracts,
-  contractIds = [],
+  contractIds: _legacyContractIds,
 }: {
   invoice: GeneratedInvoiceRecord;
   contracts: ContractRecord[];
+  /** @deprecated Invoice 自身冻结的 contractIds 是唯一付款依据。 */
   contractIds?: ContractId[];
 }) => {
-  const source = invoicePaymentListItem({
-    ...invoice,
-    snapshot: { ...invoice.snapshot, contractIds },
-  }, contracts);
+  const source = invoicePaymentListItem(invoice, contracts);
   return revalidatePaymentListItem({
     ...source,
     snapshot: {
