@@ -56,6 +56,7 @@ type ResourceKind = 'contract' | 'invoice' | 'payment';
 type ExpandedPaymentRow = { invoiceId: InvoiceId; mode: 'view' | 'edit' } | null;
 type PaymentGenerationIssueGroup = {
   key: string;
+  invoiceId?: InvoiceId;
   creatorName: string;
   invoiceNumber: string;
   issues: string[];
@@ -370,6 +371,7 @@ export function RequestProjectResourceManager({
   const [bulkPaymentNotice, setBulkPaymentNotice] = useState('');
   const [paymentGenerationChecking, setPaymentGenerationChecking] = useState(false);
   const [paymentGenerationIssues, setPaymentGenerationIssues] = useState<PaymentGenerationIssueGroup[] | null>(null);
+  const [paymentGenerationFailedInvoiceIds, setPaymentGenerationFailedInvoiceIds] = useState<InvoiceId[]>([]);
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -529,6 +531,7 @@ export function RequestProjectResourceManager({
     ) return;
     setPaymentGenerationChecking(true);
     setPaymentGenerationIssues(null);
+    setPaymentGenerationFailedInvoiceIds([]);
     try {
       const expectedInvoiceIds = paymentRequestInvoiceIds(request.creatorLinks ?? []);
       const validationList: PaymentListRecord = {
@@ -558,6 +561,7 @@ export function RequestProjectResourceManager({
         const issues = [...new Set([...localMessages, ...apiMessages])];
         return issues.length ? [{
           key: item.invoiceId,
+          invoiceId: item.invoiceId,
           creatorName: item.snapshot.creatorName,
           invoiceNumber: item.snapshot.invoiceNumber,
           issues,
@@ -573,6 +577,7 @@ export function RequestProjectResourceManager({
         });
       }
       if (issueGroups.length) {
+        setPaymentGenerationFailedInvoiceIds(issueGroups.flatMap((group) => group.invoiceId ? [group.invoiceId] : []));
         setPaymentGenerationIssues(issueGroups);
         return;
       }
@@ -580,6 +585,19 @@ export function RequestProjectResourceManager({
     } finally {
       setPaymentGenerationChecking(false);
     }
+  };
+
+  const openPaymentGenerationIssue = (group: PaymentGenerationIssueGroup) => {
+    setPaymentGenerationIssues(null);
+    if (!group.invoiceId) return;
+    setExpandedPaymentRow({ invoiceId: group.invoiceId, mode: 'view' });
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const row = document.getElementById(`request-payment-row-${group.invoiceId}`);
+        row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row?.focus({ preventScroll: true });
+      });
+    });
   };
 
   const applyBulkPaymentField = (field: 'paymentReason' | 'transactionReference', rawValue: string) => {
@@ -894,16 +912,17 @@ export function RequestProjectResourceManager({
                   && (list.status === 'draft' || canEditSubmittedPaymentList);
                 const transactionReference = String(paymentListItemValue(item, 'transactionReference') || '');
                 const transferMethod = String(paymentListItemValue(item, 'transferMethod') || effectiveAccount.transferMethod || '待补充');
+                const generationFailed = paymentGenerationFailedInvoiceIds.includes(item.invoiceId);
                 return (
                   <article
-                    className={`payment-list-overview-row${failurePayout ? ' is-payment-failure' : ''}${focused ? ' is-failure-focused' : ''}`}
+                    className={`payment-list-overview-row${failurePayout ? ' is-payment-failure' : ''}${focused ? ' is-failure-focused' : ''}${generationFailed ? ' is-generation-failed' : ''}`}
                     id={`request-payment-row-${item.invoiceId}`}
                     key={`${list.paymentListId}-${item.invoiceId}`}
-                    tabIndex={focused ? -1 : undefined}
+                    tabIndex={focused || generationFailed ? -1 : undefined}
                   >
                     <header className="payment-list-overview-row-header">
                       <div className="payment-list-overview-creator"><Avatar initials={creator?.initials ?? item.snapshot.creatorName.slice(0, 2).toUpperCase()} accent={creator?.accent ?? '#60758f'} size="sm" /><span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {paymentProviderDisplayName(effectiveAccount.provider)}</small></span></div>
-                      <span className={`payment-list-overview-state ${itemIssues.length ? 'is-warning' : 'is-ready'}`}>{itemIssues.length ? '待完善' : '已完成'}</span>
+                      <span className={`payment-list-overview-state ${generationFailed ? 'is-error' : itemIssues.length ? 'is-warning' : 'is-ready'}`}>{generationFailed ? '校验未通过' : itemIssues.length ? '待完善' : '已完成'}</span>
                     </header>
                     <div className={`payment-list-overview-row-summary${transferMethod === 'SWIFT' ? ' is-swift' : ''}`}><span>收款账户名 <b title={accountName}>{accountName}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>收款方币种 <b>{paymentListItemValue(item, 'receiveCurrency') || '待补充'}</b></span><span>转账方式 <b>{transferMethod}</b></span>{transferMethod === 'SWIFT' ? <span>SWIFT 费用选项 <b>{swiftFeeOptionLabel(paymentListItemValue(item, 'feeBearer'))}</b></span> : null}</div>
                     {paymentListReturn ? (
@@ -1022,7 +1041,7 @@ export function RequestProjectResourceManager({
                         </div>
                       </section>
                     ) : null}
-                    <footer className="payment-list-overview-row-footer"><span>{itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><span className="payment-list-overview-row-actions"><ListActionButton kind="view" onClick={() => togglePaymentRow(list, item.invoiceId, 'view')}>{expandedMode === 'view' ? '收起详情' : '查看本笔'}</ListActionButton>{rowCanEdit ? <ListActionButton kind="edit" onClick={() => togglePaymentRow(list, item.invoiceId, 'edit')}>{expandedMode === 'edit' ? '收起编辑' : '编辑本笔'}</ListActionButton> : null}</span></footer>
+                    <footer className="payment-list-overview-row-footer"><span>{generationFailed ? 'Airwallex 校验未通过 · 请查看并修正本笔明细' : itemIssues.length ? itemIssues[0] : `付款信息完整 · ${paymentListStatusLabel(list.status)}`}</span><span className="payment-list-overview-row-actions"><ListActionButton kind="view" onClick={() => togglePaymentRow(list, item.invoiceId, 'view')}>{expandedMode === 'view' ? '收起详情' : '查看本笔'}</ListActionButton>{rowCanEdit ? <ListActionButton kind="edit" onClick={() => togglePaymentRow(list, item.invoiceId, 'edit')}>{expandedMode === 'edit' ? '收起编辑' : '编辑本笔'}</ListActionButton> : null}</span></footer>
                   </article>
                 );
               })}
@@ -1048,9 +1067,19 @@ export function RequestProjectResourceManager({
             </div>
             <div className="payment-generation-issue-list">
               {paymentGenerationIssues.map((group) => (
-                <article key={group.key}>
-                  <header><div><strong>{group.creatorName}</strong><span>{group.invoiceNumber}</span></div><span>{group.issues.length} 项待补充</span></header>
-                  <ul>{group.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                <article className={group.invoiceId ? 'is-clickable' : ''} key={group.key}>
+                  {group.invoiceId ? (
+                    <button type="button" aria-label={`查看 ${group.creatorName} ${group.invoiceNumber} 未通过明细`} onClick={() => openPaymentGenerationIssue(group)}>
+                      <span className="payment-generation-issue-heading"><span><strong>{group.creatorName}</strong><small>{group.invoiceNumber}</small></span><em>{group.issues.length} 项待补充</em></span>
+                      <span className="payment-generation-issue-messages">{group.issues.map((issue) => <span key={issue}>{issue}</span>)}</span>
+                      <span className="payment-generation-issue-jump">查看该笔明细 →</span>
+                    </button>
+                  ) : (
+                    <div className="payment-generation-issue-static">
+                      <span className="payment-generation-issue-heading"><span><strong>{group.creatorName}</strong><small>{group.invoiceNumber}</small></span><em>{group.issues.length} 项待补充</em></span>
+                      <span className="payment-generation-issue-messages">{group.issues.map((issue) => <span key={issue}>{issue}</span>)}</span>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>

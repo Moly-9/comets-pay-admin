@@ -128,6 +128,8 @@
 .payment-list-overview-rows { display: grid; gap: 10px; }
 .payment-list-overview-row { display: grid; gap: 10px; border: 1px solid #e2e6ec; border-radius: 8px; background: #fff; padding: 14px 16px; }
 .payment-list-overview-row.is-failure-focused { box-shadow: 0 0 0 3px #f1c1a9; }
+.payment-list-overview-row.is-generation-failed { border-color: #df8d83; box-shadow: 0 0 0 2px rgba(196, 79, 68, .1); }
+.payment-list-overview-row.is-generation-failed:focus { outline: 3px solid rgba(196, 79, 68, .2); outline-offset: 2px; }
 .request-payment-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 12px; }
 .request-payment-bulk-fields { display: grid; grid-row: 2; grid-template-columns: repeat(2, minmax(230px, 1fr)); gap: 10px; min-width: 0; width: 100%; }
 .request-payment-bulk-fields > label { display: grid; min-width: 0; gap: 5px; color: #526071; font-size: 11px; font-weight: 650; }
@@ -151,10 +153,12 @@
 .payment-list-overview-state { flex: 0 0 auto; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 700; }
 .payment-list-overview-state.is-ready { background: #ebf8f0; color: #2d7650; }
 .payment-list-overview-state.is-warning { background: #fff4e4; color: #a05a21; }
+.payment-list-overview-state.is-error { background: #fff0ee; color: #a8443b; }
 .payment-list-overview-row-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; color: #7b8591; font-size: 11px; }
 .payment-list-overview-row-summary.is-swift { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .payment-list-overview-row-summary span { min-width: 0; }
 .payment-list-overview-row-summary b { display: block; overflow: hidden; margin-top: 3px; color: #455263; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.payment-list-overview-row.is-generation-failed .payment-list-overview-row-summary { border: 1px solid #f1d5d1; border-radius: 8px; background: #fff8f7; padding: 9px 10px; }
 .payment-list-overview-row-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #edf0f3; padding-top: 9px; color: #a05a21; font-size: 11px; }
 .payment-list-overview-row-footer .text-link { flex: 0 0 auto; }
 .payment-list-overview-row-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 14px; }
@@ -187,12 +191,22 @@
 .payment-generation-issues-intro strong { font-size: 13px; }
 .payment-generation-issues-intro p { margin: 0; color: #745d5a; font-size: 11px; line-height: 1.5; }
 .payment-generation-issue-list { display: grid; gap: 9px; }
-.payment-generation-issue-list article { border: 1px solid #e0e5eb; border-radius: 10px; background: #fff; padding: 12px 13px; }
-.payment-generation-issue-list header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.payment-generation-issue-list header > div { display: grid; min-width: 0; gap: 3px; }
-.payment-generation-issue-list header strong { color: #303c4c; font-size: 12px; }
-.payment-generation-issue-list header span { color: #8a5660; font-size: 10px; }
-.payment-generation-issue-list ul { display: grid; gap: 4px; margin: 9px 0 0; padding: 9px 0 0 18px; border-top: 1px solid #edf0f3; color: #5d6876; font-size: 11px; line-height: 1.45; }
+.payment-generation-issue-list article { overflow: hidden; border: 1px solid #e0e5eb; border-radius: 10px; background: #fff; }
+.payment-generation-issue-list article.is-clickable { border-color: #e5b8b2; }
+.payment-generation-issue-list button,
+.payment-generation-issue-static { display: grid; width: 100%; gap: 9px; border: 0; background: transparent; padding: 12px 13px; text-align: left; }
+.payment-generation-issue-list button { cursor: pointer; transition: background 160ms ease, box-shadow 160ms ease; }
+.payment-generation-issue-list button:hover { background: #fff8f7; }
+.payment-generation-issue-list button:focus-visible { outline: 3px solid rgba(196, 79, 68, .2); outline-offset: -3px; }
+.payment-generation-issue-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.payment-generation-issue-heading > span { display: grid; min-width: 0; gap: 3px; }
+.payment-generation-issue-heading strong { color: #303c4c; font-size: 12px; }
+.payment-generation-issue-heading small { color: #8a5660; font-size: 10px; }
+.payment-generation-issue-heading em { color: #a64a42; font-size: 10px; font-style: normal; }
+.payment-generation-issue-messages { display: grid; gap: 4px; border-top: 1px solid #edf0f3; padding: 9px 0 0 16px; color: #5d6876; font-size: 11px; line-height: 1.45; }
+.payment-generation-issue-messages > span { position: relative; }
+.payment-generation-issue-messages > span::before { position: absolute; top: .55em; left: -12px; width: 4px; height: 4px; border-radius: 50%; background: #c45f55; content: ''; }
+.payment-generation-issue-jump { justify-self: end; color: #a8443b; font-size: 10px; font-weight: 700; }
 
 @keyframes payment-list-spin {
   to { transform: rotate(360deg); }

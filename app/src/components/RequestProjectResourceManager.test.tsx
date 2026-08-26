@@ -262,6 +262,10 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('validatePaymentListAccountViaApi({ item, creators })');
     expect(source).toContain('Airwallex 付款信息完整性校验未通过');
     expect(source).toContain('paymentGenerationIssues.map');
+    expect(source).toContain('openPaymentGenerationIssue(group)');
+    expect(source).toContain('查看该笔明细 →');
+    expect(source).toContain("setExpandedPaymentRow({ invoiceId: group.invoiceId, mode: 'view' })");
+    expect(source).toContain("row?.scrollIntoView({ behavior: 'smooth', block: 'center' })");
     expect(source).toContain('付款单已清空');
     expect(source).toContain('run: onClearPaymentLists');
     expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
@@ -284,6 +288,8 @@ describe('request project resource aggregation', () => {
     expect(editorSource).toContain('ArrowRight');
     expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
     expect(paymentRowsSource).toContain('payment-list-overview-state');
+    expect(paymentRowsSource).toContain('is-generation-failed');
+    expect(paymentRowsSource).toContain('校验未通过');
     expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
     expect(paymentRowsSource).toContain('paymentListReturn.reason');
     expect(paymentRowsSource).toContain('通知达人');
@@ -321,6 +327,8 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('paymentEditorCloseWarning');
     expect(source).toContain("['admin', 'project', 'owner'].includes(currentUser.roleKey)");
     expect(source).toContain('closePaymentEditor');
+    expect(paymentEditorCss).toContain('.payment-list-overview-row.is-generation-failed');
+    expect(paymentEditorCss).toContain('.payment-generation-issue-list button:focus-visible');
   });
 
   it('keeps payment-return notifications separate from Invoice-content returns', () => {
