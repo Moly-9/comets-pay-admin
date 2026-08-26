@@ -717,7 +717,7 @@ export function ContractsPage({
                   <th>Publisher</th>
                   <th>关联项目</th>
                   <th>合同金额</th>
-                  <th>有效期</th>
+                  <th>到期时间</th>
                   <th>付款就绪度</th>
                   <th className="action-cell">操作</th>
                 </tr>

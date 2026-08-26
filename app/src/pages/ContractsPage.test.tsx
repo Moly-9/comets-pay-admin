@@ -64,7 +64,7 @@ describe('ContractsPage batch actions', () => {
     const html = renderContractsPage(false);
     const source = readFileSync(new URL('./ContractsPage.tsx', import.meta.url), 'utf8');
 
-    expect(html).toContain('<th>合同金额</th><th>有效期</th><th>付款就绪度</th>');
+    expect(html).toContain('<th>合同金额</th><th>到期时间</th><th>付款就绪度</th>');
     expect(html).not.toContain('<th class="contract-date-cell">更新日期</th>');
     expect(source).toContain('<th className="contract-date-cell">更新日期</th>');
     expect(html).toContain('role="combobox" aria-label="筛选关联项目"');
