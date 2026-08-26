@@ -4108,6 +4108,37 @@ input[type="checkbox"]:disabled {
   overscroll-behavior: contain;
 }
 
+.request-payment-review-modal .modal-content {
+  display: flex;
+  overflow: hidden;
+}
+
+.request-payment-review-modal .payment-list-review-content {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.request-payment-review-modal .request-payment-payee-table-section {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.request-payment-review-modal .request-payment-payee-table-scroll {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
+  scroll-padding-bottom: 12px;
+}
+
+.request-payment-review-modal .request-payment-payee-table-scroll::after {
+  display: block;
+  height: 12px;
+  content: '';
+}
+
 .request-payment-payee-table {
   width: 100%;
   min-width: 900px;
@@ -4509,6 +4540,21 @@ input[type="checkbox"]:disabled {
 
   .request-payment-payee-table-scroll {
     max-height: none;
+    overflow: visible;
+  }
+
+  .request-payment-review-modal .modal-content {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .request-payment-review-modal .payment-list-review-content {
+    height: auto;
+    min-height: 100%;
+    grid-template-rows: none;
+  }
+
+  .request-payment-review-modal .request-payment-payee-table-scroll {
     overflow: visible;
   }
 
@@ -23700,6 +23746,10 @@ button:disabled {
   border-top: 1px solid var(--soft-line);
   background: #fff;
   padding: 10px 14px;
+}
+
+.request-approval-actions {
+  justify-content: flex-end;
 }
 
 .invoice-review-actions > div {

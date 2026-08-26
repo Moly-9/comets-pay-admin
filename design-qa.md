@@ -1685,3 +1685,32 @@ final result: passed
 - `git diff --check` passed.
 
 final result: passed
+
+---
+
+# 付款清单底部滚动与审批操作区验收
+
+验收日期：2026-08-27
+
+## Evidence
+
+- Desktop payment-list bottom: `design-qa-payment-list-bottom-scroll.png`.
+- Mobile payment-list bottom: `design-qa-payment-list-bottom-scroll-390.png`.
+- Approval action alignment: `design-qa-request-approval-actions.png`.
+
+## Findings
+
+- 桌面付款清单移除外层与表格的嵌套纵向滚动，仅保留表格内部滚动，避免滚轮停在错误容器。
+- 最后一笔付款下方保留 12px 安全留白；滚动到底后，最后一行完整位于表格滚动视口内。
+- 390px 下继续由弹窗内容区统一滚动，最后一张付款卡与固定底部关闭区之间保留 34px 以上间距。
+- “退回媒介修改”与“审批通过”在桌面操作区右对齐相邻排列，退回按钮位于审批按钮左侧；窄屏保持同一顺序纵向排列。
+- 桌面和 390px 均无页面级横向溢出，浏览器控制台无新增 warning 或 error。
+
+## Automated Verification
+
+- 定向 Vitest：3 个测试文件、29 项测试通过。
+- 完整 Vitest：97 个测试文件、669 项测试通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+
+final result: passed

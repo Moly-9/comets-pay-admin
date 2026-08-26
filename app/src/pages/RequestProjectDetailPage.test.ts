@@ -88,6 +88,11 @@ describe('request project payment presentation', () => {
       source.indexOf('<table className="data-table request-detail-payment-table">'),
       source.indexOf('</table>', source.indexOf('<table className="data-table request-detail-payment-table">')),
     );
+    const approvalActionsStart = source.lastIndexOf('<div className="invoice-review-actions request-approval-actions">');
+    const approvalActions = source.slice(
+      approvalActionsStart,
+      source.indexOf('</div>', approvalActionsStart),
+    );
 
     expect(source).toContain('<RequestProjectInfoCard');
     expect(sharedProjectInfo).not.toContain('<dt>审批负责人</dt>');
@@ -112,6 +117,10 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('request-detail-transfer-method');
     expect(paymentTable).toContain('{handle} · {platform}');
     expect(styles).toContain('.request-detail-creator-cell');
+    expect(approvalActions.indexOf('退回媒介修改')).toBeLessThan(approvalActions.indexOf('审批通过'));
+    expect(styles).toMatch(/\.request-approval-actions\s*{[^}]*justify-content:\s*flex-end;/s);
+    expect(styles).toMatch(/\.request-payment-review-modal \.modal-content\s*{[^}]*overflow:\s*hidden;/s);
+    expect(styles).toMatch(/\.request-payment-review-modal \.request-payment-payee-table-scroll\s*{[^}]*scroll-padding-bottom:\s*12px;/s);
     expect(viewerSource).toContain("viewer.kind === 'contract' ? record.title : record.id");
     expect(viewerSource).toContain("viewer.kind === 'contract' ? record.id : record.title");
     expect(viewerSource).toContain("viewer.kind === 'contract' && record.status === '已签署'");
