@@ -128,8 +128,8 @@
 .payment-list-overview-rows { display: grid; gap: 10px; }
 .payment-list-overview-row { display: grid; gap: 10px; border: 1px solid #e2e6ec; border-radius: 8px; background: #fff; padding: 14px 16px; }
 .payment-list-overview-row.is-failure-focused { box-shadow: 0 0 0 3px #f1c1a9; }
-.request-payment-toolbar { align-items: flex-end; justify-content: space-between; gap: 16px; }
-.request-payment-bulk-fields { display: grid; flex: 1 1 540px; grid-template-columns: repeat(2, minmax(230px, 1fr)); gap: 10px; min-width: 0; }
+.request-payment-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 12px; }
+.request-payment-bulk-fields { display: grid; grid-row: 2; grid-template-columns: repeat(2, minmax(230px, 1fr)); gap: 10px; min-width: 0; width: 100%; }
 .request-payment-bulk-fields > label { display: grid; min-width: 0; gap: 5px; color: #526071; font-size: 11px; font-weight: 650; }
 .request-payment-bulk-fields > label > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .request-payment-bulk-fields small { color: #a45a2b; font-size: 10px; font-weight: 600; }
@@ -138,7 +138,7 @@
 .request-payment-bulk-control input:focus { border-color: #7f9dc4; box-shadow: 0 0 0 3px rgba(80, 121, 174, .12); }
 .request-payment-bulk-control input:disabled { background: #f4f6f8; color: #9aa3af; }
 .request-payment-bulk-control .button { min-height: 34px; padding: 0 10px; font-size: 11px; }
-.request-payment-toolbar-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.request-payment-toolbar-actions { display: flex; grid-row: 1; flex-wrap: wrap; justify-self: end; justify-content: flex-end; gap: 8px; max-width: 100%; }
 .request-payment-bulk-notice { margin-top: -4px; border-radius: 7px; background: #f1f6fb; padding: 7px 10px; color: #486581; font-size: 11px; }
 .payment-list-overview-row-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .payment-list-overview-row-header > div { min-width: 0; }
@@ -185,9 +185,7 @@
   .payment-list-editor-header-summary { min-height: 66px; }
   .payment-list-editor-header-actions .payment-list-editor-state { justify-self: start; }
   .payment-list-editor-body { grid-template-columns: 1fr; grid-template-rows: repeat(2, minmax(0, 1fr)); overflow: auto; }
-  .request-payment-toolbar { align-items: stretch; flex-direction: column; }
-  .request-payment-bulk-fields { flex-basis: auto; width: 100%; }
-  .request-payment-toolbar-actions { justify-content: flex-start; }
+  .request-payment-toolbar-actions { justify-content: flex-end; }
   .payment-list-inline-panel { grid-template-columns: 1fr; }
   .payment-list-editor-invoice { order: 1; }
   .payment-list-editor-payment { order: 2; }

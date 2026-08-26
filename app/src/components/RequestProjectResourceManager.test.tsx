@@ -231,6 +231,7 @@ describe('request project resource aggregation', () => {
 
   it('keeps payment-list editing and Excel export at list level', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
+    const paymentEditorCss = readFileSync(new URL('./PaymentListEditor.css', import.meta.url), 'utf8');
     const paymentDialogSource = source.slice(
       source.indexOf("resourceDialog === 'payment'"),
       source.indexOf('{linkDialog ?'),
@@ -251,6 +252,10 @@ describe('request project resource aggregation', () => {
     expect(toolbarSource.indexOf('清空清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
     expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('编辑付款清单'));
     expect(toolbarSource.indexOf('编辑付款清单')).toBeLessThan(toolbarSource.indexOf('生成付款清单'));
+    expect(paymentEditorCss).toContain('.request-payment-toolbar { display: grid;');
+    expect(paymentEditorCss).toContain('.request-payment-toolbar-actions { display: flex; grid-row: 1;');
+    expect(paymentEditorCss).toContain('.request-payment-bulk-fields { display: grid; grid-row: 2;');
+    expect(paymentEditorCss).toContain('justify-self: end; justify-content: flex-end;');
     expect(paymentRowsSource).not.toContain('创建编辑版本');
     expect(paymentRowsSource).not.toContain('>导出</Button>');
     expect(source).toContain("currentPaymentList?.status === 'draft'");
