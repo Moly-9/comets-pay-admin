@@ -117,4 +117,23 @@ describe('new payment request resource picker', () => {
     expect(tableSource).not.toContain('付款清单${');
     expect(tableSource).toContain('actualPayoutAmountLabel(payout)');
   });
+
+  it('opens project detail from the full project row without hijacking row actions', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const css = readFileSync(new URL('./MediaPaymentProjectsPage.css', import.meta.url), 'utf8');
+    const listTableSource = source.slice(
+      source.indexOf('<table className="data-table operational-table media-payment-project-table">'),
+      source.indexOf('</table>', source.indexOf('<table className="data-table operational-table media-payment-project-table">')),
+    );
+
+    expect(listTableSource).toContain('className={`media-payment-project-row');
+    expect(listTableSource).toContain('role="link"');
+    expect(listTableSource).toContain('tabIndex={0}');
+    expect(listTableSource).toContain('onClick={() => openRequestDetail(request)}');
+    expect(listTableSource).toContain("['Enter', ' '].includes(event.key)");
+    expect(listTableSource).toContain('onClick={(event) => event.stopPropagation()}');
+    expect(css).toContain('tr.media-payment-project-row:hover');
+    expect(css).toContain('tr.media-payment-project-row:focus-visible');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+  });
 });

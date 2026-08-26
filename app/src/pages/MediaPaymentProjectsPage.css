@@ -1,0 +1,28 @@
+.media-payment-project-table tbody tr.media-payment-project-row {
+  cursor: pointer;
+  transition: outline-color 160ms ease, background-color 160ms ease;
+}
+
+.media-payment-project-table tbody tr.media-payment-project-row:hover {
+  outline: 1px solid #cbd9e8;
+  outline-offset: -1px;
+}
+
+.media-payment-project-table tbody tr.media-payment-project-row:focus-visible {
+  outline: 2px solid #527eae;
+  outline-offset: -2px;
+}
+
+.media-payment-project-table tbody tr.media-payment-project-row:not(.media-request-returned-row):not(.media-request-payment-failure-row):hover {
+  background: #f7faff;
+}
+
+.media-payment-project-table tbody tr.media-payment-project-row .action-cell {
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-payment-project-table tbody tr.media-payment-project-row {
+    transition: none;
+  }
+}

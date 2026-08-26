@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react';
 import { createPortal } from 'react-dom';
+import './MediaPaymentProjectsPage.css';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
@@ -957,6 +958,11 @@ export function MediaPaymentProjectsPage({
     setCreating(true);
   };
 
+  const openRequestDetail = (request: RequestProjectSummary) => {
+    setSelectedRequestId(request.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const openEditForm = (request: RequestProjectSummary, showCreatorPicker = false) => {
     if (!requestEditAllowed(request)) {
       notify('项目已锁定', '请款项目提交后仅可查看；审批退回或付款失败后才能修改。');
@@ -1674,7 +1680,19 @@ export function MediaPaymentProjectsPage({
                   : [];
                 const isExporting = exportingRequestId === request.id;
                 return (
-                  <tr className={hasPaymentFailure ? 'media-request-payment-failure-row' : isReturned ? 'media-request-returned-row' : undefined} key={request.id}>
+                  <tr
+                    className={`media-payment-project-row${hasPaymentFailure ? ' media-request-payment-failure-row' : isReturned ? ' media-request-returned-row' : ''}`}
+                    key={request.id}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`查看项目 ${requestCodeFor(request)}`}
+                    onClick={() => openRequestDetail(request)}
+                    onKeyDown={(event) => {
+                      if (event.currentTarget !== event.target || !['Enter', ' '].includes(event.key)) return;
+                      event.preventDefault();
+                      openRequestDetail(request);
+                    }}
+                  >
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
@@ -1692,11 +1710,11 @@ export function MediaPaymentProjectsPage({
                         {isReturned && failedPayouts.length ? <small>{failedPayouts.length} 笔失败款待恢复</small> : null}
                       </div>
                     </td>
-                    <td className="action-cell">
+                    <td className="action-cell" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                       <div className="media-project-row-actions">
                         <ListActionButton
                           kind={hasPaymentFailure || isReturned ? 'danger' : 'view'}
-                          onClick={() => { setSelectedRequestId(request.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                          onClick={() => openRequestDetail(request)}
                         >
                           {hasPaymentFailure
                             ? (canCreate ? '处理失败请款' : '查看失败请款')
