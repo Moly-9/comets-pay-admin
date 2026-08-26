@@ -60,6 +60,26 @@ export const contractPublishingChannelsForCreator = (
     : [];
 };
 
+export const appendContractPublishingChannel = (
+  channels: ContractPublishingChannel[],
+): ContractPublishingChannel[] => [
+  ...channels,
+  {
+    socialAccountId: '',
+    platform: '',
+    channelUrl: '',
+  },
+];
+
+export const removeContractPublishingChannelAt = (
+  channels: ContractPublishingChannel[],
+  index: number,
+): ContractPublishingChannel[] => (
+  channels.length <= 1
+    ? channels
+    : channels.filter((_, channelIndex) => channelIndex !== index)
+);
+
 export const formatContractPublishingPlatforms = (
   model: Pick<ContractGenerationModel, 'platform' | 'channelUrl'> & {
     publishingChannels?: ContractPublishingChannel[];

@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import {
+  appendContractPublishingChannel,
   contractPublishingChannelsForCreator,
   contractPayoutSnapshot,
   defaultContractPayoutAccount,
   eligibleContractPayoutAccounts,
   formatContractPublishingChannelLinks,
   formatContractPublishingPlatforms,
+  removeContractPublishingChannelAt,
   resolveContractPublishingChannels,
   validateContractGenerationModel,
 } from './contractGenerationModel';
@@ -377,6 +379,16 @@ describe('contract generation model', () => {
 
     missing.publishingChannels[0].channelUrl = 'https://youtube.com/@sample';
     expect(validateContractGenerationModel(missing).channelUrl).toBe('第 2 个频道链接格式无效');
+  });
+
+  it('adds and removes publishing-channel rows while retaining at least one row', () => {
+    const initial = validModel().publishingChannels;
+    const added = appendContractPublishingChannel(initial);
+
+    expect(added).toHaveLength(2);
+    expect(added[1]).toEqual({ socialAccountId: '', platform: '', channelUrl: '' });
+    expect(removeContractPublishingChannelAt(added, 0)).toEqual([added[1]]);
+    expect(removeContractPublishingChannelAt(initial, 0)).toEqual(initial);
   });
 
   it('refreshes the read-only payment snapshot when the selected account changes', () => {

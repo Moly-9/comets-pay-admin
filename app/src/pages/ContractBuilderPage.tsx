@@ -36,6 +36,7 @@ import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { contractGenerationFilename } from '../contractGenerationFilename';
 import { contractDocumentFilename } from '../documentFilenames';
 import {
+  appendContractPublishingChannel,
   contractPublishingChannelsForCreator,
   contractPaymentMethodForAccount,
   contractPayoutSnapshot,
@@ -43,6 +44,7 @@ import {
   eligibleContractPayoutAccounts,
   formatContractPublishingChannelLinks,
   formatContractPublishingPlatforms,
+  removeContractPublishingChannelAt,
   validateContractGenerationModel,
 } from '../contractGenerationModel';
 import type {
@@ -614,6 +616,28 @@ export function ContractBuilderPage({
     resetOutput();
   };
 
+  const clearPublishingChannelErrors = () => {
+    setErrors((current) => {
+      if (!current.platform && !current.channelUrl) return current;
+      const next = { ...current };
+      delete next.platform;
+      delete next.channelUrl;
+      return next;
+    });
+  };
+
+  const addPublishingChannel = () => {
+    setPublishingChannels((current) => appendContractPublishingChannel(current));
+    clearPublishingChannelErrors();
+    resetOutput();
+  };
+
+  const removePublishingChannel = (index: number) => {
+    setPublishingChannels((current) => removeContractPublishingChannelAt(current, index));
+    clearPublishingChannelErrors();
+    resetOutput();
+  };
+
   const selectProject = (id: string) => {
     const project = projects.find((item) => String(item.cooperationProjectId ?? item.projectId ?? item.id) === id);
     const reference = project?.creatorProfiles?.find((item) => item.creatorId === creatorId && item.status !== 'removed');
@@ -839,18 +863,30 @@ export function ContractBuilderPage({
                 onFocus={() => setActiveField('platform')}
               >
                 <div className="contract-publishing-channels-head">
-                  <strong>发布平台 / 发布频道 *</strong>
-                  <span>保留多频道快照，每行可分别选择平台并编辑链接</span>
+                  <div className="contract-publishing-channels-copy">
+                    <strong>发布平台 / 发布频道 *</strong>
+                    <span>保留多频道快照，每行可分别选择平台并编辑链接</span>
+                  </div>
+                  <Button
+                    className="contract-publishing-channel-add"
+                    variant="secondary"
+                    icon={<Plus size={14} />}
+                    disabled={!selectedCreator}
+                    onClick={addPublishingChannel}
+                  >
+                    新增渠道
+                  </Button>
                 </div>
                 <div className="contract-publishing-channels-grid" data-contract-field="channelUrl">
                   <span>发布平台 *</span>
                   <span>频道链接 *</span>
+                  <span>操作</span>
                   {(publishingChannels.length ? publishingChannels : [{
                     socialAccountId: '',
                     platform: '',
                     channelUrl: '',
                   }]).map((channel, index) => (
-                    <div className="contract-publishing-channel-row" key={channel.socialAccountId || 'empty-channel'}>
+                    <div className="contract-publishing-channel-row" key={`${channel.socialAccountId || 'manual-channel'}-${index}`}>
                       <label>
                         <span className="sr-only">{`发布平台 ${index + 1}`}</span>
                         <SelectField
@@ -875,6 +911,16 @@ export function ContractBuilderPage({
                           onChange={(event) => updatePublishingChannel(index, 'channelUrl', event.target.value)}
                         />
                       </label>
+                      <button
+                        className="contract-publishing-channel-remove"
+                        type="button"
+                        aria-label={`删除发布渠道 ${index + 1}`}
+                        title={publishingChannels.length <= 1 ? '至少保留一个发布渠道' : '删除该发布渠道'}
+                        disabled={publishingChannels.length <= 1}
+                        onClick={() => removePublishingChannel(index)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   ))}
                 </div>
