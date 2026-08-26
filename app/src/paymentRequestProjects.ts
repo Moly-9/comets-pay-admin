@@ -31,6 +31,25 @@ export type PaymentRequestCreatorLink = {
 
 export type PaymentRequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payermax';
 
+export const PAYMENT_REQUEST_COST_TYPES = [
+  '网红采买成本',
+  '采购成本',
+  '外包成本',
+  '投流',
+] as const;
+
+export type PaymentRequestCostType = typeof PAYMENT_REQUEST_COST_TYPES[number];
+
+export const DEFAULT_PAYMENT_REQUEST_COST_TYPE: PaymentRequestCostType = '网红采买成本';
+
+export const normalizePaymentRequestCostType = (value?: string): PaymentRequestCostType => {
+  const normalized = value?.trim() ?? '';
+  if (normalized.includes('投流')) return '投流';
+  if (normalized.includes('外包')) return '外包成本';
+  if (normalized.includes('采购') && !normalized.includes('网红')) return '采购成本';
+  return DEFAULT_PAYMENT_REQUEST_COST_TYPE;
+};
+
 export type PaymentRequestFeeBearer = '付款方' | '收款方' | '各自承担';
 
 export const paymentRequestFeeBearerToPaymentList = (
@@ -47,16 +66,18 @@ export type PaymentRequestRemarkAttachment = {
   size: number;
   type: string;
   lastModified: number;
+  dataUrl?: string;
 };
 
 export const mergePaymentRequestRemarkAttachments = (
   current: PaymentRequestRemarkAttachment[],
-  files: ArrayLike<Pick<File, 'name' | 'size' | 'type' | 'lastModified'>>,
+  files: ArrayLike<PaymentRequestRemarkAttachment>,
 ) => [...current, ...Array.from(files, (file) => ({
   name: file.name,
   size: file.size,
   type: file.type,
   lastModified: file.lastModified,
+  ...(file.dataUrl ? { dataUrl: file.dataUrl } : {}),
 }))].filter((attachment, index, all) => (
   all.findIndex((candidate) => candidate.name === attachment.name
     && candidate.size === attachment.size
@@ -82,7 +103,7 @@ export type PaymentRequestPaymentPlan = {
 };
 
 export type PaymentRequestExtraDetails = {
-  costType?: string;
+  costType?: PaymentRequestCostType | string;
   feeBearer?: PaymentRequestFeeBearer;
   remark?: string;
   remarkAttachments?: PaymentRequestRemarkAttachment[];
@@ -110,10 +131,8 @@ export const paymentRequestPaymentPlanIssues = ({
 
 export const paymentRequestExtraDetailIssues = ({
   costType,
-  feeBearer,
-}: Pick<PaymentRequestExtraDetails, 'costType' | 'feeBearer'>) => [
-  !costType?.trim() ? '请填写成本类型' : '',
-  !feeBearer ? '请选择手续费承担方' : '',
+}: Pick<PaymentRequestExtraDetails, 'costType'>) => [
+  !costType?.trim() ? '请选择成本类型' : '',
 ].filter((issue) => Boolean(issue));
 
 export const paymentRequestDraftCreatorsReady = (
@@ -923,12 +942,10 @@ export const createPaymentRequestListItem = ({
   invoice,
   contracts,
   contractIds = [],
-  feeBearer,
 }: {
   invoice: GeneratedInvoiceRecord;
   contracts: ContractRecord[];
   contractIds?: ContractId[];
-  feeBearer?: PaymentRequestFeeBearer;
 }) => {
   const source = invoicePaymentListItem({
     ...invoice,
@@ -938,7 +955,6 @@ export const createPaymentRequestListItem = ({
     ...source,
     snapshot: {
       ...source.snapshot,
-      feeBearer: paymentRequestFeeBearerToPaymentList(feeBearer),
       transactionReference: '',
     },
   });

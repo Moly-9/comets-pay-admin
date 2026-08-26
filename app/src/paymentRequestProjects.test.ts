@@ -12,6 +12,8 @@ import type {
   RequestApprovalStatus,
 } from './businessWorkflow';
 import {
+  DEFAULT_PAYMENT_REQUEST_COST_TYPE,
+  PAYMENT_REQUEST_COST_TYPES,
   canAddCreatorToPaymentRequest,
   canCancelPaymentRequest,
   addInvoiceToPaymentRequestSelection,
@@ -33,6 +35,7 @@ import {
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
   mergePaymentRequestRemarkAttachments,
+  normalizePaymentRequestCostType,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
   paymentRequestCancellationIssue,
@@ -172,14 +175,25 @@ describe('payment request payment plan', () => {
 });
 
 describe('payment request extra details', () => {
-  it('requires a cost type and fee bearer while leaving remarks optional', () => {
-    expect(paymentRequestExtraDetailIssues({})).toEqual([
-      '请填写成本类型',
-      '请选择手续费承担方',
+  it('uses the fixed cost types and normalizes historical values', () => {
+    expect(PAYMENT_REQUEST_COST_TYPES).toEqual([
+      '网红采买成本',
+      '采购成本',
+      '外包成本',
+      '投流',
     ]);
+    expect(DEFAULT_PAYMENT_REQUEST_COST_TYPE).toBe('网红采买成本');
+    expect(normalizePaymentRequestCostType('达人合作费')).toBe('网红采买成本');
+    expect(normalizePaymentRequestCostType('网红采购')).toBe('网红采买成本');
+    expect(normalizePaymentRequestCostType('物料采购成本')).toBe('采购成本');
+    expect(normalizePaymentRequestCostType('内容外包费用')).toBe('外包成本');
+    expect(normalizePaymentRequestCostType('广告投流')).toBe('投流');
+  });
+
+  it('requires only a cost type while leaving remarks optional', () => {
+    expect(paymentRequestExtraDetailIssues({})).toEqual(['请选择成本类型']);
     expect(paymentRequestExtraDetailIssues({
-      costType: '达人合作费',
-      feeBearer: '各自承担',
+      costType: '网红采买成本',
     })).toEqual([]);
   });
 
@@ -191,6 +205,18 @@ describe('payment request extra details', () => {
       first,
       sameNameNewVersion,
     ]);
+  });
+
+  it('preserves pasted image preview data while de-duplicating screenshots', () => {
+    const screenshot = {
+      name: '备注截图.png',
+      size: 2048,
+      type: 'image/png',
+      lastModified: 3,
+      dataUrl: 'data:image/png;base64,preview',
+    };
+
+    expect(mergePaymentRequestRemarkAttachments([], [screenshot, screenshot])).toEqual([screenshot]);
   });
 });
 
@@ -427,7 +453,7 @@ describe('media payment request submission validation', () => {
     expect(issues).toContain(`${mismatched.id} 与当前达人或合作关系不一致`);
   });
 
-  it('creates a validated request-specific payment row when the contract is optional', () => {
+  it('leaves the fee bearer empty when the contract is optional', () => {
     const source = invoice({
       snapshot: {
         ...invoice().snapshot,
@@ -450,30 +476,40 @@ describe('media payment request submission validation', () => {
     const item = createPaymentRequestListItem({
       invoice: source,
       contracts: [],
-      feeBearer: '付款方',
     });
 
-    expect(item.snapshot.feeBearer).toBe('ADVERTISER');
+    expect(item.snapshot.feeBearer).toBe('');
     expect(item.snapshot.transactionReference).toBe('');
     expect(item.requiresRevalidation).toBe(true);
     expect(item.validationIssues).toEqual(expect.arrayContaining([
+      '手续费承担方未确认',
       '交易附言未填写',
     ]));
   });
 
-  it.each([
-    ['付款方', 'ADVERTISER'],
-    ['收款方', 'PUBLISHER'],
-    ['各自承担', 'SHARED'],
-  ] as const)('inherits request fee bearer %s into the payment row as %s', (feeBearer, expected) => {
+  it('inherits one unique linked-contract fee bearer into the payment row', () => {
+    const linkedContract = contract('CON-FEE');
     const item = createPaymentRequestListItem({
       invoice: invoice(),
-      contracts: [],
-      feeBearer,
+      contracts: [linkedContract],
+      contractIds: [linkedContract.contractId!],
     });
 
-    expect(item.snapshot.feeBearer).toBe(expected);
+    expect(item.snapshot.feeBearer).toBe('ADVERTISER');
     expect(item.overrides).not.toHaveProperty('feeBearer');
+  });
+
+  it('leaves the fee bearer editable when linked contracts conflict', () => {
+    const advertiserContract = contract('CON-ADVERTISER');
+    const publisherContract = { ...contract('CON-PUBLISHER'), feeBearer: 'PUBLISHER' as const };
+    const item = createPaymentRequestListItem({
+      invoice: invoice(),
+      contracts: [advertiserContract, publisherContract],
+      contractIds: [advertiserContract.contractId!, publisherContract.contractId!],
+    });
+
+    expect(item.snapshot.feeBearer).toBe('');
+    expect(item.validationIssues).toContain('手续费承担方未确认');
   });
 
   it('sums multiple invoices for one creator and rejects duplicate or extra payment rows', () => {

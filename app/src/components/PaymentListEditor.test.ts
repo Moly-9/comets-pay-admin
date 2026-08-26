@@ -16,6 +16,10 @@ describe('PaymentListEditor', () => {
     expect(source).toContain('accountOverrideOnly');
     expect(source).toContain('paymentFieldsEditable = editable && !accountOverrideOnly');
     expect(source).toContain('编辑付款手续费承担方');
+    expect(source).toContain('paymentListContractFeeBearer');
+    expect(source).toContain('contractFeeBearer.locked');
+    expect(source).toContain('合同未约定，请填写');
+    expect(source).toContain('合同约定不一致，请确认');
     expect(source).toContain('付款描述（选填）');
     expect(source).toContain('Airwallex');
     expect(source).toContain('PayPal');

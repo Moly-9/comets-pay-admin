@@ -14,6 +14,7 @@ import { accountDisplayValue } from '../accountPresentation';
 import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { RequestRemarkAttachments } from '../components/RequestRemarkAttachments';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -904,16 +905,14 @@ export function RequestProjectDetailPage({
               <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
               <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
               <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
-              <div><dt>手续费承担方</dt><dd>{request.feeBearer || '待补充'}</dd></div>
+              <div><dt>手续费承担方</dt><dd>按合同约定；未约定时在付款清单填写</dd></div>
               <div className="project-info-full"><dt>付款事由</dt><dd>{detail.reason}</dd></div>
               <div className="project-info-full"><dt>备注</dt><dd>{request.remark || '未填写'}</dd></div>
               <div className="project-info-full">
                 <dt>备注附件</dt>
-                <dd className="request-remark-attachment-summary">
-                  {request.remarkAttachments?.length
-                    ? request.remarkAttachments.map((attachment) => <span key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}><FileText size={14} aria-hidden="true" />{attachment.name}</span>)
-                    : '无附件'}
-                </dd>
+                <dd>{request.remarkAttachments?.length
+                  ? <RequestRemarkAttachments attachments={request.remarkAttachments} />
+                  : '无附件'}</dd>
               </div>
             </dl>
           </section>

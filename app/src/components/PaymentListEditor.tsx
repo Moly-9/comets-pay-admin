@@ -15,6 +15,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import {
   paymentListEffectiveAccount,
+  paymentListContractFeeBearer,
   paymentListItemValue,
   validatePaymentListGeneration,
   type PaymentListEditableField,
@@ -128,7 +129,7 @@ export function PaymentListEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const snapshot = invoice?.snapshot;
   const linkedContracts = snapshot?.contractIds?.map((contractId) => contracts.find((contract) => contract.contractId === contractId || contract.id === contractId)).filter((contract): contract is ContractRecord => Boolean(contract)) ?? [];
-  const contractFeeBearers = [...new Set(linkedContracts.map((contract) => contract.feeBearer).filter(Boolean))];
+  const contractFeeBearer = paymentListContractFeeBearer(linkedContracts);
   const feeBearerOptions = [
     { value: 'ADVERTISER', label: '付款方' },
     { value: 'PUBLISHER', label: '收款方' },
@@ -190,8 +191,9 @@ export function PaymentListEditor({
     setDragStartX(null);
   };
   const transferMethod = String(paymentListItemValue(item, 'transferMethod') || account.transferMethod || '');
-  const feeBearer = String(paymentListItemValue(item, 'feeBearer') || contractFeeBearers[0] || '');
-  const feeBearerFromContract = linkedContracts.length > 0;
+  const feeBearer = String(contractFeeBearer.locked
+    ? contractFeeBearer.value
+    : paymentListItemValue(item, 'feeBearer') || '');
   const accountEditable = editable && accountEditableInvoiceIds.includes(item.invoiceId);
 
   return (
@@ -287,7 +289,7 @@ export function PaymentListEditor({
             <label>收款币种<SelectField ariaLabel="付款收款币种" variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled onChange={(value) => update('receiveCurrency', value)} /></label>
             <label>付款金额<input aria-label="付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} disabled /></label>
             <label>转账方式<SelectField ariaLabel="付款转账方式" variant="form" value={transferMethod} options={transferMethodOptions} disabled onChange={(value) => update('transferMethod', value)} /></label>
-            <label>手续费承担方{feeBearerFromContract ? <input readOnly value={display(feeBearer)} /> : <SelectField ariaLabel="编辑付款手续费承担方" variant="form" value={feeBearer} options={feeBearerOptions} placeholder="请选择手续费承担方" disabled={!paymentFieldsEditable} onChange={(value) => update('feeBearer', value)} />}</label>
+            <label>手续费承担方{contractFeeBearer.locked ? <input readOnly value={display(feeBearer)} /> : <SelectField ariaLabel="编辑付款手续费承担方" variant="form" value={feeBearer} options={feeBearerOptions} placeholder={contractFeeBearer.conflicting ? '合同约定不一致，请确认' : '合同未约定，请填写'} disabled={!paymentFieldsEditable} onChange={(value) => update('feeBearer', value)} />}</label>
             <label>付款原因<input aria-label="编辑付款原因" value={paymentListItemValue(item, 'paymentReason')} disabled={!paymentFieldsEditable} onChange={(event) => update('paymentReason', event.target.value)} /></label>
             <label>交易附言<input aria-label="编辑交易附言" placeholder="请输入交易附言" value={paymentListItemValue(item, 'transactionReference')} disabled={!paymentFieldsEditable} onChange={(event) => update('transactionReference', event.target.value)} /></label>
             <label className="is-wide">描述<input aria-label="编辑付款描述" placeholder="请输入付款描述（选填）" value={paymentListItemValue(item, 'description')} disabled={!paymentFieldsEditable} onChange={(event) => update('description', event.target.value)} /></label>

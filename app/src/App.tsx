@@ -1919,7 +1919,6 @@ export default function App() {
           invoice,
           contracts,
           contractIds: link.contractIds,
-          feeBearer: request.feeBearer,
         });
       });
       const requestPaymentProvider = paymentRequestProviderForChannel(request.paymentChannel);
@@ -1992,8 +1991,8 @@ export default function App() {
       paymentRequestProjectId: request.paymentRequestProjectId,
       paymentChannel: request.paymentChannel,
     });
-    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.paymentChannel || !request.generatedDetail?.reason || !request.costType?.trim() || !request.feeBearer) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道、成本类型、手续费承担方和付款事由');
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.paymentChannel || !request.generatedDetail?.reason || !request.costType?.trim()) {
+      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道、成本类型和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => (

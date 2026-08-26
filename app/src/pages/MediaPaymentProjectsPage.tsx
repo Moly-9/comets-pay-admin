@@ -8,21 +8,19 @@ import {
   Clock3,
   Circle,
   FileText,
-  Paperclip,
   Pencil,
   Plus,
   ReceiptText,
   Search,
   Send,
-  Trash2,
-  Upload,
   Users,
   WalletCards,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ClipboardEvent } from 'react';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
+import { RequestRemarkAttachments } from '../components/RequestRemarkAttachments';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   canEditRequestProjectResources,
@@ -50,10 +48,13 @@ import {
   canCancelPaymentRequest,
   cooperationProjectIdFor,
   createEmptyPaymentRequestListFilters,
+  DEFAULT_PAYMENT_REQUEST_COST_TYPE,
   filterPaymentRequestList,
   invoiceAmountLabel,
   myProjectStatusFor,
   mergePaymentRequestRemarkAttachments,
+  normalizePaymentRequestCostType,
+  PAYMENT_REQUEST_COST_TYPES,
   paymentRequestAmount,
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
@@ -68,8 +69,8 @@ import {
   paymentRequestSubmissionIssues,
   resolveCreatorDocuments,
   type MyProjectStatus,
+  type PaymentRequestCostType,
   type PaymentRequestCreatorLink,
-  type PaymentRequestFeeBearer,
   type PaymentRequestPaymentChannel,
   type PaymentRequestRemarkAttachment,
 } from '../paymentRequestProjects';
@@ -103,17 +104,19 @@ const PAYMENT_CHANNEL_OPTIONS = [
   { value: 'Payermax', label: 'Payer Max', description: '本地支付网络' },
 ] as const;
 
-const FEE_BEARER_OPTIONS = [
-  { value: '付款方', label: '付款方', description: '手续费由付款方承担' },
-  { value: '收款方', label: '收款方', description: '手续费从收款金额中扣除' },
-  { value: '各自承担', label: '各自承担', description: '双方分别承担各自产生的费用' },
-] as const;
+const COST_TYPE_OPTIONS = PAYMENT_REQUEST_COST_TYPES.map((costType) => ({
+  value: costType,
+  label: costType,
+}));
 
-const formatAttachmentSize = (size: number) => {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-};
+const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result ?? ''));
+  reader.onerror = () => reject(reader.error ?? new Error('无法读取截图'));
+  reader.readAsDataURL(file);
+});
 
 type RequestResourcePickerOption = {
   value: string;
@@ -567,8 +570,7 @@ export function MediaPaymentProjectsPage({
   const [pm, setPm] = useState(PM_USERS[0]?.name ?? '');
   const [paymentChannel, setPaymentChannel] = useState<PaymentRequestPaymentChannel | ''>('');
   const [expectedPaymentDate, setExpectedPaymentDate] = useState('');
-  const [costType, setCostType] = useState('');
-  const [feeBearer, setFeeBearer] = useState<PaymentRequestFeeBearer | ''>('');
+  const [costType, setCostType] = useState<PaymentRequestCostType>(DEFAULT_PAYMENT_REQUEST_COST_TYPE);
   const [reason, setReason] = useState('');
   const [remark, setRemark] = useState('');
   const [remarkAttachments, setRemarkAttachments] = useState<PaymentRequestRemarkAttachment[]>([]);
@@ -764,8 +766,7 @@ export function MediaPaymentProjectsPage({
     setPm(PM_USERS[0]?.name ?? '');
     setPaymentChannel('');
     setExpectedPaymentDate('');
-    setCostType('');
-    setFeeBearer('');
+    setCostType(DEFAULT_PAYMENT_REQUEST_COST_TYPE);
     setReason('');
     setRemark('');
     setRemarkAttachments([]);
@@ -803,8 +804,7 @@ export function MediaPaymentProjectsPage({
     setPm(request.pm);
     setPaymentChannel(paymentPlan.paymentChannel);
     setExpectedPaymentDate(paymentPlan.expectedPaymentDate);
-    setCostType(request.costType ?? '');
-    setFeeBearer(request.feeBearer ?? '');
+    setCostType(normalizePaymentRequestCostType(request.costType));
     setReason(request.generatedDetail?.reason ?? '');
     setRemark(request.remark ?? '');
     setRemarkAttachments(request.remarkAttachments ?? []);
@@ -961,11 +961,36 @@ export function MediaPaymentProjectsPage({
     selectedCreators.length,
     validCreatorLinks.length,
   );
+  const handleRemarkPaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = Array.from(event.clipboardData.items)
+      .filter((item) => REMARK_IMAGE_TYPES.has(item.type))
+      .flatMap((item) => {
+        const file = item.getAsFile();
+        return file ? [file] : [];
+      });
+    if (!imageFiles.length) return;
+    const pastedAt = Date.now();
+    try {
+      const pastedAttachments = await Promise.all(imageFiles.map(async (file, index) => {
+        const extension = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1] || 'png';
+        return {
+          name: `备注截图-${pastedAt}-${index + 1}.${extension}`,
+          size: file.size,
+          type: file.type,
+          lastModified: pastedAt + index,
+          dataUrl: await fileDataUrl(file),
+        };
+      }));
+      setRemarkAttachments((current) => mergePaymentRequestRemarkAttachments(current, pastedAttachments));
+    } catch {
+      notify('截图粘贴失败', '无法读取剪贴板中的截图，请重新截图后粘贴。');
+    }
+  };
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
     ...paymentRequestPaymentPlanIssues({ paymentChannel, expectedPaymentDate }),
-    ...paymentRequestExtraDetailIssues({ costType, feeBearer: feeBearer || undefined }),
+    ...paymentRequestExtraDetailIssues({ costType }),
     !reason.trim() ? '请填写请款事由' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
@@ -991,8 +1016,7 @@ export function MediaPaymentProjectsPage({
     && pm
     && paymentChannel
     && expectedPaymentDate
-    && costType.trim()
-    && feeBearer
+    && costType
     && reason.trim()
     && creatorsReady
     && formIssues.length === 0,
@@ -1004,7 +1028,7 @@ export function MediaPaymentProjectsPage({
       notify('项目已锁定', '项目状态已变化，本次修改不能保存。');
       return;
     }
-    if (!selectedProject || !paymentChannel || !expectedPaymentDate || !costType.trim() || !feeBearer || !canCreateRequest) {
+    if (!selectedProject || !paymentChannel || !expectedPaymentDate || !costType || !canCreateRequest) {
       notify('请完善必填信息', formIssues[0] ?? '请检查达人和 Invoice 关联信息。');
       return;
     }
@@ -1031,8 +1055,7 @@ export function MediaPaymentProjectsPage({
       pm,
       paymentChannel,
       expectedPaymentDate,
-      costType: costType.trim(),
-      feeBearer,
+      costType,
       remark: remark.trim(),
       remarkAttachments,
       amount: paymentRequestAmountLabel(validCreatorLinks, invoices),
@@ -1059,7 +1082,7 @@ export function MediaPaymentProjectsPage({
         payee: `${validCreatorLinks.length} 位合作达人`,
         provider: paymentChannel,
         beneficiaryId: '按付款清单账户快照',
-        feePolicy: feeBearer,
+        feePolicy: '按合同约定；合同未约定时由付款清单补充',
       },
     };
     if (editingRequest) onUpdated(request);
@@ -1256,18 +1279,16 @@ export function MediaPaymentProjectsPage({
             <div><dt>付款渠道</dt><dd>{selectedRequest.paymentChannel ? paymentProviderDisplayName(selectedRequest.paymentChannel) : '待补充'}</dd></div>
             <div><dt>预计付款时间</dt><dd>{selectedRequest.expectedPaymentDate || '待补充'}</dd></div>
             <div><dt>成本类型</dt><dd>{selectedRequest.costType || '待补充'}</dd></div>
-            <div><dt>手续费承担方</dt><dd>{selectedRequest.feeBearer || '待补充'}</dd></div>
+            <div><dt>手续费承担方</dt><dd>按合同约定；未约定时在付款清单填写</dd></div>
             <div><dt>项目媒介</dt><dd>{selectedRequest.media}</dd></div>
             <div><dt>创建时间</dt><dd>{formatCreatedAt(selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt)}</dd></div>
             <div className="project-info-wide"><dt>付款事由</dt><dd>{selectedRequest.generatedDetail?.reason || '待补充'}</dd></div>
             <div className="project-info-wide"><dt>备注</dt><dd>{selectedRequest.remark || '未填写'}</dd></div>
             <div className="project-info-wide">
               <dt>备注附件</dt>
-              <dd className="request-remark-attachment-summary">
-                {selectedRequest.remarkAttachments?.length
-                  ? selectedRequest.remarkAttachments.map((attachment) => <span key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}><FileText size={14} aria-hidden="true" />{attachment.name}</span>)
-                  : '无附件'}
-              </dd>
+              <dd>{selectedRequest.remarkAttachments?.length
+                ? <RequestRemarkAttachments attachments={selectedRequest.remarkAttachments} />
+                : '无附件'}</dd>
             </div>
           </dl>
         </section>
@@ -1645,63 +1666,25 @@ export function MediaPaymentProjectsPage({
                 />
               </div>
             </div>
-            <div className="media-request-payment-plan">
-              <label>
-                <span className="required-field-label">成本类型 <em className="required-mark" aria-hidden="true">*</em></span>
-                <input placeholder="例如：网红采买成本" value={costType} onChange={(event) => setCostType(event.target.value)} />
-              </label>
-              <div className="form-field">
-                <span className="form-field-label">手续费承担方 <em className="required-mark" aria-hidden="true">*</em></span>
-                <SelectField<PaymentRequestFeeBearer | ''>
-                  ariaLabel="选择手续费承担方"
-                  variant="form"
-                  value={feeBearer}
-                  options={FEE_BEARER_OPTIONS}
-                  onChange={setFeeBearer}
-                  placeholder="请选择手续费承担方"
-                />
-              </div>
+            <div className="form-field">
+              <span className="form-field-label">成本类型 <em className="required-mark" aria-hidden="true">*</em></span>
+              <SelectField<PaymentRequestCostType>
+                ariaLabel="选择成本类型"
+                variant="form"
+                value={costType}
+                options={COST_TYPE_OPTIONS}
+                onChange={setCostType}
+              />
             </div>
             <div className="form-field"><span id="media-request-reason-label" className="form-field-label">付款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本项目的付款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
             <div className="form-field media-request-remark-field">
               <span id="media-request-remark-label" className="form-field-label">备注 <small className="request-optional-label">选填</small></span>
-              <textarea aria-labelledby="media-request-remark-label" placeholder="补充付款说明、特殊要求或其他信息" value={remark} onChange={(event) => setRemark(event.target.value)} />
-              <div className="media-request-remark-upload">
-                <label className="media-request-remark-upload-trigger">
-                  <Upload size={16} aria-hidden="true" />
-                  <span>上传备注附件</span>
-                  <input
-                    className="contract-file-input"
-                    type="file"
-                    multiple
-                    aria-label="上传备注附件"
-                    onChange={(event) => {
-                      setRemarkAttachments((current) => mergePaymentRequestRemarkAttachments(
-                        current,
-                        event.target.files ?? [],
-                      ));
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-                <small>文件仅保留在当前浏览器原型中，不会上传外部服务</small>
-              </div>
-              {remarkAttachments.length ? (
-                <div className="media-request-remark-files" aria-label="已选择的备注附件">
-                  {remarkAttachments.map((attachment) => (
-                    <div key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}>
-                      <Paperclip size={15} aria-hidden="true" />
-                      <span><strong>{attachment.name}</strong><small>{formatAttachmentSize(attachment.size)}</small></span>
-                      <button
-                        type="button"
-                        aria-label={`移除附件 ${attachment.name}`}
-                        title="移除附件"
-                        onClick={() => setRemarkAttachments((current) => current.filter((item) => item !== attachment))}
-                      ><Trash2 size={15} aria-hidden="true" /></button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+              <textarea aria-labelledby="media-request-remark-label" placeholder="补充付款说明；可直接在此粘贴截图" value={remark} onChange={(event) => setRemark(event.target.value)} onPaste={handleRemarkPaste} />
+              <small className="media-request-remark-paste-hint">支持粘贴 PNG、JPG 或 WebP 截图，图片仅保留在当前浏览器原型中。</small>
+              <RequestRemarkAttachments
+                attachments={remarkAttachments}
+                onRemove={(attachment) => setRemarkAttachments((current) => current.filter((item) => item !== attachment))}
+              />
             </div>
             <div className="form-field">
               <span className="form-field-label form-field-label-with-meta"><span>合作达人 <small className="request-optional-label">选填</small></span><small>可在创建后继续添加，当前仅展示有未占用已通过 Invoice 的达人</small></span>

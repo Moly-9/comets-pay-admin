@@ -2095,73 +2095,52 @@ input[type="checkbox"]:disabled {
   justify-content: space-between;
 }
 
-.media-request-remark-upload {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.media-request-remark-upload > small {
+.media-request-remark-paste-hint {
   color: #8a8f9b;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
-.form-grid .media-request-remark-upload-trigger {
-  display: inline-flex;
-  flex: 0 0 auto;
-  flex-direction: row;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  border: 1px solid #d8dce4;
-  border-radius: 8px;
-  background: #fff;
-  padding: 0 12px;
-  color: #484c56;
-  cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.media-request-remark-upload-trigger:hover {
-  border-color: #c7bdcf;
-  background: #faf8fb;
-}
-
-.media-request-remark-upload-trigger svg {
-  flex: 0 0 auto;
-  color: #806887;
-}
-
-.media-request-remark-files {
+.request-remark-attachments {
   display: grid;
-  gap: 7px;
-}
-
-.media-request-remark-files > div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 9px;
+  width: 100%;
+}
+
+.request-remark-attachments figure {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid #e2e5ea;
   border-radius: 8px;
-  background: #fafbfc;
-  padding: 8px 9px 8px 11px;
+  background: #fff;
+  margin: 0;
 }
 
-.media-request-remark-files > div > svg {
+.request-remark-attachments img,
+.request-remark-file-icon {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #f5f6f8;
+  object-fit: cover;
+}
+
+.request-remark-file-icon {
+  display: grid;
+  place-items: center;
   color: #806887;
 }
 
-.media-request-remark-files span {
+.request-remark-attachments figcaption {
   display: grid;
   min-width: 0;
   gap: 2px;
+  padding: 8px 38px 8px 9px;
 }
 
-.media-request-remark-files strong {
+.request-remark-attachments strong {
   overflow: hidden;
   color: #34373f;
   font-size: 11.5px;
@@ -2170,12 +2149,15 @@ input[type="checkbox"]:disabled {
   white-space: nowrap;
 }
 
-.media-request-remark-files small {
+.request-remark-attachments small {
   color: #8a8f9b;
   font-size: 10px;
 }
 
-.media-request-remark-files button {
+.request-remark-attachments button {
+  position: absolute;
+  right: 5px;
+  bottom: 6px;
   display: inline-grid;
   width: 30px;
   height: 30px;
@@ -2187,7 +2169,7 @@ input[type="checkbox"]:disabled {
   cursor: pointer;
 }
 
-.media-request-remark-files button:hover {
+.request-remark-attachments button:hover {
   background: #fff0f2;
   color: #b94d61;
 }
@@ -2306,7 +2288,8 @@ input[type="checkbox"]:disabled {
 }
 
 .media-request-creator-search {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
@@ -2323,6 +2306,13 @@ input[type="checkbox"]:disabled {
   outline: 0;
   background: transparent;
   font: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.media-request-creator-search > span {
+  white-space: nowrap;
 }
 
 .media-request-creator-options {
@@ -3066,7 +3056,6 @@ input[type="checkbox"]:disabled {
 
 @media (max-width: 760px) {
   .media-request-payment-plan { grid-template-columns: 1fr; }
-  .media-request-remark-upload { align-items: flex-start; flex-direction: column; }
   .media-request-link-row { grid-template-columns: 1fr; }
   .media-request-document-creator { padding: 12px; }
   .media-request-document-fields {
@@ -13366,9 +13355,11 @@ button:disabled {
 }
 
 .creator-picker-search-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .creator-picker-search {
@@ -13395,6 +13386,7 @@ button:disabled {
 }
 
 .creator-picker-search input {
+  width: 100%;
   min-width: 0;
   height: 100%;
   flex: 1;
@@ -13405,6 +13397,9 @@ button:disabled {
   font-family: inherit;
   color: #34373f;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .creator-picker-search input::placeholder {

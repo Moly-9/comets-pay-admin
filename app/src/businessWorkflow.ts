@@ -586,6 +586,17 @@ export type PaymentListContractReference = {
   feeBearer: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
 };
 
+export const paymentListContractFeeBearer = (
+  contracts: PaymentListContractReference[],
+) => {
+  const values = [...new Set(contracts.map((contract) => contract.feeBearer).filter(Boolean))];
+  return {
+    value: values.length === 1 ? values[0] : '',
+    locked: values.length === 1,
+    conflicting: values.length > 1,
+  } as const;
+};
+
 const paymentListItemValidationIssues = (item: PaymentListItem) => {
   const snapshot = paymentListEffectiveAccount(item);
   const provider = snapshot.provider;
@@ -1003,8 +1014,7 @@ export const invoicePaymentListItem = (
       contract.contractId === contractId || contract.id === contractId
     ))
   ));
-  const feeBearers = [...new Set(contractReferences.map((contract) => contract.feeBearer).filter(Boolean))];
-  const feeBearer = feeBearers.length === 1 ? feeBearers[0] : '';
+  const feeBearer = paymentListContractFeeBearer(contractReferences).value;
   const payoutAccountId = frozen.payoutAccountId;
   const payoutAccountVersion = frozen.payoutAccountVersion ?? 'legacy-v1';
   const accountFingerprint = frozen.payoutAccountFingerprint;

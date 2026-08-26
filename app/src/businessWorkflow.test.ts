@@ -12,6 +12,7 @@ import {
   nextReviewStatusAfterMutation,
   invoicePaymentListItem,
   paymentListEffectiveAccount,
+  paymentListContractFeeBearer,
   paymentListItemValue,
   paymentListProviderForItems,
   payoutWithPaymentListSnapshot,
@@ -190,6 +191,21 @@ describe('project payment list', () => {
     },
     overrides: {},
   };
+
+  it('locks only one unique contract fee bearer and exposes missing or conflicting values', () => {
+    expect(paymentListContractFeeBearer([])).toEqual({ value: '', locked: false, conflicting: false });
+    expect(paymentListContractFeeBearer([
+      { id: 'one', feeBearer: 'ADVERTISER' },
+      { id: 'two', feeBearer: 'ADVERTISER' },
+    ])).toEqual({ value: 'ADVERTISER', locked: true, conflicting: false });
+    expect(paymentListContractFeeBearer([
+      { id: 'one', feeBearer: '' },
+    ])).toEqual({ value: '', locked: false, conflicting: false });
+    expect(paymentListContractFeeBearer([
+      { id: 'one', feeBearer: 'ADVERTISER' },
+      { id: 'two', feeBearer: 'PUBLISHER' },
+    ])).toEqual({ value: '', locked: false, conflicting: true });
+  });
 
   it('keeps one payment row per invoice and removes rows without deleting invoices', () => {
     const withItem = upsertPaymentListItem(record, item);

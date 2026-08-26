@@ -92,12 +92,17 @@ describe('request project payment presentation', () => {
 
   it('keeps the extra request fields in both project detail entries', () => {
     const myProjectsSource = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 
     expect(myProjectsSource).toContain('<dt>成本类型</dt>');
     expect(myProjectsSource).toContain('<dt>手续费承担方</dt>');
     expect(myProjectsSource).toContain('<dt>备注</dt>');
     expect(myProjectsSource).toContain('<dt>备注附件</dt>');
-    expect(myProjectsSource).toContain('aria-label="上传备注附件"');
+    expect(myProjectsSource).not.toContain('aria-label="上传备注附件"');
+    expect(myProjectsSource).toContain('onPaste={handleRemarkPaste}');
+    expect(myProjectsSource).toContain('<RequestRemarkAttachments');
+    expect(appSource).not.toContain('!request.feeBearer');
+    expect(appSource).not.toContain('feeBearer: request.feeBearer');
   });
 
   it('maps real payment-list snapshots into the shared read-only project viewer', () => {
