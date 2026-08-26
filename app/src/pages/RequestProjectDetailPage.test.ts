@@ -65,23 +65,27 @@ describe('request project payment presentation', () => {
 
   it('keeps the requested project fields and payment columns in the detail view', () => {
     const source = readFileSync(new URL('./RequestProjectDetailPage.tsx', import.meta.url), 'utf8');
-    const projectInfo = source.slice(
-      source.indexOf('<dl className="project-info-grid">'),
-      source.indexOf('</dl>', source.indexOf('<dl className="project-info-grid">')),
+    const sharedProjectInfo = readFileSync(
+      new URL('../components/RequestProjectInfoCard.tsx', import.meta.url),
+      'utf8',
     );
     const paymentTable = source.slice(
       source.indexOf('<table className="data-table request-detail-payment-table">'),
       source.indexOf('</table>', source.indexOf('<table className="data-table request-detail-payment-table">')),
     );
 
-    expect(projectInfo).not.toContain('<dt>审批负责人</dt>');
-    expect(projectInfo).not.toContain('<dt>付款方式</dt>');
-    expect(projectInfo).toContain('<dt>付款渠道</dt>');
-    expect(projectInfo).toContain('<dt>预计付款时间</dt>');
-    expect(projectInfo).toContain('<dt>成本类型</dt>');
-    expect(projectInfo).toContain('<dt>手续费承担方</dt>');
-    expect(projectInfo).toContain('<dt>备注</dt>');
-    expect(projectInfo).toContain('<dt>备注附件</dt>');
+    expect(source).toContain('<RequestProjectInfoCard');
+    expect(sharedProjectInfo).not.toContain('<dt>审批负责人</dt>');
+    expect(sharedProjectInfo).not.toContain('<dt>付款方式</dt>');
+    expect(sharedProjectInfo).not.toContain('<dt>手续费承担方</dt>');
+    expect(sharedProjectInfo).not.toContain('<dt>提交人</dt>');
+    expect(sharedProjectInfo).not.toContain('<dt>备注附件</dt>');
+    expect(sharedProjectInfo).toContain('<dt>付款渠道</dt>');
+    expect(sharedProjectInfo).toContain('<dt>预计付款时间</dt>');
+    expect(sharedProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(sharedProjectInfo).toContain('<dt>项目媒介</dt>');
+    expect(sharedProjectInfo).toContain('<dt>创建时间</dt>');
+    expect(sharedProjectInfo).toContain('<dt>备注</dt>');
     expect(paymentTable).toContain('<th>达人</th>');
     expect(paymentTable).toContain('<th>Invoice</th>');
     expect(paymentTable).toContain('<th>请款金额</th>');
@@ -92,17 +96,17 @@ describe('request project payment presentation', () => {
 
   it('keeps editable remark screenshots but simplifies the my-project detail fields', () => {
     const myProjectsSource = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
-    const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-    const myProjectInfoStart = myProjectsSource.indexOf('<dl className="project-info-grid">');
-    const myProjectInfo = myProjectsSource.slice(
-      myProjectInfoStart,
-      myProjectsSource.indexOf('</dl>', myProjectInfoStart),
+    const sharedProjectInfo = readFileSync(
+      new URL('../components/RequestProjectInfoCard.tsx', import.meta.url),
+      'utf8',
     );
+    const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 
-    expect(myProjectInfo).toContain('<dt>成本类型</dt>');
-    expect(myProjectInfo).not.toContain('<dt>手续费承担方</dt>');
-    expect(myProjectInfo).toContain('<dt>备注</dt>');
-    expect(myProjectInfo).not.toContain('<dt>备注附件</dt>');
+    expect(myProjectsSource).toContain('<RequestProjectInfoCard');
+    expect(sharedProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(sharedProjectInfo).not.toContain('<dt>手续费承担方</dt>');
+    expect(sharedProjectInfo).toContain('<dt>备注</dt>');
+    expect(sharedProjectInfo).not.toContain('<dt>备注附件</dt>');
     expect(myProjectsSource).not.toContain('aria-label="上传备注附件"');
     expect(myProjectsSource).toContain('onPaste={handleRemarkPaste}');
     expect(myProjectsSource).toContain('<RequestRemarkAttachments');

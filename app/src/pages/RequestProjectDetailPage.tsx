@@ -14,7 +14,7 @@ import { accountDisplayValue } from '../accountPresentation';
 import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
-import { RequestRemarkAttachments } from '../components/RequestRemarkAttachments';
+import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
 import type {
   ProjectResourceKind,
   ProjectResourceRecord,
@@ -801,7 +801,6 @@ export function RequestProjectDetailPage({
   const paymentChannel = requestPaymentChannelLabel(
     request.paymentChannel ?? payees.map((payee) => payee.channel),
   );
-  const expectedPaymentDate = requestExpectedPaymentDateLabel(request, detail.updatedAt);
   const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
   const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
@@ -889,33 +888,20 @@ export function RequestProjectDetailPage({
 
       <div className="project-detail-layout">
         <div className="project-detail-main">
-          <section className="project-detail-card">
-            <header className="project-detail-card-header">
-              <div><h2>请款项目信息</h2><p>查看项目、提交人与付款背景。</p></div>
-              <span>更新于 {detail.updatedAt}</span>
-            </header>
-            <dl className="project-info-grid">
-              <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
-              <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
-              <div><dt>品牌 / 客户</dt><dd>{detail.brand}</dd></div>
-              <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
-              <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
-              <div><dt>提交时间</dt><dd>{detail.submittedAt}</dd></div>
-              <div><dt>提交人</dt><dd>{detail.submitter}</dd></div>
-              <div><dt>付款渠道</dt><dd>{paymentChannel}</dd></div>
-              <div><dt>预计付款时间</dt><dd>{expectedPaymentDate}</dd></div>
-              <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
-              <div><dt>手续费承担方</dt><dd>按合同约定；未约定时在付款清单填写</dd></div>
-              <div className="project-info-full"><dt>付款事由</dt><dd>{detail.reason}</dd></div>
-              <div className="project-info-full"><dt>备注</dt><dd>{request.remark || '未填写'}</dd></div>
-              <div className="project-info-full">
-                <dt>备注附件</dt>
-                <dd>{request.remarkAttachments?.length
-                  ? <RequestRemarkAttachments attachments={request.remarkAttachments} />
-                  : '无附件'}</dd>
-              </div>
-            </dl>
-          </section>
+          <RequestProjectInfoCard
+            requestCode={request.requestCode ?? request.id}
+            cooperationProjectName={request.cooperationProjectName ?? request.project}
+            cooperationProjectCode={request.cooperationProjectCode ?? String(request.projectId ?? '')}
+            brand={request.brand}
+            pm={request.pm}
+            paymentChannel={request.paymentChannel ? paymentProviderDisplayName(request.paymentChannel) : undefined}
+            expectedPaymentDate={request.expectedPaymentDate}
+            costType={request.costType}
+            media={request.media}
+            createdAt={request.createdAt ?? request.approval?.submittedAt}
+            reason={request.generatedDetail?.reason}
+            remark={request.remark}
+          />
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
