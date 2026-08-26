@@ -206,6 +206,7 @@ describe('request project resource aggregation', () => {
     expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
     expect(styles).toContain('.request-resource-invoice-card-list .request-resource-invoice-row');
     expect(styles).toContain('.request-resource-contract-card-list .request-resource-contract-row');
+    expect(styles).toContain('grid-template-columns: 40px minmax(260px, 1.8fr) minmax(150px, 1fr) minmax(120px, .65fr) auto');
     expect(styles).toContain('-webkit-line-clamp: 2');
     expect(styles).toContain('.request-resource-contract-row .project-record-status.is-success');
   });

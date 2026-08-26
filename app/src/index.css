@@ -3682,6 +3682,12 @@ input[type="checkbox"]:disabled {
   box-shadow: 0 7px 20px rgba(35, 42, 55, .07);
 }
 
+@media (min-width: 981px) {
+  .request-resource-contract-card-list .request-resource-contract-row {
+    grid-template-columns: 40px minmax(260px, 1.8fr) minmax(150px, 1fr) minmax(120px, .65fr) auto;
+  }
+}
+
 .request-contract-record-icon {
   width: 40px;
   height: 40px;
