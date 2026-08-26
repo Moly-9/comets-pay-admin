@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Send,
   Unlink,
+  Upload,
   UserCheck,
   WalletCards,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ import {
 } from '../businessWorkflow';
 import { CONTRACT_TYPE_LABELS, contractLinkedToProject, formatContractMoney, getContractReadiness, getContractType, getContractValidity, isConfirmedContract, type ContractRecord, type ContractUploadInput } from '../contracts';
 import type { SystemUser } from '../data';
+import { canDeleteContract } from '../permissions';
 import { formatInvoiceMoney, invoiceTotal } from '../invoice/invoiceUtils';
 import {
   invoiceCooperationProjectId,
@@ -48,6 +50,7 @@ import {
 } from '../requestApprovalWorkflow';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
+import { ContractUploadWizard } from './ContractUploadWizard';
 import { PaymentListEditor } from './PaymentListEditor';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
@@ -144,6 +147,21 @@ export const canEditRequestProjectResources = (
 );
 
 const contractStableId = (contract: ContractRecord) => contract.contractId ?? contract.id as ContractId;
+
+const contractUsedInRequestProjects = (
+  contract: ContractRecord,
+  requests: RequestProjectSummary[],
+) => {
+  if (contract.projectLinks?.some((link) => link.status !== 'ENDED')) {
+    return true;
+  }
+  const contractIds = new Set(
+    [contract.contractId, contract.id].filter((id): id is string => Boolean(id)),
+  );
+  return requests.some((request) => request.creatorLinks?.some((link) => (
+    link.contractIds.some((contractId) => contractIds.has(contractId))
+  )));
+};
 
 const creatorFor = (creatorId: string, creators: CreatorProfile[]) => (
   creators.find((creator) => creator.id === creatorId)
@@ -309,6 +327,7 @@ const requiredPaymentLabel = (label: string) => (
 
 export function RequestProjectResourceManager({
   request,
+  cooperationProject,
   requests,
   creators,
   contracts,
@@ -327,7 +346,10 @@ export function RequestProjectResourceManager({
   onChangeLinks,
   onOpenContract,
   onOpenInvoice,
+  onGenerateContract,
   onGenerateInvoice,
+  onUploadContract,
+  onDeleteContract,
   onDeleteInvoice,
   onClearPaymentLists,
   onRemovePaymentInvoice,
@@ -344,10 +366,15 @@ export function RequestProjectResourceManager({
   const [invoiceCreatorFilter, setInvoiceCreatorFilter] = useState('ALL');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [selectedLinkedInvoiceIds, setSelectedLinkedInvoiceIds] = useState<InvoiceId[]>([]);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [notificationPayoutId, setNotificationPayoutId] = useState<string | null>(null);
   const [notificationReturnInvoiceId, setNotificationReturnInvoiceId] = useState<InvoiceId | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [paymentEditorListId, setPaymentEditorListId] = useState<PaymentListId | null>(null);
+  const [paymentEditorInvoiceId, setPaymentEditorInvoiceId] = useState<InvoiceId | null>(null);
+  const [paymentEditorMode, setPaymentEditorMode] = useState<'view' | 'edit'>('edit');
+  const [paymentEditorCloseWarning, setPaymentEditorCloseWarning] = useState(false);
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -397,6 +424,14 @@ export function RequestProjectResourceManager({
     ? validatePaymentListGeneration(currentPaymentList, paymentRequestInvoiceIds(request.creatorLinks ?? []))
     : [{ code: 'NO_ITEMS' as const, message: '付款清单尚未生成。' }];
   const paymentListReady = Boolean(currentPaymentList && paymentListIssues.length === 0);
+  const paymentEditorList = paymentEditorListId
+    ? paymentLists.find((list) => list.paymentListId === paymentEditorListId) ?? null
+    : null;
+  useEffect(() => {
+    if (paymentEditorCloseWarning && paymentEditorList && !paymentEditorList.items.some((item) => item.requiresRevalidation)) {
+      setPaymentEditorCloseWarning(false);
+    }
+  }, [paymentEditorCloseWarning, paymentEditorList]);
   const notificationPayout = notificationPayoutId
     ? payouts.find((payout) => payout.id === notificationPayoutId) ?? null
     : null;
@@ -485,11 +520,37 @@ export function RequestProjectResourceManager({
     }
   };
 
-  const openPaymentEditor = (_paymentListId: PaymentListId, invoiceId?: InvoiceId, mode: 'view' | 'edit' = 'edit') => {
-    if (mode === 'edit' && currentPaymentList?.status !== 'draft') onBeginEditPaymentList(_paymentListId);
-    document.getElementById(`request-payment-row-${invoiceId}`)?.scrollIntoView({ block: 'center' });
+  const generateOrRefreshPaymentList = () => {
+    if (currentPaymentList?.status === 'draft' && currentPaymentList.items.length) {
+      void onGeneratePaymentListVersion(currentPaymentList.paymentListId);
+    }
   };
 
+  const openPaymentEditor = (paymentListId: PaymentListId, invoiceId?: InvoiceId, mode: 'view' | 'edit' = 'edit') => {
+    const list = paymentLists.find((candidate) => candidate.paymentListId === paymentListId);
+    if (!list) return;
+    const readOnly = mode === 'view' || (['submitted', 'approved', 'paid'].includes(list.status) && !canEditSubmittedPaymentList);
+    if (!readOnly && !canEditPaymentList) return;
+    if (!readOnly && list.status !== 'draft') onBeginEditPaymentList(paymentListId);
+    setPaymentEditorListId(paymentListId);
+    setPaymentEditorInvoiceId(invoiceId ?? null);
+    setPaymentEditorMode(mode);
+    setPaymentEditorCloseWarning(false);
+  };
+
+  const closePaymentEditor = () => {
+    const requiresRevalidation = paymentEditorMode === 'edit'
+      && ['admin', 'project', 'owner'].includes(currentUser.roleKey)
+      && Boolean(paymentEditorList?.items.some((item) => item.requiresRevalidation));
+    if (requiresRevalidation) {
+      setPaymentEditorCloseWarning(true);
+      return;
+    }
+    setPaymentEditorCloseWarning(false);
+    setPaymentEditorListId(null);
+    setPaymentEditorInvoiceId(null);
+    setPaymentEditorMode('edit');
+  };
 
   const contractCandidates = contractAssociationCandidates(contracts, cooperationProjectId).filter((contract) => (
     Boolean(contract.creatorId && linkByCreator.has(contract.creatorId))
@@ -656,28 +717,18 @@ export function RequestProjectResourceManager({
       ) : !canEditLinkedResources && !paymentFailureRecoveryMode ? <NoticeBanner>当前账号在项目提交后仅可查看与导出资料。</NoticeBanner> : null}
 
       {resourceDialog === 'contract' ? (
-        <Modal title={`${request.requestCode ?? request.id} · 合同资料`} width="820px" className="project-resource-modal request-resource-modal request-contract-list-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
+        <Modal title={`${request.requestCode ?? request.id} · 合同资料`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
-            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
-            <div className="request-contract-card-list">
+            {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateContract}>生成合同</Button><Button variant="ghost" icon={<Upload size={15} />} onClick={() => { setResourceDialog(null); setUploadOpen(true); }}>上传合同</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
+            <div className="request-resource-flat-list">
               {linkedContracts.map((contract) => {
                 const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;
                 const contractId = contractStableId(contract);
-                const creatorName = creator?.name || contract.generationSnapshot?.creatorName || '达人档案缺失';
-                const creatorHandle = creator?.handle || contract.creatorHandle || contract.generationSnapshot?.creatorHandle || 'Handle 待补充';
-                const creatorPlatform = creator?.platform || contract.platform || contract.generationSnapshot?.platform || '社媒平台待补充';
-                return (
-                  <article className="request-contract-card" key={contractId}>
-                    <span className="project-contract-record-icon" aria-hidden="true"><FileText size={18} /></span>
-                    <div className="request-contract-card-document"><span>合同名称 / 编号</span><strong>{contract.name || '合同名称待补充'}</strong><small>{contract.id}</small></div>
-                    <div className="request-contract-card-creator"><span>达人</span><strong>{creatorName}</strong><small>{creatorHandle} · {creatorPlatform}</small></div>
-                    <div className="request-contract-card-amount"><span>合同金额</span><strong>{formatContractMoney(contract)}</strong></div>
-                    <div className="request-contract-card-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton> : null}</div>
-                  </article>
-                );
+                const usedInRequest = contractUsedInRequestProjects(contract, requests);
+                return <article className="request-resource-flat-row" key={contractId}><span className="project-contract-record-icon"><FileText size={18} /></span><div><strong>{contract.id}</strong><small>{contract.name}</small></div><div><span>达人</span><strong>{creator?.name ?? '达人档案缺失'}</strong><small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small></div><div><span>合同 / IO</span><strong>{contract.ioId || 'IO 待补充'}</strong><small>{formatContractMoney(contract)}</small></div><span className="project-record-status"><i />{getContractReadiness(contract).label}</span><div className="project-contract-record-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <><ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton>{canDeleteContract(currentUser, contract, { usedInRequest }) ? <ListActionButton kind="danger" onClick={() => setConfirmAction({ title: '删除合同源记录', description: `将删除 ${contract.id}；系统会同步清理请款项目关联并触发重新校验。`, confirmLabel: '确认删除', danger: true, run: () => onDeleteContract(contractId) })}>删除</ListActionButton> : null}</> : null}</div></article>;
               })}
-              {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>{canEditLinkedResources ? '可通过“关联已有合同”添加当前合作项目下的合同。' : '当前仅可查看，暂无可展示的合同资料。'}</p></div> : null}
+              {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款项目未关联合同</strong><p>合同选填，可上传、生成或关联已有记录。</p></div> : null}
             </div>
           </div>
         </Modal>
@@ -705,37 +756,22 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
-      {resourceDialog === 'payment' ? (
-        <Modal title={`${request.requestCode ?? request.id} · 付款单`} width="100%" className="payment-list-editor-modal" onClose={() => setResourceDialog(null)} footer={null}>
+      {resourceDialog === 'payment' && !paymentEditorList ? (
+        <Modal title={`${request.requestCode ?? request.id} · 付款单`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>{currentPaymentList?.paymentListCode ?? '付款单待生成'}</strong><p>一张付款单包含全部 Invoice；当前请款项目固定使用 {paymentProviderDisplayName(request.paymentChannel)}。</p></div><span>{paymentItemCount} 笔</span></div>
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
                 {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                {canEditPaymentList && currentPaymentList && currentPaymentList.status !== 'draft' && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => onBeginEditPaymentList(currentPaymentList.paymentListId)}>创建编辑草稿</Button> : null}
+                {canEditPaymentList && currentPaymentList && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
+                {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!paymentListReady || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定，请点击编辑付款清单后再修改' : paymentListReady ? '生成付款清单' : `还有 ${paymentListIssues.length} 项付款信息待完善`} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
               </div>
             ) : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
             {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务标记为“付款清单原因”的明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
             {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>请点击“编辑付款清单”逐笔完善付款明细，完成 {paymentListIssues.length} 项校验后才能生成。</span></div></div> : null}
-            {currentPaymentList ? <PaymentListEditor
-              list={currentPaymentList}
-              initialInvoiceId={focusedFailurePayoutId ? invoices.find((invoice) => invoice.sourcePayoutId === focusedFailurePayoutId)?.invoiceId : undefined}
-              invoices={invoices}
-              contracts={contracts}
-              creators={creators}
-              editable={canEditPaymentList && currentPaymentList.status === 'draft'}
-              accountEditableInvoiceIds={failureEditableInvoiceIds}
-              accountOverrideOnly={paymentFailureRecoveryMode}
-              requestPaymentProvider={requestPaymentProvider}
-              onUpdatePaymentItem={onUpdatePaymentItem}
-              onChangePaymentAccount={onChangePaymentAccount}
-              onRevalidatePaymentItem={onRevalidatePaymentItem}
-              onGenerate={canEditPaymentList && currentPaymentList.status === 'draft' ? () => onGeneratePaymentListVersion(currentPaymentList.paymentListId) : undefined}
-              onClose={() => setResourceDialog(null)}
-            /> : null}
-            <div className="payment-list-overview-rows" hidden>
+            <div className="payment-list-overview-rows">
               {currentPaymentList?.items.map((item) => {
                 const list = currentPaymentList;
                 const effectiveAccount = paymentListEffectiveAccount(item);
@@ -860,6 +896,32 @@ export function RequestProjectResourceManager({
         </Modal>
       ) : null}
 
+      {resourceDialog === 'payment' && paymentEditorList ? (
+        <Modal title={`${request.requestCode ?? request.id} · ${paymentEditorMode === 'view' ? '查看付款明细' : '编辑付款清单'}`} width="100%" className="payment-list-editor-modal" onClose={closePaymentEditor} footer={null}>
+          {paymentEditorCloseWarning ? (
+            <NoticeBanner onClose={() => setPaymentEditorCloseWarning(false)}>
+              <strong>请完成付款信息校验</strong>
+              <span>修改后的付款明细需要点击“重新校验”，校验通过后才能关闭此弹窗。</span>
+            </NoticeBanner>
+          ) : null}
+          <PaymentListEditor
+            list={paymentEditorList}
+            initialInvoiceId={paymentEditorInvoiceId ?? undefined}
+            invoices={invoices}
+            contracts={contracts}
+            creators={creators}
+            editable={paymentEditorMode === 'edit' && canEditPaymentList && paymentEditorList.status === 'draft'}
+            accountEditableInvoiceIds={failureEditableInvoiceIds}
+            accountOverrideOnly={paymentFailureRecoveryMode}
+            requestPaymentProvider={requestPaymentProvider}
+            onUpdatePaymentItem={onUpdatePaymentItem}
+            onChangePaymentAccount={onChangePaymentAccount}
+            onRevalidatePaymentItem={onRevalidatePaymentItem}
+            onClose={closePaymentEditor}
+          />
+        </Modal>
+      ) : null}
+
       {notificationPayout || notificationReturnItem ? (
         <Modal
           title={notificationReturnItem ? '通知达人修改付款明细' : '发送付款失败通知'}
@@ -931,6 +993,8 @@ export function RequestProjectResourceManager({
           </div></div>
         </Modal>
       ) : null}
+
+      {uploadOpen ? <ContractUploadWizard projects={[cooperationProject]} creators={creators} contracts={contracts} onClose={() => { setUploadOpen(false); setResourceDialog('contract'); }} onSave={(inputs) => { const records = onUploadContract(inputs); setUploadOpen(false); if (records[0]) onOpenContract(records[0].id); }} /> : null}
 
       {confirmAction ? <Modal title={confirmAction.title} width="460px" className="project-payment-remove-modal" onClose={() => setConfirmAction(null)} footer={<><Button variant="secondary" onClick={() => setConfirmAction(null)}>取消</Button><Button variant={confirmAction.danger ? 'danger' : 'primary'} onClick={() => { confirmAction.run(); setConfirmAction(null); }}>{confirmAction.confirmLabel}</Button></>}><div className="project-payment-remove-confirmation"><span><AlertTriangle size={22} /></span><div><strong>请确认操作范围</strong><p>{confirmAction.description}</p><small>本原型的变更只保存在当前浏览器会话。</small></div></div></Modal> : null}
     </>

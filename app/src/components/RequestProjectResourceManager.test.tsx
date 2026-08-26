@@ -179,34 +179,6 @@ describe('request project resource aggregation', () => {
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
   });
 
-  it('renders the contract viewer as a compact read-focused card list', () => {
-    const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
-    const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
-    const contractDialogSource = source.slice(
-      source.indexOf("resourceDialog === 'contract'"),
-      source.indexOf("resourceDialog === 'invoice'"),
-    );
-
-    expect(contractDialogSource).toContain('width="820px"');
-    expect(contractDialogSource).toContain('request-contract-card-list');
-    expect(contractDialogSource).toContain('request-contract-card-document');
-    expect(contractDialogSource).toContain('request-contract-card-creator');
-    expect(contractDialogSource).toContain('request-contract-card-amount');
-    expect(contractDialogSource).toContain('contract.name || \'合同名称待补充\'');
-    expect(contractDialogSource).toContain('contract.generationSnapshot?.creatorName');
-    expect(contractDialogSource).toContain('formatContractMoney(contract)');
-    expect(contractDialogSource).toContain('关联已有合同');
-    expect(contractDialogSource).toContain('移出请款');
-    expect(contractDialogSource).toContain('>查看</ListActionButton>');
-    expect(contractDialogSource).not.toContain('生成合同');
-    expect(contractDialogSource).not.toContain('上传合同');
-    expect(contractDialogSource).not.toContain('删除合同源记录');
-    expect(contractDialogSource).not.toContain('合同 / IO');
-    expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
-    expect(styles).toContain('min-height: min(200px, calc(100dvh - 24px))');
-    expect(styles).toContain('@media (max-width: 760px)');
-  });
-
   it('removes multi-project coverage controls from contract generation and upload', () => {
     const builderSource = readFileSync(new URL('../pages/ContractBuilderPage.tsx', import.meta.url), 'utf8');
     const uploadSource = readFileSync(new URL('./ContractUploadWizard.tsx', import.meta.url), 'utf8');
@@ -219,31 +191,71 @@ describe('request project resource aggregation', () => {
     expect(uploadSource).toContain('projectLinks: [{');
   });
 
-  it('keeps payment-list viewing, editing, validation and export in one modal', () => {
+  it('keeps payment-list editing and Excel export at list level', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     const paymentDialogSource = source.slice(
       source.indexOf("resourceDialog === 'payment'"),
       source.indexOf('{linkDialog ?'),
     );
-    expect(paymentDialogSource).toContain('导出 Excel');
-    expect(paymentDialogSource).toContain('创建编辑草稿');
-    expect(paymentDialogSource).toContain('<PaymentListEditor');
-    expect(paymentDialogSource).toContain("currentPaymentList.status === 'draft'");
+    const toolbarSource = paymentDialogSource.slice(
+      paymentDialogSource.indexOf('request-payment-toolbar'),
+      paymentDialogSource.indexOf('request-payment-flat-rows'),
+    );
+    const paymentRowsSource = paymentDialogSource.slice(
+      paymentDialogSource.indexOf('payment-list-overview-rows'),
+    );
+
+    expect(toolbarSource).toContain('生成付款清单');
+    expect(toolbarSource).toContain('导出 Excel');
+    expect(toolbarSource).toContain('编辑付款清单');
+    expect(toolbarSource).toContain('清空清单');
+    expect(toolbarSource).not.toContain('删除清单');
+    expect(toolbarSource.indexOf('清空清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
+    expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('编辑付款清单'));
+    expect(toolbarSource.indexOf('编辑付款清单')).toBeLessThan(toolbarSource.indexOf('生成付款清单'));
+    expect(paymentRowsSource).not.toContain('创建编辑版本');
+    expect(paymentRowsSource).not.toContain('>导出</Button>');
+    expect(source).toContain("currentPaymentList?.status === 'draft'");
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
+    expect(source).toContain('付款单已清空');
+    expect(source).toContain('run: onClearPaymentLists');
+    expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
+    expect(paymentRowsSource).not.toContain('SelectField');
     const editorSource = readFileSync(new URL('./PaymentListEditor.tsx', import.meta.url), 'utf8');
     expect(editorSource).toContain('ariaLabel="付款支付币种"');
     expect(editorSource).toContain('ariaLabel="付款收款币种"');
-    expect(editorSource).toContain('转账方式（只读）');
-    expect(editorSource).toContain('aria-label="付款金额" type="number"');
+    expect(editorSource).toContain('金额、币种和收款账户来自 Invoice 签署冻结快照，当前保持只读');
+    expect(editorSource).toContain('aria-label="付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, \'amount\')} disabled');
+    expect(editorSource).toContain('ariaLabel="付款转账方式"');
     expect(source).toContain('accountOverrideOnly={paymentFailureRecoveryMode}');
     expect(source).toContain("payout.paymentFailureRecovery?.status !== 'RETRY_SUBMITTED'");
     expect(editorSource.match(/PAYMENT_CURRENCY_OPTIONS/g)?.length).toBeGreaterThanOrEqual(2);
     expect(editorSource).toContain("update('paymentReason', event.target.value)");
     expect(editorSource).toContain("update('transactionReference', event.target.value)");
+    expect(editorSource).toContain("update('description', event.target.value)");
     expect(editorSource).toContain('手续费承担方');
-    expect(editorSource).toContain('查看详情');
-    expect(editorSource).toContain('生成付款清单');
-    expect(source).not.toContain('paymentEditorCloseWarning');
+    expect(editorSource).toContain('请输入交易附言');
+    expect(editorSource).toContain('onPointerUp');
+    expect(editorSource).toContain('ArrowRight');
+    expect(toolbarSource).toContain('canEditPaymentList && currentPaymentList');
+    expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
+    expect(paymentRowsSource).toContain('payment-list-overview-state');
+    expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
+    expect(paymentRowsSource).toContain('paymentListReturn.reason');
+    expect(paymentRowsSource).toContain('通知达人');
+    expect(paymentRowsSource).toContain('paymentListReturn.notifications');
+    expect(paymentRowsSource).toContain('模拟达人已修改账户');
+    expect(paymentRowsSource).toContain('paymentListReturn.accountUpdate');
+    expect(paymentRowsSource).toContain('账户已更新并通过校验');
+    expect(paymentRowsSource).toContain('校验通过');
+    expect(paymentRowsSource).toContain('canEditPaymentList && onSendPaymentListReturnNotification');
+    expect(paymentRowsSource).toContain("linkedPayout.status !== '已付款'");
+    expect(paymentRowsSource).toContain('编辑本笔');
+    expect(paymentRowsSource).toContain('查看本笔');
+    expect(source).toContain('请完成付款信息校验');
+    expect(source).toContain('paymentEditorCloseWarning');
+    expect(source).toContain("['admin', 'project', 'owner'].includes(currentUser.roleKey)");
+    expect(source).toContain('closePaymentEditor');
   });
 
   it('keeps payment-return notifications separate from Invoice-content returns', () => {
