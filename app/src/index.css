@@ -12084,6 +12084,13 @@ button:disabled {
   color: #626977;
 }
 
+.project-record-item-icon.is-contract {
+  border-color: #dcd2f1;
+  background: linear-gradient(145deg, #f6f3fc, #ece6f8);
+  color: #62498f;
+  box-shadow: 0 5px 14px rgba(92, 67, 140, .12);
+}
+
 .project-record-item-copy,
 .project-record-item-meta {
   display: grid;
@@ -12133,6 +12140,14 @@ button:disabled {
   height: 12px;
   border-radius: 4px;
   background: #7a8fae;
+}
+
+.project-record-item .project-record-status.is-success {
+  color: #287a50;
+}
+
+.project-record-item .project-record-status.is-success i {
+  background: currentColor;
 }
 
 .project-record-status.is-warning {

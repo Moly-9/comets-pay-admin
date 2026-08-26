@@ -65,6 +65,8 @@ describe('request project payment presentation', () => {
 
   it('keeps the requested project fields and payment columns in the detail view', () => {
     const source = readFileSync(new URL('./RequestProjectDetailPage.tsx', import.meta.url), 'utf8');
+    const viewerSource = readFileSync(new URL('./ProjectDetailPage.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
     const sharedProjectInfo = readFileSync(
       new URL('../components/RequestProjectInfoCard.tsx', import.meta.url),
       'utf8',
@@ -92,6 +94,12 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<th>付款渠道</th>');
     expect(paymentTable).toContain('<th>付款方式</th>');
     expect(paymentTable).toContain('<th>状态</th>');
+    expect(viewerSource).toContain("viewer.kind === 'contract' ? record.title : record.id");
+    expect(viewerSource).toContain("viewer.kind === 'contract' ? record.id : record.title");
+    expect(viewerSource).toContain("record.status === '已签署' ? ' is-success' : ''");
+    expect(viewerSource).toContain("viewer.kind === 'contract' ? ' is-contract' : ''");
+    expect(styles).toContain('.project-record-item-icon.is-contract');
+    expect(styles).toContain('.project-record-item .project-record-status.is-success');
   });
 
   it('keeps editable remark screenshots but simplifies the my-project detail fields', () => {

@@ -920,15 +920,15 @@ export function ProjectResourceViewer({
             <div className="project-record-list" role="list">
               {resourceRecords.map((record) => (
                 <article className="project-record-item" role="listitem" key={record.id}>
-                  <span className="project-record-item-icon"><ViewerIcon size={18} /></span>
+                  <span className={`project-record-item-icon${viewer.kind === 'contract' ? ' is-contract' : ''}`}><ViewerIcon size={18} /></span>
                   <div className="project-record-item-copy">
-                    <strong>{record.id}</strong>
-                    <span>{record.title}</span>
+                    <strong>{viewer.kind === 'contract' ? record.title : record.id}</strong>
+                    <span>{viewer.kind === 'contract' ? record.id : record.title}</span>
                     <small>{record.subtitle}</small>
                   </div>
                   <div className="project-record-item-meta">
                     <strong>{record.amount}</strong>
-                    <span className="project-record-status"><i />{record.status}</span>
+                    <span className={`project-record-status${viewer.kind === 'contract' && record.status === '已签署' ? ' is-success' : ''}`}><i />{record.status}</span>
                   </div>
                   <Button
                     className="project-record-open"
