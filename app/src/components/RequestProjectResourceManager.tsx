@@ -7,7 +7,6 @@ import {
   FileText,
   Link2,
   Mail,
-  Pencil,
   ReceiptText,
   RefreshCw,
   Send,
@@ -43,6 +42,7 @@ import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
+import { validatePaymentListAccountViaApi } from '../requestPaymentAccountValidation';
 import {
   requestApprovalHasScopedReturnItems,
   requestApprovalReturnItemForInvoice,
@@ -54,6 +54,12 @@ import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type ResourceKind = 'contract' | 'invoice' | 'payment';
 type ExpandedPaymentRow = { invoiceId: InvoiceId; mode: 'view' | 'edit' } | null;
+type PaymentGenerationIssueGroup = {
+  key: string;
+  creatorName: string;
+  invoiceNumber: string;
+  issues: string[];
+};
 type ConfirmAction = {
   title: string;
   description: string;
@@ -305,6 +311,13 @@ const paymentFeeBearerLabel = (value: unknown) => {
   return '待补充';
 };
 
+const swiftFeeOptionLabel = (value: unknown) => {
+  if (value === 'ADVERTISER') return 'OUR · 付款方承担';
+  if (value === 'PUBLISHER') return 'BEN · 收款方承担';
+  if (value === 'SHARED') return 'SHA · 各自承担';
+  return '待补充';
+};
+
 const requiredPaymentLabel = (label: string) => (
   <span className="project-payment-required-label">{label}<em aria-hidden="true">*</em></span>
 );
@@ -355,6 +368,8 @@ export function RequestProjectResourceManager({
   const [bulkPaymentReason, setBulkPaymentReason] = useState('');
   const [bulkTransactionReference, setBulkTransactionReference] = useState('');
   const [bulkPaymentNotice, setBulkPaymentNotice] = useState('');
+  const [paymentGenerationChecking, setPaymentGenerationChecking] = useState(false);
+  const [paymentGenerationIssues, setPaymentGenerationIssues] = useState<PaymentGenerationIssueGroup[] | null>(null);
   const links = request.creatorLinks ?? [];
   const linkByCreator = requestLinksByCreator(request);
   const cooperationProjectId = request.cooperationProjectId ?? request.projectId;
@@ -505,9 +520,65 @@ export function RequestProjectResourceManager({
     }
   };
 
-  const generateOrRefreshPaymentList = () => {
-    if (currentPaymentList?.status === 'draft' && currentPaymentList.items.length) {
-      void onGeneratePaymentListVersion(currentPaymentList.paymentListId);
+  const generateOrRefreshPaymentList = async () => {
+    if (
+      !currentPaymentList
+      || currentPaymentList.status !== 'draft'
+      || !currentPaymentList.items.length
+      || paymentGenerationChecking
+    ) return;
+    setPaymentGenerationChecking(true);
+    setPaymentGenerationIssues(null);
+    try {
+      const expectedInvoiceIds = paymentRequestInvoiceIds(request.creatorLinks ?? []);
+      const validationList: PaymentListRecord = {
+        ...currentPaymentList,
+        items: currentPaymentList.items.map((item) => ({
+          ...item,
+          requiresRevalidation: false,
+          validationIssues: [],
+        })),
+      };
+      const localIssues = validatePaymentListGeneration(validationList, expectedInvoiceIds);
+      const apiChecks = await Promise.all(currentPaymentList.items.map(async (item) => {
+        const effectiveAccount = paymentListEffectiveAccount(item);
+        if (effectiveAccount.provider !== 'Airwallex') return null;
+        return validatePaymentListAccountViaApi({ item, creators });
+      }));
+      const issueGroups: PaymentGenerationIssueGroup[] = currentPaymentList.items.flatMap((item, index) => {
+        const localMessages = localIssues
+          .filter((issue) => issue.invoiceId === item.invoiceId)
+          .map((issue) => issue.message.replace(`${item.snapshot.invoiceNumber}：`, ''));
+        const apiCheck = apiChecks[index];
+        const apiMessages = apiCheck && apiCheck.state !== 'passed'
+          ? apiCheck.fieldIssues?.length
+            ? apiCheck.fieldIssues.map((issue) => issue.message)
+            : [apiCheck.message]
+          : [];
+        const issues = [...new Set([...localMessages, ...apiMessages])];
+        return issues.length ? [{
+          key: item.invoiceId,
+          creatorName: item.snapshot.creatorName,
+          invoiceNumber: item.snapshot.invoiceNumber,
+          issues,
+        }] : [];
+      });
+      const listIssues = localIssues.filter((issue) => !issue.invoiceId);
+      if (listIssues.length) {
+        issueGroups.unshift({
+          key: 'payment-list',
+          creatorName: '付款清单',
+          invoiceNumber: currentPaymentList.paymentListCode,
+          issues: listIssues.map((issue) => issue.message),
+        });
+      }
+      if (issueGroups.length) {
+        setPaymentGenerationIssues(issueGroups);
+        return;
+      }
+      await onGeneratePaymentListVersion(currentPaymentList.paymentListId);
+    } finally {
+      setPaymentGenerationChecking(false);
     }
   };
 
@@ -779,15 +850,14 @@ export function RequestProjectResourceManager({
                 <div className="request-payment-toolbar-actions">
                   {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
                   {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                  {canEditPaymentList && currentPaymentList && (canEditSubmittedPaymentList || !['submitted', 'approved', 'paid'].includes(currentPaymentList.status)) ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openPaymentEditor(currentPaymentList.paymentListId)}>编辑付款清单</Button> : null}
-                  {canEditLinkedResources ? <Button icon={<RefreshCw size={15} />} disabled={!paymentListReady || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定，请点击编辑付款清单后再修改' : paymentListReady ? '生成付款清单' : `还有 ${paymentListIssues.length} 项付款信息待完善`} onClick={generateOrRefreshPaymentList}>生成付款清单</Button> : null}
+                  {canEditLinkedResources ? <Button icon={<RefreshCw className={paymentGenerationChecking ? 'is-spinning' : undefined} size={15} />} disabled={paymentGenerationChecking || !currentPaymentList?.items.length || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定' : '调用 Airwallex 付款信息完整性接口校验并生成付款清单'} onClick={() => { void generateOrRefreshPaymentList(); }}>{paymentGenerationChecking ? 'Airwallex 校验中' : '生成付款清单'}</Button> : null}
                 </div>
               </div>
             ) : null}
             {bulkPaymentNotice ? <div className="request-payment-bulk-notice" role="status">{bulkPaymentNotice}</div> : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
             {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务标记为“付款清单原因”的明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
-            {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>请点击“编辑付款清单”逐笔完善付款明细，完成 {paymentListIssues.length} 项校验后才能生成。</span></div></div> : null}
+            {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>可通过每笔卡片下方的“编辑本笔”完善信息；点击“生成付款清单”将调用 Airwallex 接口校验并展示缺失字段。</span></div></div> : null}
             <div className="payment-list-overview-rows">
               {currentPaymentList?.items.map((item) => {
                 const list = currentPaymentList;
@@ -823,6 +893,7 @@ export function RequestProjectResourceManager({
                   && (!hasScopedApprovalReturn || Boolean(paymentListReturn))
                   && (list.status === 'draft' || canEditSubmittedPaymentList);
                 const transactionReference = String(paymentListItemValue(item, 'transactionReference') || '');
+                const transferMethod = String(paymentListItemValue(item, 'transferMethod') || effectiveAccount.transferMethod || '待补充');
                 return (
                   <article
                     className={`payment-list-overview-row${failurePayout ? ' is-payment-failure' : ''}${focused ? ' is-failure-focused' : ''}`}
@@ -834,7 +905,7 @@ export function RequestProjectResourceManager({
                       <div className="payment-list-overview-creator"><Avatar initials={creator?.initials ?? item.snapshot.creatorName.slice(0, 2).toUpperCase()} accent={creator?.accent ?? '#60758f'} size="sm" /><span><strong>{item.snapshot.creatorName}</strong><small>{item.snapshot.invoiceNumber} · {list.paymentListCode} · {paymentProviderDisplayName(effectiveAccount.provider)}</small></span></div>
                       <span className={`payment-list-overview-state ${itemIssues.length ? 'is-warning' : 'is-ready'}`}>{itemIssues.length ? '待完善' : '已完成'}</span>
                     </header>
-                    <div className="payment-list-overview-row-summary"><span>收款账户名 <b title={accountName}>{accountName}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>付款原因 <b title={String(paymentListItemValue(item, 'paymentReason') || '')}>{paymentListItemValue(item, 'paymentReason') || '待填写'}</b></span><span>交易附言 <b title={transactionReference}>{transactionReference || '待填写'}</b></span></div>
+                    <div className={`payment-list-overview-row-summary${transferMethod === 'SWIFT' ? ' is-swift' : ''}`}><span>收款账户名 <b title={accountName}>{accountName}</b></span><span>金额 <b>{paymentListItemValue(item, 'currency')} {Number(paymentListItemValue(item, 'amount')).toLocaleString('en-US')}</b></span><span>收款方币种 <b>{paymentListItemValue(item, 'receiveCurrency') || '待补充'}</b></span><span>转账方式 <b>{transferMethod}</b></span>{transferMethod === 'SWIFT' ? <span>SWIFT 费用选项 <b>{swiftFeeOptionLabel(paymentListItemValue(item, 'feeBearer'))}</b></span> : null}</div>
                     {paymentListReturn ? (
                       <div className="request-approval-return-item-note" role="note">
                         <AlertTriangle size={15} />
@@ -957,6 +1028,31 @@ export function RequestProjectResourceManager({
               })}
               {!currentPaymentList ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单尚未生成</strong><p>请先关联 Invoice，再生成当前请款项目唯一的付款单。</p></div> : null}
               {currentPaymentList && !paymentItemCount ? <div className="project-resource-browser-empty"><WalletCards size={23} /><strong>付款单已清空</strong><p>点击“生成付款清单”可按当前关联的 Invoice 重新生成付款明细。</p></div> : null}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {paymentGenerationIssues ? (
+        <Modal
+          title="付款信息校验未通过"
+          width="620px"
+          className="payment-generation-issues-modal"
+          onClose={() => setPaymentGenerationIssues(null)}
+          footer={<Button onClick={() => setPaymentGenerationIssues(null)}>返回修改</Button>}
+        >
+          <div className="payment-generation-issues">
+            <div className="payment-generation-issues-intro" role="alert">
+              <CircleAlert size={19} aria-hidden="true" />
+              <div><strong>Airwallex 付款信息完整性校验未通过</strong><p>请补齐以下字段后再次生成付款清单。本地开发环境调用同结构的 Airwallex Mock 代理。</p></div>
+            </div>
+            <div className="payment-generation-issue-list">
+              {paymentGenerationIssues.map((group) => (
+                <article key={group.key}>
+                  <header><div><strong>{group.creatorName}</strong><span>{group.invoiceNumber}</span></div><span>{group.issues.length} 项待补充</span></header>
+                  <ul>{group.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                </article>
+              ))}
             </div>
           </div>
         </Modal>

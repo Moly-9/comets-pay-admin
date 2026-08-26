@@ -229,7 +229,7 @@ describe('request project resource aggregation', () => {
     expect(uploadSource).toContain('projectLinks: [{');
   });
 
-  it('keeps payment-list editing and Excel export at list level', () => {
+  it('keeps payment-list editing inline and validates before list generation', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     const paymentEditorCss = readFileSync(new URL('./PaymentListEditor.css', import.meta.url), 'utf8');
     const paymentDialogSource = source.slice(
@@ -246,12 +246,11 @@ describe('request project resource aggregation', () => {
 
     expect(toolbarSource).toContain('生成付款清单');
     expect(toolbarSource).toContain('导出 Excel');
-    expect(toolbarSource).toContain('编辑付款清单');
+    expect(toolbarSource).not.toContain('>编辑付款清单</Button>');
     expect(toolbarSource).toContain('清空清单');
     expect(toolbarSource).not.toContain('删除清单');
     expect(toolbarSource.indexOf('清空清单')).toBeLessThan(toolbarSource.indexOf('导出 Excel'));
-    expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('编辑付款清单'));
-    expect(toolbarSource.indexOf('编辑付款清单')).toBeLessThan(toolbarSource.indexOf('生成付款清单'));
+    expect(toolbarSource.indexOf('导出 Excel')).toBeLessThan(toolbarSource.indexOf('生成付款清单'));
     expect(paymentEditorCss).toContain('.request-payment-toolbar { display: grid;');
     expect(paymentEditorCss).toContain('.request-payment-toolbar-actions { display: flex; grid-row: 1;');
     expect(paymentEditorCss).toContain('.request-payment-bulk-fields { display: grid; grid-row: 2;');
@@ -260,6 +259,9 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).not.toContain('>导出</Button>');
     expect(source).toContain("currentPaymentList?.status === 'draft'");
     expect(source).toContain('onGeneratePaymentListVersion(currentPaymentList.paymentListId)');
+    expect(source).toContain('validatePaymentListAccountViaApi({ item, creators })');
+    expect(source).toContain('Airwallex 付款信息完整性校验未通过');
+    expect(source).toContain('paymentGenerationIssues.map');
     expect(source).toContain('付款单已清空');
     expect(source).toContain('run: onClearPaymentLists');
     expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
@@ -280,7 +282,6 @@ describe('request project resource aggregation', () => {
     expect(editorSource).toContain('请输入交易附言');
     expect(editorSource).toContain('onPointerUp');
     expect(editorSource).toContain('ArrowRight');
-    expect(toolbarSource).toContain('canEditPaymentList && currentPaymentList');
     expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
     expect(paymentRowsSource).toContain('payment-list-overview-state');
     expect(paymentRowsSource).toContain('payment-list-overview-row-summary');
@@ -298,7 +299,11 @@ describe('request project resource aggregation', () => {
     expect(paymentRowsSource).toContain('payment-list-overview-creator');
     expect(paymentRowsSource).toContain('<Avatar');
     expect(paymentRowsSource).toContain('收款账户名');
-    expect(paymentRowsSource).toContain('付款原因');
+    expect(paymentRowsSource).toContain('收款方币种');
+    expect(paymentRowsSource).toContain('转账方式');
+    expect(paymentRowsSource).toContain("transferMethod === 'SWIFT'");
+    expect(paymentRowsSource).toContain('SWIFT 费用选项');
+    expect(paymentRowsSource).toContain('swiftFeeOptionLabel');
     expect(paymentRowsSource).toContain('payment-list-inline-panel');
     expect(paymentRowsSource).toContain('来自 Invoice 签署冻结快照，不可修改');
     expect(paymentRowsSource).toContain('togglePaymentRow(list, item.invoiceId, \'view\')');
