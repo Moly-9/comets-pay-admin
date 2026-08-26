@@ -717,7 +717,7 @@ export function RequestProjectResourceManager({
       ) : !canEditLinkedResources && !paymentFailureRecoveryMode ? <NoticeBanner>当前账号在项目提交后仅可查看与导出资料。</NoticeBanner> : null}
 
       {resourceDialog === 'contract' ? (
-        <Modal title={`${request.requestCode ?? request.id} · 合同资料`} width="1120px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
+        <Modal title={`${request.requestCode ?? request.id} · 合同资料`} width="920px" className="project-resource-modal request-resource-modal request-document-list-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部合同</strong><p>平铺展示当前请款项目已关联的合同。</p></div><span>{linkedContracts.length} 份</span></div>
             {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateContract}>生成合同</Button><Button variant="ghost" icon={<Upload size={15} />} onClick={() => { setResourceDialog(null); setUploadOpen(true); }}>上传合同</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('contract')}>关联已有合同</Button></div> : null}
@@ -735,7 +735,7 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {resourceDialog === 'invoice' ? (
-        <Modal title={`${request.requestCode ?? request.id} · Invoice`} width="1080px" className="project-resource-modal request-resource-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
+        <Modal title={`${request.requestCode ?? request.id} · Invoice`} width="920px" className="project-resource-modal request-resource-modal request-document-list-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
             <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
             {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="ghost" icon={<FilePlus2 size={15} />} onClick={onGenerateInvoice}>生成 Invoice</Button><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('invoice')}>关联已有 Invoice</Button>{selectedLinkedInvoiceIds.length ? <Button variant="danger" icon={<Unlink size={15} />} onClick={() => setConfirmAction({ title: '批量解除 Invoice 关联', description: `将从当前请款项目移除 ${selectedLinkedInvoiceIds.length} 份 Invoice，源记录保留。`, confirmLabel: '确认解除', run: () => unlinkInvoices(selectedLinkedInvoiceIds) })}>解除已选</Button> : null}</div> : null}

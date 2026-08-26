@@ -157,6 +157,7 @@ describe('request project resource aggregation', () => {
 
   it('provides creator filters for both candidate dialogs and removes Invoice editing', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
     expect(source).toContain('全部合同');
     expect(source).toContain('全部 Invoice');
     expect(source).toContain('一张付款单包含全部 Invoice');
@@ -177,6 +178,12 @@ describe('request project resource aggregation', () => {
       source.indexOf("resourceDialog === 'payment'"),
     );
     expect(invoiceDialogSource).not.toContain('>编辑</button>');
+    expect(contractDialogSource).toContain('width="920px"');
+    expect(invoiceDialogSource).toContain('width="920px"');
+    expect(contractDialogSource).toContain('request-document-list-modal');
+    expect(invoiceDialogSource).toContain('request-document-list-modal');
+    expect(styles).toContain('min-height: min(240px, calc(100dvh - 24px))');
+    expect(styles).toContain('max-height: min(560px, calc(100dvh - 24px))');
   });
 
   it('removes multi-project coverage controls from contract generation and upload', () => {

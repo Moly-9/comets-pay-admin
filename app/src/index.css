@@ -3592,6 +3592,15 @@ input[type="checkbox"]:disabled {
 
 .request-resource-modal .modal-content { padding: 20px; }
 
+.project-resource-modal.request-document-list-modal {
+  min-height: min(240px, calc(100dvh - 24px));
+  max-height: min(560px, calc(100dvh - 24px));
+}
+
+.request-document-list-modal .modal-content {
+  overscroll-behavior: contain;
+}
+
 .request-resource-candidate-filter {
   display: flex;
   min-height: 62px;
