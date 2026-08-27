@@ -69,6 +69,21 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(option.searchText).toContain(accountName);
   });
 
+  it('keeps creator-picker typography aligned and orders contract details by name, code, then amount', () => {
+    const invoiceBuilderStyles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const contractOptionMarkup = invoiceBuilderSource.match(
+      /selectableContracts\.map\(\(contract\) => \([\s\S]*?<\/label>\s*\)\)\}/,
+    )?.[0];
+
+    expect(invoiceBuilderStyles).toMatch(
+      /\.invoice-builder-form \.contract-search-input-wrap input\s*\{\s*font-size:\s*12\.5px;/,
+    );
+    expect(contractOptionMarkup).toBeDefined();
+    expect(contractOptionMarkup).toContain('<strong>{contract.name}</strong>');
+    expect(contractOptionMarkup).toContain('<small>{contract.id} · {formatContractMoney(contract)}</small>');
+    expect(contractOptionMarkup?.indexOf('contract.name')).toBeLessThan(contractOptionMarkup?.indexOf('contract.id') ?? 0);
+  });
+
   it('keeps user-entered fee details independent from contract selection', () => {
     const contractSelectionHandler = invoiceBuilderSource.match(
       /const toggleContract = [\s\S]*?const selectPayoutAccount =/,

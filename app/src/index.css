@@ -18559,6 +18559,10 @@ button:disabled {
   font: inherit;
 }
 
+.invoice-builder-form .contract-search-input-wrap input {
+  font-size: 12.5px;
+}
+
 .contract-search-input-wrap input::placeholder {
   color: #a0a5af;
 }

@@ -759,8 +759,8 @@ export function InvoiceBuilderPage({
                           onChange={() => contract.contractId && toggleContract(contract.contractId)}
                         />
                         <span>
-                          <strong>{contract.id}</strong>
-                          <small>{contract.name} · {formatContractMoney(contract)}</small>
+                          <strong>{contract.name}</strong>
+                          <small>{contract.id} · {formatContractMoney(contract)}</small>
                         </span>
                       </label>
                     ))}
