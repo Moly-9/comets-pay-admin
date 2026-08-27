@@ -197,13 +197,6 @@ export const requestPaymentStatusLabel = (
   return '未付款';
 };
 
-const requestPaymentStatusTone = (status: RequestPaymentStatus) => {
-  if (status === '已付款') return 'is-success';
-  if (status === '付款处理中') return 'is-processing';
-  if (status === '付款失败') return 'is-danger';
-  return '';
-};
-
 export const normalizeRequestPaymentChannels = <T extends { channel: string }>(items: T[]): T[] => {
   const channel = requestPaymentChannelLabel(items.map((item) => item.channel));
   return items.map((item) => ({ ...item, channel }));
@@ -939,7 +932,7 @@ export function RequestProjectDetailPage({
 
       <PageHeading
         title={request.requestCode ?? request.id}
-        subtitle={`关联项目 ${request.cooperationProjectName ?? request.project} · 项目媒介 ${request.media} · 负责 PM ${request.pm}`}
+        subtitle={`关联项目 ${request.cooperationProjectName ?? request.project}`}
         actions={<span className="project-detail-status"><i />{currentApprovalLabel}</span>}
       />
 
@@ -1014,8 +1007,7 @@ export function RequestProjectDetailPage({
                   const initials = payee.initials ?? creator?.initials ?? payee.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
                   const handle = payee.handle ?? creator?.handle ?? 'Handle 待补充';
                   const platform = payee.platform ?? creator?.platform ?? '社媒平台待补充';
-                  const status = requestPaymentStatusLabel(payee.status);
-                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle} · {platform}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className={`simple-status ${requestPaymentStatusTone(status)}`.trim()}><i />{status}</span></td></tr>;
+                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle} · {platform}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
                 })}</tbody>
               </table>
             </div>

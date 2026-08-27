@@ -95,6 +95,8 @@ describe('request project payment presentation', () => {
     );
 
     expect(source).toContain('<RequestProjectInfoCard');
+    expect(source).toContain('subtitle={`关联项目 ${request.cooperationProjectName ?? request.project}`}');
+    expect(source).not.toContain('subtitle={`关联项目 ${request.cooperationProjectName ?? request.project} · 项目媒介');
     expect(sharedProjectInfo).not.toContain('<dt>审批负责人</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>付款方式</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>手续费承担方</dt>');
@@ -116,6 +118,8 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<PaymentProviderBadge compact provider={payee.channel} />');
     expect(paymentTable).toContain('request-detail-transfer-method');
     expect(paymentTable).toContain('{handle} · {platform}');
+    expect(paymentTable).toContain('<span className="simple-status is-success"><i />已校验</span>');
+    expect(paymentTable).not.toContain('requestPaymentStatusLabel(payee.status)');
     expect(styles).toContain('.request-detail-creator-cell');
     expect(approvalActions.indexOf('退回媒介修改')).toBeLessThan(approvalActions.indexOf('审批通过'));
     expect(styles).toMatch(/\.request-approval-actions\s*{[^}]*justify-content:\s*flex-end;/s);
