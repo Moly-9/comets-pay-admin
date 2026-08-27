@@ -27,6 +27,7 @@ describe('SearchableComboBox', () => {
     const html = renderToStaticMarkup(
       <SearchableComboBox
         ariaLabel="合作达人"
+        className="creator-search-combobox"
         value="creator-1"
         options={options}
         placeholder="搜索达人"
@@ -36,6 +37,7 @@ describe('SearchableComboBox', () => {
       />,
     );
 
+    expect(html).toContain('contract-search-combobox creator-search-combobox');
     expect(html).toContain('value="Camila Costa · @camila.beauty · Instagram"');
     expect(html).toMatch(/<button[^>]*aria-label="清除合作达人"[^>]*disabled/);
   });

@@ -16,7 +16,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
-import { SearchableComboBox, type SearchableOption } from '../components/SearchableComboBox';
+import { SearchableComboBox } from '../components/SearchableComboBox';
+import { creatorSearchOption } from '../creatorSearchOptions';
 import {
   createPrototypeId,
   type CreatorId,
@@ -156,44 +157,7 @@ const createBlankLine = (index: number): InvoiceLineItem => ({
   lineTotal: 0,
 });
 
-const normalizeChannelId = (value: string) => value.trim().replace(/^@/, '').toLowerCase();
-
-const payoutAccountNameTerms = (creator: CreatorProfile) => creator.payoutAccounts.flatMap((account) => {
-  if (account.provider === 'PayPal') return [account.nickname, account.paypalUsername];
-  if (account.provider === 'PayMax') return [account.nickname, account.beneficiaryName];
-  return [
-    account.nickname,
-    account.bankDetails.accountName,
-    account.companyName,
-    [account.firstName, account.lastName].filter(Boolean).join(' '),
-  ];
-});
-
-export const invoiceCreatorSearchOption = (creator: CreatorProfile): SearchableOption => {
-  const primarySocialAccount = creator.socialAccounts.find((account) => (
-    normalizeChannelId(account.handle) === normalizeChannelId(creator.handle)
-  )) ?? creator.socialAccounts[0];
-  const channelId = primarySocialAccount?.handle || creator.handle || '频道 ID 待补充';
-  const platform = primarySocialAccount?.platform || creator.platform || '社媒平台待补充';
-
-  return {
-    value: creator.id,
-    label: creator.name,
-    selectedLabel: `${creator.name} · ${channelId} · ${platform}`,
-    description: `${channelId} · ${platform}`,
-    searchText: [
-      creator.name,
-      creator.handle,
-      ...creator.socialAccounts.flatMap((account) => [
-        account.id,
-        account.handle,
-        account.profileUrl,
-        account.platform,
-      ]),
-      ...payoutAccountNameTerms(creator),
-    ].filter(Boolean).join(' '),
-  };
-};
+export const invoiceCreatorSearchOption = creatorSearchOption;
 
 export function InvoiceBuilderPage({
   creators,
@@ -720,6 +684,7 @@ export function InvoiceBuilderPage({
                 <span>合作达人 *</span>
                 <SearchableComboBox
                   ariaLabel="合作达人"
+                  className="creator-search-combobox"
                   value={creatorId}
                   placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name"
                   options={creatorOptions}

@@ -18559,8 +18559,31 @@ button:disabled {
   font: inherit;
 }
 
-.invoice-builder-form .contract-search-input-wrap input {
+.creator-search-combobox .contract-search-input-wrap input {
   font-size: 12.5px;
+}
+
+.contract-builder-form .creator-search-combobox .contract-search-input-wrap input {
+  font-size: 12.5px;
+}
+
+.contract-upload-field .creator-search-combobox .contract-search-input-wrap {
+  min-height: 40px;
+  border-color: #d9dde5;
+}
+
+.contract-upload-field .creator-search-combobox .contract-search-input-wrap:focus-within {
+  border-color: #ad91b3;
+  box-shadow: 0 0 0 3px rgba(137, 102, 145, 0.08);
+}
+
+.contract-upload-field .creator-search-combobox .contract-search-input-wrap input {
+  width: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
 }
 
 .contract-search-input-wrap input::placeholder {

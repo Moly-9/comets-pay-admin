@@ -31,6 +31,7 @@ import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Co
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
+import { creatorSearchOption } from '../creatorSearchOptions';
 import { contractGenerationFilename } from '../contractGenerationFilename';
 import { contractDocumentFilename } from '../documentFilenames';
 import {
@@ -282,18 +283,7 @@ export function ContractBuilderPage({
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
 
-  const creatorOptions = creators.map((creator) => ({
-    value: creator.id,
-    label: creator.contact.legalName || creator.name,
-    description: `${creator.name} · @${creator.handle.replace(/^@/, '')} · ${creator.region}`,
-    searchText: [
-      creator.contact.legalName,
-      creator.name,
-      creator.handle,
-      creator.platform,
-      ...creator.socialAccounts.flatMap((account) => [account.handle, account.id, account.profileUrl]),
-    ].join(' '),
-  }));
+  const creatorOptions = creators.map(creatorSearchOption);
   const creatorProjects = projects.filter((project) => project.creatorProfiles?.some((reference) => (
     reference.creatorId === creatorId && reference.status !== 'removed'
   )));
@@ -713,7 +703,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`} data-contract-field="creator">
                 <span>合作达人 *</span>
-                <SearchableComboBox ariaLabel="合同合作达人" value={creatorId} placeholder="搜索 real name、display name、账号名或频道链接" options={creatorOptions} onChange={selectCreator} onClear={() => selectCreator('')} />
+                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorId} placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name" options={creatorOptions} onChange={selectCreator} onClear={() => selectCreator('')} />
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.contractType ? 'has-error' : ''}`} data-contract-field="contractType">

@@ -9,8 +9,10 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { SearchableComboBox } from '../components/SearchableComboBox';
+import { creatorSearchOption } from '../creatorSearchOptions';
 import {
   InvoiceReviewMetricGrid,
   InvoiceReviewWorkspace,
@@ -123,17 +125,15 @@ export function ExternalInvoiceCollectionCreatePage({
   })), [projects]);
   const creatorOptions = useMemo(() => creatorReferences.map((reference) => {
     const creator = creators.find((item) => String(item.id) === String(reference.creatorId));
+    if (creator) return creatorSearchOption(creator);
+    const channelId = reference.handle || '频道 ID 待补充';
+    const platform = reference.platform || '社媒平台待补充';
     return {
       value: String(reference.creatorId),
       label: reference.name,
-      description: [reference.platform, reference.handle].filter(Boolean).join(' · '),
-      leading: (
-        <Avatar
-          initials={creator?.initials ?? reference.name.slice(0, 2)}
-          accent={creator?.accent}
-          size="sm"
-        />
-      ),
+      selectedLabel: `${reference.name} · ${channelId} · ${platform}`,
+      description: `${channelId} · ${platform}`,
+      searchText: [reference.name, reference.handle, reference.platform].filter(Boolean).join(' '),
     };
   }), [creatorReferences, creators]);
   const eligibleContracts = useMemo(() => contracts.filter((contract) => (
@@ -221,16 +221,19 @@ export function ExternalInvoiceCollectionCreatePage({
             </div>
             <div className="form-control">
               <span className="required-field-label">达人档案 <em className="required-mark">*</em></span>
-              <SelectField
+              <SearchableComboBox
                 ariaLabel="选择项目内达人"
-                variant="form"
-                menuStrategy="fixed"
+                className="creator-search-combobox"
                 value={creatorId}
-                placeholder={selectedProject ? '请选择项目内达人' : '请先选择合作项目'}
+                placeholder={selectedProject ? '搜索频道链接、频道 ID、Account Name 或 Display Name' : '请先选择合作项目'}
                 options={creatorOptions}
                 disabled={!selectedProject}
                 onChange={(value) => {
                   setCreatorId(value);
+                  setContractIds([]);
+                }}
+                onClear={() => {
+                  setCreatorId('');
                   setContractIds([]);
                 }}
               />

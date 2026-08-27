@@ -33,6 +33,8 @@ import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import { cooperationProjectIdFor } from '../paymentRequestProjects';
 import type { CreatorProfile } from '../types';
 import { Button, Modal, SelectField } from './Common';
+import { creatorSearchOption } from '../creatorSearchOptions';
+import { SearchableComboBox } from './SearchableComboBox';
 
 type Props = {
   projects: ProjectSummary[];
@@ -102,11 +104,7 @@ export function ContractUploadWizard({
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · ${project.creators} 位达人`,
   }));
-  const creatorOptions = creators.map((creator) => ({
-    value: creator.id,
-    label: creator.name,
-    description: `${creator.handle} · ${creator.region} · ${creator.platform}`,
-  }));
+  const creatorOptions = creators.map(creatorSearchOption);
   const frameworkOptions = contracts
     .filter((contract) => isFrameworkContract(contract) && contract.creatorId === creatorId)
     .map((contract) => ({
@@ -326,15 +324,20 @@ export function ContractUploadWizard({
             </div>
             <div className="contract-upload-field">
               <span>合作达人 *</span>
-              <SelectField
+              <SearchableComboBox
                 ariaLabel="合作达人"
-                variant="form"
+                className="creator-search-combobox"
                 value={creatorId}
-                placeholder={selectedProject ? '选择全系统达人' : '请先选择项目'}
+                placeholder={selectedProject ? '搜索频道链接、频道 ID、Account Name 或 Display Name' : '请先选择项目'}
                 options={creatorOptions}
                 disabled={!selectedProject}
                 onChange={(value) => {
                   setCreatorId(value);
+                  setDraftContractId('');
+                  setContractName('');
+                }}
+                onClear={() => {
+                  setCreatorId('');
                   setDraftContractId('');
                   setContractName('');
                 }}

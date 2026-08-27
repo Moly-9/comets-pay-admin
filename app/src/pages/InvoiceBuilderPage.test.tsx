@@ -76,7 +76,7 @@ describe('InvoiceBuilderPage create mode', () => {
     )?.[0];
 
     expect(invoiceBuilderStyles).toMatch(
-      /\.invoice-builder-form \.contract-search-input-wrap input\s*\{\s*font-size:\s*12\.5px;/,
+      /\.creator-search-combobox \.contract-search-input-wrap input\s*\{\s*font-size:\s*12\.5px;/,
     );
     expect(contractOptionMarkup).toBeDefined();
     expect(contractOptionMarkup).toContain('<strong>{contract.name}</strong>');

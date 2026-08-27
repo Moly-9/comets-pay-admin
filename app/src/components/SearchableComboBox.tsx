@@ -27,6 +27,7 @@ export function SearchableComboBox({
   options,
   placeholder,
   ariaLabel,
+  className = '',
   disabled = false,
   error,
   onChange,
@@ -36,6 +37,7 @@ export function SearchableComboBox({
   options: SearchableOption[];
   placeholder: string;
   ariaLabel: string;
+  className?: string;
   disabled?: boolean;
   error?: string;
   onChange: (value: string) => void;
@@ -70,7 +72,15 @@ export function SearchableComboBox({
   };
 
   return (
-    <div className={`contract-search-combobox ${open ? 'is-open' : ''} ${error ? 'has-error' : ''}`} ref={rootRef}>
+    <div
+      className={[
+        'contract-search-combobox',
+        className,
+        open ? 'is-open' : '',
+        error ? 'has-error' : '',
+      ].filter(Boolean).join(' ')}
+      ref={rootRef}
+    >
       <div className="contract-search-input-wrap">
         <Search size={15} aria-hidden="true" />
         <input
