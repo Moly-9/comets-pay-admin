@@ -10,7 +10,7 @@ import {
   PROJECT_DEMO_PAYOUTS,
 } from '../prototypeResourceFixtures';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
-import { InvoiceBuilderPage } from './InvoiceBuilderPage';
+import { InvoiceBuilderPage, invoiceCreatorSearchOption } from './InvoiceBuilderPage';
 
 const invoiceBuilderSource = readFileSync(new URL('./InvoiceBuilderPage.tsx', import.meta.url), 'utf8');
 
@@ -34,6 +34,39 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
     expect(html).toContain('data-testid="invoice-fill-demo"');
     expect(html).toContain('填充演示数据');
+  });
+
+  it('uses a searchable creator picker with channel and payout-account metadata', () => {
+    const creator = INITIAL_CREATORS.find((item) => item.socialAccounts.length && item.payoutAccounts.length)!;
+    const option = invoiceCreatorSearchOption(creator);
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={INITIAL_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={INITIAL_CONTRACTS}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
+        generatedInvoices={[]}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+    const primarySocialAccount = creator.socialAccounts.find((account) => (
+      account.handle.replace(/^@/, '').toLowerCase() === creator.handle.replace(/^@/, '').toLowerCase()
+    )) ?? creator.socialAccounts[0];
+    const accountName = creator.payoutAccounts[0].provider === 'PayPal'
+      ? creator.payoutAccounts[0].paypalUsername
+      : creator.payoutAccounts[0].provider === 'PayMax'
+        ? creator.payoutAccounts[0].beneficiaryName
+        : creator.payoutAccounts[0].bankDetails.accountName;
+
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('aria-label="合作达人"');
+    expect(html).toContain('搜索频道链接、频道 ID、Account Name 或 Display Name');
+    expect(option.selectedLabel).toBe(`${creator.name} · ${primarySocialAccount.handle} · ${primarySocialAccount.platform}`);
+    expect(option.searchText).toContain(primarySocialAccount.profileUrl);
+    expect(option.searchText).toContain(primarySocialAccount.handle);
+    expect(option.searchText).toContain(accountName);
   });
 
   it('keeps user-entered fee details independent from contract selection', () => {

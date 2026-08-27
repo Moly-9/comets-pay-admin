@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { SearchableComboBox, type SearchableOption } from '../components/SearchableComboBox';
 import {
   createPrototypeId,
   type CreatorId,
@@ -154,6 +155,45 @@ const createBlankLine = (index: number): InvoiceLineItem => ({
   quantity: 0,
   lineTotal: 0,
 });
+
+const normalizeChannelId = (value: string) => value.trim().replace(/^@/, '').toLowerCase();
+
+const payoutAccountNameTerms = (creator: CreatorProfile) => creator.payoutAccounts.flatMap((account) => {
+  if (account.provider === 'PayPal') return [account.nickname, account.paypalUsername];
+  if (account.provider === 'PayMax') return [account.nickname, account.beneficiaryName];
+  return [
+    account.nickname,
+    account.bankDetails.accountName,
+    account.companyName,
+    [account.firstName, account.lastName].filter(Boolean).join(' '),
+  ];
+});
+
+export const invoiceCreatorSearchOption = (creator: CreatorProfile): SearchableOption => {
+  const primarySocialAccount = creator.socialAccounts.find((account) => (
+    normalizeChannelId(account.handle) === normalizeChannelId(creator.handle)
+  )) ?? creator.socialAccounts[0];
+  const channelId = primarySocialAccount?.handle || creator.handle || '频道 ID 待补充';
+  const platform = primarySocialAccount?.platform || creator.platform || '社媒平台待补充';
+
+  return {
+    value: creator.id,
+    label: creator.name,
+    selectedLabel: `${creator.name} · ${channelId} · ${platform}`,
+    description: `${channelId} · ${platform}`,
+    searchText: [
+      creator.name,
+      creator.handle,
+      ...creator.socialAccounts.flatMap((account) => [
+        account.id,
+        account.handle,
+        account.profileUrl,
+        account.platform,
+      ]),
+      ...payoutAccountNameTerms(creator),
+    ].filter(Boolean).join(' '),
+  };
+};
 
 export function InvoiceBuilderPage({
   creators,
@@ -303,11 +343,7 @@ export function InvoiceBuilderPage({
   const selectedContracts = selectableContracts.filter((contract) => (
     contract.contractId && contractIds.includes(contract.contractId)
   ));
-  const creatorOptions = creators.map((creator) => ({
-    value: creator.id,
-    label: creator.name,
-    description: `${creator.handle} · ${creator.region} · ${creator.platform}`,
-  }));
+  const creatorOptions = creators.map(invoiceCreatorSearchOption);
   const projectOptions = projects.map((project) => ({
     value: cooperationProjectIdFor(project),
     label: project.name,
@@ -682,7 +718,16 @@ export function InvoiceBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`}>
                 <span>合作达人 *</span>
-                <SelectField ariaLabel="合作达人" variant="form" value={creatorId} placeholder="从达人档案选择" options={creatorOptions} onChange={selectCreator} disabled={isEditing} />
+                <SearchableComboBox
+                  ariaLabel="合作达人"
+                  value={creatorId}
+                  placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name"
+                  options={creatorOptions}
+                  onChange={selectCreator}
+                  onClear={() => selectCreator('')}
+                  disabled={isEditing}
+                  error={errors.creator}
+                />
                 {errors.creator ? <small>{errors.creator}</small> : null}
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>

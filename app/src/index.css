@@ -18525,6 +18525,11 @@ button:disabled {
   z-index: 200;
 }
 
+.contract-search-combobox.has-error .contract-search-input-wrap {
+  border-color: #e56c5f;
+  background: #fffafa;
+}
+
 .contract-search-input-wrap {
   display: flex;
   min-height: 44px;
