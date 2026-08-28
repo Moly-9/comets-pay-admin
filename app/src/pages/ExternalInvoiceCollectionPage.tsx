@@ -8,7 +8,6 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { accountDisplayValue } from '../accountPresentation';
 import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
@@ -56,6 +55,7 @@ import {
   invoiceEntitySnapshot,
 } from '../invoice/invoiceBillingEntities';
 import { formatInvoiceMoney, todayInputValue } from '../invoice/invoiceUtils';
+import { invoicePayoutAccountPresentationRows } from '../invoice/invoicePayoutAccountPresentation';
 import {
   createDocumentPayoutSnapshot,
   eligibleInvoicePayoutAccounts,
@@ -582,16 +582,11 @@ export function ExternalInvoiceCollectionDetailPage({
       note: currentFile ? '当前原文件版本有效，可追溯历史版本。' : '缺少有效原文件。',
     },
   ] : [];
-  const accountRows: InvoiceReviewAccountRow[] = [
-    { label: '付款方式', value: accountProvider ?? '待选择' },
-    { label: 'Account Name', value: accountProvider === 'PayPal' ? accountSnapshot.paypalUsername || '待补充' : accountSnapshot.accountName || '待补充' },
-    { label: 'Account Number', value: accountProvider === 'PayPal' ? '不适用' : accountDisplayValue(accountSnapshot.accountNumber) },
-    { label: 'Bank Name', value: accountSnapshot.bankName || (accountProvider === 'PayPal' ? '不适用' : '待补充') },
-    { label: 'SWIFT / BIC', value: accountSnapshot.swiftCode || (accountProvider === 'PayPal' ? '不适用' : '待补充') },
-    { label: 'IBAN', value: accountSnapshot.iban ? accountDisplayValue(accountSnapshot.iban) : '不适用' },
-    { label: 'PayPal Email', value: accountProvider === 'PayPal' ? accountSnapshot.paypalEmail || '待补充' : '不适用' },
-    { label: '账户审核状态', value: ['VALIDATED', 'VERIFIED'].includes(accountSnapshot.validationStatus ?? '') ? '已审核通过' : accountSnapshot.validationStatus || '待审核' },
-  ];
+  const accountRows: InvoiceReviewAccountRow[] = invoicePayoutAccountPresentationRows({
+    snapshot: accountSnapshot,
+    provider: accountProvider,
+    paymentMethod: accountProvider === 'PayPal' ? 'paypal' : 'bank',
+  });
   const accountMatched = Boolean(
     confirmation
     && normalized(confirmation.values.PAYMENT_ACCOUNT) === normalized(profileAccountValue),
@@ -827,9 +822,10 @@ export function ExternalInvoiceCollectionDetailPage({
         contractPending={!hasUploadedEvidence && selectedContracts.length > 0}
         noContract={selectedContracts.length === 0}
         accountRows={accountRows}
-        accountDescription={!hasUploadedEvidence
-          ? '任务创建时固定的默认已审核收款账户'
-          : undefined}
+        accountTitle="达人填写的付款信息"
+        accountDescription={hasUploadedEvidence
+          ? '达人最终确认并绑定的付款信息 · 当前仅为前端原型展示，待接入付款账户接口后展示完整字段'
+          : '任务创建时冻结的达人默认付款信息 · 当前仅为前端原型展示，待接入付款账户接口后展示完整字段'}
         accountComparison={confirmation ? {
           invoiceValue: confirmation.values.PAYMENT_ACCOUNT,
           profileValue: profileAccountValue,

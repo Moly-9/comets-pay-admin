@@ -176,6 +176,7 @@ type InvoiceReviewWorkspaceProps = {
   noContract?: boolean;
   contractPending?: boolean;
   accountRows: InvoiceReviewAccountRow[];
+  accountTitle?: string;
   accountComparison?: InvoiceReviewAccountComparison;
   accountDescription?: string;
   timeline: InvoiceReviewTimelineItem[];
@@ -261,6 +262,7 @@ export function InvoiceReviewWorkspace({
   noContract = false,
   contractPending = false,
   accountRows,
+  accountTitle,
   accountComparison,
   accountDescription,
   timeline,
@@ -656,7 +658,7 @@ export function InvoiceReviewWorkspace({
           {activeTab === 'account' ? (
             <div className="invoice-review-account-section">
               <div className="invoice-review-section-heading">
-                <div><Landmark size={18} /><span><strong>达人档案已审核账户</strong><small>{accountDescription ?? '付款只能使用当前达人档案中的有效账户'}</small></span></div>
+                <div><Landmark size={18} /><span><strong>{accountTitle ?? '达人档案已审核账户'}</strong><small>{accountDescription ?? '付款只能使用当前达人档案中的有效账户'}</small></span></div>
               </div>
               {accountComparison ? (
                 <div className={`invoice-review-account-comparison ${accountComparison.matched ? 'is-matched' : 'is-blocked'}`}>

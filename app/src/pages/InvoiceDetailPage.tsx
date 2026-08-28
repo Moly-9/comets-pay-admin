@@ -36,6 +36,7 @@ import {
   getInvoiceContractReference,
   invoiceAccountSummary,
 } from '../invoice/invoiceReview';
+import { invoicePayoutAccountPresentationRows } from '../invoice/invoicePayoutAccountPresentation';
 import {
   getApprovedInvoicePaymentStatus,
   getInvoiceEditContext,
@@ -682,16 +683,15 @@ export function InvoiceDetailPage({
               ? '.invoice-paper-signature'
               : '.invoice-paper-table-wrap',
   }));
-  const workspaceAccountRows: InvoiceReviewAccountRow[] = [
-    { label: '付款方式', value: model.paymentMethod === 'bank' ? 'Bank transfer' : 'PayPal' },
-    { label: 'Account Name', value: model.paymentMethod === 'bank' ? model.payment.accountName || '待补充' : model.payment.paypalUsername || '待补充' },
-    { label: 'Account Number / IBAN', value: invoiceAccountSummary(model) },
-    { label: 'Bank Name', value: model.paymentMethod === 'bank' ? model.payment.bankName || '待补充' : '不适用' },
-    { label: 'SWIFT / BIC', value: model.paymentMethod === 'bank' ? model.payment.swiftCode || '待补充' : '不适用' },
-    { label: 'PayPal Email', value: model.paymentMethod === 'paypal' ? model.payment.paypalEmail || '待补充' : '不适用' },
-    { label: '账户版本', value: model.payoutAccountVersion ?? model.payment.payoutAccountVersion ?? 'legacy-v1' },
-    { label: '账户审核状态', value: checks.find((check) => check.id.includes('account'))?.passed ? '已审核通过' : '待复核' },
-  ];
+  const workspaceAccountRows: InvoiceReviewAccountRow[] = invoicePayoutAccountPresentationRows({
+    snapshot: model.payment,
+    provider: model.payoutProvider ?? provider,
+    paymentMethod: model.paymentMethod,
+    accountVersion: model.payoutAccountVersion,
+    validationLabel: checks.find((check) => check.id.includes('account'))?.passed
+      ? '已审核通过'
+      : '待复核',
+  });
   const processTimeline: InvoiceReviewTimelineItem[] = steps.map((step, index) => {
     const complete = invoiceReviewStatus
       ? index < currentIndex || (invoiceReviewStatus === '已通过' && payout?.status === '已付款')
@@ -939,6 +939,8 @@ export function InvoiceDetailPage({
         } : undefined}
         noContract={Boolean(generatedRecord && selectedContracts.length === 0)}
         accountRows={workspaceAccountRows}
+        accountTitle="达人填写的付款信息"
+        accountDescription="生成 Invoice 时选择并冻结的达人付款信息 · 当前仅为前端原型展示，待接入付款账户接口后展示完整字段"
         timeline={processTimeline}
         historySummary={invoiceHistorySummary}
         currentTask={currentTask}

@@ -35,6 +35,27 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('--invoice-review-left:40%');
   });
 
+  it('identifies creator-entered payment information as prototype-only account data', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="INTERNAL_GENERATED"
+        initialTab="account"
+        accountTitle="达人填写的付款信息"
+        accountDescription="当前仅为前端原型展示，待接入付款账户接口后展示完整字段"
+        accountRows={[
+          { label: '付款渠道', value: 'PayPal' },
+          { label: 'PayPal Email', value: 'creator@example.test' },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('达人填写的付款信息');
+    expect(html).toContain('当前仅为前端原型展示，待接入付款账户接口后展示完整字段');
+    expect(html).toContain('<dt>付款渠道</dt><dd>PayPal</dd>');
+    expect(html).toContain('<dt>PayPal Email</dt><dd>creator@example.test</dd>');
+  });
+
   it('shows external exceptions first and explains why approval is disabled', () => {
     const html = renderToStaticMarkup(
       <InvoiceReviewWorkspace
