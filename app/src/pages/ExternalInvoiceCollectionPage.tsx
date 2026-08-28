@@ -395,12 +395,17 @@ export function ExternalInvoiceCollectionDetailPage({
     : accountProvider
       ? '银行转账'
       : '待选择';
-  const presetAccount = accounts.find((account) => getPayoutAccountId(account) === record.presetPayoutAccountId);
-  const displayPaymentSummary = selectedAccount
-    ? `${paymentProviderDisplayName(selectedAccount.provider)} · ${getPayoutAccountSummary(selectedAccount)}`
-    : presetAccount
-      ? `${paymentProviderDisplayName(presetAccount.provider)} · ${getPayoutAccountSummary(presetAccount)}`
-      : `${accountProvider ? paymentProviderDisplayName(accountProvider) : '已审核账户'} · 任务预设快照`;
+  const displayPaymentChannel = accountProvider
+    ? paymentProviderDisplayName(accountProvider)
+    : '待选择';
+  const displayLocalClearing = accountSnapshot.localClearingSystem
+    || (accountSnapshot.transferMethod === 'LOCAL' ? 'LOCAL' : '本地清算不适用');
+  const displayPaymentCountry = accountSnapshot.bankCountry || '国家待补充';
+  const displayPaymentSummary = [
+    displayPaymentMethod,
+    displayLocalClearing,
+    displayPaymentCountry,
+  ].join(' · ');
   const baselineValueFor = (field: ExternalInvoiceFieldKey) => {
     if (field === 'INVOICE_DATE') return confirmation?.values.INVOICE_DATE ?? '待确认';
     if (field === 'PUBLISHER') return expectedPublisher;
@@ -695,7 +700,7 @@ export function ExternalInvoiceCollectionDetailPage({
       label: '预计币种&金额',
       value: formatInvoiceMoney(record.expected.currency, record.expected.amount),
     },
-    { id: 'advertiser', label: '付款主体', value: record.expected.billTo.name },
+    { id: 'publisher', label: '开票主体', value: expectedPublisher },
     { id: 'description', label: '合作内容', value: record.expected.description },
     { id: 'due-date', label: '截止时间', value: record.expected.dueDate },
   ];
@@ -756,8 +761,8 @@ export function ExternalInvoiceCollectionDetailPage({
           secondary: `任务基准 · ${displayCurrency}`,
         },
         {
-          label: '付款方式',
-          value: displayPaymentMethod,
+          label: '付款渠道',
+          value: displayPaymentChannel,
           secondary: displayPaymentSummary,
         },
       ]} />
