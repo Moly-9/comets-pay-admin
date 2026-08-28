@@ -21433,8 +21433,15 @@ button:disabled {
   flex: 1 1 auto;
   border-bottom: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.contract-filter-tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .contract-filter-tabs .tab-button {
@@ -21667,10 +21674,6 @@ button:disabled {
 .contract-type-io {
   background: #e9f6f1;
   color: #237a62;
-}
-
-.contract-relation-subtext {
-  color: #8b6c2e !important;
 }
 
 .contract-name-link:hover strong,
@@ -24898,6 +24901,10 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+.contract-upload-contract-name {
+  margin: 0 16px 16px;
+}
+
 .contract-upload-field input {
   width: 100%;
   min-width: 0;
@@ -25818,7 +25825,8 @@ button:disabled {
     display: none;
   }
 
-  .contract-source-file-list {
+  .contract-source-file-list,
+  .contract-upload-contract-name {
     margin: 0 12px 12px;
   }
 

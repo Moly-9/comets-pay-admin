@@ -63,6 +63,7 @@ describe('shared creator search option', () => {
     expect(filterSearchableOptions(options, 'Camila Costa')).toEqual(options);
     expect(filterSearchableOptions(options, 'channel-camila-instagram')).toEqual(options);
     expect(filterSearchableOptions(options, 'instagram.com/camila.beauty')).toEqual(options);
+    expect(filterSearchableOptions(options, 'Studio Ltd.')).toEqual(options);
     expect(filterSearchableOptions(options, 'Camila Costa Payments')).toEqual(options);
     expect(filterSearchableOptions(options, 'payments@example.com')).toEqual(options);
     expect(creatorSearchOptions([creator])).toHaveLength(1);
@@ -117,8 +118,11 @@ describe('shared creator search option', () => {
       expect(source).toMatch(/creatorSearchOptions|creatorSearchOption/);
       expect(source).toContain('CreatorIdentity');
       expect(source).toContain('className="creator-search-combobox"');
+    });
+    [invoiceBuilder, contractBuilder, externalCollection].forEach((source) => {
       expect(source).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
     });
+    expect(contractUpload).toContain('支持搜索 Display Name、频道 ID、频道链接、法定真名、Account Name');
     expect(contractUpload).toContain('<SearchableComboBox');
     expect(externalCollection).toContain('<SearchableComboBox');
   });

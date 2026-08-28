@@ -766,7 +766,6 @@ export function ContractsPage({
                           </span>
                           <small>{displayNumber}</small>
                         </span>
-                        {contract.frameworkContractId ? <small className="contract-relation-subtext">框架合同：{contract.frameworkContractId}</small> : null}
                       </button>
                     </td>
                     <td title={realName}>{realName}</td>

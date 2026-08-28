@@ -84,6 +84,13 @@ describe('ContractsPage batch actions', () => {
     expect(html).toContain('即将到期 · 7天');
   });
 
+  it('keeps contract tabs horizontally scrollable without showing a scrollbar rail', () => {
+    const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+
+    expect(styles).toMatch(/\.contract-filter-tabs\s*{[^}]*overflow-x:\s*auto;[^}]*overflow-y:\s*hidden;[^}]*scrollbar-width:\s*none;/s);
+    expect(styles).toMatch(/\.contract-filter-tabs::\-webkit-scrollbar\s*{[^}]*display:\s*none;/s);
+  });
+
   it('marks an expired contract as invalid for payment', () => {
     const expired = {
       ...INITIAL_CONTRACTS[0],
@@ -122,6 +129,7 @@ describe('ContractsPage batch actions', () => {
       ioId: 'IO-20260829-001',
       name: '八月内容合作 IO 单',
       contractType: 'IO' as const,
+      frameworkContractId: 'contract-framework-source' as ContractRecord['frameworkContractId'],
     };
     const html = renderContractsPage(false, [independent, framework, io]);
     const nameCells = [...html.matchAll(/<button class="contract-name-link"[\s\S]*?<\/button>/g)].map(([cell]) => cell);
@@ -134,5 +142,7 @@ describe('ContractsPage batch actions', () => {
     expect(nameCells[1]).not.toContain('IO-SHOULD-NOT-SHOW-002');
     expect(nameCells[2]).toContain('<span class="contract-name-meta"><span class="contract-type-badge contract-type-io">IO 单</span><small>IO-20260829-001</small></span>');
     expect(nameCells[2]).not.toContain('CON-SHOULD-NOT-SHOW-IN-META');
+    expect(nameCells[2]).not.toContain('contract-framework-source');
+    expect(nameCells[2]).not.toContain('框架合同：');
   });
 });
