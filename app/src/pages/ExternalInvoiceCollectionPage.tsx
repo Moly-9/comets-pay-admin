@@ -206,7 +206,7 @@ export function ExternalInvoiceCollectionCreatePage({
       <button className="external-back-button" type="button" onClick={onBack}><ArrowLeft size={17} />返回 Invoice 管理</button>
       <PageHeading
         title="发起外部 Invoice 收集"
-        subtitle="先固定合作项目、达人和预期业务信息，再向对应达人档案发布上传任务。"
+        subtitle="先固定合作项目、达人和付款信息，再向对应达人档案发布上传任务。"
       />
       <div className="external-collection-form">
         <section className="content-card external-collection-card">
@@ -292,7 +292,7 @@ export function ExternalInvoiceCollectionCreatePage({
 
         <section className="content-card external-collection-card external-collection-card-final">
           <div className="external-section-heading">
-            <div><span className="external-section-kicker">03</span><h2>预期业务信息</h2></div>
+            <div><span className="external-section-kicker">03</span><h2>付款信息</h2></div>
             <p>达人上传后，系统将以这些字段及达人档案账户进行校验。</p>
           </div>
           <div className="form-grid external-form-grid">

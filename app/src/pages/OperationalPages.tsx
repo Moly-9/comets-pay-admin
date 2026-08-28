@@ -3485,7 +3485,7 @@ export function InvoicePage({
         <article className="invoice-overview-card invoice-overview-card-mint">
           <span>待达人处理</span>
           <strong>{invoiceOverview.creatorPending}</strong>
-          <small>{groupedRows.signature.length} 待签署 · {groupedRows.upload.length} 待采集</small>
+          <small>{groupedRows.signature.length} 待签署 · {groupedRows.upload.length} 待回收</small>
         </article>
         <article className="invoice-overview-card invoice-overview-card-amber">
           <span>待内部处理</span>
@@ -3501,7 +3501,7 @@ export function InvoicePage({
       <section className="content-card">
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedRows.signature.length}</span></button>
-          <button className={`tab-button ${tab === 'upload' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('upload')}>待采集 <span>{groupedRows.upload.length}</span></button>
+          <button className={`tab-button ${tab === 'upload' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('upload')}>待回收 <span>{groupedRows.upload.length}</span></button>
           <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedRows.review.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedRows.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedRows.returned.length}</span></button>

@@ -1274,7 +1274,7 @@ export function InvoiceBatchBuilderPage({
     });
     const issues = tokens.length ? result.issues : [{
       code: 'NOT_FOUND' as const,
-      message: '请至少输入一位达人的 Creator ID、频道ID或 Display Name',
+      message: '请至少输入一位达人的 Creator ID、频道 ID/Handle、频道链接或 Display Name',
     }];
     setBulkCreatorInputOpen(false);
     openCreatorImportReview('TEXT', '批量输入', result.matches, issues);
@@ -1282,6 +1282,7 @@ export function InvoiceBatchBuilderPage({
 
   const importCreatorTemplate = async (file: File) => {
     if (!selectedProject) return;
+    setBulkCreatorInputOpen(false);
     const basicIssues: InvoiceBatchCreatorImportIssue[] = [];
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
       basicIssues.push({ code: 'INVALID_TEMPLATE', message: '仅支持系统下载的 .xlsx 达人名单模板' });
@@ -1544,31 +1545,130 @@ export function InvoiceBatchBuilderPage({
                   </Button>
                   <Button
                     variant="secondary"
-                    icon={<Upload size={15} />}
-                    disabled={importingCreators}
-                    onClick={() => creatorFileInputRef.current?.click()}
-                  >
-                    {importingCreators ? '正在解析' : '导入 Excel'}
-                  </Button>
-                  <Button
-                    variant="secondary"
                     icon={<ClipboardPaste size={15} />}
                     onClick={() => setBulkCreatorInputOpen(true)}
                   >
                     批量输入
                   </Button>
-                  <input
-                    ref={creatorFileInputRef}
-                    hidden
-                    type="file"
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void importCreatorTemplate(file);
-                    }}
-                  />
                 </div>
               </div>
+              {creatorImportReview && creatorSelectionPreview ? (
+                <section className="invoice-batch-import-preview" aria-label="达人导入预览">
+                  <div className="invoice-batch-import-review-head">
+                    <span className="invoice-batch-import-source">
+                      {creatorImportReview.source === 'EXCEL' ? <FileSpreadsheet size={17} /> : <ClipboardPaste size={17} />}
+                      <span>
+                        <strong>达人档案 · 导入预览</strong>
+                        <small>{creatorImportReview.sourceName} · 匹配范围：{selectedProject.name}</small>
+                      </span>
+                    </span>
+                    <div className="invoice-batch-selection-mode" role="radiogroup" aria-label="导入应用方式">
+                      <label className={creatorSelectionMode === 'APPEND' ? 'is-selected' : ''}>
+                        <input
+                          type="radio"
+                          name="creator-selection-mode-inline"
+                          value="APPEND"
+                          checked={creatorSelectionMode === 'APPEND'}
+                          onChange={() => setCreatorSelectionMode('APPEND')}
+                        />
+                        追加到当前选择
+                      </label>
+                      <label className={creatorSelectionMode === 'REPLACE' ? 'is-selected' : ''}>
+                        <input
+                          type="radio"
+                          name="creator-selection-mode-inline"
+                          value="REPLACE"
+                          checked={creatorSelectionMode === 'REPLACE'}
+                          onChange={() => setCreatorSelectionMode('REPLACE')}
+                        />
+                        覆盖当前选择
+                      </label>
+                    </div>
+                  </div>
+
+                  <dl className="invoice-batch-import-summary">
+                    <div><dt>匹配成功</dt><dd>{creatorImportReview.matches.length}</dd></div>
+                    <div><dt>需要处理</dt><dd>{creatorImportReview.issues.length + creatorSelectionPreview.overflowIds.length}</dd></div>
+                    <div><dt>确认后已选</dt><dd>{creatorSelectionPreview.selectedIds.length}</dd></div>
+                  </dl>
+
+                  {creatorImportReview.matches.length ? (
+                    <div className="invoice-batch-creator-grid invoice-batch-import-preview-grid">
+                      {creatorImportReview.matches.map((match) => {
+                        const accepted = creatorSelectionPreview.selectedIds.includes(match.engagementId);
+                        const creator = prototypeCreators.find((candidate) => candidate.id === match.creatorId);
+                        const reference = selectedProject.creatorProfiles?.find((candidate) => candidate.engagementId === match.engagementId);
+                        return (
+                          <article
+                            key={match.engagementId}
+                            className={`invoice-batch-creator invoice-batch-import-preview-card${accepted ? ' is-selected' : ' is-disabled'}`}
+                          >
+                            <span className="invoice-batch-creator-check"><Check size={13} /></span>
+                            <CreatorIdentity
+                              creator={creator}
+                              displayName={match.creatorName}
+                              initials={creatorInitials(match.creatorName)}
+                              accent="#5f72d8"
+                              fallbackHandle={match.creatorHandle}
+                              fallbackPlatform={reference?.platform}
+                              socialAccountsMode="expanded"
+                            />
+                            <em className={accepted ? 'is-ready' : ''}>{accepted ? '将选择' : '超过50人上限'}</em>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="invoice-batch-search-empty">未匹配到可预览的项目达人</div>
+                  )}
+
+                  {creatorImportReview.issues.length || creatorSelectionPreview.overflowIds.length ? (
+                    <section className="invoice-batch-import-result-group is-issues" aria-label="需要处理的导入问题">
+                      <header>
+                        <strong>需要处理</strong>
+                        <span>{creatorImportReview.issues.length + creatorSelectionPreview.overflowIds.length} 项</span>
+                      </header>
+                      <ul>
+                        {creatorImportReview.issues.map((issue, index) => (
+                          <li key={`${issue.code}:${issue.sourceRow ?? index}:${issue.sourceValue ?? ''}`}>
+                            <AlertTriangle size={15} />
+                            <span>{issue.message}</span>
+                          </li>
+                        ))}
+                        {creatorSelectionPreview.overflowIds.map((engagementId) => {
+                          const match = creatorImportReview.matches.find((candidate) => candidate.engagementId === engagementId);
+                          return (
+                            <li key={`limit:${engagementId}`}>
+                              <AlertTriangle size={15} />
+                              <span>{match?.creatorName ?? engagementId} 超过单批50人上限，未加入选择</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </section>
+                  ) : null}
+
+                  <footer className="invoice-batch-import-preview-actions">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setCreatorImportReview(null);
+                        setBulkCreatorInputOpen(true);
+                      }}
+                    >
+                      返回修改
+                    </Button>
+                    <Button
+                      icon={<Check size={15} />}
+                      disabled={!creatorImportReview.matches.length}
+                      onClick={applyCreatorImportReview}
+                    >
+                      确认应用（{creatorSelectionPreview.selectedIds.length}）
+                    </Button>
+                  </footer>
+                </section>
+              ) : (
+                <>
               <div className="invoice-batch-creator-toolbar">
                 <div>
                   <strong>达人档案</strong>
@@ -1638,6 +1738,8 @@ export function InvoiceBatchBuilderPage({
               {!filteredProjectReferences.length ? (
                 <div className="invoice-batch-search-empty">没有匹配的项目达人</div>
               ) : null}
+                </>
+              )}
             </div>
           ) : (
             <div className="invoice-batch-empty-state">
@@ -1890,6 +1992,14 @@ export function InvoiceBatchBuilderPage({
             <>
               <Button variant="secondary" onClick={() => setBulkCreatorInputOpen(false)}>取消</Button>
               <Button
+                variant="secondary"
+                icon={<Upload size={15} />}
+                disabled={importingCreators}
+                onClick={() => creatorFileInputRef.current?.click()}
+              >
+                {importingCreators ? '正在解析' : '导入 Excel'}
+              </Button>
+              <Button
                 icon={<Search size={15} />}
                 disabled={!bulkCreatorInput.trim()}
                 onClick={reviewBulkCreatorInput}
@@ -1902,122 +2012,28 @@ export function InvoiceBatchBuilderPage({
           <div className="invoice-batch-bulk-input">
             <div>
               <strong>{selectedProject.name}</strong>
-              <span>支持 Creator ID、频道ID/Handle 和 Display Name，仅匹配当前项目达人。</span>
+              <span>支持 Creator ID、频道 ID/Handle、完整频道链接和 Display Name，仅匹配当前项目达人。</span>
             </div>
             <label>
               <span>达人名单</span>
               <textarea
                 autoFocus
                 value={bulkCreatorInput}
-                placeholder={'例如：\n@MinaKato，Alex Ruiz\ncreator-nika；@noahplays'}
+                placeholder={'例如：\n@MinaKato，Alex Ruiz\nhttps://www.youtube.com/@noahplays\ncreator-nika；tiktok.com/@nika'}
                 onChange={(event) => setBulkCreatorInput(event.target.value)}
               />
               <small>可使用换行、Tab、中英文逗号、分号、顿号或竖线分隔。</small>
             </label>
-          </div>
-        </Modal>
-      ) : null}
-
-      {creatorImportReview && creatorSelectionPreview ? (
-        <Modal
-          title={creatorImportReview.source === 'EXCEL' ? '确认 Excel 导入结果' : '确认批量输入结果'}
-          width="760px"
-          className="invoice-batch-creator-import-modal"
-          onClose={() => setCreatorImportReview(null)}
-          footer={(
-            <>
-              <Button variant="secondary" onClick={() => setCreatorImportReview(null)}>取消</Button>
-              <Button
-                icon={<Check size={15} />}
-                disabled={!creatorImportReview.matches.length}
-                onClick={applyCreatorImportReview}
-              >
-                应用选择（{creatorSelectionPreview.selectedIds.length}）
-              </Button>
-            </>
-          )}
-        >
-          <div className="invoice-batch-import-review">
-            <div className="invoice-batch-import-review-head">
-              <span className="invoice-batch-import-source">
-                {creatorImportReview.source === 'EXCEL' ? <FileSpreadsheet size={17} /> : <ClipboardPaste size={17} />}
-                <span><strong>{creatorImportReview.sourceName}</strong><small>匹配范围：{selectedProject?.name}</small></span>
-              </span>
-              <div className="invoice-batch-selection-mode" role="radiogroup" aria-label="导入应用方式">
-                <label className={creatorSelectionMode === 'APPEND' ? 'is-selected' : ''}>
-                  <input
-                    type="radio"
-                    name="creator-selection-mode"
-                    value="APPEND"
-                    checked={creatorSelectionMode === 'APPEND'}
-                    onChange={() => setCreatorSelectionMode('APPEND')}
-                  />
-                  追加到当前选择
-                </label>
-                <label className={creatorSelectionMode === 'REPLACE' ? 'is-selected' : ''}>
-                  <input
-                    type="radio"
-                    name="creator-selection-mode"
-                    value="REPLACE"
-                    checked={creatorSelectionMode === 'REPLACE'}
-                    onChange={() => setCreatorSelectionMode('REPLACE')}
-                  />
-                  覆盖当前选择
-                </label>
-              </div>
-            </div>
-
-            <dl className="invoice-batch-import-summary">
-              <div><dt>匹配成功</dt><dd>{creatorImportReview.matches.length}</dd></div>
-              <div><dt>需要处理</dt><dd>{creatorImportReview.issues.length + creatorSelectionPreview.overflowIds.length}</dd></div>
-              <div><dt>应用后已选</dt><dd>{creatorSelectionPreview.selectedIds.length}</dd></div>
-            </dl>
-
-            {creatorImportReview.matches.length ? (
-              <section className="invoice-batch-import-result-group" aria-label="匹配成功的达人">
-                <header><strong>匹配成功</strong><span>{creatorImportReview.matches.length} 位达人</span></header>
-                <div>
-                  {creatorImportReview.matches.map((match) => {
-                    const accepted = creatorSelectionPreview.selectedIds.includes(match.engagementId);
-                    const creator = prototypeCreators.find((candidate) => candidate.id === match.creatorId);
-                    const reference = selectedProject?.creatorProfiles?.find((candidate) => candidate.engagementId === match.engagementId);
-                    return (
-                      <article key={match.engagementId} className={accepted ? '' : 'is-overflow'}>
-                        <CreatorIdentity creator={creator} displayName={match.creatorName} initials={creatorInitials(match.creatorName)} accent="#5f72d8" fallbackHandle={match.creatorHandle} fallbackPlatform={reference?.platform} />
-                        <small>{match.sourceLabel}</small>
-                        <em>{accepted ? '将选择' : '超过50人上限'}</em>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
-
-            {creatorImportReview.issues.length || creatorSelectionPreview.overflowIds.length ? (
-              <section className="invoice-batch-import-result-group is-issues" aria-label="需要处理的导入问题">
-                <header>
-                  <strong>需要处理</strong>
-                  <span>{creatorImportReview.issues.length + creatorSelectionPreview.overflowIds.length} 项</span>
-                </header>
-                <ul>
-                  {creatorImportReview.issues.map((issue, index) => (
-                    <li key={`${issue.code}:${issue.sourceRow ?? index}:${issue.sourceValue ?? ''}`}>
-                      <AlertTriangle size={15} />
-                      <span>{issue.message}</span>
-                    </li>
-                  ))}
-                  {creatorSelectionPreview.overflowIds.map((engagementId) => {
-                    const match = creatorImportReview.matches.find((candidate) => candidate.engagementId === engagementId);
-                    return (
-                      <li key={`limit:${engagementId}`}>
-                        <AlertTriangle size={15} />
-                        <span>{match?.creatorName ?? engagementId} 超过单批50人上限，未加入选择</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ) : null}
+            <input
+              ref={creatorFileInputRef}
+              hidden
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importCreatorTemplate(file);
+              }}
+            />
           </div>
         </Modal>
       ) : null}

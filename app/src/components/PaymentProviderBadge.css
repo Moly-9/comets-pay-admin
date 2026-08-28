@@ -13,11 +13,11 @@
   max-width: 100%;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
+  border: 1px solid var(--payment-provider-border, #dfe3e8);
   border-radius: 7px;
-  background: var(--payment-provider-surface, #697386);
+  background: var(--payment-provider-surface, #f3f4f6);
   padding: 4px 10px;
-  color: #fff;
+  color: var(--payment-provider-ink, #4b5563);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
@@ -37,19 +37,27 @@
 }
 
 .payment-provider-badge.is-airwallex {
-  --payment-provider-surface: #675ff2;
+  --payment-provider-surface: #f0efff;
+  --payment-provider-border: #dcd8ff;
+  --payment-provider-ink: #5548d9;
 }
 
 .payment-provider-badge.is-paymax {
-  --payment-provider-surface: #ff3f49;
+  --payment-provider-surface: #fff0f1;
+  --payment-provider-border: #ffd5d9;
+  --payment-provider-ink: #d92d3a;
 }
 
 .payment-provider-badge.is-paypal {
-  --payment-provider-surface: #3478f6;
+  --payment-provider-surface: #edf4ff;
+  --payment-provider-border: #d4e4ff;
+  --payment-provider-ink: #1f67c7;
 }
 
 .payment-provider-badge.is-unknown {
-  --payment-provider-surface: #697386;
+  --payment-provider-surface: #f3f4f6;
+  --payment-provider-border: #e1e4e8;
+  --payment-provider-ink: #59616d;
 }
 
 .payout-list-provider {

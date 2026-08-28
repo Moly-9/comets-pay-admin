@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, InvoiceId, ProjectId } from '../businessWorkflow';
@@ -8,6 +9,23 @@ import { InvoiceBatchBuilderPage, InvoiceBatchResultSection } from './InvoiceBat
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
 
 describe('InvoiceBatchBuilderPage layout', () => {
+  it('moves Excel import into the bulk-input footer and previews matches in the creator archive', () => {
+    const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
+    const toolbarStart = source.indexOf('className="invoice-batch-creator-import-actions"');
+    const toolbarEnd = source.indexOf('{creatorImportReview && creatorSelectionPreview', toolbarStart);
+    const modalStart = source.indexOf('title="批量输入达人"');
+    const modalEnd = source.indexOf('{forceDescriptionKey ?', modalStart);
+    const toolbarSource = source.slice(toolbarStart, toolbarEnd);
+    const modalSource = source.slice(modalStart, modalEnd);
+
+    expect(toolbarSource).toContain('下载 Excel 模板');
+    expect(toolbarSource).not.toContain("'导入 Excel'");
+    expect(modalSource.indexOf('导入 Excel')).toBeLessThan(modalSource.indexOf('解析并预览'));
+    expect(source).toContain('className="invoice-batch-creator-grid invoice-batch-import-preview-grid"');
+    expect(source).toContain('达人档案 · 导入预览');
+    expect(source).toContain('频道 ID/Handle、完整频道链接和 Display Name');
+  });
+
   it('renders the five batch workflow areas as cards with individual validation metrics', () => {
     const html = renderToStaticMarkup(
       <InvoiceBatchBuilderPage

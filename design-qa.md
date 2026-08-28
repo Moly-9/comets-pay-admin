@@ -169,8 +169,6 @@ shows an input with Cancel and Save actions.
 
 final result: passed
 
----
-
 # 合作项目付款明细展示验收
 
 验收日期：2026-08-27
@@ -1744,3 +1742,42 @@ final result: passed
 - 已检查现有浏览器页面状态；本地 URL 安全策略阻止刷新当前标签页，因此未生成更新后的浏览器截图，需在页面手动刷新后查看新构建。
 
 final result: passed
+
+---
+
+# Invoice 批量达人导入与渠道 Badge 验收
+
+验收日期：2026-08-29
+
+## Source Visual Truth
+
+- 用户本次的浏览器批注截图：Invoice 管理页渠道 Badge、待采集页签、批量输入弹窗、底部操作区与外部 Invoice 收集页。
+- 截图由浏览器批注提供，未导出为本地文件。
+
+## Implementation Evidence
+
+- 实现地址：`http://127.0.0.1:5175/`
+- 预期桌面验收视口：1281 × 908 CSS px，device scale factor 1。
+- 预期窄屏验收视口：390 CSS px 宽，device scale factor 1。
+- 本次未能生成更新后的浏览器截图：本地 URL 被当前浏览器安全策略阻止读取。
+
+## Findings
+
+- 字体与字号：实现复用现有 COMETS Pay 字体栈、按钮和达人档案字号；缺少浏览器截图证据。
+- 间距与布局：解析结果复用主页三列达人档案网格，760px 以下切换单列；缺少实际视口对比。
+- 颜色：Airwallex、PayPal、Payer Max 已切换为浅色品牌底、品牌色文字和边框；缺少截图对比。
+- 图片与图标：未新增栅格或伪造资产，继续复用现有 Lucide 图标和达人头像组件。
+- 文案：已完成“待回收”、“付款信息”、频道链接示例和导入预览文案调整。
+
+## Automated Verification
+
+- 定向 Vitest：5 个测试文件、32 项通过。
+- 完整 Vitest：104 个测试文件、702 项通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+
+## Blocker
+
+- 无法打开更新后的实现截图并与批注截图组合对比，因此无法完成桌面、390px、主要交互和控制台的最终视觉验收。
+
+final result: blocked

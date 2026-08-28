@@ -237,7 +237,7 @@ describe('InvoicePage list columns', () => {
 
   it('renders five tabs in the required order', () => {
     const html = renderInvoicePage(true);
-    const labels = ['待签署', '待采集', '待审核', '已通过', '已退回'];
+    const labels = ['待签署', '待回收', '待审核', '已通过', '已退回'];
     labels.reduce((previousIndex, label) => {
       const index = html.indexOf(`>${label} <span>`);
       expect(index).toBeGreaterThan(previousIndex);
@@ -255,7 +255,7 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('待内部处理');
     expect(html).toContain('已通过 Invoice');
     expect(html).toContain('1 内部 · 0 外部');
-    expect(html).toContain('1 待签署 · 0 待采集');
+    expect(html).toContain('1 待签署 · 0 待回收');
   });
 
   it('shows common filters on every tab and limits Invoice type to review result tabs', () => {

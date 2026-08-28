@@ -1444,6 +1444,36 @@
 .invoice-batch-creator-import-modal .modal-content { padding: 18px 20px; }
 .invoice-batch-bulk-input,
 .invoice-batch-import-review { display: grid; gap: 16px; }
+.invoice-batch-import-preview {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #dedfe9;
+  border-radius: 10px;
+  background: #fafaff;
+  padding: 14px;
+  box-shadow: inset 3px 0 0 #756ceb;
+}
+.invoice-batch-import-preview-grid {
+  align-items: stretch;
+}
+.invoice-batch-import-preview-card {
+  cursor: default;
+}
+.invoice-batch-import-preview-card:hover:not(.is-disabled) {
+  border-color: #e9a08f;
+  background: #fffaf8;
+}
+.invoice-batch-import-preview-card.is-disabled {
+  opacity: 0.68;
+}
+.invoice-batch-import-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #e3e4ed;
+  padding-top: 12px;
+}
 .invoice-batch-bulk-input > div:first-child { display: grid; gap: 4px; }
 .invoice-batch-bulk-input > div:first-child strong { color: #343942; font-size: 12px; }
 .invoice-batch-bulk-input > div:first-child span,
@@ -1652,6 +1682,19 @@
   .invoice-batch-import-review-head {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .invoice-batch-import-preview {
+    padding: 12px;
+  }
+
+  .invoice-batch-import-preview-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .invoice-batch-import-preview-actions .button {
+    width: 100%;
   }
 
   .invoice-batch-selection-mode {

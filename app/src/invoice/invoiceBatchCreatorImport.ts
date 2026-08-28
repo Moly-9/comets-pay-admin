@@ -318,6 +318,13 @@ export const parseInvoiceBatchCreatorTokens = (value: string) => value
   .map((token) => token.trim())
   .filter(Boolean);
 
+const isInvoiceBatchChannelUrlToken = (value: string) => {
+  const source = value.trim();
+  if (!source || /\s/.test(source)) return false;
+  if (/^(?:https?:\/\/|www\.)/i.test(source)) return true;
+  return /^[a-z0-9.-]+\.[a-z]{2,}(?:[/?#]|$)/i.test(source);
+};
+
 export const matchInvoiceBatchCreatorTokens = ({
   tokens,
   creators,
@@ -367,6 +374,10 @@ export const matchInvoiceBatchCreatorTokens = ({
   });
 
   remainingTokens.forEach(({ token, sourceRow }) => {
+    if (isInvoiceBatchChannelUrlToken(token)) {
+      rows.push({ sourceRow, channelId: '', displayName: '', channelUrl: token });
+      return;
+    }
     const channelCandidates = candidatesForField(creators, 'channelId', token);
     if (channelCandidates.length) {
       rows.push({ sourceRow, channelId: token, displayName: '', channelUrl: '' });

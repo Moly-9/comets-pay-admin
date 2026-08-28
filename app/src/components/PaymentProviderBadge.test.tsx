@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
@@ -47,5 +48,14 @@ describe('PaymentProviderBadge', () => {
     expect(compact).toContain('is-airwallex is-compact');
     expect(unknown).toContain('is-unknown');
     expect(unknown).toContain('Pending provider');
+  });
+
+  it('uses light brand surfaces with darker brand text', () => {
+    const css = readFileSync(new URL('./PaymentProviderBadge.css', import.meta.url), 'utf8');
+
+    expect(css).toContain('--payment-provider-surface: #f0efff');
+    expect(css).toContain('--payment-provider-surface: #fff0f1');
+    expect(css).toContain('--payment-provider-surface: #edf4ff');
+    expect(css).toContain('color: var(--payment-provider-ink, #4b5563)');
   });
 });
