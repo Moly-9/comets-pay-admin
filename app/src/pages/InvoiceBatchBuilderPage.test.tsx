@@ -11,6 +11,7 @@ import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
 describe('InvoiceBatchBuilderPage layout', () => {
   it('moves Excel import into the bulk-input footer and previews matches in the creator archive', () => {
     const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');
     const toolbarStart = source.indexOf('className="invoice-batch-creator-import-actions"');
     const toolbarEnd = source.indexOf('{creatorImportReview && creatorSelectionPreview', toolbarStart);
     const modalStart = source.indexOf('title="批量输入达人"');
@@ -24,6 +25,9 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(source).toContain('className="invoice-batch-creator-grid invoice-batch-import-preview-grid"');
     expect(source).toContain('达人档案 · 导入预览');
     expect(source).toContain('频道 ID/Handle、完整频道链接和 Display Name');
+    expect(source).toContain("placeholder={'例如：\\nMinaKato\\nhttps://www.youtube.com/@MinaKato'}");
+    expect(styles).toMatch(/\.invoice-batch-creator\.is-selected,[\s\S]*?background:\s*#f6fbf8;/);
+    expect(styles).toMatch(/\.invoice-batch-creator \.avatar-sm\s*\{[\s\S]*?width:\s*38px;/);
   });
 
   it('renders the five batch workflow areas as cards with individual validation metrics', () => {

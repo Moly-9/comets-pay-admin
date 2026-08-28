@@ -12,6 +12,7 @@ import { useState, type MouseEvent, type PointerEvent } from 'react';
 import type { CreatorProfile, CreatorSocialAccount } from '../types';
 import { creatorSocialAccounts } from '../creatorSearchOptions';
 import { Avatar } from './Common';
+import './CreatorSearchOptions.css';
 
 const PLATFORM_ICONS: Record<string, LucideIcon> = {
   instagram: Instagram,

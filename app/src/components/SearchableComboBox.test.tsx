@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
@@ -40,5 +41,14 @@ describe('SearchableComboBox', () => {
     expect(html).toContain('contract-search-combobox creator-search-combobox');
     expect(html).toContain('value="Camila Costa · @camila.beauty · Instagram"');
     expect(html).toMatch(/<button[^>]*aria-label="清除合作达人"[^>]*disabled/);
+  });
+
+  it('uses the shared creator identity card treatment for creator search options', () => {
+    const css = readFileSync(new URL('./CreatorSearchOptions.css', import.meta.url), 'utf8');
+
+    expect(css).toMatch(/\.creator-search-combobox \.contract-search-option\s*\{[\s\S]*?min-height:\s*64px;/);
+    expect(css).toMatch(/\.creator-search-combobox \.contract-search-option\.is-selected[\s\S]*?background:\s*#f6fbf8;/);
+    expect(css).toMatch(/\.creator-search-combobox \.contract-search-option \.avatar-sm,[\s\S]*?width:\s*38px;/);
+    expect(css).toMatch(/\.creator-option\.creator-option-selected,[\s\S]*?background:\s*#f6fbf8;/);
   });
 });

@@ -2019,7 +2019,7 @@ export function InvoiceBatchBuilderPage({
               <textarea
                 autoFocus
                 value={bulkCreatorInput}
-                placeholder={'例如：\n@MinaKato，Alex Ruiz\nhttps://www.youtube.com/@noahplays\ncreator-nika；tiktok.com/@nika'}
+                placeholder={'例如：\nMinaKato\nhttps://www.youtube.com/@MinaKato'}
                 onChange={(event) => setBulkCreatorInput(event.target.value)}
               />
               <small>可使用换行、Tab、中英文逗号、分号、顿号或竖线分隔。</small>

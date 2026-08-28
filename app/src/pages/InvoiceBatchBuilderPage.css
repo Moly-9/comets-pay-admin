@@ -201,14 +201,19 @@
   transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
-.invoice-batch-creator:hover:not(.is-disabled),
-.invoice-batch-creator.is-selected {
-  border-color: #e9a08f;
-  background: #fffaf8;
+.invoice-batch-creator:hover:not(.is-disabled) {
+  border-color: #dce9e2;
+  background: #f8fcfa;
+}
+
+.invoice-batch-creator.is-selected,
+.invoice-batch-creator.is-selected:hover:not(.is-disabled) {
+  border-color: #bfe6ce;
+  background: #f6fbf8;
 }
 
 .invoice-batch-creator:focus-within {
-  box-shadow: 0 0 0 3px rgba(255, 157, 135, 0.13);
+  box-shadow: 0 0 0 3px rgba(76, 156, 112, 0.14);
 }
 
 .invoice-batch-creator.is-disabled {
@@ -240,6 +245,13 @@
   border-color: var(--multi-select-border);
   background: var(--multi-select-fill);
   color: var(--multi-select-ink);
+}
+
+.invoice-batch-creator .avatar-sm {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 11px;
 }
 
 .invoice-batch-creator > span:nth-of-type(2) {
