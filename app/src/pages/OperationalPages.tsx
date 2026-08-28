@@ -1842,6 +1842,11 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
   }),
   createSeedCreator({
     id: 'creator-oliver', initials: 'OC', accent: '#06b6d4', name: 'Oliver Chen', handle: '@oliver.tech', region: '新加坡', platform: 'YouTube', projects: 2,
+    socialAccounts: [
+      createSocialAccount('social-creator-oliver-youtube', 'YouTube', '@oliver.tech'),
+      createSocialAccount('social-creator-oliver-x', 'X', '@olivertech'),
+      createSocialAccount('social-creator-oliver-twitch', 'Twitch', '@oliver_live'),
+    ],
     contact: createInvoiceContact('Oliver Chen', 'oliver.chen@creator.example', '+65 8000 5319', 'Tanjong Pagar, Singapore'),
     bank: { countryCode: 'SG', countryName: 'Singapore', currency: 'SGD', accountNumber: '0000000003', bankName: 'DBS Bank', clearingSystem: 'FAST', routingType1: 'bank_code', routingValue1: '7171', routingType2: 'branch_code', routingValue2: '006', streetAddress: '12 Marina Boulevard', city: 'Singapore', state: 'Singapore', postcode: '018982', status: 'VERIFIED' },
   }),
@@ -2028,7 +2033,7 @@ function ProjectCreatorPicker({
               key={value}
               onClick={() => toggleCreator(creator.id, value)}
             >
-              <CreatorIdentity creator={creator} />
+              <CreatorIdentity creator={creator} socialAccountsMode="expanded" />
               <X size={13} aria-hidden="true" />
             </button>
           ))}
@@ -2061,7 +2066,7 @@ function ProjectCreatorPicker({
                   key={value}
                   onClick={() => toggleCreator(creator.id, value)}
                 >
-                  <CreatorIdentity creator={creator} className="creator-option-profile" />
+                  <CreatorIdentity creator={creator} className="creator-option-profile" socialAccountsMode="expanded" />
                   <span className="creator-option-meta"><strong>{creator.region}</strong><small>{creatorSocialAccounts(creator).length} 个社媒账号</small></span>
                   {selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}
                 </button>

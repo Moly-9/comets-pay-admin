@@ -41,7 +41,6 @@
 3. Post-fix desktop, focused, responsive, overflow and console checks found no remaining actionable P0, P1 or P2 issue.
 
 final result: passed
-
 ---
 
 # Design QA - 达人多社媒账号统一展示
@@ -2257,5 +2256,56 @@ final result: passed
 1. Initial P2: after changing the outer form to CSS Grid, the table's desktop minimum width expanded the validation card to about 1603px and shifted the metric grid outside the viewport.
 2. Fix: constrained the form grid track with `minmax(0, 1fr)` and each workflow card with `min-width: 0`, keeping wide-table overflow inside its existing table wrapper.
 3. Post-fix desktop, selected-data, mobile, interaction, overflow, and console checks found no remaining actionable P0, P1, or P2 issue.
+
+final result: passed
+
+---
+
+# Badge 样式统一设计验收
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9651e3e5-59bd-42e2-9fda-4e071d845b0a.png`
+- Implementation desktop: `design-qa-badges-desktop.png`
+- Implementation mobile: `design-qa-badges-mobile-390.png`
+- Combined comparison: `design-qa-badges-comparison.png`
+- Source pixels: 1447 × 434, 1x reference capture
+- Implementation desktop pixels: 1432 × 730, 1447 × 738 CSS viewport override, 1x capture
+- Implementation mobile pixels: 375 × 812, requested 390 × 844 responsive viewport, 1x capture
+- State: Invoice 管理“已通过”列表；桌面端包含付款渠道 Badge 和三平台达人折叠状态，窄屏端验证同一列表的自适应。
+
+## Full-view comparison evidence
+
+`design-qa-badges-comparison.png` 将参考图与实现的 Invoice 表格区域组合到同一张图中。实现保留现有 COMETS Pay 导航和表格字体，付款渠道使用与参考图一致的红、紫、蓝实色徽标，社媒账号使用浅色胶囊并横向排列。
+
+## Focused-region evidence
+
+- 付款渠道：Payer Max 红色、Airwallex 紫色、PayPal 蓝色，均保留白色文字以避免仅依赖颜色识别。
+- 社媒 Badge：平台图标和 Handle 同置于胶囊内；Oliver Chen 默认显示前 2 个并显示 `+1`。
+- 交互：点击 `+1` 后显示全部 3 个平台与“收起”，再次点击恢复折叠；`aria-expanded` 从 `false` 切换为 `true` 再恢复。
+- 选择器：Invoice 达人选择项直接展示 Oliver Chen 的全部 3 个平台，不渲染内层按钮。
+- 响应式：390px 验收中页面无水平溢出，平台 Badge 保持横排并对过长 Handle 做省略处理。
+
+## Required fidelity surfaces
+
+- Fonts and typography: 继续使用系统 Noto Sans SC 体系；Badge 的 11.5–12px 字号、粗细和行高与参考图的紧凑小标签层级一致。
+- Spacing and layout rhythm: 付款渠道与社媒 Badge 高度、内边距、圆角和间距已收紧；达人列使用稳定宽度确保两枚 Badge 横排。
+- Colors and tokens: 品牌实色渠道 Badge 和浅色平台 Badge 与参考图语义一致，对比度可读。
+- Image and icon fidelity: 使用现有 Lucide 社媒图标资产，没有使用文字字形、表情或 CSS 绘制替代图标。
+- Copy and content: 保留 `Payer Max`、`Airwallex`、`PayPal`、`+N` 和“收起”文案，选择器与普通列表的展示规则与需求一致。
+
+## Comparison history
+
+1. Initial finding [P2]: Invoice 表格达人列过窄，两枚社媒 Badge 被挤成上下两行。
+2. Fix: 为 Invoice 达人列增加稳定列宽，收紧 Badge 宽度并为折叠视图禁止换行。
+3. Post-fix evidence: `design-qa-badges-desktop.png` 中双平台 Badge 稳定横排；`design-qa-badges-mobile-390.png` 中也无页面水平溢出。
+
+## Findings
+
+无未解决的 P0、P1 或 P2 问题。参考图为独立表格，实现位于现有系统导航框架内，该差异为明确的产品结构约束。
+
+## Verification
+
+- Primary interactions: `+N` 展开、“收起”折叠、Invoice 达人选择器全量展示。
+- Responsive states: desktop and 390px narrow screen.
+- Browser console: 0 errors, 0 warnings.
 
 final result: passed

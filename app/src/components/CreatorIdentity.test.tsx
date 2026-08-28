@@ -21,18 +21,32 @@ const creator = {
   socialAccounts: [
     { id: 'social-instagram', handle: '@mina.first', platform: 'Instagram', profileUrl: '' },
     { id: 'social-tiktok', handle: '@mina.second', platform: 'TikTok', profileUrl: '' },
+    { id: 'social-youtube', handle: '@mina.third', platform: 'YouTube', profileUrl: '' },
   ],
 } as CreatorProfile;
 
 describe('CreatorIdentity', () => {
-  it('keeps profile account order and exposes platforms through labelled icons', () => {
+  it('keeps profile account order, shows two badges, and exposes the remaining count', () => {
     const html = renderToStaticMarkup(<CreatorIdentity creator={creator} />);
 
     expect(html.indexOf('@mina.first')).toBeLessThan(html.indexOf('@mina.second'));
+    expect(html).not.toContain('@mina.third');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('>+1</button>');
     expect(html).toContain('aria-label="Instagram"');
     expect(html).toContain('aria-label="TikTok"');
     expect(html).not.toContain('>Instagram<');
     expect(html).not.toContain('>TikTok<');
+  });
+
+  it('renders every social badge without a nested expansion control in expanded mode', () => {
+    const html = renderToStaticMarkup(<CreatorIdentity creator={creator} socialAccountsMode="expanded" />);
+
+    expect(html.indexOf('@mina.first')).toBeLessThan(html.indexOf('@mina.second'));
+    expect(html.indexOf('@mina.second')).toBeLessThan(html.indexOf('@mina.third'));
+    expect(html).toContain('aria-label="YouTube"');
+    expect(html).not.toContain('creator-social-accounts-toggle');
+    expect(html).not.toContain('<button');
   });
 
   it('uses the generic platform icon for unknown platforms', () => {

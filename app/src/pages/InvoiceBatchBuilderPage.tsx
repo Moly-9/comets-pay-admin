@@ -689,7 +689,7 @@ function BatchRowTable({
                     type="button"
                     onClick={() => onOpenCreatorPaymentInformation(row.creatorId)}
                   >
-                    <CreatorIdentity creator={creator} displayName={row.creatorName} fallbackHandle={row.creatorHandle} fallbackPlatform={row.creatorPlatform} />
+                    <CreatorIdentity creator={creator} displayName={row.creatorName} fallbackHandle={row.creatorHandle} fallbackPlatform={row.creatorPlatform} socialAccountsMode="expanded" />
                   </button>
                 </td>
                 <td data-label="Description">
@@ -1625,7 +1625,7 @@ export function InvoiceBatchBuilderPage({
                         onChange={() => toggleEngagement(reference.engagementId)}
                       />
                       <span className="invoice-batch-creator-check"><Check size={13} /></span>
-                      <CreatorIdentity creator={creator} displayName={reference.name} fallbackHandle={reference.handle} fallbackPlatform={reference.platform} />
+                      <CreatorIdentity creator={creator} displayName={reference.name} fallbackHandle={reference.handle} fallbackPlatform={reference.platform} socialAccountsMode="expanded" />
                       {existingCount ? (
                         <em className="is-ready">已有 {existingCount} 份，可继续生成</em>
                       ) : (

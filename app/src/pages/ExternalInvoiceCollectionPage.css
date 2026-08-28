@@ -353,7 +353,8 @@
 .invoice-list-filter-summary button:hover,
 .invoice-list-filter-summary button:focus-visible { color: #b8422e; }
 
-.invoice-management-table { min-width: 1450px; table-layout: fixed; }
+.invoice-management-table { min-width: 1550px; table-layout: fixed; }
+.invoice-management-table .invoice-creator-column { width: 270px; min-width: 270px; }
 .invoice-management-table th,
 .invoice-management-table td { vertical-align: middle; }
 .invoice-management-table th:nth-last-child(2),

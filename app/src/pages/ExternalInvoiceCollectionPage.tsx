@@ -244,7 +244,7 @@ export function ExternalInvoiceCollectionCreatePage({
                 renderOption={(option) => {
                   const creator = creators.find((item) => item.id === option.value);
                   const reference = creatorReferences.find((item) => String(item.creatorId) === option.value);
-                  return <CreatorIdentity creator={creator} displayName={reference?.name} fallbackHandle={reference?.handle} fallbackPlatform={reference?.platform} />;
+                  return <CreatorIdentity creator={creator} displayName={reference?.name} fallbackHandle={reference?.handle} fallbackPlatform={reference?.platform} socialAccountsMode="expanded" />;
                 }}
                 disabled={!selectedProject}
                 onChange={(value) => {

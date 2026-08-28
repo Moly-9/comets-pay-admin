@@ -361,7 +361,7 @@ export function PaymentProjectPaymentDetailPage({
                   >
                     <span className="payment-batch-item-person">
                       <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                      <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} />
+                      <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} socialAccountsMode="expanded" />
                     </span>
                     <span className="payment-batch-item-provider" data-label="付款渠道">
                       <PaymentProviderBadge compact provider={item.provider} />

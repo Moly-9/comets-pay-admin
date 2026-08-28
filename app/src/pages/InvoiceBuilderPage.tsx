@@ -729,7 +729,7 @@ export function InvoiceBuilderPage({
                   options={creatorOptions}
                   resultUnit="位达人"
                   renderOption={(option) => (
-                    <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} />
+                    <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />
                   )}
                   onChange={selectCreator}
                   onClear={() => selectCreator('')}

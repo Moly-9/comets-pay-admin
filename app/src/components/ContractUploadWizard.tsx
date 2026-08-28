@@ -342,7 +342,7 @@ export function ContractUploadWizard({
                 placeholder={selectedProject ? '搜索 Display Name、Handle、Real Name、Company Name 或 Account Name' : '请先选择项目'}
                 options={creatorOptions}
                 resultUnit="位达人"
-                renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} />}
+                renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />}
                 disabled={!selectedProject}
                 onChange={(value) => {
                   const creator = creators.find((item) => item.id === value);

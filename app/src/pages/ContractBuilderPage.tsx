@@ -739,7 +739,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`} data-contract-field="creator">
                 <span>合作达人 *</span>
-                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" options={creatorOptions} resultUnit="位达人" renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} />} onChange={selectCreator} onClear={() => selectCreator('')} />
+                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" options={creatorOptions} resultUnit="位达人" renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />} onChange={selectCreator} onClear={() => selectCreator('')} />
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.contractType ? 'has-error' : ''}`} data-contract-field="contractType">

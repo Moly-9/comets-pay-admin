@@ -94,7 +94,7 @@ export function InvoiceManagementTable({
                   />
                 </th>
               ) : null}
-              <th>达人</th>
+              <th className="invoice-creator-column">达人</th>
               <th>收款主体</th>
               <th>关联项目</th>
               <th>Invoice 编号</th>
@@ -126,7 +126,7 @@ export function InvoiceManagementTable({
                     />
                   </td>
                 ) : null}
-                <td>
+                <td className="invoice-creator-column">
                   <CreatorIdentity
                     className="creator-cell"
                     displayName={row.creatorName}

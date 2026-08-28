@@ -536,7 +536,7 @@ export function PaymentBatchDetailPage({
                             >
                               <span className="payment-batch-item-person">
                                 <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                                <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} />
+                                <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} socialAccountsMode="expanded" />
                               </span>
                               <span className="payment-batch-item-provider" data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
                               <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>

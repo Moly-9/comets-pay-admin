@@ -1891,8 +1891,8 @@ export function MediaPaymentProjectsPage({
                 {selectedCreators.length ? (
                   <div className="creator-selection-chips" aria-label="已选择的合作达人">
                     {selectedCreators.map((creator) => creatorSelectionEditable ? (
-                      <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} /><X size={13} aria-hidden="true" /></button>
-                    ) : <span className="creator-selection-chip is-readonly" key={creator.id}><CreatorIdentity creator={creator} /></span>)}
+                      <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} socialAccountsMode="expanded" /><X size={13} aria-hidden="true" /></button>
+                    ) : <span className="creator-selection-chip is-readonly" key={creator.id}><CreatorIdentity creator={creator} socialAccountsMode="expanded" /></span>)}
                     {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setSocialAccountIdsByCreator({}); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); setOpenDocumentPicker(null); setResourcePreview(null); }}>清除已选</button> : null}
                   </div>
                 ) : null}
@@ -1905,7 +1905,7 @@ export function MediaPaymentProjectsPage({
                         const resolution = resolutions.get(creator.id);
                         const ready = resolution?.status === 'READY';
                         const availableInvoiceCount = resolution?.availableInvoices.length ?? 0;
-                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} className="creator-option-profile" /><span className="creator-option-meta"><strong>{ready ? '可加入请款' : creator.region}</strong><small>{ready ? `${availableInvoiceCount} 份可用 Invoice` : resolution ? STATUS_COPY[resolution.status] : '待选择项目'}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
+                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} className="creator-option-profile" socialAccountsMode="expanded" /><span className="creator-option-meta"><strong>{ready ? '可加入请款' : creator.region}</strong><small>{ready ? `${availableInvoiceCount} 份可用 Invoice` : resolution ? STATUS_COPY[resolution.status] : '待选择项目'}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
                       })}
                       {!visibleCreators.length ? <div className="creator-picker-empty">没有找到匹配的达人档案</div> : null}
                     </div>

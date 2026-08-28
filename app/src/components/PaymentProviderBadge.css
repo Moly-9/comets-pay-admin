@@ -9,15 +9,15 @@
 
 .payment-provider-badge {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 26px;
   max-width: 100%;
   align-items: center;
-  gap: 7px;
-  border: 1px solid var(--payment-provider-border, #dfe3e9);
+  justify-content: center;
+  border: 1px solid transparent;
   border-radius: 7px;
-  background: var(--payment-provider-surface, #f6f7f9);
-  padding: 4px 9px 4px 5px;
-  color: var(--payment-provider-text, #4f5968);
+  background: var(--payment-provider-surface, #697386);
+  padding: 4px 10px;
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
@@ -25,33 +25,9 @@
 }
 
 .payment-provider-badge.is-compact {
-  min-height: 26px;
-  gap: 6px;
-  padding: 3px 8px 3px 4px;
+  min-height: 24px;
+  padding: 3px 9px;
   font-size: 11.5px;
-}
-
-.payment-provider-mark {
-  display: inline-flex;
-  width: 21px;
-  height: 21px;
-  flex: 0 0 21px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: var(--payment-provider-accent, #6b7280);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.payment-provider-badge.is-compact .payment-provider-mark {
-  width: 18px;
-  height: 18px;
-  flex-basis: 18px;
-  border-radius: 5px;
-  font-size: 10px;
 }
 
 .payment-provider-label {
@@ -61,30 +37,19 @@
 }
 
 .payment-provider-badge.is-airwallex {
-  --payment-provider-accent: #6758df;
-  --payment-provider-border: #dcd7fb;
-  --payment-provider-surface: #f2f0ff;
-  --payment-provider-text: #4f42b8;
+  --payment-provider-surface: #675ff2;
 }
 
 .payment-provider-badge.is-paymax {
-  --payment-provider-accent: #e65d48;
-  --payment-provider-border: #ffd4cc;
-  --payment-provider-surface: #fff1ee;
-  --payment-provider-text: #a63c2c;
+  --payment-provider-surface: #ff3f49;
 }
 
 .payment-provider-badge.is-paypal {
-  --payment-provider-accent: #1685dc;
-  --payment-provider-border: #c9e3f9;
-  --payment-provider-surface: #edf7ff;
-  --payment-provider-text: #0b62a6;
+  --payment-provider-surface: #3478f6;
 }
 
 .payment-provider-badge.is-unknown {
-  --payment-provider-border: #dfe3e9;
-  --payment-provider-surface: #f6f7f9;
-  --payment-provider-text: #667085;
+  --payment-provider-surface: #697386;
 }
 
 .payout-list-provider {
@@ -102,19 +67,10 @@
   box-sizing: border-box;
   height: 20px;
   min-height: 20px;
-  gap: 4px;
-  padding: 1px 5px 1px 2px;
+  padding: 1px 6px;
   border-radius: 5px;
   font-size: 9.5px;
   line-height: 1;
-}
-
-.payout-list-provider .payout-list-provider-badge .payment-provider-mark {
-  width: 15px;
-  height: 15px;
-  flex-basis: 15px;
-  border-radius: 4px;
-  font-size: 8.5px;
 }
 
 @media (max-width: 680px) {

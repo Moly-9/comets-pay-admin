@@ -859,7 +859,7 @@ function ProjectCreatorManagerModal({
                 onClick={() => toggleCreator(creator.id, value)}
               >
                 <span className="project-creator-modal-profile">
-                  <CreatorIdentity creator={creator} size="md" />
+                  <CreatorIdentity creator={creator} size="md" socialAccountsMode="expanded" />
                 </span>
                 <span className="project-creator-modal-meta"><strong>{creator.region}</strong><small>{creatorSocialAccounts(creator).length} 个社媒账号</small></span>
                 <span className="project-creator-modal-projects">参与 {creator.projects} 个项目</span>

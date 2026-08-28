@@ -22,6 +22,7 @@ describe('PaymentProviderBadge', () => {
     expect(html).toContain('is-paypal');
     expect(html).toContain('data-payment-provider="PayPal"');
     expect(html).toContain('PayPal');
+    expect(html).not.toContain('payment-provider-mark');
   });
 
   it('renders the standardized Payer Max brand label', () => {
@@ -37,5 +38,14 @@ describe('PaymentProviderBadge', () => {
     expect(html).toContain('is-airwallex');
     expect(html).toContain('is-paymax');
     expect(html).toContain('is-paypal');
+  });
+
+  it('keeps compact sizing and provides a neutral fallback for unknown channels', () => {
+    const compact = renderToStaticMarkup(<PaymentProviderBadge compact provider="Airwallex" />);
+    const unknown = renderToStaticMarkup(<PaymentProviderBadge provider="Pending provider" />);
+
+    expect(compact).toContain('is-airwallex is-compact');
+    expect(unknown).toContain('is-unknown');
+    expect(unknown).toContain('Pending provider');
   });
 });
