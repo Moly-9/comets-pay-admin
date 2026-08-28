@@ -203,9 +203,34 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('>操作</th>');
     expect(html).toContain('Signature Demo Display Name');
     expect(html).toContain('@signature-channel-id');
+    expect(html).toContain('@signature-channel-id · YouTube');
     expect(html).toContain('Signature Demo Company Ltd.');
     expect(html).toContain('Signature Demo Project');
     expect(html).toContain('内部 Invoice');
+  });
+
+  it('uses an exact Handle match to complete legacy Invoice creator display metadata', () => {
+    const legacySnapshot = {
+      ...snapshot,
+      creatorId: undefined,
+      creatorHandle: '@signature-channel-id',
+    } as unknown as GeneratedInvoiceRecord['snapshot'];
+    const legacyPayout = {
+      ...payout,
+      creatorId: undefined,
+      invoiceSnapshot: legacySnapshot,
+    } as Payout;
+    const legacyRecord = {
+      ...record,
+      snapshot: legacySnapshot,
+    };
+    const html = renderInvoicePage(true, {
+      payouts: [legacyPayout],
+      generatedInvoices: [legacyRecord],
+    });
+
+    expect(html).toContain('Signature Demo Display Name');
+    expect(html).toContain('@signature-channel-id · YouTube');
   });
 
   it('renders five tabs in the required order', () => {

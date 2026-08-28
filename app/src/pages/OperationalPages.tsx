@@ -3015,18 +3015,44 @@ export function InvoicePage({
   const invoiceSnapshotFor = (payout: Payout) => (
     generatedInvoiceByPayoutId.get(payout.id)?.snapshot ?? payout.invoiceSnapshot
   );
+  const normalizeCreatorHandle = (value?: string) => (
+    value?.trim().replace(/^@/, '').toLocaleLowerCase() ?? ''
+  );
+  const legacyCreatorForInvoice = (displayName?: string, handle?: string) => {
+    const normalizedHandle = normalizeCreatorHandle(handle);
+    const handleMatch = normalizedHandle
+      ? creators.find((candidate) => (
+          normalizeCreatorHandle(candidate.handle) === normalizedHandle
+          || candidate.socialAccounts.some((account) => (
+            normalizeCreatorHandle(account.handle) === normalizedHandle
+          ))
+        ))
+      : undefined;
+    if (handleMatch) return handleMatch;
+    const normalizedName = displayName?.trim().toLocaleLowerCase();
+    return normalizedName
+      ? creators.find((candidate) => candidate.name.trim().toLocaleLowerCase() === normalizedName)
+      : undefined;
+  };
   const invoiceIdentityFor = (payout: Payout) => {
     const snapshot = invoiceSnapshotFor(payout);
     const creatorId = snapshot?.creatorId ?? payout.creatorId;
-    const creator = creatorId
+    const creator = (creatorId
       ? creators.find((candidate) => candidate.id === creatorId)
-      : undefined;
+      : undefined) ?? legacyCreatorForInvoice(
+      snapshot?.creatorName ?? payout.creator,
+      snapshot?.creatorHandle ?? payout.handle,
+    );
+    const primarySocialAccount = creator?.socialAccounts.find((account) => account.handle.trim());
     return {
       displayName: creator?.name ?? snapshot?.creatorName ?? payout.creator,
-      channelId: creator?.socialAccounts.find((account) => account.handle.trim())?.handle
+      channelId: primarySocialAccount?.handle
         ?? creator?.handle
         ?? snapshot?.creatorHandle
         ?? payout.handle,
+      platform: primarySocialAccount?.platform.trim()
+        || creator?.platform?.trim()
+        || '社媒平台待补充',
       initials: creator?.initials ?? payout.initials,
       accent: creator?.accent ?? payout.accent,
     };
@@ -3069,6 +3095,7 @@ export function InvoicePage({
       invoiceType: generated?.invoiceType ?? 'INTERNAL',
       creatorName: identity.displayName,
       channelId: identity.channelId,
+      creatorPlatform: identity.platform,
       issuerName: creators.find((creator) => creator.id === snapshot?.creatorId)?.contact?.legalName
         ?? snapshot?.from.legalName
         ?? '待补充',
@@ -3097,6 +3124,7 @@ export function InvoicePage({
   });
   const externalRows: InvoiceManagementRow[] = externalInvoices.map((record) => {
     const creator = creators.find((candidate) => candidate.id === record.creatorId);
+    const primarySocialAccount = creator?.socialAccounts.find((account) => account.handle.trim());
     const status = externalInvoiceListStatus(record.status);
     const primaryAction = (record.status === 'WAITING_MEDIA_REVIEW' && canReviewMedia)
       || (record.status !== 'APPROVED' && record.status !== 'WAITING_MEDIA_REVIEW' && canManageInvoice);
@@ -3105,9 +3133,12 @@ export function InvoicePage({
       invoiceId: String(record.invoiceId),
       invoiceType: 'EXTERNAL',
       creatorName: creator?.name ?? record.creatorName,
-      channelId: creator?.socialAccounts.find((account) => account.handle.trim())?.handle
+      channelId: primarySocialAccount?.handle
         ?? creator?.handle
         ?? record.creatorHandle,
+      creatorPlatform: primarySocialAccount?.platform.trim()
+        || creator?.platform?.trim()
+        || '社媒平台待补充',
       initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
       accent: creator?.accent ?? '#9c6f93',
       issuerName: creator?.contact.legalName ?? '待补充',

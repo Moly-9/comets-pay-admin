@@ -54,6 +54,7 @@ const managementRow = (overrides: Partial<InvoiceManagementRow> = {}): InvoiceMa
   invoiceType: 'INTERNAL',
   creatorName: 'Test Creator',
   channelId: '@test',
+  creatorPlatform: 'YouTube',
   issuerName: 'Test Creator Limited',
   initials: 'TC',
   accent: '#64748b',
@@ -143,6 +144,14 @@ describe('Invoice management presentation', () => {
       status: 'all',
       invoiceType: 'all',
     }).map((row) => row.invoiceId)).toEqual(['invoice-paymax']);
+
+    expect(filterInvoiceManagementRows(rows, {
+      search: 'youtube',
+      projectKeys: [],
+      provider: 'all',
+      status: 'all',
+      invoiceType: 'all',
+    }).map((row) => row.invoiceId)).toEqual(['invoice-test', 'invoice-paypal', 'invoice-paymax']);
   });
 
   it('uses the expected management groups without an approval tab', () => {

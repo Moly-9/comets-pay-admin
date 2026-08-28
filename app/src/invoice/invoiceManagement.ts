@@ -27,6 +27,7 @@ export type InvoiceManagementRow = {
   invoiceType: InvoiceType;
   creatorName: string;
   channelId: string;
+  creatorPlatform: string;
   issuerName: string;
   initials: string;
   accent: string;
@@ -70,7 +71,7 @@ export const filterInvoiceManagementRows = (
 
   return rows.filter((row) => {
     const matchesSearch = !query || (
-      `${row.creatorName} ${row.channelId} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
+      `${row.creatorName} ${row.channelId} ${row.creatorPlatform} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
         .toLowerCase()
         .includes(query)
     );

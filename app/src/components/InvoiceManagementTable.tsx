@@ -128,7 +128,10 @@ export function InvoiceManagementTable({
                 <td>
                   <div className="creator-cell">
                     <Avatar initials={row.initials} accent={row.accent} size="sm" />
-                    <span><strong>{row.creatorName}</strong><small>{row.channelId}</small></span>
+                    <span>
+                      <strong>{row.creatorName}</strong>
+                      <small>{row.channelId} · {row.creatorPlatform}</small>
+                    </span>
                   </div>
                 </td>
                 <td className="invoice-issuer-cell">{row.issuerName || '待补充'}</td>
