@@ -100,4 +100,39 @@ describe('ContractsPage batch actions', () => {
     expect(html).toContain('role="tab" aria-selected="false">待处理<span>0</span>');
     expect(html).toContain('role="tab" aria-selected="false">已到期<span>1</span>');
   });
+
+  it('shows a complete-name tooltip and one type-specific number in the contract name cell', () => {
+    const independent = {
+      ...INITIAL_CONTRACTS[0],
+      id: 'CON-INDEPENDENT-001',
+      ioId: 'IO-SHOULD-NOT-SHOW-001',
+      name: '这是一个用于验证单行省略与悬停完整展示的很长独立合同名称',
+      contractType: 'INDEPENDENT' as const,
+    };
+    const framework = {
+      ...INITIAL_CONTRACTS[0],
+      id: 'CON-FRAMEWORK-001',
+      ioId: 'IO-SHOULD-NOT-SHOW-002',
+      name: '年度框架合作合同',
+      contractType: 'FRAMEWORK' as const,
+    };
+    const io = {
+      ...INITIAL_CONTRACTS[0],
+      id: 'CON-SHOULD-NOT-SHOW-IN-META',
+      ioId: 'IO-20260829-001',
+      name: '八月内容合作 IO 单',
+      contractType: 'IO' as const,
+    };
+    const html = renderContractsPage(false, [independent, framework, io]);
+    const nameCells = [...html.matchAll(/<button class="contract-name-link"[\s\S]*?<\/button>/g)].map(([cell]) => cell);
+
+    expect(nameCells).toHaveLength(3);
+    expect(nameCells[0]).toContain(`title="${independent.name}"`);
+    expect(nameCells[0]).toContain('<span class="contract-name-meta"><span class="contract-type-badge contract-type-independent">独立合同</span><small>CON-INDEPENDENT-001</small></span>');
+    expect(nameCells[0]).not.toContain('IO-SHOULD-NOT-SHOW-001');
+    expect(nameCells[1]).toContain('<span class="contract-name-meta"><span class="contract-type-badge contract-type-framework">框架合同</span><small>CON-FRAMEWORK-001</small></span>');
+    expect(nameCells[1]).not.toContain('IO-SHOULD-NOT-SHOW-002');
+    expect(nameCells[2]).toContain('<span class="contract-name-meta"><span class="contract-type-badge contract-type-io">IO 单</span><small>IO-20260829-001</small></span>');
+    expect(nameCells[2]).not.toContain('CON-SHOULD-NOT-SHOW-IN-META');
+  });
 });

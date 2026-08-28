@@ -726,6 +726,10 @@ export function ContractsPage({
               {visible.map((contract) => {
                 const readiness = getContractReadiness(contract);
                 const bucket = getContractManagementBucket(contract, referenceDate);
+                const contractType = getContractType(contract);
+                const displayNumber = contractType === 'IO'
+                  ? contract.ioId || 'IO 单号待补充'
+                  : contract.id;
                 const stableId = contractSelectionId(contract);
                 const rowSelected = selectedIds.has(stableId);
                 const project = projectDisplayFor(contract, displayProjects);
@@ -749,17 +753,19 @@ export function ContractsPage({
                       <button
                         className="contract-name-link"
                         type="button"
-                        title={`${contract.name} · ${contract.id}${contract.ioId ? ` · ${contract.ioId}` : ''}`}
+                        title={contract.name}
                         onClick={(event) => {
                           event.stopPropagation();
                           openContract(contract.id);
                         }}
                       >
                         <strong>{contract.name}</strong>
-                        <span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>
-                          {CONTRACT_TYPE_LABELS[getContractType(contract)]}
+                        <span className="contract-name-meta">
+                          <span className={`contract-type-badge contract-type-${contractType.toLowerCase()}`}>
+                            {CONTRACT_TYPE_LABELS[contractType]}
+                          </span>
+                          <small>{displayNumber}</small>
                         </span>
-                        <small>{contract.id}{contract.ioId ? ` · ${contract.ioId}` : ''}</small>
                         {contract.frameworkContractId ? <small className="contract-relation-subtext">框架合同：{contract.frameworkContractId}</small> : null}
                       </button>
                     </td>

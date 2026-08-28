@@ -21613,6 +21613,9 @@ button:disabled {
 
 .contract-name-link strong {
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -21622,6 +21625,21 @@ button:disabled {
 .contract-name-link small {
   color: var(--muted);
   font-size: 10.5px;
+}
+
+.contract-name-meta {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+.contract-name-meta small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .contract-type-badge {
@@ -26328,4 +26346,22 @@ button:disabled {
   .creator-social-account {
     white-space: nowrap;
   }
+}
+
+/* Contract list: keep the primary name concise while preserving the complete value via title. */
+.contract-table:not(.contract-template-table) .contract-name-link {
+  width: 100%;
+  min-width: 0;
+  max-width: 300px;
+  overflow: hidden;
+}
+
+.contract-table:not(.contract-template-table) .contract-name-link > strong,
+.contract-table:not(.contract-template-table) .contract-name-meta,
+.contract-table:not(.contract-template-table) .contract-name-meta small {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
