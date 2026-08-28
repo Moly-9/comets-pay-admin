@@ -203,7 +203,8 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('>操作</th>');
     expect(html).toContain('Signature Demo Display Name');
     expect(html).toContain('@signature-channel-id');
-    expect(html).toContain('@signature-channel-id · YouTube');
+    expect(html).toContain('aria-label="YouTube"');
+    expect(html).not.toContain('@signature-channel-id · YouTube');
     expect(html).toContain('Signature Demo Company Ltd.');
     expect(html).toContain('Signature Demo Project');
     expect(html).toContain('内部 Invoice');
@@ -230,7 +231,8 @@ describe('InvoicePage list columns', () => {
     });
 
     expect(html).toContain('Signature Demo Display Name');
-    expect(html).toContain('@signature-channel-id · YouTube');
+    expect(html).toContain('@signature-channel-id');
+    expect(html).toContain('aria-label="YouTube"');
   });
 
   it('renders five tabs in the required order', () => {

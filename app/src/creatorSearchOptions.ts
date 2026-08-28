@@ -120,7 +120,7 @@ export const creatorHandleForDisplay = ({
 };
 
 const payoutAccountNameTerms = (creator: CreatorProfile) => (creator.payoutAccounts ?? []).flatMap((account) => {
-  if (account.provider === 'PayPal') return [account.nickname, account.paypalUsername];
+  if (account.provider === 'PayPal') return [account.nickname, account.paypalUsername, account.paypalEmail];
   if (account.provider === 'PayMax') return [account.nickname, account.beneficiaryName];
   return [
     account.nickname,
@@ -129,6 +129,28 @@ const payoutAccountNameTerms = (creator: CreatorProfile) => (creator.payoutAccou
     [account.firstName, account.lastName].filter(Boolean).join(' '),
   ];
 });
+
+const creatorBaseSearchTerms = (creator: CreatorProfile) => [
+  creator.name,
+  creator.contact.legalName,
+  creator.handle,
+  creator.platform,
+  ...payoutAccountNameTerms(creator),
+];
+
+export const creatorSearchTerms = (creator: CreatorProfile) => [
+  ...creatorBaseSearchTerms(creator),
+  ...creatorSocialAccounts(creator).flatMap((account) => [
+    account.id,
+    account.handle,
+    account.profileUrl,
+    account.platform,
+  ]),
+].filter(Boolean).join(' ');
+
+export const creatorDisplayHandles = (creator: CreatorProfile) => creatorSocialAccounts(creator)
+  .map((account) => account.handle.trim())
+  .filter(Boolean);
 
 export const creatorSocialAccountSearchOptions = (
   creator: CreatorProfile,
@@ -141,15 +163,11 @@ export const creatorSocialAccountSearchOptions = (
     selectedLabel: `${creator.name} · ${channelId} · ${platform}`,
     description: `${channelId} · ${platform}`,
     searchText: [
-      creator.name,
-      creator.contact.legalName,
-      creator.handle,
-      creator.platform,
+      ...creatorBaseSearchTerms(creator),
       account.id,
       account.handle,
       account.profileUrl,
       account.platform,
-      ...payoutAccountNameTerms(creator),
     ].filter(Boolean).join(' '),
   };
 });
@@ -158,8 +176,14 @@ export const creatorSocialSearchOptions = (
   creators: CreatorProfile[],
 ) => creators.flatMap(creatorSocialAccountSearchOptions);
 
-/** @deprecated Prefer creatorSocialAccountSearchOptions for account-aware selections. */
+export const creatorSearchOptions = (
+  creators: CreatorProfile[],
+): SearchableOption[] => creators.map(creatorSearchOption);
+
 export const creatorSearchOption = (creator: CreatorProfile): SearchableOption => ({
-  ...creatorSocialAccountSearchOptions(creator)[0],
   value: creator.id,
+  label: creator.name,
+  selectedLabel: [creator.name, ...creatorDisplayHandles(creator)].join(' · '),
+  description: creatorDisplayHandles(creator).join(' · '),
+  searchText: creatorSearchTerms(creator),
 });

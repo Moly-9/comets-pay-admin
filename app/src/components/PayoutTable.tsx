@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import { Avatar, ListActionButton, StatusMark } from './Common';
+import { ListActionButton, StatusMark } from './Common';
+import { CreatorIdentity } from './CreatorIdentity';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
 import { formatAmount } from '../data';
-import type { InvoiceReviewStatus, Payout, PayoutStatus } from '../types';
-import { formatCreatorHandle } from '../creatorSearchOptions';
+import type { CreatorSocialAccount, InvoiceReviewStatus, Payout, PayoutStatus } from '../types';
 
 const ACTION_LABELS: Record<Payout['status'], string> = {
   未进入付款: '查看详情',
@@ -59,6 +59,7 @@ export function PayoutTable({
     platform?: string;
     initials: string;
     accent: string;
+    socialAccounts?: CreatorSocialAccount[];
   };
   projectNameFor?: (payout: Payout) => string;
   invoiceNumberFor?: (payout: Payout) => string;
@@ -108,10 +109,7 @@ export function PayoutTable({
               return (
               <tr key={payout.id} onClick={() => onSelect(payout)}>
                 <td>
-                  <div className="creator-cell">
-                    <Avatar initials={identity.initials} accent={identity.accent} size="sm" />
-                    <span><strong>{identity.displayName}</strong><small>{formatCreatorHandle(identity.channelId, identity.platform ?? payout.creatorPlatform)}</small></span>
-                  </div>
+                  <CreatorIdentity className="creator-cell" displayName={identity.displayName} initials={identity.initials} accent={identity.accent} accounts={identity.socialAccounts} fallbackHandle={identity.channelId} fallbackPlatform={identity.platform ?? payout.creatorPlatform} />
                 </td>
                 <td className="invoice-project-cell">{projectNameFor?.(payout) ?? payout.project}</td>
                 <td className="mono-cell">

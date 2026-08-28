@@ -44,6 +44,27 @@ final result: passed
 
 ---
 
+# Design QA - 达人多社媒账号统一展示
+
+## 验收范围
+
+- Invoice 列表和搜索。
+- 单笔 Invoice、合同生成、新建请款的达人选择器。
+- 桌面端默认视口、`768 x 1024` iPad 视口和 `390 x 844` 窄屏视口。
+
+## 结果
+
+- 每位达人在选择器中只出现一次，多个 Handle 按达人档案当前顺序展示。
+- 平台名称不作为可见文字重复输出，通过 Lucide 图标展示，并保留 `aria-label` 和悬浮提示。
+- Invoice 列表可通过第二个 Handle 检索到达人；选择器可通过 Real Name 和 PayPal 邮箱命中。
+- 新建请款仅展示当前项目下存在未占用、已通过 Invoice 的达人，同一达人不再按社媒账号拆分。
+- `390px` 下多账号自动换行，请款弹窗、达人选项和页面均无水平溢出； iPad 视口同样无溢出。
+- 浏览器控制台无 warning 或 error。
+
+final result: passed
+
+---
+
 # Design QA - Invoice 列表说明文案与发布按钮顺序
 
 ## Reference and environment

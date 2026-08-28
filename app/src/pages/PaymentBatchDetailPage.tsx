@@ -44,8 +44,8 @@ import {
   resolvePaymentProjectDocuments,
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
-import type { GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
-import { formatCreatorHandle } from '../creatorSearchOptions';
+import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 
@@ -262,6 +262,7 @@ export function PaymentBatchDetailPage({
   payouts = [],
   contracts = [],
   invoices = [],
+  creators = [],
   projectItems,
   canHandleFailure = false,
   onBack,
@@ -272,6 +273,7 @@ export function PaymentBatchDetailPage({
   payouts?: readonly Payout[];
   contracts?: readonly ContractRecord[];
   invoices?: readonly GeneratedInvoiceRecord[];
+  creators?: readonly CreatorProfile[];
   projectItems?: readonly PaymentBatchItemSnapshot[];
   canHandleFailure?: boolean;
   onBack: () => void;
@@ -534,7 +536,7 @@ export function PaymentBatchDetailPage({
                             >
                               <span className="payment-batch-item-person">
                                 <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                                <span><strong>{item.creatorName}</strong><small>{formatCreatorHandle(item.creatorHandle, item.creatorPlatform)}</small></span>
+                                <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} />
                               </span>
                               <span className="payment-batch-item-provider" data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
                               <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>

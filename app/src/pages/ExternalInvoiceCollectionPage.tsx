@@ -11,11 +11,9 @@ import { useMemo, useState } from 'react';
 import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
-  creatorSocialAccountSearchOptions,
-  creatorSocialSelectionValue,
-  formatCreatorHandle,
-  parseCreatorSocialSelectionValue,
+  creatorSearchOption,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import {
@@ -119,9 +117,7 @@ export function ExternalInvoiceCollectionCreatePage({
     selectedReference?.handle,
     selectedReference?.platform,
   );
-  const creatorSelectionValue = creatorId && selectedSocialAccount
-    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
-    : '';
+  const creatorSelectionValue = creatorId;
   const selectedBillingEntity = invoiceBillingSettings.entities.find((entity) => (
     entity.id === billingEntityId
   )) ?? defaultInvoiceBillingEntity(invoiceBillingSettings)!;
@@ -141,17 +137,13 @@ export function ExternalInvoiceCollectionCreatePage({
   })), [projects]);
   const creatorOptions = useMemo(() => creatorReferences.flatMap((reference) => {
     const creator = creators.find((item) => String(item.id) === String(reference.creatorId));
-    if (creator) return creatorSocialAccountSearchOptions(creator);
+    if (creator) return [creatorSearchOption(creator)];
     const channelId = reference.handle || '频道 ID 待补充';
-    const platform = reference.platform || '社媒平台待补充';
     return [{
-      value: creatorSocialSelectionValue(
-        String(reference.creatorId),
-        reference.socialAccountId ?? `legacy-reference:${reference.engagementId}`,
-      ),
+      value: String(reference.creatorId),
       label: reference.name,
-      selectedLabel: `${reference.name} · ${channelId} · ${platform}`,
-      description: `${channelId} · ${platform}`,
+      selectedLabel: `${reference.name} · ${channelId}`,
+      description: channelId,
       searchText: [reference.name, reference.handle, reference.platform].filter(Boolean).join(' '),
     }];
   }), [creatorReferences, creators]);
@@ -246,13 +238,25 @@ export function ExternalInvoiceCollectionCreatePage({
                 ariaLabel="选择项目内达人"
                 className="creator-search-combobox"
                 value={creatorSelectionValue}
-                placeholder={selectedProject ? '搜索频道链接、频道 ID、Account Name 或 Display Name' : '请先选择合作项目'}
+                placeholder={selectedProject ? '搜索 Display Name、Handle、Real Name、Company Name 或 Account Name' : '请先选择合作项目'}
                 options={creatorOptions}
+                resultUnit="位达人"
+                renderOption={(option) => {
+                  const creator = creators.find((item) => item.id === option.value);
+                  const reference = creatorReferences.find((item) => String(item.creatorId) === option.value);
+                  return <CreatorIdentity creator={creator} displayName={reference?.name} fallbackHandle={reference?.handle} fallbackPlatform={reference?.platform} />;
+                }}
                 disabled={!selectedProject}
                 onChange={(value) => {
-                  const selection = parseCreatorSocialSelectionValue(value);
-                  setCreatorId(selection?.creatorId ?? '');
-                  setCreatorSocialAccountId(selection?.socialAccountId ?? '');
+                  const creator = creators.find((item) => item.id === value);
+                  const reference = creatorReferences.find((item) => String(item.creatorId) === value);
+                  setCreatorId(value);
+                  setCreatorSocialAccountId(resolveCreatorSocialAccount(
+                    creator,
+                    reference?.socialAccountId,
+                    reference?.handle,
+                    reference?.platform,
+                  )?.id ?? '');
                   setContractIds([]);
                 }}
                 onClear={() => {
@@ -712,7 +716,7 @@ export function ExternalInvoiceCollectionDetailPage({
     || field.status === 'REUPLOAD_REQUIRED'
   )).length + contractBlockers.length;
   const collectionSummaryFields: InvoiceReviewSummaryField[] = [
-    { id: 'creator', label: '达人', value: record.creatorName, secondary: formatCreatorHandle(record.creatorHandle, record.creatorPlatform) },
+    { id: 'creator', label: '达人', value: record.creatorName, secondary: record.creatorHandle },
     { id: 'project', label: '关联项目', value: record.projectName },
     {
       id: 'expected-amount',

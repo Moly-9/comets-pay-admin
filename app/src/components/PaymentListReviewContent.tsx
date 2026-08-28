@@ -35,8 +35,8 @@ import {
   type PaymentAccountFieldIssue,
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
-import { creatorHandleForDisplay } from '../creatorSearchOptions';
-import { Avatar, Button } from './Common';
+import { Button } from './Common';
+import { CreatorIdentity } from './CreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
@@ -500,19 +500,7 @@ export function PaymentListReviewContent({
                       const creator = row.item.snapshot.creatorId
                         ? creators.find((candidate) => String(candidate.id) === String(row.item.snapshot.creatorId))
                         : creators.find((candidate) => candidate.name === row.item.snapshot.creatorName);
-                      const creatorInitials = creator?.initials || row.item.snapshot.creatorName
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((part) => part[0]?.toUpperCase())
-                        .join('') || '—';
                       const recipientName = creator?.name || row.item.snapshot.creatorName;
-                      const recipientHandle = creatorHandleForDisplay({
-                        creator,
-                        socialAccountId: row.item.snapshot.creatorSocialAccountId,
-                        handle: row.item.snapshot.creatorHandle,
-                        platform: row.item.snapshot.creatorPlatform,
-                      });
                       const subjectName = recipientSubjectName(
                         row.effectiveAccount,
                         row.item.snapshot.realName,
@@ -522,11 +510,7 @@ export function PaymentListReviewContent({
                         <tr key={row.key}>
                           <td data-label="收款人名称">
                             <div className="request-payment-payee-creator">
-                              <Avatar initials={creatorInitials} accent={creator?.accent ?? '#718096'} size="sm" />
-                              <div>
-                                <strong>{recipientName}</strong>
-                                <small>{recipientHandle}</small>
-                              </div>
+                              <CreatorIdentity creator={creator} displayName={recipientName} fallbackHandle={row.item.snapshot.creatorHandle} fallbackPlatform={row.item.snapshot.creatorPlatform} />
                             </div>
                           </td>
                           <td data-label="收款主体"><strong>{subjectName}</strong></td>

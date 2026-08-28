@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button } from '../components/Common';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
   PaymentAttachmentPreview,
   type PaymentAttachmentPreviewTarget,
@@ -38,8 +39,7 @@ import {
   resolvePaymentProjectDocuments,
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
-import type { GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
-import { formatCreatorHandle } from '../creatorSearchOptions';
+import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentItemDetails } from './PaymentBatchDetailPage';
 
 const displayTime = (value?: string) => value
@@ -95,6 +95,7 @@ export function PaymentProjectPaymentDetailPage({
   payouts,
   contracts = [],
   invoices = [],
+  creators = [],
   canHandleFailure,
   onBack,
   onReturnPayout,
@@ -104,6 +105,7 @@ export function PaymentProjectPaymentDetailPage({
   payouts: readonly Payout[];
   contracts?: readonly ContractRecord[];
   invoices?: readonly GeneratedInvoiceRecord[];
+  creators?: readonly CreatorProfile[];
   canHandleFailure: boolean;
   onBack: () => void;
   onReturnPayout: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
@@ -359,7 +361,7 @@ export function PaymentProjectPaymentDetailPage({
                   >
                     <span className="payment-batch-item-person">
                       <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                      <span><strong>{item.creatorName}</strong><small>{formatCreatorHandle(item.creatorHandle, item.creatorPlatform)}</small></span>
+                      <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} />
                     </span>
                     <span className="payment-batch-item-provider" data-label="付款渠道">
                       <PaymentProviderBadge compact provider={item.provider} />

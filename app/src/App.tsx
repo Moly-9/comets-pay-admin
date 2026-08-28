@@ -4678,6 +4678,7 @@ export default function App() {
           payouts={payouts}
           contracts={contracts}
           invoices={generatedInvoices}
+          creators={creators}
           onNewBatch={() => setActivePage('new-batch')}
           notify={notify}
           canCreateBatch={canExecutePayouts}
@@ -4748,6 +4749,7 @@ export default function App() {
           payouts={payouts}
           contracts={contracts}
           invoices={generatedInvoices}
+          creators={creators}
           canHandleFailure={canExecutePayouts}
           onBack={() => setPaymentDetailRequestId(null)}
           onReturnPayout={returnPayout}

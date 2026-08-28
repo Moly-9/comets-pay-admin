@@ -81,11 +81,9 @@ import {
 } from '../paymentRequestProjects';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
-  creatorSocialAccountMatches,
-  creatorSocialAccounts,
-  creatorHandleForDisplay,
-  formatCreatorHandle,
+  creatorSearchTerms,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import {
@@ -835,20 +833,16 @@ export function MediaPaymentProjectsPage({
     count + (resolution?.availableInvoices.length ?? 0)
   ), 0);
   const visibleCreators = creators
-    .flatMap((creator) => creatorSocialAccounts(creator).map((socialAccount) => ({ creator, socialAccount })))
-    .filter(({ creator, socialAccount }) => (
-      !query || `${creator.name}${socialAccount.handle}${creator.region}${socialAccount.platform}${socialAccount.profileUrl}`.toLowerCase().includes(query)
-    ))
-    .filter(({ creator }) => (
+    .filter((creator) => !query || `${creatorSearchTerms(creator)} ${creator.region}`.toLowerCase().includes(query))
+    .filter((creator) => (
       resolutions.get(creator.id)?.status === 'READY'
       || selectedCreatorIds.includes(creator.id as CreatorId)
     ))
     .sort((left, right) => {
-      const leftReady = resolutions.get(left.creator.id)?.status === 'READY';
-      const rightReady = resolutions.get(right.creator.id)?.status === 'READY';
+      const leftReady = resolutions.get(left.id)?.status === 'READY';
+      const rightReady = resolutions.get(right.id)?.status === 'READY';
       if (leftReady !== rightReady) return leftReady ? -1 : 1;
-      return left.creator.name.localeCompare(right.creator.name)
-        || left.socialAccount.platform.localeCompare(right.socialAccount.platform);
+      return left.name.localeCompare(right.name);
     });
 
   const metrics = paymentRequestListMetrics(visibleRequests);
@@ -1034,32 +1028,31 @@ export function MediaPaymentProjectsPage({
     setFormSubmitAttempted(false);
   };
 
-  const toggleCreator = (creatorId: CreatorId, socialAccountId: string) => {
+  const toggleCreator = (creatorId: CreatorId) => {
     if (!creatorSelectionEditable) {
       notify('达人名单已锁定', '只有草稿状态可以添加或移除达人。');
       return;
     }
-    const selectedSocialAccountId = socialAccountIdsByCreator[creatorId];
-    const removing = selectedCreatorIds.includes(creatorId) && selectedSocialAccountId === socialAccountId;
-    const replacing = selectedCreatorIds.includes(creatorId) && !removing;
+    const removing = selectedCreatorIds.includes(creatorId);
     if (!removing && resolutions.get(creatorId)?.status !== 'READY') {
       notify('暂无可请款 Invoice', '该达人在当前合作项目下没有未占用的已通过 Invoice。');
       return;
     }
-    if ((removing || replacing) && openDocumentPicker?.startsWith(`${creatorId}:`)) {
+    if (removing && openDocumentPicker?.startsWith(`${creatorId}:`)) {
       setOpenDocumentPicker(null);
       setResourcePreview(null);
     }
     setSelectedCreatorIds((current) => removing
       ? current.filter((id) => id !== creatorId)
-      : replacing ? current : [...current, creatorId]);
+      : [...current, creatorId]);
     setSocialAccountIdsByCreator((current) => {
       if (removing) {
         const next = { ...current };
         delete next[creatorId];
         return next;
       }
-      return { ...current, [creatorId]: socialAccountId };
+      const creator = creators.find((item) => item.id === creatorId);
+      return { ...current, [creatorId]: resolveCreatorSocialAccount(creator)?.id ?? '' };
     });
     setContractIdsByCreator((current) => {
       if (!current[creatorId]) return current;
@@ -1068,7 +1061,7 @@ export function MediaPaymentProjectsPage({
       return next;
     });
     setInvoiceIdsByCreator((current) => {
-      if (removing || replacing) {
+      if (removing) {
         if (!current[creatorId]) return current;
         const next = { ...current };
         delete next[creatorId];
@@ -1159,20 +1152,14 @@ export function MediaPaymentProjectsPage({
   const validCreatorLinks = selectedCreators.flatMap<PaymentRequestCreatorLink>((creator) => {
     const resolution = resolutions.get(creator.id);
     const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
-    const selectedSocialAccount = resolveCreatorSocialAccount(creator, socialAccountIdsByCreator[creator.id]);
     const selectedInvoices = resolution?.invoices.filter((invoice) => (
       selectedInvoiceIds.includes(invoice.invoiceId)
-      && (!selectedSocialAccount || creatorSocialAccountMatches(selectedSocialAccount, {
-        socialAccountId: invoice.snapshot.creatorSocialAccountId,
-        handle: invoice.snapshot.creatorHandle,
-        platform: invoice.snapshot.creatorPlatform,
-      }))
     )) ?? [];
     const engagementId = selectedInvoices[0]?.snapshot.engagementId;
     if (!selectedInvoices.length || !engagementId) return [];
     const socialAccount = resolveCreatorSocialAccount(
       creator,
-      selectedSocialAccount?.id,
+      selectedInvoices[0]?.snapshot.creatorSocialAccountId,
       selectedInvoices[0]?.snapshot.creatorHandle,
       selectedInvoices[0]?.snapshot.creatorPlatform,
     );
@@ -1583,7 +1570,7 @@ export function MediaPaymentProjectsPage({
                   ));
                   return (
                     <tr key={link.creatorId}>
-                      <td><div className="media-request-creator-cell"><Avatar initials={creator?.initials ?? '?'} accent={creator?.accent ?? '#718096'} size="sm" /><span><strong>{creator?.name ?? link.creatorId}</strong><small>{creatorHandleForDisplay({ creator, socialAccountId: link.socialAccountId, handle: link.creatorHandle, platform: link.creatorPlatform })}</small></span></div></td>
+                      <td><div className="media-request-creator-cell"><CreatorIdentity creator={creator} displayName={String(link.creatorId)} fallbackHandle={link.creatorHandle} fallbackPlatform={link.creatorPlatform} /></div></td>
                       <td>
                         <div className="media-request-record-stack">
                           {presentation.invoices.length ? presentation.invoices.map((invoice) => (
@@ -1903,30 +1890,22 @@ export function MediaPaymentProjectsPage({
                 </button>
                 {selectedCreators.length ? (
                   <div className="creator-selection-chips" aria-label="已选择的合作达人">
-                    {selectedCreators.map((creator) => {
-                      const socialAccount = resolveCreatorSocialAccount(creator, socialAccountIdsByCreator[creator.id]);
-                      return creatorSelectionEditable ? (
-                        <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId, socialAccount?.id ?? '')}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name} · {formatCreatorHandle(socialAccount?.handle ?? creator.handle, socialAccount?.platform ?? creator.platform)}</span><X size={13} aria-hidden="true" /></button>
-                      ) : <span className="creator-selection-chip is-readonly" key={creator.id}><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span>{creator.name}</span></span>;
-                    })}
+                    {selectedCreators.map((creator) => creatorSelectionEditable ? (
+                      <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} /><X size={13} aria-hidden="true" /></button>
+                    ) : <span className="creator-selection-chip is-readonly" key={creator.id}><CreatorIdentity creator={creator} /></span>)}
                     {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setSocialAccountIdsByCreator({}); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); setOpenDocumentPicker(null); setResourcePreview(null); }}>清除已选</button> : null}
                   </div>
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
                   <div id="media-request-creator-options" className="creator-options" role="listbox" aria-label="达人档案列表" aria-multiselectable="true">
-                    <div className="creator-picker-search-row"><label className="creator-picker-search"><Search size={16} aria-hidden="true" /><input aria-label="搜索合作达人" placeholder="搜索姓名、账号、地区或平台" value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} /></label><span className="creator-picker-result-count" aria-live="polite"><strong>{visibleCreators.length}</strong><span>个账号</span></span></div>
+                    <div className="creator-picker-search-row"><label className="creator-picker-search"><Search size={16} aria-hidden="true" /><input aria-label="搜索合作达人" placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} /></label><span className="creator-picker-result-count" aria-live="polite"><strong>{visibleCreators.length}</strong><span>位达人</span></span></div>
                     <div className="creator-option-list">
-                      {visibleCreators.map(({ creator, socialAccount }) => {
-                        const selected = selectedCreatorIds.includes(creator.id as CreatorId)
-                          && socialAccountIdsByCreator[creator.id] === socialAccount.id;
+                      {visibleCreators.map((creator) => {
+                        const selected = selectedCreatorIds.includes(creator.id as CreatorId);
                         const resolution = resolutions.get(creator.id);
                         const ready = resolution?.status === 'READY';
-                        const accountInvoiceCount = resolution?.availableInvoices.filter((invoice) => creatorSocialAccountMatches(socialAccount, {
-                          socialAccountId: invoice.snapshot.creatorSocialAccountId,
-                          handle: invoice.snapshot.creatorHandle,
-                          platform: invoice.snapshot.creatorPlatform,
-                        })).length ?? 0;
-                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={`${creator.id}:${socialAccount.id}`} onClick={() => toggleCreator(creator.id as CreatorId, socialAccount.id)}><span className="creator-option-profile"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{socialAccount.handle} · {socialAccount.platform}</small></span></span><span className="creator-option-meta"><strong>{ready ? '可加入请款' : creator.region}</strong><small>{ready ? `${accountInvoiceCount} 份当前账号 Invoice` : `${socialAccount.platform} · ${resolution ? STATUS_COPY[resolution.status] : '待选择项目'}`}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
+                        const availableInvoiceCount = resolution?.availableInvoices.length ?? 0;
+                        return <button className={`creator-option ${selected ? 'creator-option-selected' : ''} ${ready ? 'creator-option-ready' : ''}`} type="button" role="option" aria-selected={selected} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} className="creator-option-profile" /><span className="creator-option-meta"><strong>{ready ? '可加入请款' : creator.region}</strong><small>{ready ? `${availableInvoiceCount} 份可用 Invoice` : resolution ? STATUS_COPY[resolution.status] : '待选择项目'}</small></span>{selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}</button>;
                       })}
                       {!visibleCreators.length ? <div className="creator-picker-empty">没有找到匹配的达人档案</div> : null}
                     </div>
@@ -1939,14 +1918,6 @@ export function MediaPaymentProjectsPage({
                 <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。Invoice 必填且可多选，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
                 {selectedCreators.map((creator) => {
                   const resolution = resolutions.get(creator.id);
-                  const selectedSocialAccount = resolveCreatorSocialAccount(
-                    creator,
-                    socialAccountIdsByCreator[creator.id],
-                  );
-                  const creatorChannel = formatCreatorHandle(
-                    selectedSocialAccount?.handle ?? creator.handle,
-                    selectedSocialAccount?.platform ?? creator.platform,
-                  );
                   const selectedContractIds = contractIdsByCreator[creator.id] ?? [];
                   const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
                   const autoLinkedContractIds = autoLinkedContractIdsByCreator[creator.id] ?? [];
@@ -1954,13 +1925,7 @@ export function MediaPaymentProjectsPage({
                   const contractPickerId = `media-request-contracts-${creator.id}`;
                   const invoicePickerKey = `${creator.id}:invoice`;
                   const contractPickerKey = `${creator.id}:contract`;
-                  const invoiceOptions = (resolution?.invoices ?? [])
-                    .filter((invoice) => !selectedSocialAccount || creatorSocialAccountMatches(selectedSocialAccount, {
-                      socialAccountId: invoice.snapshot.creatorSocialAccountId,
-                      handle: invoice.snapshot.creatorHandle,
-                      platform: invoice.snapshot.creatorPlatform,
-                    }))
-                    .map((invoice): RequestResourcePickerOption => {
+                  const invoiceOptions = (resolution?.invoices ?? []).map((invoice): RequestResourcePickerOption => {
                     const owner = resolution?.invoiceOwners.find((item) => item.invoiceId === invoice.invoiceId)?.owner;
                     const selected = selectedInvoiceIds.includes(invoice.invoiceId);
                     const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
@@ -1970,19 +1935,13 @@ export function MediaPaymentProjectsPage({
                     return {
                       value: invoice.invoiceId,
                       label: invoiceRequestResourceTitle(invoice, selectedProject?.name),
-                      description: `${creatorChannel} · ${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
+                      description: `${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
                       selected,
                       disabled: Boolean(owner || invoiceNotApproved || channelMismatch),
                       resource: { kind: 'invoice', invoice },
                     };
                   });
-                  const contractOptions = (resolution?.contracts ?? [])
-                    .filter((contract) => !selectedSocialAccount || creatorSocialAccountMatches(selectedSocialAccount, {
-                      socialAccountId: contract.creatorSocialAccountId,
-                      handle: contract.creatorHandle,
-                      platform: contract.creatorPlatform ?? contract.platform,
-                    }))
-                    .flatMap<RequestResourcePickerOption>((contract) => {
+                  const contractOptions = (resolution?.contracts ?? []).flatMap<RequestResourcePickerOption>((contract) => {
                     if (!contract.contractId) return [];
                     const enabled = isContractAvailableForNewAssociation(contract);
                     const expired = getContractValidity(contract).expired;
@@ -1993,7 +1952,7 @@ export function MediaPaymentProjectsPage({
                     return [{
                       value: contract.contractId,
                       label: contractRequestResourceTitle(contract),
-                      description: `${creatorChannel} · ${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : expired ? '不可关联：合同已失效' : `不可关联：${contract.status}`}`,
+                      description: `${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : expired ? '不可关联：合同已失效' : `不可关联：${contract.status}`}`,
                       selected,
                       disabled: !enabled,
                       resource: { kind: 'contract', contract },
@@ -2001,7 +1960,7 @@ export function MediaPaymentProjectsPage({
                   });
                   return (
                     <article className="media-request-document-row" key={creator.id}>
-                      <div className="media-request-document-creator"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creatorChannel}</small></span></div>
+                      <div className="media-request-document-creator"><CreatorIdentity creator={creator} /></div>
                       <div className="media-request-document-fields">
                         <div className={`media-request-document-field media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
                           <span>Invoice <em>必填，可多选</em></span>

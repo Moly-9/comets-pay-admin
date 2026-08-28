@@ -46,6 +46,7 @@ import {
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
@@ -122,6 +123,7 @@ import { requestProjectStatusesForFilter } from '../requestProjectStatusFilters'
 import { demoAccountName, demoDisplayName, demoRealName } from '../demoCreatorNames';
 import {
   creatorSocialAccounts,
+  creatorSearchTerms,
   creatorSocialSelectionValue,
   formatCreatorHandle,
   parseCreatorSocialSelectionValue,
@@ -1974,19 +1976,18 @@ function ProjectCreatorPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const normalizedSearch = search.trim().toLowerCase();
-  const creatorAccounts = creators.flatMap((creator) => creatorSocialAccounts(creator).map((socialAccount) => ({
-    creator,
-    socialAccount,
-    value: creatorSocialSelectionValue(creator.id, socialAccount.id),
-  })));
-  const visibleCreators = creatorAccounts.filter(({ creator, socialAccount }) => !normalizedSearch || (
-    `${creator.name}${socialAccount.handle}${creator.region}${socialAccount.platform}${socialAccount.profileUrl}`.toLowerCase().includes(normalizedSearch)
+  const creatorEntries = creators.flatMap((creator) => {
+    const socialAccount = creatorSocialAccounts(creator)[0];
+    return socialAccount ? [{ creator, value: creatorSocialSelectionValue(creator.id, socialAccount.id) }] : [];
+  });
+  const visibleCreators = creatorEntries.filter(({ creator }) => !normalizedSearch || (
+    `${creatorSearchTerms(creator)} ${creator.region}`.toLowerCase().includes(normalizedSearch)
   ));
   const selectedCreators = selectedHandles.flatMap((value) => {
     const selection = parseCreatorSocialSelectionValue(value);
     const creator = creators.find((item) => item.id === selection?.creatorId);
     const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
-    return creator && socialAccount ? [{ creator, socialAccount, value }] : [];
+    return creator && socialAccount ? [{ creator, value }] : [];
   });
 
   const toggleCreator = (creatorId: string, value: string) => {
@@ -2019,7 +2020,7 @@ function ProjectCreatorPicker({
 
       {selectedCreators.length > 0 ? (
         <div className="creator-selection-chips" aria-label="已选择的合作达人">
-          {selectedCreators.map(({ creator, socialAccount, value }) => (
+          {selectedCreators.map(({ creator, value }) => (
             <button
               className="creator-selection-chip"
               type="button"
@@ -2027,8 +2028,7 @@ function ProjectCreatorPicker({
               key={value}
               onClick={() => toggleCreator(creator.id, value)}
             >
-              <Avatar initials={creator.initials} accent={creator.accent} size="sm" />
-              <span>{creator.name} · {formatCreatorHandle(socialAccount.handle, socialAccount.platform)}</span>
+              <CreatorIdentity creator={creator} />
               <X size={13} aria-hidden="true" />
             </button>
           ))}
@@ -2041,31 +2041,28 @@ function ProjectCreatorPicker({
           <div className="creator-picker-search-row">
             <label className="creator-picker-search">
               <Search size={16} aria-hidden="true" />
-              <input aria-label="搜索达人档案" placeholder="搜索姓名、账号、地区或平台" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <input aria-label="搜索达人档案" placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" value={search} onChange={(event) => setSearch(event.target.value)} />
             </label>
             <span className="creator-picker-result-count" aria-live="polite">
               <strong>{visibleCreators.length}</strong>
-              <span>/ {creatorAccounts.length} 个账号</span>
+              <span>/ {creatorEntries.length} 位达人</span>
             </span>
           </div>
           <div className="creator-option-list">
-            {visibleCreators.map(({ creator, socialAccount, value }) => {
-              const selected = selectedHandles.includes(value);
+            {visibleCreators.map(({ creator, value }) => {
+              const selected = selectedHandles.some((selectedValue) => parseCreatorSocialSelectionValue(selectedValue)?.creatorId === creator.id);
               return (
                 <button
                   className={`creator-option ${selected ? 'creator-option-selected' : ''}`}
-                  data-creator-handle={socialAccount.handle}
+                  data-creator-handle={creatorSocialAccounts(creator)[0]?.handle}
                   type="button"
                   role="option"
                   aria-selected={selected}
                   key={value}
                   onClick={() => toggleCreator(creator.id, value)}
                 >
-                  <span className="creator-option-profile">
-                    <Avatar initials={creator.initials} accent={creator.accent} size="sm" />
-                    <span><strong>{creator.name}</strong><small>{socialAccount.handle} · {socialAccount.platform}</small></span>
-                  </span>
-                  <span className="creator-option-meta"><strong>{creator.region}</strong><small>{socialAccount.platform}</small></span>
+                  <CreatorIdentity creator={creator} className="creator-option-profile" />
+                  <span className="creator-option-meta"><strong>{creator.region}</strong><small>{creatorSocialAccounts(creator).length} 个社媒账号</small></span>
                   {selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}
                 </button>
               );
@@ -3107,6 +3104,7 @@ export function InvoicePage({
         ?? '社媒平台待补充',
       initials: creator?.initials ?? payout.initials,
       accent: creator?.accent ?? payout.accent,
+      socialAccounts: creator ? creatorSocialAccounts(creator).map((account) => ({ ...account })) : undefined,
     };
   };
   const canActOnInvoice = (payout: Payout) => (
@@ -3148,6 +3146,7 @@ export function InvoicePage({
       creatorName: identity.displayName,
       channelId: identity.channelId,
       creatorPlatform: identity.platform,
+      creatorSocialAccounts: identity.socialAccounts,
       issuerName: creators.find((creator) => creator.id === snapshot?.creatorId)?.contact?.legalName
         ?? snapshot?.from.legalName
         ?? '待补充',
@@ -3197,6 +3196,7 @@ export function InvoicePage({
         ?? primarySocialAccount?.platform.trim()
         ?? creator?.platform?.trim()
         ?? '社媒平台待补充',
+      creatorSocialAccounts: creator ? creatorSocialAccounts(creator).map((account) => ({ ...account })) : undefined,
       initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
       accent: creator?.accent ?? '#9c6f93',
       issuerName: creator?.contact.legalName ?? '待补充',
@@ -3718,6 +3718,7 @@ export function BatchesPage({
   payouts = [],
   contracts = [],
   invoices = [],
+  creators = [],
   onNewBatch,
   notify,
   canCreateBatch,
@@ -3729,6 +3730,7 @@ export function BatchesPage({
   payouts?: readonly Payout[];
   contracts?: readonly ContractRecord[];
   invoices?: readonly GeneratedInvoiceRecord[];
+  creators?: readonly CreatorProfile[];
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
@@ -3944,6 +3946,7 @@ export function BatchesPage({
         payouts={payouts}
         contracts={contracts}
         invoices={invoices}
+        creators={creators}
         projectItems={selectedProjectItems}
         canHandleFailure={canCreateBatch}
         onBack={closeBatchDetail}

@@ -4,6 +4,7 @@ import type { CreatorId } from './businessWorkflow';
 import { filterSearchableOptions } from './components/SearchableComboBox';
 import {
   creatorSearchOption,
+  creatorSearchOptions,
   creatorSocialAccountMatches,
   creatorSocialAccountSearchOptions,
   parseCreatorSocialSelectionValue,
@@ -58,11 +59,13 @@ describe('shared creator search option', () => {
     const option = creatorSearchOption(creator);
     const options = [option];
 
-    expect(option.selectedLabel).toBe('Camila Costa · @camila.beauty · Instagram');
+    expect(option.selectedLabel).toBe('Camila Costa · @camila.beauty · @camila.tiktok');
     expect(filterSearchableOptions(options, 'Camila Costa')).toEqual(options);
     expect(filterSearchableOptions(options, 'channel-camila-instagram')).toEqual(options);
     expect(filterSearchableOptions(options, 'instagram.com/camila.beauty')).toEqual(options);
     expect(filterSearchableOptions(options, 'Camila Costa Payments')).toEqual(options);
+    expect(filterSearchableOptions(options, 'payments@example.com')).toEqual(options);
+    expect(creatorSearchOptions([creator])).toHaveLength(1);
   });
 
   it('returns one stable option per social account when searching the same display name', () => {
@@ -111,9 +114,10 @@ describe('shared creator search option', () => {
     const externalCollection = readFileSync(new URL('./pages/ExternalInvoiceCollectionPage.tsx', import.meta.url), 'utf8');
 
     [invoiceBuilder, contractBuilder, contractUpload, externalCollection].forEach((source) => {
-      expect(source).toContain('creatorSocialAccountSearchOptions');
+      expect(source).toMatch(/creatorSearchOptions|creatorSearchOption/);
+      expect(source).toContain('CreatorIdentity');
       expect(source).toContain('className="creator-search-combobox"');
-      expect(source).toContain('搜索频道链接、频道 ID、Account Name 或 Display Name');
+      expect(source).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
     });
     expect(contractUpload).toContain('<SearchableComboBox');
     expect(externalCollection).toContain('<SearchableComboBox');

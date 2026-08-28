@@ -34,12 +34,11 @@ import { cooperationProjectIdFor } from '../paymentRequestProjects';
 import type { CreatorProfile } from '../types';
 import { Button, Modal, SelectField } from './Common';
 import {
-  creatorSocialAccountSearchOptions,
-  creatorSocialSelectionValue,
-  parseCreatorSocialSelectionValue,
+  creatorSearchOptions,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import { SearchableComboBox } from './SearchableComboBox';
+import { CreatorIdentity } from './CreatorIdentity';
 
 type Props = {
   projects: ProjectSummary[];
@@ -99,9 +98,7 @@ export function ContractUploadWizard({
   const selectedProject = projects.find((project) => cooperationProjectIdFor(project) === projectId) ?? null;
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
   const selectedSocialAccount = resolveCreatorSocialAccount(selectedCreator, creatorSocialAccountId);
-  const creatorSelectionValue = creatorId && selectedSocialAccount
-    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
-    : '';
+  const creatorSelectionValue = creatorId;
   const selectedProjectInternalId = selectedProject
     ? cooperationProjectIdFor(selectedProject) as ProjectId
     : null;
@@ -116,7 +113,7 @@ export function ContractUploadWizard({
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · ${project.creators} 位达人`,
   }));
-  const creatorOptions = creators.flatMap(creatorSocialAccountSearchOptions);
+  const creatorOptions = creatorSearchOptions(creators);
   const frameworkOptions = contracts
     .filter((contract) => isFrameworkContract(contract) && contract.creatorId === creatorId)
     .map((contract) => ({
@@ -342,13 +339,15 @@ export function ContractUploadWizard({
                 ariaLabel="合作达人"
                 className="creator-search-combobox"
                 value={creatorSelectionValue}
-                placeholder={selectedProject ? '搜索频道链接、频道 ID、Account Name 或 Display Name' : '请先选择项目'}
+                placeholder={selectedProject ? '搜索 Display Name、Handle、Real Name、Company Name 或 Account Name' : '请先选择项目'}
                 options={creatorOptions}
+                resultUnit="位达人"
+                renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} />}
                 disabled={!selectedProject}
                 onChange={(value) => {
-                  const selection = parseCreatorSocialSelectionValue(value);
-                  setCreatorId(selection?.creatorId ?? '');
-                  setCreatorSocialAccountId(selection?.socialAccountId ?? '');
+                  const creator = creators.find((item) => item.id === value);
+                  setCreatorId(creator?.id ?? '');
+                  setCreatorSocialAccountId(resolveCreatorSocialAccount(creator)?.id ?? '');
                   setDraftContractId('');
                   setContractName('');
                 }}
@@ -407,8 +406,7 @@ export function ContractUploadWizard({
                 <span>{selectedProject.id} · {selectedProject.brand}</span>
               </div>
               <div>
-                <strong>{selectedCreator.name}</strong>
-                <span>{selectedSocialAccount?.handle ?? selectedCreator.handle} · {selectedSocialAccount?.platform ?? selectedCreator.platform}</span>
+                <CreatorIdentity creator={selectedCreator} />
               </div>
             </div>
           ) : null}

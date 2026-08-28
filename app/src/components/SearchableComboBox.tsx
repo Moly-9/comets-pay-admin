@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronDown, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export type SearchableOption = {
   value: string;
@@ -32,6 +32,8 @@ export function SearchableComboBox({
   error,
   onChange,
   onClear,
+  renderOption,
+  resultUnit = '个结果',
 }: {
   value: string;
   options: SearchableOption[];
@@ -42,6 +44,8 @@ export function SearchableComboBox({
   error?: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  renderOption?: (option: SearchableOption) => ReactNode;
+  resultUnit?: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -140,7 +144,7 @@ export function SearchableComboBox({
       </div>
       {open && !disabled ? (
         <div className="contract-search-menu" id={`${ariaLabel.replace(/\s+/g, '-')}-options`} role="listbox" aria-label={`${ariaLabel}选项`}>
-          <div className="contract-search-result-count">{visibleOptions.length} 个结果</div>
+          <div className="contract-search-result-count">{visibleOptions.length} {resultUnit}</div>
           {visibleOptions.length ? visibleOptions.map((option, index) => (
             <button
               type="button"
@@ -151,7 +155,9 @@ export function SearchableComboBox({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(option)}
             >
-              <span><strong>{option.label}</strong>{option.description ? <small>{option.description}</small> : null}</span>
+              {renderOption ? renderOption(option) : (
+                <span><strong>{option.label}</strong>{option.description ? <small>{option.description}</small> : null}</span>
+              )}
               {option.value === value ? <CheckCircle2 size={15} aria-hidden="true" /> : null}
             </button>
           )) : <div className="contract-search-empty">未找到匹配项</div>}

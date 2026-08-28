@@ -71,13 +71,13 @@ import {
   type ProjectPdfArchiveKind,
 } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
-import { creatorHandleForDisplay } from '../creatorSearchOptions';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { ContractDocumentView } from './ContractDocumentView';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal, SelectField, type SelectOption } from './Common';
+import { CreatorIdentity } from './CreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './FinanceReviewWorkspace.css';
 
@@ -1533,8 +1533,7 @@ export function FinanceReviewWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <strong>{creator?.name ?? '达人档案缺失'}</strong>
-                      <small>{creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId, handle: contract.creatorHandle, platform: contract.creatorPlatform ?? contract.platform })}</small>
+                      <CreatorIdentity creator={creator} displayName="达人档案缺失" fallbackHandle={contract.creatorHandle} fallbackPlatform={contract.creatorPlatform ?? contract.platform} />
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>付款金额</span>
@@ -1614,8 +1613,7 @@ export function FinanceReviewWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong>
-                      <small>{creatorHandleForDisplay({ creator, socialAccountId: linkedInvoice.snapshot.creatorSocialAccountId, handle: linkedInvoice.snapshot.creatorHandle, platform: linkedInvoice.snapshot.creatorPlatform })}</small>
+                      <CreatorIdentity creator={creator} displayName={linkedInvoice.snapshot.creatorName} fallbackHandle={linkedInvoice.snapshot.creatorHandle} fallbackPlatform={linkedInvoice.snapshot.creatorPlatform} />
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>Invoice 金额</span>

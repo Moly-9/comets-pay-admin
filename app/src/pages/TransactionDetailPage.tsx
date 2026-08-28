@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  AtSign,
   ArrowLeft,
   Banknote,
   Building2,
@@ -24,13 +23,13 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Avatar, Button, Modal, StatusMark } from '../components/Common';
+import { Button, Modal, StatusMark } from '../components/Common';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import type { TransactionBatchContext } from '../transactionRecords';
 import { transactionOccurredAt, transactionRecordDetails } from '../transactionRecords';
 import type { Payout } from '../types';
-import { formatCreatorHandle } from '../creatorSearchOptions';
 
 const displayTime = (value?: string) => {
   if (!value) return '未记录';
@@ -70,11 +69,9 @@ export function TransactionDetailPage({
       <h1 ref={titleRef} className="sr-only" tabIndex={-1}>交易详情：{payout.invoice || payout.creator}</h1>
 
       <section className="transaction-creator-summary-card" aria-label={`付款达人 ${payout.creator}`}>
-        <Avatar initials={payout.initials} accent={payout.accent} size="lg" />
+        <CreatorIdentity displayName={payout.creator} initials={payout.initials} accent={payout.accent} fallbackHandle={payout.handle} fallbackPlatform={payout.creatorPlatform} size="lg" />
         <div className="transaction-creator-summary-identity">
-          <strong>{payout.creator}</strong>
           <span><FolderKanban size={13} aria-hidden="true" />{payout.project}</span>
-          <small><AtSign size={12} aria-hidden="true" />{formatCreatorHandle(payout.handle, payout.creatorPlatform).replace(/^@/, '')}</small>
         </div>
         <StatusMark status={payout.status} />
       </section>

@@ -49,7 +49,8 @@ import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
-import { creatorHandleForDisplay, findCreatorSocialAccount, formatCreatorHandle } from '../creatorSearchOptions';
+import { findCreatorSocialAccount } from '../creatorSearchOptions';
+import { CreatorIdentity } from './CreatorIdentity';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
 type CreateDialogKind = 'invoice';
@@ -564,6 +565,7 @@ export function ProjectResourceManager({
                 {linkedContracts.map((contract) => {
                   const reference = references.find((item) => item.engagementId === contract.engagementId);
                   const creator = reference ? referenceLabel(reference, creators) : null;
+                  const creatorProfile = reference ? referenceCreator(reference, creators) : null;
                   const relation = getContractInvoiceRelation(contract, linkedInvoices);
                   return (
                     <article className="project-contract-record" role="listitem" key={contractStableId(contract)}>
@@ -575,8 +577,7 @@ export function ProjectResourceManager({
                       </div>
                       <div className="project-contract-record-person">
                         <span>对应达人</span>
-                        <strong>{creator?.name ?? '达人资料缺失'}</strong>
-                        <small>{creator ? formatCreatorHandle(contract.creatorHandle ?? creator.handle, contract.creatorPlatform ?? contract.platform ?? creator.platform) : '请检查 Engagement 关联'}</small>
+                        <CreatorIdentity creator={creatorProfile} displayName={creator?.name ?? '达人资料缺失'} fallbackHandle={contract.creatorHandle ?? creator?.handle} fallbackPlatform={contract.creatorPlatform ?? contract.platform ?? creator?.platform} />
                       </div>
                       <div className="project-contract-record-io">
                         <span>合同 / IO</span>
@@ -667,6 +668,7 @@ export function ProjectResourceManager({
                 {linkedInvoices.map((invoice) => {
                   const reference = references.find((item) => item.engagementId === invoice.snapshot.engagementId);
                   const creator = reference ? referenceLabel(reference, creators) : null;
+                  const creatorProfile = reference ? referenceCreator(reference, creators) : null;
                   const covered = linkedContracts.filter((contract) => (
                     contract.contractId && invoice.snapshot.contractIds?.includes(contract.contractId)
                   ));
@@ -675,8 +677,7 @@ export function ProjectResourceManager({
                       <span className="project-contract-record-icon"><ReceiptText size={18} /></span>
                       <div className="project-contract-record-main">
                         <strong>{invoice.id}</strong>
-                        <span>{creator?.name ?? invoice.snapshot.creatorName}</span>
-                        <small>{formatCreatorHandle(invoice.snapshot.creatorHandle || creator?.handle || '', invoice.snapshot.creatorPlatform ?? creator?.platform)}</small>
+                        <CreatorIdentity creator={creatorProfile} displayName={creator?.name ?? invoice.snapshot.creatorName} fallbackHandle={invoice.snapshot.creatorHandle || creator?.handle} fallbackPlatform={invoice.snapshot.creatorPlatform ?? creator?.platform} />
                       </div>
                       <div className="project-invoice-record-contracts">
                         <span>覆盖合同 / IO</span>

@@ -114,11 +114,11 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<th>付款渠道</th>');
     expect(paymentTable).toContain('<th>付款方式</th>');
     expect(paymentTable).toContain('<th>状态</th>');
-    expect(paymentTable).toContain('<Avatar');
+    expect(paymentTable).toContain('<CreatorIdentity');
     expect(paymentTable).toContain('<PaymentProviderBadge compact provider={payee.channel} />');
     expect(paymentTable).toContain('request-detail-transfer-method');
-    expect(paymentTable).toContain('{handle}');
-    expect(source).toContain('creatorHandleForDisplay({ creator, socialAccountId: payee.socialAccountId');
+    expect(paymentTable).toContain('fallbackHandle={payee.handle}');
+    expect(paymentTable).toContain('fallbackPlatform={payee.platform}');
     expect(paymentTable).toContain('<span className="simple-status is-success"><i />已校验</span>');
     expect(paymentTable).not.toContain('requestPaymentStatusLabel(payee.status)');
     expect(styles).toContain('.request-detail-creator-cell');
@@ -289,7 +289,7 @@ describe('request project payment presentation', () => {
     expect(viewerSource).toContain('<th>手续费承担方</th>');
     expect(viewerSource).toContain('<th>API 校验结果</th>');
     expect(viewerSource).toContain('projectPaymentReviewPassed(');
-    expect(viewerSource).toContain('<Avatar initials={creatorInitials}');
+    expect(viewerSource).toContain('<CreatorIdentity creator={creator}');
     expect(viewerSource).toContain('validatePaymentListAccountViaApi');
     expect(viewerSource).toContain('onExportPaymentList(list.paymentListId)');
     expect(viewerSource).not.toContain('添加付款行');

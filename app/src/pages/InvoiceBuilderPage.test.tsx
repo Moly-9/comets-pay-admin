@@ -62,8 +62,8 @@ describe('InvoiceBuilderPage create mode', () => {
 
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="合作达人"');
-    expect(html).toContain('搜索频道链接、频道 ID、Account Name 或 Display Name');
-    expect(option.selectedLabel).toBe(`${creator.name} · ${primarySocialAccount.handle} · ${primarySocialAccount.platform}`);
+    expect(html).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
+    expect(option.selectedLabel).toBe([creator.name, ...creator.socialAccounts.map((account) => account.handle)].join(' · '));
     expect(option.searchText).toContain(primarySocialAccount.profileUrl);
     expect(option.searchText).toContain(primarySocialAccount.handle);
     expect(option.searchText).toContain(accountName);

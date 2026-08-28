@@ -33,10 +33,10 @@ import {
   type EngagementId,
   type ProjectId,
 } from '../businessWorkflow';
-import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
-import { formatCreatorHandle } from '../creatorSearchOptions';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
@@ -248,15 +248,7 @@ export function InvoiceBatchResultSection({
                     >
                       <td data-label="达人">
                         <div className="invoice-batch-result-creator">
-                          <Avatar
-                            initials={creator?.initials || creatorInitials(row.creatorName)}
-                            accent={creator?.accent || '#5f72d8'}
-                            size="sm"
-                          />
-                          <span>
-                            <strong>{row.creatorName}</strong>
-                            <small>{formatCreatorHandle(row.creatorHandle, row.creatorPlatform)}</small>
-                          </span>
+                          <CreatorIdentity creator={creator} displayName={row.creatorName} initials={creatorInitials(row.creatorName)} accent="#5f72d8" fallbackHandle={row.creatorHandle} fallbackPlatform={row.creatorPlatform} />
                         </div>
                       </td>
                       <td data-label="付款渠道">
@@ -697,9 +689,8 @@ function BatchRowTable({
                     type="button"
                     onClick={() => onOpenCreatorPaymentInformation(row.creatorId)}
                   >
-                    {row.creatorName}
+                    <CreatorIdentity creator={creator} displayName={row.creatorName} fallbackHandle={row.creatorHandle} fallbackPlatform={row.creatorPlatform} />
                   </button>
-                  <small>{formatCreatorHandle(row.creatorHandle, row.creatorPlatform)}</small>
                 </td>
                 <td data-label="Description">
                   <div className="invoice-batch-line-stack">
@@ -1008,8 +999,8 @@ export function InvoiceBatchBuilderPage({
   ]);
   const projectReferences = selectedProject?.creatorProfiles ?? [];
   const filteredProjectReferences = useMemo(
-    () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch),
-    [creatorSearch, projectReferences],
+    () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch, prototypeCreators),
+    [creatorSearch, projectReferences, prototypeCreators],
   );
   const selectableEngagementIds = useMemo(
     () => selectableInvoiceBatchEngagementIds(
@@ -1593,7 +1584,7 @@ export function InvoiceBatchBuilderPage({
                   <input
                     type="search"
                     value={creatorSearch}
-                    placeholder="搜索达人姓名、Handle 或平台"
+                    placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name"
                     aria-label="搜索达人档案"
                     onChange={(event) => setCreatorSearch(event.target.value)}
                   />
@@ -1611,6 +1602,7 @@ export function InvoiceBatchBuilderPage({
 
               <div className="invoice-batch-creator-grid">
                 {filteredProjectReferences.map((reference) => {
+                  const creator = prototypeCreators.find((candidate) => candidate.id === reference.creatorId);
                   const existingCount = generatedInvoices.filter(
                     (invoice) => invoice.snapshot.engagementId === reference.engagementId,
                   ).length;
@@ -1633,10 +1625,7 @@ export function InvoiceBatchBuilderPage({
                         onChange={() => toggleEngagement(reference.engagementId)}
                       />
                       <span className="invoice-batch-creator-check"><Check size={13} /></span>
-                      <span>
-                        <strong>{reference.name}</strong>
-                        <small>{reference.handle} · {reference.platform}</small>
-                      </span>
+                      <CreatorIdentity creator={creator} displayName={reference.name} fallbackHandle={reference.handle} fallbackPlatform={reference.platform} />
                       {existingCount ? (
                         <em className="is-ready">已有 {existingCount} 份，可继续生成</em>
                       ) : (
@@ -1994,12 +1983,8 @@ export function InvoiceBatchBuilderPage({
                     const reference = selectedProject?.creatorProfiles?.find((candidate) => candidate.engagementId === match.engagementId);
                     return (
                       <article key={match.engagementId} className={accepted ? '' : 'is-overflow'}>
-                        <Avatar
-                          size="sm"
-                          initials={creator?.initials ?? creatorInitials(match.creatorName)}
-                          accent={creator?.accent ?? '#5f72d8'}
-                        />
-                        <span><strong>{match.creatorName}</strong><small>{formatCreatorHandle(match.creatorHandle, reference?.platform)} · {match.sourceLabel}</small></span>
+                        <CreatorIdentity creator={creator} displayName={match.creatorName} initials={creatorInitials(match.creatorName)} accent="#5f72d8" fallbackHandle={match.creatorHandle} fallbackPlatform={reference?.platform} />
+                        <small>{match.sourceLabel}</small>
                         <em>{accepted ? '将选择' : '超过50人上限'}</em>
                       </article>
                     );

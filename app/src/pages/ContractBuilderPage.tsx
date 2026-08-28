@@ -31,11 +31,10 @@ import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Co
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
-  creatorSocialAccountSearchOptions,
-  creatorSocialSelectionValue,
+  creatorSearchOptions,
   formatCreatorHandle,
-  parseCreatorSocialSelectionValue,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import { contractGenerationFilename } from '../contractGenerationFilename';
@@ -278,9 +277,7 @@ export function ContractBuilderPage({
     draftModel?.creatorHandle,
     draftModel?.creatorPlatform,
   );
-  const creatorSelectionValue = creatorId && selectedSocialAccount
-    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
-    : '';
+  const creatorSelectionValue = creatorId;
   const selectedProject = projects.find((project) => String(project.cooperationProjectId ?? project.projectId ?? project.id) === projectSelectionId) ?? null;
   const selectedReference = selectedProject?.creatorProfiles?.find((reference) => (
     reference.creatorId === creatorId && reference.status !== 'removed'
@@ -314,7 +311,7 @@ export function ContractBuilderPage({
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
 
-  const creatorOptions = creators.flatMap(creatorSocialAccountSearchOptions);
+  const creatorOptions = creatorSearchOptions(creators);
   const creatorProjects = projects.filter((project) => project.creatorProfiles?.some((reference) => (
     reference.creatorId === creatorId && reference.status !== 'removed'
   )));
@@ -488,13 +485,12 @@ export function ContractBuilderPage({
   }, [model]);
 
   const selectCreator = (value: string) => {
-    const selection = parseCreatorSocialSelectionValue(value);
-    const creator = creators.find((item) => item.id === selection?.creatorId) ?? null;
-    const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
+    const creator = creators.find((item) => item.id === value) ?? null;
+    const socialAccount = resolveCreatorSocialAccount(creator);
     const account = defaultContractPayoutAccount(creator);
-    setCreatorId(selection?.creatorId ?? '');
+    setCreatorId(creator?.id ?? '');
     setCreatorSocialAccountId(socialAccount?.id ?? '');
-    const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === selection?.creatorId && reference.status !== 'removed');
+    const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === creator?.id && reference.status !== 'removed');
     setEngagementId(currentProjectReference?.engagementId ?? '');
     if (!currentProjectReference) {
       setProjectSelectionId('');
@@ -743,7 +739,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`} data-contract-field="creator">
                 <span>合作达人 *</span>
-                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name" options={creatorOptions} onChange={selectCreator} onClear={() => selectCreator('')} />
+                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" options={creatorOptions} resultUnit="位达人" renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} />} onChange={selectCreator} onClear={() => selectCreator('')} />
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.contractType ? 'has-error' : ''}`} data-contract-field="contractType">

@@ -6,6 +6,7 @@ import {
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency } from '../types';
 import { demoAccountName } from '../demoCreatorNames';
+import { creatorSearchTerms } from '../creatorSearchOptions';
 
 export const INVOICE_BATCH_PROTOTYPE_CURRENCY = 'USD' as const;
 export const INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY: InvoiceCurrency = 'EUR';
@@ -115,13 +116,15 @@ export const withInvoiceBatchPrototypeAccounts = (
 export const filterInvoiceBatchCreatorReferences = (
   references: ProjectCreatorReference[],
   query: string,
+  creators: CreatorProfile[] = [],
 ) => {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) return references;
-  return references.filter((reference) => (
-    [reference.name, reference.handle, reference.platform]
-      .some((value) => value.toLocaleLowerCase().includes(normalizedQuery))
-  ));
+  return references.filter((reference) => {
+    const creator = creators.find((candidate) => candidate.id === reference.creatorId);
+    return [reference.name, reference.handle, reference.platform, creator ? creatorSearchTerms(creator) : '']
+      .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+  });
 };
 
 export const selectableInvoiceBatchEngagementIds = (

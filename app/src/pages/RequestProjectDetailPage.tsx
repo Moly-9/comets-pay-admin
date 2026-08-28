@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Avatar, Button, ListActionButton, Modal, PageHeading } from '../components/Common';
+import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { PaymentProviderBadge, paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
@@ -58,7 +59,6 @@ import {
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
 import { demoDisplayName } from '../demoCreatorNames';
-import { creatorHandleForDisplay } from '../creatorSearchOptions';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestExtraDetails & {
   id: string;
@@ -1033,9 +1033,7 @@ export function RequestProjectDetailPage({
                   const creator = payee.creatorId
                     ? creators.find((candidate) => String(candidate.id) === String(payee.creatorId))
                     : creators.find((candidate) => candidate.name === payee.name);
-                  const initials = payee.initials ?? creator?.initials ?? payee.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-                  const handle = creatorHandleForDisplay({ creator, socialAccountId: payee.socialAccountId, handle: payee.handle, platform: payee.platform });
-                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
+                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><CreatorIdentity creator={creator} displayName={payee.name} initials={payee.initials} accent={payee.accent} fallbackHandle={payee.handle} fallbackPlatform={payee.platform} /></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
                 })}</tbody>
               </table>
             </div>

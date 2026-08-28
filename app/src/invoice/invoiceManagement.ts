@@ -1,6 +1,6 @@
 import type { InvoiceId, RequestApprovalStatus } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
-import type { GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
+import type { CreatorSocialAccount, GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
 import { requestApprovalReturnItemForInvoice } from '../requestApprovalWorkflow';
 
 export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
@@ -28,6 +28,7 @@ export type InvoiceManagementRow = {
   creatorName: string;
   channelId: string;
   creatorPlatform: string;
+  creatorSocialAccounts?: CreatorSocialAccount[];
   issuerName: string;
   initials: string;
   accent: string;
@@ -71,7 +72,7 @@ export const filterInvoiceManagementRows = (
 
   return rows.filter((row) => {
     const matchesSearch = !query || (
-      `${row.creatorName} ${row.channelId} ${row.creatorPlatform} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
+      `${row.creatorName} ${row.channelId} ${row.creatorPlatform} ${(row.creatorSocialAccounts ?? []).map((account) => `${account.handle} ${account.platform} ${account.profileUrl}`).join(' ')} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
         .toLowerCase()
         .includes(query)
     );

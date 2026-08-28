@@ -17,11 +17,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { SearchableComboBox } from '../components/SearchableComboBox';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
   creatorSearchOption,
-  creatorSocialAccountSearchOptions,
-  creatorSocialSelectionValue,
-  parseCreatorSocialSelectionValue,
+  creatorSearchOptions,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import {
@@ -295,9 +294,7 @@ export function InvoiceBuilderPage({
     editSnapshot?.creatorHandle,
     editSnapshot?.creatorPlatform,
   );
-  const creatorSelectionValue = creatorId && selectedSocialAccount
-    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
-    : '';
+  const creatorSelectionValue = creatorId;
   const eligiblePayoutAccounts = eligibleInvoicePayoutAccounts(selectedCreator);
   const payoutAccountOptions = eligiblePayoutAccounts.map((account) => ({
     value: getPayoutAccountId(account),
@@ -331,7 +328,7 @@ export function InvoiceBuilderPage({
   const selectedContracts = selectableContracts.filter((contract) => (
     contract.contractId && contractIds.includes(contract.contractId)
   ));
-  const creatorOptions = creators.flatMap(creatorSocialAccountSearchOptions);
+  const creatorOptions = creatorSearchOptions(creators);
   const projectOptions = projects.map((project) => ({
     value: cooperationProjectIdFor(project),
     label: project.name,
@@ -429,10 +426,10 @@ export function InvoiceBuilderPage({
   }, [isDirty, isEditing]);
 
   const selectCreator = (value: string) => {
-    const selection = parseCreatorSocialSelectionValue(value);
-    const creator = creators.find((item) => item.id === selection?.creatorId);
-    setCreatorId(selection?.creatorId ?? '');
-    setCreatorSocialAccountId(selection?.socialAccountId ?? '');
+    const creator = creators.find((item) => item.id === value);
+    const socialAccount = resolveCreatorSocialAccount(creator);
+    setCreatorId(creator?.id ?? '');
+    setCreatorSocialAccountId(socialAccount?.id ?? '');
     setSelectedProjectId('');
     setEngagementId('');
     setContractIds([]);
@@ -728,8 +725,12 @@ export function InvoiceBuilderPage({
                   ariaLabel="合作达人"
                   className="creator-search-combobox"
                   value={creatorSelectionValue}
-                  placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name"
+                  placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name"
                   options={creatorOptions}
+                  resultUnit="位达人"
+                  renderOption={(option) => (
+                    <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} />
+                  )}
                   onChange={selectCreator}
                   onClear={() => selectCreator('')}
                   disabled={isEditing}

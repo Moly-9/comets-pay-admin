@@ -181,7 +181,9 @@ describe('FinanceReviewWorkspace project resource cards', () => {
     expect(workspaceSource).toContain('<small><b>Invoice 编号</b>{linkedInvoice.id}</small>');
     expect(workspaceSource.match(/className="finance-review-resource-card-person"/g)).toHaveLength(2);
     expect(workspaceSource.match(/<span>达人<\/span>/g)).toHaveLength(2);
-    expect(workspaceSource).toContain('creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId');
+    expect(workspaceSource.match(/<CreatorIdentity creator=\{creator\}/g)).toHaveLength(2);
+    expect(workspaceSource).toContain('fallbackHandle={contract.creatorHandle}');
+    expect(workspaceSource).toContain('fallbackHandle={linkedInvoice.snapshot.creatorHandle}');
     expect(workspaceSource).toContain('invoiceDocumentName(linkedInvoice.snapshot)');
     expect(workspaceSource).toContain('contractDocumentFilename(contract)');
     expect(workspaceSource).toContain("invoiceFilename(linkedInvoice.snapshot, 'pdf')");
