@@ -122,9 +122,18 @@ export type ContractPublishingChannel = {
 
 export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed' | 'applied';
 export type ContractLifecycle =
+  | 'EDITING_DRAFT'
   | 'GENERATED_DRAFT'
   | 'UPLOADED_PENDING_CONFIRMATION'
   | 'CONFIRMED';
+
+export type ContractManagementBucket =
+  | 'template'
+  | 'draft'
+  | 'signature'
+  | 'expired'
+  | 'ready'
+  | 'attention';
 
 export type ContractType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
 export type ContractValidityStatus =
@@ -247,7 +256,8 @@ export type ContractRecord = {
   payoutAccountFingerprint?: string;
   paymentSnapshot?: DocumentPayoutSnapshot;
   signed: boolean;
-  status: ContractStatus;
+  /** @deprecated Historical snapshot only. New workflow uses lifecycle, readiness and validity. */
+  status?: ContractStatus;
   updated: string;
   deliverables: ContractDeliverable[];
   issues: ContractIssue[];
@@ -351,6 +361,7 @@ export const getContractReadiness = (contract: ContractRecord) => {
     : contract.signed;
   const contractType = getContractType(contract);
   const requiresFinancialFields = contractType !== 'FRAMEWORK';
+  const parsing = contract.extractionStage === 'parsing';
   const ready = (
     lifecycleConfirmed
     && !contract.isTemplate
@@ -371,9 +382,11 @@ export const getContractReadiness = (contract: ContractRecord) => {
     reviewCount: nonSignatureIssues.length - blockers.length,
     label: ready
       ? '可用于付款项目'
-      : contract.lifecycle === 'GENERATED_DRAFT'
+      : contract.lifecycle === 'EDITING_DRAFT'
+        ? '草稿未生成'
+        : contract.lifecycle === 'GENERATED_DRAFT'
         ? '待上传签署合同'
-        : contract.status === '待解析'
+        : parsing
           ? '等待解析'
           : `${blockerCount} 项待处理`,
   };
@@ -488,6 +501,17 @@ export const isContractAvailableForNewAssociation = (
   contract: ContractRecord,
   referenceDate = currentContractReferenceDate(),
 ) => isPaymentContract(contract) && !getContractValidity(contract, referenceDate).expired;
+
+export const getContractManagementBucket = (
+  contract: ContractRecord,
+  referenceDate = currentContractReferenceDate(),
+): ContractManagementBucket => {
+  if (contract.isTemplate) return 'template';
+  if (contract.lifecycle === 'EDITING_DRAFT') return 'draft';
+  if (getContractValidity(contract, referenceDate).expired) return 'expired';
+  if (contract.lifecycle === 'GENERATED_DRAFT') return 'signature';
+  return getContractReadiness(contract).ready ? 'ready' : 'attention';
+};
 
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
 
@@ -756,6 +780,7 @@ export const createGeneratedContractDraft = (
     generationVariant?: ContractDocumentVariant;
     qualityReport?: ContractQualityReport;
     pageCount?: number;
+    uploadedByAccount?: string;
   } = {},
 ): ContractRecord => {
   const totalFee = model.totalFee.trim() ? Number(model.totalFee) : null;
@@ -809,7 +834,6 @@ export const createGeneratedContractDraft = (
     payoutAccountFingerprint: model.payoutAccountFingerprint ?? model.paymentSnapshot.accountFingerprint,
     paymentSnapshot: { ...model.paymentSnapshot },
     signed: false,
-    status: '待回传',
     updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
     deliverables: [
       ...model.purposeItems,
@@ -846,6 +870,39 @@ export const createGeneratedContractDraft = (
     qualityReport: options.qualityReport,
     generationVersion: version,
     generatedFileBaseName: fileBaseName,
+    uploadedByAccount: options.uploadedByAccount,
+  };
+};
+
+export const createEditingContractDraft = (
+  model: ContractGenerationModel,
+  existingDraft?: ContractRecord | null,
+  uploadedByAccount?: string,
+): ContractRecord => {
+  const base = createGeneratedContractDraft(model, existingDraft?.generationVersion ?? 1, '', {
+    existingContractId: existingDraft?.contractId,
+    uploadedByAccount: uploadedByAccount ?? existingDraft?.uploadedByAccount,
+  });
+  return {
+    ...base,
+    id: existingDraft?.id ?? model.contractNumber,
+    name: model.contractName.trim() || existingDraft?.name || '未命名合同草稿',
+    sourceName: '合同文件尚未生成',
+    documentUrl: '',
+    documentNote: '生成中的合同表单草稿，可继续编辑后生成正式合同。',
+    pageCount: undefined,
+    lifecycle: 'EDITING_DRAFT',
+    projectId: model.projectId || undefined,
+    cooperationProjectId: model.cooperationProjectId || undefined,
+    projectLinks: model.cooperationProjectId || model.projectId
+      ? [{ cooperationProjectId: (model.cooperationProjectId ?? model.projectId) as CooperationProjectId, status: 'ACTIVE' }]
+      : [],
+    creatorId: model.creatorId || undefined,
+    engagementId: model.engagementId || undefined,
+    generationVariant: undefined,
+    qualityReport: undefined,
+    generatedFileBaseName: undefined,
+    updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
   };
 };
 
@@ -918,7 +975,6 @@ export const createUploadedContract = (
     accountName: '',
     accountFingerprint: '',
     signed: false,
-    status: '待补字段',
     updated: today,
     deliverables: [],
     issues: [
@@ -1102,7 +1158,7 @@ export const applyConfirmedRecognitionToContract = (
     lifecycle: 'CONFIRMED',
     confirmedAt: new Date().toISOString(),
     signed: true,
-    status: '已生效',
+    status: undefined,
     issues: contract.issues.filter((issue) => !['recognition-review', 'signature'].includes(issue.id)),
   };
 };

@@ -682,7 +682,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
   return (
     <div className="page-stack">
       <PageHeading
-        title="系统设置"
+        title="系统账号"
         subtitle="管理系统账号、角色权限与请款审批流程。"
         actions={view === 'approvals'
           ? <Button icon={<Plus size={17} />} onClick={openCreateApprovalFlow}>新建审批流程</Button>

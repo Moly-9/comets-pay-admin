@@ -81,6 +81,8 @@ type Props = {
   initialEngagementId?: EngagementId | null;
   existingDraft?: ContractRecord | null;
   onGenerated: (model: ContractGenerationModel, files: ContractGeneratedFiles) => ContractRecord;
+  onSaveDraft: (model: ContractGenerationModel) => ContractRecord;
+  onDraftStateChange?: (model: ContractGenerationModel, dirty: boolean) => void;
   onCancel: () => void;
   onOpenContractManagement: (contractId: string) => void;
 };
@@ -191,6 +193,8 @@ export function ContractBuilderPage({
   initialEngagementId,
   existingDraft,
   onGenerated,
+  onSaveDraft,
+  onDraftStateChange,
   onCancel,
   onOpenContractManagement,
 }: Props) {
@@ -312,10 +316,7 @@ export function ContractBuilderPage({
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
 
   const creatorOptions = creatorSearchOptions(creators);
-  const creatorProjects = projects.filter((project) => project.creatorProfiles?.some((reference) => (
-    reference.creatorId === creatorId && reference.status !== 'removed'
-  )));
-  const projectOptions = creatorProjects.map((project) => ({
+  const projectOptions = projects.map((project) => ({
     value: String(project.cooperationProjectId ?? project.projectId ?? project.id),
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
@@ -423,6 +424,27 @@ export function ContractBuilderPage({
     selectedSocialAccount,
     totalFee,
   ]);
+  const modelSignature = useMemo(() => JSON.stringify(model), [model]);
+  const [savedModelSignature, setSavedModelSignature] = useState<string | null>(null);
+  const dirty = savedModelSignature !== null && savedModelSignature !== modelSignature;
+
+  useEffect(() => {
+    if (savedModelSignature === null) setSavedModelSignature(modelSignature);
+  }, [modelSignature, savedModelSignature]);
+
+  useEffect(() => {
+    onDraftStateChange?.(model, dirty);
+  }, [dirty, model, onDraftStateChange]);
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [dirty]);
 
   const qualityReport = useMemo(
     () => createContractQualityReport(model),
@@ -492,10 +514,7 @@ export function ContractBuilderPage({
     setCreatorSocialAccountId(socialAccount?.id ?? '');
     const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === creator?.id && reference.status !== 'removed');
     setEngagementId(currentProjectReference?.engagementId ?? '');
-    if (!currentProjectReference) {
-      setProjectSelectionId('');
-      setProjectName('');
-    }
+    if (selectedProject) setProjectName(selectedProject.name);
     setPromotedProduct('');
     setPayoutAccountId(account?.id ?? '');
     setPublishingChannels(contractPublishingChannelsForCreator(creator).sort((left, right) => (
@@ -631,6 +650,7 @@ export function ContractBuilderPage({
       if (action === 'SAVE') {
         const record = onGenerated(model, files);
         setGenerated({ record, files });
+        setSavedModelSignature(modelSignature);
       }
     } catch (reason) {
       const fieldId = reason instanceof Error && 'fieldId' in reason ? String(reason.fieldId) : '';
@@ -642,6 +662,14 @@ export function ContractBuilderPage({
     } finally {
       setGenerating(false);
     }
+  };
+
+  const saveDraft = () => {
+    const record = onSaveDraft(model);
+    setSavedModelSignature(modelSignature);
+    setGenerated(null);
+    setGenerationError('');
+    return record;
   };
 
   const download = (extension: 'pdf' | 'docx') => {
@@ -958,7 +986,7 @@ export function ContractBuilderPage({
       <footer className="contract-builder-actions">
         <div>
           <Button variant="ghost" onClick={onCancel}>取消</Button>
-          <Button variant="secondary" icon={<Save size={16} />} disabled={generating} onClick={() => void generate('DRAFT', 'SAVE')}>
+          <Button variant="secondary" icon={<Save size={16} />} disabled={generating} onClick={saveDraft}>
             保存草稿
           </Button>
         </div>

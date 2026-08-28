@@ -32,7 +32,7 @@ import {
   RequestProjectResourceManager,
   type RequestProjectResourceActions,
 } from '../components/RequestProjectResourceManager';
-import { formatContractMoney, getContractValidity, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
+import { formatContractMoney, getContractReadiness, getContractValidity, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
 import { PM_USERS, type SystemUser } from '../data';
 import {
   createPrototypeCode,
@@ -1952,7 +1952,7 @@ export function MediaPaymentProjectsPage({
                     return [{
                       value: contract.contractId,
                       label: contractRequestResourceTitle(contract),
-                      description: `${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? contract.status : expired ? '不可关联：合同已失效' : `不可关联：${contract.status}`}`,
+                      description: `${formatContractMoney(contract)} · ${selected ? selectedSource : enabled ? '可用于付款项目' : expired ? '不可关联：合同已失效' : `不可关联：${getContractReadiness(contract).label}`}`,
                       selected,
                       disabled: !enabled,
                       resource: { kind: 'contract', contract },

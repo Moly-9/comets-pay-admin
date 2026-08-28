@@ -36,7 +36,8 @@ export type PaymentBatchContractSnapshot = Readonly<{
   amount: number | null;
   signer?: string;
   paymentAccount?: string;
-  status: string;
+  /** @deprecated Historical snapshot only. */
+  status?: string;
   signed: boolean;
   updatedAt: string;
 }>;
@@ -246,7 +247,6 @@ const snapshotContract = (contract: ContractRecord): PaymentBatchContractSnapsho
     || contract.paymentSnapshot?.accountName
     || contract.paymentSnapshot?.paypalEmail
     || undefined,
-  status: contract.status,
   signed: contract.signed,
   updatedAt: contract.updated,
 });

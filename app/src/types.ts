@@ -27,6 +27,8 @@ export type NavPage =
   | 'transactions'
   | 'organization'
   | 'channels'
+  | 'system-accounts'
+  | 'system-config'
   | 'system-settings'
   | 'notifications';
 

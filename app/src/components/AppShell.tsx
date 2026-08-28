@@ -70,7 +70,16 @@ const NAV_ENTRIES: NavEntry[] = [
       { label: '渠道设置', page: 'channels' },
     ],
   },
-  { type: 'item', label: '系统设置', page: 'system-settings', icon: Settings },
+  {
+    type: 'group',
+    id: 'system',
+    label: '系统设置',
+    icon: Settings,
+    items: [
+      { label: '系统账号', page: 'system-accounts' },
+      { label: '系统配置', page: 'system-config' },
+    ],
+  },
   { type: 'item', label: '通知', page: 'notifications', icon: Bell },
 ];
 
@@ -78,6 +87,7 @@ const selectedPage = (page: NavPage) => {
   if (page === 'new-batch') return 'batches';
   if (page === 'invoice-create' || page === 'invoice-batch-create' || page === 'invoice-edit') return 'invoice';
   if (page === 'contract-create') return 'contracts';
+  if (page === 'system-settings') return 'system-accounts';
   return page;
 };
 
@@ -99,6 +109,7 @@ export function AppShell({
     creators: true,
     payments: true,
     account: true,
+    system: true,
   });
 
   const current = selectedPage(activePage);

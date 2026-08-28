@@ -4,6 +4,7 @@ import {
   contractLinkedToProject,
   contractProjectLinksFor,
   contractProjectIds,
+  createEditingContractDraft,
   createGeneratedContractDraft,
   createUploadedContract,
   frameworkIoContracts,
@@ -86,6 +87,59 @@ const generationModel: ContractGenerationModel = {
 };
 
 describe('generated contract upload workflow', () => {
+  it('saves incomplete form data as an editing draft without generating files', () => {
+    const incomplete = {
+      ...generationModel,
+      contractName: '',
+      projectId: '' as ProjectId,
+      projectName: '',
+      creatorId: '' as CreatorId,
+      creatorName: '',
+      publisher: '',
+      payoutAccountId: '',
+    };
+
+    const draft = createEditingContractDraft(incomplete, null, 'media.contract.owner');
+
+    expect(draft.lifecycle).toBe('EDITING_DRAFT');
+    expect(draft.name).toBe('未命名合同草稿');
+    expect(draft.documentUrl).toBe('');
+    expect(draft.sourceName).toBe('合同文件尚未生成');
+    expect(draft.pageCount).toBeUndefined();
+    expect(draft.generationVariant).toBeUndefined();
+    expect(draft.generatedFileBaseName).toBeUndefined();
+    expect(draft.generationSnapshot).toMatchObject({
+      projectName: '',
+      creatorName: '',
+      payoutAccountId: '',
+    });
+  });
+
+  it('updates one editing draft in place and upgrades the same identity after generation', () => {
+    const initial = createEditingContractDraft(generationModel, null, 'media.contract.owner');
+    const updatedModel = {
+      ...generationModel,
+      contractName: 'Updated synthetic contract',
+      totalFee: '3600',
+    };
+    const updated = createEditingContractDraft(updatedModel, initial, 'media.contract.owner');
+    const generated = createGeneratedContractDraft(updatedModel, 1, 'blob:generated-contract', {
+      existingContractId: updated.contractId,
+      generationVariant: 'FORMAL',
+      uploadedByAccount: 'media.contract.owner',
+    });
+
+    expect(updated.contractId).toBe(initial.contractId);
+    expect(updated.id).toBe(initial.id);
+    expect(updated.name).toBe('Updated synthetic contract');
+    expect(updated.lifecycle).toBe('EDITING_DRAFT');
+    expect(generated.contractId).toBe(initial.contractId);
+    expect(generated.id).toBe(initial.id);
+    expect(generated.lifecycle).toBe('GENERATED_DRAFT');
+    expect(generated.totalFee).toBe(3600);
+    expect(generated.documentUrl).toBe('blob:generated-contract');
+  });
+
   it('keeps the contract identity when the same collaboration draft is regenerated', () => {
     const initialDraft = createGeneratedContractDraft(generationModel, 1);
     const updatedDraft = createGeneratedContractDraft(

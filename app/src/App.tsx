@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { accountDisplayValue } from './accountPresentation';
 import { resolveCreatorSocialAccount } from './creatorSearchOptions';
 import { AppShell } from './components/AppShell';
+import { DraftExitDialog } from './components/DraftExitDialog';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { paymentProviderDisplayName } from './components/PaymentProviderBadge';
@@ -13,6 +14,7 @@ import {
 import {
   completeGeneratedContractUpload,
   contractLinkedToProject,
+  createEditingContractDraft,
   createGeneratedContractDraft,
   createUploadedContract,
   INITIAL_CONTRACTS,
@@ -61,6 +63,7 @@ import { PaymentProjectPaymentDetailPage } from './pages/PaymentProjectPaymentDe
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
+import { SystemConfigurationPage } from './pages/SystemConfigurationPage';
 import {
   applyInvoiceDocumentEdit,
   applyInvoiceReviewAction,
@@ -464,6 +467,10 @@ export default function App() {
   const [focusedCreatorId, setFocusedCreatorId] = useState<string | null>(null);
   const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
+  const [editingContractDraftId, setEditingContractDraftId] = useState<string | null>(null);
+  const [contractBuilderModel, setContractBuilderModel] = useState<ContractGenerationModel | null>(null);
+  const [contractBuilderDirty, setContractBuilderDirty] = useState(false);
+  const [pendingContractExit, setPendingContractExit] = useState<{ run: () => void } | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceEditTarget, setInvoiceEditTarget] = useState<{
     invoiceId: InvoiceId;
@@ -746,7 +753,28 @@ export default function App() {
     return true;
   }, [contracts, notify, registerProjectMutation]);
 
+  const saveContractDraft = useCallback((model: ContractGenerationModel) => {
+    const existingDraft = contracts.find((contract) => (
+      contract.lifecycle === 'EDITING_DRAFT'
+      && ((editingContractDraftId && (contract.contractId ?? contract.id) === editingContractDraftId)
+        || contract.id === model.contractNumber)
+    ));
+    const record = createEditingContractDraft(model, existingDraft, currentUser.account);
+    setContracts((current) => existingDraft
+      ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
+      : [record, ...current]);
+    setEditingContractDraftId(record.contractId ?? record.id);
+    setContractBuilderDirty(false);
+    notify('合同草稿已保存', `${record.name} 已保存到草稿箱，可稍后继续编辑。`);
+    return record;
+  }, [contracts, currentUser.account, editingContractDraftId, notify]);
+
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
+    const existingDraft = contracts.find((contract) => (
+      contract.lifecycle === 'EDITING_DRAFT'
+      && ((editingContractDraftId && (contract.contractId ?? contract.id) === editingContractDraftId)
+        || contract.id === model.contractNumber)
+    ));
     const projectKey = String(model.cooperationProjectId ?? model.projectId);
     const existingProject = projects.find((project) => getProjectId(project) === projectKey);
     const existingReference = existingProject?.creatorProfiles?.find((reference) => (
@@ -785,22 +813,28 @@ export default function App() {
     }
     const resolvedModel = { ...model, engagementId: resolvedEngagementId };
     const documentUrl = URL.createObjectURL(files.pdfBlob);
-    const record = createGeneratedContractDraft(resolvedModel, 1, documentUrl, {
+    const record = createGeneratedContractDraft(resolvedModel, existingDraft?.generationVersion ?? 1, documentUrl, {
+      existingContractId: existingDraft?.contractId,
       generationVariant: files.variant,
       qualityReport: files.qualityReport,
       pageCount: files.pageCount,
+      uploadedByAccount: currentUser.account,
     });
-    setContracts((current) => [record, ...current]);
+    setContracts((current) => existingDraft
+      ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
+      : [record, ...current]);
+    setEditingContractDraftId(null);
+    setContractBuilderDirty(false);
     registerProjectMutation({
       projectId: resolvedModel.projectId,
       engagementId: resolvedEngagementId,
       entityType: 'contract',
       entityId: record.contractId ?? record.id,
-      action: 'create',
+      action: existingDraft ? 'update' : 'create',
       summary: `已生成合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
-  }, [contracts, creators, projects, registerProjectMutation]);
+  }, [contracts, creators, currentUser.account, editingContractDraftId, projects, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
@@ -896,20 +930,7 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const navigate = (page: NavPage, options?: NavOptions) => {
-    if (!canAccessPage(currentUser, page)) {
-      notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
-      return false;
-    }
-    if (
-      (
-        (activePage === 'invoice-edit' && invoiceEditorDirty)
-        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
-      )
-      && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
-    ) {
-      return false;
-    }
+  const finishNavigation = (page: NavPage, options?: NavOptions) => {
     if (page === 'requests') {
       setRequestStatusFilter(options?.requestStatusFilter ?? 'all');
     }
@@ -926,7 +947,33 @@ export default function App() {
     setSelectedPayout(null);
     setPaymentDetailRequestId(null);
     setPaymentWorkbenchInitialTab('review');
+    if (page !== 'contract-create') {
+      setEditingContractDraftId(null);
+      setContractBuilderModel(null);
+      setContractBuilderDirty(false);
+    }
     return true;
+  };
+
+  const navigate = (page: NavPage, options?: NavOptions) => {
+    if (!canAccessPage(currentUser, page)) {
+      notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
+      return false;
+    }
+    if (
+      (
+        (activePage === 'invoice-edit' && invoiceEditorDirty)
+        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
+      )
+      && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
+    ) {
+      return false;
+    }
+    if (activePage === 'contract-create' && page !== 'contract-create' && contractBuilderDirty) {
+      setPendingContractExit({ run: () => { finishNavigation(page, options); } });
+      return false;
+    }
+    return finishNavigation(page, options);
   };
 
   const saveCreator = (updated: CreatorProfile) => {
@@ -4416,6 +4463,7 @@ export default function App() {
           projects={manageableCooperationProjects}
           projectDirectory={projects}
           creators={creators}
+          requestProjects={requestProjects}
           canUpload={canUploadContracts}
           canEditTemplates={canEditTemplates}
           canDelete={canDeleteContracts}
@@ -4431,6 +4479,12 @@ export default function App() {
           onBindFrameworkContract={bindFrameworkContract}
           onCreateContract={() => {
             setContractGenerationEngagementId(null);
+            setEditingContractDraftId(null);
+            setActivePage('contract-create');
+          }}
+          onEditDraft={(contractId) => {
+            setContractGenerationEngagementId(null);
+            setEditingContractDraftId(contractId);
             setActivePage('contract-create');
           }}
           onUpdateContract={updateContract}
@@ -4445,8 +4499,9 @@ export default function App() {
           creators={creators}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
-            contract.engagementId === contractGenerationEngagementId
-            && contract.lifecycle === 'GENERATED_DRAFT'
+            contract.lifecycle === 'EDITING_DRAFT'
+            && ((editingContractDraftId && (contract.contractId ?? contract.id) === editingContractDraftId)
+              || (!editingContractDraftId && contract.engagementId === contractGenerationEngagementId))
           ))}
           onGenerated={(model, files) => {
             const record = generateContract(model, files);
@@ -4456,15 +4511,27 @@ export default function App() {
             );
             return record;
           }}
+          onSaveDraft={saveContractDraft}
+          onDraftStateChange={(model, dirty) => {
+            setContractBuilderModel(model);
+            setContractBuilderDirty(dirty);
+          }}
           onCancel={() => {
-            setContractGenerationEngagementId(null);
-            if (requestResourceReturn?.resource === 'contract') {
-              setFocusedProjectId(requestResourceReturn.requestId);
-              setRequestResourceReturn(null);
-              setActivePage('projects');
-            } else {
-              setActivePage('contracts');
-            }
+            const run = () => {
+              setContractGenerationEngagementId(null);
+              setEditingContractDraftId(null);
+              setContractBuilderModel(null);
+              setContractBuilderDirty(false);
+              if (requestResourceReturn?.resource === 'contract') {
+                setFocusedProjectId(requestResourceReturn.requestId);
+                setRequestResourceReturn(null);
+                setActivePage('projects');
+              } else {
+                setActivePage('contracts');
+              }
+            };
+            if (contractBuilderDirty) setPendingContractExit({ run });
+            else run();
           }}
           onOpenContractManagement={(contractId) => {
             setContractGenerationEngagementId(null);
@@ -4720,6 +4787,18 @@ export default function App() {
     case 'channels':
       pageContent = <ChannelsPage notify={notify} />;
       break;
+    case 'system-config':
+      pageContent = (
+        <SystemConfigurationPage
+          contracts={contracts}
+          projects={projects}
+          creators={creators}
+          notify={notify}
+          onUpdateContract={updateContract}
+        />
+      );
+      break;
+    case 'system-accounts':
     case 'system-settings':
       pageContent = <SystemSettingsPage notify={notify} />;
       break;
@@ -4829,6 +4908,15 @@ export default function App() {
     });
   };
 
+  const finishPendingContractExit = (saveDraft: boolean) => {
+    const pending = pendingContractExit;
+    if (!pending) return;
+    if (saveDraft && contractBuilderModel) saveContractDraft(contractBuilderModel);
+    setPendingContractExit(null);
+    setContractBuilderDirty(false);
+    pending.run();
+  };
+
   return (
     <AppShell
       activePage={activePage}
@@ -4910,6 +4998,14 @@ export default function App() {
           onViewInvoice={openInvoiceFromPayout}
         />
       ) : null}
+      <DraftExitDialog
+        open={Boolean(pendingContractExit)}
+        title="退出生成合同？"
+        description="当前合同内容尚未保存，你可以保存到草稿箱后退出。"
+        onDiscard={() => finishPendingContractExit(false)}
+        onSave={() => finishPendingContractExit(true)}
+        onContinue={() => setPendingContractExit(null)}
+      />
       <Toast toast={toast} onClose={() => setToast(null)} />
     </AppShell>
   );

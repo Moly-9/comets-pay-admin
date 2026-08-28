@@ -160,7 +160,7 @@ export function TransactionDetailPage({
                 <div className="transaction-resource-entry" key={contract.contractId ?? contract.contractCode}>
                   <strong>{contract.contractCode}</strong>
                   <span>{contract.name}</span>
-                  <small>{money(contract.currency, contract.amount)} · {contract.signed ? '已签署' : '待签署'} · {contract.status}</small>
+                  <small>{money(contract.currency, contract.amount)} · {contract.signed ? '已签署' : '待签署'}</small>
                 </div>
               )) : <span>{payout.contract || '历史数据待补全'}</span>}
             </div>
@@ -242,7 +242,6 @@ export function TransactionDetailPage({
                       <div><dt>合同名称</dt><dd>{contract.name}</dd></div>
                       <div><dt>合同金额</dt><dd>{money(contract.currency, contract.amount)}</dd></div>
                       <div><dt>签署状态</dt><dd>{contract.signed ? '已签署' : '待签署'}</dd></div>
-                      <div><dt>合同状态</dt><dd>{contract.status}</dd></div>
                       <div><dt>更新时间</dt><dd>{contract.updatedAt || '未记录'}</dd></div>
                     </dl>
                   </section>

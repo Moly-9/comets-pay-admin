@@ -1064,6 +1064,8 @@ export const PAGE_TITLES = {
   transactions: '交易记录',
   organization: '组织信息',
   channels: '渠道设置',
+  'system-accounts': '系统账号',
+  'system-config': '系统配置',
   'system-settings': '系统设置',
   notifications: '通知',
 } as const;

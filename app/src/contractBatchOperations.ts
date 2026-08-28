@@ -1,4 +1,4 @@
-import type { ContractRecord } from './contracts';
+import { getContractManagementBucket, getContractReadiness, type ContractRecord } from './contracts';
 import { contractDocumentFilename } from './documentFilenames';
 
 export type ContractExportFailure = {
@@ -60,7 +60,7 @@ const contractManifest = (contracts: ContractRecord[]) => {
     'Brand',
     'Currency',
     'Total Fee',
-    'Status',
+    'Payment Readiness',
     'Updated Date',
   ];
   const rows = contracts.map((contract) => [
@@ -73,7 +73,7 @@ const contractManifest = (contracts: ContractRecord[]) => {
     contract.brand,
     contract.currency,
     contract.totalFee,
-    contract.status,
+    getContractManagementBucket(contract) === 'expired' ? '已失效' : getContractReadiness(contract).label,
     contract.updated,
   ]);
   return `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}`;

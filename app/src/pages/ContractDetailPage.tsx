@@ -44,15 +44,16 @@ import {
   frameworkIoContracts,
   getContractType,
   getContractReadiness,
+  getContractValidity,
   isFrameworkContract,
   isIoContract,
-  type ContractStatus,
   type ContractType,
   type ContractRecord,
   type ContractUploadInput,
 } from '../contracts';
 import { contractDocumentFilename } from '../documentFilenames';
 import type { ContractId } from '../businessWorkflow';
+import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -180,17 +181,6 @@ const FIELD_STATUS_LABELS = {
   conflict: '需核对',
   confirmed: '已确认',
 } as const;
-
-const CONTRACT_STATUS_NOTES: Record<ContractStatus, string> = {
-  参考模板: '仅作为合同模板资源，不能直接进入付款流程。',
-  待解析: '合同文件尚未完成解析，暂不能进行付款校验。',
-  待补字段: '补齐必填字段并解决阻断项后，才能进入付款流程。',
-  待回传: '合同草稿等待线下签署文件回传。',
-  已生效: '合同已生效；仍需满足付款就绪规则。',
-  履约中: '合同正在履约；满足付款规则后可进入付款流程。',
-  待签署: '等待合同完成签署并通过人工确认。',
-  已归档: '合同已归档；如需付款仍需确认付款条件有效。',
-};
 
 const sourceLabel = (source: ContractSourceLocation | null) => {
   if (!source) return '未找到可靠来源';
@@ -402,8 +392,8 @@ function ContractPaymentList({
           <div className="contract-payment-account-section" key={section.title}>
             <h4>{section.title}</h4>
             <dl className="contract-payment-data-grid">
-              {section.items.map(([label, value, wide]) => (
-                <div className={wide ? 'is-wide' : ''} key={`${section.title}-${label}`}>
+              {section.items.map(([label, value, wide], itemIndex) => (
+                <div className={wide ? 'is-wide' : ''} key={`${section.title}-${label}-${itemIndex}`}>
                   <dt>{label}</dt>
                   <dd>{value}</dd>
                 </div>
@@ -494,6 +484,7 @@ export function ContractDetailPage({
   projects = [],
   projectDirectory = projects,
   creators = [],
+  requestProjects = [],
   onBack,
   backLabel = '返回合同列表',
   notify,
@@ -507,6 +498,7 @@ export function ContractDetailPage({
   projects?: ProjectSummary[];
   projectDirectory?: ProjectSummary[];
   creators?: CreatorProfile[];
+  requestProjects?: PaymentRequestProjectLike[];
   onBack: () => void;
   backLabel?: string;
   notify: Notify;
@@ -580,6 +572,9 @@ export function ContractDetailPage({
     ? nonSignatureIssues.filter((issue) => issue.id !== 'recognition-review')
     : nonSignatureIssues;
   const readiness = getContractReadiness({ ...contract, issues: visibleIssues });
+  const validity = getContractValidity(contract);
+  const paymentReady = readiness.ready && !validity.expired;
+  const readinessLabel = validity.expired ? '已失效' : readiness.label;
   const signatureConfirmed = contract.signed === true
     || (contract.signed == null && contract.lifecycle === 'CONFIRMED');
   const signaturePending = !contract.isTemplate && !signatureConfirmed;
@@ -616,6 +611,14 @@ export function ContractDetailPage({
   const linkedIoContracts = isFrameworkContract(contract)
     ? frameworkIoContracts(contract, contracts)
     : [];
+  const contractIds = new Set(
+    [contract.contractId, contract.id].filter((value): value is string => Boolean(value)),
+  );
+  const linkedRequestCount = new Set(requestProjects
+    .filter((request) => request.creatorLinks?.some((link) => (
+      link.contractIds.some((contractId) => contractIds.has(contractId))
+    )))
+    .map((request) => request.paymentRequestProjectId ?? request.id)).size;
   const frameworkRelationOptions = [
     { value: '', label: '不绑定框架合同', description: 'IO 单保存后仍可用于 Invoice 与付款流程' },
     ...frameworkContracts.map((candidate) => ({
@@ -768,8 +771,6 @@ export function ContractDetailPage({
     notify('框架合同已上传并绑定', `${framework.id} 已成为当前 IO 单的框架合同。`);
   };
 
-  const contractStatusNote = CONTRACT_STATUS_NOTES[contract.status];
-
   return (
     <div className="page-stack contract-detail-page">
       <button className="project-back-button" type="button" onClick={onBack}>
@@ -800,10 +801,10 @@ export function ContractDetailPage({
       <div className="contract-metric-grid">
         <article>
           <span>付款就绪度</span>
-          <strong className={readiness.ready ? 'contract-ready-text' : 'contract-attention-text'}>{readiness.label}</strong>
+          <strong className={paymentReady ? 'contract-ready-text' : 'contract-attention-text'}>{readinessLabel}</strong>
           <small>{isFrameworkContract(contract)
-            ? readiness.ready ? '可供同一达人 IO 单选择绑定' : '确认主体和签署状态后可用于绑定'
-            : readiness.ready ? '可加入新建付款项目' : '完成阻断项后才能进入付款流程'}</small>
+            ? paymentReady ? '可供同一达人 IO 单选择绑定' : validity.expired ? '合同已到期，仅保留历史关系' : '确认主体和签署状态后可用于绑定'
+            : paymentReady ? '可加入新建付款项目' : validity.expired ? '合同已到期，不能建立新的付款关联' : '完成阻断项后才能进入付款流程'}</small>
         </article>
         <article>
           <span>合同金额</span>
@@ -811,9 +812,11 @@ export function ContractDetailPage({
           <small>{hasRecognition && contract.extractionStage !== 'applied' ? '识别结果尚未应用到正式字段' : '以人工确认后的正式字段为准'}</small>
         </article>
         <article>
-          <span>合同状态</span>
-          <strong className={readiness.ready ? 'contract-ready-text' : 'contract-attention-text'}>{contract.status}</strong>
-          <small>{contractStatusNote}</small>
+          <span>{contract.isTemplate ? '使用就绪度' : '关联请款项目'}</span>
+          <strong className={contract.isTemplate ? 'contract-ready-text' : undefined}>
+            {contract.isTemplate ? (contract.issues.some((issue) => issue.severity === 'blocker') ? '待完善' : '可使用') : `${linkedRequestCount} 个`}
+          </strong>
+          <small>{contract.isTemplate ? '模板不参与请款和付款计算' : linkedRequestCount ? '按稳定合同 ID 统计当前已关联请款' : '当前合同尚未关联请款项目'}</small>
         </article>
       </div>
 
