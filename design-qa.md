@@ -735,6 +735,66 @@ final result: blocked
 
 ---
 
+# Invoice 批量达人身份卡片布局验收
+
+验收日期：2026-08-29
+
+## Source Visual Truth
+
+- 用户选中的身份参考图：
+  `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d8a4660c-e757-4d27-9493-49f4c1456cbe.png`
+- 仓库内留存的参考图：`qa/invoice-batch-creator-source.png`
+- 参考图像素尺寸：321 × 65 px。
+- 目标结构：左侧达人头像；右侧第一行 Display Name，第二行按顺序横排平台图标与 Handle Badge。
+
+## Implementation Evidence
+
+- 浏览器渲染截图：`qa/invoice-batch-creator-layout-after.jpg`
+- 同尺寸身份区域：`qa/invoice-batch-creator-identity-after.png`
+- 组合对照图：`qa/invoice-batch-creator-comparison.png`
+- 桌面 CSS 视口：1281 × 908；浏览器截图：1266 × 897 px；device scale factor 1。
+- 身份区域按参考图归一化为 321 × 65 px 后并排比较。
+- 交互状态：批量生成 Invoice 页面、项目 #301164、Mina Kato 已选中、两个社媒账号可见。
+
+## Full-view Comparison Evidence
+
+- 三列达人卡片网格、搜索区、批量操作区和选择交互保持原有结构。
+- 已选卡片继续使用系统浅绿色选中态；移除右侧份数说明后，身份区获得稳定的可用宽度。
+- 390 × 844 CSS px 下卡片宽度 311 px，无页面级横向溢出。
+
+## Focused Region Comparison Evidence
+
+- 组合图左侧为用户参考，右侧为修正后的浏览器身份区域。
+- 两侧均为 38 px 圆角头像配两层文字结构；第二层两个平台 Badge 保持同一行。
+- 两个 `@MinaKato` 均完整展示，没有截断或换行。
+
+## Comparison History
+
+1. 初始实现仍受旧的 `span:nth-of-type(2)` 规则影响，头像与文字纵向堆叠，并显示“已有 3 份，可继续生成”。
+2. 第一轮修正移除份数提示，并用 `.creator-identity` 明确建立头像与文本两列；两个 Badge 因亚像素宽度差异换成两行。
+3. 第二轮提高选择器明确度、禁止 Badge 容器换行并收紧 Badge 内边距；浏览器复核两个 Badge 同行且 Handle 无截断。
+
+## Findings
+
+- 无可执行的 P0、P1 或 P2 问题。
+- 字体与排版：沿用 COMETS Pay 字体栈和现有 Display Name/Badge 字重；主次层级与参考一致。
+- 间距与布局：头像固定在左侧，右侧严格两层；10 px 水平间距和 5 px 层间距在桌面与窄屏保持稳定。
+- 颜色与视觉 Token：保留现有平台 Badge 颜色和浅绿色选中态，没有引入新的颜色体系。
+- 图片与图标质量：头像继续复用系统 Avatar，平台继续复用现有图标组件；没有伪造或占位资产。
+- 文案与内容：已移除“已有 X 份，可继续生成”和“默认空中云汇”，保留达人身份及选择逻辑。
+
+## Interaction And Automated Verification
+
+- 桌面选中状态、390 px 窄屏布局与平台 Badge 同行展示已验证。
+- 浏览器控制台 warning/error：0。
+- 完整 Vitest：105 个测试文件、710 项测试通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+
+final result: passed
+
+---
+
 # Finance Review Footer Action Placement Design QA
 
 ## Evidence
@@ -1781,3 +1841,11 @@ final result: passed
 - 无法打开更新后的实现截图并与批注截图组合对比，因此无法完成桌面、390px、主要交互和控制台的最终视觉验收。
 
 final result: blocked
+
+---
+
+# Latest Design QA Status
+
+最新验收为本文中的“Invoice 批量达人身份卡片布局验收”。该报告已包含参考图、浏览器渲染截图、同尺寸组合对照、桌面与 390px 状态、控制台检查、完整测试和构建结果；没有待处理的 P0、P1 或 P2 问题。
+
+final result: passed

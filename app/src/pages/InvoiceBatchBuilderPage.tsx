@@ -1703,9 +1703,6 @@ export function InvoiceBatchBuilderPage({
               <div className="invoice-batch-creator-grid">
                 {filteredProjectReferences.map((reference) => {
                   const creator = prototypeCreators.find((candidate) => candidate.id === reference.creatorId);
-                  const existingCount = generatedInvoices.filter(
-                    (invoice) => invoice.snapshot.engagementId === reference.engagementId,
-                  ).length;
                   const selected = selectedEngagementIds.includes(reference.engagementId);
                   const locked = lockedEngagementIds.includes(reference.engagementId);
                   const disabled = !selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS;
@@ -1726,11 +1723,6 @@ export function InvoiceBatchBuilderPage({
                       />
                       <span className="invoice-batch-creator-check"><Check size={13} /></span>
                       <CreatorIdentity creator={creator} displayName={reference.name} fallbackHandle={reference.handle} fallbackPlatform={reference.platform} socialAccountsMode="expanded" />
-                      {existingCount ? (
-                        <em className="is-ready">已有 {existingCount} 份，可继续生成</em>
-                      ) : (
-                        <em className="is-ready">默认空中云汇</em>
-                      )}
                     </label>
                   );
                 })}

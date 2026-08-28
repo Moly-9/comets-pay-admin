@@ -28,6 +28,10 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(source).toContain("placeholder={'例如：\\nMinaKato\\nhttps://www.youtube.com/@MinaKato'}");
     expect(styles).toMatch(/\.invoice-batch-creator\.is-selected,[\s\S]*?background:\s*#f6fbf8;/);
     expect(styles).toMatch(/\.invoice-batch-creator \.avatar-sm\s*\{[\s\S]*?width:\s*38px;/);
+    expect(styles).toMatch(/\.invoice-batch-creator > \.creator-identity\s*\{[\s\S]*?grid-template-columns:\s*38px minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.invoice-batch-creator \.creator-social-accounts\.is-expanded-view\s*\{[\s\S]*?flex-wrap:\s*nowrap;/);
+    expect(source).not.toContain('可继续生成');
+    expect(source).not.toContain('默认空中云汇');
   });
 
   it('renders the five batch workflow areas as cards with individual validation metrics', () => {
