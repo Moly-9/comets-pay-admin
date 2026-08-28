@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
 import { InvoicePage, INITIAL_CREATORS, TransactionsPage } from './OperationalPages';
+
+describe('request page labels', () => {
+  it('uses the cooperation approval title and business-side description', () => {
+    const source = readFileSync(new URL('./OperationalPages.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('title="请款审批"');
+    expect(source).toContain('subtitle="业务侧已提交的请款项目列表，仅展示与当前系统账号有关的项目。"');
+    expect(source).not.toContain('subtitle="媒介已提交的请款项目列表，仅展示与当前系统账号有关的项目。"');
+  });
+});
 
 const transactionPayout = (
   currency: InvoiceCurrency,

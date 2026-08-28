@@ -1049,8 +1049,8 @@ export const INITIAL_PAYOUTS: Payout[] = RAW_INITIAL_PAYOUTS.map((payout) => ({
 export const PAGE_TITLES = {
   dashboard: '数据工作台',
   'payment-workbench': '付款工作台',
-  projects: '我的请款项目',
-  requests: '请款项目',
+  projects: '我的请款',
+  requests: '请款审批',
   contracts: '合同管理',
   'contract-create': '生成合同',
   creators: '达人档案',

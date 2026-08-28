@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { DEMO_SYSTEM_USERS } from '../data';
+import { DEMO_SYSTEM_USERS, PAGE_TITLES } from '../data';
 import type { SystemRoleKey } from '../data';
 import { AppShell } from './AppShell';
 
@@ -22,6 +22,16 @@ const renderFor = (roleKey: SystemRoleKey) => renderToStaticMarkup(
 );
 
 describe('AppShell system navigation', () => {
+  it('uses the request workflow labels without changing route identities', () => {
+    const html = renderFor('admin');
+    expect(html).toContain('请款协作');
+    expect(html).toContain('我的请款');
+    expect(html).toContain('合作审批');
+    expect(html).not.toContain('请款项目协作');
+    expect(PAGE_TITLES.projects).toBe('我的请款');
+    expect(PAGE_TITLES.requests).toBe('请款审批');
+  });
+
   it('shows system accounts and configuration to administrators', () => {
     const html = renderFor('admin');
     expect(html).toContain('系统设置');

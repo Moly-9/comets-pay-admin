@@ -937,7 +937,7 @@ export function ProjectsPage({
   return (
     <div className="page-stack">
       <PageHeading
-        title="我的项目"
+        title="我的请款"
         subtitle="仅展示与当前账号关联的项目，集中管理项目合同与invoice、达人名单、请款进度。"
         actions={canCreateProject ? <Button icon={<Plus size={17} />} onClick={openProjectModal}>新建项目</Button> : undefined}
       />
@@ -1335,8 +1335,8 @@ export function RequestsPage({
   return (
     <div className="page-stack">
       <PageHeading
-        title="请款项目"
-      subtitle="媒介已提交的请款项目列表，仅展示与当前系统账号有关的项目。"
+        title="请款审批"
+        subtitle="业务侧已提交的请款项目列表，仅展示与当前系统账号有关的项目。"
       />
       <div className="metrics-grid">
         <MetricCard

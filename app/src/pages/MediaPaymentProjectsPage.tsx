@@ -1667,7 +1667,7 @@ export function MediaPaymentProjectsPage({
   return (
     <div className="page-stack">
       <PageHeading
-        title="我的请款项目"
+        title="我的请款"
         subtitle="仅展示与当前账号关联的项目，集中管理合同与 Invoice、达人名单和请款进度。"
         actions={canCreate ? <Button icon={<Plus size={17} />} onClick={openCreateForm}>新建请款审批</Button> : undefined}
       />

@@ -8,6 +8,12 @@ import {
 } from './MediaPaymentProjectsPage';
 
 describe('new payment request resource picker', () => {
+  it('uses the concise my-request page title', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('title="我的请款"');
+    expect(source).not.toContain('title="我的请款项目"');
+  });
+
   it('shows selectable and selected resources before disabled resources', () => {
     const options = [
       { value: 'disabled-one', label: '置灰 1', description: '', selected: false, disabled: true },
