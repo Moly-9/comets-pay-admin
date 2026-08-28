@@ -1,5 +1,6 @@
 import type { InvoiceBillingEntityId } from './businessWorkflow';
 import type { InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
+import { demoDisplayName } from './demoCreatorNames';
 
 export type SystemRoleKey = 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project';
 export type LoginSessionPolicy = 'single_device' | 'multi_device';
@@ -428,7 +429,7 @@ const returnedInvoiceReviewFixture = (
   };
 };
 
-export const INITIAL_PAYOUTS: Payout[] = [
+const RAW_INITIAL_PAYOUTS: Payout[] = [
   {
     id: 'pay-001',
     creator: '@MinaKato',
@@ -1039,6 +1040,11 @@ export const INITIAL_PAYOUTS: Payout[] = [
     paidAt: '2026-08-08 16:50',
   },
 ];
+
+export const INITIAL_PAYOUTS: Payout[] = RAW_INITIAL_PAYOUTS.map((payout) => ({
+  ...payout,
+  creator: demoDisplayName(payout.creator),
+}));
 
 export const PAGE_TITLES = {
   dashboard: '数据工作台',

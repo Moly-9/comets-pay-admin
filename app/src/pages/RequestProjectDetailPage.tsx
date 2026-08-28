@@ -57,6 +57,7 @@ import {
   type PaymentRequestPaymentPlan,
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
+import { demoDisplayName } from '../demoCreatorNames';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestExtraDetails & {
   id: string;
@@ -421,7 +422,7 @@ const approvalProgress = (request: RequestProjectSummary): RequestProgress[] | n
   ];
 };
 
-const REQUEST_CREATOR_NAMES: Record<string, string[]> = {
+const RAW_REQUEST_CREATOR_NAMES: Record<string, string[]> = {
   'PRJ-260718': ['@MinaKato', 'Yuki Tanaka', 'Camila Costa', 'Oliver Chen', 'Alex Ruiz', 'Hannah Lee'],
   'PRJ-260716': ['Alex Ruiz', 'Hannah Lee', 'Luca Bianchi'],
   'PRJ-260711': ['@Luna_J', 'Emily Wong', 'Marc O.', 'Sofia Kim', 'Noah Park'],
@@ -445,7 +446,14 @@ const REQUEST_CREATOR_NAMES: Record<string, string[]> = {
   ],
 };
 
-const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
+const REQUEST_CREATOR_NAMES: Record<string, string[]> = Object.fromEntries(
+  Object.entries(RAW_REQUEST_CREATOR_NAMES).map(([projectId, names]) => [
+    projectId,
+    names.map(demoDisplayName),
+  ]),
+);
+
+const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
   'PRJ-260718': {
     brand: 'Solara Beauty',
     submitter: '赖丽红',
@@ -543,6 +551,19 @@ const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     ],
   },
 };
+
+const REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = Object.fromEntries(
+  Object.entries(RAW_REQUEST_PROJECT_DETAILS).map(([projectId, detail]) => [
+    projectId,
+    {
+      ...detail,
+      payees: detail.payees.map((payee) => ({
+        ...payee,
+        name: demoDisplayName(payee.name),
+      })),
+    },
+  ]),
+);
 
 function getRequestProjectDetail(request: RequestProjectSummary): RequestProjectDetail {
   const myProjectStatus = myProjectStatusFor(request);

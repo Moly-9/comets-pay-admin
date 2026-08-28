@@ -35,6 +35,7 @@ import {
   INITIAL_PROJECTS,
   INITIAL_REQUEST_PROJECTS,
 } from './pages/OperationalPages';
+import { demoAccountName } from './demoCreatorNames';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
 
@@ -355,7 +356,9 @@ const requestContracts: ContractRecord[] = INITIAL_PROJECTS.flatMap((project, pr
       paymentWithinWorkingDays: 45,
       feeBearer: 'ADVERTISER',
       paymentMethod: invoice.snapshot.paymentMethod === 'paypal' ? 'PAYPAL' : 'BANK',
-      accountName: invoice.snapshot.from.legalName || creator.name,
+      accountName: payment.accountName
+        || payment.paypalUsername
+        || demoAccountName(invoice.snapshot.from.legalName || creator.name),
       accountFingerprint: invoice.snapshot.payoutAccountFingerprint ?? payment.accountFingerprint ?? '原型账户快照',
       payoutAccountId: invoice.snapshot.payoutAccountId,
       payoutAccountVersion: invoice.snapshot.payoutAccountVersion,

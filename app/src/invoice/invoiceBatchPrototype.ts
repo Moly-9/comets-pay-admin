@@ -5,6 +5,7 @@ import {
 } from '../payoutAccounts';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency } from '../types';
+import { demoAccountName } from '../demoCreatorNames';
 
 export const INVOICE_BATCH_PROTOTYPE_CURRENCY = 'USD' as const;
 export const INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY: InvoiceCurrency = 'EUR';
@@ -79,7 +80,7 @@ export const withInvoiceBatchPrototypeAccounts = (
           bankCountryCode: 'US',
           bankCountryName: 'United States',
           accountCurrency: INVOICE_BATCH_PROTOTYPE_CURRENCY,
-          accountName: creator.contact.legalName,
+          accountName: demoAccountName(creator.contact.legalName),
           accountNumber: prototypeAccountNumber(creator.id),
           bankAccountCategory: 'Checking',
           accountRoutingType1: 'aba',
@@ -102,7 +103,7 @@ export const withInvoiceBatchPrototypeAccounts = (
         nickname: INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
         isDefault: false,
         status: 'VERIFIED',
-        paypalUsername: `prototype_creator_${accountSuffix}`,
+        paypalUsername: demoAccountName(`prototype_creator_${accountSuffix}`),
         paypalEmail: `invoice.prototype+${accountSuffix}@example.test`,
         transferNote: 'USD prototype payment information',
       }),

@@ -119,6 +119,7 @@ import type {
   RequestProjectStatusFilter,
 } from '../types';
 import { requestProjectStatusesForFilter } from '../requestProjectStatusFilters';
+import { demoAccountName, demoDisplayName, demoRealName } from '../demoCreatorNames';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
   ExternalInvoiceCollectionCreatePage,
@@ -1648,7 +1649,10 @@ const createSeedCreator = ({
   socialAccounts,
   ...creator
 }: CreatorSeed): CreatorProfile => {
-  const [firstName = '', ...lastNameParts] = creator.contact.legalName.trim().split(/\s+/);
+  const displayName = demoDisplayName(creator.name);
+  const realName = demoRealName(creator.contact.legalName);
+  const accountName = demoAccountName(creator.contact.legalName);
+  const [firstName = '', ...lastNameParts] = realName.split(/\s+/);
   const stableAccountSuffix = Array.from(creator.id).reduce(
     (value, character) => (value * 31 + character.charCodeAt(0)) % 100_000_000,
     0,
@@ -1698,7 +1702,7 @@ const createSeedCreator = ({
         bankCountryCode: bank.countryCode,
         bankCountryName: bank.countryName,
         accountCurrency: bank.currency,
-        accountName: creator.contact.legalName,
+        accountName,
         accountNumber: bank.accountNumber ?? '',
         iban: bank.iban ?? '',
         bankAccountCategory: bank.accountCategory ?? 'Checking',
@@ -1738,7 +1742,7 @@ const createSeedCreator = ({
       nickname: paypal.nickname ?? (resolvedBank ? 'PayPal 备用账户' : 'PayPal 主账户'),
       isDefault: paypalIsDefault,
       status: paypal.status ?? 'READY_FOR_VALIDATION',
-      paypalUsername: paypal.username,
+      paypalUsername: demoAccountName(paypal.username),
       paypalEmail: paypal.email,
     }));
   }
@@ -1749,6 +1753,11 @@ const createSeedCreator = ({
 
   return {
     ...creator,
+    name: displayName,
+    contact: {
+      ...creator.contact,
+      legalName: realName,
+    },
     socialAccounts: socialAccounts?.map((account) => ({ ...account }))
       ?? createSocialAccountsFromSummary(creator.id, creator.platform, creator.handle),
     payoutAccounts,
@@ -2770,10 +2779,10 @@ export function CreatorsPage({
 }
 
 const COLLABORATIONS = [
-  { creator: '@MinaKato', project: '夏日直播计划', deliverable: '直播 2 场 + 短视频 3 条', invoice: '已提交', payment: '待财务复核' },
-  { creator: 'Alex Ruiz', project: '新品开箱', deliverable: 'YouTube 长视频 1 条', invoice: '已通过', payment: '等待付款' },
-  { creator: 'Nika', project: 'TikTok Spark', deliverable: 'TikTok 视频 4 条', invoice: '资料异常', payment: '暂停' },
-  { creator: '@Luna_J', project: '七月联名', deliverable: 'Reels 2 条 + Story 6 条', invoice: '已通过', payment: '飞书审批中' },
+  { creator: demoDisplayName('Mina Kato'), project: '夏日直播计划', deliverable: '直播 2 场 + 短视频 3 条', invoice: '已提交', payment: '待财务复核' },
+  { creator: demoDisplayName('Alex Ruiz'), project: '新品开箱', deliverable: 'YouTube 长视频 1 条', invoice: '已通过', payment: '等待付款' },
+  { creator: demoDisplayName('Nika Petrova'), project: 'TikTok Spark', deliverable: 'TikTok 视频 4 条', invoice: '资料异常', payment: '暂停' },
+  { creator: demoDisplayName('Luna Jones'), project: '七月联名', deliverable: 'Reels 2 条 + Story 6 条', invoice: '已通过', payment: '飞书审批中' },
 ];
 
 export function CollaborationsPage({ notify, canImport }: { notify: Notify; canImport: boolean }) {
@@ -4576,7 +4585,7 @@ export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
     id: 1,
     icon: FileCheck2,
     title: 'Invoice 待审核',
-    body: '@MinaKato · Once Human主机上线KOL合作项目 · USD 3,240',
+    body: `${demoDisplayName('Mina Kato')} · Once Human主机上线KOL合作项目 · USD 3,240`,
     time: '10 分钟前',
     unread: true,
     actionLabel: '进入审核',
@@ -4585,7 +4594,7 @@ export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
   {
     id: 2,
     icon: AlertCircle,
-    title: 'Nika 的收款资料校验失败',
+    title: `${demoDisplayName('Nika Petrova')} 的收款资料校验失败`,
     body: '泰国本地转账路由代码待补充，请在达人档案中更新。',
     time: '42 分钟前',
     unread: true,
@@ -4606,7 +4615,7 @@ export const INITIAL_NOTIFICATIONS: SystemNotificationItem[] = [
     id: 4,
     icon: CheckCircle2,
     title: '付款状态已回写',
-    body: 'Kenji Mori · USD 4,100 · 已付款',
+    body: `${demoDisplayName('Kenji Mori')} · USD 4,100 · 已付款`,
     time: '昨天 14:32',
     unread: false,
     actionLabel: '查看付款详情',

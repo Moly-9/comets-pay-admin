@@ -39,6 +39,7 @@ import {
 import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceManager } from '../components/ProjectResourceManager';
 import type { SystemUser } from '../data';
+import { demoDisplayName } from '../demoCreatorNames';
 
 export type ProjectSummary = {
   id: string;
@@ -216,16 +217,17 @@ function createInvoiceRecords({
   return rows.map((row, index) => {
     const id = `INV-${projectCode}-${String(index + 1).padStart(2, '0')}`;
     const channel = paymentProviderDisplayName(row.channel);
+    const creatorName = demoDisplayName(row.creator);
     return {
       id,
-      title: row.creator,
+      title: creatorName,
       subtitle: `${invoiceDate} · ${channel}`,
       amount: row.amount,
       status,
       channel,
       fields: [
         { label: 'Invoice 编号', value: id },
-        { label: '达人 / 收款人', value: row.creator },
+        { label: '达人 / 收款人', value: creatorName },
         { label: '关联项目', value: projectName },
         { label: 'Invoice 日期', value: invoiceDate },
         { label: '付款渠道', value: channel },
@@ -432,7 +434,7 @@ const PROJECT_RESOURCE_RECORDS: Record<string, ProjectResourceRecords> = {
   },
 };
 
-const PROJECT_DETAILS: Record<string, ProjectDetail> = {
+const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
   'PRJ-260718': {
     media: '赖丽红',
     requestReason: '支付直播达人首期合作费用、内容制作费用及项目投流预算。',
@@ -518,6 +520,19 @@ const PROJECT_DETAILS: Record<string, ProjectDetail> = {
     ],
   },
 };
+
+const PROJECT_DETAILS: Record<string, ProjectDetail> = Object.fromEntries(
+  Object.entries(RAW_PROJECT_DETAILS).map(([projectId, detail]) => [
+    projectId,
+    {
+      ...detail,
+      creators: detail.creators.map((creator) => ({
+        ...creator,
+        name: demoDisplayName(creator.name),
+      })),
+    },
+  ]),
+);
 
 function resolveProjectCreatorReferences(
   project: ProjectSummary,

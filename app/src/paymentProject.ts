@@ -1,4 +1,5 @@
 import type { ContractRecord } from './contracts';
+import { demoAccountName, demoRealName } from './demoCreatorNames';
 
 export type PaymentProjectInvoice = {
   id: string;
@@ -46,13 +47,13 @@ export const PAYMENT_PROJECT_INVOICES: PaymentProjectInvoice[] = [
   {
     id: 'INV-260831-LM',
     contractId: 'CON-260724-KOL-01',
-    creator: 'Léa Martin',
+    creator: demoRealName('Léa Martin'),
     billTo: 'Comets International Limited',
     project: 'Nebula Quest 法国市场推广',
     currency: 'EUR',
     total: 8500,
     paymentMethod: 'BANK',
-    accountName: 'Léa Martin',
+    accountName: demoAccountName('Léa Martin'),
     accountFingerprint: '•••• 4821',
     beneficiaryId: 'bene_demo_lea',
     provider: 'Airwallex',
@@ -62,13 +63,13 @@ export const PAYMENT_PROJECT_INVOICES: PaymentProjectInvoice[] = [
   {
     id: 'INV-260831-LM-REV',
     contractId: 'CON-260724-KOL-01',
-    creator: 'Lea Martin Studio',
+    creator: demoRealName('Lea Martin Studio'),
     billTo: 'Comets International Limited',
     project: 'Nebula Quest 法国市场推广',
     currency: 'USD',
     total: 9000,
     paymentMethod: 'BANK',
-    accountName: 'Lea Martin Studio',
+    accountName: demoAccountName('Lea Martin Studio'),
     accountFingerprint: '•••• 7190',
     beneficiaryId: 'bene_demo_lea_studio',
     provider: 'Airwallex',
@@ -78,13 +79,13 @@ export const PAYMENT_PROJECT_INVOICES: PaymentProjectInvoice[] = [
   {
     id: 'INV-240718',
     contractId: 'CON-260718-01',
-    creator: 'Mina Kato',
+    creator: demoRealName('Mina Kato'),
     billTo: 'Solara Beauty Limited',
     project: '夏日直播计划',
     currency: 'USD',
     total: 32000,
     paymentMethod: 'BANK',
-    accountName: 'Mina Kato',
+    accountName: demoAccountName('Mina Kato'),
     accountFingerprint: '•••• 1842',
     beneficiaryId: 'bene_demo_mina',
     provider: 'Airwallex',

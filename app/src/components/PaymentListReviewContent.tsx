@@ -27,6 +27,7 @@ import type {
   RequestFinanceReview,
 } from '../financeReview';
 import { bankAddress, formatInvoiceMoney } from '../invoice/invoiceUtils';
+import { demoRealName } from '../demoCreatorNames';
 import {
   reviewPaymentListAccountSnapshot,
   validatePaymentListAccountViaApi,
@@ -676,7 +677,10 @@ export function PaymentListReviewContent({
                   'Hong Kong SAR China': 'HK',
                   Singapore: 'SG',
                 };
-                const realNameParts = String(row.item.snapshot.realName || creator?.name || 'Mina Kato').trim().split(/\s+/);
+                const realName = row.item.snapshot.realName
+                  || creator?.contact.legalName
+                  || demoRealName('Mina Kato');
+                const realNameParts = realName.trim().split(/\s+/);
                 const schemaDemoValues: Record<string, string> = {
                   'beneficiary.entity_type': details?.beneficiaryType || 'PERSONAL',
                   'beneficiary.bank_details.bank_country_code': countryCodeByName[bankCountry] || bankCountry,
@@ -755,7 +759,7 @@ export function PaymentListReviewContent({
                       { id: 'payment-method', label: '付款方式', value: transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem) },
                       { id: 'swift-charge-option', label: 'SWIFT 费用选项', value: row.effectiveAccount.transferMethod === 'SWIFT' ? 'SHA · 共同承担' : '—' },
                       { id: 'fee-bearer', label: '手续费承担方', value: feeBearerLabel(paymentListItemValue(row.item, 'feeBearer')) },
-                      { id: 'real-name', label: 'Real Name', value: row.item.snapshot.realName || creator?.name || 'Camila Costa' },
+                      { id: 'real-name', label: 'Real Name', value: realName },
                       { id: 'beneficiary-type', label: '收款方类型', value: details?.beneficiaryType || 'PERSONAL' },
                       { id: 'bank-country', label: '银行国家 / 地区', value: bankCountry },
                       { id: 'account-currency', label: '账户币种', value: details?.accountCurrency || currency },

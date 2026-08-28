@@ -8,6 +8,7 @@ import {
   invoicePaymentForCreator,
 } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
+import { demoAccountName } from './demoCreatorNames';
 import type {
   ContractId,
   CreatorId,
@@ -417,7 +418,9 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     paymentWithinWorkingDays: 45,
     feeBearer: 'ADVERTISER',
     paymentMethod: provider === 'PayPal' ? 'PAYPAL' : 'BANK',
-    accountName: payment.accountName || creator.contact.legalName || creator.name,
+    accountName: payment.accountName
+      || payment.paypalUsername
+      || demoAccountName(creator.contact.legalName || creator.name),
     accountFingerprint: accountFingerprintForCreator(creator),
     payoutAccountId: payment.payoutAccountId,
     payoutAccountVersion: payment.payoutAccountVersion,
@@ -553,7 +556,9 @@ export const REQUEST_CONTRACT_ASSOCIATION_FIXTURES: ContractRecord[] = REQUEST_C
     paymentWithinWorkingDays: 45,
     feeBearer: 'ADVERTISER',
     paymentMethod: payment.payoutProvider === 'PayPal' ? 'PAYPAL' : 'BANK',
-    accountName: payment.accountName || creator.contact.legalName || creator.name,
+    accountName: payment.accountName
+      || payment.paypalUsername
+      || demoAccountName(creator.contact.legalName || creator.name),
     accountFingerprint: accountFingerprintForCreator(creator),
     payoutAccountId: payment.payoutAccountId,
     payoutAccountVersion: payment.payoutAccountVersion,
