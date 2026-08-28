@@ -45,6 +45,7 @@ import {
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
 import type { GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 
@@ -533,7 +534,7 @@ export function PaymentBatchDetailPage({
                             >
                               <span className="payment-batch-item-person">
                                 <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                                <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
+                                <span><strong>{item.creatorName}</strong><small>{formatCreatorHandle(item.creatorHandle, item.creatorPlatform)}</small></span>
                               </span>
                               <span className="payment-batch-item-provider" data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
                               <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>

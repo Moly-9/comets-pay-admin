@@ -297,6 +297,8 @@ export type InvoiceDocumentModel = {
   signatureText?: string;
   billTo: InvoiceEntity;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   creatorName: string;
   creatorId?: CreatorId;
   engagementId?: EngagementId;
@@ -465,6 +467,8 @@ export type InvoiceBatchRow = {
   creatorId: CreatorId;
   creatorName: string;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   sourcePayoutId: string;
   invoiceDate: string;
   items: InvoiceBatchLineItem[];
@@ -603,6 +607,8 @@ export type Payout = {
   paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
   handle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   initials: string;
   projectId: string;
   project: string;

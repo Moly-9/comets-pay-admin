@@ -202,6 +202,8 @@ export type ExternalInvoiceCollectionInput = {
   creatorId: CreatorId;
   creatorName: string;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   contractIds: ContractId[];
   presetPayoutAccountId: string;
   presetPayoutAccountSnapshot: DocumentPayoutSnapshot;
@@ -219,6 +221,8 @@ export type ExternalInvoiceCollectionRecord = {
   creatorId: CreatorId;
   creatorName: string;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   contractIds: ContractId[];
   presetPayoutAccountId: string;
   presetPayoutAccountSnapshot: DocumentPayoutSnapshot;
@@ -306,6 +310,8 @@ export const createExternalInvoiceCollection = ({
   creatorId,
   creatorName,
   creatorHandle,
+  creatorSocialAccountId,
+  creatorPlatform,
   contractIds,
   presetPayoutAccountId,
   presetPayoutAccountSnapshot,
@@ -335,6 +341,8 @@ export const createExternalInvoiceCollection = ({
     creatorId,
     creatorName,
     creatorHandle,
+    creatorSocialAccountId,
+    creatorPlatform,
     contractIds,
     presetPayoutAccountId,
     presetPayoutAccountSnapshot: { ...presetPayoutAccountSnapshot },
@@ -892,6 +900,8 @@ export const buildApprovedExternalInvoice = ({
     invoiceDate,
     billTo: { ...record.expected.billTo },
     creatorHandle: record.creatorHandle,
+    creatorSocialAccountId: record.creatorSocialAccountId,
+    creatorPlatform: record.creatorPlatform,
     creatorName: record.creatorName,
     creatorId: record.creatorId,
     engagementId: record.engagementId,
@@ -947,6 +957,8 @@ export const buildApprovedExternalInvoice = ({
     id: payoutId,
     creator: record.creatorName,
     handle: record.creatorHandle,
+    creatorSocialAccountId: record.creatorSocialAccountId,
+    creatorPlatform: record.creatorPlatform,
     initials: creator.initials,
     projectId: String(record.projectId),
     project: record.projectName,

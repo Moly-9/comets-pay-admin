@@ -120,6 +120,13 @@ import type {
 } from '../types';
 import { requestProjectStatusesForFilter } from '../requestProjectStatusFilters';
 import { demoAccountName, demoDisplayName, demoRealName } from '../demoCreatorNames';
+import {
+  creatorSocialAccounts,
+  creatorSocialSelectionValue,
+  formatCreatorHandle,
+  parseCreatorSocialSelectionValue,
+  resolveCreatorSocialAccount,
+} from '../creatorSearchOptions';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
   ExternalInvoiceCollectionCreatePage,
@@ -767,8 +774,10 @@ export function ProjectsPage({
           selectedCreatorHandles?: string[];
         };
         const validPM = PM_USERS.some((user) => user.name === draft.selectedPM);
-        const creatorHandleSet = new Set(creators.map((creator) => creator.handle));
-        const validHandles = (draft.selectedCreatorHandles ?? []).filter((handle) => creatorHandleSet.has(handle));
+        const creatorSelectionSet = new Set(creators.flatMap((creator) => (
+          creatorSocialAccounts(creator).map((account) => creatorSocialSelectionValue(creator.id, account.id))
+        )));
+        const validHandles = (draft.selectedCreatorHandles ?? []).filter((value) => creatorSelectionSet.has(value));
         setName(draft.name ?? '');
         setBrand(draft.customer ?? '');
         setSelectedPM(validPM ? draft.selectedPM! : (PM_USERS[0]?.name ?? ''));
@@ -791,7 +800,12 @@ export function ProjectsPage({
 
   const createProject = () => {
     if (!name.trim() || !selectedPM || selectedCreatorHandles.length === 0) return;
-    const selectedCreatorProfiles = creators.filter((creator) => selectedCreatorHandles.includes(creator.handle));
+    const selectedCreatorProfiles = selectedCreatorHandles.flatMap((value) => {
+      const selection = parseCreatorSocialSelectionValue(value);
+      const creator = creators.find((item) => item.id === selection?.creatorId);
+      const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
+      return creator && socialAccount ? [{ creator, socialAccount }] : [];
+    });
     if (selectedCreatorProfiles.length === 0) return;
     const projectId = createPrototypeId('project') as ProjectId;
     const projectCode = createPrototypeCode('PRJ');
@@ -805,7 +819,7 @@ export function ProjectsPage({
       media: currentUser.name,
       pm: selectedPM,
       creators: selectedCreatorProfiles.length,
-      creatorProfiles: selectedCreatorProfiles.map((creator) => ({
+      creatorProfiles: selectedCreatorProfiles.map(({ creator, socialAccount }) => ({
         creatorId: creator.id as CreatorId,
         projectId,
         engagementId: createPrototypeId('engagement') as EngagementId,
@@ -813,8 +827,9 @@ export function ProjectsPage({
         createdAt,
         updatedAt: createdAt,
         name: creator.name,
-        handle: creator.handle,
-        platform: creator.platform,
+        handle: socialAccount.handle,
+        platform: socialAccount.platform,
+        socialAccountId: socialAccount.id,
       })),
       requestReason: requestReason.trim(),
       invoiceCount: 0,
@@ -835,9 +850,13 @@ export function ProjectsPage({
       notify('项目资料已锁定', '当前账号或项目状态不允许修改达人名单。');
       return;
     }
-    const nextCreatorIds = new Set(
-      creators.filter((creator) => creatorHandles.includes(creator.handle)).map((creator) => creator.id),
-    );
+    const selectedCreatorAccounts = creatorHandles.flatMap((value) => {
+      const selection = parseCreatorSocialSelectionValue(value);
+      const creator = creators.find((item) => item.id === selection?.creatorId);
+      const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
+      return creator && socialAccount ? [{ creator, socialAccount }] : [];
+    });
+    const nextCreatorIds = new Set(selectedCreatorAccounts.map(({ creator }) => creator.id));
     const removedReferences = (project.creatorProfiles ?? []).filter((reference) => !nextCreatorIds.has(reference.creatorId));
     const blockedRemoval = removedReferences.find((reference) => (
       contracts.some((contract) => contract.engagementId === reference.engagementId)
@@ -848,14 +867,13 @@ export function ProjectsPage({
       notify('无法移除达人', `${blockedRemoval.name} 仍有关联合同、Invoice 或付款清单，请先处理这些资料。`);
       return;
     }
-    const selectedHandleSet = new Set(creatorHandles);
-    const selectedCreatorProfiles = creators.filter((creator) => selectedHandleSet.has(creator.handle));
+    const selectedCreatorProfiles = selectedCreatorAccounts;
     onProjectsChange((current) => current.map((project) => (
       project.id === projectId
         ? {
             ...project,
             creators: selectedCreatorProfiles.length,
-            creatorProfiles: selectedCreatorProfiles.map((creator) => ({
+            creatorProfiles: selectedCreatorProfiles.map(({ creator, socialAccount }) => ({
               creatorId: creator.id as CreatorId,
               engagementId: project.creatorProfiles?.find((item) => item.creatorId === creator.id)?.engagementId
                 ?? createPrototypeId('engagement') as EngagementId,
@@ -864,8 +882,9 @@ export function ProjectsPage({
               createdAt: project.creatorProfiles?.find((item) => item.creatorId === creator.id)?.createdAt ?? nowIso(),
               updatedAt: nowIso(),
               name: creator.name,
-              handle: creator.handle,
-              platform: creator.platform,
+              handle: socialAccount.handle,
+              platform: socialAccount.platform,
+              socialAccountId: socialAccount.id,
             })),
           }
         : project
@@ -1799,7 +1818,11 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
     paypal: { username: 'nika.spark.prototype', email: 'nika.spark@example.test', nickname: 'PayPal USD 备用账户', status: 'VERIFIED' },
   }),
   createSeedCreator({
-    id: 'creator-luna', initials: 'LJ', accent: '#a855f7', name: 'Luna Jones', handle: '@Luna_J', region: '美国', platform: 'Instagram', projects: 5,
+    id: 'creator-luna', initials: 'LJ', accent: '#a855f7', name: 'Luna Jones', handle: '@Luna_J', region: '美国', platform: 'Instagram · TikTok', projects: 5,
+    socialAccounts: [
+      createSocialAccount('social-creator-luna-instagram', 'Instagram', '@Luna_J'),
+      createSocialAccount('social-creator-luna-tiktok', 'TikTok', '@luna.j.tiktok'),
+    ],
     contact: createInvoiceContact('Luna Jones', 'luna.jones@creator.example', '+1 212 555 0146', 'New York, NY, United States'),
     bank: { countryCode: 'US', countryName: 'United States', currency: 'USD', accountNumber: '0000000006', bankName: 'JPMorgan Chase Bank', clearingSystem: 'ACH', routingType1: 'aba', routingValue1: '000000000', streetAddress: '270 Park Avenue', city: 'New York', state: 'New York', postcode: '10017' },
     paypal: { username: 'luna.jones', email: 'luna.jones@example.com' },
@@ -1951,15 +1974,28 @@ function ProjectCreatorPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const normalizedSearch = search.trim().toLowerCase();
-  const visibleCreators = creators.filter((creator) => !normalizedSearch || (
-    `${creator.name}${creator.handle}${creator.region}${creator.platform}`.toLowerCase().includes(normalizedSearch)
+  const creatorAccounts = creators.flatMap((creator) => creatorSocialAccounts(creator).map((socialAccount) => ({
+    creator,
+    socialAccount,
+    value: creatorSocialSelectionValue(creator.id, socialAccount.id),
+  })));
+  const visibleCreators = creatorAccounts.filter(({ creator, socialAccount }) => !normalizedSearch || (
+    `${creator.name}${socialAccount.handle}${creator.region}${socialAccount.platform}${socialAccount.profileUrl}`.toLowerCase().includes(normalizedSearch)
   ));
-  const selectedCreators = creators.filter((creator) => selectedHandles.includes(creator.handle));
+  const selectedCreators = selectedHandles.flatMap((value) => {
+    const selection = parseCreatorSocialSelectionValue(value);
+    const creator = creators.find((item) => item.id === selection?.creatorId);
+    const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
+    return creator && socialAccount ? [{ creator, socialAccount, value }] : [];
+  });
 
-  const toggleCreator = (handle: string) => {
-    onChange(selectedHandles.includes(handle)
-      ? selectedHandles.filter((selectedHandle) => selectedHandle !== handle)
-      : [...selectedHandles, handle]);
+  const toggleCreator = (creatorId: string, value: string) => {
+    const existing = selectedHandles.find((selectedValue) => (
+      parseCreatorSocialSelectionValue(selectedValue)?.creatorId === creatorId
+    ));
+    onChange(existing === value
+      ? selectedHandles.filter((selectedValue) => selectedValue !== value)
+      : [...selectedHandles.filter((selectedValue) => selectedValue !== existing), value]);
   };
 
   return (
@@ -1983,16 +2019,16 @@ function ProjectCreatorPicker({
 
       {selectedCreators.length > 0 ? (
         <div className="creator-selection-chips" aria-label="已选择的合作达人">
-          {selectedCreators.map((creator) => (
+          {selectedCreators.map(({ creator, socialAccount, value }) => (
             <button
               className="creator-selection-chip"
               type="button"
               aria-label={`移除 ${creator.name}`}
-              key={creator.handle}
-              onClick={() => toggleCreator(creator.handle)}
+              key={value}
+              onClick={() => toggleCreator(creator.id, value)}
             >
               <Avatar initials={creator.initials} accent={creator.accent} size="sm" />
-              <span>{creator.name}</span>
+              <span>{creator.name} · {formatCreatorHandle(socialAccount.handle, socialAccount.platform)}</span>
               <X size={13} aria-hidden="true" />
             </button>
           ))}
@@ -2009,27 +2045,27 @@ function ProjectCreatorPicker({
             </label>
             <span className="creator-picker-result-count" aria-live="polite">
               <strong>{visibleCreators.length}</strong>
-              <span>/ {creators.length} 位</span>
+              <span>/ {creatorAccounts.length} 个账号</span>
             </span>
           </div>
           <div className="creator-option-list">
-            {visibleCreators.map((creator) => {
-              const selected = selectedHandles.includes(creator.handle);
+            {visibleCreators.map(({ creator, socialAccount, value }) => {
+              const selected = selectedHandles.includes(value);
               return (
                 <button
                   className={`creator-option ${selected ? 'creator-option-selected' : ''}`}
-                  data-creator-handle={creator.handle}
+                  data-creator-handle={socialAccount.handle}
                   type="button"
                   role="option"
                   aria-selected={selected}
-                  key={creator.handle}
-                  onClick={() => toggleCreator(creator.handle)}
+                  key={value}
+                  onClick={() => toggleCreator(creator.id, value)}
                 >
                   <span className="creator-option-profile">
                     <Avatar initials={creator.initials} accent={creator.accent} size="sm" />
-                    <span><strong>{creator.name}</strong><small>{creator.handle}</small></span>
+                    <span><strong>{creator.name}</strong><small>{socialAccount.handle} · {socialAccount.platform}</small></span>
                   </span>
-                  <span className="creator-option-meta"><strong>{creator.region}</strong><small>{creator.platform}</small></span>
+                  <span className="creator-option-meta"><strong>{creator.region}</strong><small>{socialAccount.platform}</small></span>
                   {selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}
                 </button>
               );
@@ -3052,16 +3088,23 @@ export function InvoicePage({
       snapshot?.creatorName ?? payout.creator,
       snapshot?.creatorHandle ?? payout.handle,
     );
-    const primarySocialAccount = creator?.socialAccounts.find((account) => account.handle.trim());
+    const primarySocialAccount = resolveCreatorSocialAccount(
+      creator,
+      snapshot?.creatorSocialAccountId ?? payout.creatorSocialAccountId,
+      snapshot?.creatorHandle ?? payout.handle,
+      snapshot?.creatorPlatform ?? payout.creatorPlatform,
+    );
     return {
       displayName: creator?.name ?? snapshot?.creatorName ?? payout.creator,
       channelId: primarySocialAccount?.handle
         ?? creator?.handle
         ?? snapshot?.creatorHandle
         ?? payout.handle,
-      platform: primarySocialAccount?.platform.trim()
-        || creator?.platform?.trim()
-        || '社媒平台待补充',
+      platform: snapshot?.creatorPlatform
+        ?? payout.creatorPlatform
+        ?? primarySocialAccount?.platform.trim()
+        ?? creator?.platform?.trim()
+        ?? '社媒平台待补充',
       initials: creator?.initials ?? payout.initials,
       accent: creator?.accent ?? payout.accent,
     };
@@ -3133,7 +3176,12 @@ export function InvoicePage({
   });
   const externalRows: InvoiceManagementRow[] = externalInvoices.map((record) => {
     const creator = creators.find((candidate) => candidate.id === record.creatorId);
-    const primarySocialAccount = creator?.socialAccounts.find((account) => account.handle.trim());
+    const primarySocialAccount = resolveCreatorSocialAccount(
+      creator,
+      record.creatorSocialAccountId,
+      record.creatorHandle,
+      record.creatorPlatform,
+    );
     const status = externalInvoiceListStatus(record.status);
     const primaryAction = (record.status === 'WAITING_MEDIA_REVIEW' && canReviewMedia)
       || (record.status !== 'APPROVED' && record.status !== 'WAITING_MEDIA_REVIEW' && canManageInvoice);
@@ -3145,9 +3193,10 @@ export function InvoicePage({
       channelId: primarySocialAccount?.handle
         ?? creator?.handle
         ?? record.creatorHandle,
-      creatorPlatform: primarySocialAccount?.platform.trim()
-        || creator?.platform?.trim()
-        || '社媒平台待补充',
+      creatorPlatform: record.creatorPlatform
+        ?? primarySocialAccount?.platform.trim()
+        ?? creator?.platform?.trim()
+        ?? '社媒平台待补充',
       initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
       accent: creator?.accent ?? '#9c6f93',
       issuerName: creator?.contact.legalName ?? '待补充',

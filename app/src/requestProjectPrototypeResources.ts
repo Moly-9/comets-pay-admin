@@ -556,6 +556,9 @@ const requests: RequestProjectSummary[] = requestSeeds.map((request) => {
   const entries = requestInvoiceEntries.filter((entry) => entry.request.id === request.id);
   const creatorLinks: PaymentRequestCreatorLink[] = entries.map(({ invoice, contract }) => ({
     creatorId: invoice.snapshot.creatorId!,
+    socialAccountId: invoice.snapshot.creatorSocialAccountId,
+    creatorHandle: invoice.snapshot.creatorHandle,
+    creatorPlatform: invoice.snapshot.creatorPlatform,
     engagementId: invoice.snapshot.engagementId!,
     contractIds: [contract.contractId!],
     invoiceIds: [invoice.invoiceId],

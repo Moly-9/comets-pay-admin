@@ -15,6 +15,7 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { accountDisplayValue, emailDisplayValue, isLegacyMaskedAccountValue } from '../accountPresentation';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
@@ -826,7 +827,7 @@ export function InvoiceDetailPage({
 
       <PageHeading
         title={model.invoiceNumber}
-        subtitle={`${model.creatorHandle || model.creatorName} · ${model.projectName || '待关联项目'}`}
+        subtitle={`${model.creatorHandle ? formatCreatorHandle(model.creatorHandle, model.creatorPlatform) : model.creatorName} · ${model.projectName || '待关联项目'}`}
         actions={(
           <div className="invoice-detail-header-actions">
             <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyInvoiceId}>复制编号</Button>

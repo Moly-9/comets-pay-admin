@@ -143,8 +143,8 @@ describe('transaction records', () => {
     });
 
     expect(transactionDateKey(failed)).toBe('2026-08-04');
-    expect(transactionCreatorLabel(failed)).toBe('Mina Kato (@MinaKato)');
-    expect(transactionCreatorLabel(payout({ creator: '@MinaKato' }))).toBe('@MinaKato');
+    expect(transactionCreatorLabel(failed)).toBe('Mina Kato (@MinaKato · 社媒平台待补充)');
+    expect(transactionCreatorLabel(payout({ creator: '@MinaKato', creatorPlatform: 'Instagram' }))).toBe('@MinaKato · Instagram');
   });
 
   it('matches stable batch context and searches request, batch, payer, and payment-list data', () => {

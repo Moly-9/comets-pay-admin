@@ -369,6 +369,8 @@ const assertStableInvoiceIdentity = (
     || snapshot.creatorId !== previous.creatorId
     || snapshot.creatorName !== previous.creatorName
     || snapshot.creatorHandle !== previous.creatorHandle
+    || snapshot.creatorSocialAccountId !== previous.creatorSocialAccountId
+    || snapshot.creatorPlatform !== previous.creatorPlatform
     || snapshot.engagementId !== previous.engagementId
     || snapshot.projectId !== previous.projectId
     || snapshot.projectName !== previous.projectName

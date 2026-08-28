@@ -39,6 +39,7 @@ import {
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
 import type { GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 import { PaymentItemDetails } from './PaymentBatchDetailPage';
 
 const displayTime = (value?: string) => value
@@ -358,7 +359,7 @@ export function PaymentProjectPaymentDetailPage({
                   >
                     <span className="payment-batch-item-person">
                       <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                      <span><strong>{item.creatorName}</strong><small>{item.creatorHandle}</small></span>
+                      <span><strong>{item.creatorName}</strong><small>{formatCreatorHandle(item.creatorHandle, item.creatorPlatform)}</small></span>
                     </span>
                     <span className="payment-batch-item-provider" data-label="付款渠道">
                       <PaymentProviderBadge compact provider={item.provider} />

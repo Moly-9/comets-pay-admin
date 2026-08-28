@@ -35,6 +35,7 @@ import {
   type PaymentAccountFieldIssue,
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
+import { creatorHandleForDisplay } from '../creatorSearchOptions';
 import { Avatar, Button } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
@@ -506,8 +507,12 @@ export function PaymentListReviewContent({
                         .map((part) => part[0]?.toUpperCase())
                         .join('') || '—';
                       const recipientName = creator?.name || row.item.snapshot.creatorName;
-                      const recipientHandle = creator?.handle || row.item.snapshot.creatorHandle || 'Handle 待补充';
-                      const recipientPlatform = creator?.platform || '社媒平台待补充';
+                      const recipientHandle = creatorHandleForDisplay({
+                        creator,
+                        socialAccountId: row.item.snapshot.creatorSocialAccountId,
+                        handle: row.item.snapshot.creatorHandle,
+                        platform: row.item.snapshot.creatorPlatform,
+                      });
                       const subjectName = recipientSubjectName(
                         row.effectiveAccount,
                         row.item.snapshot.realName,
@@ -521,7 +526,6 @@ export function PaymentListReviewContent({
                               <div>
                                 <strong>{recipientName}</strong>
                                 <small>{recipientHandle}</small>
-                                <small>{recipientPlatform}</small>
                               </div>
                             </div>
                           </td>

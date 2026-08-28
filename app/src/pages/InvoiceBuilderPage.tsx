@@ -17,7 +17,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { SearchableComboBox } from '../components/SearchableComboBox';
-import { creatorSearchOption } from '../creatorSearchOptions';
+import {
+  creatorSearchOption,
+  creatorSocialAccountSearchOptions,
+  creatorSocialSelectionValue,
+  parseCreatorSocialSelectionValue,
+  resolveCreatorSocialAccount,
+} from '../creatorSearchOptions';
 import {
   createPrototypeId,
   type CreatorId,
@@ -193,6 +199,12 @@ export function InvoiceBuilderPage({
   const initialCreator = creators.find((creator) => (
     creator.id === (editSnapshot?.creatorId ?? initialContext?.reference.creatorId)
   ));
+  const initialSocialAccount = resolveCreatorSocialAccount(
+    initialCreator,
+    editSnapshot?.creatorSocialAccountId ?? initialContext?.reference.socialAccountId,
+    editSnapshot?.creatorHandle ?? initialContext?.reference.handle,
+    editSnapshot?.creatorPlatform ?? initialContext?.reference.platform,
+  );
   const initialProjectId = editSnapshot?.cooperationProjectId
     ?? editSnapshot?.projectId
     ?? (initialContext ? cooperationProjectIdFor(initialContext.project) : '');
@@ -202,6 +214,9 @@ export function InvoiceBuilderPage({
       )) ?? eligibleInvoicePayoutAccounts(initialCreator)[0] ?? null
     : null;
   const [creatorId, setCreatorId] = useState(initialCreator?.id ?? editSnapshot?.creatorId ?? '');
+  const [creatorSocialAccountId, setCreatorSocialAccountId] = useState(
+    editSnapshot?.creatorSocialAccountId ?? initialSocialAccount?.id ?? '',
+  );
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId);
   const [engagementId, setEngagementId] = useState(editSnapshot?.engagementId ?? initialEngagementId ?? '');
   const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
@@ -274,6 +289,15 @@ export function InvoiceBuilderPage({
   }), [contracts, creators, generatedInvoices, payouts, projects]);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
+  const selectedSocialAccount = resolveCreatorSocialAccount(
+    selectedCreator,
+    creatorSocialAccountId,
+    editSnapshot?.creatorHandle,
+    editSnapshot?.creatorPlatform,
+  );
+  const creatorSelectionValue = creatorId && selectedSocialAccount
+    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
+    : '';
   const eligiblePayoutAccounts = eligibleInvoicePayoutAccounts(selectedCreator);
   const payoutAccountOptions = eligiblePayoutAccounts.map((account) => ({
     value: getPayoutAccountId(account),
@@ -307,7 +331,7 @@ export function InvoiceBuilderPage({
   const selectedContracts = selectableContracts.filter((contract) => (
     contract.contractId && contractIds.includes(contract.contractId)
   ));
-  const creatorOptions = creators.map(invoiceCreatorSearchOption);
+  const creatorOptions = creators.flatMap(creatorSocialAccountSearchOptions);
   const projectOptions = projects.map((project) => ({
     value: cooperationProjectIdFor(project),
     label: project.name,
@@ -334,7 +358,15 @@ export function InvoiceBuilderPage({
     invoiceNumber,
     invoiceDate,
     billTo,
-    creatorHandle: isEditing ? editSnapshot?.creatorHandle ?? '' : selectedCreator?.handle ?? '',
+    creatorHandle: isEditing
+      ? editSnapshot?.creatorHandle ?? ''
+      : selectedSocialAccount?.handle ?? selectedCreator?.handle ?? '',
+    creatorSocialAccountId: isEditing
+      ? editSnapshot?.creatorSocialAccountId
+      : selectedSocialAccount?.id,
+    creatorPlatform: isEditing
+      ? editSnapshot?.creatorPlatform
+      : selectedSocialAccount?.platform ?? selectedCreator?.platform,
     creatorName: isEditing ? editSnapshot?.creatorName ?? '' : selectedCreator?.name ?? '',
     creatorId: isEditing
       ? editSnapshot?.creatorId
@@ -362,7 +394,7 @@ export function InvoiceBuilderPage({
     payoutAccountFingerprint: payment.accountFingerprint,
     paymentMethod,
     payment,
-  }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, payoutAccountId, selectedCreator, selectedProject]);
+  }), [billTo, contractIds, currency, editSnapshot, engagementId, from, invoiceDate, invoiceNumber, isEditing, items, payment, paymentMethod, payoutAccountId, selectedCreator, selectedProject, selectedSocialAccount]);
   const contractMatch = useMemo(() => evaluateInvoiceContractMatch(
     selectedContracts,
     model,
@@ -396,9 +428,11 @@ export function InvoiceBuilderPage({
     return () => window.removeEventListener('beforeunload', guard);
   }, [isDirty, isEditing]);
 
-  const selectCreator = (id: string) => {
-    const creator = creators.find((item) => item.id === id);
-    setCreatorId(id);
+  const selectCreator = (value: string) => {
+    const selection = parseCreatorSocialSelectionValue(value);
+    const creator = creators.find((item) => item.id === selection?.creatorId);
+    setCreatorId(selection?.creatorId ?? '');
+    setCreatorSocialAccountId(selection?.socialAccountId ?? '');
     setSelectedProjectId('');
     setEngagementId('');
     setContractIds([]);
@@ -423,6 +457,14 @@ export function InvoiceBuilderPage({
       reference.engagementId === prototypeSeed.engagementId
     )));
     setCreatorId(prototypeSeed.creatorId);
+    const reference = project?.creatorProfiles?.find((item) => item.engagementId === prototypeSeed.engagementId);
+    const socialAccount = resolveCreatorSocialAccount(
+      creator,
+      reference?.socialAccountId,
+      reference?.handle,
+      reference?.platform,
+    );
+    setCreatorSocialAccountId(socialAccount?.id ?? '');
     setSelectedProjectId(project ? cooperationProjectIdFor(project) : '');
     setEngagementId(prototypeSeed.engagementId);
     setContractIds([]);
@@ -685,7 +727,7 @@ export function InvoiceBuilderPage({
                 <SearchableComboBox
                   ariaLabel="合作达人"
                   className="creator-search-combobox"
-                  value={creatorId}
+                  value={creatorSelectionValue}
                   placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name"
                   options={creatorOptions}
                   onChange={selectCreator}

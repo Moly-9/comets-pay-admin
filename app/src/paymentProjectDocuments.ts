@@ -3,6 +3,7 @@ import { accountDisplayValue } from './accountPresentation';
 import { contractDocumentFilename } from './documentFilenames';
 import { invoiceFilename } from './invoice/invoiceUtils';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
+import { formatCreatorHandle } from './creatorSearchOptions';
 import { createFlatProjectPdfArchive } from './projectResourcePdfArchive';
 import type {
   PaymentBatchItemSnapshot,
@@ -144,7 +145,7 @@ export const createPaymentProjectWorkbook = async ({
       requestCode: request.requestCode,
       paymentListCode: item.paymentListCode,
       creatorName: item.creatorName,
-      creatorHandle: item.creatorHandle,
+      creatorHandle: formatCreatorHandle(item.creatorHandle, item.creatorPlatform),
       contracts: item.contracts.map((contract) => contract.contractCode).join('、') || item.legacyContractReference || '未关联',
       invoice: item.invoice?.invoiceNumber || item.legacyInvoiceReference || '未关联',
       provider: paymentProviderDisplayName(item.provider),

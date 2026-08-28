@@ -965,6 +965,8 @@ export const invoicePaymentForCreator = (
   creator: CreatorProfile | null | undefined,
   provider?: Provider,
 ) => createDocumentPayoutSnapshot(
-  creator ? getPayoutAccountForProvider(creator.payoutAccounts, provider) : null,
+  creator?.payoutAccounts?.length
+    ? getPayoutAccountForProvider(creator.payoutAccounts, provider)
+    : null,
   creator?.id,
 );

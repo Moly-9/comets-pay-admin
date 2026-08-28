@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 import { Button, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
@@ -220,7 +221,10 @@ function ContractDefinitionList({
       case 'publisher': return contract.publisher || '待补充';
       case 'contractNumber': return contract.id;
       case 'projectBrand': return projectName || '待补充';
-      case 'platformChannel': return joinedValue(contract.platform, contract.channelName);
+      case 'platformChannel': return formatCreatorHandle(
+        contract.creatorHandle ?? contract.channelName,
+        contract.creatorPlatform ?? contract.platform,
+      );
       case 'effectiveDate': return contract.effectiveDate || '待补充';
       case 'campaignPeriod': return contract.campaignStart && contract.campaignEnd
         ? `${contract.campaignStart} 至 ${contract.campaignEnd}`

@@ -31,7 +31,13 @@ import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Co
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
-import { creatorSearchOption } from '../creatorSearchOptions';
+import {
+  creatorSocialAccountSearchOptions,
+  creatorSocialSelectionValue,
+  formatCreatorHandle,
+  parseCreatorSocialSelectionValue,
+  resolveCreatorSocialAccount,
+} from '../creatorSearchOptions';
 import { contractGenerationFilename } from '../contractGenerationFilename';
 import { contractDocumentFilename } from '../documentFilenames';
 import {
@@ -199,9 +205,22 @@ export function ContractBuilderPage({
   const initialCreator = creators.find((creator) => (
     creator.id === (draftModel?.creatorId ?? initialContext?.reference.creatorId)
   )) ?? null;
+  const initialSocialAccount = resolveCreatorSocialAccount(
+    initialCreator,
+    draftModel?.creatorSocialAccountId ?? initialContext?.reference.socialAccountId,
+    draftModel?.creatorHandle ?? initialContext?.reference.handle,
+    draftModel?.creatorPlatform ?? initialContext?.reference.platform,
+  );
   const initialAccount = defaultContractPayoutAccount(initialCreator);
-  const initialPublishingChannels = contractPublishingChannelsForCreator(initialCreator, draftModel);
+  const initialPublishingChannels = contractPublishingChannelsForCreator(initialCreator, draftModel)
+    .sort((left, right) => (
+      Number(right.socialAccountId === initialSocialAccount?.id)
+      - Number(left.socialAccountId === initialSocialAccount?.id)
+    ));
   const [creatorId, setCreatorId] = useState(draftModel?.creatorId ?? initialCreator?.id ?? '');
+  const [creatorSocialAccountId, setCreatorSocialAccountId] = useState(
+    draftModel?.creatorSocialAccountId ?? initialSocialAccount?.id ?? '',
+  );
   const [engagementId, setEngagementId] = useState(draftModel?.engagementId ?? initialEngagementId ?? '');
   const [projectSelectionId, setProjectSelectionId] = useState(initialProjectId);
   const [contractType, setContractType] = useState<NonNullable<ContractGenerationModel['contractType']>>(draftModel?.contractType ?? existingDraft?.contractType ?? 'INDEPENDENT');
@@ -253,6 +272,15 @@ export function ContractBuilderPage({
   const previewGenerationRef = useRef(0);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
+  const selectedSocialAccount = resolveCreatorSocialAccount(
+    selectedCreator,
+    creatorSocialAccountId,
+    draftModel?.creatorHandle,
+    draftModel?.creatorPlatform,
+  );
+  const creatorSelectionValue = creatorId && selectedSocialAccount
+    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
+    : '';
   const selectedProject = projects.find((project) => String(project.cooperationProjectId ?? project.projectId ?? project.id) === projectSelectionId) ?? null;
   const selectedReference = selectedProject?.creatorProfiles?.find((reference) => (
     reference.creatorId === creatorId && reference.status !== 'removed'
@@ -262,7 +290,7 @@ export function ContractBuilderPage({
   const selectedAccount = eligibleAccounts.find((account) => (
     account.id === payoutAccountId || getPayoutAccountId(account) === payoutAccountId
   )) ?? null;
-  const primarySocialAccount = selectedCreator?.socialAccounts.find((account) => (
+  const primarySocialAccount = selectedSocialAccount ?? selectedCreator?.socialAccounts.find((account) => (
     account.platform.toLowerCase() === selectedContext?.reference.platform.toLowerCase()
     || account.handle.toLowerCase() === selectedContext?.reference.handle.toLowerCase()
   )) ?? selectedCreator?.socialAccounts[0];
@@ -274,7 +302,10 @@ export function ContractBuilderPage({
     channelUrl: '',
   };
   const platform = formatContractPublishingPlatforms(publishingChannelValues);
-  const channelName = selectedContext?.reference.handle || primarySocialAccount?.handle || selectedCreator?.handle || '';
+  const rawChannelName = primarySocialAccount?.handle || selectedContext?.reference.handle || selectedCreator?.handle || '';
+  const channelName = rawChannelName
+    ? formatCreatorHandle(rawChannelName, primarySocialAccount?.platform ?? selectedContext?.reference.platform ?? selectedCreator?.platform)
+    : '';
   const channelUrl = formatContractPublishingChannelLinks(publishingChannelValues);
   const paymentSnapshot = useMemo(
     () => contractPayoutSnapshot(selectedAccount, selectedCreator?.id),
@@ -283,7 +314,7 @@ export function ContractBuilderPage({
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
 
-  const creatorOptions = creators.map(creatorSearchOption);
+  const creatorOptions = creators.flatMap(creatorSocialAccountSearchOptions);
   const creatorProjects = projects.filter((project) => project.creatorProfiles?.some((reference) => (
     reference.creatorId === creatorId && reference.status !== 'removed'
   )));
@@ -315,7 +346,9 @@ export function ContractBuilderPage({
     brandName: selectedProject?.brand ?? '',
     creatorId: (selectedCreator?.id ?? '') as CreatorId,
     creatorName: selectedCreator?.name ?? '',
-    creatorHandle: selectedCreator?.handle ?? '',
+    creatorHandle: selectedSocialAccount?.handle ?? selectedCreator?.handle ?? '',
+    creatorSocialAccountId: selectedSocialAccount?.id,
+    creatorPlatform: selectedSocialAccount?.platform ?? selectedCreator?.platform,
     engagementId: resolvedEngagementId as EngagementId,
     contractNumber,
     ioNumber: '',
@@ -390,6 +423,7 @@ export function ContractBuilderPage({
     resolvedEngagementId,
     resolvedProjectId,
     selectedCreator,
+    selectedSocialAccount,
     totalFee,
   ]);
 
@@ -453,11 +487,14 @@ export function ContractBuilderPage({
     return () => window.clearTimeout(timer);
   }, [model]);
 
-  const selectCreator = (id: string) => {
-    const creator = creators.find((item) => item.id === id) ?? null;
+  const selectCreator = (value: string) => {
+    const selection = parseCreatorSocialSelectionValue(value);
+    const creator = creators.find((item) => item.id === selection?.creatorId) ?? null;
+    const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
     const account = defaultContractPayoutAccount(creator);
-    setCreatorId(id);
-    const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === id && reference.status !== 'removed');
+    setCreatorId(selection?.creatorId ?? '');
+    setCreatorSocialAccountId(socialAccount?.id ?? '');
+    const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === selection?.creatorId && reference.status !== 'removed');
     setEngagementId(currentProjectReference?.engagementId ?? '');
     if (!currentProjectReference) {
       setProjectSelectionId('');
@@ -465,7 +502,10 @@ export function ContractBuilderPage({
     }
     setPromotedProduct('');
     setPayoutAccountId(account?.id ?? '');
-    setPublishingChannels(contractPublishingChannelsForCreator(creator));
+    setPublishingChannels(contractPublishingChannelsForCreator(creator).sort((left, right) => (
+      Number(right.socialAccountId === socialAccount?.id)
+      - Number(left.socialAccountId === socialAccount?.id)
+    )));
     setErrors({});
     resetOutput();
   };
@@ -703,7 +743,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`} data-contract-field="creator">
                 <span>合作达人 *</span>
-                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorId} placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name" options={creatorOptions} onChange={selectCreator} onClear={() => selectCreator('')} />
+                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name" options={creatorOptions} onChange={selectCreator} onClear={() => selectCreator('')} />
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.contractType ? 'has-error' : ''}`} data-contract-field="contractType">

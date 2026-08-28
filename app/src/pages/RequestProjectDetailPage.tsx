@@ -58,6 +58,7 @@ import {
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
 import { demoDisplayName } from '../demoCreatorNames';
+import { creatorHandleForDisplay } from '../creatorSearchOptions';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestExtraDetails & {
   id: string;
@@ -72,6 +73,9 @@ export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestEx
   cancelReason?: string;
   creatorLinks?: Array<{
     creatorId: CreatorId;
+    socialAccountId?: string;
+    creatorHandle?: string;
+    creatorPlatform?: string;
     engagementId: EngagementId;
     contractIds: ContractId[];
     invoiceIds: InvoiceId[];
@@ -120,6 +124,7 @@ type RequestResource = {
 type RequestPayee = {
   name: string;
   creatorId?: CreatorId;
+  socialAccountId?: string;
   handle?: string;
   platform?: string;
   initials?: string;
@@ -307,8 +312,11 @@ export const requestPayeesFromPaymentLists = (
       return {
         name: item.snapshot.creatorName,
         creatorId: item.snapshot.creatorId,
-        handle: creator?.handle ?? item.snapshot.creatorHandle,
-        platform: creator?.platform,
+        ...(item.snapshot.creatorSocialAccountId
+          ? { socialAccountId: item.snapshot.creatorSocialAccountId }
+          : {}),
+        handle: item.snapshot.creatorHandle,
+        platform: item.snapshot.creatorPlatform ?? creator?.platform,
         initials: creator?.initials,
         accent: creator?.accent,
         invoice: item.snapshot.invoiceNumber,
@@ -423,12 +431,12 @@ const approvalProgress = (request: RequestProjectSummary): RequestProgress[] | n
 };
 
 const RAW_REQUEST_CREATOR_NAMES: Record<string, string[]> = {
-  'PRJ-260718': ['@MinaKato', 'Yuki Tanaka', 'Camila Costa', 'Oliver Chen', 'Alex Ruiz', 'Hannah Lee'],
+  'PRJ-260718': ['Mina Kato', 'Yuki Tanaka', 'Camila Costa', 'Oliver Chen', 'Alex Ruiz', 'Hannah Lee'],
   'PRJ-260716': ['Alex Ruiz', 'Hannah Lee', 'Luca Bianchi'],
-  'PRJ-260711': ['@Luna_J', 'Emily Wong', 'Marc O.', 'Sofia Kim', 'Noah Park'],
+  'PRJ-260711': ['Luna Jones', 'Emily Wong', 'Marc O.', 'Sofia Kim', 'Noah Park'],
   'PRJ-260625': [
     'Kenji Mori',
-    '@MinaKato',
+    'Mina Kato',
     'Nika Petrova',
     'Aoi Sato',
     'Riku Tanaka',
@@ -465,7 +473,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     invoice: { id: '6 份 Invoice', meta: '请款金额 USD 18,420', status: '已校验' },
     payment: { id: 'PAY-260718-04', meta: '多渠道 · 分组付款', status: '待打款' },
     payees: [
-      { name: '@MinaKato', invoice: 'INV-20240718-00001', amount: 'USD 3,240', channel: 'Airwallex', status: '待打款' },
+      { name: 'Mina Kato', invoice: 'INV-20240718-00001', amount: 'USD 3,240', channel: 'Airwallex', status: '待打款' },
       { name: 'Yuki Tanaka', invoice: 'INV-20240719-00001', amount: 'USD 2,180', channel: 'PayPal', status: '待打款' },
       { name: 'Camila Costa', invoice: 'INV-20240720-00001', amount: 'USD 2,760', channel: 'PayMax', status: '待打款' },
     ],
@@ -513,7 +521,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     invoice: { id: '5 份 Invoice', meta: '其中 1 份收款账号待补充', status: '待补资料' },
     payment: { id: '待生成', meta: '资料补齐且审批通过后生成', status: '未生成' },
     payees: [
-      { name: '@Luna_J', invoice: 'INV-20240711-00001', amount: 'USD 4,200', channel: 'Airwallex', status: '资料完整' },
+      { name: 'Luna Jones', invoice: 'INV-20240711-00001', amount: 'USD 4,200', channel: 'Airwallex', status: '资料完整' },
       { name: 'Emily Wong', invoice: 'INV-20240711-00002', amount: 'USD 3,600', channel: 'Airwallex', status: '资料完整' },
       { name: 'Marc O.', invoice: 'INV-20240711-00003', amount: 'USD 2,100', channel: 'PayPal', status: '待补资料' },
     ],
@@ -538,7 +546,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     payment: { id: 'PAY-260625-12', meta: 'Airwallex · 16 笔付款', status: '已完成' },
     payees: [
       { name: 'Kenji Mori', invoice: 'INV-20240625-00001', amount: 'USD 3,800', channel: 'Airwallex', status: '已付款' },
-      { name: '@MinaKato', invoice: 'INV-20240625-00002', amount: 'USD 3,240', channel: 'Airwallex', status: '已付款' },
+      { name: 'Mina Kato', invoice: 'INV-20240625-00002', amount: 'USD 3,240', channel: 'Airwallex', status: '已付款' },
       { name: 'Nika', invoice: 'INV-20240625-00003', amount: 'USD 2,980', channel: 'PayPal', status: '已付款' },
     ],
     progress: [
@@ -1026,9 +1034,8 @@ export function RequestProjectDetailPage({
                     ? creators.find((candidate) => String(candidate.id) === String(payee.creatorId))
                     : creators.find((candidate) => candidate.name === payee.name);
                   const initials = payee.initials ?? creator?.initials ?? payee.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-                  const handle = payee.handle ?? creator?.handle ?? 'Handle 待补充';
-                  const platform = payee.platform ?? creator?.platform ?? '社媒平台待补充';
-                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle} · {platform}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
+                  const handle = creatorHandleForDisplay({ creator, socialAccountId: payee.socialAccountId, handle: payee.handle, platform: payee.platform });
+                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
                 })}</tbody>
               </table>
             </div>

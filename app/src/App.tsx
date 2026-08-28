@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { accountDisplayValue } from './accountPresentation';
+import { resolveCreatorSocialAccount } from './creatorSearchOptions';
 import { AppShell } from './components/AppShell';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
@@ -275,7 +276,25 @@ const NORMALIZED_INITIAL_INVOICE_RESOURCES = normalizeInvoiceResourceNumbers({
 const INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES = {
   ...RAW_PAYMENT_BATCH_PROTOTYPE_RESOURCES,
   invoices: NORMALIZED_INITIAL_INVOICE_RESOURCES.invoices,
-  payouts: NORMALIZED_INITIAL_INVOICE_RESOURCES.payouts,
+  payouts: NORMALIZED_INITIAL_INVOICE_RESOURCES.payouts.map((payout) => {
+    const creator = INITIAL_CREATORS.find((candidate) => (
+      candidate.id === payout.creatorId
+      || candidate.socialAccounts.some((account) => account.handle.toLowerCase() === payout.handle.toLowerCase())
+    ));
+    const socialAccount = resolveCreatorSocialAccount(
+      creator,
+      payout.creatorSocialAccountId,
+      payout.handle,
+      payout.creatorPlatform,
+    );
+    return {
+      ...payout,
+      creator: creator?.name ?? payout.creator,
+      creatorId: payout.creatorId ?? creator?.id as CreatorId | undefined,
+      creatorSocialAccountId: payout.creatorSocialAccountId ?? socialAccount?.id,
+      creatorPlatform: payout.creatorPlatform ?? socialAccount?.platform ?? creator?.platform,
+    };
+  }),
   paymentLists: NORMALIZED_INITIAL_INVOICE_RESOURCES.paymentLists,
 };
 
@@ -629,8 +648,9 @@ export default function App() {
                 createdAt: occurredAt,
                 updatedAt: occurredAt,
                 name: creator.name,
-                handle: creator.handle,
-                platform: creator.platform,
+                handle: input.creatorHandle,
+                platform: input.creatorPlatform,
+                socialAccountId: input.creatorSocialAccountId,
               },
             ],
           };
@@ -754,8 +774,9 @@ export default function App() {
                   createdAt: occurredAt,
                   updatedAt: occurredAt,
                   name: creator.name,
-                  handle: creator.handle,
-                  platform: creator.platform,
+                  handle: model.creatorHandle,
+                  platform: model.creatorPlatform ?? model.platform,
+                  socialAccountId: model.creatorSocialAccountId,
                 },
               ],
             }
@@ -935,6 +956,8 @@ export default function App() {
         id: record.sourcePayoutId,
         creator: record.snapshot.creatorName,
         handle: record.snapshot.creatorHandle,
+        creatorSocialAccountId: record.snapshot.creatorSocialAccountId,
+        creatorPlatform: record.snapshot.creatorPlatform,
         initials: creator?.initials ?? record.snapshot.creatorName.slice(0, 2).toUpperCase(),
         projectId: String(cooperationProjectId),
         project: project?.name ?? record.snapshot.projectName,

@@ -49,6 +49,7 @@ import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
 import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
+import { creatorHandleForDisplay, findCreatorSocialAccount, formatCreatorHandle } from '../creatorSearchOptions';
 
 type ResourceDialogKind = 'contract' | 'invoice' | 'payment';
 type CreateDialogKind = 'invoice';
@@ -110,10 +111,16 @@ const referenceCreator = (
 
 const referenceLabel = (reference: ProjectReference, creators: CreatorProfile[]) => {
   const creator = referenceCreator(reference, creators);
+  const socialAccount = findCreatorSocialAccount(
+    creator,
+    reference.socialAccountId,
+    reference.handle,
+    reference.platform,
+  );
   return {
     name: creator?.name ?? reference.name,
-    handle: creator?.handle ?? reference.handle,
-    platform: creator?.platform ?? reference.platform,
+    handle: socialAccount?.handle ?? reference.handle,
+    platform: socialAccount?.platform ?? reference.platform,
   };
 };
 
@@ -569,7 +576,7 @@ export function ProjectResourceManager({
                       <div className="project-contract-record-person">
                         <span>对应达人</span>
                         <strong>{creator?.name ?? '达人资料缺失'}</strong>
-                        <small>{creator ? `${creator.handle} · ${creator.platform}` : '请检查 Engagement 关联'}</small>
+                        <small>{creator ? formatCreatorHandle(contract.creatorHandle ?? creator.handle, contract.creatorPlatform ?? contract.platform ?? creator.platform) : '请检查 Engagement 关联'}</small>
                       </div>
                       <div className="project-contract-record-io">
                         <span>合同 / IO</span>
@@ -669,7 +676,7 @@ export function ProjectResourceManager({
                       <div className="project-contract-record-main">
                         <strong>{invoice.id}</strong>
                         <span>{creator?.name ?? invoice.snapshot.creatorName}</span>
-                        <small>{creator ? `${creator.handle} · ${creator.platform}` : invoice.snapshot.creatorHandle}</small>
+                        <small>{formatCreatorHandle(invoice.snapshot.creatorHandle || creator?.handle || '', invoice.snapshot.creatorPlatform ?? creator?.platform)}</small>
                       </div>
                       <div className="project-invoice-record-contracts">
                         <span>覆盖合同 / IO</span>

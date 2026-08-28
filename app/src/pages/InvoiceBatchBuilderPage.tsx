@@ -36,6 +36,7 @@ import {
 import { Avatar, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
@@ -254,7 +255,7 @@ export function InvoiceBatchResultSection({
                           />
                           <span>
                             <strong>{row.creatorName}</strong>
-                            <small>{row.creatorHandle}</small>
+                            <small>{formatCreatorHandle(row.creatorHandle, row.creatorPlatform)}</small>
                           </span>
                         </div>
                       </td>
@@ -698,7 +699,7 @@ function BatchRowTable({
                   >
                     {row.creatorName}
                   </button>
-                  <small>{row.creatorHandle}</small>
+                  <small>{formatCreatorHandle(row.creatorHandle, row.creatorPlatform)}</small>
                 </td>
                 <td data-label="Description">
                   <div className="invoice-batch-line-stack">
@@ -1990,6 +1991,7 @@ export function InvoiceBatchBuilderPage({
                   {creatorImportReview.matches.map((match) => {
                     const accepted = creatorSelectionPreview.selectedIds.includes(match.engagementId);
                     const creator = prototypeCreators.find((candidate) => candidate.id === match.creatorId);
+                    const reference = selectedProject?.creatorProfiles?.find((candidate) => candidate.engagementId === match.engagementId);
                     return (
                       <article key={match.engagementId} className={accepted ? '' : 'is-overflow'}>
                         <Avatar
@@ -1997,7 +1999,7 @@ export function InvoiceBatchBuilderPage({
                           initials={creator?.initials ?? creatorInitials(match.creatorName)}
                           accent={creator?.accent ?? '#5f72d8'}
                         />
-                        <span><strong>{match.creatorName}</strong><small>{match.creatorHandle} · {match.sourceLabel}</small></span>
+                        <span><strong>{match.creatorName}</strong><small>{formatCreatorHandle(match.creatorHandle, reference?.platform)} · {match.sourceLabel}</small></span>
                         <em>{accepted ? '将选择' : '超过50人上限'}</em>
                       </article>
                     );

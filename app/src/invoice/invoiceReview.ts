@@ -39,7 +39,11 @@ export const buildInvoiceReviewModel = (
   creators: CreatorProfile[],
   billTo: InvoiceEntity,
 ): InvoiceDocumentModel => {
-  const creator = creators.find((item) => item.handle === payout.handle) ?? null;
+  const creator = creators.find((item) => (
+    item.id === payout.creatorId
+    || item.handle === payout.handle
+    || item.socialAccounts?.some((account) => account.handle === payout.handle)
+  )) ?? null;
   const paymentMethod = payout.provider === 'PayPal' ? 'paypal' : 'bank';
   const payment = invoicePaymentForCreator(creator, payout.provider);
   const fallbackName = payout.creator.replace(/^@/, '');
@@ -54,6 +58,8 @@ export const buildInvoiceReviewModel = (
     invoiceDate: invoiceDateFromNumber(payout.invoice),
     billTo: { ...billTo },
     creatorHandle: payout.handle,
+    creatorSocialAccountId: payout.creatorSocialAccountId,
+    creatorPlatform: payout.creatorPlatform,
     creatorName: creator?.name ?? fallbackName,
     projectId: payout.projectId as ProjectId,
     projectName: payout.project,

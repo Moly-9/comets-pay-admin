@@ -43,6 +43,7 @@ import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
 import { accountDisplayValue } from '../accountPresentation';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
+import { creatorHandleForDisplay, formatCreatorHandle } from '../creatorSearchOptions';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal } from './Common';
@@ -636,7 +637,7 @@ export function PaymentExecutionWorkspace({
                         : payout.feeBearer;
                       return (
                         <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
-                          <td><div className="payment-execution-creator-cell"><span style={{ '--payee-accent': payout.accent } as CSSProperties}>{payout.initials}</span><div><strong>{payout.creator}</strong><small>{payout.handle || '达人账号待补充'}</small></div></div></td>
+                          <td><div className="payment-execution-creator-cell"><span style={{ '--payee-accent': payout.accent } as CSSProperties}>{payout.initials}</span><div><strong>{payout.creator}</strong><small>{formatCreatorHandle(payout.handle, payout.creatorPlatform)}</small></div></div></td>
                           <td><div className="payment-execution-account-cell"><strong title={payout.account}>{accountDisplayValue(payout.account, '账户待补充')}</strong><small>{transferMethodLabel(payout)}</small></div></td>
                           <td><span className="payment-execution-currency">{payout.currency}</span></td>
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
@@ -916,7 +917,7 @@ export function PaymentExecutionWorkspace({
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
                       <strong>{creator?.name ?? contract.publisher ?? '达人档案缺失'}</strong>
-                      <small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorHandle ?? contract.creatorId}</small>
+                      <small>{creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId, handle: contract.creatorHandle, platform: contract.creatorPlatform ?? contract.platform })}</small>
                     </div>
                     <div className="finance-review-resource-card-amount"><span>付款金额</span><strong>{formatContractMoney(contract)}</strong></div>
                     <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
@@ -979,7 +980,7 @@ export function PaymentExecutionWorkspace({
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
                       <strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong>
-                      <small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small>
+                      <small>{creatorHandleForDisplay({ creator, socialAccountId: linkedInvoice.snapshot.creatorSocialAccountId, handle: linkedInvoice.snapshot.creatorHandle, platform: linkedInvoice.snapshot.creatorPlatform })}</small>
                     </div>
                     <div className="finance-review-resource-card-amount"><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong></div>
                     <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>

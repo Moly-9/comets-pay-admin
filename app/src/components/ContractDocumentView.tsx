@@ -1,5 +1,6 @@
 import type { ContractRecord } from '../contracts';
 import { formatContractMoney } from '../contracts';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 
 const paymentMethodLabel = (contract: ContractRecord) => {
   if (contract.paymentMethod === 'PAYPAL') return 'PayPal';
@@ -21,6 +22,10 @@ export function ContractDocumentView({
   contract: ContractRecord;
   ariaLabel?: string;
 }) {
+  const channelName = formatCreatorHandle(
+    contract.creatorHandle ?? contract.channelName,
+    contract.creatorPlatform ?? contract.platform,
+  );
   const campaignPeriod = contract.campaignStart && contract.campaignEnd
     ? `${contract.campaignStart} to ${contract.campaignEnd}`
     : 'To be confirmed';
@@ -57,7 +62,7 @@ export function ContractDocumentView({
           The Publisher will create and publish promotional content for <strong>{contract.brand}</strong> under
           the project <strong>{contract.project}</strong>. Content will be delivered through
           <strong> {contract.platform || 'the agreed social platform'} </strong>
-          using the channel <strong>{contract.channelName || 'specified in the IO'}</strong>, in accordance with
+          using the channel <strong>{channelName}</strong>, in accordance with
           brand guidelines, the approved creative direction and the campaign schedule.
         </p>
       </section>
@@ -122,7 +127,7 @@ export function ContractDocumentView({
           <tbody>
             <tr><th>Project / Brand</th><td>{contract.project} / {contract.brand}</td></tr>
             <tr><th>Publisher</th><td>{contract.publisher || 'To be confirmed'}</td></tr>
-            <tr><th>Platform / Channel</th><td>{contract.platform || '—'} / {contract.channelName || '—'}</td></tr>
+            <tr><th>Platform / Channel</th><td>{contract.platform || '—'} / {channelName}</td></tr>
             <tr><th>Campaign Period</th><td>{campaignPeriod}</td></tr>
             <tr><th>Project Total Fees</th><td>{formatContractMoney(contract)}</td></tr>
             <tr><th>Linked Payment Account</th><td>{contract.accountName || 'To be confirmed'} {contract.accountFingerprint}</td></tr>

@@ -195,7 +195,7 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('<th>API 校验结果</th>');
     expect(reviewContentSource).toContain('<Avatar initials={creatorInitials}');
     expect(reviewContentSource).toContain('<small>{recipientHandle}</small>');
-    expect(reviewContentSource).toContain('<small>{recipientPlatform}</small>');
+    expect(reviewContentSource).toContain('creatorHandleForDisplay({');
     expect(reviewContentSource).toContain('recipientSubjectName(');
     expect(reviewContentSource).toContain('request-payment-review-heading-actions');
     expect(reviewContentSource).toContain("variant === 'finance-workspace' ? (accountDisplay");

@@ -30,6 +30,7 @@ import { formatAmount } from '../data';
 import type { TransactionBatchContext } from '../transactionRecords';
 import { transactionOccurredAt, transactionRecordDetails } from '../transactionRecords';
 import type { Payout } from '../types';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 
 const displayTime = (value?: string) => {
   if (!value) return '未记录';
@@ -73,7 +74,7 @@ export function TransactionDetailPage({
         <div className="transaction-creator-summary-identity">
           <strong>{payout.creator}</strong>
           <span><FolderKanban size={13} aria-hidden="true" />{payout.project}</span>
-          <small><AtSign size={12} aria-hidden="true" />{payout.handle.replace(/^@/, '')}</small>
+          <small><AtSign size={12} aria-hidden="true" />{formatCreatorHandle(payout.handle, payout.creatorPlatform).replace(/^@/, '')}</small>
         </div>
         <StatusMark status={payout.status} />
       </section>

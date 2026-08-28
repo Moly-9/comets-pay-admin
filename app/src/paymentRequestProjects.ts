@@ -24,6 +24,9 @@ import type { GeneratedInvoiceRecord, InvoiceReviewStatus } from './types';
 
 export type PaymentRequestCreatorLink = {
   creatorId: CreatorId;
+  socialAccountId?: string;
+  creatorHandle?: string;
+  creatorPlatform?: string;
   engagementId: EngagementId;
   contractIds: ContractId[];
   invoiceIds: InvoiceId[];
@@ -190,6 +193,9 @@ export const normalizePaymentRequestCreatorLink = (
   link: LegacyPaymentRequestCreatorLink,
 ): PaymentRequestCreatorLink => ({
   creatorId: link.creatorId,
+  socialAccountId: link.socialAccountId,
+  creatorHandle: link.creatorHandle,
+  creatorPlatform: link.creatorPlatform,
   engagementId: link.engagementId,
   contractIds: [...new Set(link.contractIds)],
   invoiceIds: [...new Set([

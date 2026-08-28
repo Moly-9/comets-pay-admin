@@ -4,6 +4,7 @@ import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
 import { formatAmount } from '../data';
 import type { InvoiceReviewStatus, Payout, PayoutStatus } from '../types';
+import { formatCreatorHandle } from '../creatorSearchOptions';
 
 const ACTION_LABELS: Record<Payout['status'], string> = {
   未进入付款: '查看详情',
@@ -55,6 +56,7 @@ export function PayoutTable({
   identityFor?: (payout: Payout) => {
     displayName: string;
     channelId: string;
+    platform?: string;
     initials: string;
     accent: string;
   };
@@ -90,6 +92,7 @@ export function PayoutTable({
               const identity = identityFor?.(payout) ?? {
                 displayName: payout.creator,
                 channelId: payout.handle,
+                platform: payout.creatorPlatform,
                 initials: payout.initials,
                 accent: payout.accent,
               };
@@ -107,7 +110,7 @@ export function PayoutTable({
                 <td>
                   <div className="creator-cell">
                     <Avatar initials={identity.initials} accent={identity.accent} size="sm" />
-                    <span><strong>{identity.displayName}</strong><small>{identity.channelId}</small></span>
+                    <span><strong>{identity.displayName}</strong><small>{formatCreatorHandle(identity.channelId, identity.platform ?? payout.creatorPlatform)}</small></span>
                   </div>
                 </td>
                 <td className="invoice-project-cell">{projectNameFor?.(payout) ?? payout.project}</td>

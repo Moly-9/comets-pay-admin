@@ -117,7 +117,8 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<Avatar');
     expect(paymentTable).toContain('<PaymentProviderBadge compact provider={payee.channel} />');
     expect(paymentTable).toContain('request-detail-transfer-method');
-    expect(paymentTable).toContain('{handle} · {platform}');
+    expect(paymentTable).toContain('{handle}');
+    expect(source).toContain('creatorHandleForDisplay({ creator, socialAccountId: payee.socialAccountId');
     expect(paymentTable).toContain('<span className="simple-status is-success"><i />已校验</span>');
     expect(paymentTable).not.toContain('requestPaymentStatusLabel(payee.status)');
     expect(styles).toContain('.request-detail-creator-cell');

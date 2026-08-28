@@ -42,8 +42,9 @@ export const upsertGeneratedInvoiceEngagements = ({
       createdAt: existing?.createdAt ?? occurredAt,
       updatedAt: occurredAt,
       name: creator.name,
-      handle: creator.handle,
-      platform: creator.platform,
+      handle: record.snapshot.creatorHandle || creator.handle,
+      platform: record.snapshot.creatorPlatform ?? creator.platform,
+      socialAccountId: record.snapshot.creatorSocialAccountId,
     };
     if (existingIndex >= 0) creatorProfiles[existingIndex] = reference;
     else creatorProfiles.push(reference);

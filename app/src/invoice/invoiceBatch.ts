@@ -26,6 +26,7 @@ import type {
 import { validateInvoiceDocumentModel } from './invoiceDraft';
 import { createInvoiceContractMatchReview, evaluateInvoiceContractMatch } from './invoiceContractMatching';
 import { formatInvoiceNumber, normalizeLineItem } from './invoiceUtils';
+import { resolveCreatorSocialAccount } from '../creatorSearchOptions';
 
 export const INVOICE_BATCH_MAX_ROWS = 50;
 export const INVOICE_BATCH_CURRENCIES: InvoiceCurrency[] = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'];
@@ -175,6 +176,12 @@ export const createInvoiceBatchRow = ({
   if (!reference) throw new Error(`项目中不存在合作关系 ${engagementId}`);
   const creator = creators.find((item) => item.id === reference.creatorId);
   if (!creator) throw new Error(`合作关系 ${engagementId} 缺少达人档案`);
+  const socialAccount = resolveCreatorSocialAccount(
+    creator,
+    reference.socialAccountId,
+    reference.handle,
+    reference.platform,
+  );
   const payout = payouts.find((item) => (
     item.creatorId === creator.id && item.projectId === projectId
   ));
@@ -196,7 +203,9 @@ export const createInvoiceBatchRow = ({
     engagementId,
     creatorId: creator.id as CreatorId,
     creatorName: creator.name,
-    creatorHandle: creator.handle,
+    creatorHandle: socialAccount?.handle ?? creator.handle,
+    creatorSocialAccountId: socialAccount?.id,
+    creatorPlatform: socialAccount?.platform ?? creator.platform,
     sourcePayoutId: payout?.id ?? createPrototypeId('payout'),
     invoiceDate,
     items: synchronizeInvoiceBatchLineItems([], lineItems),
@@ -238,7 +247,9 @@ export const buildInvoiceDocumentForBatchRow = (
     invoiceNumber,
     invoiceDate: row.invoiceDate,
     billTo: { ...context.invoiceEntity },
-    creatorHandle: creator.handle,
+    creatorHandle: row.creatorHandle || creator.handle,
+    creatorSocialAccountId: row.creatorSocialAccountId,
+    creatorPlatform: row.creatorPlatform,
     creatorName: creator.name,
     creatorId: creator.id as CreatorId,
     engagementId: row.engagementId,

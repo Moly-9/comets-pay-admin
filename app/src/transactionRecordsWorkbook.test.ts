@@ -14,6 +14,7 @@ const records: Payout[] = [{
   id: 'pay-test',
   creator: 'Mina Kato',
   handle: '@MinaKato',
+  creatorPlatform: 'Instagram',
   initials: 'MK',
   projectId: 'PRJ-20260801-TEST01',
   project: '夏季新品推广',
@@ -52,7 +53,7 @@ describe('transaction records workbook', () => {
       '余额',
       '收款账户',
     ]);
-    expect(worksheet?.getRow(2).getCell(1).value).toBe('Mina Kato (@MinaKato)');
+    expect(worksheet?.getRow(2).getCell(1).value).toBe('Mina Kato (@MinaKato · Instagram)');
     expect(worksheet?.getRow(2).getCell(2).value).toBe('INV-20260801-TEST01');
     expect(worksheet?.getRow(2).getCell(4).value).toBeInstanceOf(Date);
     expect((worksheet?.getRow(2).getCell(4).value as Date).getUTCHours()).toBe(16);

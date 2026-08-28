@@ -108,6 +108,8 @@ export type PaymentListItemSnapshot = {
   invoiceNumber: string;
   creatorName: string;
   creatorHandle?: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   realName?: string;
   currency: string;
   receiveCurrency: string;
@@ -1099,6 +1101,8 @@ export const invoicePaymentListItem = (
       invoiceNumber: invoice.id,
       creatorName: invoice.snapshot.creatorName,
       creatorHandle: invoice.snapshot.creatorHandle,
+      creatorSocialAccountId: invoice.snapshot.creatorSocialAccountId,
+      creatorPlatform: invoice.snapshot.creatorPlatform,
       realName: invoice.snapshot.from.legalName,
       currency: frozen.currency,
       receiveCurrency: payment.accountCurrency || frozen.currency,

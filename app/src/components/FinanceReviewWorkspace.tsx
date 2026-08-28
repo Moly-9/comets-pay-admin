@@ -71,6 +71,7 @@ import {
   type ProjectPdfArchiveKind,
 } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import { creatorHandleForDisplay } from '../creatorSearchOptions';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { ContractDocumentView } from './ContractDocumentView';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
@@ -1533,7 +1534,7 @@ export function FinanceReviewWorkspace({
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
                       <strong>{creator?.name ?? '达人档案缺失'}</strong>
-                      <small>{creator ? `${creator.handle} · ${creator.platform}` : contract.creatorId}</small>
+                      <small>{creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId, handle: contract.creatorHandle, platform: contract.creatorPlatform ?? contract.platform })}</small>
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>付款金额</span>
@@ -1614,7 +1615,7 @@ export function FinanceReviewWorkspace({
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
                       <strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong>
-                      <small>{creator ? `${creator.handle} · ${creator.platform}` : linkedInvoice.snapshot.creatorHandle}</small>
+                      <small>{creatorHandleForDisplay({ creator, socialAccountId: linkedInvoice.snapshot.creatorSocialAccountId, handle: linkedInvoice.snapshot.creatorHandle, platform: linkedInvoice.snapshot.creatorPlatform })}</small>
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>Invoice 金额</span>

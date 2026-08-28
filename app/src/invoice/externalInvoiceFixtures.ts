@@ -8,6 +8,7 @@ import {
 } from '../payoutAccounts';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceEntity } from '../types';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
+import { resolveCreatorSocialAccount } from '../creatorSearchOptions';
 import {
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
@@ -44,6 +45,12 @@ export const createInitialExternalInvoiceCollections = ({
 
   const records: ExternalInvoiceCollectionRecord[] = [];
   candidates.forEach(({ project, reference, creator }, index) => {
+    const socialAccount = resolveCreatorSocialAccount(
+      creator,
+      reference.socialAccountId,
+      reference.handle,
+      reference.platform,
+    );
     const defaultAccount = eligibleInvoicePayoutAccounts(creator).find((account) => account.isDefault)!;
     const presetPayoutAccountId = getPayoutAccountId(defaultAccount);
     const projectId = (project.projectId ?? project.id) as ProjectId;
@@ -59,7 +66,9 @@ export const createInitialExternalInvoiceCollections = ({
       engagementId: reference.engagementId,
       creatorId: reference.creatorId,
       creatorName: creator.name,
-      creatorHandle: creator.socialAccounts.find((account) => account.handle.trim())?.handle ?? creator.handle,
+      creatorHandle: socialAccount?.handle ?? creator.handle,
+      creatorSocialAccountId: socialAccount?.id,
+      creatorPlatform: socialAccount?.platform ?? creator.platform,
       contractIds: index === 2 ? [] : contractIds,
       presetPayoutAccountId,
       presetPayoutAccountSnapshot: createDocumentPayoutSnapshot(defaultAccount, creator.id),

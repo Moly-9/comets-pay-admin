@@ -57,6 +57,8 @@ export type PaymentBatchItemSnapshot = Readonly<{
   creatorId?: string;
   creatorName: string;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   deliverable: string;
   paymentListId?: PaymentListId;
   paymentListCode: string;
@@ -309,6 +311,8 @@ const snapshotItem = ({
     creatorId: payout.creatorId ?? invoice?.snapshot.creatorId,
     creatorName: invoice?.snapshot.creatorName ?? payout.creator,
     creatorHandle: invoice?.snapshot.creatorHandle ?? payout.handle,
+    creatorSocialAccountId: invoice?.snapshot.creatorSocialAccountId ?? payout.creatorSocialAccountId,
+    creatorPlatform: invoice?.snapshot.creatorPlatform ?? payout.creatorPlatform,
     deliverable: payout.deliverable || invoice?.snapshot.items[0]?.description || '未记录',
     paymentListId: paymentList?.paymentListId,
     paymentListCode: paymentList?.paymentListCode ?? '关联资料缺失',

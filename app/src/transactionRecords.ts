@@ -1,5 +1,6 @@
 import { isInvoiceApprovedForPayment } from './invoice/invoiceReviewWorkflow';
 import { accountDisplayValue } from './accountPresentation';
+import { formatCreatorHandle } from './creatorSearchOptions';
 import {
   type PaymentBatchContractSnapshot,
   type PaymentBatchInvoiceSnapshot,
@@ -368,6 +369,8 @@ export const filterTransactionRecords = (
 export const transactionCreatorLabel = (payout: Payout) => {
   const creator = payout.creator.trim();
   const handle = payout.handle.trim();
-  if (!handle || handle.toLocaleLowerCase() === creator.toLocaleLowerCase()) return creator;
-  return `${creator} (${handle})`;
+  if (!handle) return creator;
+  const account = formatCreatorHandle(handle, payout.creatorPlatform);
+  if (handle.toLocaleLowerCase() === creator.toLocaleLowerCase()) return account;
+  return `${creator} (${account})`;
 };

@@ -432,7 +432,7 @@ const returnedInvoiceReviewFixture = (
 const RAW_INITIAL_PAYOUTS: Payout[] = [
   {
     id: 'pay-001',
-    creator: '@MinaKato',
+    creator: 'Mina Kato',
     handle: '@MinaKato',
     initials: 'MK',
     projectId: 'PRJ-260727-03',
@@ -607,7 +607,7 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
   },
   {
     id: 'pay-004',
-    creator: '@Luna_J',
+    creator: 'Luna Jones',
     handle: '@Luna_J',
     initials: 'LJ',
     projectId: 'PRJ-260727-04',
@@ -683,7 +683,7 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
   },
   {
     id: 'pay-014',
-    creator: '@MinaKato',
+    creator: 'Mina Kato',
     handle: '@MinaKato',
     initials: 'MK',
     projectId: 'PRJ-260801-01',

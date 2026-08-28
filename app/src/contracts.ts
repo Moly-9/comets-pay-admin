@@ -165,6 +165,8 @@ export type ContractGenerationModel = {
   creatorId: CreatorId;
   creatorName: string;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   engagementId: EngagementId;
   contractNumber: string;
   ioNumber: string;
@@ -253,6 +255,8 @@ export type ContractRecord = {
   cooperationProjectId?: CooperationProjectId;
   creatorId?: CreatorId;
   creatorHandle?: string;
+  creatorSocialAccountId?: string;
+  creatorPlatform?: string;
   engagementId?: EngagementId;
   lifecycle?: ContractLifecycle;
   generationSnapshot?: ContractGenerationModel;
@@ -713,6 +717,7 @@ export type ContractUploadInput = {
   creatorId: CreatorId;
   creatorName: string;
   creatorHandle: string;
+  creatorSocialAccountId?: string;
   creatorPlatform: string;
   engagementId?: EngagementId;
   draftContractId?: ContractId;
@@ -828,6 +833,8 @@ export const createGeneratedContractDraft = (
       : [{ cooperationProjectId: model.cooperationProjectId ?? model.projectId, status: 'ACTIVE' }],
     creatorId: model.creatorId,
     creatorHandle: model.creatorHandle,
+    creatorSocialAccountId: model.creatorSocialAccountId,
+    creatorPlatform: model.creatorPlatform ?? model.platform,
     engagementId: model.engagementId,
     lifecycle: 'GENERATED_DRAFT',
     generationSnapshot: {
@@ -856,6 +863,8 @@ export const createUploadedContract = (
     customer,
     creatorId,
     creatorHandle,
+    creatorSocialAccountId,
+    creatorPlatform,
     engagementId,
     draftContractId,
     recognitionResults,
@@ -935,6 +944,8 @@ export const createUploadedContract = (
       : [{ cooperationProjectId: cooperationProjectId ?? projectId, status: 'ACTIVE' }],
     creatorId,
     creatorHandle,
+    creatorSocialAccountId,
+    creatorPlatform,
     engagementId,
     lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
     uploadedFromDraftId: draftContractId,

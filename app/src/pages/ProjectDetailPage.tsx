@@ -40,6 +40,14 @@ import { ProjectDocumentDetailPage } from './ProjectDocumentDetailPage';
 import { ProjectResourceManager } from '../components/ProjectResourceManager';
 import type { SystemUser } from '../data';
 import { demoDisplayName } from '../demoCreatorNames';
+import {
+  creatorSocialAccounts,
+  creatorSocialSelectionValue,
+  findCreatorSocialAccount,
+  formatCreatorHandle,
+  parseCreatorSocialSelectionValue,
+  resolveCreatorSocialAccount,
+} from '../creatorSearchOptions';
 
 export type ProjectSummary = {
   id: string;
@@ -66,6 +74,7 @@ export type ProjectSummary = {
     name: string;
     handle: string;
     platform: string;
+    socialAccountId?: string;
   }>;
   requestReason?: string;
   invoiceCount?: number;
@@ -285,7 +294,7 @@ const SUMMER_INVOICE_RECORDS = createInvoiceRecords({
   status: '财务复核中',
   invoiceDate: '2026-07-19',
   rows: [
-    { creator: '@MinaKato', amount: 'USD 3,240', channel: 'Airwallex' },
+    { creator: 'Mina Kato', amount: 'USD 3,240', channel: 'Airwallex' },
     { creator: 'Yuki Tanaka', amount: 'USD 1,480', channel: 'PayPal' },
     { creator: 'Camila Costa', amount: 'USD 2,160', channel: 'PayMax' },
     { creator: 'Oliver Chen', amount: 'USD 1,850', channel: 'Airwallex' },
@@ -293,7 +302,7 @@ const SUMMER_INVOICE_RECORDS = createInvoiceRecords({
     { creator: 'Hannah Lee', amount: 'USD 920', channel: 'PayPal' },
     { creator: 'Nika Petrova', amount: 'USD 1,200', channel: 'Airwallex' },
     { creator: 'Luca Bianchi', amount: 'USD 1,050', channel: 'PayMax' },
-    { creator: '@Luna_J', amount: 'USD 980', channel: 'Airwallex' },
+    { creator: 'Luna Jones', amount: 'USD 980', channel: 'Airwallex' },
     { creator: 'Sofia Kim', amount: 'USD 1,420', channel: 'PayPal' },
     { creator: 'Noah Park', amount: 'USD 1,350', channel: 'Airwallex' },
     { creator: 'Maya Chen', amount: 'USD 1,450', channel: 'PayMax' },
@@ -307,7 +316,7 @@ const UNBOXING_INVOICE_RECORDS = createInvoiceRecords({
   invoiceDate: '2026-07-16',
   rows: [
     { creator: 'Alex Ruiz', amount: 'EUR 1,850', channel: 'PayMax' },
-    { creator: '@hannah.home', amount: 'EUR 950', channel: 'PayPal' },
+    { creator: 'Hannah Lee', amount: 'EUR 950', channel: 'PayPal' },
     { creator: 'Luca Bianchi', amount: 'EUR 800', channel: 'Airwallex' },
     { creator: 'Mia Johnson', amount: 'EUR 700', channel: 'PayPal' },
     { creator: 'Theo Martin', amount: 'EUR 650', channel: 'Airwallex' },
@@ -323,7 +332,7 @@ const COLLAB_INVOICE_RECORDS = createInvoiceRecords({
   status: '已通过',
   invoiceDate: '2026-07-15',
   rows: [
-    { creator: '@Luna_J', amount: 'USD 2,800', channel: 'Airwallex' },
+    { creator: 'Luna Jones', amount: 'USD 2,800', channel: 'Airwallex' },
     { creator: 'Emily Wong', amount: 'USD 2,400', channel: 'PayPal' },
     { creator: 'Marc O.', amount: 'USD 2,500', channel: 'Airwallex' },
     { creator: 'Sofia Kim', amount: 'USD 2,250', channel: 'PayMax' },
@@ -333,7 +342,7 @@ const COLLAB_INVOICE_RECORDS = createInvoiceRecords({
 
 const JAPAN_CREATOR_NAMES = [
   'Kenji Mori',
-  '@MinaKato',
+  'Mina Kato',
   'Nika Petrova',
   'Aoi Sato',
   'Riku Tanaka',
@@ -444,7 +453,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     invoice: { id: '12 份 Invoice', meta: '对应 12 份合同 · 请款金额 USD 18,420', status: '财务复核中' },
     payment: { id: 'PAY-260718-04', meta: 'Airwallex · 12 笔付款', status: '待打款' },
     creators: [
-      { name: '@MinaKato', platform: 'TikTok / Instagram', deliverable: '直播 2 场 + 短视频 3 条', status: '已验收' },
+      { name: 'Mina Kato', platform: 'TikTok / Instagram', deliverable: '直播 2 场 + 短视频 3 条', status: '已验收' },
       { name: 'Yuki Tanaka', platform: 'Instagram', deliverable: 'Reels 2 条', status: '内容制作中' },
       { name: 'Camila Costa', platform: 'TikTok', deliverable: '短视频 2 条', status: '待交付' },
     ],
@@ -466,7 +475,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     payment: { id: '待生成', meta: '审批完成后自动生成付款清单', status: '未生成' },
     creators: [
       { name: 'Alex Ruiz', platform: 'YouTube', deliverable: '长视频 1 条', status: '待验收' },
-      { name: '@hannah.home', platform: 'Instagram', deliverable: 'Reels 1 条 + Story 3 条', status: '已交付' },
+      { name: 'Hannah Lee', platform: 'Instagram', deliverable: 'Reels 1 条 + Story 3 条', status: '已交付' },
       { name: 'Luca Bianchi', platform: 'TikTok', deliverable: '短视频 2 条', status: '内容制作中' },
     ],
     progress: [
@@ -486,7 +495,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     invoice: { id: '5 份 Invoice', meta: '对应 5 份合同 · 请款金额 USD 12,600', status: '已通过' },
     payment: { id: 'PAY-260702-08', meta: 'Airwallex · 批量付款', status: '付款处理中' },
     creators: [
-      { name: '@Luna_J', platform: 'Instagram', deliverable: 'Reels 2 条 + Story 6 条', status: '已验收' },
+      { name: 'Luna Jones', platform: 'Instagram', deliverable: 'Reels 2 条 + Story 6 条', status: '已验收' },
       { name: 'Emily Wong', platform: 'YouTube', deliverable: '长视频 1 条', status: '已验收' },
       { name: 'Marc O.', platform: 'Instagram', deliverable: '图文 3 组', status: '已验收' },
     ],
@@ -508,7 +517,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     payment: { id: 'PAY-260625-12', meta: 'Airwallex · 16 笔付款', status: '已完成' },
     creators: [
       { name: 'Kenji Mori', platform: 'YouTube', deliverable: '测评视频 1 条', status: '已完成' },
-      { name: '@MinaKato', platform: 'TikTok', deliverable: '短视频 2 条', status: '已完成' },
+      { name: 'Mina Kato', platform: 'TikTok', deliverable: '短视频 2 条', status: '已完成' },
       { name: 'Nika', platform: 'Instagram', deliverable: 'Reels 2 条', status: '已完成' },
     ],
     progress: [
@@ -541,13 +550,20 @@ function resolveProjectCreatorReferences(
   const archiveById = new Map(creatorArchive.map((creator) => [creator.id, creator]));
   return (project.creatorProfiles ?? []).map((reference) => {
     const currentProfile = archiveById.get(reference.creatorId);
+    const currentSocialAccount = findCreatorSocialAccount(
+      currentProfile,
+      reference.socialAccountId,
+      reference.handle,
+      reference.platform,
+    );
     return currentProfile
       ? {
           creatorId: currentProfile.id as CreatorId,
           engagementId: reference.engagementId,
           name: currentProfile.name,
-          handle: currentProfile.handle,
-          platform: currentProfile.platform,
+          handle: currentSocialAccount?.handle ?? reference.handle,
+          platform: currentSocialAccount?.platform ?? reference.platform,
+          socialAccountId: currentSocialAccount?.id ?? reference.socialAccountId,
         }
       : reference;
   });
@@ -568,7 +584,7 @@ function projectCreatorRows(
   const activeStatuses = ['脚本确认中', '待发布', '待验收', '已交付'];
 
   return resolveProjectCreatorReferences(project, creatorArchive).map((creator, index) => ({
-    name: creator.handle || creator.name,
+    name: creator.handle ? formatCreatorHandle(creator.handle, creator.platform) : creator.name,
     platform: creator.platform,
     deliverable: deliverables[index % deliverables.length],
     status: project.status === '已完成' ? '已完成' : activeStatuses[index % activeStatuses.length],
@@ -680,7 +696,25 @@ function ProjectCreatorManagerModal({
   onSave: (creatorHandles: string[]) => void;
   onClose: () => void;
 }) {
-  const initialHandles = project.creatorProfiles?.map((creator) => creator.handle) ?? [];
+  const creatorAccounts = useMemo(() => creatorArchive.flatMap((creator) => (
+    creatorSocialAccounts(creator).map((socialAccount) => ({
+      creator,
+      socialAccount,
+      value: creatorSocialSelectionValue(creator.id, socialAccount.id),
+    }))
+  )), [creatorArchive]);
+  const initialHandles = project.creatorProfiles?.flatMap((reference) => {
+    const creator = creatorArchive.find((item) => item.id === reference.creatorId);
+    const socialAccount = resolveCreatorSocialAccount(
+      creator,
+      reference.socialAccountId,
+      reference.handle,
+      reference.platform,
+    );
+    return creator && socialAccount
+      ? [creatorSocialSelectionValue(creator.id, socialAccount.id)]
+      : [];
+  }) ?? [];
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState('all');
   const [platform, setPlatform] = useState('all');
@@ -696,31 +730,36 @@ function ProjectCreatorManagerModal({
     })),
   ], [creatorArchive]);
   const platformOptions = useMemo(() => {
-    const platforms = Array.from(new Set(creatorArchive.flatMap((creator) => splitCreatorPlatforms(creator.platform))));
+    const platforms = Array.from(new Set(creatorAccounts.map(({ socialAccount }) => socialAccount.platform)));
     return [
-      { value: 'all', label: '全部平台', description: `${creatorArchive.length} 位达人` },
+      { value: 'all', label: '全部平台', description: `${creatorAccounts.length} 个账号` },
       ...platforms.map((item) => ({
         value: item,
         label: item,
-        description: `${creatorArchive.filter((creator) => splitCreatorPlatforms(creator.platform).includes(item)).length} 位达人`,
+        description: `${creatorAccounts.filter(({ socialAccount }) => socialAccount.platform === item).length} 个账号`,
       })),
     ];
-  }, [creatorArchive]);
-  const visibleCreators = useMemo(() => creatorArchive.filter((creator) => {
+  }, [creatorAccounts]);
+  const visibleCreators = useMemo(() => creatorAccounts.filter(({ creator, socialAccount }) => {
     const matchesSearch = !normalizedSearch || (
-      `${creator.name}${creator.handle}${creator.region}${creator.platform}`.toLowerCase().includes(normalizedSearch)
+      `${creator.name}${socialAccount.handle}${creator.region}${socialAccount.platform}${socialAccount.profileUrl}`.toLowerCase().includes(normalizedSearch)
     );
     const matchesRegion = region === 'all' || creator.region === region;
-    const matchesPlatform = platform === 'all' || splitCreatorPlatforms(creator.platform).includes(platform);
+    const matchesPlatform = platform === 'all' || socialAccount.platform === platform;
     return matchesSearch && matchesRegion && matchesPlatform;
-  }), [creatorArchive, normalizedSearch, platform, region]);
+  }), [creatorAccounts, normalizedSearch, platform, region]);
   const hasFilters = Boolean(normalizedSearch || region !== 'all' || platform !== 'all');
 
-  const toggleCreator = (handle: string) => {
+  const toggleCreator = (creatorId: string, value: string) => {
     setSelectedHandles((current) => (
-      current.includes(handle)
-        ? current.filter((selectedHandle) => selectedHandle !== handle)
-        : [...current, handle]
+      current.includes(value)
+        ? current.filter((selectedValue) => selectedValue !== value)
+        : [
+            ...current.filter((selectedValue) => (
+              parseCreatorSocialSelectionValue(selectedValue)?.creatorId !== creatorId
+            )),
+            value,
+          ]
     ));
   };
 
@@ -791,7 +830,7 @@ function ProjectCreatorManagerModal({
         <div className="project-creator-modal-list-header">
           <span>
             达人档案
-            <small>显示 {visibleCreators.length} / {creatorArchive.length} 位</small>
+            <small>显示 {visibleCreators.length} / {creatorAccounts.length} 个账号</small>
           </span>
           <div>
             {selectedHandles.length > 0 ? (
@@ -802,23 +841,23 @@ function ProjectCreatorManagerModal({
         </div>
 
         <div className="project-creator-modal-list" role="listbox" aria-label="项目达人档案" aria-multiselectable="true">
-          {visibleCreators.map((creator) => {
-            const selected = selectedHandleSet.has(creator.handle);
+          {visibleCreators.map(({ creator, socialAccount, value }) => {
+            const selected = selectedHandleSet.has(value);
             return (
               <button
                 className={`project-creator-modal-option ${selected ? 'project-creator-modal-option-selected' : ''}`}
                 type="button"
                 role="option"
                 aria-selected={selected}
-                data-creator-handle={creator.handle}
-                key={creator.id}
-                onClick={() => toggleCreator(creator.handle)}
+                data-creator-handle={socialAccount.handle}
+                key={value}
+                onClick={() => toggleCreator(creator.id, value)}
               >
                 <span className="project-creator-modal-profile">
                   <Avatar initials={creator.initials} accent={creator.accent} size="md" />
-                  <span><strong>{creator.name}</strong><small>{creator.handle}</small></span>
+                  <span><strong>{creator.name}</strong><small>{socialAccount.handle} · {socialAccount.platform}</small></span>
                 </span>
-                <span className="project-creator-modal-meta"><strong>{creator.region}</strong><small>{creator.platform}</small></span>
+                <span className="project-creator-modal-meta"><strong>{creator.region}</strong><small>{socialAccount.platform}</small></span>
                 <span className="project-creator-modal-projects">参与 {creator.projects} 个项目</span>
                 {selected
                   ? <CheckCircle2 className="project-creator-modal-check project-creator-modal-check-selected" size={20} />
