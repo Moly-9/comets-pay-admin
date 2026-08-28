@@ -279,13 +279,16 @@ describe('request project payment presentation', () => {
     expect(viewerSource).not.toContain('校验 Airwallex 付款信息完整性</Button>');
     expect(viewerSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators })');
     expect(viewerSource).toContain('导出 Excel');
-    expect(viewerSource).toContain('<th>达人名称</th>');
+    expect(viewerSource).toContain('<th>收款人名称</th>');
+    expect(viewerSource).toContain('<th>收款主体</th>');
     expect(viewerSource).toContain('<th>收款账户</th>');
     expect(viewerSource).toContain('<th>支付币种</th>');
     expect(viewerSource).toContain('<th>收款方币种</th>');
     expect(viewerSource).toContain('<th>Invoice 金额</th>');
     expect(viewerSource).toContain('<th>手续费承担方</th>');
     expect(viewerSource).toContain('<th>API 校验结果</th>');
+    expect(viewerSource).toContain('projectPaymentReviewPassed(');
+    expect(viewerSource).toContain('<Avatar initials={creatorInitials}');
     expect(viewerSource).toContain('validatePaymentListAccountViaApi');
     expect(viewerSource).toContain('onExportPaymentList(list.paymentListId)');
     expect(viewerSource).not.toContain('添加付款行');

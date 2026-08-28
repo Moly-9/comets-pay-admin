@@ -34,7 +34,7 @@ import {
   type PaymentAccountFieldIssue,
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
-import { Button } from './Common';
+import { Avatar, Button } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
@@ -118,6 +118,40 @@ const recipientAccountName = (
   return details?.accountName || fallbackName || '未填写';
 };
 
+export const recipientSubjectName = (
+  account: ReturnType<typeof paymentListEffectiveAccount>,
+  fallbackRealName?: string,
+  creator?: CreatorProfile,
+) => {
+  const details = account.paymentDetails;
+  const schemaValues = details?.schemaValues ?? {};
+  const entityType = String(
+    details?.beneficiaryType || schemaValues['beneficiary.entity_type'] || 'PERSONAL',
+  ).toUpperCase();
+  if (entityType === 'COMPANY') {
+    return schemaValues['beneficiary.company_name']
+      || details?.accountName
+      || fallbackRealName
+      || creator?.contact.legalName
+      || '未填写';
+  }
+  const schemaRealName = [
+    schemaValues['beneficiary.first_name'],
+    schemaValues['beneficiary.last_name'],
+  ].filter(Boolean).join(' ');
+  return fallbackRealName
+    || schemaRealName
+    || creator?.contact.legalName
+    || details?.accountName
+    || '未填写';
+};
+
+export const projectPaymentReviewPassed = (
+  invoiceFieldsMatch: boolean,
+  apiPassedCount: number,
+  totalCount: number,
+) => totalCount > 0 && invoiceFieldsMatch && apiPassedCount === totalCount;
+
 const fieldStateLabel = (field?: FinanceReviewField) => {
   if (field?.state === 'match') return '一致';
   if (field?.state === 'mismatch') return '不一致';
@@ -191,9 +225,6 @@ export function PaymentListReviewContent({
   const visibleAccountRows = accountDisplay === 'current-full' ? currentRows : rows;
   const snapshotAttentionCount = rows.filter((row) => row.snapshotReview.state !== 'ready').length;
   const apiPassedCount = rows.filter((row) => accountChecks[row.key]?.state === 'passed').length;
-  const fullyValidatedCount = rows.filter((row) => (
-    accountChecks[row.key]?.state === 'passed' && row.snapshotReview.state === 'ready'
-  )).length;
   const apiIssueCount = rows.filter((row) => (
     ['invalid', 'unavailable'].includes(accountChecks[row.key]?.state ?? '')
   )).length;
@@ -213,9 +244,12 @@ export function PaymentListReviewContent({
       reviewIndex: reviewIndexByReference.get(`${row.list.paymentListId}:${row.item.id}`),
     }];
   }), [accountChecks, reviewIndexByReference, rows]);
-  const allApiChecksPassed = rows.length > 0
-    && apiPassedCount === rows.length
-    && snapshotAttentionCount === 0;
+  const allApiChecksPassed = rows.length > 0 && apiPassedCount === rows.length;
+  const projectReviewPassed = projectPaymentReviewPassed(
+    financeReview.canApprove,
+    apiPassedCount,
+    rows.length,
+  );
   const currentListIds = [...new Set(currentReview?.paymentItems.map((item) => item.paymentListId) ?? [])];
   const exportLists = exportMode === 'current'
     ? paymentLists.filter((list) => currentListIds.includes(list.paymentListId))
@@ -399,11 +433,15 @@ export function PaymentListReviewContent({
 
           {variant === 'project' ? (
             <div
-              className={`request-finance-project-summary${financeReview.canApprove ? ' is-passed' : ' is-warning'}`}
+              className={`request-finance-project-summary${projectReviewPassed ? ' is-passed' : ' is-warning'}`}
               role="status"
             >
-              <div className="finance-review-summary-heading"><span className="finance-review-card-title-icon is-validation" aria-hidden="true"><ShieldCheck size={14} /></span><strong>项目核对：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong></div>
-              <span>{financeReview.canApprove ? '可提交财务审批通过' : `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`}</span>
+              <div className="finance-review-summary-heading"><span className="finance-review-card-title-icon is-validation" aria-hidden="true"><ShieldCheck size={14} /></span><strong>{projectReviewPassed ? '项目核对通过' : '项目核对'}：{financeReview.matchedCount} / {financeReview.totalCount} 份 Invoice 关键字段一致</strong></div>
+              <span>{projectReviewPassed
+                ? 'Invoice 关键字段与 API 校验全部通过，可提交财务审批'
+                : !financeReview.canApprove
+                  ? `存在 ${financeReview.mismatchCount} 项关键差异，需退回修改`
+                  : `API 校验已通过 ${apiPassedCount}/${rows.length}，全部通过后项目核对完成`}</span>
               {financeReview.warningCount ? <small>另有 {financeReview.warningCount} 项合同信息需核对（不阻断审批）</small> : null}
               {financeReview.projectIssues.map((issue) => (
                 <small key={issue.id}>{issue.label}：{issue.paymentValue}</small>
@@ -417,13 +455,14 @@ export function PaymentListReviewContent({
                 <span className="finance-review-card-title-icon is-account" aria-hidden="true"><UserRoundCheck size={16} /></span>
                 <div>
                   <strong id="request-payment-payee-table-title">达人付款信息</strong>
-                  <p>逐笔核对付款字段与收款账户 · {validating ? '正在自动校验' : `已通过 ${fullyValidatedCount}/${rows.length}`}</p>
+                  <p>逐笔核对付款字段与收款账户 · {validating ? '正在自动校验' : `API 已通过 ${apiPassedCount}/${rows.length}`}</p>
                 </div>
               </header>
               <div className="table-scroll request-payment-payee-table-scroll">
                 <table className="request-payment-payee-table">
                   <colgroup>
                     <col className="is-creator" />
+                    <col className="is-subject" />
                     <col className="is-account" />
                     <col className="is-currency" />
                     <col className="is-currency" />
@@ -433,7 +472,8 @@ export function PaymentListReviewContent({
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>达人名称</th>
+                      <th>收款人名称</th>
+                      <th>收款主体</th>
                       <th>收款账户</th>
                       <th>支付币种</th>
                       <th>收款方币种</th>
@@ -443,31 +483,48 @@ export function PaymentListReviewContent({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, index) => {
+                    {rows.map((row) => {
                       const currency = String(paymentListItemValue(row.item, 'currency') || '待确认');
                       const receiveCurrency = displayValue(paymentListItemValue(row.item, 'receiveCurrency'));
                       const invoiceCurrency = String(row.item.snapshot.currency || currency);
                       const invoiceAmount = Number(row.item.snapshot.amount || 0);
                       const check = accountChecks[row.key];
-                      const passed = check?.state === 'passed' && row.snapshotReview.state === 'ready';
+                      const passed = check?.state === 'passed';
                       const checking = !check || check.state === 'checking';
                       const validationLabel = checking ? '校验中' : passed ? '已通过' : '未通过';
-                      const validationMessage = row.snapshotReview.issues[0]
-                        || (check && 'message' in check ? check.message : '正在自动校验付款信息');
-                      const creatorInitials = row.item.snapshot.creatorName
+                      const validationMessage = check && 'message' in check
+                        ? check.message
+                        : '正在自动校验付款信息';
+                      const creator = row.item.snapshot.creatorId
+                        ? creators.find((candidate) => String(candidate.id) === String(row.item.snapshot.creatorId))
+                        : creators.find((candidate) => candidate.name === row.item.snapshot.creatorName);
+                      const creatorInitials = creator?.initials || row.item.snapshot.creatorName
                         .split(/\s+/)
                         .filter(Boolean)
                         .slice(0, 2)
                         .map((part) => part[0]?.toUpperCase())
                         .join('') || '—';
+                      const recipientName = creator?.name || row.item.snapshot.creatorName;
+                      const recipientHandle = creator?.handle || row.item.snapshot.creatorHandle || 'Handle 待补充';
+                      const recipientPlatform = creator?.platform || '社媒平台待补充';
+                      const subjectName = recipientSubjectName(
+                        row.effectiveAccount,
+                        row.item.snapshot.realName,
+                        creator,
+                      );
                       return (
                         <tr key={row.key}>
-                          <td data-label="达人名称">
+                          <td data-label="收款人名称">
                             <div className="request-payment-payee-creator">
-                              <span className={`is-tone-${(index % 4) + 1}`} aria-hidden="true">{creatorInitials}</span>
-                              <strong>{row.item.snapshot.creatorName}</strong>
+                              <Avatar initials={creatorInitials} accent={creator?.accent ?? '#718096'} size="sm" />
+                              <div>
+                                <strong>{recipientName}</strong>
+                                <small>{recipientHandle}</small>
+                                <small>{recipientPlatform}</small>
+                              </div>
                             </div>
                           </td>
+                          <td data-label="收款主体"><strong>{subjectName}</strong></td>
                           <td data-label="收款账户">
                             <strong>{accountDisplayValue(row.effectiveAccount.accountSummary)}</strong>
                             <small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small>

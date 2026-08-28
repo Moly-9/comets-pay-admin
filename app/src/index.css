@@ -4141,17 +4141,18 @@ input[type="checkbox"]:disabled {
 
 .request-payment-payee-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1000px;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
-.request-payment-payee-table col.is-creator { width: 17%; }
-.request-payment-payee-table col.is-account { width: 23%; }
-.request-payment-payee-table col.is-currency { width: 10%; }
-.request-payment-payee-table col.is-amount { width: 15%; }
-.request-payment-payee-table col.is-fee { width: 14%; }
-.request-payment-payee-table col.is-validation { width: 11%; }
+.request-payment-payee-table col.is-creator { width: 20%; }
+.request-payment-payee-table col.is-subject { width: 14%; }
+.request-payment-payee-table col.is-account { width: 18%; }
+.request-payment-payee-table col.is-currency { width: 8%; }
+.request-payment-payee-table col.is-amount { width: 13%; }
+.request-payment-payee-table col.is-fee { width: 10%; }
+.request-payment-payee-table col.is-validation { width: 9%; }
 
 .request-payment-payee-table th,
 .request-payment-payee-table td {
@@ -4207,30 +4208,32 @@ input[type="checkbox"]:disabled {
   gap: 9px;
 }
 
-.request-payment-payee-creator > span {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
+.request-payment-payee-creator > .avatar {
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #efe7ff;
-  color: #7952bd;
-  font-size: 10px;
-  font-weight: 800;
 }
 
-.request-payment-payee-creator > span.is-tone-2 { background: #fdebf2; color: #bd4f79; }
-.request-payment-payee-creator > span.is-tone-3 { background: #e9f0ff; color: #4270ba; }
-.request-payment-payee-creator > span.is-tone-4 { background: #fff0e5; color: #c46a2b; }
+.request-payment-payee-creator > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
 
-.request-payment-payee-creator > strong {
+.request-payment-payee-creator strong,
+.request-payment-payee-creator small {
   overflow: hidden;
-  color: #29323d;
-  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.request-payment-payee-creator strong {
+  color: #29323d;
+  font-weight: 700;
+}
+
+.request-payment-payee-creator small {
+  color: #7a8592;
+  font-size: 9.5px;
+  line-height: 1.35;
 }
 
 .request-payment-currency-badge {

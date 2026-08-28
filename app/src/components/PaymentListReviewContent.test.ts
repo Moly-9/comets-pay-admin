@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { FinanceReviewPage } from '../financeReview';
-import { financeWorkspaceComparisonFields } from './PaymentListReviewContent';
+import {
+  financeWorkspaceComparisonFields,
+  projectPaymentReviewPassed,
+  recipientSubjectName,
+} from './PaymentListReviewContent';
 
 const reviewContentSource = readFileSync(
   new URL('./PaymentListReviewContent.tsx', import.meta.url),
@@ -152,18 +156,50 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).not.toContain('exportMode="current"');
   });
 
-  it('renders the project payment list as the requested seven-column payee table', () => {
+  it('only passes the project review after every API validation passes', () => {
+    expect(projectPaymentReviewPassed(true, 17, 17)).toBe(true);
+    expect(projectPaymentReviewPassed(true, 16, 17)).toBe(false);
+    expect(projectPaymentReviewPassed(false, 17, 17)).toBe(false);
+    expect(projectPaymentReviewPassed(true, 0, 0)).toBe(false);
+    expect(reviewContentSource).toContain('API 校验已通过 ${apiPassedCount}/${rows.length}');
+    expect(reviewContentSource).toContain('API 已通过 ${apiPassedCount}/${rows.length}');
+    expect(reviewContentSource).toContain("const passed = check?.state === 'passed';");
+  });
+
+  it('uses the frozen real name or company name as the recipient subject', () => {
+    expect(recipientSubjectName({
+      paymentDetails: {
+        beneficiaryType: 'COMPANY',
+        accountName: 'Fallback Account Name',
+        schemaValues: { 'beneficiary.company_name': 'Mina Studio Limited' },
+      },
+    } as never, 'Mina Kato')).toBe('Mina Studio Limited');
+    expect(recipientSubjectName({
+      paymentDetails: {
+        beneficiaryType: 'PERSONAL',
+        accountName: 'Fallback Account Name',
+        schemaValues: {},
+      },
+    } as never, 'Mina Kato')).toBe('Mina Kato');
+  });
+
+  it('renders the project payment list as the requested eight-column payee table', () => {
     expect(reviewContentSource).toContain('request-payment-payee-table-section');
-    expect(reviewContentSource).toContain('<th>达人名称</th>');
+    expect(reviewContentSource).toContain('<th>收款人名称</th>');
+    expect(reviewContentSource).toContain('<th>收款主体</th>');
     expect(reviewContentSource).toContain('<th>收款账户</th>');
     expect(reviewContentSource).toContain('<th>支付币种</th>');
     expect(reviewContentSource).toContain('<th>收款方币种</th>');
     expect(reviewContentSource).toContain('<th>Invoice 金额</th>');
     expect(reviewContentSource).toContain('<th>手续费承担方</th>');
     expect(reviewContentSource).toContain('<th>API 校验结果</th>');
+    expect(reviewContentSource).toContain('<Avatar initials={creatorInitials}');
+    expect(reviewContentSource).toContain('<small>{recipientHandle}</small>');
+    expect(reviewContentSource).toContain('<small>{recipientPlatform}</small>');
+    expect(reviewContentSource).toContain('recipientSubjectName(');
     expect(reviewContentSource).toContain('request-payment-review-heading-actions');
     expect(reviewContentSource).toContain("variant === 'finance-workspace' ? (accountDisplay");
-    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*900px;/s);
+    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*1000px;/s);
     expect(workspaceStyles).toMatch(/@media \(max-width: 640px\)[\s\S]*\.request-payment-payee-table tr\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
 

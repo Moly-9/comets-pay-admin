@@ -1714,3 +1714,33 @@ final result: passed
 - `git diff --check` 通过。
 
 final result: passed
+
+---
+
+# 付款清单 API 核对口径与收款身份验收
+
+验收日期：2026-08-28
+
+## Source Evidence
+
+- 用户浏览器批注中的付款清单桌面截图，状态为项目关键字段 17/17 一致、API 通过 0/17。
+- 目标字段：收款人名称、收款主体、收款账户、支付币种、收款方币种、Invoice 金额、手续费承担方、API 校验结果。
+
+## Findings
+
+- 项目核对通过改为双条件：Invoice 关键字段一致，并且当前付款清单全部 API 校验通过。
+- 达人付款信息中的通过数只统计 API 返回 `passed` 的付款明细，与 API 校验结果列使用同一口径。
+- API 结果列不再混入付款快照复核状态，避免顶部计数与逐行结果不一致。
+- 首列改为“收款人名称”，复用系统头像组件并展示收款人、Handle 和社媒平台。
+- 新增“收款主体”列：个人账户读取冻结 Real Name，公司账户读取 Airwallex Schema 的 Company Name。
+- 桌面表格扩展为八列并保持固定列宽；640px 以下继续转换为两列信息卡片，收款人身份占完整首行。
+
+## Verification
+
+- `PaymentListReviewContent` 定向测试：19 项通过。
+- 完整 Vitest：99 个测试文件、677 项测试通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+- 已检查现有浏览器页面状态；本地 URL 安全策略阻止刷新当前标签页，因此未生成更新后的浏览器截图，需在页面手动刷新后查看新构建。
+
+final result: passed
