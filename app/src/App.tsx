@@ -52,6 +52,9 @@ import {
   createPaymentBatchRecord,
   createPaymentExecutionBatchRecord,
   createPaymentProjectPaymentRecord,
+  paymentBatchItemAttemptNumber,
+  paymentBatchItemOrderCode,
+  paymentBatchItemSourceOrderCode,
 } from './paymentBatches';
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
@@ -2632,25 +2635,40 @@ export default function App() {
 
     const waitingPayoutIds = new Set(projectPayouts.map((payout) => payout.id));
     setPayouts((current) => current.map((payout) => (
-      waitingPayoutIds.has(payout.id) ? {
-        ...payout,
+      waitingPayoutIds.has(payout.id)
+        ? (() => {
+            const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
+            return {
+              ...payout,
+              status: '付款处理中' as const,
+              currentPaymentAttempt: {
+                paymentBatchId: batchRecord.paymentBatchId,
+                paymentBatchCode: batchRecord.paymentBatchCode,
+                submittedAt,
+                paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+                sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+                attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+              },
+            };
+          })()
+        : payout
+    )));
+    setSelectedPayout((current) => {
+      if (!current || !waitingPayoutIds.has(current.id)) return current;
+      const batchItem = batchRecord.items.find((item) => item.payoutId === current.id)!;
+      return {
+        ...current,
         status: '付款处理中',
         currentPaymentAttempt: {
           paymentBatchId: batchRecord.paymentBatchId,
           paymentBatchCode: batchRecord.paymentBatchCode,
           submittedAt,
+          paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+          sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+          attemptNumber: paymentBatchItemAttemptNumber(batchItem),
         },
-      } : payout
-    )));
-    setSelectedPayout((current) => current && waitingPayoutIds.has(current.id) ? {
-      ...current,
-      status: '付款处理中',
-      currentPaymentAttempt: {
-        paymentBatchId: batchRecord.paymentBatchId,
-        paymentBatchCode: batchRecord.paymentBatchCode,
-        submittedAt,
-      },
-    } : current);
+      };
+    });
     setPaymentBatches((current) => [batchRecord, ...current]);
     notify(
       '项目付款已提交渠道',
@@ -4389,11 +4407,21 @@ export default function App() {
       notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
       return;
     }
+    const retryItems = selected.filter(isPaymentFailureRetryReady);
+    if (retryItems.length > 0 && retryItems.length !== selected.length) {
+      notify('无法创建付款批次', '首次付款和重新付款需要分别创建付款批次及付款单。');
+      return;
+    }
     const execution = executeMockBatchSubmission(submission);
     const now = new Date();
     const localPaymentTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
       .toISOString()
       .slice(0, 16);
+    const isRetryBatch = retryItems.length > 0;
+    const retryPaymentOrderCode = isRetryBatch ? createPrototypeCode('PAY') : undefined;
+    const retryAttemptNumber = isRetryBatch
+      ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
+      : undefined;
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
@@ -4412,6 +4440,8 @@ export default function App() {
         status: '付款处理中',
         lifecycle: execution.lifecycle,
         itemStatus: '付款处理中',
+        paymentOrderCode: retryPaymentOrderCode,
+        paymentAttemptNumber: retryAttemptNumber,
       });
     } catch (error) {
       notify(
@@ -4422,8 +4452,19 @@ export default function App() {
     }
     setPayouts((current) => current.map((payout) => {
       if (!selected.some((item) => item.id === payout.id)) return payout;
+      const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
       return isPaymentFailureRetryReady(payout)
-        ? markPaymentFailureRetrySubmitted(payout, execution.batchId, execution.batchCode, localPaymentTime)
+        ? markPaymentFailureRetrySubmitted(
+            payout,
+            execution.batchId,
+            execution.batchCode,
+            localPaymentTime,
+            {
+              paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+              sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+              attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+            },
+          )
         : {
             ...payout,
             status: '付款处理中',
@@ -4432,6 +4473,9 @@ export default function App() {
               paymentBatchId: batchRecord.paymentBatchId,
               paymentBatchCode: batchRecord.paymentBatchCode,
               submittedAt: localPaymentTime,
+              paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+              sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+              attemptNumber: paymentBatchItemAttemptNumber(batchItem),
             },
           };
     }));

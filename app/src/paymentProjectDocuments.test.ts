@@ -4,11 +4,13 @@ import type { ContractRecord } from './contracts';
 import type { PaymentBatchItemSnapshot, PaymentBatchRequestSnapshot } from './paymentBatches';
 import {
   createPaymentProjectConfirmationArchive,
+  createPaymentItemConfirmationPdf,
   createPaymentProjectContractArchive,
   createPaymentProjectDetailWorkbook,
   createPaymentProjectInvoiceArchive,
   createPaymentProjectWorkbook,
   paymentProjectConfirmationArchiveFilename,
+  paymentItemConfirmationFilename,
   paymentProjectDetailWorkbookFilename,
   paymentProjectWorkbookFilename,
   resolvePaymentProjectDocuments,
@@ -255,6 +257,27 @@ describe('payment project documents', () => {
       items: [{ ...item, paidAt: undefined }],
       loadAsset: async () => new Blob(['unused']),
     })).rejects.toThrow('当前没有具备实际付款日期的已付款明细');
+  });
+
+  it('downloads one confirmation PDF with the current payment-order filename', async () => {
+    const template = new Blob(['AIRWALLEX CONFIRMATION'], { type: 'application/pdf' });
+    const retryItem = {
+      ...item,
+      paymentOrderCode: 'PAY-RETRY-002',
+      sourcePaymentOrderCode: item.paymentListCode,
+      paymentAttemptNumber: 2,
+    } satisfies PaymentBatchItemSnapshot;
+
+    const result = await createPaymentItemConfirmationPdf({
+      item: retryItem,
+      loadAsset: async (path) => {
+        expect(path).toBe('/export-assets/airwallex/airwallex付款单-支付确认函.pdf');
+        return template;
+      },
+    });
+
+    expect(await result.text()).toBe('AIRWALLEX CONFIRMATION');
+    expect(paymentItemConfirmationFilename(retryItem)).toBe('PAY-RETRY-002-INV-202608-000019-付款确认函.pdf');
   });
 
   it('uses stable project filenames', () => {

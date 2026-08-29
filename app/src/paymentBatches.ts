@@ -68,6 +68,9 @@ export type PaymentBatchItemSnapshot = Readonly<{
   paymentListCode: string;
   paymentListStatus: string;
   paymentListVersion?: number;
+  paymentOrderCode?: string;
+  sourcePaymentOrderCode?: string;
+  paymentAttemptNumber?: number;
   contracts: readonly PaymentBatchContractSnapshot[];
   invoice?: PaymentBatchInvoiceSnapshot;
   legacyContractReference?: string;
@@ -169,6 +172,8 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   status: PaymentBatchStatus;
   lifecycle: readonly string[];
   itemStatus?: Payout['status'];
+  paymentOrderCode?: string;
+  paymentAttemptNumber?: number;
 }>;
 
 type CreatePaymentExecutionBatchRecordInput = PaymentBatchSourceData & Readonly<{
@@ -318,6 +323,8 @@ const snapshotItem = ({
   contracts,
   itemStatus,
   batchPaidAt,
+  paymentOrderCode,
+  paymentAttemptNumber,
 }: {
   payout: Payout;
   request: RequestProjectSummary;
@@ -326,6 +333,8 @@ const snapshotItem = ({
   contracts: readonly ContractRecord[];
   itemStatus?: Payout['status'];
   batchPaidAt: string;
+  paymentOrderCode?: string;
+  paymentAttemptNumber?: number;
 }): PaymentBatchItemSnapshot => {
   const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
   const invoiceId = invoice?.invoiceId;
@@ -373,6 +382,13 @@ const snapshotItem = ({
   const paymentStatus = itemStatus ?? payout.status;
   const hasSuccessfulResult = paymentStatus === '已付款';
   const hasFailedResult = paymentStatus === '付款失败' || paymentStatus === '已退回';
+  const sourcePaymentOrderCode = paymentList?.paymentListCode ?? '关联资料缺失';
+  const resolvedPaymentOrderCode = paymentOrderCode
+    ?? payout.currentPaymentAttempt?.paymentOrderCode
+    ?? sourcePaymentOrderCode;
+  const resolvedAttemptNumber = paymentAttemptNumber
+    ?? payout.currentPaymentAttempt?.attemptNumber
+    ?? (resolvedPaymentOrderCode !== sourcePaymentOrderCode ? 2 : 1);
 
   return {
     payoutId: payout.id,
@@ -386,6 +402,9 @@ const snapshotItem = ({
     paymentListCode: paymentList?.paymentListCode ?? '关联资料缺失',
     paymentListStatus: paymentList?.status ?? '未关联',
     paymentListVersion: paymentList?.version,
+    paymentOrderCode: resolvedPaymentOrderCode,
+    sourcePaymentOrderCode,
+    paymentAttemptNumber: resolvedAttemptNumber,
     contracts: contractSnapshots,
     invoice: invoice ? {
       invoiceId: invoice.invoiceId,
@@ -450,6 +469,8 @@ export const createPaymentBatchRecord = ({
   paymentLists,
   contracts,
   itemStatus,
+  paymentOrderCode,
+  paymentAttemptNumber,
   ...batch
 }: CreatePaymentBatchRecordInput): PaymentBatchRecord => {
   if (!payouts.length) throw new Error('付款批次至少需要一笔付款明细');
@@ -479,8 +500,29 @@ export const createPaymentBatchRecord = ({
       contracts,
       itemStatus,
       batchPaidAt: batch.paidAt,
+      paymentOrderCode,
+      paymentAttemptNumber,
     })),
   };
+};
+
+export const paymentBatchItemOrderCode = (item: PaymentBatchItemSnapshot) => (
+  item.paymentOrderCode || item.paymentListCode || '关联资料缺失'
+);
+
+export const paymentBatchItemSourceOrderCode = (item: PaymentBatchItemSnapshot) => (
+  item.sourcePaymentOrderCode || item.paymentListCode || '关联资料缺失'
+);
+
+export const paymentBatchItemAttemptNumber = (item: PaymentBatchItemSnapshot) => (
+  Math.max(1, item.paymentAttemptNumber ?? 1)
+);
+
+export const paymentBatchItemAttemptLabel = (item: PaymentBatchItemSnapshot) => {
+  const attemptNumber = paymentBatchItemAttemptNumber(item);
+  if (attemptNumber === 1) return '首次付款';
+  if (attemptNumber === 2) return '二次付款';
+  return `第 ${attemptNumber} 次付款`;
 };
 
 export const createPaymentExecutionBatchRecord = ({
@@ -825,6 +867,8 @@ export const createInitialPaymentBatches = ({
     status: '已付款',
     lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
     itemStatus: '已付款',
+    paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+    paymentAttemptNumber: 2,
   });
 
   return [retryBatch, ...initialAttempts];

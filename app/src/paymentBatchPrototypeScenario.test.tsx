@@ -90,11 +90,22 @@ describe('payment batch prototype scenario', () => {
       request.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
     ))!;
     const retriedPayout = payoutsForRequest(retriedRequest).find((payout) => payout.currentPaymentAttempt);
+    const originalPaymentOrderCode = retriedPayout
+      ? INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists.find((list) => (
+          INITIAL_COMPLETE_REQUEST_RESOURCES.invoices.some((invoice) => (
+            invoice.sourcePayoutId === retriedPayout.id
+            && list.items.some((item) => item.invoiceId === invoice.invoiceId)
+          ))
+        ))?.paymentListCode
+      : undefined;
 
     expect(retriedPayout).toMatchObject({
       status: '已付款',
       currentPaymentAttempt: {
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+        paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+        sourcePaymentOrderCode: originalPaymentOrderCode,
+        attemptNumber: 2,
       },
       paymentFailureRecovery: {
         status: 'RETRY_SUCCEEDED',
@@ -105,6 +116,8 @@ describe('payment batch prototype scenario', () => {
         },
       },
     });
+    expect(originalPaymentOrderCode).toBeTruthy();
+    expect(retriedPayout?.currentPaymentAttempt?.paymentOrderCode).not.toBe(originalPaymentOrderCode);
     expect(retriedPayout?.paymentFailure).toBeUndefined();
   });
 

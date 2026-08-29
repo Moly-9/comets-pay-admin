@@ -25,6 +25,7 @@ export const PAYMENT_BATCH_RETRY_DEMO = {
   requestCode: 'REQ-202607-000011',
   retryBatchId: 'payment_batch_fixture_retry_001',
   retryBatchCode: 'BAT-20260806-001',
+  retryPaymentOrderCode: 'PAY-20260806-001',
   submittedAt: '2026-08-06T10:15',
   payer: '奚文慧',
 } as const;
@@ -133,6 +134,10 @@ export const applyPaymentBatchPrototypeScenario = ({
       const isRetrySuccess = perspective === 'project-current'
         && scenario.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
         && scenario.providerItemIndex === 0;
+      const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
+      const sourcePaymentOrderCode = paymentLists.find((list) => (
+        linkedInvoice && list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
+      ))?.paymentListCode;
       const paymentResult = status === '已付款' ? prototypePaymentResultFor(payout) : undefined;
       const balanceKey = `${payout.provider}:${payout.currency}`;
       const previousBalance = runningBalances.get(balanceKey)
@@ -166,6 +171,9 @@ export const applyPaymentBatchPrototypeScenario = ({
           paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
           paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
           submittedAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+          paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+          sourcePaymentOrderCode,
+          attemptNumber: 2,
         } : payout.currentPaymentAttempt,
         paymentFailureRecovery: isRetrySuccess ? {
           status: 'RETRY_SUCCEEDED',

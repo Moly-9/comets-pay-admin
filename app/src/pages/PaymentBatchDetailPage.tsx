@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   ArrowLeft,
-  Building2,
   ChevronDown,
   CircleAlert,
   Coins,
@@ -17,9 +16,9 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Button } from '../components/Common';
+import { Button, ListActionButton } from '../components/Common';
 import {
   PaymentAttachmentPreview,
   type PaymentAttachmentPreviewTarget,
@@ -29,6 +28,10 @@ import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
   paymentBatchAmountLabel,
+  paymentBatchItemAttemptLabel,
+  paymentBatchItemAttemptNumber,
+  paymentBatchItemOrderCode,
+  paymentBatchItemSourceOrderCode,
   paymentBatchStatusCounts,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
@@ -37,13 +40,11 @@ import type { ContractRecord } from '../contracts';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import {
-  createPaymentProjectContractArchive,
-  createPaymentProjectInvoiceArchive,
+  createPaymentItemConfirmationPdf,
   createPaymentProjectWorkbook,
+  paymentItemConfirmationFilename,
   paymentProjectWorkbookFilename,
-  resolvePaymentProjectDocuments,
 } from '../paymentProjectDocuments';
-import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
@@ -75,16 +76,21 @@ const money = (currency: string, amount: number | null) => (
   amount === null ? '未记录' : `${currency} ${amount.toLocaleString('en-US')}`
 );
 
-const contractSummary = (item: PaymentBatchItemSnapshot) => {
-  if (item.contracts.length) return item.contracts.map((contract) => contract.contractCode).join('、');
-  return item.legacyContractReference || '未关联';
-};
-
 const paymentOrderStatus = (items: readonly PaymentBatchItemSnapshot[]) => {
   if (items.some((item) => ['付款失败', '已退回'].includes(item.paymentStatus))) return '部分打款失败';
   if (items.length > 0 && items.every((item) => item.paymentStatus === '已付款')) return '已付款';
   return '付款处理中';
 };
+
+const paymentDateLabel = (value?: string) => value
+  ? value.replace('T', ' ').split(' ')[0]
+  : '—';
+
+const paymentFeeLabel = (item: PaymentBatchItemSnapshot) => (
+  item.transferFeeAmount !== undefined && item.transferFeeCurrency
+    ? money(item.transferFeeCurrency, item.transferFeeAmount)
+    : '—'
+);
 
 export function PaymentItemDetails({
   item,
@@ -208,7 +214,9 @@ export function PaymentItemDetails({
           <span className={`payment-batch-detail-panel-badge ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
         </header>
         <dl>
-          <div><dt>付款单</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
+          <div><dt>付款单</dt><dd>{paymentBatchItemOrderCode(item)}</dd></div>
+          {paymentBatchItemAttemptNumber(item) > 1 ? <div><dt>原付款单</dt><dd>{paymentBatchItemSourceOrderCode(item)}</dd></div> : null}
+          <div><dt>付款类型</dt><dd>{paymentBatchItemAttemptLabel(item)}</dd></div>
           <div><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
           <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
           <div><dt>收款账户</dt><dd>{accountDisplayValue(item.accountSummary)}</dd></div>
@@ -289,7 +297,8 @@ export function PaymentBatchDetailPage({
   ));
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
   const [previewTarget, setPreviewTarget] = useState<PaymentAttachmentPreviewTarget | null>(null);
-  const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | 'workbook' | null>(null);
+  const [downloadingResource, setDownloadingResource] = useState<'workbook' | null>(null);
+  const [downloadingConfirmationId, setDownloadingConfirmationId] = useState<string | null>(null);
   const [resourceError, setResourceError] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
   const totals = paymentBatchAmountLabel(batch);
@@ -302,15 +311,10 @@ export function PaymentBatchDetailPage({
       return true;
     });
   }, [batch.items, projectItems]);
-  const projectDocuments = useMemo(() => resolvePaymentProjectDocuments({
-    items: projectArchiveItems,
-    contracts,
-    invoices,
-  }), [contracts, invoices, projectArchiveItems]);
   const paymentOrders = useMemo(() => {
     const grouped = new Map<string, PaymentBatchItemSnapshot[]>();
     batch.items.forEach((item) => {
-      const code = item.paymentListCode || '关联资料缺失';
+      const code = paymentBatchItemOrderCode(item);
       grouped.set(code, [...(grouped.get(code) ?? []), item]);
     });
     return [...grouped.entries()].map(([code, items]) => ({ code, items }));
@@ -349,31 +353,35 @@ export function PaymentBatchDetailPage({
     setPreviewTarget({ kind: 'invoice', invoice });
   };
 
-  const downloadProjectResource = async (kind: 'contract' | 'invoice' | 'workbook') => {
+  const downloadProjectWorkbook = async () => {
     if (!projectArchiveItems.length || downloadingResource) return;
-    setDownloadingResource(kind);
+    setDownloadingResource('workbook');
     setResourceError('');
     try {
-      if (kind === 'contract') {
-        downloadBlob(
-          await createPaymentProjectContractArchive({ items: projectArchiveItems, contracts }),
-          projectPdfArchiveFilename(batch.request.requestCode, 'contract'),
-        );
-      } else if (kind === 'invoice') {
-        downloadBlob(
-          await createPaymentProjectInvoiceArchive({ items: projectArchiveItems, invoices }),
-          projectPdfArchiveFilename(batch.request.requestCode, 'invoice'),
-        );
-      } else {
-        downloadBlob(
-          await createPaymentProjectWorkbook({ request: batch.request, items: projectArchiveItems }),
-          paymentProjectWorkbookFilename(batch.request.requestCode),
-        );
-      }
+      downloadBlob(
+        await createPaymentProjectWorkbook({ request: batch.request, items: projectArchiveItems }),
+        paymentProjectWorkbookFilename(batch.request.requestCode),
+      );
     } catch (error) {
       setResourceError(error instanceof Error ? error.message : '项目资料下载失败，请稍后重试。');
     } finally {
       setDownloadingResource(null);
+    }
+  };
+
+  const downloadItemConfirmation = async (item: PaymentBatchItemSnapshot) => {
+    if (downloadingConfirmationId) return;
+    setDownloadingConfirmationId(item.payoutId);
+    setResourceError('');
+    try {
+      downloadBlob(
+        await createPaymentItemConfirmationPdf({ item }),
+        paymentItemConfirmationFilename(item),
+      );
+    } catch (error) {
+      setResourceError(error instanceof Error ? error.message : '付款确认函下载失败，请稍后重试。');
+    } finally {
+      setDownloadingConfirmationId(null);
     }
   };
 
@@ -392,7 +400,7 @@ export function PaymentBatchDetailPage({
         <div>
           <span>付款批次</span>
           <h1 ref={titleRef} tabIndex={-1}>{batch.paymentBatchCode}</h1>
-          <p>{batch.request.cooperationProjectName}</p>
+          <p>{batch.request.cooperationProjectCode} · {batch.request.cooperationProjectName}</p>
         </div>
         <div className="payment-batch-detail-total">
           <span className={`simple-status ${batchStatusTone(batch.status)}`}><i />{batch.status}</span>
@@ -427,33 +435,15 @@ export function PaymentBatchDetailPage({
 
       <section className="payment-batch-orders-section" aria-labelledby="payment-batch-orders-title">
         <header className="payment-batch-orders-heading">
-          <div><h2 id="payment-batch-orders-title">付款单与付款明细</h2><p>每张付款单集中展示项目付款信息、付款项和渠道结果。</p></div>
+          <div><h2 id="payment-batch-orders-title">付款单与付款明细</h2><p>每次重新付款创建新付款单，并保留与原付款单的结果关联。</p></div>
           <div className="payment-project-resource-toolbar">
             <div className="payment-project-resource-actions" aria-label="下载付款项目资料">
-              <Button
-                variant="secondary"
-                icon={downloadingResource === 'contract' ? <LoaderCircle className="is-spinning" size={15} /> : <FileText size={15} />}
-                disabled={!projectDocuments.contracts.length || downloadingResource !== null}
-                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
-                onClick={() => downloadProjectResource('contract')}
-              >
-                {downloadingResource === 'contract' ? '正在打包' : '下载合同'}
-              </Button>
-              <Button
-                variant="secondary"
-                icon={downloadingResource === 'invoice' ? <LoaderCircle className="is-spinning" size={15} /> : <ReceiptText size={15} />}
-                disabled={!projectDocuments.invoices.length || downloadingResource !== null}
-                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
-                onClick={() => downloadProjectResource('invoice')}
-              >
-                {downloadingResource === 'invoice' ? '正在打包' : '下载 Invoice'}
-              </Button>
               <Button
                 variant="secondary"
                 icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
                 disabled={!projectArchiveItems.length || downloadingResource !== null}
                 disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款确认文件。'}
-                onClick={() => downloadProjectResource('workbook')}
+                onClick={downloadProjectWorkbook}
               >
                 {downloadingResource === 'workbook' ? '正在生成' : '下载付款表'}
               </Button>
@@ -467,12 +457,18 @@ export function PaymentBatchDetailPage({
             const orderCounts = paymentBatchStatusCounts({ items: order.items });
             const orderStatus = paymentOrderStatus(order.items);
             const orderId = `payment-order-${order.code.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+            const attemptNumber = paymentBatchItemAttemptNumber(order.items[0]);
+            const sourcePaymentOrderCode = paymentBatchItemSourceOrderCode(order.items[0]);
             return (
               <article className="payment-batch-order-card" key={order.code} role="listitem" aria-labelledby={`${orderId}-title`}>
                 <header className="payment-batch-order-header">
                   <div className="payment-batch-order-identity">
                     <span aria-hidden="true"><WalletCards size={20} /></span>
-                    <div><small>付款单</small><h2 id={`${orderId}-title`}>{order.code}</h2><p>{order.items.length} 笔付款明细</p></div>
+                    <div>
+                      <small>付款单</small>
+                      <h2 id={`${orderId}-title`}>{order.code}</h2>
+                      <p>{paymentBatchItemAttemptLabel(order.items[0])}{attemptNumber > 1 ? ` · 关联原付款单 ${sourcePaymentOrderCode}` : ''} · {order.items.length} 笔付款明细</p>
+                    </div>
                   </div>
                   <div className="payment-batch-order-result">
                     <span className={`simple-status ${paymentStatusTone(orderStatus)}`}><i />{orderStatus}</span>
@@ -480,22 +476,6 @@ export function PaymentBatchDetailPage({
                     <small>{orderCounts.succeeded} 成功 · {orderCounts.failed} 失败 · {orderCounts.processing} 处理中</small>
                   </div>
                 </header>
-
-                <section className="payment-batch-order-project" aria-label={`${order.code} 付款信息`}>
-                  <div className="payment-batch-project-heading">
-                    <span aria-hidden="true"><Building2 size={20} /></span>
-                    <div><h3 className="payment-batch-project-section-title">付款信息</h3><span className="payment-batch-project-name">{batch.request.cooperationProjectName}</span><small>{batch.request.cooperationProjectCode}</small></div>
-                  </div>
-                  <dl className="payment-batch-project-grid">
-                    <div><dt>付款项目编号</dt><dd>{batch.request.requestCode}</dd></div>
-                    <div><dt>付款金额</dt><dd>{paymentBatchAmountLabel({ items: order.items })}</dd></div>
-                    <div><dt>品牌 / 客户</dt><dd>{batch.request.brand}</dd></div>
-                    <div><dt>项目媒介</dt><dd>{batch.request.media}</dd></div>
-                    <div><dt>负责 PM</dt><dd>{batch.request.pm}</dd></div>
-                    <div><dt>预计付款时间</dt><dd>{batch.request.expectedPaymentDate}</dd></div>
-                    <div className="payment-batch-project-full payment-batch-project-reason"><dt>付款事由</dt><dd>{batch.request.reason}</dd></div>
-                  </dl>
-                </section>
 
                 <section className="payment-batch-order-items" aria-label={`${order.code} 付款明细`}>
                   <header>
@@ -505,75 +485,108 @@ export function PaymentBatchDetailPage({
                     </div>
                     <span className="payment-batch-order-items-count"><strong>{order.items.length}</strong> 笔</span>
                   </header>
-                  <div className="payment-batch-item-list">
-                    <div className="payment-batch-item-table-head" aria-hidden="true">
-                      <span>达人</span>
-                      <span>付款渠道</span>
-                      <span>Invoice</span>
-                      <span>合同</span>
-                      <span>付款金额</span>
-                      <span>付款状态</span>
-                      <span />
-                    </div>
-                    <div className="payment-batch-item-rows" role="list">
+                  <div className="payment-batch-order-table-scroll" role="region" aria-label={`${order.code} 付款明细表，可横向滚动`} tabIndex={0}>
+                    <table className="data-table payment-batch-order-table">
+                      <thead>
+                        <tr>
+                          <th>达人</th>
+                          <th>关联项目</th>
+                          <th>付款渠道</th>
+                          <th>收款银行账号</th>
+                          <th>付款日期</th>
+                          <th>付款金额</th>
+                          <th>手续费</th>
+                          <th>付款类型</th>
+                          <th>付款状态</th>
+                          <th className="action-cell">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
                       {order.items.map((item) => {
                         const expanded = expandedItemId === item.payoutId;
                         const livePayout = currentAttemptPayout(item);
                         const creator = creators.find((candidate) => candidate.id === item.creatorId);
                         const creatorIdentity = paymentCreatorIdentityFromBatchItem(item, creator);
                         const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                        const confirmationDisabledReason = item.provider !== 'Airwallex'
+                          ? '当前付款渠道不支持付款确认函。'
+                          : item.paymentStatus !== '已付款' || !item.paidAt
+                            ? '仅已付款且已记录付款日期的明细可以下载确认函。'
+                            : undefined;
                         return (
-                          <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
-                            <button
-                              className="payment-batch-item-trigger"
-                              type="button"
-                              aria-expanded={expanded}
-                              aria-controls={detailId}
-                              aria-label={`${item.creatorName}，${money(item.currency, item.amount)}，${item.paymentStatus}，${expanded ? '收起' : '展开'}付款详情`}
-                              onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
-                            >
-                              <PaymentCreatorIdentity className="payment-batch-item-person" {...creatorIdentity} />
-                              <span className="payment-batch-item-provider" data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
-                              <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
-                              <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
-                              <span className="payment-batch-item-amount" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
-                              <span className={`payment-batch-item-status ${paymentStatusTone(item.paymentStatus)}`} data-label="付款状态"><strong><i />{item.paymentStatus}</strong></span>
-                              <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
-                            </button>
+                          <Fragment key={item.payoutId}>
+                            <tr className={expanded ? 'is-expanded' : undefined}>
+                              <td className="payment-batch-table-creator-cell">
+                                <button
+                                  className="payment-batch-table-detail-trigger"
+                                  type="button"
+                                  aria-expanded={expanded}
+                                  aria-controls={detailId}
+                                  aria-label={`${item.creatorName}，${money(item.currency, item.amount)}，${item.paymentStatus}，${expanded ? '收起' : '展开'}付款详情`}
+                                  onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
+                                >
+                                  <PaymentCreatorIdentity {...creatorIdentity} />
+                                  <ChevronDown size={16} aria-hidden="true" />
+                                </button>
+                              </td>
+                              <td className="payment-batch-table-project-cell"><strong>{batch.request.cooperationProjectCode}</strong><small>{batch.request.cooperationProjectName}</small></td>
+                              <td><span className="payment-batch-table-provider"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span></td>
+                              <td className="payment-batch-table-account-cell"><strong title={item.accountIdentifier || item.accountSummary}>{item.accountIdentifier || item.accountSummary}</strong><small>{item.accountIdentifierLabel || '收款账户快照'}</small></td>
+                              <td className="payment-batch-table-date-cell">{paymentDateLabel(item.paidAt)}</td>
+                              <td className="payment-batch-table-money-cell"><strong>{money(item.currency, item.amount)}</strong></td>
+                              <td className="payment-batch-table-money-cell">{paymentFeeLabel(item)}</td>
+                              <td><span className={`payment-batch-attempt-badge${paymentBatchItemAttemptNumber(item) > 1 ? ' is-retry' : ''}`}>{paymentBatchItemAttemptLabel(item)}</span></td>
+                              <td><span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span></td>
+                              <td className="action-cell payment-batch-table-action-cell">
+                                <ListActionButton
+                                  kind="download"
+                                  loading={downloadingConfirmationId === item.payoutId}
+                                  disabled={Boolean(confirmationDisabledReason) || Boolean(downloadingConfirmationId)}
+                                  title={confirmationDisabledReason}
+                                  aria-label={`下载 ${item.creatorName} 的付款确认函`}
+                                  onClick={() => { void downloadItemConfirmation(item); }}
+                                >
+                                  {downloadingConfirmationId === item.payoutId ? '下载中' : '下载确认函'}
+                                </ListActionButton>
+                              </td>
+                            </tr>
                             {expanded ? (
-                              <div id={detailId}>
-                                <PaymentItemDetails
-                                  item={item}
-                                  payout={livePayout}
-                                  onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined}
-                                  onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
-                                  onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
-                                />
-                                {item.paymentStatus === '付款失败'
-                                  && livePayout?.status === '付款失败'
-                                  && !livePayout.paymentFailureReturn ? (
-                                  <div className="payment-project-failure-action">
-                                    <div>
-                                      <strong>该笔付款需要财务判断问题类型</strong>
-                                      <span>退回后仅处理当前失败款，批次内已成功付款不会受影响。</span>
+                              <tr className="payment-batch-table-detail-row">
+                                <td colSpan={10} id={detailId}>
+                                  <PaymentItemDetails
+                                    item={item}
+                                    payout={livePayout}
+                                    onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(batch.request.paymentRequestProjectId, item.payoutId) : undefined}
+                                    onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
+                                    onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
+                                  />
+                                  {item.paymentStatus === '付款失败'
+                                    && livePayout?.status === '付款失败'
+                                    && !livePayout.paymentFailureReturn ? (
+                                    <div className="payment-project-failure-action">
+                                      <div>
+                                        <strong>该笔付款需要财务判断问题类型</strong>
+                                        <span>退回后仅处理当前失败款，批次内已成功付款不会受影响。</span>
+                                      </div>
+                                      <Button
+                                        variant="danger"
+                                        icon={<RotateCcw size={16} />}
+                                        disabled={!canHandleFailure || !onReturnPayout}
+                                        disabledReason={!onReturnPayout ? '当前流程未配置退回操作。' : '当前账号或付款状态不允许退回。'}
+                                        onClick={() => setFailureDialogPayoutId(item.payoutId)}
+                                      >
+                                        退回媒介处理
+                                      </Button>
                                     </div>
-                                    <Button
-                                      variant="danger"
-                                      icon={<RotateCcw size={16} />}
-                                      disabled={!canHandleFailure || !onReturnPayout}
-                                      disabledReason={!onReturnPayout ? '当前流程未配置退回操作。' : '当前账号或付款状态不允许退回。'}
-                                      onClick={() => setFailureDialogPayoutId(item.payoutId)}
-                                    >
-                                      退回媒介处理
-                                    </Button>
-                                  </div>
-                                ) : null}
-                              </div>
+                                  ) : null}
+                                </td>
+                              </tr>
                             ) : null}
-                          </article>
+                          </Fragment>
                         );
                       })}
-                    </div>
+                      </tbody>
+                    </table>
                   </div>
                 </section>
               </article>

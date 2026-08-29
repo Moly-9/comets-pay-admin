@@ -571,6 +571,9 @@ export type PaymentAttemptRef = {
   paymentBatchId: PaymentBatchId;
   paymentBatchCode: string;
   submittedAt: string;
+  paymentOrderCode?: string;
+  sourcePaymentOrderCode?: string;
+  attemptNumber?: number;
 };
 
 export type PaymentNotificationDelivery = {

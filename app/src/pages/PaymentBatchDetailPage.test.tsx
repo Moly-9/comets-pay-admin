@@ -89,11 +89,8 @@ describe('PaymentBatchDetailPage', () => {
     );
 
     expect(html).toContain('BAT-20260810-001');
-    expect(html).toContain('REQ-202608-000001');
     expect(html).toContain('COMETS 夏季内容项目');
     expect(html).toContain('PRJ-202608-000001');
-    expect(html).toContain('张晓晓');
-    expect(html).toContain('陈晨');
     expect(html).toContain('PAY-202608-000001');
     expect(html).toContain('INV-202608-000001');
     expect(html).toContain('CON-202608-000001');
@@ -110,16 +107,18 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('aria-label="Mina Kato，USD 1,250，付款失败，收起付款详情"');
     expect(html).toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
     expect(html).toContain('class="payment-batch-order-card"');
-    expect(html).toContain('payment-batch-project-full payment-batch-project-reason');
     expect(html).toContain('class="payment-batch-order-items-heading"');
     expect(html).toContain('<span>付款单</span><strong>PAY-202608-000001</strong>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
     expect(html).toContain('<span>支付币种</span><strong>USD</strong>');
-    expect(html).toContain('<p>COMETS 夏季内容项目</p>');
-    expect(html).not.toContain('<p>REQ-202608-000001 · COMETS 夏季内容项目</p>');
-    expect(html).toContain('<dt>付款项目编号</dt>');
-    expect(html).toContain('<dt>付款金额</dt>');
+    expect(html).toContain('<p>PRJ-202608-000001 · COMETS 夏季内容项目</p>');
+    expect(html).not.toContain('<dt>付款项目编号</dt>');
+    expect(html).not.toContain('payment-batch-order-project');
+    expect(html).toContain('<th>达人</th><th>关联项目</th><th>付款渠道</th><th>收款银行账号</th><th>付款日期</th><th>付款金额</th><th>手续费</th><th>付款类型</th><th>付款状态</th>');
+    expect(html).toContain('class="data-table payment-batch-order-table"');
+    expect(html).toContain('class="payment-batch-attempt-badge">首次付款</span>');
+    expect(html).toContain('下载确认函');
     expect(html).not.toContain('payment_batch_detail_test');
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
@@ -199,6 +198,31 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('PAY-202608-000002');
     expect(html).toContain('<strong>2 张付款单</strong><small>2 笔付款明细</small>');
     expect(html).toContain('2 张付款单 · 2 笔明细');
+  });
+
+  it('renders a retry in a new payment order while linking the original order', () => {
+    const retryItem = {
+      ...DETAIL_BATCH.items[0],
+      paymentOrderCode: 'PAY-20260811-000002',
+      sourcePaymentOrderCode: 'PAY-202608-000001',
+      paymentAttemptNumber: 2,
+      paymentStatus: '已付款',
+      failure: undefined,
+      paidAt: '2026-08-11T09:05',
+      transferFeeAmount: 8.5,
+      transferFeeCurrency: 'USD',
+    } satisfies PaymentBatchRecord['items'][number];
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage
+        batch={{ ...DETAIL_BATCH, status: '已付款', items: [retryItem] }}
+        onBack={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('<strong>PAY-20260811-000002</strong><small>1 笔付款明细</small>');
+    expect(html).toContain('二次付款 · 关联原付款单 PAY-202608-000001 · 1 笔付款明细');
+    expect(html).toContain('payment-batch-attempt-badge is-retry">二次付款</span>');
+    expect(html).toContain('USD 8.5');
   });
 
   it('exposes the shared return action for a failed item in the batch detail', () => {
@@ -352,13 +376,13 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('1234567890');
   });
 
-  it('provides separate contract, Invoice and payment workbook actions beside the payment orders', () => {
+  it('keeps only the payment workbook action beside the payment orders', () => {
     const html = renderToStaticMarkup(
       <PaymentBatchDetailPage batch={DETAIL_BATCH} onBack={vi.fn()} />,
     );
 
-    expect(html).toContain('下载合同');
-    expect(html).toContain('下载 Invoice');
+    expect(html).not.toContain('>下载合同<');
+    expect(html).not.toContain('>下载 Invoice<');
     expect(html).toContain('下载付款表');
     expect(html).not.toContain('下载项目资料');
   });

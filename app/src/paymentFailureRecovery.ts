@@ -282,6 +282,11 @@ export const markPaymentFailureRetrySubmitted = (
   batchId: string,
   batchCode: string,
   submittedAt = new Date().toISOString(),
+  paymentOrder?: {
+    paymentOrderCode: string;
+    sourcePaymentOrderCode: string;
+    attemptNumber: number;
+  },
 ): Payout => {
   if (!isPaymentFailureRetryReady(payout)) {
     throw new Error('失败款尚未完成账户校验和财务确认。');
@@ -302,6 +307,7 @@ export const markPaymentFailureRetrySubmitted = (
       paymentBatchId: batchId as PaymentBatchId,
       paymentBatchCode: batchCode,
       submittedAt,
+      ...paymentOrder,
     },
     paymentFailureRecovery: payout.paymentFailureRecovery ? {
       ...payout.paymentFailureRecovery,

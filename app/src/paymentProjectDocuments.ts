@@ -266,6 +266,29 @@ const confirmationAmountSegment = (amount: number) => (
   Number.isInteger(amount) ? String(amount) : String(amount).replace(/0+$/, '').replace(/\.$/, '')
 );
 
+export const createPaymentItemConfirmationPdf = async ({
+  item,
+  loadAsset = loadConfirmationAsset,
+  genericPdf = createGenericPaymentConfirmationPdf,
+}: {
+  item: PaymentBatchItemSnapshot;
+  loadAsset?: ConfirmationAssetLoader;
+  genericPdf?: (item: PaymentBatchItemSnapshot) => Promise<Blob>;
+}) => {
+  if (item.paymentStatus !== '已付款' || !paymentDateKey(item.paidAt)) {
+    throw new Error('仅具备实际付款日期的已付款明细可以下载确认函。');
+  }
+  return item.provider === 'Airwallex'
+    ? loadAsset(PAYMENT_CONFIRMATION_ASSET_PATH)
+    : genericPdf(item);
+};
+
+export const paymentItemConfirmationFilename = (item: PaymentBatchItemSnapshot) => {
+  const paymentOrderCode = item.paymentOrderCode || item.paymentListCode || '付款单';
+  const invoiceNumber = item.invoice?.invoiceNumber || item.legacyInvoiceReference || item.payoutId;
+  return `${safeFileSegment(paymentOrderCode, '付款单')}-${safeFileSegment(invoiceNumber, '付款明细')}-付款确认函.pdf`;
+};
+
 export const createPaymentProjectConfirmationArchive = async ({
   items,
   loadAsset = loadConfirmationAsset,

@@ -358,8 +358,20 @@ describe('payment batch snapshots', () => {
       status: '付款处理中',
       lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
       itemStatus: '付款处理中',
+      paymentOrderCode: 'PAY-RETRY-002',
+      paymentAttemptNumber: 2,
     });
     expect(retryBatch.items[0].failure).toBeUndefined();
+    expect(retryBatch.items[0]).toMatchObject({
+      paymentOrderCode: 'PAY-RETRY-002',
+      sourcePaymentOrderCode: 'PAY-TEST-001',
+      paymentAttemptNumber: 2,
+    });
+    expect(frozenFailedBatch.items[0]).toMatchObject({
+      paymentOrderCode: 'PAY-TEST-001',
+      sourcePaymentOrderCode: 'PAY-TEST-001',
+      paymentAttemptNumber: 1,
+    });
 
     const succeededPayout: Payout = {
       ...failedPayout,
@@ -370,6 +382,9 @@ describe('payment batch snapshots', () => {
         paymentBatchId: retryBatch.paymentBatchId,
         paymentBatchCode: retryBatch.paymentBatchCode,
         submittedAt: retryBatch.paidAt,
+        paymentOrderCode: 'PAY-RETRY-002',
+        sourcePaymentOrderCode: 'PAY-TEST-001',
+        attemptNumber: 2,
       },
     };
     const succeededAttempt = applyPaymentResultToCurrentBatch({
@@ -543,6 +558,11 @@ describe('payment batch snapshots', () => {
       PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
       ...Array.from({ length: 8 }, (_, index) => `BAT-20260805-${String(8 - index).padStart(3, '0')}`),
     ]);
+    expect(records[0].items[0]).toMatchObject({
+      paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+      paymentAttemptNumber: 2,
+    });
+    expect(records[0].items[0].sourcePaymentOrderCode).not.toBe(records[0].items[0].paymentOrderCode);
     expect(records.map((record) => record.items.length)).toEqual([1, 5, 5, 5, 5, 5, 1, 5, 4]);
     expect(records.map((record) => record.request.requestCode)).toEqual([
       'REQ-202607-000011',
