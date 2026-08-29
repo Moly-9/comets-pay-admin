@@ -158,9 +158,16 @@ const HISTORICAL_TRANSACTION_SEEDS: Readonly<Record<string, HistoricalTransactio
 };
 
 export const findTransactionBatchContext = (
-  payout: Pick<Payout, 'id'>,
+  payout: Pick<Payout, 'id' | 'currentPaymentAttempt' | 'paymentFailureRecovery'>,
   batches: readonly PaymentBatchRecord[],
 ): TransactionBatchContext | null => {
+  const currentBatchId = payout.currentPaymentAttempt?.paymentBatchId
+    ?? payout.paymentFailureRecovery?.retryBatchId;
+  if (currentBatchId) {
+    const batch = batches.find((candidate) => candidate.paymentBatchId === currentBatchId);
+    const item = batch?.items.find((candidate) => candidate.payoutId === payout.id);
+    return batch && item ? { batch, item } : null;
+  }
   for (const batch of batches) {
     const item = batch.items.find((candidate) => candidate.payoutId === payout.id);
     if (item) return { batch, item };
@@ -302,16 +309,12 @@ export const isPaymentTransactionRecord = (payout: Payout) => (
 
 export const transactionPaymentStatus = (
   payout: Payout,
-  payouts: readonly Payout[],
+  _payouts: readonly Payout[],
   batches: readonly PaymentBatchRecord[] = [],
 ): PaymentAggregateStatus => {
   const context = findTransactionBatchContext(payout, batches);
   if (!context) return aggregatePaymentStatus([payout.status]);
-  const payoutById = new Map(payouts.map((item) => [item.id, item]));
-  const statuses = context.batch.items.map((item) => (
-    payoutById.get(item.payoutId)?.status ?? item.paymentStatus
-  ));
-  return aggregatePaymentStatus(statuses, context.batch.status);
+  return context.batch.status;
 };
 
 const matchesTransactionSearch = (

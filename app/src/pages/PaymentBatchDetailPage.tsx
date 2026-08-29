@@ -288,35 +288,16 @@ export function PaymentBatchDetailPage({
   const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | 'workbook' | null>(null);
   const [resourceError, setResourceError] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const liveItems = useMemo(() => batch.items.map((item) => {
-    const payout = payouts.find((candidate) => candidate.id === item.payoutId);
-    if (!payout) return item;
-    return {
-      ...item,
-      paymentStatus: payout.status,
-      paidAt: payout.paidAt ?? item.paidAt,
-      failure: payout.paymentFailure ? {
-        code: payout.paymentFailure.errorCode,
-        response: payout.paymentFailure.providerResponse,
-        occurredAt: payout.paymentFailure.occurredAt,
-      } : item.failure,
-    };
-  }), [batch.items, payouts]);
-  const liveStatus: PaymentBatchRecord['status'] = liveItems.some((item) => ['付款失败', '已退回'].includes(item.paymentStatus))
-    ? '部分失败'
-    : liveItems.length > 0 && liveItems.every((item) => item.paymentStatus === '已付款')
-      ? '已付款'
-      : batch.status;
-  const totals = paymentBatchAmountLabel({ items: liveItems });
+  const totals = paymentBatchAmountLabel(batch);
   const projectArchiveItems = useMemo(() => {
-    const sourceItems = projectItems?.length ? projectItems : liveItems;
+    const sourceItems = projectItems?.length ? projectItems : batch.items;
     const seen = new Set<string>();
     return sourceItems.filter((item) => {
       if (seen.has(item.payoutId)) return false;
       seen.add(item.payoutId);
       return true;
     });
-  }, [liveItems, projectItems]);
+  }, [batch.items, projectItems]);
   const projectDocuments = useMemo(() => resolvePaymentProjectDocuments({
     items: projectArchiveItems,
     contracts,
@@ -324,14 +305,22 @@ export function PaymentBatchDetailPage({
   }), [contracts, invoices, projectArchiveItems]);
   const paymentOrders = useMemo(() => {
     const grouped = new Map<string, PaymentBatchItemSnapshot[]>();
-    liveItems.forEach((item) => {
+    batch.items.forEach((item) => {
       const code = item.paymentListCode || '关联资料缺失';
       grouped.set(code, [...(grouped.get(code) ?? []), item]);
     });
     return [...grouped.entries()].map(([code, items]) => ({ code, items }));
-  }, [liveItems]);
+  }, [batch.items]);
   const paymentOrderSummary = paymentOrders.length === 1 ? paymentOrders[0].code : `${paymentOrders.length} 张付款单`;
-  const failureDialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
+  const failureDialogItem = batch.items.find((item) => item.payoutId === failureDialogPayoutId);
+
+  const currentAttemptPayout = (item: PaymentBatchItemSnapshot) => payouts.find((payout) => (
+    payout.id === item.payoutId
+    && (
+      payout.currentPaymentAttempt?.paymentBatchId === batch.paymentBatchId
+      || payout.paymentFailureRecovery?.retryBatchId === batch.paymentBatchId
+    )
+  ));
 
   const viewContractAttachment = (snapshot: PaymentBatchItemSnapshot['contracts'][number]) => {
     const contract = contracts.find((candidate) => (
@@ -402,7 +391,7 @@ export function PaymentBatchDetailPage({
           <p>{batch.request.cooperationProjectName}</p>
         </div>
         <div className="payment-batch-detail-total">
-          <span className={`simple-status ${batchStatusTone(liveStatus)}`}><i />{liveStatus}</span>
+          <span className={`simple-status ${batchStatusTone(batch.status)}`}><i />{batch.status}</span>
           <strong>{totals}</strong>
           <small>{batch.items.length} 笔付款</small>
         </div>
@@ -429,7 +418,7 @@ export function PaymentBatchDetailPage({
 
       <section className="payment-batch-detail-section payment-batch-lifecycle-section">
         <header><div><h2>渠道处理进度</h2><p>付款明细提交、平台处理与最终付款结果。</p></div></header>
-        <PaymentProgressSteps ariaLabel="渠道处理进度" status={liveStatus} />
+        <PaymentProgressSteps ariaLabel="渠道处理进度" status={batch.status} />
       </section>
 
       <section className="payment-batch-orders-section" aria-labelledby="payment-batch-orders-title">
@@ -525,7 +514,7 @@ export function PaymentBatchDetailPage({
                     <div className="payment-batch-item-rows" role="list">
                       {order.items.map((item) => {
                         const expanded = expandedItemId === item.payoutId;
-                        const livePayout = payouts.find((payout) => payout.id === item.payoutId);
+                        const livePayout = currentAttemptPayout(item);
                         const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
                         return (
                           <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
@@ -557,7 +546,9 @@ export function PaymentBatchDetailPage({
                                   onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
                                   onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
                                 />
-                                {item.paymentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
+                                {item.paymentStatus === '付款失败'
+                                  && livePayout?.status === '付款失败'
+                                  && !livePayout.paymentFailureReturn ? (
                                   <div className="payment-project-failure-action">
                                     <div>
                                       <strong>该笔付款需要财务判断问题类型</strong>
@@ -601,7 +592,7 @@ export function PaymentBatchDetailPage({
           item={failureDialogItem}
           onClose={() => setFailureDialogPayoutId(null)}
           onSubmit={(issueType, reason) => {
-            const payout = payouts.find((candidate) => candidate.id === failureDialogPayoutId);
+            const payout = currentAttemptPayout(failureDialogItem);
             return payout ? onReturnPayout(payout, issueType, reason) : false;
           }}
         />

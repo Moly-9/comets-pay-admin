@@ -5,6 +5,7 @@ import type {
   EngagementId,
   InvoiceBillingEntityId,
   InvoiceId,
+  PaymentBatchId,
   PaymentRequestProjectId,
   ProjectId,
 } from './businessWorkflow';
@@ -563,7 +564,14 @@ export type PaymentFailureRecoveryStatus =
   | 'CREATOR_UPDATED'
   | 'PENDING_FINANCE_CONFIRMATION'
   | 'READY_FOR_RETRY'
-  | 'RETRY_SUBMITTED';
+  | 'RETRY_SUBMITTED'
+  | 'RETRY_SUCCEEDED';
+
+export type PaymentAttemptRef = {
+  paymentBatchId: PaymentBatchId;
+  paymentBatchCode: string;
+  submittedAt: string;
+};
 
 export type PaymentNotificationDelivery = {
   channel: 'IN_APP' | 'GMAIL';
@@ -603,6 +611,7 @@ export type PaymentFailureRecovery = {
   financeConfirmedByName?: string;
   retryBatchId?: string;
   retryBatchCode?: string;
+  retrySucceededAt?: string;
   previousAttempts?: Array<{
     status: PaymentFailureRecoveryStatus;
     notifications: PaymentFailureNotification[];
@@ -678,6 +687,7 @@ export type Payout = {
   paymentFailure?: PaymentFailureRecord;
   paymentFailureReturn?: PaymentFailureReturn;
   paymentFailureRecovery?: PaymentFailureRecovery;
+  currentPaymentAttempt?: PaymentAttemptRef;
   invoiceSnapshot?: InvoiceDocumentModel;
   invoicePaymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   accent: string;

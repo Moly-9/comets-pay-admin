@@ -9,6 +9,7 @@ import {
   isPaymentTransactionRecord,
   transactionCreatorLabel,
   transactionDateKey,
+  transactionPaymentStatus,
   transactionRecordDetails,
   type TransactionRecordFilters,
 } from './transactionRecords';
@@ -154,6 +155,39 @@ describe('transaction records', () => {
     ['REQ-20260810-TEST', 'PAY-20260810-TEST', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
       expect(filterTransactionRecords([payout()], filters({ search }), [batch])).toHaveLength(1);
     });
+  });
+
+  it('uses the current payment attempt instead of an older failed batch', () => {
+    const failedBatch = {
+      ...batch,
+      paymentBatchId: 'payment-batch-failed',
+      paymentBatchCode: 'BAT-FAILED-001',
+      status: '全部失败',
+      items: [{ ...batch.items[0], paymentStatus: '付款失败' }],
+    } as unknown as PaymentBatchRecord;
+    const retryBatch = {
+      ...batch,
+      paymentBatchId: 'payment-batch-retry',
+      paymentBatchCode: 'BAT-RETRY-002',
+      status: '已付款',
+      items: [{ ...batch.items[0], paymentStatus: '已付款' }],
+    } as unknown as PaymentBatchRecord;
+    const currentPayout = payout({
+      currentPaymentAttempt: {
+        paymentBatchId: retryBatch.paymentBatchId,
+        paymentBatchCode: retryBatch.paymentBatchCode,
+        submittedAt: retryBatch.paidAt,
+      },
+    });
+
+    expect(findTransactionBatchContext(currentPayout, [failedBatch, retryBatch])?.batch.paymentBatchCode)
+      .toBe('BAT-RETRY-002');
+    expect(transactionRecordDetails(
+      currentPayout,
+      findTransactionBatchContext(currentPayout, [failedBatch, retryBatch]),
+    ).paymentBatchCode).toBe('BAT-RETRY-002');
+    expect(transactionPaymentStatus(currentPayout, [currentPayout], [failedBatch, retryBatch]))
+      .toBe('已付款');
   });
 
   it('provides complete historical snapshots for every current legacy transaction', () => {

@@ -23,9 +23,11 @@ import type {
 import { accountDisplayValue } from './accountPresentation';
 import {
   applyPaymentBatchPrototypeScenario,
+  PAYMENT_BATCH_RETRY_DEMO,
   paymentBatchPrototypeStatusFor,
   type PaymentBatchPrototypeStatus,
 } from './paymentBatchPrototypeScenario';
+import { aggregatePaymentStatus } from './paymentStatusFilters';
 
 export type PaymentBatchStatus = PaymentBatchPrototypeStatus;
 
@@ -364,6 +366,9 @@ const snapshotItem = ({
     payment: effectivePaymentDetails,
     accountSummary: accountDisplayValue(rawAccountSummary, ''),
   });
+  const paymentStatus = itemStatus ?? payout.status;
+  const hasSuccessfulResult = paymentStatus === '已付款';
+  const hasFailedResult = paymentStatus === '付款失败' || paymentStatus === '已退回';
 
   return {
     payoutId: payout.id,
@@ -411,13 +416,13 @@ const snapshotItem = ({
     paymentReason: String(paymentListItem ? paymentListItemValue(paymentListItem, 'paymentReason') : '') || '未记录',
     transactionReference: String(paymentListItem ? paymentListItemValue(paymentListItem, 'transactionReference') : '') || '未记录',
     description: String(paymentListItem ? paymentListItemValue(paymentListItem, 'description') : '') || payout.deliverable || '未记录',
-    paymentStatus: itemStatus ?? payout.status,
+    paymentStatus,
     paidAt: payout.paidAt ?? batchPaidAt,
-    transferFeeAmount: payout.transferFeeAmount,
-    transferFeeCurrency: payout.transferFeeCurrency,
-    actualPaidAmount: payout.actualPaidAmount,
-    actualPaidCurrency: payout.actualPaidCurrency,
-    failure: payout.paymentFailure ? {
+    transferFeeAmount: hasSuccessfulResult ? payout.transferFeeAmount : undefined,
+    transferFeeCurrency: hasSuccessfulResult ? payout.transferFeeCurrency : undefined,
+    actualPaidAmount: hasSuccessfulResult ? payout.actualPaidAmount : undefined,
+    actualPaidCurrency: hasSuccessfulResult ? payout.actualPaidCurrency : undefined,
+    failure: hasFailedResult && payout.paymentFailure ? {
       code: payout.paymentFailure.errorCode,
       response: payout.paymentFailure.providerResponse,
       occurredAt: payout.paymentFailure.occurredAt,
@@ -436,6 +441,9 @@ export const createPaymentBatchRecord = ({
   ...batch
 }: CreatePaymentBatchRecordInput): PaymentBatchRecord => {
   if (!payouts.length) throw new Error('付款批次至少需要一笔付款明细');
+  if (new Set(payouts.map((payout) => payout.id)).size !== payouts.length) {
+    throw new Error('同一个付款批次不能重复包含同一笔付款明细');
+  }
   if (payouts.some((payout) => payout.provider !== batch.provider)) {
     throw new Error('一个付款批次只能包含同一付款渠道的付款明细');
   }
@@ -502,10 +510,11 @@ export const createPaymentExecutionBatchRecord = ({
     lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
     itemStatus: '付款处理中',
   });
-  if (existingBatches.some((batch) => (
-    batch.request.paymentRequestProjectId === record.request.paymentRequestProjectId
-  ))) {
-    throw new Error(`请款项目 ${record.request.requestCode} 已生成付款批次`);
+  const selectedPayoutIds = new Set(payouts.map((payout) => payout.id));
+  if (existingBatches.some((batch) => batch.items.some((item) => (
+    selectedPayoutIds.has(item.payoutId) && item.paymentStatus === '付款处理中'
+  )))) {
+    throw new Error(`请款项目 ${record.request.requestCode} 存在仍在处理中的付款批次`);
   }
   return record;
 };
@@ -595,6 +604,107 @@ export const paymentBatchStatusCounts = (batch: Pick<PaymentBatchRecord, 'items'
   { succeeded: 0, failed: 0, processing: 0 },
 );
 
+export type PaymentBatchAttemptUpdateResult = Readonly<{
+  batches: readonly PaymentBatchRecord[];
+  updatedBatchId?: PaymentBatchId;
+  issue?: 'INVALID_RESULT' | 'BATCH_NOT_FOUND' | 'AMBIGUOUS_BATCH' | 'ATTEMPT_FINALIZED';
+}>;
+
+const batchLifecycleForStatus = (
+  lifecycle: readonly string[],
+  status: PaymentBatchStatus,
+) => {
+  const activeLifecycle = lifecycle.filter((stage) => (
+    !['COMPLETED', 'PARTIALLY_FAILED', 'FAILED'].includes(stage)
+  ));
+  const resultStage = status === '已付款'
+    ? 'COMPLETED'
+    : status === '部分失败'
+      ? 'PARTIALLY_FAILED'
+      : status === '全部失败'
+        ? 'FAILED'
+        : undefined;
+  return resultStage ? [...activeLifecycle, resultStage] : activeLifecycle;
+};
+
+export const applyPaymentResultToCurrentBatch = ({
+  batches,
+  payout,
+}: {
+  batches: readonly PaymentBatchRecord[];
+  payout: Payout;
+}): PaymentBatchAttemptUpdateResult => {
+  if (payout.status !== '已付款' && payout.status !== '付款失败') {
+    return { batches, issue: 'INVALID_RESULT' };
+  }
+
+  const explicitBatchId = payout.currentPaymentAttempt?.paymentBatchId
+    ?? (payout.paymentFailureRecovery?.status === 'RETRY_SUBMITTED'
+      ? payout.paymentFailureRecovery.retryBatchId as PaymentBatchId | undefined
+      : undefined);
+  const matchingBatches = explicitBatchId
+    ? batches.filter((batch) => (
+        batch.paymentBatchId === explicitBatchId
+        && batch.items.some((item) => item.payoutId === payout.id)
+      ))
+    : batches.filter((batch) => batch.items.some((item) => (
+        item.payoutId === payout.id && item.paymentStatus === '付款处理中'
+      )));
+
+  if (!matchingBatches.length) return { batches, issue: 'BATCH_NOT_FOUND' };
+  if (matchingBatches.length > 1) return { batches, issue: 'AMBIGUOUS_BATCH' };
+
+  const target = matchingBatches[0];
+  const targetItem = target.items.find((item) => item.payoutId === payout.id);
+  if (!targetItem || targetItem.paymentStatus !== '付款处理中') {
+    return { batches, issue: 'ATTEMPT_FINALIZED' };
+  }
+
+  const items = target.items.map((item): PaymentBatchItemSnapshot => {
+    if (item.payoutId !== payout.id) return item;
+    if (payout.status === '已付款') {
+      return {
+        ...item,
+        paymentStatus: '已付款',
+        paidAt: payout.paidAt,
+        transferFeeAmount: payout.transferFeeAmount,
+        transferFeeCurrency: payout.transferFeeCurrency,
+        actualPaidAmount: payout.actualPaidAmount,
+        actualPaidCurrency: payout.actualPaidCurrency,
+        failure: undefined,
+      };
+    }
+    return {
+      ...item,
+      paymentStatus: '付款失败',
+      paidAt: undefined,
+      transferFeeAmount: undefined,
+      transferFeeCurrency: undefined,
+      actualPaidAmount: undefined,
+      actualPaidCurrency: undefined,
+      failure: payout.paymentFailure ? {
+        code: payout.paymentFailure.errorCode,
+        response: payout.paymentFailure.providerResponse,
+        occurredAt: payout.paymentFailure.occurredAt,
+      } : undefined,
+    };
+  });
+  const status = aggregatePaymentStatus(items.map((item) => item.paymentStatus), target.status);
+  const updatedBatch: PaymentBatchRecord = {
+    ...target,
+    status,
+    lifecycle: batchLifecycleForStatus(target.lifecycle, status),
+    items,
+  };
+
+  return {
+    batches: batches.map((batch) => (
+      batch.paymentBatchId === target.paymentBatchId ? updatedBatch : batch
+    )),
+    updatedBatchId: target.paymentBatchId,
+  };
+};
+
 export const createInitialPaymentBatches = ({
   payouts,
   requests,
@@ -604,6 +714,13 @@ export const createInitialPaymentBatches = ({
 }: PaymentBatchSourceData): PaymentBatchRecord[] => {
   const batchItemLimit = 5;
   const scenarioResources = applyPaymentBatchPrototypeScenario({
+    payouts,
+    requests,
+    generatedInvoices,
+    paymentLists,
+    perspective: 'historical-batch',
+  });
+  const currentResources = applyPaymentBatchPrototypeScenario({
     payouts,
     requests,
     generatedInvoices,
@@ -641,7 +758,7 @@ export const createInitialPaymentBatches = ({
       });
     });
 
-  return eligibleGroups.map(({ provider, payouts: groupedPayouts, status }, index) => {
+  const initialAttempts = eligibleGroups.map(({ provider, payouts: groupedPayouts, status }, index) => {
     const ordinal = eligibleGroups.length - index;
     const ordinalLabel = String(ordinal).padStart(3, '0');
     const totalMinutes = (16 * 60) - (index * 10);
@@ -669,4 +786,34 @@ export const createInitialPaymentBatches = ({
           : ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
     });
   });
+
+  const originalFailedBatch = initialAttempts.find((batch) => (
+    batch.paymentBatchCode === 'BAT-20260805-008'
+    && batch.request.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
+  ));
+  const failedItem = originalFailedBatch?.items.find((item) => item.paymentStatus === '付款失败');
+  const retryPayout = failedItem
+    ? currentResources.payouts.find((payout) => payout.id === failedItem.payoutId)
+    : undefined;
+  if (!retryPayout) return initialAttempts;
+
+  const retryBatch = createPaymentBatchRecord({
+    requests: currentResources.requests,
+    generatedInvoices,
+    paymentLists: currentResources.paymentLists,
+    contracts,
+    payouts: [retryPayout],
+    paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
+    paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+    provider: retryPayout.provider,
+    fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[retryPayout.provider],
+    sourceCurrency: retryPayout.currency,
+    payer: PAYMENT_BATCH_RETRY_DEMO.payer,
+    paidAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+    status: '已付款',
+    lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
+    itemStatus: '已付款',
+  });
+
+  return [retryBatch, ...initialAttempts];
 };

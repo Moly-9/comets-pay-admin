@@ -2,6 +2,7 @@ import type {
   Payout,
   PayoutAccountVersion,
 } from './types';
+import type { PaymentBatchId } from './businessWorkflow';
 import { createPaymentNotification } from './paymentNotification';
 
 export type PaymentFailureRecoveryActor = {
@@ -21,7 +22,7 @@ export const markPaymentFailureAccountChanged = (
   account: PaymentFailureRevalidationAccount,
   occurredAt = new Date().toISOString(),
 ): Payout => {
-  if (!payout.paymentFailureRecovery || payout.paymentFailureRecovery.status === 'RETRY_SUBMITTED') {
+  if (!payout.paymentFailureRecovery || ['RETRY_SUBMITTED', 'RETRY_SUCCEEDED'].includes(payout.paymentFailureRecovery.status)) {
     throw new Error('当前付款不在可修改的失败恢复流程中。');
   }
   return {
@@ -53,7 +54,8 @@ const nextAccountVersion = (value?: PayoutAccountVersion): PayoutAccountVersion 
 export const isPaymentFailureRetryCandidate = (payout: Payout) => (
   payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST'
   && Boolean(payout.paymentFailureRecovery)
-  && payout.paymentFailureRecovery?.status !== 'RETRY_SUBMITTED'
+  && ['AWAITING_CREATOR_UPDATE', 'CREATOR_UPDATED', 'PENDING_FINANCE_CONFIRMATION', 'READY_FOR_RETRY']
+    .includes(payout.paymentFailureRecovery!.status)
 );
 
 export const isPaymentFailureRetryReady = (payout: Payout) => (
@@ -75,6 +77,7 @@ export const paymentFailureRecoveryLabel = (payout: Payout) => {
       : '已重新校验，可重试';
   }
   if (status === 'RETRY_SUBMITTED') return '付款处理中';
+  if (status === 'RETRY_SUCCEEDED') return '重试付款成功';
   return '等待达人更新账户';
 };
 
@@ -276,6 +279,7 @@ export const markPaymentFailureRetrySubmitted = (
   payout: Payout,
   batchId: string,
   batchCode: string,
+  submittedAt = new Date().toISOString(),
 ): Payout => {
   if (!isPaymentFailureRetryReady(payout)) {
     throw new Error('失败款尚未完成账户校验和财务确认。');
@@ -284,11 +288,25 @@ export const markPaymentFailureRetrySubmitted = (
     ...payout,
     status: '付款处理中',
     issue: undefined,
+    returnReason: undefined,
+    paidAt: undefined,
+    transferFeeAmount: undefined,
+    transferFeeCurrency: undefined,
+    actualPaidAmount: undefined,
+    actualPaidCurrency: undefined,
+    paymentFailure: undefined,
+    paymentFailureReturn: undefined,
+    currentPaymentAttempt: {
+      paymentBatchId: batchId as PaymentBatchId,
+      paymentBatchCode: batchCode,
+      submittedAt,
+    },
     paymentFailureRecovery: payout.paymentFailureRecovery ? {
       ...payout.paymentFailureRecovery,
       status: 'RETRY_SUBMITTED',
       retryBatchId: batchId,
       retryBatchCode: batchCode,
+      retrySucceededAt: undefined,
     } : undefined,
   };
 };

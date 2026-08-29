@@ -1,4 +1,4 @@
-import type { PaymentListRecord } from './businessWorkflow';
+import type { PaymentBatchId, PaymentListRecord } from './businessWorkflow';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
 import type { GeneratedInvoiceRecord, Payout } from './types';
@@ -13,9 +13,26 @@ export const PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<str
   'REQ-202607-000014': '已付款',
 };
 
+export const PAYMENT_PROJECT_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<string, PaymentBatchPrototypeStatus>> = {
+  ...PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE,
+  'REQ-202607-000011': '已付款',
+};
+
+export const PAYMENT_BATCH_RETRY_DEMO = {
+  requestCode: 'REQ-202607-000011',
+  retryBatchId: 'payment_batch_fixture_retry_001',
+  retryBatchCode: 'BAT-20260806-001',
+  submittedAt: '2026-08-06T10:15',
+  payer: '奚文慧',
+} as const;
+
 export const paymentBatchPrototypeStatusFor = (
   request: Pick<RequestProjectSummary, 'id' | 'requestCode'>,
 ) => PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE[request.requestCode ?? request.id];
+
+export const paymentProjectPrototypeStatusFor = (
+  request: Pick<RequestProjectSummary, 'id' | 'requestCode'>,
+) => PAYMENT_PROJECT_PROTOTYPE_STATUS_BY_REQUEST_CODE[request.requestCode ?? request.id];
 
 export const paymentBatchPrototypePayoutStatus = (
   batchStatus: PaymentBatchPrototypeStatus,
@@ -37,14 +54,19 @@ export const applyPaymentBatchPrototypeScenario = ({
   requests,
   generatedInvoices,
   paymentLists,
+  perspective = 'project-current',
 }: {
   payouts: readonly Payout[];
   requests: readonly RequestProjectSummary[];
   generatedInvoices: readonly GeneratedInvoiceRecord[];
   paymentLists: readonly PaymentListRecord[];
+  perspective?: 'project-current' | 'historical-batch';
 }) => {
+  const statusFor = perspective === 'historical-batch'
+    ? paymentBatchPrototypeStatusFor
+    : paymentProjectPrototypeStatusFor;
   const batchedRequestIds = new Set(requests.flatMap((request) => {
-    const status = paymentBatchPrototypeStatusFor(request);
+    const status = statusFor(request);
     return request.paymentRequestProjectId && status
       ? [request.paymentRequestProjectId]
       : [];
@@ -52,11 +74,13 @@ export const applyPaymentBatchPrototypeScenario = ({
   const payoutScenario = new Map<string, {
     batchStatus: PaymentBatchPrototypeStatus;
     providerItemIndex: number;
+    requestCode: string;
   }>();
 
   requests.forEach((request) => {
-    const batchStatus = paymentBatchPrototypeStatusFor(request);
+    const batchStatus = statusFor(request);
     if (!batchStatus) return;
+    const requestCode = request.requestCode ?? request.id;
     const invoiceIds = requestInvoiceIds(request);
     const sourcePayoutIds = new Set(generatedInvoices
       .filter((invoice) => invoiceIds.has(invoice.invoiceId))
@@ -65,14 +89,14 @@ export const applyPaymentBatchPrototypeScenario = ({
     payouts.forEach((payout) => {
       if (!sourcePayoutIds.has(payout.id)) return;
       const providerItemIndex = providerIndexes.get(payout.provider) ?? 0;
-      payoutScenario.set(payout.id, { batchStatus, providerItemIndex });
+      payoutScenario.set(payout.id, { batchStatus, providerItemIndex, requestCode });
       providerIndexes.set(payout.provider, providerItemIndex + 1);
     });
   });
 
   return {
     requests: requests.map((request): RequestProjectSummary => {
-      const batchStatus = paymentBatchPrototypeStatusFor(request);
+      const batchStatus = statusFor(request);
       if (!batchStatus) return request;
       if (batchStatus !== '已付款') {
         return {
@@ -101,17 +125,41 @@ export const applyPaymentBatchPrototypeScenario = ({
         scenario.providerItemIndex,
       );
       const failed = status === '付款失败';
+      const isRetrySuccess = perspective === 'project-current'
+        && scenario.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
+        && scenario.providerItemIndex === 0;
+      const paymentResult = status === '已付款' ? prototypePaymentResultFor(payout) : undefined;
       return {
         ...payout,
         status,
-        paidAt: status === '已付款' ? (payout.paidAt ?? '2026-08-05 16:00') : undefined,
-        ...(status === '已付款' ? prototypePaymentResultFor(payout) : {
+        paidAt: status === '已付款'
+          ? (isRetrySuccess ? PAYMENT_BATCH_RETRY_DEMO.submittedAt : payout.paidAt ?? '2026-08-05 16:00')
+          : undefined,
+        ...(status === '已付款' ? {
+          ...paymentResult,
+        } : {
           transferFeeAmount: undefined,
           transferFeeCurrency: undefined,
           actualPaidAmount: undefined,
           actualPaidCurrency: undefined,
         }),
         issue: failed ? '渠道返回收款账户暂不可用，等待财务处理' : undefined,
+        returnReason: isRetrySuccess ? undefined : payout.returnReason,
+        paymentFailureReturn: isRetrySuccess ? undefined : payout.paymentFailureReturn,
+        currentPaymentAttempt: isRetrySuccess ? {
+          paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
+          paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+          submittedAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+        } : payout.currentPaymentAttempt,
+        paymentFailureRecovery: isRetrySuccess ? {
+          status: 'RETRY_SUCCEEDED',
+          notifications: [],
+          failureCode: 'BENEFICIARY_UNAVAILABLE',
+          returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',
+          retryBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId,
+          retryBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+          retrySucceededAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+        } : payout.paymentFailureRecovery,
         paymentFailure: failed ? {
           provider: payout.provider,
           errorCode: 'BENEFICIARY_UNAVAILABLE',
@@ -126,7 +174,7 @@ export const applyPaymentBatchPrototypeScenario = ({
       const request = requests.find((candidate) => (
         candidate.paymentRequestProjectId === paymentList.paymentRequestProjectId
       ));
-      const batchStatus = request ? paymentBatchPrototypeStatusFor(request) : undefined;
+      const batchStatus = request ? statusFor(request) : undefined;
       return {
         ...paymentList,
         status: batchStatus === '已付款' ? 'paid' : 'approved',

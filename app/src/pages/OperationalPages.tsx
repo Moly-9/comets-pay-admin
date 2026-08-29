@@ -184,7 +184,6 @@ import {
 import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
-  aggregatePaymentStatus,
   matchesPaymentStatus,
   type PaymentAggregateStatus,
   type PaymentStatusFilter,
@@ -3649,7 +3648,6 @@ export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
 export const paymentBatchRows = (
   batches: readonly PaymentBatchRecord[],
-  payouts: readonly Payout[] = [],
 ): PaymentBatchRow[] => (
   batches.map((batch) => ({
     paymentBatchId: batch.paymentBatchId,
@@ -3659,12 +3657,7 @@ export const paymentBatchRows = (
     amount: paymentBatchAmountLabel(batch),
     payer: batch.payer,
     paidAt: batch.paidAt,
-    status: (() => {
-      const itemStatuses = batch.items.map((item) => (
-        payouts.find((payout) => payout.id === item.payoutId)?.status ?? item.paymentStatus
-      ));
-      return aggregatePaymentStatus(itemStatuses, batch.status);
-    })(),
+    status: batch.status,
   }))
 );
 
@@ -3786,7 +3779,7 @@ export function BatchesPage({
   const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
   const listScrollPositionRef = useRef(0);
-  const rows = useMemo(() => paymentBatchRows(batches, payouts), [batches, payouts]);
+  const rows = useMemo(() => paymentBatchRows(batches), [batches]);
   const filteredRows = useMemo(() => filterPaymentBatchRows(rows, {
     search,
     start,

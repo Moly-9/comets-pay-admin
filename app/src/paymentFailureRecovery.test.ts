@@ -161,12 +161,23 @@ describe('payment failure recovery', () => {
       { account: 'finance', name: '财务人员' },
     );
     const submitted = markPaymentFailureRetrySubmitted(ready, 'batch_retry_1', 'BAT-RETRY-001');
+    const succeeded = {
+      ...submitted,
+      status: '已付款' as const,
+      paymentFailureRecovery: submitted.paymentFailureRecovery ? {
+        ...submitted.paymentFailureRecovery,
+        status: 'RETRY_SUCCEEDED' as const,
+        retrySucceededAt: '2026-08-11T10:00:00.000Z',
+      } : undefined,
+    };
     const failedAgain = beginPaymentFailureAccountRecovery({ ...submitted, status: '付款失败' });
 
     expect(isPaymentFailureRetryCandidate(submitted)).toBe(false);
     expect(submitted.status).toBe('付款处理中');
     expect(paymentFailureRecoveryLabel(submitted)).toBe('付款处理中');
     expect(submitted.paymentFailureRecovery?.retryBatchCode).toBe('BAT-RETRY-001');
+    expect(isPaymentFailureRetryCandidate(succeeded)).toBe(false);
+    expect(paymentFailureRecoveryLabel(succeeded)).toBe('重试付款成功');
     expect(failedAgain.paymentFailureRecovery?.status).toBe('AWAITING_CREATOR_UPDATE');
     expect(failedAgain.paymentFailureRecovery?.previousAttempts).toEqual([
       expect.objectContaining({

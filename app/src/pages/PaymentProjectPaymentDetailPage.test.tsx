@@ -23,7 +23,7 @@ const failedRecord = createPaymentProjectPaymentRecord({
 });
 
 describe('PaymentProjectPaymentDetailPage', () => {
-  it('renders one request project with all payment details and expands the failed item', () => {
+  it('renders the retried request project with its current successful payment result', () => {
     const html = renderToStaticMarkup(
       <PaymentProjectPaymentDetailPage
         record={failedRecord}
@@ -44,7 +44,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('本页面仅展示当前付款项目，不混入同批次的其他项目');
     expect(html).toContain('<dt>付款编号</dt>');
     expect(html).toContain('<dt>付款金额</dt>');
-    expect(html).toContain(`simple-status is-danger"><i></i>${failedRecord.status}`);
+    expect(html).toContain(`simple-status is-success"><i></i>${failedRecord.status}`);
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
     expect(html).not.toContain('<dt>请款金额</dt>');
@@ -68,16 +68,17 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('payment-batch-item-list payment-project-detail-item-list');
     expect(html).toContain('payment-batch-item-trigger payment-project-detail-item-trigger');
     expect(html).not.toContain('<table');
-    expect(html).toContain('付款失败需要处理');
-    expect(html).toContain('退回媒介处理');
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain('BENEFICIARY_UNAVAILABLE');
+    expect(html).not.toContain('付款失败需要处理');
+    expect(html).not.toContain('退回媒介处理');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('BENEFICIARY_UNAVAILABLE');
     expect(html).toContain('下载合同');
     expect(html).toContain('下载 Invoice');
     expect(html).toContain('下载付款表');
     expect(html).not.toContain('下载项目资料');
-    expect(html).toContain('查看合同附件');
-    expect(html).toContain('查看 Invoice 附件');
+    expect(html).not.toContain('查看合同附件');
+    expect(html).not.toContain('查看 Invoice 附件');
+    expect(html).not.toContain('关联资料缺失');
     expect(html).not.toContain('付款批次</span>');
     expect(html).not.toContain('请款项目付款');
   });
@@ -217,12 +218,12 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('<strong>已付款</strong>');
     expect(html).not.toContain('<strong>已完成</strong>');
     expect(html).toContain('payment-progress-steps');
-    expect(html).toContain('部分失败');
+    expect(html).toContain('5 成功 · 0 失败');
     expect(html).toContain('以渠道回写时间为准');
-    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('disabled=""');
     expect(html).toContain('payment-project-summary-card is-order');
     expect(html).toContain('payment-project-summary-card is-provider');
-    expect(html).toContain('payment-project-summary-card is-result-danger');
+    expect(html).toContain('payment-project-summary-card is-result-success');
     expect(html).toContain('payment-project-summary-card is-updated');
     expect(html).toContain('data-payment-provider="Airwallex"');
   });

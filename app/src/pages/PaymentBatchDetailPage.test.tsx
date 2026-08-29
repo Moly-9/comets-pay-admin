@@ -225,6 +225,11 @@ describe('PaymentBatchDetailPage', () => {
         providerResponse: 'The beneficiary is currently disabled.',
         occurredAt: '2026-08-10T14:35',
       },
+      currentPaymentAttempt: {
+        paymentBatchId: DETAIL_BATCH.paymentBatchId,
+        paymentBatchCode: DETAIL_BATCH.paymentBatchCode,
+        submittedAt: DETAIL_BATCH.paidAt,
+      },
     };
     const html = renderToStaticMarkup(
       <PaymentBatchDetailPage
@@ -238,6 +243,46 @@ describe('PaymentBatchDetailPage', () => {
 
     expect(html).toContain('该笔付款需要财务判断问题类型');
     expect(html).toContain('退回媒介处理');
+  });
+
+  it('keeps a historical failed batch read-only after a later attempt succeeds', () => {
+    const succeededPayout: Payout = {
+      id: 'payout_detail_test',
+      paymentRequestProjectId: DETAIL_BATCH.request.paymentRequestProjectId,
+      creator: 'Mina Kato',
+      handle: '@minakato',
+      initials: 'MK',
+      projectId: DETAIL_BATCH.request.cooperationProjectId,
+      project: DETAIL_BATCH.request.cooperationProjectName,
+      contract: 'CON-202608-000001',
+      invoice: 'INV-202608-000001',
+      provider: 'Airwallex',
+      currency: 'USD',
+      amount: 1250,
+      account: 'prototype-account',
+      status: '已付款',
+      invoiceReviewStatus: '已通过',
+      accent: '#64748b',
+      paidAt: '2026-08-11T09:05',
+      currentPaymentAttempt: {
+        paymentBatchId: 'payment_batch_retry_success' as PaymentBatchRecord['paymentBatchId'],
+        paymentBatchCode: 'BAT-20260811-002',
+        submittedAt: '2026-08-11T09:00',
+      },
+    };
+    const html = renderToStaticMarkup(
+      <PaymentBatchDetailPage
+        batch={DETAIL_BATCH}
+        payouts={[succeededPayout]}
+        canHandleFailure
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(html).toContain('部分失败');
+    expect(html).toContain('BENEFICIARY_DISABLED');
+    expect(html).not.toContain('退回媒介处理');
   });
 
   it('uses the simplified three-stage channel progress', () => {

@@ -148,15 +148,16 @@ describe('payment batch filters and selection', () => {
     expect(html).not.toContain('不支持确认函导出');
   });
 
-  it('derives the batch list status from live payout results', () => {
+  it('keeps the batch list status frozen when the live payout changes', () => {
     const batch = createTestBatch('BAT-LIVE-001', 'Airwallex', '2026-08-11T10:00');
     const basePayout = {
       id: batch.items[0].payoutId,
       status: '已付款',
     } as Payout;
 
-    expect(paymentBatchRows([{ ...batch, status: '部分失败' }], [basePayout])[0].status).toBe('已付款');
-    expect(paymentBatchRows([batch], [{ ...basePayout, status: '已退回' }])[0].status).toBe('全部失败');
+    expect(paymentBatchRows([{ ...batch, status: '部分失败' }])[0].status).toBe('部分失败');
+    expect(paymentBatchRows([batch])[0].status).toBe(batch.status);
+    expect(basePayout.status).toBe('已付款');
   });
 });
 

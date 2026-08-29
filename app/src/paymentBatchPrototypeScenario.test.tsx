@@ -4,8 +4,9 @@ import { buildPaymentProjectRows } from './pages/PaymentWorkbenchPage';
 import { TransactionsPage } from './pages/OperationalPages';
 import {
   applyPaymentBatchPrototypeScenario,
-  PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE,
+  PAYMENT_BATCH_RETRY_DEMO,
   paymentBatchPrototypePayoutStatus,
+  paymentProjectPrototypeStatusFor,
 } from './paymentBatchPrototypeScenario';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 
@@ -35,7 +36,7 @@ describe('payment batch prototype scenario', () => {
     expect(paymentBatchPrototypePayoutStatus('全部失败', 3)).toBe('付款失败');
   });
 
-  it('keeps two processing and two paid projects in their matching workbench tabs', () => {
+  it('shows the retried request as paid while keeping the processing project visible', () => {
     const input = {
       payouts: scenario.payouts,
       requests: scenario.requests,
@@ -48,15 +49,15 @@ describe('payment batch prototype scenario', () => {
 
     const paidRows = buildPaymentProjectRows({ ...input, tab: 'paid' });
     expect(paidRows.filter((row) => row.status === '付款处理中')).toHaveLength(1);
-    expect(paidRows.filter((row) => row.status === '已付款')).toHaveLength(2);
-    expect(paidRows.filter((row) => row.status === '部分失败')).toHaveLength(1);
+    expect(paidRows.filter((row) => row.status === '已付款')).toHaveLength(3);
+    expect(paidRows.filter((row) => row.status === '部分失败')).toHaveLength(0);
     expect(paidRows.find((row) => row.status === '付款处理中')?.actionLabel).toBe('查看进度');
-    expect(paidRows.find((row) => row.status === '部分失败')?.actionLabel).toBe('处理失败');
+    expect(paidRows.find((row) => row.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode)?.status).toBe('已付款');
   });
 
   it('keeps request, payment-list, and payout states aligned by request', () => {
     scenario.requests.forEach((request) => {
-      const batchStatus = PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE[request.requestCode ?? request.id];
+      const batchStatus = paymentProjectPrototypeStatusFor(request);
       if (!batchStatus) return;
 
       expect(request.lifecycle).toBe(batchStatus === '已付款' ? 'COMPLETED' : 'APPROVED');
@@ -83,7 +84,26 @@ describe('payment batch prototype scenario', () => {
     });
   });
 
-  it('surfaces failed payments and calculated results in transaction records', () => {
+  it('links the retried payout to the new successful batch attempt', () => {
+    const retriedRequest = scenario.requests.find((request) => (
+      request.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
+    ))!;
+    const retriedPayout = payoutsForRequest(retriedRequest).find((payout) => payout.currentPaymentAttempt);
+
+    expect(retriedPayout).toMatchObject({
+      status: '已付款',
+      currentPaymentAttempt: {
+        paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+      },
+      paymentFailureRecovery: {
+        status: 'RETRY_SUCCEEDED',
+        retryBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+      },
+    });
+    expect(retriedPayout?.paymentFailure).toBeUndefined();
+  });
+
+  it('keeps transaction records on the current project result after retry success', () => {
     const paid = scenario.payouts.filter((payout) => payout.status === '已付款');
     const failed = scenario.payouts.filter((payout) => payout.status === '付款失败');
     const settled = paid.length + failed.length;
@@ -98,6 +118,7 @@ describe('payment batch prototype scenario', () => {
     expect(html).toMatch(/aria-selected="false">付款失败<span>\d+<\/span>/);
     expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain(`>${successRate}</strong>`);
-    expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);
+    expect(failed).toHaveLength(0);
+    expect(html).toContain('全部渠道成功率 · 0 笔失败');
   });
 });
