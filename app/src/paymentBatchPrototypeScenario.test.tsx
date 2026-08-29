@@ -99,6 +99,10 @@ describe('payment batch prototype scenario', () => {
       paymentFailureRecovery: {
         status: 'RETRY_SUCCEEDED',
         retryBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+        previousFailure: {
+          errorCode: 'BENEFICIARY_UNAVAILABLE',
+          occurredAt: '2026-08-05T16:05',
+        },
       },
     });
     expect(retriedPayout?.paymentFailure).toBeUndefined();

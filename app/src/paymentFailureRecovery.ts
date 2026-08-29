@@ -94,6 +94,7 @@ export const beginPaymentFailureAccountRecovery = (
     paymentFailureRecovery: {
       status: 'AWAITING_CREATOR_UPDATE',
       notifications: [],
+      previousFailure: payout.paymentFailure ?? previous?.previousFailure,
       readyReason: undefined,
       failureCode: payout.paymentFailure?.errorCode,
       returnReason: payout.paymentFailureReturn?.reason,
@@ -102,6 +103,7 @@ export const beginPaymentFailureAccountRecovery = (
         {
           status: previous.status,
           notifications: previous.notifications,
+          previousFailure: previous.previousFailure,
           failureCode: previous.failureCode,
           returnReason: previous.returnReason,
           creatorUpdatedAt: previous.creatorUpdatedAt,

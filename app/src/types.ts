@@ -596,6 +596,7 @@ export type PaymentFailureNotification = PaymentNotification;
 export type PaymentFailureRecovery = {
   status: PaymentFailureRecoveryStatus;
   notifications: PaymentFailureNotification[];
+  previousFailure?: PaymentFailureRecord;
   readyReason?: 'ACCOUNT_UNCHANGED' | 'REVALIDATED';
   failureCode?: string;
   returnReason?: string;
@@ -615,15 +616,16 @@ export type PaymentFailureRecovery = {
   previousAttempts?: Array<{
     status: PaymentFailureRecoveryStatus;
     notifications: PaymentFailureNotification[];
+    previousFailure?: PaymentFailureRecord;
     failureCode?: string;
     returnReason?: string;
-      creatorUpdatedAt?: string;
-      revalidatedAt?: string;
-      financeConfirmedAt?: string;
-      financeConfirmedByAccount?: string;
-      financeConfirmedByName?: string;
-      retryBatchId?: string;
-      retryBatchCode?: string;
+    creatorUpdatedAt?: string;
+    revalidatedAt?: string;
+    financeConfirmedAt?: string;
+    financeConfirmedByAccount?: string;
+    financeConfirmedByName?: string;
+    retryBatchId?: string;
+    retryBatchCode?: string;
   }>;
 };
 

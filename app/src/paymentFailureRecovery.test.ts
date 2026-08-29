@@ -61,6 +61,7 @@ describe('payment failure recovery', () => {
     expect(payout.status).toBe('已退回');
     expect(payout.invoiceReviewStatus).toBe('已通过');
     expect(payout.paymentFailureRecovery?.status).toBe('AWAITING_CREATOR_UPDATE');
+    expect(payout.paymentFailureRecovery?.previousFailure).toEqual(failedPayout().paymentFailure);
     expect(isPaymentFailureRetryCandidate(payout)).toBe(true);
     expect(isPaymentFailureRetryReady(payout)).toBe(false);
   });
@@ -176,6 +177,7 @@ describe('payment failure recovery', () => {
     expect(submitted.status).toBe('付款处理中');
     expect(paymentFailureRecoveryLabel(submitted)).toBe('付款处理中');
     expect(submitted.paymentFailureRecovery?.retryBatchCode).toBe('BAT-RETRY-001');
+    expect(submitted.paymentFailureRecovery?.previousFailure).toEqual(failedPayout().paymentFailure);
     expect(isPaymentFailureRetryCandidate(succeeded)).toBe(false);
     expect(paymentFailureRecoveryLabel(succeeded)).toBe('重试付款成功');
     expect(failedAgain.paymentFailureRecovery?.status).toBe('AWAITING_CREATOR_UPDATE');

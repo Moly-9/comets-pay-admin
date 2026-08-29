@@ -146,6 +146,14 @@ export function PaymentProjectItemDrawer({
   const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
   const failureReturn = payout?.paymentFailureReturn;
   const failure = item.failure;
+  const failureRecovery = payout?.paymentFailureRecovery;
+  const isSecondaryPayment = failureRecovery
+    ? ['RETRY_SUBMITTED', 'RETRY_SUCCEEDED'].includes(failureRecovery.status)
+    : false;
+  const previousFailure = failureRecovery?.previousFailure;
+  const retryBatchCode = failureRecovery?.retryBatchCode
+    || payout?.currentPaymentAttempt?.paymentBatchCode
+    || '未记录';
   const canReturnFailure = item.paymentStatus === '付款失败' && !failureReturn && Boolean(onRequestFailureReturn);
   const titleId = `payment-project-item-drawer-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
@@ -205,6 +213,7 @@ export function PaymentProjectItemDrawer({
             <h2 id={titleId}>{accountName}</h2>
           </div>
           <div className="payment-project-item-drawer-header-actions">
+            {isSecondaryPayment ? <span className="payment-project-retry-badge">二次付款</span> : null}
             <span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
             <button ref={closeButtonRef} className="icon-button" type="button" aria-label="关闭付款明细" onClick={onClose}>
               <X size={20} aria-hidden="true" />
@@ -227,6 +236,46 @@ export function PaymentProjectItemDrawer({
             </dl>
           </section>
 
+          <section className="payment-project-item-drawer-section" aria-labelledby={`${titleId}-result`}>
+            <h3 id={`${titleId}-result`}><CircleAlert size={17} aria-hidden="true" />渠道结果</h3>
+            <dl className="payment-project-item-drawer-grid">
+              <div><dt>付款状态</dt><dd>{item.paymentStatus}</dd></div>
+              <div><dt>渠道回写时间</dt><dd>{failure?.occurredAt ? displayTime(failure.occurredAt) : displayTime(item.paidAt)}</dd></div>
+              {failure ? (
+                <>
+                  <div><dt>错误码</dt><dd>{failure.code}</dd></div>
+                  <div className="is-full"><dt>渠道响应</dt><dd>{failure.response}</dd></div>
+                </>
+              ) : null}
+            </dl>
+            {isSecondaryPayment ? (
+              <div className="payment-project-previous-failure-card" role="status">
+                <AlertTriangle size={18} aria-hidden="true" />
+                <div>
+                  <strong>二次付款</strong>
+                  <p>本笔付款为上一次付款失败后重新发起。</p>
+                  <dl>
+                    <div><dt>当前重试批次</dt><dd>{retryBatchCode}</dd></div>
+                    <div><dt>上一次失败时间</dt><dd>{displayTime(previousFailure?.occurredAt)}</dd></div>
+                    <div><dt>上一次错误码</dt><dd>{previousFailure?.errorCode || '未记录'}</dd></div>
+                    <div className="is-full"><dt>上一次失败原因</dt><dd>{previousFailure?.providerResponse || '未记录'}</dd></div>
+                    {failureRecovery?.returnReason ? <div className="is-full"><dt>业务退回原因</dt><dd>{failureRecovery.returnReason}</dd></div> : null}
+                  </dl>
+                </div>
+              </div>
+            ) : null}
+            {failureReturn ? (
+              <div className="payment-project-item-return-card" role="status">
+                <AlertTriangle size={17} aria-hidden="true" />
+                <div>
+                  <strong>{failureReturn.issueType === 'INVOICE_CONTENT' ? 'Invoice 内容问题' : '付款账户问题'}</strong>
+                  <span>退回原因：{failureReturn.reason}</span>
+                  <small>{failureReturn.actorName} · {displayTime(failureReturn.occurredAt)}</small>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
           <section className="payment-project-item-drawer-section" aria-labelledby={`${titleId}-payment`}>
             <h3 id={`${titleId}-payment`}><WalletCards size={17} aria-hidden="true" />付款信息</h3>
             <dl className="payment-project-item-drawer-grid">
@@ -244,30 +293,6 @@ export function PaymentProjectItemDrawer({
               <div className="is-full"><dt>交易附言</dt><dd>{item.transactionReference || '未记录'}</dd></div>
               <div className="is-full"><dt>付款描述</dt><dd>{item.description || '未记录'}</dd></div>
             </dl>
-          </section>
-
-          <section className="payment-project-item-drawer-section" aria-labelledby={`${titleId}-result`}>
-            <h3 id={`${titleId}-result`}><CircleAlert size={17} aria-hidden="true" />渠道结果</h3>
-            <dl className="payment-project-item-drawer-grid">
-              <div><dt>付款状态</dt><dd>{item.paymentStatus}</dd></div>
-              <div><dt>渠道回写时间</dt><dd>{failure?.occurredAt ? displayTime(failure.occurredAt) : displayTime(item.paidAt)}</dd></div>
-              {failure ? (
-                <>
-                  <div><dt>错误码</dt><dd>{failure.code}</dd></div>
-                  <div className="is-full"><dt>渠道响应</dt><dd>{failure.response}</dd></div>
-                </>
-              ) : null}
-            </dl>
-            {failureReturn ? (
-              <div className="payment-project-item-return-card" role="status">
-                <AlertTriangle size={17} aria-hidden="true" />
-                <div>
-                  <strong>{failureReturn.issueType === 'INVOICE_CONTENT' ? 'Invoice 内容问题' : '付款账户问题'}</strong>
-                  <span>退回原因：{failureReturn.reason}</span>
-                  <small>{failureReturn.actorName} · {displayTime(failureReturn.occurredAt)}</small>
-                </div>
-              </div>
-            ) : null}
           </section>
         </div>
 

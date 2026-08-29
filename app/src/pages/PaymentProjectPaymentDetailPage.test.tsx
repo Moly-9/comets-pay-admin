@@ -236,9 +236,37 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(drawerHtml).toContain('BENEFICIARY_UNAVAILABLE');
     expect(drawerHtml).toContain('The beneficiary account is unavailable.');
     expect(drawerHtml).toContain('退回媒介处理');
+    expect(drawerHtml.indexOf('渠道结果')).toBeLessThan(drawerHtml.indexOf('付款信息'));
+    expect(drawerHtml).not.toContain('二次付款');
     expect(drawerHtml).not.toContain('付款关联文件');
     expect(drawerHtml).not.toContain('Invoice 日期');
     expect(drawerHtml).not.toContain('关联资料缺失');
+  });
+
+  it('identifies a retry and shows the frozen previous channel failure before payment information', () => {
+    const retryPayout = resources.payouts.find((payout) => payout.currentPaymentAttempt);
+    const retryItem = failedRecord.items.find((item) => item.payoutId === retryPayout?.id);
+    expect(retryPayout).toBeDefined();
+    expect(retryItem).toBeDefined();
+
+    const drawerHtml = renderToStaticMarkup(
+      <PaymentProjectItemDrawer
+        item={retryItem!}
+        payout={retryPayout}
+        canHandleFailure={false}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect((drawerHtml.match(/二次付款/g) ?? [])).toHaveLength(2);
+    expect(drawerHtml).toContain('当前重试批次');
+    expect(drawerHtml).toContain('BAT-20260806-001');
+    expect(drawerHtml).toContain('上一次失败时间');
+    expect(drawerHtml).toContain('2026-08-05 16:05');
+    expect(drawerHtml).toContain('BENEFICIARY_UNAVAILABLE');
+    expect(drawerHtml).toContain('The beneficiary is temporarily unavailable.');
+    expect(drawerHtml).toContain('业务退回原因');
+    expect(drawerHtml.indexOf('渠道结果')).toBeLessThan(drawerHtml.indexOf('付款信息'));
   });
 
   it('uses the workbench table, sticky utility columns, colored downloads, and responsive drawer', () => {
@@ -251,9 +279,12 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('.payment-project-item-drawer');
     expect(css).toContain('width: min(520px, 100vw)');
     expect(css).toContain('.payment-project-info-icon');
-    expect(css).toContain('linear-gradient(135deg, #4b86e8 0%, #2f63c7 100%)');
-    expect(css).toContain('linear-gradient(135deg, #e85f55 0%, #c9403b 100%)');
-    expect(css).toContain('linear-gradient(135deg, #8b5dd3 0%, #6842ae 100%)');
+    expect(css).toContain('linear-gradient(135deg, #ffede2 0%, #ffe7e8 100%)');
+    expect(css).toContain('linear-gradient(135deg, #ffefd4 0%, #ffe7cc 100%)');
+    expect(css).toContain('linear-gradient(135deg, #f4ebfe 0%, #f6e9fd 100%)');
+    expect(css).toContain('linear-gradient(135deg, #e8f8f0 0%, #e6f6f2 100%)');
+    expect(css).toContain('.payment-project-previous-failure-card');
+    expect(css).toContain('.payment-project-retry-badge');
     expect(css).toContain('font-size: 28px');
     expect(css).toContain('border-radius: 50%');
     expect(css).toContain('.payment-project-info-cards');

@@ -170,6 +170,12 @@ export const applyPaymentBatchPrototypeScenario = ({
         paymentFailureRecovery: isRetrySuccess ? {
           status: 'RETRY_SUCCEEDED',
           notifications: [],
+          previousFailure: {
+            provider: payout.provider,
+            errorCode: 'BENEFICIARY_UNAVAILABLE',
+            providerResponse: 'The beneficiary is temporarily unavailable.',
+            occurredAt: '2026-08-05T16:05',
+          },
           failureCode: 'BENEFICIARY_UNAVAILABLE',
           returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',
           retryBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId,
