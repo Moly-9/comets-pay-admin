@@ -36,6 +36,7 @@ import {
   invoiceAccountSummary,
 } from '../invoice/invoiceReview';
 import { invoicePayoutAccountPresentationRows } from '../invoice/invoicePayoutAccountPresentation';
+import { hasInvoiceSignatureEvidence } from '../invoice/invoiceSignature';
 import {
   getApprovedInvoicePaymentStatus,
   getInvoiceEditContext,
@@ -198,6 +199,7 @@ const sameAccount = (left: string, right: string) => {
 function buildReviewChecks(
   source: InvoiceDetailSource,
   model: InvoiceDocumentModel,
+  contracts: ContractRecord[],
 ): InvoiceReviewCheck[] {
   if (source.kind === 'generated') {
     const signed = Boolean(model.signatureText || model.signatureDate || source.payout?.invoiceSignedAt);
@@ -269,7 +271,7 @@ function buildReviewChecks(
       {
         id: 'signature',
         label: '签署完整性',
-        contractValue: '需要完整签署',
+        contractValue: signaturePending ? '需要完整签署' : '已签署',
         invoiceValue: signaturePending ? '等待签署或补充资料' : '签名页已归档',
         passed: !signaturePending,
         note: signaturePending ? '当前资料尚未满足付款条件' : '签名区域检查通过',
@@ -279,10 +281,18 @@ function buildReviewChecks(
 
   const { payout } = source;
   const reference = getInvoiceContractReference(payout);
+  const linkedContract = contracts.find((contract) => (
+    Boolean(contract.contractId && model.contractIds?.includes(contract.contractId))
+    || contract.id === payout.contract
+    || String(contract.contractId ?? '') === payout.contract
+  ));
+  const contractPublisher = linkedContract?.publisher?.trim() ?? '';
+  const invoicePublisher = model.from.legalName?.trim() ?? '';
   const accountSummary = invoiceAccountSummary(model);
   const accountIssue = Boolean(payout.issue && /(账户|收款资料|路由)/.test(payout.issue));
   const partyIssue = Boolean(payout.issue && /(主体|名称)/.test(payout.issue));
   const signatureIssue = Boolean(payout.issue && /签字|签名/.test(payout.issue));
+  const signed = hasInvoiceSignatureEvidence(payout);
   const modelTotal = invoiceTotal(model);
 
   return [
@@ -297,10 +307,18 @@ function buildReviewChecks(
     {
       id: 'party',
       label: '收款主体',
-      contractValue: model.creatorName || model.from.legalName,
-      invoiceValue: model.from.legalName || '待补充',
-      passed: !partyIssue && sameText(model.creatorName || model.from.legalName, model.from.legalName),
-      note: partyIssue ? payout.issue ?? '收款主体需复核' : 'Invoice From与合同Publisher一致',
+      contractValue: contractPublisher || '合同 Publisher 缺失',
+      invoiceValue: invoicePublisher || '待补充',
+      passed: Boolean(contractPublisher && invoicePublisher)
+        && !partyIssue
+        && sameText(contractPublisher, invoicePublisher),
+      note: !linkedContract
+        ? '未找到关联合同，不能通过达人名称推断合同 Publisher'
+        : partyIssue
+          ? payout.issue ?? '收款主体需复核'
+          : contractPublisher && invoicePublisher && sameText(contractPublisher, invoicePublisher)
+            ? 'Invoice From与合同Publisher一致'
+            : 'Invoice From与合同Publisher不一致',
     },
     {
       id: 'bill-to',
@@ -331,10 +349,14 @@ function buildReviewChecks(
     {
       id: 'signature',
       label: '签署完整性',
-      contractValue: '需要完整签署',
-      invoiceValue: signatureIssue ? '签字页缺失' : '签名页已识别',
-      passed: !signatureIssue,
-      note: signatureIssue ? payout.issue ?? '签名信息不完整' : '签名区域检查通过',
+      contractValue: signed && !signatureIssue ? '已签署' : '需要完整签署',
+      invoiceValue: signed && !signatureIssue ? '已签署' : signatureIssue ? '签字页缺失' : '等待签署',
+      passed: signed && !signatureIssue,
+      note: signed && !signatureIssue
+        ? '签名区域检查通过'
+        : signatureIssue
+          ? payout.issue ?? '签名信息不完整'
+          : '等待达人完成签署',
     },
   ];
 }
@@ -457,14 +479,14 @@ export function InvoiceDetailPage({
         passed: ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state),
         note: check.message,
       }))
-    : buildReviewChecks(source, model), [contractMatch, model, source]);
+    : buildReviewChecks(source, model, contracts), [contractMatch, contracts, model, source]);
   const passedCount = checks.filter((check) => check.passed).length;
   const allPassed = checks.length > 0 && passedCount === checks.length;
-  const signedForMediaReview = Boolean(model.signatureText || model.signatureDate || payout?.invoiceSignedAt);
+  const signedForMediaReview = hasInvoiceSignatureEvidence(payout, generatedRecord);
   const contractMatchEnforced = Boolean(storedContractMatchReview);
   const mediaApprovalReady = signedForMediaReview
     && (!contractMatchEnforced || Boolean(contractMatch?.canProceed));
-  const availableActions = invoiceReviewStatus
+  const availableActions = invoiceReviewStatus && managementView?.tab !== 'signature'
     ? getInvoiceDetailReviewActions(invoiceReviewStatus, {
         manage: canManageInvoice,
         mediaReview: canReviewMedia,
@@ -822,7 +844,6 @@ export function InvoiceDetailPage({
     };
   })();
   const workspaceBlockingReasons = [
-    ...(primaryAction === 'APPROVE_MEDIA' && !signedForMediaReview ? ['达人尚未完成签署，不能进行审核'] : []),
     ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatch?.canProceed
       ? ['合同与 Invoice 存在未处理的阻断项']
       : []),

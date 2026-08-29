@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { INITIAL_CONTRACTS } from '../contracts';
 import type { GeneratedInvoiceRecord, InvoiceEditContext, Payout } from '../types';
 import {
   buildInvoiceSignatureReminderMessage,
@@ -98,6 +99,46 @@ const renderDetail = (
 );
 
 describe('InvoiceDetailPage edit actions', () => {
+  it('uses the linked contract Publisher and shows completed signature evidence', () => {
+    const signedModel = {
+      ...model,
+      creatorName: 'Synthetic Display Name',
+      from: { ...model.from, legalName: 'Synthetic Legal Name' },
+    };
+    const signedPayout: Payout = {
+      ...basePayout,
+      creator: 'Synthetic Display Name',
+      contract: 'CON-SYNTHETIC',
+      invoiceReviewStatus: '待媒介审核',
+      invoiceSignedAt: '2026-08-14T02:00:00.000Z',
+      invoiceSnapshot: signedModel,
+    };
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      id: 'CON-SYNTHETIC',
+      publisher: 'Synthetic Legal Name',
+    };
+    const html = renderToStaticMarkup(
+      <InvoiceDetailPage
+        source={{ kind: 'payout', payout: signedPayout }}
+        model={signedModel}
+        contracts={[contract]}
+        onBack={() => undefined}
+        onMarkSigned={() => undefined}
+        onReviewAction={() => undefined}
+        canManageInvoice={false}
+        canReviewMedia
+        canReviewFinance={false}
+        notify={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Synthetic Legal Name');
+    expect(html).toContain('已完成 5/6 项');
+    expect(html).toContain('已签名');
+    expect(html).not.toContain('达人尚未完成签署，不能进行审核');
+  });
+
   it('preserves the existing Invoice heading and shows Invoice type first in the four metric cards', () => {
     const html = renderDetail(basePayout, { manage: false, media: true });
     expect(html).toContain('INV-SYNTHETIC');

@@ -454,6 +454,7 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
     account: '0000000001',
     status: '未进入付款',
     invoiceReviewStatus: '待媒介审核',
+    invoiceSignedAt: '2026-07-31T10:00:00.000Z',
     accent: '#f59e0b',
   },
   {

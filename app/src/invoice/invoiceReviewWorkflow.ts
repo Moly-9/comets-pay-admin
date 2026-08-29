@@ -14,6 +14,7 @@ import type { InvoicePageTab } from './invoiceManagement';
 import { todayInputValue } from './invoiceUtils';
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
 import { accountDisplayValue, emailDisplayValue } from '../accountPresentation';
+import { currentInvoiceContractMatchReview } from './invoiceContractMatching';
 
 export type { InvoicePageTab } from './invoiceManagement';
 
@@ -737,6 +738,13 @@ export const markGeneratedInvoiceSigned = (
 ): Payout => {
   if (record.sourcePayoutId !== payout.id) {
     throw new Error('生成记录与付款记录的稳定关联不一致。');
+  }
+  const contractMatchReview = currentInvoiceContractMatchReview(record);
+  if (
+    contractMatchReview
+    && (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED')
+  ) {
+    throw new Error('合同与 Invoice 仍存在未处理的阻断项，不能提交审核。');
   }
   const event = createInvoiceReviewEvent(payout, 'MARK_SIGNED', actor, undefined, occurredAt);
   const signedSnapshot = {

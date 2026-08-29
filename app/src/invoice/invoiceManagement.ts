@@ -90,6 +90,10 @@ export type InvoiceManagementView = {
   requestApprovalStatus?: RequestApprovalStatus;
 };
 
+export type InvoiceManagementEvidence = {
+  signed?: boolean;
+};
+
 export type InvoiceManagementReturnContext = {
   source: 'APPROVAL_INVOICE' | 'PAYMENT_FAILURE_INVOICE';
   sourceLabel: string;
@@ -119,6 +123,7 @@ export const getInvoiceManagementView = (
   payout: Pick<Payout, 'invoiceReviewStatus' | 'status' | 'paymentFailureReturn' | 'paymentFailureRecovery'>,
   request?: PaymentRequestProjectLike,
   returnContext?: InvoiceManagementReturnContext | null,
+  evidence?: InvoiceManagementEvidence,
 ): InvoiceManagementView => {
   if (returnContext) {
     return { tab: 'returned', status: '已退回', requestApprovalStatus: request?.approval?.status };
@@ -128,7 +133,13 @@ export const getInvoiceManagementView = (
     return { tab: 'signature', status: '草稿', requestApprovalStatus: request?.approval?.status };
   }
 
-  if (payout.invoiceReviewStatus === '待签署') {
+  if (
+    payout.invoiceReviewStatus === '待签署'
+    || (
+      (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
+      && evidence?.signed === false
+    )
+  ) {
     return { tab: 'signature', status: '待签署', requestApprovalStatus: request?.approval?.status };
   }
   if (payout.invoiceReviewStatus === '达人反馈') {

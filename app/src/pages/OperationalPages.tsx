@@ -66,6 +66,7 @@ import {
   type InvoiceManagementRow,
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
+import { hasInvoiceSignatureEvidence } from '../invoice/invoiceSignature';
 import {
   externalInvoiceListStatus,
   externalInvoicePageTab,
@@ -3069,7 +3070,9 @@ export function InvoicePage({
       generatedInvoiceByPayoutId.get(payout.id)?.invoiceId,
       request,
     );
-    return getInvoiceManagementView(payout, request, returnContext);
+    return getInvoiceManagementView(payout, request, returnContext, {
+      signed: hasInvoiceSignatureEvidence(payout, generatedInvoiceByPayoutId.get(payout.id)),
+    });
   };
   const invoiceSnapshotFor = (payout: Payout) => (
     generatedInvoiceByPayoutId.get(payout.id)?.snapshot ?? payout.invoiceSnapshot
@@ -3124,9 +3127,11 @@ export function InvoicePage({
       socialAccounts: creator ? creatorSocialAccounts(creator).map((account) => ({ ...account })) : undefined,
     };
   };
-  const canActOnInvoice = (payout: Payout) => (
+  const canActOnInvoice = (payout: Payout, view: InvoiceManagementView) => (
     (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
     || (
+      view.tab === 'review'
+      &&
       (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
       && canReviewMedia
     )
@@ -3143,8 +3148,10 @@ export function InvoicePage({
     const identity = invoiceIdentityFor(payout);
     const request = findInvoiceRequest(payout, generatedInvoices, requests);
     const returnContext = getInvoiceManagementReturnContext(payout, generated?.invoiceId, request);
-    const view = getInvoiceManagementView(payout, request, returnContext);
-    const canAct = canActOnInvoice(payout);
+    const view = getInvoiceManagementView(payout, request, returnContext, {
+      signed: hasInvoiceSignatureEvidence(payout, generated),
+    });
+    const canAct = canActOnInvoice(payout, view);
     const actionLabel = view.status === '已退回'
       ? '查看详情'
       : payout.invoiceReviewStatus === '草稿'

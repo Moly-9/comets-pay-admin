@@ -86,6 +86,7 @@ import {
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
 } from './invoice/invoiceManagement';
+import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
 import {
   buildApprovedExternalInvoice,
   correctExternalInvoiceRecognition,
@@ -3616,7 +3617,9 @@ export default function App() {
     const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
     const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
     const returnContext = getInvoiceManagementReturnContext(payout, invoice?.invoiceId, request);
-    setInvoiceTab(getInvoiceManagementView(payout, request, returnContext).tab);
+    setInvoiceTab(getInvoiceManagementView(payout, request, returnContext, {
+      signed: hasInvoiceSignatureEvidence(payout, invoice),
+    }).tab);
     setFocusedInvoiceId(payout.id);
     setSelectedPayout(null);
     setActivePage('invoice');
@@ -3635,7 +3638,9 @@ export default function App() {
       if (!navigate('invoice')) return;
       const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
       const returnContext = getInvoiceManagementReturnContext(payout, invoice.invoiceId, request);
-      setInvoiceTab(getInvoiceManagementView(payout, request, returnContext).tab);
+      setInvoiceTab(getInvoiceManagementView(payout, request, returnContext, {
+        signed: hasInvoiceSignatureEvidence(payout, invoice),
+      }).tab);
       setFocusedInvoiceId(payout.id);
     } else if (target.kind === 'request-review') {
       const request = requestProjects.find((item) => (
