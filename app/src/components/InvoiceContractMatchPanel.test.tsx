@@ -71,4 +71,45 @@ describe('InvoiceContractMatchPanel', () => {
     expect(html).toContain('role="alert"');
     expect(html).not.toContain('<textarea');
   });
+
+  it('renders business account differences, both update times, and the manual collapse action', () => {
+    const reasonIssue = issue('REASON_REQUIRED', '付款账户信息存在差异。');
+    const accountDifference = {
+      fieldLabels: ['Account Number', '银行名称'],
+      technicalMetadataOnly: false,
+      contractAccounts: [{
+        contractReference: 'CON-TEST-1',
+        updatedAt: '2026-08-01T08:00:00.000Z',
+      }],
+      invoiceAccountUpdatedAt: '2026-08-20T09:30:00.000Z',
+    };
+    const match: InvoiceContractMatchPanelValue = {
+      result: 'APPROVED_WITH_REASON',
+      checks: checks('APPROVED_WITH_REASON').map((check) => check.field === 'PAYMENT_ACCOUNT'
+        ? {
+          ...check,
+          state: 'APPROVED_WITH_REASON' as const,
+          message: reasonIssue.message,
+          paymentAccountDifference: accountDifference,
+        }
+        : check),
+      blockerIssues: [],
+      reasonRequiredIssues: [{ ...reasonIssue, field: 'PAYMENT_ACCOUNT', paymentAccountDifference: accountDifference }],
+    };
+    const html = renderToStaticMarkup(
+      <InvoiceContractMatchPanel
+        match={match}
+        reason="经项目确认使用当前主账户"
+        onCollapse={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('差异字段');
+    expect(html).toContain('Account Number、银行名称');
+    expect(html).toContain('合同账户更新');
+    expect(html).toContain('当前 Invoice 账户更新');
+    expect(html).toContain('CON-TEST-1');
+    expect(html).toContain('收起');
+    expect(html).not.toContain('账户指纹');
+  });
 });

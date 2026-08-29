@@ -1759,6 +1759,7 @@ const createSeedCreator = ({
         : status === 'REVIEW_REQUIRED'
           ? 'PARTIAL_MATCH'
           : '',
+      updatedAt: isValidated ? '2026-07-18T10:31:00.000Z' : '2026-07-18T10:30:00.000Z',
       validatedAt: isValidated ? '2026-07-18 10:30' : '',
       verifiedAt: status === 'VERIFIED' || status === 'REVIEW_REQUIRED' || status === 'CANNOT_VERIFY'
         ? '2026-07-18 10:31'
@@ -1773,6 +1774,7 @@ const createSeedCreator = ({
       nickname: paypal.nickname ?? (resolvedBank ? 'PayPal 备用账户' : 'PayPal 主账户'),
       isDefault: paypalIsDefault,
       status: paypal.status ?? 'READY_FOR_VALIDATION',
+      updatedAt: '2026-07-18T10:31:00.000Z',
       paypalUsername: demoAccountName(paypal.username),
       paypalEmail: paypal.email,
     }));

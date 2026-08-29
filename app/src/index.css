@@ -8102,6 +8102,40 @@ body:has(.finance-review-workspace) {
   font-style: normal;
 }
 
+.invoice-contract-match-head-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+}
+
+.invoice-contract-match-head-actions button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid #d8dce4;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 8px;
+  color: #656c78;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.invoice-contract-match-head-actions button:hover {
+  border-color: #c3a7bd;
+  color: #8d587f;
+}
+
+.invoice-contract-match-head-actions button:focus-visible {
+  outline: 3px solid rgba(173, 121, 169, 0.18);
+  outline-offset: 2px;
+}
+
 .invoice-contract-match-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -8136,7 +8170,11 @@ body:has(.finance-review-workspace) {
   color: #8b681c;
 }
 
-.invoice-contract-match-grid article div {
+.invoice-contract-match-grid article.has-account-difference {
+  grid-column: span 2;
+}
+
+.invoice-contract-match-grid article > div {
   display: grid;
   min-width: 0;
   gap: 2px;
@@ -8156,6 +8194,45 @@ body:has(.finance-review-workspace) {
   color: #737b87;
   font-size: 10px;
   line-height: 1.4;
+}
+
+.invoice-contract-account-difference {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  margin: 7px 0 0;
+  border-top: 1px solid #ece3ca;
+  padding-top: 7px;
+  color: #626975;
+}
+
+.invoice-contract-account-difference > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.invoice-contract-account-difference dt,
+.invoice-contract-account-difference dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.invoice-contract-account-difference dt {
+  color: #8b681c;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.invoice-contract-account-difference dd {
+  color: #666d78;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.invoice-contract-account-difference dd > span {
+  display: block;
 }
 
 .invoice-contract-match-reason {
@@ -8223,8 +8300,17 @@ body:has(.finance-review-workspace) {
     flex-direction: column;
   }
 
+  .invoice-contract-match-head-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .invoice-contract-match-grid {
     grid-template-columns: 1fr;
+  }
+
+  .invoice-contract-match-grid article.has-account-difference {
+    grid-column: auto;
   }
 }
 

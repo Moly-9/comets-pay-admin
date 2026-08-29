@@ -65,6 +65,7 @@ export type PayoutAccountIdentity = {
   providerAccountScope?: string;
   schemaKey?: string;
   accountFingerprint?: string;
+  updatedAt?: string;
 };
 
 export type AirwallexVerificationCode =
@@ -224,6 +225,7 @@ export type DocumentPayoutSnapshot = CreatorPaymentDetails & {
   accountCurrency?: string;
   schemaKey?: string;
   validationStatus?: PayoutAccountStatus;
+  updatedAt?: string;
   validatedAt?: string;
   verifiedAt?: string;
   schemaValues?: Record<string, string>;
@@ -372,6 +374,17 @@ export type InvoiceContractMatchIssue = {
   contractValue: string;
   invoiceValue: string;
   message: string;
+  paymentAccountDifference?: InvoicePaymentAccountDifference;
+};
+
+export type InvoicePaymentAccountDifference = {
+  fieldLabels: string[];
+  technicalMetadataOnly: boolean;
+  contractAccounts: Array<{
+    contractReference: string;
+    updatedAt?: string;
+  }>;
+  invoiceAccountUpdatedAt?: string;
 };
 
 export type InvoiceContractMatchReview = {

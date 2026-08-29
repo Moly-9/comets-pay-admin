@@ -64,7 +64,6 @@ import {
   createInvoiceBatchPrototypeSeed,
   filterInvoiceBatchCreatorReferences,
   selectableInvoiceBatchEngagementIds,
-  withInvoiceBatchPrototypeAccounts,
 } from '../invoice/invoiceBatchPrototype';
 import {
   createInvoiceContractMatchReview,
@@ -636,6 +635,9 @@ function BatchRowTable({
   onOpenCreatorPaymentInformation,
   onPreview,
   onPreviewContract,
+  collapsedMatchRows,
+  onCollapseMatch,
+  onExpandMatch,
 }: {
   rows: InvoiceBatchRow[];
   context: InvoiceBatchContext;
@@ -645,6 +647,9 @@ function BatchRowTable({
   onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
   onPreview: (row: InvoiceBatchRow) => void;
   onPreviewContract: (contract: ContractRecord) => void;
+  collapsedMatchRows: ReadonlySet<EngagementId>;
+  onCollapseMatch: (engagementId: EngagementId) => void;
+  onExpandMatch: (engagementId: EngagementId) => void;
 }) {
   const visibleRows = onlyProblems
     ? rows.filter((row) => !['READY', 'GENERATED'].includes(row.status))
@@ -698,6 +703,11 @@ function BatchRowTable({
             const showsContractMatchPanel = Boolean(contractMatch && (
               contractMatch.blockerIssues.length || contractMatch.reasonRequiredIssues.length
             ));
+            const contractMatchCollapsed = Boolean(
+              showsContractMatchPanel
+              && contractMatch?.result === 'APPROVED_WITH_REASON'
+              && collapsedMatchRows.has(row.engagementId),
+            );
             return (
               <Fragment key={row.engagementId}>
               <tr
@@ -904,6 +914,15 @@ function BatchRowTable({
                       {row.issues[0]}
                     </span>
                   ) : null}
+                  {contractMatchCollapsed ? (
+                    <div className="invoice-batch-collapsed-match">
+                      <span>差异说明已填写</span>
+                      <button type="button" onClick={() => onExpandMatch(row.engagementId)}>
+                        <ChevronDown size={13} aria-hidden="true" />
+                        查看差异
+                      </button>
+                    </div>
+                  ) : null}
                 </td>
                 <td data-label="预览" className="invoice-batch-preview-cell">
                   <button
@@ -917,7 +936,7 @@ function BatchRowTable({
                   </button>
                 </td>
               </tr>
-              {showsContractMatchPanel && contractMatch ? (
+              {showsContractMatchPanel && contractMatch && !contractMatchCollapsed ? (
                 <tr className="invoice-batch-match-reason-row">
                   <td colSpan={10}>
                     <InvoiceContractMatchPanel
@@ -927,6 +946,7 @@ function BatchRowTable({
                       onReasonChange={(value) => onChange(row.engagementId, {
                         contractMatchReason: value,
                       })}
+                      onCollapse={() => onCollapseMatch(row.engagementId)}
                     />
                   </td>
                 </tr>
@@ -1002,12 +1022,9 @@ export function InvoiceBatchBuilderPage({
     model: InvoiceDocumentModel;
   } | null>(null);
   const [contractPreview, setContractPreview] = useState<ContractRecord | null>(null);
+  const [collapsedMatchRows, setCollapsedMatchRows] = useState<Set<EngagementId>>(() => new Set());
   const creatorFileInputRef = useRef<HTMLInputElement>(null);
 
-  const prototypeCreators = useMemo(
-    () => withInvoiceBatchPrototypeAccounts(creators),
-    [creators],
-  );
   const invoiceProjects = useMemo(() => projects.map((project) => {
     const stableProjectId = projectIdFor(project);
     return {
@@ -1033,7 +1050,7 @@ export function InvoiceBatchBuilderPage({
   );
   const context = useMemo<InvoiceBatchContext | null>(() => selectedProject ? ({
     project: selectedProject,
-    creators: prototypeCreators,
+    creators,
     payouts,
     contracts,
     generatedInvoices,
@@ -1042,14 +1059,14 @@ export function InvoiceBatchBuilderPage({
     contracts,
     generatedInvoices,
     payouts,
-    prototypeCreators,
+    creators,
     selectedInvoiceEntity,
     selectedProject,
   ]);
   const projectReferences = selectedProject?.creatorProfiles ?? [];
   const filteredProjectReferences = useMemo(
-    () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch, prototypeCreators),
-    [creatorSearch, projectReferences, prototypeCreators],
+    () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch, creators),
+    [creatorSearch, creators, projectReferences],
   );
   const selectableEngagementIds = useMemo(
     () => selectableInvoiceBatchEngagementIds(
@@ -1124,6 +1141,7 @@ export function InvoiceBatchBuilderPage({
     setCreatorImportReview(null);
     setCreatorSelectionMode('APPEND');
     setRows([]);
+    setCollapsedMatchRows(new Set());
     setGenerationError('');
     setGenerationProgress({ current: 0, total: 0 });
   };
@@ -1141,7 +1159,7 @@ export function InvoiceBatchBuilderPage({
     };
     const demoContext: InvoiceBatchContext = {
       project,
-      creators: prototypeCreators,
+      creators,
       payouts,
       contracts,
       generatedInvoices,
@@ -1155,13 +1173,8 @@ export function InvoiceBatchBuilderPage({
         currency: prototypeSeed.currency,
         lineItems: [descriptionSeed],
       });
-      const account = eligibleInvoicePayoutAccounts(
-        prototypeCreators.find((creator) => creator.id === initial.creatorId),
-      ).find((candidate) => candidate.provider === seed.payoutProvider);
       return updateAndValidateInvoiceBatchRow(initial, {
         currency: prototypeSeed.currency,
-        payoutAccountId: account ? getPayoutAccountId(account) : initial.payoutAccountId,
-        payoutAccountLocked: false,
         items: updateInvoiceBatchLineItem(initial.items, initial.items[0].id, {
           unitPrice: seed.unitPrice,
           quantity: seed.quantity,
@@ -1175,6 +1188,7 @@ export function InvoiceBatchBuilderPage({
     setCurrency(prototypeSeed.currency);
     setSharedDescriptions([descriptionSeed]);
     setRows(demoRows);
+    setCollapsedMatchRows(new Set());
     setOnlyProblems(false);
     setCreatorImportReview(null);
     setBulkCreatorInput('');
@@ -1183,6 +1197,7 @@ export function InvoiceBatchBuilderPage({
   };
 
   const applySelection = (nextIds: EngagementId[]) => {
+    setCollapsedMatchRows(new Set());
     setSelectedEngagementIds(nextIds);
     if (!context) {
       setRows([]);
@@ -1219,6 +1234,7 @@ export function InvoiceBatchBuilderPage({
 
   const applySharedDescriptions = (nextDescriptions: InvoiceBatchLineItemSeed[]) => {
     setSharedDescriptions(nextDescriptions);
+    setCollapsedMatchRows(new Set());
     if (!context) return;
     setRows((current) => current.map((row) => (
       row.status === 'GENERATED'
@@ -1248,6 +1264,7 @@ export function InvoiceBatchBuilderPage({
 
   const applySharedDescriptionToAll = (templateKey: string) => {
     if (!context) return;
+    setCollapsedMatchRows(new Set());
     setRows((current) => current.map((row) => (
       row.status === 'GENERATED'
         ? row
@@ -1262,6 +1279,14 @@ export function InvoiceBatchBuilderPage({
 
   const updateRow = (engagementId: EngagementId, patch: Partial<InvoiceBatchRow>) => {
     if (!context) return;
+    if (Object.keys(patch).some((field) => field !== 'contractMatchReason')) {
+      setCollapsedMatchRows((current) => {
+        if (!current.has(engagementId)) return current;
+        const next = new Set(current);
+        next.delete(engagementId);
+        return next;
+      });
+    }
     setRows((current) => current.map((row) => (
       row.engagementId === engagementId
         ? updateAndValidateInvoiceBatchRow(row, patch, context)
@@ -1271,6 +1296,7 @@ export function InvoiceBatchBuilderPage({
 
   const updateAllRows = (patch: Partial<InvoiceBatchRow>) => {
     if (!context) return;
+    setCollapsedMatchRows(new Set());
     setRows((current) => current.map((row) => (
       row.status === 'GENERATED'
         ? row
@@ -1282,6 +1308,7 @@ export function InvoiceBatchBuilderPage({
     const entity = invoiceBillingSettings.entities.find((candidate) => candidate.id === value);
     if (!entity) return;
     setSelectedBillingEntityId(entity.id);
+    setCollapsedMatchRows(new Set());
     if (!context) return;
     const nextContext = { ...context, invoiceEntity: invoiceEntitySnapshot(entity) };
     setRows((current) => current.map((row) => (
@@ -1318,7 +1345,7 @@ export function InvoiceBatchBuilderPage({
     const tokens = parseInvoiceBatchCreatorTokens(bulkCreatorInput);
     const result = matchInvoiceBatchCreatorTokens({
       tokens,
-      creators: prototypeCreators,
+      creators,
       projectReferences,
     });
     const issues = tokens.length ? result.issues : [{
@@ -1356,7 +1383,7 @@ export function InvoiceBatchBuilderPage({
       }
       const matched = matchInvoiceBatchCreatorRows({
         rows: imported.rows,
-        creators: prototypeCreators,
+        creators,
         projectReferences,
       });
       openCreatorImportReview(
@@ -1646,7 +1673,7 @@ export function InvoiceBatchBuilderPage({
                     <div className="invoice-batch-creator-grid invoice-batch-import-preview-grid">
                       {creatorImportReview.matches.map((match) => {
                         const accepted = creatorSelectionPreview.selectedIds.includes(match.engagementId);
-                        const creator = prototypeCreators.find((candidate) => candidate.id === match.creatorId);
+                        const creator = creators.find((candidate) => candidate.id === match.creatorId);
                         const reference = selectedProject.creatorProfiles?.find((candidate) => candidate.engagementId === match.engagementId);
                         return (
                           <article
@@ -1753,7 +1780,7 @@ export function InvoiceBatchBuilderPage({
 
               <div className="invoice-batch-creator-grid">
                 {filteredProjectReferences.map((reference) => {
-                  const creator = prototypeCreators.find((candidate) => candidate.id === reference.creatorId);
+                  const creator = creators.find((candidate) => candidate.id === reference.creatorId);
                   const selected = selectedEngagementIds.includes(reference.engagementId);
                   const locked = lockedEngagementIds.includes(reference.engagementId);
                   const disabled = !selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS;
@@ -1975,6 +2002,15 @@ export function InvoiceBatchBuilderPage({
               onOpenCreatorPaymentInformation={onOpenCreatorPaymentInformation}
               onPreview={openPreview}
               onPreviewContract={setContractPreview}
+              collapsedMatchRows={collapsedMatchRows}
+              onCollapseMatch={(engagementId) => setCollapsedMatchRows((current) => (
+                new Set(current).add(engagementId)
+              ))}
+              onExpandMatch={(engagementId) => setCollapsedMatchRows((current) => {
+                const next = new Set(current);
+                next.delete(engagementId);
+                return next;
+              })}
             />
           ) : (
             <div className="invoice-batch-empty">请先选择项目和达人</div>
@@ -1983,7 +2019,7 @@ export function InvoiceBatchBuilderPage({
 
         <InvoiceBatchResultSection
           rows={rows}
-          creators={prototypeCreators}
+          creators={creators}
           contracts={contracts}
           fallbackCurrency={currency}
           onDownloadZip={() => void downloadZip()}

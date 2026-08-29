@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, FileText } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronUp, FileText } from 'lucide-react';
 import { useId } from 'react';
 import type { InvoiceContractMatchIssue } from '../types';
 import type { InvoiceContractMatchCheck } from '../invoice/invoiceContractMatching';
@@ -19,6 +19,7 @@ type InvoiceContractMatchPanelProps = {
   contextLabel?: string;
   className?: string;
   reasonInputId?: string;
+  onCollapse?: () => void;
 };
 
 const confirmedCheck = (check: InvoiceContractMatchCheck) => (
@@ -33,6 +34,14 @@ const resultTitle = (result: InvoiceContractMatchPanelValue['result']) => {
   return '合同与 Invoice 已匹配';
 };
 
+const formatAccountUpdatedAt = (value?: string) => {
+  if (!value) return '暂无更新时间';
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const timestamp = Date.parse(normalized);
+  if (Number.isNaN(timestamp)) return value;
+  return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
+};
+
 export function InvoiceContractMatchPanel({
   match,
   reason,
@@ -42,6 +51,7 @@ export function InvoiceContractMatchPanel({
   contextLabel,
   className = '',
   reasonInputId,
+  onCollapse,
 }: InvoiceContractMatchPanelProps) {
   const generatedReasonId = useId();
   const reasonId = reasonInputId ?? generatedReasonId;
@@ -65,13 +75,25 @@ export function InvoiceContractMatchPanel({
           {match.result === 'BLOCKED' ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
           <strong>{resultTitle(match.result)}</strong>
         </span>
-        <em>{match.result === 'NOT_APPLICABLE'
-          ? '不适用'
-          : `${confirmedCount}/${match.checks.length} 已确认`}</em>
+        <div className="invoice-contract-match-head-actions">
+          <em>{match.result === 'NOT_APPLICABLE'
+            ? '不适用'
+            : `${confirmedCount}/${match.checks.length} 已确认`}</em>
+          {onCollapse && match.result === 'APPROVED_WITH_REASON' ? (
+            <button type="button" onClick={onCollapse}>
+              <ChevronUp size={14} aria-hidden="true" />
+              收起
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="invoice-contract-match-grid">
         {match.checks.map((check) => (
-          <article data-state={check.state} key={check.field}>
+          <article
+            className={check.paymentAccountDifference ? 'has-account-difference' : undefined}
+            data-state={check.state}
+            key={check.field}
+          >
             <span>{
               check.state === 'MATCH' || check.state === 'APPROVED_WITH_REASON'
                 ? <CheckCircle2 size={15} />
@@ -79,7 +101,32 @@ export function InvoiceContractMatchPanel({
                   ? <FileText size={15} />
                   : <AlertTriangle size={15} />
             }</span>
-            <div><strong>{check.label}</strong><small>{check.message}</small></div>
+            <div className="invoice-contract-match-check-copy">
+              <strong>{check.label}</strong>
+              <small>{check.message}</small>
+              {check.paymentAccountDifference ? (
+                <dl className="invoice-contract-account-difference">
+                  <div>
+                    <dt>差异字段</dt>
+                    <dd>{check.paymentAccountDifference.technicalMetadataOnly
+                      ? '账户记录已更新，付款信息字段一致'
+                      : check.paymentAccountDifference.fieldLabels.join('、')}</dd>
+                  </div>
+                  <div>
+                    <dt>合同账户更新</dt>
+                    <dd>{check.paymentAccountDifference.contractAccounts.map((account) => (
+                      <span key={account.contractReference}>
+                        {account.contractReference} · {formatAccountUpdatedAt(account.updatedAt)}
+                      </span>
+                    ))}</dd>
+                  </div>
+                  <div>
+                    <dt>当前 Invoice 账户更新</dt>
+                    <dd>{formatAccountUpdatedAt(check.paymentAccountDifference.invoiceAccountUpdatedAt)}</dd>
+                  </div>
+                </dl>
+              ) : null}
+            </div>
           </article>
         ))}
       </div>

@@ -6,6 +6,7 @@ import type {
   InvoiceContractMatchIssue,
   InvoiceContractMatchReview,
   InvoiceDocumentModel,
+  InvoicePaymentAccountDifference,
 } from '../types';
 import { payoutSnapshotForContract } from './invoiceDraft';
 import { formatInvoiceMoney, invoiceTotal } from './invoiceUtils';
@@ -17,6 +18,7 @@ export type InvoiceContractMatchCheck = {
   invoiceValue: string;
   state: 'MATCH' | 'NOT_APPLICABLE' | 'BLOCKER' | 'REASON_REQUIRED' | 'APPROVED_WITH_REASON';
   message: string;
+  paymentAccountDifference?: InvoicePaymentAccountDifference;
 };
 
 export type InvoiceContractMatchActor = {
@@ -62,6 +64,7 @@ type AccountField = {
   contractValue: unknown;
   invoiceValue: unknown;
   compact?: boolean;
+  technical?: boolean;
 };
 
 const accountFields = (
@@ -82,16 +85,19 @@ const accountFields = (
       label: '账户 ID',
       contractValue: contract.payoutAccountId || snapshot?.payoutAccountId,
       invoiceValue: model.payoutAccountId || model.payment.payoutAccountId,
+      technical: true,
     },
     {
       label: '账户版本',
       contractValue: contract.payoutAccountVersion || snapshot?.payoutAccountVersion,
       invoiceValue: model.payoutAccountVersion || model.payment.payoutAccountVersion,
+      technical: true,
     },
     {
       label: '账户指纹',
       contractValue: contract.payoutAccountFingerprint || snapshot?.accountFingerprint,
       invoiceValue: model.payoutAccountFingerprint || model.payment.accountFingerprint,
+      technical: true,
     },
   ];
 
@@ -138,6 +144,10 @@ const contractAccountSummary = (contract: ContractRecord) => {
   ].filter(Boolean).join(' / ') || '未填写'}`;
 };
 
+const payoutSnapshotUpdatedAt = (snapshot: DocumentPayoutSnapshot | null | undefined) => (
+  snapshot?.updatedAt || snapshot?.verifiedAt || snapshot?.validatedAt || undefined
+);
+
 const issue = (
   field: InvoiceContractMatchField,
   severity: InvoiceContractMatchIssue['severity'],
@@ -145,6 +155,7 @@ const issue = (
   contractValue: string,
   invoiceValue: string,
   message: string,
+  paymentAccountDifference?: InvoicePaymentAccountDifference,
 ): InvoiceContractMatchIssue => ({
   field,
   label: FIELD_LABELS[field],
@@ -153,6 +164,7 @@ const issue = (
   contractValue,
   invoiceValue,
   message,
+  ...(paymentAccountDifference ? { paymentAccountDifference } : {}),
 });
 
 export const invoiceContractMatchFingerprint = (
@@ -257,16 +269,33 @@ export const evaluateInvoiceContractMatch = (
     const mismatchedAccountFields = accountContracts.flatMap((contract) => (
       accountFields(contract, model)
         .filter((field) => populated(field.contractValue) && !sameText(field.contractValue, field.invoiceValue))
-        .map((field) => `${contractReference(contract)}：${field.label}`)
+        .map((field) => ({ contract, field }))
     ));
     if (mismatchedAccountFields.length) {
+      const fieldLabels = uniqueValues(
+        mismatchedAccountFields
+          .filter(({ field }) => !field.technical)
+          .map(({ field }) => field.label),
+      );
+      const paymentAccountDifference: InvoicePaymentAccountDifference = {
+        fieldLabels,
+        technicalMetadataOnly: fieldLabels.length === 0,
+        contractAccounts: accountContracts.map((contract) => ({
+          contractReference: contractReference(contract),
+          updatedAt: payoutSnapshotUpdatedAt(payoutSnapshotForContract(contract)),
+        })),
+        invoiceAccountUpdatedAt: payoutSnapshotUpdatedAt(model.payment),
+      };
       issues.push(issue(
         'PAYMENT_ACCOUNT',
         'REASON_REQUIRED',
         accountContracts,
         accountContracts.map(contractAccountSummary).join('；'),
         accountSummary(model),
-        `付款账户存在差异：${mismatchedAccountFields.join('、')}。`,
+        paymentAccountDifference.technicalMetadataOnly
+          ? '账户记录版本不同，付款信息字段一致。'
+          : '付款账户信息存在差异。',
+        paymentAccountDifference,
       ));
     }
 
@@ -282,6 +311,7 @@ export const evaluateInvoiceContractMatch = (
             ? 'BLOCKER'
             : normalizedReason ? 'APPROVED_WITH_REASON' : 'REASON_REQUIRED',
           message: currentIssue.message,
+          paymentAccountDifference: currentIssue.paymentAccountDifference,
         });
         return;
       }

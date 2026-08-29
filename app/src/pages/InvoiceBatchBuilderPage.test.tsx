@@ -30,8 +30,16 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(tableSource).toContain('<InvoiceContractMatchPanel');
     expect(source).toContain('className="invoice-batch-contract-preview-modal"');
     expect(source).toContain('<ContractDocumentView');
+    expect(tableSource).toContain('contractMatchCollapsed');
+    expect(tableSource).toContain('差异说明已填写');
+    expect(tableSource).toContain('查看差异');
+    expect(tableSource).toContain('onCollapseMatch(row.engagementId)');
+    expect(source).toContain('const [collapsedMatchRows, setCollapsedMatchRows]');
+    expect(source).not.toContain('withInvoiceBatchPrototypeAccounts');
+    expect(source).not.toContain('seed.payoutProvider');
     expect(styles).toContain('.invoice-batch-contract-select[aria-pressed="true"]');
     expect(styles).toContain('.invoice-batch-match-reason-row .invoice-contract-match-panel');
+    expect(styles).toContain('.invoice-batch-collapsed-match');
   });
 
   it('moves Excel import into the bulk-input footer and previews matches in the creator archive', () => {
