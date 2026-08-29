@@ -72,9 +72,13 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).not.toContain('退回媒介处理');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('BENEFICIARY_UNAVAILABLE');
-    expect(html).toContain('下载合同');
-    expect(html).toContain('下载 Invoice');
-    expect(html).toContain('下载付款表');
+    expect(html).toContain('下载付款资料');
+    expect(html).toContain('下载付款明细');
+    expect(html).toContain('下载确认函');
+    expect(html).toContain('选择全部可导出确认函的付款明细');
+    expect(html).toContain('全选可导出');
+    expect(html).toContain('payment-project-detail-select-cell');
+    expect(html).toContain('class="avatar avatar-sm"');
     expect(html).not.toContain('下载项目资料');
     expect(html).not.toContain('查看合同附件');
     expect(html).not.toContain('查看 Invoice 附件');
@@ -188,13 +192,48 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect((failedDataRow.match(/>—</g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
+  it('expands a failed row into payment and channel results only', () => {
+    const failedItem = {
+      ...failedRecord.items[0],
+      paymentStatus: '付款失败' as const,
+      paidAt: undefined,
+      failure: {
+        code: 'BENEFICIARY_UNAVAILABLE',
+        response: 'The beneficiary account is unavailable.',
+        occurredAt: '2026-08-26T18:30:00.000Z',
+      },
+    };
+    const html = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={{ ...failedRecord, status: '全部失败', items: [failedItem] }}
+        payouts={[]}
+        canHandleFailure={false}
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('账户快照与渠道结果');
+    expect(html).toContain('BENEFICIARY_UNAVAILABLE');
+    expect(html).not.toContain('付款关联文件');
+    expect(html).not.toContain('Invoice 日期');
+    expect(html).not.toContain('关联资料缺失');
+    expect(html).toContain('disabled=""');
+  });
+
   it('reuses the original payment item list styling and mobile expand target', () => {
     const css = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
     const sharedCss = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
-    expect(css).toContain('.payment-project-detail-item-head,');
+    expect(css).toContain('.payment-project-detail-item-row');
+    expect(css).toContain('grid-template-columns: 44px minmax(0, 1fr)');
     expect(css).toContain('.payment-project-detail-item-trigger');
     expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(css).toContain('font-size: 28px');
+    expect(css).toContain('border-radius: 50%');
+    expect(css).toContain('.payment-project-info-cards');
+    expect(css).toContain('min-height: 44px');
     expect(sharedCss).toContain('.payment-batch-item-list');
     expect(sharedCss).toMatch(/\.payment-batch-item-trigger > \.payment-batch-item-expand-icon\s*{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/);
     expect(css).not.toContain('.payment-project-detail-table');
@@ -252,6 +291,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('项目费用归属');
     expect(html).toContain('成本类型明细');
     expect(html).toContain('simple-status is-processing"><i></i>付款处理中');
+    expect(html).toContain('payment-project-summary-card is-result-processing');
     expect(html).not.toContain('simple-status"><i></i>已完成');
   });
 });

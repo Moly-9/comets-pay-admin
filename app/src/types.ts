@@ -651,11 +651,14 @@ export type Payout = {
   externalBeneficiaryId?: string;
   transferMethod?: AirwallexTransferMethod | 'PAYPAL';
   localClearingSystem?: string;
+  recipientCountry?: string;
   feeBearer?: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
   transferFeeAmount?: number;
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  postTransactionBalance?: number;
+  postTransactionBalanceCurrency?: InvoiceCurrency;
   paymentListRequiresRevalidation?: boolean;
   paymentListValidationIssues?: string[];
   status: PayoutStatus;

@@ -1,3 +1,227 @@
+.payment-project-payment-detail-page .payment-batch-detail-total > strong {
+  color: #1f232b;
+  font-size: 28px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card {
+  --payment-project-card-accent: #725484;
+  --payment-project-card-border: #ded2e7;
+  --payment-project-card-icon: #eadff2;
+  --payment-project-card-surface: linear-gradient(135deg, #fbf8fd 0%, #eee4f5 100%);
+  min-height: 102px;
+  border-color: var(--payment-project-card-border);
+  background-color: #f8f4fb;
+  background-image: var(--payment-project-card-surface);
+  box-shadow: 0 8px 22px rgba(39, 43, 52, 0.045);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-provider {
+  --payment-project-card-accent: #446b9c;
+  --payment-project-card-border: #d3deed;
+  --payment-project-card-icon: #dfeaf8;
+  --payment-project-card-surface: linear-gradient(135deg, #f7faff 0%, #e5eefb 100%);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-result-success {
+  --payment-project-card-accent: #39745a;
+  --payment-project-card-border: #cee2d7;
+  --payment-project-card-icon: #dceee4;
+  --payment-project-card-surface: linear-gradient(135deg, #f5fbf8 0%, #dff1e7 100%);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-result-danger {
+  --payment-project-card-accent: #ac4d43;
+  --payment-project-card-border: #eccbc6;
+  --payment-project-card-icon: #f6dcd7;
+  --payment-project-card-surface: linear-gradient(135deg, #fff8f6 0%, #f8dfda 100%);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-result-processing {
+  --payment-project-card-accent: #996322;
+  --payment-project-card-border: #ead5b5;
+  --payment-project-card-icon: #f3dfbf;
+  --payment-project-card-surface: linear-gradient(135deg, #fffaf2 0%, #f7e6c8 100%);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-updated {
+  --payment-project-card-accent: #936427;
+  --payment-project-card-border: #e7d3b5;
+  --payment-project-card-icon: #f2dfc2;
+  --payment-project-card-surface: linear-gradient(135deg, #fffbf4 0%, #f6e5ca 100%);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card .payment-project-summary-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  background: var(--payment-project-card-icon);
+  color: var(--payment-project-card-accent);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card > div > span:first-child,
+.payment-project-payment-detail-page .payment-project-summary-card small {
+  color: #6f7580;
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card strong,
+.payment-project-payment-detail-page .payment-project-summary-card .payment-provider-label {
+  color: #242830;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section > header {
+  justify-content: center;
+  text-align: center;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section .payment-progress-steps {
+  width: min(100%, 820px);
+  margin-inline: auto;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > span {
+  position: relative;
+  z-index: 2;
+  border-radius: 50%;
+  box-shadow: 0 0 0 7px #fff;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > :is(strong, small) {
+  position: relative;
+  z-index: 2;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > i {
+  z-index: 0;
+  left: 52px;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 8px 17px 17px;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards > div,
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n + 1),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n + 1),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 3),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 2) {
+  min-height: 72px;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid #e3e6eb;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fb 100%);
+  padding: 12px 14px;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards > .payment-batch-project-full {
+  grid-column: 1 / -1;
+  min-height: 68px;
+  border: 1px solid #e3e6eb !important;
+  padding: 12px 14px !important;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards dt {
+  color: #767d89;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards dd {
+  color: #292d35;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.payment-project-payment-detail-page .payment-batch-items-section > header {
+  align-items: flex-start;
+}
+
+.payment-project-resource-toolbar {
+  max-width: 100%;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.payment-project-resource-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payment-project-compact-select-all {
+  display: none;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  color: #596170;
+  cursor: pointer;
+}
+
+.payment-project-compact-select-all input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #745783;
+}
+
+.payment-project-compact-select-all input:focus-visible {
+  outline: 2px solid #879bc4;
+  outline-offset: 3px;
+}
+
+.payment-project-resource-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions .button,
+.payment-project-payment-detail-page .payment-project-download-select .custom-select-trigger {
+  min-height: 44px;
+  border: 1px solid #d7dce4;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 12px;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.payment-project-payment-detail-page .payment-project-download-select {
+  width: 154px;
+}
+
+.payment-project-payment-detail-page .payment-project-download-select .custom-select-trigger {
+  width: 100%;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):hover:not(:disabled) {
+  border-color: #b9a6c7;
+  background: #faf7fc;
+  color: #654f73;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):focus-visible {
+  outline: 2px solid #879bc4;
+  outline-offset: 2px;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-error {
+  margin: 12px 16px 0;
+}
+
 .payment-project-detail-item-list {
   width: 100%;
   max-height: min(680px, calc(100dvh - 180px));
@@ -24,7 +248,80 @@
   background: #b9bec8;
 }
 
-.payment-project-payment-detail-page .payment-project-detail-item-head,
+.payment-project-payment-detail-page .payment-project-detail-item-head {
+  min-width: 1324px;
+  grid-template-columns:
+    44px
+    minmax(188px, 1.35fr)
+    minmax(112px, .72fr)
+    minmax(190px, 1.2fr)
+    minmax(116px, .72fr)
+    minmax(130px, .82fr)
+    minmax(138px, .88fr)
+    minmax(126px, .8fr)
+    minmax(110px, .7fr)
+    32px;
+  padding-left: 0;
+}
+
+.payment-project-detail-item-head {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+}
+
+.payment-project-detail-item-head > span:nth-child(7) {
+  text-align: left;
+}
+
+.payment-project-detail-item-row {
+  display: grid;
+  min-width: 1324px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: stretch;
+  background: #fff;
+}
+
+.payment-project-detail-item.is-selected .payment-project-detail-item-row,
+.payment-project-detail-item.is-selected .payment-project-detail-item-trigger {
+  background: #faf7fc;
+}
+
+.payment-project-detail-select-cell {
+  display: flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.payment-project-detail-item-row > .payment-project-detail-select-cell {
+  min-height: 62px;
+}
+
+.payment-project-detail-select-cell input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #745783;
+  cursor: pointer;
+}
+
+.payment-project-detail-select-cell input:focus-visible {
+  outline: 2px solid #879bc4;
+  outline-offset: 3px;
+}
+
+.payment-project-detail-select-cell:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.payment-project-detail-select-cell input:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .payment-project-payment-detail-page .payment-project-detail-item-trigger {
   min-width: 1280px;
   grid-template-columns:
@@ -39,19 +336,13 @@
     32px;
 }
 
-.payment-project-detail-item-head {
-  position: sticky;
-  z-index: 4;
-  top: 0;
-}
-
-.payment-project-detail-item-head > span:nth-child(6) {
-  text-align: left;
-}
-
 .payment-project-detail-item-person > span,
 .payment-project-detail-item-trigger > span:not(.payment-batch-item-person) {
   min-width: 0;
+}
+
+.payment-project-detail-item-person > .avatar {
+  flex: 0 0 auto;
 }
 
 .payment-project-detail-item-trigger > span > :is(strong, small) {
@@ -76,6 +367,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.payment-project-payment-detail-page .payment-batch-item-details {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (min-width: 1400px) {
   .payment-project-detail-item-list {
     border-top: 1px solid #eceef2;
@@ -83,6 +378,10 @@
 }
 
 @media (max-width: 1399px) {
+  .payment-project-payment-detail-page .payment-project-info-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .payment-project-detail-item-list {
     max-height: none;
     overflow: visible;
@@ -92,14 +391,104 @@
     display: none;
   }
 
+  .payment-project-compact-select-all {
+    display: inline-flex;
+  }
+
+  .payment-project-detail-item-row {
+    min-width: 0;
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .payment-project-detail-item-row > .payment-project-detail-select-cell {
+    align-items: flex-start;
+    padding-top: 14px;
+  }
+
   .payment-project-payment-detail-page .payment-project-detail-item-trigger {
     min-width: 0;
   }
 }
 
+@media (max-width: 980px) {
+  .payment-project-payment-detail-page .payment-project-info-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 720px) {
+  .payment-project-payment-detail-page .payment-batch-detail-total > strong {
+    font-size: 28px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section .payment-progress-steps {
+    width: min(100%, 300px);
+    justify-items: center;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section li {
+    width: 100%;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section li > i {
+    display: block;
+    top: 42px;
+    right: auto;
+    bottom: -14px;
+    left: 20px;
+    width: 1px;
+    height: auto;
+  }
+
+  .payment-project-payment-detail-page .payment-project-info-cards {
+    grid-template-columns: 1fr;
+    padding: 6px 14px 14px;
+  }
+
+  .payment-project-payment-detail-page .payment-project-info-cards > div,
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n + 1),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n + 1),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 3),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 2) {
+    min-height: 66px;
+    border: 1px solid #e3e6eb;
+    padding: 11px 12px;
+  }
+
+  .payment-project-resource-toolbar,
+  .payment-project-resource-actions,
+  .payment-project-resource-meta {
+    width: 100%;
+  }
+
+  .payment-project-resource-meta {
+    justify-content: space-between;
+  }
+
+  .payment-project-resource-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .payment-project-payment-detail-page .payment-project-download-select,
+  .payment-project-payment-detail-page .payment-project-resource-actions .button {
+    width: 100%;
+  }
+
+  .payment-project-detail-item-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .payment-project-detail-select-cell {
+    min-width: 40px;
+  }
+
   .payment-project-payment-detail-page .payment-project-detail-item-trigger {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding-left: 10px;
   }
 
   .payment-project-detail-item-trigger > .payment-project-detail-item-person {

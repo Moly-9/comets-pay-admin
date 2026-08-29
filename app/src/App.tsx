@@ -4947,6 +4947,7 @@ export default function App() {
           invoices={generatedInvoices}
           creators={creators}
           canHandleFailure={canExecutePayouts}
+          notify={notify}
           onBack={() => setPaymentDetailRequestId(null)}
           onReturnPayout={returnPayout}
           onOpenFailurePaymentList={(requestId, payoutId) => {

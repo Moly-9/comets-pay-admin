@@ -101,18 +101,22 @@ const paymentOrderStatus = (items: readonly PaymentBatchItemSnapshot[]) => {
 export function PaymentItemDetails({
   item,
   payout,
+  mode = 'complete',
   onOpenFailurePaymentList,
   onViewContractAttachment,
   onViewInvoiceAttachment,
 }: {
   item: PaymentBatchItemSnapshot;
   payout?: Payout;
+  mode?: 'complete' | 'payment-only';
   onOpenFailurePaymentList?: () => void;
   onViewContractAttachment?: (contract: PaymentBatchItemSnapshot['contracts'][number]) => void;
   onViewInvoiceAttachment?: (invoiceId: NonNullable<PaymentBatchItemSnapshot['invoice']>['invoiceId']) => void;
 }) {
   return (
     <div className="payment-batch-item-details">
+      {mode === 'complete' ? (
+        <>
       <section className="payment-batch-detail-panel is-contract" aria-labelledby={`${item.payoutId}-contract-title`}>
         <header>
           <span className="payment-batch-detail-panel-icon" aria-hidden="true"><FileText size={17} /></span>
@@ -203,6 +207,9 @@ export function PaymentItemDetails({
         )}
       </section>
 
+        </>
+      ) : null}
+
       <section className="payment-batch-detail-panel is-payment" aria-labelledby={`${item.payoutId}-payment-title`}>
         <header>
           <span className="payment-batch-detail-panel-icon" aria-hidden="true"><WalletCards size={17} /></span>
@@ -223,6 +230,15 @@ export function PaymentItemDetails({
           <div><dt>描述</dt><dd>{item.description}</dd></div>
           <div><dt>渠道结果</dt><dd>{item.failure?.code ?? item.paymentStatus}</dd></div>
           <div><dt>付款时间</dt><dd>{displayTime(item.paidAt)}</dd></div>
+          {mode === 'payment-only' ? (
+            <>
+              <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || item.transferMethod || '待补充'}</dd></div>
+              <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
+              <div><dt>付款方实付</dt><dd>{item.actualPaidAmount !== undefined && item.actualPaidCurrency ? money(item.actualPaidCurrency, item.actualPaidAmount) : '—'}</dd></div>
+              <div><dt>手续费金额</dt><dd>{item.transferFeeAmount !== undefined && item.transferFeeCurrency ? money(item.transferFeeCurrency, item.transferFeeAmount) : '—'}</dd></div>
+              <div><dt>交易后余额</dt><dd>{item.postTransactionBalance !== undefined && item.postTransactionBalanceCurrency ? money(item.postTransactionBalanceCurrency, item.postTransactionBalance) : '—'}</dd></div>
+            </>
+          ) : null}
         </dl>
         {item.failure ? (
           <div className="payment-batch-failure-result" role="status">
@@ -247,7 +263,7 @@ export function PaymentItemDetails({
         ) : null}
       </section>
 
-      {item.associationIssues.length ? (
+      {mode === 'complete' && item.associationIssues.length ? (
         <div className="payment-batch-association-warning" role="status">
           <CircleAlert size={17} aria-hidden="true" />
           <span><strong>关联资料缺失</strong>{item.associationIssues.join('；')}</span>

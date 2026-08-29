@@ -1,6 +1,9 @@
 import type { PaymentBatchId, PaymentListRecord } from './businessWorkflow';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
-import { prototypePaymentResultFor } from './prototypePaymentResults';
+import {
+  prototypeFundingAccountOpeningBalance,
+  prototypePaymentResultFor,
+} from './prototypePaymentResults';
 import type { GeneratedInvoiceRecord, Payout } from './types';
 import type { PaymentAggregateStatus } from './paymentStatusFilters';
 
@@ -94,6 +97,8 @@ export const applyPaymentBatchPrototypeScenario = ({
     });
   });
 
+  const runningBalances = new Map<string, number>();
+
   return {
     requests: requests.map((request): RequestProjectSummary => {
       const batchStatus = statusFor(request);
@@ -129,6 +134,13 @@ export const applyPaymentBatchPrototypeScenario = ({
         && scenario.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
         && scenario.providerItemIndex === 0;
       const paymentResult = status === '已付款' ? prototypePaymentResultFor(payout) : undefined;
+      const balanceKey = `${payout.provider}:${payout.currency}`;
+      const previousBalance = runningBalances.get(balanceKey)
+        ?? prototypeFundingAccountOpeningBalance(payout);
+      const postTransactionBalance = paymentResult?.actualPaidAmount === undefined
+        ? undefined
+        : Math.round((previousBalance - paymentResult.actualPaidAmount + Number.EPSILON) * 100) / 100;
+      if (postTransactionBalance !== undefined) runningBalances.set(balanceKey, postTransactionBalance);
       return {
         ...payout,
         status,
@@ -137,11 +149,15 @@ export const applyPaymentBatchPrototypeScenario = ({
           : undefined,
         ...(status === '已付款' ? {
           ...paymentResult,
+          postTransactionBalance,
+          postTransactionBalanceCurrency: payout.currency,
         } : {
           transferFeeAmount: undefined,
           transferFeeCurrency: undefined,
           actualPaidAmount: undefined,
           actualPaidCurrency: undefined,
+          postTransactionBalance: undefined,
+          postTransactionBalanceCurrency: undefined,
         }),
         issue: failed ? '渠道返回收款账户暂不可用，等待财务处理' : undefined,
         returnReason: isRetrySuccess ? undefined : payout.returnReason,

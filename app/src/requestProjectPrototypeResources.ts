@@ -492,6 +492,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     externalBeneficiaryId: invoice.snapshot.payment.externalBeneficiaryId,
     transferMethod: invoice.snapshot.payment.transferMethod,
     localClearingSystem: invoice.snapshot.payment.localClearingSystem,
+    recipientCountry: invoice.snapshot.payment.bankCountry,
     feeBearer: 'ADVERTISER',
     status: paid ? '已付款' : processing ? '付款处理中' : approved ? '等待付款' : returned ? '已退回' : '未进入付款',
     invoiceReviewStatus: paid || approved ? '已通过' : returned ? '已退回' : '已通过',

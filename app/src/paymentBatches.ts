@@ -77,6 +77,8 @@ export type PaymentBatchItemSnapshot = Readonly<{
   currency: InvoiceCurrency;
   receiveCurrency: string;
   transferMethod: string;
+  localClearingSystem?: string;
+  recipientCountry?: string;
   accountSummary: string;
   accountName?: string;
   accountIdentifier?: string;
@@ -93,6 +95,8 @@ export type PaymentBatchItemSnapshot = Readonly<{
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  postTransactionBalance?: number;
+  postTransactionBalanceCurrency?: InvoiceCurrency;
   failure?: Readonly<{
     code: string;
     response: string;
@@ -403,6 +407,12 @@ const snapshotItem = ({
       effectiveAccount?.transferMethod ?? payout.transferMethod ?? documentPayment?.transferMethod,
       payout.provider,
     ),
+    localClearingSystem: effectivePaymentDetails?.localClearingSystem
+      || payout.localClearingSystem
+      || undefined,
+    recipientCountry: effectivePaymentDetails?.bankCountry
+      || payout.recipientCountry
+      || undefined,
     accountSummary: accountDisplayValue(rawAccountSummary),
     ...accountRecipient,
     payoutAccountId: effectiveAccount?.payoutAccountId
@@ -422,6 +432,8 @@ const snapshotItem = ({
     transferFeeCurrency: hasSuccessfulResult ? payout.transferFeeCurrency : undefined,
     actualPaidAmount: hasSuccessfulResult ? payout.actualPaidAmount : undefined,
     actualPaidCurrency: hasSuccessfulResult ? payout.actualPaidCurrency : undefined,
+    postTransactionBalance: hasSuccessfulResult ? payout.postTransactionBalance : undefined,
+    postTransactionBalanceCurrency: hasSuccessfulResult ? payout.postTransactionBalanceCurrency : undefined,
     failure: hasFailedResult && payout.paymentFailure ? {
       code: payout.paymentFailure.errorCode,
       response: payout.paymentFailure.providerResponse,

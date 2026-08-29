@@ -9,6 +9,7 @@ import {
   paymentProjectPrototypeStatusFor,
 } from './paymentBatchPrototypeScenario';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
+import { prototypeFundingAccountOpeningBalance } from './prototypePaymentResults';
 
 const scenario = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -101,6 +102,25 @@ describe('payment batch prototype scenario', () => {
       },
     });
     expect(retriedPayout?.paymentFailure).toBeUndefined();
+  });
+
+  it('stores a decreasing post-transaction funding balance only on successful payments', () => {
+    const balances = new Map<string, number>();
+
+    scenario.payouts.forEach((payout) => {
+      if (payout.status !== '已付款') {
+        expect(payout.postTransactionBalance).toBeUndefined();
+        expect(payout.postTransactionBalanceCurrency).toBeUndefined();
+        return;
+      }
+      const key = `${payout.provider}:${payout.currency}`;
+      const before = balances.get(key) ?? prototypeFundingAccountOpeningBalance(payout);
+      const expected = Math.round((before - (payout.actualPaidAmount ?? 0) + Number.EPSILON) * 100) / 100;
+
+      expect(payout.postTransactionBalance).toBe(expected);
+      expect(payout.postTransactionBalanceCurrency).toBe(payout.currency);
+      balances.set(key, expected);
+    });
   });
 
   it('keeps transaction records on the current project result after retry success', () => {

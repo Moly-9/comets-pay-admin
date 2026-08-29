@@ -269,6 +269,7 @@ describe('payment batch snapshots', () => {
     expect(record.request.paymentRequestProjectId).toBe(input.requests[0].paymentRequestProjectId);
     expect(record.items).toHaveLength(input.payouts.length);
     expect(record.items.every((item) => item.paymentStatus === '付款处理中')).toBe(true);
+    expect(record.items.every((item) => item.postTransactionBalance === undefined)).toBe(true);
   });
 
   it('rejects repeated, partial-state, or mixed-provider payment execution batches', () => {
@@ -388,6 +389,10 @@ describe('payment batch snapshots', () => {
     input.payouts[0].transferFeeCurrency = 'USD';
     input.payouts[0].actualPaidAmount = 1258.5;
     input.payouts[0].actualPaidCurrency = 'USD';
+    input.payouts[0].localClearingSystem = 'ACH';
+    input.payouts[0].recipientCountry = 'United States';
+    input.payouts[0].postTransactionBalance = 48_741.5;
+    input.payouts[0].postTransactionBalanceCurrency = 'USD';
     const record = createPaymentBatchRecord({ ...input, status: '已付款', itemStatus: '已付款' });
 
     expect(record.request.requestCode).toBe('REQ-TEST-001');
@@ -405,6 +410,10 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].transferFeeCurrency).toBe('USD');
     expect(record.items[0].actualPaidAmount).toBe(1258.5);
     expect(record.items[0].actualPaidCurrency).toBe('USD');
+    expect(record.items[0].localClearingSystem).toBe('ACH');
+    expect(record.items[0].recipientCountry).toBe('United States');
+    expect(record.items[0].postTransactionBalance).toBe(48_741.5);
+    expect(record.items[0].postTransactionBalanceCurrency).toBe('USD');
     expect(record.items[0].paidAt).toBe('2026-08-10T10:30');
   });
 

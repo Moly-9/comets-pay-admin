@@ -6,6 +6,8 @@ import {
   CalendarClock,
   ChevronDown,
   CircleAlert,
+  Download,
+  FileArchive,
   FileSpreadsheet,
   FileText,
   LoaderCircle,
@@ -14,11 +16,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '../components/Common';
-import {
-  PaymentAttachmentPreview,
-  type PaymentAttachmentPreviewTarget,
-} from '../components/PaymentAttachmentPreview';
+import { Avatar, Button, SelectField, type SelectOption } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
@@ -32,8 +30,12 @@ import type { ContractRecord } from '../contracts';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
   createPaymentProjectContractArchive,
+  createPaymentProjectConfirmationArchive,
+  createPaymentProjectDetailWorkbook,
   createPaymentProjectInvoiceArchive,
   createPaymentProjectWorkbook,
+  paymentProjectConfirmationArchiveFilename,
+  paymentProjectDetailWorkbookFilename,
   paymentProjectWorkbookFilename,
   resolvePaymentProjectDocuments,
 } from '../paymentProjectDocuments';
@@ -95,6 +97,10 @@ const paymentResultDate = (status: Payout['status'], paidAt?: string) => {
   return paidAt.replace('T', ' ').split(' ')[0] || '—';
 };
 
+type ProjectDownloadAction = 'contract' | 'invoice' | 'payment-list' | 'payment-detail' | 'confirmation-all' | 'confirmation-selected';
+
+const hasPaymentDate = (value?: string) => /^(\d{4})-(\d{2})-(\d{2})/.test(value ?? '');
+
 export function PaymentProjectPaymentDetailPage({
   record,
   payouts,
@@ -105,6 +111,7 @@ export function PaymentProjectPaymentDetailPage({
   onBack,
   onReturnPayout,
   onOpenFailurePaymentList,
+  notify,
 }: {
   record: PaymentProjectPaymentRecord;
   payouts: readonly Payout[];
@@ -115,72 +122,114 @@ export function PaymentProjectPaymentDetailPage({
   onBack: () => void;
   onReturnPayout: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
+  notify?: (title: string, message: string) => void;
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(() => initialExpandedItemId(record));
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
-  const [previewTarget, setPreviewTarget] = useState<PaymentAttachmentPreviewTarget | null>(null);
-  const [downloadingResource, setDownloadingResource] = useState<'contract' | 'invoice' | 'workbook' | null>(null);
+  const [downloadingResource, setDownloadingResource] = useState<ProjectDownloadAction | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const [resourceError, setResourceError] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const compactSelectAllRef = useRef<HTMLInputElement>(null);
+  const liveItems = useMemo(() => record.items.map((item) => {
+    const payout = payouts.find((candidate) => candidate.id === item.payoutId);
+    if (!payout) return item;
+    const succeeded = payout.status === '已付款';
+    return {
+      ...item,
+      paymentStatus: payout.status,
+      paidAt: payout.paidAt ?? item.paidAt,
+      transferFeeAmount: succeeded ? payout.transferFeeAmount ?? item.transferFeeAmount : undefined,
+      transferFeeCurrency: succeeded ? payout.transferFeeCurrency ?? item.transferFeeCurrency : undefined,
+      actualPaidAmount: succeeded ? payout.actualPaidAmount ?? item.actualPaidAmount : undefined,
+      actualPaidCurrency: succeeded ? payout.actualPaidCurrency ?? item.actualPaidCurrency : undefined,
+      postTransactionBalance: succeeded ? payout.postTransactionBalance ?? item.postTransactionBalance : undefined,
+      postTransactionBalanceCurrency: succeeded
+        ? payout.postTransactionBalanceCurrency ?? item.postTransactionBalanceCurrency
+        : undefined,
+      localClearingSystem: payout.localClearingSystem ?? item.localClearingSystem,
+      recipientCountry: payout.recipientCountry ?? item.recipientCountry,
+      failure: payout.paymentFailure ? {
+        code: payout.paymentFailure.errorCode,
+        response: payout.paymentFailure.providerResponse,
+        occurredAt: payout.paymentFailure.occurredAt,
+      } : item.failure,
+    };
+  }), [payouts, record.items]);
   const totals = paymentBatchAmountLabel(record);
-  const statusCounts = paymentBatchStatusCounts(record);
+  const statusCounts = paymentBatchStatusCounts({ items: liveItems });
   const failedItems = useMemo(
-    () => record.items.filter((item) => item.paymentStatus === '付款失败'),
-    [record.items],
+    () => liveItems.filter((item) => item.paymentStatus === '付款失败'),
+    [liveItems],
   );
-  const dialogItem = record.items.find((item) => item.payoutId === failureDialogPayoutId);
+  const dialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
+  const confirmationEligibleItems = useMemo(() => liveItems.filter((item) => (
+    item.paymentStatus === '已付款' && hasPaymentDate(item.paidAt)
+  )), [liveItems]);
+  const confirmationEligibleIds = useMemo(
+    () => new Set(confirmationEligibleItems.map((item) => item.payoutId)),
+    [confirmationEligibleItems],
+  );
+  const selectedConfirmationItems = useMemo(
+    () => confirmationEligibleItems.filter((item) => selectedItemIds.has(item.payoutId)),
+    [confirmationEligibleItems, selectedItemIds],
+  );
+  const allEligibleSelected = confirmationEligibleItems.length > 0
+    && selectedConfirmationItems.length === confirmationEligibleItems.length;
   const projectDocuments = useMemo(() => resolvePaymentProjectDocuments({
-    items: record.items,
+    items: liveItems,
     contracts,
     invoices,
-  }), [contracts, invoices, record.items]);
+  }), [contracts, invoices, liveItems]);
 
-  const viewContractAttachment = (snapshot: PaymentBatchItemSnapshot['contracts'][number]) => {
-    const contract = contracts.find((candidate) => (
-      String(candidate.contractId ?? candidate.id) === String(snapshot.contractId)
-      || candidate.id === snapshot.contractCode
-    ));
-    if (!contract) {
-      setResourceError('未找到该合同的附件记录，请返回项目资料检查关联。');
-      return;
-    }
-    setResourceError('');
-    setPreviewTarget({ kind: 'contract', contract });
-  };
-
-  const viewInvoiceAttachment = (invoiceId: NonNullable<PaymentBatchItemSnapshot['invoice']>['invoiceId']) => {
-    const invoice = invoices.find((candidate) => String(candidate.invoiceId) === String(invoiceId));
-    if (!invoice) {
-      setResourceError('未找到该 Invoice 的附件记录，请返回项目资料检查关联。');
-      return;
-    }
-    setResourceError('');
-    setPreviewTarget({ kind: 'invoice', invoice });
-  };
-
-  const downloadProjectResource = async (kind: 'contract' | 'invoice' | 'workbook') => {
-    if (!record.items.length || downloadingResource) return;
+  const downloadProjectResource = async (kind: ProjectDownloadAction) => {
+    if (!liveItems.length || downloadingResource) return;
     setDownloadingResource(kind);
     setResourceError('');
     try {
       if (kind === 'contract') {
         downloadBlob(
-          await createPaymentProjectContractArchive({ items: record.items, contracts }),
+          await createPaymentProjectContractArchive({ items: liveItems, contracts }),
           projectPdfArchiveFilename(record.request.requestCode, 'contract'),
         );
       } else if (kind === 'invoice') {
         downloadBlob(
-          await createPaymentProjectInvoiceArchive({ items: record.items, invoices }),
+          await createPaymentProjectInvoiceArchive({ items: liveItems, invoices }),
           projectPdfArchiveFilename(record.request.requestCode, 'invoice'),
         );
-      } else {
+      } else if (kind === 'payment-list') {
         downloadBlob(
-          await createPaymentProjectWorkbook({ request: record.request, items: record.items }),
+          await createPaymentProjectWorkbook({ request: record.request, items: liveItems }),
           paymentProjectWorkbookFilename(record.request.requestCode),
         );
+      } else if (kind === 'payment-detail') {
+        downloadBlob(
+          await createPaymentProjectDetailWorkbook({ request: record.request, items: liveItems }),
+          paymentProjectDetailWorkbookFilename(record.request.requestCode),
+        );
+      } else {
+        const confirmationItems = kind === 'confirmation-selected'
+          ? selectedConfirmationItems
+          : confirmationEligibleItems;
+        downloadBlob(
+          await createPaymentProjectConfirmationArchive({ items: confirmationItems }),
+          paymentProjectConfirmationArchiveFilename(record.request.requestCode),
+        );
       }
+      const successCopy: Record<ProjectDownloadAction, string> = {
+        contract: '合同压缩包已生成。',
+        invoice: 'Invoice 压缩包已生成。',
+        'payment-list': '付款清单已导出。',
+        'payment-detail': '付款明细已导出。',
+        'confirmation-all': `已生成 ${confirmationEligibleItems.length} 份付款确认函。`,
+        'confirmation-selected': `已生成 ${selectedConfirmationItems.length} 份所选付款确认函。`,
+      };
+      notify?.('下载已开始', successCopy[kind]);
     } catch (error) {
-      setResourceError(error instanceof Error ? error.message : '项目资料下载失败，请稍后重试。');
+      const message = error instanceof Error ? error.message : '项目资料下载失败，请稍后重试。';
+      setResourceError(message);
+      notify?.('下载失败', message);
     } finally {
       setDownloadingResource(null);
     }
@@ -194,6 +243,19 @@ export function PaymentProjectPaymentDetailPage({
     if (expandedItemId && record.items.some((item) => item.payoutId === expandedItemId)) return;
     setExpandedItemId(initialExpandedItemId(record));
   }, [expandedItemId, record]);
+
+  useEffect(() => {
+    setSelectedItemIds((current) => {
+      const next = new Set([...current].filter((id) => confirmationEligibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [confirmationEligibleIds]);
+
+  useEffect(() => {
+    const indeterminate = selectedConfirmationItems.length > 0 && !allEligibleSelected;
+    if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
+    if (compactSelectAllRef.current) compactSelectAllRef.current.indeterminate = indeterminate;
+  }, [allEligibleSelected, selectedConfirmationItems.length]);
 
   const openFailureDialog = (payoutId: string) => {
     setFailureDialogPayoutId(payoutId);
@@ -212,6 +274,68 @@ export function PaymentProjectPaymentDetailPage({
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   };
+
+  const toggleConfirmationItem = (payoutId: string) => {
+    if (!confirmationEligibleIds.has(payoutId)) return;
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      if (next.has(payoutId)) next.delete(payoutId);
+      else next.add(payoutId);
+      return next;
+    });
+  };
+
+  const toggleAllConfirmationItems = () => {
+    setSelectedItemIds(allEligibleSelected
+      ? new Set()
+      : new Set(confirmationEligibleItems.map((item) => item.payoutId)));
+  };
+
+  const resourceDownloadOptions: readonly SelectOption<ProjectDownloadAction>[] = [
+    {
+      value: 'contract',
+      label: '下载合同',
+      description: `${projectDocuments.contracts.length} 份合同 PDF 压缩包`,
+      leading: <FileText size={16} />,
+      disabled: !projectDocuments.contracts.length,
+      title: !projectDocuments.contracts.length ? '当前没有可下载的合同。' : undefined,
+    },
+    {
+      value: 'invoice',
+      label: '下载 Invoice',
+      description: `${projectDocuments.invoices.length} 份 Invoice PDF 压缩包`,
+      leading: <ReceiptText size={16} />,
+      disabled: !projectDocuments.invoices.length,
+      title: !projectDocuments.invoices.length ? '当前没有可下载的 Invoice。' : undefined,
+    },
+    {
+      value: 'payment-list',
+      label: '下载付款清单',
+      description: '导出当前项目冻结付款清单 Excel',
+      leading: <FileSpreadsheet size={16} />,
+      disabled: !liveItems.length,
+      title: !liveItems.length ? '当前没有可下载的付款清单。' : undefined,
+    },
+  ];
+
+  const confirmationDownloadOptions: readonly SelectOption<ProjectDownloadAction>[] = [
+    {
+      value: 'confirmation-all',
+      label: '导出所有',
+      description: `${confirmationEligibleItems.length} 笔已付款明细可导出`,
+      leading: <FileArchive size={16} />,
+      disabled: !confirmationEligibleItems.length,
+      title: !confirmationEligibleItems.length ? '没有具备实际付款日期的已付款明细。' : undefined,
+    },
+    {
+      value: 'confirmation-selected',
+      label: '导出所选',
+      description: `${selectedConfirmationItems.length} 笔已选择`,
+      leading: <FileArchive size={16} />,
+      disabled: !selectedConfirmationItems.length,
+      title: !selectedConfirmationItems.length ? '请先勾选已付款明细。' : undefined,
+    },
+  ];
 
   return (
     <div className="page-stack payment-batch-detail-page payment-project-payment-detail-page">
@@ -298,7 +422,7 @@ export function PaymentProjectPaymentDetailPage({
           <span aria-hidden="true"><Building2 size={20} /></span>
           <div><span className="payment-batch-project-name">{record.request.cooperationProjectName}</span><small>{record.request.cooperationProjectCode}</small></div>
         </div>
-        <dl className="payment-batch-project-grid">
+        <dl className="payment-batch-project-grid payment-project-info-cards">
           <div><dt>付款编号</dt><dd>{record.request.requestCode}</dd></div>
           <div><dt>付款金额</dt><dd>{record.request.amount}</dd></div>
           <div><dt>品牌 / 客户</dt><dd>{record.request.brand}</dd></div>
@@ -315,43 +439,78 @@ export function PaymentProjectPaymentDetailPage({
 
       <section className="payment-batch-detail-section payment-batch-items-section">
         <header>
-          <div><h2>付款明细</h2><p>查看当前项目每笔付款的合同、Invoice、账户快照和渠道结果。</p></div>
+          <div><h2>付款明细</h2><p>核对当前项目每笔付款的账户快照、付款结果与失败原因。</p></div>
           <div className="payment-project-resource-toolbar">
             <div className="payment-project-resource-actions" aria-label="下载付款项目资料">
+              <SelectField
+                ariaLabel="下载付款资料"
+                className="payment-project-download-select"
+                value="payment-detail"
+                options={resourceDownloadOptions}
+                selectedLabel={downloadingResource && ['contract', 'invoice', 'payment-list'].includes(downloadingResource) ? '资料生成中…' : '下载付款资料'}
+                leadingIcon={downloadingResource && ['contract', 'invoice', 'payment-list'].includes(downloadingResource)
+                  ? <LoaderCircle className="is-spinning" size={15} />
+                  : <Download size={15} />}
+                variant="compact"
+                menuStrategy="fixed"
+                disabled={downloadingResource !== null}
+                onChange={(kind) => { void downloadProjectResource(kind); }}
+              />
               <Button
                 variant="secondary"
-                icon={downloadingResource === 'contract' ? <LoaderCircle className="is-spinning" size={15} /> : <FileText size={15} />}
-                disabled={!projectDocuments.contracts.length || downloadingResource !== null}
-                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
-                onClick={() => downloadProjectResource('contract')}
+                icon={downloadingResource === 'payment-detail' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
+                disabled={!liveItems.length || downloadingResource !== null}
+                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款明细。'}
+                onClick={() => { void downloadProjectResource('payment-detail'); }}
               >
-                {downloadingResource === 'contract' ? '正在打包' : '下载合同'}
+                {downloadingResource === 'payment-detail' ? '正在生成' : '下载付款明细'}
               </Button>
-              <Button
-                variant="secondary"
-                icon={downloadingResource === 'invoice' ? <LoaderCircle className="is-spinning" size={15} /> : <ReceiptText size={15} />}
-                disabled={!projectDocuments.invoices.length || downloadingResource !== null}
-                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
-                onClick={() => downloadProjectResource('invoice')}
-              >
-                {downloadingResource === 'invoice' ? '正在打包' : '下载 Invoice'}
-              </Button>
-              <Button
-                variant="secondary"
-                icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
-                disabled={!record.items.length || downloadingResource !== null}
-                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款确认文件。'}
-                onClick={() => downloadProjectResource('workbook')}
-              >
-                {downloadingResource === 'workbook' ? '正在生成' : '下载付款表'}
-              </Button>
+              <SelectField
+                ariaLabel="下载付款确认函"
+                className="payment-project-download-select"
+                value="payment-detail"
+                options={confirmationDownloadOptions}
+                selectedLabel={downloadingResource?.startsWith('confirmation') ? '确认函生成中…' : '下载确认函'}
+                leadingIcon={downloadingResource?.startsWith('confirmation')
+                  ? <LoaderCircle className="is-spinning" size={15} />
+                  : <FileArchive size={15} />}
+                variant="compact"
+                menuStrategy="fixed"
+                disabled={downloadingResource !== null}
+                onChange={(kind) => { void downloadProjectResource(kind); }}
+              />
             </div>
-            <span>{record.items.length} 笔</span>
+            <div className="payment-project-resource-meta">
+              <label className="payment-project-compact-select-all">
+                <input
+                  ref={compactSelectAllRef}
+                  type="checkbox"
+                  aria-label="选择全部可导出确认函的付款明细"
+                  checked={allEligibleSelected}
+                  disabled={!confirmationEligibleItems.length}
+                  title={confirmationEligibleItems.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
+                  onChange={toggleAllConfirmationItems}
+                />
+                <span>全选可导出</span>
+              </label>
+              <span>{liveItems.length} 笔 · 已选 {selectedConfirmationItems.length} 笔</span>
+            </div>
           </div>
         </header>
         {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
         <div className="payment-batch-item-list payment-project-detail-item-list">
-          <div className="payment-batch-item-table-head payment-project-detail-item-head" aria-hidden="true">
+          <div className="payment-batch-item-table-head payment-project-detail-item-head">
+            <label className="payment-project-detail-select-cell">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                aria-label="选择全部可导出确认函的付款明细"
+                checked={allEligibleSelected}
+                disabled={!confirmationEligibleItems.length}
+                title={confirmationEligibleItems.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
+                onChange={toggleAllConfirmationItems}
+              />
+            </label>
             <span>达人名称</span>
             <span>付款渠道</span>
             <span>收款银行账号</span>
@@ -363,70 +522,86 @@ export function PaymentProjectPaymentDetailPage({
             <span />
           </div>
           <div className="payment-batch-item-rows" role="list">
-            {record.items.map((item) => {
+            {liveItems.map((item) => {
               const expanded = expandedItemId === item.payoutId;
               const livePayout = payouts.find((payout) => payout.id === item.payoutId);
-              const currentStatus = livePayout?.status ?? item.paymentStatus;
-              const displayName = creators.find((creator) => creator.id === item.creatorId)?.name ?? item.creatorName;
+              const currentStatus = item.paymentStatus;
+              const creator = creators.find((candidate) => candidate.id === item.creatorId);
+              const displayName = creator?.name ?? item.creatorName;
               const accountName = item.accountName || '待补充';
               const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
+              const canSelect = confirmationEligibleIds.has(item.payoutId);
+              const selected = selectedItemIds.has(item.payoutId);
+              const selectReason = currentStatus !== '已付款'
+                ? '仅已付款明细可以生成确认函。'
+                : !hasPaymentDate(item.paidAt)
+                  ? '缺少实际付款时间，无法生成确认函。'
+                  : '选择此付款明细';
               const itemDomId = `payment-project-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
               const detailId = `${itemDomId}-details`;
               return (
                 <article
                   id={itemDomId}
-                  className={`payment-batch-item payment-project-detail-item${expanded ? ' is-expanded' : ''}`}
+                  className={`payment-batch-item payment-project-detail-item${expanded ? ' is-expanded' : ''}${selected ? ' is-selected' : ''}`}
                   key={item.payoutId}
                   role="listitem"
                 >
-                  <button
-                    className="payment-batch-item-trigger payment-project-detail-item-trigger"
-                    type="button"
-                    aria-expanded={expanded}
-                    aria-controls={detailId}
-                    aria-label={`${accountName}，${money(item.currency, item.amount)}，${currentStatus}，${expanded ? '收起' : '展开'}付款详情`}
-                    onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
-                  >
-                    <span className="payment-batch-item-person payment-project-detail-item-person">
-                      <span>
-                        <strong title={accountName}>{accountName}</strong>
-                        <small title={displayName}>{displayName}</small>
+                  <div className="payment-project-detail-item-row">
+                    <label className="payment-project-detail-select-cell">
+                      <input
+                        type="checkbox"
+                        aria-label={`选择 ${accountName} 的付款确认函`}
+                        checked={selected}
+                        disabled={!canSelect}
+                        title={selectReason}
+                        onChange={() => toggleConfirmationItem(item.payoutId)}
+                      />
+                    </label>
+                    <button
+                      className="payment-batch-item-trigger payment-project-detail-item-trigger"
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={detailId}
+                      aria-label={`${accountName}，${money(item.currency, item.amount)}，${currentStatus}，${expanded ? '收起' : '展开'}付款详情`}
+                      onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
+                    >
+                      <span className="payment-batch-item-person payment-project-detail-item-person">
+                        <Avatar
+                          initials={creator?.initials ?? displayName.slice(0, 2).toUpperCase()}
+                          accent={creator?.accent ?? '#60758f'}
+                          size="sm"
+                        />
+                        <span>
+                          <strong title={accountName}>{accountName}</strong>
+                          <small title={displayName}>{displayName}</small>
+                        </span>
                       </span>
-                    </span>
-                    <span className="payment-batch-item-provider" data-label="付款渠道">
-                      <PaymentProviderBadge compact provider={item.provider} />
-                    </span>
-                    <span data-label="收款银行账号">
-                      <strong title={accountIdentifier}>{accountIdentifier}</strong>
-                      <small>{item.accountIdentifierLabel || '收款账户快照'}</small>
-                    </span>
-                    <span data-label="付款日期"><strong>{paymentResultDate(currentStatus, livePayout?.paidAt ?? item.paidAt)}</strong></span>
-                    <span className="payment-project-detail-item-money" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
-                    <span className="payment-project-detail-item-money" data-label="支付总金额">
-                      <strong>{paymentResultMoney({
-                        status: currentStatus,
-                        amount: livePayout?.actualPaidAmount ?? item.actualPaidAmount,
-                        currency: livePayout?.actualPaidCurrency ?? item.actualPaidCurrency,
-                      })}</strong>
-                    </span>
-                    <span className="payment-project-detail-item-money" data-label="手续费金额">
-                      <strong>{paymentResultMoney({
-                        status: currentStatus,
-                        amount: livePayout?.transferFeeAmount ?? item.transferFeeAmount,
-                        currency: livePayout?.transferFeeCurrency ?? item.transferFeeCurrency,
-                      })}</strong>
-                    </span>
-                    <span className={`payment-batch-item-status ${paymentStatusTone(currentStatus)}`} data-label="付款状态"><strong><i />{currentStatus}</strong></span>
-                    <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
-                  </button>
+                      <span className="payment-batch-item-provider" data-label="付款渠道">
+                        <PaymentProviderBadge compact provider={item.provider} />
+                      </span>
+                      <span data-label="收款银行账号">
+                        <strong title={accountIdentifier}>{accountIdentifier}</strong>
+                        <small>{item.accountIdentifierLabel || '收款账户快照'}</small>
+                      </span>
+                      <span data-label="付款日期"><strong>{paymentResultDate(currentStatus, item.paidAt)}</strong></span>
+                      <span className="payment-project-detail-item-money" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
+                      <span className="payment-project-detail-item-money" data-label="支付总金额">
+                        <strong>{paymentResultMoney({ status: currentStatus, amount: item.actualPaidAmount, currency: item.actualPaidCurrency })}</strong>
+                      </span>
+                      <span className="payment-project-detail-item-money" data-label="手续费金额">
+                        <strong>{paymentResultMoney({ status: currentStatus, amount: item.transferFeeAmount, currency: item.transferFeeCurrency })}</strong>
+                      </span>
+                      <span className={`payment-batch-item-status ${paymentStatusTone(currentStatus)}`} data-label="付款状态"><strong><i />{currentStatus}</strong></span>
+                      <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
+                    </button>
+                  </div>
                   {expanded ? (
                     <div id={detailId}>
                       <PaymentItemDetails
                         item={item}
                         payout={livePayout}
+                        mode="payment-only"
                         onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined}
-                        onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
-                        onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
                       />
                       {currentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
                         <div className="payment-project-failure-action">
@@ -450,7 +625,7 @@ export function PaymentProjectPaymentDetailPage({
                 </article>
               );
             })}
-            {!record.items.length ? (
+            {!liveItems.length ? (
               <div className="payment-batch-detail-empty-state" role="status">
                 <ReceiptText size={22} aria-hidden="true" />
                 <strong>该项目暂无付款明细</strong>
@@ -471,9 +646,6 @@ export function PaymentProjectPaymentDetailPage({
             return payout ? onReturnPayout(payout, issueType, reason) : false;
           }}
         />
-      ) : null}
-      {previewTarget ? (
-        <PaymentAttachmentPreview target={previewTarget} onClose={() => setPreviewTarget(null)} />
       ) : null}
     </div>
   );
