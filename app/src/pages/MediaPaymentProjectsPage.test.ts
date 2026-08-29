@@ -203,4 +203,32 @@ describe('new payment request resource picker', () => {
     expect(css).toContain('.media-payment-project-table th:nth-child(2) { width: 26%; }');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
+
+  it('opens the dedicated three-method creator modal from both detail entry points', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const modalSource = readFileSync(
+      new URL('../components/PaymentRequestCreatorAddModal.tsx', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain('<PaymentRequestCreatorAddModal');
+    expect(source).toContain('onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button>');
+    expect(source).toContain('点击使用链接、达人档案或 Excel 批量添加');
+    expect(source).toContain('onApply={(selection) => openEditForm(selectedRequest, false, selection)}');
+    expect(source).toContain('id="media-request-document-section"');
+    expect(modalSource).toContain("{ value: 'LINKS', label: '粘贴链接'");
+    expect(modalSource).toContain("{ value: 'ARCHIVE', label: '从达人档案库选择'");
+    expect(modalSource).toContain("{ value: 'EXCEL', label: 'Excel 导入'");
+    expect(modalSource).toContain('initialPageSize: 10');
+    expect(modalSource).toContain('socialAccountsMaxVisible={1}');
+    expect(modalSource).toContain('INVOICE_BATCH_CREATOR_IMPORT_MAX_FILE_SIZE');
+  });
+
+  it('keeps payment attribution and expected payment date controls horizontally aligned', () => {
+    const css = readFileSync(new URL('./MediaPaymentProjectsPage.css', import.meta.url), 'utf8');
+
+    expect(css).toMatch(/\.media-request-payment-plan \.form-field-label\s*\{[^}]*display: inline-flex;[^}]*min-height: 19px;[^}]*white-space: nowrap;/s);
+    expect(css).toMatch(/\.media-request-payment-plan \.form-field\s*\{[^}]*align-content: start;/s);
+    expect(css).toMatch(/\.media-request-payment-plan \.required-mark\s*\{[^}]*flex: 0 0 auto;/s);
+  });
 });

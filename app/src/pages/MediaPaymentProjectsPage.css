@@ -57,6 +57,22 @@
   color: #c43f35;
 }
 
+.media-request-payment-plan .form-field-label {
+  display: inline-flex;
+  min-height: 19px;
+  align-items: center;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.media-request-payment-plan .form-field {
+  align-content: start;
+}
+
+.media-request-payment-plan .required-mark {
+  flex: 0 0 auto;
+}
+
 .payment-request-cost-cascader-menu {
   position: fixed;
   z-index: 2300;

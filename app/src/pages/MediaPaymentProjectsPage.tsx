@@ -25,6 +25,11 @@ import { ContractDocumentView } from '../components/ContractDocumentView';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentRequestCostCascader } from '../components/PaymentRequestCostCascader';
+import {
+  PaymentRequestCreatorAddModal,
+  type PaymentRequestCreatorEligibility,
+  type PaymentRequestCreatorSelection,
+} from '../components/PaymentRequestCreatorAddModal';
 import { RequestRemarkAttachments } from '../components/RequestRemarkAttachments';
 import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
@@ -842,10 +847,24 @@ export function MediaPaymentProjectsPage({
   const [focusedFailurePayoutId, setFocusedFailurePayoutId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RequestProjectSummary | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [creatorAddRequestId, setCreatorAddRequestId] = useState<string | null>(null);
+  const [focusCreatorDocuments, setFocusCreatorDocuments] = useState(false);
 
   useEffect(() => {
     if (initialFocusedFailurePayoutId) setFocusedFailurePayoutId(initialFocusedFailurePayoutId);
   }, [initialFocusedFailurePayoutId]);
+
+  useEffect(() => {
+    if (!creating || !focusCreatorDocuments || !selectedCreatorIds.length) return undefined;
+    const animationFrame = window.requestAnimationFrame(() => {
+      document.getElementById('media-request-document-section')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+      setFocusCreatorDocuments(false);
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [creating, focusCreatorDocuments, selectedCreatorIds.length]);
 
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const visibleRequests = requests.filter((request) => {
@@ -1036,6 +1055,7 @@ export function MediaPaymentProjectsPage({
     setResourcePreview(null);
     setResourceDocumentDialog(null);
     setFormSubmitAttempted(false);
+    setFocusCreatorDocuments(false);
     setEditingRequestId(null);
   };
 
@@ -1056,7 +1076,11 @@ export function MediaPaymentProjectsPage({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const openEditForm = (request: RequestProjectSummary, showCreatorPicker = false) => {
+  const openEditForm = (
+    request: RequestProjectSummary,
+    showCreatorPicker = false,
+    appendedCreators: PaymentRequestCreatorSelection[] = [],
+  ) => {
     if (!requestEditAllowed(request)) {
       notify('请款已锁定', '请款提交后仅可查看；审批退回或付款失败后才能修改。');
       return;
@@ -1076,8 +1100,13 @@ export function MediaPaymentProjectsPage({
     setRemarkAttachments(request.remarkAttachments ?? []);
     setCreatorSearch('');
     setCreatorPickerOpen(showCreatorPicker && canAddCreatorToPaymentRequest(request));
-    setSelectedCreatorIds((request.creatorLinks ?? []).map((link) => link.creatorId));
-    setSocialAccountIdsByCreator(Object.fromEntries(
+    const existingCreatorIds = (request.creatorLinks ?? []).map((link) => link.creatorId);
+    const newCreators = appendedCreators.filter((candidate, index, all) => (
+      !existingCreatorIds.includes(candidate.creatorId)
+      && all.findIndex((item) => item.creatorId === candidate.creatorId) === index
+    ));
+    setSelectedCreatorIds([...existingCreatorIds, ...newCreators.map((candidate) => candidate.creatorId)]);
+    const existingSocialAccounts = Object.fromEntries(
       (request.creatorLinks ?? []).flatMap((link) => {
         const creator = creators.find((item) => item.id === link.creatorId);
         const invoice = invoices.find((item) => link.invoiceIds.includes(item.invoiceId));
@@ -1089,18 +1118,32 @@ export function MediaPaymentProjectsPage({
         );
         return socialAccount ? [[link.creatorId, socialAccount.id]] : [];
       }),
-    ));
+    );
+    const appendedSocialAccounts = Object.fromEntries(newCreators.flatMap((candidate) => {
+      const creator = creators.find((item) => item.id === candidate.creatorId);
+      const socialAccount = resolveCreatorSocialAccount(creator, candidate.socialAccountId);
+      return socialAccount ? [[candidate.creatorId, socialAccount.id]] : [];
+    }));
+    setSocialAccountIdsByCreator({ ...existingSocialAccounts, ...appendedSocialAccounts });
     setContractIdsByCreator(Object.fromEntries(
-      (request.creatorLinks ?? []).map((link) => [link.creatorId, [...link.contractIds]]),
+      [
+        ...(request.creatorLinks ?? []).map((link): [string, ContractId[]] => [link.creatorId, [...link.contractIds]]),
+        ...newCreators.map((candidate): [string, ContractId[]] => [candidate.creatorId, []]),
+      ],
     ));
     setInvoiceIdsByCreator(Object.fromEntries(
-      (request.creatorLinks ?? []).map((link) => [link.creatorId, [...link.invoiceIds]]),
+      [
+        ...(request.creatorLinks ?? []).map((link): [string, InvoiceId[]] => [link.creatorId, [...link.invoiceIds]]),
+        ...newCreators.map((candidate): [string, InvoiceId[]] => [candidate.creatorId, []]),
+      ],
     ));
     setAutoLinkedContractIdsByCreator({});
     setOpenDocumentPicker(null);
     setResourcePreview(null);
     setResourceDocumentDialog(null);
     setFormSubmitAttempted(false);
+    setFocusCreatorDocuments(newCreators.length > 0);
+    setCreatorAddRequestId(null);
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
     setCreating(true);
@@ -1489,6 +1532,50 @@ export function MediaPaymentProjectsPage({
       payouts,
       submissionIssues,
     });
+    const creatorAddProjectId = (selectedRequest.cooperationProjectId
+      ?? selectedRequest.projectId
+      ?? cooperationProject?.cooperationProjectId
+      ?? cooperationProject?.projectId
+      ?? cooperationProject?.id
+      ?? '') as ProjectId;
+    const creatorAddResolutions = new Map(creators.map((creator) => [
+      creator.id as CreatorId,
+      resolveCreatorDocuments({
+        contracts,
+        invoices,
+        requests,
+        cooperationProjectId: creatorAddProjectId as CooperationProjectId,
+        creatorId: creator.id as CreatorId,
+        excludeRequestId: selectedRequest.paymentRequestProjectId,
+      }),
+    ]));
+    const creatorAddProjectReferences = creators.flatMap((creator) => {
+      const creatorId = creator.id as CreatorId;
+      const explicitReference = cooperationProject?.creatorProfiles?.find((reference) => (
+        reference.creatorId === creatorId && reference.status !== 'removed'
+      ));
+      const resolution = creatorAddResolutions.get(creatorId);
+      const engagementId = explicitReference?.engagementId
+        ?? resolution?.invoices.find((invoice) => invoice.snapshot.engagementId)?.snapshot.engagementId
+        ?? resolution?.contracts.find((contract) => contract.engagementId)?.engagementId;
+      return engagementId ? [{ creatorId, engagementId, status: 'active' as const }] : [];
+    });
+    const creatorAddEligibility = Object.fromEntries(creators.map((creator) => {
+      const creatorId = creator.id as CreatorId;
+      const resolution = creatorAddResolutions.get(creatorId);
+      const belongsToProject = creatorAddProjectReferences.some((reference) => reference.creatorId === creatorId);
+      const eligible = belongsToProject && resolution?.status === 'READY';
+      const reason = !belongsToProject
+        ? '该达人不属于当前合作项目'
+        : resolution?.status === 'READY'
+          ? `${resolution.availableInvoices.length} 份可用 Invoice`
+          : STATUS_COPY[resolution?.status ?? 'MISSING_INVOICE'];
+      return [creatorId, {
+        eligible,
+        reason,
+        availableInvoiceCount: resolution?.availableInvoices.length ?? 0,
+      } satisfies PaymentRequestCreatorEligibility];
+    }));
     const scrollToSection = (id: string) => {
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
@@ -1648,7 +1735,7 @@ export function MediaPaymentProjectsPage({
           />
         </section>
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与实际付款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => openEditForm(selectedRequest, true)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
+          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与实际付款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
           {links.length ? (
             <div className="table-scroll">
               <table className="data-table project-creator-table media-request-creator-table">
@@ -1737,7 +1824,7 @@ export function MediaPaymentProjectsPage({
               </table>
             </div>
           ) : canAddCreators ? (
-            <button className="project-detail-empty project-detail-empty-action" type="button" onClick={() => openEditForm(selectedRequest, true)}><Users size={20} /><span><strong>尚未添加达人</strong><small>点击从达人档案筛选项目达人</small></span></button>
+            <button className="project-detail-empty project-detail-empty-action" type="button" onClick={() => setCreatorAddRequestId(selectedRequest.id)}><Users size={20} /><span><strong>尚未添加达人</strong><small>点击使用链接、达人档案或 Excel 批量添加</small></span></button>
           ) : <div className="project-detail-empty"><Users size={20} /><span><strong>尚未添加达人</strong><small>当前请款为只读状态</small></span></div>}
         </section>
         {!hasPaymentFailureRecovery ? <section id="media-request-submit-section" className="project-detail-card media-request-submit-card">
@@ -1766,6 +1853,21 @@ export function MediaPaymentProjectsPage({
             </div>
           </aside>
         </div>
+        {creatorAddRequestId === selectedRequest.id ? (
+          <PaymentRequestCreatorAddModal
+            requestCode={requestCodeFor(selectedRequest)}
+            projectId={creatorAddProjectId}
+            projectCode={selectedRequest.cooperationProjectCode ?? cooperationProject?.cooperationProjectCode ?? cooperationProject?.projectCode ?? String(creatorAddProjectId)}
+            projectName={cooperationProject?.name ?? selectedRequest.cooperationProjectName ?? selectedRequest.project}
+            creators={creators}
+            existingCreatorIds={links.map((link) => link.creatorId)}
+            projectReferences={creatorAddProjectReferences}
+            eligibilityByCreatorId={creatorAddEligibility}
+            onClose={() => setCreatorAddRequestId(null)}
+            onApply={(selection) => openEditForm(selectedRequest, false, selection)}
+            onNotify={notify}
+          />
+        ) : null}
         {cancelRequestModal}
       </div>
     );
@@ -2067,7 +2169,7 @@ export function MediaPaymentProjectsPage({
               </div>
             </div>
             {selectedCreators.length ? (
-              <section className="media-request-document-section">
+              <section id="media-request-document-section" className="media-request-document-section">
                 <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。Invoice 必填且可多选，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
                 {selectedCreators.map((creator) => {
                   const resolution = resolutions.get(creator.id);

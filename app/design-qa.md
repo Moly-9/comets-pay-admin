@@ -41,6 +41,62 @@
 3. Post-fix desktop, focused, responsive, overflow and console checks found no remaining actionable P0, P1 or P2 issue.
 
 final result: passed
+
+---
+
+# Design QA - “我的请款”添加达人弹窗
+
+## Reference and environment
+
+- Source visual truth:
+  - Excel 导入：`/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-a9769f5f-b148-4dc5-9178-a3535077f695.png`。
+  - 粘贴链接：`/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-95607ea0-2534-449b-b8b6-05fe3ec78339.png`。
+  - 达人档案库：`/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-b95cc715-6687-425c-afaf-38cc7a38551f.png`。
+- Browser implementation:
+  - `app/design-qa-payment-request-creator-add-desktop.png`，桌面端粘贴链接页签。
+  - `app/design-qa-payment-request-creator-add-mobile.png`，`390 x 844` 达人档案库页签。
+- Implementation URL: `http://127.0.0.1:5174/`。
+- State: 管理员账号；草稿请款 `REQ-202607-000015`；已有 7 位达人；从详情页“添加达人”打开弹窗。
+
+## Comparison evidence
+
+- 三张参考图与桌面、390px 实现截图已在同一视觉对照输入中检查。
+- 实现沿用参考图的标题、三页签、内容区和底部操作区骨架，并增加当前请款、项目和资格规则上下文，避免批量选择后才发现不可加入。
+- 粘贴链接、达人档案库和 Excel 导入三个页签共用同一暂存选择；关闭、切换页签和已选数量的层级一致。
+- 档案库只展示头像、Display Name、首个社媒平台和 Handle；多账号用 `+N`，每页 10 条，非当前项目或无可用 Invoice 的达人保持可查看但不可选择。
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed；继续使用系统 Noto Sans SC 字体层级，标题、页签、帮助文案和按钮字号与现有请款页面一致，没有缩放或截断核心文案。
+- Spacing and layout rhythm: passed；桌面弹窗约 820px，内容卡、页签、输入区和固定底栏使用系统间距；`390 x 844` 下为单列，底部操作始终可见。
+- Colors and visual tokens: passed；参考图的紫色交互语义按现有 COMETS Pay 橙红主色映射，中性色、边框、禁用态和错误态沿用系统 Token。
+- Image quality and asset fidelity: passed；达人使用档案头像/首字母头像，平台、上传、搜索和关闭均复用现有 Lucide 图标，没有新增伪造位图资产。
+- Copy and content: passed；三个页签、Excel 三列表头、5MB 限制、资格说明、问题项和“添加选中达人”动作均使用完整业务文案。
+
+## Interaction, responsive and technical checks
+
+- “添加达人”和“尚未添加达人”两个入口均打开独立弹窗；仅草稿且具备编辑权限时可用。
+- 链接规范化覆盖协议、域名大小写、查询参数、锚点和末尾斜杠；有效项可部分成功，重复、未匹配、非项目和无可用 Invoice 分别提示。
+- Excel 复用系统 `.xlsx` 达人模板，验证模板版本、项目 ID、固定表头、多字段一致性、5MB 上限和部分成功导入。
+- 应用选择后追加到既有达人，不移除已有记录，并进入现有“达人单据关联”区域；新达人仍必须选择符合当前付款渠道的可用 Invoice。
+- 付款安排表单实测“项目费用归属”和“预计付款时间”控件顶部均为 `520px`，误差 `0px`。
+- `390 x 844` 验收没有页面级水平溢出，弹窗主体和底部操作区均在有效视口内。
+- Browser console warning/error log: empty。
+- 聚焦 Vitest：在本次提交的隔离快照中 3 个文件、26 项测试通过。
+- 全量 Vitest：在本次提交的隔离快照中 114 个文件、798 项测试全部通过。当前共享工作区曾出现 3 个文件、5 项测试失败，均来自本任务之外并行存在的财务审批、付款清单和请款资源修改，未纳入本次提交。
+- TypeScript/Vite production build: 在本次提交的隔离快照中通过；仅保留既有 chunk-size 提示。
+
+## Findings and comparison history
+
+1. 旧入口直接展开完整请款编辑表单，无法先按来源批量筛选达人。
+   - Fix: 新增独立三页签弹窗，并在应用选择后进入原有单据关联流程。
+2. 参考档案库包含粉丝数、地区等本次不需要的信息。
+   - Fix: 按 Invoice 列表达人列收敛为头像、Display Name、平台和 Handle，并保留 `+N` 展开。
+3. 旧付款安排标签高度不一致导致两个控件上下错位。
+   - Fix: 统一标签高度和不换行规则，浏览器测量误差为 `0px`。
+4. Post-fix desktop、390px、三页签、资格反馈、分页、控制台和布局复查未发现剩余可执行的 P0、P1 或 P2 问题。
+
+final result: passed
 ---
 
 # Design QA - 达人多社媒账号统一展示
