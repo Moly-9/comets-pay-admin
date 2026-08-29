@@ -59,11 +59,15 @@ describe('PaymentProjectPaymentDetailPage', () => {
       '手续费金额',
       '付款状态',
     ];
-    headings.forEach((heading) => expect(html).toContain(`>${heading}</th>`));
-    const tableHead = html.slice(html.indexOf('<thead>'), html.indexOf('</thead>'));
+    headings.forEach((heading) => expect(html).toContain(`>${heading}</span>`));
+    const headStart = html.indexOf('payment-project-detail-item-head');
+    const tableHead = html.slice(headStart, html.indexOf('</div>', headStart));
     headings.slice(1).forEach((heading, index) => {
       expect(tableHead.indexOf(headings[index])).toBeLessThan(tableHead.indexOf(heading));
     });
+    expect(html).toContain('payment-batch-item-list payment-project-detail-item-list');
+    expect(html).toContain('payment-batch-item-trigger payment-project-detail-item-trigger');
+    expect(html).not.toContain('<table');
     expect(html).toContain('付款失败需要处理');
     expect(html).toContain('退回媒介处理');
     expect(html).toContain('aria-expanded="true"');
@@ -131,8 +135,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(paidHtml).toContain('2026-08-26');
     expect(paidHtml).toContain('USD 1,258.5');
     expect(paidHtml).toContain('USD 8.5');
-    expect(paidHtml).toContain('payment-project-detail-status-cell');
-    expect(paidHtml).toContain('payment-project-detail-expand-button');
+    expect(paidHtml).toContain('payment-batch-item-status is-success');
+    expect(paidHtml).toContain('payment-batch-item-expand-icon');
     expect(paidHtml).toContain('aria-expanded="false"');
 
     const processingRecord = {
@@ -174,8 +178,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
         onReturnPayout={vi.fn(() => true)}
       />,
     );
-    const failedRowStart = failedHtml.indexOf('<tr id="payment-project-item');
-    const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</tr>', failedRowStart));
+    const failedRowStart = failedHtml.indexOf('<article id="payment-project-item');
+    const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</button>', failedRowStart));
 
     expect(failedDataRow).not.toContain('2026-08-26');
     expect(failedDataRow).not.toContain('USD 1,258.5');
@@ -183,14 +187,16 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect((failedDataRow.match(/>—</g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
-  it('keeps the status column sticky and the mobile expand target accessible', () => {
+  it('reuses the original payment item list styling and mobile expand target', () => {
     const css = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
+    const sharedCss = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
-    expect(css).toContain('.payment-project-detail-table .payment-project-detail-status-cell');
-    expect(css).toMatch(/position:\s*sticky/);
-    expect(css).toMatch(/right:\s*0/);
-    expect(css).toMatch(/\.payment-project-detail-expand-button\s*\{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/);
-    expect(css).toContain('@media (max-width: 480px)');
+    expect(css).toContain('.payment-project-detail-item-head,');
+    expect(css).toContain('.payment-project-detail-item-trigger');
+    expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(sharedCss).toContain('.payment-batch-item-list');
+    expect(sharedCss).toMatch(/\.payment-batch-item-trigger > \.payment-batch-item-expand-icon\s*{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/);
+    expect(css).not.toContain('.payment-project-detail-table');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 

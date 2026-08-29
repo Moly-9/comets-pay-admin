@@ -13,7 +13,7 @@ import {
   RotateCcw,
   WalletCards,
 } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/Common';
 import {
   PaymentAttachmentPreview,
@@ -350,150 +350,114 @@ export function PaymentProjectPaymentDetailPage({
           </div>
         </header>
         {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
-        <div
-          className="payment-project-detail-table-scroll"
-          role="region"
-          aria-label="付款明细表，可横向滚动查看全部字段"
-          tabIndex={0}
-        >
-          <table className="data-table payment-project-detail-table">
-            <thead>
-              <tr>
-                <th className="payment-project-detail-creator-heading">达人名称</th>
-                <th className="payment-project-detail-provider-heading">付款渠道</th>
-                <th className="payment-project-detail-account-heading">收款银行账号</th>
-                <th className="payment-project-detail-date-heading">付款日期</th>
-                <th className="payment-project-detail-money-heading">付款金额</th>
-                <th className="payment-project-detail-money-heading">支付总金额</th>
-                <th className="payment-project-detail-money-heading">手续费金额</th>
-                <th className="payment-project-detail-status-cell">付款状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {record.items.map((item) => {
-                const expanded = expandedItemId === item.payoutId;
-                const livePayout = payouts.find((payout) => payout.id === item.payoutId);
-                const currentStatus = livePayout?.status ?? item.paymentStatus;
-                const displayName = creators.find((creator) => creator.id === item.creatorId)?.name ?? item.creatorName;
-                const accountName = item.accountName || '待补充';
-                const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
-                const itemDomId = `payment-project-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-                const detailId = `${itemDomId}-details`;
-                const toggleExpanded = () => setExpandedItemId(expanded ? null : item.payoutId);
-                const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
-                  if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
-                  event.preventDefault();
-                  toggleExpanded();
-                };
-                return (
-                  <Fragment key={item.payoutId}>
-                    <tr
-                      id={itemDomId}
-                      className={`payment-project-detail-row${expanded ? ' is-expanded' : ''}`}
-                      tabIndex={0}
-                      aria-expanded={expanded}
-                      aria-controls={detailId}
-                      aria-label={`${accountName}，${money(item.currency, item.amount)}，${currentStatus}，${expanded ? '收起' : '展开'}付款详情`}
-                      onClick={toggleExpanded}
-                      onKeyDown={handleRowKeyDown}
-                    >
-                      <td className="payment-project-detail-creator-cell">
-                        <span className="payment-project-detail-primary-secondary">
-                          <strong title={accountName}>{accountName}</strong>
-                          <small title={displayName}>{displayName}</small>
-                        </span>
-                      </td>
-                      <td className="payment-project-detail-provider-cell"><PaymentProviderBadge compact provider={item.provider} /></td>
-                      <td className="payment-project-detail-account-cell">
-                        <span className="payment-project-detail-primary-secondary">
-                          <strong title={accountIdentifier}>{accountIdentifier}</strong>
-                          <small>{item.accountIdentifierLabel || '收款账户快照'}</small>
-                        </span>
-                      </td>
-                      <td className="payment-project-detail-date-cell">{paymentResultDate(currentStatus, livePayout?.paidAt ?? item.paidAt)}</td>
-                      <td className="payment-project-detail-money-cell"><strong>{money(item.currency, item.amount)}</strong></td>
-                      <td className="payment-project-detail-money-cell">
-                        <strong>{paymentResultMoney({
-                          status: currentStatus,
-                          amount: livePayout?.actualPaidAmount ?? item.actualPaidAmount,
-                          currency: livePayout?.actualPaidCurrency ?? item.actualPaidCurrency,
-                        })}</strong>
-                      </td>
-                      <td className="payment-project-detail-money-cell">
-                        <strong>{paymentResultMoney({
-                          status: currentStatus,
-                          amount: livePayout?.transferFeeAmount ?? item.transferFeeAmount,
-                          currency: livePayout?.transferFeeCurrency ?? item.transferFeeCurrency,
-                        })}</strong>
-                      </td>
-                      <td className="payment-project-detail-status-cell">
-                        <span className="payment-project-detail-status-layout">
-                          <span className={`payment-batch-item-status ${paymentStatusTone(currentStatus)}`}><strong><i />{currentStatus}</strong></span>
-                          <button
-                            className="payment-project-detail-expand-button"
-                            type="button"
-                            aria-expanded={expanded}
-                            aria-controls={detailId}
-                            aria-label={`${expanded ? '收起' : '展开'} ${accountName} 付款详情`}
-                            title={expanded ? '收起付款详情' : '展开付款详情'}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleExpanded();
-                            }}
-                          >
-                            <ChevronDown size={17} aria-hidden="true" />
-                          </button>
-                        </span>
-                      </td>
-                    </tr>
-                    {expanded ? (
-                      <tr className="payment-project-detail-expanded-row">
-                        <td colSpan={8}>
-                          <div id={detailId} className="payment-project-detail-expanded-content">
-                            <PaymentItemDetails
-                              item={item}
-                              payout={livePayout}
-                              onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined}
-                              onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
-                              onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
-                            />
-                            {currentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
-                              <div className="payment-project-failure-action">
-                                <div>
-                                  <strong>该笔付款需要财务判断问题类型</strong>
-                                  <span>退回后不能直接重试，媒介需从对应资料节点重新提交。</span>
-                                </div>
-                                <Button
-                                  variant="danger"
-                                  icon={<RotateCcw size={16} />}
-                                  disabled={!canHandleFailure}
-                                  disabledReason="当前账号或付款状态不允许退回媒介处理。"
-                                  onClick={() => openFailureDialog(item.payoutId)}
-                                >
-                                  退回媒介处理
-                                </Button>
-                              </div>
-                            ) : null}
+        <div className="payment-batch-item-list payment-project-detail-item-list">
+          <div className="payment-batch-item-table-head payment-project-detail-item-head" aria-hidden="true">
+            <span>达人名称</span>
+            <span>付款渠道</span>
+            <span>收款银行账号</span>
+            <span>付款日期</span>
+            <span>付款金额</span>
+            <span>支付总金额</span>
+            <span>手续费金额</span>
+            <span>付款状态</span>
+            <span />
+          </div>
+          <div className="payment-batch-item-rows" role="list">
+            {record.items.map((item) => {
+              const expanded = expandedItemId === item.payoutId;
+              const livePayout = payouts.find((payout) => payout.id === item.payoutId);
+              const currentStatus = livePayout?.status ?? item.paymentStatus;
+              const displayName = creators.find((creator) => creator.id === item.creatorId)?.name ?? item.creatorName;
+              const accountName = item.accountName || '待补充';
+              const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
+              const itemDomId = `payment-project-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+              const detailId = `${itemDomId}-details`;
+              return (
+                <article
+                  id={itemDomId}
+                  className={`payment-batch-item payment-project-detail-item${expanded ? ' is-expanded' : ''}`}
+                  key={item.payoutId}
+                  role="listitem"
+                >
+                  <button
+                    className="payment-batch-item-trigger payment-project-detail-item-trigger"
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={detailId}
+                    aria-label={`${accountName}，${money(item.currency, item.amount)}，${currentStatus}，${expanded ? '收起' : '展开'}付款详情`}
+                    onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
+                  >
+                    <span className="payment-batch-item-person payment-project-detail-item-person">
+                      <span>
+                        <strong title={accountName}>{accountName}</strong>
+                        <small title={displayName}>{displayName}</small>
+                      </span>
+                    </span>
+                    <span className="payment-batch-item-provider" data-label="付款渠道">
+                      <PaymentProviderBadge compact provider={item.provider} />
+                    </span>
+                    <span data-label="收款银行账号">
+                      <strong title={accountIdentifier}>{accountIdentifier}</strong>
+                      <small>{item.accountIdentifierLabel || '收款账户快照'}</small>
+                    </span>
+                    <span data-label="付款日期"><strong>{paymentResultDate(currentStatus, livePayout?.paidAt ?? item.paidAt)}</strong></span>
+                    <span className="payment-project-detail-item-money" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
+                    <span className="payment-project-detail-item-money" data-label="支付总金额">
+                      <strong>{paymentResultMoney({
+                        status: currentStatus,
+                        amount: livePayout?.actualPaidAmount ?? item.actualPaidAmount,
+                        currency: livePayout?.actualPaidCurrency ?? item.actualPaidCurrency,
+                      })}</strong>
+                    </span>
+                    <span className="payment-project-detail-item-money" data-label="手续费金额">
+                      <strong>{paymentResultMoney({
+                        status: currentStatus,
+                        amount: livePayout?.transferFeeAmount ?? item.transferFeeAmount,
+                        currency: livePayout?.transferFeeCurrency ?? item.transferFeeCurrency,
+                      })}</strong>
+                    </span>
+                    <span className={`payment-batch-item-status ${paymentStatusTone(currentStatus)}`} data-label="付款状态"><strong><i />{currentStatus}</strong></span>
+                    <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
+                  </button>
+                  {expanded ? (
+                    <div id={detailId}>
+                      <PaymentItemDetails
+                        item={item}
+                        payout={livePayout}
+                        onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined}
+                        onViewContractAttachment={contracts.length ? viewContractAttachment : undefined}
+                        onViewInvoiceAttachment={invoices.length ? viewInvoiceAttachment : undefined}
+                      />
+                      {currentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
+                        <div className="payment-project-failure-action">
+                          <div>
+                            <strong>该笔付款需要财务判断问题类型</strong>
+                            <span>退回后不能直接重试，媒介需从对应资料节点重新提交。</span>
                           </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-              {!record.items.length ? (
-                <tr>
-                  <td className="payment-project-detail-empty-cell" colSpan={8}>
-                    <div className="payment-batch-detail-empty-state" role="status">
-                      <ReceiptText size={22} aria-hidden="true" />
-                      <strong>该项目暂无付款明细</strong>
-                      <span>请款记录存在，但没有可展示的付款项快照。</span>
+                          <Button
+                            variant="danger"
+                            icon={<RotateCcw size={16} />}
+                            disabled={!canHandleFailure}
+                            disabledReason="当前账号或付款状态不允许退回媒介处理。"
+                            onClick={() => openFailureDialog(item.payoutId)}
+                          >
+                            退回媒介处理
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                  ) : null}
+                </article>
+              );
+            })}
+            {!record.items.length ? (
+              <div className="payment-batch-detail-empty-state" role="status">
+                <ReceiptText size={22} aria-hidden="true" />
+                <strong>该项目暂无付款明细</strong>
+                <span>请款记录存在，但没有可展示的付款项快照。</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       </section>
 
