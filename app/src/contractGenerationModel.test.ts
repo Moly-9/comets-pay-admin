@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import {
   appendContractPublishingChannel,
+  contractPublishingChannelForPlatform,
   contractPublishingChannelsForCreator,
   contractPayoutSnapshot,
   defaultContractPayoutAccount,
@@ -204,6 +205,40 @@ describe('contract generation model', () => {
       platform: 'TikTok',
       channelUrl: 'https://www.tiktok.com/@next',
     }]);
+  });
+
+  it('updates a channel URL from the selected creator platform and clears unmatched platforms', () => {
+    const profile = creator();
+    profile.socialAccounts.push(
+      {
+        id: 'social-instagram',
+        platform: 'Instagram',
+        handle: '@sample.instagram',
+        profileUrl: 'https://instagram.com/sample',
+      },
+      {
+        id: 'social-twitter',
+        platform: 'Twitter',
+        handle: '@sample_x',
+        profileUrl: 'https://x.com/sample_x',
+      },
+    );
+
+    expect(contractPublishingChannelForPlatform(profile, 'Instagram')).toEqual({
+      socialAccountId: 'social-instagram',
+      platform: 'Instagram',
+      channelUrl: 'https://instagram.com/sample',
+    });
+    expect(contractPublishingChannelForPlatform(profile, 'X')).toEqual({
+      socialAccountId: 'social-twitter',
+      platform: 'X',
+      channelUrl: 'https://x.com/sample_x',
+    });
+    expect(contractPublishingChannelForPlatform(profile, 'Facebook')).toEqual({
+      socialAccountId: '',
+      platform: 'Facebook',
+      channelUrl: '',
+    });
   });
 
   it('only exposes verified Airwallex and PayPal accounts and selects the verified default', () => {

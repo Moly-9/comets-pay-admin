@@ -41,6 +41,7 @@ import { contractGenerationFilename } from '../contractGenerationFilename';
 import { contractDocumentFilename } from '../documentFilenames';
 import {
   appendContractPublishingChannel,
+  contractPublishingChannelForPlatform,
   contractPublishingChannelsForCreator,
   contractPaymentMethodForAccount,
   contractPayoutSnapshot,
@@ -316,7 +317,10 @@ export function ContractBuilderPage({
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
 
-  const creatorOptions = creatorSearchOptions(creators);
+  const creatorOptions = creatorSearchOptions(creators).map((option) => ({
+    ...option,
+    selectedLabel: option.label,
+  }));
   const projectOptions = projects.map((project) => ({
     value: String(project.cooperationProjectId ?? project.projectId ?? project.id),
     label: project.name,
@@ -540,13 +544,22 @@ export function ContractBuilderPage({
     key: 'platform' | 'channelUrl',
     value: string,
   ) => {
-    setPublishingChannels((current) => current.map((channel, channelIndex) => (
-      channelIndex === index ? { ...channel, [key]: value } : channel
-    )));
+    setPublishingChannels((current) => current.map((channel, channelIndex) => {
+      if (channelIndex !== index) return channel;
+      if (key === 'platform') {
+        return contractPublishingChannelForPlatform(
+          selectedCreator,
+          value,
+          channel.socialAccountId,
+        );
+      }
+      return { ...channel, channelUrl: value };
+    }));
     setErrors((current) => {
-      if (!current[key]) return current;
+      if (!current[key] && !(key === 'platform' && current.channelUrl)) return current;
       const next = { ...current };
       delete next[key];
+      if (key === 'platform') delete next.channelUrl;
       return next;
     });
     resetOutput();
@@ -782,7 +795,7 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.creator ? 'has-error' : ''}`} data-contract-field="creator">
                 <span>合作达人 *</span>
-                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" options={creatorOptions} resultUnit="位达人" renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />} onChange={selectCreator} onClear={() => selectCreator('')} />
+                <SearchableComboBox ariaLabel="合同合作达人" className="creator-search-combobox" value={creatorSelectionValue} placeholder="搜索 Display Name、频道 ID、频道链接…" options={creatorOptions} resultUnit="位达人" renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />} onChange={selectCreator} onClear={() => selectCreator('')} />
                 <small>{errors.creator}</small>
               </div>
               <div className={`invoice-form-control ${errors.contractType ? 'has-error' : ''}`} data-contract-field="contractType">

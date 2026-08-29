@@ -113,13 +113,16 @@ describe('shared creator search option', () => {
     const contractBuilder = readFileSync(new URL('./pages/ContractBuilderPage.tsx', import.meta.url), 'utf8');
     const contractUpload = readFileSync(new URL('./components/ContractUploadWizard.tsx', import.meta.url), 'utf8');
     const externalCollection = readFileSync(new URL('./pages/ExternalInvoiceCollectionPage.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./index.css', import.meta.url), 'utf8');
 
     [invoiceBuilder, contractBuilder, contractUpload, externalCollection].forEach((source) => {
       expect(source).toMatch(/creatorSearchOptions|creatorSearchOption/);
       expect(source).toContain('CreatorIdentity');
       expect(source).toContain('className="creator-search-combobox"');
     });
-    expect(contractBuilder).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
+    expect(contractBuilder).toContain('搜索 Display Name、频道 ID、频道链接…');
+    expect(contractBuilder).toContain('selectedLabel: option.label');
+    expect(styles).toMatch(/\.contract-builder-form \.creator-search-combobox \.contract-search-input-wrap input:focus\s*{[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s);
     expect(invoiceBuilder).toContain('搜索达人名称、频道 ID、频道链接…');
     expect(externalCollection).toContain('搜索达人名称、频道ID、频道链接...');
     expect(contractUpload).toContain('支持搜索 Display Name、频道 ID、频道链接、法定真名、Account Name');

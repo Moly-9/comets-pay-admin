@@ -60,6 +60,30 @@ export const contractPublishingChannelsForCreator = (
     : [];
 };
 
+const comparablePublishingPlatform = (platform: string) => {
+  const normalized = platform.trim().toLowerCase();
+  return normalized === 'twitter' ? 'x' : normalized;
+};
+
+export const contractPublishingChannelForPlatform = (
+  creator: CreatorProfile | null | undefined,
+  platform: string,
+  preferredSocialAccountId = '',
+): ContractPublishingChannel => {
+  const normalizedPlatform = comparablePublishingPlatform(platform);
+  const matchesPlatform = (account: CreatorProfile['socialAccounts'][number]) => (
+    comparablePublishingPlatform(account.platform) === normalizedPlatform
+  );
+  const account = creator?.socialAccounts.find((candidate) => (
+    candidate.id === preferredSocialAccountId && matchesPlatform(candidate)
+  )) ?? creator?.socialAccounts.find(matchesPlatform);
+  return {
+    socialAccountId: account?.id ?? '',
+    platform,
+    channelUrl: account?.profileUrl.trim() ?? '',
+  };
+};
+
 export const appendContractPublishingChannel = (
   channels: ContractPublishingChannel[],
 ): ContractPublishingChannel[] => [
