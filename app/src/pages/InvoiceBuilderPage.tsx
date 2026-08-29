@@ -18,6 +18,7 @@ import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPanel';
 import { SearchableComboBox } from '../components/SearchableComboBox';
 import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractSelector } from '../components/InvoiceContractSelector';
 import {
   creatorSearchOption,
   resolveCreatorSocialAccount,
@@ -30,7 +31,7 @@ import {
   type InvoiceId,
   type ProjectId,
 } from '../businessWorkflow';
-import { contractLinkedToProject, formatContractMoney, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
+import { contractLinkedToProject, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -765,36 +766,14 @@ export function InvoiceBuilderPage({
             </div>
             {selectedProjectId && engagementId ? (
               <div className="invoice-contract-coverage">
-                <div className="invoice-contract-coverage-head">
-                  <div>
-                    <strong id="invoice-contract-coverage-label">关联合同（非必填）</strong>
-                    <span>主体必须一致；金额、币种或付款账户差异填写说明后可继续。</span>
-                  </div>
-                  <em>{contractIds.length ? `已选 ${contractIds.length} 份` : '未关联合同（非必填）'}</em>
-                </div>
-                {selectableContracts.length ? (
-                  <div
-                    className="invoice-contract-options"
-                    role="group"
-                    aria-labelledby="invoice-contract-coverage-label"
-                  >
-                    {selectableContracts.map((contract) => (
-                      <label key={contract.contractId}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(contract.contractId && contractIds.includes(contract.contractId))}
-                          onChange={() => contract.contractId && toggleContract(contract.contractId)}
-                        />
-                        <span>
-                          <strong>{contract.name}</strong>
-                          <small>{contract.id} · {formatContractMoney(contract)}</small>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p>当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。</p>
-                )}
+                <InvoiceContractSelector
+                  contracts={selectableContracts}
+                  selectedContractIds={contractIds}
+                  onToggle={toggleContract}
+                  labelId="invoice-contract-coverage-label"
+                  helperText="主体必须一致；金额、币种或付款账户差异填写说明后可继续。"
+                  emptyText="当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。"
+                />
                 <InvoiceContractMatchPanel
                   match={contractMatch}
                   reason={contractMatchReason}

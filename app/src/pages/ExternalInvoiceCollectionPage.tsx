@@ -12,6 +12,7 @@ import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../compon
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
 import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractSelector } from '../components/InvoiceContractSelector';
 import {
   creatorSearchOption,
   resolveCreatorSocialAccount,
@@ -25,11 +26,7 @@ import {
   type InvoiceReviewSummaryField,
   type InvoiceReviewTimelineItem,
 } from '../components/InvoiceReviewWorkspace';
-import {
-  CONTRACT_TYPE_LABELS,
-  contractLinkedToProject,
-  type ContractRecord,
-} from '../contracts';
+import { contractLinkedToProject, type ContractRecord } from '../contracts';
 import {
   EXTERNAL_INVOICE_CRITICAL_FIELDS,
   EXTERNAL_INVOICE_FIELD_LABEL,
@@ -66,6 +63,11 @@ import type { ProjectSummary } from './ProjectDetailPage';
 import './ExternalInvoiceCollectionPage.css';
 
 const CURRENCIES: InvoiceCurrency[] = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'];
+
+export const externalInvoiceCreatorSearchOption = (creator: CreatorProfile) => ({
+  ...creatorSearchOption(creator),
+  selectedLabel: creator.name,
+});
 
 const TECHNICAL_STATUS_LABEL: Record<ExternalInvoiceCollectionRecord['status'], string> = {
   DRAFT: '收集信息草稿',
@@ -137,12 +139,12 @@ export function ExternalInvoiceCollectionCreatePage({
   })), [projects]);
   const creatorOptions = useMemo(() => creatorReferences.flatMap((reference) => {
     const creator = creators.find((item) => String(item.id) === String(reference.creatorId));
-    if (creator) return [creatorSearchOption(creator)];
+    if (creator) return [externalInvoiceCreatorSearchOption(creator)];
     const channelId = reference.handle || '频道 ID 待补充';
     return [{
       value: String(reference.creatorId),
       label: reference.name,
-      selectedLabel: `${reference.name} · ${channelId}`,
+      selectedLabel: reference.name,
       description: channelId,
       searchText: [reference.name, reference.handle, reference.platform].filter(Boolean).join(' '),
     }];
@@ -238,7 +240,7 @@ export function ExternalInvoiceCollectionCreatePage({
                 ariaLabel="选择项目内达人"
                 className="creator-search-combobox"
                 value={creatorSelectionValue}
-                placeholder={selectedProject ? '搜索 Display Name、Handle、Real Name、Company Name 或 Account Name' : '请先选择合作项目'}
+                placeholder={selectedProject ? '搜索达人名称、频道ID、频道链接...' : '请先选择合作项目'}
                 options={creatorOptions}
                 resultUnit="位达人"
                 renderOption={(option) => {
@@ -274,19 +276,20 @@ export function ExternalInvoiceCollectionCreatePage({
             <div><span className="external-section-kicker">02</span><h2>关联合同</h2></div>
             <p>支持不关联合同，也可同时关联多份独立合同、框架合同或 IO 单。</p>
           </div>
-          <div className="external-contract-picker">
-            {eligibleContracts.length ? eligibleContracts.map((contract) => {
-              const contractId = contract.contractId!;
-              const checked = contractIds.includes(contractId);
-              return (
-                <label key={String(contractId)} className={checked ? 'is-selected' : ''}>
-                  <input type="checkbox" checked={checked} onChange={() => setContractIds((current) => (
-                    checked ? current.filter((id) => id !== contractId) : [...current, contractId]
-                  ))} />
-                  <span><strong>{contract.id}</strong><small>{CONTRACT_TYPE_LABELS[contract.contractType ?? 'INDEPENDENT']} · {contract.name}</small></span>
-                </label>
-              );
-            }) : <div className="external-empty-inline">选择达人后展示该达人在当前项目下的已确认合同；无合同也可继续。</div>}
+          <div className="external-invoice-contract-coverage">
+            <InvoiceContractSelector
+              contracts={eligibleContracts}
+              selectedContractIds={contractIds}
+              onToggle={(contractId) => setContractIds((current) => (
+                current.includes(contractId)
+                  ? current.filter((id) => id !== contractId)
+                  : [...current, contractId]
+              ))}
+              labelId="external-invoice-contract-coverage-label"
+              heading="选择合同（非必填）"
+              helperText="合同名称、编号和金额与生成 Invoice 保持一致。"
+              emptyText="选择达人后展示该达人在当前项目下的已确认合同；无合同也可继续。"
+            />
           </div>
         </section>
 

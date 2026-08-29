@@ -13,6 +13,7 @@ import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
 import { InvoiceBuilderPage, invoiceCreatorSearchOption } from './InvoiceBuilderPage';
 
 const invoiceBuilderSource = readFileSync(new URL('./InvoiceBuilderPage.tsx', import.meta.url), 'utf8');
+const invoiceContractSelectorSource = readFileSync(new URL('../components/InvoiceContractSelector.tsx', import.meta.url), 'utf8');
 
 describe('InvoiceBuilderPage create mode', () => {
   it('keeps every fee-detail input blank until the user enters it', () => {
@@ -76,8 +77,8 @@ describe('InvoiceBuilderPage create mode', () => {
 
   it('keeps creator-picker typography aligned and orders contract details by name, code, then amount', () => {
     const invoiceBuilderStyles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
-    const contractOptionMarkup = invoiceBuilderSource.match(
-      /selectableContracts\.map\(\(contract\) => \([\s\S]*?<\/label>\s*\)\)\}/,
+    const contractOptionMarkup = invoiceContractSelectorSource.match(
+      /contracts\.map\(\(contract\) => \{[\s\S]*?<\/label>[\s\S]*?\}\)\}/,
     )?.[0];
 
     expect(invoiceBuilderStyles).toMatch(
@@ -93,6 +94,7 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(contractOptionMarkup).toContain('<strong>{contract.name}</strong>');
     expect(contractOptionMarkup).toContain('<small>{contract.id} · {formatContractMoney(contract)}</small>');
     expect(contractOptionMarkup?.indexOf('contract.name')).toBeLessThan(contractOptionMarkup?.indexOf('contract.id') ?? 0);
+    expect(invoiceBuilderSource).toContain('<InvoiceContractSelector');
   });
 
   it('keeps user-entered fee details independent from contract selection', () => {

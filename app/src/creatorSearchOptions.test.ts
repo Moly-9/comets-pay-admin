@@ -119,10 +119,9 @@ describe('shared creator search option', () => {
       expect(source).toContain('CreatorIdentity');
       expect(source).toContain('className="creator-search-combobox"');
     });
-    [contractBuilder, externalCollection].forEach((source) => {
-      expect(source).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
-    });
+    expect(contractBuilder).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
     expect(invoiceBuilder).toContain('搜索达人名称、频道 ID、频道链接…');
+    expect(externalCollection).toContain('搜索达人名称、频道ID、频道链接...');
     expect(contractUpload).toContain('支持搜索 Display Name、频道 ID、频道链接、法定真名、Account Name');
     expect(contractUpload).toContain('<SearchableComboBox');
     expect(externalCollection).toContain('<SearchableComboBox');

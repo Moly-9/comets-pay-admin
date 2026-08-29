@@ -7960,9 +7960,14 @@ body:has(.finance-review-workspace) {
 }
 
 .invoice-contract-coverage-head span,
-.invoice-contract-coverage > p {
+.invoice-contract-coverage > p,
+.invoice-contract-selector-empty {
   color: var(--muted);
   font-size: 12px;
+}
+
+.invoice-contract-selector-empty {
+  margin: 10px 0 0;
 }
 
 .invoice-contract-coverage-head em {

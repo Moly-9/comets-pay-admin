@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
@@ -8,7 +9,11 @@ import type { CreatorProfile } from '../types';
 import {
   ExternalInvoiceCollectionCreatePage,
   ExternalInvoiceCollectionDetailPage,
+  externalInvoiceCreatorSearchOption,
 } from './ExternalInvoiceCollectionPage';
+
+const externalCreateSource = readFileSync(new URL('./ExternalInvoiceCollectionPage.tsx', import.meta.url), 'utf8');
+const externalCreateStyles = readFileSync(new URL('./ExternalInvoiceCollectionPage.css', import.meta.url), 'utf8');
 
 const creatorId = 'creator-external-metrics' as CreatorId;
 const creator: CreatorProfile = {
@@ -118,5 +123,26 @@ describe('ExternalInvoiceCollectionCreatePage', () => {
     );
 
     expect(html).toContain('aria-label="\u9009\u62e9\u5916\u90e8 Invoice \u4ed8\u6b3e\u4e3b\u4f53"');
+  });
+
+  it('uses the shared contract selector and a display-name-only creator selection', () => {
+    const option = externalInvoiceCreatorSearchOption(creator);
+
+    expect(option.selectedLabel).toBe('External Creator');
+    expect(option.searchText).toContain('@external');
+    expect(option.searchText).toContain('https://example.com/external');
+    expect(option.searchText).toContain('External Creator LLC');
+    expect(externalCreateSource).toContain("搜索达人名称、频道ID、频道链接...");
+    expect(externalCreateSource).toContain('<InvoiceContractSelector');
+    expect(externalCreateSource).toContain('selectedLabel: reference.name');
+  });
+
+  it('removes the orange inner focus state while keeping the shared lavender focus ring', () => {
+    expect(externalCreateStyles).toMatch(
+      /\.external-invoice-page \.creator-search-combobox \.contract-search-input-wrap:focus-within\s*\{[^}]*border-color:\s*#ad91b3;[^}]*box-shadow:/s,
+    );
+    expect(externalCreateStyles).toMatch(
+      /\.external-invoice-page \.form-grid \.creator-search-combobox \.contract-search-input-wrap input:focus\s*\{[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    );
   });
 });
