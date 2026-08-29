@@ -424,7 +424,7 @@
 }
 
 .finance-review-document-header-controls .finance-review-document-switch-field {
-  flex-basis: 132px;
+  flex-basis: 112px;
 }
 
 .finance-review-document-switch-field.is-contract {
@@ -454,7 +454,7 @@
 }
 
 .finance-review-document-header-controls .finance-review-document-kind-select {
-  width: 132px;
+  width: 112px;
 }
 
 .finance-review-document-contract-select {
@@ -465,6 +465,10 @@
   min-height: 34px;
   padding-top: 6px;
   padding-bottom: 6px;
+}
+
+.finance-review-document-header-controls .finance-review-document-switch-field:not(.is-contract) .custom-select-trigger {
+  height: 34px;
 }
 
 .finance-review-document-switcher .custom-select-option-description {
@@ -701,6 +705,11 @@
     gap: 7px;
   }
 
+  .finance-review-document-switcher .custom-select-trigger {
+    height: 44px;
+    min-height: 44px;
+  }
+
   .finance-review-document-switch-field,
   .finance-review-document-switch-field.is-contract,
   .finance-review-document-kind-select,
@@ -710,7 +719,7 @@
   }
 
   .finance-review-document-switch-field:first-child {
-    flex: 0 0 132px;
+    flex: 0 0 112px;
   }
 
   .finance-review-document-switch-field.is-contract {
@@ -781,11 +790,11 @@
   }
 
   .finance-review-document-switch-field:first-child {
-    flex-basis: 124px;
+    flex-basis: 112px;
   }
 
   .finance-review-document-kind-select {
-    width: 124px;
+    width: 112px;
   }
 
   .finance-review-document-switch-field.is-contract {

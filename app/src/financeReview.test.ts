@@ -540,4 +540,47 @@ describe('request finance review', () => {
       review,
     )).toBe(false);
   });
+
+  it('requires one stable contract for contract returns and preserves full-item scope', () => {
+    const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    const initial = createFinanceReviewSession({
+      requestId: request.id,
+      approvalRound: 1,
+      reviewerAccount: 'finance.test',
+      review,
+    });
+    const missingContract = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      issueType: 'CONTRACT_CONTENT',
+      reason: '需修改合同',
+      reviewedAt: '2026-08-09T10:00:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(missingContract, review)).toBe(false);
+
+    const contractReturn = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      issueType: 'CONTRACT_CONTENT',
+      reason: '需修改合同',
+      contractIds: ['contract-stable-id' as never],
+      reviewedAt: '2026-08-09T10:01:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(contractReturn, review)).toBe(true);
+    expect(financeReviewReturnItems(contractReturn, review)[0]).toMatchObject({
+      issueType: 'CONTRACT_CONTENT',
+      contractIds: ['contract-stable-id'],
+    });
+    expect(financeReviewReturnReason(contractReturn, review))
+      .toBe('INV-TEST（合同 · 合同范围：contract-stable-id）：需修改合同');
+
+    const fullReturn = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      issueType: 'FULL_ITEM',
+      reason: '整笔退回修改',
+      contractIds: ['contract-a' as never, 'contract-b' as never],
+      reviewedAt: '2026-08-09T10:02:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(fullReturn, review)).toBe(true);
+    expect(financeReviewReturnReason(fullReturn, review))
+      .toBe('INV-TEST（整笔请款 · 合同范围：contract-a、contract-b）：整笔退回修改');
+  });
 });

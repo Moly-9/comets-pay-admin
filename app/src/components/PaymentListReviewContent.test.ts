@@ -115,12 +115,14 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).not.toContain("id: 'bank-postal-code'");
   });
 
-  it('uses compact 12px comparison text and the requested payment summary header fields', () => {
-    expect(reviewContentSource).toContain('<dt>Account Name</dt><dd>{accountName}</dd>');
-    expect(reviewContentSource).toContain('<dt>付款清单编号</dt><dd>{row.list.paymentListCode}</dd>');
-    expect(reviewContentSource).toContain('<dt>支付方式</dt><dd>{transferMethodCode(row.effectiveAccount.transferMethod)}</dd>');
-    expect(reviewContentSource).toContain("if (transferMethod === 'LOCAL') return 'LOCAL'");
-    expect(reviewContentSource).toContain("if (transferMethod === 'SWIFT') return 'SWIFT'");
+  it('uses compact 12px comparison text and moves API status into the summary header', () => {
+    expect(reviewContentSource).toContain('const visibleAccountCheckStatus');
+    expect(reviewContentSource).toContain('const visibleAccountCheckLabel');
+    expect(reviewContentSource).toContain("? '已校验'");
+    expect(reviewContentSource).toContain("? '校验未通过'");
+    expect(reviewContentSource).toContain('className={`request-payment-api-result is-${visibleAccountCheckStatus');
+    expect(reviewContentSource).not.toContain('finance-payment-account-summary-meta');
+    expect(reviewContentSource).not.toContain('transferMethodCode');
     expect(workspaceStyles).toMatch(/\.finance-review-workspace \.finance-payment-list-review-content \.request-finance-comparison-table th,[\s\S]*\.request-finance-comparison-table td,[\s\S]*font-size:\s*12px;/s);
   });
 
@@ -291,14 +293,16 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('setAccountDetailsExpanded(false)');
     expect(reviewContentSource).toContain('aria-expanded={accountDetailsExpanded}');
     expect(reviewContentSource).toContain("accountDetailsExpanded ? '收起详情' : '查看详情'");
-    expect(reviewContentSource).toContain('<dt>达人</dt><dd>{row.item.snapshot.creatorName}</dd>');
+    expect(reviewContentSource).toContain('className="finance-payment-account-detail-row"');
+    expect(reviewContentSource).not.toContain('<dt>达人</dt><dd>{row.item.snapshot.creatorName}</dd>');
     expect(reviewContentSource).toContain("'beneficiary.date_of_birth'");
     expect(reviewContentSource).toContain('FINANCE_WORKSPACE_HIDDEN_SCHEMA_PATHS.has(field.path)');
     expect(reviewContentSource).not.toContain("label: '出生日期'");
     expect(reviewContentSource).not.toContain("label: '请求编号'");
     expect(reviewContentSource).toContain('className="finance-review-comparison-identity"');
     expect(workspaceStyles).toMatch(/\.finance-review-comparison-identity\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s);
-    expect(workspaceStyles).toMatch(/\.finance-payment-account-summary-meta > div:nth-child\(odd\)\s*\{[^}]*border-left:\s*0;[^}]*padding-left:\s*0;/s);
+    expect(workspaceStyles).toMatch(/\.finance-payment-account-snapshots\s*\{[^}]*border:\s*1px solid #e0e4e9;[^}]*background:\s*#fff;/s);
+    expect(workspaceStyles).toMatch(/\.finance-payment-account-detail-list:not\(\.is-expanded\)\s*\{[^}]*display:\s*none;/s);
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

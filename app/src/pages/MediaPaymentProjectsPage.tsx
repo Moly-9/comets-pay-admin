@@ -1499,10 +1499,16 @@ export function MediaPaymentProjectsPage({
     const editable = requestEditAllowed(selectedRequest);
     const hasScopedApprovalReturn = requestApprovalHasScopedReturnItems(selectedRequest.approval);
     const hasInvoiceReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
-      item.issueType === 'INVOICE_CONTENT'
+      ['INVOICE_CONTENT', 'FULL_ITEM'].includes(item.issueType)
     )));
     const hasPaymentListReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
-      item.issueType === 'PAYMENT_LIST'
+      ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
+    )));
+    const hasContractReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
+      ['CONTRACT_CONTENT', 'FULL_ITEM'].includes(item.issueType)
+    )));
+    const hasFullItemReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
+      item.issueType === 'FULL_ITEM'
     )));
     const requestContentEditable = editable && !hasPaymentFailureRecovery && !hasScopedApprovalReturn;
     const canAddCreators = !hasPaymentFailureRecovery
@@ -1644,15 +1650,19 @@ export function MediaPaymentProjectsPage({
                   <span>退回待处理</span>
                   <h2 id="media-request-return-heading">{returnHeading}</h2>
                   <p>{hasScopedApprovalReturn
-                    ? '请仅处理下方标记的退回明细；未被标记的 Invoice 与付款明细保持锁定。'
+                    ? '请仅处理下方标记的退回明细；未被标记的合同、Invoice 与付款明细保持锁定。'
                     : '请根据退回意见修改请款内容和付款清单，完成校验后重新提交。'}</p>
                 </div>
                 {editable ? (
                   <div className="media-request-return-panel-actions">
                     {!hasScopedApprovalReturn ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openEditForm(selectedRequest)}>修改请款内容</Button> : null}
                     <Button variant={hasScopedApprovalReturn ? 'secondary' : 'ghost'} onClick={() => scrollToSection('media-request-resource-section')}>
-                      {hasInvoiceReturn && hasPaymentListReturn
+                      {hasFullItemReturn
+                        ? '处理整笔退回'
+                        : [hasContractReturn, hasInvoiceReturn, hasPaymentListReturn].filter(Boolean).length > 1
                         ? '处理退回明细'
+                        : hasContractReturn
+                          ? '修改指定合同'
                         : hasInvoiceReturn
                           ? '修改指定 Invoice'
                           : hasPaymentListReturn

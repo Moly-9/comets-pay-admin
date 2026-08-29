@@ -257,7 +257,10 @@ import {
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalAllowsInvoicePayoutOverride,
   requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
+  requestApprovalReturnItemForInvoiceEdit,
+  requestApprovalReturnItemForPaymentListEdit,
   requestApprovalStage,
   appendRequestApprovalReturnNotification,
   recordRequestApprovalReturnAccountUpdate,
@@ -3856,9 +3859,20 @@ export default function App() {
     requestResourceEditable(request)
     && (
       requestApprovalHasScopedReturnItems(request.approval)
-        ? Boolean(requestApprovalReturnItemForInvoice(request.approval, invoiceId, 'PAYMENT_LIST'))
+        ? Boolean(requestApprovalReturnItemForPaymentListEdit(request.approval, invoiceId))
         : !requestHasPaymentFailureRecovery(request)
       || Boolean(paymentFailurePayoutForInvoice(request, invoiceId))
+    )
+  );
+
+  const requestContractResourceEditable = (
+    request: RequestProjectSummary,
+    contractId: string,
+  ) => (
+    requestResourceEditable(request)
+    && (
+      !requestApprovalHasScopedReturnItems(request.approval)
+      || Boolean(requestApprovalReturnItemForContract(request.approval, contractId))
     )
   );
 
@@ -3868,7 +3882,7 @@ export default function App() {
     && requestResourceEditable(request)
     && (
       !requestApprovalHasScopedReturnItems(request.approval)
-      || Boolean(requestApprovalReturnItemForInvoice(request.approval, invoiceId, 'INVOICE_CONTENT'))
+      || Boolean(requestApprovalReturnItemForInvoiceEdit(request.approval, invoiceId))
     )
   ));
 
@@ -4262,7 +4276,7 @@ export default function App() {
     onBeginEditPaymentList: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
       const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
-        item.issueType === 'PAYMENT_LIST'
+        ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
         && item.paymentItems.some((paymentItem) => paymentItem.paymentListId === paymentListId)
       ));
       if (
@@ -4279,7 +4293,7 @@ export default function App() {
     onGeneratePaymentListVersion: async (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
       const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
-        item.issueType === 'PAYMENT_LIST'
+        ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
         && item.paymentItems.some((paymentItem) => paymentItem.paymentListId === paymentListId)
       ));
       if (
@@ -4584,6 +4598,18 @@ export default function App() {
           requestProjects={requestProjects}
           canUpload={canUploadContracts}
           canEditTemplates={canEditTemplates}
+          canEditContract={(contract) => {
+            const context = requestResourceReturn?.resource === 'contract'
+              ? requestResourceReturn
+              : null;
+            if (!context) return true;
+            if (context.source === 'finance-review') return false;
+            const request = requestProjects.find((candidate) => candidate.id === context.requestId);
+            return Boolean(request && requestContractResourceEditable(
+              request,
+              String(contract.contractId ?? contract.id),
+            ));
+          }}
           canDelete={canDeleteContracts}
           canDeleteContract={(contract) => canDeleteContract(currentUser, contract, contractDeletionOptions(contract))}
           focusedContractId={focusedContractId}

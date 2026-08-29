@@ -90,11 +90,35 @@ export const requestApprovalReturnItemForInvoice = (
   && (!issueType || item.issueType === issueType)
 ));
 
+export const requestApprovalReturnItemForInvoiceEdit = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+) => state?.returnItems?.find((item) => (
+  item.invoiceId === invoiceId
+  && ['INVOICE_CONTENT', 'FULL_ITEM'].includes(item.issueType)
+));
+
+export const requestApprovalReturnItemForPaymentListEdit = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+) => state?.returnItems?.find((item) => (
+  item.invoiceId === invoiceId
+  && ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
+));
+
+export const requestApprovalReturnItemForContract = (
+  state: RequestApprovalState | undefined,
+  contractId: string,
+) => state?.returnItems?.find((item) => (
+  ['CONTRACT_CONTENT', 'FULL_ITEM'].includes(item.issueType)
+  && item.contractIds?.some((candidate) => String(candidate) === contractId)
+));
+
 export const requestApprovalAllowsInvoicePayoutOverride = (
   state: RequestApprovalState | undefined,
   invoiceId: RequestApprovalReturnItem['invoiceId'],
 ) => state?.status === 'RETURNED_TO_MEDIA_REVIEW' && Boolean(
-  requestApprovalReturnItemForInvoice(state, invoiceId, 'INVOICE_CONTENT'),
+  requestApprovalReturnItemForInvoiceEdit(state, invoiceId),
 );
 
 export const appendRequestApprovalReturnNotification = (

@@ -47,6 +47,7 @@ import {
 export { contractsForFinanceReviewPage } from '../financeReview';
 import {
   type RequestApprovalReturnIssueType,
+  type ContractId,
   paymentListProviders,
   type InvoiceId,
   type PaymentListId,
@@ -99,14 +100,22 @@ const REVIEW_PANE_OPTIONS: Array<{
 export const FINANCE_RETURN_ISSUE_OPTIONS: readonly SelectOption<RequestApprovalReturnIssueType>[] = [
   { value: 'INVOICE_CONTENT', label: 'Invoice 原因', description: '仅开放该份 Invoice 修改权限' },
   { value: 'PAYMENT_LIST', label: '付款清单原因', description: '仅开放对应付款明细修改权限' },
+  { value: 'CONTRACT_CONTENT', label: '合同原因', description: '仅开放指定的一份合同修改权限' },
+  { value: 'FULL_ITEM', label: '整笔退回', description: '开放该达人本笔请款的合同、Invoice 和付款明细' },
 ];
 
+const FINANCE_RETURN_ISSUE_LABEL: Record<RequestApprovalReturnIssueType, string> = {
+  INVOICE_CONTENT: 'Invoice 原因',
+  PAYMENT_LIST: '付款清单原因',
+  CONTRACT_CONTENT: '合同原因',
+  FULL_ITEM: '整笔退回',
+};
+
 const financeReturnIssueLabel = (issueType: RequestApprovalReturnIssueType) => (
-  issueType === 'INVOICE_CONTENT' ? 'Invoice 原因' : '付款清单原因'
+  FINANCE_RETURN_ISSUE_LABEL[issueType]
 );
 
-const PAGE_KIND_LABEL: Record<FinanceReviewPage['kind'], string> = {
-  pair: '一一对应',
+const PAGE_KIND_LABEL: Record<Exclude<FinanceReviewPage['kind'], 'pair'>, string> = {
   'missing-invoice': '缺少 Invoice',
   'missing-payment': '缺少付款明细',
   'duplicate-payment': '重复付款明细',
@@ -674,6 +683,7 @@ export function FinanceReviewWorkspace({
   const [downloadingResourceRecord, setDownloadingResourceRecord] = useState('');
   const [resourceDownloadError, setResourceDownloadError] = useState('');
   const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
+  const [issueContractId, setIssueContractId] = useState('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
   const invoiceZoomRef = useRef(1);
@@ -835,6 +845,16 @@ export function FinanceReviewWorkspace({
     description: [contract.name, contract.sourceName].filter(Boolean).join(' · ') || '合同快照',
     leading: <FileText size={15} />,
   }));
+  const returnIssueOptions: readonly SelectOption<RequestApprovalReturnIssueType>[] = FINANCE_RETURN_ISSUE_OPTIONS.map((option) => (
+    option.value === 'CONTRACT_CONTENT' && currentContracts.length === 0
+      ? {
+          ...option,
+          disabled: true,
+          title: '当前达人无关联合同',
+          description: '当前达人无关联合同',
+        }
+      : option
+  ));
   const accountValidationIssueCount = financeReview.pages.reduce((count, page) => (
     page.kind !== 'pair'
       ? count + 1
@@ -912,15 +932,48 @@ export function FinanceReviewWorkspace({
   const openIssueEditor = () => {
     setIssueType(currentDecision.state === 'incorrect' ? currentDecision.issueType : '');
     setIssueReason(currentDecision.state === 'incorrect' ? currentDecision.reason : '');
+    const savedContractId = currentDecision.state === 'incorrect'
+      ? currentDecision.contractIds?.[0]
+      : undefined;
+    const suggestedContractId = documentKind === 'contract' && selectedContractId
+      ? selectedContractId
+      : currentContracts.length === 1
+        ? stableContractId(currentContracts[0])
+        : '';
+    setIssueContractId(savedContractId ? String(savedContractId) : suggestedContractId);
     setIssueEditorOpen(true);
   };
 
+  const changeIssueType = (nextIssueType: RequestApprovalReturnIssueType | '') => {
+    setIssueType(nextIssueType);
+    if (nextIssueType !== 'CONTRACT_CONTENT') {
+      setIssueContractId('');
+      return;
+    }
+    if (documentKind === 'contract' && selectedContractId) {
+      setIssueContractId(selectedContractId);
+      return;
+    }
+    setIssueContractId(currentContracts.length === 1 ? stableContractId(currentContracts[0]) : '');
+  };
+
   const saveIssue = () => {
-    if (!currentPage || !issueType || !issueReason.trim()) return;
+    if (
+      !currentPage
+      || !issueType
+      || !issueReason.trim()
+      || (issueType === 'CONTRACT_CONTENT' && !issueContractId)
+    ) return;
+    const contractIds = issueType === 'CONTRACT_CONTENT'
+      ? [issueContractId as ContractId]
+      : issueType === 'FULL_ITEM'
+        ? currentContracts.map((contract) => stableContractId(contract) as ContractId)
+        : undefined;
     onSessionChange(setFinanceReviewDecision(activeSession, currentPage.key, {
       state: 'incorrect',
       issueType,
       reason: issueReason.trim(),
+      contractIds,
       reviewedAt: new Date().toISOString(),
     }));
     setIssueEditorOpen(false);
@@ -1327,7 +1380,7 @@ export function FinanceReviewWorkspace({
                   ) : null}
                 </div>
                 <div className="finance-review-invoice-header-actions">
-                  {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
+                  {currentPage && currentPage.kind !== 'pair' ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
                   <div className="finance-review-zoom-controls" role="group" aria-label={`${activeDocumentLabel}缩放`}>
                     <button
                       className="icon-button"
@@ -1752,7 +1805,16 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setIssueEditorOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!issueType || !issueReason.trim()} disabledReason={!issueType ? '请先选择问题类型。' : '请先填写问题说明。'} onClick={saveIssue}>保存有误记录</Button>
+              <Button
+                variant="danger"
+                disabled={!issueType || !issueReason.trim() || (issueType === 'CONTRACT_CONTENT' && !issueContractId)}
+                disabledReason={!issueType
+                  ? '请先选择问题类型。'
+                  : issueType === 'CONTRACT_CONTENT' && !issueContractId
+                    ? '请先选择需修改的合同。'
+                    : '请先填写问题说明。'}
+                onClick={saveIssue}
+              >保存有误记录</Button>
             </>
           )}
         >
@@ -1761,14 +1823,31 @@ export function FinanceReviewWorkspace({
             <SelectField<RequestApprovalReturnIssueType | ''>
               ariaLabel="财务退回问题类型"
               value={issueType}
-              placeholder="请选择 Invoice 原因或付款清单原因"
+              placeholder="请选择退回问题类型"
               variant="form"
               menuStrategy="fixed"
-              options={FINANCE_RETURN_ISSUE_OPTIONS}
-              onChange={setIssueType}
+              options={returnIssueOptions}
+              onChange={changeIssueType}
             />
-            <small>所选类型决定媒介侧仅开放 Invoice 或对应付款明细。</small>
+            <small>所选类型决定媒介侧可修改的合同、Invoice 和付款明细范围。</small>
           </label>
+          {issueType === 'CONTRACT_CONTENT' ? (
+            <label className="finance-review-reason-field">
+              <span>需修改合同 <em>*</em></span>
+              <SelectField<string>
+                ariaLabel="选择需修改合同"
+                value={issueContractId}
+                placeholder="请选择一份合同"
+                variant="form"
+                menuStrategy="fixed"
+                menuWidth={320}
+                options={contractOptions}
+                disabled={!contractOptions.length}
+                onChange={setIssueContractId}
+              />
+              <small>只会开放选中合同，其他关联资料继续锁定。</small>
+            </label>
+          ) : null}
           <label className="finance-review-reason-field">
             <span>问题说明 <em>*</em></span>
             <textarea
@@ -1779,6 +1858,10 @@ export function FinanceReviewWorkspace({
                 ? '请说明该份 Invoice 需要修改的内容'
                 : issueType === 'PAYMENT_LIST'
                   ? '请说明对应付款明细需要修改的内容'
+                  : issueType === 'CONTRACT_CONTENT'
+                    ? '请说明选中合同需要修改的内容'
+                    : issueType === 'FULL_ITEM'
+                      ? '请说明该达人本笔请款需要整体修改的内容'
                   : '请先选择问题类型，再填写具体原因'}
               onChange={(event) => setIssueReason(event.target.value)}
             />
@@ -1810,6 +1893,12 @@ export function FinanceReviewWorkspace({
                 return decision?.state === 'incorrect' ? (
                   <article key={page.key}>
                     <strong>{page.invoiceNumber}<span>{financeReturnIssueLabel(decision.issueType)}</span></strong>
+                    {decision.contractIds?.length ? (
+                      <small>合同范围：{decision.contractIds.map((contractId) => (
+                        contracts.find((contract) => stableContractId(contract) === String(contractId))?.id
+                        ?? String(contractId)
+                      )).join('、')}</small>
+                    ) : null}
                     <p>{decision.reason}</p>
                   </article>
                 ) : [];

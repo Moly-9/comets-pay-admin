@@ -557,6 +557,7 @@ export function ContractDetailPage({
   notify,
   onUpdateContract,
   canEditTemplate = false,
+  canEdit = true,
   onBindFrameworkContract,
   onUploadContracts,
 }: {
@@ -571,6 +572,7 @@ export function ContractDetailPage({
   notify: Notify;
   onUpdateContract?: (contract: ContractRecord) => void;
   canEditTemplate?: boolean;
+  canEdit?: boolean;
   onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onUploadContracts?: (inputs: ContractUploadInput[]) => ContractRecord[];
 }) {
@@ -664,7 +666,7 @@ export function ContractDetailPage({
     { id: 'payment', label: '付款与Invoice' },
     { id: 'checks', label: `校验记录${checkIssueCount ? ` ${checkIssueCount}` : ''}` },
   ];
-  const canEditCurrentContract = !contract.isTemplate || canEditTemplate;
+  const canEditCurrentContract = canEdit && (!contract.isTemplate || canEditTemplate);
   const pendingGeneratedUpload = Boolean(
     contract.uploadedFromDraftId
     && contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION',

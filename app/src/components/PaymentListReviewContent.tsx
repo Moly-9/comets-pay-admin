@@ -115,15 +115,6 @@ const transferMethodLabel = (
   return '待确认';
 };
 
-const transferMethodCode = (
-  transferMethod: ReturnType<typeof paymentListEffectiveAccount>['transferMethod'],
-) => {
-  if (transferMethod === 'LOCAL') return 'LOCAL';
-  if (transferMethod === 'SWIFT') return 'SWIFT';
-  if (transferMethod === 'PAYPAL') return 'PAYPAL';
-  return '待确认';
-};
-
 const displayValue = (value: unknown) => (
   value === undefined || value === null || value === '' ? '未填写' : String(value)
 );
@@ -246,6 +237,25 @@ export function PaymentListReviewContent({
     return row ? [row] : [];
   }) ?? [];
   const visibleAccountRows = accountDisplay === 'current-full' ? currentRows : rows;
+  const visibleAccountCheckStatus = visibleAccountRows.length === 0
+    ? 'pending' as const
+    : validating || visibleAccountRows.some((row) => (
+      !accountChecks[row.key] || accountChecks[row.key]?.state === 'checking'
+    ))
+      ? 'checking' as const
+      : visibleAccountRows.some((row) => (
+        row.snapshotReview.state !== 'ready'
+        || ['invalid', 'unavailable'].includes(accountChecks[row.key]?.state ?? '')
+      ))
+        ? 'failed' as const
+        : 'passed' as const;
+  const visibleAccountCheckLabel = visibleAccountCheckStatus === 'passed'
+    ? '已校验'
+    : visibleAccountCheckStatus === 'failed'
+      ? '校验未通过'
+      : visibleAccountCheckStatus === 'checking'
+        ? '校验中'
+        : '待校验';
   const snapshotAttentionCount = rows.filter((row) => row.snapshotReview.state !== 'ready').length;
   const apiPassedCount = rows.filter((row) => accountChecks[row.key]?.state === 'passed').length;
   const apiIssueCount = rows.filter((row) => (
@@ -663,11 +673,25 @@ export function PaymentListReviewContent({
           )}
 
           {variant === 'finance-workspace' ? (accountDisplay === 'current-full' ? (
-            <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
+            <section className="finance-payment-account-snapshots" aria-label="当前达人付款信息汇总">
               <header>
                 <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人付款信息汇总</strong><small>Airwallex 付款信息完整性字段 · 空值使用原型演示值，实际以 API 校验为准</small></span></div>
                 <div className="finance-payment-account-heading-actions">
                   <span>{visibleAccountRows.length} 条</span>
+                  <span
+                    className={`request-payment-api-result is-${visibleAccountCheckStatus === 'pending' ? 'checking' : visibleAccountCheckStatus}`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {visibleAccountCheckStatus === 'checking'
+                      ? <LoaderCircle className="is-spinning" size={14} />
+                      : visibleAccountCheckStatus === 'passed'
+                        ? <CircleCheck size={14} />
+                        : visibleAccountCheckStatus === 'failed'
+                          ? <CircleAlert size={14} />
+                          : <ShieldCheck size={14} />}
+                    {visibleAccountCheckLabel}
+                  </span>
                   <button
                     className="finance-payment-account-detail-toggle"
                     type="button"
@@ -875,32 +899,12 @@ export function PaymentListReviewContent({
                   'transaction-reference': 'transaction-reference',
                 };
                 return (
-                  <article
-                    className="finance-payment-account-snapshot"
+                  <div
+                    className="finance-payment-account-detail-row"
                     id={`finance-payment-account-${row.key}`}
                     key={row.key}
                     tabIndex={-1}
                   >
-                    <header>
-                      <div>
-                        <span className="finance-review-card-title-icon is-creator" aria-hidden="true"><UserRoundCheck size={14} /></span>
-                        <dl className="finance-payment-account-summary-meta">
-                          <div><dt>达人</dt><dd>{row.item.snapshot.creatorName}</dd></div>
-                          <div><dt>Account Name</dt><dd>{accountName}</dd></div>
-                          <div><dt>付款清单编号</dt><dd>{row.list.paymentListCode}</dd></div>
-                          <div><dt>支付方式</dt><dd>{transferMethodCode(row.effectiveAccount.transferMethod)}</dd></div>
-                        </dl>
-                      </div>
-                      <span className={`request-payment-api-result is-${!accountCheck || accountCheck.state === 'checking' ? 'checking' : accountCheck.state === 'passed' ? 'passed' : 'failed'}`}>
-                        {!accountCheck || accountCheck.state === 'checking'
-                          ? <LoaderCircle className="is-spinning" size={14} />
-                          : accountCheck.state === 'passed'
-                            ? <CircleCheck size={14} />
-                            : <CircleAlert size={14} />}
-                        {!accountCheck || accountCheck.state === 'checking' ? '校验中' : accountCheck.state === 'passed' ? '已校验' : '待补充'}
-                      </span>
-                    </header>
-                    {accountDetailsExpanded ? <>
                     {renderValidation(row)}
                     <dl className={`finance-payment-account-fields${row.effectiveAccount.provider === 'Airwallex' ? ' finance-payment-airwallex-fields' : ''}`}>
                       {accountFields.map((accountField) => {
@@ -949,8 +953,7 @@ export function PaymentListReviewContent({
                       <div><dt>付款原因</dt><dd>{displayValue(paymentListItemValue(row.item, 'paymentReason'))}</dd></div>
                       <div className="request-payment-review-reference"><dt>交易附言</dt><dd>{displayValue(paymentListItemValue(row.item, 'transactionReference'))}</dd></div>
                     </dl> : null}
-                    </> : null}
-                  </article>
+                  </div>
                 );
               }) : (
                 <div className="project-resource-browser-empty finance-payment-account-empty">

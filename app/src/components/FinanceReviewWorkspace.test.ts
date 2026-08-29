@@ -149,7 +149,28 @@ describe('FinanceReviewWorkspace return issue types', () => {
         label: '付款清单原因',
         description: '仅开放对应付款明细修改权限',
       },
+      {
+        value: 'CONTRACT_CONTENT',
+        label: '合同原因',
+        description: '仅开放指定的一份合同修改权限',
+      },
+      {
+        value: 'FULL_ITEM',
+        label: '整笔退回',
+        description: '开放该达人本笔请款的合同、Invoice 和付款明细',
+      },
     ]);
+    expect(workspaceSource).toContain('ariaLabel="选择需修改合同"');
+    expect(workspaceSource).toContain("issueType === 'CONTRACT_CONTENT' && !issueContractId");
+    expect(workspaceSource).toContain("issueType === 'FULL_ITEM'");
+    expect(workspaceSource).toContain("title: '当前达人无关联合同'");
+    expect(workspaceSource).toContain('合同范围：{decision.contractIds.map');
+  });
+
+  it('hides the normal pair badge while preserving exception badges', () => {
+    expect(workspaceSource).toContain("currentPage.kind !== 'pair'");
+    expect(workspaceSource).not.toContain("pair: '一一对应'");
+    expect(workspaceSource).toContain("'missing-payment': '缺少付款明细'");
   });
 });
 
@@ -304,6 +325,9 @@ describe('FinanceReviewWorkspace document switching', () => {
     expect(workspaceSource).not.toContain('<div className="finance-review-document-switcher"');
     expect(workspaceStageStyles).toContain('.finance-review-document-switcher');
     expect(workspaceStageStyles).toContain('.finance-review-document-header-controls');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-document-header-controls \.finance-review-document-kind-select\s*\{[^}]*width:\s*112px;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-document-header-controls \.finance-review-document-switch-field:not\(\.is-contract\) \.custom-select-trigger\s*\{[^}]*height:\s*34px;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.finance-review-document-switcher \.custom-select-trigger\s*\{[^}]*min-height:\s*44px;/s);
     expect(workspaceStageStyles).toContain('@media (max-width: 767px)');
   });
 });

@@ -45,7 +45,10 @@ import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import { validatePaymentListAccountViaApi } from '../requestPaymentAccountValidation';
 import {
   requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
+  requestApprovalReturnItemForInvoiceEdit,
+  requestApprovalReturnItemForPaymentListEdit,
 } from '../requestApprovalWorkflow';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
@@ -416,7 +419,7 @@ export function RequestProjectResourceManager({
   );
   const hasScopedApprovalReturn = requestApprovalHasScopedReturnItems(request.approval);
   const hasScopedPaymentListReturn = Boolean(request.approval?.returnItems?.some((item) => (
-    item.issueType === 'PAYMENT_LIST'
+    ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
   )));
   const canEditLinkedResources = canEdit && !paymentFailureRecoveryMode && !hasScopedApprovalReturn;
   const canEditPaymentList = canEdit
@@ -438,7 +441,8 @@ export function RequestProjectResourceManager({
   const canBulkEditPaymentFields = Boolean(
     canEditPaymentList
     && currentPaymentList?.status === 'draft'
-    && !paymentFailureRecoveryMode,
+    && !paymentFailureRecoveryMode
+    && !hasScopedApprovalReturn,
   );
   const paymentEditorList = paymentEditorListId
     ? paymentLists.find((list) => list.paymentListId === paymentEditorListId) ?? null
@@ -828,7 +832,7 @@ export function RequestProjectResourceManager({
       </div>
 
       {hasScopedApprovalReturn ? (
-        <NoticeBanner>财务已按明细指定修改范围：仅标记为 Invoice 原因或付款清单原因的对应记录可修改，其余资料保持锁定。</NoticeBanner>
+        <NoticeBanner>财务已按明细指定修改范围：仅退回记录对应的合同、Invoice 或付款明细可修改，其余资料保持锁定。</NoticeBanner>
       ) : !canEditLinkedResources && !paymentFailureRecoveryMode ? <NoticeBanner>当前账号在项目提交后仅可查看与导出资料。</NoticeBanner> : null}
 
       {resourceDialog === 'contract' ? (
@@ -842,7 +846,9 @@ export function RequestProjectResourceManager({
                 const contractId = contractStableId(contract);
                 const readiness = getContractReadiness(contract);
                 const contractName = contract.name || '合同名称待补充';
-                return <article className="request-resource-flat-row request-resource-contract-row" key={contractId}><span className="project-contract-record-icon request-contract-record-icon" aria-hidden="true"><FileSignature size={19} strokeWidth={2} /></span><div><strong className="request-contract-name" title={contractName}>{contractName}</strong><small>{contract.id}</small></div><div><span>达人</span><CreatorIdentity creator={creator} displayName="达人档案缺失" fallbackHandle={contract.creatorHandle} fallbackPlatform={contract.creatorPlatform ?? contract.platform} showAvatar={false} socialAccountsMaxVisible={1} /></div><div><span>合同金额</span><strong>{formatContractMoney(contract)}</strong></div><span className={`project-record-status${readiness.ready ? ' is-success' : ''}`}><i />{readiness.label}</span><div className="project-contract-record-actions"><ListActionButton kind="view" onClick={() => onOpenContract(contract.id)}>查看</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="danger" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton> : null}</div></article>;
+                const contractReturn = requestApprovalReturnItemForContract(request.approval, String(contractId));
+                const contractEditable = canEdit && Boolean(contractReturn);
+                return <article className="request-resource-flat-row request-resource-contract-row" key={contractId}><span className="project-contract-record-icon request-contract-record-icon" aria-hidden="true"><FileSignature size={19} strokeWidth={2} /></span><div><strong className="request-contract-name" title={contractName}>{contractName}</strong><small>{contract.id}</small></div><div><span>达人</span><CreatorIdentity creator={creator} displayName="达人档案缺失" fallbackHandle={contract.creatorHandle} fallbackPlatform={contract.creatorPlatform ?? contract.platform} showAvatar={false} socialAccountsMaxVisible={1} /></div><div><span>合同金额</span><strong>{formatContractMoney(contract)}</strong></div><span className={`project-record-status${contractReturn ? ' is-warning' : readiness.ready ? ' is-success' : ''}`}><i />{contractReturn ? '需修改合同' : readiness.label}</span><div className="project-contract-record-actions"><ListActionButton kind={contractEditable ? 'edit' : 'view'} onClick={() => onOpenContract(String(contractId))}>{contractEditable ? '打开修改' : '查看'}</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="danger" onClick={() => setConfirmAction({ title: '移出当前请款', description: `合同 ${contract.id} 仍保留在当前合作项目，只从本次请款中移除。`, confirmLabel: '确认移出', run: () => unlinkContract(contractId) })}>移出请款</ListActionButton> : null}</div></article>;
               })}
               {!linkedContracts.length ? <div className="project-resource-browser-empty"><FileText size={23} /><strong>当前请款未关联合同</strong><p>合同选填，可关联当前合作项目下的已有记录。</p></div> : null}
             </div>
@@ -858,11 +864,7 @@ export function RequestProjectResourceManager({
             <div className="request-resource-flat-list request-resource-invoice-card-list">
               {linkedInvoices.map((invoice) => {
                 const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
-                const invoiceReturn = requestApprovalReturnItemForInvoice(
-                  request.approval,
-                  invoice.invoiceId,
-                  'INVOICE_CONTENT',
-                );
+                const invoiceReturn = requestApprovalReturnItemForInvoiceEdit(request.approval, invoice.invoiceId);
                 return <article className="request-resource-flat-row request-resource-invoice-row" key={invoice.invoiceId}><span className="project-contract-record-icon request-invoice-record-icon" aria-hidden="true"><ReceiptText size={19} strokeWidth={2} /></span><div><strong>{invoice.id}</strong><small>{invoice.status}</small></div><div><span>达人</span><CreatorIdentity creator={creator} displayName={invoice.snapshot.creatorName} fallbackHandle={invoice.snapshot.creatorHandle} fallbackPlatform={invoice.snapshot.creatorPlatform} showAvatar={false} socialAccountsMaxVisible={1} /></div><div><span>Invoice 金额</span><strong>{formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div><span className={`project-record-status${invoiceReturn ? ' is-warning' : ''}`}><i />{invoiceReturn ? '需修改 Invoice' : invoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span><div className="project-contract-record-actions"><ListActionButton kind={invoiceReturn ? 'edit' : 'view'} onClick={() => onOpenInvoice(invoice.invoiceId)}>{invoiceReturn ? '打开修改' : '查看'}</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '解除 Invoice 关联', description: `${invoice.id} 源记录会保留，对应付款行将移除。`, confirmLabel: '确认解除', run: () => unlinkInvoices([invoice.invoiceId]) })}>解除</ListActionButton> : null}</div></article>;
               })}
               {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款未关联 Invoice</strong><p>每位达人提交审批前至少需要一份 Invoice。</p></div> : null}
@@ -890,7 +892,7 @@ export function RequestProjectResourceManager({
             ) : null}
             {bulkPaymentNotice ? <div className="request-payment-bulk-notice" role="status">{bulkPaymentNotice}</div> : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
-            {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务标记为“付款清单原因”的明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
+            {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务退回范围内的付款明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
             {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>可通过每笔卡片下方的“编辑本笔”完善信息；点击“生成付款清单”将调用 Airwallex 接口校验并展示缺失字段。</span></div></div> : null}
             <div className="payment-list-overview-rows">
               {currentPaymentList?.items.map((item) => {
@@ -912,10 +914,9 @@ export function RequestProjectResourceManager({
                 const failurePayout = linkedPayout?.paymentFailureRecovery && linkedPayout.status !== '已付款'
                   ? linkedPayout
                   : undefined;
-                const paymentListReturn = requestApprovalReturnItemForInvoice(
+                const paymentListReturn = requestApprovalReturnItemForPaymentListEdit(
                   request.approval,
                   item.invoiceId,
-                  'PAYMENT_LIST',
                 );
                 const recovery = failurePayout?.paymentFailureRecovery;
                 const focused = failurePayout?.id === focusedFailurePayoutId;
@@ -945,7 +946,7 @@ export function RequestProjectResourceManager({
                       <div className="request-approval-return-item-note" role="note">
                         <AlertTriangle size={15} />
                         <span><strong>退回原因：</strong>{paymentListReturn.reason}</span>
-                        {canEditPaymentList && onSendPaymentListReturnNotification ? (
+                        {paymentListReturn.issueType === 'PAYMENT_LIST' && canEditPaymentList && onSendPaymentListReturnNotification ? (
                           <Button
                             variant="ghost"
                             icon={<Send size={14} />}
@@ -954,7 +955,7 @@ export function RequestProjectResourceManager({
                             通知达人
                           </Button>
                         ) : null}
-                        {canEditPaymentList && onSimulatePaymentListReturnAccountUpdate ? (
+                        {paymentListReturn.issueType === 'PAYMENT_LIST' && canEditPaymentList && onSimulatePaymentListReturnAccountUpdate ? (
                           <Button
                             variant="ghost"
                             icon={<UserCheck size={14} />}

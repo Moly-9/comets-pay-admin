@@ -330,6 +330,7 @@ export function ContractsPage({
   requestProjects = [],
   canUpload,
   canEditTemplates = false,
+  canEditContract,
   canDelete,
   canDeleteContract,
   focusedContractId,
@@ -350,6 +351,7 @@ export function ContractsPage({
   requestProjects?: PaymentRequestProjectLike[];
   canUpload: boolean;
   canEditTemplates?: boolean;
+  canEditContract?: (contract: ContractRecord) => boolean;
   canDelete: boolean;
   canDeleteContract: (contract: ContractRecord) => boolean;
   focusedContractId: string | null;
@@ -379,7 +381,10 @@ export function ContractsPage({
   const [exporting, setExporting] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectedContract = selectedContractId
-    ? contracts.find((contract) => contract.id === selectedContractId)
+    ? contracts.find((contract) => (
+        contract.id === selectedContractId
+        || String(contract.contractId ?? '') === selectedContractId
+      ))
     : null;
   const referenceDate = currentContractReferenceDate();
 
@@ -562,6 +567,7 @@ export function ContractsPage({
         creators={creators}
         requestProjects={requestProjects}
         canEditTemplate={canEditTemplates}
+        canEdit={canEditContract?.(selectedContract) ?? true}
         notify={notify}
         onUpdateContract={onUpdateContract}
         onBindFrameworkContract={onBindFrameworkContract}

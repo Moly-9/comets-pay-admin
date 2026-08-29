@@ -46,7 +46,11 @@ export type RequestApprovalStatus =
 
 export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
 
-export type RequestApprovalReturnIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
+export type RequestApprovalReturnIssueType =
+  | 'INVOICE_CONTENT'
+  | 'PAYMENT_LIST'
+  | 'CONTRACT_CONTENT'
+  | 'FULL_ITEM';
 
 export type RequestApprovalReturnAccountUpdate = {
   status: 'VALIDATED';
@@ -61,6 +65,7 @@ export type RequestApprovalReturnItem = {
   invoiceNumber: string;
   issueType: RequestApprovalReturnIssueType;
   reason: string;
+  contractIds?: ContractId[];
   paymentItems: Array<{
     paymentListId: PaymentListId;
     itemId: string;

@@ -1,7 +1,7 @@
 import type { InvoiceId, RequestApprovalStatus } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import type { CreatorSocialAccount, GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
-import { requestApprovalReturnItemForInvoice } from '../requestApprovalWorkflow';
+import { requestApprovalReturnItemForInvoiceEdit } from '../requestApprovalWorkflow';
 
 export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
 
@@ -193,17 +193,13 @@ export const getInvoiceManagementReturnContext = (
   }
 
   if (!invoiceId || request?.approval?.status !== 'RETURNED_TO_MEDIA_REVIEW') return null;
-  const scopedReturn = requestApprovalReturnItemForInvoice(
-    request.approval,
-    invoiceId,
-    'INVOICE_CONTENT',
-  );
+  const scopedReturn = requestApprovalReturnItemForInvoiceEdit(request.approval, invoiceId);
   if (!scopedReturn) return null;
   const returnEvent = [...request.approval.history].reverse().find((event) => (
     event.action === 'RETURN'
     && event.round === request.approval?.round
     && (event.returnItems ?? request.approval?.returnItems)?.some((item) => (
-      item.invoiceId === invoiceId && item.issueType === 'INVOICE_CONTENT'
+      item.invoiceId === invoiceId && ['INVOICE_CONTENT', 'FULL_ITEM'].includes(item.issueType)
     ))
   ));
   const returnTime = Date.parse(returnEvent?.occurredAt ?? request.approval.updatedAt);

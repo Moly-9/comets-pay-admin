@@ -290,7 +290,7 @@ describe('request project resource aggregation', () => {
     expect(editorSource).toContain('请输入交易附言');
     expect(editorSource).toContain('onPointerUp');
     expect(editorSource).toContain('ArrowRight');
-    expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
+    expect(toolbarSource).toContain('仅财务退回范围内的付款明细可修改');
     expect(paymentRowsSource).toContain('payment-list-overview-state');
     expect(paymentRowsSource).toContain('is-generation-failed');
     expect(paymentRowsSource).toContain('校验未通过');
@@ -338,9 +338,10 @@ describe('request project resource aggregation', () => {
   it('keeps payment-return notifications separate from Invoice-content returns', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     const paymentRowsSource = source.slice(source.indexOf('payment-list-overview-rows'));
-    expect(paymentRowsSource).toContain("requestApprovalReturnItemForInvoice(");
-    expect(paymentRowsSource).toContain("'PAYMENT_LIST'");
-    expect(source).toContain("'INVOICE_CONTENT'");
+    expect(paymentRowsSource).toContain('requestApprovalReturnItemForPaymentListEdit(');
+    expect(paymentRowsSource).toContain("paymentListReturn.issueType === 'PAYMENT_LIST'");
+    expect(source).toContain('requestApprovalReturnItemForInvoiceEdit(');
+    expect(source).toContain('requestApprovalReturnItemForContract(');
     expect(source).toContain('通知达人修改付款明细');
     expect(source).toContain('当前仅模拟发送并保留通知记录');
   });

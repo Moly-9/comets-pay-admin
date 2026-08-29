@@ -42,6 +42,14 @@ const recognitionField = (
 });
 
 describe('ContractDetailPage expiry presentation', () => {
+  it('supports a request-scoped read-only contract detail', () => {
+    const detailSource = readFileSync(new URL('./ContractDetailPage.tsx', import.meta.url), 'utf8');
+
+    expect(detailSource).toContain('canEdit = true');
+    expect(detailSource).toContain('const canEditCurrentContract = canEdit && (!contract.isTemplate || canEditTemplate)');
+    expect(detailSource).toContain('recognitionLocked={recognitionApplied || !canEditCurrentContract}');
+  });
+
   it.each(['INDEPENDENT', 'FRAMEWORK', 'IO'] as ContractType[])('replaces effective date with expiry while retaining Campaign Period for %s', (contractType) => {
     const fields = contractSummaryFieldsFor(contractType);
 

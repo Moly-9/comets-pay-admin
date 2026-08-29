@@ -9,7 +9,10 @@ import {
   createRequestApprovalState,
   requestApprovalAllowsInvoicePayoutOverride,
   requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
+  requestApprovalReturnItemForInvoiceEdit,
+  requestApprovalReturnItemForPaymentListEdit,
   requestApprovalReturnDetails,
   returnApprovedRequestToMediaReview,
 } from './requestApprovalWorkflow';
@@ -160,6 +163,51 @@ describe('request approval workflow', () => {
       { ...returned, status: 'PENDING_FINANCE' },
       invoiceId,
     )).toBe(false);
+  });
+
+  it('resolves contract and full-item edit scopes without opening unrelated resources', () => {
+    const finance = userFor('finance');
+    const invoiceId = 'invoice-full-return-id' as never;
+    const returned = applyRequestApprovalAction(
+      { ...createRequestApprovalState(), status: 'PENDING_FINANCE' },
+      'RETURN',
+      finance,
+      '合同与付款资料需要修改',
+      '2026-08-10T07:10:00.000Z',
+      [
+        {
+          pageKey: 'invoice:contract-only',
+          invoiceId: 'invoice-contract-only-id' as never,
+          invoiceNumber: 'INV-CONTRACT',
+          issueType: 'CONTRACT_CONTENT',
+          reason: '修改指定合同',
+          contractIds: ['contract-only-id' as never],
+          paymentItems: [],
+        },
+        {
+          pageKey: 'invoice:full-return',
+          invoiceId,
+          invoiceNumber: 'INV-FULL',
+          issueType: 'FULL_ITEM',
+          reason: '整笔资料都需要修改',
+          contractIds: ['contract-full-a' as never, 'contract-full-b' as never],
+          paymentItems: [{ paymentListId: 'payment-list-full' as never, itemId: 'payment-item-full' }],
+        },
+      ],
+    );
+
+    expect(requestApprovalReturnItemForContract(returned, 'contract-only-id')?.issueType)
+      .toBe('CONTRACT_CONTENT');
+    expect(requestApprovalReturnItemForContract(returned, 'contract-full-b')?.issueType)
+      .toBe('FULL_ITEM');
+    expect(requestApprovalReturnItemForContract(returned, 'contract-unrelated')).toBeUndefined();
+    expect(requestApprovalReturnItemForInvoiceEdit(returned, invoiceId)?.issueType).toBe('FULL_ITEM');
+    expect(requestApprovalReturnItemForPaymentListEdit(returned, invoiceId)?.issueType).toBe('FULL_ITEM');
+    expect(requestApprovalReturnItemForInvoiceEdit(
+      returned,
+      'invoice-contract-only-id' as never,
+    )).toBeUndefined();
+    expect(requestApprovalAllowsInvoicePayoutOverride(returned, invoiceId)).toBe(true);
   });
 
   it('appends a payment-list notification only to the targeted returned Invoice', () => {

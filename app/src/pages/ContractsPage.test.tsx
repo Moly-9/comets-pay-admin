@@ -53,6 +53,13 @@ describe('ContractsPage batch actions', () => {
     expect(html).not.toContain('data-testid="contract-bulk-delete"');
   });
 
+  it('restores a contract by stable id and forwards scoped edit permission', () => {
+    const source = readFileSync(new URL('./ContractsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain("String(contract.contractId ?? '') === selectedContractId");
+    expect(source).toContain('canEdit={canEditContract?.(selectedContract) ?? true}');
+  });
+
   it('shows the list-level delete action only when the role can delete contracts', () => {
     const html = renderContractsPage(true);
     const deleteButton = html.match(/<button[^>]*data-testid="contract-bulk-delete"[^>]*>/)?.[0];

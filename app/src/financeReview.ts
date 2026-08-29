@@ -1,4 +1,5 @@
 import type {
+  ContractId,
   PaymentListItem,
   PaymentListRecord,
   RequestApprovalReturnItem,
@@ -92,6 +93,7 @@ export type FinanceReviewDecision =
       state: 'incorrect';
       issueType: RequestApprovalReturnIssueType;
       reason: string;
+      contractIds?: ContractId[];
       reviewedAt: string;
     };
 
@@ -718,6 +720,10 @@ export const financeReviewSessionCanReturn = (
         decision?.state === 'incorrect'
         && Boolean(decision.issueType)
         && Boolean(decision.reason.trim())
+        && (
+          decision.issueType !== 'CONTRACT_CONTENT'
+          || decision.contractIds?.length === 1
+        )
       );
   })
   && review.pages.some((page) => session.decisions[page.key]?.state === 'incorrect'),
@@ -735,6 +741,7 @@ export const financeReviewReturnItems = (
         invoiceNumber: page.invoiceNumber,
         issueType: decision.issueType,
         reason: decision.reason,
+        contractIds: decision.contractIds?.length ? [...decision.contractIds] : undefined,
         paymentItems: page.paymentItems,
       }]
     : [];
@@ -744,5 +751,16 @@ export const financeReviewReturnReason = (
   session: FinanceReviewSession,
   review: RequestFinanceReview,
 ) => financeReviewReturnItems(session, review)
-  .map((item) => `${item.invoiceNumber}（${item.issueType === 'INVOICE_CONTENT' ? 'Invoice' : '付款清单'}）：${item.reason}`)
+  .map((item) => {
+    const issueLabel: Record<RequestApprovalReturnIssueType, string> = {
+      INVOICE_CONTENT: 'Invoice',
+      PAYMENT_LIST: '付款清单',
+      CONTRACT_CONTENT: '合同',
+      FULL_ITEM: '整笔请款',
+    };
+    const contractScope = item.contractIds?.length
+      ? ` · 合同范围：${item.contractIds.join('、')}`
+      : '';
+    return `${item.invoiceNumber}（${issueLabel[item.issueType]}${contractScope}）：${item.reason}`;
+  })
   .join('；');
