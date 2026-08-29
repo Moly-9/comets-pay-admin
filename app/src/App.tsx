@@ -206,6 +206,9 @@ import {
   paymentRequestAmountLabel,
   paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
+  paymentRequestExtraDetailIssues,
+  paymentRequestPaymentPlanFor,
+  paymentRequestPaymentPlanIssues,
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   paymentRequestCancellationIssue,
@@ -231,6 +234,7 @@ import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
+import { prototypePaymentResultFor } from './prototypePaymentResults';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
@@ -2062,15 +2066,19 @@ export default function App() {
 
   const submitMediaPaymentRequest = (request: RequestProjectSummary) => {
     const creatorLinks = request.creatorLinks ?? [];
-    const issues = paymentRequestSubmissionIssues({
-      creatorLinks,
-      invoices: generatedInvoices,
-      paymentLists,
-      paymentRequestProjectId: request.paymentRequestProjectId,
-      paymentChannel: request.paymentChannel,
-    });
-    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.paymentChannel || !request.generatedDetail?.reason || !request.costType?.trim()) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道、成本类型和付款事由');
+    const issues = [
+      ...paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor(request)),
+      ...paymentRequestExtraDetailIssues(request),
+      ...paymentRequestSubmissionIssues({
+        creatorLinks,
+        invoices: generatedInvoices,
+        paymentLists,
+        paymentRequestProjectId: request.paymentRequestProjectId,
+        paymentChannel: request.paymentChannel,
+      }),
+    ];
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
+      issues.unshift('项目必填资料不完整，请检查关联项目、PM 和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => (
@@ -2475,6 +2483,7 @@ export default function App() {
       status: nextStatus,
       issue: payout.status === '信息异常' ? undefined : payout.issue,
       paidAt: nextStatus === '已付款' ? '2026-07-17 刚刚' : payout.paidAt,
+      ...(nextStatus === '已付款' ? prototypePaymentResultFor(payout) : {}),
     };
     const nextPayouts = payouts.map((item) => item.id === payout.id ? updated : item);
     const completedRequests = nextStatus === '已付款'
@@ -2601,6 +2610,11 @@ export default function App() {
     const updated: Payout = {
       ...payout,
       status: '付款失败',
+      paidAt: undefined,
+      transferFeeAmount: undefined,
+      transferFeeCurrency: undefined,
+      actualPaidAmount: undefined,
+      actualPaidCurrency: undefined,
       paymentFailure: {
         provider: payout.provider,
         errorCode: 'SIMULATED_PROVIDER_DECLINE',

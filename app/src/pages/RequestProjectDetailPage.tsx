@@ -1000,8 +1000,11 @@ export function RequestProjectDetailPage({
             brand={request.brand}
             pm={request.pm}
             paymentChannel={request.paymentChannel ? paymentProviderDisplayName(request.paymentChannel) : undefined}
+            paymentEntity={request.paymentEntity}
+            projectCostAttribution={request.projectCostAttribution}
             expectedPaymentDate={request.expectedPaymentDate}
             costType={request.costType}
+            costTypeDetail={request.costTypeDetail}
             media={request.media}
             createdAt={request.createdAt ?? request.approval?.submittedAt}
             reason={request.generatedDetail?.reason}

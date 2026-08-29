@@ -40,3 +40,140 @@
     transition: none;
   }
 }
+
+.media-request-field-hint,
+.media-request-field-error {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.media-request-field-hint {
+  color: #777e8a;
+}
+
+.media-request-field-error {
+  color: #c43f35;
+}
+
+.payment-request-cost-cascader-menu {
+  position: fixed;
+  z-index: 2300;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: auto;
+  border: 1px solid #e0e3e9;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.99);
+  padding: 6px;
+  box-shadow: 0 18px 42px rgba(35, 31, 46, 0.16), 0 3px 10px rgba(35, 31, 46, 0.08);
+  animation: custom-select-enter 150ms ease-out;
+  backdrop-filter: blur(10px);
+}
+
+.payment-request-cost-cascader-menu.has-children {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.payment-request-cost-cascader-level {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px;
+}
+
+.payment-request-cost-cascader-level.is-detail {
+  border-left: 1px solid #eceef2;
+  padding-left: 8px;
+}
+
+.payment-request-cost-cascader-caption {
+  padding: 6px 9px 5px;
+  color: #9298a3;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.payment-request-cost-cascader-option {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  outline: 0;
+  background: transparent;
+  padding: 7px 9px;
+  color: #444953;
+  font: inherit;
+  text-align: left;
+}
+
+.payment-request-cost-cascader-option > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.payment-request-cost-cascader-option strong {
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.payment-request-cost-cascader-option small {
+  overflow: hidden;
+  color: #858b96;
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-request-cost-cascader-option:hover,
+.payment-request-cost-cascader-option:focus-visible,
+.payment-request-cost-cascader-option.is-expanded {
+  background: #f5f6f8;
+}
+
+.payment-request-cost-cascader-option.is-selected {
+  background: #fff1ed;
+  color: #b8422e;
+}
+
+.payment-request-cost-cascader-option.is-selected small {
+  color: #9a6157;
+}
+
+.payment-request-cost-cascader .custom-select-trigger[aria-invalid="true"] {
+  border-color: #d9655c;
+  box-shadow: 0 0 0 3px rgba(217, 101, 92, 0.12);
+}
+
+@media (max-width: 559px) {
+  .payment-request-cost-cascader-menu.has-children {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-request-cost-cascader-level.is-detail {
+    border-top: 1px solid #eceef2;
+    border-left: 0;
+    padding-top: 8px;
+    padding-left: 2px;
+  }
+
+  .payment-request-cost-cascader-option small {
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .payment-request-cost-cascader-menu {
+    animation: none;
+  }
+}

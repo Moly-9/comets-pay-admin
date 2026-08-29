@@ -1136,6 +1136,14 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     brand: project.brand,
     media: project.media,
     pm: project.pm,
+    paymentEntity: projectIndex % 6 === 5 ? 'novacomets' as const : 'Comets International Limited' as const,
+    projectCostAttribution: /\bJapan\b|日本/i.test(project.name)
+      ? '日本分公司' as const
+      : projectIndex % 6 === 5
+        ? 'novacomets' as const
+        : '香港公司（comets）' as const,
+    costType: projectIndex % 4 === 1 ? '采购成本' as const : '网红采买成本' as const,
+    costTypeDetail: projectIndex % 4 === 1 ? '实物采购' as const : undefined,
     amount: project.budget,
     contracts: project.creators,
     invoices: project.creators,

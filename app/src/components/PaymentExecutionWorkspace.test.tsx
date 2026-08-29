@@ -79,6 +79,9 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('请款项目信息');
     expect(html).toContain('项目编号');
     expect(html).toContain('关联项目');
+    expect(html).toContain('付款主体');
+    expect(html).toContain('项目费用归属');
+    expect(html).toContain('成本类型明细');
     expect(html).toContain('当前审批流');
     expect(html).toContain('关联资料');
     expect(html.indexOf('请款项目信息')).toBeLessThan(html.indexOf('当前审批流'));

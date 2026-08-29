@@ -109,6 +109,9 @@ describe('PaymentProjectPaymentDetailPage', () => {
     );
 
     expect(html).toContain('付款项目信息');
+    expect(html).toContain('付款主体');
+    expect(html).toContain('项目费用归属');
+    expect(html).toContain('成本类型明细');
     expect(html).toContain('simple-status is-processing"><i></i>付款处理中');
     expect(html).not.toContain('simple-status"><i></i>已完成');
   });

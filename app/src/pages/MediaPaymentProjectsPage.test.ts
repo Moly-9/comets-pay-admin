@@ -28,6 +28,29 @@ describe('new payment request resource picker', () => {
     expect(source).not.toContain('返回我的请款项目');
   });
 
+  it('requires payment ownership fields and uses a two-level procurement cost cascader', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const cascaderSource = readFileSync(
+      new URL('../components/PaymentRequestCostCascader.tsx', import.meta.url),
+      'utf8',
+    );
+    const css = readFileSync(new URL('./MediaPaymentProjectsPage.css', import.meta.url), 'utf8');
+
+    expect(source).toContain('ariaLabel="选择付款主体"');
+    expect(source).toContain('ariaLabel="选择项目费用归属"');
+    expect(source).toContain('日区项目请选择日本分公司');
+    expect(source).toContain('<PaymentRequestCostCascader');
+    expect(source).toContain('paymentEntity,');
+    expect(source).toContain('projectCostAttribution,');
+    expect(source).toContain("costTypeDetail: costType === '采购成本' ? costTypeDetail : undefined");
+    expect(cascaderSource).toContain('PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS.map');
+    expect(cascaderSource).toContain("event.key === 'ArrowRight'");
+    expect(cascaderSource).toContain("event.key === 'ArrowLeft'");
+    expect(cascaderSource).toContain('aria-haspopup="tree"');
+    expect(css).toContain('.payment-request-cost-cascader-menu.has-children');
+    expect(css).toContain('@media (max-width: 559px)');
+  });
+
   it('shows selectable and selected resources before disabled resources', () => {
     const options = [
       { value: 'disabled-one', label: '置灰 1', description: '', selected: false, disabled: true },

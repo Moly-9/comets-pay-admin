@@ -37,6 +37,7 @@ import {
 } from './pages/OperationalPages';
 import { demoAccountName } from './demoCreatorNames';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
+import { prototypePaymentResultFor } from './prototypePaymentResults';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
 
 const FINANCE_REVIEW_PROJECT_CODES = new Set([
@@ -468,6 +469,10 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
   const paid = request.lifecycle === 'COMPLETED';
   const returned = request.lifecycle === 'RETURNED';
   const processing = REQUEST_PROJECT_DEMO_STAGE_BY_CODE[request.id] === 'PAYMENT_PROCESSING';
+  const provider = paymentRequestProviderForChannel(request.paymentChannel)
+    ?? invoicePaymentListProvider(invoice);
+  const currency = invoice.snapshot.currency;
+  const amount = invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0);
   return {
     ...baseline,
     id: invoice.sourcePayoutId,
@@ -476,10 +481,9 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     project: request.cooperationProjectName ?? request.project,
     contract: contract.id,
     invoice: invoice.id,
-    provider: paymentRequestProviderForChannel(request.paymentChannel)
-      ?? invoicePaymentListProvider(invoice),
-    currency: invoice.snapshot.currency,
-    amount: invoice.snapshot.items.reduce((total, item) => total + item.lineTotal, 0),
+    provider,
+    currency,
+    amount,
     account: accountDisplayValue(account),
     creatorId: invoice.snapshot.creatorId,
     payoutAccountId: invoice.snapshot.payoutAccountId,
@@ -496,6 +500,7 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     invoiceSnapshot: invoice.snapshot,
     requestApprovalRound: request.approval?.round,
     paidAt: paid ? '2026-08-05 16:00' : undefined,
+    ...(paid ? prototypePaymentResultFor({ provider, currency, amount, feeBearer: 'ADVERTISER' }) : {}),
     issue: undefined,
     returnReason: undefined,
   };

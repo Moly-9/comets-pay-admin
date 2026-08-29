@@ -1,6 +1,7 @@
 import type { InvoiceBillingEntityId } from './businessWorkflow';
 import type { InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
 import { demoDisplayName } from './demoCreatorNames';
+import { prototypePaymentResultFor } from './prototypePaymentResults';
 
 export type SystemRoleKey = 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project';
 export type LoginSessionPolicy = 'single_device' | 'multi_device';
@@ -1053,6 +1054,7 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
 export const INITIAL_PAYOUTS: Payout[] = RAW_INITIAL_PAYOUTS.map((payout) => ({
   ...payout,
   creator: demoDisplayName(payout.creator),
+  ...(payout.status === '已付款' ? prototypePaymentResultFor(payout) : {}),
 }));
 
 export const PAGE_TITLES = {

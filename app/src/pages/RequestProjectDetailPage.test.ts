@@ -103,8 +103,11 @@ describe('request project payment presentation', () => {
     expect(sharedProjectInfo).not.toContain('<dt>提交人</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>备注附件</dt>');
     expect(sharedProjectInfo).toContain('<dt>付款渠道</dt>');
+    expect(sharedProjectInfo).toContain('<dt>付款主体</dt>');
+    expect(sharedProjectInfo).toContain('<dt>项目费用归属</dt>');
     expect(sharedProjectInfo).toContain('<dt>预计付款时间</dt>');
     expect(sharedProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(sharedProjectInfo).toContain('<dt>成本类型明细</dt>');
     expect(sharedProjectInfo).toContain('<dt>项目媒介</dt>');
     expect(sharedProjectInfo).toContain('<dt>创建时间</dt>');
     expect(sharedProjectInfo).toContain('<dt>备注</dt>');
@@ -151,6 +154,9 @@ describe('request project payment presentation', () => {
 
     expect(myProjectsSource).toContain('<RequestProjectInfoCard');
     expect(sharedProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(sharedProjectInfo).toContain('<dt>付款主体</dt>');
+    expect(sharedProjectInfo).toContain('<dt>项目费用归属</dt>');
+    expect(sharedProjectInfo).toContain('<dt>成本类型明细</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>手续费承担方</dt>');
     expect(sharedProjectInfo).toContain('<dt>备注</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>备注附件</dt>');

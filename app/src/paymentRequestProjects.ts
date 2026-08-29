@@ -34,6 +34,21 @@ export type PaymentRequestCreatorLink = {
 
 export type PaymentRequestPaymentChannel = 'Airwallex' | 'PayPal' | 'Payermax';
 
+export const PAYMENT_REQUEST_PAYMENT_ENTITIES = [
+  'Comets International Limited',
+  'novacomets',
+] as const;
+
+export type PaymentRequestPaymentEntity = typeof PAYMENT_REQUEST_PAYMENT_ENTITIES[number];
+
+export const PAYMENT_REQUEST_COST_ATTRIBUTIONS = [
+  '日本分公司',
+  '香港公司（comets）',
+  'novacomets',
+] as const;
+
+export type PaymentRequestCostAttribution = typeof PAYMENT_REQUEST_COST_ATTRIBUTIONS[number];
+
 export const PAYMENT_REQUEST_COST_TYPES = [
   '网红采买成本',
   '采购成本',
@@ -43,6 +58,15 @@ export const PAYMENT_REQUEST_COST_TYPES = [
 
 export type PaymentRequestCostType = typeof PAYMENT_REQUEST_COST_TYPES[number];
 
+export const PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS = [
+  '实物采购',
+  '礼品卡',
+  '会员订阅',
+  '版主工资',
+] as const;
+
+export type PaymentRequestProcurementCostDetail = typeof PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS[number];
+
 export const DEFAULT_PAYMENT_REQUEST_COST_TYPE: PaymentRequestCostType = '网红采买成本';
 
 export const normalizePaymentRequestCostType = (value?: string): PaymentRequestCostType => {
@@ -51,6 +75,21 @@ export const normalizePaymentRequestCostType = (value?: string): PaymentRequestC
   if (normalized.includes('外包')) return '外包成本';
   if (normalized.includes('采购') && !normalized.includes('网红')) return '采购成本';
   return DEFAULT_PAYMENT_REQUEST_COST_TYPE;
+};
+
+export const normalizePaymentRequestProcurementCostDetail = (
+  value?: string,
+): PaymentRequestProcurementCostDetail | '' => (
+  PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS.find((detail) => detail === value?.trim()) ?? ''
+);
+
+export const paymentRequestCostTypeLabel = (
+  costType?: PaymentRequestExtraDetails['costType'],
+  costTypeDetail?: PaymentRequestExtraDetails['costTypeDetail'],
+) => {
+  if (!costType?.trim()) return '待补充';
+  if (costType !== '采购成本') return costType;
+  return costTypeDetail?.trim() ? `${costType} / ${costTypeDetail}` : costType;
 };
 
 export type PaymentRequestFeeBearer = '付款方' | '收款方' | '各自承担';
@@ -102,11 +141,14 @@ export const paymentRequestChannelForProvider = (
 
 export type PaymentRequestPaymentPlan = {
   paymentChannel?: PaymentRequestPaymentChannel;
+  paymentEntity?: PaymentRequestPaymentEntity;
+  projectCostAttribution?: PaymentRequestCostAttribution;
   expectedPaymentDate?: string;
 };
 
 export type PaymentRequestExtraDetails = {
   costType?: PaymentRequestCostType | string;
+  costTypeDetail?: PaymentRequestProcurementCostDetail | string;
   feeBearer?: PaymentRequestFeeBearer;
   remark?: string;
   remarkAttachments?: PaymentRequestRemarkAttachment[];
@@ -114,6 +156,8 @@ export type PaymentRequestExtraDetails = {
 
 export type PaymentRequestPaymentPlanForm = {
   paymentChannel: PaymentRequestPaymentChannel | '';
+  paymentEntity: PaymentRequestPaymentEntity | '';
+  projectCostAttribution: PaymentRequestCostAttribution | '';
   expectedPaymentDate: string;
 };
 
@@ -121,21 +165,29 @@ export const paymentRequestPaymentPlanFor = (
   request?: PaymentRequestPaymentPlan,
 ): PaymentRequestPaymentPlanForm => ({
   paymentChannel: request?.paymentChannel ?? '',
+  paymentEntity: request?.paymentEntity ?? '',
+  projectCostAttribution: request?.projectCostAttribution ?? '',
   expectedPaymentDate: request?.expectedPaymentDate ?? '',
 });
 
 export const paymentRequestPaymentPlanIssues = ({
   paymentChannel,
+  paymentEntity,
+  projectCostAttribution,
   expectedPaymentDate,
 }: PaymentRequestPaymentPlanForm) => [
   !paymentChannel ? '请选择付款渠道' : '',
+  !paymentEntity ? '请选择付款主体' : '',
+  !projectCostAttribution ? '请选择项目费用归属' : '',
   !expectedPaymentDate.trim() ? '请选择预计付款时间' : '',
 ].filter((issue) => Boolean(issue));
 
 export const paymentRequestExtraDetailIssues = ({
   costType,
-}: Pick<PaymentRequestExtraDetails, 'costType'>) => [
+  costTypeDetail,
+}: Pick<PaymentRequestExtraDetails, 'costType' | 'costTypeDetail'>) => [
   !costType?.trim() ? '请选择成本类型' : '',
+  costType === '采购成本' && !costTypeDetail?.trim() ? '请选择采购成本明细' : '',
 ].filter((issue) => Boolean(issue));
 
 export const paymentRequestDraftCreatorsReady = (

@@ -1,5 +1,6 @@
 import type { PaymentListRecord } from './businessWorkflow';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
+import { prototypePaymentResultFor } from './prototypePaymentResults';
 import type { GeneratedInvoiceRecord, Payout } from './types';
 import type { PaymentAggregateStatus } from './paymentStatusFilters';
 
@@ -104,6 +105,12 @@ export const applyPaymentBatchPrototypeScenario = ({
         ...payout,
         status,
         paidAt: status === '已付款' ? (payout.paidAt ?? '2026-08-05 16:00') : undefined,
+        ...(status === '已付款' ? prototypePaymentResultFor(payout) : {
+          transferFeeAmount: undefined,
+          transferFeeCurrency: undefined,
+          actualPaidAmount: undefined,
+          actualPaidCurrency: undefined,
+        }),
         issue: failed ? '渠道返回收款账户暂不可用，等待财务处理' : undefined,
         paymentFailure: failed ? {
           provider: payout.provider,

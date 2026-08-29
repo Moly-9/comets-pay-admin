@@ -514,8 +514,11 @@ function FinanceReviewProjectOverview({
           <div><dt>品牌</dt><dd>{projectBrand}</dd></div>
           <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
           <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(paymentChannel)}</dd></div>
+          <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
+          <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
           <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
           <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+          <div><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
           <div><dt>手续费承担方</dt><dd>{request.feeBearer || '待补充'}</dd></div>
           <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
           <div><dt>创建时间</dt><dd>{createdAt}</dd></div>

@@ -98,7 +98,11 @@ export type PaymentBatchRequestSnapshot = Readonly<{
   lifecycle: string;
   amount: string;
   reason: string;
+  paymentEntity?: string;
+  projectCostAttribution?: string;
   expectedPaymentDate: string;
+  costType?: string;
+  costTypeDetail?: string;
   cooperationProjectId: CooperationProjectId;
   cooperationProjectCode: string;
   cooperationProjectName: string;
@@ -226,7 +230,11 @@ const snapshotRequest = (request: RequestProjectSummary): PaymentBatchRequestSna
     lifecycle: request.lifecycle ?? '未记录',
     amount: request.amount,
     reason: request.generatedDetail?.reason || '未单独填写',
+    paymentEntity: request.paymentEntity,
+    projectCostAttribution: request.projectCostAttribution,
     expectedPaymentDate: request.expectedPaymentDate || '未设置',
+    costType: request.costType,
+    costTypeDetail: request.costTypeDetail,
     cooperationProjectId,
     cooperationProjectCode: request.cooperationProjectCode ?? String(cooperationProjectId),
     cooperationProjectName: request.cooperationProjectName ?? request.project,

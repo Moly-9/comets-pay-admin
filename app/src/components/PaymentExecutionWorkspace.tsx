@@ -546,7 +546,11 @@ export function PaymentExecutionWorkspace({
               <div><dt>提交人</dt><dd>{request.media}</dd></div>
               <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
               <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
+              <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
+              <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
               <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+              <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+              <div><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
               <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
               <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
             </dl>
@@ -776,7 +780,11 @@ export function PaymentExecutionWorkspace({
                   <div><dt>提交人</dt><dd>{request.media}</dd></div>
                   <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
                   <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
+                  <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
+                  <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
                   <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+                  <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+                  <div><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
                   <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
                   <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
                 </dl>

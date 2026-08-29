@@ -643,6 +643,10 @@ export type Payout = {
   transferMethod?: AirwallexTransferMethod | 'PAYPAL';
   localClearingSystem?: string;
   feeBearer?: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  actualPaidAmount?: number;
+  actualPaidCurrency?: InvoiceCurrency;
   paymentListRequiresRevalidation?: boolean;
   paymentListValidationIssues?: string[];
   status: PayoutStatus;

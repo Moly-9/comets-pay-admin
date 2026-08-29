@@ -24,6 +24,7 @@ import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, Sel
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { Pagination, usePagination } from '../components/Pagination';
+import { PaymentRequestCostCascader } from '../components/PaymentRequestCostCascader';
 import { RequestRemarkAttachments } from '../components/RequestRemarkAttachments';
 import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
@@ -59,8 +60,10 @@ import {
   invoiceAmountLabel,
   myProjectStatusFor,
   mergePaymentRequestRemarkAttachments,
+  normalizePaymentRequestProcurementCostDetail,
   normalizePaymentRequestCostType,
-  PAYMENT_REQUEST_COST_TYPES,
+  PAYMENT_REQUEST_COST_ATTRIBUTIONS,
+  PAYMENT_REQUEST_PAYMENT_ENTITIES,
   paymentRequestAmount,
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
@@ -76,8 +79,11 @@ import {
   resolveCreatorDocuments,
   type MyProjectStatus,
   type PaymentRequestCostType,
+  type PaymentRequestCostAttribution,
   type PaymentRequestCreatorLink,
   type PaymentRequestPaymentChannel,
+  type PaymentRequestPaymentEntity,
+  type PaymentRequestProcurementCostDetail,
   type PaymentRequestRemarkAttachment,
 } from '../paymentRequestProjects';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
@@ -115,17 +121,13 @@ const PAYMENT_CHANNEL_OPTIONS = [
   { value: 'Payermax', label: 'Payer Max', description: '本地支付网络' },
 ] as const;
 
-const COST_TYPE_OPTIONS = PAYMENT_REQUEST_COST_TYPES.map((costType) => ({
-  value: costType,
-  label: costType,
-}));
-
 const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const actualPayoutAmountLabel = (payout?: Payout) => {
   if (!payout || payout.status !== '已付款') return '—';
-  return `${payout.currency} ${payout.amount.toLocaleString('en-US', {
-    minimumFractionDigits: Number.isInteger(payout.amount) ? 0 : 2,
+  const amount = payout.actualPaidAmount ?? payout.amount;
+  return `${payout.actualPaidCurrency ?? payout.currency} ${amount.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
 };
@@ -815,8 +817,11 @@ export function MediaPaymentProjectsPage({
   const [brand, setBrand] = useState('');
   const [pm, setPm] = useState(PM_USERS[0]?.name ?? '');
   const [paymentChannel, setPaymentChannel] = useState<PaymentRequestPaymentChannel | ''>('');
+  const [paymentEntity, setPaymentEntity] = useState<PaymentRequestPaymentEntity | ''>('');
+  const [projectCostAttribution, setProjectCostAttribution] = useState<PaymentRequestCostAttribution | ''>('');
   const [expectedPaymentDate, setExpectedPaymentDate] = useState('');
   const [costType, setCostType] = useState<PaymentRequestCostType>(DEFAULT_PAYMENT_REQUEST_COST_TYPE);
+  const [costTypeDetail, setCostTypeDetail] = useState<PaymentRequestProcurementCostDetail | ''>('');
   const [reason, setReason] = useState('');
   const [remark, setRemark] = useState('');
   const [remarkAttachments, setRemarkAttachments] = useState<PaymentRequestRemarkAttachment[]>([]);
@@ -1012,8 +1017,11 @@ export function MediaPaymentProjectsPage({
     setBrand('');
     setPm(PM_USERS[0]?.name ?? '');
     setPaymentChannel('');
+    setPaymentEntity('');
+    setProjectCostAttribution('');
     setExpectedPaymentDate('');
     setCostType(DEFAULT_PAYMENT_REQUEST_COST_TYPE);
+    setCostTypeDetail('');
     setReason('');
     setRemark('');
     setRemarkAttachments([]);
@@ -1058,8 +1066,11 @@ export function MediaPaymentProjectsPage({
     setBrand(request.brand ?? '');
     setPm(request.pm);
     setPaymentChannel(paymentPlan.paymentChannel);
+    setPaymentEntity(paymentPlan.paymentEntity);
+    setProjectCostAttribution(paymentPlan.projectCostAttribution);
     setExpectedPaymentDate(paymentPlan.expectedPaymentDate);
     setCostType(normalizePaymentRequestCostType(request.costType));
+    setCostTypeDetail(normalizePaymentRequestProcurementCostDetail(request.costTypeDetail));
     setReason(request.generatedDetail?.reason ?? '');
     setRemark(request.remark ?? '');
     setRemarkAttachments(request.remarkAttachments ?? []);
@@ -1285,8 +1296,13 @@ export function MediaPaymentProjectsPage({
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
     !pm ? '请选择项目 PM' : '',
-    ...paymentRequestPaymentPlanIssues({ paymentChannel, expectedPaymentDate }),
-    ...paymentRequestExtraDetailIssues({ costType }),
+    ...paymentRequestPaymentPlanIssues({
+      paymentChannel,
+      paymentEntity,
+      projectCostAttribution,
+      expectedPaymentDate,
+    }),
+    ...paymentRequestExtraDetailIssues({ costType, costTypeDetail }),
     !reason.trim() ? '请填写请款事由' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
@@ -1311,8 +1327,11 @@ export function MediaPaymentProjectsPage({
     selectedProject
     && pm
     && paymentChannel
+    && paymentEntity
+    && projectCostAttribution
     && expectedPaymentDate
     && costType
+    && (costType !== '采购成本' || costTypeDetail)
     && reason.trim()
     && creatorsReady
     && formIssues.length === 0,
@@ -1324,7 +1343,7 @@ export function MediaPaymentProjectsPage({
       notify('请款已锁定', '请款状态已变化，本次修改不能保存。');
       return;
     }
-    if (!selectedProject || !paymentChannel || !expectedPaymentDate || !costType || !canCreateRequest) {
+    if (!selectedProject || !paymentChannel || !paymentEntity || !projectCostAttribution || !expectedPaymentDate || !costType || !canCreateRequest) {
       notify('请完善必填信息', formIssues[0] ?? '请检查达人和 Invoice 关联信息。');
       return;
     }
@@ -1350,8 +1369,11 @@ export function MediaPaymentProjectsPage({
       media: currentScopeName,
       pm,
       paymentChannel,
+      paymentEntity,
+      projectCostAttribution,
       expectedPaymentDate,
       costType,
+      costTypeDetail: costType === '采购成本' ? costTypeDetail : undefined,
       remark: remark.trim(),
       remarkAttachments,
       amount: paymentRequestAmountLabel(validCreatorLinks, invoices),
@@ -1572,8 +1594,11 @@ export function MediaPaymentProjectsPage({
           brand={selectedRequest.brand}
           pm={selectedRequest.pm}
           paymentChannel={selectedRequest.paymentChannel ? paymentProviderDisplayName(selectedRequest.paymentChannel) : undefined}
+          paymentEntity={selectedRequest.paymentEntity}
+          projectCostAttribution={selectedRequest.projectCostAttribution}
           expectedPaymentDate={selectedRequest.expectedPaymentDate}
           costType={selectedRequest.costType}
+          costTypeDetail={selectedRequest.costTypeDetail}
           media={selectedRequest.media}
           createdAt={selectedRequest.createdAt ?? selectedRequest.approval?.submittedAt}
           reason={selectedRequest.generatedDetail?.reason}
@@ -1927,6 +1952,40 @@ export function MediaPaymentProjectsPage({
                 />
               </div>
               <div className="form-field">
+                <span className="form-field-label">付款主体 <em className="required-mark" aria-hidden="true">*</em></span>
+                <SelectField<PaymentRequestPaymentEntity | ''>
+                  ariaLabel="选择付款主体"
+                  variant="form"
+                  value={paymentEntity}
+                  options={PAYMENT_REQUEST_PAYMENT_ENTITIES.map((entity) => ({
+                    value: entity,
+                    label: entity,
+                    description: '本次请款实际付款的法人主体',
+                  }))}
+                  onChange={setPaymentEntity}
+                  placeholder="请选择付款主体"
+                />
+                {formSubmitAttempted && !paymentEntity ? <small className="media-request-field-error">请选择付款主体</small> : null}
+              </div>
+              <div className="form-field">
+                <span className="form-field-label">项目费用归属 <em className="required-mark" aria-hidden="true">*</em></span>
+                <SelectField<PaymentRequestCostAttribution | ''>
+                  ariaLabel="选择项目费用归属"
+                  variant="form"
+                  value={projectCostAttribution}
+                  options={PAYMENT_REQUEST_COST_ATTRIBUTIONS.map((attribution) => ({
+                    value: attribution,
+                    label: attribution,
+                    description: attribution === '日本分公司' ? '适用于日区项目' : '请根据项目费用实际归属选择',
+                  }))}
+                  onChange={setProjectCostAttribution}
+                  placeholder="请选择费用归属"
+                />
+                <small className={formSubmitAttempted && !projectCostAttribution ? 'media-request-field-error' : 'media-request-field-hint'}>
+                  {formSubmitAttempted && !projectCostAttribution ? '请选择项目费用归属' : '日区项目请选择日本分公司'}
+                </small>
+              </div>
+              <div className="form-field">
                 <span id="media-request-expected-payment-date-label" className="form-field-label">预计付款时间 <em className="required-mark" aria-hidden="true">*</em></span>
                 <input
                   id="media-request-expected-payment-date"
@@ -1939,13 +1998,20 @@ export function MediaPaymentProjectsPage({
             </div>
             <div className="form-field">
               <span className="form-field-label">成本类型 <em className="required-mark" aria-hidden="true">*</em></span>
-              <SelectField<PaymentRequestCostType>
-                ariaLabel="选择成本类型"
-                variant="form"
-                value={costType}
-                options={COST_TYPE_OPTIONS}
-                onChange={setCostType}
+              <PaymentRequestCostCascader
+                costType={costType}
+                costTypeDetail={costTypeDetail}
+                invalid={formSubmitAttempted && costType === '采购成本' && !costTypeDetail}
+                onChange={(nextCostType, nextCostTypeDetail) => {
+                  setCostType(nextCostType);
+                  setCostTypeDetail(nextCostType === '采购成本' ? nextCostTypeDetail : '');
+                }}
               />
+              <small className={formSubmitAttempted && costType === '采购成本' && !costTypeDetail ? 'media-request-field-error' : 'media-request-field-hint'}>
+                {formSubmitAttempted && costType === '采购成本' && !costTypeDetail
+                  ? '请继续选择采购成本明细'
+                  : '选择采购成本后，需继续选择具体明细'}
+              </small>
             </div>
             <div className="form-field"><span id="media-request-reason-label" className="form-field-label">付款事由 <em className="required-mark" aria-hidden="true">*</em></span><textarea aria-labelledby="media-request-reason-label" placeholder="填写本次请款的付款背景或用途" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
             <div className="form-field media-request-remark-field">

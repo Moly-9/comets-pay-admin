@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { Payout } from '../types';
+import type { PaymentRequestProjectId } from '../businessWorkflow';
+import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import {
   buildPaymentProjectRows,
   filterPaymentProjectRows,
@@ -71,6 +74,7 @@ const projectPayouts: Payout[] = [
 
 describe('PaymentWorkbenchPage project list controls', () => {
   it('renders search, the renamed provider default, selection, and payment channel column', () => {
+    const css = readFileSync(new URL('./PaymentWorkbenchPage.css', import.meta.url), 'utf8');
     const html = renderToStaticMarkup(
       <PaymentWorkbenchPage
         payouts={projectPayouts}
@@ -87,14 +91,17 @@ describe('PaymentWorkbenchPage project list controls', () => {
     );
 
     expect(html).toContain('aria-label="搜索待审核付款项目"');
-    expect(html).toContain('placeholder="搜索项目编号、名称、付款单等"');
+    expect(html).toContain('placeholder="搜索项目编号、关联项目、付款主体等"');
     expect(html.indexOf('aria-label="搜索待审核付款项目"')).toBeLessThan(html.indexOf('type="date"'));
     expect(html).toContain('全部付款渠道');
     expect(html).toContain('aria-label="全选当前筛选结果中的付款项目"');
     expect(html).toContain('class="table-scroll payment-project-table-scroll"');
     expect(html).toContain('aria-label="付款项目明细表，可横向滚动查看更多列"');
     expect(html).toContain('tabindex="0"');
-    expect(html).toContain('<th>付款单</th><th>付款渠道</th>');
+    ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '实际付款金额及币种', '实际付款日期', '发起人', '项目状态', '操作']
+      .forEach((heading) => expect(html).toContain(`>${heading}</th>`));
+    expect(css).toMatch(/\.payment-project-table \.payment-project-status-cell\s*{[^}]*position: sticky;[^}]*right: 116px;/s);
+    expect(css).toMatch(/\.payment-project-table \.payment-project-action-cell\s*{[^}]*position: sticky;[^}]*right: 0;/s);
     expect(html).toContain('待审核合计 · 0 个项目');
   });
 
@@ -133,6 +140,52 @@ describe('PaymentWorkbenchPage project list controls', () => {
       { currency: 'USD', amount: 2000, count: 2 },
       { currency: 'EUR', amount: 300, count: 1 },
     ]);
+  });
+
+  it('uses the request payment entity and aggregates reported payment results by currency and date', () => {
+    const paymentRequestProjectId = 'request-payment-entity-test' as PaymentRequestProjectId;
+    const request: RequestProjectSummary = {
+      id: 'request-payment-entity-test',
+      paymentRequestProjectId,
+      requestCode: 'REQ-ENTITY-001',
+      cooperationProjectCode: 'PRJ-ENTITY-001',
+      cooperationProjectName: 'Entity Test Project',
+      lifecycle: 'COMPLETED',
+      project: 'Entity Test Project',
+      brand: 'Entity Brand',
+      media: 'Media Owner',
+      pm: 'Project PM',
+      paymentEntity: 'novacomets',
+      projectCostAttribution: 'novacomets',
+      amount: 'USD 1,200',
+      contracts: 1,
+      invoices: 1,
+      paymentOrder: 'PAY-ENTITY-001',
+      status: '已付款',
+      filter: 'processed',
+    };
+    const paidPayout: Payout = {
+      ...projectPayouts[0],
+      paymentRequestProjectId,
+      status: '已付款',
+      transferFeeAmount: 8,
+      transferFeeCurrency: 'USD',
+      actualPaidAmount: 1208,
+      actualPaidCurrency: 'USD',
+      paidAt: '2026-08-28 10:00',
+    };
+    const [row] = buildPaymentProjectRows({
+      tab: 'paid',
+      payouts: [paidPayout],
+      requests: [request],
+      generatedInvoices: [],
+    });
+
+    expect(row.paymentEntity).toBe('novacomets');
+    expect(row.transferFeeTotals).toEqual([{ currency: 'USD', amount: 8, count: 1 }]);
+    expect(row.actualPaidTotals).toEqual([{ currency: 'USD', amount: 1208, count: 1 }]);
+    expect(row.actualPaidDates).toEqual(['2026-08-28']);
+    expect(filterPaymentProjectRows([row], { provider: '全部付款渠道', search: 'novacomets 1208 2026-08-28' })).toEqual([row]);
   });
 
   it('toggles one or all filtered project ids without losing other tab selections', () => {

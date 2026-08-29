@@ -130,6 +130,8 @@ describe('PaymentWorkbenchPage currency overview', () => {
       brand: 'Test Brand',
       media: 'Media',
       pm: 'PM',
+      paymentEntity: 'novacomets',
+      projectCostAttribution: '香港公司（comets）',
       amount: 'USD 100',
       contracts: 1,
       invoices: 1,
@@ -139,10 +141,15 @@ describe('PaymentWorkbenchPage currency overview', () => {
     }]);
 
     expect(html).toContain('待审核<span>1</span>');
-    expect(html).toContain('<th>项目编号</th><th>关联项目</th>');
+    const headings = ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '实际付款金额及币种', '实际付款日期', '发起人', '项目状态', '操作'];
+    expect(headings.every((heading) => html.includes(`>${heading}</th>`))).toBe(true);
+    expect(headings.map((heading) => html.indexOf(`>${heading}</th>`))).toEqual(
+      [...headings.map((heading) => html.indexOf(`>${heading}</th>`))].sort((left, right) => left - right),
+    );
     expect(html).toContain('REQ-FINANCE-001');
     expect(html).toContain('PRJ-FINANCE-001');
     expect(html).toContain('Finance Review Project');
+    expect(html).toContain('title="novacomets">novacomets</td>');
     expect(html).toContain('待财务审核');
     expect(html).toContain('<span>审核</span>');
   });

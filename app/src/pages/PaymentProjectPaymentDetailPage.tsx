@@ -299,7 +299,11 @@ export function PaymentProjectPaymentDetailPage({
           <div><dt>品牌 / 客户</dt><dd>{record.request.brand}</dd></div>
           <div><dt>项目媒介</dt><dd>{record.request.media}</dd></div>
           <div><dt>负责 PM</dt><dd>{record.request.pm}</dd></div>
+          <div><dt>付款主体</dt><dd>{record.request.paymentEntity || '待补充'}</dd></div>
+          <div><dt>项目费用归属</dt><dd>{record.request.projectCostAttribution || '待补充'}</dd></div>
           <div><dt>预计付款时间</dt><dd>{record.request.expectedPaymentDate}</dd></div>
+          <div><dt>成本类型</dt><dd>{record.request.costType || '待补充'}</dd></div>
+          <div><dt>成本类型明细</dt><dd>{record.request.costType === '采购成本' ? record.request.costTypeDetail || '待补充' : '—'}</dd></div>
           <div className="payment-batch-project-full"><dt>付款事由</dt><dd>{record.request.reason}</dd></div>
         </dl>
       </section>
