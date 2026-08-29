@@ -84,7 +84,7 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('付款清单');
     expect(reviewContentSource).toContain('结果');
     expect(reviewContentSource).toContain('合同信息需核对');
-    expect(reviewContentSource).toContain('<strong>{currentReview.creatorName}</strong>');
+    expect(reviewContentSource).toContain('<strong title={currentReview.creatorName}>{currentReview.creatorName}</strong>');
     expect(reviewContentSource).toContain('Real Name');
     expect(reviewContentSource).toContain('Account Name');
     expect(reviewContentSource).toContain('Account Number');
@@ -252,13 +252,18 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(2);
     expect(workspaceSource).toContain('const [invoicePanePercent, setInvoicePanePercent] = useState(40)');
     expect(workspaceSource).toContain('aria-label="调整 Invoice 快照与付款清单核对看板宽度"');
-    expect(workspaceSource).toContain('aria-valuemin={30}');
-    expect(workspaceSource).toContain('aria-valuemax={70}');
+    expect(workspaceSource).toContain('aria-valuemin={MIN_INVOICE_PANE_PERCENT}');
+    expect(workspaceSource).toContain('aria-valuemax={MAX_INVOICE_PANE_PERCENT}');
+    expect(workspaceSource).toContain('const MIN_INVOICE_PANE_PERCENT = 20');
+    expect(workspaceSource).toContain('const MAX_INVOICE_PANE_PERCENT = 80');
+    expect(workspaceSource).toContain('event.currentTarget.setPointerCapture(event.pointerId)');
+    expect(workspaceSource).toContain('event.currentTarget.hasPointerCapture(event.pointerId)');
     expect(workspaceSource).toContain("current + (event.key === 'ArrowLeft' ? -2 : 2)");
     expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(760px, 1fr\) minmax\(280px, 320px\);/s);
     expect(workspaceStyles).toMatch(/\.finance-review-comparison-panes\s*\{[\s\S]*?min-width:\s*760px;/s);
     expect(workspaceStyles).toContain('var(--finance-review-invoice-size, 40fr)');
     expect(workspaceStyles).toContain('var(--finance-review-payment-size, 60fr)');
+    expect(workspaceStyles).toMatch(/\.finance-review-comparison-panes\s*\{[\s\S]*?minmax\(0, var\(--finance-review-invoice-size, 40fr\)\)[\s\S]*?minmax\(0, var\(--finance-review-payment-size, 60fr\)\)/s);
     expect(workspaceStyles).toMatch(/\.finance-review-pane-resizer\s*\{[^}]*width:\s*44px;[^}]*min-height:\s*44px;[^}]*touch-action:\s*none;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*8px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-pane\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*8px;/s);
@@ -291,6 +296,9 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('FINANCE_WORKSPACE_HIDDEN_SCHEMA_PATHS.has(field.path)');
     expect(reviewContentSource).not.toContain("label: '出生日期'");
     expect(reviewContentSource).not.toContain("label: '请求编号'");
+    expect(reviewContentSource).toContain('className="finance-review-comparison-identity"');
+    expect(workspaceStyles).toMatch(/\.finance-review-comparison-identity\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s);
+    expect(workspaceStyles).toMatch(/\.finance-payment-account-summary-meta > div:nth-child\(odd\)\s*\{[^}]*border-left:\s*0;[^}]*padding-left:\s*0;/s);
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

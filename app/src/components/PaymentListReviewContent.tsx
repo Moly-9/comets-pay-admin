@@ -595,9 +595,11 @@ export function PaymentListReviewContent({
             <section className="request-finance-comparison" aria-label="合同、Invoice 与付款清单三方对照">
               <header className="request-finance-comparison-header">
                 <div className="finance-review-comparison-title">
-                  <span className="finance-review-card-title-icon is-invoice" aria-hidden="true"><ReceiptText size={14} /></span>
-                  <div>
-                    <strong>{currentReview.creatorName}</strong>
+                  <div className="finance-review-comparison-title-copy">
+                    <div className="finance-review-comparison-identity">
+                      <span className="finance-review-card-title-icon is-invoice" aria-hidden="true"><ReceiptText size={14} /></span>
+                      <strong title={currentReview.creatorName}>{currentReview.creatorName}</strong>
+                    </div>
                     <span>
                       {currentReview.mismatchCount ? `${currentReview.mismatchCount} 项不一致` : '关键字段一致'}
                       {currentReview.warningCount ? ` · ${currentReview.warningCount} 项合同信息需核对` : ''}

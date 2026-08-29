@@ -160,6 +160,9 @@ const reviewStatusLabel = (state: 'unreviewed' | 'correct' | 'incorrect') => {
 const MIN_INVOICE_ZOOM = 0.6;
 const MAX_INVOICE_ZOOM = 2.2;
 const INVOICE_ZOOM_STEP = 0.1;
+const MIN_INVOICE_PANE_PERCENT = 20;
+const MAX_INVOICE_PANE_PERCENT = 80;
+const FINANCE_REVIEW_RESIZER_WIDTH = 44;
 
 const ACCOUNT_VALIDATION_FIELD_IDS = new Set([
   'account-id',
@@ -708,24 +711,17 @@ export function FinanceReviewWorkspace({
     });
   };
 
-  useEffect(() => {
-    if (!paneResizing) return undefined;
-    const handlePointerMove = (event: PointerEvent) => {
-      const bounds = comparisonPanesRef.current?.getBoundingClientRect();
-      if (!bounds?.width) return;
-      const nextPercent = ((event.clientX - bounds.left) / bounds.width) * 100;
-      setInvoicePanePercent(Math.min(70, Math.max(30, nextPercent)));
-    };
-    const stopResizing = () => setPaneResizing(false);
-    document.addEventListener('pointermove', handlePointerMove);
-    document.addEventListener('pointerup', stopResizing, { once: true });
-    document.addEventListener('pointercancel', stopResizing, { once: true });
-    return () => {
-      document.removeEventListener('pointermove', handlePointerMove);
-      document.removeEventListener('pointerup', stopResizing);
-      document.removeEventListener('pointercancel', stopResizing);
-    };
-  }, [paneResizing]);
+  const updateInvoicePanePercentFromPointer = (clientX: number) => {
+    const bounds = comparisonPanesRef.current?.getBoundingClientRect();
+    const availableWidth = (bounds?.width ?? 0) - FINANCE_REVIEW_RESIZER_WIDTH;
+    if (!bounds || availableWidth <= 0) return;
+    const pointerPosition = clientX - bounds.left - FINANCE_REVIEW_RESIZER_WIDTH / 2;
+    const nextPercent = (pointerPosition / availableWidth) * 100;
+    setInvoicePanePercent(Math.min(
+      MAX_INVOICE_PANE_PERCENT,
+      Math.max(MIN_INVOICE_PANE_PERCENT, nextPercent),
+    ));
+  };
 
   const openResourceDialog = (kind: 'contract' | 'invoice') => {
     setResourceDownloadError('');
@@ -1442,22 +1438,41 @@ export function FinanceReviewWorkspace({
               role="separator"
               aria-label="调整 Invoice 快照与付款清单核对看板宽度"
               aria-orientation="vertical"
-              aria-valuemin={30}
-              aria-valuemax={70}
+              aria-valuemin={MIN_INVOICE_PANE_PERCENT}
+              aria-valuemax={MAX_INVOICE_PANE_PERCENT}
               aria-valuenow={Math.round(invoicePanePercent)}
               aria-valuetext={`Invoice ${Math.round(invoicePanePercent)}%，付款清单 ${Math.round(100 - invoicePanePercent)}%`}
               tabIndex={0}
               onPointerDown={(event) => {
                 event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
                 setPaneResizing(true);
+                updateInvoicePanePercentFromPointer(event.clientX);
               }}
+              onPointerMove={(event) => {
+                if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                updateInvoicePanePercentFromPointer(event.clientX);
+              }}
+              onPointerUp={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                setPaneResizing(false);
+              }}
+              onPointerCancel={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                setPaneResizing(false);
+              }}
+              onLostPointerCapture={() => setPaneResizing(false)}
               onKeyDown={(event) => {
                 if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
                 event.preventDefault();
-                if (event.key === 'Home') setInvoicePanePercent(30);
-                else if (event.key === 'End') setInvoicePanePercent(70);
-                else setInvoicePanePercent((current) => Math.min(70, Math.max(
-                  30,
+                if (event.key === 'Home') setInvoicePanePercent(MIN_INVOICE_PANE_PERCENT);
+                else if (event.key === 'End') setInvoicePanePercent(MAX_INVOICE_PANE_PERCENT);
+                else setInvoicePanePercent((current) => Math.min(MAX_INVOICE_PANE_PERCENT, Math.max(
+                  MIN_INVOICE_PANE_PERCENT,
                   current + (event.key === 'ArrowLeft' ? -2 : 2),
                 )));
               }}

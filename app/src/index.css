@@ -5599,9 +5599,9 @@ body:has(.finance-review-workspace) {
   min-width: 760px;
   min-height: 0;
   grid-template-columns:
-    minmax(300px, var(--finance-review-invoice-size, 40fr))
+    minmax(0, var(--finance-review-invoice-size, 40fr))
     44px
-    minmax(400px, var(--finance-review-payment-size, 60fr));
+    minmax(0, var(--finance-review-payment-size, 60fr));
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
@@ -6002,7 +6002,7 @@ body:has(.finance-review-workspace) {
   min-width: 0;
 }
 
-.finance-review-comparison-title > div {
+.finance-review-comparison-title > .finance-review-comparison-title-copy {
   align-items: start;
 }
 
@@ -6168,7 +6168,7 @@ body:has(.finance-review-workspace) {
   padding-left: 8px;
 }
 
-.finance-payment-account-summary-meta > div:first-child {
+.finance-payment-account-summary-meta > div:nth-child(odd) {
   border-left: 0;
   padding-left: 0;
 }
@@ -6448,6 +6448,31 @@ body:has(.finance-review-workspace) {
 .finance-review-summary-heading,
 .finance-review-comparison-title {
   gap: 8px;
+}
+
+.finance-review-comparison-title-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.finance-review-comparison-identity {
+  display: flex;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.finance-review-comparison-identity .finance-review-card-title-icon {
+  flex: 0 0 auto;
+}
+
+.finance-review-comparison-identity strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .finance-review-heading-with-icon > div,
