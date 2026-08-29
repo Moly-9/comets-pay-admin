@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { applyPaymentBatchPrototypeScenario } from '../paymentBatchPrototypeScenario';
 import { createPaymentProjectPaymentRecord } from '../paymentBatches';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
-import { PaymentProjectPaymentDetailPage } from './PaymentProjectPaymentDetailPage';
+import { PaymentProjectItemDrawer, PaymentProjectPaymentDetailPage } from './PaymentProjectPaymentDetailPage';
 
 const resources = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -42,8 +42,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain(failedRecord.request.cooperationProjectName);
     expect(html).toContain('付款项目信息');
     expect(html).toContain('本页面仅展示当前付款项目，不混入同批次的其他项目');
-    expect(html).toContain('<dt>付款编号</dt>');
-    expect(html).toContain('<dt>付款金额</dt>');
+    expect(html).toContain('>付款编号</dt>');
+    expect(html).toContain('>付款金额</dt>');
     expect(html).toContain(`simple-status is-success"><i></i>${failedRecord.status}`);
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
@@ -59,26 +59,26 @@ describe('PaymentProjectPaymentDetailPage', () => {
       '手续费金额',
       '付款状态',
     ];
-    headings.forEach((heading) => expect(html).toContain(`>${heading}</span>`));
-    const headStart = html.indexOf('payment-project-detail-item-head');
-    const tableHead = html.slice(headStart, html.indexOf('</div>', headStart));
+    headings.forEach((heading) => expect(html).toContain(`>${heading}</th>`));
+    const headStart = html.indexOf('<thead>');
+    const tableHead = html.slice(headStart, html.indexOf('</thead>', headStart));
     headings.slice(1).forEach((heading, index) => {
       expect(tableHead.indexOf(headings[index])).toBeLessThan(tableHead.indexOf(heading));
     });
-    expect(html).toContain('payment-batch-item-list payment-project-detail-item-list');
-    expect(html).toContain('payment-batch-item-trigger payment-project-detail-item-trigger');
-    expect(html).not.toContain('<table');
+    expect(html).toContain('data-table payment-project-detail-table');
+    expect(html).toContain('payment-project-detail-action-cell');
+    expect(html).toContain('<table');
     expect(html).not.toContain('付款失败需要处理');
     expect(html).not.toContain('退回媒介处理');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('payment-batch-item-expand-icon');
     expect(html).not.toContain('BENEFICIARY_UNAVAILABLE');
     expect(html).toContain('下载付款资料');
     expect(html).toContain('下载付款明细');
     expect(html).toContain('下载确认函');
     expect(html).toContain('选择全部可导出确认函的付款明细');
-    expect(html).toContain('全选可导出');
     expect(html).toContain('payment-project-detail-select-cell');
     expect(html).toContain('class="avatar avatar-sm"');
+    expect(html).toContain('查看详情');
     expect(html).not.toContain('下载项目资料');
     expect(html).not.toContain('查看合同附件');
     expect(html).not.toContain('查看 Invoice 附件');
@@ -140,9 +140,10 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(paidHtml).toContain('2026-08-26');
     expect(paidHtml).toContain('USD 1,258.5');
     expect(paidHtml).toContain('USD 8.5');
-    expect(paidHtml).toContain('payment-batch-item-status is-success');
-    expect(paidHtml).toContain('payment-batch-item-expand-icon');
-    expect(paidHtml).toContain('aria-expanded="false"');
+    expect(paidHtml).toContain('simple-status is-success');
+    expect(paidHtml).toContain('payment-project-detail-status-cell');
+    expect(paidHtml).not.toContain('payment-batch-item-expand-icon');
+    expect(paidHtml).not.toContain('payment-batch-item-expand-icon');
 
     const processingRecord = {
       ...failedRecord,
@@ -183,8 +184,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
         onReturnPayout={vi.fn(() => true)}
       />,
     );
-    const failedRowStart = failedHtml.indexOf('<article id="payment-project-item');
-    const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</button>', failedRowStart));
+    const failedRowStart = failedHtml.indexOf('<tbody>');
+    const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</tr>', failedRowStart));
 
     expect(failedDataRow).not.toContain('2026-08-26');
     expect(failedDataRow).not.toContain('USD 1,258.5');
@@ -192,7 +193,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect((failedDataRow.match(/>—</g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
-  it('expands a failed row into payment and channel results only', () => {
+  it('opens failed payment information in a dedicated drawer without row expansion', () => {
     const failedItem = {
       ...failedRecord.items[0],
       paymentStatus: '付款失败' as const,
@@ -203,7 +204,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
         occurredAt: '2026-08-26T18:30:00.000Z',
       },
     };
-    const html = renderToStaticMarkup(
+    const pageHtml = renderToStaticMarkup(
       <PaymentProjectPaymentDetailPage
         record={{ ...failedRecord, status: '全部失败', items: [failedItem] }}
         payouts={[]}
@@ -213,30 +214,51 @@ describe('PaymentProjectPaymentDetailPage', () => {
       />,
     );
 
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain('账户快照与渠道结果');
-    expect(html).toContain('BENEFICIARY_UNAVAILABLE');
-    expect(html).not.toContain('付款关联文件');
-    expect(html).not.toContain('Invoice 日期');
-    expect(html).not.toContain('关联资料缺失');
-    expect(html).toContain('disabled=""');
+    expect(pageHtml).toContain('查看失败明细');
+    expect(pageHtml).toContain('查看详情');
+    expect(pageHtml).not.toContain('payment-batch-item-expand-icon');
+    expect(pageHtml).not.toContain('BENEFICIARY_UNAVAILABLE');
+
+    const drawerHtml = renderToStaticMarkup(
+      <PaymentProjectItemDrawer
+        item={failedItem}
+        canHandleFailure
+        onClose={vi.fn()}
+        onRequestFailureReturn={vi.fn()}
+      />,
+    );
+
+    expect(drawerHtml).toContain('role="dialog"');
+    expect(drawerHtml).toContain('aria-modal="true"');
+    expect(drawerHtml).toContain('收款人');
+    expect(drawerHtml).toContain('付款信息');
+    expect(drawerHtml).toContain('渠道结果');
+    expect(drawerHtml).toContain('BENEFICIARY_UNAVAILABLE');
+    expect(drawerHtml).toContain('The beneficiary account is unavailable.');
+    expect(drawerHtml).toContain('退回媒介处理');
+    expect(drawerHtml).not.toContain('付款关联文件');
+    expect(drawerHtml).not.toContain('Invoice 日期');
+    expect(drawerHtml).not.toContain('关联资料缺失');
   });
 
-  it('reuses the original payment item list styling and mobile expand target', () => {
+  it('uses the workbench table, sticky utility columns, colored downloads, and responsive drawer', () => {
     const css = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
-    const sharedCss = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
-    expect(css).toContain('.payment-project-detail-item-row');
-    expect(css).toContain('grid-template-columns: 44px minmax(0, 1fr)');
-    expect(css).toContain('.payment-project-detail-item-trigger');
-    expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(css).toContain('.payment-project-detail-table');
+    expect(css).toContain('position: sticky');
+    expect(css).toContain('right: 116px');
+    expect(css).toContain('right: 0');
+    expect(css).toContain('.payment-project-item-drawer');
+    expect(css).toContain('width: min(520px, 100vw)');
+    expect(css).toContain('.payment-project-info-icon');
+    expect(css).toContain('linear-gradient(135deg, #4b86e8 0%, #2f63c7 100%)');
+    expect(css).toContain('linear-gradient(135deg, #e85f55 0%, #c9403b 100%)');
+    expect(css).toContain('linear-gradient(135deg, #8b5dd3 0%, #6842ae 100%)');
     expect(css).toContain('font-size: 28px');
     expect(css).toContain('border-radius: 50%');
     expect(css).toContain('.payment-project-info-cards');
     expect(css).toContain('min-height: 44px');
-    expect(sharedCss).toContain('.payment-batch-item-list');
-    expect(sharedCss).toMatch(/\.payment-batch-item-trigger > \.payment-batch-item-expand-icon\s*{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/);
-    expect(css).not.toContain('.payment-project-detail-table');
+    expect(css).not.toContain('.payment-project-detail-item-trigger');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 

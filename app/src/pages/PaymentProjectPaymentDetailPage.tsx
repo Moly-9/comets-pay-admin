@@ -4,19 +4,24 @@ import {
   ArrowLeft,
   Building2,
   CalendarClock,
-  ChevronDown,
   CircleAlert,
+  Coins,
   Download,
   FileArchive,
   FileSpreadsheet,
   FileText,
+  Landmark,
+  ListChecks,
   LoaderCircle,
+  MessageSquareText,
   ReceiptText,
   RotateCcw,
+  UserRound,
   WalletCards,
+  X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, SelectField, type SelectOption } from '../components/Common';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Avatar, Button, ListActionButton, SelectField, type SelectOption } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
@@ -41,7 +46,6 @@ import {
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
-import { PaymentItemDetails } from './PaymentBatchDetailPage';
 import './PaymentProjectPaymentDetailPage.css';
 
 const displayTime = (value?: string) => value
@@ -68,10 +72,6 @@ const projectSummaryResultTone = (status: PaymentProjectPaymentRecord['status'])
   if (status === '付款处理中') return 'is-result-processing';
   return 'is-result-success';
 };
-
-const initialExpandedItemId = (record: PaymentProjectPaymentRecord) => (
-  record.items.find((item) => item.paymentStatus === '付款失败')?.payoutId ?? null
-);
 
 const paymentResultPlaceholder = (status: Payout['status']) => (
   status === '付款处理中' ? '待渠道回写' : '—'
@@ -101,6 +101,230 @@ type ProjectDownloadAction = 'contract' | 'invoice' | 'payment-list' | 'payment-
 
 const hasPaymentDate = (value?: string) => /^(\d{4})-(\d{2})-(\d{2})/.test(value ?? '');
 
+function PaymentProjectInfoCard({
+  className = '',
+  icon,
+  label,
+  value,
+}: {
+  className?: string;
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <dt><span className="payment-project-info-icon" aria-hidden="true">{icon}</span>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+function PaymentProjectCreatorIdentity({
+  accountName,
+  creator,
+  displayName,
+  size = 'sm',
+}: {
+  accountName: string;
+  creator?: CreatorProfile;
+  displayName: string;
+  size?: 'sm' | 'lg';
+}) {
+  const resolvedDisplayName = creator?.name || displayName || 'Display Name 待补充';
+  return (
+    <span
+      className={`payment-project-creator-identity is-${size}`}
+      aria-label={`Account Name：${accountName}，Display Name：${resolvedDisplayName}`}
+    >
+      <Avatar
+        initials={creator?.initials ?? resolvedDisplayName.slice(0, 2).toUpperCase()}
+        accent={creator?.accent ?? '#60758f'}
+        size={size}
+      />
+      <span className="payment-project-creator-identity-copy">
+        <strong title={accountName}>{accountName}</strong>
+        <small title={resolvedDisplayName}>{resolvedDisplayName}</small>
+      </span>
+    </span>
+  );
+}
+
+export function PaymentProjectItemDrawer({
+  canHandleFailure,
+  creator,
+  item,
+  onClose,
+  onOpenFailurePaymentList,
+  onRequestFailureReturn,
+  payout,
+}: {
+  canHandleFailure: boolean;
+  creator?: CreatorProfile;
+  item: PaymentBatchItemSnapshot;
+  onClose: () => void;
+  onOpenFailurePaymentList?: () => void;
+  onRequestFailureReturn?: () => void;
+  payout?: Payout;
+}) {
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const accountName = item.accountName || '待补充';
+  const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
+  const failureReturn = payout?.paymentFailureReturn;
+  const failure = item.failure;
+  const canReturnFailure = item.paymentStatus === '付款失败' && !failureReturn && Boolean(onRequestFailureReturn);
+  const titleId = `payment-project-item-drawer-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(drawerRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled):not([aria-disabled="true"]), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ) ?? []).filter((element) => !element.hasAttribute('hidden'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="payment-project-item-drawer-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+    >
+      <aside
+        ref={drawerRef}
+        className="payment-project-item-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="payment-project-item-drawer-header">
+          <div>
+            <span>付款明细</span>
+            <h2 id={titleId}>{accountName}</h2>
+          </div>
+          <div className="payment-project-item-drawer-header-actions">
+            <span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
+            <button ref={closeButtonRef} className="icon-button" type="button" aria-label="关闭付款明细" onClick={onClose}>
+              <X size={20} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <div className="payment-project-item-drawer-content">
+          <section className="payment-project-recipient-card" aria-labelledby={`${titleId}-recipient`}>
+            <div className="payment-project-recipient-identity">
+              <span id={`${titleId}-recipient`}>收款人</span>
+              <PaymentProjectCreatorIdentity
+                accountName={accountName}
+                creator={creator}
+                displayName={item.creatorName}
+                size="lg"
+              />
+            </div>
+            <PaymentProviderBadge compact provider={item.provider} />
+            <dl>
+              <div><dt>{item.accountIdentifierLabel || '收款账户'}</dt><dd>{accountIdentifier}</dd></div>
+              <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
+              <div><dt>收款币种</dt><dd>{item.receiveCurrency || '待补充'}</dd></div>
+              <div><dt>账户版本</dt><dd>{item.payoutAccountVersion}</dd></div>
+            </dl>
+          </section>
+
+          <section className="payment-project-item-drawer-section" aria-labelledby={`${titleId}-payment`}>
+            <h3 id={`${titleId}-payment`}><WalletCards size={17} aria-hidden="true" />付款信息</h3>
+            <dl className="payment-project-item-drawer-grid">
+              <div><dt>付款清单编号</dt><dd>{item.paymentListCode}{item.paymentListVersion ? ` · V${item.paymentListVersion}` : ''}</dd></div>
+              <div><dt>付款渠道</dt><dd>{item.provider}</dd></div>
+              <div><dt>付款方式</dt><dd>{item.transferMethod || '待补充'}</dd></div>
+              <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || '待补充'}</dd></div>
+              <div><dt>付款金额</dt><dd>{money(item.currency, item.amount)}</dd></div>
+              <div><dt>支付总金额</dt><dd>{paymentResultMoney({ status: item.paymentStatus, amount: item.actualPaidAmount, currency: item.actualPaidCurrency })}</dd></div>
+              <div><dt>手续费金额</dt><dd>{paymentResultMoney({ status: item.paymentStatus, amount: item.transferFeeAmount, currency: item.transferFeeCurrency })}</dd></div>
+              <div><dt>手续费承担方</dt><dd>{item.feeBearer || '未记录'}</dd></div>
+              <div><dt>付款日期</dt><dd>{paymentResultDate(item.paymentStatus, item.paidAt)}</dd></div>
+              <div><dt>交易后余额</dt><dd>{item.postTransactionBalance !== undefined && item.postTransactionBalanceCurrency ? money(item.postTransactionBalanceCurrency, item.postTransactionBalance) : '—'}</dd></div>
+              <div className="is-full"><dt>付款原因</dt><dd>{item.paymentReason || '未记录'}</dd></div>
+              <div className="is-full"><dt>交易附言</dt><dd>{item.transactionReference || '未记录'}</dd></div>
+              <div className="is-full"><dt>付款描述</dt><dd>{item.description || '未记录'}</dd></div>
+            </dl>
+          </section>
+
+          <section className="payment-project-item-drawer-section" aria-labelledby={`${titleId}-result`}>
+            <h3 id={`${titleId}-result`}><CircleAlert size={17} aria-hidden="true" />渠道结果</h3>
+            <dl className="payment-project-item-drawer-grid">
+              <div><dt>付款状态</dt><dd>{item.paymentStatus}</dd></div>
+              <div><dt>渠道回写时间</dt><dd>{failure?.occurredAt ? displayTime(failure.occurredAt) : displayTime(item.paidAt)}</dd></div>
+              {failure ? (
+                <>
+                  <div><dt>错误码</dt><dd>{failure.code}</dd></div>
+                  <div className="is-full"><dt>渠道响应</dt><dd>{failure.response}</dd></div>
+                </>
+              ) : null}
+            </dl>
+            {failureReturn ? (
+              <div className="payment-project-item-return-card" role="status">
+                <AlertTriangle size={17} aria-hidden="true" />
+                <div>
+                  <strong>{failureReturn.issueType === 'INVOICE_CONTENT' ? 'Invoice 内容问题' : '付款账户问题'}</strong>
+                  <span>退回原因：{failureReturn.reason}</span>
+                  <small>{failureReturn.actorName} · {displayTime(failureReturn.occurredAt)}</small>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+
+        <footer className="payment-project-item-drawer-footer">
+          <Button variant="secondary" onClick={onClose}>关闭</Button>
+          {failureReturn && onOpenFailurePaymentList ? (
+            <Button icon={<ListChecks size={16} />} onClick={onOpenFailurePaymentList}>查看付款清单</Button>
+          ) : null}
+          {canReturnFailure ? (
+            <Button
+              variant="danger"
+              icon={<RotateCcw size={16} />}
+              disabled={!canHandleFailure}
+              disabledReason="当前账号或付款状态不允许退回媒介处理。"
+              onClick={onRequestFailureReturn}
+            >
+              退回媒介处理
+            </Button>
+          ) : null}
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
 export function PaymentProjectPaymentDetailPage({
   record,
   payouts,
@@ -124,14 +348,14 @@ export function PaymentProjectPaymentDetailPage({
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
   notify?: (title: string, message: string) => void;
 }) {
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(() => initialExpandedItemId(record));
+  const [selectedDetailItemId, setSelectedDetailItemId] = useState<string | null>(null);
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
   const [downloadingResource, setDownloadingResource] = useState<ProjectDownloadAction | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const [resourceError, setResourceError] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const compactSelectAllRef = useRef<HTMLInputElement>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const liveItems = useMemo(() => record.items.map((item) => {
     const payout = payouts.find((candidate) => candidate.id === item.payoutId);
     if (!payout) return item;
@@ -164,6 +388,13 @@ export function PaymentProjectPaymentDetailPage({
     [liveItems],
   );
   const dialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
+  const selectedDetailItem = liveItems.find((item) => item.payoutId === selectedDetailItemId);
+  const selectedDetailPayout = selectedDetailItem
+    ? payouts.find((payout) => payout.id === selectedDetailItem.payoutId)
+    : undefined;
+  const selectedDetailCreator = selectedDetailItem
+    ? creators.find((creator) => creator.id === selectedDetailItem.creatorId)
+    : undefined;
   const confirmationEligibleItems = useMemo(() => liveItems.filter((item) => (
     item.paymentStatus === '已付款' && hasPaymentDate(item.paidAt)
   )), [liveItems]);
@@ -240,9 +471,9 @@ export function PaymentProjectPaymentDetailPage({
   }, []);
 
   useEffect(() => {
-    if (expandedItemId && record.items.some((item) => item.payoutId === expandedItemId)) return;
-    setExpandedItemId(initialExpandedItemId(record));
-  }, [expandedItemId, record]);
+    if (!selectedDetailItemId || liveItems.some((item) => item.payoutId === selectedDetailItemId)) return;
+    setSelectedDetailItemId(null);
+  }, [liveItems, selectedDetailItemId]);
 
   useEffect(() => {
     setSelectedItemIds((current) => {
@@ -254,7 +485,6 @@ export function PaymentProjectPaymentDetailPage({
   useEffect(() => {
     const indeterminate = selectedConfirmationItems.length > 0 && !allEligibleSelected;
     if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
-    if (compactSelectAllRef.current) compactSelectAllRef.current.indeterminate = indeterminate;
   }, [allEligibleSelected, selectedConfirmationItems.length]);
 
   const openFailureDialog = (payoutId: string) => {
@@ -265,14 +495,22 @@ export function PaymentProjectPaymentDetailPage({
     setFailureDialogPayoutId(null);
   };
 
-  const revealFirstFailure = () => {
+  const openDetailDrawer = (payoutId: string, trigger?: HTMLButtonElement | null) => {
+    detailTriggerRef.current = trigger ?? null;
+    setSelectedDetailItemId(payoutId);
+  };
+
+  const closeDetailDrawer = useCallback(() => {
+    setSelectedDetailItemId(null);
+    const trigger = detailTriggerRef.current;
+    detailTriggerRef.current = null;
+    window.requestAnimationFrame(() => trigger?.focus());
+  }, []);
+
+  const revealFirstFailure = (trigger?: HTMLButtonElement | null) => {
     const first = failedItems[0];
     if (!first) return;
-    setExpandedItemId(first.payoutId);
-    window.requestAnimationFrame(() => {
-      document.getElementById(`payment-project-item-${first.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+    openDetailDrawer(first.payoutId, trigger);
   };
 
   const toggleConfirmationItem = (payoutId: string) => {
@@ -397,9 +635,15 @@ export function PaymentProjectPaymentDetailPage({
           <span aria-hidden="true"><AlertTriangle size={19} /></span>
           <div>
             <strong>{failedItems.length} 笔付款失败需要处理</strong>
-            <p>失败记录已优先展开。请核对渠道结果，并逐笔退回媒介修正对应资料。</p>
+            <p>请打开失败明细核对渠道结果，并逐笔退回媒介修正对应资料。</p>
           </div>
-          <Button variant="danger" icon={<CircleAlert size={16} />} onClick={revealFirstFailure}>查看失败明细</Button>
+          <Button
+            variant="danger"
+            icon={<CircleAlert size={16} />}
+            onClick={(event) => revealFirstFailure(event.currentTarget)}
+          >
+            查看失败明细
+          </Button>
         </section>
       ) : null}
 
@@ -415,7 +659,10 @@ export function PaymentProjectPaymentDetailPage({
 
       <section className="payment-batch-detail-section">
         <header>
-          <div><h2>付款项目信息</h2><p>本页面仅展示当前付款项目，不混入同批次的其他项目。</p></div>
+          <div>
+            <h2 className="payment-project-section-heading"><span aria-hidden="true"><Building2 size={18} /></span>付款项目信息</h2>
+            <p>本页面仅展示当前付款项目，不混入同批次的其他项目。</p>
+          </div>
           <span className={`simple-status ${projectStatusTone(record.status)}`}><i />{record.status}</span>
         </header>
         <div className="payment-batch-project-heading">
@@ -423,28 +670,40 @@ export function PaymentProjectPaymentDetailPage({
           <div><span className="payment-batch-project-name">{record.request.cooperationProjectName}</span><small>{record.request.cooperationProjectCode}</small></div>
         </div>
         <dl className="payment-batch-project-grid payment-project-info-cards">
-          <div><dt>付款编号</dt><dd>{record.request.requestCode}</dd></div>
-          <div><dt>付款金额</dt><dd>{record.request.amount}</dd></div>
-          <div><dt>品牌 / 客户</dt><dd>{record.request.brand}</dd></div>
-          <div><dt>项目媒介</dt><dd>{record.request.media}</dd></div>
-          <div><dt>负责 PM</dt><dd>{record.request.pm}</dd></div>
-          <div><dt>付款主体</dt><dd>{record.request.paymentEntity || '待补充'}</dd></div>
-          <div><dt>项目费用归属</dt><dd>{record.request.projectCostAttribution || '待补充'}</dd></div>
-          <div><dt>预计付款时间</dt><dd>{record.request.expectedPaymentDate}</dd></div>
-          <div><dt>成本类型</dt><dd>{record.request.costType || '待补充'}</dd></div>
-          <div><dt>成本类型明细</dt><dd>{record.request.costType === '采购成本' ? record.request.costTypeDetail || '待补充' : '—'}</dd></div>
-          <div className="payment-batch-project-full"><dt>付款事由</dt><dd>{record.request.reason}</dd></div>
+          <PaymentProjectInfoCard icon={<ReceiptText size={16} />} label="付款编号" value={record.request.requestCode} />
+          <PaymentProjectInfoCard icon={<Coins size={16} />} label="付款金额" value={record.request.amount} />
+          <PaymentProjectInfoCard icon={<Building2 size={16} />} label="品牌 / 客户" value={record.request.brand} />
+          <PaymentProjectInfoCard icon={<UserRound size={16} />} label="项目媒介" value={record.request.media} />
+          <PaymentProjectInfoCard icon={<UserRound size={16} />} label="负责 PM" value={record.request.pm} />
+          <PaymentProjectInfoCard icon={<Landmark size={16} />} label="付款主体" value={record.request.paymentEntity || '待补充'} />
+          <PaymentProjectInfoCard icon={<Building2 size={16} />} label="项目费用归属" value={record.request.projectCostAttribution || '待补充'} />
+          <PaymentProjectInfoCard icon={<CalendarClock size={16} />} label="预计付款时间" value={record.request.expectedPaymentDate} />
+          <PaymentProjectInfoCard icon={<ListChecks size={16} />} label="成本类型" value={record.request.costType || '待补充'} />
+          <PaymentProjectInfoCard
+            icon={<FileText size={16} />}
+            label="成本类型明细"
+            value={record.request.costType === '采购成本' ? record.request.costTypeDetail || '待补充' : '—'}
+          />
+          <PaymentProjectInfoCard
+            className="payment-batch-project-full"
+            icon={<MessageSquareText size={16} />}
+            label="付款事由"
+            value={record.request.reason}
+          />
         </dl>
       </section>
 
       <section className="payment-batch-detail-section payment-batch-items-section">
         <header>
-          <div><h2>付款明细</h2><p>核对当前项目每笔付款的账户快照、付款结果与失败原因。</p></div>
+          <div>
+            <h2 className="payment-project-section-heading"><span aria-hidden="true"><ListChecks size={18} /></span>付款明细</h2>
+            <p>核对当前项目每笔付款的账户快照、付款结果与失败原因。</p>
+          </div>
           <div className="payment-project-resource-toolbar">
             <div className="payment-project-resource-actions" aria-label="下载付款项目资料">
               <SelectField
                 ariaLabel="下载付款资料"
-                className="payment-project-download-select"
+                className="payment-project-download-select is-resource-download"
                 value="payment-detail"
                 options={resourceDownloadOptions}
                 selectedLabel={downloadingResource && ['contract', 'invoice', 'payment-list'].includes(downloadingResource) ? '资料生成中…' : '下载付款资料'}
@@ -458,6 +717,7 @@ export function PaymentProjectPaymentDetailPage({
               />
               <Button
                 variant="secondary"
+                className="payment-project-download-button is-detail-download"
                 icon={downloadingResource === 'payment-detail' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
                 disabled={!liveItems.length || downloadingResource !== null}
                 disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款明细。'}
@@ -467,7 +727,7 @@ export function PaymentProjectPaymentDetailPage({
               </Button>
               <SelectField
                 ariaLabel="下载付款确认函"
-                className="payment-project-download-select"
+                className="payment-project-download-select is-confirmation-download"
                 value="payment-detail"
                 options={confirmationDownloadOptions}
                 selectedLabel={downloadingResource?.startsWith('confirmation') ? '确认函生成中…' : '下载确认函'}
@@ -481,160 +741,128 @@ export function PaymentProjectPaymentDetailPage({
               />
             </div>
             <div className="payment-project-resource-meta">
-              <label className="payment-project-compact-select-all">
-                <input
-                  ref={compactSelectAllRef}
-                  type="checkbox"
-                  aria-label="选择全部可导出确认函的付款明细"
-                  checked={allEligibleSelected}
-                  disabled={!confirmationEligibleItems.length}
-                  title={confirmationEligibleItems.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
-                  onChange={toggleAllConfirmationItems}
-                />
-                <span>全选可导出</span>
-              </label>
               <span>{liveItems.length} 笔 · 已选 {selectedConfirmationItems.length} 笔</span>
             </div>
           </div>
         </header>
         {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
-        <div className="payment-batch-item-list payment-project-detail-item-list">
-          <div className="payment-batch-item-table-head payment-project-detail-item-head">
-            <label className="payment-project-detail-select-cell">
-              <input
-                ref={selectAllRef}
-                type="checkbox"
-                aria-label="选择全部可导出确认函的付款明细"
-                checked={allEligibleSelected}
-                disabled={!confirmationEligibleItems.length}
-                title={confirmationEligibleItems.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
-                onChange={toggleAllConfirmationItems}
-              />
-            </label>
-            <span>达人名称</span>
-            <span>付款渠道</span>
-            <span>收款银行账号</span>
-            <span>付款日期</span>
-            <span>付款金额</span>
-            <span>支付总金额</span>
-            <span>手续费金额</span>
-            <span>付款状态</span>
-            <span />
-          </div>
-          <div className="payment-batch-item-rows" role="list">
-            {liveItems.map((item) => {
-              const expanded = expandedItemId === item.payoutId;
-              const livePayout = payouts.find((payout) => payout.id === item.payoutId);
-              const currentStatus = item.paymentStatus;
-              const creator = creators.find((candidate) => candidate.id === item.creatorId);
-              const displayName = creator?.name ?? item.creatorName;
-              const accountName = item.accountName || '待补充';
-              const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
-              const canSelect = confirmationEligibleIds.has(item.payoutId);
-              const selected = selectedItemIds.has(item.payoutId);
-              const selectReason = currentStatus !== '已付款'
-                ? '仅已付款明细可以生成确认函。'
-                : !hasPaymentDate(item.paidAt)
-                  ? '缺少实际付款时间，无法生成确认函。'
-                  : '选择此付款明细';
-              const itemDomId = `payment-project-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-              const detailId = `${itemDomId}-details`;
-              return (
-                <article
-                  id={itemDomId}
-                  className={`payment-batch-item payment-project-detail-item${expanded ? ' is-expanded' : ''}${selected ? ' is-selected' : ''}`}
-                  key={item.payoutId}
-                  role="listitem"
-                >
-                  <div className="payment-project-detail-item-row">
-                    <label className="payment-project-detail-select-cell">
+        <div className="table-shell payment-project-detail-table-shell">
+          <div
+            className="table-scroll payment-project-detail-table-scroll"
+            role="region"
+            aria-label="付款明细表，可横向滚动查看更多列"
+            tabIndex={0}
+          >
+            <table className="data-table payment-project-detail-table">
+              <thead>
+                <tr>
+                  <th className="payment-project-detail-select-cell">
+                    <label className="payment-project-detail-select-control">
+                      <span className="sr-only">选择全部可导出确认函的付款明细</span>
                       <input
+                        ref={selectAllRef}
                         type="checkbox"
-                        aria-label={`选择 ${accountName} 的付款确认函`}
-                        checked={selected}
-                        disabled={!canSelect}
-                        title={selectReason}
-                        onChange={() => toggleConfirmationItem(item.payoutId)}
+                        aria-label="选择全部可导出确认函的付款明细"
+                        checked={allEligibleSelected}
+                        disabled={!confirmationEligibleItems.length}
+                        title={confirmationEligibleItems.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
+                        onChange={toggleAllConfirmationItems}
                       />
                     </label>
-                    <button
-                      className="payment-batch-item-trigger payment-project-detail-item-trigger"
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-controls={detailId}
-                      aria-label={`${accountName}，${money(item.currency, item.amount)}，${currentStatus}，${expanded ? '收起' : '展开'}付款详情`}
-                      onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
-                    >
-                      <span className="payment-batch-item-person payment-project-detail-item-person">
-                        <Avatar
-                          initials={creator?.initials ?? displayName.slice(0, 2).toUpperCase()}
-                          accent={creator?.accent ?? '#60758f'}
-                          size="sm"
+                  </th>
+                  <th className="payment-project-detail-creator-heading">达人名称</th>
+                  <th className="payment-project-detail-provider-heading">付款渠道</th>
+                  <th className="payment-project-detail-account-heading">收款银行账号</th>
+                  <th className="payment-project-detail-date-heading">付款日期</th>
+                  <th className="payment-project-detail-money-heading">付款金额</th>
+                  <th className="payment-project-detail-money-heading">支付总金额</th>
+                  <th className="payment-project-detail-money-heading">手续费金额</th>
+                  <th className="payment-project-detail-status-cell">付款状态</th>
+                  <th className="action-cell payment-project-detail-action-cell">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveItems.length ? liveItems.map((item) => {
+                  const currentStatus = item.paymentStatus;
+                  const creator = creators.find((candidate) => candidate.id === item.creatorId);
+                  const accountName = item.accountName || '待补充';
+                  const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
+                  const canSelect = confirmationEligibleIds.has(item.payoutId);
+                  const selected = selectedItemIds.has(item.payoutId);
+                  const selectReason = currentStatus !== '已付款'
+                    ? '仅已付款明细可以生成确认函。'
+                    : !hasPaymentDate(item.paidAt)
+                      ? '缺少实际付款时间，无法生成确认函。'
+                      : '选择此付款明细';
+                  return (
+                    <tr className={selected ? 'is-selected' : ''} key={item.payoutId} aria-selected={selected}>
+                      <td className="payment-project-detail-select-cell">
+                        <label className="payment-project-detail-select-control">
+                          <span className="sr-only">选择 {accountName} 的付款确认函</span>
+                          <input
+                            type="checkbox"
+                            aria-label={`选择 ${accountName} 的付款确认函`}
+                            checked={selected}
+                            disabled={!canSelect}
+                            title={selectReason}
+                            onChange={() => toggleConfirmationItem(item.payoutId)}
+                          />
+                        </label>
+                      </td>
+                      <td className="payment-project-detail-creator-cell">
+                        <PaymentProjectCreatorIdentity
+                          accountName={accountName}
+                          creator={creator}
+                          displayName={item.creatorName}
                         />
-                        <span>
-                          <strong title={accountName}>{accountName}</strong>
-                          <small title={displayName}>{displayName}</small>
-                        </span>
-                      </span>
-                      <span className="payment-batch-item-provider" data-label="付款渠道">
-                        <PaymentProviderBadge compact provider={item.provider} />
-                      </span>
-                      <span data-label="收款银行账号">
+                      </td>
+                      <td className="payment-project-detail-provider-cell"><PaymentProviderBadge compact provider={item.provider} /></td>
+                      <td className="payment-project-detail-account-cell">
                         <strong title={accountIdentifier}>{accountIdentifier}</strong>
                         <small>{item.accountIdentifierLabel || '收款账户快照'}</small>
-                      </span>
-                      <span data-label="付款日期"><strong>{paymentResultDate(currentStatus, item.paidAt)}</strong></span>
-                      <span className="payment-project-detail-item-money" data-label="付款金额"><strong>{money(item.currency, item.amount)}</strong></span>
-                      <span className="payment-project-detail-item-money" data-label="支付总金额">
-                        <strong>{paymentResultMoney({ status: currentStatus, amount: item.actualPaidAmount, currency: item.actualPaidCurrency })}</strong>
-                      </span>
-                      <span className="payment-project-detail-item-money" data-label="手续费金额">
-                        <strong>{paymentResultMoney({ status: currentStatus, amount: item.transferFeeAmount, currency: item.transferFeeCurrency })}</strong>
-                      </span>
-                      <span className={`payment-batch-item-status ${paymentStatusTone(currentStatus)}`} data-label="付款状态"><strong><i />{currentStatus}</strong></span>
-                      <span className="payment-batch-item-expand-icon" aria-hidden="true"><ChevronDown size={17} /></span>
-                    </button>
-                  </div>
-                  {expanded ? (
-                    <div id={detailId}>
-                      <PaymentItemDetails
-                        item={item}
-                        payout={livePayout}
-                        mode="payment-only"
-                        onOpenFailurePaymentList={onOpenFailurePaymentList ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, item.payoutId) : undefined}
-                      />
-                      {currentStatus === '付款失败' && !livePayout?.paymentFailureReturn ? (
-                        <div className="payment-project-failure-action">
-                          <div>
-                            <strong>该笔付款需要财务判断问题类型</strong>
-                            <span>退回后不能直接重试，媒介需从对应资料节点重新提交。</span>
-                          </div>
-                          <Button
-                            variant="danger"
-                            icon={<RotateCcw size={16} />}
-                            disabled={!canHandleFailure}
-                            disabledReason="当前账号或付款状态不允许退回媒介处理。"
-                            onClick={() => openFailureDialog(item.payoutId)}
-                          >
-                            退回媒介处理
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-            {!liveItems.length ? (
-              <div className="payment-batch-detail-empty-state" role="status">
-                <ReceiptText size={22} aria-hidden="true" />
-                <strong>该项目暂无付款明细</strong>
-                <span>请款记录存在，但没有可展示的付款项快照。</span>
-              </div>
-            ) : null}
+                      </td>
+                      <td className="payment-project-detail-date-cell">{paymentResultDate(currentStatus, item.paidAt)}</td>
+                      <td className="payment-project-detail-money-cell">{money(item.currency, item.amount)}</td>
+                      <td className="payment-project-detail-money-cell">{paymentResultMoney({ status: currentStatus, amount: item.actualPaidAmount, currency: item.actualPaidCurrency })}</td>
+                      <td className="payment-project-detail-money-cell">{paymentResultMoney({ status: currentStatus, amount: item.transferFeeAmount, currency: item.transferFeeCurrency })}</td>
+                      <td className="payment-project-detail-status-cell">
+                        <span className={`simple-status ${paymentStatusTone(currentStatus)}`}><i />{currentStatus}</span>
+                      </td>
+                      <td className="action-cell payment-project-detail-action-cell">
+                        <ListActionButton
+                          kind="view"
+                          onClick={(event) => openDetailDrawer(item.payoutId, event.currentTarget)}
+                        >
+                          查看详情
+                        </ListActionButton>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr>
+                    <td className="request-project-empty" colSpan={10}>该项目暂无付款明细</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
+
+      {selectedDetailItem ? (
+        <PaymentProjectItemDrawer
+          key={selectedDetailItem.payoutId}
+          item={selectedDetailItem}
+          payout={selectedDetailPayout}
+          creator={selectedDetailCreator}
+          canHandleFailure={canHandleFailure}
+          onClose={closeDetailDrawer}
+          onRequestFailureReturn={selectedDetailPayout ? () => openFailureDialog(selectedDetailItem.payoutId) : undefined}
+          onOpenFailurePaymentList={selectedDetailPayout?.paymentFailureReturn && onOpenFailurePaymentList
+            ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, selectedDetailItem.payoutId)
+            : undefined}
+        />
+      ) : null}
 
       {failureDialogPayoutId && dialogItem ? (
         <PaymentFailureReturnDialog
