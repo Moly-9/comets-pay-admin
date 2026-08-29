@@ -535,6 +535,7 @@ export function PaymentListReviewContent({
                         ? creators.find((candidate) => String(candidate.id) === String(row.item.snapshot.creatorId))
                         : creators.find((candidate) => candidate.name === row.item.snapshot.creatorName);
                       const recipientName = creator?.name || row.item.snapshot.creatorName;
+                      const accountValue = accountDisplayValue(row.effectiveAccount.accountSummary);
                       const subjectName = recipientSubjectName(
                         row.effectiveAccount,
                         row.item.snapshot.realName,
@@ -544,12 +545,12 @@ export function PaymentListReviewContent({
                         <tr key={row.key}>
                           <td data-label="收款人名称">
                             <div className="request-payment-payee-creator">
-                              <CreatorIdentity creator={creator} displayName={recipientName} fallbackHandle={row.item.snapshot.creatorHandle} fallbackPlatform={row.item.snapshot.creatorPlatform} />
+                              <CreatorIdentity creator={creator} displayName={recipientName} fallbackHandle={row.item.snapshot.creatorHandle} fallbackPlatform={row.item.snapshot.creatorPlatform} socialAccountsMaxVisible={1} />
                             </div>
                           </td>
                           <td data-label="收款主体"><strong>{subjectName}</strong></td>
-                          <td data-label="收款账户">
-                            <strong>{accountDisplayValue(row.effectiveAccount.accountSummary)}</strong>
+                          <td className="request-payment-account-cell" data-label="收款账户">
+                            <strong title={accountValue}>{accountValue}</strong>
                             <small>{transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem)}</small>
                           </td>
                           <td data-label="支付币种"><span className="request-payment-currency-badge">{currency}</span></td>

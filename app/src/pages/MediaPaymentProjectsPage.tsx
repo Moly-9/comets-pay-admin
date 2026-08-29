@@ -46,6 +46,7 @@ import {
   type PaymentListRecord,
   type PaymentRequestProjectId,
   type ProjectId,
+  type RequestApprovalStage,
 } from '../businessWorkflow';
 import {
   addInvoiceToPaymentRequestSelection,
@@ -410,7 +411,85 @@ export type MyProjectRequestProgressStep = {
   label: string;
   description: string;
   time: string;
-  state: 'complete' | 'current' | 'pending';
+  state: 'complete' | 'current' | 'pending' | 'returned';
+};
+
+const REQUEST_APPROVAL_PROGRESS_STAGES: Array<{
+  stage: RequestApprovalStage;
+  status: NonNullable<RequestProjectSummary['approval']>['status'];
+  label: string;
+}> = [
+  { stage: 'PM', status: 'PENDING_PM', label: 'PM 审批' },
+  { stage: 'PROJECT_OWNER', status: 'PENDING_PROJECT_OWNER', label: '项目负责人审批' },
+  { stage: 'OWNER', status: 'PENDING_OWNER', label: '老板审批' },
+  { stage: 'FINANCE', status: 'PENDING_FINANCE', label: '财务审批' },
+];
+
+const approvalProgressSteps = ({
+  request,
+  approvalCompleted,
+  hasPaymentFailureRecovery,
+}: {
+  request: RequestProjectSummary;
+  approvalCompleted: boolean;
+  hasPaymentFailureRecovery: boolean;
+}): MyProjectRequestProgressStep[] => {
+  const approval = request.approval;
+  if (!approval || request.lifecycle === 'CANCELLED') {
+    return REQUEST_APPROVAL_PROGRESS_STAGES.map((item, index) => ({
+      label: item.label,
+      description: index === 0 ? '提交审核后进入' : `${REQUEST_APPROVAL_PROGRESS_STAGES[index - 1].label}通过后进入`,
+      time: '待开始',
+      state: 'pending',
+    }));
+  }
+
+  const currentStageIndex = REQUEST_APPROVAL_PROGRESS_STAGES.findIndex((item) => item.status === approval.status);
+  const returnedStageIndex = REQUEST_APPROVAL_PROGRESS_STAGES.findIndex((item) => item.stage === approval.returnedFromStage);
+  const latestEventForStage = (stage: RequestApprovalStage, action: 'APPROVE' | 'RETURN') => (
+    [...approval.history].reverse().find((event) => event.stage === stage && event.action === action)
+  );
+
+  return REQUEST_APPROVAL_PROGRESS_STAGES.map((item, index) => {
+    const approvedEvent = latestEventForStage(item.stage, 'APPROVE');
+    const stageComplete = approvalCompleted
+      || approval.status === 'APPROVED'
+      || currentStageIndex > index
+      || (approval.status === 'RETURNED_TO_MEDIA_REVIEW' && returnedStageIndex > index);
+    if (stageComplete || (hasPaymentFailureRecovery && approval.status === 'RETURNED_TO_MEDIA_REVIEW')) {
+      return {
+        label: item.label,
+        description: approvedEvent ? `${approvedEvent.actorName} 已审批通过` : `${item.label}已通过`,
+        time: approvedEvent
+          ? `第 ${approvedEvent.round} 轮 · ${formatCreatedAt(approvedEvent.occurredAt)}`
+          : `第 ${approval.round} 轮 · 已通过`,
+        state: 'complete',
+      };
+    }
+    if (approval.status === 'RETURNED_TO_MEDIA_REVIEW' && returnedStageIndex === index) {
+      const returnEvent = latestEventForStage(item.stage, 'RETURN');
+      return {
+        label: item.label,
+        description: `${returnEvent?.actorName || '审批人'}已退回：${approval.returnReason?.trim() || returnEvent?.reason?.trim() || '未记录原因'}`,
+        time: `第 ${returnEvent?.round ?? approval.round} 轮 · ${formatCreatedAt(returnEvent?.occurredAt ?? approval.updatedAt)}`,
+        state: 'returned',
+      };
+    }
+    if (currentStageIndex === index) {
+      return {
+        label: item.label,
+        description: `第 ${approval.round} 轮 · 等待${item.label}`,
+        time: formatCreatedAt(approval.updatedAt),
+        state: 'current',
+      };
+    }
+    return {
+      label: item.label,
+      description: index === 0 ? '提交审核后进入' : `${REQUEST_APPROVAL_PROGRESS_STAGES[index - 1].label}通过后进入`,
+      time: '待开始',
+      state: 'pending',
+    };
+  });
 };
 
 export const buildMyProjectRequestProgress = ({
@@ -458,7 +537,7 @@ export const buildMyProjectRequestProgress = ({
     || request.approval?.status === 'APPROVED'
     || hasPaymentFailureRecovery;
   const createdTime = formatCreatedAt(request.createdAt ?? request.approval?.submittedAt);
-  const updatedTime = formatCreatedAt(request.approval?.updatedAt ?? request.approval?.submittedAt);
+  const submittedTime = formatCreatedAt(request.approval?.submittedAt ?? request.approval?.updatedAt);
 
   let invoiceStep: MyProjectRequestProgressStep;
   if (invoiceReady) {
@@ -491,8 +570,8 @@ export const buildMyProjectRequestProgress = ({
   } else if (approvalCompleted) {
     approvalStep = {
       label: '提交审核',
-      description: hasPaymentFailureRecovery ? '审批已完成，失败款正在恢复处理' : 'PM、项目负责人、老板及财务均已通过',
-      time: updatedTime,
+      description: hasPaymentFailureRecovery ? '已提交并完成审批，失败款正在恢复处理' : `第 ${approvalRound} 轮 · 已提交审批`,
+      time: submittedTime,
       state: 'complete',
     };
   } else if (request.lifecycle === 'RETURNED') {
@@ -505,9 +584,9 @@ export const buildMyProjectRequestProgress = ({
   } else if (request.approval || request.lifecycle === 'SUBMITTED') {
     approvalStep = {
       label: '提交审核',
-      description: `第 ${approvalRound} 轮 · ${myProjectStatusFor(request)}`,
-      time: updatedTime,
-      state: 'current',
+      description: `第 ${approvalRound} 轮 · 已提交审批`,
+      time: submittedTime,
+      state: 'complete',
     };
   } else if (invoiceReady && submissionIssues.length === 0) {
     approvalStep = {
@@ -590,6 +669,7 @@ export const buildMyProjectRequestProgress = ({
     },
     invoiceStep,
     approvalStep,
+    ...approvalProgressSteps({ request, approvalCompleted, hasPaymentFailureRecovery }),
     paymentStep,
   ];
 };
@@ -1570,7 +1650,7 @@ export function MediaPaymentProjectsPage({
                   ));
                   return (
                     <tr key={link.creatorId}>
-                      <td><div className="media-request-creator-cell"><CreatorIdentity creator={creator} displayName={String(link.creatorId)} fallbackHandle={link.creatorHandle} fallbackPlatform={link.creatorPlatform} /></div></td>
+                      <td><div className="media-request-creator-cell"><CreatorIdentity creator={creator} displayName={String(link.creatorId)} fallbackHandle={link.creatorHandle} fallbackPlatform={link.creatorPlatform} socialAccountsMaxVisible={1} /></div></td>
                       <td>
                         <div className="media-request-record-stack">
                           {presentation.invoices.length ? presentation.invoices.map((invoice) => (
@@ -1651,7 +1731,7 @@ export function MediaPaymentProjectsPage({
               {progress.map((step, index) => (
                 <div className={`project-progress-item progress-${step.state}`} key={step.label}>
                   <span className="project-progress-node">
-                    {step.state === 'complete' ? <Check size={15} aria-hidden="true" /> : step.state === 'current' ? <Clock3 size={15} aria-hidden="true" /> : index + 1}
+                    {step.state === 'complete' ? <Check size={15} aria-hidden="true" /> : step.state === 'current' ? <Clock3 size={15} aria-hidden="true" /> : step.state === 'returned' ? <AlertTriangle size={14} aria-hidden="true" /> : index + 1}
                   </span>
                   <div><strong>{step.label}</strong><p>{step.description}</p><small>{step.time}</small></div>
                 </div>

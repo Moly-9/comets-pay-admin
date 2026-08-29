@@ -114,6 +114,7 @@ export function CreatorIdentity({
   fallbackPlatform,
   accounts,
   socialAccountsMode = 'collapsible',
+  socialAccountsMaxVisible = 2,
   showSocialAccounts = true,
   size = 'sm',
   className = '',
@@ -126,6 +127,7 @@ export function CreatorIdentity({
   fallbackPlatform?: string;
   accounts?: readonly CreatorSocialAccount[];
   socialAccountsMode?: CreatorSocialAccountsMode;
+  socialAccountsMaxVisible?: number;
   showSocialAccounts?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -146,6 +148,7 @@ export function CreatorIdentity({
             fallbackHandle={fallbackHandle}
             fallbackPlatform={fallbackPlatform}
             mode={socialAccountsMode}
+            maxVisible={socialAccountsMaxVisible}
           />
         ) : null}
       </span>

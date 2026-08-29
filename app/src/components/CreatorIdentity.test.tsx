@@ -49,6 +49,18 @@ describe('CreatorIdentity', () => {
     expect(html).not.toContain('<button');
   });
 
+  it('supports a single visible badge for compact table cells', () => {
+    const html = renderToStaticMarkup(
+      <CreatorIdentity creator={creator} socialAccountsMaxVisible={1} />,
+    );
+
+    expect(html).toContain('@mina.first');
+    expect(html).not.toContain('@mina.second');
+    expect(html).not.toContain('@mina.third');
+    expect(html).toContain('aria-label="展开其余 2 个社媒平台"');
+    expect(html).toContain('>+2</button>');
+  });
+
   it('uses the generic platform icon for unknown platforms', () => {
     const html = renderToStaticMarkup(<CreatorSocialAccounts accounts={[
       { id: 'social-unknown', handle: '@mina.new', platform: 'Mastodon', profileUrl: '' },

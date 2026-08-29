@@ -2271,8 +2271,23 @@ input[type="checkbox"]:disabled {
 
 .media-request-creator-cell > span {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  width: 100%;
+  align-items: center;
   min-width: 0;
-  gap: 2px;
+  gap: 10px;
+}
+
+.media-request-creator-cell .creator-identity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.media-request-creator-cell .creator-identity-copy > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .media-request-creator-cell small {
@@ -4231,23 +4246,24 @@ input[type="checkbox"]:disabled {
 
 .request-payment-payee-table {
   width: 100%;
-  min-width: 1000px;
+  min-width: 1080px;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
-.request-payment-payee-table col.is-creator { width: 20%; }
-.request-payment-payee-table col.is-subject { width: 14%; }
-.request-payment-payee-table col.is-account { width: 18%; }
-.request-payment-payee-table col.is-currency { width: 8%; }
-.request-payment-payee-table col.is-amount { width: 13%; }
+.request-payment-payee-table col.is-creator { width: 21%; }
+.request-payment-payee-table col.is-subject { width: 13%; }
+.request-payment-payee-table col.is-account { width: 21%; }
+.request-payment-payee-table col.is-currency { width: 7.5%; }
+.request-payment-payee-table col.is-amount { width: 12%; }
 .request-payment-payee-table col.is-fee { width: 10%; }
-.request-payment-payee-table col.is-validation { width: 9%; }
+.request-payment-payee-table col.is-validation { width: 8%; }
 
 .request-payment-payee-table th,
 .request-payment-payee-table td {
   border-bottom: 1px solid #e8ebf0;
-  padding: 10px 12px;
+  box-sizing: border-box;
+  padding: 10px clamp(10px, 1vw, 15px);
   color: #46515f;
   font-size: 11.5px;
   line-height: 1.4;
@@ -4277,6 +4293,20 @@ input[type="checkbox"]:disabled {
 .request-payment-payee-table td > strong,
 .request-payment-payee-table td > small {
   display: block;
+  overflow-wrap: anywhere;
+}
+
+.request-payment-account-cell > strong {
+  display: -webkit-box !important;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.request-payment-account-cell > small {
+  max-width: 100%;
   overflow-wrap: anywhere;
 }
 
@@ -13354,6 +13384,9 @@ button:disabled {
 .project-progress-card {
   position: sticky;
   top: 86px;
+  max-height: calc(100vh - 118px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .project-progress-list {
@@ -13435,6 +13468,17 @@ button:disabled {
   border-color: #ffad99;
   background: #fff1ec;
   color: #ee654b;
+}
+
+.progress-returned .project-progress-node {
+  border-color: #efb0a7;
+  background: #fff1ef;
+  color: #c94f45;
+}
+
+.progress-returned strong,
+.progress-returned p {
+  color: #a4463d;
 }
 
 .page-search input {
@@ -20281,6 +20325,8 @@ button:disabled {
 
   .project-progress-card {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 

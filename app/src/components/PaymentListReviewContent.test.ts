@@ -203,10 +203,14 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('<CreatorIdentity creator={creator}');
     expect(reviewContentSource).toContain('fallbackHandle={row.item.snapshot.creatorHandle}');
     expect(reviewContentSource).toContain('fallbackPlatform={row.item.snapshot.creatorPlatform}');
+    expect(reviewContentSource).toContain('socialAccountsMaxVisible={1}');
+    expect(reviewContentSource).toContain('className="request-payment-account-cell"');
+    expect(reviewContentSource).toContain('title={accountValue}');
     expect(reviewContentSource).toContain('recipientSubjectName(');
     expect(reviewContentSource).toContain('request-payment-review-heading-actions');
     expect(reviewContentSource).toContain("variant === 'finance-workspace' ? (accountDisplay");
-    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*1000px;/s);
+    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*1080px;/s);
+    expect(workspaceStyles).toMatch(/\.request-payment-account-cell > strong\s*{[^}]*-webkit-line-clamp:\s*2;/s);
     expect(workspaceStyles).toMatch(/@media \(max-width: 640px\)[\s\S]*\.request-payment-payee-table tr\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
 

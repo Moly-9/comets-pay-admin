@@ -132,6 +132,16 @@ describe('new payment request resource picker', () => {
     expect(tableSource).not.toContain('contract.contractNumber');
     expect(tableSource).not.toContain('付款清单${');
     expect(tableSource).toContain('actualPayoutAmountLabel(payout)');
+    expect(tableSource).toContain('socialAccountsMaxVisible={1}');
+  });
+
+  it('keeps compact creator identities aligned and the longer progress card scrollable', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+
+    expect(css).toMatch(/\.media-request-creator-cell > span\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
+    expect(css).toMatch(/\.media-request-creator-cell \.creator-identity-copy\s*{[^}]*display:\s*grid;/s);
+    expect(css).toMatch(/\.project-progress-card\s*{[^}]*max-height:\s*calc\(100vh - 118px\);[^}]*overflow-y:\s*auto;/s);
+    expect(css).toContain('.progress-returned .project-progress-node');
   });
 
   it('opens project detail from the full project row without hijacking row actions', () => {
