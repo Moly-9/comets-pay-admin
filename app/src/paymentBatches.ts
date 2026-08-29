@@ -13,6 +13,7 @@ import {
 } from './businessWorkflow';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import type {
+  DocumentPayoutSnapshot,
   GeneratedInvoiceRecord,
   InvoiceCurrency,
   Payout,
@@ -75,6 +76,9 @@ export type PaymentBatchItemSnapshot = Readonly<{
   receiveCurrency: string;
   transferMethod: string;
   accountSummary: string;
+  accountName?: string;
+  accountIdentifier?: string;
+  accountIdentifierLabel?: 'Account Number' | 'IBAN' | 'PayPal 邮箱' | 'PayPal 账户' | 'PayMax 账户 ID' | '历史收款标识';
   payoutAccountId?: string;
   payoutAccountVersion: PayoutAccountVersion;
   feeBearer: string;
@@ -83,6 +87,10 @@ export type PaymentBatchItemSnapshot = Readonly<{
   description: string;
   paymentStatus: Payout['status'];
   paidAt?: string;
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  actualPaidAmount?: number;
+  actualPaidCurrency?: InvoiceCurrency;
   failure?: Readonly<{
     code: string;
     response: string;
@@ -199,6 +207,43 @@ const transferMethodLabel = (value: unknown, provider: PaymentBatchItemSnapshot[
   return provider;
 };
 
+const normalizedSnapshotValue = (value: unknown) => String(value ?? '').trim();
+
+const paymentRecipientSnapshot = ({
+  provider,
+  payment,
+  accountSummary,
+}: {
+  provider: PaymentBatchItemSnapshot['provider'];
+  payment?: DocumentPayoutSnapshot;
+  accountSummary: string;
+}): Pick<PaymentBatchItemSnapshot, 'accountName' | 'accountIdentifier' | 'accountIdentifierLabel'> => {
+  const accountName = normalizedSnapshotValue(payment?.accountName) || undefined;
+  if (provider === 'PayPal') {
+    const email = normalizedSnapshotValue(payment?.paypalEmail);
+    const username = normalizedSnapshotValue(payment?.paypalUsername);
+    return {
+      accountName,
+      accountIdentifier: email || username || accountSummary || undefined,
+      accountIdentifierLabel: email ? 'PayPal 邮箱' : username ? 'PayPal 账户' : '历史收款标识',
+    };
+  }
+  if (provider === 'PayMax') {
+    return {
+      accountName,
+      accountIdentifier: accountSummary || normalizedSnapshotValue(payment?.accountNumber) || undefined,
+      accountIdentifierLabel: accountSummary || payment?.accountNumber ? 'PayMax 账户 ID' : undefined,
+    };
+  }
+  const accountNumber = normalizedSnapshotValue(payment?.accountNumber);
+  const iban = normalizedSnapshotValue(payment?.iban);
+  return {
+    accountName,
+    accountIdentifier: accountNumber || iban || accountSummary || undefined,
+    accountIdentifierLabel: accountNumber ? 'Account Number' : iban ? 'IBAN' : accountSummary ? '历史收款标识' : undefined,
+  };
+};
+
 const requestForPayout = (
   payout: Payout,
   requests: readonly RequestProjectSummary[],
@@ -313,6 +358,12 @@ const snapshotItem = ({
   const feeBearer = paymentListItem
     ? paymentListItemValue(paymentListItem, 'feeBearer')
     : payout.feeBearer;
+  const effectivePaymentDetails = effectiveAccount?.paymentDetails ?? documentPayment;
+  const accountRecipient = paymentRecipientSnapshot({
+    provider: payout.provider,
+    payment: effectivePaymentDetails,
+    accountSummary: accountDisplayValue(rawAccountSummary, ''),
+  });
 
   return {
     payoutId: payout.id,
@@ -348,6 +399,7 @@ const snapshotItem = ({
       payout.provider,
     ),
     accountSummary: accountDisplayValue(rawAccountSummary),
+    ...accountRecipient,
     payoutAccountId: effectiveAccount?.payoutAccountId
       ?? payout.payoutAccountId
       ?? invoice?.snapshot.payoutAccountId,
@@ -361,6 +413,10 @@ const snapshotItem = ({
     description: String(paymentListItem ? paymentListItemValue(paymentListItem, 'description') : '') || payout.deliverable || '未记录',
     paymentStatus: itemStatus ?? payout.status,
     paidAt: payout.paidAt ?? batchPaidAt,
+    transferFeeAmount: payout.transferFeeAmount,
+    transferFeeCurrency: payout.transferFeeCurrency,
+    actualPaidAmount: payout.actualPaidAmount,
+    actualPaidCurrency: payout.actualPaidCurrency,
     failure: payout.paymentFailure ? {
       code: payout.paymentFailure.errorCode,
       response: payout.paymentFailure.providerResponse,

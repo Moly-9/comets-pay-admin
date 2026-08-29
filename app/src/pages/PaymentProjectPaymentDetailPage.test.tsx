@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { applyPaymentBatchPrototypeScenario } from '../paymentBatchPrototypeScenario';
 import { createPaymentProjectPaymentRecord } from '../paymentBatches';
@@ -48,6 +49,21 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).not.toContain('<dt>请款编号</dt>');
     expect(html).not.toContain('<dt>请款金额</dt>');
     expect(html).toContain(`${failedRecord.items.length} 笔付款明细`);
+    const headings = [
+      '达人名称',
+      '付款渠道',
+      '收款银行账号',
+      '付款日期',
+      '付款金额',
+      '支付总金额',
+      '手续费金额',
+      '付款状态',
+    ];
+    headings.forEach((heading) => expect(html).toContain(`>${heading}</th>`));
+    const tableHead = html.slice(html.indexOf('<thead>'), html.indexOf('</thead>'));
+    headings.slice(1).forEach((heading, index) => {
+      expect(tableHead.indexOf(headings[index])).toBeLessThan(tableHead.indexOf(heading));
+    });
     expect(html).toContain('付款失败需要处理');
     expect(html).toContain('退回媒介处理');
     expect(html).toContain('aria-expanded="true"');
@@ -60,6 +76,122 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('查看 Invoice 附件');
     expect(html).not.toContain('付款批次</span>');
     expect(html).not.toContain('请款项目付款');
+  });
+
+  it('renders frozen Account Name as primary copy and Display Name as secondary copy', () => {
+    const sourceItem = failedRecord.items[0];
+    const accountRecord = {
+      ...failedRecord,
+      items: [{
+        ...sourceItem,
+        accountName: 'Frozen Creator Legal Account',
+        accountIdentifier: 'GB29NWBK60161331926819',
+        accountIdentifierLabel: 'IBAN' as const,
+        creatorName: 'Frozen Display Name',
+      }],
+    };
+    const html = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={accountRecord}
+        payouts={[]}
+        canHandleFailure={false}
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(html).toContain('<strong title="Frozen Creator Legal Account">Frozen Creator Legal Account</strong>');
+    expect(html).toContain('<small title="Frozen Display Name">Frozen Display Name</small>');
+    expect(html).toContain('<strong title="GB29NWBK60161331926819">GB29NWBK60161331926819</strong>');
+    expect(html).toContain('<small>IBAN</small>');
+  });
+
+  it('uses channel result amounts only after payment succeeds and keeps status inside the eighth column', () => {
+    const sourceItem = failedRecord.items[0];
+    const paidItem = {
+      ...sourceItem,
+      paymentStatus: '已付款' as const,
+      paidAt: '2026-08-26T18:30:00.000Z',
+      transferFeeAmount: 8.5,
+      transferFeeCurrency: 'USD' as const,
+      actualPaidAmount: 1258.5,
+      actualPaidCurrency: 'USD' as const,
+    };
+    const paidRecord = { ...failedRecord, status: '已付款' as const, items: [paidItem] };
+    const paidHtml = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={paidRecord}
+        payouts={[]}
+        canHandleFailure={false}
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(paidHtml).toContain('2026-08-26');
+    expect(paidHtml).toContain('USD 1,258.5');
+    expect(paidHtml).toContain('USD 8.5');
+    expect(paidHtml).toContain('payment-project-detail-status-cell');
+    expect(paidHtml).toContain('payment-project-detail-expand-button');
+    expect(paidHtml).toContain('aria-expanded="false"');
+
+    const processingRecord = {
+      ...failedRecord,
+      status: '付款处理中' as const,
+      items: [{
+        ...paidItem,
+        paymentStatus: '付款处理中' as const,
+      }],
+    };
+    const processingHtml = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={processingRecord}
+        payouts={[]}
+        canHandleFailure={false}
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect((processingHtml.match(/待渠道回写/g) ?? [])).toHaveLength(3);
+    expect(processingHtml).not.toContain('USD 1,258.5');
+    expect(processingHtml).not.toContain('USD 8.5');
+
+    const failedResultRecord = {
+      ...failedRecord,
+      status: '全部失败' as const,
+      items: [{
+        ...paidItem,
+        paymentStatus: '付款失败' as const,
+      }],
+    };
+    const failedHtml = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={failedResultRecord}
+        payouts={[]}
+        canHandleFailure={false}
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+    const failedRowStart = failedHtml.indexOf('<tr id="payment-project-item');
+    const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</tr>', failedRowStart));
+
+    expect(failedDataRow).not.toContain('2026-08-26');
+    expect(failedDataRow).not.toContain('USD 1,258.5');
+    expect(failedDataRow).not.toContain('USD 8.5');
+    expect((failedDataRow.match(/>—</g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('keeps the status column sticky and the mobile expand target accessible', () => {
+    const css = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
+
+    expect(css).toContain('.payment-project-detail-table .payment-project-detail-status-cell');
+    expect(css).toMatch(/position:\s*sticky/);
+    expect(css).toMatch(/right:\s*0/);
+    expect(css).toMatch(/\.payment-project-detail-expand-button\s*\{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/);
+    expect(css).toContain('@media (max-width: 480px)');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('uses project-level progress copy and status counts', () => {

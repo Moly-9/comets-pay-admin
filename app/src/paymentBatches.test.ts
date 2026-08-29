@@ -297,7 +297,12 @@ describe('payment batch snapshots', () => {
   });
 
   it('builds one linked request snapshot with contract, Invoice and payment-list data', () => {
-    const record = createPaymentBatchRecord(buildInput());
+    const input = buildInput();
+    input.payouts[0].transferFeeAmount = 8.5;
+    input.payouts[0].transferFeeCurrency = 'USD';
+    input.payouts[0].actualPaidAmount = 1258.5;
+    input.payouts[0].actualPaidCurrency = 'USD';
+    const record = createPaymentBatchRecord(input);
 
     expect(record.request.requestCode).toBe('REQ-TEST-001');
     expect(record.items).toHaveLength(1);
@@ -307,7 +312,52 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].invoice?.invoiceNumber).toBe('INV-TEST-001');
     expect(record.items[0].paymentListCode).toBe('PAY-TEST-001');
     expect(record.items[0].accountSummary).toBe('1234567890');
+    expect(record.items[0].accountName).toBe('1234567890');
+    expect(record.items[0].accountIdentifier).toBe('1234567890');
+    expect(record.items[0].accountIdentifierLabel).toBe('Account Number');
+    expect(record.items[0].transferFeeAmount).toBe(8.5);
+    expect(record.items[0].transferFeeCurrency).toBe('USD');
+    expect(record.items[0].actualPaidAmount).toBe(1258.5);
+    expect(record.items[0].actualPaidCurrency).toBe('USD');
     expect(record.items[0].paidAt).toBe('2026-08-10T10:30');
+  });
+
+  it.each([
+    {
+      provider: 'PayPal' as const,
+      account: 'creator-paypal@example.com',
+      expectedLabel: 'PayPal 邮箱',
+    },
+    {
+      provider: 'PayMax' as const,
+      account: 'paymax_account_10001',
+      expectedLabel: 'PayMax 账户 ID',
+    },
+  ])('freezes the $provider recipient identifier instead of reading a later creator profile', ({
+    provider,
+    account,
+    expectedLabel,
+  }) => {
+    const input = buildInput();
+    const payout = createPayout(`payout-${provider.toLowerCase()}`, input.requests[0].cooperationProjectId!, 'INV-TEST-001', provider);
+    payout.account = account;
+    const invoice = createInvoice(payout, input.generatedInvoices[0].invoiceId, input.contracts[0].contractId!);
+    const paymentList = createPaymentList(input.requests[0], invoice.invoiceId);
+    paymentList.provider = provider;
+    paymentList.items[0].snapshot.provider = provider;
+    paymentList.items[0].snapshot.accountSummary = account;
+    paymentList.items[0].snapshot.paymentDetails = invoice.snapshot.payment;
+
+    const record = createPaymentBatchRecord({
+      ...input,
+      payouts: [payout],
+      generatedInvoices: [invoice],
+      paymentLists: [paymentList],
+      provider,
+    });
+
+    expect(record.items[0].accountIdentifier).toBe(account);
+    expect(record.items[0].accountIdentifierLabel).toBe(expectedLabel);
   });
 
   it('rejects payouts that resolve to more than one request project', () => {
