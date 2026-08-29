@@ -386,6 +386,7 @@ export const authenticateSystemUser = (account: string, password: string): { use
 };
 
 export const INITIAL_INVOICE_BILLING_ENTITY_ID = 'ibe_fixture_comets_international' as InvoiceBillingEntityId;
+export const INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID = 'ibe_fixture_novacomets_limited' as InvoiceBillingEntityId;
 
 export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
   billingEntityId: INITIAL_INVOICE_BILLING_ENTITY_ID,
@@ -394,11 +395,18 @@ export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
 };
 
 export const INITIAL_INVOICE_BILLING_SETTINGS: InvoiceBillingSettings = {
-  entities: [{
-    id: INITIAL_INVOICE_BILLING_ENTITY_ID,
-    name: INITIAL_INVOICE_ENTITY.name,
-    address: INITIAL_INVOICE_ENTITY.address,
-  }],
+  entities: [
+    {
+      id: INITIAL_INVOICE_BILLING_ENTITY_ID,
+      name: INITIAL_INVOICE_ENTITY.name,
+      address: INITIAL_INVOICE_ENTITY.address,
+    },
+    {
+      id: INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID,
+      name: 'NovaComets Limited',
+      address: 'Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China',
+    },
+  ],
   defaultEntityId: INITIAL_INVOICE_BILLING_ENTITY_ID,
 };
 

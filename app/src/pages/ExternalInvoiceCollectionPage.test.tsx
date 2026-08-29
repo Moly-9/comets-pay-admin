@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import { createExternalInvoiceCollection } from '../invoice/externalInvoiceCollection';
 import { createDocumentPayoutSnapshot } from '../payoutAccounts';
+import { INITIAL_INVOICE_BILLING_SETTINGS } from '../data';
 import type { CreatorProfile } from '../types';
-import { ExternalInvoiceCollectionDetailPage } from './ExternalInvoiceCollectionPage';
+import {
+  ExternalInvoiceCollectionCreatePage,
+  ExternalInvoiceCollectionDetailPage,
+} from './ExternalInvoiceCollectionPage';
 
 const creatorId = 'creator-external-metrics' as CreatorId;
 const creator: CreatorProfile = {
@@ -97,5 +101,22 @@ describe('ExternalInvoiceCollectionDetailPage', () => {
     expect(html).toContain('无合同');
     expect(html).not.toContain('PayPal · 邮箱账户');
     expect(html).toContain('disabled=""');
+  });
+});
+
+describe('ExternalInvoiceCollectionCreatePage', () => {
+  it('renders the shared Invoice billing entity selector', () => {
+    const html = renderToStaticMarkup(
+      <ExternalInvoiceCollectionCreatePage
+        projects={[]}
+        creators={[]}
+        contracts={[]}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
+        onCreate={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('aria-label="\u9009\u62e9\u5916\u90e8 Invoice \u4ed8\u6b3e\u4e3b\u4f53"');
   });
 });

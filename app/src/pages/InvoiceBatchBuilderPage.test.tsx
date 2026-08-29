@@ -67,6 +67,7 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(html).toContain('统一 Description');
     expect(html).not.toContain('分别填写 Description');
     expect(html).not.toContain('逐人费用模板');
+    expect(html).toContain('aria-label="批量 Invoice Bill To 开票主体"');
   });
 
   it('renders generated results with creator avatars, reference columns, and file actions', () => {

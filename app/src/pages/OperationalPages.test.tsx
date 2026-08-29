@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
-import { InvoicePage, INITIAL_CREATORS, TransactionsPage } from './OperationalPages';
+import { InvoicePage, INITIAL_CREATORS, OrganizationPage, TransactionsPage } from './OperationalPages';
 
 describe('request page labels', () => {
   it('uses the cooperation approval title and business-side description', () => {
@@ -12,6 +12,27 @@ describe('request page labels', () => {
     expect(source).toContain('title="请款审批"');
     expect(source).toContain('subtitle="业务侧已提交的请款项目列表，仅展示与当前系统账号有关的项目。"');
     expect(source).not.toContain('subtitle="媒介已提交的请款项目列表，仅展示与当前系统账号有关的项目。"');
+  });
+});
+
+describe('OrganizationPage invoice billing entities', () => {
+  it('shows NovaComets as a selectable non-default Invoice entity', () => {
+    const html = renderToStaticMarkup(
+      <OrganizationPage
+        notify={vi.fn()}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
+        onInvoiceBillingSettingsChange={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('COMETS INTERNATIONAL LIMITED');
+    expect(html).toContain('NovaComets Limited');
+    expect(html).toContain('Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China');
+    expect(html).toContain('checked=""');
+    expect(html).toContain('<span>\u9ed8\u8ba4\u4e3b\u4f53</span>');
+    expect(html).toContain('<span>\u8bbe\u4e3a\u9ed8\u8ba4</span>');
+    expect(html).toContain('aria-label="\u7f16\u8f91 NovaComets Limited"');
+    expect(html).toContain('aria-label="\u5220\u9664 NovaComets Limited"');
   });
 });
 

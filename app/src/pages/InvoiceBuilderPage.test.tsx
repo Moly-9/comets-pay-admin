@@ -34,6 +34,7 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
     expect(html).toContain('data-testid="invoice-fill-demo"');
     expect(html).toContain('填充演示数据');
+    expect(html).toContain('aria-label="选择 Bill To 开票主体"');
   });
 
   it('uses a searchable creator picker with channel and payout-account metadata', () => {
