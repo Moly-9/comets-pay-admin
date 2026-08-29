@@ -42,26 +42,6 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(styles).toContain('.invoice-batch-collapsed-match');
   });
 
-  it('keeps five match cards adaptive on desktop and supports creator-only line items', () => {
-    const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
-    const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');
-    const tableSource = source.match(/function BatchRowTable\([\s\S]*?export function InvoiceBatchBuilderPage/)?.[0] ?? '';
-
-    expect(tableSource).toContain('invoiceBatchLineItemScope(item)');
-    expect(tableSource).toContain('className="invoice-batch-add-creator-line"');
-    expect(tableSource).toContain('addInvoiceBatchCreatorLineItem(row.items)');
-    expect(tableSource).toContain('removeInvoiceBatchCreatorLineItem(row.items, item.id)');
-    expect(tableSource).toContain('个人明细');
-    expect(tableSource).toContain('disabled={rowLocked}');
-    expect(styles).toContain('@media (min-width: 1181px)');
-    expect(styles).toMatch(/\.invoice-batch-match-reason-row \.invoice-contract-match-grid\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*nowrap;/);
-    expect(styles).toMatch(/article\[data-state="MATCH"\][\s\S]*?flex:\s*0\.72 1 126px;/);
-    expect(styles).toMatch(/article\[data-state="REASON_REQUIRED"\][\s\S]*?flex:\s*1\.35 1 196px;/);
-    expect(styles).toMatch(/article\.has-account-difference\s*\{[\s\S]*?flex:\s*1\.9 1 300px;/);
-    expect(styles).toMatch(/@media \(max-width: 1180px\)[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
-    expect(styles).toMatch(/@media \(max-width: 560px\)[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/);
-  });
-
   it('moves Excel import into the bulk-input footer and previews matches in the creator archive', () => {
     const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
     const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');

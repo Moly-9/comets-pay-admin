@@ -44,15 +44,12 @@ import { creatorSocialAccounts } from '../creatorSearchOptions';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
-  addInvoiceBatchCreatorLineItem,
   availableContractsForEngagement,
   buildInvoiceDocumentForBatchRow,
   clearInvoiceBatchDescriptionOverride,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
   INVOICE_BATCH_CURRENCIES,
-  invoiceBatchLineItemScope,
-  removeInvoiceBatchCreatorLineItem,
   setInvoiceBatchDescriptionOverride,
   synchronizeInvoiceBatchDescriptions,
   updateInvoiceBatchLineItem,
@@ -747,12 +744,10 @@ function BatchRowTable({
                 <td data-label="Description">
                   <div className="invoice-batch-line-stack">
                     {row.items.map((item, itemIndex) => {
-                      const creatorLineItem = invoiceBatchLineItemScope(item) === 'CREATOR';
-                      const overridden = !creatorLineItem
-                        && row.descriptionOverrideKeys.includes(item.templateKey);
+                      const overridden = row.descriptionOverrideKeys.includes(item.templateKey);
                       return (
                         <div
-                          className={`invoice-batch-description-override${overridden ? ' is-overridden' : ''}${creatorLineItem ? ' is-creator-line' : ''}`}
+                          className={`invoice-batch-description-override${overridden ? ' is-overridden' : ''}`}
                           key={item.id}
                         >
                           <input
@@ -764,22 +759,7 @@ function BatchRowTable({
                               setInvoiceBatchDescriptionOverride(row, item.id, event.target.value),
                             )}
                           />
-                          {creatorLineItem ? (
-                            <>
-                              <span>个人明细</span>
-                              <button
-                                type="button"
-                                aria-label={`删除 ${row.creatorName} 第 ${itemIndex + 1} 条个人明细`}
-                                title="删除个人明细"
-                                disabled={rowLocked}
-                                onClick={() => onChange(row.engagementId, {
-                                  items: removeInvoiceBatchCreatorLineItem(row.items, item.id),
-                                })}
-                              >
-                                <Trash2 size={13} aria-hidden="true" />
-                              </button>
-                            </>
-                          ) : overridden ? (
+                          {overridden ? (
                             <>
                               <span>已覆盖</span>
                               <button
@@ -803,22 +783,6 @@ function BatchRowTable({
                         </div>
                       );
                     })}
-                    <button
-                      className="invoice-batch-add-creator-line"
-                      type="button"
-                      disabled={rowLocked}
-                      onClick={() => onChange(row.engagementId, {
-                        items: addInvoiceBatchCreatorLineItem(row.items),
-                      })}
-                    >
-                      <Plus size={14} aria-hidden="true" />
-                      新增明细
-                    </button>
-                    <span className="sr-only" aria-live="polite">
-                      {`${row.creatorName} 当前有 ${row.items.filter((item) => (
-                        invoiceBatchLineItemScope(item) === 'CREATOR'
-                      )).length} 条个人明细`}
-                    </span>
                   </div>
                 </td>
                 <td data-label="Price">
