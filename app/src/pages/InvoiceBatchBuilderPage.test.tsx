@@ -9,6 +9,31 @@ import { InvoiceBatchBuilderPage, InvoiceBatchResultSection } from './InvoiceBat
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './OperationalPages';
 
 describe('InvoiceBatchBuilderPage layout', () => {
+  it('separates compact creator accounts, contract selection, and contract preview actions', () => {
+    const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');
+    const tableSource = source.match(/function BatchRowTable\([\s\S]*?export function InvoiceBatchBuilderPage/)?.[0] ?? '';
+    const contractPickerSource = tableSource.match(/<details className="invoice-batch-contract-picker">[\s\S]*?<\/details>/)?.[0] ?? '';
+
+    expect(tableSource).toContain('showSocialAccounts={false}');
+    expect(tableSource).toContain('<CreatorSocialAccounts');
+    expect(tableSource).toContain('maxVisible={1}');
+    expect(tableSource).toContain('className="invoice-batch-creator-socials"');
+    expect(contractPickerSource).toContain('className="invoice-batch-contract-select"');
+    expect(contractPickerSource).toContain('aria-pressed={selected}');
+    expect(contractPickerSource).toContain('<Circle size={17}');
+    expect(contractPickerSource).not.toContain('type="checkbox"');
+    expect(contractPickerSource.indexOf('<strong>{contract.name}</strong>')).toBeLessThan(
+      contractPickerSource.indexOf('<small>{contract.id}</small>'),
+    );
+    expect(contractPickerSource).toContain('onPreviewContract(contract)');
+    expect(tableSource).toContain('<InvoiceContractMatchPanel');
+    expect(source).toContain('className="invoice-batch-contract-preview-modal"');
+    expect(source).toContain('<ContractDocumentView');
+    expect(styles).toContain('.invoice-batch-contract-select[aria-pressed="true"]');
+    expect(styles).toContain('.invoice-batch-match-reason-row .invoice-contract-match-panel');
+  });
+
   it('moves Excel import into the bulk-input footer and previews matches in the creator archive', () => {
     const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
     const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');

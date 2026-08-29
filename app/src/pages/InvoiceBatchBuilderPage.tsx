@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  Circle,
   ChevronDown,
   ChevronRight,
   ClipboardPaste,
@@ -34,9 +35,12 @@ import {
   type ProjectId,
 } from '../businessWorkflow';
 import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { ContractDocumentView } from '../components/ContractDocumentView';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
-import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPanel';
+import { CreatorIdentity, CreatorSocialAccounts } from '../components/CreatorIdentity';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { creatorSocialAccounts } from '../creatorSearchOptions';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
@@ -64,6 +68,7 @@ import {
 } from '../invoice/invoiceBatchPrototype';
 import {
   createInvoiceContractMatchReview,
+  evaluateInvoiceContractMatch,
   type InvoiceContractMatchActor,
 } from '../invoice/invoiceContractMatching';
 import {
@@ -80,6 +85,7 @@ import { findExistingEngagementId } from '../paymentRequestProjects';
 import {
   downloadBlob,
   formatInvoiceMoney,
+  formatInvoiceNumber,
   invoiceFilename,
   nextInvoiceNumber,
   todayInputValue,
@@ -629,6 +635,7 @@ function BatchRowTable({
   onChange,
   onOpenCreatorPaymentInformation,
   onPreview,
+  onPreviewContract,
 }: {
   rows: InvoiceBatchRow[];
   context: InvoiceBatchContext;
@@ -637,6 +644,7 @@ function BatchRowTable({
   onChange: (engagementId: EngagementId, patch: Partial<InvoiceBatchRow>) => void;
   onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
   onPreview: (row: InvoiceBatchRow) => void;
+  onPreviewContract: (contract: ContractRecord) => void;
 }) {
   const visibleRows = onlyProblems
     ? rows.filter((row) => !['READY', 'GENERATED'].includes(row.status))
@@ -666,6 +674,9 @@ function BatchRowTable({
               context.contracts,
               { projectId: row.projectId, creatorId: row.creatorId },
             );
+            const selectedContracts = availableContracts.filter((contract) => (
+              row.contractIds.includes(contract.contractId)
+            ));
             const meta = STATUS_META[row.status];
             const rowLocked = row.status === 'GENERATED' || row.status === 'GENERATING';
             const creator = context.creators.find((item) => item.id === row.creatorId);
@@ -673,8 +684,19 @@ function BatchRowTable({
             const selectedAccount = payoutAccounts.find((account) => (
               getPayoutAccountId(account) === row.payoutAccountId
             ));
-            const needsMatchReason = row.contractMatchReview?.issues.some((issue) => (
-              issue.severity === 'REASON_REQUIRED'
+            const contractMatch = !rowLocked && row.contractMatchReview && row.contractIds.length
+              ? evaluateInvoiceContractMatch(
+                  selectedContracts,
+                  buildInvoiceDocumentForBatchRow(
+                    row,
+                    context,
+                    formatInvoiceNumber(row.invoiceDate, 1),
+                  ),
+                  row.contractMatchReason,
+                )
+              : null;
+            const showsContractMatchPanel = Boolean(contractMatch && (
+              contractMatch.blockerIssues.length || contractMatch.reasonRequiredIssues.length
             ));
             return (
               <Fragment key={row.engagementId}>
@@ -684,13 +706,30 @@ function BatchRowTable({
                 data-creator-id={row.creatorId}
               >
                 <td data-label="达人">
-                  <button
-                    className="invoice-batch-creator-link"
-                    type="button"
-                    onClick={() => onOpenCreatorPaymentInformation(row.creatorId)}
-                  >
-                    <CreatorIdentity creator={creator} displayName={row.creatorName} fallbackHandle={row.creatorHandle} fallbackPlatform={row.creatorPlatform} socialAccountsMode="expanded" />
-                  </button>
+                  <div className="invoice-batch-creator-cell">
+                    <button
+                      className="invoice-batch-creator-link"
+                      type="button"
+                      aria-label={`查看 ${row.creatorName} 的付款信息`}
+                      onClick={() => onOpenCreatorPaymentInformation(row.creatorId)}
+                    >
+                      <CreatorIdentity
+                        creator={creator}
+                        displayName={row.creatorName}
+                        fallbackHandle={row.creatorHandle}
+                        fallbackPlatform={row.creatorPlatform}
+                        showSocialAccounts={false}
+                      />
+                    </button>
+                    <CreatorSocialAccounts
+                      accounts={creator ? creatorSocialAccounts(creator) : undefined}
+                      fallbackHandle={row.creatorHandle}
+                      fallbackPlatform={row.creatorPlatform}
+                      mode="collapsible"
+                      maxVisible={1}
+                      className="invoice-batch-creator-socials"
+                    />
+                  </div>
                 </td>
                 <td data-label="Description">
                   <div className="invoice-batch-line-stack">
@@ -825,20 +864,33 @@ function BatchRowTable({
                         {availableContracts.map((contract) => {
                           const selected = row.contractIds.includes(contract.contractId);
                           return (
-                            <label key={contract.contractId}>
-                              <input
-                                type="checkbox"
-                                checked={selected}
+                            <div className="invoice-batch-contract-option" key={contract.contractId}>
+                              <button
+                                className="invoice-batch-contract-select"
+                                type="button"
+                                aria-label={`${selected ? '取消选择' : '选择'}合同 ${contract.name}`}
+                                aria-pressed={selected}
                                 disabled={rowLocked}
-                                onChange={() => onChange(row.engagementId, {
+                                onClick={() => onChange(row.engagementId, {
                                   contractIds: selected
                                     ? row.contractIds.filter((id) => id !== contract.contractId)
                                     : [...row.contractIds, contract.contractId as ContractId],
                                   payoutAccountLocked: false,
                                 })}
-                              />
-                              <span><strong>{contract.id}</strong><small>{contract.name}</small></span>
-                            </label>
+                              >
+                                {selected
+                                  ? <CheckCircle2 size={17} aria-hidden="true" />
+                                  : <Circle size={17} aria-hidden="true" />}
+                              </button>
+                              <button
+                                className="invoice-batch-contract-preview-trigger"
+                                type="button"
+                                aria-label={`预览合同 ${contract.name}`}
+                                onClick={() => onPreviewContract(contract)}
+                              >
+                                <span><strong>{contract.name}</strong><small>{contract.id}</small></span>
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -865,21 +917,17 @@ function BatchRowTable({
                   </button>
                 </td>
               </tr>
-              {needsMatchReason && !rowLocked ? (
+              {showsContractMatchPanel && contractMatch ? (
                 <tr className="invoice-batch-match-reason-row">
                   <td colSpan={10}>
-                    <label>
-                      <span><AlertTriangle size={15} /><strong>{row.creatorName} · 合同差异说明 *</strong></span>
-                      <textarea
-                        value={row.contractMatchReason}
-                        maxLength={300}
-                        placeholder="说明金额、币种或付款账户与合同不一致的业务原因"
-                        onChange={(event) => onChange(row.engagementId, {
-                          contractMatchReason: event.target.value,
-                        })}
-                      />
-                      <small>{row.contractMatchReason.trim().length}/300</small>
-                    </label>
+                    <InvoiceContractMatchPanel
+                      match={contractMatch}
+                      reason={row.contractMatchReason}
+                      contextLabel={row.creatorName}
+                      onReasonChange={(value) => onChange(row.engagementId, {
+                        contractMatchReason: value,
+                      })}
+                    />
                   </td>
                 </tr>
               ) : null}
@@ -953,6 +1001,7 @@ export function InvoiceBatchBuilderPage({
     creatorName: string;
     model: InvoiceDocumentModel;
   } | null>(null);
+  const [contractPreview, setContractPreview] = useState<ContractRecord | null>(null);
   const creatorFileInputRef = useRef<HTMLInputElement>(null);
 
   const prototypeCreators = useMemo(
@@ -1925,6 +1974,7 @@ export function InvoiceBatchBuilderPage({
               onChange={updateRow}
               onOpenCreatorPaymentInformation={onOpenCreatorPaymentInformation}
               onPreview={openPreview}
+              onPreviewContract={setContractPreview}
             />
           ) : (
             <div className="invoice-batch-empty">请先选择项目和达人</div>
@@ -2075,6 +2125,27 @@ export function InvoiceBatchBuilderPage({
             <InvoiceDocumentView
               model={preview.model}
               ariaLabel={`${preview.creatorName} Invoice 大图预览`}
+            />
+          </div>
+        </Modal>
+      ) : null}
+
+      {contractPreview ? (
+        <Modal
+          title={`${contractPreview.name} · 合同预览`}
+          width="980px"
+          className="invoice-batch-contract-preview-modal"
+          onClose={() => setContractPreview(null)}
+          footer={<Button variant="secondary" onClick={() => setContractPreview(null)}>关闭</Button>}
+        >
+          <div className="invoice-batch-preview-meta">
+            <span>{contractPreview.id}</span>
+            <small>当前展示系统保存的结构化合同内容，原型阶段不替代真实附件。</small>
+          </div>
+          <div className="invoice-batch-contract-preview-canvas">
+            <ContractDocumentView
+              contract={contractPreview}
+              ariaLabel={`${contractPreview.id} 合同结构化预览`}
             />
           </div>
         </Modal>

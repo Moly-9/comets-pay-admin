@@ -599,8 +599,15 @@
   text-align: center;
 }
 
+.invoice-batch-creator-cell {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
 .invoice-batch-creator-link {
   display: block;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
   border: 0;
@@ -613,6 +620,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.invoice-batch-creator-link .creator-identity {
+  width: 100%;
+}
+
+.invoice-batch-creator-socials {
+  max-width: calc(100% - 44px);
+  margin-left: 44px;
+}
+
+.invoice-batch-creator-socials .creator-social-account {
+  max-width: 116px;
 }
 
 .invoice-batch-creator-link:hover,
@@ -713,36 +733,93 @@
 .invoice-batch-contract-picker > div {
   display: grid;
   max-height: 190px;
+  overflow-x: hidden;
   overflow-y: auto;
   border-top: 1px solid #eceef2;
   padding: 5px;
 }
 
-.invoice-batch-contract-picker label {
+.invoice-batch-contract-option {
   display: grid;
+  min-width: 0;
   min-height: 44px;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   border-radius: 6px;
-  padding: 6px 7px;
-  cursor: pointer;
+  padding: 4px;
 }
 
-.invoice-batch-contract-picker label:hover,
-.invoice-batch-contract-picker label:focus-within {
+.invoice-batch-contract-option:hover,
+.invoice-batch-contract-option:focus-within {
   background: #f7f8fa;
 }
 
-.invoice-batch-contract-picker label > span,
-.invoice-batch-contract-picker label strong,
-.invoice-batch-contract-picker label small {
+.invoice-batch-contract-select,
+.invoice-batch-contract-preview-trigger {
+  border: 0;
+  background: transparent;
+  color: #4c5562;
+  font: inherit;
+  cursor: pointer;
+}
+
+.invoice-batch-contract-select {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  color: #aeb4bf;
+}
+
+.invoice-batch-contract-select[aria-pressed="true"] {
+  color: #ad79a9;
+}
+
+.invoice-batch-contract-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.invoice-batch-contract-select:focus-visible,
+.invoice-batch-contract-preview-trigger:focus-visible {
+  outline: 2px solid rgba(173, 121, 169, 0.28);
+  outline-offset: 1px;
+}
+
+.invoice-batch-contract-preview-trigger {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 5px;
+  padding: 5px 4px;
+  text-align: left;
+  white-space: normal;
+}
+
+.invoice-batch-contract-preview-trigger:hover strong {
+  color: #9a547f;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.invoice-batch-contract-preview-trigger > span,
+.invoice-batch-contract-preview-trigger strong,
+.invoice-batch-contract-preview-trigger small {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.invoice-batch-contract-picker label small {
+.invoice-batch-contract-preview-trigger strong {
+  color: #343942;
+  font-size: 10.5px;
+}
+
+.invoice-batch-contract-preview-trigger small {
   margin-top: 2px;
   color: #858b98;
   font-size: 9.5px;
@@ -1413,11 +1490,13 @@
   margin-left: auto;
 }
 
-.invoice-batch-preview-modal {
+.invoice-batch-preview-modal,
+.invoice-batch-contract-preview-modal {
   max-height: min(900px, calc(100vh - 40px));
 }
 
-.invoice-batch-preview-modal .modal-content {
+.invoice-batch-preview-modal .modal-content,
+.invoice-batch-contract-preview-modal .modal-content {
   background: #eef0f3;
   padding: 0;
 }
@@ -1459,6 +1538,18 @@
   width: min(100%, 720px);
   min-height: 940px;
   margin: 0 auto;
+}
+
+.invoice-batch-contract-preview-canvas {
+  height: min(720px, calc(100vh - 220px));
+  overflow: auto;
+  padding: 28px;
+}
+
+.invoice-batch-contract-preview-canvas .contract-paper {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  box-shadow: 0 14px 32px rgba(39, 43, 51, 0.12);
 }
 
 .invoice-batch-creator-import-modal .modal-content { padding: 18px 20px; }
@@ -2002,41 +2093,29 @@
     text-align: left;
   }
 
-  .invoice-batch-preview-canvas {
+  .invoice-batch-preview-canvas,
+  .invoice-batch-contract-preview-canvas {
     padding: 14px;
   }
 }
 
 .invoice-batch-table .invoice-batch-match-reason-row td {
-  padding: 0 12px 12px;
+  padding: 0 8px 12px;
   border-top: 0;
-  background: #fffdf7;
+  background: transparent;
+  white-space: normal;
 }
 
-.invoice-batch-match-reason-row label {
-  display: grid;
-  grid-template-columns: minmax(180px, auto) minmax(280px, 1fr) 44px;
-  align-items: center;
-  gap: 10px;
+.invoice-batch-match-reason-row .invoice-contract-match-panel {
+  margin-top: 0;
+  border-radius: 10px;
+  white-space: normal;
 }
 
-.invoice-batch-match-reason-row label > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #8b681c;
-  font-size: 11px;
-}
-
-.invoice-batch-match-reason-row textarea {
-  min-height: 54px;
-  resize: vertical;
-}
-
-.invoice-batch-match-reason-row small {
-  color: #7b818c;
-  font-size: 10px;
-  text-align: right;
+.invoice-contract-match-context {
+  color: #7b6578;
+  font-size: 10.5px;
+  font-weight: 700;
 }
 
 @media (max-width: 1180px) {
@@ -2047,17 +2126,8 @@
 
   .invoice-batch-table .invoice-batch-match-reason-row td {
     display: block;
-    padding: 11px;
-    border: 1px solid #ead8aa;
-    border-radius: 6px;
-  }
-
-  .invoice-batch-match-reason-row label {
-    grid-template-columns: 1fr;
-  }
-
-  .invoice-batch-match-reason-row small {
-    text-align: left;
+    padding: 0;
+    border: 0;
   }
 }
 

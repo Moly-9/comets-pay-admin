@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowLeft,
   Building2,
   CheckCircle2,
@@ -16,6 +15,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPanel';
 import { SearchableComboBox } from '../components/SearchableComboBox';
 import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
@@ -795,68 +795,16 @@ export function InvoiceBuilderPage({
                 ) : (
                   <p>当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。</p>
                 )}
-                <div className="invoice-contract-match-panel" data-result={contractMatch.result}>
-                  <div className="invoice-contract-match-head">
-                    <span>
-                      {contractMatch.result === 'BLOCKED' ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
-                      <strong>{
-                        contractMatch.result === 'NOT_APPLICABLE'
-                          ? '未关联合同，匹配不适用'
-                          : contractMatch.result === 'BLOCKED'
-                            ? '主体不一致，暂不能生成'
-                            : contractMatch.result === 'REASON_REQUIRED'
-                              ? '存在可放行差异，请填写说明'
-                              : contractMatch.result === 'APPROVED_WITH_REASON'
-                                ? '差异说明已填写，可以生成'
-                                : '合同与 Invoice 已匹配'
-                      }</strong>
-                    </span>
-                    <em>{contractMatch.result === 'NOT_APPLICABLE'
-                      ? '不适用'
-                      : `${contractMatch.checks.filter((check) => (
-                          ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state)
-                        )).length}/${contractMatch.checks.length} 已确认`}</em>
-                  </div>
-                  <div className="invoice-contract-match-grid">
-                    {contractMatch.checks.map((check) => (
-                      <article data-state={check.state} key={check.field}>
-                        <span>{
-                          check.state === 'MATCH' || check.state === 'APPROVED_WITH_REASON'
-                            ? <CheckCircle2 size={15} />
-                            : check.state === 'NOT_APPLICABLE'
-                              ? <FileText size={15} />
-                              : <AlertTriangle size={15} />
-                        }</span>
-                        <div><strong>{check.label}</strong><small>{check.message}</small></div>
-                      </article>
-                    ))}
-                  </div>
-                  {contractMatch.reasonRequiredIssues.length ? (
-                    <label className={`invoice-contract-match-reason ${errors.contractMatch ? 'has-error' : ''}`}>
-                      <span>合同差异说明 *</span>
-                      <textarea
-                        id="invoice-contract-match-reason"
-                        value={contractMatchReason}
-                        maxLength={300}
-                        aria-invalid={Boolean(errors.contractMatch)}
-                        aria-describedby="invoice-contract-match-reason-help"
-                        placeholder="说明金额、币种或付款账户与合同不一致的业务原因"
-                        onChange={(event) => {
-                          setContractMatchReason(event.target.value);
-                          setGeneratedFiles(null);
-                        }}
-                      />
-                      <small
-                        id="invoice-contract-match-reason-help"
-                        role={errors.contractMatch ? 'alert' : undefined}
-                      >
-                        {errors.contractMatch || `${contractMatchReason.trim().length}/300`}
-                      </small>
-                    </label>
-                  ) : contractMatch.blockerIssues.length ? (
-                    <p className="invoice-contract-match-blocker" role="alert">{contractMatch.blockerIssues.map((item) => item.message).join('；')}</p>
-                  ) : null}
-                </div>
+                <InvoiceContractMatchPanel
+                  match={contractMatch}
+                  reason={contractMatchReason}
+                  error={errors.contractMatch}
+                  reasonInputId="invoice-contract-match-reason"
+                  onReasonChange={(value) => {
+                    setContractMatchReason(value);
+                    setGeneratedFiles(null);
+                  }}
+                />
               </div>
             ) : null}
           </div>
