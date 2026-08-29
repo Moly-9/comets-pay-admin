@@ -474,6 +474,7 @@ export type InvoiceBatchGeneratedFiles = {
 
 export type InvoiceBatchLineItem = InvoiceLineItem & {
   templateKey: string;
+  lineItemScope?: 'SHARED' | 'CREATOR';
 };
 
 export type InvoiceBatchRow = {

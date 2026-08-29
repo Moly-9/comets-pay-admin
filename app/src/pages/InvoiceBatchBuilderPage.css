@@ -844,9 +844,25 @@
   gap: 5px;
 }
 
+.invoice-batch-description-override.is-creator-line {
+  grid-template-columns: minmax(0, 1fr) auto 28px;
+  align-items: center;
+  gap: 5px;
+}
+
 .invoice-batch-description-override.is-overridden input {
   border-color: #e4aa74;
   background: #fffaf2;
+}
+
+.invoice-batch-description-override.is-creator-line input {
+  border-color: #c9d8eb;
+  background: #f8fbff;
+}
+
+.invoice-batch-description-override.is-creator-line > span {
+  background: #eaf2fc;
+  color: #35648f;
 }
 
 .invoice-batch-description-override > span {
@@ -876,6 +892,39 @@
 .invoice-batch-description-override > button:hover:not(:disabled) {
   border-color: #dfa08e;
   color: #a44f3d;
+}
+
+.invoice-batch-add-creator-line {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px dashed #c9ced7;
+  border-radius: 6px;
+  background: #fff;
+  color: #5f6875;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.invoice-batch-add-creator-line:hover:not(:disabled) {
+  border-color: #c585aa;
+  background: #fff9fc;
+  color: #8d587f;
+}
+
+.invoice-batch-add-creator-line:focus-visible {
+  outline: 3px solid rgba(173, 121, 169, 0.18);
+  outline-offset: 2px;
+}
+
+.invoice-batch-add-creator-line:disabled,
+.invoice-batch-description-override > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .invoice-batch-line-totals > strong {
@@ -2151,6 +2200,45 @@
   white-space: normal;
 }
 
+@media (min-width: 1181px) {
+  .invoice-batch-match-reason-row .invoice-contract-match-grid {
+    display: flex;
+    min-width: 940px;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article {
+    min-width: 138px;
+    flex: 1 1 150px;
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article[data-state="MATCH"],
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article[data-state="NOT_APPLICABLE"],
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article[data-state="APPROVED_WITH_REASON"] {
+    min-width: 118px;
+    flex: 0.72 1 126px;
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article[data-state="BLOCKER"],
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article[data-state="REASON_REQUIRED"] {
+    min-width: 178px;
+    flex: 1.35 1 196px;
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article.has-account-difference {
+    min-width: 268px;
+    flex: 1.9 1 300px;
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article strong,
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+}
+
 .invoice-contract-match-context {
   color: #7b6578;
   font-size: 10.5px;
@@ -2158,6 +2246,16 @@
 }
 
 @media (max-width: 1180px) {
+  .invoice-batch-match-reason-row .invoice-contract-match-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid article.has-account-difference {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 760px) {
   .invoice-batch-table .invoice-batch-match-reason-row {
     display: block;
     padding: 0 11px 11px;
@@ -2167,6 +2265,26 @@
     display: block;
     padding: 0;
     border: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .invoice-batch-description-override.is-overridden,
+  .invoice-batch-description-override.is-creator-line {
+    grid-template-columns: minmax(0, 1fr) auto 44px;
+  }
+
+  .invoice-batch-description-override > button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .invoice-batch-add-creator-line {
+    min-height: 44px;
+  }
+
+  .invoice-batch-match-reason-row .invoice-contract-match-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
