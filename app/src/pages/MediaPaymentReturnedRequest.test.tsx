@@ -184,7 +184,7 @@ describe('media returned payment request handling', () => {
   it('keeps payment-workbench returns visible in My Projects with a reason and action', () => {
     const html = renderPage(null);
 
-    expect(html).toContain('1 个请款项目待处理');
+    expect(html).toContain('1 个请款待处理');
     expect(html).toContain('其中 1 个付款信息有误，0 个打款失败');
     expect(html).toContain('“处理退回”或“处理失败请款”');
     expect(html).toContain('付款工作台 · 收款账户名与 Invoice 不一致');
@@ -194,7 +194,7 @@ describe('media returned payment request handling', () => {
   it('shows full return details, correction entry points, and the resubmit action', () => {
     const html = renderPage(returnedRequest.id);
 
-    expect(html).toContain('付款工作台已退回此请款项目');
+    expect(html).toContain('付款工作台已退回此请款');
     expect(html).toContain('收款账户名与 Invoice 不一致，请修正付款清单。');
     expect(html).toContain('财务测试员');
     expect(html).toContain('财务账号');
@@ -206,7 +206,7 @@ describe('media returned payment request handling', () => {
     expect(html).toContain('请选择预计付款时间');
     expect(html).toContain('重新提交');
     expect(html).toContain('aria-label="请款进度"');
-    expect(html).toContain('项目创建');
+    expect(html).toContain('请款创建');
     expect(html).toContain('补充合同');
     expect(html).toContain('关联 Invoice');
     expect(html).toContain('提交审核');
@@ -264,7 +264,7 @@ describe('media returned payment request handling', () => {
     expect(detailHtml).not.toContain('修改请款内容');
     expect(detailHtml).not.toContain('当前账号在项目提交后仅可查看与导出资料。');
     expect(detailHtml).not.toContain('退回待处理');
-    expect(detailHtml).not.toContain('付款工作台已退回此请款项目');
+    expect(detailHtml).not.toContain('付款工作台已退回此请款');
   });
 
   it('summarizes ordinary returns and payment failures in one actionable reminder', () => {
@@ -300,7 +300,7 @@ describe('media returned payment request handling', () => {
 
     const html = renderPage(null, [failedPayout], [returnedRequest, failedRequest]);
 
-    expect(html).toContain('2 个请款项目待处理');
+    expect(html).toContain('2 个请款待处理');
     expect(html).toContain('其中 1 个付款信息有误，1 个打款失败');
     expect(html).toContain('处理退回');
     expect(html).toContain('处理失败请款');

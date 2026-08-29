@@ -118,7 +118,7 @@ describe('My Projects payment request progress', () => {
     const progress = progressFor(request, [], ['缺少 Invoice']);
 
     expect(progress.map((step) => step.label)).toEqual([
-      '项目创建',
+      '请款创建',
       '补充合同',
       '关联 Invoice',
       '提交审核',

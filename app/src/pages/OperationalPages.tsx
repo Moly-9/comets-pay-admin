@@ -425,6 +425,11 @@ export function ProjectInlineFilterPanel({
   onSearchChange,
   onFiltersChange,
   onClear,
+  entityLabel = '项目',
+  statusLabel = '项目状态',
+  searchPlaceholder = '搜索项目名称或编号',
+  listAriaLabel = '项目列表筛选',
+  countLabel = '个项目',
 }: {
   search: string;
   filters: ProjectListFilters;
@@ -438,6 +443,11 @@ export function ProjectInlineFilterPanel({
   onSearchChange: (value: string) => void;
   onFiltersChange: Dispatch<SetStateAction<ProjectListFilters>>;
   onClear: () => void;
+  entityLabel?: string;
+  statusLabel?: string;
+  searchPlaceholder?: string;
+  listAriaLabel?: string;
+  countLabel?: string;
 }) {
   const hasBudgetFilter = filters.currency !== 'all' || Boolean(filters.minBudget || filters.maxBudget);
   const activeFilterCount = Number(filters.customers.length > 0)
@@ -458,11 +468,11 @@ export function ProjectInlineFilterPanel({
         : 'active');
 
   return (
-    <div className="project-inline-filter-panel" aria-label="项目列表筛选">
+    <div className="project-inline-filter-panel" aria-label={listAriaLabel}>
       <div className="project-inline-filters">
         <div className="project-filter-field project-inline-filter-search">
-          <span className="project-filter-field-label">项目</span>
-          <SearchBar value={search} onChange={onSearchChange} placeholder="搜索项目名称或编号" />
+          <span className="project-filter-field-label">{entityLabel}</span>
+          <SearchBar value={search} onChange={onSearchChange} placeholder={searchPlaceholder} />
         </div>
         <SearchableMultiFilter
           className="project-inline-filter-customer"
@@ -524,9 +534,9 @@ export function ProjectInlineFilterPanel({
           {invalidBudgetRange ? <small className="project-budget-error">最高金额不能低于最低金额，当前暂不应用金额区间</small> : null}
         </div>
         <div className="project-filter-field project-inline-filter-status">
-          <span className="project-filter-field-label">项目状态</span>
+          <span className="project-filter-field-label">{statusLabel}</span>
           <SelectField
-            ariaLabel="项目状态"
+            ariaLabel={statusLabel}
             className={`project-status-select project-status-select-${selectedStatusTone}`}
             variant="form"
             value={selectedStatus}
@@ -543,8 +553,8 @@ export function ProjectInlineFilterPanel({
         <div className="project-inline-filter-meta">
           <span>
             {hasActiveFilters
-              ? `显示 ${resultCount} / ${totalCount} 个项目`
-              : `共 ${totalCount} 个项目`}
+              ? `显示 ${resultCount} / ${totalCount} ${countLabel}`
+              : `共 ${totalCount} ${countLabel}`}
           </span>
           {hasActiveFilters ? <button type="button" onClick={onClear}>清除全部</button> : null}
         </div>

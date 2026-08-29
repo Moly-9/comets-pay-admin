@@ -1,11 +1,6 @@
 .media-payment-project-table tbody tr.media-payment-project-row {
   cursor: pointer;
-  transition: outline-color 160ms ease, background-color 160ms ease;
-}
-
-.media-payment-project-table tbody tr.media-payment-project-row:hover {
-  outline: 1px solid #cbd9e8;
-  outline-offset: -1px;
+  transition: background-color 160ms ease;
 }
 
 .media-payment-project-table tbody tr.media-payment-project-row:focus-visible {
@@ -20,6 +15,25 @@
 .media-payment-project-table tbody tr.media-payment-project-row .action-cell {
   cursor: default;
 }
+
+.media-payment-project-table {
+  min-width: 1080px;
+  table-layout: fixed;
+}
+
+.media-payment-project-table :is(th, td):not([colspan]) {
+  padding-right: 14px;
+  padding-left: 14px;
+}
+
+.media-payment-project-table th:nth-child(1) { width: 14%; }
+.media-payment-project-table th:nth-child(2) { width: 26%; }
+.media-payment-project-table th:nth-child(3) { width: 10%; }
+.media-payment-project-table th:nth-child(4) { width: 10%; }
+.media-payment-project-table th:nth-child(5) { width: 8%; }
+.media-payment-project-table th:nth-child(6) { width: 12%; }
+.media-payment-project-table th:nth-child(7) { width: 10%; }
+.media-payment-project-table th:nth-child(8) { width: 10%; }
 
 @media (prefers-reduced-motion: reduce) {
   .media-payment-project-table tbody tr.media-payment-project-row {

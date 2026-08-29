@@ -11,6 +11,8 @@ type RequestProjectInfoCardProps = {
   createdAt?: string;
   reason?: string;
   remark?: string;
+  title?: string;
+  requestCodeLabel?: string;
 };
 
 const formatCreatedAt = (value?: string) => {
@@ -39,14 +41,16 @@ export function RequestProjectInfoCard({
   createdAt,
   reason,
   remark,
+  title = '请款项目信息',
+  requestCodeLabel = '项目编号',
 }: RequestProjectInfoCardProps) {
   return (
     <section className="project-detail-card">
       <header className="project-detail-card-header">
-        <div><h2>请款项目信息</h2><p>查看关联项目、付款安排与付款背景。</p></div>
+        <div><h2>{title}</h2><p>查看关联项目、付款安排与付款背景。</p></div>
       </header>
       <dl className="project-info-grid">
-        <div><dt>项目编号</dt><dd>{requestCode}</dd></div>
+        <div><dt>{requestCodeLabel}</dt><dd>{requestCode}</dd></div>
         <div><dt>关联项目</dt><dd>{cooperationProjectName}<small className="cell-subtext">{cooperationProjectCode || '待同步'}</small></dd></div>
         <div><dt>品牌</dt><dd>{brand || '未填写（非必填）'}</dd></div>
         <div><dt>负责 PM</dt><dd>{pm}</dd></div>

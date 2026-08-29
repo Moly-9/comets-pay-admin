@@ -163,7 +163,7 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('一张付款单包含全部 Invoice');
     expect(source).toContain('ariaLabel="合同候选达人筛选"');
     expect(source).toContain('ariaLabel="Invoice 候选达人筛选"');
-    expect(source).toContain('Invoice 候选范围不会受当前请款项目达人名单限制');
+    expect(source).toContain('Invoice 候选范围不会受当前请款达人名单限制');
     expect(source).toContain('草稿尚未回传签署文件');
     expect(source).toContain('已上传，待人工确认');
     expect(source).toContain('合同尚未完成签署');
@@ -446,7 +446,7 @@ describe('Invoice association workflow', () => {
       request.creatorLinks ?? [],
       creators,
       [],
-    )).toBe('达人已通过其他合作关系加入当前请款项目');
+    )).toBe('达人已通过其他合作关系加入当前请款');
   });
 });
 

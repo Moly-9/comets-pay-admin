@@ -14,6 +14,20 @@ describe('new payment request resource picker', () => {
     expect(source).not.toContain('title="我的请款项目"');
   });
 
+  it('uses request terminology only in the my-request list and detail', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('statusLabel="请款状态"');
+    expect(source).toContain('<th>请款编号</th>');
+    expect(source).toContain('<th>请款状态</th>');
+    expect(source).toContain('title="请款信息"');
+    expect(source).toContain('requestCodeLabel="请款编号"');
+    expect(source).toContain('countLabel="个请款"');
+    expect(source).toContain('<span>请款总数</span>');
+    expect(source).not.toContain('请款项目总数');
+    expect(source).not.toContain('返回我的请款项目');
+  });
+
   it('shows selectable and selected resources before disabled resources', () => {
     const options = [
       { value: 'disabled-one', label: '置灰 1', description: '', selected: false, disabled: true },
@@ -158,8 +172,12 @@ describe('new payment request resource picker', () => {
     expect(listTableSource).toContain('onClick={() => openRequestDetail(request)}');
     expect(listTableSource).toContain("['Enter', ' '].includes(event.key)");
     expect(listTableSource).toContain('onClick={(event) => event.stopPropagation()}');
-    expect(css).toContain('tr.media-payment-project-row:hover');
+    expect(css).toContain('tr.media-payment-project-row:not(.media-request-returned-row):not(.media-request-payment-failure-row):hover');
     expect(css).toContain('tr.media-payment-project-row:focus-visible');
+    expect(css).not.toMatch(/tr\.media-payment-project-row:hover\s*\{[^}]*outline:/s);
+    expect(css).toMatch(/tr\.media-payment-project-row:focus-visible\s*\{[^}]*outline:/s);
+    expect(css).toMatch(/\.media-payment-project-table :is\(th, td\):not\(\[colspan\]\)\s*\{[^}]*padding-right: 14px;[^}]*padding-left: 14px;/s);
+    expect(css).toContain('.media-payment-project-table th:nth-child(2) { width: 26%; }');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });
