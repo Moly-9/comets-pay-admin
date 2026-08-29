@@ -269,7 +269,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(drawerHtml.indexOf('渠道结果')).toBeLessThan(drawerHtml.indexOf('付款信息'));
   });
 
-  it('uses the workbench table, sticky utility columns, colored downloads, and responsive drawer', () => {
+  it('uses the workbench table, Invoice-style summary cards, white downloads, and responsive drawer', () => {
     const css = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
 
     expect(css).toContain('.payment-project-detail-table');
@@ -279,14 +279,17 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('.payment-project-item-drawer');
     expect(css).toContain('width: min(520px, 100vw)');
     expect(css).toContain('.payment-project-info-icon');
-    expect(css).toContain('linear-gradient(135deg, #ffede2 0%, #ffe7e8 100%)');
-    expect(css).toContain('linear-gradient(135deg, #ffefd4 0%, #ffe7cc 100%)');
-    expect(css).toContain('linear-gradient(135deg, #f4ebfe 0%, #f6e9fd 100%)');
-    expect(css).toContain('linear-gradient(135deg, #e8f8f0 0%, #e6f6f2 100%)');
+    expect(css).toContain('linear-gradient(125deg, #fff5e9, #fff0ea)');
+    expect(css).toContain('linear-gradient(125deg, #f0faf6, #eaf8f6)');
+    expect(css).toContain('linear-gradient(125deg, #fff9ea, #fff2df)');
+    expect(css).toContain('linear-gradient(125deg, #fff4f8, #f9effb)');
+    expect(css).toContain('font-size: clamp(17px, 1.55vw, 24px)');
+    expect(css).toContain('background: #fff');
+    expect(css).toContain('border: 1px solid #d7dce4');
     expect(css).toContain('.payment-project-previous-failure-card');
     expect(css).toContain('.payment-project-retry-badge');
     expect(css).toContain('font-size: 28px');
-    expect(css).toContain('border-radius: 50%');
+    expect(css).toContain('border-radius: 14px');
     expect(css).toContain('.payment-project-info-cards');
     expect(css).toContain('min-height: 44px');
     expect(css).not.toContain('.payment-project-detail-item-trigger');
@@ -315,9 +318,10 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).not.toContain('disabled=""');
     expect(html).toContain('payment-project-summary-card is-order');
     expect(html).toContain('payment-project-summary-card is-provider');
-    expect(html).toContain('payment-project-summary-card is-result-success');
+    expect(html).toContain('payment-project-summary-card is-result');
     expect(html).toContain('payment-project-summary-card is-updated');
     expect(html).toContain('data-payment-provider="Airwallex"');
+    expect(html).not.toContain('payment-project-summary-icon');
   });
 
   it('shows the current payment project status in the payment information card', () => {
@@ -344,7 +348,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('项目费用归属');
     expect(html).toContain('成本类型明细');
     expect(html).toContain('simple-status is-processing"><i></i>付款处理中');
-    expect(html).toContain('payment-project-summary-card is-result-processing');
+    expect(html).toContain('payment-project-summary-card is-result');
+    expect(html).not.toContain('payment-project-summary-card is-result-processing');
     expect(html).not.toContain('simple-status"><i></i>已完成');
   });
 });

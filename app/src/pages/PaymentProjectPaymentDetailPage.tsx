@@ -1,5 +1,4 @@
 import {
-  Activity,
   AlertTriangle,
   ArrowLeft,
   Building2,
@@ -67,12 +66,6 @@ const projectStatusTone = (status: PaymentProjectPaymentRecord['status']) => {
   if (status === '部分失败' || status === '全部失败' || status === '已退回') return 'is-danger';
   if (status === '付款处理中') return 'is-processing';
   return 'is-success';
-};
-
-const projectSummaryResultTone = (status: PaymentProjectPaymentRecord['status']) => {
-  if (status === '部分失败' || status === '全部失败' || status === '已退回') return 'is-result-danger';
-  if (status === '付款处理中') return 'is-result-processing';
-  return 'is-result-success';
 };
 
 const paymentResultPlaceholder = (status: Payout['status']) => (
@@ -590,23 +583,20 @@ export function PaymentProjectPaymentDetailPage({
 
       <section className="payment-batch-detail-summary payment-project-summary-grid" aria-label="项目付款摘要">
         <div className="payment-project-summary-card is-order">
-          <span className="payment-project-summary-icon" aria-hidden="true"><ReceiptText size={18} /></span>
           <div>
             <span>付款单</span>
-            <strong>{record.paymentOrderCodes.join('、') || '未关联'}</strong>
+            <strong title={record.paymentOrderCodes.join('、') || '未关联'}>{record.paymentOrderCodes.join('、') || '未关联'}</strong>
             <small>{record.paymentOrderCodes.length} 份付款清单</small>
           </div>
         </div>
         <div className="payment-project-summary-card is-provider">
-          <span className="payment-project-summary-icon" aria-hidden="true"><WalletCards size={18} /></span>
           <div>
             <span>付款渠道</span>
-            <PaymentProviderBadges compact providers={record.providers} />
+            <PaymentProviderBadges className="payment-project-summary-provider" compact providers={record.providers} />
             <small>{record.providers.length} 个执行渠道</small>
           </div>
         </div>
-        <div className={`payment-project-summary-card ${projectSummaryResultTone(record.status)}`}>
-          <span className="payment-project-summary-icon" aria-hidden="true"><Activity size={18} /></span>
+        <div className="payment-project-summary-card is-result">
           <div>
             <span>处理结果</span>
             <strong>{statusCounts.succeeded} 成功 · {statusCounts.failed} 失败</strong>
@@ -614,10 +604,9 @@ export function PaymentProjectPaymentDetailPage({
           </div>
         </div>
         <div className="payment-project-summary-card is-updated">
-          <span className="payment-project-summary-icon" aria-hidden="true"><CalendarClock size={18} /></span>
           <div>
             <span>最近更新</span>
-            <strong>{displayTime(record.lastActivityAt)}</strong>
+            <strong title={displayTime(record.lastActivityAt)}>{displayTime(record.lastActivityAt)}</strong>
             <small>以渠道回写时间为准</small>
           </div>
         </div>

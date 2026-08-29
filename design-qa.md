@@ -169,6 +169,57 @@ shows an input with Cancel and Save actions.
 
 final result: passed
 
+---
+
+# 已付款详情摘要卡片与下载按钮验收
+
+验收日期：2026-08-30
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ae1553f1-32b9-475a-a3e2-46a1323d2a58.png`。
+- Desktop implementation: `/tmp/comets-pay-paid-detail-full-1281.png`。
+- Mobile implementation: `/tmp/comets-pay-paid-detail-mobile-390.png`。
+- 页面状态：付款工作台 > 已付款 > `REQ-202607-000011` 项目详情。
+
+## Normalization
+
+- Source image: 913 × 137 px。
+- Desktop capture: 1266 × 896 px；CSS viewport 1281 × 907，device scale factor 1。
+- Mobile capture: 375 × 812 px；viewport override 390 × 844，device scale factor 1。
+- Source is a focused card-strip reference. The desktop full-view comparison keeps the card strip readable at the top of the implementation; no additional focused crop was required.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Typography: titles and auxiliary text render at 11px in `#747b89`; main values render in `#20232b` at an adaptive 17–24px, and mobile uses 22px. Long payment codes remain single-line and expose their full value through `title`.
+- Spacing and layout: the four cards use the Invoice overview's 116px height, 20px padding, 14px radius, and four-column desktop rhythm. At 390px they stack into 345px-wide cards with 108px height and 15px padding.
+- Colors and tokens: cards use the reference peach, mint, amber, and lilac gradients in the same order. The result card remains amber across payment states. All three download controls are white with neutral borders and dark text.
+- Image and icon quality: the reference contains no card imagery. The previous decorative card icons were removed; no replacement or synthetic asset was introduced.
+- Copy and content: existing payment order, provider, result, update time, and download labels are unchanged.
+
+## Interaction Verification
+
+- Download-data and confirmation select controls retain their combobox behavior; the detail download remains a button.
+- All three controls retain a 44px minimum height, disabled styling, hover feedback, and visible keyboard focus treatment.
+- At 390px all three controls expand to 315px without page-level horizontal overflow.
+- Browser console warning/error logs were empty.
+
+## Comparison History
+
+1. The first browser pass found that global payment-summary rules still overrode the intended black main text, adaptive size, gray auxiliary text, and four-column desktop grid.
+2. Page-scoped selector specificity was increased without modifying global styles.
+3. The post-fix pass measured four 227.5px desktop columns; every card used black 19.8555px main text and gray 11px auxiliary text. The mobile pass measured a single 345px column with no horizontal overflow.
+
+## Automated Verification
+
+- Focused Vitest: `PaymentProjectPaymentDetailPage.test.tsx`, 8 tests passed.
+- TypeScript and Vite production build passed.
+- Full Vitest: 114 test files, 805 tests passed.
+- TypeScript and Vite production build passed after the scoped visual changes.
+
+final result: passed
+
 # 合作项目付款明细展示验收
 
 验收日期：2026-08-27
@@ -1846,6 +1897,6 @@ final result: blocked
 
 # Latest Design QA Status
 
-最新验收为本文中的“Invoice 批量达人身份卡片布局验收”。该报告已包含参考图、浏览器渲染截图、同尺寸组合对照、桌面与 390px 状态、控制台检查、完整测试和构建结果；没有待处理的 P0、P1 或 P2 问题。
+最新验收为本文中的“已付款详情摘要卡片与下载按钮验收”。该报告已包含参考图、浏览器渲染截图、桌面与 390px 状态、控制台检查、完整测试和构建结果；没有待处理的 P0、P1 或 P2 问题。
 
 final result: passed

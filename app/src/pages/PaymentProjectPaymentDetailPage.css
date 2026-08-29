@@ -6,69 +6,73 @@
 }
 
 .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card {
-  --payment-project-card-accent: #8a554c;
-  --payment-project-card-border: #f2d9d2;
-  --payment-project-card-icon: rgba(255, 255, 255, 0.64);
-  --payment-project-card-surface: linear-gradient(135deg, #ffede2 0%, #ffe7e8 100%);
-  min-height: 102px;
-  border-color: var(--payment-project-card-border);
-  background-color: #ffebe5;
-  background-image: var(--payment-project-card-surface);
-  box-shadow: 0 8px 22px rgba(39, 43, 52, 0.045);
+  min-height: 116px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 7px;
+  border-color: rgba(222, 225, 231, 0.78);
+  border-radius: 14px;
+  background: linear-gradient(125deg, #fff5e9, #fff0ea);
+  padding: 20px;
+  box-shadow: var(--shadow-soft);
 }
 
 .payment-project-payment-detail-page .payment-project-summary-card.is-provider {
-  --payment-project-card-accent: #856029;
-  --payment-project-card-border: #f1ddb8;
-  --payment-project-card-icon: rgba(255, 255, 255, 0.66);
-  --payment-project-card-surface: linear-gradient(135deg, #ffefd4 0%, #ffe7cc 100%);
+  background: linear-gradient(125deg, #f0faf6, #eaf8f6);
 }
 
-.payment-project-payment-detail-page .payment-project-summary-card.is-result-success {
-  --payment-project-card-accent: #3f755f;
-  --payment-project-card-border: #d2e9df;
-  --payment-project-card-icon: rgba(255, 255, 255, 0.66);
-  --payment-project-card-surface: linear-gradient(135deg, #e8f8f0 0%, #e6f6f2 100%);
-}
-
-.payment-project-payment-detail-page .payment-project-summary-card.is-result-danger {
-  --payment-project-card-accent: #a64d45;
-  --payment-project-card-border: #f0d0cc;
-  --payment-project-card-icon: rgba(255, 255, 255, 0.66);
-  --payment-project-card-surface: linear-gradient(135deg, #ffede7 0%, #ffe1e2 100%);
-}
-
-.payment-project-payment-detail-page .payment-project-summary-card.is-result-processing {
-  --payment-project-card-accent: #856029;
-  --payment-project-card-border: #f1ddb8;
-  --payment-project-card-icon: rgba(255, 255, 255, 0.66);
-  --payment-project-card-surface: linear-gradient(135deg, #ffefd4 0%, #ffe7cc 100%);
+.payment-project-payment-detail-page .payment-project-summary-card.is-result {
+  background: linear-gradient(125deg, #fff9ea, #fff2df);
 }
 
 .payment-project-payment-detail-page .payment-project-summary-card.is-updated {
-  --payment-project-card-accent: #715484;
-  --payment-project-card-border: #eadcf7;
-  --payment-project-card-icon: rgba(255, 255, 255, 0.66);
-  --payment-project-card-surface: linear-gradient(135deg, #f4ebfe 0%, #f6e9fd 100%);
+  background: linear-gradient(125deg, #fff4f8, #f9effb);
 }
 
-.payment-project-payment-detail-page .payment-project-summary-card .payment-project-summary-icon {
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  border-radius: 50%;
-  background: var(--payment-project-card-icon);
-  color: var(--payment-project-card-accent);
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card > div {
+  gap: 7px;
 }
 
-.payment-project-payment-detail-page .payment-project-summary-card > div > span:first-child,
-.payment-project-payment-detail-page .payment-project-summary-card small {
-  color: #6f7580;
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card > div > span:first-child,
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card small {
+  color: #747b89;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
-.payment-project-payment-detail-page .payment-project-summary-card strong,
-.payment-project-payment-detail-page .payment-project-summary-card .payment-provider-label {
-  color: #20242c;
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card > div > span:first-child {
+  font-weight: 500;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card strong {
+  color: #20232b;
+  font-size: clamp(17px, 1.55vw, 24px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider {
+  min-width: 0;
+  align-self: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider .payment-provider-badge {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #20232b;
+  font-size: clamp(17px, 1.55vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider .payment-provider-label {
+  color: #20232b;
 }
 
 .payment-project-payment-detail-page .payment-batch-lifecycle-section > header {
@@ -202,14 +206,15 @@
 .payment-project-payment-detail-page .payment-project-resource-actions .button,
 .payment-project-payment-detail-page .payment-project-download-select .custom-select-trigger {
   min-height: 44px;
-  border: 1px solid transparent;
+  border: 1px solid #d7dce4;
   border-radius: 7px;
+  background: #fff;
   padding: 0 12px;
-  color: #fff;
+  color: #4b5563;
   font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
-  box-shadow: 0 7px 16px rgba(33, 43, 62, 0.14);
+  box-shadow: none;
 }
 
 .payment-project-payment-detail-page .payment-project-download-select {
@@ -220,35 +225,10 @@
   width: 100%;
 }
 
-.payment-project-payment-detail-page .is-resource-download .custom-select-trigger {
-  border-color: #f1ddb8;
-  background: linear-gradient(135deg, #ffefd4 0%, #ffe7cc 100%);
-  color: #6f4d1f;
-}
-
-.payment-project-payment-detail-page .payment-project-download-button.is-detail-download {
-  border-color: #eadcf7;
-  background: linear-gradient(135deg, #f4ebfe 0%, #f6e9fd 100%);
-  color: #604573;
-}
-
-.payment-project-payment-detail-page .is-confirmation-download .custom-select-trigger {
-  border-color: #d2e9df;
-  background: linear-gradient(135deg, #e8f8f0 0%, #e6f6f2 100%);
-  color: #356b58;
-}
-
-.payment-project-payment-detail-page .is-resource-download .custom-select-trigger:hover:not(:disabled) {
-  background: linear-gradient(135deg, #ffe8c2 0%, #ffddb8 100%);
-}
-
-.payment-project-payment-detail-page .payment-project-download-button.is-detail-download:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: linear-gradient(135deg, #eee0fb 0%, #efdcf8 100%);
-  color: #563d68;
-}
-
-.payment-project-payment-detail-page .is-confirmation-download .custom-select-trigger:hover:not(:disabled) {
-  background: linear-gradient(135deg, #dcf2e7 0%, #d9eee8 100%);
+.payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #bac4d2;
+  background: #f7f9fc;
+  color: #334155;
 }
 
 .payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):disabled,
@@ -260,9 +240,9 @@
 }
 
 .payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):focus-visible {
-  outline: 2px solid #604573;
+  outline: 2px solid #5273a3;
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(96, 69, 115, 0.18);
+  box-shadow: 0 0 0 4px rgba(82, 115, 163, 0.18);
 }
 
 .payment-project-payment-detail-page .payment-project-resource-error {
@@ -803,6 +783,12 @@
   min-height: 44px;
 }
 
+@media (min-width: 1181px) {
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1399px) {
   .payment-project-payment-detail-page .payment-project-info-cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -818,6 +804,16 @@
 @media (max-width: 720px) {
   .payment-project-payment-detail-page .payment-batch-detail-total > strong {
     font-size: 28px;
+  }
+
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card {
+    min-height: 108px;
+    padding: 15px;
+  }
+
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card strong,
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider .payment-provider-badge {
+    font-size: 22px;
   }
 
   .payment-project-payment-detail-page .payment-batch-lifecycle-section .payment-progress-steps {
