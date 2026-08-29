@@ -39,17 +39,21 @@ import { ContractDocumentView } from '../components/ContractDocumentView';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPanel';
 import { CreatorIdentity, CreatorSocialAccounts } from '../components/CreatorIdentity';
+import { Pagination, usePagination } from '../components/Pagination';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { creatorSocialAccounts } from '../creatorSearchOptions';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
+  addInvoiceBatchCreatorLineItem,
   availableContractsForEngagement,
   buildInvoiceDocumentForBatchRow,
   clearInvoiceBatchDescriptionOverride,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
   INVOICE_BATCH_CURRENCIES,
+  invoiceBatchLineItemScope,
+  removeInvoiceBatchCreatorLineItem,
   setInvoiceBatchDescriptionOverride,
   synchronizeInvoiceBatchDescriptions,
   updateInvoiceBatchLineItem,
@@ -144,6 +148,8 @@ const STATUS_META = {
   GENERATED: { label: '已生成', tone: 'success' },
   FAILED: { label: '生成失败', tone: 'danger' },
 } as const;
+
+const INVOICE_BATCH_CREATOR_PAGE_SIZE = 15;
 
 const INVOICE_BATCH_CURRENCY_NAMES: Record<InvoiceCurrency, string> = {
   USD: '美元',
@@ -744,10 +750,12 @@ function BatchRowTable({
                 <td data-label="Description">
                   <div className="invoice-batch-line-stack">
                     {row.items.map((item, itemIndex) => {
-                      const overridden = row.descriptionOverrideKeys.includes(item.templateKey);
+                      const creatorLineItem = invoiceBatchLineItemScope(item) === 'CREATOR';
+                      const overridden = !creatorLineItem
+                        && row.descriptionOverrideKeys.includes(item.templateKey);
                       return (
                         <div
-                          className={`invoice-batch-description-override${overridden ? ' is-overridden' : ''}`}
+                          className={`invoice-batch-description-override${overridden ? ' is-overridden' : ''}${creatorLineItem ? ' is-creator-line' : ''}`}
                           key={item.id}
                         >
                           <input
@@ -759,7 +767,7 @@ function BatchRowTable({
                               setInvoiceBatchDescriptionOverride(row, item.id, event.target.value),
                             )}
                           />
-                          {overridden ? (
+                          {creatorLineItem ? <span>个人明细</span> : overridden ? (
                             <>
                               <span>已覆盖</span>
                               <button
@@ -806,23 +814,52 @@ function BatchRowTable({
                   </div>
                 </td>
                 <td data-label="Amount">
-                  <div className="invoice-batch-line-stack">
-                    {row.items.map((item, itemIndex) => (
-                      <input
-                        key={item.id}
-                        aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Amount`}
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={item.quantity || ''}
-                        disabled={rowLocked}
-                        onChange={(event) => onChange(row.engagementId, {
-                          items: updateInvoiceBatchLineItem(row.items, item.id, {
-                            quantity: Number(event.target.value),
-                          }),
-                        })}
-                      />
-                    ))}
+                  <div className="invoice-batch-line-stack invoice-batch-amount-stack">
+                    {row.items.map((item, itemIndex) => {
+                      const creatorLineItem = invoiceBatchLineItemScope(item) === 'CREATOR';
+                      return (
+                        <div className={`invoice-batch-amount-item${creatorLineItem ? ' is-creator-line' : ''}`} key={item.id}>
+                          <input
+                            aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Amount`}
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={item.quantity || ''}
+                            disabled={rowLocked}
+                            onChange={(event) => onChange(row.engagementId, {
+                              items: updateInvoiceBatchLineItem(row.items, item.id, {
+                                quantity: Number(event.target.value),
+                              }),
+                            })}
+                          />
+                          {creatorLineItem ? (
+                            <button
+                              type="button"
+                              aria-label={`删除 ${row.creatorName} 第 ${itemIndex + 1} 条个人明细`}
+                              title="删除个人明细"
+                              disabled={rowLocked}
+                              onClick={() => onChange(row.engagementId, {
+                                items: removeInvoiceBatchCreatorLineItem(row.items, item.id),
+                              })}
+                            >
+                              <Trash2 size={13} aria-hidden="true" />
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    <button
+                      className="invoice-batch-add-line-button"
+                      type="button"
+                      disabled={rowLocked}
+                      aria-label={`为 ${row.creatorName} 新增费用明细`}
+                      onClick={() => onChange(row.engagementId, {
+                        items: addInvoiceBatchCreatorLineItem(row.items),
+                      })}
+                    >
+                      <Plus size={13} aria-hidden="true" />
+                      新增明细
+                    </button>
                   </div>
                 </td>
                 <td data-label="Total">
@@ -1068,6 +1105,10 @@ export function InvoiceBatchBuilderPage({
     () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch, creators),
     [creatorSearch, creators, projectReferences],
   );
+  const creatorPagination = usePagination(filteredProjectReferences, {
+    initialPageSize: INVOICE_BATCH_CREATOR_PAGE_SIZE,
+    resetKey: `${projectId}:${creatorSearch}`,
+  });
   const selectableEngagementIds = useMemo(
     () => selectableInvoiceBatchEngagementIds(
       projectReferences,
@@ -1779,7 +1820,7 @@ export function InvoiceBatchBuilderPage({
               </div>
 
               <div className="invoice-batch-creator-grid">
-                {filteredProjectReferences.map((reference) => {
+                {creatorPagination.pageItems.map((reference) => {
                   const creator = creators.find((candidate) => candidate.id === reference.creatorId);
                   const selected = selectedEngagementIds.includes(reference.engagementId);
                   const locked = lockedEngagementIds.includes(reference.engagementId);
@@ -1807,6 +1848,18 @@ export function InvoiceBatchBuilderPage({
               </div>
               {!filteredProjectReferences.length ? (
                 <div className="invoice-batch-search-empty">没有匹配的项目达人</div>
+              ) : null}
+              {filteredProjectReferences.length > INVOICE_BATCH_CREATOR_PAGE_SIZE ? (
+                <div className="invoice-batch-creator-pagination">
+                  <span>每页 {INVOICE_BATCH_CREATOR_PAGE_SIZE} 位达人，已选结果跨页保留</span>
+                  <Pagination
+                    page={creatorPagination.page}
+                    pageSize={INVOICE_BATCH_CREATOR_PAGE_SIZE}
+                    total={filteredProjectReferences.length}
+                    ariaLabel="达人档案分页"
+                    onPageChange={creatorPagination.setPage}
+                  />
+                </div>
               ) : null}
                 </>
               )}

@@ -186,6 +186,22 @@
   gap: 8px;
 }
 
+.invoice-batch-creator-pagination {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #eceef2;
+  padding-top: 10px;
+  color: #7b828e;
+  font-size: 10px;
+}
+
+.invoice-batch-creator-pagination > span {
+  line-height: 1.5;
+}
+
 .invoice-batch-creator {
   display: grid;
   min-width: 0;
@@ -602,7 +618,7 @@
 .invoice-batch-creator-cell {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  gap: 1px;
 }
 
 .invoice-batch-creator-link {
@@ -624,15 +640,45 @@
 
 .invoice-batch-creator-link .creator-identity {
   width: 100%;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+}
+
+.invoice-batch-creator-link .avatar-sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 9px;
+}
+
+.invoice-batch-creator-link .creator-identity-copy {
+  gap: 0;
+  padding-top: 1px;
+}
+
+.invoice-batch-creator-link .creator-identity-copy > strong {
+  line-height: 1.25;
 }
 
 .invoice-batch-creator-socials {
-  max-width: calc(100% - 44px);
-  margin-left: 44px;
+  max-width: calc(100% - 37px);
+  margin-top: -10px;
+  margin-left: 37px;
+  gap: 3px;
 }
 
 .invoice-batch-creator-socials .creator-social-account {
-  max-width: 116px;
+  max-width: 108px;
+  padding: 2px 5px 2px 4px;
+  font-size: 10px;
+}
+
+.invoice-batch-creator-socials .creator-social-accounts-toggle {
+  min-height: 19px;
+  padding: 2px 6px;
+  font-size: 10px;
 }
 
 .invoice-batch-creator-link:hover,
@@ -844,9 +890,25 @@
   gap: 5px;
 }
 
+.invoice-batch-description-override.is-creator-line {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+}
+
 .invoice-batch-description-override.is-overridden input {
   border-color: #e4aa74;
   background: #fffaf2;
+}
+
+.invoice-batch-description-override.is-creator-line input {
+  border-color: #c9d8eb;
+  background: #f8fbff;
+}
+
+.invoice-batch-description-override.is-creator-line > span {
+  background: #eaf2fc;
+  color: #35648f;
 }
 
 .invoice-batch-description-override > span {
@@ -876,6 +938,71 @@
 .invoice-batch-description-override > button:hover:not(:disabled) {
   border-color: #dfa08e;
   color: #a44f3d;
+}
+
+.invoice-batch-amount-item {
+  display: grid;
+  min-width: 112px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+}
+
+.invoice-batch-amount-item.is-creator-line {
+  grid-template-columns: minmax(0, 1fr) 28px;
+}
+
+.invoice-batch-amount-item > button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d9dde3;
+  border-radius: 6px;
+  background: #fff;
+  color: #7a808a;
+  cursor: pointer;
+}
+
+.invoice-batch-amount-item > button:hover:not(:disabled) {
+  border-color: #dfa08e;
+  color: #a44f3d;
+}
+
+.invoice-batch-add-line-button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed #c9ced7;
+  border-radius: 6px;
+  background: #fff;
+  color: #626b77;
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.invoice-batch-add-line-button:hover:not(:disabled) {
+  border-color: #c585aa;
+  background: #fff9fc;
+  color: #8d587f;
+}
+
+.invoice-batch-add-line-button:focus-visible,
+.invoice-batch-amount-item > button:focus-visible {
+  outline: 3px solid rgba(173, 121, 169, 0.18);
+  outline-offset: 2px;
+}
+
+.invoice-batch-add-line-button:disabled,
+.invoice-batch-amount-item > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .invoice-batch-line-totals > strong {
@@ -1816,6 +1943,15 @@
     grid-template-columns: 1fr;
   }
 
+  .invoice-batch-creator-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invoice-batch-creator-pagination .pagination {
+    justify-content: flex-start;
+  }
+
   .invoice-batch-creator-toolbar {
     grid-template-columns: 1fr;
   }
@@ -1997,6 +2133,21 @@
   .invoice-batch-result-table tbody tr:hover td,
   .invoice-batch-result-table tbody tr.is-failed td {
     background: transparent;
+  }
+}
+
+@media (max-width: 560px) {
+  .invoice-batch-add-line-button {
+    min-height: 44px;
+  }
+
+  .invoice-batch-amount-item.is-creator-line {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .invoice-batch-amount-item > button {
+    width: 44px;
+    height: 44px;
   }
 }
 

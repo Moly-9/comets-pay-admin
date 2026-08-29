@@ -42,6 +42,30 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(styles).toContain('.invoice-batch-collapsed-match');
   });
 
+  it('paginates creator selection and places creator line-item actions after Amount', () => {
+    const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');
+    const tableSource = source.match(/function BatchRowTable\([\s\S]*?export function InvoiceBatchBuilderPage/)?.[0] ?? '';
+    const amountStart = tableSource.indexOf('<td data-label="Amount">');
+    const amountEnd = tableSource.indexOf('<td data-label="Total">', amountStart);
+    const amountSource = tableSource.slice(amountStart, amountEnd);
+
+    expect(source).toContain('const INVOICE_BATCH_CREATOR_PAGE_SIZE = 15');
+    expect(source).toContain('usePagination(filteredProjectReferences');
+    expect(source).toContain('creatorPagination.pageItems.map');
+    expect(source).toContain('ariaLabel="达人档案分页"');
+    expect(source).toContain('已选结果跨页保留');
+    expect(amountSource).toContain('className="invoice-batch-add-line-button"');
+    expect(amountSource).toContain('addInvoiceBatchCreatorLineItem(row.items)');
+    expect(amountSource).toContain('removeInvoiceBatchCreatorLineItem(row.items, item.id)');
+    expect(amountSource.indexOf('aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Amount`}'))
+      .toBeLessThan(amountSource.indexOf('className="invoice-batch-add-line-button"'));
+    expect(styles).toMatch(/\.invoice-batch-creator-cell\s*\{[^}]*gap:\s*1px;/s);
+    expect(styles).toMatch(/\.invoice-batch-creator-socials\s*\{[^}]*margin-top:\s*-10px;/s);
+    expect(styles).toContain('.invoice-batch-creator-pagination');
+    expect(styles).toContain('.invoice-batch-amount-item.is-creator-line');
+  });
+
   it('moves Excel import into the bulk-input footer and previews matches in the creator archive', () => {
     const source = readFileSync(new URL('./InvoiceBatchBuilderPage.tsx', import.meta.url), 'utf8');
     const styles = readFileSync(new URL('./InvoiceBatchBuilderPage.css', import.meta.url), 'utf8');
