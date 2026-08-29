@@ -72,13 +72,14 @@ import {
   type ProjectPdfArchiveKind,
 } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
+import { paymentCreatorIdentityFromValues } from '../paymentCreatorIdentity';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { ContractDocumentView } from './ContractDocumentView';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal, SelectField, type SelectOption } from './Common';
-import { CreatorIdentity } from './CreatorIdentity';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './FinanceReviewWorkspace.css';
 
@@ -1584,6 +1585,11 @@ export function FinanceReviewWorkspace({
             <div className="finance-review-resource-card-list" ref={resourceListRef}>
               {linkedContracts.map((contract) => {
                 const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: contract.paymentSnapshot?.accountName || contract.accountName,
+                  displayName: creator?.name || contract.publisher || '达人档案缺失',
+                  creator,
+                });
                 const contractId = contract.contractId ?? contract.id;
                 const recordKey = `contract:${contractId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -1603,7 +1609,7 @@ export function FinanceReviewWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <CreatorIdentity creator={creator} displayName="达人档案缺失" fallbackHandle={contract.creatorHandle} fallbackPlatform={contract.creatorPlatform ?? contract.platform} />
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>付款金额</span>
@@ -1666,6 +1672,11 @@ export function FinanceReviewWorkspace({
             <div className="finance-review-resource-card-list" ref={resourceListRef}>
               {linkedInvoices.map((linkedInvoice) => {
                 const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: linkedInvoice.snapshot.payment.accountName,
+                  displayName: linkedInvoice.snapshot.creatorName,
+                  creator,
+                });
                 const invoiceName = invoiceDocumentName(linkedInvoice.snapshot);
                 const recordKey = `invoice:${linkedInvoice.invoiceId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -1685,7 +1696,7 @@ export function FinanceReviewWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <CreatorIdentity creator={creator} displayName={linkedInvoice.snapshot.creatorName} fallbackHandle={linkedInvoice.snapshot.creatorHandle} fallbackPlatform={linkedInvoice.snapshot.creatorPlatform} />
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>Invoice 金额</span>

@@ -36,8 +36,9 @@ import {
   type PaymentAccountFieldIssue,
 } from '../requestPaymentAccountValidation';
 import type { CreatorProfile } from '../types';
+import { paymentCreatorIdentityFromValues } from '../paymentCreatorIdentity';
 import { Button } from './Common';
-import { CreatorIdentity } from './CreatorIdentity';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { InvoiceContractMismatchNotice } from './InvoiceContractMismatchNotice';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
@@ -546,6 +547,11 @@ export function PaymentListReviewContent({
                         ? creators.find((candidate) => String(candidate.id) === String(row.item.snapshot.creatorId))
                         : creators.find((candidate) => candidate.name === row.item.snapshot.creatorName);
                       const recipientName = creator?.name || row.item.snapshot.creatorName;
+                      const creatorIdentity = paymentCreatorIdentityFromValues({
+                        accountName: row.effectiveAccount.paymentDetails?.accountName,
+                        displayName: recipientName,
+                        creator,
+                      });
                       const accountValue = accountDisplayValue(row.effectiveAccount.accountSummary);
                       const subjectName = recipientSubjectName(
                         row.effectiveAccount,
@@ -556,7 +562,7 @@ export function PaymentListReviewContent({
                         <tr key={row.key}>
                           <td data-label="收款人名称">
                             <div className="request-payment-payee-creator">
-                              <CreatorIdentity creator={creator} displayName={recipientName} fallbackHandle={row.item.snapshot.creatorHandle} fallbackPlatform={row.item.snapshot.creatorPlatform} socialAccountsMaxVisible={1} />
+                              <PaymentCreatorIdentity {...creatorIdentity} />
                             </div>
                           </td>
                           <td data-label="收款主体"><strong>{subjectName}</strong></td>

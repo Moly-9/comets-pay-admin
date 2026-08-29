@@ -146,13 +146,19 @@
 }
 
 .transaction-records-table .transaction-creator-cell {
+  display: grid;
   min-width: 220px;
+  gap: 4px;
 }
 
 .transaction-records-table .transaction-creator-cell small {
   max-width: 250px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.transaction-creator-project {
+  padding-left: 42px;
 }
 
 .transaction-data-cell {
@@ -254,6 +260,14 @@
   display: grid;
   min-width: 0;
   gap: 3px;
+}
+
+.transaction-creator-summary-card > .payment-creator-identity {
+  display: inline-flex;
+}
+
+.transaction-payment-list-creator {
+  grid-column: span 2;
 }
 
 .transaction-creator-summary-identity > span,

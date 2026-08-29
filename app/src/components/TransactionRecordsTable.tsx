@@ -6,7 +6,12 @@ import {
   transactionRecordDetails,
 } from '../transactionRecords';
 import type { Payout } from '../types';
-import { Avatar, ListActionButton, StatusMark } from './Common';
+import {
+  paymentCreatorIdentityFromBatchItem,
+  paymentCreatorIdentityFromPayout,
+} from '../paymentCreatorIdentity';
+import { ListActionButton, StatusMark } from './Common';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { Pagination, usePagination } from './Pagination';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 
@@ -84,6 +89,9 @@ export function TransactionRecordsTable({
               const details = transactionRecordDetails(payout, context);
               const invoiceNumber = details.invoice?.invoiceNumber ?? payout.invoice;
               const payerTime = displayTimeParts(details.paymentTime);
+              const creatorIdentity = context
+                ? paymentCreatorIdentityFromBatchItem(context.item)
+                : paymentCreatorIdentityFromPayout({ payout });
               return (
                 <tr className={selectedIds.has(payout.id) ? 'is-selected' : ''} key={payout.id}>
                   <td className="transaction-select-cell">
@@ -95,9 +103,9 @@ export function TransactionRecordsTable({
                     />
                   </td>
                   <td>
-                    <div className="creator-cell transaction-creator-cell">
-                      <Avatar initials={payout.initials} accent={payout.accent} size="sm" />
-                      <span><strong>{payout.creator}</strong><small>{payout.project}</small></span>
+                    <div className="transaction-creator-cell">
+                      <PaymentCreatorIdentity {...creatorIdentity} />
+                      <small className="transaction-creator-project" title={payout.project}>{payout.project}</small>
                     </div>
                   </td>
                   <td>

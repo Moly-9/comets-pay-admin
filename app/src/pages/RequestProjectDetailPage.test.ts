@@ -300,7 +300,7 @@ describe('request project payment presentation', () => {
     expect(viewerSource).toContain('<th>手续费承担方</th>');
     expect(viewerSource).toContain('<th>API 校验结果</th>');
     expect(viewerSource).toContain('projectPaymentReviewPassed(');
-    expect(viewerSource).toContain('<CreatorIdentity creator={creator}');
+    expect(viewerSource).toContain('<PaymentCreatorIdentity {...creatorIdentity} />');
     expect(viewerSource).toContain('validatePaymentListAccountViaApi');
     expect(viewerSource).toContain('onExportPaymentList(list.paymentListId)');
     expect(viewerSource).not.toContain('添加付款行');

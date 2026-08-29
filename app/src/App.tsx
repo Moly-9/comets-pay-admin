@@ -236,6 +236,7 @@ import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
+import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
@@ -4883,6 +4884,9 @@ export default function App() {
       pageContent = (
         <BatchWizardPage
           payouts={batchReadyPayouts}
+          generatedInvoices={generatedInvoices}
+          paymentLists={paymentLists}
+          creators={creators}
           onCancel={() => setActivePage('batches')}
           onDraft={() => notify('草稿已保存', '付款选择与渠道配置已保存在当前浏览器。')}
           onSubmit={createBatch}
@@ -5005,6 +5009,12 @@ export default function App() {
   const selectedPayoutContract = selectedPayout
     ? contracts.find((contract) => contract.id === selectedPayout.contract) ?? null
     : null;
+  const selectedPayoutPaymentItem = selectedPayout
+    ? findPaymentListItemForPayout(selectedPayout, generatedInvoices, paymentLists)
+    : undefined;
+  const selectedPayoutCreator = selectedPayout?.creatorId
+    ? creators.find((creator) => creator.id === selectedPayout.creatorId)
+    : undefined;
   const financeReviewRequest = financeReviewRequestId
     ? requestProjects.find((request) => request.id === financeReviewRequestId) ?? null
     : null;
@@ -5104,6 +5114,8 @@ export default function App() {
       {selectedPayout ? (
         <PayoutDrawer
           payout={selectedPayout}
+          paymentItem={selectedPayoutPaymentItem}
+          creator={selectedPayoutCreator}
           onClose={() => setSelectedPayout(null)}
           onAdvance={advancePayout}
           onPaymentFailed={failPayout}

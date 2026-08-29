@@ -18,7 +18,7 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react';
-import { useRef, useState, type CSSProperties } from 'react';
+import { useRef, useState } from 'react';
 import {
   paymentListItemValue,
   type PaymentListItem,
@@ -46,8 +46,12 @@ import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal } from './Common';
-import { CreatorIdentity } from './CreatorIdentity';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
+import {
+  paymentCreatorIdentityFromPayout,
+  paymentCreatorIdentityFromValues,
+} from '../paymentCreatorIdentity';
 import './PaymentExecutionWorkspace.css';
 
 const formatDateTime = (value?: string) => {
@@ -631,6 +635,7 @@ export function PaymentExecutionWorkspace({
                       const creator = creators.find((candidate) => candidate.id === payout.creatorId);
                       const informationValidated = payout.status === '等待付款';
                       const paymentItem = paymentItemForPayout(payout);
+                      const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
                       const receiveCurrency = paymentItem
                         ? String(paymentListItemValue(paymentItem, 'receiveCurrency') || payout.currency)
                         : payout.currency;
@@ -645,7 +650,7 @@ export function PaymentExecutionWorkspace({
                         : payout.feeBearer;
                       return (
                         <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
-                          <td><div className="payment-execution-creator-cell"><CreatorIdentity creator={creator} displayName={payout.creator} initials={payout.initials} accent={payout.accent} fallbackHandle={payout.handle} fallbackPlatform={payout.creatorPlatform} /></div></td>
+                          <td><div className="payment-execution-creator-cell"><PaymentCreatorIdentity {...creatorIdentity} /></div></td>
                           <td><div className="payment-execution-account-cell"><strong title={payout.account}>{accountDisplayValue(payout.account, '账户待补充')}</strong><small>{transferMethodLabel(payout)}</small></div></td>
                           <td><span className="payment-execution-currency">{payout.currency}</span></td>
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
@@ -663,6 +668,9 @@ export function PaymentExecutionWorkspace({
             ) : (
             <div className="payment-execution-payee-list">
               {project.payouts.map((payout, index) => {
+                const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+                const paymentItem = paymentItemForPayout(payout);
+                const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
                 const informationValidated = isPayoutPaymentInformationValidated(payout);
                 const returnItem = hasScopedReturnItems ? returnItemForPayout(payout) : undefined;
                 const detailReturned = isReturned && returnedPayoutIds.has(payout.id);
@@ -671,11 +679,8 @@ export function PaymentExecutionWorkspace({
                 return (
                   <article className={`payment-execution-payee${detailReturned ? ' is-returned' : ''}${detailPassed ? ' is-passed' : ''}`} key={payout.id}>
                     <header>
-                      <span className="payment-execution-payee-avatar" style={{ '--payee-accent': payout.accent } as CSSProperties}>
-                        {payout.initials}
-                      </span>
-                      <div>
-                        <strong>{payout.creator}</strong>
+                      <div className="payment-execution-payee-identity">
+                        <PaymentCreatorIdentity {...creatorIdentity} />
                         <small>{payout.invoice} · {project.paymentOrder} · {paymentProviderDisplayName(payout.provider)}</small>
                       </div>
                       <span className={`payment-execution-payee-status ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
@@ -916,6 +921,11 @@ export function PaymentExecutionWorkspace({
             <div className="finance-review-resource-card-list">
               {linkedContracts.map((contract) => {
                 const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: contract.paymentSnapshot?.accountName || contract.accountName,
+                  displayName: contract.publisher,
+                  creator,
+                });
                 const contractId = stableContractId(contract);
                 const recordKey = `contract:${contractId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -929,7 +939,7 @@ export function PaymentExecutionWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <CreatorIdentity creator={creator} displayName={contract.publisher ?? '达人档案缺失'} fallbackHandle={contract.creatorHandle} fallbackPlatform={contract.creatorPlatform ?? contract.platform} />
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount"><span>付款金额</span><strong>{formatContractMoney(contract)}</strong></div>
                     <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
@@ -980,6 +990,11 @@ export function PaymentExecutionWorkspace({
             <div className="finance-review-resource-card-list">
               {linkedInvoices.map((linkedInvoice) => {
                 const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: linkedInvoice.snapshot.payment.accountName,
+                  displayName: linkedInvoice.snapshot.creatorName,
+                  creator,
+                });
                 const invoiceName = invoiceDocumentName(linkedInvoice.snapshot);
                 const recordKey = `invoice:${linkedInvoice.invoiceId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -993,7 +1008,7 @@ export function PaymentExecutionWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <CreatorIdentity creator={creator} displayName={linkedInvoice.snapshot.creatorName} fallbackHandle={linkedInvoice.snapshot.creatorHandle} fallbackPlatform={linkedInvoice.snapshot.creatorPlatform} />
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount"><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong></div>
                     <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>

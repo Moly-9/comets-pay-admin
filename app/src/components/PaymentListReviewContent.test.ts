@@ -201,10 +201,9 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('<th>Invoice 金额</th>');
     expect(reviewContentSource).toContain('<th>手续费承担方</th>');
     expect(reviewContentSource).toContain('<th>API 校验结果</th>');
-    expect(reviewContentSource).toContain('<CreatorIdentity creator={creator}');
-    expect(reviewContentSource).toContain('fallbackHandle={row.item.snapshot.creatorHandle}');
-    expect(reviewContentSource).toContain('fallbackPlatform={row.item.snapshot.creatorPlatform}');
-    expect(reviewContentSource).toContain('socialAccountsMaxVisible={1}');
+    expect(reviewContentSource).toContain('<PaymentCreatorIdentity {...creatorIdentity} />');
+    expect(reviewContentSource).toContain('accountName: row.effectiveAccount.paymentDetails?.accountName');
+    expect(reviewContentSource).toContain('displayName: recipientName');
     expect(reviewContentSource).toContain('className="request-payment-account-cell"');
     expect(reviewContentSource).toContain('title={accountValue}');
     expect(reviewContentSource).toContain('recipientSubjectName(');

@@ -1,11 +1,14 @@
 import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
-import { Avatar, Button, Modal, StatusMark } from './Common';
+import type { PaymentListItem } from '../businessWorkflow';
+import { Button, Modal, StatusMark } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { accountDisplayValue } from '../accountPresentation';
 import { formatAmount, getProjectFixture, SYSTEM_USERS, type SystemUser } from '../data';
 import type { ContractRecord } from '../contracts';
-import type { PaymentFailureIssueType, Payout } from '../types';
+import { paymentCreatorIdentityFromPayout } from '../paymentCreatorIdentity';
+import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 
 type ApprovalAssignment = {
   media: string;
@@ -112,6 +115,8 @@ const frozenAccountLabel = (payout: Payout) => {
 
 export function PayoutDrawer({
   payout,
+  paymentItem,
+  creator,
   onClose,
   onAdvance,
   onPaymentFailed,
@@ -124,6 +129,8 @@ export function PayoutDrawer({
   onViewInvoice,
 }: {
   payout: Payout;
+  paymentItem?: PaymentListItem;
+  creator?: CreatorProfile;
   onClose: () => void;
   onAdvance: (payout: Payout) => void;
   onPaymentFailed: (payout: Payout) => void;
@@ -138,6 +145,7 @@ export function PayoutDrawer({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [issueType, setIssueType] = useState<PaymentFailureIssueType | ''>('');
+  const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
   const currentIndex = timelineIndex(payout.status);
   const approvalAssignment = getProjectApprovalAssignment(payout);
   const steps: Array<{ label: string; description: string; actor: ApprovalActor }> = [
@@ -195,8 +203,10 @@ export function PayoutDrawer({
 
         <div className="drawer-content">
           <div className="drawer-creator">
-            <Avatar initials={payout.initials} accent={payout.accent} size="lg" />
-            <div><strong>{payout.creator}</strong><span>{payout.project}</span></div>
+            <div className="drawer-creator-main">
+              <PaymentCreatorIdentity size="lg" {...creatorIdentity} />
+              <span className="drawer-creator-project">{payout.project}</span>
+            </div>
             <StatusMark status={payout.status} />
           </div>
 

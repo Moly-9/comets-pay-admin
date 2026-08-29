@@ -11437,7 +11437,7 @@ button:disabled {
 
 .drawer-creator {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   border-radius: 13px;
@@ -11448,6 +11448,17 @@ button:disabled {
 .drawer-creator > div {
   display: grid;
   gap: 4px;
+}
+
+.drawer-creator-main {
+  min-width: 0;
+}
+
+.drawer-creator-project {
+  overflow: hidden;
+  padding-left: 52px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .drawer-creator span {

@@ -21,10 +21,11 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Avatar, Button, ListActionButton, SelectField, type SelectOption } from '../components/Common';
+import { Button, ListActionButton, SelectField, type SelectOption } from '../components/Common';
 import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDialog';
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
+import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -45,6 +46,7 @@ import {
   resolvePaymentProjectDocuments,
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
+import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
 import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
 import './PaymentProjectPaymentDetailPage.css';
 
@@ -120,36 +122,6 @@ function PaymentProjectInfoCard({
   );
 }
 
-function PaymentProjectCreatorIdentity({
-  accountName,
-  creator,
-  displayName,
-  size = 'sm',
-}: {
-  accountName: string;
-  creator?: CreatorProfile;
-  displayName: string;
-  size?: 'sm' | 'lg';
-}) {
-  const resolvedDisplayName = creator?.name || displayName || 'Display Name 待补充';
-  return (
-    <span
-      className={`payment-project-creator-identity is-${size}`}
-      aria-label={`Account Name：${accountName}，Display Name：${resolvedDisplayName}`}
-    >
-      <Avatar
-        initials={creator?.initials ?? resolvedDisplayName.slice(0, 2).toUpperCase()}
-        accent={creator?.accent ?? '#60758f'}
-        size={size}
-      />
-      <span className="payment-project-creator-identity-copy">
-        <strong title={accountName}>{accountName}</strong>
-        <small title={resolvedDisplayName}>{resolvedDisplayName}</small>
-      </span>
-    </span>
-  );
-}
-
 export function PaymentProjectItemDrawer({
   canHandleFailure,
   creator,
@@ -169,7 +141,8 @@ export function PaymentProjectItemDrawer({
 }) {
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const accountName = item.accountName || '待补充';
+  const creatorIdentity = paymentCreatorIdentityFromBatchItem(item, creator);
+  const accountName = creatorIdentity.accountName;
   const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
   const failureReturn = payout?.paymentFailureReturn;
   const failure = item.failure;
@@ -243,12 +216,7 @@ export function PaymentProjectItemDrawer({
           <section className="payment-project-recipient-card" aria-labelledby={`${titleId}-recipient`}>
             <div className="payment-project-recipient-identity">
               <span id={`${titleId}-recipient`}>收款人</span>
-              <PaymentProjectCreatorIdentity
-                accountName={accountName}
-                creator={creator}
-                displayName={item.creatorName}
-                size="lg"
-              />
+              <PaymentCreatorIdentity size="lg" {...creatorIdentity} />
             </div>
             <PaymentProviderBadge compact provider={item.provider} />
             <dl>
@@ -785,7 +753,8 @@ export function PaymentProjectPaymentDetailPage({
                 {liveItems.length ? liveItems.map((item) => {
                   const currentStatus = item.paymentStatus;
                   const creator = creators.find((candidate) => candidate.id === item.creatorId);
-                  const accountName = item.accountName || '待补充';
+                  const creatorIdentity = paymentCreatorIdentityFromBatchItem(item, creator);
+                  const accountName = creatorIdentity.accountName;
                   const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
                   const canSelect = confirmationEligibleIds.has(item.payoutId);
                   const selected = selectedItemIds.has(item.payoutId);
@@ -810,11 +779,7 @@ export function PaymentProjectPaymentDetailPage({
                         </label>
                       </td>
                       <td className="payment-project-detail-creator-cell">
-                        <PaymentProjectCreatorIdentity
-                          accountName={accountName}
-                          creator={creator}
-                          displayName={item.creatorName}
-                        />
+                        <PaymentCreatorIdentity {...creatorIdentity} />
                       </td>
                       <td className="payment-project-detail-provider-cell"><PaymentProviderBadge compact provider={item.provider} /></td>
                       <td className="payment-project-detail-account-cell">

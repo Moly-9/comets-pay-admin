@@ -24,12 +24,16 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import { Button, Modal, StatusMark } from '../components/Common';
-import { CreatorIdentity } from '../components/CreatorIdentity';
+import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import type { TransactionBatchContext } from '../transactionRecords';
 import { transactionOccurredAt, transactionRecordDetails } from '../transactionRecords';
 import type { Payout } from '../types';
+import {
+  paymentCreatorIdentityFromBatchItem,
+  paymentCreatorIdentityFromPayout,
+} from '../paymentCreatorIdentity';
 
 const displayTime = (value?: string) => {
   if (!value) return '未记录';
@@ -55,6 +59,9 @@ export function TransactionDetailPage({
   const [resourceView, setResourceView] = useState<TransactionResourceView | null>(null);
   const details = transactionRecordDetails(payout, context);
   const finalTime = transactionOccurredAt(payout);
+  const creatorIdentity = context
+    ? paymentCreatorIdentityFromBatchItem(context.item)
+    : paymentCreatorIdentityFromPayout({ payout });
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -69,7 +76,7 @@ export function TransactionDetailPage({
       <h1 ref={titleRef} className="sr-only" tabIndex={-1}>交易详情：{payout.invoice || payout.creator}</h1>
 
       <section className="transaction-creator-summary-card" aria-label={`付款达人 ${payout.creator}`}>
-        <CreatorIdentity displayName={payout.creator} initials={payout.initials} accent={payout.accent} fallbackHandle={payout.handle} fallbackPlatform={payout.creatorPlatform} size="lg" />
+        <PaymentCreatorIdentity size="lg" {...creatorIdentity} />
         <div className="transaction-creator-summary-identity">
           <span><FolderKanban size={13} aria-hidden="true" />{payout.project}</span>
         </div>
@@ -272,7 +279,7 @@ export function TransactionDetailPage({
               <div><dt>付款清单编号</dt><dd>{details.paymentListCode}</dd></div>
               <div><dt>版本</dt><dd>{details.paymentListVersion ? `V${details.paymentListVersion}` : '历史数据待补全'}</dd></div>
               <div><dt>清单状态</dt><dd>{details.paymentListStatus}</dd></div>
-              <div><dt>付款达人</dt><dd>{payout.creator}</dd></div>
+              <div className="transaction-payment-list-creator"><dt>付款达人</dt><dd><PaymentCreatorIdentity {...creatorIdentity} /></dd></div>
               <div><dt>付款金额</dt><dd>{formatAmount(payout)}</dd></div>
               <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(payout.provider)}</dd></div>
               <div><dt>付款方式</dt><dd>{details.transferMethod}</dd></div>

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Avatar, Button } from '../components/Common';
+import { Button } from '../components/Common';
 import {
   PaymentAttachmentPreview,
   type PaymentAttachmentPreviewTarget,
@@ -45,7 +45,8 @@ import {
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
-import { CreatorIdentity } from '../components/CreatorIdentity';
+import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
+import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 
@@ -55,19 +56,6 @@ const fundingAccountLabel = (value: string) => {
   if (value === 'mock-paypal-balance') return 'PayPal Business Balance';
   if (value === 'mock-paymax-operating') return 'Payer Max 运营资金账户';
   return value || '未记录';
-};
-
-const creatorInitials = (name: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length > 1) return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-  return Array.from(parts[0] ?? '?').slice(0, 2).join('').toUpperCase();
-};
-
-const CREATOR_ACCENTS = ['#e49728', '#4c78d8', '#dc5d5d', '#8b5bd6', '#2f8f72', '#b35c96'];
-
-const creatorAccent = (value: string) => {
-  const hash = Array.from(value).reduce((total, character) => total + character.charCodeAt(0), 0);
-  return CREATOR_ACCENTS[hash % CREATOR_ACCENTS.length];
 };
 
 const paymentStatusTone = (status: string) => {
@@ -531,6 +519,8 @@ export function PaymentBatchDetailPage({
                       {order.items.map((item) => {
                         const expanded = expandedItemId === item.payoutId;
                         const livePayout = currentAttemptPayout(item);
+                        const creator = creators.find((candidate) => candidate.id === item.creatorId);
+                        const creatorIdentity = paymentCreatorIdentityFromBatchItem(item, creator);
                         const detailId = `payment-batch-item-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
                         return (
                           <article className={expanded ? 'payment-batch-item is-expanded' : 'payment-batch-item'} key={item.payoutId} role="listitem">
@@ -542,10 +532,7 @@ export function PaymentBatchDetailPage({
                               aria-label={`${item.creatorName}，${money(item.currency, item.amount)}，${item.paymentStatus}，${expanded ? '收起' : '展开'}付款详情`}
                               onClick={() => setExpandedItemId(expanded ? null : item.payoutId)}
                             >
-                              <span className="payment-batch-item-person">
-                                <Avatar initials={creatorInitials(item.creatorName)} accent={creatorAccent(item.creatorName)} size="sm" />
-                                <CreatorIdentity creator={creators.find((creator) => creator.id === item.creatorId)} displayName={item.creatorName} fallbackHandle={item.creatorHandle} fallbackPlatform={item.creatorPlatform} socialAccountsMode="expanded" />
-                              </span>
+                              <PaymentCreatorIdentity className="payment-batch-item-person" {...creatorIdentity} />
                               <span className="payment-batch-item-provider" data-label="付款渠道"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span>
                               <span data-label="Invoice" title={item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}><strong>{item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '未关联'}</strong></span>
                               <span data-label="合同" title={contractSummary(item)}><strong>{contractSummary(item)}</strong></span>
