@@ -362,7 +362,7 @@
   justify-self: end;
 }
 
-@media (max-width: 1280px) and (min-width: 901px) {
+@media (max-width: 1280px) and (min-width: 768px) {
   .finance-review-workspace .modal-footer {
     min-height: 0;
   }
@@ -650,7 +650,7 @@
   box-shadow: 0 3px 10px rgb(91 62 125 / 16%);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   .modal-panel.finance-review-workspace.is-overview {
     width: 100vw;
     max-width: 100vw !important;

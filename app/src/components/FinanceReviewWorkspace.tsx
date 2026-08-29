@@ -16,6 +16,7 @@ import {
   Eye,
   FileText,
   Files,
+  GripVertical,
   Landmark,
   LoaderCircle,
   PanelRightClose,
@@ -656,6 +657,8 @@ export function FinanceReviewWorkspace({
   const [reviewIndex, setReviewIndex] = useState(firstPendingIndex);
   const [activePane, setActivePane] = useState<FinanceReviewPane>('invoice');
   const [approvalCollapsed, setApprovalCollapsed] = useState(false);
+  const [invoicePanePercent, setInvoicePanePercent] = useState(40);
+  const [paneResizing, setPaneResizing] = useState(false);
   const [documentKind, setDocumentKind] = useState<ReviewDocumentKind>('invoice');
   const [selectedContractId, setSelectedContractId] = useState('');
   const [invoiceZoom, setInvoiceZoom] = useState(1);
@@ -672,6 +675,7 @@ export function FinanceReviewWorkspace({
   const invoiceZoomRef = useRef(1);
   const overviewFocusRef = useRef<HTMLDivElement>(null);
   const validationFocusRef = useRef<HTMLDivElement>(null);
+  const comparisonPanesRef = useRef<HTMLDivElement>(null);
   const resourceListRef = useRef<HTMLDivElement>(null);
   const restoredResourceRef = useRef('');
 
@@ -695,11 +699,32 @@ export function FinanceReviewWorkspace({
 
   const changeStage = (nextStage: FinanceReviewStage) => {
     setStage(nextStage);
+    setApprovalCollapsed(nextStage === 'validation');
+    if (nextStage === 'validation') setActivePane('invoice');
     window.requestAnimationFrame(() => {
       if (nextStage === 'validation') validationFocusRef.current?.focus();
       else overviewFocusRef.current?.focus();
     });
   };
+
+  useEffect(() => {
+    if (!paneResizing) return undefined;
+    const handlePointerMove = (event: PointerEvent) => {
+      const bounds = comparisonPanesRef.current?.getBoundingClientRect();
+      if (!bounds?.width) return;
+      const nextPercent = ((event.clientX - bounds.left) / bounds.width) * 100;
+      setInvoicePanePercent(Math.min(70, Math.max(30, nextPercent)));
+    };
+    const stopResizing = () => setPaneResizing(false);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', stopResizing, { once: true });
+    document.addEventListener('pointercancel', stopResizing, { once: true });
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', stopResizing);
+      document.removeEventListener('pointercancel', stopResizing);
+    };
+  }, [paneResizing]);
 
   const openResourceDialog = (kind: 'contract' | 'invoice') => {
     setResourceDownloadError('');
@@ -1256,6 +1281,14 @@ export function FinanceReviewWorkspace({
               </div>
 
               <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
+            <div
+              className={`finance-review-comparison-panes${paneResizing ? ' is-resizing' : ''}`}
+              ref={comparisonPanesRef}
+              style={{
+                '--finance-review-invoice-size': `${invoicePanePercent}fr`,
+                '--finance-review-payment-size': `${100 - invoicePanePercent}fr`,
+              } as CSSProperties}
+            >
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true">{documentKind === 'contract' ? <Files size={17} /> : <FileText size={17} />}</span><span><strong>{activeDocumentLabel}</strong><small title={activeDocumentMeta}>{activeDocumentMeta}</small></span></div>
@@ -1403,6 +1436,34 @@ export function FinanceReviewWorkspace({
               </button>
             </section>
 
+            <div
+              className="finance-review-pane-resizer"
+              role="separator"
+              aria-label="调整 Invoice 快照与付款清单核对看板宽度"
+              aria-orientation="vertical"
+              aria-valuemin={30}
+              aria-valuemax={70}
+              aria-valuenow={Math.round(invoicePanePercent)}
+              aria-valuetext={`Invoice ${Math.round(invoicePanePercent)}%，付款清单 ${Math.round(100 - invoicePanePercent)}%`}
+              tabIndex={0}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setPaneResizing(true);
+              }}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                if (event.key === 'Home') setInvoicePanePercent(30);
+                else if (event.key === 'End') setInvoicePanePercent(70);
+                else setInvoicePanePercent((current) => Math.min(70, Math.max(
+                  30,
+                  current + (event.key === 'ArrowLeft' ? -2 : 2),
+                )));
+              }}
+            >
+              <GripVertical size={18} aria-hidden="true" />
+            </div>
+
             <section className={`finance-review-pane finance-review-payment-pane${activePane === 'payment' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><WalletCards size={17} /></span><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
@@ -1428,6 +1489,7 @@ export function FinanceReviewWorkspace({
                 />
               </div>
             </section>
+            </div>
 
             <aside
               id="finance-review-approval-panel"

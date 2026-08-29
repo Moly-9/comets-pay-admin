@@ -153,8 +153,9 @@ describe('shared payment-list finance review content', () => {
   it('runs account validation automatically and keeps the finance workspace summary read-only', () => {
     expect(reviewContentSource).toContain("{variant === 'project' ? (");
     expect(reviewContentSource).toContain('void Promise.all(rows.map(async (row) => [');
-    expect(reviewContentSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators })');
-    expect(reviewContentSource).toContain('const validationScopeKey = JSON.stringify({ paymentLists, creators });');
+    expect(reviewContentSource).toContain("const validationScope = variant === 'finance-workspace' ? 'completeness' : 'full';");
+    expect(reviewContentSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators, scope: validationScope })');
+    expect(reviewContentSource).toContain('const validationScopeKey = JSON.stringify({ paymentLists, creators, validationScope });');
     expect(reviewContentSource).toContain('}, [validationScopeKey]);');
     expect(reviewContentSource).toContain('付款清单打开后自动调用 Airwallex');
     expect(reviewContentSource).not.toContain('request-payment-review-summary-action');
@@ -232,7 +233,7 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('data-testid="finance-review-approval-scroll"');
     expect(workspaceSource).toContain('aria-label="项目与审批详情"');
     expect(workspaceSource).toContain('tabIndex={0}');
-    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*{[^}]*height:\s*0;[^}]*grid-template-rows:\s*minmax\(0, 1fr\);[^}]*overflow:\s*hidden;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*{[^}]*height:\s*0;[^}]*grid-template-rows:\s*minmax\(0, 1fr\);[^}]*overflow-x:\s*auto;[^}]*overflow-y:\s*hidden;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-payment-scroll,\s*\.finance-review-approval-scroll\s*{[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-approval-scroll\s*{[^}]*grid-auto-rows:\s*max-content;/s);
   });
@@ -250,13 +251,22 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).not.toContain('finance-review-project-page-nav');
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex - 1\)\}/g)).toHaveLength(2);
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(2);
-    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 4fr\) minmax\(0, 4fr\) minmax\(260px, 2fr\);/s);
+    expect(workspaceSource).toContain('const [invoicePanePercent, setInvoicePanePercent] = useState(40)');
+    expect(workspaceSource).toContain('aria-label="调整 Invoice 快照与付款清单核对看板宽度"');
+    expect(workspaceSource).toContain('aria-valuemin={30}');
+    expect(workspaceSource).toContain('aria-valuemax={70}');
+    expect(workspaceSource).toContain("current + (event.key === 'ArrowLeft' ? -2 : 2)");
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(760px, 1fr\) minmax\(280px, 320px\);/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-comparison-panes\s*\{[\s\S]*?min-width:\s*760px;/s);
+    expect(workspaceStyles).toContain('var(--finance-review-invoice-size, 40fr)');
+    expect(workspaceStyles).toContain('var(--finance-review-payment-size, 60fr)');
+    expect(workspaceStyles).toMatch(/\.finance-review-pane-resizer\s*\{[^}]*width:\s*44px;[^}]*min-height:\s*44px;[^}]*touch-action:\s*none;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*8px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-pane\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*8px;/s);
-    expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\) 0fr;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(760px, 1fr\) 0;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-approval-toggle\s*\{[^}]*right:\s*16px;[^}]*top:\s*15px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-invoice-edge-nav\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;[^}]*border-radius:\s*50%;/s);
-    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
     expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-validation-stage\s*{[^}]*transition:\s*none;/s);
   });
@@ -269,7 +279,19 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*width:\s*100%;[^}]*flex:\s*none;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*justify-self:\s*center;/s);
     expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 768px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
+  });
+
+  it('keeps the current creator payment summary collapsed and excludes review-only hidden fields', () => {
+    expect(reviewContentSource).toContain('const [accountDetailsExpanded, setAccountDetailsExpanded] = useState(false)');
+    expect(reviewContentSource).toContain('setAccountDetailsExpanded(false)');
+    expect(reviewContentSource).toContain('aria-expanded={accountDetailsExpanded}');
+    expect(reviewContentSource).toContain("accountDetailsExpanded ? '收起详情' : '查看详情'");
+    expect(reviewContentSource).toContain('<dt>达人</dt><dd>{row.item.snapshot.creatorName}</dd>');
+    expect(reviewContentSource).toContain("'beneficiary.date_of_birth'");
+    expect(reviewContentSource).toContain('FINANCE_WORKSPACE_HIDDEN_SCHEMA_PATHS.has(field.path)');
+    expect(reviewContentSource).not.toContain("label: '出生日期'");
+    expect(reviewContentSource).not.toContain("label: '请求编号'");
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

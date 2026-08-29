@@ -289,7 +289,7 @@ describe('request project payment presentation', () => {
     expect(source).toContain('financeReview.pages.flatMap');
     expect(viewerSource).not.toContain('校验 Airwallex 付款信息完整性</Button>');
     expect(viewerSource).toContain('<InvoiceContractMismatchNotice');
-    expect(viewerSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators })');
+    expect(viewerSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators, scope: validationScope })');
     expect(viewerSource).toContain('导出 Excel');
     expect(viewerSource).toContain('<th>收款人名称</th>');
     expect(viewerSource).toContain('<th>收款主体</th>');

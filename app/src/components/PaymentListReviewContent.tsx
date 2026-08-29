@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -58,6 +59,10 @@ const FINANCE_WORKSPACE_COMPARISON_FIELD_IDS = new Set([
   'bank-address',
   'swift-code',
   'iban',
+]);
+
+const FINANCE_WORKSPACE_HIDDEN_SCHEMA_PATHS = new Set([
+  'beneficiary.date_of_birth',
 ]);
 
 export const financeWorkspaceComparisonFields = (
@@ -206,6 +211,7 @@ export function PaymentListReviewContent({
   const [validating, setValidating] = useState(false);
   const [localIndex, setLocalIndex] = useState(0);
   const [pendingAccountFocusKey, setPendingAccountFocusKey] = useState<string | null>(null);
+  const [accountDetailsExpanded, setAccountDetailsExpanded] = useState(false);
   const maxIndex = Math.max(0, pages.length - 1);
   const requestedIndex = activeIndex ?? localIndex;
   const reviewIndex = Number.isFinite(requestedIndex)
@@ -222,7 +228,8 @@ export function PaymentListReviewContent({
     effectiveAccount: paymentListEffectiveAccount(item),
     snapshotReview: reviewPaymentListAccountSnapshot(item, creators),
   }))), [creators, paymentLists]);
-  const validationScopeKey = JSON.stringify({ paymentLists, creators });
+  const validationScope = variant === 'finance-workspace' ? 'completeness' : 'full';
+  const validationScopeKey = JSON.stringify({ paymentLists, creators, validationScope });
   const rowByReference = useMemo(() => new Map(rows.map((row) => [
     `${row.list.paymentListId}:${row.item.id}`,
     row,
@@ -291,6 +298,10 @@ export function PaymentListReviewContent({
   }, [activeIndex, maxIndex]);
 
   useEffect(() => {
+    setAccountDetailsExpanded(false);
+  }, [currentReview?.key]);
+
+  useEffect(() => {
     if (!pendingAccountFocusKey) return undefined;
     const frame = window.requestAnimationFrame(() => {
       const target = document.getElementById(`finance-payment-account-${pendingAccountFocusKey}`);
@@ -340,7 +351,7 @@ export function PaymentListReviewContent({
     }])));
     void Promise.all(rows.map(async (row) => [
       row.key,
-      await validatePaymentListAccountViaApi({ item: row.item, creators }),
+      await validatePaymentListAccountViaApi({ item: row.item, creators, scope: validationScope }),
     ] as const)).then((results) => {
       if (cancelled) return;
       setAccountChecks(Object.fromEntries(results));
@@ -647,8 +658,24 @@ export function PaymentListReviewContent({
             <section className="finance-payment-account-snapshots" aria-label="当前达人账户快照">
               <header>
                 <div><span className="finance-review-card-title-icon is-account" aria-hidden="true"><Landmark size={14} /></span><span><strong>当前达人付款信息汇总</strong><small>Airwallex 付款信息完整性字段 · 空值使用原型演示值，实际以 API 校验为准</small></span></div>
-                <span>{visibleAccountRows.length} 条</span>
+                <div className="finance-payment-account-heading-actions">
+                  <span>{visibleAccountRows.length} 条</span>
+                  <button
+                    className="finance-payment-account-detail-toggle"
+                    type="button"
+                    aria-expanded={accountDetailsExpanded}
+                    aria-controls={`finance-payment-account-details-${reviewIndex}`}
+                    onClick={() => setAccountDetailsExpanded((expanded) => !expanded)}
+                  >
+                    {accountDetailsExpanded ? '收起详情' : '查看详情'}
+                    <ChevronDown size={15} aria-hidden="true" />
+                  </button>
+                </div>
               </header>
+              <div
+                className={`finance-payment-account-detail-list${accountDetailsExpanded ? ' is-expanded' : ''}`}
+                id={`finance-payment-account-details-${reviewIndex}`}
+              >
               {visibleAccountRows.length ? visibleAccountRows.map((row) => {
                 const fieldById = new Map(currentReview?.fields.map((field) => [field.id, field]) ?? []);
                 const details = row.effectiveAccount.paymentDetails;
@@ -713,7 +740,6 @@ export function PaymentListReviewContent({
                   'beneficiary.address.country_code': countryCodeByName[bankCountry] || bankCountry,
                   'beneficiary.first_name': realNameParts[0] || 'Mina',
                   'beneficiary.last_name': realNameParts.slice(1).join(' ') || 'Kato',
-                  'beneficiary.date_of_birth': '1992-08-16',
                   'beneficiary.company_name': creator?.name || 'COMETS Creator Studio',
                   'beneficiary.address.street_address': bankStreetAddress,
                   'beneficiary.address.city': bankCity,
@@ -756,7 +782,6 @@ export function PaymentListReviewContent({
                   { path: 'beneficiary.address.country_code', label: '收款人地址国家 / 地区' },
                   { path: 'beneficiary.first_name', label: '法定名' },
                   { path: 'beneficiary.last_name', label: '法定姓' },
-                  { path: 'beneficiary.date_of_birth', label: '出生日期' },
                   { path: 'beneficiary.address.street_address', label: '收款人街道地址' },
                   { path: 'beneficiary.address.city', label: '收款人城市' },
                   { path: 'beneficiary.address.state', label: '收款人州 / 省' },
@@ -768,7 +793,10 @@ export function PaymentListReviewContent({
                   { path: 'beneficiary.bank_details.intermediary_bank_name', label: '中间行名称' },
                 ];
                 const supplementalSchemaFields = (details?.schemaFields?.length ? details.schemaFields : fallbackSchemaFields)
-                  .filter((field) => !displayedSchemaPaths.has(field.path))
+                  .filter((field) => (
+                    !displayedSchemaPaths.has(field.path)
+                    && !FINANCE_WORKSPACE_HIDDEN_SCHEMA_PATHS.has(field.path)
+                  ))
                   .map((field) => ({
                     id: `schema-${field.path}`,
                     label: field.label,
@@ -801,7 +829,6 @@ export function PaymentListReviewContent({
                       { id: 'payment-reason', label: '付款原因', value: displayValue(paymentListItemValue(row.item, 'paymentReason')) },
                       { id: 'transaction-reference', label: '交易附言', value: displayValue(paymentListItemValue(row.item, 'transactionReference')) },
                       { id: 'description', label: '描述', value: row.item.snapshot.description || '影音服务付款（原型演示）' },
-                      { id: 'request-id', label: '请求编号', value: row.item.snapshot.transactionReference || row.item.snapshot.invoiceNumber },
                       ...supplementalSchemaFields,
                     ]
                   : [
@@ -850,13 +877,22 @@ export function PaymentListReviewContent({
                       <div>
                         <span className="finance-review-card-title-icon is-creator" aria-hidden="true"><UserRoundCheck size={14} /></span>
                         <dl className="finance-payment-account-summary-meta">
+                          <div><dt>达人</dt><dd>{row.item.snapshot.creatorName}</dd></div>
                           <div><dt>Account Name</dt><dd>{accountName}</dd></div>
                           <div><dt>付款清单编号</dt><dd>{row.list.paymentListCode}</dd></div>
                           <div><dt>支付方式</dt><dd>{transferMethodCode(row.effectiveAccount.transferMethod)}</dd></div>
                         </dl>
                       </div>
-                      <span className="project-record-status"><i />{paymentListStatusLabel(row.list)}</span>
+                      <span className={`request-payment-api-result is-${!accountCheck || accountCheck.state === 'checking' ? 'checking' : accountCheck.state === 'passed' ? 'passed' : 'failed'}`}>
+                        {!accountCheck || accountCheck.state === 'checking'
+                          ? <LoaderCircle className="is-spinning" size={14} />
+                          : accountCheck.state === 'passed'
+                            ? <CircleCheck size={14} />
+                            : <CircleAlert size={14} />}
+                        {!accountCheck || accountCheck.state === 'checking' ? '校验中' : accountCheck.state === 'passed' ? '已校验' : '待补充'}
+                      </span>
                     </header>
+                    {accountDetailsExpanded ? <>
                     {renderValidation(row)}
                     <dl className={`finance-payment-account-fields${row.effectiveAccount.provider === 'Airwallex' ? ' finance-payment-airwallex-fields' : ''}`}>
                       {accountFields.map((accountField) => {
@@ -905,6 +941,7 @@ export function PaymentListReviewContent({
                       <div><dt>付款原因</dt><dd>{displayValue(paymentListItemValue(row.item, 'paymentReason'))}</dd></div>
                       <div className="request-payment-review-reference"><dt>交易附言</dt><dd>{displayValue(paymentListItemValue(row.item, 'transactionReference'))}</dd></div>
                     </dl> : null}
+                    </> : null}
                   </article>
                 );
               }) : (
@@ -914,6 +951,7 @@ export function PaymentListReviewContent({
                   <p>请核对缺失或额外付款明细，并记录有误原因。</p>
                 </div>
               )}
+              </div>
             </section>
           ) : (
             <div className="project-payment-rows request-payment-flat-rows">

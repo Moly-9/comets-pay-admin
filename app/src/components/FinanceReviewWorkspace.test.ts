@@ -37,10 +37,11 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain('onClick={() => changeStage(\'validation\')}');
     expect(workspaceSource).toContain('校验审核');
     expect(workspaceSource).toContain('icon={<ArrowLeft size={16} />}');
-    expect(workspaceSource).not.toContain('ArrowRight');
+    expect(workspaceSource).toContain("setApprovalCollapsed(nextStage === 'validation')");
+    expect(workspaceSource).toContain("if (nextStage === 'validation') setActivePane('invoice')");
   });
 
-  it('returns to the overview without resetting review, page, zoom, or drawer state', () => {
+  it('returns to the overview without resetting review, page, or zoom state', () => {
     expect(workspaceSource).toContain('onClick={() => changeStage(\'overview\')}');
     expect(workspaceSource).toContain('返回项目概览');
     expect(workspaceSource).toContain("const [reviewIndex, setReviewIndex] = useState(firstPendingIndex)");
@@ -64,7 +65,7 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;/s);
     expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer > \.finance-review-footer-actions\s*{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 768px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
   });
 
   it('reuses the same project overview for the drawer and approval board', () => {
@@ -130,7 +131,7 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceStageStyles).toMatch(/\.modal-backdrop:has\(\.finance-review-workspace\)\s*{[^}]*justify-content:\s*flex-end;/s);
     expect(workspaceStageStyles).toMatch(/\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*min\(520px, 100vw\);/s);
     expect(workspaceStageStyles).toMatch(/transition:\s*width 220ms ease-out, max-width 220ms ease-out/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*100vw;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*100vw;/s);
     expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.modal-panel\.finance-review-workspace,[\s\S]*transition:\s*none;/s);
   });
 });
@@ -211,7 +212,7 @@ describe('FinanceReviewWorkspace project resource cards', () => {
   it('keeps cards readable without horizontal overflow on narrow screens', () => {
     expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*44px minmax\(220px, 1fr\) minmax\(150px, \.7fr\) minmax\(140px, \.55fr\) auto auto;/s);
     expect(workspaceStageStyles).toContain('.finance-review-resource-card-person');
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-resource-card-person\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.finance-review-resource-card-person\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
     expect(workspaceStageStyles).toMatch(/@media \(max-width: 480px\)[\s\S]*\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*38px minmax\(0, 1fr\);[^}]*height:\s*max-content;[^}]*min-height:\s*0;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card-actions\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
@@ -303,7 +304,7 @@ describe('FinanceReviewWorkspace document switching', () => {
     expect(workspaceSource).not.toContain('<div className="finance-review-document-switcher"');
     expect(workspaceStageStyles).toContain('.finance-review-document-switcher');
     expect(workspaceStageStyles).toContain('.finance-review-document-header-controls');
-    expect(workspaceStageStyles).toContain('@media (max-width: 900px)');
+    expect(workspaceStageStyles).toContain('@media (max-width: 767px)');
   });
 });
 
