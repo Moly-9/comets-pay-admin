@@ -17,7 +17,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import { formatCreatorHandle } from '../creatorSearchOptions';
 import { Button, PageHeading, SelectField } from '../components/Common';
@@ -28,6 +28,7 @@ import {
   canConfirmRecognitionFields,
   confirmRecognitionFields,
   editRecognitionField,
+  normalizeCampaignPeriod,
   reopenRecognitionFields,
 } from '../contractRecognition';
 import {
@@ -62,9 +63,18 @@ type ContractDetailTab = 'summary' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
 
 type ContractDetailField = {
+  key: ContractFieldKey | 'campaignEnd' | 'paymentInfo';
+  label: string;
+};
+
+type ContractPaymentField = {
   key: ContractFieldKey | 'paymentInfo';
   label: string;
 };
+
+const isRecognitionFieldKey = (
+  key: ContractDetailField['key'],
+): key is ContractFieldKey => key !== 'campaignEnd' && key !== 'paymentInfo';
 
 const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
   INDEPENDENT: [
@@ -73,14 +83,14 @@ const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
     { key: 'contractNumber', label: '合同编号' },
     { key: 'projectBrand', label: 'Project Name' },
     { key: 'platformChannel', label: '平台 / 频道' },
-    { key: 'effectiveDate', label: '生效日期' },
+    { key: 'campaignEnd', label: '到期时间' },
     { key: 'campaignPeriod', label: 'Campaign Period' },
   ],
   FRAMEWORK: [
     { key: 'advertiser', label: 'Advertiser' },
     { key: 'publisher', label: 'Publisher' },
     { key: 'contractNumber', label: '合同编号' },
-    { key: 'effectiveDate', label: '生效日期' },
+    { key: 'campaignEnd', label: '到期时间' },
     { key: 'campaignPeriod', label: 'Campaign Period' },
   ],
   IO: [
@@ -89,12 +99,16 @@ const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
     { key: 'contractNumber', label: '合同编号' },
     { key: 'projectBrand', label: 'Project Name' },
     { key: 'platformChannel', label: '平台 / 频道' },
-    { key: 'effectiveDate', label: '生效日期' },
+    { key: 'campaignEnd', label: '到期时间' },
     { key: 'campaignPeriod', label: 'Campaign Period' },
   ],
 };
 
-const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
+export const contractSummaryFieldsFor = (contractType: ContractType) => (
+  SUMMARY_FIELDS_BY_TYPE[contractType]
+);
+
+const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractPaymentField[]> = {
   INDEPENDENT: [
     { key: 'projectTotalFees', label: '付款金额' },
     { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
@@ -117,9 +131,32 @@ const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
 
 const DETAIL_FIELD_LABELS: Partial<Record<ContractFieldKey, string>> = Object.fromEntries(
   [...SUMMARY_FIELDS_BY_TYPE.INDEPENDENT, ...PAYMENT_FIELDS_BY_TYPE.INDEPENDENT]
-    .filter((field): field is { key: ContractFieldKey; label: string } => field.key !== 'paymentInfo')
+    .filter((field): field is { key: ContractFieldKey; label: string } => isRecognitionFieldKey(field.key))
     .map((field) => [field.key, field.label]),
 ) as Partial<Record<ContractFieldKey, string>>;
+
+export const contractExpiryDisplayValue = (
+  contract: Pick<ContractRecord, 'campaignEnd' | 'isLongTerm'>,
+) => {
+  const validity = getContractValidity(contract);
+  if (validity.status === 'LONG_TERM') return '长期有效';
+  if (validity.status === 'UNSET') return '未设置';
+  return validity.endDate;
+};
+
+export const recognitionCampaignEndValue = (
+  field: ContractRecognitionField | undefined,
+  isLongTerm = false,
+) => {
+  if (isLongTerm) return '长期有效';
+  if (!field) return '待补充';
+  const normalized = typeof field.normalizedValue === 'object' && field.normalizedValue
+    ? field.normalizedValue as { endDate?: string }
+    : undefined;
+  const normalizedEnd = normalized?.endDate?.trim();
+  if (normalizedEnd) return normalizedEnd;
+  return normalizeCampaignPeriod(field.editedValue?.trim() || field.rawValue).endDate || '待补充';
+};
 
 const FEE_BEARER_LABELS = {
   ADVERTISER: 'Advertiser承担',
@@ -204,7 +241,7 @@ function ContractDefinitionList({
   formalFieldsHidden?: boolean;
 }) {
   const joinedValue = (...values: string[]) => values.filter(Boolean).join(' · ') || '待补充';
-  const valueFor = (key: ContractFieldKey) => {
+  const valueFor = (key: ContractDetailField['key']) => {
     if (formalFieldsHidden && key !== 'contractNumber') return '待补充';
     switch (key) {
       case 'advertiser': return contract.advertiser || '待识别';
@@ -215,6 +252,7 @@ function ContractDefinitionList({
         contract.creatorHandle ?? contract.channelName,
         contract.creatorPlatform ?? contract.platform,
       );
+      case 'campaignEnd': return contractExpiryDisplayValue(contract);
       case 'effectiveDate': return contract.effectiveDate || '待补充';
       case 'campaignPeriod': return contract.campaignStart && contract.campaignEnd
         ? `${contract.campaignStart} 至 ${contract.campaignEnd}`
@@ -228,7 +266,7 @@ function ContractDefinitionList({
         <div key={field.key}>
           <dt>{field.label}</dt>
           <dd>
-            {valueFor(field.key as ContractFieldKey)}
+            {valueFor(field.key)}
             <small>{field.key === 'contractNumber' ? '系统字段' : '合同识别 / 人工确认'}</small>
           </dd>
         </div>
@@ -244,7 +282,7 @@ function ContractPaymentList({
   formalFieldsHidden = false,
 }: {
   contract: ContractRecord;
-  fields: ContractDetailField[];
+  fields: ContractPaymentField[];
   paymentSnapshot: ReturnType<typeof invoicePaymentForCreator> | null;
   formalFieldsHidden?: boolean;
 }) {
@@ -415,6 +453,8 @@ function RecognitionFieldList({
   onOpenSource,
   fieldLabels = {},
   recognitionLocked = false,
+  showCampaignEnd = false,
+  isLongTerm = false,
 }: {
   fields: ContractRecognitionField[];
   fieldKeys: ContractFieldKey[];
@@ -423,6 +463,8 @@ function RecognitionFieldList({
   onOpenSource: (source: ContractSourceLocation) => void;
   fieldLabels?: Partial<Record<ContractFieldKey, string>>;
   recognitionLocked?: boolean;
+  showCampaignEnd?: boolean;
+  isLongTerm?: boolean;
 }) {
   return (
     <div className="contract-recognition-detail-list">
@@ -431,47 +473,72 @@ function RecognitionFieldList({
         if (!field) return null;
         const fieldLocked = recognitionLocked || field.status === 'confirmed';
         return (
-          <article
-            className={`contract-recognition-detail contract-recognition-field-${field.status}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
-            key={field.fieldKey}
-          >
-            <div className="contract-recognition-label">{fieldLabels[field.fieldKey] ?? field.label}</div>
-            <div className="contract-recognition-value">
-              <input
-                aria-label={fieldLabels[field.fieldKey] ?? field.label}
-                value={field.rawValue}
-                placeholder="待补充"
-                readOnly={fieldLocked}
-                onChange={(event) => onChange(field.fieldKey, event.target.value)}
-              />
-              {field.source ? (
-                <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
-                  <FileSearch size={12} />
-                  {sourceLabel(field.source)}
-                </button>
-              ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
-              {field.status === 'conflict' && field.candidates.length > 1 ? (
-                <div className="contract-recognition-candidates">
-                  <strong><AlertTriangle size={13} />发现多个候选，请选择后确认</strong>
-                  {field.candidates.map((candidate, index) => (
-                    <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
-                      <span>{candidate.rawValue}</span>
-                      <small>{sourceLabel(candidate.source)}</small>
+          <Fragment key={field.fieldKey}>
+            {showCampaignEnd && fieldKey === 'campaignPeriod' ? (
+              <article
+                className={`contract-recognition-detail contract-recognition-detail-derived contract-recognition-field-${field.status} contract-recognition-detail-readonly`}
+                data-derived-from="campaignPeriod"
+              >
+                <div className="contract-recognition-label">到期时间</div>
+                <div className="contract-recognition-value">
+                  <input
+                    aria-label="到期时间"
+                    value={recognitionCampaignEndValue(field, isLongTerm)}
+                    readOnly
+                  />
+                  {field.source ? (
+                    <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
+                      <FileSearch size={12} />
+                      {sourceLabel(field.source)}
                     </button>
-                  ))}
+                  ) : <small className="contract-recognition-missing-source">未识别，需在 Campaign Period 补充</small>}
                 </div>
-              ) : null}
-              {field.profileComparison?.status === 'conflict' ? (
-                <div className="contract-recognition-profile-conflict">
-                  <AlertTriangle size={13} />
-                  <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
+                <div className="contract-recognition-actions">
+                  <span className="contract-recognition-status">自动同步</span>
                 </div>
-              ) : null}
-            </div>
-            <div className="contract-recognition-actions">
-              <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
-            </div>
-          </article>
+              </article>
+            ) : null}
+            <article
+              className={`contract-recognition-detail contract-recognition-field-${field.status}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
+            >
+              <div className="contract-recognition-label">{fieldLabels[field.fieldKey] ?? field.label}</div>
+              <div className="contract-recognition-value">
+                <input
+                  aria-label={fieldLabels[field.fieldKey] ?? field.label}
+                  value={field.rawValue}
+                  placeholder="待补充"
+                  readOnly={fieldLocked}
+                  onChange={(event) => onChange(field.fieldKey, event.target.value)}
+                />
+                {field.source ? (
+                  <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
+                    <FileSearch size={12} />
+                    {sourceLabel(field.source)}
+                  </button>
+                ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
+                {field.status === 'conflict' && field.candidates.length > 1 ? (
+                  <div className="contract-recognition-candidates">
+                    <strong><AlertTriangle size={13} />发现多个候选，请选择后确认</strong>
+                    {field.candidates.map((candidate, index) => (
+                      <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
+                        <span>{candidate.rawValue}</span>
+                        <small>{sourceLabel(candidate.source)}</small>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {field.profileComparison?.status === 'conflict' ? (
+                  <div className="contract-recognition-profile-conflict">
+                    <AlertTriangle size={13} />
+                    <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
+                  </div>
+                ) : null}
+              </div>
+              <div className="contract-recognition-actions">
+                <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
+              </div>
+            </article>
+          </Fragment>
         );
       })}
     </div>
@@ -535,10 +602,10 @@ export function ContractDetailPage({
   const paymentFields = PAYMENT_FIELDS_BY_TYPE[contractType];
   const summaryFieldKeys = summaryFields
     .map((field) => field.key)
-    .filter((key): key is ContractFieldKey => key !== 'paymentInfo');
+    .filter(isRecognitionFieldKey);
   const paymentFieldKeys = paymentFields
     .map((field) => field.key)
-    .filter((key): key is ContractFieldKey => key !== 'paymentInfo');
+    .filter(isRecognitionFieldKey);
   const recognitionFieldKeys = Array.from(new Set([...summaryFieldKeys, ...paymentFieldKeys]));
   const projectName = useMemo(() => {
     const projectId = contract.cooperationProjectId ?? contract.projectId;
@@ -960,6 +1027,8 @@ export function ContractDetailPage({
                     onOpenSource={openSource}
                     fieldLabels={DETAIL_FIELD_LABELS}
                     recognitionLocked={recognitionApplied || !canEditCurrentContract}
+                    showCampaignEnd
+                    isLongTerm={Boolean(contract.isLongTerm)}
                   />
                 ) : (
                   <ContractDefinitionList

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { contractNameFromUploadFile } from './ContractUploadWizard';
+import { contractNameFromUploadFile, contractUploadCreatorSearchOptions } from './ContractUploadWizard';
+import type { CreatorProfile } from '../types';
 
 describe('ContractUploadWizard contract naming', () => {
   it('uses a trimmed upload filename without the PDF or DOCX extension', () => {
@@ -23,5 +24,39 @@ describe('ContractUploadWizard contract naming', () => {
     expect(source).not.toContain('对应生成草稿');
     expect(styles).toMatch(/\.creator-search-combobox \.contract-search-option > \.creator-identity\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
     expect(styles).toMatch(/\.creator-search-combobox \.contract-search-option \.creator-social-accounts\s*{[^}]*flex-wrap:\s*nowrap;[^}]*overflow:\s*hidden;/s);
+  });
+
+  it('shows only the creator display name after selection without reducing search coverage', () => {
+    const creator = {
+      id: 'creator-upload-display',
+      initials: 'MK',
+      accent: '#f4d7c4',
+      name: 'Mina Kato dis',
+      handle: '@MinaKato',
+      region: 'JP',
+      platform: 'Instagram',
+      projects: 1,
+      contact: {
+        legalName: 'Mina Kato Limited',
+        address: '',
+        phone: '',
+        email: 'mina@example.com',
+      },
+      socialAccounts: [{
+        id: 'channel-mina-instagram',
+        handle: '@MinaKato',
+        platform: 'Instagram',
+        profileUrl: 'https://instagram.com/MinaKato',
+      }],
+      payoutAccounts: [],
+    } satisfies CreatorProfile;
+
+    const [option] = contractUploadCreatorSearchOptions([creator]);
+
+    expect(option.label).toBe('Mina Kato dis');
+    expect(option.selectedLabel).toBe('Mina Kato dis');
+    expect(option.searchText).toContain('channel-mina-instagram');
+    expect(option.searchText).toContain('https://instagram.com/MinaKato');
+    expect(option.searchText).toContain('Mina Kato Limited');
   });
 });

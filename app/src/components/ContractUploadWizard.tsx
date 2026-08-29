@@ -74,6 +74,13 @@ export const contractNameFromUploadFile = (fileName: string) => {
   return withoutExtension || normalized;
 };
 
+export const contractUploadCreatorSearchOptions = (creators: CreatorProfile[]) => (
+  creatorSearchOptions(creators).map((option) => ({
+    ...option,
+    selectedLabel: option.label,
+  }))
+);
+
 export function ContractUploadWizard({
   projects,
   creators,
@@ -119,7 +126,7 @@ export function ContractUploadWizard({
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · ${project.creators} 位达人`,
   }));
-  const creatorOptions = creatorSearchOptions(creators);
+  const creatorOptions = contractUploadCreatorSearchOptions(creators);
   const frameworkOptions = contracts
     .filter((contract) => isFrameworkContract(contract) && contract.creatorId === creatorId)
     .map((contract) => ({

@@ -9569,6 +9569,21 @@ button:disabled {
   gap: 10px;
 }
 
+.contract-detail-page > .page-heading-row > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.contract-detail-page > .page-heading-row h1,
+.contract-detail-page > .page-heading-row p {
+  overflow-wrap: anywhere;
+}
+
+.contract-detail-page > .page-heading-row .page-heading-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
 .button {
   display: inline-flex;
   min-height: 38px;
@@ -23838,6 +23853,7 @@ button:disabled {
 
   .contract-detail-page .page-heading-actions .button {
     width: 100%;
+    min-height: 44px;
   }
 
   .contract-tabs {
@@ -25615,6 +25631,11 @@ button:disabled {
 .contract-recognition-field-confirmed .contract-recognition-status {
   background: #e8f6ef;
   color: #23765a;
+}
+
+.contract-recognition-detail-derived .contract-recognition-status {
+  background: #f2e8fb;
+  color: #7b4bb2;
 }
 
 .contract-recognition-empty {
