@@ -7,6 +7,7 @@ import type {
   CreatorPayoutAccount,
   CreatorProfile,
   DocumentPayoutSnapshot,
+  InvoicePaymentMethod,
   PayMaxPayoutAccount,
   PayPalPayoutAccount,
   PayoutAccountStatus,
@@ -575,6 +576,13 @@ export const eligibleInvoicePayoutAccounts = (
   && isPayoutAccountUsableForDocuments(account)
   && (account.provider === 'Airwallex' || account.provider === 'PayPal')
 )) ?? [];
+
+export const invoicePaymentMethodForProvider = (
+  provider?: Provider | null,
+  fallback: InvoicePaymentMethod = 'bank',
+): InvoicePaymentMethod => (
+  provider ? (provider === 'PayPal' ? 'paypal' : 'bank') : fallback
+);
 
 export const hasPayoutAccountHistory = (account: CreatorPayoutAccount) => Boolean(
   account.hasPaymentHistory

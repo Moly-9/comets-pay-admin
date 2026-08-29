@@ -145,6 +145,53 @@ const requestWithContract = {
 };
 
 describe('request finance review', () => {
+  it('carries only the current Invoice version contract mismatch reason into later approval review', () => {
+    const currentInvoice = {
+      ...invoice,
+      version: 2,
+      contractMatchReviews: [
+        { version: 1, contractIds: [], result: 'APPROVED_WITH_REASON', issues: [], reason: '旧版本说明' },
+        {
+          version: 2,
+          contractIds: [],
+          result: 'APPROVED_WITH_REASON',
+          issues: [],
+          reason: '当前版本合同金额差异已由项目确认',
+          actorName: 'Mina Media',
+          actorRole: '媒介',
+          reviewedAt: '2026-08-09T08:30:00.000Z',
+        },
+      ],
+    } as unknown as GeneratedInvoiceRecord;
+
+    const review = buildRequestFinanceReview(request, [currentInvoice], [paymentList()]);
+    expect(review.pages[0].contractMismatchReview).toEqual({
+      reason: '当前版本合同金额差异已由项目确认',
+      actorName: 'Mina Media',
+      actorRole: '媒介',
+      reviewedAt: '2026-08-09T08:30:00.000Z',
+    });
+    expect(review.fingerprint).toContain('当前版本合同金额差异已由项目确认');
+    expect(review.fingerprint).not.toContain('旧版本说明');
+  });
+
+  it('does not reuse a mismatch reason from an older Invoice version', () => {
+    const revisedInvoice = {
+      ...invoice,
+      version: 2,
+      contractMatchReviews: [{
+        version: 1,
+        contractIds: [],
+        result: 'APPROVED_WITH_REASON',
+        issues: [],
+        reason: '上一版本说明',
+      }],
+    } as unknown as GeneratedInvoiceRecord;
+
+    const review = buildRequestFinanceReview(request, [revisedInvoice], [paymentList()]);
+    expect(review.pages[0].contractMismatchReview).toBeUndefined();
+  });
+
   it('approves only a one-to-one matching invoice and payment row', () => {
     const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
     expect(review.canApprove).toBe(true);

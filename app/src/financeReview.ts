@@ -8,6 +8,7 @@ import { paymentListEffectiveAccount, paymentListItemValue } from './businessWor
 import type { ContractRecord } from './contracts';
 import { getAirwallexCountryProfile } from './airwallexFormSchema';
 import { bankAddress, invoiceTotal } from './invoice/invoiceUtils';
+import { currentInvoiceContractMatchReview } from './invoice/invoiceContractMatching';
 import { paymentRequestInvoiceIds, type PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
 
@@ -36,6 +37,13 @@ export type FinanceReviewPaymentItemRef = {
   itemId: PaymentListItem['id'];
 };
 
+export type FinanceReviewContractMismatchReview = {
+  reason: string;
+  actorName?: string;
+  actorRole?: string;
+  reviewedAt?: string;
+};
+
 export type FinanceInvoiceReview = {
   key: string;
   kind: Exclude<FinanceReviewPageKind, 'extra-payment' | 'empty-request'>;
@@ -44,6 +52,7 @@ export type FinanceInvoiceReview = {
   creatorName: string;
   paymentItems: FinanceReviewPaymentItemRef[];
   sourceVersions: string[];
+  contractMismatchReview?: FinanceReviewContractMismatchReview;
   fields: FinanceReviewField[];
   mismatchCount: number;
   warningCount: number;
@@ -57,6 +66,7 @@ export type FinanceReviewPage = FinanceInvoiceReview | {
   creatorName: string;
   paymentItems: FinanceReviewPaymentItemRef[];
   sourceVersions: string[];
+  contractMismatchReview?: FinanceReviewContractMismatchReview;
   fields: FinanceReviewField[];
   mismatchCount: number;
   warningCount: number;
@@ -267,6 +277,15 @@ const reviewInvoice = (
   matches: Array<{ list: PaymentListRecord; item: PaymentListItem }>,
   contracts: ContractRecord[],
 ): FinanceInvoiceReview => {
+  const storedContractMatchReview = currentInvoiceContractMatchReview(record);
+  const contractMismatchReview = storedContractMatchReview?.reason?.trim()
+    ? {
+        reason: storedContractMatchReview.reason.trim(),
+        actorName: storedContractMatchReview.actorName,
+        actorRole: storedContractMatchReview.actorRole,
+        reviewedAt: storedContractMatchReview.reviewedAt,
+      }
+    : undefined;
   const paymentItems = matches.map(({ list, item }) => ({
     paymentListId: list.paymentListId,
     itemId: item.id,
@@ -294,6 +313,7 @@ const reviewInvoice = (
       creatorName: record.snapshot.creatorName,
       paymentItems,
       sourceVersions,
+      contractMismatchReview,
       fields,
       mismatchCount: 1,
       warningCount: 0,
@@ -484,6 +504,7 @@ const reviewInvoice = (
     creatorName: record.snapshot.creatorName,
     paymentItems,
     sourceVersions,
+    contractMismatchReview,
     fields,
     ...fieldCounts(fields),
   };
@@ -495,14 +516,15 @@ export const financeReviewFingerprint = (pages: FinanceReviewPage[]) => pages.ma
   invoiceId: page.invoiceId,
   paymentItems: page.paymentItems,
   sourceVersions: page.sourceVersions,
-    fields: page.fields.map((field) => [
-      field.id,
-      field.contractValue,
-      field.invoiceValue,
-      field.paymentValue,
-      field.state,
-      field.warning,
-    ]),
+  contractMismatchReview: page.contractMismatchReview,
+  fields: page.fields.map((field) => [
+    field.id,
+    field.contractValue,
+    field.invoiceValue,
+    field.paymentValue,
+    field.state,
+    field.warning,
+  ]),
 })).join('\n');
 
 export const buildRequestFinanceReview = (

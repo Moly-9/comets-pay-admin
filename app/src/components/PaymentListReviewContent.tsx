@@ -37,6 +37,7 @@ import {
 import type { CreatorProfile } from '../types';
 import { Button } from './Common';
 import { CreatorIdentity } from './CreatorIdentity';
+import { InvoiceContractMismatchNotice } from './InvoiceContractMismatchNotice';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type RequestPaymentAccountCheck = PaymentAccountApiValidation | {
@@ -75,6 +76,18 @@ const paymentListStatusLabel = (paymentList: PaymentListRecord | null) => {
   if (paymentList.status === 'submitted') return '已提交';
   if (paymentList.status === 'generated') return '已生成';
   return '草稿';
+};
+
+const contractMismatchReviewTime = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 };
 
 const feeBearerLabel = (value: unknown) => {
@@ -256,6 +269,22 @@ export function PaymentListReviewContent({
   const exportLists = exportMode === 'current'
     ? paymentLists.filter((list) => currentListIds.includes(list.paymentListId))
     : paymentLists;
+  const contractMismatchNoticeItems = (variant === 'project'
+    ? pages
+    : currentReview ? [currentReview] : [])
+    .flatMap((page) => {
+      const review = page.contractMismatchReview;
+      if (!review?.reason) return [];
+      const meta = [
+        review.actorName || review.actorRole,
+        contractMismatchReviewTime(review.reviewedAt),
+      ].filter(Boolean).join(' · ');
+      return [{
+        invoiceNumber: page.invoiceNumber,
+        reason: review.reason,
+        meta: meta || undefined,
+      }];
+    });
 
   useEffect(() => {
     if (activeIndex === undefined) setLocalIndex((current) => Math.min(current, maxIndex));
@@ -389,6 +418,11 @@ export function PaymentListReviewContent({
           </div>
         </div>
       ) : null}
+
+      <InvoiceContractMismatchNotice
+        className={variant === 'finance-workspace' ? 'is-compact' : ''}
+        items={contractMismatchNoticeItems}
+      />
 
       {rows.length ? (
         <>

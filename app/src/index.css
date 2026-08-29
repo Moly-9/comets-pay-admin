@@ -3904,6 +3904,88 @@ input[type="checkbox"]:disabled {
   font-size: 11.5px;
 }
 
+.invoice-contract-mismatch-notices {
+  display: grid;
+  gap: 8px;
+}
+
+.invoice-contract-mismatch-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  border: 1px solid #ead8b9;
+  border-left: 3px solid #d49a42;
+  border-radius: 8px;
+  background: #fff9ee;
+  padding: 11px 12px;
+  color: #966321;
+}
+
+.invoice-contract-mismatch-notice > svg {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.invoice-contract-mismatch-notice > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.invoice-contract-mismatch-notice header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.invoice-contract-mismatch-notice strong {
+  color: #784c16;
+  font-size: 11.5px;
+}
+
+.invoice-contract-mismatch-notice em {
+  max-width: 52%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f7ecd9;
+  padding: 2px 8px;
+  color: #7f6546;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-contract-mismatch-notice p {
+  margin: 0;
+  color: #694d2a;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.invoice-contract-mismatch-notice small {
+  color: #806d55;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.invoice-contract-mismatch-notices.is-compact .invoice-contract-mismatch-notice {
+  border-radius: 6px;
+  padding: 9px 10px;
+}
+
+.invoice-contract-mismatch-notices.is-compact .invoice-contract-mismatch-notice p {
+  font-size: 11px;
+}
+
+.request-contract-mismatch-notices {
+  margin-bottom: 0;
+}
+
 .request-payment-review-summary {
   display: flex;
   min-height: 62px;
@@ -18591,6 +18673,74 @@ button:disabled {
 
 .contract-search-input-wrap input::placeholder {
   color: #a0a5af;
+}
+
+.invoice-builder-form .creator-search-combobox .contract-search-input-wrap {
+  border-color: #d8dce4;
+}
+
+.invoice-builder-form .creator-search-combobox .contract-search-input-wrap:focus-within {
+  border-color: #ad91b3;
+  box-shadow: 0 0 0 3px rgba(137, 102, 145, 0.1);
+}
+
+.invoice-builder-form .creator-search-combobox .contract-search-input-wrap input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.invoice-builder-form .invoice-contract-match-reason {
+  gap: 6px;
+}
+
+.invoice-builder-form .invoice-contract-match-reason textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 180px;
+  box-sizing: border-box;
+  border: 1px solid #d8dce4;
+  border-radius: 9px;
+  outline: 0;
+  background: #fdfcfe;
+  padding: 10px 12px;
+  color: #34373f;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.invoice-builder-form .invoice-contract-match-reason textarea::placeholder {
+  color: #9298a4;
+}
+
+.invoice-builder-form .invoice-contract-match-reason textarea:focus {
+  border-color: #ad91b3;
+  box-shadow: 0 0 0 3px rgba(137, 102, 145, 0.1);
+}
+
+.invoice-builder-form .invoice-contract-match-reason.has-error textarea {
+  border-color: #dc7065;
+  background: #fffafa;
+  box-shadow: 0 0 0 3px rgba(220, 112, 101, 0.08);
+}
+
+.invoice-builder-form .invoice-contract-match-reason > small {
+  min-height: 14px;
+  justify-self: end;
+  color: #777e8a;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.invoice-builder-form .invoice-contract-match-reason.has-error > small {
+  justify-self: start;
+  color: #c94f45;
+}
+
+.invoice-payment-method-readonly > small {
+  color: #717784 !important;
+  line-height: 1.5;
 }
 
 .contract-search-toggle,

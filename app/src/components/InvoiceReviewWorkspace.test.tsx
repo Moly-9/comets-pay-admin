@@ -164,7 +164,7 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('is-document-unavailable');
   });
 
-  it('shows the generation note inside each approved contract mismatch card', () => {
+  it('shows the current-version mismatch reason once above the contract checks', () => {
     const html = renderToStaticMarkup(
       <InvoiceReviewWorkspace
         {...baseProps}
@@ -187,8 +187,9 @@ describe('InvoiceReviewWorkspace', () => {
     );
 
     expect(html).toContain('合同匹配 0/1 · 1项需关注');
-    expect(html).toContain('invoice-review-contract-mismatch-reason');
-    expect(html).toContain('不一致原因');
+    expect(html).toContain('invoice-contract-mismatch-notice');
+    expect(html).toContain('合同差异说明');
+    expect(html.match(/合同为预算金额/g)).toHaveLength(1);
     expect(html).toContain('合同为预算金额，Invoice 按实际验收金额结算。');
     expect(html).toContain('生成 Invoice 时填写 · 媒介测试');
   });

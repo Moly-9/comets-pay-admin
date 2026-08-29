@@ -143,6 +143,13 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('currentReview?.paymentItems');
   });
 
+  it('shows the current-version contract mismatch reason in payment-list and finance reviews', () => {
+    expect(reviewContentSource).toContain('InvoiceContractMismatchNotice');
+    expect(reviewContentSource).toContain('page.contractMismatchReview');
+    expect(reviewContentSource).toContain("variant === 'project'");
+    expect(workspaceSource).toContain('<PaymentListReviewContent');
+  });
+
   it('runs account validation automatically and keeps the finance workspace summary read-only', () => {
     expect(reviewContentSource).toContain("{variant === 'project' ? (");
     expect(reviewContentSource).toContain('void Promise.all(rows.map(async (row) => [');

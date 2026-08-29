@@ -63,8 +63,10 @@ describe('InvoiceBuilderPage create mode', () => {
 
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="合作达人"');
-    expect(html).toContain('搜索 Display Name、Handle、Real Name、Company Name 或 Account Name');
-    expect(option.selectedLabel).toBe([creator.name, ...creator.socialAccounts.map((account) => account.handle)].join(' · '));
+    expect(html).toContain('搜索达人名称、频道 ID、频道链接…');
+    expect(html).toContain('aria-label="付款方式（根据付款账户自动确定）"');
+    expect(html).toContain('value="待选择付款账户"');
+    expect(option.selectedLabel).toBe(creator.name);
     expect(option.searchText).toContain(primarySocialAccount.profileUrl);
     expect(option.searchText).toContain(primarySocialAccount.handle);
     expect(option.searchText).toContain(accountName);
@@ -78,6 +80,12 @@ describe('InvoiceBuilderPage create mode', () => {
 
     expect(invoiceBuilderStyles).toMatch(
       /\.creator-search-combobox \.contract-search-input-wrap input\s*\{\s*font-size:\s*12\.5px;/,
+    );
+    expect(invoiceBuilderStyles).toMatch(
+      /\.invoice-builder-form \.creator-search-combobox \.contract-search-input-wrap input:focus\s*\{[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s,
+    );
+    expect(invoiceBuilderStyles).toMatch(
+      /\.invoice-builder-form \.invoice-contract-match-reason textarea\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*1\.6;/s,
     );
     expect(contractOptionMarkup).toBeDefined();
     expect(contractOptionMarkup).toContain('<strong>{contract.name}</strong>');
@@ -108,6 +116,41 @@ describe('InvoiceBuilderPage create mode', () => {
 });
 
 describe('InvoiceBuilderPage edit mode', () => {
+  it('restores the current-version contract mismatch reason while editing', () => {
+    const sourceRecord = PROJECT_DEMO_INVOICES[0]!;
+    const record = {
+      ...sourceRecord,
+      version: 1,
+      contractMatchReviews: [{
+        version: 1,
+        contractIds: sourceRecord.snapshot.contractIds ?? [],
+        result: 'APPROVED_WITH_REASON' as const,
+        issues: [],
+        reason: '合同金额包含额外授权费用',
+      }],
+    };
+    const html = renderToStaticMarkup(
+      <InvoiceBuilderPage
+        creators={INITIAL_CREATORS}
+        payouts={PROJECT_DEMO_PAYOUTS}
+        projects={INITIAL_PROJECTS}
+        contracts={PROJECT_DEMO_CONTRACTS}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
+        generatedInvoices={PROJECT_DEMO_INVOICES}
+        editRecord={record}
+        editContext="PROJECT_RESOURCE"
+        onEdited={() => record}
+        onCancel={() => undefined}
+        onOpenInvoiceManagement={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('合同差异说明 *');
+    expect(html).toContain('>合同金额包含额外授权费用</textarea>');
+    expect(html).toContain('aria-describedby="invoice-contract-match-reason-help"');
+    expect(invoiceBuilderSource).toContain("contractMatchReason !== initialContractMatchReason");
+  });
+
   it('prefills business identity fields without exposing internal IDs or enabling an unchanged save', () => {
     const record = PROJECT_DEMO_INVOICES[0]!;
     const html = renderToStaticMarkup(
@@ -249,7 +292,7 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).toContain('保存并重新发起签署');
   });
 
-  it('unlocks payout account and payment method for the scoped finance Invoice return', () => {
+  it('unlocks the payout account and derives a read-only payment method for the scoped finance return', () => {
     const record = PROJECT_DEMO_INVOICES[0]!;
     const html = renderToStaticMarkup(
       <InvoiceBuilderPage
@@ -270,10 +313,12 @@ describe('InvoiceBuilderPage edit mode', () => {
 
     const payoutAccountTrigger = html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0];
     const paymentMethodTrigger = html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0];
-    expect(html).toContain('财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。');
+    expect(html).toContain('财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户，付款方式将按渠道自动确定。');
     expect(html).toContain('同步刷新对应付款明细');
     expect(payoutAccountTrigger).not.toContain('disabled');
-    expect(paymentMethodTrigger).not.toContain('disabled');
+    expect(paymentMethodTrigger).toBeUndefined();
+    expect(html).toContain('aria-label="付款方式（根据付款账户自动确定）"');
+    expect(html).toContain('value="Bank Transfer"');
   });
 
   it('keeps payout fields editable independently from the selected contracts', () => {
@@ -295,7 +340,8 @@ describe('InvoiceBuilderPage edit mode', () => {
     );
 
     expect(html.match(/<button[^>]*aria-label="付款账户"[^>]*>/)?.[0]).not.toContain('disabled');
-    expect(html.match(/<button[^>]*aria-label="付款方式"[^>]*>/)?.[0]).not.toContain('disabled');
+    expect(html).not.toContain('aria-label="付款方式"');
+    expect(html).toContain('aria-label="付款方式（根据付款账户自动确定）"');
     expect(html).toContain('选择达人档案中的已验证账户后');
   });
 });

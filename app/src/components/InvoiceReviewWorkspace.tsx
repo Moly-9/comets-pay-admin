@@ -28,6 +28,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button, Modal, SelectField } from './Common';
+import { InvoiceContractMismatchNotice } from './InvoiceContractMismatchNotice';
 import './InvoiceReviewWorkspace.css';
 
 export type InvoiceReviewSourceType = 'INTERNAL_GENERATED' | 'EXTERNAL_UPLOADED';
@@ -628,29 +629,27 @@ export function InvoiceReviewWorkspace({
               ) : contractPending ? (
                 <div className="invoice-review-pending-state"><Clock3 size={20} /><span><strong>待达人上传 Invoice 后进行匹配</strong><small>上传后将校验主体、币种和金额、收款信息及签名完整性。</small></span></div>
               ) : (
-                <div className="invoice-review-contract-list">
-                  {contractChecks.map((check) => (
-                    <article className={`is-${check.state.toLowerCase().replace('_', '-')}`} key={check.id}>
-                      <span>{check.state === 'PASS' || check.state === 'NOT_APPLICABLE' ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}</span>
-                      <div>
-                        <header><strong>{check.label}</strong><small>{contractStateLabel(check.state)}</small></header>
-                        <dl><div><dt>合同 / 系统</dt><dd>{check.contractValue}</dd></div><div><dt>Invoice</dt><dd>{check.invoiceValue}</dd></div></dl>
-                        <p>{check.note}</p>
-                        {check.state === 'WARNING' && contractMismatchReview?.reason ? (
-                          <div className="invoice-review-contract-mismatch-reason" role="note">
-                            <CircleAlert size={16} />
-                            <span>
-                              <strong>不一致原因</strong>
-                              <p>{contractMismatchReview.reason}</p>
-                              {contractMismatchReview.meta ? <small>{contractMismatchReview.meta}</small> : null}
-                            </span>
-                          </div>
-                        ) : null}
-                        {check.evidenceTarget ? <button type="button" onClick={() => locateEvidence(check.evidenceTarget)}><Eye size={14} />定位原文</button> : null}
-                      </div>
-                    </article>
-                  ))}
-                </div>
+                <>
+                  {contractMismatchReview?.reason ? (
+                    <InvoiceContractMismatchNotice items={[{
+                      reason: contractMismatchReview.reason,
+                      meta: contractMismatchReview.meta,
+                    }]} />
+                  ) : null}
+                  <div className="invoice-review-contract-list">
+                    {contractChecks.map((check) => (
+                      <article className={`is-${check.state.toLowerCase().replace('_', '-')}`} key={check.id}>
+                        <span>{check.state === 'PASS' || check.state === 'NOT_APPLICABLE' ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}</span>
+                        <div>
+                          <header><strong>{check.label}</strong><small>{contractStateLabel(check.state)}</small></header>
+                          <dl><div><dt>合同 / 系统</dt><dd>{check.contractValue}</dd></div><div><dt>Invoice</dt><dd>{check.invoiceValue}</dd></div></dl>
+                          <p>{check.note}</p>
+                          {check.evidenceTarget ? <button type="button" onClick={() => locateEvidence(check.evidenceTarget)}><Eye size={14} />定位原文</button> : null}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           ) : null}

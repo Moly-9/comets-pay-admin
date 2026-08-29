@@ -11,6 +11,7 @@ import {
   getPayoutAccountDocumentIssues,
   getPayoutAccountForProvider,
   getPayoutAccountSelectPresentation,
+  invoicePaymentMethodForProvider,
   isPayoutAccountDocumentReady,
   normalizePayMaxStatus,
   payoutAccountToInvoicePayment,
@@ -21,6 +22,13 @@ import { setAirwallexFormValue } from './airwallexFormSchema';
 import type { CreatorProfile } from './types';
 
 describe('creator payout channels', () => {
+  it('derives the Invoice payment method from the payout provider', () => {
+    expect(invoicePaymentMethodForProvider('PayPal')).toBe('paypal');
+    expect(invoicePaymentMethodForProvider('Airwallex')).toBe('bank');
+    expect(invoicePaymentMethodForProvider('PayMax')).toBe('bank');
+    expect(invoicePaymentMethodForProvider(undefined, 'paypal')).toBe('paypal');
+  });
+
   it('presents complete Airwallex payment details and account identifiers', () => {
     const account = {
       ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-select-airwallex'),

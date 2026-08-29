@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
 import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractMismatchNotice } from '../components/InvoiceContractMismatchNotice';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { PaymentProviderBadge, paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
@@ -887,6 +888,25 @@ export function RequestProjectDetailPage({
     request.paymentChannel ?? payees.map((payee) => payee.channel),
   );
   const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
+  const contractMismatchNoticeItems = financeReview.pages.flatMap((page) => {
+    const review = page.contractMismatchReview;
+    if (!review?.reason) return [];
+    const reviewedAt = review.reviewedAt ? new Date(review.reviewedAt) : null;
+    const reviewedAtLabel = reviewedAt && !Number.isNaN(reviewedAt.getTime())
+      ? reviewedAt.toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      : review.reviewedAt;
+    return [{
+      invoiceNumber: page.invoiceNumber,
+      reason: review.reason,
+      meta: [review.actorName || review.actorRole, reviewedAtLabel].filter(Boolean).join(' · ') || undefined,
+    }];
+  });
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
   const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
   const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);
@@ -986,6 +1006,11 @@ export function RequestProjectDetailPage({
             createdAt={request.createdAt ?? request.approval?.submittedAt}
             reason={request.generatedDetail?.reason}
             remark={request.remark}
+          />
+
+          <InvoiceContractMismatchNotice
+            className="request-contract-mismatch-notices"
+            items={contractMismatchNoticeItems}
           />
 
           <section className="project-detail-card">
