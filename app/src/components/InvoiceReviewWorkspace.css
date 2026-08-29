@@ -514,6 +514,122 @@
 .invoice-review-return-form label small { color: #858c98; font-size: 10px; font-weight: 400; }
 .invoice-review-return-form textarea { min-height: 116px; resize: vertical; }
 
+.invoice-review-return-modal {
+  border-radius: 14px;
+}
+
+.invoice-review-return-modal .modal-header {
+  min-height: 64px;
+}
+
+.invoice-review-return-modal .modal-header h2 {
+  color: #2f3440;
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+.invoice-review-return-modal .modal-content {
+  padding: 20px 22px 22px;
+}
+
+.invoice-review-return-modal .modal-footer {
+  min-height: 70px;
+  background: #fbfcfd;
+}
+
+.invoice-review-return-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.invoice-review-return-context {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 11px;
+  border: 1px solid #e1e4e9;
+  border-radius: 9px;
+  background: #fafbfc;
+  padding: 13px;
+}
+
+.invoice-review-return-context-icon {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff0ea;
+  color: #e06e50;
+}
+
+.invoice-review-return-context > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.invoice-review-return-context strong {
+  color: #333944;
+  font-size: 12px;
+}
+
+.invoice-review-return-context small {
+  color: #808793;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.invoice-review-return-context p {
+  margin: 2px 0 0;
+  color: #565e6a;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.invoice-review-return-dialog .invoice-review-return-form {
+  gap: 14px;
+  border-top: 1px solid #eceef2;
+  padding-top: 14px;
+}
+
+.invoice-review-return-dialog .invoice-review-return-form .form-control {
+  display: grid;
+  gap: 7px;
+}
+
+.invoice-review-return-label-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.invoice-review-return-dialog .invoice-review-return-form textarea {
+  min-height: 120px;
+  border: 1px solid #cfd5de;
+  border-radius: 8px;
+  background: #fff;
+  color: #2f3440;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 11px 12px;
+}
+
+.invoice-review-return-dialog .invoice-review-return-form textarea::placeholder {
+  color: #9aa1ac;
+}
+
+.invoice-review-return-dialog .invoice-review-return-form textarea:focus-visible {
+  border-color: #806083;
+  outline: 3px solid rgb(128 96 131 / 13%);
+}
+
+.invoice-review-return-modal .modal-footer .button:last-child {
+  min-width: 168px;
+}
+
 .invoice-review-field-modal {
   border-radius: 12px;
 }
@@ -693,6 +809,11 @@
   .contract-metric-grid.invoice-review-metric-grid { grid-template-columns: minmax(0, 1fr); }
   .invoice-review-field-modal .modal-content { padding: 16px; }
   .invoice-review-field-dialog-intro { grid-template-columns: minmax(0, 1fr); }
+  .invoice-review-return-modal .modal-content { padding: 16px; }
+  .invoice-review-return-modal .modal-footer { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 8px; padding: 12px 16px; }
+  .invoice-review-return-modal .modal-footer .button { width: 100%; min-width: 0; }
+  .invoice-review-return-context { grid-template-columns: 32px minmax(0, 1fr); padding: 12px; }
+  .invoice-review-return-dialog .invoice-review-return-form textarea { min-height: 112px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3383,8 +3383,16 @@ export default function App() {
   ) => {
     const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
     if (!record) return;
+    const creator = creators.find((candidate) => candidate.id === record.creatorId);
     try {
-      const updated = returnExternalInvoice(record, returnType, reason, externalInvoiceActor());
+      const updated = returnExternalInvoice(
+        record,
+        returnType,
+        reason,
+        externalInvoiceActor(),
+        undefined,
+        creator?.contact.email,
+      );
       setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
       setInvoiceTab('upload');
       notify('外部 Invoice 已退回', '列表统一显示“待重新上传”，详情保留具体处理方式和原因。');
@@ -3434,11 +3442,14 @@ export default function App() {
       return;
     }
     try {
+      const creatorEmail = creators.find((creator) => creator.id === payout.creatorId)?.contact.email;
       const updated = applyInvoiceReviewAction(
         payout,
         action,
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
         reason,
+        undefined,
+        creatorEmail,
       );
       setPayouts((current) => current.map((item) => (
         item.id === payout.id ? updated : item

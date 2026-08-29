@@ -14,7 +14,9 @@ import {
   History,
   Landmark,
   Save,
+  Send,
   ShieldCheck,
+  UserRound,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -28,6 +30,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button, Modal, SelectField } from './Common';
+import { InvoiceDeliveryNotice } from './InvoiceDeliveryNotice';
 import { InvoiceContractMismatchNotice } from './InvoiceContractMismatchNotice';
 import './InvoiceReviewWorkspace.css';
 
@@ -137,6 +140,80 @@ export type InvoiceReviewReturnOption = {
   description?: string;
 };
 
+export type InvoiceReviewReturnContext = {
+  creatorName: string;
+  invoiceNumber: string;
+  projectName: string;
+  recipientEmail?: string | null;
+  instruction?: string;
+};
+
+export function InvoiceReviewReturnDialogContent({
+  context,
+  returnOptions,
+  returnOption,
+  returnReason,
+  onOptionChange,
+  onReasonChange,
+}: {
+  context: InvoiceReviewReturnContext;
+  returnOptions: InvoiceReviewReturnOption[];
+  returnOption: string;
+  returnReason: string;
+  onOptionChange: (value: string) => void;
+  onReasonChange: (value: string) => void;
+}) {
+  const selectedOption = returnOptions.find((option) => option.value === returnOption);
+  const instruction = selectedOption?.description
+    ?? context.instruction
+    ?? '请达人根据退回原因修改 Invoice，并重新完成签署。';
+  return (
+    <div className="invoice-review-return-dialog">
+      <article className="invoice-review-return-context">
+        <span className="invoice-review-return-context-icon"><UserRound size={18} /></span>
+        <div>
+          <strong>{context.creatorName || '关联达人'} · Invoice 退回</strong>
+          <small>{context.invoiceNumber || 'Invoice 编号待补充'} · {context.projectName || '关联项目待补充'}</small>
+          <p>{instruction}</p>
+        </div>
+      </article>
+
+      <div className="invoice-review-return-form">
+        {returnOptions.length ? (
+          <div className="form-control">
+            <span className="required-field-label">退回处理方式 <em className="required-mark">*</em></span>
+            <SelectField
+              ariaLabel="选择退回处理方式"
+              variant="form"
+              menuStrategy="fixed"
+              placeholder="请选择退回处理方式"
+              value={returnOption}
+              options={returnOptions}
+              onChange={onOptionChange}
+            />
+          </div>
+        ) : null}
+        <label>
+          <span className="required-field-label">
+            <span className="invoice-review-return-label-copy">退回原因 <em className="required-mark">*</em></span>
+            <small>{returnReason.length}/300</small>
+          </span>
+          <textarea
+            autoFocus={!returnOptions.length}
+            maxLength={300}
+            aria-label="退回原因"
+            value={returnReason}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder="请说明具体字段、原文件证据和需要达人处理的内容"
+          />
+        </label>
+      </div>
+
+      <InvoiceDeliveryNotice email={context.recipientEmail} purpose="return" />
+    </div>
+  );
+}
+
 export type InvoiceReviewMetricItem = {
   label: string;
   value: ReactNode;
@@ -196,6 +273,7 @@ type InvoiceReviewWorkspaceProps = {
   returnLabel?: string;
   returnDialogTitle?: string;
   returnOptions?: InvoiceReviewReturnOption[];
+  returnContext?: InvoiceReviewReturnContext;
   onReturn?: (reason: string, option?: string) => void;
   onSave?: () => void;
   approveLabel?: string;
@@ -278,6 +356,7 @@ export function InvoiceReviewWorkspace({
   returnLabel,
   returnDialogTitle,
   returnOptions = [],
+  returnContext,
   onReturn,
   onSave,
   approveLabel,
@@ -294,7 +373,7 @@ export function InvoiceReviewWorkspace({
   const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
-  const [returnOption, setReturnOption] = useState(returnOptions[0]?.value ?? '');
+  const [returnOption, setReturnOption] = useState('');
   const [fieldDialog, setFieldDialog] = useState<{
     fieldId: string;
     fieldLabel: string;
@@ -441,10 +520,23 @@ export function InvoiceReviewWorkspace({
   } as CSSProperties;
 
   const submitReturn = () => {
-    if (!returnReason.trim() || !onReturn) return;
+    if (!returnReason.trim() || !onReturn || (returnOptions.length > 0 && !returnOption)) return;
     onReturn(returnReason.trim(), returnOption || undefined);
     setReturnReason('');
+    setReturnOption('');
     setReturnOpen(false);
+  };
+
+  const closeReturnDialog = () => {
+    setReturnOpen(false);
+    setReturnReason('');
+    setReturnOption('');
+  };
+
+  const openReturnDialog = () => {
+    setReturnReason('');
+    setReturnOption('');
+    setReturnOpen(true);
   };
 
   const submitFieldAction = () => {
@@ -722,7 +814,7 @@ export function InvoiceReviewWorkspace({
           </div>
           <div className="invoice-review-footer-buttons">
             {additionalFooterActions}
-            {returnLabel && onReturn ? <Button variant="secondary" disabled={!canReview} disabledReason="当前状态或账号权限不允许退回 Invoice。" onClick={() => setReturnOpen(true)}>{returnLabel}</Button> : null}
+            {returnLabel && onReturn ? <Button variant="secondary" disabled={!canReview} disabledReason="当前状态或账号权限不允许退回 Invoice。" onClick={openReturnDialog}>{returnLabel}</Button> : null}
             {onSave ? <Button variant="secondary" icon={<Save size={16} />} disabled={!canReview} disabledReason="当前状态或账号权限不允许保存审核进度。" onClick={onSave}>保存审核进度</Button> : null}
             {approveLabel && onApprove ? (
               <Button
@@ -742,28 +834,51 @@ export function InvoiceReviewWorkspace({
       {returnOpen ? (
         <Modal
           title={returnDialogTitle ?? returnLabel ?? '退回 Invoice'}
-          width="540px"
-          onClose={() => setReturnOpen(false)}
+          width={returnContext ? '560px' : '540px'}
+          className={returnContext ? 'invoice-review-return-modal' : undefined}
+          onClose={closeReturnDialog}
           footer={(
-            <><Button variant="ghost" onClick={() => setReturnOpen(false)}>取消</Button><Button variant="danger" disabled={!returnReason.trim() || (returnOptions.length > 0 && !returnOption)} disabledReason={returnOptions.length > 0 && !returnOption ? '请先选择退回处理方式。' : '请先填写退回原因。'} onClick={submitReturn}>确认退回</Button></>
+            <>
+              <Button variant="ghost" onClick={closeReturnDialog}>取消</Button>
+              <Button
+                variant="danger"
+                icon={returnContext ? <Send size={16} /> : undefined}
+                disabled={!returnReason.trim() || (returnOptions.length > 0 && !returnOption)}
+                disabledReason={returnOptions.length > 0 && !returnOption ? '请先选择退回处理方式。' : '请先填写退回原因。'}
+                onClick={submitReturn}
+              >
+                {returnContext ? '退回并通知达人' : '确认退回'}
+              </Button>
+            </>
           )}
         >
-          <div className="invoice-review-return-form">
-            {returnOptions.length ? (
-              <div className="form-control">
-                <span className="required-field-label">退回处理方式 <em className="required-mark">*</em></span>
-                <SelectField
-                  ariaLabel="选择退回处理方式"
-                  variant="form"
-                  menuStrategy="fixed"
-                  value={returnOption}
-                  options={returnOptions}
-                  onChange={setReturnOption}
-                />
-              </div>
-            ) : null}
-            <label><span className="required-field-label">退回原因 <em className="required-mark">*</em><small>{returnReason.length}/300</small></span><textarea autoFocus maxLength={300} value={returnReason} onChange={(event) => setReturnReason(event.target.value)} placeholder="请说明具体字段、原文件证据和需要处理的内容" /></label>
-          </div>
+          {returnContext ? (
+            <InvoiceReviewReturnDialogContent
+              context={returnContext}
+              returnOptions={returnOptions}
+              returnOption={returnOption}
+              returnReason={returnReason}
+              onOptionChange={setReturnOption}
+              onReasonChange={setReturnReason}
+            />
+          ) : (
+            <div className="invoice-review-return-form">
+              {returnOptions.length ? (
+                <div className="form-control">
+                  <span className="required-field-label">退回处理方式 <em className="required-mark">*</em></span>
+                  <SelectField
+                    ariaLabel="选择退回处理方式"
+                    variant="form"
+                    menuStrategy="fixed"
+                    value={returnOption}
+                    options={returnOptions}
+                    onChange={setReturnOption}
+                  />
+                </div>
+              ) : null}
+              <label><span className="required-field-label">退回原因 <em className="required-mark">*</em><small>{returnReason.length}/300</small></span><textarea autoFocus maxLength={300} value={returnReason} onChange={(event) => setReturnReason(event.target.value)} placeholder="请说明具体字段、原文件证据和需要处理的内容" /></label>
+            </div>
+          )}
         </Modal>
       ) : null}
 

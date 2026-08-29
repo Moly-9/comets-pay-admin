@@ -313,9 +313,28 @@ describe('external Invoice collection workflow', () => {
       occupiedInvoices: [],
       actor: creatorActor,
     });
-    const returned = returnExternalInvoice(submitted, 'REUPLOAD', 'Please replace the source file.', actor);
+    const returned = returnExternalInvoice(
+      submitted,
+      'REUPLOAD',
+      'Please replace the source file.',
+      actor,
+      '2026-08-20T06:00:00.000Z',
+      creator.contact.email,
+    );
     expect(returned.status).toBe('RETURNED_FOR_REUPLOAD');
     expect(externalInvoiceListStatus(returned.status)).toBe('待重新上传');
+    expect(returned.reviewHistory.slice(-1)[0]?.notificationDeliveries).toEqual([
+      {
+        channel: 'IN_APP',
+        status: 'SIMULATED_SENT',
+        recipientLabel: '达人端 Invoice 消息中心',
+      },
+      {
+        channel: 'EMAIL',
+        status: 'SIMULATED_SENT',
+        recipientLabel: 'al***ia@example.com',
+      },
+    ]);
     expect(() => submitExternalInvoiceForReview({
       record: returned,
       creator,
@@ -342,6 +361,11 @@ describe('external Invoice collection workflow', () => {
     }).status).toBe('WAITING_MEDIA_REVIEW');
 
     const correctionReturn = returnExternalInvoice(submitted, 'CORRECTION', 'Please confirm the amount evidence.', actor);
+    expect(correctionReturn.reviewHistory.slice(-1)[0]?.notificationDeliveries?.[1]).toEqual({
+      channel: 'EMAIL',
+      status: 'SKIPPED_MISSING_RECIPIENT',
+      recipientLabel: '达人档案邮箱待补充',
+    });
     expect(() => simulateExternalInvoiceUpload({
       record: correctionReturn,
       creator,

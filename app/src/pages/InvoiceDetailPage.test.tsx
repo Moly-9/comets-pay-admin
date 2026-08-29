@@ -332,7 +332,7 @@ describe('InvoiceDetailPage edit actions', () => {
 
     expect(html).toContain('达人端站内信');
     expect(html).toContain('邮件（站外信）');
-    expect(html).toContain('creator@example.test');
+    expect(html).toContain('cr***or@example.test');
     expect(html).toContain('当前仅模拟发送');
     expect(html).toContain('失败原因和重试结果');
     expect(html).toContain('操作审计');

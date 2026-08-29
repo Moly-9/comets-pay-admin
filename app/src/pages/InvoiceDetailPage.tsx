@@ -3,8 +3,6 @@ import {
   Clipboard,
   Download,
   FileSearch,
-  Info,
-  Mail,
   MessageSquareText,
   Pencil,
   Send,
@@ -14,8 +12,12 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { accountDisplayValue, emailDisplayValue, isLegacyMaskedAccountValue } from '../accountPresentation';
+import { accountDisplayValue, isLegacyMaskedAccountValue } from '../accountPresentation';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
+import {
+  InvoiceFeedbackDeliveryNotice,
+  InvoiceSignatureReminderDeliveryNotice,
+} from '../components/InvoiceDeliveryNotice';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
@@ -119,72 +121,15 @@ const formatReviewTime = (value: string) => {
   }).format(date);
 };
 
-const deliveryEmailIsValid = (value: string) => {
-  const [localPart, domain] = value.trim().split('@');
-  return Boolean(localPart && domain?.includes('.'));
-};
-
 export const buildInvoiceSignatureReminderMessage = (model: InvoiceDocumentModel) => {
   const creatorName = model.creatorName || model.from.legalName || '达人';
   return `Hi ${creatorName}，Invoice ${model.invoiceNumber} 已准备好，请登录达人端系统，在 Invoice 中心查看并完成签署。如有疑问，可通过站内信反馈。`;
 };
 
-function InvoiceDeliveryNotice({
-  email,
-  purpose,
-}: {
-  email: string;
-  purpose: 'feedback' | 'signature';
-}) {
-  const signatureReminder = purpose === 'signature';
-  const hasEmail = deliveryEmailIsValid(email);
-  return (
-    <div
-      className="invoice-feedback-delivery"
-      role="note"
-      aria-label={signatureReminder ? '签署提醒发送渠道说明' : '回复发送渠道说明'}
-    >
-      <div className="invoice-feedback-delivery-title">
-        <Send size={16} />
-        <span>
-          <strong>{signatureReminder ? '通知发送渠道' : '回复发送渠道'}</strong>
-          <small>{signatureReminder ? '发送后将通过两个渠道同步提醒达人签署' : '提交后将通过两个渠道同步触达达人'}</small>
-        </span>
-      </div>
-      <ul>
-        <li>
-          <MessageSquareText size={16} />
-          <span>
-            <strong>达人端站内信</strong>
-            <small>{signatureReminder ? '发送至达人端 Invoice 消息中心，并引导进入签署' : '发送至达人端的 Invoice 消息中心'}</small>
-          </span>
-        </li>
-        <li>
-          <Mail size={16} />
-          <span>
-            <strong>邮件（站外信）</strong>
-            <small>{hasEmail ? `发送至达人档案邮箱：${emailDisplayValue(email)}` : '未发送 · 达人档案邮箱待补充'}</small>
-          </span>
-        </li>
-      </ul>
-      <p>
-        <Info size={15} />
-        <span>
-          <strong>原型说明：</strong>
-          {signatureReminder ? '当前仅模拟发送并保留通知记录' : '当前仅模拟发送并保留回复记录'}，不会真实触发站内信或邮件。正式接入后需分别记录双渠道发送状态、失败原因和重试结果，并保留操作审计。
-        </span>
-      </p>
-    </div>
-  );
-}
-
-export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
-  return <InvoiceDeliveryNotice email={email} purpose="feedback" />;
-}
-
-export function InvoiceSignatureReminderDeliveryNotice({ email }: { email: string }) {
-  return <InvoiceDeliveryNotice email={email} purpose="signature" />;
-}
+export {
+  InvoiceFeedbackDeliveryNotice,
+  InvoiceSignatureReminderDeliveryNotice,
+} from '../components/InvoiceDeliveryNotice';
 
 const sameText = (left: string, right: string) => (
   left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
@@ -984,6 +929,13 @@ export function InvoiceDetailPage({
         blockingReasons={workspaceBlockingReasons}
         returnLabel={returnAction ? ACTION_LABEL[returnAction] : undefined}
         returnDialogTitle={returnAction === 'RECORD_CREATOR_FEEDBACK' ? '记录达人反馈' : '退回达人修改'}
+        returnContext={returnAction === 'RETURN_TO_CREATOR' ? {
+          creatorName: model.creatorName || payout?.creator || '关联达人',
+          invoiceNumber: model.invoiceNumber,
+          projectName: model.projectName || payout?.project || '关联项目待补充',
+          recipientEmail: model.from.email,
+          instruction: '请达人根据退回原因修改 Invoice，并重新完成签署。',
+        } : undefined}
         onReturn={payout && returnAction ? (reason) => onReviewAction(payout, returnAction, reason) : undefined}
         onSave={primaryAction === 'APPROVE_MEDIA' && canReviewMedia
           ? () => notify('审核进度已保存', `${model.invoiceNumber} 的审核进度已保留在当前前端原型中。`)

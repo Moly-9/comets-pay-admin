@@ -863,11 +863,18 @@ export function ExternalInvoiceCollectionDetailPage({
             : action;
           onReviewField(fieldId as ExternalInvoiceFieldKey, decision, note);
         } : undefined}
-        returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人' : undefined}
-        returnDialogTitle="退回外部 Invoice"
+        returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人修改' : undefined}
+        returnDialogTitle="退回达人修改"
+        returnContext={{
+          creatorName: record.creatorName,
+          invoiceNumber: displayInvoiceNumber,
+          projectName: record.projectName,
+          recipientEmail: creator?.contact.email,
+          instruction: '请选择退回处理方式，并说明需要达人处理的具体内容。',
+        }}
         returnOptions={[
-          { value: 'CORRECTION', label: '退回纠正识别结果', description: '原文件正确，达人需按原文重新确认识别值' },
-          { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容有误，达人必须提交新文件版本' },
+          { value: 'CORRECTION', label: '纠正识别结果', description: '原文件正确，要求达人按原文重新确认识别值并提交。' },
+          { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容错误，要求达人上传新的文件版本。' },
         ]}
         onReturn={record.status === 'WAITING_MEDIA_REVIEW'
           ? (reason, option) => onReturn(option === 'REUPLOAD' ? 'REUPLOAD' : 'CORRECTION', reason)

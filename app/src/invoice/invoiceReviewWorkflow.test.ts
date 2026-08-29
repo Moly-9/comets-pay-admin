@@ -209,12 +209,26 @@ describe('Invoice review workflow', () => {
       'RETURN_TO_CREATOR',
       actor,
       '签署页主体错误',
+      '2026-08-04T02:00:00.000Z',
+      'creator@example.test',
     );
     expect(returned.invoiceReviewStatus).toBe('待签署');
     expect(returned.invoiceSignedAt).toBeUndefined();
     expect(returned.invoiceSnapshot?.signatureDate).toBeUndefined();
     expect(returned.invoiceSnapshot?.signatureText).toBeUndefined();
     expect(returned.invoiceVersion).toBe(2);
+    expect(returned.invoiceReviewHistory?.slice(-1)[0]?.notificationDeliveries).toEqual([
+      {
+        channel: 'IN_APP',
+        status: 'SIMULATED_SENT',
+        recipientLabel: '达人端 Invoice 消息中心',
+      },
+      {
+        channel: 'EMAIL',
+        status: 'SIMULATED_SENT',
+        recipientLabel: 'cr***or@example.test',
+      },
+    ]);
   });
 
   it('only allows Invoice-content failures to enter the edit flow', () => {
@@ -494,7 +508,7 @@ describe('Invoice review workflow', () => {
         {
           channel: 'EMAIL',
           status: 'SIMULATED_SENT',
-          recipientLabel: 'creator@example.test',
+          recipientLabel: 'cr***or@example.test',
         },
       ],
     });
