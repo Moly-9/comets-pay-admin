@@ -167,6 +167,17 @@ describe('contract generation', () => {
     expect(text).not.toContain('Associated Compan y');
   });
 
+  it('reuses parsed template rows for repeated generation from the same source', async () => {
+    const template = await readTemplate();
+    const firstExtraction = extractContractTemplatePageLines(template);
+    const secondExtraction = extractContractTemplatePageLines(template);
+
+    expect(secondExtraction).toBe(firstExtraction);
+    const [firstPages, secondPages] = await Promise.all([firstExtraction, secondExtraction]);
+    expect(secondPages).toBe(firstPages);
+    expect(firstPages).toHaveLength(17);
+  });
+
   it('replaces registered placeholders without changing unrelated text', () => {
     const template = 'Publisher {{publisher_name}} / Project {{project_name}} / {{publisher_name}}';
     const result = replaceContractPlaceholders(template, model, 'FORMAL');

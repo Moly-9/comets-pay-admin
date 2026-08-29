@@ -273,6 +273,7 @@ export function ContractBuilderPage({
   const workspaceRef = useRef<HTMLDivElement>(null);
   const previewUrlRef = useRef<string | null>(null);
   const previewGenerationRef = useRef(0);
+  const previewTimerRef = useRef<number | null>(null);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
   const selectedSocialAccount = resolveCreatorSocialAccount(
@@ -486,10 +487,15 @@ export function ContractBuilderPage({
   }, []);
 
   useEffect(() => {
+    if (previewFiles && !previewStale) {
+      setPreviewLoading(false);
+      return undefined;
+    }
     const generation = previewGenerationRef.current + 1;
     previewGenerationRef.current = generation;
     setPreviewLoading(true);
     const timer = window.setTimeout(() => {
+      if (previewTimerRef.current === timer) previewTimerRef.current = null;
       void import('../contractGeneration')
         .then(({ generateContractPreview }) => generateContractPreview(model, 'DRAFT'))
         .then((result) => {
@@ -503,8 +509,12 @@ export function ContractBuilderPage({
           setGenerationError(reason instanceof Error ? reason.message : '合同预览生成失败，请重试。');
         });
     }, 500);
-    return () => window.clearTimeout(timer);
-  }, [model]);
+    previewTimerRef.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (previewTimerRef.current === timer) previewTimerRef.current = null;
+    };
+  }, [model, previewFiles, previewStale]);
 
   const selectCreator = (value: string) => {
     const creator = creators.find((item) => item.id === value) ?? null;
@@ -638,6 +648,11 @@ export function ContractBuilderPage({
         focusIssue(firstIssue);
       }
       return;
+    }
+    previewGenerationRef.current += 1;
+    if (previewTimerRef.current !== null) {
+      window.clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
     }
     setGenerating(true);
     try {
