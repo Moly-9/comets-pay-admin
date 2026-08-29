@@ -3706,13 +3706,39 @@ input[type="checkbox"]:disabled {
 }
 
 @media (min-width: 981px) {
-  .request-resource-contract-card-list .request-resource-contract-row {
-    grid-template-columns: 40px minmax(260px, 1.8fr) minmax(150px, 1fr) minmax(120px, .65fr) auto;
+  .request-resource-contract-card-list .request-resource-contract-row,
+  .request-resource-invoice-card-list .request-resource-invoice-row {
+    grid-template-columns: 40px minmax(190px, 1.4fr) minmax(180px, 1fr) minmax(115px, .72fr) minmax(88px, .55fr) 132px;
   }
 
-  .request-resource-invoice-card-list .request-resource-invoice-row {
-    grid-template-columns: 40px minmax(180px, 1.15fr) minmax(170px, 1fr) minmax(145px, .8fr) auto;
+  .request-resource-contract-card-list .project-contract-record-actions,
+  .request-resource-invoice-card-list .project-contract-record-actions {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: center;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    border-top: 0;
+    padding-top: 0;
   }
+}
+
+.request-resource-contract-card-list .creator-social-account,
+.request-resource-invoice-card-list .creator-social-account {
+  max-width: 100%;
+}
+
+.request-resource-contract-card-list .creator-social-account > span:last-child,
+.request-resource-invoice-card-list .creator-social-account > span:last-child {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.request-resource-contract-card-list .creator-social-accounts-toggle,
+.request-resource-invoice-card-list .creator-social-accounts-toggle {
+  flex: 0 0 auto;
 }
 
 .request-contract-record-icon {
