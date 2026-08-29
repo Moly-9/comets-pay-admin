@@ -13038,10 +13038,14 @@ button:disabled {
   gap: 10px;
 }
 
-.request-detail-creator-cell > span:last-child {
+.request-detail-creator-cell > .creator-identity {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  width: 100%;
   min-width: 0;
+  align-items: center;
   gap: 2px;
+  column-gap: 10px;
 }
 
 .request-detail-creator-cell strong,
@@ -26451,10 +26455,22 @@ button:disabled {
   gap: 5px;
 }
 
+.creator-identity.is-without-avatar {
+  width: 100%;
+  gap: 0;
+}
+
+.creator-identity.is-without-avatar .creator-identity-copy {
+  width: 100%;
+}
+
 .creator-identity-copy > strong {
+  overflow: hidden;
   color: var(--ink, #2f2933);
   font-size: 13px;
   line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .creator-social-accounts {

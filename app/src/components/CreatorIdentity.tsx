@@ -116,6 +116,7 @@ export function CreatorIdentity({
   socialAccountsMode = 'collapsible',
   socialAccountsMaxVisible = 2,
   showSocialAccounts = true,
+  showAvatar = true,
   size = 'sm',
   className = '',
 }: {
@@ -129,17 +130,20 @@ export function CreatorIdentity({
   socialAccountsMode?: CreatorSocialAccountsMode;
   socialAccountsMaxVisible?: number;
   showSocialAccounts?: boolean;
+  showAvatar?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
   const name = creator?.name ?? displayName ?? '达人待补充';
   return (
-    <span className={`creator-identity ${className}`.trim()}>
-      <Avatar
-        initials={creator?.initials ?? initials ?? name.slice(0, 2).toUpperCase()}
-        accent={creator?.accent ?? accent}
-        size={size}
-      />
+    <span className={`creator-identity${showAvatar ? '' : ' is-without-avatar'} ${className}`.trim()}>
+      {showAvatar ? (
+        <Avatar
+          initials={creator?.initials ?? initials ?? name.slice(0, 2).toUpperCase()}
+          accent={creator?.accent ?? accent}
+          size={size}
+        />
+      ) : null}
       <span className="creator-identity-copy">
         <strong>{name}</strong>
         {showSocialAccounts ? (

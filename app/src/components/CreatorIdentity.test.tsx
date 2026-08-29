@@ -88,4 +88,13 @@ describe('CreatorIdentity', () => {
     expect(html).not.toContain('@mina.first');
     expect(html).not.toContain('creator-social-accounts');
   });
+
+  it('can hide the avatar while retaining the two-level creator identity', () => {
+    const html = renderToStaticMarkup(<CreatorIdentity creator={creator} showAvatar={false} />);
+
+    expect(html).toContain('creator-identity is-without-avatar');
+    expect(html).toContain('Mina Creator');
+    expect(html).toContain('@mina.first');
+    expect(html).not.toContain('class="avatar');
+  });
 });

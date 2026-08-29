@@ -119,9 +119,11 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('request-detail-transfer-method');
     expect(paymentTable).toContain('fallbackHandle={payee.handle}');
     expect(paymentTable).toContain('fallbackPlatform={payee.platform}');
+    expect(paymentTable).toContain('socialAccountsMaxVisible={1}');
     expect(paymentTable).toContain('<span className="simple-status is-success"><i />已校验</span>');
     expect(paymentTable).not.toContain('requestPaymentStatusLabel(payee.status)');
     expect(styles).toContain('.request-detail-creator-cell');
+    expect(styles).toMatch(/\.request-detail-creator-cell > \.creator-identity\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
     expect(approvalActions.indexOf('退回媒介修改')).toBeLessThan(approvalActions.indexOf('审批通过'));
     expect(styles).toMatch(/\.request-approval-actions\s*{[^}]*justify-content:\s*flex-end;/s);
     expect(styles).toMatch(/\.request-payment-review-modal \.modal-content\s*{[^}]*overflow:\s*hidden;/s);

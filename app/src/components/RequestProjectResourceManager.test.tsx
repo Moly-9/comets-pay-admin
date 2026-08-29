@@ -179,6 +179,7 @@ describe('request project resource aggregation', () => {
     expect(contractDialogSource).toContain('request-resource-contract-row');
     expect(contractDialogSource).toContain('request-contract-record-icon');
     expect(contractDialogSource).toContain('request-contract-name" title={contractName}');
+    expect(contractDialogSource).toContain('fallbackPlatform={contract.creatorPlatform ?? contract.platform} showAvatar={false}');
     expect(contractDialogSource).toContain("readiness.ready ? ' is-success' : ''");
     expect(contractDialogSource).toContain('<span>合同金额</span><strong>{formatContractMoney(contract)}</strong>');
     expect(contractDialogSource).toContain('kind="danger"');
@@ -196,6 +197,7 @@ describe('request project resource aggregation', () => {
     expect(invoiceDialogSource).toContain('request-resource-invoice-card-list');
     expect(invoiceDialogSource).toContain('request-invoice-record-icon');
     expect(invoiceDialogSource).toContain('<ReceiptText size={19} strokeWidth={2} />');
+    expect(invoiceDialogSource).toContain('fallbackPlatform={invoice.snapshot.creatorPlatform} showAvatar={false}');
     expect(invoiceDialogSource).toContain('关联已有 Invoice');
     expect(invoiceDialogSource).toContain('解除');
     expect(invoiceDialogSource).not.toContain('request-resource-select');
