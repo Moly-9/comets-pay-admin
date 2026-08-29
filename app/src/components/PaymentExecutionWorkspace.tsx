@@ -439,6 +439,7 @@ export function PaymentExecutionWorkspace({
                   className="payment-execution-overview-submit-action"
                   icon={<Send size={16} />}
                   disabled={!canSubmitPayment}
+                  disabledReason={!canExecute ? '当前账号或付款状态不允许执行打款。' : '请先完成付款资料与执行账户校验。'}
                   onClick={executePayment}
                 >
                   执行打款
@@ -465,6 +466,7 @@ export function PaymentExecutionWorkspace({
                     variant="danger"
                     icon={<AlertTriangle size={16} />}
                     disabled={!canReturnPayment}
+                    disabledReason="当前账号或付款状态不允许退回媒介修改。"
                     onClick={() => setReturnDialogOpen(true)}
                   >
                     退回媒介修改
@@ -473,6 +475,7 @@ export function PaymentExecutionWorkspace({
                     className="payment-execution-submit-action"
                     icon={<Send size={16} />}
                     disabled={!canSubmitPayment}
+                    disabledReason={!canExecute ? '当前账号或付款状态不允许执行打款。' : '请先完成付款资料与执行账户校验。'}
                     onClick={executePayment}
                   >
                     执行打款
@@ -894,6 +897,7 @@ export function PaymentExecutionWorkspace({
                   variant="secondary"
                   icon={downloadingResource === 'contract' ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                   disabled={!linkedContracts.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? '合同文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
                   onClick={() => { void downloadContracts(); }}
                 >
                   {downloadingResource === 'contract' ? '打包中' : '下载合同汇总'}
@@ -927,6 +931,7 @@ export function PaymentExecutionWorkspace({
                         className="finance-review-resource-download"
                         icon={isDownloading ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadContract(contract); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -956,6 +961,7 @@ export function PaymentExecutionWorkspace({
                   variant="secondary"
                   icon={downloadingResource === 'invoice' ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                   disabled={!linkedInvoices.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? 'Invoice 文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
                   onClick={() => { void downloadInvoices(); }}
                 >
                   {downloadingResource === 'invoice' ? '打包中' : '下载 Invoice 汇总'}
@@ -989,6 +995,7 @@ export function PaymentExecutionWorkspace({
                         className="finance-review-resource-download"
                         icon={isDownloading ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadInvoice(linkedInvoice); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -1009,7 +1016,7 @@ export function PaymentExecutionWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!returnReason.trim()} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!returnReason.trim()} disabledReason="请先填写退回原因。" onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >

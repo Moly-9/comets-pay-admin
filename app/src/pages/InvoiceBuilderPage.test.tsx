@@ -32,6 +32,8 @@ describe('InvoiceBuilderPage create mode', () => {
     expect(html).toMatch(/<span>DESCRIPTION<\/span><input[^>]*value=""/);
     expect(html).toMatch(/<span>PRICE<\/span><input[^>]*value=""/);
     expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*value=""/);
+    expect(html).toMatch(/<span>PRICE<\/span><input[^>]*step="1"/);
+    expect(html).toMatch(/<span>AMOUNT<\/span><input[^>]*step="1"/);
     expect(html).toContain('data-testid="invoice-fill-demo"');
     expect(html).toContain('填充演示数据');
     expect(html).toContain('aria-label="选择 Bill To 开票主体"');
@@ -178,7 +180,7 @@ describe('InvoiceBuilderPage edit mode', () => {
     expect(html).not.toContain('Source Payout ID（锁定）');
     expect(html).toContain('达人、项目及 Invoice 编号已锁定');
     expect(html).toContain('保存并重新发送达人');
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>.*保存并重新发送达人/s);
+    expect(html).toMatch(/<button[^>]*aria-disabled="true"[^>]*data-disabled-reason="尚未修改任何 Invoice 内容。"[^>]*>.*保存并重新发送达人/s);
     expect(html).toContain('role="group"');
     expect(html).toContain('aria-labelledby="invoice-contract-coverage-label"');
     expect(html).toContain('已选 2 份');

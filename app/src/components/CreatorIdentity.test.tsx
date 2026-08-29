@@ -67,4 +67,13 @@ describe('CreatorIdentity', () => {
     expect(html).toContain('@legacy');
     expect(html).toContain('aria-label="YouTube"');
   });
+
+  it('can render only the avatar and display name for compact selections', () => {
+    const html = renderToStaticMarkup(<CreatorIdentity creator={creator} showSocialAccounts={false} />);
+
+    expect(html).toContain('Mina Creator');
+    expect(html).toContain('avatar');
+    expect(html).not.toContain('@mina.first');
+    expect(html).not.toContain('creator-social-accounts');
+  });
 });

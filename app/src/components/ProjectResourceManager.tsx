@@ -766,13 +766,13 @@ export function ProjectResourceManager({
               <div className="project-resource-browser-toolbar project-payment-toolbar">
                 {canEdit ? (
                   paymentList ? (
-                    <Button variant="danger" icon={<Trash2 size={15} />} disabled={!paymentFieldsEditable} onClick={() => {
+                    <Button variant="danger" icon={<Trash2 size={15} />} disabled={!paymentFieldsEditable} disabledReason="当前付款清单已锁定，不能删除。" onClick={() => {
                       if (window.confirm(`确认删除付款清单 ${paymentList.paymentListCode}？Invoice 不会被删除。`)) {
                         onDeletePaymentList(paymentList.paymentListId);
                       }
                     }}>删除清单</Button>
                   ) : (
-                    <Button icon={<FilePlus2 size={15} />} disabled={!linkedInvoices.length} onClick={onCreatePaymentList}>生成付款清单</Button>
+                    <Button icon={<FilePlus2 size={15} />} disabled={!linkedInvoices.length} disabledReason="请先关联至少一份 Invoice。" onClick={onCreatePaymentList}>生成付款清单</Button>
                   )
                 ) : <span />}
                 {paymentList ? (
@@ -784,6 +784,7 @@ export function ProjectResourceManager({
                       || paymentList.status === 'draft'
                       || paymentList.status === 'submitted'
                     }
+                    disabledReason={!paymentList.items.length ? '付款清单没有可导出的付款明细。' : '付款清单尚未完成生成或仍在审核中。'}
                     onClick={() => { void onExportPaymentList(paymentList.paymentListId); }}
                   >{['approved', 'paid'].includes(paymentList.status) ? '导出 Excel' : '导出预览'}</Button>
                 ) : null}
@@ -949,6 +950,7 @@ export function ProjectResourceManager({
                     <Button
                       variant="secondary"
                       disabled={!paymentInvoiceId}
+                      disabledReason="请先选择要添加的 Invoice。"
                       onClick={() => {
                         if (!paymentList) return;
                         onAddPaymentInvoice(paymentList.paymentListId, paymentInvoiceId as InvoiceId);
@@ -1007,7 +1009,7 @@ export function ProjectResourceManager({
           footer={(
             <>
               <Button variant="ghost" onClick={closeCreateDialog}>取消</Button>
-              <Button disabled={!createEngagementId} onClick={commitCreate}>继续生成</Button>
+              <Button disabled={!createEngagementId} disabledReason="请先选择合作达人。" onClick={commitCreate}>继续生成</Button>
             </>
           )}
         >
@@ -1042,7 +1044,7 @@ export function ProjectResourceManager({
           footer={(
             <>
               <Button variant="ghost" onClick={closeLinkDialog}>取消</Button>
-              <Button disabled={!linkId} onClick={commitLink}>确认关联</Button>
+              <Button disabled={!linkId} disabledReason="请先选择要关联的业务记录。" onClick={commitLink}>确认关联</Button>
             </>
           )}
         >

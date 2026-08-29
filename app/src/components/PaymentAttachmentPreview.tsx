@@ -78,6 +78,7 @@ export function PaymentAttachmentPreview({
           <Button
             icon={<Download size={16} />}
             disabled={!pdfBlob}
+            disabledReason="附件正在生成或暂不可下载。"
             onClick={() => pdfBlob && downloadBlob(pdfBlob, targetFilename(target))}
           >
             下载附件

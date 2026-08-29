@@ -641,6 +641,7 @@ export function ContractsPage({
               data-testid="contract-bulk-export"
               icon={<Download size={15} />}
               disabled={exporting}
+              disabledReason="合同正在导出，请稍候。"
               onClick={() => { void exportSelectedContracts(); }}
             >
               {exporting ? '导出中...' : '导出'}

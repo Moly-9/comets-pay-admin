@@ -671,4 +671,5 @@ export type Payout = {
 export type ToastState = {
   title: string;
   message: string;
+  tone?: 'success' | 'warning';
 } | null;

@@ -654,6 +654,14 @@ export function InvoiceBuilderPage({
       : editContext === 'PAYMENT_FAILURE_CONTENT'
         ? '保存并重新发起签署'
         : '生成 PDF + DOCX';
+  const generateDisabledReason = generating
+    ? 'Invoice 文件正在生成，请稍候。'
+    : isEditing && !isDirty
+      ? '尚未修改任何 Invoice 内容。'
+      : contractMatch.blockerIssues[0]?.message
+        ?? (contractMatch.reasonRequiredIssues.length && !contractMatch.reasonValid
+          ? '请先填写 1–300 个字符的合同差异说明。'
+          : '');
 
   return (
     <div className="page-stack invoice-builder-page">
@@ -676,6 +684,7 @@ export function InvoiceBuilderPage({
                 icon={<Sparkles size={17} />}
                 data-testid="invoice-fill-demo"
                 disabled={!prototypeSeed || generating}
+                disabledReason={generating ? 'Invoice 文件正在生成，请稍候。' : '当前没有可用的演示项目、达人或付款账户数据。'}
                 onClick={fillPrototypeData}
               >
                 填充演示数据
@@ -707,6 +716,7 @@ export function InvoiceBuilderPage({
               <Button
                 icon={<Send size={16} />}
                 disabled={generatedFiles.record.status !== '草稿'}
+                disabledReason="当前 Invoice 已发布，无需重复发布。"
                 onClick={() => {
                   if (!onPublishGenerated(generatedFiles.record)) return;
                   setGeneratedFiles((current) => current ? {
@@ -868,8 +878,8 @@ export function InvoiceBuilderPage({
               {items.map((item, index) => (
                 <div className="invoice-line-row" key={item.id}>
                   <label className={`invoice-line-description ${errors[`item-${item.id}-description`] ? 'has-error' : ''}`}><span>DESCRIPTION</span><input value={item.description} placeholder="费用项目或合作交付" onChange={(event) => changeLine(item.id, 'description', event.target.value)} /><small>{errors[`item-${item.id}-description`]}</small></label>
-                  <label className={errors[`item-${item.id}-unitPrice`] ? 'has-error' : ''}><span>PRICE</span><input type="number" min="0" step="0.01" value={item.unitPrice || ''} onChange={(event) => changeLine(item.id, 'unitPrice', event.target.value)} /><small>{errors[`item-${item.id}-unitPrice`]}</small></label>
-                  <label className={errors[`item-${item.id}-quantity`] ? 'has-error' : ''}><span>AMOUNT</span><input type="number" min="0.01" step="0.01" value={item.quantity || ''} onChange={(event) => changeLine(item.id, 'quantity', event.target.value)} /><small>{errors[`item-${item.id}-quantity`]}</small></label>
+                  <label className={errors[`item-${item.id}-unitPrice`] ? 'has-error' : ''}><span>PRICE</span><input type="number" min="0" step="1" value={item.unitPrice || ''} onChange={(event) => changeLine(item.id, 'unitPrice', event.target.value)} /><small>{errors[`item-${item.id}-unitPrice`]}</small></label>
+                  <label className={errors[`item-${item.id}-quantity`] ? 'has-error' : ''}><span>AMOUNT</span><input type="number" min="0.01" step="1" value={item.quantity || ''} onChange={(event) => changeLine(item.id, 'quantity', event.target.value)} /><small>{errors[`item-${item.id}-quantity`]}</small></label>
                   <div className="invoice-line-total"><span>TOTAL</span><strong>{formatInvoiceMoney(currency, item.lineTotal)}</strong></div>
                   <button className="invoice-line-remove" type="button" aria-label={`删除第 ${index + 1} 项费用`} disabled={items.length === 1} onClick={() => setItems((current) => current.filter((line) => line.id !== item.id))}><Trash2 size={16} /></button>
                 </div>
@@ -978,7 +988,7 @@ export function InvoiceBuilderPage({
 
           <div className="invoice-builder-footer">
             <Button variant="ghost" onClick={cancel}>取消</Button>
-            <Button icon={<WandSparkles size={17} />} disabled={generating || (isEditing && !isDirty) || !contractMatch.canProceed} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
+            <Button icon={<WandSparkles size={17} />} disabled={Boolean(generateDisabledReason)} disabledReason={generateDisabledReason} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
           </div>
         </section>
 

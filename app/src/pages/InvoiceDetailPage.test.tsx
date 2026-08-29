@@ -113,6 +113,19 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(html.indexOf('contract-metric-grid')).toBeLessThan(html.indexOf('invoice-review-workspace'));
   });
 
+  it('keeps the review summary concise and exposes the unsigned signature state', () => {
+    const html = renderDetail(basePayout, { manage: false, media: true });
+
+    expect(html).toContain('核对主体、金额、币种、付款信息和签名状态');
+    expect(html).not.toContain('项目及合作项');
+    expect(html).toContain('金额和币种');
+    expect(html).toContain('USD 100.00');
+    expect(html).not.toContain('<small>USD</small>');
+    expect(html).toContain('签名区域');
+    expect(html).toContain('未签名');
+    expect(html).toContain('等待达人签署');
+  });
+
   it('shows the five fixed header actions and enables publish, edit and withdraw for a draft', () => {
     const draftRecord: GeneratedInvoiceRecord = {
       id: 'INV-SYNTHETIC',
@@ -197,6 +210,9 @@ describe('InvoiceDetailPage edit actions', () => {
     );
     expect(signedHtml).toContain('5/5项资料校验通过');
     expect(signedHtml).toContain('aria-label="电子签名">Synthetic Creator');
+    expect(signedHtml).toContain('签名区域');
+    expect(signedHtml).toContain('已签名');
+    expect(signedHtml).toContain('2026-08-14');
     expect(signedHtml).toContain('审核通过');
     expect(signedHtml).toContain('待审核');
     expect(signedHtml).not.toContain('待媒介审核');

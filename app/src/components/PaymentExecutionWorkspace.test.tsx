@@ -192,7 +192,8 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('还有 1 笔付款信息需要处理');
     expect(html).not.toContain('付款信息筛选');
     expect(html).toContain('payment-execution-table-status is-pending');
-    expect(html).toMatch(/class="button button-primary payment-execution-submit-action"[^>]*disabled=""/);
+    expect(html).toMatch(/class="button button-primary payment-execution-submit-action"[^>]*aria-disabled="true"/);
+    expect(html).toContain('data-disabled-reason="请先完成付款资料与执行账户校验。"');
   });
 
   it('also blocks direct execution from the overview when a payout is not ready', () => {
@@ -225,7 +226,8 @@ describe('PaymentExecutionWorkspace', () => {
     );
 
     expect(html).toContain('>执行打款</span>');
-    expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"[^>]*disabled=""/);
+    expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"[^>]*aria-disabled="true"/);
+    expect(html).toContain('data-disabled-reason="请先完成付款资料与执行账户校验。"');
   });
 
   it('prevents returning the whole request after any payout has started', () => {
@@ -256,7 +258,8 @@ describe('PaymentExecutionWorkspace', () => {
       />,
     );
 
-    expect(html).toMatch(/class="button button-danger payment-execution-return-action"[^>]*disabled=""/);
+    expect(html).toMatch(/class="button button-danger payment-execution-return-action"[^>]*aria-disabled="true"/);
+    expect(html).toContain('data-disabled-reason="当前账号或付款状态不允许退回媒介修改。"');
   });
 
   it('opens a returned request in a read-only overview with its return reason', () => {

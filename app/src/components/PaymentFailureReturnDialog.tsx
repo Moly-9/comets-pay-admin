@@ -40,6 +40,7 @@ export function PaymentFailureReturnDialog({
           <Button
             variant="danger"
             disabled={!normalizedReturnReason || !issueType}
+            disabledReason={!issueType ? '请先选择失败原因。' : '请先填写退回说明。'}
             onClick={submit}
           >
             确认退回

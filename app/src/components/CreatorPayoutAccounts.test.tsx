@@ -21,7 +21,8 @@ describe('CreatorPayoutAccounts profile editor', () => {
     expect(html).toContain('>Payer Max</strong><small>暂未开放 · 暂不支持创建</small>');
     expect(html).toContain('title="PayPal 暂未开放"');
     expect(html).toContain('title="Payer Max 暂未开放"');
-    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(html.match(/aria-disabled="true"/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html).toContain('Beneficiary Type');
     expect(html).toContain("Beneficiary&#x27;s Bank Country/Region");
     expect(html).toContain('>Currency</small>');

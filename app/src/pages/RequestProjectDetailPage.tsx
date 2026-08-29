@@ -1093,6 +1093,7 @@ export function RequestProjectDetailPage({
               {canReviewCurrentStage ? (
                 <Button
                   disabled={financeApprovalBlocked}
+                  disabledReason="财务资料校验尚未完成，当前不能审批通过。"
                   onClick={() => onApprovalAction(request, 'APPROVE')}
                 >
                   审批通过
@@ -1148,6 +1149,7 @@ export function RequestProjectDetailPage({
               <Button
                 variant="danger"
                 disabled={!normalizedReturnReason}
+                disabledReason="请先填写退回原因。"
                 onClick={() => {
                   onApprovalAction(request, 'RETURN', normalizedReturnReason);
                   setReturnDialogOpen(false);

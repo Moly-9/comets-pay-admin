@@ -993,7 +993,7 @@ export function ProjectsPage({
           title="新建项目"
           onClose={requestCloseProjectModal}
           width="760px"
-          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} onClick={createProject}>创建项目</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} disabledReason={!name.trim() ? '请先填写项目名称。' : !selectedPM ? '请先选择项目负责人。' : '请至少选择一位合作达人。'} onClick={createProject}>创建项目</Button></>}
         >
           <div className="form-grid single-column project-create-form">
             <label>
@@ -3570,6 +3570,7 @@ export function InvoicePage({
                 <Button
                   icon={<Send size={16} />}
                   disabled={!selectedPublishRows.length}
+                  disabledReason="请先选择需要发布的 Invoice。"
                   onClick={publishSelectedRows}
                 >
                   一键发布{selectedPublishRows.length ? `（${selectedPublishRows.length}）` : ''}
@@ -4363,6 +4364,7 @@ export function TransactionsPage({
             variant="secondary"
             icon={<Download size={16} />}
             disabled={exporting || !selectedTransactions.length}
+            disabledReason={exporting ? '交易记录正在导出，请稍候。' : '请先选择需要导出的交易记录。'}
             onClick={exportTransactions}
           >
             {exporting ? '导出中...' : `导出已选（${selectedTransactions.length}）`}
@@ -4616,7 +4618,7 @@ export function ChannelsPage({ notify }: { notify: Notify }) {
       notify(`${name} 连接正常`, 'API 凭证有效，回调地址可访问。');
     }, 700);
   };
-  return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
+  return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} disabledReason="连接正在校验，请稍候。" onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
 }
 
 export type NotificationNavigationTarget =

@@ -1027,7 +1027,7 @@ export function ContractDetailPage({
                       <CheckCircle2 size={17} />
                     </span>
                     <div><strong>人工确认进度</strong><small>{confirmedCount}/{applicableRecognitionFields.length} 项</small></div>
-                    <Button disabled={!allConfirmed || !onUpdateContract || !canEditCurrentContract} onClick={applyRecognition}>应用到正式合同资料</Button>
+                    <Button disabled={!allConfirmed || !onUpdateContract || !canEditCurrentContract} disabledReason={!canEditCurrentContract ? '当前账号没有编辑合同资料的权限。' : !onUpdateContract ? '当前合同无法更新。' : '请先确认全部识别字段。'} onClick={applyRecognition}>应用到正式合同资料</Button>
                   </div>
                 ) : null}
                 <article className={`contract-signature-check${contract.isTemplate ? ' is-not-applicable' : signatureConfirmed ? ' is-complete' : ' is-pending'}`}>

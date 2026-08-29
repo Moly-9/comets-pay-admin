@@ -114,6 +114,7 @@ export function CreatorIdentity({
   fallbackPlatform,
   accounts,
   socialAccountsMode = 'collapsible',
+  showSocialAccounts = true,
   size = 'sm',
   className = '',
 }: {
@@ -125,6 +126,7 @@ export function CreatorIdentity({
   fallbackPlatform?: string;
   accounts?: readonly CreatorSocialAccount[];
   socialAccountsMode?: CreatorSocialAccountsMode;
+  showSocialAccounts?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
@@ -138,12 +140,14 @@ export function CreatorIdentity({
       />
       <span className="creator-identity-copy">
         <strong>{name}</strong>
-        <CreatorSocialAccounts
-          accounts={creator ? creatorSocialAccounts(creator) : accounts}
-          fallbackHandle={fallbackHandle}
-          fallbackPlatform={fallbackPlatform}
-          mode={socialAccountsMode}
-        />
+        {showSocialAccounts ? (
+          <CreatorSocialAccounts
+            accounts={creator ? creatorSocialAccounts(creator) : accounts}
+            fallbackHandle={fallbackHandle}
+            fallbackPlatform={fallbackPlatform}
+            mode={socialAccountsMode}
+          />
+        ) : null}
       </span>
     </span>
   );

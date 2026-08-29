@@ -883,7 +883,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
           title="修改登录密码"
           width="520px"
           onClose={() => setPasswordAccount(null)}
-          footer={<><Button variant="ghost" onClick={() => setPasswordAccount(null)}>取消</Button><Button disabled={!passwordIsValid || !passwordsMatch} onClick={savePassword}>确认修改</Button></>}
+          footer={<><Button variant="ghost" onClick={() => setPasswordAccount(null)}>取消</Button><Button disabled={!passwordIsValid || !passwordsMatch} disabledReason={!passwordIsValid ? '新密码尚未满足安全规则。' : '两次输入的密码不一致。'} onClick={savePassword}>确认修改</Button></>}
         >
           <AccountProfile account={passwordAccount} />
           <div className="form-grid single-column password-form">
@@ -904,7 +904,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
           footer={(
             <>
               <Button variant="ghost" onClick={() => setApprovalDraft(null)}>取消</Button>
-              <Button disabled={!approvalDraftIsValid} onClick={saveApprovalFlow}>{approvalEditorMode === 'create' ? '创建流程' : '保存流程'}</Button>
+              <Button disabled={!approvalDraftIsValid} disabledReason="请先完成审批流程名称和节点配置。" onClick={saveApprovalFlow}>{approvalEditorMode === 'create' ? '创建流程' : '保存流程'}</Button>
             </>
           )}
         >
@@ -921,7 +921,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
       ) : null}
 
       {createOpen ? (
-        <Modal title="新增系统账号" onClose={() => setCreateOpen(false)} footer={<><Button variant="ghost" onClick={() => setCreateOpen(false)}>取消</Button><Button disabled={!newName.trim() || !newEmail.trim()} onClick={createAccount}>创建账号</Button></>}>
+        <Modal title="新增系统账号" onClose={() => setCreateOpen(false)} footer={<><Button variant="ghost" onClick={() => setCreateOpen(false)}>取消</Button><Button disabled={!newName.trim() || !newEmail.trim()} disabledReason={!newName.trim() ? '请先填写账号姓名。' : '请先填写账号邮箱。'} onClick={createAccount}>创建账号</Button></>}>
           <div className="form-grid single-column">
             <label><span>姓名 <em className="required-mark" aria-hidden="true">*</em></span><input autoFocus placeholder="输入账号使用人姓名" value={newName} onChange={(event) => setNewName(event.target.value)} /></label>
             <label><span>登录邮箱 <em className="required-mark" aria-hidden="true">*</em></span><input type="email" placeholder="name@company.com" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} /></label>

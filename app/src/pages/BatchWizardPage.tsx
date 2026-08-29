@@ -260,7 +260,7 @@ export function BatchWizardPage({
 
       <footer className="batch-summary-bar">
         <div><span>已选 {selectedPayouts.length} 笔</span><strong>{Object.entries(totals).map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ') || '—'}</strong></div>
-        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} onClick={submit}>创建并提交</Button></div>
+        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} disabledReason={!selectedPayouts.length ? '请先选择付款记录。' : hasIssue ? '请先处理付款资料校验异常。' : '请先选择执行账户。'} onClick={submit}>创建并提交</Button></div>
       </footer>
 
     </div>

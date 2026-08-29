@@ -1475,6 +1475,7 @@ export function InvoiceBatchBuilderPage({
               icon={<Sparkles size={17} />}
               data-testid="invoice-batch-fill-demo"
               disabled={!prototypeSeed || generating || hasGeneratedRows}
+              disabledReason={generating ? 'Invoice 正在批量生成，请稍候。' : hasGeneratedRows ? '已生成的批次不能再次填充演示数据。' : '当前没有可用的演示数据。'}
               onClick={fillPrototypeData}
             >
               填充演示数据
@@ -1661,6 +1662,7 @@ export function InvoiceBatchBuilderPage({
                     <Button
                       icon={<Check size={15} />}
                       disabled={!creatorImportReview.matches.length}
+                      disabledReason="当前没有可应用的达人匹配结果。"
                       onClick={applyCreatorImportReview}
                     >
                       确认应用（{creatorSelectionPreview.selectedIds.length}）
@@ -1961,6 +1963,7 @@ export function InvoiceBatchBuilderPage({
               ? <RefreshCw className="is-spinning" size={16} />
               : <PackageCheck size={16} />}
             disabled={generating || !readyRows.length}
+            disabledReason={generating ? 'Invoice 正在批量生成，请稍候。' : '当前没有校验通过且可生成的 Invoice。'}
             onClick={() => void generateBatch()}
           >
             {generating
@@ -1987,6 +1990,7 @@ export function InvoiceBatchBuilderPage({
                 variant="secondary"
                 icon={<Upload size={15} />}
                 disabled={importingCreators}
+                disabledReason="达人文件正在解析，请稍候。"
                 onClick={() => creatorFileInputRef.current?.click()}
               >
                 {importingCreators ? '正在解析' : '导入 Excel'}
@@ -1994,6 +1998,7 @@ export function InvoiceBatchBuilderPage({
               <Button
                 icon={<Search size={15} />}
                 disabled={!bulkCreatorInput.trim()}
+                disabledReason="请先输入需要解析的达人信息。"
                 onClick={reviewBulkCreatorInput}
               >
                 解析并预览

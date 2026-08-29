@@ -878,6 +878,7 @@ function AirwallexAccountForm({
         <Button
           icon={beneficiaryStatus === 'saving' ? <LoaderCircle className="airwallex-schema-spinner" size={16} /> : <ShieldCheck size={16} />}
           disabled={beneficiaryStatus === 'saving'}
+          disabledReason="收款账户正在保存，请稍候。"
           onClick={saveBeneficiary}
         >
           {beneficiaryStatus === 'saving' ? '正在校验账户' : '校验账户'}
@@ -1317,6 +1318,7 @@ export function CreatorPayoutAccounts({
                 icon={<Plus size={15} />}
                 key={provider.value}
                 disabled={!provider.available}
+                disabledReason={`${provider.label} 暂未开放`}
                 title={provider.available ? `新建 ${provider.label} 账户` : `${provider.label} 暂未开放`}
                 onClick={() => addAccount(provider.value)}
               >

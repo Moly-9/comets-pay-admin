@@ -299,7 +299,22 @@ export function ContractUploadWizard({
             <small>{documents.length ? `${fields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成关联信息并上传文件后，可确认合同名称并保存'}</small>
           </div>
           <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button type="submit" form="contract-upload-form" disabled={!canSave}>{submitLabel}</Button>
+          <Button
+            type="submit"
+            form="contract-upload-form"
+            disabled={!canSave}
+            disabledReason={parsing
+              ? '合同文件正在解析，请稍候。'
+              : !selectedProject
+                ? '请先选择合作项目。'
+                : !selectedCreator
+                  ? '请先选择合作达人。'
+                  : !documents.length
+                    ? '请先上传一份合同文件。'
+                    : !contractName.trim()
+                      ? '请填写合同名称。'
+                      : '请完成合同资料后再保存。'}
+          >{submitLabel}</Button>
         </>
       )}
     >

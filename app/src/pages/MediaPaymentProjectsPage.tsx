@@ -1317,7 +1317,7 @@ export function MediaPaymentProjectsPage({
       title={`取消请款 · ${requestCodeFor(cancelTarget)}`}
       width="520px"
       onClose={() => { setCancelTarget(null); setCancelReason(''); }}
-      footer={<><Button variant="ghost" onClick={() => { setCancelTarget(null); setCancelReason(''); }}>返回</Button><Button variant="danger" disabled={!cancelReason.trim()} onClick={() => {
+      footer={<><Button variant="ghost" onClick={() => { setCancelTarget(null); setCancelReason(''); }}>返回</Button><Button variant="danger" disabled={!cancelReason.trim()} disabledReason="请先填写取消原因。" onClick={() => {
         if (!onCancelRequest(cancelTarget, cancelReason.trim())) return;
         setSelectedRequestId(cancelTarget.id);
         setCancelTarget(null);
@@ -1641,7 +1641,7 @@ export function MediaPaymentProjectsPage({
             <NoticeBanner>申请当前状态：{selectedMyProjectStatus}。审批处理请前往“合作项目”工作台。</NoticeBanner>
           )}
           {editable ? <div className="media-request-submit-actions">
-            <Button icon={<Send size={17} />} disabled={!canSubmit} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>
+            <Button icon={<Send size={17} />} disabled={!canSubmit} disabledReason={submissionIssues[0] || '当前请款状态不允许提交。'} onClick={() => onSubmitRequest(selectedRequest)}>{isReturned ? '重新提交' : '提交申请'}</Button>
           </div> : null}
         </section> : null}
           </div>
@@ -1891,8 +1891,8 @@ export function MediaPaymentProjectsPage({
                 {selectedCreators.length ? (
                   <div className="creator-selection-chips" aria-label="已选择的合作达人">
                     {selectedCreators.map((creator) => creatorSelectionEditable ? (
-                      <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} socialAccountsMode="expanded" /><X size={13} aria-hidden="true" /></button>
-                    ) : <span className="creator-selection-chip is-readonly" key={creator.id}><CreatorIdentity creator={creator} socialAccountsMode="expanded" /></span>)}
+                      <button className="creator-selection-chip" type="button" aria-label={`移除 ${creator.name}`} key={creator.id} onClick={() => toggleCreator(creator.id as CreatorId)}><CreatorIdentity creator={creator} showSocialAccounts={false} /><X size={13} aria-hidden="true" /></button>
+                    ) : <span className="creator-selection-chip is-readonly" key={creator.id}><CreatorIdentity creator={creator} showSocialAccounts={false} /></span>)}
                     {creatorSelectionEditable ? <button className="invoice-selection-clear" type="button" onClick={() => { setSelectedCreatorIds([]); setSocialAccountIdsByCreator({}); setContractIdsByCreator({}); setInvoiceIdsByCreator({}); setAutoLinkedContractIdsByCreator({}); setOpenDocumentPicker(null); setResourcePreview(null); }}>清除已选</button> : null}
                   </div>
                 ) : null}

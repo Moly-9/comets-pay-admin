@@ -332,8 +332,8 @@ export function ExternalInvoiceCollectionCreatePage({
                   : '保存草稿后列表显示“待发布”；正式发布后才会出现在 C 端待办中。'}
             </NoticeBanner>
             <div className="external-form-actions">
-              <Button variant="secondary" disabled={!complete} onClick={() => submit(false)}>保存草稿</Button>
-              <Button icon={<Send size={16} />} disabled={!complete} onClick={() => submit(true)}>发布收集任务</Button>
+              <Button variant="secondary" disabled={!complete} disabledReason="请先完成收集任务的必填信息。" onClick={() => submit(false)}>保存草稿</Button>
+              <Button icon={<Send size={16} />} disabled={!complete} disabledReason="请先完成收集任务的必填信息。" onClick={() => submit(true)}>发布收集任务</Button>
             </div>
           </div>
         </section>
@@ -885,7 +885,7 @@ export function ExternalInvoiceCollectionDetailPage({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setSimulatorOpen(false)}>关闭</Button>
-              {confirmation ? <Button disabled={!canSubmit} icon={<Send size={16} />} onClick={() => { onSubmit(); setSimulatorOpen(false); }}>提交审核</Button> : null}
+              {confirmation ? <Button disabled={!canSubmit} disabledReason="请先完成 Invoice 文件、日期和付款账户校验。" icon={<Send size={16} />} onClick={() => { onSubmit(); setSimulatorOpen(false); }}>提交审核</Button> : null}
             </>
           )}
         >
@@ -910,10 +910,10 @@ export function ExternalInvoiceCollectionDetailPage({
             {!accounts.length ? <NoticeBanner>达人档案没有已验证且可用于 Invoice 的账户，当前不能提交。</NoticeBanner> : null}
             {canUpload ? (
               <div className="external-simulator-actions">
-                <Button disabled={!payoutAccountId || !invoiceDate} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
-                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
-                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
-                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
               </div>
             ) : null}
             {(correctionCandidate || record.status === 'RETURNED_FOR_CORRECTION') && recognition ? (

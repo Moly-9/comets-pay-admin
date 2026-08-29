@@ -441,6 +441,7 @@ export function PaymentBatchDetailPage({
                 variant="secondary"
                 icon={downloadingResource === 'contract' ? <LoaderCircle className="is-spinning" size={15} /> : <FileText size={15} />}
                 disabled={!projectDocuments.contracts.length || downloadingResource !== null}
+                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
                 onClick={() => downloadProjectResource('contract')}
               >
                 {downloadingResource === 'contract' ? '正在打包' : '下载合同'}
@@ -449,6 +450,7 @@ export function PaymentBatchDetailPage({
                 variant="secondary"
                 icon={downloadingResource === 'invoice' ? <LoaderCircle className="is-spinning" size={15} /> : <ReceiptText size={15} />}
                 disabled={!projectDocuments.invoices.length || downloadingResource !== null}
+                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
                 onClick={() => downloadProjectResource('invoice')}
               >
                 {downloadingResource === 'invoice' ? '正在打包' : '下载 Invoice'}
@@ -457,6 +459,7 @@ export function PaymentBatchDetailPage({
                 variant="secondary"
                 icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
                 disabled={!projectArchiveItems.length || downloadingResource !== null}
+                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款确认文件。'}
                 onClick={() => downloadProjectResource('workbook')}
               >
                 {downloadingResource === 'workbook' ? '正在生成' : '下载付款表'}
@@ -564,6 +567,7 @@ export function PaymentBatchDetailPage({
                                       variant="danger"
                                       icon={<RotateCcw size={16} />}
                                       disabled={!canHandleFailure || !onReturnPayout}
+                                      disabledReason={!onReturnPayout ? '当前流程未配置退回操作。' : '当前账号或付款状态不允许退回。'}
                                       onClick={() => setFailureDialogPayoutId(item.payoutId)}
                                     >
                                       退回媒介处理

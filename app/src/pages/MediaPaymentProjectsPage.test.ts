@@ -46,6 +46,16 @@ describe('new payment request resource picker', () => {
     expect(searchStyles).toContain('white-space: nowrap');
   });
 
+  it('uses compact selected creators and a two-column document identity layout', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('<CreatorIdentity creator={creator} showSocialAccounts={false} />');
+    expect(source).toContain('<div className="media-request-document-creator"><CreatorIdentity creator={creator} /></div>');
+    expect(css).toMatch(/\.media-request-document-creator > \.creator-identity\s*\{[^}]*grid-template-columns: auto minmax\(0, 1fr\);/s);
+    expect(css).toMatch(/\.media-request-document-creator \.creator-identity-copy\s*\{[^}]*display: grid;[^}]*gap: 3px;/s);
+  });
+
   it('formats Invoice and contract titles with explicit fallbacks', () => {
     expect(invoiceRequestResourceTitle({
       id: 'INV-20260826-00001',

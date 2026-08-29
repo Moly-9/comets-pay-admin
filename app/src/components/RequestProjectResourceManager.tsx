@@ -878,13 +878,13 @@ export function RequestProjectResourceManager({
             {canEdit || currentPaymentList ? (
               <div className="project-resource-browser-toolbar request-payment-toolbar">
                 <div className="request-payment-bulk-fields">
-                  <label><span>一键输入付款原因</span><span className="request-payment-bulk-control"><input aria-label="一键输入付款原因" value={bulkPaymentReason} disabled={!canBulkEditPaymentFields} placeholder="输入所有明细的付款原因" onChange={(event) => { setBulkPaymentReason(event.target.value); setBulkPaymentNotice(''); }} /><Button variant="secondary" disabled={!canBulkEditPaymentFields || !bulkPaymentReason.trim()} onClick={() => applyBulkPaymentField('paymentReason', bulkPaymentReason)}>填入全部</Button></span></label>
-                  <label><span>一键输入交易附言 <small>请使用英文</small></span><span className="request-payment-bulk-control"><input aria-label="一键输入交易附言" value={bulkTransactionReference} maxLength={140} disabled={!canBulkEditPaymentFields} placeholder="English only, max 140 characters" onChange={(event) => { setBulkTransactionReference(event.target.value); setBulkPaymentNotice(''); }} /><Button variant="secondary" disabled={!canBulkEditPaymentFields || !bulkTransactionReference.trim()} onClick={() => applyBulkPaymentField('transactionReference', bulkTransactionReference)}>填入全部</Button></span></label>
+                  <label><span>一键输入付款原因</span><span className="request-payment-bulk-control"><input aria-label="一键输入付款原因" value={bulkPaymentReason} disabled={!canBulkEditPaymentFields} placeholder="输入所有明细的付款原因" onChange={(event) => { setBulkPaymentReason(event.target.value); setBulkPaymentNotice(''); }} /><Button variant="secondary" disabled={!canBulkEditPaymentFields || !bulkPaymentReason.trim()} disabledReason={!canBulkEditPaymentFields ? '当前付款清单已锁定，不能批量修改。' : '请先填写付款原因。'} onClick={() => applyBulkPaymentField('paymentReason', bulkPaymentReason)}>填入全部</Button></span></label>
+                  <label><span>一键输入交易附言 <small>请使用英文</small></span><span className="request-payment-bulk-control"><input aria-label="一键输入交易附言" value={bulkTransactionReference} maxLength={140} disabled={!canBulkEditPaymentFields} placeholder="English only, max 140 characters" onChange={(event) => { setBulkTransactionReference(event.target.value); setBulkPaymentNotice(''); }} /><Button variant="secondary" disabled={!canBulkEditPaymentFields || !bulkTransactionReference.trim()} disabledReason={!canBulkEditPaymentFields ? '当前付款清单已锁定，不能批量修改。' : '请先填写交易附言。'} onClick={() => applyBulkPaymentField('transactionReference', bulkTransactionReference)}>填入全部</Button></span></label>
                 </div>
                 <div className="request-payment-toolbar-actions">
-                  {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
-                  {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
-                  {canEditLinkedResources ? <Button icon={<RefreshCw className={paymentGenerationChecking ? 'is-spinning' : undefined} size={15} />} disabled={paymentGenerationChecking || !currentPaymentList?.items.length || currentPaymentList?.status !== 'draft'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定' : '调用 Airwallex 付款信息完整性接口校验并生成付款清单'} onClick={() => { void generateOrRefreshPaymentList(); }}>{paymentGenerationChecking ? 'Airwallex 校验中' : '生成付款清单'}</Button> : null}
+                  {canEditLinkedResources && currentPaymentList ? <Button variant="danger" icon={<Eraser size={15} />} disabled disabledReason="为保留付款审计链路，当前不支持清空整张付款清单。" onClick={() => setConfirmAction({ title: '清空付款清单', description: `将清空当前付款清单的 ${paymentItemCount} 笔付款行。清单编号和历史版本保留，Invoice 源记录不受影响。`, confirmLabel: '确认清空', danger: true, run: onClearPaymentLists })}>清空清单</Button> : null}
+                  {currentPaymentList ? <Button variant="secondary" icon={<Download size={15} />} disabled={!paymentListExportable} disabledReason="付款清单尚未生成完成，当前不可导出。" onClick={() => { void onExportPaymentList(currentPaymentList.paymentListId); }}>导出 Excel</Button> : null}
+                  {canEditLinkedResources ? <Button icon={<RefreshCw className={paymentGenerationChecking ? 'is-spinning' : undefined} size={15} />} disabled={paymentGenerationChecking || !currentPaymentList?.items.length || currentPaymentList?.status !== 'draft'} disabledReason={paymentGenerationChecking ? '付款信息正在校验，请稍候。' : currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定。' : '请先添加付款明细。'} title={currentPaymentList?.status !== 'draft' ? '已生成的付款清单已锁定' : '调用 Airwallex 付款信息完整性接口校验并生成付款清单'} onClick={() => { void generateOrRefreshPaymentList(); }}>{paymentGenerationChecking ? 'Airwallex 校验中' : '生成付款清单'}</Button> : null}
                 </div>
               </div>
             ) : null}
@@ -959,6 +959,7 @@ export function RequestProjectResourceManager({
                             variant="ghost"
                             icon={<UserCheck size={14} />}
                             disabled={!paymentListReturn.notifications?.length || Boolean(paymentListReturn.accountUpdate)}
+                            disabledReason={!paymentListReturn.notifications?.length ? '请先通知达人更新账户。' : '账户已更新并通过校验。'}
                             title={!paymentListReturn.notifications?.length ? '请先通知达人' : paymentListReturn.accountUpdate ? '账户已更新并通过校验' : '模拟达人完成账户信息修改'}
                             onClick={() => onSimulatePaymentListReturnAccountUpdate(request.paymentRequestProjectId ?? request.id, item.invoiceId)}
                           >
@@ -999,11 +1000,12 @@ export function RequestProjectResourceManager({
                         </div>
                         {canHandlePaymentFailure ? (
                           <div className="payment-failure-recovery-actions">
-                            <Button variant="secondary" icon={<Send size={15} />} disabled={recovery.status === 'RETRY_SUBMITTED'} onClick={() => openFailureNotification(failurePayout)}>发送失败通知</Button>
+                            <Button variant="secondary" icon={<Send size={15} />} disabled={recovery.status === 'RETRY_SUBMITTED'} disabledReason="该失败付款已重新提交，无需再次通知。" onClick={() => openFailureNotification(failurePayout)}>发送失败通知</Button>
                             <Button
                               variant="ghost"
                               icon={<UserCheck size={15} />}
                               disabled={!['AWAITING_CREATOR_UPDATE', 'CREATOR_UPDATED'].includes(recovery.status)}
+                              disabledReason="请先发送失败通知并等待达人更新账户。"
                               onClick={() => openPaymentEditor(list.paymentListId, item.invoiceId, 'edit')}
                             >
                               更换执行账户
@@ -1011,6 +1013,7 @@ export function RequestProjectResourceManager({
                             <Button
                               icon={<RefreshCw size={15} />}
                               disabled={recovery.status !== 'CREATOR_UPDATED'}
+                              disabledReason="达人尚未完成执行账户更新。"
                               onClick={() => onRevalidatePaymentFailureAccount?.(failurePayout.id)}
                             >
                               重新校验
@@ -1140,6 +1143,7 @@ export function RequestProjectResourceManager({
               <Button
                 icon={<Send size={16} />}
                 disabled={!notificationMessage.trim() || (Boolean(notificationReturnItem) && !onSendPaymentListReturnNotification)}
+                disabledReason={!notificationMessage.trim() ? '请先填写通知内容。' : '当前流程不支持发送该通知。'}
                 onClick={notificationReturnItem ? submitPaymentListReturnNotification : submitFailureNotification}
               >
                 模拟发送
@@ -1177,7 +1181,7 @@ export function RequestProjectResourceManager({
       ) : null}
 
       {linkDialog ? (
-        <Modal title={linkDialog === 'contract' ? '关联已有合同' : '关联已有 Invoice'} width="920px" className="project-resource-modal request-resource-link-modal" onClose={() => { setLinkDialog(null); setResourceDialog(linkDialog); }} footer={<><Button variant="secondary" onClick={() => { setLinkDialog(null); setResourceDialog(linkDialog); }}>取消</Button><Button disabled={!selectedCandidateIds.length} onClick={commitCandidates}>关联已选（{selectedCandidateIds.length}）</Button></>}>
+        <Modal title={linkDialog === 'contract' ? '关联已有合同' : '关联已有 Invoice'} width="920px" className="project-resource-modal request-resource-link-modal" onClose={() => { setLinkDialog(null); setResourceDialog(linkDialog); }} footer={<><Button variant="secondary" onClick={() => { setLinkDialog(null); setResourceDialog(linkDialog); }}>取消</Button><Button disabled={!selectedCandidateIds.length} disabledReason={`请先选择要关联的${linkDialog === 'contract' ? '合同' : ' Invoice'}。`} onClick={commitCandidates}>关联已选（{selectedCandidateIds.length}）</Button></>}>
           <div className="project-resource-browser"><div className="project-resource-browser-heading"><div><strong>{linkDialog === 'contract' ? '合同候选' : 'Invoice 候选'}</strong><p>{linkDialog === 'contract' ? '展示当前合作项目下、属于本次请款达人的合同，可一次关联多份。' : '展示当前合作项目下全部达人的 Invoice；关联项目外达人时，会同步加入请款项目。'}</p></div><span>{linkDialog === 'contract' ? filteredContractCandidates.length : filteredInvoiceCandidates.length} 条</span></div><div className="request-resource-candidate-filter"><div><strong>按达人筛选</strong><small>{linkDialog === 'contract' ? '同一合作项目可以关联同一达人的多份合同' : 'Invoice 候选范围不会受当前请款项目达人名单限制'}</small></div>{linkDialog === 'contract' ? <SelectField ariaLabel="合同候选达人筛选" variant="form" value={contractCreatorFilter} options={contractCreatorOptions} onChange={setContractCreatorFilter} /> : <SelectField ariaLabel="Invoice 候选达人筛选" variant="form" value={invoiceCreatorFilter} options={invoiceCreatorOptions} onChange={setInvoiceCreatorFilter} />}</div><div className="request-resource-candidate-list">
             {linkDialog === 'contract' ? filteredContractCandidates.map((contract) => {
               const id = contractStableId(contract);

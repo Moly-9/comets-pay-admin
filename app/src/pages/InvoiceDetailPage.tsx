@@ -654,10 +654,22 @@ export function InvoiceDetailPage({
     { id: 'invoice-date', label: 'Invoice Date', value: model.invoiceDate || '待补充', secondary: 'Date of Invoice', evidenceTarget: '.invoice-paper-meta > section:nth-child(2)' },
     { id: 'invoice-from', label: 'Invoice From', value: model.from.legalName || '待补充', secondary: model.from.email || '联系邮箱待补充', evidenceTarget: '.invoice-paper-meta > section:first-child' },
     { id: 'bill-to', label: 'Bill To', value: model.billTo.name || '待补充', secondary: model.billTo.address || '地址待补充', evidenceTarget: '.invoice-paper-bill-to' },
-    { id: 'project', label: '项目及合作项', value: model.projectName || '待关联', secondary: model.projectId || '项目编号待关联', evidenceTarget: '.invoice-paper-table-wrap' },
     { id: 'description', label: 'Description', value: model.items.map((item) => item.description).filter(Boolean).join('；') || '待补充', secondary: `${model.items.length} 项费用明细`, evidenceTarget: '.invoice-paper-table-wrap' },
-    { id: 'amount', label: '金额和币种', value: formatInvoiceMoney(model.currency, invoiceTotal(model)), secondary: model.currency, evidenceTarget: '.invoice-paper-total' },
+    { id: 'amount', label: '金额和币种', value: formatInvoiceMoney(model.currency, invoiceTotal(model)), evidenceTarget: '.invoice-paper-total' },
     { id: 'payment', label: '付款方式与账户', value: model.paymentMethod === 'bank' ? '银行转账' : 'PayPal', secondary: invoiceAccountSummary(model), evidenceTarget: '.invoice-paper-payment' },
+    {
+      id: 'signature',
+      label: '签名区域',
+      value: signedForMediaReview ? '已签名' : '未签名',
+      secondary: signedForMediaReview
+        ? model.signatureDate
+          ? model.signatureDate
+          : payout?.invoiceSignedAt
+            ? formatReviewTime(payout.invoiceSignedAt)
+            : '签名已归档'
+        : '等待达人签署',
+      evidenceTarget: '.invoice-paper-signature',
+    },
   ];
   const workspaceContractChecks: InvoiceReviewContractCheck[] = checks.map((check) => ({
     id: check.id,
@@ -834,6 +846,7 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Send size={16} />}
               disabled={isDraft ? !canPublishDraft : !canSendSignatureReminder}
+              disabledReason={isDraft ? '当前账号不能发布该草稿' : '仅待签署状态可以发送提醒'}
               title={isDraft
                 ? canPublishDraft ? '发布并通知达人签署' : '当前账号不能发布该草稿'
                 : canSendSignatureReminder ? '再次通知达人签署' : '仅待签署状态可以发送提醒'}
@@ -845,6 +858,7 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Pencil size={16} />}
               disabled={!canEditHeader}
+              disabledReason="当前状态不可编辑"
               title={canEditHeader ? '编辑 Invoice' : '当前状态不可编辑'}
               onClick={() => { if (payout && editContext) onEditInvoice?.(payout, editContext); }}
             >
@@ -854,12 +868,13 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Undo2 size={16} />}
               disabled={!canWithdrawDraft}
+              disabledReason="只有未发布草稿可以撤销"
               title={canWithdrawDraft ? '撤销并删除当前草稿' : '只有未发布草稿可以撤销'}
               onClick={() => setWithdrawDialogOpen(true)}
             >
               撤销
             </Button>
-            <Button icon={<Download size={16} />} disabled={Boolean(downloading)} onClick={() => downloadInvoice('pdf')}>
+            <Button icon={<Download size={16} />} disabled={Boolean(downloading)} disabledReason="文件正在生成，请稍候。" onClick={() => downloadInvoice('pdf')}>
               {downloading === 'pdf' ? '生成中…' : '下载PDF'}
             </Button>
           </div>
@@ -963,7 +978,7 @@ export function InvoiceDetailPage({
         additionalFooterActions={(
           <>
             {source.kind !== 'payout' ? (
-              <Button variant="secondary" disabled={Boolean(downloading)} onClick={() => downloadInvoice('docx')}>
+              <Button variant="secondary" disabled={Boolean(downloading)} disabledReason="文件正在生成，请稍候。" onClick={() => downloadInvoice('docx')}>
                 {downloading === 'docx' ? '生成中…' : '下载DOCX'}
               </Button>
             ) : null}
@@ -993,6 +1008,7 @@ export function InvoiceDetailPage({
               <Button
                 icon={<Send size={16} />}
                 disabled={!normalizedSignatureReminderMessage}
+                disabledReason="请先填写签署提醒内容。"
                 onClick={submitSignatureReminder}
               >
                 发送签署提醒
@@ -1037,6 +1053,7 @@ export function InvoiceDetailPage({
                 <Button
                   icon={<Send size={16} />}
                   disabled={!normalizedReplyMessage}
+                  disabledReason="请先填写回复内容。"
                   onClick={submitFeedbackReply}
                 >
                   回复反馈

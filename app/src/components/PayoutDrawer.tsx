@@ -299,9 +299,9 @@ export function PayoutDrawer({
             {actionLabel && canAdvance ? <Button onClick={() => onAdvance(payout)}>{actionLabel}</Button> : null}
             {canReturnFailure ? <Button variant="danger" onClick={openReturnDialog}>退回媒介</Button> : null}
             {payout.paymentFailureRecovery?.status === 'PENDING_FINANCE_CONFIRMATION' ? (
-              <Button icon={<ShieldCheck size={16} />} disabled={!canConfirmAccountChange} title={canConfirmAccountChange ? '确认新执行账户并解锁重试' : '需要财务账号确认'} onClick={() => onConfirmAccountChange(payout.id)}>确认新执行账户</Button>
+              <Button icon={<ShieldCheck size={16} />} disabled={!canConfirmAccountChange} disabledReason="需要财务账号确认新的执行账户。" title={canConfirmAccountChange ? '确认新执行账户并解锁重试' : '需要财务账号确认'} onClick={() => onConfirmAccountChange(payout.id)}>确认新执行账户</Button>
             ) : null}
-            {payout.status === '飞书审批中' ? <Button disabled>等待飞书审批</Button> : null}
+            {payout.status === '飞书审批中' ? <Button disabled disabledReason="飞书审批尚未完成，请等待审批结果。">等待飞书审批</Button> : null}
             {(payout.status === '已付款' || payout.status === '已退回') ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
           </footer>
         </aside>
@@ -315,7 +315,7 @@ export function PayoutDrawer({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!normalizedReturnReason || !issueType} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!normalizedReturnReason || !issueType} disabledReason={!issueType ? '请先选择问题类型。' : '请先填写退回原因。'} onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >

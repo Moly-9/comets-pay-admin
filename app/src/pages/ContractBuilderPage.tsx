@@ -807,6 +807,7 @@ export function ContractBuilderPage({
                     variant="secondary"
                     icon={<Plus size={14} />}
                     disabled={!selectedCreator}
+                    disabledReason="请先选择合作达人。"
                     onClick={addPublishingChannel}
                   >
                     新增渠道
@@ -986,17 +987,18 @@ export function ContractBuilderPage({
       <footer className="contract-builder-actions">
         <div>
           <Button variant="ghost" onClick={onCancel}>取消</Button>
-          <Button variant="secondary" icon={<Save size={16} />} disabled={generating} onClick={saveDraft}>
+          <Button variant="secondary" icon={<Save size={16} />} disabled={generating} disabledReason="合同文件正在生成，请稍候。" onClick={saveDraft}>
             保存草稿
           </Button>
         </div>
         <div>
-          <Button variant="secondary" icon={<Eye size={16} />} disabled={generating} onClick={() => void generate('DRAFT', 'PREVIEW')}>
+          <Button variant="secondary" icon={<Eye size={16} />} disabled={generating} disabledReason="合同文件正在生成，请稍候。" onClick={() => void generate('DRAFT', 'PREVIEW')}>
             生成预览
           </Button>
           <Button
             icon={<WandSparkles size={17} />}
             disabled={generating || qualityReport.hasBlockers}
+            disabledReason={generating ? '合同文件正在生成，请稍候。' : '请先处理合同质量阻断项。'}
             title={qualityReport.hasBlockers ? '请先处理合同质量阻断项' : undefined}
             onClick={() => void generate('FORMAL', 'SAVE')}
           >

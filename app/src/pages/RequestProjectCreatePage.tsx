@@ -318,8 +318,8 @@ export function RequestProjectCreatePage({
           {step > 0 ? <Button variant="ghost" onClick={() => setStep((current) => current - 1)}>上一步</Button> : <Button variant="ghost" onClick={onCancel}>取消</Button>}
         </div>
         <div>
-          {step === 0 ? <Button disabled={!projectName.trim() || !brand.trim()} onClick={() => setStep(1)}>下一步：选择Invoice</Button> : null}
-          {step === 1 ? <Button disabled={!selectedInvoice || !matchPassed} onClick={() => setStep(2)}>生成付款清单</Button> : null}
+          {step === 0 ? <Button disabled={!projectName.trim() || !brand.trim()} disabledReason={!projectName.trim() ? '请先填写项目名称。' : '请先填写品牌名称。'} onClick={() => setStep(1)}>下一步：选择Invoice</Button> : null}
+          {step === 1 ? <Button disabled={!selectedInvoice || !matchPassed} disabledReason={!selectedInvoice ? '请先选择 Invoice。' : 'Invoice 与合同资料尚未通过匹配校验。'} onClick={() => setStep(2)}>生成付款清单</Button> : null}
           {step === 2 ? <Button icon={<WalletCards size={17} />} onClick={createRequest}>创建并提交审批</Button> : null}
         </div>
       </footer>

@@ -6,7 +6,7 @@ import { DraftExitDialog } from './components/DraftExitDialog';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { paymentProviderDisplayName } from './components/PaymentProviderBadge';
-import { Toast } from './components/Common';
+import { BLOCKED_ACTION_EVENT, Toast } from './components/Common';
 import {
   canEditRequestProjectResources,
   type RequestProjectResourceActions,
@@ -516,6 +516,19 @@ export default function App() {
 
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
+  }, []);
+
+  useEffect(() => {
+    const explainBlockedAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      setToast({
+        title: '暂时无法操作',
+        message: detail?.reason?.trim() || '请先完成当前页面的必填项与校验。',
+        tone: 'warning',
+      });
+    };
+    window.addEventListener(BLOCKED_ACTION_EVENT, explainBlockedAction);
+    return () => window.removeEventListener(BLOCKED_ACTION_EVENT, explainBlockedAction);
   }, []);
 
   useEffect(() => {

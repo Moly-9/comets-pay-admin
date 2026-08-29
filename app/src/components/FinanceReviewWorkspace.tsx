@@ -502,6 +502,7 @@ function FinanceReviewProjectOverview({
             icon={exportingPaymentLists ? <LoaderCircle className="is-spinning" size={14} /> : <Download size={14} />}
             title="导出该项目的全部付款清单"
             disabled={!canExportPaymentLists || exportingPaymentLists}
+            disabledReason={exportingPaymentLists ? '付款清单正在导出，请稍候。' : '当前没有可导出的付款清单。'}
             onClick={onExportPaymentLists}
           >
             {exportingPaymentLists ? '导出中' : '导出 Excel'}
@@ -1088,6 +1089,7 @@ export function FinanceReviewWorkspace({
                   variant="secondary"
                   icon={<CircleAlert size={16} />}
                   disabled={!currentPage}
+                  disabledReason="当前没有可记录的审核项目。"
                   onClick={openIssueEditor}
                 >
                   {currentDecision.state === 'incorrect' ? '编辑有误记录' : '记录有误'}
@@ -1096,6 +1098,7 @@ export function FinanceReviewWorkspace({
                   variant="secondary"
                   icon={<CheckCircle2 size={16} />}
                   disabled={!canConfirmCurrentPage}
+                  disabledReason="请先完成当前记录的必填核对项。"
                   onClick={confirmCurrentPage}
                 >
                   确认本页无误
@@ -1112,6 +1115,7 @@ export function FinanceReviewWorkspace({
                   variant="danger"
                   icon={<AlertTriangle size={16} />}
                   disabled={!canReturn}
+                  disabledReason={`仍有 ${counts.unreviewed} 份记录待核对。`}
                   title={canReturn ? '汇总全部有误记录并退回媒介' : `仍有 ${counts.unreviewed} 份记录待核对`}
                   onClick={openReturnDialog}
                 >
@@ -1125,7 +1129,7 @@ export function FinanceReviewWorkspace({
               >
                 返回项目概览
               </Button>
-              <Button icon={<ShieldCheck size={16} />} disabled={!canApprove} onClick={submitApproval}>
+              <Button icon={<ShieldCheck size={16} />} disabled={!canApprove} disabledReason={counts.incorrect ? '存在有误记录，请先退回媒介修改。' : `仍有 ${counts.unreviewed} 份记录待核对。`} onClick={submitApproval}>
                 通过财务审核
               </Button>
             </div>
@@ -1504,6 +1508,7 @@ export function FinanceReviewWorkspace({
                     ? <LoaderCircle className="is-spinning" size={15} />
                     : <Download size={15} />}
                   disabled={!linkedContracts.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? '合同文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
                   onClick={() => { void downloadProjectContracts(); }}
                 >
                   {downloadingResource === 'contract' ? '打包中' : '下载合同汇总'}
@@ -1553,6 +1558,7 @@ export function FinanceReviewWorkspace({
                           ? <LoaderCircle className="is-spinning" size={15} />
                           : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadContract(contract); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -1584,6 +1590,7 @@ export function FinanceReviewWorkspace({
                     ? <LoaderCircle className="is-spinning" size={15} />
                     : <Download size={15} />}
                   disabled={!linkedInvoices.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? 'Invoice 文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
                   onClick={() => { void downloadProjectInvoices(); }}
                 >
                   {downloadingResource === 'invoice' ? '打包中' : '下载 Invoice 汇总'}
@@ -1633,6 +1640,7 @@ export function FinanceReviewWorkspace({
                           ? <LoaderCircle className="is-spinning" size={15} />
                           : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadInvoice(linkedInvoice); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -1653,7 +1661,7 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setIssueEditorOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!issueType || !issueReason.trim()} onClick={saveIssue}>保存有误记录</Button>
+              <Button variant="danger" disabled={!issueType || !issueReason.trim()} disabledReason={!issueType ? '请先选择问题类型。' : '请先填写问题说明。'} onClick={saveIssue}>保存有误记录</Button>
             </>
           )}
         >
@@ -1696,7 +1704,7 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!canReturn || !returnReason} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!canReturn || !returnReason} disabledReason={!canReturn ? '仍有审核记录尚未完成核对。' : '请先填写退回原因。'} onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >

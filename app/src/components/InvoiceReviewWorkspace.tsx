@@ -564,7 +564,7 @@ export function InvoiceReviewWorkspace({
                 </div>
               ) : null}
               <div className="invoice-review-section-heading">
-                <div><FileCheck2 size={18} /><span><strong>结构化 Invoice 摘要</strong><small>核对项目、主体、金额、币种和付款信息</small></span></div>
+                <div><FileCheck2 size={18} /><span><strong>结构化 Invoice 摘要</strong><small>核对主体、金额、币种、付款信息和签名状态</small></span></div>
               </div>
               <dl className="invoice-review-summary-list">
                 {summaryFields.map((field) => (
@@ -722,12 +722,13 @@ export function InvoiceReviewWorkspace({
           </div>
           <div className="invoice-review-footer-buttons">
             {additionalFooterActions}
-            {returnLabel && onReturn ? <Button variant="secondary" disabled={!canReview} onClick={() => setReturnOpen(true)}>{returnLabel}</Button> : null}
-            {onSave ? <Button variant="secondary" icon={<Save size={16} />} disabled={!canReview} onClick={onSave}>保存审核进度</Button> : null}
+            {returnLabel && onReturn ? <Button variant="secondary" disabled={!canReview} disabledReason="当前状态或账号权限不允许退回 Invoice。" onClick={() => setReturnOpen(true)}>{returnLabel}</Button> : null}
+            {onSave ? <Button variant="secondary" icon={<Save size={16} />} disabled={!canReview} disabledReason="当前状态或账号权限不允许保存审核进度。" onClick={onSave}>保存审核进度</Button> : null}
             {approveLabel && onApprove ? (
               <Button
                 icon={<CheckCircle2 size={16} />}
                 disabled={!canReview || approveDisabled}
+                disabledReason={!canReview ? '当前状态或账号权限不允许执行审核。' : blockingReasons[0] || '请先完成全部审核校验。'}
                 title={approveDisabled ? blockingReasons.join('；') : undefined}
                 onClick={onApprove}
               >
@@ -744,7 +745,7 @@ export function InvoiceReviewWorkspace({
           width="540px"
           onClose={() => setReturnOpen(false)}
           footer={(
-            <><Button variant="ghost" onClick={() => setReturnOpen(false)}>取消</Button><Button variant="danger" disabled={!returnReason.trim() || (returnOptions.length > 0 && !returnOption)} onClick={submitReturn}>确认退回</Button></>
+            <><Button variant="ghost" onClick={() => setReturnOpen(false)}>取消</Button><Button variant="danger" disabled={!returnReason.trim() || (returnOptions.length > 0 && !returnOption)} disabledReason={returnOptions.length > 0 && !returnOption ? '请先选择退回处理方式。' : '请先填写退回原因。'} onClick={submitReturn}>确认退回</Button></>
           )}
         >
           <div className="invoice-review-return-form">
@@ -781,7 +782,7 @@ export function InvoiceReviewWorkspace({
                 setFieldDialog(null);
                 setFieldNote('');
               }}>取消</Button>
-              <Button variant="danger" disabled={fieldNote.trim().length < 5} onClick={submitFieldAction}>
+              <Button variant="danger" disabled={fieldNote.trim().length < 5} disabledReason="请填写至少 5 个字符的异常说明。" onClick={submitFieldAction}>
                 {fieldDialog.action === 'REUPLOAD_REQUIRED' ? '确认要求重新上传' : '保存异常结果'}
               </Button>
             </>
