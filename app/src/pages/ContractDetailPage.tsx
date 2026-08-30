@@ -658,7 +658,10 @@ export function ContractDetailPage({
     ? nonSignatureIssues.filter((issue) => issue.id !== 'recognition-review')
     : nonSignatureIssues;
   const readiness = getContractReadiness({ ...contract, issues: visibleIssues });
-  const templateReadiness = getContractTemplatePolicyReadiness(contract.templateFieldPolicies);
+  const templateReadiness = getContractTemplatePolicyReadiness(
+    contract.templateFieldPolicies,
+    contract.templateOutputFieldKeys,
+  );
   const validity = getContractValidity(contract);
   const paymentReady = readiness.ready && !validity.expired;
   const readinessLabel = validity.expired ? '已失效' : readiness.label;

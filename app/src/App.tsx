@@ -26,6 +26,10 @@ import {
   type ContractUploadInput,
 } from './contracts';
 import {
+  getContractTemplatePolicyReadiness,
+  getContractTemplateStatus,
+} from './contractTemplateFieldPolicies';
+import {
   authenticateSystemUser,
   CURRENT_USER,
   INITIAL_INVOICE_BILLING_SETTINGS,
@@ -416,6 +420,31 @@ const LOCAL_DEV_BYPASSES_AUTH = import.meta.env.DEV;
 const LOCAL_DEV_USER = LOCAL_DEV_BYPASSES_AUTH
   ? (resolveSystemUser('jeff') ?? CURRENT_USER)
   : CURRENT_USER;
+
+const getContractTemplateAvailability = (contracts: ContractRecord[]) => {
+  const template = contracts.find((contract) => (
+    contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
+  ));
+  const readiness = template
+    ? getContractTemplatePolicyReadiness(
+      template.templateFieldPolicies,
+      template.templateOutputFieldKeys,
+    )
+    : null;
+  const activeTemplate = template
+    && getContractTemplateStatus(template) === 'ACTIVE'
+    && readiness?.ready
+    ? template
+    : null;
+  const disabledReason = !template
+    ? '当前没有可用于生成合同的模板。'
+    : getContractTemplateStatus(template) !== 'ACTIVE'
+      ? '合同模板已停用，请先在系统配置中启动模板。'
+      : !readiness?.ready
+        ? '合同模板字段配置存在阻断项，请先在系统配置中修复。'
+        : undefined;
+  return { template, activeTemplate, disabledReason };
+};
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(LOCAL_DEV_BYPASSES_AUTH);
@@ -4098,6 +4127,11 @@ export default function App() {
         notify('项目资料已锁定', '当前项目仅可查看，不能生成新合同。');
         return;
       }
+      const templateAvailability = getContractTemplateAvailability(contracts);
+      if (!templateAvailability.activeTemplate) {
+        notify('暂时无法生成合同', templateAvailability.disabledReason ?? '请先配置可用的合同模板。');
+        return;
+      }
       setRequestResourceReturn({ requestId: request.id, resource: 'contract', source: 'my-project' });
       setContractGenerationEngagementId(null);
       setActivePage('contract-create');
@@ -4560,6 +4594,11 @@ export default function App() {
   const canUploadContracts = hasPermission(currentUser, 'contract_manage');
   const canDeleteContracts = hasPermission(currentUser, 'contract_delete');
   const canEditTemplates = canEditContractTemplate(currentUser);
+  const {
+    template: configuredContractTemplate,
+    activeTemplate: activeContractTemplate,
+    disabledReason: createContractDisabledReason,
+  } = getContractTemplateAvailability(contracts);
   const canManageProjects = hasPermission(currentUser, 'project_manage');
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
@@ -4715,6 +4754,7 @@ export default function App() {
             setEditingContractDraftId(null);
             setActivePage('contract-create');
           }}
+          createContractDisabledReason={createContractDisabledReason}
           onEditDraft={(contractId) => {
             setContractGenerationEngagementId(null);
             setEditingContractDraftId(contractId);
@@ -4730,9 +4770,7 @@ export default function App() {
         <ContractBuilderPage
           projects={manageableCooperationProjects}
           creators={creators}
-          contractTemplate={contracts.find((contract) => (
-            contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
-          ))}
+          contractTemplate={editingContractDraftId ? configuredContractTemplate : activeContractTemplate}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
             contract.lifecycle === 'EDITING_DRAFT'

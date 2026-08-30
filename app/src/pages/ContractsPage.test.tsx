@@ -53,6 +53,31 @@ describe('ContractsPage batch actions', () => {
     expect(html).not.toContain('data-testid="contract-bulk-delete"');
   });
 
+  it('disables new contract generation with an explicit reason when no active usable template exists', () => {
+    const html = renderToStaticMarkup(
+      <ContractsPage
+        contracts={INITIAL_CONTRACTS.slice(0, 2)}
+        projects={[]}
+        creators={[]}
+        canUpload
+        canDelete={false}
+        canDeleteContract={() => false}
+        focusedContractId={null}
+        onFocusCleared={vi.fn()}
+        onCreateContract={vi.fn()}
+        createContractDisabledReason="合同模板已停用，请先在系统配置中启动模板。"
+        onUploadContract={vi.fn()}
+        onUpdateContract={vi.fn()}
+        onDeleteContracts={vi.fn(() => 0)}
+        notify={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('>生成合同</span>');
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('data-disabled-reason="合同模板已停用，请先在系统配置中启动模板。"');
+  });
+
   it('restores a contract by stable id and forwards scoped edit permission', () => {
     const source = readFileSync(new URL('./ContractsPage.tsx', import.meta.url), 'utf8');
 

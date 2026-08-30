@@ -73,8 +73,10 @@ import type { CreatorProfile } from '../types';
 import { createContractQualityReport } from '../contractTemplate';
 import {
   CONTRACT_TEMPLATE_OUTPUT_FIELDS,
+  getContractTemplateSupportedPayoutProviders,
   hasManualPayoutDocumentDifferences,
   resolveContractTemplateFieldPolicies,
+  resolveContractTemplateOutputFieldKeys,
 } from '../contractTemplateFieldPolicies';
 import type { ProjectSummary } from './ProjectDetailPage';
 
@@ -222,6 +224,16 @@ export function ContractBuilderPage({
   const templateFieldPolicies = useMemo(() => resolveContractTemplateFieldPolicies(
     draftModel?.templateFieldPolicies ?? contractTemplate?.templateFieldPolicies,
   ), [contractTemplate?.templateFieldPolicies, draftModel?.templateFieldPolicies]);
+  const templateOutputFieldKeys = useMemo(() => resolveContractTemplateOutputFieldKeys(
+    draftModel?.templateOutputFieldKeys ?? contractTemplate?.templateOutputFieldKeys,
+  ), [contractTemplate?.templateOutputFieldKeys, draftModel?.templateOutputFieldKeys]);
+  const supportedPayoutProviders = useMemo(() => getContractTemplateSupportedPayoutProviders(
+    templateFieldPolicies,
+    templateOutputFieldKeys,
+  ), [templateFieldPolicies, templateOutputFieldKeys]);
+  const templateHasOutputField = (key: ContractTemplateOutputFieldKey) => (
+    templateOutputFieldKeys.includes(key)
+  );
   const initialContext = findInitialContext(projects, initialEngagementId);
   const initialProjectId = findProjectIdForDraft(existingDraft)
     || String(initialContext?.project.cooperationProjectId ?? initialContext?.project.projectId ?? initialContext?.project.id ?? '');
@@ -237,7 +249,13 @@ export function ContractBuilderPage({
     draftModel?.creatorHandle ?? initialContext?.reference.handle,
     draftModel?.creatorPlatform ?? initialContext?.reference.platform,
   );
-  const initialAccount = defaultContractPayoutAccount(initialCreator);
+  const initialEligibleAccounts = eligibleContractPayoutAccounts(initialCreator).filter((account) => (
+    supportedPayoutProviders.includes(account.provider as ContractGenerationModel['payoutProvider'])
+  ));
+  const profileDefaultAccount = defaultContractPayoutAccount(initialCreator);
+  const initialAccount = initialEligibleAccounts.find((account) => account.id === profileDefaultAccount?.id)
+    ?? initialEligibleAccounts[0]
+    ?? null;
   const initialPublishingChannels = contractPublishingChannelsForCreator(initialCreator, draftModel)
     .sort((left, right) => (
       Number(right.socialAccountId === initialSocialAccount?.id)
@@ -327,7 +345,9 @@ export function ContractBuilderPage({
     reference.creatorId === creatorId && reference.status !== 'removed'
   ));
   const selectedContext = selectedProject && selectedReference ? { project: selectedProject, reference: selectedReference } : null;
-  const eligibleAccounts = eligibleContractPayoutAccounts(selectedCreator);
+  const eligibleAccounts = eligibleContractPayoutAccounts(selectedCreator).filter((account) => (
+    supportedPayoutProviders.includes(account.provider as ContractGenerationModel['payoutProvider'])
+  ));
   const selectedAccount = eligibleAccounts.find((account) => (
     account.id === payoutAccountId || getPayoutAccountId(account) === payoutAccountId
   )) ?? null;
@@ -378,6 +398,7 @@ export function ContractBuilderPage({
   const model = useMemo<ContractGenerationModel>(() => ({
     templateId: 'CON-TPL-2026-KOL',
     templateFieldPolicies: { ...templateFieldPolicies },
+    templateOutputFieldKeys: [...templateOutputFieldKeys],
     templateManualFieldValues: cloneTemplateManualValues(templateManualFieldValues),
     contractName,
     contractType,
@@ -470,6 +491,7 @@ export function ContractBuilderPage({
     selectedCreator,
     selectedSocialAccount,
     templateFieldPolicies,
+    templateOutputFieldKeys,
     templateManualFieldValues,
     totalFee,
   ]);
@@ -648,14 +670,20 @@ export function ContractBuilderPage({
   const selectCreator = (value: string) => {
     const creator = creators.find((item) => item.id === value) ?? null;
     const socialAccount = resolveCreatorSocialAccount(creator);
-    const account = defaultContractPayoutAccount(creator);
+    const supportedAccounts = eligibleContractPayoutAccounts(creator).filter((candidate) => (
+      supportedPayoutProviders.includes(candidate.provider as ContractGenerationModel['payoutProvider'])
+    ));
+    const defaultAccount = defaultContractPayoutAccount(creator);
+    const account = supportedAccounts.find((candidate) => candidate.id === defaultAccount?.id)
+      ?? supportedAccounts[0]
+      ?? null;
     setCreatorId(creator?.id ?? '');
     setCreatorSocialAccountId(socialAccount?.id ?? '');
     const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === creator?.id && reference.status !== 'removed');
     setEngagementId(currentProjectReference?.engagementId ?? '');
     if (selectedProject) setProjectName(selectedProject.name);
     setPromotedProduct('');
-    setPayoutAccountId(account?.id ?? '');
+    setPayoutAccountId(account ? getPayoutAccountId(account) : '');
     setPublishingChannels(contractPublishingChannelsForCreator(creator).sort((left, right) => (
       Number(right.socialAccountId === socialAccount?.id)
       - Number(left.socialAccountId === socialAccount?.id)
@@ -899,7 +927,7 @@ export function ContractBuilderPage({
                 />
                 <small>{errors.contractName || '用于合同列表、详情和后续签署文件匹配'}</small>
               </label>
-              {templateFieldPolicies.advertiser !== 'OMIT' ? (
+              {templateHasOutputField('advertiser') && templateFieldPolicies.advertiser !== 'OMIT' ? (
                 <label className={errors.advertiser ? 'has-error' : ''} data-contract-field="signature" {...fieldProps('signature')}>
                   <span>Advertiser *</span>
                   <input
@@ -911,7 +939,7 @@ export function ContractBuilderPage({
                   <small>{errors.advertiser || (templateFieldPolicies.advertiser === 'SYSTEM' ? '系统组织信息' : '仅写入本次合同快照')}</small>
                 </label>
               ) : null}
-              {templateFieldPolicies.publisher !== 'OMIT' ? (
+              {templateHasOutputField('publisher') && templateFieldPolicies.publisher !== 'OMIT' ? (
                 <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}>
                   <span>Publisher（real name）*</span>
                   <input
@@ -924,7 +952,7 @@ export function ContractBuilderPage({
                 </label>
               ) : null}
               <label className={errors.channelName ? 'has-error' : ''} data-contract-field="channelName" {...fieldProps('channelName')}><span>发布频道名称</span><input value={channelName} readOnly /><small>{errors.channelName}</small></label>
-              {templateFieldPolicies.channel !== 'OMIT' ? <div
+              {templateHasOutputField('channel') && templateFieldPolicies.channel !== 'OMIT' ? <div
                 className={`contract-publishing-channels full-width ${errors.platform || errors.channelUrl ? 'has-error' : ''}`}
                 data-contract-field="platform"
                 onFocus={() => setActiveField('platform')}
@@ -1005,12 +1033,12 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <label className="full-width" data-contract-field="projectName" {...fieldProps('projectName')}><span>Project Name</span><input value={projectName} onChange={(event) => { setProjectName(event.target.value); resetOutput(); }} /></label>
               <label className={errors.effectiveDate ? 'has-error' : ''} data-contract-field="effectiveDate" {...fieldProps('effectiveDate')}><span>生效日期</span><input type="date" value={effectiveDate} onChange={(event) => { setEffectiveDate(event.target.value); resetOutput(); }} /><small>{errors.effectiveDate}</small></label>
-              {templateFieldPolicies.campaignPeriod === 'MANUAL' ? (
+              {templateHasOutputField('campaignPeriod') && templateFieldPolicies.campaignPeriod === 'MANUAL' ? (
                 <>
                   <label className={errors.campaignStart ? 'has-error' : ''} data-contract-field="campaignStart" {...fieldProps('campaignPeriod')}><span>Campaign Start *</span><input type="date" value={manualCampaignPeriod.startDate} onChange={(event) => updateManualCampaignPeriod('startDate', event.target.value)} /><small>{errors.campaignStart}</small></label>
                   <label className={errors.campaignEnd ? 'has-error' : ''} data-contract-field="campaignEnd" {...fieldProps('campaignPeriod')}><span>Campaign End *</span><input type="date" value={manualCampaignPeriod.endDate} onChange={(event) => updateManualCampaignPeriod('endDate', event.target.value)} /><small>{errors.campaignEnd}</small></label>
                 </>
-              ) : templateFieldPolicies.campaignPeriod === 'SYSTEM' ? (
+              ) : templateHasOutputField('campaignPeriod') && templateFieldPolicies.campaignPeriod === 'SYSTEM' ? (
                 <div className="contract-template-source-missing full-width" data-contract-field="campaignStart" role="note">
                   <AlertTriangle size={16} />
                   <span><strong>Campaign Period 系统来源缺失</strong><small>当前项目模型没有开始/结束日期字段，正式生成前请在模板中改为“生成时人工填写”或补充项目周期数据。</small></span>
@@ -1092,7 +1120,9 @@ export function ContractBuilderPage({
               {selectedAccount ? (() => {
                 const providerGroup = payoutProvider === 'PayPal' ? 'PAYPAL' : 'BANK';
                 const manualFields = CONTRACT_TEMPLATE_OUTPUT_FIELDS.filter((field) => (
-                  field.group === providerGroup && templateFieldPolicies[field.key] === 'MANUAL'
+                  field.group === providerGroup
+                  && templateHasOutputField(field.key)
+                  && templateFieldPolicies[field.key] === 'MANUAL'
                 ));
                 if (!manualFields.length) return null;
                 return (

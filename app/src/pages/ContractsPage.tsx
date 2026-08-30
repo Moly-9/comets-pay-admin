@@ -339,6 +339,7 @@ export function ContractsPage({
   onUploadContract,
   onBindFrameworkContract,
   onCreateContract,
+  createContractDisabledReason,
   onEditDraft,
   onUpdateContract,
   onDeleteContracts,
@@ -360,6 +361,7 @@ export function ContractsPage({
   onUploadContract?: (input: ContractUploadInput) => ContractRecord;
   onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onCreateContract?: () => void;
+  createContractDisabledReason?: string;
   onEditDraft?: (contractId: string) => void;
   onUpdateContract: (contract: ContractRecord) => void;
   onDeleteContracts: (contractIds: string[]) => number;
@@ -589,7 +591,13 @@ export function ContractsPage({
         actions={canUpload ? (
           <div className="page-heading-actions">
             {onCreateContract
-              ? <Button variant="secondary" icon={<FilePlus2 size={17} />} onClick={onCreateContract}>生成合同</Button>
+              ? <Button
+                  variant="secondary"
+                  icon={<FilePlus2 size={17} />}
+                  disabled={Boolean(createContractDisabledReason)}
+                  disabledReason={createContractDisabledReason}
+                  onClick={onCreateContract}
+                >生成合同</Button>
               : null}
             <Button icon={<Upload size={17} />} onClick={() => setUploadOpen(true)}>上传合同</Button>
           </div>

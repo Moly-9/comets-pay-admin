@@ -143,7 +143,7 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(styles).toMatch(/\.contract-detail-page \.page-heading-actions\s*{[^}]*grid-template-columns:\s*1fr 1fr;/s);
   });
 
-  it('renders the template-only cards and 14-field editor without ordinary contract controls', () => {
+  it('renders template-only cards and the paged field editor without ordinary contract controls', () => {
     const template = { ...INITIAL_CONTRACTS[1], uploadedByAccount: undefined } satisfies ContractRecord;
     const html = renderToStaticMarkup(
       <ContractDetailPage
@@ -160,10 +160,17 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(html).not.toContain('合同详情分类');
     expect(html).toContain('下载当前文件');
     expect(html).toContain('合同编辑器');
-    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(14);
-    expect((html.match(/系统自动带入/g) ?? [])).toHaveLength(14);
-    expect((html.match(/生成时人工填写/g) ?? [])).toHaveLength(14);
-    expect((html.match(/不生成/g) ?? [])).toHaveLength(14);
+    expect((html.match(/role="tab"/g) ?? [])).toHaveLength(3);
+    expect(html).toContain('通用字段');
+    expect(html).toContain('银行转账字段');
+    expect(html).toContain('PayPal 字段');
+    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(4);
+    expect((html.match(/>系统自动带入</g) ?? [])).toHaveLength(4);
+    expect((html.match(/>生成时人工填写</g) ?? [])).toHaveLength(4);
+    expect((html.match(/>不生成</g) ?? [])).toHaveLength(4);
+    expect((html.match(/>删除字段</g) ?? [])).toHaveLength(4);
+    expect(html).toContain('已启动');
+    expect(html).toContain('停用模板');
     expect(html).toContain('系统内置');
     expect(html.indexOf('合同类型')).toBeLessThan(html.indexOf('使用就绪度'));
     expect(html.indexOf('使用就绪度')).toBeLessThan(html.indexOf('上传者'));

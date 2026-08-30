@@ -10,12 +10,15 @@ import {
 import type { CreatorProfile } from '../types';
 import { ContractDetailPage } from './ContractDetailPage';
 import type { ProjectSummary } from './ProjectDetailPage';
-import { getContractTemplatePolicyReadiness } from '../contractTemplateFieldPolicies';
+import {
+  getContractTemplatePolicyReadiness,
+  getContractTemplateStatus,
+} from '../contractTemplateFieldPolicies';
 
 type Notify = (title: string, message: string) => void;
 
 const templateReadinessFor = (contract: ContractRecord) => (
-  getContractTemplatePolicyReadiness(contract.templateFieldPolicies)
+  getContractTemplatePolicyReadiness(contract.templateFieldPolicies, contract.templateOutputFieldKeys)
 );
 
 export function SystemConfigurationPage({
@@ -111,6 +114,7 @@ export function SystemConfigurationPage({
                 <th>模板名称</th>
                 <th>合同类型</th>
                 <th className="contract-date-cell">更新日期</th>
+                <th>模板状态</th>
                 <th>使用就绪度</th>
                 <th className="action-cell">操作</th>
               </tr>
@@ -118,6 +122,7 @@ export function SystemConfigurationPage({
             <tbody>
               {pageItems.map((template) => {
                 const readiness = templateReadinessFor(template);
+                const templateStatus = getContractTemplateStatus(template);
                 const stableId = template.contractId ?? template.id;
                 return (
                   <tr className="clickable-table-row" key={stableId} onClick={() => setSelectedTemplateId(stableId)}>
@@ -134,6 +139,11 @@ export function SystemConfigurationPage({
                     </td>
                     <td className="contract-date-cell">{template.updated}</td>
                     <td>
+                      <span className={`contract-template-list-status is-${templateStatus.toLowerCase()}`}>
+                        <i />{templateStatus === 'ACTIVE' ? '已启动' : '已停用'}
+                      </span>
+                    </td>
+                    <td>
                       <span className={`contract-readiness contract-readiness-${readiness.ready ? 'ready' : 'attention'}`}>
                         <i />{readiness.label}
                       </span>
@@ -144,7 +154,7 @@ export function SystemConfigurationPage({
                   </tr>
                 );
               })}
-              {!pageItems.length ? <tr><td className="request-project-empty" colSpan={5}>暂无符合条件的合同模板</td></tr> : null}
+              {!pageItems.length ? <tr><td className="request-project-empty" colSpan={6}>暂无符合条件的合同模板</td></tr> : null}
             </tbody>
           </table>
         </div>

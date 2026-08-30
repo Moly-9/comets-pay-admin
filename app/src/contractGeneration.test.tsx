@@ -18,7 +18,10 @@ import {
   createContractQualityReport,
   replaceContractPlaceholders,
 } from './contractTemplate';
-import { DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES } from './contractTemplateFieldPolicies';
+import {
+  ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
+  DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+} from './contractTemplateFieldPolicies';
 
 const toArrayBuffer = (buffer: Buffer) => (
   buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
@@ -332,7 +335,7 @@ describe('contract generation', () => {
     }
   }, 60_000);
 
-  it('keeps manual bank values and omitted rows identical across PDF and DOCX output', async () => {
+  it('keeps manual values and structurally deleted rows identical across PDF and DOCX output', async () => {
     const configured: ContractGenerationModel = {
       ...model,
       templateFieldPolicies: {
@@ -341,8 +344,10 @@ describe('contract generation', () => {
         accountName: 'MANUAL',
         accountNumber: 'OMIT',
         iban: 'MANUAL',
-        remittanceInformation: 'OMIT',
       },
+      templateOutputFieldKeys: ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => (
+        key !== 'remittanceInformation'
+      )),
       templateManualFieldValues: {
         accountName: 'Document-only Beneficiary',
         iban: 'MANUAL-IBAN-2026',
@@ -364,6 +369,7 @@ describe('contract generation', () => {
       expect(output).toContain('MANUAL-IBAN-2026');
       expect(output).not.toContain('0000001234');
       expect(output).not.toContain('Remittance Information (optional)');
+      expect(output).not.toContain('Synthetic test only');
     });
     expect(model.paymentSnapshot.accountName).toBe('Sample Creator Limited');
   }, 60_000);

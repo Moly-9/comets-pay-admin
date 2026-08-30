@@ -139,6 +139,8 @@ export type ContractTemplateOutputFieldKey =
 
 export type ContractTemplateFieldMode = 'SYSTEM' | 'MANUAL' | 'OMIT';
 
+export type ContractTemplateStatus = 'ACTIVE' | 'INACTIVE';
+
 export type ContractTemplateFieldPolicyMap = Record<
   ContractTemplateOutputFieldKey,
   ContractTemplateFieldMode
@@ -206,6 +208,8 @@ export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
   /** Frozen when the generation draft is created so later template edits do not alter history. */
   templateFieldPolicies?: ContractTemplateFieldPolicyMap;
+  /** Frozen structural field list. Missing means every catalog field for legacy drafts. */
+  templateOutputFieldKeys?: ContractTemplateOutputFieldKey[];
   /** Document-only values. These never update the creator's verified payout account. */
   templateManualFieldValues?: Partial<ContractTemplateManualFieldValueMap>;
   contractName: string;
@@ -274,8 +278,12 @@ export type ContractRecord = {
   documentNote?: string;
   pageCount?: number;
   isTemplate: boolean;
+  /** Missing means ACTIVE for backward compatibility with existing templates. */
+  templateStatus?: ContractTemplateStatus;
   /** Template-level generation policy. Older templates are migrated through the default resolver. */
   templateFieldPolicies?: Partial<ContractTemplateFieldPolicyMap>;
+  /** Structural field membership. Missing means every catalog field for older templates. */
+  templateOutputFieldKeys?: ContractTemplateOutputFieldKey[];
   project: string;
   brand: string;
   advertiser: string;
@@ -627,6 +635,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     documentUrl: TEMPLATE_DOCUMENT_URL,
     pageCount: 16,
     isTemplate: true,
+    templateStatus: 'ACTIVE',
     project: '待关联',
     brand: 'Comets International Limited',
     advertiser: 'Comets International Limited',
@@ -914,6 +923,9 @@ export const createGeneratedContractDraft = (
       publishingChannels: model.publishingChannels.map((channel) => ({ ...channel })),
       paymentSnapshot: { ...model.paymentSnapshot },
       templateFieldPolicies: model.templateFieldPolicies ? { ...model.templateFieldPolicies } : undefined,
+      templateOutputFieldKeys: model.templateOutputFieldKeys
+        ? [...model.templateOutputFieldKeys]
+        : undefined,
       templateManualFieldValues: model.templateManualFieldValues ? {
         ...model.templateManualFieldValues,
         channel: model.templateManualFieldValues.channel ? {

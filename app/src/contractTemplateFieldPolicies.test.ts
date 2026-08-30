@@ -3,14 +3,19 @@ import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import { createGeneratedContractDraft, INITIAL_CONTRACTS, type ContractGenerationModel } from './contracts';
 import {
   CONTRACT_TEMPLATE_OUTPUT_FIELDS,
+  ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
   DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
   contractTemplateOutputFieldApplies,
   contractTemplatePoliciesAreDirty,
   createContractTemplatePolicyUpdate,
+  createContractTemplateStatusUpdate,
+  getContractTemplateStatus,
   getContractTemplatePolicyReadiness,
+  getContractTemplateSupportedPayoutProviders,
   hasManualPayoutDocumentDifferences,
   resolveContractTemplateFieldPolicies,
   resolveContractTemplateOutput,
+  resolveContractTemplateOutputFieldKeys,
   validateContractTemplateFieldPolicies,
 } from './contractTemplateFieldPolicies';
 
@@ -89,6 +94,9 @@ describe('contract template field policies', () => {
     expect(resolved.remittanceInformation).toBe('SYSTEM');
     expect(resolved.transferNote).toBe('SYSTEM');
     expect(Object.values(resolved).filter((mode) => mode === 'SYSTEM')).toHaveLength(13);
+    expect(resolveContractTemplateOutputFieldKeys()).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
+    expect(getContractTemplateStatus({})).toBe('ACTIVE');
+    expect(getContractTemplateStatus(INITIAL_CONTRACTS[1])).toBe('ACTIVE');
   });
 
   it('resolves system, manual and omitted values through one output snapshot', () => {
@@ -127,6 +135,14 @@ describe('contract template field policies', () => {
     expect(contractTemplateOutputFieldApplies('paypalEmailAddress', 'PayPal')).toBe(true);
     expect(contractTemplateOutputFieldApplies('paypalEmailAddress', 'Airwallex')).toBe(false);
     expect(contractTemplateOutputFieldApplies('publisher', 'PayPal')).toBe(true);
+    expect(getContractTemplateSupportedPayoutProviders(
+      DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+      ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => !key.startsWith('paypal') && key !== 'transferNote'),
+    )).toEqual(['Airwallex']);
+    expect(getContractTemplateSupportedPayoutProviders(
+      DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+      ['advertiser', 'publisher', 'channel', 'campaignPeriod', 'paypalUsername', 'paypalEmailAddress'],
+    )).toEqual(['PayPal']);
   });
 
   it('enforces the Account Number / IBAN alternative at template level', () => {
@@ -146,13 +162,20 @@ describe('contract template field policies', () => {
   it('marks omitted inline fields as not ready while allowing a valid update to be saved', () => {
     const omittedPublisher = { ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, publisher: 'OMIT' as const };
     const readiness = getContractTemplatePolicyReadiness(omittedPublisher);
-    const update = createContractTemplatePolicyUpdate(INITIAL_CONTRACTS[1], omittedPublisher, '2026-08-30');
+    const update = createContractTemplatePolicyUpdate(
+      { ...INITIAL_CONTRACTS[1], templateStatus: 'INACTIVE' },
+      omittedPublisher,
+      ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
+      { updated: '2026-08-30' },
+    );
 
     expect(readiness.ready).toBe(false);
     expect(readiness.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'required-inline-omitted-publisher' }),
+      expect.objectContaining({ id: 'required-inline-missing-publisher' }),
     ]));
-    expect(update.issues).toEqual([]);
+    expect(update.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'required-inline-missing-publisher' }),
+    ]));
     expect(update.contract?.updated).toBe('2026-08-30');
     expect(update.contract?.templateFieldPolicies?.publisher).toBe('OMIT');
     expect(contractTemplatePoliciesAreDirty(DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, omittedPublisher)).toBe(true);
@@ -167,6 +190,7 @@ describe('contract template field policies', () => {
       accountName: 'MANUAL',
     };
     source.templateManualFieldValues = { accountName: 'Document-only Account Name' };
+    source.templateOutputFieldKeys = ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => key !== 'transferNote');
 
     const record = createGeneratedContractDraft(source);
     source.templateFieldPolicies.accountName = 'SYSTEM';
@@ -176,6 +200,57 @@ describe('contract template field policies', () => {
     expect(record.paymentSnapshot?.accountName).toBe('Document-only Account Name');
     expect(record.generationSnapshot?.paymentSnapshot.accountName).toBe('System Account Name');
     expect(record.generationSnapshot?.templateFieldPolicies?.accountName).toBe('MANUAL');
+    expect(record.generationSnapshot?.templateOutputFieldKeys).not.toContain('transferNote');
     expect(record.generationSnapshot?.templateManualFieldValues?.accountName).toBe('Document-only Account Name');
+  });
+
+  it('removes structural fields from output while preserving their stored policy for re-adding', () => {
+    const source = model();
+    source.templateFieldPolicies = { ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, transferNote: 'MANUAL' };
+    source.templateManualFieldValues = { transferNote: 'Document-only transfer note' };
+    source.templateOutputFieldKeys = ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => key !== 'transferNote');
+
+    const removed = resolveContractTemplateOutput(source);
+    const restored = resolveContractTemplateOutput({
+      ...source,
+      templateOutputFieldKeys: [...source.templateOutputFieldKeys, 'transferNote'],
+    });
+
+    expect(removed.values.transferNote).toBe('');
+    expect(removed.policies.transferNote).toBe('MANUAL');
+    expect(restored.values.transferNote).toBe('Document-only transfer note');
+  });
+
+  it('allows one payout method to close, but requires at least one supported method', () => {
+    const commonAndBank = ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => (
+      !['paypalUsername', 'paypalEmailAddress', 'transferNote'].includes(key)
+    ));
+    const commonOnly = ['advertiser', 'publisher', 'channel', 'campaignPeriod'] as const;
+
+    expect(getContractTemplatePolicyReadiness(DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, commonAndBank).ready).toBe(true);
+    expect(getContractTemplatePolicyReadiness(DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, commonOnly).blockers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'payout-provider-missing' })]),
+    );
+    expect(resolveContractTemplateOutputFieldKeys([])).toEqual([]);
+  });
+
+  it('blocks invalid activation and auto-deactivates an active template when invalid changes are saved', () => {
+    const invalidKeys = ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => key !== 'publisher');
+    const activation = createContractTemplateStatusUpdate({
+      ...INITIAL_CONTRACTS[1],
+      templateStatus: 'INACTIVE',
+      templateOutputFieldKeys: invalidKeys,
+    }, 'ACTIVE');
+    const save = createContractTemplatePolicyUpdate(
+      { ...INITIAL_CONTRACTS[1], templateStatus: 'ACTIVE' },
+      DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+      invalidKeys,
+      { deactivateIfInvalid: true, updated: '2026-08-30' },
+    );
+
+    expect(activation.contract).toBeUndefined();
+    expect(activation.issues[0]?.groupKeys).toContain('COMMON');
+    expect(save.autoDeactivated).toBe(true);
+    expect(save.contract.templateStatus).toBe('INACTIVE');
   });
 });

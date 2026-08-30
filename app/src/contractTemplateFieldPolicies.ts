@@ -6,6 +6,7 @@ import type {
   ContractTemplateFieldPolicyMap,
   ContractTemplateManualFieldValueMap,
   ContractTemplateOutputFieldKey,
+  ContractTemplateStatus,
 } from './contracts';
 
 export type ContractTemplateFieldGroupKey = 'COMMON' | 'BANK' | 'PAYPAL';
@@ -55,6 +56,13 @@ export const CONTRACT_TEMPLATE_FIELD_GROUPS: Array<{
   { key: 'PAYPAL', label: 'PayPal 字段', description: '选择 PayPal 账户时生效' },
 ];
 
+export const ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS = CONTRACT_TEMPLATE_OUTPUT_FIELDS
+  .map((field) => field.key);
+
+const VALID_OUTPUT_FIELD_KEYS = new Set<ContractTemplateOutputFieldKey>(
+  ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
+);
+
 export const DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES: ContractTemplateFieldPolicyMap = {
   advertiser: 'SYSTEM',
   publisher: 'SYSTEM',
@@ -74,6 +82,18 @@ export const DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES: ContractTemplateFieldPoli
 
 const VALID_FIELD_MODES = new Set<ContractTemplateFieldMode>(['SYSTEM', 'MANUAL', 'OMIT']);
 
+export const resolveContractTemplateOutputFieldKeys = (
+  fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
+): ContractTemplateOutputFieldKey[] => {
+  if (fieldKeys == null) return [...ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS];
+  const requested = new Set(fieldKeys.filter((key) => VALID_OUTPUT_FIELD_KEYS.has(key)));
+  return ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => requested.has(key));
+};
+
+export const getContractTemplateStatus = (
+  contract: Pick<ContractRecord, 'templateStatus'>,
+): ContractTemplateStatus => contract.templateStatus ?? 'ACTIVE';
+
 export const resolveContractTemplateFieldPolicies = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
 ): ContractTemplateFieldPolicyMap => {
@@ -88,69 +108,183 @@ export const resolveContractTemplateFieldPolicies = (
 export type ContractTemplatePolicyIssue = {
   id: string;
   fieldKeys: ContractTemplateOutputFieldKey[];
+  groupKeys: ContractTemplateFieldGroupKey[];
   message: string;
 };
 
 export const validateContractTemplateFieldPolicies = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
+  fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
 ): ContractTemplatePolicyIssue[] => {
   const resolved = resolveContractTemplateFieldPolicies(policies);
+  const activeFields = new Set(resolveContractTemplateOutputFieldKeys(fieldKeys));
   const issues: ContractTemplatePolicyIssue[] = [];
-  if (resolved.accountNumber === 'OMIT' && resolved.iban === 'OMIT') {
+
+  const usable = (key: ContractTemplateOutputFieldKey) => (
+    activeFields.has(key) && resolved[key] !== 'OMIT'
+  );
+  const groupFields = (group: ContractTemplateFieldGroupKey) => (
+    CONTRACT_TEMPLATE_OUTPUT_FIELDS.filter((field) => field.group === group)
+  );
+  const groupEnabled = (group: ContractTemplateFieldGroupKey) => (
+    groupFields(group).some((field) => activeFields.has(field.key))
+  );
+
+  CONTRACT_TEMPLATE_OUTPUT_FIELDS
+    .filter((field) => field.requiredInline && !usable(field.key))
+    .forEach((field) => {
+      issues.push({
+        id: `required-inline-missing-${field.key}`,
+        fieldKeys: [field.key],
+        groupKeys: [field.group],
+        message: `${field.label} 出现在合同正文中，必须保留且不能设为“不生成”。`,
+      });
+    });
+
+  const bankEnabled = groupEnabled('BANK');
+  const paypalEnabled = groupEnabled('PAYPAL');
+  if (!bankEnabled && !paypalEnabled) {
+    issues.push({
+      id: 'payout-provider-missing',
+      fieldKeys: [],
+      groupKeys: ['BANK', 'PAYPAL'],
+      message: '银行转账与 PayPal 至少启用一种付款方式。',
+    });
+  }
+
+  if (bankEnabled && !usable('accountName')) {
+    issues.push({
+      id: 'bank-account-name-missing',
+      fieldKeys: ['accountName'],
+      groupKeys: ['BANK'],
+      message: '启用银行转账时必须保留 Account Name，且不能设为“不生成”。',
+    });
+  }
+  if (bankEnabled && !usable('beneficiaryBankName')) {
+    issues.push({
+      id: 'bank-name-missing',
+      fieldKeys: ['beneficiaryBankName'],
+      groupKeys: ['BANK'],
+      message: '启用银行转账时必须保留 Beneficiary Bank Name，且不能设为“不生成”。',
+    });
+  }
+  if (bankEnabled && !usable('accountNumber') && !usable('iban')) {
     issues.push({
       id: 'bank-account-locator-omitted',
       fieldKeys: ['accountNumber', 'iban'],
-      message: 'Account Number 与 IBAN 至少保留一项，不能同时设为“不生成”。',
+      groupKeys: ['BANK'],
+      message: '启用银行转账时，Account Number 与 IBAN 至少保留一项，且不能同时设为“不生成”。',
+    });
+  }
+  if (paypalEnabled && !usable('paypalUsername')) {
+    issues.push({
+      id: 'paypal-username-missing',
+      fieldKeys: ['paypalUsername'],
+      groupKeys: ['PAYPAL'],
+      message: '启用 PayPal 时必须保留 PayPal Username，且不能设为“不生成”。',
+    });
+  }
+  if (paypalEnabled && !usable('paypalEmailAddress')) {
+    issues.push({
+      id: 'paypal-email-missing',
+      fieldKeys: ['paypalEmailAddress'],
+      groupKeys: ['PAYPAL'],
+      message: '启用 PayPal 时必须保留 PayPal Email Address，且不能设为“不生成”。',
     });
   }
   return issues;
 };
 
-export const contractTemplatePolicySignature = (
+export const contractTemplateConfigurationSignature = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
-) => JSON.stringify(resolveContractTemplateFieldPolicies(policies));
+  fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
+) => JSON.stringify({
+  policies: resolveContractTemplateFieldPolicies(policies),
+  fieldKeys: resolveContractTemplateOutputFieldKeys(fieldKeys),
+});
 
 export const contractTemplatePoliciesAreDirty = (
   saved?: Partial<ContractTemplateFieldPolicyMap> | null,
   draft?: Partial<ContractTemplateFieldPolicyMap> | null,
-) => contractTemplatePolicySignature(saved) !== contractTemplatePolicySignature(draft);
+  savedFieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
+  draftFieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
+) => contractTemplateConfigurationSignature(saved, savedFieldKeys)
+  !== contractTemplateConfigurationSignature(draft, draftFieldKeys);
 
 export const createContractTemplatePolicyUpdate = (
   contract: ContractRecord,
   policies: Partial<ContractTemplateFieldPolicyMap>,
-  updated = new Intl.DateTimeFormat('en-CA').format(new Date()),
-): { contract?: ContractRecord; issues: ContractTemplatePolicyIssue[] } => {
+  fieldKeys: readonly ContractTemplateOutputFieldKey[],
+  options: {
+    deactivateIfInvalid?: boolean;
+    updated?: string;
+  } = {},
+): { contract: ContractRecord; issues: ContractTemplatePolicyIssue[]; autoDeactivated: boolean } => {
   const resolved = resolveContractTemplateFieldPolicies(policies);
-  const issues = validateContractTemplateFieldPolicies(resolved);
-  if (issues.length) return { issues };
+  const resolvedFieldKeys = resolveContractTemplateOutputFieldKeys(fieldKeys);
+  const issues = validateContractTemplateFieldPolicies(resolved, resolvedFieldKeys);
+  const autoDeactivated = Boolean(
+    issues.length
+    && options.deactivateIfInvalid
+    && getContractTemplateStatus(contract) === 'ACTIVE'
+  );
   return {
-    issues: [],
+    issues,
+    autoDeactivated,
     contract: {
       ...contract,
       templateFieldPolicies: resolved,
-      updated,
+      templateOutputFieldKeys: resolvedFieldKeys,
+      templateStatus: autoDeactivated ? 'INACTIVE' : getContractTemplateStatus(contract),
+      updated: options.updated ?? new Intl.DateTimeFormat('en-CA').format(new Date()),
     },
   };
 };
 
 export const getContractTemplatePolicyReadiness = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
+  fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
 ) => {
   const resolved = resolveContractTemplateFieldPolicies(policies);
-  const blockers = [
-    ...validateContractTemplateFieldPolicies(resolved),
-    ...CONTRACT_TEMPLATE_OUTPUT_FIELDS
-      .filter((field) => field.requiredInline && resolved[field.key] === 'OMIT')
-      .map((field) => ({
-        id: `required-inline-omitted-${field.key}`,
-        fieldKeys: [field.key],
-        message: `${field.label} 出现在合同正文中，设为“不生成”会阻止正式文件生成。`,
-      } satisfies ContractTemplatePolicyIssue)),
-  ];
+  const blockers = validateContractTemplateFieldPolicies(resolved, fieldKeys);
   return {
     ready: blockers.length === 0,
     label: blockers.length === 0 ? '可使用' : '待完善',
     blockers,
+  };
+};
+
+export const getContractTemplateSupportedPayoutProviders = (
+  policies?: Partial<ContractTemplateFieldPolicyMap> | null,
+  fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
+): Array<ContractGenerationModel['payoutProvider']> => {
+  const resolved = resolveContractTemplateFieldPolicies(policies);
+  const activeFields = new Set(resolveContractTemplateOutputFieldKeys(fieldKeys));
+  const providers: Array<ContractGenerationModel['payoutProvider']> = [];
+  if (CONTRACT_TEMPLATE_OUTPUT_FIELDS.some((field) => (
+    field.group === 'BANK' && activeFields.has(field.key) && resolved[field.key] !== 'OMIT'
+  ))) providers.push('Airwallex');
+  if (CONTRACT_TEMPLATE_OUTPUT_FIELDS.some((field) => (
+    field.group === 'PAYPAL' && activeFields.has(field.key) && resolved[field.key] !== 'OMIT'
+  ))) providers.push('PayPal');
+  return providers;
+};
+
+export const createContractTemplateStatusUpdate = (
+  contract: ContractRecord,
+  status: ContractTemplateStatus,
+  updated = new Intl.DateTimeFormat('en-CA').format(new Date()),
+): { contract?: ContractRecord; issues: ContractTemplatePolicyIssue[] } => {
+  const issues = status === 'ACTIVE'
+    ? validateContractTemplateFieldPolicies(
+      contract.templateFieldPolicies,
+      contract.templateOutputFieldKeys,
+    )
+    : [];
+  if (issues.length) return { issues };
+  return {
+    issues: [],
+    contract: { ...contract, templateStatus: status, updated },
   };
 };
 
@@ -200,6 +334,7 @@ const manualScalarValue = (
 
 export type ResolvedContractTemplateOutput = {
   policies: ContractTemplateFieldPolicyMap;
+  outputFieldKeys: ContractTemplateOutputFieldKey[];
   values: Record<ContractTemplateOutputFieldKey, string>;
   publishingChannels: ContractPublishingChannel[];
   campaignStart: string;
@@ -211,13 +346,15 @@ export const resolveContractTemplateOutput = (
   model: ContractGenerationModel,
 ): ResolvedContractTemplateOutput => {
   const policies = resolveContractTemplateFieldPolicies(model.templateFieldPolicies);
+  const outputFieldKeys = resolveContractTemplateOutputFieldKeys(model.templateOutputFieldKeys);
+  const activeFields = new Set(outputFieldKeys);
   const manualValues = model.templateManualFieldValues;
   const useLegacyFallback = !model.templateFieldPolicies && !manualValues;
   const systemScalars = scalarSystemValues(model);
   const values = {} as Record<ContractTemplateOutputFieldKey, string>;
 
   (Object.keys(systemScalars) as Array<keyof typeof systemScalars>).forEach((key) => {
-    const mode = policies[key];
+    const mode = activeFields.has(key) ? policies[key] : 'OMIT';
     values[key] = mode === 'OMIT'
       ? ''
       : mode === 'MANUAL'
@@ -227,9 +364,10 @@ export const resolveContractTemplateOutput = (
 
   const systemChannels = systemPublishingChannels(model);
   const manualChannels = manualValues?.channel?.publishingChannels;
-  const publishingChannels = policies.channel === 'OMIT'
+  const channelMode = activeFields.has('channel') ? policies.channel : 'OMIT';
+  const publishingChannels = channelMode === 'OMIT'
     ? []
-    : policies.channel === 'MANUAL'
+    : channelMode === 'MANUAL'
       ? (manualChannels ?? (useLegacyFallback ? systemChannels : [])).map((channel) => ({ ...channel }))
       : systemChannels;
   values.channel = publishingChannels
@@ -242,14 +380,15 @@ export const resolveContractTemplateOutput = (
     .join('\n');
 
   const manualPeriod = manualValues?.campaignPeriod;
-  const campaignStart = policies.campaignPeriod === 'OMIT'
+  const campaignPeriodMode = activeFields.has('campaignPeriod') ? policies.campaignPeriod : 'OMIT';
+  const campaignStart = campaignPeriodMode === 'OMIT'
     ? ''
-    : policies.campaignPeriod === 'MANUAL'
+    : campaignPeriodMode === 'MANUAL'
       ? manualPeriod?.startDate ?? (useLegacyFallback ? model.campaignStart : '')
       : model.campaignStart;
-  const campaignEnd = policies.campaignPeriod === 'OMIT'
+  const campaignEnd = campaignPeriodMode === 'OMIT'
     ? ''
-    : policies.campaignPeriod === 'MANUAL'
+    : campaignPeriodMode === 'MANUAL'
       ? manualPeriod?.endDate ?? (useLegacyFallback ? model.campaignEnd : '')
       : model.campaignEnd;
   values.campaignPeriod = [campaignStart, campaignEnd].filter(Boolean).join(' – ');
@@ -259,7 +398,7 @@ export const resolveContractTemplateOutput = (
     accountName: values.accountName,
     accountNumber: values.accountNumber,
     bankName: values.beneficiaryBankName,
-    bankStreetAddress: policies.beneficiaryBankAddress === 'SYSTEM'
+    bankStreetAddress: activeFields.has('beneficiaryBankAddress') && policies.beneficiaryBankAddress === 'SYSTEM'
       ? model.paymentSnapshot.bankStreetAddress
       : values.beneficiaryBankAddress,
     swiftCode: values.swiftCode,
@@ -268,7 +407,7 @@ export const resolveContractTemplateOutput = (
     paypalEmail: values.paypalEmailAddress,
     transferRemarks: model.payoutProvider === 'PayPal' ? values.transferNote : values.remittanceInformation,
   };
-  if (policies.beneficiaryBankAddress !== 'SYSTEM') {
+  if (!activeFields.has('beneficiaryBankAddress') || policies.beneficiaryBankAddress !== 'SYSTEM') {
     paymentSnapshot.bankCity = '';
     paymentSnapshot.bankState = '';
     paymentSnapshot.bankPostalCode = '';
@@ -287,7 +426,7 @@ export const resolveContractTemplateOutput = (
     paymentSnapshot,
   };
 
-  return { policies, values, publishingChannels, campaignStart, campaignEnd, effectiveModel };
+  return { policies, outputFieldKeys, values, publishingChannels, campaignStart, campaignEnd, effectiveModel };
 };
 
 export const contractTemplateOutputFieldApplies = (
@@ -303,13 +442,17 @@ export const contractTemplateOutputFieldApplies = (
 export const isContractTemplateOutputFieldOmitted = (
   model: ContractGenerationModel,
   key: ContractTemplateOutputFieldKey,
-) => resolveContractTemplateFieldPolicies(model.templateFieldPolicies)[key] === 'OMIT';
+) => (
+  !resolveContractTemplateOutputFieldKeys(model.templateOutputFieldKeys).includes(key)
+  || resolveContractTemplateFieldPolicies(model.templateFieldPolicies)[key] === 'OMIT'
+);
 
 export const hasManualPayoutDocumentDifferences = (model: ContractGenerationModel) => {
   const output = resolveContractTemplateOutput(model);
   return CONTRACT_TEMPLATE_OUTPUT_FIELDS.some((field) => (
     (field.group === 'BANK' || field.group === 'PAYPAL')
     && contractTemplateOutputFieldApplies(field.key, model.payoutProvider)
+    && output.outputFieldKeys.includes(field.key)
     && output.policies[field.key] === 'MANUAL'
     && output.values[field.key] !== scalarSystemValues(model)[field.key as keyof ReturnType<typeof scalarSystemValues>]
   ));
