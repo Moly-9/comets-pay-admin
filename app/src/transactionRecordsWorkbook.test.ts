@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Workbook } from 'exceljs';
 import { describe, expect, it } from 'vitest';
 import type { Payout } from './types';
+import type { PaymentBatchRecord } from './paymentBatches';
 import { createTransactionRecords, type TransactionRecord } from './transactionRecords';
 import {
   createTransactionRecordsWorkbook,
@@ -31,13 +32,52 @@ const records: Payout[] = [{
   paidAt: '2026-08-05 16:00',
 }];
 
+const workbookBatch = {
+  paymentBatchId: 'payment-batch-workbook',
+  paymentBatchCode: 'BAT-20260805-001',
+  payer: '财务测试员',
+  paidAt: '2026-08-05 16:00',
+  status: '已付款',
+  provider: 'PayMax',
+  sourceCurrency: 'USD',
+  request: {
+    requestCode: 'REQ-20260805-001',
+    requestStatus: '已付款',
+    reason: '达人合作款',
+    cooperationProjectCode: records[0].projectId,
+    cooperationProjectName: records[0].project,
+  },
+  items: [{
+    payoutId: records[0].id,
+    creatorName: records[0].creator,
+    creatorHandle: records[0].handle,
+    creatorPlatform: records[0].creatorPlatform,
+    legacyInvoiceReference: records[0].invoice,
+    provider: records[0].provider,
+    amount: records[0].amount,
+    currency: records[0].currency,
+    receiveCurrency: records[0].currency,
+    accountSummary: records[0].account,
+    transferMethod: 'Payer Max',
+    feeBearer: '广告主承担',
+    transactionReference: 'TEST-WORKBOOK',
+    paymentListCode: 'PAY-20260805-001',
+    paymentListStatus: 'paid',
+    contracts: [],
+    paymentStatus: '已付款',
+    paidAt: records[0].paidAt,
+    recipientReceivedAmount: records[0].amount,
+    recipientReceivedCurrency: records[0].currency,
+  }],
+} as unknown as PaymentBatchRecord;
+
 describe('transaction records workbook', () => {
   it('fills the supplied template with typed transaction rows', async () => {
     const template = await readFile(templatePath);
     const blob = await createTransactionRecordsWorkbook(template.buffer.slice(
       template.byteOffset,
       template.byteOffset + template.byteLength,
-    ), createTransactionRecords(records, []));
+    ), createTransactionRecords(records, [workbookBatch]));
     const workbook = new Workbook();
     await workbook.xlsx.load(await blob.arrayBuffer());
     const worksheet = workbook.getWorksheet(TRANSACTION_RECORDS_SHEET_NAME);
@@ -69,7 +109,7 @@ describe('transaction records workbook', () => {
     expect(worksheet?.getRow(2).getCell(9).value).toBe('已付款');
     expect(worksheet?.getRow(2).getCell(10).value).toBeNull();
     expect(worksheet?.getRow(2).getCell(11).value).toBe('test-account');
-    expect(worksheet?.getRow(2).getCell(12).value).toBe('历史数据待补全');
+    expect(worksheet?.getRow(2).getCell(12).value).toBe('BAT-20260805-001');
   });
 
   it('creates a stable date-based filename', () => {
@@ -91,6 +131,7 @@ describe('transaction records workbook', () => {
     };
     const failedRecord: TransactionRecord = {
       key: 'batch:payment-batch-export:payout:pay-test',
+      paymentBatchId: 'payment-batch-export' as TransactionRecord['paymentBatchId'],
       payout: failedPayout,
       context: {
         batch: {

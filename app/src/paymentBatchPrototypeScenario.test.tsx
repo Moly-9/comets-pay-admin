@@ -11,6 +11,8 @@ import {
 } from './paymentBatchPrototypeScenario';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { prototypeFundingAccountOpeningBalance } from './prototypePaymentResults';
+import { createInitialPaymentBatches } from './paymentBatches';
+import { createTransactionRecords } from './transactionRecords';
 
 const scenario = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -178,13 +180,21 @@ describe('payment batch prototype scenario', () => {
     });
   });
 
-  it('keeps transaction records on the current project result after retry success', () => {
-    const paid = scenario.payouts.filter((payout) => payout.status === '已付款');
-    const failed = scenario.payouts.filter((payout) => payout.status === '付款失败');
+  it('keeps transaction records on linked batch attempts after retry success', () => {
+    const paymentBatches = createInitialPaymentBatches({
+      payouts: scenario.payouts,
+      requests: scenario.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+      paymentLists: scenario.paymentLists,
+      contracts: INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
+    });
+    const transactions = createTransactionRecords(scenario.payouts, paymentBatches);
+    const paid = transactions.filter((record) => record.status === '已付款');
+    const failed = transactions.filter((record) => record.status === '付款失败');
     const settled = paid.length + failed.length;
     const successRate = `${((paid.length / settled) * 100).toFixed(1)}%`;
     const html = renderToStaticMarkup(
-      <TransactionsPage payouts={scenario.payouts} paymentBatches={[]} />,
+      <TransactionsPage payouts={scenario.payouts} paymentBatches={paymentBatches} />,
     );
 
     expect(html).toContain('role="tablist" aria-label="交易状态"');
@@ -193,7 +203,9 @@ describe('payment batch prototype scenario', () => {
     expect(html).toMatch(/aria-selected="false">付款失败<span>\d+<\/span>/);
     expect(html).not.toContain('aria-label="付款状态"');
     expect(html).toContain(`>${successRate}</strong>`);
-    expect(failed).toHaveLength(1);
-    expect(html).toContain('全部渠道成功率 · 1 笔失败');
+    expect(failed.length).toBeGreaterThan(
+      scenario.payouts.filter((payout) => payout.status === '付款失败').length,
+    );
+    expect(html).toContain(`全部渠道成功率 · ${failed.length} 笔失败`);
   });
 });

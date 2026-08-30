@@ -4997,7 +4997,17 @@ export default function App() {
       );
       break;
     case 'transactions':
-      pageContent = <TransactionsPage payouts={payouts} paymentBatches={paymentBatches} />;
+      pageContent = (
+        <TransactionsPage
+          payouts={payouts}
+          paymentBatches={paymentBatches}
+          onOpenPaymentBatch={(batchId) => {
+            if (!navigate('batches')) return;
+            setFocusedBatchId(batchId);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      );
       break;
     case 'organization':
       pageContent = (

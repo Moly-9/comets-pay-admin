@@ -23,6 +23,10 @@ import type {
 } from './types';
 import { accountDisplayValue } from './accountPresentation';
 import {
+  HISTORICAL_PAYMENT_BATCH_SEEDS,
+  type HistoricalPaymentBatchSeed,
+} from './historicalPaymentBatchFixtures';
+import {
   applyPaymentBatchPrototypeScenario,
   PAYMENT_BATCH_PARTIAL_FAILURE_DEMO,
   PAYMENT_BATCH_RETRY_DEMO,
@@ -197,6 +201,145 @@ const PAYMENT_EXECUTION_FUNDING_ACCOUNTS: Record<PaymentBatchRecord['provider'],
   Airwallex: 'mock-awx-operating',
   PayPal: 'mock-paypal-balance',
   PayMax: 'mock-paymax-operating',
+};
+
+const historicalPaymentBatchTime = (payout: Payout) => (
+  payout.status === '付款失败'
+    ? payout.paymentFailure?.occurredAt ?? payout.paidAt ?? '历史时间待补全'
+    : payout.paidAt ?? '历史时间待补全'
+);
+
+const historicalPaymentBatchRecord = (
+  payout: Payout,
+  seed: HistoricalPaymentBatchSeed,
+): PaymentBatchRecord => {
+  const paidAt = historicalPaymentBatchTime(payout);
+  const failed = payout.status === '付款失败' || payout.status === '已退回';
+  const status = aggregatePaymentStatus([payout.status]);
+  const accountSummary = accountDisplayValue(payout.account);
+  const feeBearer = feeBearerLabel(payout.feeBearer);
+  const paymentReason = `${payout.deliverable ?? '达人合作内容'}已验收，申请支付本期合作款。`;
+  const paymentBatchId = `payment_batch_legacy_${payout.id}` as PaymentBatchId;
+  const paymentRequestProjectId = `payment_request_legacy_${payout.id}` as PaymentRequestProjectId;
+  const cooperationProjectId = `cooperation_project_legacy_${payout.projectId}` as CooperationProjectId;
+  const paymentListId = `payment_list_legacy_${payout.id}` as PaymentListId;
+  const paymentStatus = failed ? '付款失败' : '已付款';
+  const contractId = `contract_legacy_${payout.id}` as ContractId;
+  const invoiceId = `invoice_legacy_${payout.id}` as InvoiceId;
+
+  return {
+    paymentBatchId,
+    paymentBatchCode: seed.paymentBatchCode,
+    paymentOrderCode: seed.paymentListCode,
+    paymentAttemptNumber: 1,
+    request: {
+      paymentRequestProjectId,
+      requestCode: seed.requestCode,
+      requestStatus: paymentStatus,
+      lifecycle: failed ? 'PAYMENT_FAILED' : 'PAID',
+      amount: `${payout.currency} ${payout.amount.toLocaleString('en-US')}`,
+      reason: paymentReason,
+      expectedPaymentDate: paidAt.slice(0, 10),
+      cooperationProjectId,
+      cooperationProjectCode: payout.projectId,
+      cooperationProjectName: payout.project,
+      brand: 'COMETS',
+      media: payout.creator,
+      pm: '历史付款资料',
+    },
+    provider: payout.provider,
+    fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[payout.provider],
+    sourceCurrency: payout.currency,
+    payer: seed.payer,
+    paidAt,
+    status,
+    lifecycle: failed
+      ? ['CREATED', 'ITEMS_ADDED', 'SUBMITTED', 'FAILED']
+      : ['CREATED', 'ITEMS_ADDED', 'SUBMITTED', 'COMPLETED'],
+    items: [{
+      payoutId: payout.id,
+      creatorId: payout.creatorId,
+      creatorName: payout.creator,
+      creatorHandle: payout.handle,
+      creatorSocialAccountId: payout.creatorSocialAccountId,
+      creatorPlatform: payout.creatorPlatform,
+      deliverable: payout.deliverable ?? '达人合作内容',
+      paymentListId,
+      paymentListCode: seed.paymentListCode,
+      paymentListStatus: failed ? 'failed' : 'paid',
+      paymentListVersion: payout.paymentListVersion ?? 1,
+      paymentOrderCode: seed.paymentListCode,
+      sourcePaymentOrderCode: seed.paymentListCode,
+      paymentAttemptNumber: 1,
+      paymentAttempts: payout.paymentAttempts,
+      contracts: [{
+        contractId,
+        contractCode: payout.contract,
+        name: `${payout.creator} · ${payout.project}合作协议`,
+        currency: payout.currency,
+        amount: payout.amount,
+        status: '已生效',
+        signed: true,
+        updatedAt: seed.invoiceDate,
+      }],
+      invoice: {
+        invoiceId,
+        invoiceNumber: payout.invoice,
+        invoiceDate: seed.invoiceDate,
+        currency: payout.currency,
+        amount: payout.amount,
+        version: payout.invoiceVersion ?? 1,
+        reviewStatus: payout.invoiceReviewStatus,
+        validationStatus: 'valid',
+      },
+      provider: payout.provider,
+      amount: payout.amount,
+      currency: payout.currency,
+      receiveCurrency: payout.recipientReceivedCurrency ?? payout.currency,
+      transferMethod: seed.transferMethod,
+      localClearingSystem: payout.localClearingSystem,
+      recipientCountry: payout.recipientCountry,
+      accountSummary,
+      accountIdentifier: accountSummary,
+      accountIdentifierLabel: '历史收款标识',
+      payoutAccountId: payout.payoutAccountId,
+      payoutAccountVersion: payout.payoutAccountVersion ?? 'legacy-v1',
+      feeBearer: feeBearer === '未记录' ? '广告主承担' : feeBearer,
+      paymentReason,
+      transactionReference: `${seed.requestCode}-01`,
+      description: payout.deliverable ?? '达人合作内容',
+      paymentStatus,
+      paidAt,
+      transferFeeAmount: payout.transferFeeAmount,
+      transferFeeCurrency: payout.transferFeeCurrency,
+      actualPaidAmount: payout.actualPaidAmount,
+      actualPaidCurrency: payout.actualPaidCurrency,
+      recipientReceivedAmount: failed ? 0 : payout.recipientReceivedAmount,
+      recipientReceivedCurrency: payout.recipientReceivedCurrency ?? payout.currency,
+      postTransactionBalance: failed ? undefined : payout.postTransactionBalance,
+      postTransactionBalanceCurrency: failed ? undefined : payout.postTransactionBalanceCurrency,
+      failure: failed && payout.paymentFailure ? {
+        code: payout.paymentFailure.errorCode,
+        response: payout.paymentFailure.providerResponse,
+        occurredAt: payout.paymentFailure.occurredAt,
+      } : undefined,
+      associationIssues: [],
+    }],
+  };
+};
+
+const createHistoricalPaymentBatchRecords = (
+  payouts: readonly Payout[],
+  existingBatches: readonly PaymentBatchRecord[],
+) => {
+  const batchedPayoutIds = new Set(existingBatches.flatMap((batch) => (
+    batch.items.map((item) => item.payoutId)
+  )));
+  return payouts.flatMap((payout) => {
+    const seed = HISTORICAL_PAYMENT_BATCH_SEEDS[payout.id];
+    if (!seed || batchedPayoutIds.has(payout.id)) return [];
+    return [historicalPaymentBatchRecord(payout, seed)];
+  });
 };
 
 const requestInvoiceIds = (request: RequestProjectSummary) => new Set([
@@ -915,27 +1058,29 @@ export const createInitialPaymentBatches = ({
   const retryPayout = failedItem
     ? currentResources.payouts.find((payout) => payout.id === failedItem.payoutId)
     : undefined;
-  if (!retryPayout) return initialAttempts;
+  const scenarioBatches = retryPayout ? [
+    createPaymentBatchRecord({
+      requests: currentResources.requests,
+      generatedInvoices,
+      paymentLists: currentResources.paymentLists,
+      contracts,
+      payouts: [retryPayout],
+      paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
+      paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+      provider: retryPayout.provider,
+      fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[retryPayout.provider],
+      sourceCurrency: retryPayout.currency,
+      payer: PAYMENT_BATCH_RETRY_DEMO.payer,
+      paidAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+      status: '已付款',
+      lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
+      itemStatus: '已付款',
+      paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+      paymentAttemptNumber: 2,
+    }),
+    ...initialAttempts,
+  ] : initialAttempts;
+  const historicalBatches = createHistoricalPaymentBatchRecords(payouts, scenarioBatches);
 
-  const retryBatch = createPaymentBatchRecord({
-    requests: currentResources.requests,
-    generatedInvoices,
-    paymentLists: currentResources.paymentLists,
-    contracts,
-    payouts: [retryPayout],
-    paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
-    paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-    provider: retryPayout.provider,
-    fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[retryPayout.provider],
-    sourceCurrency: retryPayout.currency,
-    payer: PAYMENT_BATCH_RETRY_DEMO.payer,
-    paidAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
-    status: '已付款',
-    lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
-    itemStatus: '已付款',
-    paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
-    paymentAttemptNumber: 2,
-  });
-
-  return [retryBatch, ...initialAttempts];
+  return [...scenarioBatches, ...historicalBatches];
 };

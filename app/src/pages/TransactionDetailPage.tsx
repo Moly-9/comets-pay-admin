@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Banknote,
   Building2,
   CalendarClock,
@@ -54,9 +55,11 @@ type TransactionResourceView = 'contract' | 'invoice' | 'payment-list';
 export function TransactionDetailPage({
   record,
   onBack,
+  onOpenPaymentBatch,
 }: {
   record: TransactionRecord;
   onBack: () => void;
+  onOpenPaymentBatch?: () => void;
 }) {
   const { payout, context } = record;
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -156,7 +159,16 @@ export function TransactionDetailPage({
           </article>
           <article className="is-payment-batch">
             <span className="transaction-association-icon" aria-hidden="true"><ReceiptText size={19} /></span>
-            <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{paymentProviderDisplayName(record.provider)} · {details.batchStatus}</span></div>
+            <div>
+              <small>所属付款批次</small>
+              <strong>{details.paymentBatchCode}</strong>
+              <span>{paymentProviderDisplayName(record.provider)} · {details.batchStatus}</span>
+              {onOpenPaymentBatch ? (
+                <button className="transaction-association-view-button" type="button" onClick={onOpenPaymentBatch}>
+                  查看付款批次<ArrowRight size={13} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
           </article>
         </div>
       </section>

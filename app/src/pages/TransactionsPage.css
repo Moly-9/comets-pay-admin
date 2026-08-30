@@ -634,6 +634,27 @@
   white-space: nowrap;
 }
 
+.transaction-association-view-button {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  padding: 2px 0 0;
+  color: #087f8c;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.transaction-association-view-button:hover,
+.transaction-association-view-button:focus-visible {
+  color: #0e7490;
+  text-decoration: underline;
+}
+
 .transaction-resource-list {
   display: grid;
   gap: 10px;

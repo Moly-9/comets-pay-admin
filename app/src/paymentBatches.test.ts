@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContractRecord } from './contracts';
 import { INITIAL_PAYOUTS } from './data';
+import { HISTORICAL_PAYMENT_BATCH_SEEDS } from './historicalPaymentBatchFixtures';
 import type {
   ContractId,
   CooperationProjectId,
@@ -588,25 +589,31 @@ describe('payment batch snapshots', () => {
       .filter((invoice) => completedInvoiceIds.has(invoice.invoiceId))
       .map((invoice) => invoice.sourcePayoutId)
       .sort();
-    const actualPayoutIds = records.flatMap((record) => record.items.map((item) => item.payoutId));
+    const scenarioRecords = records.filter((record) => !String(record.paymentBatchId).startsWith('payment_batch_legacy_'));
+    const historicalRecords = records.filter((record) => String(record.paymentBatchId).startsWith('payment_batch_legacy_'));
+    const actualPayoutIds = scenarioRecords.flatMap((record) => record.items.map((item) => item.payoutId));
 
-    expect(records).toHaveLength(10);
-    expect(records.map((record) => record.paymentBatchCode)).toEqual([
+    expect(records).toHaveLength(20);
+    expect(new Set(records.map((record) => record.paymentBatchId)).size).toBe(records.length);
+    expect(new Set(records.map((record) => record.paymentBatchCode)).size).toBe(records.length);
+    expect(scenarioRecords).toHaveLength(10);
+    expect(historicalRecords).toHaveLength(Object.keys(HISTORICAL_PAYMENT_BATCH_SEEDS).length);
+    expect(scenarioRecords.map((record) => record.paymentBatchCode)).toEqual([
       PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
       ...Array.from({ length: 9 }, (_, index) => `BAT-20260805-${String(9 - index).padStart(3, '0')}`),
     ]);
-    expect(records[0].items[0]).toMatchObject({
+    expect(scenarioRecords[0].items[0]).toMatchObject({
       paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
       paymentAttemptNumber: 2,
     });
-    expect(records[0]).toMatchObject({
+    expect(scenarioRecords[0]).toMatchObject({
       paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
       paymentAttemptNumber: 2,
     });
-    expect(records[0].items[0].sourcePaymentOrderCode).not.toBe(records[0].items[0].paymentOrderCode);
-    expect(records[0].sourcePaymentOrderCode).toBe(records[0].items[0].sourcePaymentOrderCode);
-    expect(records.map((record) => record.items.length)).toEqual([1, 3, 5, 5, 5, 5, 5, 1, 5, 4]);
-    expect(records.map((record) => record.request.requestCode)).toEqual([
+    expect(scenarioRecords[0].items[0].sourcePaymentOrderCode).not.toBe(scenarioRecords[0].items[0].paymentOrderCode);
+    expect(scenarioRecords[0].sourcePaymentOrderCode).toBe(scenarioRecords[0].items[0].sourcePaymentOrderCode);
+    expect(scenarioRecords.map((record) => record.items.length)).toEqual([1, 3, 5, 5, 5, 5, 5, 1, 5, 4]);
+    expect(scenarioRecords.map((record) => record.request.requestCode)).toEqual([
       'REQ-202607-000011',
       PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode,
       'REQ-202607-000011',
@@ -621,10 +628,10 @@ describe('payment batch snapshots', () => {
     expect(actualPayoutIds).toHaveLength(39);
     expect(new Set(actualPayoutIds).size).toBe(38);
     expect(expectedPayoutIds.every((payoutId) => actualPayoutIds.includes(payoutId))).toBe(true);
-    expect(actualPayoutIds.filter((payoutId) => payoutId === records[0].items[0].payoutId)).toHaveLength(2);
-    expect(new Set(records.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
-    expect(new Set(records.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
-    expect(records.map((record) => record.status)).toEqual([
+    expect(actualPayoutIds.filter((payoutId) => payoutId === scenarioRecords[0].items[0].payoutId)).toHaveLength(2);
+    expect(new Set(scenarioRecords.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
+    expect(new Set(scenarioRecords.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
+    expect(scenarioRecords.map((record) => record.status)).toEqual([
       '已付款',
       '部分失败',
       '部分失败',
@@ -633,7 +640,7 @@ describe('payment batch snapshots', () => {
       '已付款', '已付款',
     ]);
 
-    records.forEach((record) => {
+    scenarioRecords.forEach((record) => {
       expect(record.items.length).toBeLessThanOrEqual(5);
       expect(new Set(record.items.map((item) => item.payoutId)).size).toBe(record.items.length);
       expect(record.request.lifecycle).toBe(record.status === '已付款' ? 'COMPLETED' : 'APPROVED');
@@ -666,6 +673,17 @@ describe('payment batch snapshots', () => {
         expect(failedItem?.recipientReceivedAmount).toBe(0);
         expect(counts).toEqual({ succeeded: record.items.length - 1, failed: 1, processing: 0 });
       }
+    });
+
+    historicalRecords.forEach((record) => {
+      expect(record.items).toHaveLength(1);
+      expect(record.items[0].associationIssues).toEqual([]);
+      expect(record.items[0].invoice).toBeDefined();
+      expect(record.items[0].contracts).toHaveLength(1);
+      expect(record.items[0].paymentListId).toBeDefined();
+      expect(record.paymentBatchCode).toBe(
+        HISTORICAL_PAYMENT_BATCH_SEEDS[record.items[0].payoutId].paymentBatchCode,
+      );
     });
 
     const originalRetrySource = records.find((record) => (

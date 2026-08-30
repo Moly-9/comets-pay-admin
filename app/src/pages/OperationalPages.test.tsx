@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
+import type { PaymentBatchRecord } from '../paymentBatches';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
 import { InvoicePage, INITIAL_CREATORS, OrganizationPage, TransactionsPage } from './OperationalPages';
 
@@ -60,21 +61,85 @@ const transactionPayout = (
   accent: '#8b5cf6',
 });
 
+const transactionBatches = (payouts: readonly Payout[]): PaymentBatchRecord[] => payouts
+  .filter((payout) => ['付款处理中', '已付款', '付款失败'].includes(payout.status))
+  .map((payout, index) => {
+    const paidAt = `2026-08-05T${String(10 + index).padStart(2, '0')}:00:00.000Z`;
+    return {
+      paymentBatchId: `payment-batch-${payout.id}`,
+      paymentBatchCode: `BAT-${payout.id}`,
+      paymentOrderCode: `PAY-${payout.id}`,
+      paymentAttemptNumber: 1,
+      request: {
+        paymentRequestProjectId: `request-${payout.id}`,
+        requestCode: `REQ-${payout.id}`,
+        requestStatus: payout.status,
+        lifecycle: payout.status === '已付款' ? 'PAID' : 'APPROVED',
+        amount: `${payout.currency} ${payout.amount}`,
+        reason: '达人合作款',
+        expectedPaymentDate: '2026-08-05',
+        cooperationProjectId: `cooperation-${payout.id}`,
+        cooperationProjectCode: payout.projectId,
+        cooperationProjectName: payout.project,
+        brand: 'COMETS',
+        media: payout.creator,
+        pm: 'PM',
+      },
+      provider: payout.provider,
+      fundingAccountId: `funding-${payout.provider}`,
+      sourceCurrency: payout.currency,
+      payer: '财务测试员',
+      paidAt,
+      status: payout.status === '付款失败' ? '全部失败' : payout.status,
+      lifecycle: ['CREATED'],
+      items: [{
+        payoutId: payout.id,
+        creatorName: payout.creator,
+        creatorHandle: payout.handle,
+        deliverable: '测试交付物',
+        paymentListCode: `PAY-${payout.id}`,
+        paymentListStatus: payout.status,
+        contracts: [],
+        legacyContractReference: payout.contract,
+        legacyInvoiceReference: payout.invoice,
+        provider: payout.provider,
+        amount: payout.amount,
+        currency: payout.currency,
+        receiveCurrency: payout.currency,
+        transferMethod: payout.provider,
+        accountSummary: payout.account,
+        payoutAccountVersion: 'legacy-v1',
+        feeBearer: '广告主承担',
+        paymentReason: '达人合作款',
+        transactionReference: `TEST-${payout.id}`,
+        description: '测试交付物',
+        paymentStatus: payout.status,
+        paidAt,
+        recipientReceivedAmount: payout.status === '付款失败'
+          ? 0
+          : payout.status === '已付款' ? payout.amount : undefined,
+        recipientReceivedCurrency: payout.currency,
+        associationIssues: [],
+      }],
+    } as unknown as PaymentBatchRecord;
+  });
+
 describe('TransactionsPage currency overview', () => {
   it('uses USD as the primary paid total and lists secondary currencies below it', () => {
     const currencySpace = '\u00a0';
+    const payouts = [
+      transactionPayout('USD', 100, 1),
+      transactionPayout('USD', 200, 2),
+      transactionPayout('EUR', 300, 3),
+      transactionPayout('GBP', 400, 4),
+      transactionPayout('HKD', 500, 5),
+      transactionPayout('SGD', 600, 6),
+      transactionPayout('USD', 700, 7, '付款失败'),
+    ];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[
-          transactionPayout('USD', 100, 1),
-          transactionPayout('USD', 200, 2),
-          transactionPayout('EUR', 300, 3),
-          transactionPayout('GBP', 400, 4),
-          transactionPayout('HKD', 500, 5),
-          transactionPayout('SGD', 600, 6),
-          transactionPayout('USD', 700, 7, '付款失败'),
-        ]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -91,19 +156,20 @@ describe('TransactionsPage currency overview', () => {
   });
 
   it('shows the overall success rate above each provider success rate and failure count', () => {
+    const payouts = [
+      transactionPayout('USD', 100, 1, '已付款', 'Airwallex'),
+      transactionPayout('USD', 100, 2, '已付款', 'Airwallex'),
+      transactionPayout('USD', 100, 3, '付款失败', 'Airwallex'),
+      transactionPayout('USD', 100, 4, '已付款', 'PayPal'),
+      transactionPayout('USD', 100, 5, '付款失败', 'PayPal'),
+      transactionPayout('USD', 100, 6, '已付款', 'PayMax'),
+      transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
+      transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
+    ];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[
-          transactionPayout('USD', 100, 1, '已付款', 'Airwallex'),
-          transactionPayout('USD', 100, 2, '已付款', 'Airwallex'),
-          transactionPayout('USD', 100, 3, '付款失败', 'Airwallex'),
-          transactionPayout('USD', 100, 4, '已付款', 'PayPal'),
-          transactionPayout('USD', 100, 5, '付款失败', 'PayPal'),
-          transactionPayout('USD', 100, 6, '已付款', 'PayMax'),
-          transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
-          transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
-        ]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -116,15 +182,16 @@ describe('TransactionsPage currency overview', () => {
   });
 
   it('shows paid, processing, and failed payment transactions in the all tab', () => {
+    const payouts = [
+      transactionPayout('USD', 100, 11, '已付款'),
+      transactionPayout('USD', 100, 12, '付款失败'),
+      transactionPayout('USD', 100, 13, '付款处理中'),
+      transactionPayout('USD', 100, 14, '等待付款'),
+    ];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[
-          transactionPayout('USD', 100, 11, '已付款'),
-          transactionPayout('USD', 100, 12, '付款失败'),
-          transactionPayout('USD', 100, 13, '付款处理中'),
-          transactionPayout('USD', 100, 14, '等待付款'),
-        ]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -143,10 +210,11 @@ describe('TransactionsPage currency overview', () => {
   });
 
   it('renders workbench-style search, date, provider, and export controls', () => {
+    const payouts = [transactionPayout('USD', 100, 21)];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[transactionPayout('USD', 100, 21)]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 

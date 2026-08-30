@@ -69,6 +69,7 @@ const context = {
 
 const record: TransactionRecord = {
   key: 'batch:payment-batch-test:payout:pay-detail-test',
+  paymentBatchId: 'payment-batch-test' as TransactionRecord['paymentBatchId'],
   payout,
   context,
   status: '已付款',
@@ -85,7 +86,7 @@ const record: TransactionRecord = {
 describe('TransactionDetailPage', () => {
   it('renders the creator card, transaction summary, associations, and highlighted payment list', () => {
     const html = renderToStaticMarkup(
-      <TransactionDetailPage record={record} onBack={vi.fn()} />,
+      <TransactionDetailPage record={record} onBack={vi.fn()} onOpenPaymentBatch={vi.fn()} />,
     );
 
     expect(html).toContain('transaction-creator-summary-card');
@@ -97,7 +98,8 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('交易状态');
     expect(html).toContain('所属关联项目');
     expect(html).toContain('所属请款项目');
-    expect(html).toContain('所属请款批次');
+    expect(html).toContain('所属付款批次');
+    expect(html).toContain('查看付款批次');
     expect(html).toContain('CON-20260810-001');
     expect(html).toContain('INV-20260810-001');
     expect(html).toContain('transaction-resource-card is-payment-list');

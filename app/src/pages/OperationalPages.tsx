@@ -4168,9 +4168,11 @@ const TRANSACTION_PAID_STATUS_OPTIONS = [
 export function TransactionsPage({
   payouts,
   paymentBatches,
+  onOpenPaymentBatch,
 }: {
   payouts: Payout[];
   paymentBatches: readonly PaymentBatchRecord[];
+  onOpenPaymentBatch?: (batchId: PaymentBatchRecord['paymentBatchId']) => void;
 }) {
   const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
@@ -4288,6 +4290,9 @@ export function TransactionsPage({
       <TransactionDetailPage
         record={detailRecord}
         onBack={closeTransactionDetail}
+        onOpenPaymentBatch={detailRecord.context && onOpenPaymentBatch
+          ? () => onOpenPaymentBatch(detailRecord.paymentBatchId)
+          : undefined}
       />
     );
   }

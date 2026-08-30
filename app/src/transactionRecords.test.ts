@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { INITIAL_PAYOUTS } from './data';
-import type { PaymentBatchRecord } from './paymentBatches';
+import { createInitialPaymentBatches, type PaymentBatchRecord } from './paymentBatches';
 import type { Payout } from './types';
 import {
   createTransactionRecords,
   findTransactionBatchContext,
   filterTransactionRecords,
-  isFinalTransaction,
   isPaymentTransactionRecord,
   transactionCreatorLabel,
   transactionDateKey,
@@ -86,7 +85,48 @@ const batch = {
   }],
 } as unknown as PaymentBatchRecord;
 
+const batchesForPayouts = (records: readonly Payout[]): PaymentBatchRecord[] => records
+  .filter(isPaymentTransactionRecord)
+  .map((record, index) => {
+    const occurredAt = record.paymentFailure?.occurredAt
+      ?? record.paidAt
+      ?? `2026-08-05T${String(10 + index).padStart(2, '0')}:00:00.000Z`;
+    return {
+      ...batch,
+      paymentBatchId: `payment-batch-${record.id}`,
+      paymentBatchCode: `BAT-${record.id}`,
+      provider: record.provider,
+      sourceCurrency: record.currency,
+      paidAt: occurredAt,
+      status: record.status === '付款失败' ? '全部失败' : record.status,
+      items: [{
+        ...batch.items[0],
+        payoutId: record.id,
+        creatorName: record.creator,
+        creatorHandle: record.handle,
+        legacyContractReference: record.contract,
+        legacyInvoiceReference: record.invoice,
+        provider: record.provider,
+        amount: record.amount,
+        currency: record.currency,
+        receiveCurrency: record.currency,
+        accountSummary: record.account,
+        paymentStatus: record.status,
+        paidAt: occurredAt,
+        failure: record.paymentFailure ? {
+          code: record.paymentFailure.errorCode,
+          response: record.paymentFailure.providerResponse,
+          occurredAt: record.paymentFailure.occurredAt,
+        } : undefined,
+      }],
+    } as unknown as PaymentBatchRecord;
+  });
+
 describe('transaction records', () => {
+  it('does not create an unlinked transaction row when no payment batch exists', () => {
+    expect(createTransactionRecords([payout()], [])).toEqual([]);
+  });
+
   it('groups processing payments with the paid tab and supports its row-status filters', () => {
     const records = [
       payout(),
@@ -100,7 +140,7 @@ describe('transaction records', () => {
       payout({ id: 'unapproved', invoiceReviewStatus: '待媒介审核' }),
     ];
 
-    const transactions = createTransactionRecords(records, []);
+    const transactions = createTransactionRecords(records, batchesForPayouts(records));
     expect(recordIds(filterTransactionRecords(transactions, filters()))).toEqual(['failed', 'pay-test', 'processing']);
     expect(recordIds(filterTransactionRecords(transactions, filters({ tab: 'paid' })))).toEqual(['pay-test', 'processing']);
     expect(recordIds(filterTransactionRecords(transactions, filters({ tab: 'paid', status: '已付款' })))).toEqual(['pay-test']);
@@ -134,7 +174,7 @@ describe('transaction records', () => {
       payout({ id: 'paypal', creator: 'Yuki Tanaka', handle: '@yuki.tokyo', provider: 'PayPal', paidAt: '2026-08-07 09:20' }),
     ];
 
-    const transactions = createTransactionRecords(records, []);
+    const transactions = createTransactionRecords(records, batchesForPayouts(records));
     expect(recordIds(filterTransactionRecords(transactions, filters({
       search: 'mina',
       provider: 'Airwallex',
@@ -275,12 +315,19 @@ describe('transaction records', () => {
     ))).toEqual([100, 90, 95]);
   });
 
-  it('provides complete historical snapshots for every current legacy transaction', () => {
-    const historicalTransactions = INITIAL_PAYOUTS.filter(isFinalTransaction);
+  it('migrates every current legacy transaction into a linked payment batch snapshot', () => {
+    const batches = createInitialPaymentBatches({
+      payouts: INITIAL_PAYOUTS,
+      requests: [],
+      generatedInvoices: [],
+      paymentLists: [],
+      contracts: [],
+    });
+    const historicalTransactions = createTransactionRecords(INITIAL_PAYOUTS, batches);
 
     expect(historicalTransactions).toHaveLength(10);
     historicalTransactions.forEach((record) => {
-      const details = transactionRecordDetails(record, null);
+      const details = transactionRecordDetails(record.payout, record.context);
       const requiredValues = [
         details.payer,
         details.paymentTime,
@@ -294,10 +341,12 @@ describe('transaction records', () => {
         details.paymentListCode,
       ];
 
-      expect(details.source).toBe('historical');
+      expect(record.context).not.toBeNull();
+      expect(record.paymentBatchId).toBe(record.context?.batch.paymentBatchId);
+      expect(details.source).toBe('batch');
       expect(requiredValues.every((value) => value && !/未记录|未关联|待补全/.test(value))).toBe(true);
       expect(details.contracts).toHaveLength(1);
-      expect(details.invoice?.invoiceNumber).toBe(record.invoice);
+      expect(details.invoice?.invoiceNumber).toBe(record.payout.invoice);
     });
   });
 });
