@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ContractRecognitionField, ContractSourceLocation } from '../contractRecognitionTypes';
 import {
   INITIAL_CONTRACTS,
@@ -141,5 +141,74 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(styles).toMatch(/\.contract-detail-page > \.page-heading-row > div:first-child\s*{[^}]*min-width:\s*0;/s);
     expect(styles).toMatch(/\.contract-detail-page > \.page-heading-row \.page-heading-actions\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-wrap:\s*nowrap;/s);
     expect(styles).toMatch(/\.contract-detail-page \.page-heading-actions\s*{[^}]*grid-template-columns:\s*1fr 1fr;/s);
+  });
+
+  it('renders the template-only cards and 14-field editor without ordinary contract controls', () => {
+    const template = { ...INITIAL_CONTRACTS[1], uploadedByAccount: undefined } satisfies ContractRecord;
+    const html = renderToStaticMarkup(
+      <ContractDetailPage
+        contract={template}
+        canEditTemplate
+        onUpdateContract={vi.fn()}
+        onBack={vi.fn()}
+        notify={vi.fn()}
+      />,
+    );
+
+    expect(html).not.toContain('复制编号');
+    expect(html).not.toContain('合同关系');
+    expect(html).not.toContain('合同详情分类');
+    expect(html).toContain('下载当前文件');
+    expect(html).toContain('合同编辑器');
+    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(14);
+    expect((html.match(/系统自动带入/g) ?? [])).toHaveLength(14);
+    expect((html.match(/生成时人工填写/g) ?? [])).toHaveLength(14);
+    expect((html.match(/不生成/g) ?? [])).toHaveLength(14);
+    expect(html).toContain('系统内置');
+    expect(html.indexOf('合同类型')).toBeLessThan(html.indexOf('使用就绪度'));
+    expect(html.indexOf('使用就绪度')).toBeLessThan(html.indexOf('上传者'));
+  });
+
+  it('maps known uploaders to names and preserves unknown uploader accounts', () => {
+    const knownHtml = renderToStaticMarkup(
+      <ContractDetailPage
+        contract={{ ...INITIAL_CONTRACTS[1], uploadedByAccount: 'zhangshiyu' }}
+        onBack={vi.fn()}
+        notify={vi.fn()}
+      />,
+    );
+    const unknownHtml = renderToStaticMarkup(
+      <ContractDetailPage
+        contract={{ ...INITIAL_CONTRACTS[1], uploadedByAccount: 'legacy.template.owner' }}
+        onBack={vi.fn()}
+        notify={vi.fn()}
+      />,
+    );
+
+    expect(knownHtml).toContain('张诗雨');
+    expect(knownHtml).toContain('zhangshiyu');
+    expect(unknownHtml).toContain('legacy.template.owner');
+    expect(unknownHtml).toContain('账号未收录在当前用户目录');
+  });
+
+  it('keeps ordinary contract metrics, relationship operations and inspector tabs unchanged', () => {
+    const html = renderToStaticMarkup(
+      <ContractDetailPage
+        contract={INITIAL_CONTRACTS[0]}
+        contracts={INITIAL_CONTRACTS}
+        onBack={vi.fn()}
+        notify={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('复制编号');
+    expect(html).toContain('付款就绪度');
+    expect(html).toContain('合同金额');
+    expect(html).toContain('关联请款项目');
+    expect(html).toContain('合同关系');
+    expect(html).toContain('合同摘要');
+    expect(html).toContain('付款与Invoice');
+    expect(html).toContain('校验记录');
+    expect(html).not.toContain('合同编辑器');
   });
 });

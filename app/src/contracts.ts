@@ -13,6 +13,7 @@ import type {
   PayoutAccountVersion,
 } from './types';
 import { demoAccountName, demoRealName } from './demoCreatorNames';
+import { resolveContractTemplateOutput } from './contractTemplateFieldPolicies';
 
 export type ContractStatus =
   | '参考模板'
@@ -120,6 +121,46 @@ export type ContractPublishingChannel = {
   channelUrl: string;
 };
 
+export type ContractTemplateOutputFieldKey =
+  | 'advertiser'
+  | 'publisher'
+  | 'channel'
+  | 'campaignPeriod'
+  | 'accountName'
+  | 'accountNumber'
+  | 'beneficiaryBankName'
+  | 'beneficiaryBankAddress'
+  | 'swiftCode'
+  | 'iban'
+  | 'remittanceInformation'
+  | 'paypalUsername'
+  | 'paypalEmailAddress'
+  | 'transferNote';
+
+export type ContractTemplateFieldMode = 'SYSTEM' | 'MANUAL' | 'OMIT';
+
+export type ContractTemplateFieldPolicyMap = Record<
+  ContractTemplateOutputFieldKey,
+  ContractTemplateFieldMode
+>;
+
+export type ContractTemplateManualFieldValueMap = {
+  advertiser: string;
+  publisher: string;
+  channel: { publishingChannels: ContractPublishingChannel[] };
+  campaignPeriod: { startDate: string; endDate: string };
+  accountName: string;
+  accountNumber: string;
+  beneficiaryBankName: string;
+  beneficiaryBankAddress: string;
+  swiftCode: string;
+  iban: string;
+  remittanceInformation: string;
+  paypalUsername: string;
+  paypalEmailAddress: string;
+  transferNote: string;
+};
+
 export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed' | 'applied';
 export type ContractLifecycle =
   | 'EDITING_DRAFT'
@@ -163,6 +204,10 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 
 export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
+  /** Frozen when the generation draft is created so later template edits do not alter history. */
+  templateFieldPolicies?: ContractTemplateFieldPolicyMap;
+  /** Document-only values. These never update the creator's verified payout account. */
+  templateManualFieldValues?: Partial<ContractTemplateManualFieldValueMap>;
   contractName: string;
   /** Optional for compatibility with older generated drafts. */
   contractType?: ContractType;
@@ -229,6 +274,8 @@ export type ContractRecord = {
   documentNote?: string;
   pageCount?: number;
   isTemplate: boolean;
+  /** Template-level generation policy. Older templates are migrated through the default resolver. */
+  templateFieldPolicies?: Partial<ContractTemplateFieldPolicyMap>;
   project: string;
   brand: string;
   advertiser: string;
@@ -783,15 +830,16 @@ export const createGeneratedContractDraft = (
     uploadedByAccount?: string;
   } = {},
 ): ContractRecord => {
+  const documentModel = resolveContractTemplateOutput(model).effectiveModel;
   const totalFee = model.totalFee.trim() ? Number(model.totalFee) : null;
   const licensePrice = model.licensePrice.trim() ? Number(model.licensePrice) : null;
-  const rawAccount = model.payoutProvider === 'PayPal'
-    ? model.paymentSnapshot.paypalEmail
-    : model.paymentSnapshot.iban || model.paymentSnapshot.accountNumber;
-  const accountName = model.payoutProvider === 'PayPal'
-    ? model.paymentSnapshot.paypalUsername
-    : model.paymentSnapshot.accountName;
-  const accountFingerprint = model.paymentSnapshot.accountFingerprint || (rawAccount
+  const rawAccount = documentModel.payoutProvider === 'PayPal'
+    ? documentModel.paymentSnapshot.paypalEmail
+    : documentModel.paymentSnapshot.iban || documentModel.paymentSnapshot.accountNumber;
+  const accountName = documentModel.payoutProvider === 'PayPal'
+    ? documentModel.paymentSnapshot.paypalUsername
+    : documentModel.paymentSnapshot.accountName;
+  const accountFingerprint = documentModel.paymentSnapshot.accountFingerprint || (rawAccount
     ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}`
     : '');
   const fileBaseName = `${model.contractNumber || 'contract'}-${model.creatorHandle.replace(/^@/, '') || 'creator'}-v${version}`;
@@ -810,14 +858,14 @@ export const createGeneratedContractDraft = (
     isTemplate: false,
     project: model.projectName,
     brand: model.brandName,
-    advertiser: model.advertiser,
-    publisher: model.publisher,
+    advertiser: documentModel.advertiser,
+    publisher: documentModel.publisher,
     channelName: model.channelName,
-    channelLink: model.channelUrl,
-    platform: model.platform,
+    channelLink: documentModel.channelUrl,
+    platform: documentModel.platform,
     effectiveDate: model.effectiveDate,
-    campaignStart: model.campaignStart,
-    campaignEnd: model.campaignEnd,
+    campaignStart: documentModel.campaignStart,
+    campaignEnd: documentModel.campaignEnd,
     currency: model.currency,
     totalFee: Number.isFinite(totalFee) ? totalFee : null,
     licensePrice: Number.isFinite(licensePrice) ? licensePrice : null,
@@ -829,10 +877,10 @@ export const createGeneratedContractDraft = (
     accountName,
     accountFingerprint,
     payoutAccountId: model.payoutAccountId || undefined,
-    payoutAccountVersion: model.payoutAccountVersion ?? model.paymentSnapshot.payoutAccountVersion,
+    payoutAccountVersion: model.payoutAccountVersion ?? documentModel.paymentSnapshot.payoutAccountVersion,
     payoutProvider: model.payoutAccountId ? model.payoutProvider : undefined,
-    payoutAccountFingerprint: model.payoutAccountFingerprint ?? model.paymentSnapshot.accountFingerprint,
-    paymentSnapshot: { ...model.paymentSnapshot },
+    payoutAccountFingerprint: model.payoutAccountFingerprint ?? documentModel.paymentSnapshot.accountFingerprint,
+    paymentSnapshot: { ...documentModel.paymentSnapshot },
     signed: false,
     updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
     deliverables: [
@@ -849,7 +897,7 @@ export const createGeneratedContractDraft = (
         description,
         source: '合同生成表单',
       })),
-    issues: blankFieldIssues(model),
+    issues: blankFieldIssues(documentModel),
     projectId: model.projectId,
     cooperationProjectId: model.cooperationProjectId ?? model.projectId,
     projectLinks: model.projectLinks?.length
@@ -865,6 +913,16 @@ export const createGeneratedContractDraft = (
       ...model,
       publishingChannels: model.publishingChannels.map((channel) => ({ ...channel })),
       paymentSnapshot: { ...model.paymentSnapshot },
+      templateFieldPolicies: model.templateFieldPolicies ? { ...model.templateFieldPolicies } : undefined,
+      templateManualFieldValues: model.templateManualFieldValues ? {
+        ...model.templateManualFieldValues,
+        channel: model.templateManualFieldValues.channel ? {
+          publishingChannels: model.templateManualFieldValues.channel.publishingChannels.map((channel) => ({ ...channel })),
+        } : undefined,
+        campaignPeriod: model.templateManualFieldValues.campaignPeriod
+          ? { ...model.templateManualFieldValues.campaignPeriod }
+          : undefined,
+      } : undefined,
     },
     generationVariant: options.generationVariant ?? 'DRAFT',
     qualityReport: options.qualityReport,

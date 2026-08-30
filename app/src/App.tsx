@@ -495,6 +495,7 @@ export default function App() {
   const [editingContractDraftId, setEditingContractDraftId] = useState<string | null>(null);
   const [contractBuilderModel, setContractBuilderModel] = useState<ContractGenerationModel | null>(null);
   const [contractBuilderDirty, setContractBuilderDirty] = useState(false);
+  const [contractTemplateDirty, setContractTemplateDirty] = useState(false);
   const [pendingContractExit, setPendingContractExit] = useState<{ run: () => void } | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceEditTarget, setInvoiceEditTarget] = useState<{
@@ -990,6 +991,7 @@ export default function App() {
       setContractBuilderModel(null);
       setContractBuilderDirty(false);
     }
+    if (page !== 'system-config') setContractTemplateDirty(false);
     return true;
   };
 
@@ -1009,6 +1011,14 @@ export default function App() {
     }
     if (activePage === 'contract-create' && page !== 'contract-create' && contractBuilderDirty) {
       setPendingContractExit({ run: () => { finishNavigation(page, options); } });
+      return false;
+    }
+    if (
+      activePage === 'system-config'
+      && page !== 'system-config'
+      && contractTemplateDirty
+      && !window.confirm('合同模板配置尚未保存，确定切换页面吗？')
+    ) {
       return false;
     }
     return finishNavigation(page, options);
@@ -4720,6 +4730,9 @@ export default function App() {
         <ContractBuilderPage
           projects={manageableCooperationProjects}
           creators={creators}
+          contractTemplate={contracts.find((contract) => (
+            contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
+          ))}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
             contract.lifecycle === 'EDITING_DRAFT'
@@ -5029,6 +5042,7 @@ export default function App() {
           creators={creators}
           notify={notify}
           onUpdateContract={updateContract}
+          onTemplateDirtyChange={setContractTemplateDirty}
         />
       );
       break;

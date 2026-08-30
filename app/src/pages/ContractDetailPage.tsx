@@ -23,6 +23,7 @@ import { formatCreatorHandle } from '../creatorSearchOptions';
 import { Button, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
+import { ContractTemplateFieldEditor } from '../components/ContractTemplateFieldEditor';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
   canConfirmRecognitionFields,
@@ -53,11 +54,15 @@ import {
   type ContractUploadInput,
 } from '../contracts';
 import { contractDocumentFilename } from '../documentFilenames';
+import { resolveSystemUser } from '../data';
 import type { ContractId } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
+import {
+  getContractTemplatePolicyReadiness,
+} from '../contractTemplateFieldPolicies';
 
 type ContractDetailTab = 'summary' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
@@ -560,6 +565,7 @@ export function ContractDetailPage({
   canEdit = true,
   onBindFrameworkContract,
   onUploadContracts,
+  onTemplateDirtyChange,
 }: {
   contract: ContractRecord;
   contracts?: ContractRecord[];
@@ -575,6 +581,7 @@ export function ContractDetailPage({
   canEdit?: boolean;
   onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onUploadContracts?: (inputs: ContractUploadInput[]) => ContractRecord[];
+  onTemplateDirtyChange?: (dirty: boolean) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ContractDetailTab>('summary');
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
@@ -582,11 +589,21 @@ export function ContractDetailPage({
   const [activeDocumentId, setActiveDocumentId] = useState(contract.sourceDocuments?.[0]?.id ?? '');
   const [focusedSource, setFocusedSource] = useState<ContractSourceLocation | null>(null);
   const [frameworkUploadOpen, setFrameworkUploadOpen] = useState(false);
+  const [templateEditorDirty, setTemplateEditorDirty] = useState(false);
   useEffect(() => {
     setDraftFields(contract.recognitionResults ?? []);
     setActiveDocumentId(contract.sourceDocuments?.[0]?.id ?? '');
     setFocusedSource(null);
   }, [contract.id]);
+  useEffect(() => {
+    if (!templateEditorDirty) return undefined;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [templateEditorDirty]);
   const selectedDocument = useMemo(() => (
     contract.sourceDocuments?.find((document) => document.id === activeDocumentId)
     ?? contract.sourceDocuments?.[0]
@@ -641,6 +658,7 @@ export function ContractDetailPage({
     ? nonSignatureIssues.filter((issue) => issue.id !== 'recognition-review')
     : nonSignatureIssues;
   const readiness = getContractReadiness({ ...contract, issues: visibleIssues });
+  const templateReadiness = getContractTemplatePolicyReadiness(contract.templateFieldPolicies);
   const validity = getContractValidity(contract);
   const paymentReady = readiness.ready && !validity.expired;
   const readinessLabel = validity.expired ? '已失效' : readiness.label;
@@ -696,6 +714,23 @@ export function ContractDetailPage({
       description: `${candidate.project} · ${CONTRACT_TYPE_LABELS.FRAMEWORK}`,
     })),
   ];
+  const uploadedByUser = contract.uploadedByAccount
+    ? resolveSystemUser(contract.uploadedByAccount)
+    : undefined;
+  const uploaderName = uploadedByUser?.name ?? contract.uploadedByAccount ?? '系统内置';
+  const uploaderDetail = uploadedByUser
+    ? uploadedByUser.account
+    : contract.uploadedByAccount
+      ? '账号未收录在当前用户目录'
+      : '随系统发布';
+
+  const leaveDetail = () => {
+    if (contract.isTemplate && templateEditorDirty) {
+      const shouldLeave = window.confirm('合同模板配置尚未保存，确定要离开吗？');
+      if (!shouldLeave) return;
+    }
+    onBack();
+  };
 
   const copyContractId = async () => {
     await navigator.clipboard.writeText(contract.id);
@@ -841,8 +876,8 @@ export function ContractDetailPage({
   };
 
   return (
-    <div className="page-stack contract-detail-page">
-      <button className="project-back-button" type="button" onClick={onBack}>
+    <div className={`page-stack contract-detail-page${contract.isTemplate ? ' contract-template-detail-page' : ''}`}>
+      <button className="project-back-button" type="button" onClick={leaveDetail}>
         <ArrowLeft size={17} />
         {backLabel}
       </button>
@@ -852,7 +887,7 @@ export function ContractDetailPage({
         subtitle={`${contract.id} · ${projectName}`}
         actions={(
           <>
-            <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button>
+            {!contract.isTemplate ? <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button> : null}
             {documentUrl ? (
               <a
                 className="button button-primary contract-file-action"
@@ -867,29 +902,47 @@ export function ContractDetailPage({
         )}
       />
 
-      <div className="contract-metric-grid">
-        <article>
-          <span>付款就绪度</span>
-          <strong className={paymentReady ? 'contract-ready-text' : 'contract-attention-text'}>{readinessLabel}</strong>
-          <small>{isFrameworkContract(contract)
-            ? paymentReady ? '可供同一达人 IO 单选择绑定' : validity.expired ? '合同已到期，仅保留历史关系' : '确认主体和签署状态后可用于绑定'
-            : paymentReady ? '可加入新建付款项目' : validity.expired ? '合同已到期，不能建立新的付款关联' : '完成阻断项后才能进入付款流程'}</small>
-        </article>
-        <article>
-          <span>合同金额</span>
-          <strong>{isFrameworkContract(contract) ? '——' : formatContractMoney(contract)}</strong>
-          <small>{hasRecognition && contract.extractionStage !== 'applied' ? '识别结果尚未应用到正式字段' : '以人工确认后的正式字段为准'}</small>
-        </article>
-        <article>
-          <span>{contract.isTemplate ? '使用就绪度' : '关联请款项目'}</span>
-          <strong className={contract.isTemplate ? 'contract-ready-text' : undefined}>
-            {contract.isTemplate ? (contract.issues.some((issue) => issue.severity === 'blocker') ? '待完善' : '可使用') : `${linkedRequestCount} 个`}
-          </strong>
-          <small>{contract.isTemplate ? '模板不参与请款和付款计算' : linkedRequestCount ? '按稳定合同 ID 统计当前已关联请款' : '当前合同尚未关联请款项目'}</small>
-        </article>
-      </div>
+      {contract.isTemplate ? (
+        <div className="contract-metric-grid contract-template-metric-grid">
+          <article>
+            <span>合同类型</span>
+            <strong>{CONTRACT_TYPE_LABELS[contractType]}</strong>
+            <small>模板详情只读展示当前合同结构</small>
+          </article>
+          <article>
+            <span>使用就绪度</span>
+            <strong className={templateReadiness.ready ? 'contract-ready-text' : 'contract-attention-text'}>{templateReadiness.label}</strong>
+            <small>{templateReadiness.ready ? '字段策略校验通过，可用于合同生成' : `${templateReadiness.blockers.length} 项策略会阻止正式生成`}</small>
+          </article>
+          <article>
+            <span>上传者</span>
+            <strong>{uploaderName}</strong>
+            <small>{uploaderDetail}</small>
+          </article>
+        </div>
+      ) : (
+        <div className="contract-metric-grid">
+          <article>
+            <span>付款就绪度</span>
+            <strong className={paymentReady ? 'contract-ready-text' : 'contract-attention-text'}>{readinessLabel}</strong>
+            <small>{isFrameworkContract(contract)
+              ? paymentReady ? '可供同一达人 IO 单选择绑定' : validity.expired ? '合同已到期，仅保留历史关系' : '确认主体和签署状态后可用于绑定'
+              : paymentReady ? '可加入新建付款项目' : validity.expired ? '合同已到期，不能建立新的付款关联' : '完成阻断项后才能进入付款流程'}</small>
+          </article>
+          <article>
+            <span>合同金额</span>
+            <strong>{isFrameworkContract(contract) ? '——' : formatContractMoney(contract)}</strong>
+            <small>{hasRecognition && contract.extractionStage !== 'applied' ? '识别结果尚未应用到正式字段' : '以人工确认后的正式字段为准'}</small>
+          </article>
+          <article>
+            <span>关联请款项目</span>
+            <strong>{`${linkedRequestCount} 个`}</strong>
+            <small>{linkedRequestCount ? '按稳定合同 ID 统计当前已关联请款' : '当前合同尚未关联请款项目'}</small>
+          </article>
+        </div>
+      )}
 
-      <section className={`contract-relationship-panel contract-relationship-${contractType.toLowerCase()}`}>
+      {!contract.isTemplate ? <section className={`contract-relationship-panel contract-relationship-${contractType.toLowerCase()}`}>
         <header>
           <span className="contract-relationship-icon"><Link2 size={17} /></span>
           <div>
@@ -939,7 +992,7 @@ export function ContractDetailPage({
         ) : (
           <div className="contract-relationship-content"><span className="contract-relationship-independent"><ShieldCheck size={16} />独立合同不需要框架合同关系。</span></div>
         )}
-      </section>
+      </section> : null}
 
       {contract.documentNote && dismissedDocumentNoteId !== contract.id ? (
         <div className="contract-document-note" role="note">
@@ -1000,7 +1053,20 @@ export function ContractDetailPage({
           )}
         </section>
 
-        <section className="contract-inspector">
+        <section className={`contract-inspector${contract.isTemplate ? ' contract-template-inspector' : ''}`}>
+          {contract.isTemplate ? (
+            <ContractTemplateFieldEditor
+              contract={contract}
+              canEdit={canEditCurrentContract}
+              onSave={onUpdateContract}
+              onDirtyChange={(dirty) => {
+                setTemplateEditorDirty(dirty);
+                onTemplateDirtyChange?.(dirty);
+              }}
+              notify={notify}
+            />
+          ) : (
+            <>
           <div className="contract-tabs" role="tablist" aria-label="合同详情分类">
             {tabs.map((tab) => (
               <button className={activeTab === tab.id ? 'contract-tab-active' : ''} type="button" role="tab" aria-selected={activeTab === tab.id} key={tab.id} onClick={() => setActiveTab(tab.id)}>
@@ -1131,6 +1197,8 @@ export function ContractDetailPage({
               </>
             ) : null}
           </div>
+            </>
+          )}
         </section>
       </div>
       {frameworkUploadOpen ? (

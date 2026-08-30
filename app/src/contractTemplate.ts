@@ -10,6 +10,11 @@ import {
   formatContractPublishingPlatforms,
   resolveContractPublishingChannels,
 } from './contractGenerationModel';
+import { getDocumentPayoutSnapshotIssues } from './payoutAccounts';
+import {
+  contractTemplateOutputFieldApplies,
+  resolveContractTemplateOutput,
+} from './contractTemplateFieldPolicies';
 
 export const CONTRACT_TEMPLATE_URL = '/contracts/single-campaign-contract-template-v1.pdf';
 export const CONTRACT_TEMPLATE_BASE_PAGE_COUNT = 17;
@@ -87,22 +92,9 @@ export const formatContractMoneyValue = (currency: string, value: string) => {
   }).format(amount);
 };
 
-const bankAddress = (model: ContractGenerationModel) => [
-  model.paymentSnapshot.bankStreetAddress,
-  model.paymentSnapshot.bankCity,
-  model.paymentSnapshot.bankState,
-  model.paymentSnapshot.bankPostalCode,
-  model.paymentSnapshot.bankCountry,
-].filter(Boolean).join(', ');
-
-const payoutAccountLocator = (model: ContractGenerationModel) => (
-  model.payoutProvider === 'PayPal'
-    ? model.paymentSnapshot.paypalEmail
-    : model.paymentSnapshot.iban || model.paymentSnapshot.accountNumber
-);
-
 const hasCreator = (model: ContractGenerationModel) => Boolean(model.creatorId);
 const hasPayoutAccount = (model: ContractGenerationModel) => Boolean(model.payoutAccountId);
+const hasProject = (model: ContractGenerationModel) => Boolean(model.projectId);
 const isRequired = (
   definition: ContractPlaceholderDefinition,
   model: ContractGenerationModel,
@@ -113,13 +105,14 @@ const isRequired = (
 );
 
 export const CONTRACT_PLACEHOLDER_DEFINITIONS: ContractPlaceholderDefinition[] = [
-  { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 72, value: (model) => model.publisher },
+  { token: 'advertiser_name', label: 'Advertiser', fieldKey: 'signature', kind: 'text', required: true, pageHint: 1, overflowAt: 100, value: (model) => resolveContractTemplateOutput(model).values.advertiser },
+  { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 72, value: (model) => resolveContractTemplateOutput(model).values.publisher },
   { token: 'publisher_address', label: 'Publisher Address', fieldKey: 'publisherAddress', kind: 'longText', required: hasCreator, pageHint: 14, overflowAt: 180, value: (model) => model.publisherAddress },
-  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'longText', required: hasCreator, pageHint: 1, overflowAt: 240, value: formatContractPublishingChannelLinks },
-  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 120, value: formatContractPublishingPlatforms },
+  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'longText', required: hasCreator, pageHint: 1, overflowAt: 240, value: (model) => formatContractPublishingChannelLinks(resolveContractTemplateOutput(model).effectiveModel) },
+  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 120, value: (model) => formatContractPublishingPlatforms(resolveContractTemplateOutput(model).effectiveModel) },
   { token: 'effective_date', label: 'Effective Date', fieldKey: 'effectiveDate', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.effectiveDate) },
-  { token: 'campaign_start', label: 'Campaign Start', fieldKey: 'campaignPeriod', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.campaignStart) },
-  { token: 'campaign_end', label: 'Campaign End', fieldKey: 'campaignPeriod', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.campaignEnd) },
+  { token: 'campaign_start', label: 'Campaign Start', fieldKey: 'campaignPeriod', kind: 'date', required: hasProject, pageHint: 14, value: (model) => formatContractDate(resolveContractTemplateOutput(model).campaignStart) },
+  { token: 'campaign_end', label: 'Campaign End', fieldKey: 'campaignPeriod', kind: 'date', required: hasProject, pageHint: 14, value: (model) => formatContractDate(resolveContractTemplateOutput(model).campaignEnd) },
   { token: 'project_name', label: 'Project Name', fieldKey: 'projectName', kind: 'longText', required: false, pageHint: 14, overflowAt: 120, value: (model) => model.projectName },
   { token: 'channel_name', label: 'Channel Name', fieldKey: 'channelName', kind: 'text', required: hasCreator, pageHint: 14, overflowAt: 90, value: (model) => model.channelName },
   { token: 'campaign_purpose', label: 'Campaign Purpose', fieldKey: 'purposeItems', kind: 'longText', required: false, pageHint: 15, overflowAt: 280, value: (model) => model.purposeItems.join('\n') },
@@ -136,13 +129,16 @@ export const CONTRACT_PLACEHOLDER_DEFINITIONS: ContractPlaceholderDefinition[] =
   { token: 'invoice_issue_days', label: 'Invoice Issue Period', fieldKey: 'invoiceIssueWorkingDays', kind: 'text', required: false, pageHint: 5, value: (model) => model.invoiceIssueWorkingDays > 0 ? `${model.invoiceIssueWorkingDays} working days` : '' },
   { token: 'payment_days', label: 'Payment Term', fieldKey: 'paymentWorkingDays', kind: 'text', required: false, pageHint: 16, value: (model) => model.paymentWorkingDays ? `${model.paymentWorkingDays} working days` : '' },
   { token: 'fee_bearer', label: 'Transfer Fee Bearer', fieldKey: 'feeBearer', kind: 'text', required: false, pageHint: 6, value: (model) => model.feeBearer === 'ADVERTISER' ? 'Advertiser' : model.feeBearer === 'PUBLISHER' ? 'Publisher' : model.feeBearer === 'SHARED' ? 'Shared' : '' },
-  { token: 'payout_account_name', label: 'Payout Account Name', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, overflowAt: 100, value: (model) => model.payoutProvider === 'PayPal' ? model.paymentSnapshot.paypalUsername : model.paymentSnapshot.accountName },
-  { token: 'payout_account_locator', label: 'Account Number / IBAN', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, overflowAt: 120, applicable: (model) => model.payoutProvider === 'Airwallex', value: payoutAccountLocator },
-  { token: 'bank_name', label: 'Beneficiary Bank', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.bankName },
-  { token: 'bank_address', label: 'Beneficiary Bank Address', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 180, applicable: (model) => model.payoutProvider === 'Airwallex', value: bankAddress },
-  { token: 'swift_code', label: 'SWIFT Code', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.swiftCode },
-  { token: 'iban', label: 'IBAN', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 80, applicable: (model) => model.payoutProvider === 'Airwallex', value: (model) => model.paymentSnapshot.iban },
-  { token: 'paypal_email', label: 'PayPal Email', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, applicable: (model) => model.payoutProvider === 'PayPal', value: (model) => model.paymentSnapshot.paypalEmail },
+  { token: 'account_name', label: 'Account Name', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, overflowAt: 100, applicable: (model) => contractTemplateOutputFieldApplies('accountName', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.accountName },
+  { token: 'account_number', label: 'Account Number', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 120, applicable: (model) => contractTemplateOutputFieldApplies('accountNumber', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.accountNumber },
+  { token: 'beneficiary_bank_name', label: 'Beneficiary Bank Name', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, applicable: (model) => contractTemplateOutputFieldApplies('beneficiaryBankName', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.beneficiaryBankName },
+  { token: 'beneficiary_bank_address', label: 'Beneficiary Bank Address', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 180, applicable: (model) => contractTemplateOutputFieldApplies('beneficiaryBankAddress', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.beneficiaryBankAddress },
+  { token: 'swift_code', label: 'SWIFT Code', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, applicable: (model) => contractTemplateOutputFieldApplies('swiftCode', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.swiftCode },
+  { token: 'iban', label: 'IBAN', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 80, applicable: (model) => contractTemplateOutputFieldApplies('iban', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.iban },
+  { token: 'remittance_information', label: 'Remittance Information', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 180, applicable: (model) => contractTemplateOutputFieldApplies('remittanceInformation', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.remittanceInformation },
+  { token: 'paypal_username', label: 'PayPal Username', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, overflowAt: 100, applicable: (model) => contractTemplateOutputFieldApplies('paypalUsername', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.paypalUsername },
+  { token: 'paypal_email', label: 'PayPal Email Address', fieldKey: 'payoutAccount', kind: 'payment', required: hasPayoutAccount, pageHint: 5, applicable: (model) => contractTemplateOutputFieldApplies('paypalEmailAddress', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.paypalEmailAddress },
+  { token: 'transfer_note', label: 'Transfer Note', fieldKey: 'payoutAccount', kind: 'payment', required: false, pageHint: 5, overflowAt: 180, applicable: (model) => contractTemplateOutputFieldApplies('transferNote', model.payoutProvider), value: (model) => resolveContractTemplateOutput(model).values.transferNote },
 ];
 
 export const placeholderToken = (token: string) => `{{${token}}}`;
@@ -176,11 +172,13 @@ export const createContractQualityReport = (
   model: ContractGenerationModel,
   additionalIssues: ContractQualityIssue[] = [],
 ): ContractQualityReport => {
+  const output = resolveContractTemplateOutput(model);
+  const effectiveModel = output.effectiveModel;
   const applicable = CONTRACT_PLACEHOLDER_DEFINITIONS.filter((definition) => (
-    definition.applicable?.(model) ?? true
+    definition.applicable?.(effectiveModel) ?? true
   ));
   const issues: ContractQualityIssue[] = [];
-  if (!model.creatorId) {
+  if (!effectiveModel.creatorId) {
     issues.push({
       id: 'missing-creator-selection',
       kind: 'REQUIRED_MISSING',
@@ -190,7 +188,7 @@ export const createContractQualityReport = (
       message: '请选择合作达人',
     });
   }
-  if (!model.projectId) {
+  if (!effectiveModel.projectId) {
     issues.push({
       id: 'missing-project-selection',
       kind: 'REQUIRED_MISSING',
@@ -200,7 +198,7 @@ export const createContractQualityReport = (
       message: '请选择关联项目',
     });
   }
-  if (!model.payoutAccountId) {
+  if (!effectiveModel.payoutAccountId) {
     issues.push({
       id: 'missing-payout-account-selection',
       kind: 'REQUIRED_MISSING',
@@ -210,8 +208,8 @@ export const createContractQualityReport = (
       message: '请选择达人已验证的收款账户',
     });
   }
-  if (model.creatorId) {
-    const publishingChannels = resolveContractPublishingChannels(model);
+  if (effectiveModel.creatorId) {
+    const publishingChannels = resolveContractPublishingChannels(effectiveModel);
     const missingPlatformIndex = publishingChannels.findIndex((channel) => !channel.platform.trim());
     const missingUrlIndex = publishingChannels.findIndex((channel) => !channel.channelUrl.trim());
     const invalidUrlIndex = publishingChannels.findIndex((channel) => {
@@ -257,8 +255,8 @@ export const createContractQualityReport = (
     }
   }
   applicable.forEach((definition) => {
-    const value = definition.value(model).trim();
-    if (isRequired(definition, model) && !value) {
+    const value = definition.value(effectiveModel).trim();
+    if (isRequired(definition, effectiveModel) && !value) {
       issues.push({
         id: `missing-${definition.token}`,
         kind: 'REQUIRED_MISSING',
@@ -279,8 +277,8 @@ export const createContractQualityReport = (
     }
   });
 
-  const amount = Number(model.totalFee);
-  if (model.totalFee && (!Number.isFinite(amount) || amount <= 0)) {
+  const amount = Number(effectiveModel.totalFee);
+  if (effectiveModel.totalFee && (!Number.isFinite(amount) || amount <= 0)) {
     issues.push({
       id: 'format-total-fee',
       kind: 'FORMAT_INVALID',
@@ -290,7 +288,7 @@ export const createContractQualityReport = (
       message: 'Project Total Fees 必须是大于 0 的金额',
     });
   }
-  if (model.licensePrice && (!Number.isFinite(Number(model.licensePrice)) || Number(model.licensePrice) < 0)) {
+  if (effectiveModel.licensePrice && (!Number.isFinite(Number(effectiveModel.licensePrice)) || Number(effectiveModel.licensePrice) < 0)) {
     issues.push({
       id: 'format-license-price',
       kind: 'FORMAT_INVALID',
@@ -300,7 +298,7 @@ export const createContractQualityReport = (
       message: 'License Price 不能小于 0',
     });
   }
-  if ((model.totalFee || model.licensePrice) && !model.currency) {
+  if ((effectiveModel.totalFee || effectiveModel.licensePrice) && !effectiveModel.currency) {
     issues.push({
       id: 'format-currency',
       kind: 'FORMAT_INVALID',
@@ -311,10 +309,10 @@ export const createContractQualityReport = (
     });
   }
   if (
-    model.payoutAccountId
-    && model.payoutProvider === 'PayPal'
-    && model.paymentSnapshot.paypalEmail
-    && !/^\S+@\S+\.\S+$/.test(model.paymentSnapshot.paypalEmail.trim())
+    effectiveModel.payoutAccountId
+    && effectiveModel.payoutProvider === 'PayPal'
+    && effectiveModel.paymentSnapshot.paypalEmail
+    && !/^\S+@\S+\.\S+$/.test(effectiveModel.paymentSnapshot.paypalEmail.trim())
   ) {
     issues.push({
       id: 'format-paypal-email',
@@ -325,7 +323,7 @@ export const createContractQualityReport = (
       message: 'PayPal Email 格式无效',
     });
   }
-  if (Boolean(model.campaignStart) !== Boolean(model.campaignEnd)) {
+  if (Boolean(effectiveModel.campaignStart) !== Boolean(effectiveModel.campaignEnd)) {
     issues.push({
       id: 'format-campaign-period-incomplete',
       kind: 'FORMAT_INVALID',
@@ -335,7 +333,7 @@ export const createContractQualityReport = (
       message: 'Campaign 日期需同时填写开始和结束日期',
     });
   }
-  if (isDateAfter(model.campaignStart, model.campaignEnd)) {
+  if (isDateAfter(effectiveModel.campaignStart, effectiveModel.campaignEnd)) {
     issues.push({
       id: 'format-campaign-period',
       kind: 'FORMAT_INVALID',
@@ -345,7 +343,7 @@ export const createContractQualityReport = (
       message: 'Campaign 结束日期不能早于开始日期',
     });
   }
-  if (Boolean(model.releaseStart) !== Boolean(model.releaseEnd)) {
+  if (Boolean(effectiveModel.releaseStart) !== Boolean(effectiveModel.releaseEnd)) {
     issues.push({
       id: 'format-release-period-incomplete',
       kind: 'FORMAT_INVALID',
@@ -355,7 +353,7 @@ export const createContractQualityReport = (
       message: '发布日期需同时填写开始和结束日期',
     });
   }
-  if (isDateAfter(model.releaseStart, model.releaseEnd)) {
+  if (isDateAfter(effectiveModel.releaseStart, effectiveModel.releaseEnd)) {
     issues.push({
       id: 'format-release-period',
       kind: 'FORMAT_INVALID',
@@ -365,17 +363,34 @@ export const createContractQualityReport = (
       message: '发布结束日期不能早于开始日期',
     });
   }
+  if (effectiveModel.payoutAccountId) {
+    const payoutIssues = getDocumentPayoutSnapshotIssues(
+      effectiveModel.paymentSnapshot,
+      effectiveModel.payoutProvider,
+    );
+    payoutIssues.forEach((issue, index) => {
+      issues.push({
+        id: `payout-policy-${issue.fieldKey}-${index}`,
+        kind: 'REQUIRED_MISSING',
+        severity: 'BLOCKER',
+        fieldKey: 'payoutAccount',
+        pageNumber: 5,
+        message: issue.message,
+      });
+    });
+  }
   issues.push(...additionalIssues);
-  const completedFields = applicable.filter((definition) => definition.value(model).trim()).length;
-  const missingRequired = issues.filter((issue) => issue.kind === 'REQUIRED_MISSING').length;
-  const overflowRisks = issues.filter((issue) => issue.kind === 'OVERFLOW_RISK').length;
+  const deduplicatedIssues = [...new Map(issues.map((issue) => [`${issue.kind}:${issue.fieldKey}:${issue.message}`, issue])).values()];
+  const completedFields = applicable.filter((definition) => definition.value(effectiveModel).trim()).length;
+  const missingRequired = deduplicatedIssues.filter((issue) => issue.kind === 'REQUIRED_MISSING').length;
+  const overflowRisks = deduplicatedIssues.filter((issue) => issue.kind === 'OVERFLOW_RISK').length;
   return {
     completedFields,
     totalFields: applicable.length,
     missingRequired,
     overflowRisks,
-    issues,
-    hasBlockers: issues.some((issue) => issue.severity === 'BLOCKER'),
+    issues: deduplicatedIssues,
+    hasBlockers: deduplicatedIssues.some((issue) => issue.severity === 'BLOCKER'),
   };
 };
 

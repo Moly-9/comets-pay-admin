@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   BriefcaseBusiness,
   CheckCircle2,
@@ -41,7 +42,6 @@ import { contractGenerationFilename } from '../contractGenerationFilename';
 import { contractDocumentFilename } from '../documentFilenames';
 import {
   appendContractPublishingChannel,
-  contractPublishingChannelForPlatform,
   contractPublishingChannelsForCreator,
   contractPaymentMethodForAccount,
   contractPayoutSnapshot,
@@ -60,6 +60,8 @@ import type {
   ContractQualityReport,
   ContractRecord,
   ContractTemplateFieldKey,
+  ContractTemplateManualFieldValueMap,
+  ContractTemplateOutputFieldKey,
 } from '../contracts';
 import {
   getPayoutAccountId,
@@ -69,6 +71,11 @@ import {
 import { downloadBlob } from '../invoice/invoiceUtils';
 import type { CreatorProfile } from '../types';
 import { createContractQualityReport } from '../contractTemplate';
+import {
+  CONTRACT_TEMPLATE_OUTPUT_FIELDS,
+  hasManualPayoutDocumentDifferences,
+  resolveContractTemplateFieldPolicies,
+} from '../contractTemplateFieldPolicies';
 import type { ProjectSummary } from './ProjectDetailPage';
 
 type GeneratedFiles = {
@@ -81,6 +88,7 @@ type Props = {
   creators: CreatorProfile[];
   initialEngagementId?: EngagementId | null;
   existingDraft?: ContractRecord | null;
+  contractTemplate?: ContractRecord | null;
   onGenerated: (model: ContractGenerationModel, files: ContractGeneratedFiles) => ContractRecord;
   onSaveDraft: (model: ContractGenerationModel) => ContractRecord;
   onDraftStateChange?: (model: ContractGenerationModel, dirty: boolean) => void;
@@ -145,6 +153,16 @@ const PUBLISHING_PLATFORM_OPTIONS = [
   { value: 'Twitch', label: 'Twitch' },
 ];
 
+const cloneTemplateManualValues = (
+  values?: Partial<ContractTemplateManualFieldValueMap>,
+): Partial<ContractTemplateManualFieldValueMap> => values ? {
+  ...values,
+  channel: values.channel ? {
+    publishingChannels: values.channel.publishingChannels.map((channel) => ({ ...channel })),
+  } : undefined,
+  campaignPeriod: values.campaignPeriod ? { ...values.campaignPeriod } : undefined,
+} : {};
+
 const findInitialContext = (
   projects: ProjectSummary[],
   engagementId?: EngagementId | null,
@@ -193,6 +211,7 @@ export function ContractBuilderPage({
   creators,
   initialEngagementId,
   existingDraft,
+  contractTemplate,
   onGenerated,
   onSaveDraft,
   onDraftStateChange,
@@ -200,6 +219,9 @@ export function ContractBuilderPage({
   onOpenContractManagement,
 }: Props) {
   const draftModel = existingDraft?.generationSnapshot;
+  const templateFieldPolicies = useMemo(() => resolveContractTemplateFieldPolicies(
+    draftModel?.templateFieldPolicies ?? contractTemplate?.templateFieldPolicies,
+  ), [contractTemplate?.templateFieldPolicies, draftModel?.templateFieldPolicies]);
   const initialContext = findInitialContext(projects, initialEngagementId);
   const initialProjectId = findProjectIdForDraft(existingDraft)
     || String(initialContext?.project.cooperationProjectId ?? initialContext?.project.projectId ?? initialContext?.project.id ?? '');
@@ -255,6 +277,22 @@ export function ContractBuilderPage({
   const [publishingChannels, setPublishingChannels] = useState<ContractPublishingChannel[]>(
     initialPublishingChannels,
   );
+  const [templateManualFieldValues, setTemplateManualFieldValues] = useState<
+    Partial<ContractTemplateManualFieldValueMap>
+  >(() => {
+    if (draftModel?.templateManualFieldValues) {
+      return cloneTemplateManualValues(draftModel.templateManualFieldValues);
+    }
+    if (draftModel && !draftModel.templateFieldPolicies) {
+      return {
+        campaignPeriod: {
+          startDate: draftModel.campaignStart,
+          endDate: draftModel.campaignEnd,
+        },
+      };
+    }
+    return {};
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generationError, setGenerationError] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -316,6 +354,8 @@ export function ContractBuilderPage({
   );
   const paymentMethod = contractPaymentMethodForAccount(selectedAccount);
   const payoutProvider = selectedAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
+  const manualPublishingChannels = templateManualFieldValues.channel?.publishingChannels ?? [];
+  const manualCampaignPeriod = templateManualFieldValues.campaignPeriod ?? { startDate: '', endDate: '' };
 
   const creatorOptions = creatorSearchOptions(creators).map((option) => ({
     ...option,
@@ -337,6 +377,8 @@ export function ContractBuilderPage({
 
   const model = useMemo<ContractGenerationModel>(() => ({
     templateId: 'CON-TPL-2026-KOL',
+    templateFieldPolicies: { ...templateFieldPolicies },
+    templateManualFieldValues: cloneTemplateManualValues(templateManualFieldValues),
     contractName,
     contractType,
     projectId: resolvedProjectId as ProjectId,
@@ -427,6 +469,8 @@ export function ContractBuilderPage({
     resolvedProjectId,
     selectedCreator,
     selectedSocialAccount,
+    templateFieldPolicies,
+    templateManualFieldValues,
     totalFee,
   ]);
   const modelSignature = useMemo(() => JSON.stringify(model), [model]);
@@ -455,6 +499,10 @@ export function ContractBuilderPage({
     () => createContractQualityReport(model),
     [model],
   );
+  const manualPayoutDiff = useMemo(
+    () => hasManualPayoutDocumentDifferences(model),
+    [model],
+  );
 
   const signalField = (fieldKey: ContractTemplateFieldKey) => {
     setActiveField(fieldKey);
@@ -466,6 +514,83 @@ export function ContractBuilderPage({
     setPreviewFiles(null);
     if (generated) setPreviewStale(true);
     if (activeField) signalField(activeField);
+  };
+
+  const setManualScalarField = (
+    key: Exclude<ContractTemplateOutputFieldKey, 'channel' | 'campaignPeriod'>,
+    value: string,
+  ) => {
+    setTemplateManualFieldValues((current) => ({ ...current, [key]: value }));
+    resetOutput();
+  };
+
+  const manualScalarFieldValue = (
+    key: Exclude<ContractTemplateOutputFieldKey, 'channel' | 'campaignPeriod'>,
+  ) => {
+    const value = templateManualFieldValues[key];
+    return typeof value === 'string' ? value : '';
+  };
+
+  const updateManualCampaignPeriod = (key: 'startDate' | 'endDate', value: string) => {
+    setTemplateManualFieldValues((current) => ({
+      ...current,
+      campaignPeriod: {
+        startDate: current.campaignPeriod?.startDate ?? '',
+        endDate: current.campaignPeriod?.endDate ?? '',
+        [key]: value,
+      },
+    }));
+    resetOutput();
+  };
+
+  const updateManualPublishingChannel = (
+    index: number,
+    key: 'platform' | 'channelUrl',
+    value: string,
+  ) => {
+    setTemplateManualFieldValues((current) => {
+      const channels = current.channel?.publishingChannels?.length
+        ? current.channel.publishingChannels
+        : [{ socialAccountId: '', platform: '', channelUrl: '' }];
+      return {
+        ...current,
+        channel: {
+          publishingChannels: channels.map((channel, channelIndex) => (
+            channelIndex === index ? { ...channel, [key]: value } : channel
+          )),
+        },
+      };
+    });
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.platform;
+      delete next.channelUrl;
+      return next;
+    });
+    resetOutput();
+  };
+
+  const addManualPublishingChannel = () => {
+    setTemplateManualFieldValues((current) => ({
+      ...current,
+      channel: {
+        publishingChannels: appendContractPublishingChannel(current.channel?.publishingChannels ?? []),
+      },
+    }));
+    resetOutput();
+  };
+
+  const removeManualPublishingChannel = (index: number) => {
+    setTemplateManualFieldValues((current) => ({
+      ...current,
+      channel: {
+        publishingChannels: removeContractPublishingChannelAt(
+          current.channel?.publishingChannels ?? [],
+          index,
+        ),
+      },
+    }));
+    resetOutput();
   };
 
   const replacePreview = (
@@ -535,55 +660,11 @@ export function ContractBuilderPage({
       Number(right.socialAccountId === socialAccount?.id)
       - Number(left.socialAccountId === socialAccount?.id)
     )));
-    setErrors({});
-    resetOutput();
-  };
-
-  const updatePublishingChannel = (
-    index: number,
-    key: 'platform' | 'channelUrl',
-    value: string,
-  ) => {
-    setPublishingChannels((current) => current.map((channel, channelIndex) => {
-      if (channelIndex !== index) return channel;
-      if (key === 'platform') {
-        return contractPublishingChannelForPlatform(
-          selectedCreator,
-          value,
-          channel.socialAccountId,
-        );
-      }
-      return { ...channel, channelUrl: value };
+    setTemplateManualFieldValues((current) => ({
+      advertiser: current.advertiser,
+      campaignPeriod: current.campaignPeriod,
     }));
-    setErrors((current) => {
-      if (!current[key] && !(key === 'platform' && current.channelUrl)) return current;
-      const next = { ...current };
-      delete next[key];
-      if (key === 'platform') delete next.channelUrl;
-      return next;
-    });
-    resetOutput();
-  };
-
-  const clearPublishingChannelErrors = () => {
-    setErrors((current) => {
-      if (!current.platform && !current.channelUrl) return current;
-      const next = { ...current };
-      delete next.platform;
-      delete next.channelUrl;
-      return next;
-    });
-  };
-
-  const addPublishingChannel = () => {
-    setPublishingChannels((current) => appendContractPublishingChannel(current));
-    clearPublishingChannelErrors();
-    resetOutput();
-  };
-
-  const removePublishingChannel = (index: number) => {
-    setPublishingChannels((current) => removeContractPublishingChannelAt(current, index));
-    clearPublishingChannelErrors();
+    setErrors({});
     resetOutput();
   };
 
@@ -818,9 +899,32 @@ export function ContractBuilderPage({
                 />
                 <small>{errors.contractName || '用于合同列表、详情和后续签署文件匹配'}</small>
               </label>
-              <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}><span>Publisher（real name）</span><input value={publisher} readOnly /><small>{errors.publisher}</small></label>
+              {templateFieldPolicies.advertiser !== 'OMIT' ? (
+                <label className={errors.advertiser ? 'has-error' : ''} data-contract-field="signature" {...fieldProps('signature')}>
+                  <span>Advertiser *</span>
+                  <input
+                    value={templateFieldPolicies.advertiser === 'MANUAL' ? manualScalarFieldValue('advertiser') : 'Comets International Limited'}
+                    readOnly={templateFieldPolicies.advertiser !== 'MANUAL'}
+                    placeholder="输入合同 Advertiser"
+                    onChange={(event) => setManualScalarField('advertiser', event.target.value)}
+                  />
+                  <small>{errors.advertiser || (templateFieldPolicies.advertiser === 'SYSTEM' ? '系统组织信息' : '仅写入本次合同快照')}</small>
+                </label>
+              ) : null}
+              {templateFieldPolicies.publisher !== 'OMIT' ? (
+                <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}>
+                  <span>Publisher（real name）*</span>
+                  <input
+                    value={templateFieldPolicies.publisher === 'MANUAL' ? manualScalarFieldValue('publisher') : publisher}
+                    readOnly={templateFieldPolicies.publisher !== 'MANUAL'}
+                    placeholder="输入 Publisher 法定名称"
+                    onChange={(event) => setManualScalarField('publisher', event.target.value)}
+                  />
+                  <small>{errors.publisher || (templateFieldPolicies.publisher === 'SYSTEM' ? '达人档案法定名称' : '仅写入本次合同快照')}</small>
+                </label>
+              ) : null}
               <label className={errors.channelName ? 'has-error' : ''} data-contract-field="channelName" {...fieldProps('channelName')}><span>发布频道名称</span><input value={channelName} readOnly /><small>{errors.channelName}</small></label>
-              <div
+              {templateFieldPolicies.channel !== 'OMIT' ? <div
                 className={`contract-publishing-channels full-width ${errors.platform || errors.channelUrl ? 'has-error' : ''}`}
                 data-contract-field="platform"
                 onFocus={() => setActiveField('platform')}
@@ -828,15 +932,15 @@ export function ContractBuilderPage({
                 <div className="contract-publishing-channels-head">
                   <div className="contract-publishing-channels-copy">
                     <strong>发布平台 / 发布频道 *</strong>
-                    <span>保留多频道快照，每行可分别选择平台并编辑链接</span>
+                    <span>{templateFieldPolicies.channel === 'SYSTEM' ? '从达人社媒账号自动读取' : '本次生成时人工填写平台及链接'}</span>
                   </div>
                   <Button
                     className="contract-publishing-channel-add"
                     variant="secondary"
                     icon={<Plus size={14} />}
-                    disabled={!selectedCreator}
-                    disabledReason="请先选择合作达人。"
-                    onClick={addPublishingChannel}
+                    disabled={templateFieldPolicies.channel !== 'MANUAL'}
+                    disabledReason="当前字段策略为系统自动带入。"
+                    onClick={addManualPublishingChannel}
                   >
                     新增渠道
                   </Button>
@@ -845,7 +949,9 @@ export function ContractBuilderPage({
                   <span>发布平台 *</span>
                   <span>频道链接 *</span>
                   <span>操作</span>
-                  {(publishingChannels.length ? publishingChannels : [{
+                  {((templateFieldPolicies.channel === 'MANUAL' ? manualPublishingChannels : publishingChannels).length
+                    ? (templateFieldPolicies.channel === 'MANUAL' ? manualPublishingChannels : publishingChannels)
+                    : [{
                     socialAccountId: '',
                     platform: '',
                     channelUrl: '',
@@ -859,8 +965,8 @@ export function ContractBuilderPage({
                           value={channel.platform}
                           placeholder="选择平台"
                           options={PUBLISHING_PLATFORM_OPTIONS}
-                          disabled={!selectedCreator}
-                          onChange={(value) => updatePublishingChannel(index, 'platform', value)}
+                          disabled={templateFieldPolicies.channel !== 'MANUAL'}
+                          onChange={(value) => updateManualPublishingChannel(index, 'platform', value)}
                         />
                       </label>
                       <label>
@@ -870,18 +976,18 @@ export function ContractBuilderPage({
                           aria-label={`频道链接 ${index + 1}`}
                           value={channel.channelUrl}
                           placeholder="https://"
-                          disabled={!selectedCreator}
+                          readOnly={templateFieldPolicies.channel !== 'MANUAL'}
                           onFocus={() => setActiveField('channelUrl')}
-                          onChange={(event) => updatePublishingChannel(index, 'channelUrl', event.target.value)}
+                          onChange={(event) => updateManualPublishingChannel(index, 'channelUrl', event.target.value)}
                         />
                       </label>
                       <button
                         className="contract-publishing-channel-remove"
                         type="button"
                         aria-label={`删除发布渠道 ${index + 1}`}
-                        title={publishingChannels.length <= 1 ? '至少保留一个发布渠道' : '删除该发布渠道'}
-                        disabled={publishingChannels.length <= 1}
-                        onClick={() => removePublishingChannel(index)}
+                        title={manualPublishingChannels.length <= 1 ? '至少保留一个发布渠道' : '删除该发布渠道'}
+                        disabled={templateFieldPolicies.channel !== 'MANUAL' || manualPublishingChannels.length <= 1}
+                        onClick={() => removeManualPublishingChannel(index)}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -889,7 +995,7 @@ export function ContractBuilderPage({
                   ))}
                 </div>
                 <small>{errors.platform || errors.channelUrl}</small>
-              </div>
+              </div> : null}
               <label className={`full-width ${errors.publisherAddress ? 'has-error' : ''}`} data-contract-field="publisherAddress" {...fieldProps('publisherAddress')}><span>Publisher 地址 *</span><textarea value={publisherAddress} readOnly /><small>{errors.publisherAddress}</small></label>
             </div>
           </div>
@@ -899,8 +1005,17 @@ export function ContractBuilderPage({
             <div className="invoice-form-grid">
               <label className="full-width" data-contract-field="projectName" {...fieldProps('projectName')}><span>Project Name</span><input value={projectName} onChange={(event) => { setProjectName(event.target.value); resetOutput(); }} /></label>
               <label className={errors.effectiveDate ? 'has-error' : ''} data-contract-field="effectiveDate" {...fieldProps('effectiveDate')}><span>生效日期</span><input type="date" value={effectiveDate} onChange={(event) => { setEffectiveDate(event.target.value); resetOutput(); }} /><small>{errors.effectiveDate}</small></label>
-              <label className={errors.campaignStart ? 'has-error' : ''} data-contract-field="campaignStart" {...fieldProps('campaignPeriod')}><span>Campaign Start</span><input type="date" value={campaignStart} onChange={(event) => { setCampaignStart(event.target.value); resetOutput(); }} /><small>{errors.campaignStart}</small></label>
-              <label className={errors.campaignEnd ? 'has-error' : ''} data-contract-field="campaignEnd" {...fieldProps('campaignPeriod')}><span>Campaign End</span><input type="date" value={campaignEnd} onChange={(event) => { setCampaignEnd(event.target.value); resetOutput(); }} /><small>{errors.campaignEnd}</small></label>
+              {templateFieldPolicies.campaignPeriod === 'MANUAL' ? (
+                <>
+                  <label className={errors.campaignStart ? 'has-error' : ''} data-contract-field="campaignStart" {...fieldProps('campaignPeriod')}><span>Campaign Start *</span><input type="date" value={manualCampaignPeriod.startDate} onChange={(event) => updateManualCampaignPeriod('startDate', event.target.value)} /><small>{errors.campaignStart}</small></label>
+                  <label className={errors.campaignEnd ? 'has-error' : ''} data-contract-field="campaignEnd" {...fieldProps('campaignPeriod')}><span>Campaign End *</span><input type="date" value={manualCampaignPeriod.endDate} onChange={(event) => updateManualCampaignPeriod('endDate', event.target.value)} /><small>{errors.campaignEnd}</small></label>
+                </>
+              ) : templateFieldPolicies.campaignPeriod === 'SYSTEM' ? (
+                <div className="contract-template-source-missing full-width" data-contract-field="campaignStart" role="note">
+                  <AlertTriangle size={16} />
+                  <span><strong>Campaign Period 系统来源缺失</strong><small>当前项目模型没有开始/结束日期字段，正式生成前请在模板中改为“生成时人工填写”或补充项目周期数据。</small></span>
+                </div>
+              ) : null}
               <div className={`contract-purpose-editor full-width ${errors.purposeItems ? 'has-error' : ''}`} data-contract-field="purposeItems" onFocus={() => setActiveField('purposeItems')}>
                 <div className="invoice-line-header"><strong>推广目的</strong>{purposeItems.length < 3 ? <Button variant="secondary" icon={<Plus size={14} />} onClick={() => setPurposeItems((current) => [...current, ''])}>新增一项</Button> : null}</div>
                 {purposeItems.map((item, index) => (
@@ -974,6 +1089,48 @@ export function ContractBuilderPage({
                   </div>
                 );
               })() : <div className="contract-account-empty full-width">达人档案没有可用于合同的已验证 Airwallex 或 PayPal 账户。</div>}
+              {selectedAccount ? (() => {
+                const providerGroup = payoutProvider === 'PayPal' ? 'PAYPAL' : 'BANK';
+                const manualFields = CONTRACT_TEMPLATE_OUTPUT_FIELDS.filter((field) => (
+                  field.group === providerGroup && templateFieldPolicies[field.key] === 'MANUAL'
+                ));
+                if (!manualFields.length) return null;
+                return (
+                  <div className="contract-manual-payout-fields full-width">
+                    <div className="contract-manual-payout-fields-heading">
+                      <strong>本次合同人工收款值</strong>
+                      <span>不会回写达人账户</span>
+                    </div>
+                    <div className="invoice-form-grid">
+                      {manualFields.map((field) => {
+                        const key = field.key as Exclude<ContractTemplateOutputFieldKey, 'channel' | 'campaignPeriod'>;
+                        const multiline = ['beneficiaryBankAddress', 'remittanceInformation', 'transferNote'].includes(key);
+                        return (
+                          <label className="full-width" data-contract-output-field={key} key={key}>
+                            <span>{field.label}</span>
+                            {multiline ? (
+                              <textarea value={manualScalarFieldValue(key)} onChange={(event) => setManualScalarField(key, event.target.value)} />
+                            ) : (
+                              <input
+                                type={key === 'paypalEmailAddress' ? 'email' : 'text'}
+                                value={manualScalarFieldValue(key)}
+                                onChange={(event) => setManualScalarField(key, event.target.value)}
+                              />
+                            )}
+                            <small>人工值仅保存到当前合同文档快照</small>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })() : null}
+              {selectedAccount && manualPayoutDiff ? (
+                <div className="contract-manual-payout-warning full-width" role="status">
+                  <AlertTriangle size={16} />
+                  <span>人工收款值与达人已验证账户不同，正式使用前必须人工核对；达人账户不会被修改。</span>
+                </div>
+              ) : null}
             </div>
           </div>
 

@@ -10,13 +10,13 @@ import {
 import type { CreatorProfile } from '../types';
 import { ContractDetailPage } from './ContractDetailPage';
 import type { ProjectSummary } from './ProjectDetailPage';
+import { getContractTemplatePolicyReadiness } from '../contractTemplateFieldPolicies';
 
 type Notify = (title: string, message: string) => void;
 
-const templateReadinessFor = (contract: ContractRecord) => {
-  const blockerCount = contract.issues.filter((issue) => issue.severity === 'blocker').length;
-  return { ready: blockerCount === 0, label: blockerCount === 0 ? '可使用' : '待完善' };
-};
+const templateReadinessFor = (contract: ContractRecord) => (
+  getContractTemplatePolicyReadiness(contract.templateFieldPolicies)
+);
 
 export function SystemConfigurationPage({
   contracts,
@@ -24,12 +24,14 @@ export function SystemConfigurationPage({
   creators,
   notify,
   onUpdateContract,
+  onTemplateDirtyChange,
 }: {
   contracts: ContractRecord[];
   projects: ProjectSummary[];
   creators: CreatorProfile[];
   notify: Notify;
   onUpdateContract: (contract: ContractRecord) => void;
+  onTemplateDirtyChange?: (dirty: boolean) => void;
 }) {
   const [search, setSearch] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -65,7 +67,11 @@ export function SystemConfigurationPage({
         backLabel="返回系统配置"
         notify={notify}
         onUpdateContract={onUpdateContract}
-        onBack={() => setSelectedTemplateId(null)}
+        onTemplateDirtyChange={onTemplateDirtyChange}
+        onBack={() => {
+          onTemplateDirtyChange?.(false);
+          setSelectedTemplateId(null);
+        }}
       />
     );
   }

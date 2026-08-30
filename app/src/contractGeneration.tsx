@@ -37,6 +37,7 @@ import type {
   ContractQualityIssue,
   ContractQualityReport,
   ContractTemplateFieldKey,
+  ContractTemplateOutputFieldKey,
 } from './contracts';
 import { formatContractPublishingChannelLinks } from './contractGenerationModel';
 import {
@@ -52,6 +53,10 @@ import {
   placeholderToken,
   replaceContractPlaceholders,
 } from './contractTemplate';
+import {
+  isContractTemplateOutputFieldOmitted,
+  resolveContractTemplateOutput,
+} from './contractTemplateFieldPolicies';
 export { contractGenerationFilename } from './contractGenerationFilename';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -100,6 +105,7 @@ type ResolvedTable = {
 
 type ResolvedSignature = {
   type: 'signature';
+  advertiser: string;
   publisher: string;
   publisherAddress: string;
 };
@@ -234,12 +240,13 @@ const stripTemplateArtifacts = (
   variant: ContractDocumentVariant,
   pageNumber: number,
 ) => {
-  const channelLinks = formatContractPublishingChannelLinks(model);
+  const effectiveModel = resolveContractTemplateOutput(model).effectiveModel;
+  const channelLinks = formatContractPublishingChannelLinks(effectiveModel);
   let result = value
     .replace(/_+/g, ' ')
     .replace(/\[\s*please fill[^\]]*\]/gi, variant === 'DRAFT' ? '待填写' : '')
-    .replace(/please fill in REAL NAME or Company NAME/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
-    .replace(/\[REAL NAME or Company Name\]/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/please fill in REAL NAME or Company NAME/gi, effectiveModel.publisher || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/\[REAL NAME or Company Name\]/gi, effectiveModel.publisher || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/please fill in the promoted channel link/gi, channelLinks || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/https:\/\/www\.youtube\.com\/x+/gi, channelLinks || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/\bXXX\b/gi, variant === 'DRAFT' ? '待填写' : '')
@@ -291,7 +298,7 @@ const standardTermsOpening = (
       fieldKey: 'publisher',
       align: 'justify',
       text: replaceContractPlaceholders(
-        `This Standard Terms And Conditions (the "Standard Terms") constitute an integrated part of all Insertion Orders (the "IO") between Comets International Limited ("Advertiser") and ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher"). Publisher is required to have their own accounts on ${placeholderToken('platform')}. The Standard Terms and IO are collectively referred to herein as the "Agreement". In the event of a contradiction between the provisions of these Standard Terms and the IO, the provisions of the IO shall prevail.`,
+        `This Standard Terms And Conditions (the "Standard Terms") constitute an integrated part of all Insertion Orders (the "IO") between ${placeholderToken('advertiser_name')} ("Advertiser") and ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher"). Publisher is required to have their own accounts on ${placeholderToken('platform')}. The Standard Terms and IO are collectively referred to herein as the "Agreement". In the event of a contradiction between the provisions of these Standard Terms and the IO, the provisions of the IO shall prevail.`,
         model,
         variant,
       ),
@@ -299,6 +306,14 @@ const standardTermsOpening = (
     ...sourcePageBlocks(1, fixedTerms, model, variant),
   ];
 };
+
+const configuredOutputRow = (
+  model: ContractGenerationModel,
+  outputFieldKey: ContractTemplateOutputFieldKey,
+  row: ResolvedTableRow,
+): ResolvedTableRow[] => (
+  isContractTemplateOutputFieldOmitted(model, outputFieldKey) ? [] : [row]
+);
 
 const paymentPage = (
   lines: string[],
@@ -323,18 +338,18 @@ const paymentPage = (
       type: 'table',
       rows: bank ? [
         { label: 'Payment Method', value: 'Bank transfer', fieldKey: 'payoutAccount' },
-        { label: 'Account Name', value: replaceContractPlaceholders(placeholderToken('payout_account_name'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Account Number / IBAN', value: replaceContractPlaceholders(placeholderToken('payout_account_locator'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Beneficiary Bank', value: replaceContractPlaceholders(placeholderToken('bank_name'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Bank Address', value: replaceContractPlaceholders(placeholderToken('bank_address'), model, variant), fieldKey: 'payoutAccount', optional: true },
-        { label: 'SWIFT Code', value: replaceContractPlaceholders(placeholderToken('swift_code'), model, variant), fieldKey: 'payoutAccount', optional: true },
-        { label: 'IBAN', value: replaceContractPlaceholders(placeholderToken('iban'), model, variant), fieldKey: 'payoutAccount', optional: true },
-        { label: 'Remittance Information', value: model.paymentSnapshot.transferRemarks, fieldKey: 'payoutAccount', optional: true },
+        ...configuredOutputRow(model, 'accountName', { label: 'Account Name', value: replaceContractPlaceholders(placeholderToken('account_name'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'accountNumber', { label: 'Account Number', value: replaceContractPlaceholders(placeholderToken('account_number'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'beneficiaryBankName', { label: 'Beneficiary Bank Name', value: replaceContractPlaceholders(placeholderToken('beneficiary_bank_name'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'beneficiaryBankAddress', { label: 'Beneficiary Bank Address', value: replaceContractPlaceholders(placeholderToken('beneficiary_bank_address'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'swiftCode', { label: 'Swift Code', value: replaceContractPlaceholders(placeholderToken('swift_code'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'iban', { label: 'IBAN', value: replaceContractPlaceholders(placeholderToken('iban'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'remittanceInformation', { label: 'Remittance Information (optional)', value: replaceContractPlaceholders(placeholderToken('remittance_information'), model, variant), fieldKey: 'payoutAccount', optional: true }),
       ] : [
         { label: 'Payment Method', value: 'PayPal', fieldKey: 'payoutAccount' },
-        { label: 'PayPal Name', value: replaceContractPlaceholders(placeholderToken('payout_account_name'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'PayPal Email', value: replaceContractPlaceholders(placeholderToken('paypal_email'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Remittance Information', value: model.paymentSnapshot.transferRemarks, fieldKey: 'payoutAccount', optional: true },
+        ...configuredOutputRow(model, 'paypalUsername', { label: 'PayPal Username', value: replaceContractPlaceholders(placeholderToken('paypal_username'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'paypalEmailAddress', { label: 'PayPal Email Address', value: replaceContractPlaceholders(placeholderToken('paypal_email'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'transferNote', { label: 'Transfer Note (optional)', value: replaceContractPlaceholders(placeholderToken('transfer_note'), model, variant), fieldKey: 'payoutAccount', optional: true }),
       ],
     },
   ];
@@ -343,15 +358,23 @@ const paymentPage = (
 const insertionOrderPage = (
   model: ContractGenerationModel,
   variant: ContractDocumentVariant,
-): ResolvedBlock[] => [
+): ResolvedBlock[] => {
+  const partyRows: ResolvedTableRow[] = [
+    ...configuredOutputRow(model, 'advertiser', { label: 'Advertiser', value: replaceContractPlaceholders(placeholderToken('advertiser_name'), model, variant), fieldKey: 'signature' }),
+    { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
+    ...configuredOutputRow(model, 'publisher', { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' }),
+    { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
+  ];
+  const campaignRows: ResolvedTableRow[] = [
+    { label: 'Project Name', value: replaceContractPlaceholders(placeholderToken('project_name'), model, variant), fieldKey: 'projectName' },
+    { label: 'Service Provider Name', value: replaceContractPlaceholders(placeholderToken('channel_name'), model, variant), fieldKey: 'channelName' },
+    ...configuredOutputRow(model, 'campaignPeriod', { label: 'Start Date', value: replaceContractPlaceholders(placeholderToken('campaign_start'), model, variant), fieldKey: 'campaignPeriod' }),
+    ...configuredOutputRow(model, 'campaignPeriod', { label: 'End Date', value: replaceContractPlaceholders(placeholderToken('campaign_end'), model, variant), fieldKey: 'campaignPeriod' }),
+  ];
+  return [
   {
     type: 'table',
-    rows: [
-      { label: 'Advertiser', value: 'Comets International Limited', fieldKey: 'signature' },
-      { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
-      { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' },
-      { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
-    ],
+    rows: partyRows,
   },
   { type: 'paragraph', style: 'title', align: 'center', text: 'Insertion Order' },
   {
@@ -360,7 +383,7 @@ const insertionOrderPage = (
     fieldKey: 'effectiveDate',
     align: 'justify',
     text: replaceContractPlaceholders(
-      `This Insertion Order ("this IO") relates to the services provided under the Standard Terms And Conditions For Digital Marketing Services entered into by ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher") and Comets International Limited ("Advertiser") with effect as of ${placeholderToken('effective_date')} ("the Agreement").`,
+      `This Insertion Order ("this IO") relates to the services provided under the Standard Terms And Conditions For Digital Marketing Services entered into by ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher") and ${placeholderToken('advertiser_name')} ("Advertiser") with effect as of ${placeholderToken('effective_date')} ("the Agreement").`,
       model,
       variant,
     ),
@@ -383,14 +406,10 @@ const insertionOrderPage = (
   { type: 'paragraph', style: 'heading', text: '2. Campaign Details' },
   {
     type: 'table',
-    rows: [
-      { label: 'Project Name', value: replaceContractPlaceholders(placeholderToken('project_name'), model, variant), fieldKey: 'projectName' },
-      { label: 'Service Provider Name', value: replaceContractPlaceholders(placeholderToken('channel_name'), model, variant), fieldKey: 'channelName' },
-      { label: 'Start Date', value: replaceContractPlaceholders(placeholderToken('campaign_start'), model, variant), fieldKey: 'campaignPeriod' },
-      { label: 'End Date', value: replaceContractPlaceholders(placeholderToken('campaign_end'), model, variant), fieldKey: 'campaignPeriod' },
-    ],
+    rows: campaignRows,
   },
-];
+  ];
+};
 
 const campaignDetailsPage = (
   model: ContractGenerationModel,
@@ -417,8 +436,8 @@ const campaignDetailsPage = (
         { label: 'Format', value: replaceContractPlaceholders(placeholderToken('content_format'), model, variant), fieldKey: 'contentFormat' },
         { label: 'Release Date', value: replaceContractPlaceholders(`${placeholderToken('release_start')} to ${placeholderToken('release_end')}`, model, variant), fieldKey: 'releasePeriod' },
         { label: 'Language', value: replaceContractPlaceholders(placeholderToken('language'), model, variant), fieldKey: 'language' },
-        { label: 'Publishing Platform', value: replaceContractPlaceholders(placeholderToken('platform'), model, variant), fieldKey: 'platform' },
-        { label: 'Channel Link', value: replaceContractPlaceholders(placeholderToken('channel_url'), model, variant), fieldKey: 'channelUrl' },
+        ...configuredOutputRow(model, 'channel', { label: 'Publishing Platform', value: replaceContractPlaceholders(placeholderToken('platform'), model, variant), fieldKey: 'platform' }),
+        ...configuredOutputRow(model, 'channel', { label: 'Channel Link', value: replaceContractPlaceholders(placeholderToken('channel_url'), model, variant), fieldKey: 'channelUrl' }),
         { label: 'Length of Content', value: replaceContractPlaceholders(placeholderToken('content_length'), model, variant), fieldKey: 'contentLength' },
         { label: 'License Period', value: replaceContractPlaceholders(placeholderToken('license_period'), model, variant), fieldKey: 'licensePeriod', optional: true },
         { label: 'License Price', value: replaceContractPlaceholders(placeholderToken('license_price'), model, variant), fieldKey: 'licensePrice', optional: true },
@@ -431,7 +450,9 @@ const campaignDetailsPage = (
 const signaturePage = (
   model: ContractGenerationModel,
   variant: ContractDocumentVariant,
-): ResolvedBlock[] => [
+): ResolvedBlock[] => {
+  const output = resolveContractTemplateOutput(model);
+  return [
   { type: 'paragraph', style: 'title', align: 'center', text: 'Execution' },
   {
     type: 'paragraph',
@@ -440,10 +461,12 @@ const signaturePage = (
   },
   {
     type: 'signature',
-    publisher: model.publisher || (variant === 'DRAFT' ? '待填写' : ''),
+    advertiser: output.values.advertiser || (variant === 'DRAFT' ? '待填写' : ''),
+    publisher: output.values.publisher || (variant === 'DRAFT' ? '待填写' : ''),
     publisherAddress: model.publisherAddress || (variant === 'DRAFT' ? '待填写' : ''),
   },
-];
+  ];
+};
 
 const prepareContractDocument = async (
   model: ContractGenerationModel,
@@ -471,7 +494,7 @@ const prepareContractDocument = async (
       ? [block.text]
       : block.type === 'table'
         ? block.rows.flatMap((row) => [row.label, row.value])
-        : [block.publisher, block.publisherAddress];
+        : [block.advertiser, block.publisher, block.publisherAddress];
     return values.some((value) => /\{\{[^}]+\}\}/.test(value))
       ? [{
           id: `unresolved-page-${page.sourcePage}`,
@@ -779,8 +802,8 @@ const buildContractPdf = async (
     const parties = [
       {
         x: CONTRACT_TEMPLATE_MARGIN,
-        party: 'For and on behalf of Comets International Limited',
-        name: 'Comets International Limited',
+        party: `For and on behalf of ${block.advertiser}`,
+        name: block.advertiser,
         title: 'Influencer Manager',
         address: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong',
       },
@@ -1002,8 +1025,8 @@ const docxSignature = (block: ResolvedSignature) => {
       cantSplit: true,
       children: [
         signatureCell(
-          'For and on behalf of Comets International Limited',
-          'Comets International Limited',
+          `For and on behalf of ${block.advertiser}`,
+          block.advertiser,
           'Influencer Manager',
           'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong',
           width,
@@ -1134,6 +1157,10 @@ export const generateContractFiles = async (
   const variant = options.variant ?? 'FORMAL';
   const templateBytes = await loadBytes(CONTRACT_TEMPLATE_URL);
   const prepared = await prepareContractDocument(model, variant, templateBytes);
+  if (variant === 'FORMAL' && prepared.qualityReport.hasBlockers) {
+    const firstBlocker = prepared.qualityReport.issues.find((issue) => issue.severity === 'BLOCKER');
+    throw new Error(firstBlocker?.message ?? '合同存在未完成的必需字段，不能生成正式文件。');
+  }
   const [pdfResult, docxBlob] = await Promise.all([
     buildContractPdf(prepared, variant, model),
     buildContractDocx(prepared, variant, model),
