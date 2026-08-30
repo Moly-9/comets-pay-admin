@@ -129,6 +129,11 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('付款渠道');
     expect(html).toContain('支付币种');
     expect(html).toContain('预计付款时间');
+    expect(html).toContain('class="is-amount"');
+    expect(html).toContain('class="is-payment-order"');
+    expect(html).toContain('class="is-provider"');
+    expect(html).toContain('class="is-currency"');
+    expect(html).toContain('class="is-expected-date"');
     expect(html.match(/payment-execution-hero-summary/g)).toHaveLength(1);
     expect(html).toContain('达人付款信息');
     expect(html).toContain('aria-label="请款项目与达人请款信息"');
@@ -163,6 +168,23 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('>退回媒介修改</span>');
     expect(html).toContain('>执行打款</span>');
     expect(html).toMatch(/class="button button-primary payment-execution-submit-action"(?![^>]*disabled)/);
+  });
+
+  it('uses the same soft system surfaces in payment, returned, and execution summaries', () => {
+    const source = readFileSync(new URL('./PaymentExecutionWorkspace.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
+
+    expect(source.match(/className="is-resources"/g)).toHaveLength(2);
+    expect(source.match(/className="is-payment-order"/g)).toHaveLength(3);
+    expect(styles).toContain('.payment-execution-metrics > .is-amount');
+    expect(styles).toContain('.payment-execution-metrics > .is-resources');
+    expect(styles).toContain('.payment-execution-metrics > .is-payment-order');
+    expect(styles).toContain('.payment-execution-hero-summary > .is-provider');
+    expect(styles).toContain('.payment-execution-hero-summary > .is-currency');
+    expect(styles).toContain('.payment-execution-hero-summary > .is-expected-date');
+    expect(styles).toContain('linear-gradient(125deg, #fff9ea 0%, #fff2df 100%)');
+    expect(styles).toMatch(/\.payment-execution-hero-summary span\s*{[^}]*color:\s*#747b89;/s);
+    expect(styles).toMatch(/\.payment-execution-hero-summary strong\s*{[^}]*color:\s*#20242c;/s);
   });
 
   it('treats every waiting-payment item as validated and blocks items outside that state', () => {

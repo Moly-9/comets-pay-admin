@@ -191,6 +191,46 @@
   padding: 12px;
 }
 
+.finance-review-workspace .finance-review-metrics article {
+  border: 1px solid rgba(222, 225, 231, 0.82);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(37, 43, 55, 0.05);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-amount {
+  border-color: #f0ddd5;
+  background: linear-gradient(125deg, #fff5e9 0%, #fff0ea 100%);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-resources {
+  border-color: #dbe7f5;
+  background: linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-payment-order {
+  border-color: #e4d8ee;
+  background: linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-status {
+  grid-column: auto;
+  border-color: #d8ebe3;
+  background: linear-gradient(125deg, #f0faf6 0%, #eaf8f6 100%);
+}
+
+.finance-review-workspace .finance-review-metrics .is-payment-order .finance-review-metric-icon {
+  background: #eadff3;
+  color: #7256a0;
+}
+
+.finance-review-workspace .finance-review-metrics :is(span, small) {
+  color: #747b89;
+}
+
+.finance-review-workspace .finance-review-metrics strong {
+  color: #20242c;
+}
+
 .finance-review-overview-stage .finance-review-metrics span,
 .finance-review-overview-stage .finance-review-project-section > header span,
 .finance-review-overview-stage .finance-review-project-info dt,

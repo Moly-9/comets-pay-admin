@@ -451,14 +451,29 @@ body:has(.payment-execution-workspace) {
   display: grid;
   min-width: 0;
   gap: 6px;
-  border: 1px solid #e4e7eb;
-  border-radius: 7px;
-  background: #f7f8fa;
+  border: 1px solid rgba(222, 225, 231, 0.82);
+  border-radius: 10px;
   padding: 13px 14px;
+  box-shadow: 0 4px 14px rgba(37, 43, 55, 0.05);
 }
 
 .payment-execution-metrics > div:last-child {
-  border-right: 1px solid #e4e7eb;
+  border-right: 1px solid rgba(222, 225, 231, 0.82);
+}
+
+.payment-execution-metrics > .is-amount {
+  border-color: #f0ddd5;
+  background: linear-gradient(125deg, #fff5e9 0%, #fff0ea 100%);
+}
+
+.payment-execution-metrics > .is-resources {
+  border-color: #dbe7f5;
+  background: linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%);
+}
+
+.payment-execution-metrics > .is-payment-order {
+  border-color: #e4d8ee;
+  background: linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%);
 }
 
 .payment-execution-metrics span,
@@ -471,7 +486,7 @@ body:has(.payment-execution-workspace) {
 
 .payment-execution-metrics strong {
   overflow-wrap: anywhere;
-  color: #2d3540;
+  color: #20242c;
   font-size: 18px;
   line-height: 1.4;
 }
@@ -480,7 +495,7 @@ body:has(.payment-execution-workspace) {
 .payment-execution-project-info dd small,
 .payment-execution-payee dd small {
   display: block;
-  color: #89929d;
+  color: #747b89;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
@@ -1318,18 +1333,43 @@ body:has(.payment-execution-workspace) {
   align-content: center;
   gap: 5px;
   min-height: 76px;
-  border: 1px solid #e1e5ea;
-  border-radius: 7px;
-  background: #f8f9fb;
+  border: 1px solid rgba(222, 225, 231, 0.82);
+  border-radius: 10px;
   padding: 12px 13px;
+  box-shadow: 0 4px 14px rgba(37, 43, 55, 0.05);
 }
 
 .payment-execution-hero-summary > div:last-child {
-  border-right: 1px solid #e1e5ea;
+  border-right: 1px solid rgba(222, 225, 231, 0.82);
+}
+
+.payment-execution-hero-summary > .is-amount {
+  border-color: #f0ddd5;
+  background: linear-gradient(125deg, #fff5e9 0%, #fff0ea 100%);
+}
+
+.payment-execution-hero-summary > .is-payment-order {
+  border-color: #e4d8ee;
+  background: linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%);
+}
+
+.payment-execution-hero-summary > .is-provider {
+  border-color: #dbe7f5;
+  background: linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%);
+}
+
+.payment-execution-hero-summary > .is-currency {
+  border-color: #d8ebe3;
+  background: linear-gradient(125deg, #f0faf6 0%, #eaf8f6 100%);
+}
+
+.payment-execution-hero-summary > .is-expected-date {
+  border-color: #f0e3c5;
+  background: linear-gradient(125deg, #fff9ea 0%, #fff2df 100%);
 }
 
 .payment-execution-hero-summary span {
-  color: #7e8894;
+  color: #747b89;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -1337,7 +1377,7 @@ body:has(.payment-execution-workspace) {
 .payment-execution-hero-summary strong {
   min-width: 0;
   overflow: hidden;
-  color: #303946;
+  color: #20242c;
   font-size: 14px;
   font-weight: 650;
   line-height: 1.45;

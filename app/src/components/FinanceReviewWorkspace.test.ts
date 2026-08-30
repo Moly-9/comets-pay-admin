@@ -86,6 +86,23 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
   });
 
+  it('shows four neutral-text overview cards with system soft backgrounds', () => {
+    expect(workspaceSource).toContain('<article className="is-amount">');
+    expect(workspaceSource).toContain('<article className="is-resources">');
+    expect(workspaceSource).toContain('<article className="is-payment-order">');
+    expect(workspaceSource).toContain("<strong>{request.paymentOrder || '待生成'}</strong>");
+    expect(workspaceSource).toContain('<article className="is-status">');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-amount');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-resources');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-payment-order');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-status');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #fff5e9 0%, #fff0ea 100%)');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%)');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%)');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #f0faf6 0%, #eaf8f6 100%)');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.finance-review-metrics strong\s*{[^}]*color:\s*#20242c;/s);
+  });
+
   it('keeps the overview scrollable and places the approval flow before linked resources', () => {
     expect(workspaceSource).toContain('data-testid="finance-review-overview-scroll"');
     expect(workspaceSource).toContain('aria-label="付款信息、当前审批流与关联资料"');

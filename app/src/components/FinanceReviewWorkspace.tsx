@@ -500,6 +500,11 @@ function FinanceReviewProjectOverview({
           <strong>{request.contracts + request.invoices} 份</strong>
           <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
         </article>
+        <article className="is-payment-order">
+          <span><span className="finance-review-metric-icon" aria-hidden="true"><ReceiptText size={13} /></span>付款单</span>
+          <strong>{request.paymentOrder || '待生成'}</strong>
+          <small>当前请款项目付款单</small>
+        </article>
         <article className="is-status">
           <span><span className="finance-review-metric-icon" aria-hidden="true"><ShieldCheck size={13} /></span>当前审批状态</span>
           <strong>{approvalLabel}</strong>

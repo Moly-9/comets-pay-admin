@@ -536,10 +536,10 @@ export function PaymentExecutionWorkspace({
               </div>
               <div className="payment-execution-hero-summary" aria-label="付款项目摘要">
                 <div className="is-amount"><span>付款总金额</span><strong>{project.amount}</strong></div>
-                <div><span>付款单号</span><strong>{project.paymentOrder}</strong></div>
-                <div><span>付款渠道</span><strong>{paymentProvider}</strong></div>
-                <div><span>支付币种</span><strong>{paymentCurrencies}</strong></div>
-                <div><span>预计付款时间</span><strong>{request.expectedPaymentDate || '待补充'}</strong></div>
+                <div className="is-payment-order"><span>付款单号</span><strong>{project.paymentOrder}</strong></div>
+                <div className="is-provider"><span>付款渠道</span><strong>{paymentProvider}</strong></div>
+                <div className="is-currency"><span>支付币种</span><strong>{paymentCurrencies}</strong></div>
+                <div className="is-expected-date"><span>预计付款时间</span><strong>{request.expectedPaymentDate || '待补充'}</strong></div>
               </div>
             </section>
           ) : (
@@ -556,9 +556,9 @@ export function PaymentExecutionWorkspace({
             </header>
 
             <div className="payment-execution-metrics" aria-label="请款项目概览">
-              <div><span>请款金额</span><strong>{project.amount}</strong></div>
-              <div><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
-              <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
+              <div className="is-amount"><span>请款金额</span><strong>{project.amount}</strong></div>
+              <div className="is-resources"><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
+              <div className="is-payment-order"><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
             </div>
 
             {renderProjectInformation()}
@@ -775,9 +775,9 @@ export function PaymentExecutionWorkspace({
                 </header>
 
                 <div className="payment-execution-metrics" aria-label="请款项目概览">
-                  <div><span>请款金额</span><strong>{project.amount}</strong></div>
-                  <div><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
-                  <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
+                  <div className="is-amount"><span>请款金额</span><strong>{project.amount}</strong></div>
+                  <div className="is-resources"><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
+                  <div className="is-payment-order"><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
                 </div>
 
                 {renderProjectInformation()}
