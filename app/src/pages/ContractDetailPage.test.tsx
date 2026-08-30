@@ -158,7 +158,7 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(html).not.toContain('复制编号');
     expect(html).not.toContain('合同关系');
     expect(html).not.toContain('合同详情分类');
-    expect(html).toContain('下载当前文件');
+    expect(html).not.toContain('下载当前文件');
     expect(html).toContain('合同编辑器');
     expect((html.match(/role="tab"/g) ?? [])).toHaveLength(3);
     expect(html).toContain('通用字段');
@@ -168,12 +168,33 @@ describe('ContractDetailPage expiry presentation', () => {
     expect((html.match(/>系统自动带入</g) ?? [])).toHaveLength(4);
     expect((html.match(/>生成时人工填写</g) ?? [])).toHaveLength(4);
     expect((html.match(/>不生成</g) ?? [])).toHaveLength(4);
-    expect((html.match(/>删除字段</g) ?? [])).toHaveLength(4);
-    expect(html).toContain('已启动');
-    expect(html).toContain('停用模板');
+    expect(html).not.toContain('添加字段');
+    expect(html).not.toContain('删除字段');
+    expect(html).not.toContain('已启动');
+    expect((html.match(/>停用模板</g) ?? [])).toHaveLength(1);
+    expect(html).not.toContain('4/4');
+    expect(html).not.toContain('7/7');
+    expect(html).not.toContain('3/3');
     expect(html).toContain('系统内置');
     expect(html.indexOf('合同类型')).toBeLessThan(html.indexOf('使用就绪度'));
     expect(html.indexOf('使用就绪度')).toBeLessThan(html.indexOf('上传者'));
+  });
+
+  it('renders a single start action for an inactive template', () => {
+    const html = renderToStaticMarkup(
+      <ContractDetailPage
+        contract={{ ...INITIAL_CONTRACTS[1], templateStatus: 'INACTIVE' }}
+        canEditTemplate
+        onUpdateContract={vi.fn()}
+        onBack={vi.fn()}
+        notify={vi.fn()}
+      />,
+    );
+
+    expect((html.match(/>启动模板</g) ?? [])).toHaveLength(1);
+    expect(html).not.toContain('停用模板');
+    expect(html).not.toContain('已停用');
+    expect(html).not.toContain('下载当前文件');
   });
 
   it('maps known uploaders to names and preserves unknown uploader accounts', () => {
@@ -209,6 +230,7 @@ describe('ContractDetailPage expiry presentation', () => {
     );
 
     expect(html).toContain('复制编号');
+    expect(html).toContain('下载当前文件');
     expect(html).toContain('付款就绪度');
     expect(html).toContain('合同金额');
     expect(html).toContain('关联请款项目');

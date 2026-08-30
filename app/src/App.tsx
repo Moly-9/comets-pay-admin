@@ -426,10 +426,7 @@ const getContractTemplateAvailability = (contracts: ContractRecord[]) => {
     contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
   ));
   const readiness = template
-    ? getContractTemplatePolicyReadiness(
-      template.templateFieldPolicies,
-      template.templateOutputFieldKeys,
-    )
+    ? getContractTemplatePolicyReadiness(template.templateFieldPolicies)
     : null;
   const activeTemplate = template
     && getContractTemplateStatus(template) === 'ACTIVE'

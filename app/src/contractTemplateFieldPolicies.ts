@@ -214,15 +214,13 @@ export const contractTemplatePoliciesAreDirty = (
 export const createContractTemplatePolicyUpdate = (
   contract: ContractRecord,
   policies: Partial<ContractTemplateFieldPolicyMap>,
-  fieldKeys: readonly ContractTemplateOutputFieldKey[],
   options: {
     deactivateIfInvalid?: boolean;
     updated?: string;
   } = {},
 ): { contract: ContractRecord; issues: ContractTemplatePolicyIssue[]; autoDeactivated: boolean } => {
   const resolved = resolveContractTemplateFieldPolicies(policies);
-  const resolvedFieldKeys = resolveContractTemplateOutputFieldKeys(fieldKeys);
-  const issues = validateContractTemplateFieldPolicies(resolved, resolvedFieldKeys);
+  const issues = validateContractTemplateFieldPolicies(resolved);
   const autoDeactivated = Boolean(
     issues.length
     && options.deactivateIfInvalid
@@ -234,7 +232,7 @@ export const createContractTemplatePolicyUpdate = (
     contract: {
       ...contract,
       templateFieldPolicies: resolved,
-      templateOutputFieldKeys: resolvedFieldKeys,
+      templateOutputFieldKeys: [...ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS],
       templateStatus: autoDeactivated ? 'INACTIVE' : getContractTemplateStatus(contract),
       updated: options.updated ?? new Intl.DateTimeFormat('en-CA').format(new Date()),
     },
@@ -276,15 +274,17 @@ export const createContractTemplateStatusUpdate = (
   updated = new Intl.DateTimeFormat('en-CA').format(new Date()),
 ): { contract?: ContractRecord; issues: ContractTemplatePolicyIssue[] } => {
   const issues = status === 'ACTIVE'
-    ? validateContractTemplateFieldPolicies(
-      contract.templateFieldPolicies,
-      contract.templateOutputFieldKeys,
-    )
+    ? validateContractTemplateFieldPolicies(contract.templateFieldPolicies)
     : [];
   if (issues.length) return { issues };
   return {
     issues: [],
-    contract: { ...contract, templateStatus: status, updated },
+    contract: {
+      ...contract,
+      templateStatus: status,
+      templateOutputFieldKeys: [...ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS],
+      updated,
+    },
   };
 };
 

@@ -11,6 +11,8 @@ import {
   Link2,
   Landmark,
   Pencil,
+  Power,
+  PowerOff,
   ReceiptText,
   ShieldCheck,
   Unlink,
@@ -20,7 +22,7 @@ import {
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import { formatCreatorHandle } from '../creatorSearchOptions';
-import { Button, PageHeading, SelectField } from '../components/Common';
+import { Button, Modal, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { ContractTemplateFieldEditor } from '../components/ContractTemplateFieldEditor';
@@ -61,7 +63,10 @@ import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
 import {
+  createContractTemplateStatusUpdate,
   getContractTemplatePolicyReadiness,
+  getContractTemplateStatus,
+  type ContractTemplatePolicyIssue,
 } from '../contractTemplateFieldPolicies';
 
 type ContractDetailTab = 'summary' | 'payment' | 'checks';
@@ -590,6 +595,8 @@ export function ContractDetailPage({
   const [focusedSource, setFocusedSource] = useState<ContractSourceLocation | null>(null);
   const [frameworkUploadOpen, setFrameworkUploadOpen] = useState(false);
   const [templateEditorDirty, setTemplateEditorDirty] = useState(false);
+  const [templateDeactivateConfirmationOpen, setTemplateDeactivateConfirmationOpen] = useState(false);
+  const [templateStatusValidationIssues, setTemplateStatusValidationIssues] = useState<ContractTemplatePolicyIssue[]>([]);
   useEffect(() => {
     setDraftFields(contract.recognitionResults ?? []);
     setActiveDocumentId(contract.sourceDocuments?.[0]?.id ?? '');
@@ -658,10 +665,8 @@ export function ContractDetailPage({
     ? nonSignatureIssues.filter((issue) => issue.id !== 'recognition-review')
     : nonSignatureIssues;
   const readiness = getContractReadiness({ ...contract, issues: visibleIssues });
-  const templateReadiness = getContractTemplatePolicyReadiness(
-    contract.templateFieldPolicies,
-    contract.templateOutputFieldKeys,
-  );
+  const templateReadiness = getContractTemplatePolicyReadiness(contract.templateFieldPolicies);
+  const templateStatus = getContractTemplateStatus(contract);
   const validity = getContractValidity(contract);
   const paymentReady = readiness.ready && !validity.expired;
   const readinessLabel = validity.expired ? '已失效' : readiness.label;
@@ -726,6 +731,33 @@ export function ContractDetailPage({
     : contract.uploadedByAccount
       ? '账号未收录在当前用户目录'
       : '随系统发布';
+
+  const templateStatusDisabledReason = !canEditCurrentContract
+    ? '当前账号没有模板编辑权限。'
+    : !onUpdateContract
+      ? '当前模板无法更新。'
+      : templateEditorDirty
+        ? '请先保存字段配置，再更改模板状态。'
+        : undefined;
+
+  const updateTemplateStatus = (status: 'ACTIVE' | 'INACTIVE') => {
+    if (!contract.isTemplate || templateStatusDisabledReason || !onUpdateContract) return;
+    const result = createContractTemplateStatusUpdate(contract, status);
+    if (!result.contract) {
+      setTemplateStatusValidationIssues(result.issues);
+      notify('模板无法启动', result.issues[0]?.message ?? '请先修复字段配置中的阻断项。');
+      return;
+    }
+    onUpdateContract(result.contract);
+    setTemplateStatusValidationIssues([]);
+    setTemplateDeactivateConfirmationOpen(false);
+    notify(
+      status === 'ACTIVE' ? '模板已启动' : '模板已停用',
+      status === 'ACTIVE'
+        ? '新建合同现在可以使用这份模板。'
+        : '模板已停止用于新建合同，既有草稿和历史合同不受影响。',
+    );
+  };
 
   const leaveDetail = () => {
     if (contract.isTemplate && templateEditorDirty) {
@@ -890,8 +922,21 @@ export function ContractDetailPage({
         subtitle={`${contract.id} · ${projectName}`}
         actions={(
           <>
-            {!contract.isTemplate ? <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button> : null}
-            {documentUrl ? (
+            {contract.isTemplate ? (
+              <Button
+                variant={templateStatus === 'ACTIVE' ? 'danger' : 'secondary'}
+                icon={templateStatus === 'ACTIVE' ? <PowerOff size={16} /> : <Power size={16} />}
+                disabled={Boolean(templateStatusDisabledReason)}
+                disabledReason={templateStatusDisabledReason}
+                onClick={() => {
+                  if (templateStatus === 'ACTIVE') setTemplateDeactivateConfirmationOpen(true);
+                  else updateTemplateStatus('ACTIVE');
+                }}
+              >
+                {templateStatus === 'ACTIVE' ? '停用模板' : '启动模板'}
+              </Button>
+            ) : <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyContractId}>复制编号</Button>}
+            {!contract.isTemplate && documentUrl ? (
               <a
                 className="button button-primary contract-file-action"
                 href={documentUrl}
@@ -1064,8 +1109,10 @@ export function ContractDetailPage({
               onSave={onUpdateContract}
               onDirtyChange={(dirty) => {
                 setTemplateEditorDirty(dirty);
+                if (dirty) setTemplateStatusValidationIssues([]);
                 onTemplateDirtyChange?.(dirty);
               }}
+              validationIssues={templateStatusValidationIssues}
               notify={notify}
             />
           ) : (
@@ -1218,6 +1265,28 @@ export function ContractDetailPage({
           onClose={() => setFrameworkUploadOpen(false)}
           onSave={saveFrameworkUpload}
         />
+      ) : null}
+      {templateDeactivateConfirmationOpen ? (
+        <Modal
+          title="停用合同模板"
+          width="480px"
+          className="contract-template-status-modal"
+          onClose={() => setTemplateDeactivateConfirmationOpen(false)}
+          footer={(
+            <>
+              <Button variant="secondary" onClick={() => setTemplateDeactivateConfirmationOpen(false)}>取消</Button>
+              <Button variant="danger" icon={<PowerOff size={15} />} onClick={() => updateTemplateStatus('INACTIVE')}>确认停用</Button>
+            </>
+          )}
+        >
+          <div className="contract-template-status-confirmation">
+            <span><AlertTriangle size={22} aria-hidden="true" /></span>
+            <div>
+              <strong>停用后将不能用于新建合同</strong>
+              <p>既有草稿和历史合同会继续使用已冻结的字段配置，不受本次停用影响。</p>
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </div>
   );

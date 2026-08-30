@@ -171,6 +171,65 @@ final result: passed
 
 ---
 
+# 合同模板顶部状态按钮与简洁页签验收
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-8cb08d0f-b598-4be7-9519-858c177a3693.png`
+- Source pixels: `443 x 114`; focused tab crop: `/tmp/comets-pay-reference-tabs.png`, `443 x 51`
+- Desktop implementation: `/tmp/comets-pay-contract-template-1281x907-final.png`, `1265 x 712` captured pixels
+- Focused implementation tab crop: `/tmp/comets-pay-contract-template-tabs-final.png`, `438 x 51`
+- Mobile implementation: `/tmp/comets-pay-contract-template-390-final.png`, `375 x 812` captured pixels
+- Requested browser viewports: `1281 x 907` and `390 x 844`; the in-app browser exposed CSS content viewports of `1280 x 720` and `390 x 844`, with scrollbar gutters producing captured content widths of `1265` and `375` pixels.
+- Density normalization: browser and source evidence were compared at device scale factor 1; focused tab crops were compared at their native 51-pixel component height.
+- State: active template, clean field-policy draft, Common tab selected.
+
+## Full-view and focused comparison
+
+The desktop and mobile captures preserve the existing COMETS Pay shell and template-reader layout. The template header contains exactly one status action, the editor has no internal status controls, and the three tabs remain readable without page-level horizontal overflow.
+
+The source and implementation tab crops were opened together at native size. Both use a white background, muted inactive labels, a darker active label, a thin bottom divider, and a two-pixel underline aligned to the active label. The focused crop was required because the tab typography and underline are too small to judge reliably in the full desktop view.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: the implementation uses the product's existing Noto Sans SC stack and matches the source's compact label size, weight hierarchy, and single-line treatment.
+- Spacing and layout rhythm: the 50-pixel tab row, 18-pixel label gap, 16-pixel horizontal padding, and label-width underline match the reference pattern while fitting the longer field-group labels.
+- Colors and visual tokens: white surface, muted gray inactive text, dark active text, soft divider, and dark underline match the reference without introducing a new palette.
+- Image quality and asset fidelity: the changed tabs contain no raster imagery or substituted visual assets. Existing Lucide status/editor icons remain part of the established application system and are outside the referenced text-tab treatment.
+- Copy and content: labels intentionally use `通用字段 / 银行转账字段 / PayPal 字段`; counters and issue badges are absent as requested.
+
+## Comparison history
+
+1. Initial mobile inspection found a 42-pixel first-tab hit target and a save button constrained to a 140-pixel auto grid track (P2). A 44-pixel tab minimum and a full-width one-column mobile action track were added. Post-fix measurements are `44 x 49` minimum for tabs and `319 x 44` for the save button.
+2. Console inspection found a repeated React maximum-update-depth warning caused by the dirty callback identity changing on every parent render (P1). The editor now stores the callback in a ref and only notifies when the dirty value changes. A fresh desktop browser session produced no errors or warnings after the fix.
+3. Post-fix desktop and mobile captures show no horizontal overflow (`scrollWidth === clientWidth`), and the focused tab comparison shows no remaining P0/P1/P2 visual mismatch.
+
+## Interactions checked
+
+- Tab click plus `ArrowLeft`, `ArrowRight`, `Home`, and `End` navigation.
+- Dirty state disables the top status action and exposes the reason.
+- Invalid active-template save confirmation and automatic deactivation.
+- Invalid activation returns to the Common tab and marks Publisher as erroneous.
+- Stop confirmation, successful stop, and successful restart.
+- Fresh browser console: no errors or warnings.
+
+## Automated verification
+
+- Isolated focused worktree: TypeScript passed.
+- Full Vitest: 118 test files, 842 tests passed.
+- Vite production build passed; only the existing large-chunk advisory remains.
+- The shared working tree also contains unrelated in-progress creator-profile changes whose tests are currently incomplete; those files are excluded from this focused verification and commit.
+
+## Follow-up polish
+
+No P3 follow-up is required for this scoped reference match.
+
+final result: passed
+
+---
+
 # 已付款详情摘要卡片与下载按钮验收
 
 验收日期：2026-08-30
@@ -1897,6 +1956,6 @@ final result: blocked
 
 # Latest Design QA Status
 
-最新验收为本文中的“已付款详情摘要卡片与下载按钮验收”。该报告已包含参考图、浏览器渲染截图、桌面与 390px 状态、控制台检查、完整测试和构建结果；没有待处理的 P0、P1 或 P2 问题。
+最新验收为本文中的“合同模板顶部状态按钮与简洁页签验收”。该报告已包含参考图、浏览器渲染截图、桌面与 390px 状态、主要交互、控制台检查、完整测试和构建结果；没有待处理的 P0、P1 或 P2 问题。
 
 final result: passed

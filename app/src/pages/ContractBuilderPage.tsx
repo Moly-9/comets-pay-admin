@@ -72,6 +72,7 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 import type { CreatorProfile } from '../types';
 import { createContractQualityReport } from '../contractTemplate';
 import {
+  ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
   CONTRACT_TEMPLATE_OUTPUT_FIELDS,
   getContractTemplateSupportedPayoutProviders,
   hasManualPayoutDocumentDifferences,
@@ -208,6 +209,12 @@ const fieldKeyForError = (key: string): ContractTemplateFieldKey | null => {
   return map[key] ?? null;
 };
 
+export const contractBuilderTemplateOutputFieldKeys = (
+  draftModel?: Pick<ContractGenerationModel, 'templateOutputFieldKeys'> | null,
+) => resolveContractTemplateOutputFieldKeys(
+  draftModel ? draftModel.templateOutputFieldKeys : ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
+);
+
 export function ContractBuilderPage({
   projects,
   creators,
@@ -224,9 +231,10 @@ export function ContractBuilderPage({
   const templateFieldPolicies = useMemo(() => resolveContractTemplateFieldPolicies(
     draftModel?.templateFieldPolicies ?? contractTemplate?.templateFieldPolicies,
   ), [contractTemplate?.templateFieldPolicies, draftModel?.templateFieldPolicies]);
-  const templateOutputFieldKeys = useMemo(() => resolveContractTemplateOutputFieldKeys(
-    draftModel?.templateOutputFieldKeys ?? contractTemplate?.templateOutputFieldKeys,
-  ), [contractTemplate?.templateOutputFieldKeys, draftModel?.templateOutputFieldKeys]);
+  const templateOutputFieldKeys = useMemo(
+    () => contractBuilderTemplateOutputFieldKeys(draftModel),
+    [draftModel],
+  );
   const supportedPayoutProviders = useMemo(() => getContractTemplateSupportedPayoutProviders(
     templateFieldPolicies,
     templateOutputFieldKeys,

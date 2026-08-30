@@ -23473,7 +23473,7 @@ button:disabled {
 .contract-template-editor-heading {
   display: grid;
   min-height: 64px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--soft-line);
@@ -23497,20 +23497,6 @@ button:disabled {
   gap: 2px;
 }
 
-.contract-template-editor-status-actions {
-  display: flex !important;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px !important;
-}
-
-.contract-template-editor-status-actions .button {
-  min-height: 38px;
-  padding: 0 11px;
-  font-size: 10px;
-}
-
-.contract-template-status,
 .contract-template-list-status {
   display: inline-flex;
   min-height: 28px;
@@ -23533,7 +23519,6 @@ button:disabled {
   background: #36bd86;
 }
 
-.contract-template-status-inactive,
 .contract-template-list-status.is-inactive {
   border-color: #e0e2e7;
   background: #f4f5f7;
@@ -23590,49 +23575,51 @@ button:disabled {
 }
 
 .contract-template-editor-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  min-height: 50px;
+  align-items: stretch;
+  gap: 18px;
   margin-top: 12px;
-  border-top: 1px solid var(--soft-line);
   border-bottom: 1px solid var(--soft-line);
-  background: #fafafb;
+  background: #fff;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.contract-template-editor-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .contract-template-editor-tabs button {
   position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 58px;
-  place-content: center;
-  gap: 3px;
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  border-right: 1px solid var(--soft-line);
   background: transparent;
-  padding: 8px;
-  color: #777d88;
+  padding: 0;
+  color: #898e99;
   cursor: pointer;
-  text-align: center;
-}
-
-.contract-template-editor-tabs button:last-child {
-  border-right: 0;
+  white-space: nowrap;
 }
 
 .contract-template-editor-tabs button::after {
   position: absolute;
-  right: 12px;
+  right: 0;
   bottom: -1px;
-  left: 12px;
+  left: 0;
   height: 2px;
-  border-radius: 2px;
-  background: #765b9e;
+  background: #1f2025;
   content: "";
   opacity: 0;
 }
 
 .contract-template-editor-tabs button.is-active {
-  background: #fff;
-  color: #514063;
+  color: #292b31;
 }
 
 .contract-template-editor-tabs button.is-active::after {
@@ -23642,21 +23629,13 @@ button:disabled {
 .contract-template-editor-tabs button:focus-visible {
   z-index: 1;
   outline: 2px solid #8066ad;
-  outline-offset: -3px;
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 .contract-template-editor-tabs span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 10.5px;
-  font-weight: 720;
-  white-space: nowrap;
-}
-
-.contract-template-editor-tabs small {
-  color: #9297a1;
-  font-size: 8.5px;
-  line-height: 1.3;
+  font-size: 11.5px;
+  font-weight: 650;
 }
 
 .contract-template-field-group {
@@ -23690,45 +23669,6 @@ button:disabled {
   color: var(--muted);
   font-size: 9.5px;
   line-height: 1.45;
-}
-
-.contract-template-add-field {
-  position: relative;
-  display: grid;
-  flex: 0 0 148px;
-  gap: 4px;
-}
-
-.contract-template-add-field > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #665176;
-  font-size: 9.5px;
-  font-weight: 700;
-}
-
-.contract-template-add-field select {
-  width: 100%;
-  min-height: 36px;
-  border: 1px solid #dfe1e6;
-  border-radius: 8px;
-  background: #fff;
-  padding: 0 28px 0 9px;
-  color: #4b4f58;
-  font: inherit;
-  font-size: 9.5px;
-}
-
-.contract-template-add-field select:focus-visible {
-  outline: 2px solid #8066ad;
-  outline-offset: 2px;
-}
-
-.contract-template-add-field select:disabled {
-  background: #f4f5f7;
-  color: #9ca0a8;
-  cursor: not-allowed;
 }
 
 .contract-template-field-list {
@@ -23774,38 +23714,6 @@ button:disabled {
   color: #858a94;
   font-size: 9.5px;
   line-height: 1.4;
-}
-
-.contract-template-remove-field {
-  display: inline-flex;
-  min-height: 34px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 1px solid #ead9d6;
-  border-radius: 8px;
-  background: #fffafa;
-  padding: 0 8px;
-  color: #a34f45;
-  cursor: pointer;
-  font-size: 9px;
-  font-weight: 650;
-}
-
-.contract-template-remove-field:hover:not(:disabled) {
-  border-color: #dcaaa4;
-  background: #fff3f1;
-}
-
-.contract-template-remove-field:focus-visible {
-  outline: 2px solid #b9655c;
-  outline-offset: 2px;
-}
-
-.contract-template-remove-field:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .contract-template-mode-options {
@@ -23893,19 +23801,6 @@ button:disabled {
   color: #936025;
 }
 
-.contract-template-field-empty {
-  display: grid;
-  min-height: 180px;
-  grid-template-columns: 34px minmax(0, 1fr);
-  place-content: center;
-  gap: 10px;
-  border: 1px dashed #d9dce2;
-  border-radius: 12px;
-  background: #fafbfc;
-  padding: 24px;
-}
-
-.contract-template-field-empty > span,
 .contract-template-status-confirmation > span {
   display: inline-flex;
   width: 34px;
@@ -23917,7 +23812,6 @@ button:disabled {
   color: #b66a31;
 }
 
-.contract-template-field-empty > div,
 .contract-template-status-confirmation > div {
   display: grid;
   min-width: 0;
@@ -23925,13 +23819,11 @@ button:disabled {
   gap: 4px;
 }
 
-.contract-template-field-empty strong,
 .contract-template-status-confirmation strong {
   color: #444851;
   font-size: 11px;
 }
 
-.contract-template-field-empty p,
 .contract-template-status-confirmation p {
   margin: 0;
   color: #777d88;
@@ -25194,7 +25086,7 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .contract-template-detail-page .page-heading-actions .contract-file-action {
+  .contract-template-detail-page .page-heading-actions .button {
     width: 100%;
     min-height: 44px;
     justify-content: center;
@@ -25204,31 +25096,12 @@ button:disabled {
     grid-template-columns: 34px minmax(0, 1fr);
   }
 
-  .contract-template-editor-status-actions {
-    grid-column: 1 / -1;
-    width: calc(100% - 44px);
-    justify-content: space-between;
-    margin-left: 44px;
-  }
-
-  .contract-template-editor-status-actions .button,
-  .contract-template-add-field select,
-  .contract-template-remove-field {
-    min-height: 44px;
-  }
-
   .contract-template-editor-tabs button {
-    min-height: 64px;
-    padding: 8px 4px;
+    min-height: 48px;
   }
 
   .contract-template-editor-tabs span {
-    font-size: 9.5px;
-    white-space: normal;
-  }
-
-  .contract-template-editor-tabs small {
-    font-size: 8px;
+    font-size: 10.5px;
   }
 
   .contract-template-field-group,
@@ -25237,14 +25110,8 @@ button:disabled {
     padding-left: 12px;
   }
 
-  .contract-template-field-group-heading,
-  .contract-template-field-row-heading {
+  .contract-template-field-group-heading {
     display: grid;
-  }
-
-  .contract-template-add-field,
-  .contract-template-remove-field {
-    width: 100%;
   }
 
   .contract-template-mode-options {
@@ -25262,6 +25129,8 @@ button:disabled {
 
   .contract-template-editor-actions {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
   }
 
   .contract-template-editor-actions .button {

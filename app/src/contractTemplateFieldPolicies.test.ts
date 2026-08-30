@@ -163,9 +163,12 @@ describe('contract template field policies', () => {
     const omittedPublisher = { ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, publisher: 'OMIT' as const };
     const readiness = getContractTemplatePolicyReadiness(omittedPublisher);
     const update = createContractTemplatePolicyUpdate(
-      { ...INITIAL_CONTRACTS[1], templateStatus: 'INACTIVE' },
+      {
+        ...INITIAL_CONTRACTS[1],
+        templateStatus: 'INACTIVE',
+        templateOutputFieldKeys: ['advertiser', 'publisher'],
+      },
       omittedPublisher,
-      ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
       { updated: '2026-08-30' },
     );
 
@@ -178,6 +181,7 @@ describe('contract template field policies', () => {
     ]));
     expect(update.contract?.updated).toBe('2026-08-30');
     expect(update.contract?.templateFieldPolicies?.publisher).toBe('OMIT');
+    expect(update.contract.templateOutputFieldKeys).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
     expect(contractTemplatePoliciesAreDirty(DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, omittedPublisher)).toBe(true);
     expect(contractTemplatePoliciesAreDirty(omittedPublisher, update.contract?.templateFieldPolicies)).toBe(false);
   });
@@ -235,22 +239,30 @@ describe('contract template field policies', () => {
   });
 
   it('blocks invalid activation and auto-deactivates an active template when invalid changes are saved', () => {
-    const invalidKeys = ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => key !== 'publisher');
+    const invalidPolicies = {
+      ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+      publisher: 'OMIT' as const,
+    };
     const activation = createContractTemplateStatusUpdate({
       ...INITIAL_CONTRACTS[1],
       templateStatus: 'INACTIVE',
-      templateOutputFieldKeys: invalidKeys,
+      templateFieldPolicies: invalidPolicies,
     }, 'ACTIVE');
     const save = createContractTemplatePolicyUpdate(
       { ...INITIAL_CONTRACTS[1], templateStatus: 'ACTIVE' },
-      DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
-      invalidKeys,
+      invalidPolicies,
       { deactivateIfInvalid: true, updated: '2026-08-30' },
     );
+    const deactivation = createContractTemplateStatusUpdate({
+      ...INITIAL_CONTRACTS[1],
+      templateOutputFieldKeys: ['advertiser', 'publisher'],
+    }, 'INACTIVE');
 
     expect(activation.contract).toBeUndefined();
     expect(activation.issues[0]?.groupKeys).toContain('COMMON');
     expect(save.autoDeactivated).toBe(true);
     expect(save.contract.templateStatus).toBe('INACTIVE');
+    expect(save.contract.templateOutputFieldKeys).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
+    expect(deactivation.contract?.templateOutputFieldKeys).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
   });
 });

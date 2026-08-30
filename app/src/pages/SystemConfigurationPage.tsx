@@ -18,7 +18,7 @@ import {
 type Notify = (title: string, message: string) => void;
 
 const templateReadinessFor = (contract: ContractRecord) => (
-  getContractTemplatePolicyReadiness(contract.templateFieldPolicies, contract.templateOutputFieldKeys)
+  getContractTemplatePolicyReadiness(contract.templateFieldPolicies)
 );
 
 export function SystemConfigurationPage({
