@@ -127,7 +127,10 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('class="payment-batch-attempt-badge">首次付款</span>');
     expect(html).toContain('下载确认函');
     expect(html).toContain('查看详情');
-    expect((html.match(/USD 2.5/g) ?? [])).toHaveLength(2);
+    expect(html).toContain('payment-project-payment-detail-page payment-batch-payment-detail-page');
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 2.5<\/strong>/);
+    expect(html).toContain('<small>实际付款金额 USD 2.5</small>');
+    expect(html).toMatch(/payment-batch-order-result[\s\S]*?<strong>USD 2.5<\/strong>/);
     expect(html).not.toContain('payment_batch_detail_test');
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
@@ -151,7 +154,9 @@ describe('PaymentBatchDetailPage', () => {
     );
 
     expect(html).toMatch(/class="payment-batch-order-card"[\s\S]*?<span class="simple-status is-processing"><i><\/i>付款处理中<\/span>/);
-    expect((html.match(/待渠道回写/g) ?? [])).toHaveLength(2);
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>待渠道回写<\/strong>/);
+    expect(html).toContain('<small>实际付款金额 待渠道回写</small>');
+    expect(html).toMatch(/payment-batch-order-result[\s\S]*?<strong>待渠道回写<\/strong>/);
   });
 
   it('highlights every supported payment provider in payment detail rows', () => {
@@ -221,6 +226,8 @@ describe('PaymentBatchDetailPage', () => {
       paidAt: '2026-08-11T09:05',
       transferFeeAmount: 8.5,
       transferFeeCurrency: 'USD',
+      actualPaidAmount: 1258.5,
+      actualPaidCurrency: 'USD',
     } satisfies PaymentBatchRecord['items'][number];
     const html = renderToStaticMarkup(
       <PaymentBatchDetailPage
@@ -240,6 +247,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('二次付款 · 关联原付款单 PAY-202608-000001 · 1 笔付款明细');
     expect(html).toContain('payment-batch-attempt-badge is-retry">二次付款</span>');
     expect(html).toContain('USD 8.5');
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 1,258.5<\/strong>/);
+    expect(html).toMatch(/payment-batch-order-result[\s\S]*?<strong>USD 1,258.5<\/strong>/);
   });
 
   it('exposes the shared return action for a failed item in the batch detail', () => {

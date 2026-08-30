@@ -2,17 +2,14 @@ import {
   AlertTriangle,
   ArrowLeft,
   CircleAlert,
-  Coins,
   Eye,
   ExternalLink,
   FileSpreadsheet,
   FileText,
-  Landmark,
   ListChecks,
   LoaderCircle,
   ReceiptText,
   RotateCcw,
-  UserRound,
   WalletCards,
   X,
 } from 'lucide-react';
@@ -23,11 +20,13 @@ import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDi
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import {
-  paymentBatchAmountLabel,
+  paymentBatchFinancialSummary,
+  paymentBatchItemForAttempt,
   paymentBatchItemAttemptLabel,
   paymentBatchItemAttemptNumber,
   paymentBatchItemOrderCode,
   paymentBatchItemSourceOrderCode,
+  paymentBatchMoneyTotalsLabel,
   paymentBatchStatusCounts,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
@@ -40,7 +39,7 @@ import {
   paymentItemConfirmationFilename,
   paymentProjectWorkbookFilename,
 } from '../paymentProjectDocuments';
-import type { CreatorProfile, PaymentAttemptSnapshot, PaymentFailureIssueType, Payout } from '../types';
+import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
 
@@ -89,44 +88,6 @@ const paymentFeeLabel = (item: PaymentBatchItemSnapshot) => (
       ? money(item.transferFeeCurrency, item.transferFeeAmount)
       : '—'
 );
-
-const paymentAttemptForBatchItem = (
-  batch: PaymentBatchRecord,
-  item: PaymentBatchItemSnapshot,
-): PaymentAttemptSnapshot | undefined => item.paymentAttempts?.find((attempt) => (
-  attempt.paymentBatchId === batch.paymentBatchId
-  || (
-    !attempt.paymentBatchId
-    && attempt.attemptNumber === batch.paymentAttemptNumber
-  )
-));
-
-const paymentItemForBatchAttempt = (
-  batch: PaymentBatchRecord,
-  item: PaymentBatchItemSnapshot,
-): PaymentBatchItemSnapshot => {
-  const attempt = paymentAttemptForBatchItem(batch, item);
-  if (!attempt) return item;
-  return {
-    ...item,
-    paymentOrderCode: batch.paymentOrderCode,
-    sourcePaymentOrderCode: batch.sourcePaymentOrderCode ?? item.sourcePaymentOrderCode,
-    paymentAttemptNumber: batch.paymentAttemptNumber,
-    paymentStatus: attempt.status,
-    paidAt: attempt.occurredAt,
-    transferFeeAmount: attempt.transferFeeAmount,
-    transferFeeCurrency: attempt.transferFeeCurrency,
-    actualPaidAmount: attempt.actualPaidAmount,
-    actualPaidCurrency: attempt.actualPaidCurrency,
-    failure: attempt.status === '付款失败' && (attempt.errorCode || attempt.providerResponse)
-      ? {
-          code: attempt.errorCode || '未记录',
-          response: attempt.providerResponse || '未记录',
-          occurredAt: attempt.occurredAt || '未记录',
-        }
-      : undefined,
-  };
-};
 
 const paymentResultValue = (
   item: PaymentBatchItemSnapshot,
@@ -466,7 +427,10 @@ export function PaymentBatchDetailPage({
   const [resourceError, setResourceError] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const totals = paymentBatchAmountLabel(batch);
+  const financialSummary = useMemo(() => paymentBatchFinancialSummary(batch), [batch]);
+  const actualPaidTotal = batch.status === '付款处理中'
+    ? '待渠道回写'
+    : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts);
   const projectArchiveItems = useMemo(() => {
     const sourceItems = projectItems?.length ? projectItems : batch.items;
     const seen = new Set<string>();
@@ -476,10 +440,7 @@ export function PaymentBatchDetailPage({
       return true;
     });
   }, [batch.items, projectItems]);
-  const batchItems = useMemo(
-    () => batch.items.map((item) => paymentItemForBatchAttempt(batch, item)),
-    [batch],
-  );
+  const batchItems = financialSummary.items;
   const orderCounts = paymentBatchStatusCounts({ items: batchItems });
   const orderStatus = paymentOrderStatus(batchItems);
   const failureDialogItem = batchItems.find((item) => item.payoutId === failureDialogPayoutId);
@@ -542,7 +503,7 @@ export function PaymentBatchDetailPage({
   }, []);
 
   return (
-    <div className="page-stack payment-batch-detail-page">
+    <div className="page-stack payment-batch-detail-page payment-project-payment-detail-page payment-batch-payment-detail-page">
       <button className="project-back-button payment-batch-detail-back" type="button" onClick={onBack}>
         <ArrowLeft size={17} aria-hidden="true" />
         返回付款批次
@@ -556,27 +517,23 @@ export function PaymentBatchDetailPage({
         </div>
         <div className="payment-batch-detail-total">
           <span className={`simple-status ${batchStatusTone(batch.status)}`}><i />{batch.status}</span>
-          <strong>{totals}</strong>
+          <strong>{actualPaidTotal}</strong>
           <small>{batch.items.length} 笔付款</small>
         </div>
       </header>
 
-      <section className="payment-batch-detail-summary" aria-label="批次摘要">
-        <div>
-          <span className="payment-batch-summary-icon is-order" aria-hidden="true"><ReceiptText size={18} /></span>
-          <span className="payment-batch-summary-content"><span>付款单</span><strong>{batch.paymentOrderCode}</strong><small>{batch.items.length} 笔付款明细</small></span>
+      <section className="payment-batch-detail-summary payment-project-summary-grid" aria-label="批次摘要">
+        <div className="payment-project-summary-card is-order">
+          <div><span>付款单</span><strong>{batch.paymentOrderCode}</strong><small>{batch.items.length} 笔付款明细</small></div>
         </div>
-        <div>
-          <span className="payment-batch-summary-icon is-payer" aria-hidden="true"><UserRound size={18} /></span>
-          <span className="payment-batch-summary-content"><span>付款人 / 时间</span><strong>{batch.payer}</strong><small>{displayTime(batch.paidAt)}</small></span>
+        <div className="payment-project-summary-card is-updated">
+          <div><span>付款人 / 时间</span><strong>{batch.payer}</strong><small>{displayTime(batch.paidAt)}</small></div>
         </div>
-        <div>
-          <span className="payment-batch-summary-icon is-provider" aria-hidden="true"><Landmark size={18} /></span>
-          <span className="payment-batch-summary-content"><span>付款渠道</span><strong>{paymentProviderDisplayName(batch.provider)}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></span>
+        <div className="payment-project-summary-card is-provider">
+          <div><span>付款渠道</span><strong>{paymentProviderDisplayName(batch.provider)}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></div>
         </div>
-        <div>
-          <span className="payment-batch-summary-icon is-currency" aria-hidden="true"><Coins size={18} /></span>
-          <span className="payment-batch-summary-content"><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>批次总额 {totals}</small></span>
+        <div className="payment-project-summary-card is-result">
+          <div><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>实际付款金额 {actualPaidTotal}</small></div>
         </div>
       </section>
 
@@ -618,7 +575,7 @@ export function PaymentBatchDetailPage({
                   </div>
                   <div className="payment-batch-order-result">
                     <span className={`simple-status ${paymentStatusTone(orderStatus)}`}><i />{orderStatus}</span>
-                    <strong>{paymentBatchAmountLabel({ items: batchItems })}</strong>
+                    <strong>{actualPaidTotal}</strong>
                     <small>{orderCounts.succeeded} 成功 · {orderCounts.failed} 失败 · {orderCounts.processing} 处理中</small>
                   </div>
                 </header>

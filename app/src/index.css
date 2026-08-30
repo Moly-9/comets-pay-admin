@@ -497,6 +497,42 @@ input[type="checkbox"]:disabled {
   box-shadow: 0 1px 2px rgba(37, 42, 51, 0.035), 0 10px 30px rgba(37, 42, 51, 0.035);
 }
 
+.payment-batch-payment-detail-page .payment-batch-detail-section,
+.payment-batch-payment-detail-page .payment-batch-orders-section {
+  border: 1px solid rgba(222, 225, 231, 0.86);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+}
+
+.payment-batch-payment-detail-page .payment-batch-orders-section {
+  overflow: hidden;
+  gap: 0;
+}
+
+.payment-batch-payment-detail-page .payment-batch-orders-heading {
+  min-height: 72px;
+  align-items: center;
+  border-bottom: 1px solid #e8ebef;
+  padding: 14px 18px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-header {
+  min-height: 84px;
+  border-bottom: 1px solid #eceef2;
+  background: linear-gradient(135deg, #fbfafc 0%, #fff 72%);
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-items > header {
+  border-bottom: 0;
+}
+
 .payment-batch-order-header {
   display: flex;
   min-height: 72px;
@@ -5266,89 +5302,37 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   width: 168px;
 }
 
-.payment-batch-export {
-  position: relative;
+.payment-batch-export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   margin-left: auto;
 }
 
-.payment-batch-export-trigger {
-  min-width: 106px;
-}
-
-.payment-batch-export-trigger:focus-visible,
-.payment-batch-export-menu button:focus-visible,
-.media-project-confirmation-action:focus-visible {
-  outline: 2px solid #e8755d;
-  outline-offset: 2px;
-}
-
-.payment-batch-export-chevron {
-  margin-left: 2px;
-  color: #858b96;
-  transition: transform 150ms ease;
-}
-
-.payment-batch-export:has(.payment-batch-export-menu) .payment-batch-export-chevron {
-  transform: rotate(180deg);
-}
-
-.payment-batch-export-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 7px);
-  right: 0;
-  display: grid;
-  width: 262px;
-  gap: 3px;
-  border: 1px solid #dfe2e8;
-  border-radius: 8px;
+.payment-batch-export-button.button {
+  min-height: 39px;
+  border-radius: 9px;
   background: #fff;
-  padding: 5px;
-  box-shadow: 0 16px 36px rgba(34, 38, 48, 0.15);
+  padding-inline: 12px;
+  white-space: nowrap;
 }
 
-.payment-batch-export-menu button {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 52px;
-  align-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  padding: 7px 9px;
-  color: #4d5360;
-  text-align: left;
+.payment-batch-export-button.is-confirmation:not(:disabled) {
+  border-color: #decfe5;
+  color: #6f547b;
 }
 
-.payment-batch-export-menu button:hover:not(:disabled),
-.payment-batch-export-menu button:focus-visible {
-  background: #f6f7f9;
+.payment-batch-export-button.is-record:not(:disabled) {
+  border-color: #d5dfe9;
+  color: #4d647f;
 }
 
-.payment-batch-export-menu button:disabled {
-  background: transparent;
-  color: #b1b5bd;
-}
-
-.payment-batch-export-menu button > span {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.payment-batch-export-menu strong {
-  color: inherit;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.payment-batch-export-menu small {
-  color: #9095a0;
-  font-size: 10px;
-}
-
-.payment-batch-export-menu button:disabled small {
-  color: #b9bcc3;
+.payment-batch-export-button:hover:not(:disabled),
+.payment-batch-export-button:focus-visible,
+.media-project-confirmation-action:focus-visible {
+  outline: 2px solid rgba(232, 117, 93, 0.72);
+  outline-offset: 2px;
 }
 
 .payment-batch-selection-summary {
@@ -5359,7 +5343,7 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 }
 
 .payment-batch-table {
-  min-width: 960px;
+  min-width: 1540px;
 }
 
 .payment-batch-table .payment-batch-select-cell {
@@ -5377,6 +5361,43 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 
 .payment-batch-table tbody tr.is-selected {
   background: #fff8f5;
+}
+
+.payment-batch-project-cell {
+  width: 220px;
+}
+
+.payment-batch-project-cell :is(strong, small) {
+  display: block;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-batch-project-cell strong {
+  color: #394351;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.payment-batch-project-cell small {
+  margin-top: 3px;
+  color: #7d8591;
+  font-size: 10px;
+}
+
+.payment-batch-money-cell {
+  min-width: 132px;
+  color: #4e5764;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payment-batch-money-cell strong {
+  color: #303741;
+  font-weight: 700;
 }
 
 .media-project-row-actions {
@@ -5427,7 +5448,7 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
     max-width: none;
   }
 
-  .payment-batch-export {
+  .payment-batch-export-actions {
     margin-left: 0;
   }
 }
@@ -5437,8 +5458,7 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   .payment-batch-date-range,
   .payment-batch-status-filter.custom-select-toolbar,
   .payment-batch-channel-filter.custom-select-toolbar,
-  .payment-batch-export,
-  .payment-batch-export-trigger {
+  .payment-batch-export-actions {
     width: 100%;
     max-width: none;
   }
@@ -5469,18 +5489,17 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   }
 
   .payment-batch-channel-filter .custom-select-trigger,
-  .payment-batch-export-trigger {
+  .payment-batch-export-button.button {
     min-height: 44px;
   }
 
-  .payment-batch-export-menu {
-    right: 0;
-    left: 0;
-    width: 100%;
+  .payment-batch-export-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .payment-batch-export-menu button {
-    min-height: 56px;
+  .payment-batch-export-button.button {
+    width: 100%;
   }
 
   .media-project-confirmation-action {
@@ -5488,9 +5507,9 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .payment-batch-export-chevron {
-    transition: none;
+@media (max-width: 420px) {
+  .payment-batch-export-actions {
+    grid-template-columns: 1fr;
   }
 }
 

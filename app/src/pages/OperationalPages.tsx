@@ -18,6 +18,7 @@ import {
   Files,
   Link2,
   ListFilter,
+  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -39,7 +40,6 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type KeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
@@ -178,6 +178,8 @@ import {
 } from '../transactionRecordsWorkbook';
 import {
   paymentBatchAmountLabel,
+  paymentBatchFinancialSummary,
+  paymentBatchMoneyTotalsLabel,
   paymentBatchStatusCounts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
@@ -3625,9 +3627,13 @@ export function InvoicePage({
 export type PaymentBatchRow = {
   paymentBatchId: PaymentBatchRecord['paymentBatchId'];
   id: string;
+  cooperationProjectCode: string;
+  cooperationProjectName: string;
   provider: string;
   count: number;
-  amount: string;
+  paymentAmount: string;
+  transferFeeAmount: string;
+  actualPaidAmount: string;
   payer: string;
   paidAt: string;
   status: PaymentAggregateStatus;
@@ -3649,16 +3655,28 @@ export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 export const paymentBatchRows = (
   batches: readonly PaymentBatchRecord[],
 ): PaymentBatchRow[] => (
-  batches.map((batch) => ({
-    paymentBatchId: batch.paymentBatchId,
-    id: batch.paymentBatchCode,
-    provider: batch.provider,
-    count: batch.items.length,
-    amount: paymentBatchAmountLabel(batch),
-    payer: batch.payer,
-    paidAt: batch.paidAt,
-    status: batch.status,
-  }))
+  batches.map((batch) => {
+    const financialSummary = paymentBatchFinancialSummary(batch);
+    const resultPending = batch.status === '付款处理中';
+    return {
+      paymentBatchId: batch.paymentBatchId,
+      id: batch.paymentBatchCode,
+      cooperationProjectCode: batch.request.cooperationProjectCode,
+      cooperationProjectName: batch.request.cooperationProjectName,
+      provider: batch.provider,
+      count: batch.items.length,
+      paymentAmount: paymentBatchAmountLabel(batch),
+      transferFeeAmount: resultPending
+        ? '待渠道回写'
+        : paymentBatchMoneyTotalsLabel(financialSummary.transferFeeAmounts),
+      actualPaidAmount: resultPending
+        ? '待渠道回写'
+        : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts),
+      payer: batch.payer,
+      paidAt: batch.paidAt,
+      status: batch.status,
+    };
+  })
 );
 
 type ExportAssetLoader = (path: string) => Promise<Blob>;
@@ -3767,12 +3785,8 @@ export function BatchesPage({
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [exporting, setExporting] = useState<'confirmations' | 'records' | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-  const exportTriggerRef = useRef<HTMLButtonElement>(null);
-  const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
   const listScrollPositionRef = useRef(0);
   const rows = useMemo(() => paymentBatchRows(batches), [batches]);
@@ -3795,7 +3809,6 @@ export function BatchesPage({
   const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
   const allVisibleSelected = filteredRows.length > 0 && selectedVisibleCount === filteredRows.length;
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
-  const exportDisabled = !exportAvailability.records || exporting !== null;
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
   const selectedProjectItems = useMemo(() => {
     if (!selectedBatch) return [];
@@ -3824,7 +3837,10 @@ export function BatchesPage({
     return {
       ...totals,
       processingBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).processing > 0).length,
-      failedBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).failed > 0).length,
+      paidBatches: batches.filter((batch) => batch.status === '已付款').length,
+      paidBatchItems: batches
+        .filter((batch) => batch.status === '已付款')
+        .reduce((count, batch) => count + batch.items.length, 0),
       successRate: total ? `${((totals.succeeded / total) * 100).toFixed(1)}%` : '—',
       total,
     };
@@ -3846,15 +3862,6 @@ export function BatchesPage({
     }
   }, [allVisibleSelected, selectedVisibleCount]);
 
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!exportMenuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePointer);
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
-  }, [menuOpen]);
-
   const updateStart = (value: string) => {
     const [nextStart, nextEnd] = correctedPaymentBatchDateRange(value, end, 'start');
     setStart(nextStart);
@@ -3873,54 +3880,8 @@ export function BatchesPage({
       return next;
     });
   };
-  const availableExportItemIndexes = [
-    exportAvailability.confirmations ? 0 : -1,
-    exportAvailability.records ? 1 : -1,
-  ].filter((index) => index >= 0);
-  const focusExportItem = (index: number) => {
-    window.requestAnimationFrame(() => exportItemRefs.current[index]?.focus());
-  };
-  const openExportMenu = (focusEdge?: 'first' | 'last') => {
-    setMenuOpen(true);
-    if (focusEdge && availableExportItemIndexes.length) {
-      focusExportItem(focusEdge === 'first'
-        ? availableExportItemIndexes[0]
-        : availableExportItemIndexes[availableExportItemIndexes.length - 1]);
-    }
-  };
-  const closeExportMenu = (restoreFocus = false) => {
-    setMenuOpen(false);
-    if (restoreFocus) window.requestAnimationFrame(() => exportTriggerRef.current?.focus());
-  };
-  const handleExportTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      openExportMenu(event.key === 'ArrowDown' ? 'first' : 'last');
-    } else if (event.key === 'Escape' && menuOpen) {
-      event.preventDefault();
-      closeExportMenu();
-    }
-  };
-  const handleExportItemKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const currentPosition = availableExportItemIndexes.indexOf(index);
-      const offset = event.key === 'ArrowDown' ? 1 : -1;
-      const nextPosition = (currentPosition + offset + availableExportItemIndexes.length)
-        % availableExportItemIndexes.length;
-      exportItemRefs.current[availableExportItemIndexes[nextPosition]]?.focus();
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      const targetPosition = event.key === 'Home' ? 0 : availableExportItemIndexes.length - 1;
-      exportItemRefs.current[availableExportItemIndexes[targetPosition]]?.focus();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      closeExportMenu(true);
-    }
-  };
   const exportConfirmations = async () => {
     if (!exportAvailability.confirmations || exporting !== null) return;
-    setMenuOpen(false);
     setExporting('confirmations');
     try {
       const archive = await createBatchConfirmationArchive(selectedAirwallexRows.map((row) => row.id));
@@ -3935,7 +3896,6 @@ export function BatchesPage({
   };
   const exportPaymentData = async () => {
     if (!exportAvailability.records || exporting !== null) return;
-    setMenuOpen(false);
     setExporting('records');
     try {
       const workbook = await loadPaymentDataRecord();
@@ -3994,7 +3954,7 @@ export function BatchesPage({
       <div className="metrics-grid">
         <MetricCard label="处理中批次" value={String(batchMetrics.processingBatches)} meta={`共 ${batchMetrics.processing} 笔付款`} tone="peach" />
         <MetricCard label="付款成功率" value={batchMetrics.successRate} meta={`${batchMetrics.succeeded} / ${batchMetrics.total} 笔`} />
-        <MetricCard label="需人工处理" value={String(batchMetrics.failed)} meta={`来自 ${batchMetrics.failedBatches} 个批次`} tone="lilac" />
+        <MetricCard label="已付款批次" value={String(batchMetrics.paidBatches)} meta={`共 ${batchMetrics.paidBatchItems} 笔付款`} tone="lilac" />
       </div>
       <section className="content-card">
         <div className="content-toolbar payment-batch-toolbar">
@@ -4029,55 +3989,35 @@ export function BatchesPage({
             ]}
             onChange={setProvider}
           />
-          <div
-            className="payment-batch-export"
-            ref={exportMenuRef}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
-            }}
-          >
-            <button
-              ref={exportTriggerRef}
-              className="button button-secondary payment-batch-export-trigger"
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              disabled={exporting !== null}
-              onKeyDown={handleExportTriggerKeyDown}
-              onClick={() => setMenuOpen((current) => !current)}
+          <div className="payment-batch-export-actions" aria-label="付款批次导出">
+            <Button
+              variant="secondary"
+              className="payment-batch-export-button is-confirmation"
+              icon={exporting === 'confirmations'
+                ? <LoaderCircle className="is-spinning" size={16} />
+                : <FileArchive size={16} />}
+              disabled={!exportAvailability.confirmations || exporting !== null}
+              disabledReason={exporting
+                ? '文件正在导出，请稍候。'
+                : '请先选择至少一个 Airwallex 付款批次。'}
+              onClick={() => { void exportConfirmations(); }}
             >
-              <Download size={16} aria-hidden="true" />
-              <span>{exporting ? '导出中...' : selectedRows.length ? `导出（${selectedRows.length}）` : '导出'}</span>
-              <ChevronDown className="payment-batch-export-chevron" size={15} aria-hidden="true" />
-            </button>
-            {menuOpen ? (
-              <div className="payment-batch-export-menu" role="menu" aria-label="批次导出选项">
-                <button
-                  ref={(node) => { exportItemRefs.current[0] = node; }}
-                  type="button"
-                  role="menuitem"
-                  disabled={!exportAvailability.confirmations || exporting !== null}
-                  tabIndex={-1}
-                  onKeyDown={(event) => handleExportItemKeyDown(event, 0)}
-                  onClick={() => { void exportConfirmations(); }}
-                >
-                  <FileArchive size={17} aria-hidden="true" />
-                  <span><strong>导出确认函</strong><small>按批次目录生成 ZIP</small></span>
-                </button>
-                <button
-                  ref={(node) => { exportItemRefs.current[1] = node; }}
-                  type="button"
-                  role="menuitem"
-                  disabled={exportDisabled}
-                  tabIndex={-1}
-                  onKeyDown={(event) => handleExportItemKeyDown(event, 1)}
-                  onClick={() => { void exportPaymentData(); }}
-                >
-                  <FileSpreadsheet size={17} aria-hidden="true" />
-                  <span><strong>导出付款数据记录</strong><small>下载原始 Excel 文件</small></span>
-                </button>
-              </div>
-            ) : null}
+              {exporting === 'confirmations' ? '正在导出' : '导出确认函'}
+            </Button>
+            <Button
+              variant="secondary"
+              className="payment-batch-export-button is-record"
+              icon={exporting === 'records'
+                ? <LoaderCircle className="is-spinning" size={16} />
+                : <FileSpreadsheet size={16} />}
+              disabled={!exportAvailability.records || exporting !== null}
+              disabledReason={exporting
+                ? '文件正在导出，请稍候。'
+                : '请先选择至少一个付款批次。'}
+              onClick={() => { void exportPaymentData(); }}
+            >
+              {exporting === 'records' ? '正在导出' : '导出付款明细'}
+            </Button>
           </div>
         </div>
         <div className="payment-batch-selection-summary" aria-live="polite">
@@ -4097,7 +4037,7 @@ export function BatchesPage({
                     onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, filteredRows))}
                   />
                 </th>
-                <th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
+                <th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -4114,9 +4054,15 @@ export function BatchesPage({
                       />
                     </td>
                     <td className="mono-cell">{batch.id}</td>
+                    <td className="payment-batch-project-cell">
+                      <strong>{batch.cooperationProjectCode}</strong>
+                      <small title={batch.cooperationProjectName}>{batch.cooperationProjectName}</small>
+                    </td>
                     <td><PaymentProviderBadge compact provider={batch.provider} /></td>
                     <td>{batch.count} 笔</td>
-                    <td>{batch.amount}</td>
+                    <td className="payment-batch-money-cell">{batch.paymentAmount}</td>
+                    <td className="payment-batch-money-cell">{batch.transferFeeAmount}</td>
+                    <td className="payment-batch-money-cell"><strong>{batch.actualPaidAmount}</strong></td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
                     <td><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
                     <td className="action-cell">
@@ -4132,7 +4078,7 @@ export function BatchesPage({
                   </tr>
                 );
               })}
-              {!filteredRows.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
+              {!filteredRows.length ? <tr><td colSpan={11} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
             </tbody>
           </table>
         </div>

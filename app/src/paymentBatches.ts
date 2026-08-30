@@ -825,15 +825,107 @@ export const createPaymentProjectPaymentRecord = ({
   };
 };
 
-export const paymentBatchAmountLabel = (batch: Pick<PaymentBatchRecord, 'items'>) => {
-  const totals = batch.items.reduce<Record<string, number>>((result, item) => ({
-    ...result,
-    [item.currency]: (result[item.currency] ?? 0) + item.amount,
-  }), {});
-  return Object.entries(totals)
-    .map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`)
-    .join(' + ');
+export type PaymentBatchMoneyTotal = Readonly<{
+  currency: InvoiceCurrency;
+  amount: number;
+}>;
+
+export type PaymentBatchFinancialSummary = Readonly<{
+  items: readonly PaymentBatchItemSnapshot[];
+  paymentAmounts: readonly PaymentBatchMoneyTotal[];
+  transferFeeAmounts: readonly PaymentBatchMoneyTotal[];
+  actualPaidAmounts: readonly PaymentBatchMoneyTotal[];
+}>;
+
+const paymentAttemptForBatchItem = (
+  batch: PaymentBatchRecord,
+  item: PaymentBatchItemSnapshot,
+): PaymentAttemptSnapshot | undefined => item.paymentAttempts?.find((attempt) => (
+  attempt.paymentBatchId === batch.paymentBatchId
+  || (
+    !attempt.paymentBatchId
+    && attempt.attemptNumber === batch.paymentAttemptNumber
+  )
+));
+
+export const paymentBatchItemForAttempt = (
+  batch: PaymentBatchRecord,
+  item: PaymentBatchItemSnapshot,
+): PaymentBatchItemSnapshot => {
+  const attempt = paymentAttemptForBatchItem(batch, item);
+  if (!attempt) return item;
+  return {
+    ...item,
+    paymentOrderCode: batch.paymentOrderCode,
+    sourcePaymentOrderCode: batch.sourcePaymentOrderCode ?? item.sourcePaymentOrderCode,
+    paymentAttemptNumber: batch.paymentAttemptNumber,
+    paymentStatus: attempt.status,
+    paidAt: attempt.occurredAt,
+    transferFeeAmount: attempt.transferFeeAmount,
+    transferFeeCurrency: attempt.transferFeeCurrency,
+    actualPaidAmount: attempt.actualPaidAmount,
+    actualPaidCurrency: attempt.actualPaidCurrency,
+    failure: attempt.status === '付款失败' && (attempt.errorCode || attempt.providerResponse)
+      ? {
+          code: attempt.errorCode || '未记录',
+          response: attempt.providerResponse || '未记录',
+          occurredAt: attempt.occurredAt || '未记录',
+        }
+      : undefined,
+  };
 };
+
+const paymentBatchMoneyTotals = (
+  items: readonly PaymentBatchItemSnapshot[],
+  amountFor: (item: PaymentBatchItemSnapshot) => number | undefined,
+  currencyFor: (item: PaymentBatchItemSnapshot) => InvoiceCurrency | undefined,
+): readonly PaymentBatchMoneyTotal[] => {
+  const totals = items.reduce<Map<InvoiceCurrency, number>>((result, item) => {
+    const amount = amountFor(item);
+    const currency = currencyFor(item);
+    if (amount === undefined || !currency) return result;
+    result.set(currency, (result.get(currency) ?? 0) + amount);
+    return result;
+  }, new Map());
+  return [...totals.entries()].map(([currency, amount]) => ({
+    currency,
+    amount: Math.round((amount + Number.EPSILON) * 100) / 100,
+  }));
+};
+
+export const paymentBatchMoneyTotalsLabel = (
+  totals: readonly PaymentBatchMoneyTotal[],
+  fallback = '—',
+) => totals.length
+  ? totals.map(({ currency, amount }) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ')
+  : fallback;
+
+export const paymentBatchFinancialSummary = (
+  batch: PaymentBatchRecord,
+): PaymentBatchFinancialSummary => {
+  const items = batch.items.map((item) => paymentBatchItemForAttempt(batch, item));
+  return {
+    items,
+    paymentAmounts: paymentBatchMoneyTotals(items, (item) => item.amount, (item) => item.currency),
+    transferFeeAmounts: paymentBatchMoneyTotals(
+      items,
+      (item) => item.transferFeeAmount,
+      (item) => item.transferFeeCurrency,
+    ),
+    actualPaidAmounts: paymentBatchMoneyTotals(
+      items,
+      (item) => item.actualPaidAmount,
+      (item) => item.actualPaidCurrency,
+    ),
+  };
+};
+
+export const paymentBatchAmountLabel = (batch: Pick<PaymentBatchRecord, 'items'>) => (
+  paymentBatchMoneyTotalsLabel(
+    paymentBatchMoneyTotals(batch.items, (item) => item.amount, (item) => item.currency),
+    '',
+  )
+);
 
 export const paymentBatchStatusCounts = (batch: Pick<PaymentBatchRecord, 'items'>) => batch.items.reduce(
   (counts, item) => {

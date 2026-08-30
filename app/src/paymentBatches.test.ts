@@ -19,6 +19,8 @@ import {
   createPaymentExecutionBatchRecord,
   createPaymentProjectPaymentRecord,
   paymentBatchAmountLabel,
+  paymentBatchFinancialSummary,
+  paymentBatchMoneyTotalsLabel,
   paymentBatchStatusCounts,
 } from './paymentBatches';
 import {
@@ -439,6 +441,57 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].postTransactionBalance).toBe(48_741.5);
     expect(record.items[0].postTransactionBalanceCurrency).toBe('USD');
     expect(record.items[0].paidAt).toBe('2026-08-10T10:30');
+  });
+
+  it('summarizes the selected batch attempt without accumulating an earlier failed retry', () => {
+    const input = buildInput();
+    const record = createPaymentBatchRecord({ ...input, status: '已付款', itemStatus: '已付款' });
+    const retryRecord = {
+      ...record,
+      paymentOrderCode: 'PAY-RETRY-002',
+      sourcePaymentOrderCode: record.paymentOrderCode,
+      paymentAttemptNumber: 2,
+      items: record.items.map((item) => ({
+        ...item,
+        paymentOrderCode: 'PAY-RETRY-002',
+        sourcePaymentOrderCode: record.paymentOrderCode,
+        paymentAttemptNumber: 2,
+        paymentAttempts: [
+          {
+            paymentBatchId: 'payment_batch_previous' as PaymentBatchId,
+            paymentBatchCode: 'BAT-PREVIOUS',
+            attemptNumber: 1,
+            status: '付款失败' as const,
+            occurredAt: '2026-08-09T10:00',
+            principalAmount: 1250,
+            principalCurrency: 'USD' as const,
+            transferFeeAmount: 2.5,
+            transferFeeCurrency: 'USD' as const,
+            actualPaidAmount: 2.5,
+            actualPaidCurrency: 'USD' as const,
+          },
+          {
+            paymentBatchId: record.paymentBatchId,
+            paymentBatchCode: record.paymentBatchCode,
+            attemptNumber: 2,
+            status: '已付款' as const,
+            occurredAt: '2026-08-10T10:30',
+            principalAmount: 1250,
+            principalCurrency: 'USD' as const,
+            transferFeeAmount: 8.5,
+            transferFeeCurrency: 'USD' as const,
+            actualPaidAmount: 1258.5,
+            actualPaidCurrency: 'USD' as const,
+          },
+        ],
+      })),
+    };
+    const summary = paymentBatchFinancialSummary(retryRecord);
+
+    expect(paymentBatchMoneyTotalsLabel(summary.paymentAmounts)).toBe('USD 1,250');
+    expect(paymentBatchMoneyTotalsLabel(summary.transferFeeAmounts)).toBe('USD 8.5');
+    expect(paymentBatchMoneyTotalsLabel(summary.actualPaidAmounts)).toBe('USD 1,258.5');
+    expect(summary.items[0].paymentStatus).toBe('已付款');
   });
 
   it.each([
