@@ -445,6 +445,9 @@ export function PaymentBatchDetailPage({
   const batchItems = financialSummary.items;
   const orderCounts = paymentBatchStatusCounts({ items: batchItems });
   const orderStatus = paymentOrderStatus(batchItems);
+  const paymentTypeLabel = batch.paymentAttemptNumber > 1 ? '二次付款' : '首次付款';
+  const sourcePaymentOrderCode = batch.sourcePaymentOrderCode
+    ?? (batchItems[0] ? paymentBatchItemSourceOrderCode(batchItems[0]) : undefined);
   const failureDialogItem = batchItems.find((item) => item.payoutId === failureDialogPayoutId);
   const selectedDetailItem = batchItems.find((item) => item.payoutId === selectedDetailItemId);
   const selectedDetailCreator = selectedDetailItem
@@ -526,7 +529,11 @@ export function PaymentBatchDetailPage({
 
       <section className="payment-batch-detail-summary payment-project-summary-grid" aria-label="批次摘要">
         <div className="payment-project-summary-card is-order">
-          <div><span>付款单</span><strong>{batch.paymentOrderCode}</strong><small>{batch.items.length} 笔付款明细</small></div>
+          <div>
+            <span>付款类型</span>
+            <strong>{paymentTypeLabel}</strong>
+            <small>{batch.paymentAttemptNumber > 1 ? `关联原付款单 ${sourcePaymentOrderCode ?? '未记录'}` : `${batch.items.length} 笔付款明细`}</small>
+          </div>
         </div>
         <div className="payment-project-summary-card is-updated">
           <div><span>付款人 / 时间</span><strong>{batch.payer}</strong><small>{displayTime(batch.paidAt)}</small></div>
@@ -544,25 +551,7 @@ export function PaymentBatchDetailPage({
         <PaymentProgressSteps ariaLabel="渠道处理进度" status={batch.status} />
       </section>
 
-      <section className="payment-batch-orders-section" aria-labelledby="payment-batch-orders-title">
-        <header className="payment-batch-orders-heading">
-          <div><h2 id="payment-batch-orders-title">付款单与付款明细</h2><p>本批次对应一次渠道付款及一张付款单，表格仅展示本次尝试结果。</p></div>
-          <div className="payment-project-resource-toolbar">
-            <div className="payment-project-resource-actions" aria-label="下载付款项目资料">
-              <Button
-                variant="secondary"
-                icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
-                disabled={!projectArchiveItems.length || downloadingResource !== null}
-                disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款确认文件。'}
-                onClick={downloadProjectWorkbook}
-              >
-                {downloadingResource === 'workbook' ? '正在生成' : '下载付款表'}
-              </Button>
-            </div>
-            <span>{batchItems.length ? 1 : 0} 张付款单 · {batch.items.length} 笔明细</span>
-          </div>
-        </header>
-        {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
+      <section className="payment-batch-orders-section" aria-label="付款单与付款明细">
         {batchItems.length ? (
           <div className="payment-batch-order-list">
               <article className="payment-batch-order-card" aria-labelledby="payment-batch-order-title">
@@ -572,7 +561,7 @@ export function PaymentBatchDetailPage({
                     <div>
                       <small>付款单</small>
                       <h2 id="payment-batch-order-title">{batch.paymentOrderCode}</h2>
-                      <p>{batch.paymentAttemptNumber > 1 ? `${paymentBatchItemAttemptLabel(batchItems[0])} · 关联原付款单 ${batch.sourcePaymentOrderCode ?? paymentBatchItemSourceOrderCode(batchItems[0])}` : '首次付款'} · {batchItems.length} 笔付款明细</p>
+                      <p>{batch.paymentAttemptNumber > 1 ? `${paymentTypeLabel} · 关联原付款单 ${sourcePaymentOrderCode ?? '未记录'}` : paymentTypeLabel} · {batchItems.length} 笔付款明细</p>
                     </div>
                   </div>
                   <div className="payment-batch-order-result">
@@ -588,23 +577,35 @@ export function PaymentBatchDetailPage({
                       <span aria-hidden="true"><ListChecks size={17} /></span>
                       <div><h3>付款明细</h3><p>查看本次付款的账户快照、费用和渠道结果。</p></div>
                     </div>
-                    <span className="payment-batch-order-items-count"><strong>{batchItems.length}</strong> 笔</span>
+                    <div className="payment-batch-order-items-tools" aria-label="付款明细工具">
+                      <Button
+                        variant="secondary"
+                        icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
+                        disabled={!projectArchiveItems.length || downloadingResource !== null}
+                        disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款明细。'}
+                        onClick={downloadProjectWorkbook}
+                      >
+                        {downloadingResource === 'workbook' ? '正在生成' : '下载付款明细表'}
+                      </Button>
+                      <span className="payment-batch-order-items-count"><strong>{batchItems.length}</strong> 笔</span>
+                    </div>
                   </header>
+                  {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
                   <div className="payment-batch-order-table-scroll" role="region" aria-label={`${batch.paymentOrderCode} 付款明细表，可横向滚动`} tabIndex={0}>
                     <table className="data-table payment-batch-order-table">
                       <thead>
                         <tr>
-                          <th>达人</th>
-                          <th>关联项目</th>
-                          <th>付款渠道</th>
-                          <th>收款银行账号</th>
-                          <th>付款日期</th>
-                          <th>付款金额</th>
-                          <th>手续费</th>
-                          <th>实际付款金额</th>
-                          <th>付款类型</th>
-                          <th>付款状态</th>
-                          <th className="action-cell">操作</th>
+                          <th className="payment-batch-col-creator" scope="col">达人</th>
+                          <th className="payment-batch-col-project" scope="col">关联项目</th>
+                          <th className="payment-batch-col-provider" scope="col">付款渠道</th>
+                          <th className="payment-batch-col-account" scope="col">收款银行账号</th>
+                          <th className="payment-batch-col-date" scope="col">付款日期</th>
+                          <th className="payment-batch-col-amount" scope="col">付款金额</th>
+                          <th className="payment-batch-col-fee" scope="col">手续费</th>
+                          <th className="payment-batch-col-actual" scope="col">实际付款金额</th>
+                          <th className="payment-batch-col-attempt" scope="col">付款类型</th>
+                          <th className="payment-batch-col-status" scope="col">付款状态</th>
+                          <th className="action-cell payment-batch-col-actions" scope="col">操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -618,19 +619,23 @@ export function PaymentBatchDetailPage({
                             : undefined;
                         return (
                           <tr key={item.payoutId}>
-                              <td className="payment-batch-table-creator-cell">
-                                <PaymentCreatorIdentity {...creatorIdentity} />
+                              <td className="payment-batch-col-creator payment-batch-table-creator-cell">
+                                <PaymentCreatorIdentity {...creatorIdentity} className="payment-batch-table-creator-identity" />
                               </td>
-                              <td className="payment-batch-table-project-cell"><strong title={batch.request.cooperationProjectName}>{batch.request.cooperationProjectName}</strong><small title={batch.request.cooperationProjectCode}>{batch.request.cooperationProjectCode}</small></td>
-                              <td><span className="payment-batch-table-provider"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span></td>
-                              <td className="payment-batch-table-account-cell"><strong title={item.accountIdentifier || item.accountSummary}>{item.accountIdentifier || item.accountSummary}</strong><small>{item.accountIdentifierLabel || '收款账户快照'}</small></td>
-                              <td className="payment-batch-table-date-cell">{paymentDateLabel(item.paidAt)}</td>
-                              <td className="payment-batch-table-money-cell"><strong>{money(item.currency, item.amount)}</strong></td>
-                              <td className="payment-batch-table-money-cell">{paymentFeeLabel(item)}</td>
-                              <td className="payment-batch-table-money-cell"><strong>{paymentResultValue(item, item.actualPaidAmount, item.actualPaidCurrency)}</strong></td>
-                              <td><span className={`payment-batch-attempt-badge${paymentBatchItemAttemptNumber(item) > 1 ? ' is-retry' : ''}`}>{paymentBatchItemAttemptLabel(item)}</span></td>
-                              <td><span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span></td>
-                              <td className="action-cell payment-batch-table-action-cell">
+                              <td className="payment-batch-col-project">
+                                <span className="payment-batch-table-project-cell"><strong title={batch.request.cooperationProjectName}>{batch.request.cooperationProjectName}</strong><small title={batch.request.cooperationProjectCode}>{batch.request.cooperationProjectCode}</small></span>
+                              </td>
+                              <td className="payment-batch-col-provider"><span className="payment-batch-table-provider"><PaymentProviderBadge compact provider={item.provider} /><small title={item.transferMethod}>{item.transferMethod}</small></span></td>
+                              <td className="payment-batch-col-account">
+                                <span className="payment-batch-table-account-cell"><strong title={item.accountIdentifier || item.accountSummary}>{item.accountIdentifier || item.accountSummary}</strong><small title={item.accountIdentifierLabel || '收款账户快照'}>{item.accountIdentifierLabel || '收款账户快照'}</small></span>
+                              </td>
+                              <td className="payment-batch-col-date payment-batch-table-date-cell">{paymentDateLabel(item.paidAt)}</td>
+                              <td className="payment-batch-col-amount payment-batch-table-money-cell"><strong>{money(item.currency, item.amount)}</strong></td>
+                              <td className="payment-batch-col-fee payment-batch-table-money-cell">{paymentFeeLabel(item)}</td>
+                              <td className="payment-batch-col-actual payment-batch-table-money-cell"><strong>{paymentResultValue(item, item.actualPaidAmount, item.actualPaidCurrency)}</strong></td>
+                              <td className="payment-batch-col-attempt"><span className={`payment-batch-attempt-badge${paymentBatchItemAttemptNumber(item) > 1 ? ' is-retry' : ''}`}>{paymentBatchItemAttemptLabel(item)}</span></td>
+                              <td className="payment-batch-col-status"><span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span></td>
+                              <td className="action-cell payment-batch-col-actions payment-batch-table-action-cell">
                                 <div className="payment-batch-table-actions">
                                   <ListActionButton
                                     ref={(node) => {

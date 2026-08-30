@@ -70,6 +70,7 @@ const DETAIL_BATCH: PaymentBatchRecord = {
     receiveCurrency: 'USD',
     transferMethod: 'LOCAL',
     accountSummary: '•••• 7890',
+    accountName: 'Mina Kato Account',
     payoutAccountId: 'payout_account_detail_test',
     payoutAccountVersion: 'v2',
     feeBearer: '广告主承担',
@@ -105,28 +106,33 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('CON-202608-000001');
     expect(html).toContain('data-payment-provider="Airwallex"');
     expect(html).toContain('<span class="payment-provider-label">Airwallex</span>');
-    expect(html).toContain('<small>LOCAL</small>');
+    expect(html).toContain('<small title="LOCAL">LOCAL</small>');
     expect(html).toContain('达人');
     expect(html).toContain('付款渠道');
     expect(html).toContain('付款金额');
     expect(html).toContain('avatar avatar-sm');
     expect(html).toContain('>MK</span>');
     expect(html).toContain('aria-label="查看 Mina Kato 的付款详情"');
-    expect(html).toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
+    expect(html).not.toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
+    expect(html).toContain('aria-label="付款单与付款明细"');
     expect(html).toContain('class="payment-batch-order-card"');
     expect(html).toContain('payment-batch-order-header payment-batch-order-summary-card');
     expect(html).toContain('payment-batch-order-items payment-batch-order-items-card');
     expect(html).toContain('class="payment-batch-order-items-heading"');
-    expect(html).toContain('<span>付款单</span><strong>PAY-202608-000001</strong>');
+    expect(html).toContain('<span>付款类型</span><strong>首次付款</strong><small>1 笔付款明细</small>');
+    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-202608-000001</h2>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
     expect(html).toContain('<span>支付币种</span><strong>USD</strong>');
     expect(html).toContain('<p>PRJ-202608-000001 · COMETS 夏季内容项目</p>');
     expect(html).not.toContain('<dt>付款项目编号</dt>');
     expect(html).not.toContain('payment-batch-order-project');
-    expect(html).toContain('<th>达人</th><th>关联项目</th><th>付款渠道</th><th>收款银行账号</th><th>付款日期</th><th>付款金额</th><th>手续费</th><th>实际付款金额</th><th>付款类型</th><th>付款状态</th>');
+    expect(html).toContain('<th class="payment-batch-col-creator" scope="col">达人</th>');
+    expect(html).toContain('<th class="payment-batch-col-project" scope="col">关联项目</th>');
+    expect(html).toContain('<th class="action-cell payment-batch-col-actions" scope="col">操作</th>');
     expect(html).toContain('class="data-table payment-batch-order-table"');
     expect(html).toContain('<strong title="COMETS 夏季内容项目">COMETS 夏季内容项目</strong><small title="PRJ-202608-000001">PRJ-202608-000001</small>');
+    expect(html).toContain('<strong title="Mina Kato Account">Mina Kato Account</strong><small title="Mina Kato">Mina Kato</small>');
     expect(html).toContain('class="payment-batch-attempt-badge">首次付款</span>');
     expect(html).toContain('下载确认函');
     expect(html).toContain('查看详情');
@@ -215,7 +221,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('PAY-202608-000001');
     expect(html).not.toContain('PAY-202608-000002');
     expect(html).toContain('<small>2 笔付款明细</small>');
-    expect(html).toContain('1 张付款单 · 2 笔明细');
+    expect(html).not.toContain('1 张付款单 · 2 笔明细');
   });
 
   it('renders a retry in a new payment order while linking the original order', () => {
@@ -246,7 +252,8 @@ describe('PaymentBatchDetailPage', () => {
       />,
     );
 
-    expect(html).toContain('<span>付款单</span><strong>PAY-20260811-000002</strong><small>1 笔付款明细</small>');
+    expect(html).toContain('<span>付款类型</span><strong>二次付款</strong><small>关联原付款单 PAY-202608-000001</small>');
+    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-20260811-000002</h2>');
     expect(html).toContain('二次付款 · 关联原付款单 PAY-202608-000001 · 1 笔付款明细');
     expect(html).toContain('payment-batch-attempt-badge is-retry">二次付款</span>');
     expect(html).toContain('USD 8.5');
@@ -445,15 +452,16 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('1234567890');
   });
 
-  it('keeps only the payment workbook action beside the payment orders', () => {
+  it('keeps the renamed payment workbook action before the item count', () => {
     const html = renderToStaticMarkup(
       <PaymentBatchDetailPage batch={DETAIL_BATCH} onBack={vi.fn()} />,
     );
 
     expect(html).not.toContain('>下载合同<');
     expect(html).not.toContain('>下载 Invoice<');
-    expect(html).toContain('下载付款表');
+    expect(html).toContain('下载付款明细表');
     expect(html).not.toContain('下载项目资料');
+    expect(html.indexOf('下载付款明细表')).toBeLessThan(html.indexOf('payment-batch-order-items-count'));
   });
 
   it('reads the shared failure return record and exposes the payment-list deep link', () => {
@@ -532,18 +540,26 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('没有可展示的付款项快照');
   });
 
-  it('uses a responsive right drawer and keeps status actions visible in the wide table', () => {
+  it('uses a responsive right drawer and semantic sticky identity and action columns', () => {
     const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
     const source = readFileSync(new URL('./PaymentBatchDetailPage.tsx', import.meta.url), 'utf8');
 
     expect(css).toContain('.payment-batch-item-drawer-backdrop');
     expect(css).toContain('width: min(560px, 100vw)');
-    expect(css).toContain('.payment-batch-order-table :is(th, td):nth-child(10)');
-    expect(css).toContain('right: 226px');
+    expect(css).toContain('min-width: 1760px');
+    expect(css).toContain('table-layout: auto');
+    expect(css).toContain(':is(th, td).payment-batch-col-creator');
+    expect(css).toContain('left: 0');
+    expect(css).toContain(':is(th, td).payment-batch-col-actions');
+    expect(css).toContain('right: 0');
+    expect(css).not.toContain('.payment-batch-order-table :is(th, td):nth-child(10)');
     expect(css).toContain('.payment-batch-table-actions');
     expect(css).toContain('.payment-batch-order-summary-card');
     expect(css).toContain('.payment-batch-order-items-card');
     expect(css).toContain('.payment-batch-drawer-financial-summary');
+    expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.payment-batch-order-items-tools \.button \{[\s\S]*?min-height: 44px/);
+    expect(source).toContain('className="payment-batch-col-creator" scope="col"');
+    expect(source).toContain('className="action-cell payment-batch-col-actions" scope="col"');
     expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.payment-batch-item-drawer \{[\s\S]*?width: 100vw/);
     expect(source).toContain("event.key === 'Escape'");
     expect(source).toContain("event.key !== 'Tab'");
