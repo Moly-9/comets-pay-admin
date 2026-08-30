@@ -875,8 +875,8 @@ input[type="checkbox"]:disabled {
 }
 
 .data-table.payment-batch-order-table {
-  width: 100%;
-  min-width: 1760px;
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
@@ -887,7 +887,7 @@ input[type="checkbox"]:disabled {
   border-top: 1px solid #e5e8ed;
   border-bottom: 1px solid #dfe4e9;
   background: #f7f8fa;
-  padding: 11px 12px;
+  padding: 11px 8px;
   color: #687380;
   font-size: 12px;
   font-weight: 650;
@@ -900,70 +900,22 @@ input[type="checkbox"]:disabled {
   height: 66px;
   border-bottom: 1px solid #edf0f3;
   background: #fff;
-  padding: 9px 12px;
+  padding: 9px 8px;
   color: #35404c;
   font-size: 12px;
   line-height: 1.45;
   vertical-align: middle;
 }
 
+.payment-batch-order-table :is(th, td):not([colspan]) {
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
 .payment-batch-order-table tbody tr:not(.payment-batch-table-detail-row):hover > td,
 .payment-batch-order-table tbody tr.is-expanded > td,
 .payment-batch-order-table tbody tr:focus-within > td {
   background: #faf9fc;
-}
-
-.payment-batch-order-table .payment-batch-col-creator {
-  width: 260px;
-  min-width: 260px;
-  max-width: 320px;
-}
-
-.payment-batch-order-table .payment-batch-col-project {
-  width: 18%;
-  min-width: 220px;
-  max-width: 340px;
-}
-
-.payment-batch-order-table .payment-batch-col-provider {
-  width: 1%;
-  min-width: 128px;
-}
-
-.payment-batch-order-table .payment-batch-col-account {
-  width: 16%;
-  min-width: 200px;
-  max-width: 300px;
-}
-
-.payment-batch-order-table .payment-batch-col-date {
-  width: 1%;
-  min-width: 100px;
-}
-
-.payment-batch-order-table .payment-batch-col-amount {
-  width: 1%;
-  min-width: 120px;
-}
-
-.payment-batch-order-table .payment-batch-col-fee {
-  width: 1%;
-  min-width: 110px;
-}
-
-.payment-batch-order-table .payment-batch-col-actual {
-  width: 1%;
-  min-width: 140px;
-}
-
-.payment-batch-order-table .payment-batch-col-attempt {
-  width: 1%;
-  min-width: 104px;
-}
-
-.payment-batch-order-table .payment-batch-col-status {
-  width: 1%;
-  min-width: 112px;
 }
 
 .payment-batch-order-table :is(
@@ -975,20 +927,13 @@ input[type="checkbox"]:disabled {
   .payment-batch-col-attempt,
   .payment-batch-col-status
 ) {
+  width: 1%;
   white-space: nowrap;
 }
 
 .payment-batch-order-table .payment-batch-col-actions {
-  width: 226px;
-  min-width: 226px;
-  max-width: 226px;
-}
-
-.payment-batch-order-table :is(th, td).payment-batch-col-creator {
-  position: sticky;
-  z-index: 2;
-  left: 0;
-  box-shadow: 10px 0 14px -15px rgba(37, 45, 58, 0.78);
+  width: 1%;
+  white-space: nowrap;
 }
 
 .payment-batch-order-table :is(th, td).payment-batch-col-actions {
@@ -998,17 +943,13 @@ input[type="checkbox"]:disabled {
   box-shadow: -10px 0 14px -15px rgba(37, 45, 58, 0.78);
 }
 
-.payment-batch-order-table th.payment-batch-col-creator,
 .payment-batch-order-table th.payment-batch-col-actions {
   z-index: 3;
   background: #f7f8fa;
 }
 
-.payment-batch-order-table tbody tr:not(.payment-batch-table-detail-row):hover > td.payment-batch-col-creator,
 .payment-batch-order-table tbody tr:not(.payment-batch-table-detail-row):hover > td.payment-batch-col-actions,
-.payment-batch-order-table tbody tr.is-expanded > td.payment-batch-col-creator,
 .payment-batch-order-table tbody tr.is-expanded > td.payment-batch-col-actions,
-.payment-batch-order-table tbody tr:focus-within > td.payment-batch-col-creator,
 .payment-batch-order-table tbody tr:focus-within > td.payment-batch-col-actions {
   background: #faf9fc;
 }
@@ -1051,20 +992,29 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 .payment-batch-table-account-cell,
 .payment-batch-table-provider {
   display: grid;
-  width: 100%;
-  min-width: 0;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
   gap: 3px;
 }
 
-.payment-batch-table-creator-identity {
-  width: 100%;
+.payment-batch-order-table .payment-batch-table-creator-identity {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
 }
 
+.payment-batch-order-table .payment-batch-table-creator-identity .payment-creator-identity-copy {
+  min-width: max-content;
+}
+
+.payment-batch-order-table .payment-batch-table-creator-identity .payment-creator-identity-copy > :is(strong, small),
 .payment-batch-table-project-cell :is(strong, small),
 .payment-batch-table-account-cell :is(strong, small),
 .payment-batch-table-provider small {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -28030,46 +27980,13 @@ button:disabled {
   white-space: nowrap;
 }
 
-/* Payment batch detail: preserve both sticky edge columns without hiding the scrollable center on phones. */
+/* Payment batch detail: keep actions usable while the content-sized table scrolls on phones. */
 @media (max-width: 520px) {
-  .payment-batch-order-table .payment-batch-col-creator {
-    width: 160px;
-    min-width: 160px;
-    max-width: 160px;
-  }
-
-  .payment-batch-order-table .payment-batch-col-actions {
-    width: 112px;
-    min-width: 112px;
-    max-width: 112px;
-  }
-
-  .payment-batch-order-table .payment-batch-col-project {
-    min-width: 394px;
-    max-width: 430px;
-  }
-
-  .payment-batch-order-table .payment-batch-col-account {
-    min-width: 280px;
-    max-width: 340px;
-  }
-
-  .payment-batch-order-table :is(th, td).payment-batch-col-creator,
-  .payment-batch-order-table :is(th, td).payment-batch-col-actions {
-    padding-right: 8px;
-    padding-left: 8px;
-  }
-
   .payment-batch-table-actions {
     width: 96px;
     max-width: 96px;
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .payment-batch-table-creator-identity {
-    width: 144px;
-    max-width: 144px;
   }
 
   .payment-batch-table-action-cell .list-action-button {

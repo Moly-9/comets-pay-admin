@@ -964,3 +964,11 @@
 @media (prefers-reduced-motion: reduce) {
   .payment-project-item-drawer { animation: none; }
 }
+
+/* Payment batch annotations use one stable value size at every responsive breakpoint. */
+.payment-project-payment-detail-page.payment-batch-payment-detail-page.payment-batch-detail-page
+  .payment-project-summary-card strong,
+.payment-project-payment-detail-page.payment-batch-payment-detail-page.payment-batch-detail-page
+  .payment-project-summary-provider .payment-provider-badge {
+  font-size: 18px;
+}
