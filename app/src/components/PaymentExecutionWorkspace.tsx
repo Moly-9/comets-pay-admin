@@ -413,6 +413,26 @@ export function PaymentExecutionWorkspace({
     }
   };
 
+  const renderProjectInformation = () => (
+    <dl className="payment-execution-project-info" data-testid="payment-execution-project-info">
+      <div className="payment-execution-project-field"><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
+      <div className="payment-execution-project-field"><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
+      <div className="payment-execution-project-field"><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
+      <div className="payment-execution-project-field"><dt>项目媒介</dt><dd>{project.media}</dd></div>
+      <div className="payment-execution-project-field"><dt>负责 PM</dt><dd>{project.pm}</dd></div>
+      <div className="payment-execution-project-field"><dt>提交人</dt><dd>{request.media}</dd></div>
+      <div className="payment-execution-project-field"><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
+      <div className="payment-execution-project-field"><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
+      <div className="payment-execution-project-field"><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
+      <div className="payment-execution-project-field"><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
+      <div className="payment-execution-project-field is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
+    </dl>
+  );
+
   return (
     <>
       <Modal
@@ -499,12 +519,12 @@ export function PaymentExecutionWorkspace({
           {!showOverview ? (
           <main
             ref={paymentListFocusRef}
-            className={`payment-execution-main${isReturned ? ' is-returned' : ' payment-execution-board-card'}`}
+            className={`payment-execution-main${isReturned ? ' is-returned' : ''}`}
             tabIndex={-1}
             aria-label="请款项目与达人请款信息"
           >
           {!isReturned ? (
-            <section className="payment-execution-hero" aria-labelledby="payment-execution-project-title">
+            <section className="payment-execution-hero payment-execution-content-card" aria-labelledby="payment-execution-project-title">
               <div className="payment-execution-hero-heading">
                 <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
                 <div>
@@ -541,23 +561,7 @@ export function PaymentExecutionWorkspace({
               <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
             </div>
 
-            <dl className="payment-execution-project-info">
-              <div><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
-              <div><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
-              <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
-              <div><dt>项目媒介</dt><dd>{project.media}</dd></div>
-              <div><dt>负责 PM</dt><dd>{project.pm}</dd></div>
-              <div><dt>提交人</dt><dd>{request.media}</dd></div>
-              <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
-              <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
-              <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
-              <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
-              <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-              <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
-              <div><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
-              <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
-              <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
-            </dl>
+            {renderProjectInformation()}
           </section>
           )}
 
@@ -589,7 +593,7 @@ export function PaymentExecutionWorkspace({
           ) : null}
 
           {!isReturned ? (
-            <section className={`payment-execution-validation-alert is-${validationReady ? 'success' : 'warning'}`} role="status" aria-live="polite">
+            <section className={`payment-execution-validation-alert payment-execution-content-card is-${validationReady ? 'success' : 'warning'}`} role="status" aria-label="校验结果" aria-live="polite">
               <span>{validationReady ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</span>
               <div>
                 <strong>{validationReady
@@ -602,7 +606,7 @@ export function PaymentExecutionWorkspace({
             </section>
           ) : null}
 
-          <section className={`payment-execution-payees${isReturned ? ' payment-execution-content-card' : ' is-table-view'}`} aria-labelledby="payment-execution-payees-title">
+          <section className={`payment-execution-payees payment-execution-content-card${isReturned ? '' : ' is-table-view'}`} aria-labelledby="payment-execution-payees-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><UserRound size={18} /></span>
@@ -702,7 +706,7 @@ export function PaymentExecutionWorkspace({
                             ? '付款信息校验成功，收款账户与付款资料均已通过审核'
                             : '付款信息尚未完成校验，暂不能执行打款'}</span>
                     </div>
-                    <dl>
+                    <dl className="payment-execution-payee-fields">
                       <div className="is-account"><dt>收款账户</dt><dd>{accountDisplayValue(payout.account)}<small>{transferMethodLabel(payout)}</small></dd></div>
                       <div><dt>支付币种</dt><dd>{payout.currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{payout.currency}</dd></div>
@@ -776,23 +780,7 @@ export function PaymentExecutionWorkspace({
                   <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
                 </div>
 
-                <dl className="payment-execution-project-info">
-                  <div><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
-                  <div><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
-                  <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
-                  <div><dt>项目媒介</dt><dd>{project.media}</dd></div>
-                  <div><dt>负责 PM</dt><dd>{project.pm}</dd></div>
-                  <div><dt>提交人</dt><dd>{request.media}</dd></div>
-                  <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
-                  <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
-                  <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
-                  <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
-                  <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-                  <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
-                  <div><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
-                  <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
-                  <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
-                </dl>
+                {renderProjectInformation()}
               </section>
             ) : null}
             <section className={`payment-execution-approval${isReturned ? ' payment-execution-board-card' : ''}`} aria-labelledby="payment-execution-approval-title">

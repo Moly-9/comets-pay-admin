@@ -82,6 +82,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('付款主体');
     expect(html).toContain('项目费用归属');
     expect(html).toContain('成本类型明细');
+    expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
     expect(html).toContain('当前审批流');
     expect(html).toContain('关联资料');
     expect(html.indexOf('请款项目信息')).toBeLessThan(html.indexOf('当前审批流'));
@@ -131,7 +132,9 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html.match(/payment-execution-hero-summary/g)).toHaveLength(1);
     expect(html).toContain('达人付款信息');
     expect(html).toContain('aria-label="请款项目与达人请款信息"');
-    expect(html.match(/payment-execution-board-card/g)).toHaveLength(2);
+    expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
+    expect(html.match(/payment-execution-board-card/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="校验结果"');
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain('class="payment-execution-table"');
     expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
@@ -323,6 +326,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html.indexOf('退回原因')).toBeLessThan(html.indexOf('请款项目信息'));
     expect(html).toContain('财务审核 · 财务测试员 · 第 1 轮');
     expect(html).toContain('审核未通过');
+    expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
     expect(html).toContain('该项目审核未通过，可展开付款清单查看具体明细和退回原因。');
     expect(html).toContain('>查看付款清单</span>');
     expect(html).toContain('>关闭</span>');
@@ -367,6 +371,9 @@ describe('PaymentExecutionWorkspace', () => {
     });
     expect(html).toContain('2 位达人需修改 · 0 位达人已通过审核');
     expect(html).toContain('付款资料需要媒介复核并修正后重新提交。');
+    expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
+    expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
+    expect(html.match(/payment-execution-payee-fields/g)).toHaveLength(2);
     expect(html.match(/payment-execution-payee is-returned/g)).toHaveLength(2);
     expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(2);
   });
