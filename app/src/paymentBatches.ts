@@ -133,6 +133,9 @@ export type PaymentBatchRequestSnapshot = Readonly<{
 export type PaymentBatchRecord = Readonly<{
   paymentBatchId: PaymentBatchId;
   paymentBatchCode: string;
+  paymentOrderCode: string;
+  sourcePaymentOrderCode?: string;
+  paymentAttemptNumber: number;
   request: PaymentBatchRequestSnapshot;
   provider: Exclude<Provider, '手动打款'>;
   fundingAccountId: string;
@@ -175,6 +178,7 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   lifecycle: readonly string[];
   itemStatus?: Payout['status'];
   paymentOrderCode?: string;
+  sourcePaymentOrderCode?: string;
   paymentAttemptNumber?: number;
 }>;
 
@@ -384,6 +388,7 @@ const snapshotItem = ({
   const paymentStatus = itemStatus ?? payout.status;
   const hasSuccessfulResult = paymentStatus === '已付款';
   const hasFailedResult = paymentStatus === '付款失败' || paymentStatus === '已退回';
+  const hasFinalizedResult = hasSuccessfulResult || hasFailedResult;
   const sourcePaymentOrderCode = paymentList?.paymentListCode ?? '关联资料缺失';
   const resolvedPaymentOrderCode = paymentOrderCode
     ?? payout.currentPaymentAttempt?.paymentOrderCode
@@ -452,10 +457,10 @@ const snapshotItem = ({
     description: String(paymentListItem ? paymentListItemValue(paymentListItem, 'description') : '') || payout.deliverable || '未记录',
     paymentStatus,
     paidAt: payout.paidAt ?? batchPaidAt,
-    transferFeeAmount: hasSuccessfulResult ? payout.transferFeeAmount : undefined,
-    transferFeeCurrency: hasSuccessfulResult ? payout.transferFeeCurrency : undefined,
-    actualPaidAmount: hasSuccessfulResult ? payout.actualPaidAmount : undefined,
-    actualPaidCurrency: hasSuccessfulResult ? payout.actualPaidCurrency : undefined,
+    transferFeeAmount: hasFinalizedResult ? payout.transferFeeAmount : undefined,
+    transferFeeCurrency: hasFinalizedResult ? payout.transferFeeCurrency : undefined,
+    actualPaidAmount: hasFinalizedResult ? payout.actualPaidAmount : undefined,
+    actualPaidCurrency: hasFinalizedResult ? payout.actualPaidCurrency : undefined,
     postTransactionBalance: hasSuccessfulResult ? payout.postTransactionBalance : undefined,
     postTransactionBalanceCurrency: hasSuccessfulResult ? payout.postTransactionBalanceCurrency : undefined,
     failure: hasFailedResult && payout.paymentFailure ? {
@@ -475,6 +480,7 @@ export const createPaymentBatchRecord = ({
   contracts,
   itemStatus,
   paymentOrderCode,
+  sourcePaymentOrderCode,
   paymentAttemptNumber,
   ...batch
 }: CreatePaymentBatchRecordInput): PaymentBatchRecord => {
@@ -494,8 +500,36 @@ export const createPaymentBatchRecord = ({
     throw new Error('一个付款批次只能关联一个请款项目');
   }
   const request = matchedRequests[0]!;
+  const sourceItems = payouts.map((payout) => snapshotItem({
+    payout,
+    request,
+    generatedInvoices,
+    paymentLists,
+    contracts,
+    itemStatus,
+    batchPaidAt: batch.paidAt,
+    paymentOrderCode: '',
+    paymentAttemptNumber: 1,
+  }));
+  const sourceOrderCodes = new Set(sourceItems.map((item) => item.sourcePaymentOrderCode));
+  if (sourceOrderCodes.size !== 1) {
+    throw new Error('一个付款批次只能关联一张原付款单');
+  }
+  const resolvedSourcePaymentOrderCode = sourcePaymentOrderCode
+    ?? sourceItems[0].sourcePaymentOrderCode
+    ?? '关联资料缺失';
+  const resolvedPaymentOrderCode = paymentOrderCode || resolvedSourcePaymentOrderCode;
+  const resolvedPaymentAttemptNumber = Math.max(
+    1,
+    paymentAttemptNumber ?? (resolvedPaymentOrderCode === resolvedSourcePaymentOrderCode ? 1 : 2),
+  );
   return {
     ...batch,
+    paymentOrderCode: resolvedPaymentOrderCode,
+    sourcePaymentOrderCode: resolvedPaymentAttemptNumber > 1
+      ? resolvedSourcePaymentOrderCode
+      : undefined,
+    paymentAttemptNumber: resolvedPaymentAttemptNumber,
     request: snapshotRequest(request),
     items: payouts.map((payout) => snapshotItem({
       payout,
@@ -505,8 +539,8 @@ export const createPaymentBatchRecord = ({
       contracts,
       itemStatus,
       batchPaidAt: batch.paidAt,
-      paymentOrderCode,
-      paymentAttemptNumber,
+      paymentOrderCode: resolvedPaymentOrderCode,
+      paymentAttemptNumber: resolvedPaymentAttemptNumber,
     })),
   };
 };
@@ -721,6 +755,13 @@ export const applyPaymentResultToCurrentBatch = ({
 
   const items = target.items.map((item): PaymentBatchItemSnapshot => {
     if (item.payoutId !== payout.id) return item;
+    const currentAttempt = payout.paymentAttempts?.find((attempt) => (
+      attempt.paymentBatchId === target.paymentBatchId
+      || (
+        !attempt.paymentBatchId
+        && attempt.attemptNumber === target.paymentAttemptNumber
+      )
+    ));
     if (payout.status === '已付款') {
       return {
         ...item,
@@ -731,7 +772,7 @@ export const applyPaymentResultToCurrentBatch = ({
         actualPaidAmount: payout.actualPaidAmount,
         actualPaidCurrency: payout.actualPaidCurrency,
         paymentAttempts: payout.paymentAttempts
-          ?.filter((attempt) => attempt.attemptNumber <= (payout.currentPaymentAttempt?.attemptNumber ?? 1))
+          ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
           .map((attempt) => ({ ...attempt })),
         failure: undefined,
       };
@@ -739,13 +780,13 @@ export const applyPaymentResultToCurrentBatch = ({
     return {
       ...item,
       paymentStatus: '付款失败',
-      paidAt: undefined,
-      transferFeeAmount: undefined,
-      transferFeeCurrency: undefined,
-      actualPaidAmount: undefined,
-      actualPaidCurrency: undefined,
+      paidAt: currentAttempt?.occurredAt ?? payout.paymentFailure?.occurredAt,
+      transferFeeAmount: currentAttempt?.transferFeeAmount,
+      transferFeeCurrency: currentAttempt?.transferFeeCurrency,
+      actualPaidAmount: currentAttempt?.actualPaidAmount,
+      actualPaidCurrency: currentAttempt?.actualPaidCurrency,
       paymentAttempts: payout.paymentAttempts
-        ?.filter((attempt) => attempt.attemptNumber <= (payout.currentPaymentAttempt?.attemptNumber ?? 1))
+        ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
         .map((attempt) => ({ ...attempt })),
       failure: payout.paymentFailure ? {
         code: payout.paymentFailure.errorCode,

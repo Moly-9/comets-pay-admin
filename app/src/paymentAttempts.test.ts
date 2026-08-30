@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  paymentAttemptAmountTotals,
   paymentAttemptSnapshotFor,
   withLatestFailedAttemptReturnReason,
   withPaymentAttemptSnapshot,
@@ -73,5 +74,42 @@ describe('payment attempt snapshots', () => {
       status: '付款失败',
       returnReason: '请更新收款账户。',
     });
+  });
+
+  it('aggregates attempts by currency without double counting the same batch', () => {
+    const duplicateBatchId = 'payment_batch_attempt_test' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'];
+    const attempts = [
+      {
+        paymentBatchId: duplicateBatchId,
+        attemptNumber: 1,
+        status: '付款失败' as const,
+        principalAmount: 1_250,
+        principalCurrency: 'USD' as const,
+        transferFeeAmount: 2,
+        transferFeeCurrency: 'USD' as const,
+      },
+      {
+        paymentBatchId: duplicateBatchId,
+        attemptNumber: 1,
+        status: '付款失败' as const,
+        principalAmount: 1_250,
+        principalCurrency: 'USD' as const,
+        transferFeeAmount: 2.5,
+        transferFeeCurrency: 'USD' as const,
+      },
+      {
+        attemptNumber: 2,
+        status: '已付款' as const,
+        principalAmount: 1_250,
+        principalCurrency: 'USD' as const,
+        transferFeeAmount: 3,
+        transferFeeCurrency: 'EUR' as const,
+      },
+    ];
+
+    expect(paymentAttemptAmountTotals(attempts, 'transferFeeAmount', 'transferFeeCurrency')).toEqual([
+      { currency: 'USD', amount: 2.5 },
+      { currency: 'EUR', amount: 3 },
+    ]);
   });
 });

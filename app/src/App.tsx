@@ -4960,8 +4960,6 @@ export default function App() {
         <BatchesPage
           batches={paymentBatches}
           payouts={payouts}
-          contracts={contracts}
-          invoices={generatedInvoices}
           creators={creators}
           onNewBatch={() => setActivePage('new-batch')}
           notify={notify}

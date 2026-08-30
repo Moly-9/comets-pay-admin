@@ -141,7 +141,14 @@ export const applyPaymentBatchPrototypeScenario = ({
       const sourcePaymentOrderCode = paymentLists.find((list) => (
         linkedInvoice && list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
       ))?.paymentListCode;
-      const paymentResult = status === '已付款' ? prototypePaymentResultFor(payout) : undefined;
+      const prototypePaymentResult = prototypePaymentResultFor(payout);
+      const paymentResult = status === '已付款' ? prototypePaymentResult : undefined;
+      const failedPaymentResult = failed ? {
+        transferFeeAmount: prototypePaymentResult.transferFeeAmount,
+        transferFeeCurrency: prototypePaymentResult.transferFeeCurrency,
+        actualPaidAmount: prototypePaymentResult.transferFeeAmount,
+        actualPaidCurrency: prototypePaymentResult.transferFeeCurrency,
+      } : undefined;
       const retryPaymentAttempts = isRetrySuccess && paymentResult?.transferFeeAmount !== undefined
         ? [
             {
@@ -193,10 +200,7 @@ export const applyPaymentBatchPrototypeScenario = ({
           postTransactionBalance,
           postTransactionBalanceCurrency: payout.currency,
         } : {
-          transferFeeAmount: undefined,
-          transferFeeCurrency: undefined,
-          actualPaidAmount: undefined,
-          actualPaidCurrency: undefined,
+          ...failedPaymentResult,
           postTransactionBalance: undefined,
           postTransactionBalanceCurrency: undefined,
         }),

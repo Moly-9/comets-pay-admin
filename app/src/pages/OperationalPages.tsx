@@ -3742,8 +3742,6 @@ const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
 export function BatchesPage({
   batches,
   payouts = [],
-  contracts = [],
-  invoices = [],
   creators = [],
   onNewBatch,
   notify,
@@ -3754,8 +3752,6 @@ export function BatchesPage({
 }: {
   batches: readonly PaymentBatchRecord[];
   payouts?: readonly Payout[];
-  contracts?: readonly ContractRecord[];
-  invoices?: readonly GeneratedInvoiceRecord[];
   creators?: readonly CreatorProfile[];
   onNewBatch: () => void;
   notify: Notify;
@@ -3970,8 +3966,6 @@ export function BatchesPage({
       <PaymentBatchDetailPage
         batch={selectedBatch}
         payouts={payouts}
-        contracts={contracts}
-        invoices={invoices}
         creators={creators}
         projectItems={selectedProjectItems}
         canHandleFailure={canCreateBatch}

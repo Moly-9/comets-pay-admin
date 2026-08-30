@@ -31,6 +31,7 @@ import {
   type PaymentBatchItemSnapshot,
   type PaymentProjectPaymentRecord,
 } from '../paymentBatches';
+import { paymentAttemptAmountTotals } from '../paymentAttempts';
 import type { ContractRecord } from '../contracts';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
@@ -76,20 +77,6 @@ const projectStatusTone = (status: PaymentProjectPaymentRecord['status']) => {
 
 const paymentResultPlaceholder = (status: Payout['status']) => (
   status === '付款处理中' ? '待渠道回写' : '—'
-);
-
-const paymentResultMoney = ({
-  status,
-  amount,
-  currency,
-}: {
-  status: Payout['status'];
-  amount?: number;
-  currency?: string;
-}) => (
-  status === '已付款' && amount !== undefined && currency
-    ? money(currency, amount)
-    : paymentResultPlaceholder(status)
 );
 
 const paymentResultDate = (status: Payout['status'], paidAt?: string) => {
@@ -162,12 +149,8 @@ const paymentAttemptAggregate = (
   if (attempts.some((attempt) => attempt[amountKey] === undefined || !attempt[currencyKey])) {
     return ['待补充'];
   }
-  const totals = attempts.reduce<Map<string, number>>((result, attempt) => {
-    const currency = attempt[currencyKey]!;
-    result.set(currency, (result.get(currency) ?? 0) + attempt[amountKey]!);
-    return result;
-  }, new Map());
-  return [...totals.entries()].map(([currency, amount]) => money(currency, amount));
+  return paymentAttemptAmountTotals(attempts, amountKey, currencyKey)
+    .map(({ currency, amount }) => money(currency, amount));
 };
 
 type ProjectDownloadAction = 'contract' | 'invoice' | 'payment-list' | 'payment-detail' | 'confirmation-all' | 'confirmation-selected';
@@ -314,11 +297,11 @@ export function PaymentProjectItemDrawer({
               <div><dt>收款币种</dt><dd>{item.receiveCurrency || '待补充'}</dd></div>
               <div><dt>账户版本</dt><dd>{item.payoutAccountVersion}</dd></div>
               <div>
-                <dt>累计支付总金额</dt>
+                <dt>累计实际付款金额</dt>
                 <dd className="payment-project-amount-stack">{cumulativePaidAmounts.map((amount) => <span key={amount}>{amount}</span>)}</dd>
               </div>
               <div>
-                <dt>累计手续费</dt>
+                <dt>实际总手续费</dt>
                 <dd className="payment-project-amount-stack">{cumulativeFeeAmounts.map((amount) => <span key={amount}>{amount}</span>)}</dd>
               </div>
             </dl>
@@ -356,7 +339,7 @@ export function PaymentProjectItemDrawer({
                       <div><dt>付款时间</dt><dd>{displayTime(attempt.occurredAt)}</dd></div>
                       <div><dt>支付金额</dt><dd>{paymentAttemptMoney(attempt.principalAmount, attempt.principalCurrency)}</dd></div>
                       <div><dt>手续费</dt><dd>{paymentAttemptMoney(attempt.transferFeeAmount, attempt.transferFeeCurrency)}</dd></div>
-                      <div className="is-full"><dt>支付总金额</dt><dd>{paymentAttemptMoney(attempt.actualPaidAmount, attempt.actualPaidCurrency)}</dd></div>
+                      <div className="is-full"><dt>实际付款金额</dt><dd>{paymentAttemptMoney(attempt.actualPaidAmount, attempt.actualPaidCurrency)}</dd></div>
                       {attempt.status === '付款失败' ? (
                         <>
                           <div><dt>错误码</dt><dd>{attempt.errorCode || '未记录'}</dd></div>
@@ -862,8 +845,8 @@ export function PaymentProjectPaymentDetailPage({
                   <th className="payment-project-detail-account-heading">收款银行账号</th>
                   <th className="payment-project-detail-date-heading">付款日期</th>
                   <th className="payment-project-detail-money-heading">付款金额</th>
-                  <th className="payment-project-detail-money-heading">支付总金额</th>
-                  <th className="payment-project-detail-money-heading">手续费金额</th>
+                  <th className="payment-project-detail-money-heading">实际付款金额</th>
+                  <th className="payment-project-detail-money-heading">实际总手续费</th>
                   <th className="payment-project-detail-status-cell">付款状态</th>
                   <th className="action-cell payment-project-detail-action-cell">操作</th>
                 </tr>
@@ -875,6 +858,20 @@ export function PaymentProjectPaymentDetailPage({
                   const creatorIdentity = paymentCreatorIdentityFromBatchItem(item, creator);
                   const accountName = creatorIdentity.accountName;
                   const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
+                  const livePayout = payouts.find((payout) => payout.id === item.payoutId);
+                  const paymentAttempts = paymentAttemptsForDrawer(item, livePayout);
+                  const cumulativeActualAmounts = paymentAttemptAggregate(
+                    paymentAttempts,
+                    'actualPaidAmount',
+                    'actualPaidCurrency',
+                    currentStatus,
+                  );
+                  const cumulativeFeeAmounts = paymentAttemptAggregate(
+                    paymentAttempts,
+                    'transferFeeAmount',
+                    'transferFeeCurrency',
+                    currentStatus,
+                  );
                   const canSelect = confirmationEligibleIds.has(item.payoutId);
                   const selected = selectedItemIds.has(item.payoutId);
                   const selectReason = currentStatus !== '已付款'
@@ -907,8 +904,8 @@ export function PaymentProjectPaymentDetailPage({
                       </td>
                       <td className="payment-project-detail-date-cell">{paymentResultDate(currentStatus, item.paidAt)}</td>
                       <td className="payment-project-detail-money-cell">{money(item.currency, item.amount)}</td>
-                      <td className="payment-project-detail-money-cell">{paymentResultMoney({ status: currentStatus, amount: item.actualPaidAmount, currency: item.actualPaidCurrency })}</td>
-                      <td className="payment-project-detail-money-cell">{paymentResultMoney({ status: currentStatus, amount: item.transferFeeAmount, currency: item.transferFeeCurrency })}</td>
+                      <td className="payment-project-detail-money-cell"><span className="payment-project-amount-stack">{cumulativeActualAmounts.map((amount) => <span key={amount}>{amount}</span>)}</span></td>
+                      <td className="payment-project-detail-money-cell"><span className="payment-project-amount-stack">{cumulativeFeeAmounts.map((amount) => <span key={amount}>{amount}</span>)}</span></td>
                       <td className="payment-project-detail-status-cell">
                         <span className={`simple-status ${paymentStatusTone(currentStatus)}`}><i />{currentStatus}</span>
                       </td>

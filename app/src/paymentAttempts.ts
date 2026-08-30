@@ -1,5 +1,10 @@
 import type { PaymentAttemptSnapshot, Payout } from './types';
 
+export type PaymentAttemptAmountTotal = Readonly<{
+  currency: string;
+  amount: number;
+}>;
+
 const attemptIdentity = (attempt: PaymentAttemptSnapshot) => (
   attempt.paymentBatchId
     ? `batch:${attempt.paymentBatchId}`
@@ -81,4 +86,24 @@ export const withLatestFailedAttemptReturnReason = (
         : attempt
     )),
   };
+};
+
+export const paymentAttemptAmountTotals = (
+  attempts: readonly PaymentAttemptSnapshot[],
+  amountKey: 'actualPaidAmount' | 'transferFeeAmount',
+  currencyKey: 'actualPaidCurrency' | 'transferFeeCurrency',
+): readonly PaymentAttemptAmountTotal[] => {
+  const uniqueAttempts = [...attempts.reduce<Map<string, PaymentAttemptSnapshot>>((result, attempt) => {
+    result.set(attemptIdentity(attempt), attempt);
+    return result;
+  }, new Map()).values()];
+  const totals = uniqueAttempts.reduce<Map<string, number>>((result, attempt) => {
+    const amount = attempt[amountKey];
+    const currency = attempt[currencyKey];
+    if (amount === undefined || !currency) return result;
+    const total = (result.get(currency) ?? 0) + amount;
+    result.set(currency, Math.round((total + Number.EPSILON) * 100) / 100);
+    return result;
+  }, new Map());
+  return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));
 };

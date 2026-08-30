@@ -258,6 +258,8 @@ describe('payment batch snapshots', () => {
 
     expect(record).toMatchObject({
       paymentBatchCode: 'BAT-20260811-000001',
+      paymentOrderCode: 'PAY-TEST-001',
+      paymentAttemptNumber: 1,
       provider: 'Airwallex',
       fundingAccountId: 'mock-awx-operating',
       sourceCurrency: 'USD',
@@ -268,6 +270,7 @@ describe('payment batch snapshots', () => {
     });
     expect(record.request.paymentRequestProjectId).toBe(input.requests[0].paymentRequestProjectId);
     expect(record.items).toHaveLength(input.payouts.length);
+    expect(record.items.every((item) => item.paymentOrderCode === record.paymentOrderCode)).toBe(true);
     expect(record.items.every((item) => item.paymentStatus === '付款处理中')).toBe(true);
     expect(record.items.every((item) => item.postTransactionBalance === undefined)).toBe(true);
   });
@@ -488,6 +491,35 @@ describe('payment batch snapshots', () => {
     })).toThrow('一个付款批次只能关联一个请款项目');
   });
 
+  it('rejects payment items from different source payment orders', () => {
+    const input = buildInput();
+    const secondInvoiceId = 'invoice_test_same_request' as InvoiceId;
+    const secondPayout = createPayout(
+      'payout-same-request-two',
+      input.requests[0].cooperationProjectId!,
+      'INV-TEST-002',
+    );
+    const secondInvoice = createInvoice(
+      secondPayout,
+      secondInvoiceId,
+      input.contracts[0].contractId!,
+    );
+    const request = {
+      ...input.requests[0],
+      invoiceIds: [...(input.requests[0].invoiceIds ?? []), secondInvoiceId],
+    };
+    const secondPaymentList = createPaymentList(request, secondInvoiceId);
+    secondPaymentList.paymentListCode = 'PAY-TEST-002';
+
+    expect(() => createPaymentBatchRecord({
+      ...input,
+      payouts: [...input.payouts, secondPayout],
+      requests: [request],
+      generatedInvoices: [...input.generatedInvoices, secondInvoice],
+      paymentLists: [...input.paymentLists, secondPaymentList],
+    })).toThrow('一个付款批次只能关联一张原付款单');
+  });
+
   it('keeps source changes from mutating the historical record', () => {
     const input = buildInput();
     const record = createPaymentBatchRecord(input);
@@ -562,7 +594,12 @@ describe('payment batch snapshots', () => {
       paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
       paymentAttemptNumber: 2,
     });
+    expect(records[0]).toMatchObject({
+      paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+      paymentAttemptNumber: 2,
+    });
     expect(records[0].items[0].sourcePaymentOrderCode).not.toBe(records[0].items[0].paymentOrderCode);
+    expect(records[0].sourcePaymentOrderCode).toBe(records[0].items[0].sourcePaymentOrderCode);
     expect(records.map((record) => record.items.length)).toEqual([1, 5, 5, 5, 5, 5, 1, 5, 4]);
     expect(records.map((record) => record.request.requestCode)).toEqual([
       'REQ-202607-000011',
@@ -594,6 +631,8 @@ describe('payment batch snapshots', () => {
       expect(new Set(record.items.map((item) => item.payoutId)).size).toBe(record.items.length);
       expect(record.request.lifecycle).toBe(record.status === '已付款' ? 'COMPLETED' : 'APPROVED');
       expect(new Set(record.items.map((item) => item.provider))).toEqual(new Set([record.provider]));
+      expect(record.items.every((item) => item.paymentOrderCode === record.paymentOrderCode)).toBe(true);
+      expect(record.items.every((item) => item.paymentAttemptNumber === record.paymentAttemptNumber)).toBe(true);
       expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
       expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
       expect(record.items.every((item) => item.associationIssues.length === 0)).toBe(true);
@@ -614,8 +653,30 @@ describe('payment batch snapshots', () => {
         expect(record.items.filter((item) => item.paymentStatus === '已付款')).toHaveLength(record.items.length - 1);
         expect(record.items.find((item) => item.paymentStatus === '付款失败')?.failure?.code)
           .toBe('BENEFICIARY_UNAVAILABLE');
+        const failedItem = record.items.find((item) => item.paymentStatus === '付款失败');
+        expect(failedItem?.transferFeeAmount).toBeGreaterThan(0);
+        expect(failedItem?.actualPaidAmount).toBe(failedItem?.transferFeeAmount);
         expect(counts).toEqual({ succeeded: record.items.length - 1, failed: 1, processing: 0 });
       }
+    });
+
+    const originalRetrySource = records.find((record) => (
+      record.paymentBatchCode === PAYMENT_BATCH_RETRY_DEMO.originalBatchCode
+    ))!;
+    const originalFailedItem = originalRetrySource.items.find((item) => item.paymentStatus === '付款失败')!;
+    expect(originalRetrySource.paymentOrderCode).toBe(originalFailedItem.paymentListCode);
+    expect(originalRetrySource.items).toHaveLength(5);
+    expect(originalFailedItem).toMatchObject({
+      amount: 15_288,
+      transferFeeAmount: 30.58,
+      actualPaidAmount: 30.58,
+    });
+    expect(records[0].items[0]).toMatchObject({
+      payoutId: originalFailedItem.payoutId,
+      amount: 15_288,
+      transferFeeAmount: 30.58,
+      actualPaidAmount: 15_318.58,
+      paymentStatus: '已付款',
     });
   });
 });

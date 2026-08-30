@@ -55,8 +55,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
       '收款银行账号',
       '付款日期',
       '付款金额',
-      '支付总金额',
-      '手续费金额',
+      '实际付款金额',
+      '实际总手续费',
       '付款状态',
     ];
     headings.forEach((heading) => expect(html).toContain(`>${heading}</th>`));
@@ -79,6 +79,9 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('payment-project-detail-select-cell');
     expect(html).toContain('class="avatar avatar-sm"');
     expect(html).toContain('查看详情');
+    expect(html).toContain('HKD 15,288');
+    expect(html).toContain('HKD 15,349.16');
+    expect(html).toContain('HKD 61.16');
     expect(html).not.toContain('下载项目资料');
     expect(html).not.toContain('查看合同附件');
     expect(html).not.toContain('查看 Invoice 附件');
@@ -125,6 +128,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
       transferFeeCurrency: 'USD' as const,
       actualPaidAmount: 1258.5,
       actualPaidCurrency: 'USD' as const,
+      paymentAttempts: undefined,
     };
     const paidRecord = { ...failedRecord, status: '已付款' as const, items: [paidItem] };
     const paidHtml = renderToStaticMarkup(
@@ -173,6 +177,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
       items: [{
         ...paidItem,
         paymentStatus: '付款失败' as const,
+        actualPaidAmount: 8.5,
       }],
     };
     const failedHtml = renderToStaticMarkup(
@@ -189,8 +194,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
 
     expect(failedDataRow).not.toContain('2026-08-26');
     expect(failedDataRow).not.toContain('USD 1,258.5');
-    expect(failedDataRow).not.toContain('USD 8.5');
-    expect((failedDataRow.match(/>—</g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((failedDataRow.match(/USD 8.5/g) ?? [])).toHaveLength(2);
   });
 
   it('opens failed payment information in a dedicated drawer without row expansion', () => {
@@ -269,9 +273,9 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(drawerHtml).toContain('2026-08-05 16:05');
     expect(drawerHtml).toContain('HKD 30.58');
     expect(drawerHtml).toContain('HKD 15,318.58');
-    expect(drawerHtml).toContain('累计支付总金额');
+    expect(drawerHtml).toContain('累计实际付款金额');
     expect(drawerHtml).toContain('HKD 15,349.16');
-    expect(drawerHtml).toContain('累计手续费');
+    expect(drawerHtml).toContain('实际总手续费');
     expect(drawerHtml).toContain('HKD 61.16');
     expect(drawerHtml).toContain('BENEFICIARY_UNAVAILABLE');
     expect(drawerHtml).toContain('The beneficiary is temporarily unavailable.');

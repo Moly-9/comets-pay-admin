@@ -22,6 +22,8 @@ const createTestBatch = (
 ): PaymentBatchRecord => ({
   paymentBatchId: `payment_batch_${paymentBatchCode}` as PaymentBatchRecord['paymentBatchId'],
   paymentBatchCode,
+  paymentOrderCode: 'PAY-TEST-001',
+  paymentAttemptNumber: 1,
   request: {
     paymentRequestProjectId: 'request_test' as PaymentBatchRecord['request']['paymentRequestProjectId'],
     requestCode: 'REQ-TEST-001',
@@ -55,6 +57,8 @@ const createTestBatch = (
     deliverable: '测试交付',
     paymentListCode: 'PAY-TEST-001',
     paymentListStatus: 'paid',
+    paymentOrderCode: 'PAY-TEST-001',
+    paymentAttemptNumber: 1,
     contracts: [],
     provider,
     amount: 1000,
