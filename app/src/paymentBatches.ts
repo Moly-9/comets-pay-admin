@@ -16,6 +16,7 @@ import type {
   DocumentPayoutSnapshot,
   GeneratedInvoiceRecord,
   InvoiceCurrency,
+  PaymentAttemptSnapshot,
   Payout,
   PayoutAccountVersion,
   Provider,
@@ -71,6 +72,7 @@ export type PaymentBatchItemSnapshot = Readonly<{
   paymentOrderCode?: string;
   sourcePaymentOrderCode?: string;
   paymentAttemptNumber?: number;
+  paymentAttempts?: readonly PaymentAttemptSnapshot[];
   contracts: readonly PaymentBatchContractSnapshot[];
   invoice?: PaymentBatchInvoiceSnapshot;
   legacyContractReference?: string;
@@ -405,6 +407,9 @@ const snapshotItem = ({
     paymentOrderCode: resolvedPaymentOrderCode,
     sourcePaymentOrderCode,
     paymentAttemptNumber: resolvedAttemptNumber,
+    paymentAttempts: payout.paymentAttempts
+      ?.filter((attempt) => attempt.attemptNumber <= resolvedAttemptNumber)
+      .map((attempt) => ({ ...attempt })),
     contracts: contractSnapshots,
     invoice: invoice ? {
       invoiceId: invoice.invoiceId,
@@ -725,6 +730,9 @@ export const applyPaymentResultToCurrentBatch = ({
         transferFeeCurrency: payout.transferFeeCurrency,
         actualPaidAmount: payout.actualPaidAmount,
         actualPaidCurrency: payout.actualPaidCurrency,
+        paymentAttempts: payout.paymentAttempts
+          ?.filter((attempt) => attempt.attemptNumber <= (payout.currentPaymentAttempt?.attemptNumber ?? 1))
+          .map((attempt) => ({ ...attempt })),
         failure: undefined,
       };
     }
@@ -736,6 +744,9 @@ export const applyPaymentResultToCurrentBatch = ({
       transferFeeCurrency: undefined,
       actualPaidAmount: undefined,
       actualPaidCurrency: undefined,
+      paymentAttempts: payout.paymentAttempts
+        ?.filter((attempt) => attempt.attemptNumber <= (payout.currentPaymentAttempt?.attemptNumber ?? 1))
+        .map((attempt) => ({ ...attempt })),
       failure: payout.paymentFailure ? {
         code: payout.paymentFailure.errorCode,
         response: payout.paymentFailure.providerResponse,
@@ -842,7 +853,7 @@ export const createInitialPaymentBatches = ({
   });
 
   const originalFailedBatch = initialAttempts.find((batch) => (
-    batch.paymentBatchCode === 'BAT-20260805-008'
+    batch.paymentBatchCode === PAYMENT_BATCH_RETRY_DEMO.originalBatchCode
     && batch.request.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
   ));
   const failedItem = originalFailedBatch?.items.find((item) => item.paymentStatus === '付款失败');

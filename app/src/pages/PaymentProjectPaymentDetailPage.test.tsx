@@ -196,6 +196,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
   it('opens failed payment information in a dedicated drawer without row expansion', () => {
     const failedItem = {
       ...failedRecord.items[0],
+      paymentAttemptNumber: 1,
+      paymentAttempts: undefined,
       paymentStatus: '付款失败' as const,
       paidAt: undefined,
       failure: {
@@ -243,7 +245,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(drawerHtml).not.toContain('关联资料缺失');
   });
 
-  it('identifies a retry and shows the frozen previous channel failure before payment information', () => {
+  it('shows two frozen payment attempts and cumulative spend before payment information', () => {
     const retryPayout = resources.payouts.find((payout) => payout.currentPaymentAttempt);
     const retryItem = failedRecord.items.find((item) => item.payoutId === retryPayout?.id);
     expect(retryPayout).toBeDefined();
@@ -259,18 +261,94 @@ describe('PaymentProjectPaymentDetailPage', () => {
     );
 
     expect((drawerHtml.match(/二次付款/g) ?? [])).toHaveLength(2);
-    expect(drawerHtml).toContain('当前重试批次');
+    expect(drawerHtml).toContain('首次付款');
+    expect(drawerHtml).toContain('所属批次');
+    expect(drawerHtml).toContain('BAT-20260805-008');
     expect(drawerHtml).toContain('BAT-20260806-001');
-    expect(drawerHtml).toContain('上一次失败时间');
+    expect(drawerHtml).toContain('付款时间');
     expect(drawerHtml).toContain('2026-08-05 16:05');
+    expect(drawerHtml).toContain('HKD 30.58');
+    expect(drawerHtml).toContain('HKD 15,318.58');
+    expect(drawerHtml).toContain('累计支付总金额');
+    expect(drawerHtml).toContain('HKD 15,349.16');
+    expect(drawerHtml).toContain('累计手续费');
+    expect(drawerHtml).toContain('HKD 61.16');
     expect(drawerHtml).toContain('BENEFICIARY_UNAVAILABLE');
     expect(drawerHtml).toContain('The beneficiary is temporarily unavailable.');
     expect(drawerHtml).toContain('业务退回原因');
     expect(drawerHtml.indexOf('渠道结果')).toBeLessThan(drawerHtml.indexOf('付款信息'));
+    const paymentInfo = drawerHtml.slice(drawerHtml.indexOf('付款信息'));
+    expect(paymentInfo).not.toContain('<dt>支付总金额</dt>');
+    expect(paymentInfo).not.toContain('<dt>手续费金额</dt>');
+    expect(paymentInfo).not.toContain('<dt>交易后余额</dt>');
   });
 
-  it('uses the workbench table, Invoice-style summary cards, white downloads, and responsive drawer', () => {
+  it('uses legacy successful results and keeps abnormal multi-currency attempts separated', () => {
+    const sourceItem = failedRecord.items[1];
+    const legacyHtml = renderToStaticMarkup(
+      <PaymentProjectItemDrawer
+        item={{
+          ...sourceItem,
+          paymentAttempts: undefined,
+          paymentAttemptNumber: 1,
+          paymentStatus: '已付款',
+          actualPaidAmount: 1_258.5,
+          actualPaidCurrency: 'USD',
+          transferFeeAmount: 8.5,
+          transferFeeCurrency: 'USD',
+        }}
+        canHandleFailure={false}
+        onClose={vi.fn()}
+      />,
+    );
+    const legacyRecipient = legacyHtml.slice(legacyHtml.indexOf('收款人'), legacyHtml.indexOf('渠道结果'));
+    expect(legacyRecipient).toContain('USD 1,258.5');
+    expect(legacyRecipient).toContain('USD 8.5');
+
+    const multiCurrencyHtml = renderToStaticMarkup(
+      <PaymentProjectItemDrawer
+        item={{
+          ...sourceItem,
+          paymentStatus: '已付款',
+          paymentAttempts: [
+            {
+              attemptNumber: 1,
+              status: '付款失败',
+              principalAmount: 1_250,
+              principalCurrency: 'USD',
+              transferFeeAmount: 2,
+              transferFeeCurrency: 'USD',
+              actualPaidAmount: 2,
+              actualPaidCurrency: 'USD',
+            },
+            {
+              attemptNumber: 2,
+              status: '已付款',
+              principalAmount: 1_250,
+              principalCurrency: 'USD',
+              transferFeeAmount: 3,
+              transferFeeCurrency: 'EUR',
+              actualPaidAmount: 1_253,
+              actualPaidCurrency: 'EUR',
+            },
+          ],
+        }}
+        canHandleFailure={false}
+        onClose={vi.fn()}
+      />,
+    );
+    const multiCurrencyRecipient = multiCurrencyHtml.slice(
+      multiCurrencyHtml.indexOf('收款人'),
+      multiCurrencyHtml.indexOf('渠道结果'),
+    );
+    expect(multiCurrencyRecipient).toContain('USD 2');
+    expect(multiCurrencyRecipient).toContain('EUR 1,253');
+    expect(multiCurrencyRecipient).toContain('EUR 3');
+  });
+
+  it('uses the workbench table, summary-style downloads, and responsive drawer', () => {
     const css = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./PaymentProjectPaymentDetailPage.tsx', import.meta.url), 'utf8');
 
     expect(css).toContain('.payment-project-detail-table');
     expect(css).toContain('position: sticky');
@@ -284,9 +362,10 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('linear-gradient(125deg, #fff9ea, #fff2df)');
     expect(css).toContain('linear-gradient(125deg, #fff4f8, #f9effb)');
     expect(css).toContain('font-size: clamp(17px, 1.55vw, 24px)');
-    expect(css).toContain('background: #fff');
-    expect(css).toContain('border: 1px solid #d7dce4');
-    expect(css).toContain('.payment-project-previous-failure-card');
+    expect(css).toContain('linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%)');
+    expect(css).toContain('linear-gradient(125deg, #fff2f0 0%, #f8e2df 100%)');
+    expect(css).toContain('linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%)');
+    expect(css).toContain('.payment-project-attempt-card');
     expect(css).toContain('.payment-project-retry-badge');
     expect(css).toContain('font-size: 28px');
     expect(css).toContain('border-radius: 14px');
@@ -294,6 +373,11 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('min-height: 44px');
     expect(css).not.toContain('.payment-project-detail-item-trigger');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(source).not.toContain('份合同 PDF 压缩包');
+    expect(source).not.toContain('份 Invoice PDF 压缩包');
+    expect(source).not.toContain('导出当前项目冻结付款清单 Excel');
+    expect(source).not.toContain('笔已付款明细可导出');
+    expect(source).not.toContain('笔已选择');
   });
 
   it('uses project-level progress copy and status counts', () => {

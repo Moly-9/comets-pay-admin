@@ -576,6 +576,23 @@ export type PaymentAttemptRef = {
   attemptNumber?: number;
 };
 
+export type PaymentAttemptSnapshot = Readonly<{
+  paymentBatchId?: PaymentBatchId;
+  paymentBatchCode?: string;
+  attemptNumber: number;
+  status: Extract<PayoutStatus, '付款失败' | '已付款'>;
+  occurredAt?: string;
+  principalAmount: number;
+  principalCurrency: InvoiceCurrency;
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  actualPaidAmount?: number;
+  actualPaidCurrency?: InvoiceCurrency;
+  errorCode?: string;
+  providerResponse?: string;
+  returnReason?: string;
+}>;
+
 export type PaymentNotificationDelivery = {
   channel: 'IN_APP' | 'GMAIL';
   status: 'SIMULATED_SENT' | 'SKIPPED_MISSING_RECIPIENT';
@@ -696,6 +713,7 @@ export type Payout = {
   paymentFailureReturn?: PaymentFailureReturn;
   paymentFailureRecovery?: PaymentFailureRecovery;
   currentPaymentAttempt?: PaymentAttemptRef;
+  paymentAttempts?: readonly PaymentAttemptSnapshot[];
   invoiceSnapshot?: InvoiceDocumentModel;
   invoicePaymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   accent: string;

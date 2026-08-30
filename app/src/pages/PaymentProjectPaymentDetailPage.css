@@ -231,6 +231,45 @@
   color: #334155;
 }
 
+.payment-project-payment-detail-page .is-resource-download .custom-select-trigger:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #cbdcf2;
+  background: linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%);
+  color: #31567f;
+  box-shadow: 0 6px 16px rgba(67, 111, 166, 0.1);
+}
+
+.payment-project-payment-detail-page .is-detail-download:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #edcfca;
+  background: linear-gradient(125deg, #fff2f0 0%, #f8e2df 100%);
+  color: #8e463f;
+  box-shadow: 0 6px 16px rgba(166, 76, 67, 0.09);
+}
+
+.payment-project-payment-detail-page .is-confirmation-download .custom-select-trigger:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #dccbea;
+  background: linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%);
+  color: #684b7b;
+  box-shadow: 0 6px 16px rgba(112, 78, 137, 0.1);
+}
+
+.payment-project-payment-detail-page .is-resource-download .custom-select-trigger:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #adc7e7;
+  background: linear-gradient(125deg, #e6f0fd 0%, #d7e6f8 100%);
+  color: #284a72;
+}
+
+.payment-project-payment-detail-page .is-detail-download:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #e4b8b2;
+  background: linear-gradient(125deg, #ffebe8 0%, #f4d7d3 100%);
+  color: #7f3d37;
+}
+
+.payment-project-payment-detail-page .is-confirmation-download .custom-select-trigger:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #cdb4e0;
+  background: linear-gradient(125deg, #f1e7f9 0%, #e5d4f1 100%);
+  color: #5e426f;
+}
+
 .payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):disabled,
 .payment-project-payment-detail-page .payment-project-resource-actions .button[aria-disabled="true"] {
   border-color: #e1e4e9;
@@ -638,6 +677,12 @@
   line-height: 1.5;
 }
 
+.payment-project-amount-stack {
+  display: grid;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
 .payment-project-item-drawer-section {
   margin-top: 22px;
 }
@@ -678,75 +723,85 @@
   color: #a94b41;
 }
 
-.payment-project-previous-failure-card {
-  display: flex;
-  align-items: flex-start;
+.payment-project-attempt-history {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 12px;
-  border: 1px solid #eadcf7;
+}
+
+.payment-project-attempt-card {
+  min-width: 0;
+  border: 1px solid #dce3e0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #f8f0ff 0%, #f4edf9 100%);
+  background: linear-gradient(135deg, #f4faf7 0%, #e9f5ef 100%);
   padding: 12px;
-  color: #705280;
+  color: #30363b;
 }
 
-.payment-project-previous-failure-card > svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
+.payment-project-attempt-card.is-failed {
+  border-color: #edcfca;
+  background: linear-gradient(135deg, #fff5f3 0%, #fbe8e5 100%);
 }
 
-.payment-project-previous-failure-card > div {
+.payment-project-attempt-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.payment-project-attempt-card > header > div {
   display: grid;
   min-width: 0;
-  flex: 1 1 auto;
-  gap: 4px;
+  gap: 2px;
 }
 
-.payment-project-previous-failure-card strong {
-  color: #50365f;
+.payment-project-attempt-card > header strong {
+  color: #292e34;
   font-size: 12.5px;
 }
 
-.payment-project-previous-failure-card p {
-  margin: 0;
-  color: #77647f;
+.payment-project-attempt-card > header span:not(.simple-status) {
+  color: #737b84;
   font-size: 10.5px;
   line-height: 1.5;
 }
 
-.payment-project-previous-failure-card dl {
+.payment-project-attempt-card dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
-  margin: 6px 0 0;
+  margin: 10px 0 0;
 }
 
-.payment-project-previous-failure-card dl > div {
+.payment-project-attempt-card dl > div {
   display: grid;
   min-width: 0;
   gap: 3px;
-  border: 1px solid rgba(226, 209, 240, 0.88);
+  border: 1px solid rgba(220, 225, 228, 0.92);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.78);
   padding: 8px 9px;
 }
 
-.payment-project-previous-failure-card dl > .is-full {
+.payment-project-attempt-card dl > .is-full {
   grid-column: 1 / -1;
 }
 
-.payment-project-previous-failure-card dt {
-  color: #86738e;
+.payment-project-attempt-card dt {
+  color: #7a818a;
   font-size: 10px;
 }
 
-.payment-project-previous-failure-card dd {
+.payment-project-attempt-card dd {
   overflow-wrap: anywhere;
   margin: 0;
-  color: #493b50;
+  color: #30353b;
   font-size: 11.5px;
   font-weight: 620;
   line-height: 1.45;
+  font-variant-numeric: tabular-nums;
 }
 
 .payment-project-item-return-card > div {
@@ -896,11 +951,12 @@
     width: 100%;
   }
 
-  .payment-project-previous-failure-card dl {
+  .payment-project-attempt-history,
+  .payment-project-attempt-card dl {
     grid-template-columns: 1fr;
   }
 
-  .payment-project-previous-failure-card dl > .is-full {
+  .payment-project-attempt-card dl > .is-full {
     grid-column: auto;
   }
 }

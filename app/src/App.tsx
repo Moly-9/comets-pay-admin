@@ -239,6 +239,11 @@ import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
+import {
+  paymentAttemptSnapshotFor,
+  withLatestFailedAttemptReturnReason,
+  withPaymentAttemptSnapshot,
+} from './paymentAttempts';
 import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
 import {
   beginPaymentFailureAccountRecovery,
@@ -2507,12 +2512,13 @@ export default function App() {
     const resultAt = nowIso();
     const retrySucceeded = nextStatus === '已付款'
       && payout.paymentFailureRecovery?.status === 'RETRY_SUBMITTED';
-    const updated: Payout = {
+    const paymentResult = nextStatus === '已付款' ? prototypePaymentResultFor(payout) : undefined;
+    const baseUpdated: Payout = {
       ...payout,
       status: nextStatus,
       issue: payout.status === '信息异常' ? undefined : payout.issue,
       paidAt: nextStatus === '已付款' ? resultAt : payout.paidAt,
-      ...(nextStatus === '已付款' ? prototypePaymentResultFor(payout) : {}),
+      ...(paymentResult ?? {}),
       ...(retrySucceeded ? {
         issue: undefined,
         returnReason: undefined,
@@ -2525,6 +2531,17 @@ export default function App() {
         } : undefined,
       } : {}),
     };
+    const updated = nextStatus === '已付款' && paymentResult
+      ? withPaymentAttemptSnapshot(baseUpdated, paymentAttemptSnapshotFor({
+          payout: baseUpdated,
+          status: '已付款',
+          occurredAt: resultAt,
+          transferFeeAmount: paymentResult.transferFeeAmount,
+          transferFeeCurrency: paymentResult.transferFeeCurrency,
+          actualPaidAmount: paymentResult.actualPaidAmount,
+          actualPaidCurrency: paymentResult.actualPaidCurrency,
+        }))
+      : baseUpdated;
     if (nextStatus === '已付款') {
       const batchUpdate = applyPaymentResultToCurrentBatch({ batches: paymentBatches, payout: updated });
       if (!batchUpdate.updatedBatchId) {
@@ -2688,7 +2705,8 @@ export default function App() {
     }
     const occurredAt = nowIso();
     const failureReason = '渠道付款失败：SIMULATED_PROVIDER_DECLINE';
-    const updated: Payout = {
+    const failedPaymentResult = prototypePaymentResultFor(payout);
+    const baseUpdated: Payout = {
       ...payout,
       status: '付款失败',
       paidAt: undefined,
@@ -2718,6 +2736,17 @@ export default function App() {
       ],
       issue: failureReason,
     };
+    const updated = withPaymentAttemptSnapshot(baseUpdated, paymentAttemptSnapshotFor({
+      payout: baseUpdated,
+      status: '付款失败',
+      occurredAt,
+      transferFeeAmount: failedPaymentResult.transferFeeAmount,
+      transferFeeCurrency: failedPaymentResult.transferFeeCurrency,
+      actualPaidAmount: failedPaymentResult.transferFeeAmount,
+      actualPaidCurrency: failedPaymentResult.transferFeeCurrency,
+      errorCode: baseUpdated.paymentFailure?.errorCode,
+      providerResponse: baseUpdated.paymentFailure?.providerResponse,
+    }));
     const batchUpdate = applyPaymentResultToCurrentBatch({ batches: paymentBatches, payout: updated });
     if (!batchUpdate.updatedBatchId) {
       notify('无法记录付款失败', paymentBatchAttemptIssueMessage(batchUpdate.issue));
@@ -2748,7 +2777,7 @@ export default function App() {
       return false;
     }
     const occurredAt = nowIso();
-    const returnedPayout: Payout = {
+    const returnedPayout = withLatestFailedAttemptReturnReason({
       ...payout,
       status: '已退回',
       paymentFailureReturn: {
@@ -2777,7 +2806,7 @@ export default function App() {
       ],
       returnReason: normalizedReason,
       issue: `付款失败已退回：${normalizedReason}`,
-    };
+    }, normalizedReason);
     const linkedRequest = requestProjects.find((request) => (
       (Boolean(payout.paymentRequestProjectId)
         && request.paymentRequestProjectId === payout.paymentRequestProjectId)

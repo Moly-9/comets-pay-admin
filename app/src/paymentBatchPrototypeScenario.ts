@@ -23,6 +23,9 @@ export const PAYMENT_PROJECT_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<s
 
 export const PAYMENT_BATCH_RETRY_DEMO = {
   requestCode: 'REQ-202607-000011',
+  originalBatchId: 'payment_batch_fixture_paid_008',
+  originalBatchCode: 'BAT-20260805-008',
+  originalFailedAt: '2026-08-05T16:05',
   retryBatchId: 'payment_batch_fixture_retry_001',
   retryBatchCode: 'BAT-20260806-001',
   retryPaymentOrderCode: 'PAY-20260806-001',
@@ -139,6 +142,39 @@ export const applyPaymentBatchPrototypeScenario = ({
         linkedInvoice && list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
       ))?.paymentListCode;
       const paymentResult = status === '已付款' ? prototypePaymentResultFor(payout) : undefined;
+      const retryPaymentAttempts = isRetrySuccess && paymentResult?.transferFeeAmount !== undefined
+        ? [
+            {
+              paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.originalBatchId as PaymentBatchId,
+              paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.originalBatchCode,
+              attemptNumber: 1,
+              status: '付款失败' as const,
+              occurredAt: PAYMENT_BATCH_RETRY_DEMO.originalFailedAt,
+              principalAmount: payout.amount,
+              principalCurrency: payout.currency,
+              transferFeeAmount: paymentResult.transferFeeAmount,
+              transferFeeCurrency: payout.currency,
+              actualPaidAmount: paymentResult.transferFeeAmount,
+              actualPaidCurrency: payout.currency,
+              errorCode: 'BENEFICIARY_UNAVAILABLE',
+              providerResponse: 'The beneficiary is temporarily unavailable.',
+              returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',
+            },
+            {
+              paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
+              paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+              attemptNumber: 2,
+              status: '已付款' as const,
+              occurredAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+              principalAmount: payout.amount,
+              principalCurrency: payout.currency,
+              transferFeeAmount: paymentResult.transferFeeAmount,
+              transferFeeCurrency: paymentResult.transferFeeCurrency,
+              actualPaidAmount: paymentResult.actualPaidAmount,
+              actualPaidCurrency: paymentResult.actualPaidCurrency,
+            },
+          ]
+        : payout.paymentAttempts;
       const balanceKey = `${payout.provider}:${payout.currency}`;
       const previousBalance = runningBalances.get(balanceKey)
         ?? prototypeFundingAccountOpeningBalance(payout);
@@ -175,6 +211,7 @@ export const applyPaymentBatchPrototypeScenario = ({
           sourcePaymentOrderCode,
           attemptNumber: 2,
         } : payout.currentPaymentAttempt,
+        paymentAttempts: retryPaymentAttempts,
         paymentFailureRecovery: isRetrySuccess ? {
           status: 'RETRY_SUCCEEDED',
           notifications: [],
@@ -182,7 +219,7 @@ export const applyPaymentBatchPrototypeScenario = ({
             provider: payout.provider,
             errorCode: 'BENEFICIARY_UNAVAILABLE',
             providerResponse: 'The beneficiary is temporarily unavailable.',
-            occurredAt: '2026-08-05T16:05',
+            occurredAt: PAYMENT_BATCH_RETRY_DEMO.originalFailedAt,
           },
           failureCode: 'BENEFICIARY_UNAVAILABLE',
           returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',

@@ -46,7 +46,13 @@ import {
 } from '../paymentProjectDocuments';
 import { projectPdfArchiveFilename } from '../projectResourcePdfArchive';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
-import type { CreatorProfile, GeneratedInvoiceRecord, PaymentFailureIssueType, Payout } from '../types';
+import type {
+  CreatorProfile,
+  GeneratedInvoiceRecord,
+  PaymentAttemptSnapshot,
+  PaymentFailureIssueType,
+  Payout,
+} from '../types';
 import './PaymentProjectPaymentDetailPage.css';
 
 const displayTime = (value?: string) => value
@@ -90,6 +96,78 @@ const paymentResultDate = (status: Payout['status'], paidAt?: string) => {
   if (status !== '已付款') return paymentResultPlaceholder(status);
   if (!paidAt) return '—';
   return paidAt.replace('T', ' ').split(' ')[0] || '—';
+};
+
+const paymentAttemptMoney = (amount?: number, currency?: string) => (
+  amount !== undefined && currency ? money(currency, amount) : '待补充'
+);
+
+const paymentAttemptsForDrawer = (
+  item: PaymentBatchItemSnapshot,
+  payout?: Payout,
+): readonly PaymentAttemptSnapshot[] => {
+  const storedAttempts = payout?.paymentAttempts?.length
+    ? payout.paymentAttempts
+    : item.paymentAttempts;
+  if (storedAttempts?.length) {
+    return [...storedAttempts].sort((left, right) => left.attemptNumber - right.attemptNumber);
+  }
+
+  const currentAttemptNumber = Math.max(
+    1,
+    payout?.currentPaymentAttempt?.attemptNumber ?? item.paymentAttemptNumber ?? 1,
+  );
+  const previousFailure = payout?.paymentFailureRecovery?.previousFailure;
+  const fallbackAttempts: PaymentAttemptSnapshot[] = [];
+  if (currentAttemptNumber > 1 && previousFailure) {
+    fallbackAttempts.push({
+      attemptNumber: currentAttemptNumber - 1,
+      status: '付款失败',
+      occurredAt: previousFailure.occurredAt,
+      principalAmount: item.amount,
+      principalCurrency: item.currency,
+      errorCode: previousFailure.errorCode,
+      providerResponse: previousFailure.providerResponse,
+      returnReason: payout?.paymentFailureRecovery?.returnReason,
+    });
+  }
+  if (item.paymentStatus === '已付款' || item.paymentStatus === '付款失败') {
+    fallbackAttempts.push({
+      paymentBatchId: payout?.currentPaymentAttempt?.paymentBatchId,
+      paymentBatchCode: payout?.currentPaymentAttempt?.paymentBatchCode,
+      attemptNumber: currentAttemptNumber,
+      status: item.paymentStatus,
+      occurredAt: item.paymentStatus === '已付款' ? item.paidAt : item.failure?.occurredAt,
+      principalAmount: item.amount,
+      principalCurrency: item.currency,
+      transferFeeAmount: item.transferFeeAmount,
+      transferFeeCurrency: item.transferFeeCurrency,
+      actualPaidAmount: item.actualPaidAmount,
+      actualPaidCurrency: item.actualPaidCurrency,
+      errorCode: item.failure?.code,
+      providerResponse: item.failure?.response,
+      returnReason: payout?.paymentFailureRecovery?.returnReason ?? payout?.returnReason,
+    });
+  }
+  return fallbackAttempts;
+};
+
+const paymentAttemptAggregate = (
+  attempts: readonly PaymentAttemptSnapshot[],
+  amountKey: 'actualPaidAmount' | 'transferFeeAmount',
+  currencyKey: 'actualPaidCurrency' | 'transferFeeCurrency',
+  status: Payout['status'],
+) => {
+  if (!attempts.length) return [status === '付款处理中' ? '待渠道回写' : '待补充'];
+  if (attempts.some((attempt) => attempt[amountKey] === undefined || !attempt[currencyKey])) {
+    return ['待补充'];
+  }
+  const totals = attempts.reduce<Map<string, number>>((result, attempt) => {
+    const currency = attempt[currencyKey]!;
+    result.set(currency, (result.get(currency) ?? 0) + attempt[amountKey]!);
+    return result;
+  }, new Map());
+  return [...totals.entries()].map(([currency, amount]) => money(currency, amount));
 };
 
 type ProjectDownloadAction = 'contract' | 'invoice' | 'payment-list' | 'payment-detail' | 'confirmation-all' | 'confirmation-selected';
@@ -140,13 +218,22 @@ export function PaymentProjectItemDrawer({
   const failureReturn = payout?.paymentFailureReturn;
   const failure = item.failure;
   const failureRecovery = payout?.paymentFailureRecovery;
-  const isSecondaryPayment = failureRecovery
+  const paymentAttempts = paymentAttemptsForDrawer(item, payout);
+  const isSecondaryPayment = paymentAttempts.length > 1 || (failureRecovery
     ? ['RETRY_SUBMITTED', 'RETRY_SUCCEEDED'].includes(failureRecovery.status)
-    : false;
-  const previousFailure = failureRecovery?.previousFailure;
-  const retryBatchCode = failureRecovery?.retryBatchCode
-    || payout?.currentPaymentAttempt?.paymentBatchCode
-    || '未记录';
+    : false);
+  const cumulativePaidAmounts = paymentAttemptAggregate(
+    paymentAttempts,
+    'actualPaidAmount',
+    'actualPaidCurrency',
+    item.paymentStatus,
+  );
+  const cumulativeFeeAmounts = paymentAttemptAggregate(
+    paymentAttempts,
+    'transferFeeAmount',
+    'transferFeeCurrency',
+    item.paymentStatus,
+  );
   const canReturnFailure = item.paymentStatus === '付款失败' && !failureReturn && Boolean(onRequestFailureReturn);
   const titleId = `payment-project-item-drawer-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
@@ -226,6 +313,14 @@ export function PaymentProjectItemDrawer({
               <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
               <div><dt>收款币种</dt><dd>{item.receiveCurrency || '待补充'}</dd></div>
               <div><dt>账户版本</dt><dd>{item.payoutAccountVersion}</dd></div>
+              <div>
+                <dt>累计支付总金额</dt>
+                <dd className="payment-project-amount-stack">{cumulativePaidAmounts.map((amount) => <span key={amount}>{amount}</span>)}</dd>
+              </div>
+              <div>
+                <dt>累计手续费</dt>
+                <dd className="payment-project-amount-stack">{cumulativeFeeAmounts.map((amount) => <span key={amount}>{amount}</span>)}</dd>
+              </div>
             </dl>
           </section>
 
@@ -241,20 +336,37 @@ export function PaymentProjectItemDrawer({
                 </>
               ) : null}
             </dl>
-            {isSecondaryPayment ? (
-              <div className="payment-project-previous-failure-card" role="status">
-                <AlertTriangle size={18} aria-hidden="true" />
-                <div>
-                  <strong>二次付款</strong>
-                  <p>本笔付款为上一次付款失败后重新发起。</p>
-                  <dl>
-                    <div><dt>当前重试批次</dt><dd>{retryBatchCode}</dd></div>
-                    <div><dt>上一次失败时间</dt><dd>{displayTime(previousFailure?.occurredAt)}</dd></div>
-                    <div><dt>上一次错误码</dt><dd>{previousFailure?.errorCode || '未记录'}</dd></div>
-                    <div className="is-full"><dt>上一次失败原因</dt><dd>{previousFailure?.providerResponse || '未记录'}</dd></div>
-                    {failureRecovery?.returnReason ? <div className="is-full"><dt>业务退回原因</dt><dd>{failureRecovery.returnReason}</dd></div> : null}
-                  </dl>
-                </div>
+            {isSecondaryPayment && paymentAttempts.length > 1 ? (
+              <div className="payment-project-attempt-history" role="list" aria-label="多次付款记录">
+                {paymentAttempts.map((attempt) => (
+                  <article
+                    className={`payment-project-attempt-card is-${attempt.status === '付款失败' ? 'failed' : 'succeeded'}`}
+                    key={`${attempt.paymentBatchId ?? attempt.attemptNumber}-${attempt.status}`}
+                    role="listitem"
+                  >
+                    <header>
+                      <div>
+                        <strong>{attempt.attemptNumber === 1 ? '首次付款' : attempt.attemptNumber === 2 ? '二次付款' : `第 ${attempt.attemptNumber} 次付款`}</strong>
+                        <span>{attempt.status === '付款失败' ? '渠道付款失败' : '渠道付款成功'}</span>
+                      </div>
+                      <span className={`simple-status ${paymentStatusTone(attempt.status)}`}><i />{attempt.status}</span>
+                    </header>
+                    <dl>
+                      <div><dt>所属批次</dt><dd>{attempt.paymentBatchCode || '未记录'}</dd></div>
+                      <div><dt>付款时间</dt><dd>{displayTime(attempt.occurredAt)}</dd></div>
+                      <div><dt>支付金额</dt><dd>{paymentAttemptMoney(attempt.principalAmount, attempt.principalCurrency)}</dd></div>
+                      <div><dt>手续费</dt><dd>{paymentAttemptMoney(attempt.transferFeeAmount, attempt.transferFeeCurrency)}</dd></div>
+                      <div className="is-full"><dt>支付总金额</dt><dd>{paymentAttemptMoney(attempt.actualPaidAmount, attempt.actualPaidCurrency)}</dd></div>
+                      {attempt.status === '付款失败' ? (
+                        <>
+                          <div><dt>错误码</dt><dd>{attempt.errorCode || '未记录'}</dd></div>
+                          <div className="is-full"><dt>失败原因</dt><dd>{attempt.providerResponse || '未记录'}</dd></div>
+                          <div className="is-full"><dt>业务退回原因</dt><dd>{attempt.returnReason || '未记录'}</dd></div>
+                        </>
+                      ) : null}
+                    </dl>
+                  </article>
+                ))}
               </div>
             ) : null}
             {failureReturn ? (
@@ -277,11 +389,8 @@ export function PaymentProjectItemDrawer({
               <div><dt>付款方式</dt><dd>{item.transferMethod || '待补充'}</dd></div>
               <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || '待补充'}</dd></div>
               <div><dt>付款金额</dt><dd>{money(item.currency, item.amount)}</dd></div>
-              <div><dt>支付总金额</dt><dd>{paymentResultMoney({ status: item.paymentStatus, amount: item.actualPaidAmount, currency: item.actualPaidCurrency })}</dd></div>
-              <div><dt>手续费金额</dt><dd>{paymentResultMoney({ status: item.paymentStatus, amount: item.transferFeeAmount, currency: item.transferFeeCurrency })}</dd></div>
               <div><dt>手续费承担方</dt><dd>{item.feeBearer || '未记录'}</dd></div>
               <div><dt>付款日期</dt><dd>{paymentResultDate(item.paymentStatus, item.paidAt)}</dd></div>
-              <div><dt>交易后余额</dt><dd>{item.postTransactionBalance !== undefined && item.postTransactionBalanceCurrency ? money(item.postTransactionBalanceCurrency, item.postTransactionBalance) : '—'}</dd></div>
               <div className="is-full"><dt>付款原因</dt><dd>{item.paymentReason || '未记录'}</dd></div>
               <div className="is-full"><dt>交易附言</dt><dd>{item.transactionReference || '未记录'}</dd></div>
               <div className="is-full"><dt>付款描述</dt><dd>{item.description || '未记录'}</dd></div>
@@ -358,6 +467,7 @@ export function PaymentProjectPaymentDetailPage({
       postTransactionBalanceCurrency: succeeded
         ? payout.postTransactionBalanceCurrency ?? item.postTransactionBalanceCurrency
         : undefined,
+      paymentAttempts: payout.paymentAttempts ?? item.paymentAttempts,
       localClearingSystem: payout.localClearingSystem ?? item.localClearingSystem,
       recipientCountry: payout.recipientCountry ?? item.recipientCountry,
       failure: payout.paymentFailure ? {
@@ -519,7 +629,6 @@ export function PaymentProjectPaymentDetailPage({
     {
       value: 'contract',
       label: '下载合同',
-      description: `${projectDocuments.contracts.length} 份合同 PDF 压缩包`,
       leading: <FileText size={16} />,
       disabled: !projectDocuments.contracts.length,
       title: !projectDocuments.contracts.length ? '当前没有可下载的合同。' : undefined,
@@ -527,7 +636,6 @@ export function PaymentProjectPaymentDetailPage({
     {
       value: 'invoice',
       label: '下载 Invoice',
-      description: `${projectDocuments.invoices.length} 份 Invoice PDF 压缩包`,
       leading: <ReceiptText size={16} />,
       disabled: !projectDocuments.invoices.length,
       title: !projectDocuments.invoices.length ? '当前没有可下载的 Invoice。' : undefined,
@@ -535,7 +643,6 @@ export function PaymentProjectPaymentDetailPage({
     {
       value: 'payment-list',
       label: '下载付款清单',
-      description: '导出当前项目冻结付款清单 Excel',
       leading: <FileSpreadsheet size={16} />,
       disabled: !liveItems.length,
       title: !liveItems.length ? '当前没有可下载的付款清单。' : undefined,
@@ -546,7 +653,6 @@ export function PaymentProjectPaymentDetailPage({
     {
       value: 'confirmation-all',
       label: '导出所有',
-      description: `${confirmationEligibleItems.length} 笔已付款明细可导出`,
       leading: <FileArchive size={16} />,
       disabled: !confirmationEligibleItems.length,
       title: !confirmationEligibleItems.length ? '没有具备实际付款日期的已付款明细。' : undefined,
@@ -554,7 +660,6 @@ export function PaymentProjectPaymentDetailPage({
     {
       value: 'confirmation-selected',
       label: '导出所选',
-      description: `${selectedConfirmationItems.length} 笔已选择`,
       leading: <FileArchive size={16} />,
       disabled: !selectedConfirmationItems.length,
       title: !selectedConfirmationItems.length ? '请先勾选已付款明细。' : undefined,

@@ -118,6 +118,23 @@ describe('payment batch prototype scenario', () => {
     });
     expect(originalPaymentOrderCode).toBeTruthy();
     expect(retriedPayout?.currentPaymentAttempt?.paymentOrderCode).not.toBe(originalPaymentOrderCode);
+    expect(retriedPayout?.paymentAttempts).toEqual([
+      expect.objectContaining({
+        paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.originalBatchCode,
+        attemptNumber: 1,
+        status: '付款失败',
+        actualPaidAmount: 30.58,
+        transferFeeAmount: 30.58,
+        errorCode: 'BENEFICIARY_UNAVAILABLE',
+      }),
+      expect.objectContaining({
+        paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+        attemptNumber: 2,
+        status: '已付款',
+        actualPaidAmount: 15_318.58,
+        transferFeeAmount: 30.58,
+      }),
+    ]);
     expect(retriedPayout?.paymentFailure).toBeUndefined();
   });
 
