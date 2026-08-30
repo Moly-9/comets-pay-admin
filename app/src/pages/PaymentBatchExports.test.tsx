@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -151,7 +152,9 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('付款人 / 付款时间');
     expect(html).not.toContain('创建人 / 时间');
     expect(html).toContain('<th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th>');
-    expect(html).toContain('<strong>PRJ-TEST-001</strong><small title="测试项目">测试项目</small>');
+    expect(html).toContain('<strong title="测试项目">测试项目</strong><small title="PRJ-TEST-001">PRJ-TEST-001</small>');
+    expect(html).toContain('<th class="payment-batch-status-cell">状态</th>');
+    expect(html).toContain('<th class="action-cell payment-batch-action-cell">操作</th>');
     expect(html).toContain('aria-label="付款批次导出"');
     expect(html).toContain('payment-batch-export-button is-confirmation');
     expect(html).toContain('payment-batch-export-button is-record');
@@ -162,6 +165,13 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('aria-label="选择付款批次 BAT-20260715-006"');
     expect(html).toContain('aria-label="选择付款批次 BAT-20260714-005"');
     expect(html).not.toContain('不支持确认函导出');
+
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    expect(css).toContain('.payment-batch-table :is(th, td).payment-batch-status-cell');
+    expect(css).toContain('right: 132px');
+    expect(css).toContain('.payment-batch-table :is(th, td).payment-batch-action-cell');
+    expect(css).toMatch(/\.payment-batch-export-button\.is-confirmation:not\(:disabled\)[\s\S]*?color: #2f333a/);
+    expect(css).toMatch(/\.payment-batch-export-button\.is-record:not\(:disabled\)[\s\S]*?color: #2f333a/);
   });
 
   it('keeps the batch list status frozen when the live payout changes', () => {

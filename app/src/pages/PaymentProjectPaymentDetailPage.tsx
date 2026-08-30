@@ -25,6 +25,7 @@ import { PaymentFailureReturnDialog } from '../components/PaymentFailureReturnDi
 import { PaymentProgressSteps } from '../components/PaymentProgressSteps';
 import { PaymentProviderBadge, PaymentProviderBadges } from '../components/PaymentProviderBadge';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
+import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
 import {
   paymentBatchAmountLabel,
   paymentBatchStatusCounts,
@@ -372,7 +373,7 @@ export function PaymentProjectItemDrawer({
               <div><dt>付款方式</dt><dd>{item.transferMethod || '待补充'}</dd></div>
               <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || '待补充'}</dd></div>
               <div><dt>付款金额</dt><dd>{money(item.currency, item.amount)}</dd></div>
-              <div><dt>手续费承担方</dt><dd>{item.feeBearer || '未记录'}</dd></div>
+              <div><dt>手续费承担方</dt><dd>{paymentFeeBearerDisplayName(item.feeBearer)}</dd></div>
               <div><dt>付款日期</dt><dd>{paymentResultDate(item.paymentStatus, item.paidAt)}</dd></div>
               <div className="is-full"><dt>付款原因</dt><dd>{item.paymentReason || '未记录'}</dd></div>
               <div className="is-full"><dt>交易附言</dt><dd>{item.transactionReference || '未记录'}</dd></div>

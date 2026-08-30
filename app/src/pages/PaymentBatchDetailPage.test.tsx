@@ -114,6 +114,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('aria-label="查看 Mina Kato 的付款详情"');
     expect(html).toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
     expect(html).toContain('class="payment-batch-order-card"');
+    expect(html).toContain('payment-batch-order-header payment-batch-order-summary-card');
+    expect(html).toContain('payment-batch-order-items payment-batch-order-items-card');
     expect(html).toContain('class="payment-batch-order-items-heading"');
     expect(html).toContain('<span>付款单</span><strong>PAY-202608-000001</strong>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
@@ -124,6 +126,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('payment-batch-order-project');
     expect(html).toContain('<th>达人</th><th>关联项目</th><th>付款渠道</th><th>收款银行账号</th><th>付款日期</th><th>付款金额</th><th>手续费</th><th>实际付款金额</th><th>付款类型</th><th>付款状态</th>');
     expect(html).toContain('class="data-table payment-batch-order-table"');
+    expect(html).toContain('<strong title="COMETS 夏季内容项目">COMETS 夏季内容项目</strong><small title="PRJ-202608-000001">PRJ-202608-000001</small>');
     expect(html).toContain('class="payment-batch-attempt-badge">首次付款</span>');
     expect(html).toContain('下载确认函');
     expect(html).toContain('查看详情');
@@ -306,6 +309,18 @@ describe('PaymentBatchDetailPage', () => {
     );
     expect(drawerHtml).toContain('退回媒介处理');
     expect(drawerHtml).toContain('BENEFICIARY_DISABLED');
+    expect(drawerHtml).toContain('aria-label="本次付款金额"');
+    expect(drawerHtml).toContain('<span>付款金额</span><strong>USD 1,250</strong>');
+    expect(drawerHtml).toContain('<span>手续费金额</span><strong>USD 2.5</strong>');
+    expect(drawerHtml).toContain('<span>实际付款金额</span><strong>USD 2.5</strong>');
+    expect(drawerHtml).toContain('我方承担');
+    expect(drawerHtml.indexOf('付款渠道 / 方式')).toBeLessThan(drawerHtml.indexOf('本地清算方式'));
+    expect(drawerHtml.indexOf('本地清算方式')).toBeLessThan(drawerHtml.indexOf('收款国家 / 地区'));
+    const paymentPanel = drawerHtml.slice(drawerHtml.indexOf('payment-batch-detail-panel is-payment'));
+    expect(paymentPanel).not.toContain('<dt>付款金额</dt>');
+    expect(paymentPanel).not.toContain('<dt>手续费金额</dt>');
+    expect(paymentPanel).not.toContain('<dt>实际付款金额</dt>');
+    expect(paymentPanel).not.toContain('交易后余额');
     expect(drawerHtml).not.toContain('合同编号');
     expect(drawerHtml).not.toContain('Invoice 编号');
   });
@@ -526,6 +541,9 @@ describe('PaymentBatchDetailPage', () => {
     expect(css).toContain('.payment-batch-order-table :is(th, td):nth-child(10)');
     expect(css).toContain('right: 226px');
     expect(css).toContain('.payment-batch-table-actions');
+    expect(css).toContain('.payment-batch-order-summary-card');
+    expect(css).toContain('.payment-batch-order-items-card');
+    expect(css).toContain('.payment-batch-drawer-financial-summary');
     expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.payment-batch-item-drawer \{[\s\S]*?width: 100vw/);
     expect(source).toContain("event.key === 'Escape'");
     expect(source).toContain("event.key !== 'Tab'");

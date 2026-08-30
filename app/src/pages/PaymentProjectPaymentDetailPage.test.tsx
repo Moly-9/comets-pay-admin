@@ -272,6 +272,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(drawerHtml).toContain('aria-modal="true"');
     expect(drawerHtml).toContain('收款人');
     expect(drawerHtml).toContain('付款信息');
+    expect(drawerHtml).toContain('我方承担');
     expect(drawerHtml).toContain('渠道结果');
     expect(drawerHtml).toContain('BENEFICIARY_UNAVAILABLE');
     expect(drawerHtml).toContain('The beneficiary account is unavailable.');

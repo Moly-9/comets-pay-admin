@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import { Button, Modal, StatusMark } from '../components/Common';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
+import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import { transactionRecordDetails, type TransactionRecord } from '../transactionRecords';
@@ -137,7 +138,7 @@ export function TransactionDetailPage({
           <div className="is-batch"><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
           <div className="is-account"><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{accountDisplayValue(details.accountSummary)}</dd></div>
           <div className="is-method"><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{details.transferMethod}</dd></div>
-          <div className="is-fee"><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{details.feeBearer}</dd></div>
+          <div className="is-fee"><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{paymentFeeBearerDisplayName(details.feeBearer)}</dd></div>
           <div className="is-reference"><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
           <div className="is-reason"><dt><ClipboardCheck size={14} aria-hidden="true" />付款事由</dt><dd>{details.requestReason}</dd></div>
         </dl>

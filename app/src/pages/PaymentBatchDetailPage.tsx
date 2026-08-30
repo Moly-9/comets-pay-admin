@@ -42,6 +42,7 @@ import {
 import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
+import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 
@@ -224,24 +225,20 @@ export function PaymentItemDetails({
           {paymentBatchItemAttemptNumber(item) > 1 ? <div><dt>原付款单</dt><dd>{paymentBatchItemSourceOrderCode(item)}</dd></div> : null}
           <div><dt>付款类型</dt><dd>{paymentBatchItemAttemptLabel(item)}</dd></div>
           <div><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
+          {mode === 'payment-only' ? (
+            <>
+              <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || item.transferMethod || '待补充'}</dd></div>
+              <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
+            </>
+          ) : null}
           <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
-          <div><dt>付款金额</dt><dd>{money(item.currency, item.amount)}</dd></div>
           <div><dt>收款账户</dt><dd>{accountDisplayValue(item.accountSummary)}</dd></div>
-          <div><dt>费用承担</dt><dd>{item.feeBearer}</dd></div>
+          <div><dt>费用承担</dt><dd>{paymentFeeBearerDisplayName(item.feeBearer)}</dd></div>
           <div><dt>付款原因</dt><dd>{item.paymentReason}</dd></div>
           <div><dt>交易附言</dt><dd>{item.transactionReference}</dd></div>
           <div><dt>描述</dt><dd>{item.description}</dd></div>
           <div><dt>渠道结果</dt><dd>{item.failure?.code ?? item.paymentStatus}</dd></div>
           <div><dt>付款时间</dt><dd>{displayTime(item.paidAt)}</dd></div>
-          {mode === 'payment-only' ? (
-            <>
-              <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || item.transferMethod || '待补充'}</dd></div>
-              <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
-              <div><dt>实际付款金额</dt><dd>{paymentResultValue(item, item.actualPaidAmount, item.actualPaidCurrency)}</dd></div>
-              <div><dt>手续费金额</dt><dd>{paymentResultValue(item, item.transferFeeAmount, item.transferFeeCurrency)}</dd></div>
-              <div><dt>交易后余额</dt><dd>{item.postTransactionBalance !== undefined && item.postTransactionBalanceCurrency ? money(item.postTransactionBalanceCurrency, item.postTransactionBalance) : '—'}</dd></div>
-            </>
-          ) : null}
         </dl>
         {item.failure ? (
           <div className="payment-batch-failure-result" role="status">
@@ -367,6 +364,11 @@ export function PaymentBatchItemDrawer({
             <div className="payment-batch-drawer-recipient-heading">
               <PaymentCreatorIdentity size="lg" {...creatorIdentity} />
               <PaymentProviderBadge compact provider={item.provider} />
+            </div>
+            <div className="payment-batch-drawer-financial-summary" aria-label="本次付款金额">
+              <div><span>付款金额</span><strong>{money(item.currency, item.amount)}</strong></div>
+              <div><span>手续费金额</span><strong>{paymentFeeLabel(item)}</strong></div>
+              <div><span>实际付款金额</span><strong>{paymentResultValue(item, item.actualPaidAmount, item.actualPaidCurrency)}</strong></div>
             </div>
             <dl>
               <div><dt>{item.accountIdentifierLabel || '收款账户'}</dt><dd>{item.accountIdentifier || item.accountSummary || '待补充'}</dd></div>
@@ -564,7 +566,7 @@ export function PaymentBatchDetailPage({
         {batchItems.length ? (
           <div className="payment-batch-order-list">
               <article className="payment-batch-order-card" aria-labelledby="payment-batch-order-title">
-                <header className="payment-batch-order-header">
+                <header className="payment-batch-order-header payment-batch-order-summary-card">
                   <div className="payment-batch-order-identity">
                     <span aria-hidden="true"><WalletCards size={20} /></span>
                     <div>
@@ -580,7 +582,7 @@ export function PaymentBatchDetailPage({
                   </div>
                 </header>
 
-                <section className="payment-batch-order-items" aria-label={`${batch.paymentOrderCode} 付款明细`}>
+                <section className="payment-batch-order-items payment-batch-order-items-card" aria-label={`${batch.paymentOrderCode} 付款明细`}>
                   <header>
                     <div className="payment-batch-order-items-heading">
                       <span aria-hidden="true"><ListChecks size={17} /></span>
@@ -619,7 +621,7 @@ export function PaymentBatchDetailPage({
                               <td className="payment-batch-table-creator-cell">
                                 <PaymentCreatorIdentity {...creatorIdentity} />
                               </td>
-                              <td className="payment-batch-table-project-cell"><strong>{batch.request.cooperationProjectCode}</strong><small>{batch.request.cooperationProjectName}</small></td>
+                              <td className="payment-batch-table-project-cell"><strong title={batch.request.cooperationProjectName}>{batch.request.cooperationProjectName}</strong><small title={batch.request.cooperationProjectCode}>{batch.request.cooperationProjectCode}</small></td>
                               <td><span className="payment-batch-table-provider"><PaymentProviderBadge compact provider={item.provider} /><small>{item.transferMethod}</small></span></td>
                               <td className="payment-batch-table-account-cell"><strong title={item.accountIdentifier || item.accountSummary}>{item.accountIdentifier || item.accountSummary}</strong><small>{item.accountIdentifierLabel || '收款账户快照'}</small></td>
                               <td className="payment-batch-table-date-cell">{paymentDateLabel(item.paidAt)}</td>

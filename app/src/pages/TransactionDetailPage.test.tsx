@@ -114,6 +114,8 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('PAY-20260810-001');
     expect(html).toContain('付款事由');
     expect(html).toContain('达人合作内容验收完成');
+    expect(html).toContain('我方承担');
+    expect(html).not.toContain('>广告主承担<');
     expect(html).toContain('aria-label="查看合同"');
     expect(html).toContain('aria-label="查看 Invoice"');
     expect(html).toContain('aria-label="查看付款清单"');

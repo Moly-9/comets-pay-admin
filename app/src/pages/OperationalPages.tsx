@@ -4037,7 +4037,7 @@ export function BatchesPage({
                     onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, filteredRows))}
                   />
                 </th>
-                <th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
+                <th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th><th>付款人 / 付款时间</th><th className="payment-batch-status-cell">状态</th><th className="action-cell payment-batch-action-cell">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -4055,8 +4055,8 @@ export function BatchesPage({
                     </td>
                     <td className="mono-cell">{batch.id}</td>
                     <td className="payment-batch-project-cell">
-                      <strong>{batch.cooperationProjectCode}</strong>
-                      <small title={batch.cooperationProjectName}>{batch.cooperationProjectName}</small>
+                      <strong title={batch.cooperationProjectName}>{batch.cooperationProjectName}</strong>
+                      <small title={batch.cooperationProjectCode}>{batch.cooperationProjectCode}</small>
                     </td>
                     <td><PaymentProviderBadge compact provider={batch.provider} /></td>
                     <td>{batch.count} 笔</td>
@@ -4064,8 +4064,8 @@ export function BatchesPage({
                     <td className="payment-batch-money-cell">{batch.transferFeeAmount}</td>
                     <td className="payment-batch-money-cell"><strong>{batch.actualPaidAmount}</strong></td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
-                    <td><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
-                    <td className="action-cell">
+                    <td className="payment-batch-status-cell"><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
+                    <td className="action-cell payment-batch-action-cell">
                       <ListActionButton
                         ref={(node) => { if (node) detailTriggerRefs.current.set(batch.paymentBatchId, node); }}
                         kind="view"
