@@ -3,6 +3,7 @@ import { INITIAL_PAYOUTS } from './data';
 import type { PaymentBatchRecord } from './paymentBatches';
 import type { Payout } from './types';
 import {
+  createTransactionRecords,
   findTransactionBatchContext,
   filterTransactionRecords,
   isFinalTransaction,
@@ -43,6 +44,10 @@ const filters = (overrides: Partial<TransactionRecordFilters> = {}): Transaction
   ...overrides,
 });
 
+const recordIds = (records: ReturnType<typeof createTransactionRecords>) => (
+  records.map((record) => record.payout.id)
+);
+
 const batch = {
   paymentBatchId: 'payment-batch-test',
   paymentBatchCode: 'PAY-20260810-TEST',
@@ -71,6 +76,13 @@ const batch = {
   items: [{
     payoutId: 'pay-test',
     paymentListCode: 'PL-20260810-TEST',
+    provider: 'Airwallex',
+    amount: 1980,
+    currency: 'USD',
+    receiveCurrency: 'USD',
+    feeBearer: '广告主承担',
+    paymentStatus: '已付款',
+    paidAt: '2026-08-05 16:00',
   }],
 } as unknown as PaymentBatchRecord;
 
@@ -88,13 +100,14 @@ describe('transaction records', () => {
       payout({ id: 'unapproved', invoiceReviewStatus: '待媒介审核' }),
     ];
 
-    expect(filterTransactionRecords(records, filters()).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);
-    expect(filterTransactionRecords(records, filters({ tab: 'paid' })).map((record) => record.id)).toEqual(['pay-test', 'processing']);
-    expect(filterTransactionRecords(records, filters({ tab: 'paid', status: '已付款' })).map((record) => record.id)).toEqual(['pay-test']);
-    expect(filterTransactionRecords(records, filters({ tab: 'paid', status: '付款处理中' })).map((record) => record.id)).toEqual(['processing']);
-    expect(filterTransactionRecords(records, filters({ tab: 'failed' })).map((record) => record.id)).toEqual(['failed']);
-    expect(filterTransactionRecords(records, filters({ tab: undefined, status: '付款处理中' })).map((record) => record.id)).toEqual(['processing']);
-    expect(filterTransactionRecords(records, filters({ tab: undefined, status: '全部失败' })).map((record) => record.id)).toEqual(['failed']);
+    const transactions = createTransactionRecords(records, []);
+    expect(recordIds(filterTransactionRecords(transactions, filters()))).toEqual(['failed', 'pay-test', 'processing']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ tab: 'paid' })))).toEqual(['pay-test', 'processing']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ tab: 'paid', status: '已付款' })))).toEqual(['pay-test']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ tab: 'paid', status: '付款处理中' })))).toEqual(['processing']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ tab: 'failed' })))).toEqual(['failed']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ tab: undefined, status: '付款处理中' })))).toEqual(['processing']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ tab: undefined, status: '全部失败' })))).toEqual(['failed']);
     expect(records.filter(isPaymentTransactionRecord).map((record) => record.id)).toEqual(['pay-test', 'failed', 'processing']);
   });
 
@@ -109,11 +122,10 @@ describe('transaction records', () => {
       ],
     } as unknown as PaymentBatchRecord;
 
-    expect(filterTransactionRecords(
-      [payout(), failed],
+    expect(recordIds(filterTransactionRecords(
+      createTransactionRecords([payout(), failed], [partialBatch]),
       filters({ status: '部分失败' }),
-      [partialBatch],
-    ).map((record) => record.id)).toEqual(['pay-test', 'failed']);
+    ))).toEqual(['pay-test', 'failed']);
   });
 
   it('combines search, provider, and inclusive date filters', () => {
@@ -122,13 +134,14 @@ describe('transaction records', () => {
       payout({ id: 'paypal', creator: 'Yuki Tanaka', handle: '@yuki.tokyo', provider: 'PayPal', paidAt: '2026-08-07 09:20' }),
     ];
 
-    expect(filterTransactionRecords(records, filters({
+    const transactions = createTransactionRecords(records, []);
+    expect(recordIds(filterTransactionRecords(transactions, filters({
       search: 'mina',
       provider: 'Airwallex',
       startDate: '2026-08-05',
       endDate: '2026-08-05',
-    })).map((record) => record.id)).toEqual(['pay-test']);
-    expect(filterTransactionRecords(records, filters({ search: 'paypal' })).map((record) => record.id)).toEqual(['paypal']);
+    })))).toEqual(['pay-test']);
+    expect(recordIds(filterTransactionRecords(transactions, filters({ search: 'paypal' })))).toEqual(['paypal']);
   });
 
   it('uses the failure occurrence date and formats distinct creator handles', () => {
@@ -153,7 +166,10 @@ describe('transaction records', () => {
     expect(findTransactionBatchContext(payout({ id: 'other' }), [batch])).toBeNull();
 
     ['REQ-20260810-TEST', 'PAY-20260810-TEST', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
-      expect(filterTransactionRecords([payout()], filters({ search }), [batch])).toHaveLength(1);
+      expect(filterTransactionRecords(
+        createTransactionRecords([payout()], [batch]),
+        filters({ search }),
+      )).toHaveLength(1);
     });
   });
 
@@ -188,6 +204,75 @@ describe('transaction records', () => {
     ).paymentBatchCode).toBe('BAT-RETRY-002');
     expect(transactionPaymentStatus(currentPayout, [currentPayout], [failedBatch, retryBatch]))
       .toBe('已付款');
+  });
+
+  it('keeps a failed batch item and its successful retry as separate transaction rows', () => {
+    const failedBatch = {
+      ...batch,
+      paymentBatchId: 'payment-batch-failed',
+      paymentBatchCode: 'BAT-FAILED-001',
+      paidAt: '2026-08-05T15:00:00.000Z',
+      status: '全部失败',
+      items: [{
+        ...batch.items[0],
+        paymentStatus: '付款失败',
+        paidAt: '2026-08-05T15:05:00.000Z',
+        transferFeeAmount: 6,
+        transferFeeCurrency: 'USD',
+        recipientReceivedAmount: 0,
+        recipientReceivedCurrency: 'USD',
+        failure: {
+          code: 'BENEFICIARY_UNAVAILABLE',
+          response: 'Beneficiary unavailable',
+          occurredAt: '2026-08-05T15:05:00.000Z',
+        },
+      }],
+    } as unknown as PaymentBatchRecord;
+    const retryBatch = {
+      ...batch,
+      paymentBatchId: 'payment-batch-retry',
+      paymentBatchCode: 'BAT-RETRY-002',
+      paidAt: '2026-08-06T10:00:00.000Z',
+      items: [{
+        ...batch.items[0],
+        paidAt: '2026-08-06T10:05:00.000Z',
+        transferFeeAmount: 6,
+        transferFeeCurrency: 'USD',
+        recipientReceivedAmount: 1980,
+        recipientReceivedCurrency: 'USD',
+      }],
+    } as unknown as PaymentBatchRecord;
+
+    const records = createTransactionRecords([payout()], [failedBatch, retryBatch]);
+
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.context?.batch.paymentBatchCode)).toEqual([
+      'BAT-RETRY-002',
+      'BAT-FAILED-001',
+    ]);
+    expect(records.map((record) => record.status)).toEqual(['已付款', '付款失败']);
+    expect(records.map((record) => record.recipientReceivedAmount)).toEqual([1980, 0]);
+    expect(new Set(records.map((record) => record.key)).size).toBe(2);
+  });
+
+  it('derives successful recipient amounts from each fee-bearer snapshot', () => {
+    const feePayouts = [
+      payout({ id: 'advertiser' }),
+      payout({ id: 'publisher' }),
+      payout({ id: 'shared' }),
+    ];
+    const feeBatch = {
+      ...batch,
+      items: [
+        { ...batch.items[0], payoutId: 'advertiser', amount: 100, transferFeeAmount: 10, transferFeeCurrency: 'USD', feeBearer: '广告主承担' },
+        { ...batch.items[0], payoutId: 'publisher', amount: 100, transferFeeAmount: 10, transferFeeCurrency: 'USD', feeBearer: '收款人承担' },
+        { ...batch.items[0], payoutId: 'shared', amount: 100, transferFeeAmount: 10, transferFeeCurrency: 'USD', feeBearer: '共同承担' },
+      ],
+    } as unknown as PaymentBatchRecord;
+
+    expect(createTransactionRecords(feePayouts, [feeBatch]).map((record) => (
+      record.recipientReceivedAmount
+    ))).toEqual([100, 90, 95]);
   });
 
   it('provides complete historical snapshots for every current legacy transaction', () => {

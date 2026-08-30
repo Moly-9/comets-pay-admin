@@ -22,6 +22,8 @@ export const prototypePaymentResultFor = ({
   | 'transferFeeCurrency'
   | 'actualPaidAmount'
   | 'actualPaidCurrency'
+  | 'recipientReceivedAmount'
+  | 'recipientReceivedCurrency'
   | 'postTransactionBalance'
   | 'postTransactionBalanceCurrency'
 > => {
@@ -32,11 +34,14 @@ export const prototypePaymentResultFor = ({
     : feeBearer === 'SHARED'
       ? transferFeeAmount / 2
       : transferFeeAmount;
+  const recipientFeeShare = roundCurrency(transferFeeAmount - payerFeeShare);
   return {
     transferFeeAmount,
     transferFeeCurrency: currency,
     actualPaidAmount: roundCurrency(amount + payerFeeShare),
     actualPaidCurrency: currency,
+    recipientReceivedAmount: roundCurrency(Math.max(0, amount - recipientFeeShare)),
+    recipientReceivedCurrency: currency,
     postTransactionBalance: roundCurrency(
       prototypeFundingAccountOpeningBalance({ provider, currency }) - amount - payerFeeShare,
     ),

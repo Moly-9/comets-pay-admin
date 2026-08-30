@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { TransactionBatchContext } from '../transactionRecords';
+import type { TransactionBatchContext, TransactionRecord } from '../transactionRecords';
 import type { Payout } from '../types';
 import { TransactionDetailPage } from './TransactionDetailPage';
 
@@ -67,15 +67,32 @@ const context = {
   },
 } as unknown as TransactionBatchContext;
 
+const record: TransactionRecord = {
+  key: 'batch:payment-batch-test:payout:pay-detail-test',
+  payout,
+  context,
+  status: '已付款',
+  occurredAt: '2026-08-10 16:30',
+  provider: 'Airwallex',
+  paymentAmount: 4100,
+  paymentCurrency: 'USD',
+  transferFeeAmount: 8.2,
+  transferFeeCurrency: 'USD',
+  recipientReceivedAmount: 4100,
+  recipientReceivedCurrency: 'USD',
+};
+
 describe('TransactionDetailPage', () => {
   it('renders the creator card, transaction summary, associations, and highlighted payment list', () => {
     const html = renderToStaticMarkup(
-      <TransactionDetailPage payout={payout} context={context} onBack={vi.fn()} />,
+      <TransactionDetailPage record={record} onBack={vi.fn()} />,
     );
 
     expect(html).toContain('transaction-creator-summary-card');
     expect(html).not.toContain('transaction-detail-header');
-    expect(html).toContain('付款金额');
+    expect(html).toContain('支付金额');
+    expect(html).toContain('手续费 USD 8.2');
+    expect(html).toContain('对方实收 USD 4,100');
     expect(html).toContain('付款渠道');
     expect(html).toContain('交易状态');
     expect(html).toContain('所属关联项目');
@@ -104,7 +121,7 @@ describe('TransactionDetailPage', () => {
 
   it('marks unknown historical records for completion without hiding known payout data', () => {
     const html = renderToStaticMarkup(
-      <TransactionDetailPage payout={payout} context={null} onBack={vi.fn()} />,
+      <TransactionDetailPage record={{ ...record, key: 'historical:payout:pay-detail-test', context: null }} onBack={vi.fn()} />,
     );
 
     expect(html).toContain('历史数据待补全');

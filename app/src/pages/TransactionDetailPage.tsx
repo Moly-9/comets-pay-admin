@@ -27,9 +27,7 @@ import { Button, Modal, StatusMark } from '../components/Common';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
-import type { TransactionBatchContext } from '../transactionRecords';
-import { transactionOccurredAt, transactionRecordDetails } from '../transactionRecords';
-import type { Payout } from '../types';
+import { transactionRecordDetails, type TransactionRecord } from '../transactionRecords';
 import {
   paymentCreatorIdentityFromBatchItem,
   paymentCreatorIdentityFromPayout,
@@ -44,21 +42,27 @@ const money = (currency: string, amount: number | null) => (
   amount === null ? '未记录' : `${currency} ${amount.toLocaleString('en-US')}`
 );
 
+const transactionMoney = (currency: string, amount: number) => (
+  `${currency} ${amount.toLocaleString('en-US', {
+    minimumFractionDigits: amount === 0 ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`
+);
+
 type TransactionResourceView = 'contract' | 'invoice' | 'payment-list';
 
 export function TransactionDetailPage({
-  payout,
-  context,
+  record,
   onBack,
 }: {
-  payout: Payout;
-  context: TransactionBatchContext | null;
+  record: TransactionRecord;
   onBack: () => void;
 }) {
+  const { payout, context } = record;
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [resourceView, setResourceView] = useState<TransactionResourceView | null>(null);
   const details = transactionRecordDetails(payout, context);
-  const finalTime = transactionOccurredAt(payout);
+  const finalTime = record.occurredAt;
   const creatorIdentity = context
     ? paymentCreatorIdentityFromBatchItem(context.item)
     : paymentCreatorIdentityFromPayout({ payout });
@@ -80,34 +84,41 @@ export function TransactionDetailPage({
         <div className="transaction-creator-summary-identity">
           <span><FolderKanban size={13} aria-hidden="true" />{payout.project}</span>
         </div>
-        <StatusMark status={payout.status} />
+        <StatusMark status={record.status} />
       </section>
 
       <section className="transaction-detail-summary" aria-label="交易摘要">
         <article className="is-amount">
-          <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />付款金额</span>
-          <strong>{formatAmount(payout)}</strong>
-          <small>收款币种 {details.receiveCurrency}</small>
+          <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />支付金额</span>
+          <strong>{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</strong>
+          <small>
+            手续费 {record.transferFeeAmount !== undefined && record.transferFeeCurrency
+              ? formatAmount({ currency: record.transferFeeCurrency, amount: record.transferFeeAmount })
+              : record.status === '付款处理中' ? '待渠道回写' : '—'}
+            {' · '}对方实收 {record.recipientReceivedAmount !== undefined
+              ? transactionMoney(record.recipientReceivedCurrency, record.recipientReceivedAmount)
+              : record.status === '付款处理中' ? '待渠道回写' : '—'}
+          </small>
         </article>
         <article className="is-provider">
           <span className="transaction-detail-summary-label"><Landmark size={15} aria-hidden="true" />付款渠道</span>
-          <PaymentProviderBadge provider={payout.provider} />
+          <PaymentProviderBadge provider={record.provider} />
           <small>{details.transferMethod}</small>
         </article>
         <article className="is-status">
           <span className="transaction-detail-summary-label"><CircleCheckBig size={15} aria-hidden="true" />交易状态</span>
-          <StatusMark status={payout.status} />
+          <StatusMark status={record.status} />
           <small>{displayTime(finalTime)}</small>
         </article>
       </section>
 
-      {payout.paymentFailure ? (
+      {details.failure ? (
         <section className="transaction-detail-failure" role="alert">
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
-            <strong>{payout.paymentFailure.errorCode}</strong>
-            <span>{payout.paymentFailure.providerResponse}</span>
-            <small>{displayTime(payout.paymentFailure.occurredAt)}</small>
+            <strong>{details.failure.code}</strong>
+            <span>{details.failure.response}</span>
+            <small>{displayTime(details.failure.occurredAt)}</small>
           </div>
         </section>
       ) : null}
@@ -145,7 +156,7 @@ export function TransactionDetailPage({
           </article>
           <article className="is-payment-batch">
             <span className="transaction-association-icon" aria-hidden="true"><ReceiptText size={19} /></span>
-            <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{paymentProviderDisplayName(payout.provider)} · {details.batchStatus}</span></div>
+            <div><small>所属请款批次</small><strong>{details.paymentBatchCode}</strong><span>{paymentProviderDisplayName(record.provider)} · {details.batchStatus}</span></div>
           </article>
         </div>
       </section>

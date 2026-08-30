@@ -111,7 +111,7 @@
 }
 
 .transaction-records-table {
-  min-width: 1230px;
+  min-width: 1540px;
 }
 
 .transaction-records-table .transaction-select-cell {
@@ -130,11 +130,19 @@
 }
 
 .transaction-records-table th:nth-child(6) {
-  min-width: 160px;
+  min-width: 145px;
 }
 
 .transaction-records-table th:nth-child(7) {
-  min-width: 170px;
+  min-width: 145px;
+}
+
+.transaction-records-table th:nth-child(8) {
+  min-width: 190px;
+}
+
+.transaction-records-table th:nth-child(9) {
+  min-width: 180px;
 }
 
 .transaction-records-table tbody tr.is-selected {
@@ -188,7 +196,8 @@
 }
 
 .transaction-invoice-cell strong,
-.transaction-records-table .transaction-amount-cell strong {
+.transaction-records-table .transaction-amount-cell strong,
+.transaction-records-table .transaction-money-cell strong {
   color: #252933;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-weight: 700;

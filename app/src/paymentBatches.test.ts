@@ -408,6 +408,8 @@ describe('payment batch snapshots', () => {
     input.payouts[0].transferFeeCurrency = 'USD';
     input.payouts[0].actualPaidAmount = 1258.5;
     input.payouts[0].actualPaidCurrency = 'USD';
+    input.payouts[0].recipientReceivedAmount = 1250;
+    input.payouts[0].recipientReceivedCurrency = 'USD';
     input.payouts[0].localClearingSystem = 'ACH';
     input.payouts[0].recipientCountry = 'United States';
     input.payouts[0].postTransactionBalance = 48_741.5;
@@ -429,6 +431,8 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].transferFeeCurrency).toBe('USD');
     expect(record.items[0].actualPaidAmount).toBe(1258.5);
     expect(record.items[0].actualPaidCurrency).toBe('USD');
+    expect(record.items[0].recipientReceivedAmount).toBe(1250);
+    expect(record.items[0].recipientReceivedCurrency).toBe('USD');
     expect(record.items[0].localClearingSystem).toBe('ACH');
     expect(record.items[0].recipientCountry).toBe('United States');
     expect(record.items[0].postTransactionBalance).toBe(48_741.5);
@@ -659,6 +663,7 @@ describe('payment batch snapshots', () => {
         const failedItem = record.items.find((item) => item.paymentStatus === '付款失败');
         expect(failedItem?.transferFeeAmount).toBeGreaterThan(0);
         expect(failedItem?.actualPaidAmount).toBe(failedItem?.transferFeeAmount);
+        expect(failedItem?.recipientReceivedAmount).toBe(0);
         expect(counts).toEqual({ succeeded: record.items.length - 1, failed: 1, processing: 0 });
       }
     });

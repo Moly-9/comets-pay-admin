@@ -163,6 +163,8 @@ export const applyPaymentBatchPrototypeScenario = ({
         transferFeeCurrency: prototypePaymentResult.transferFeeCurrency,
         actualPaidAmount: prototypePaymentResult.transferFeeAmount,
         actualPaidCurrency: prototypePaymentResult.transferFeeCurrency,
+        recipientReceivedAmount: 0,
+        recipientReceivedCurrency: payout.currency,
       } : undefined;
       const retryPaymentAttempts = isRetrySuccess && paymentResult?.transferFeeAmount !== undefined
         ? [
@@ -178,6 +180,8 @@ export const applyPaymentBatchPrototypeScenario = ({
               transferFeeCurrency: payout.currency,
               actualPaidAmount: paymentResult.transferFeeAmount,
               actualPaidCurrency: payout.currency,
+              recipientReceivedAmount: 0,
+              recipientReceivedCurrency: payout.currency,
               errorCode: 'BENEFICIARY_UNAVAILABLE',
               providerResponse: 'The beneficiary is temporarily unavailable.',
               returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',
@@ -194,6 +198,8 @@ export const applyPaymentBatchPrototypeScenario = ({
               transferFeeCurrency: paymentResult.transferFeeCurrency,
               actualPaidAmount: paymentResult.actualPaidAmount,
               actualPaidCurrency: paymentResult.actualPaidCurrency,
+              recipientReceivedAmount: paymentResult.recipientReceivedAmount,
+              recipientReceivedCurrency: paymentResult.recipientReceivedCurrency,
             },
           ]
         : payout.paymentAttempts;

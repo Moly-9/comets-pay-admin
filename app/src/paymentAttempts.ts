@@ -27,6 +27,8 @@ export const paymentAttemptSnapshotFor = ({
   transferFeeCurrency,
   actualPaidAmount,
   actualPaidCurrency,
+  recipientReceivedAmount,
+  recipientReceivedCurrency,
   errorCode,
   providerResponse,
   returnReason,
@@ -38,6 +40,8 @@ export const paymentAttemptSnapshotFor = ({
   transferFeeCurrency?: PaymentAttemptSnapshot['transferFeeCurrency'];
   actualPaidAmount?: number;
   actualPaidCurrency?: PaymentAttemptSnapshot['actualPaidCurrency'];
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: PaymentAttemptSnapshot['recipientReceivedCurrency'];
   errorCode?: string;
   providerResponse?: string;
   returnReason?: string;
@@ -57,6 +61,8 @@ export const paymentAttemptSnapshotFor = ({
   transferFeeCurrency,
   actualPaidAmount,
   actualPaidCurrency,
+  recipientReceivedAmount,
+  recipientReceivedCurrency,
   errorCode,
   providerResponse,
   returnReason,

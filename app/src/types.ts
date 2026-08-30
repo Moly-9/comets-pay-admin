@@ -588,6 +588,8 @@ export type PaymentAttemptSnapshot = Readonly<{
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: InvoiceCurrency;
   errorCode?: string;
   providerResponse?: string;
   returnReason?: string;
@@ -679,6 +681,8 @@ export type Payout = {
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: InvoiceCurrency;
   postTransactionBalance?: number;
   postTransactionBalanceCurrency?: InvoiceCurrency;
   paymentListRequiresRevalidation?: boolean;

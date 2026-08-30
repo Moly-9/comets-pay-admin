@@ -138,6 +138,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('INV-13');
     expect(html).not.toContain('INV-14');
     expect(html).toContain('付款处理中');
+    expect(html).toContain('USD 0.00');
     expect(html).not.toContain('等待付款');
   });
 
@@ -162,7 +163,9 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>Invoice</th>');
     expect(html).toContain('>渠道</th>');
     expect(html).toContain('>状态</th>');
-    expect(html).toContain('>金额</th>');
+    expect(html).toContain('>支付金额</th>');
+    expect(html).toContain('>手续费</th>');
+    expect(html).toContain('>对方实际收到金额</th>');
     expect(html).not.toContain('>时间</th>');
     expect(html).toContain('>付款人 / 付款时间</th>');
     expect(html).toContain('>操作</th>');

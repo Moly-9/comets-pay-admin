@@ -2540,6 +2540,8 @@ export default function App() {
           transferFeeCurrency: paymentResult.transferFeeCurrency,
           actualPaidAmount: paymentResult.actualPaidAmount,
           actualPaidCurrency: paymentResult.actualPaidCurrency,
+          recipientReceivedAmount: paymentResult.recipientReceivedAmount,
+          recipientReceivedCurrency: paymentResult.recipientReceivedCurrency,
         }))
       : baseUpdated;
     if (nextStatus === '已付款') {
@@ -2714,6 +2716,8 @@ export default function App() {
       transferFeeCurrency: undefined,
       actualPaidAmount: undefined,
       actualPaidCurrency: undefined,
+      recipientReceivedAmount: undefined,
+      recipientReceivedCurrency: undefined,
       paymentFailure: {
         provider: payout.provider,
         errorCode: 'SIMULATED_PROVIDER_DECLINE',
@@ -2744,6 +2748,8 @@ export default function App() {
       transferFeeCurrency: failedPaymentResult.transferFeeCurrency,
       actualPaidAmount: failedPaymentResult.transferFeeAmount,
       actualPaidCurrency: failedPaymentResult.transferFeeCurrency,
+      recipientReceivedAmount: 0,
+      recipientReceivedCurrency: payout.currency,
       errorCode: baseUpdated.paymentFailure?.errorCode,
       providerResponse: baseUpdated.paymentFailure?.providerResponse,
     }));

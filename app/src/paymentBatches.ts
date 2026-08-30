@@ -101,6 +101,8 @@ export type PaymentBatchItemSnapshot = Readonly<{
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: InvoiceCurrency;
   postTransactionBalance?: number;
   postTransactionBalanceCurrency?: InvoiceCurrency;
   failure?: Readonly<{
@@ -462,6 +464,8 @@ const snapshotItem = ({
     transferFeeCurrency: hasFinalizedResult ? payout.transferFeeCurrency : undefined,
     actualPaidAmount: hasFinalizedResult ? payout.actualPaidAmount : undefined,
     actualPaidCurrency: hasFinalizedResult ? payout.actualPaidCurrency : undefined,
+    recipientReceivedAmount: hasFinalizedResult ? payout.recipientReceivedAmount : undefined,
+    recipientReceivedCurrency: hasFinalizedResult ? payout.recipientReceivedCurrency : undefined,
     postTransactionBalance: hasSuccessfulResult ? payout.postTransactionBalance : undefined,
     postTransactionBalanceCurrency: hasSuccessfulResult ? payout.postTransactionBalanceCurrency : undefined,
     failure: hasFailedResult && payout.paymentFailure ? {
@@ -772,6 +776,8 @@ export const applyPaymentResultToCurrentBatch = ({
         transferFeeCurrency: payout.transferFeeCurrency,
         actualPaidAmount: payout.actualPaidAmount,
         actualPaidCurrency: payout.actualPaidCurrency,
+        recipientReceivedAmount: payout.recipientReceivedAmount,
+        recipientReceivedCurrency: payout.recipientReceivedCurrency,
         paymentAttempts: payout.paymentAttempts
           ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
           .map((attempt) => ({ ...attempt })),
@@ -786,6 +792,8 @@ export const applyPaymentResultToCurrentBatch = ({
       transferFeeCurrency: currentAttempt?.transferFeeCurrency,
       actualPaidAmount: currentAttempt?.actualPaidAmount,
       actualPaidCurrency: currentAttempt?.actualPaidCurrency,
+      recipientReceivedAmount: currentAttempt?.recipientReceivedAmount ?? 0,
+      recipientReceivedCurrency: currentAttempt?.recipientReceivedCurrency ?? item.receiveCurrency as InvoiceCurrency,
       paymentAttempts: payout.paymentAttempts
         ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
         .map((attempt) => ({ ...attempt })),

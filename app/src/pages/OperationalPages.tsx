@@ -166,9 +166,9 @@ import type { RequestApprovalReminderSummary } from '../requestApprovalReminders
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob, todayInputValue } from '../invoice/invoiceUtils';
 import {
-  findTransactionBatchContext,
+  createTransactionRecords,
   filterTransactionRecords,
-  isPaymentTransactionRecord,
+  type TransactionRecord,
   type TransactionTab,
   type TransactionProvider,
 } from '../transactionRecords';
@@ -4178,40 +4178,46 @@ export function TransactionsPage({
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [detailPayoutId, setDetailPayoutId] = useState<string | null>(null);
-  const detailReturnIdRef = useRef<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const [detailRecordKey, setDetailRecordKey] = useState<string | null>(null);
+  const detailReturnKeyRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const transactions = payouts.filter(isPaymentTransactionRecord);
-  const visible = filterTransactionRecords(payouts, {
+  const transactions = useMemo(
+    () => createTransactionRecords(payouts, paymentBatches),
+    [payouts, paymentBatches],
+  );
+  const visible = filterTransactionRecords(transactions, {
     tab,
     status: tab === 'paid' ? paymentStatus : ALL_PAYMENT_STATUSES,
     search,
     provider,
     startDate,
     endDate,
-  }, paymentBatches);
-  const selectedTransactions = transactions.filter((payout) => selectedIds.has(payout.id));
-  const detailPayout = detailPayoutId
-    ? transactions.find((payout) => payout.id === detailPayoutId) ?? null
+  });
+  const selectedTransactions = transactions.filter((record) => selectedKeys.has(record.key));
+  const detailRecord = detailRecordKey
+    ? transactions.find((record) => record.key === detailRecordKey) ?? null
     : null;
-  const paid = transactions.filter((payout) => payout.status === '已付款');
-  const failed = transactions.filter((payout) => payout.status === '付款失败');
+  const paid = transactions.filter((record) => record.status === '已付款');
+  const failed = transactions.filter((record) => record.status === '付款失败');
   const transactionTabCounts: Record<TransactionTab, number> = {
     all: transactions.length,
-    paid: transactions.filter((payout) => ['已付款', '付款处理中'].includes(payout.status)).length,
+    paid: transactions.filter((record) => ['已付款', '付款处理中'].includes(record.status)).length,
     failed: failed.length,
   };
-  const paidCurrencies = aggregatePayoutCurrencies(paid, true);
+  const paidCurrencies = aggregatePayoutCurrencies(paid.map((record) => ({
+    amount: record.paymentAmount,
+    currency: record.paymentCurrency,
+  })), true);
   const formatSuccessRate = (successfulCount: number, failedCount: number) => {
     const total = successfulCount + failedCount;
     return total ? `${((successfulCount / total) * 100).toFixed(1)}%` : '—';
   };
   const successRate = formatSuccessRate(paid.length, failed.length);
   const providerSuccessRates = (['Airwallex', 'PayPal', 'PayMax'] as const).map((provider) => {
-    const successfulCount = paid.filter((payout) => payout.provider === provider).length;
-    const failedCount = failed.filter((payout) => payout.provider === provider).length;
+    const successfulCount = paid.filter((record) => record.provider === provider).length;
+    const failedCount = failed.filter((record) => record.provider === provider).length;
     return {
       provider,
       successRate: formatSuccessRate(successfulCount, failedCount),
@@ -4231,35 +4237,35 @@ export function TransactionsPage({
     setTab(nextTab);
     setPaymentStatus(ALL_PAYMENT_STATUSES);
   };
-  const toggleTransaction = (payoutId: string, checked: boolean) => {
-    setSelectedIds((current) => {
+  const toggleTransaction = (recordKey: string, checked: boolean) => {
+    setSelectedKeys((current) => {
       const next = new Set(current);
-      if (checked) next.add(payoutId);
-      else next.delete(payoutId);
+      if (checked) next.add(recordKey);
+      else next.delete(recordKey);
       return next;
     });
   };
-  const toggleTransactions = (payoutIds: readonly string[], checked: boolean) => {
-    setSelectedIds((current) => {
+  const toggleTransactions = (recordKeys: readonly string[], checked: boolean) => {
+    setSelectedKeys((current) => {
       const next = new Set(current);
-      payoutIds.forEach((payoutId) => {
-        if (checked) next.add(payoutId);
-        else next.delete(payoutId);
+      recordKeys.forEach((recordKey) => {
+        if (checked) next.add(recordKey);
+        else next.delete(recordKey);
       });
       return next;
     });
   };
-  const openTransactionDetail = (payout: Payout) => {
-    detailReturnIdRef.current = payout.id;
-    setDetailPayoutId(payout.id);
+  const openTransactionDetail = (record: TransactionRecord) => {
+    detailReturnKeyRef.current = record.key;
+    setDetailRecordKey(record.key);
   };
   const closeTransactionDetail = () => {
-    const returnId = detailReturnIdRef.current;
-    setDetailPayoutId(null);
+    const returnKey = detailReturnKeyRef.current;
+    setDetailRecordKey(null);
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        if (!returnId) return;
-        const button = document.querySelector<HTMLButtonElement>(`[data-transaction-detail="${returnId}"]`);
+        if (!returnKey) return;
+        const button = document.querySelector<HTMLButtonElement>(`[data-transaction-detail="${returnKey}"]`);
         button?.focus();
       });
     });
@@ -4277,11 +4283,10 @@ export function TransactionsPage({
     }
   };
 
-  if (detailPayout) {
+  if (detailRecord) {
     return (
       <TransactionDetailPage
-        payout={detailPayout}
-        context={findTransactionBatchContext(detailPayout, paymentBatches)}
+        record={detailRecord}
         onBack={closeTransactionDetail}
       />
     );
@@ -4370,7 +4375,7 @@ export function TransactionsPage({
           {selectedTransactions.length ? (
             <span className="transaction-selection-summary" aria-live="polite">
               <strong>已选 {selectedTransactions.length} 条</strong>
-              <button className="transaction-selection-clear" type="button" onClick={() => setSelectedIds(new Set())}>清空</button>
+              <button className="transaction-selection-clear" type="button" onClick={() => setSelectedKeys(new Set())}>清空</button>
             </span>
           ) : null}
           <Button
@@ -4386,9 +4391,8 @@ export function TransactionsPage({
         </div>
         {exportError ? <p className="transaction-export-error" role="alert">{exportError}</p> : null}
         <TransactionRecordsTable
-          payouts={visible}
-          paymentBatches={paymentBatches}
-          selectedIds={selectedIds}
+          records={visible}
+          selectedKeys={selectedKeys}
           onToggle={toggleTransaction}
           onToggleAll={toggleTransactions}
           onOpenDetail={openTransactionDetail}

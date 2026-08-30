@@ -42,6 +42,8 @@ describe('payment attempt snapshots', () => {
       transferFeeCurrency: 'USD',
       actualPaidAmount: 2.5,
       actualPaidCurrency: 'USD',
+      recipientReceivedAmount: 0,
+      recipientReceivedCurrency: 'USD',
       errorCode: 'PROTOTYPE_DECLINE',
       providerResponse: 'Prototype transfer declined.',
     });
@@ -52,6 +54,7 @@ describe('payment attempt snapshots', () => {
         principalAmount: 1_250,
         transferFeeAmount: 2.5,
         actualPaidAmount: 2.5,
+        recipientReceivedAmount: 0,
         status: '付款失败',
       }),
     ]);

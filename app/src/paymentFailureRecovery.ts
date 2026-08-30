@@ -301,6 +301,8 @@ export const markPaymentFailureRetrySubmitted = (
     transferFeeCurrency: undefined,
     actualPaidAmount: undefined,
     actualPaidCurrency: undefined,
+    recipientReceivedAmount: undefined,
+    recipientReceivedCurrency: undefined,
     paymentFailure: undefined,
     paymentFailureReturn: undefined,
     currentPaymentAttempt: {
