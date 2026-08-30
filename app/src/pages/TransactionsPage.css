@@ -122,11 +122,11 @@
 }
 
 .transaction-records-table th:nth-child(2) {
-  min-width: 230px;
+  min-width: 210px;
 }
 
 .transaction-records-table th:nth-child(3) {
-  min-width: 190px;
+  min-width: 260px;
 }
 
 .transaction-records-table th:nth-child(5) {
@@ -159,18 +159,7 @@
 
 .transaction-records-table .transaction-creator-cell {
   display: grid;
-  min-width: 220px;
-  gap: 4px;
-}
-
-.transaction-records-table .transaction-creator-cell small {
-  max-width: 250px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.transaction-creator-project {
-  padding-left: 42px;
+  min-width: 190px;
 }
 
 .transaction-data-cell {
@@ -201,12 +190,24 @@
   line-height: 1.4;
 }
 
-.transaction-invoice-cell .transaction-primary-value,
 .transaction-records-table .transaction-amount-cell .transaction-primary-value,
 .transaction-records-table .transaction-money-cell .transaction-primary-value {
   color: #252933;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.transaction-project-cell {
+  min-width: 230px;
+}
+
+.transaction-project-cell .transaction-primary-value {
+  color: #343842;
+}
+
+.transaction-project-cell small {
+  font-family: "SFMono-Regular", Consolas, monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -391,15 +392,11 @@
   color: var(--transaction-emerald);
 }
 
-.transaction-detail-summary strong {
+.transaction-summary-value {
   color: #252830;
   font-size: clamp(17px, 1.55vw, 24px);
+  font-weight: 700;
   line-height: 1.2;
-}
-
-.transaction-detail-summary .payment-provider-badge,
-.transaction-detail-summary .status-mark {
-  width: fit-content;
 }
 
 .transaction-detail-failure {
@@ -598,7 +595,6 @@
 
 .transaction-association-grid .is-cooperation-project {
   border-color: #bfdbfe;
-  box-shadow: inset 3px 0 0 var(--transaction-blue);
 }
 
 .transaction-association-grid .is-cooperation-project .transaction-association-icon {
@@ -609,7 +605,6 @@
 
 .transaction-association-grid .is-request-project {
   border-color: #c7d2fe;
-  box-shadow: inset 3px 0 0 var(--transaction-indigo);
 }
 
 .transaction-association-grid .is-request-project .transaction-association-icon {
@@ -620,7 +615,6 @@
 
 .transaction-association-grid .is-payment-batch {
   border-color: #a5f3fc;
-  box-shadow: inset 3px 0 0 var(--transaction-cyan);
 }
 
 .transaction-association-grid .is-payment-batch .transaction-association-icon {
@@ -861,6 +855,54 @@
   gap: 14px;
 }
 
+.transaction-payment-detail-modal .payment-batch-item-details {
+  display: block;
+  border-top: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.transaction-payment-detail-modal .payment-batch-detail-panel.is-payment {
+  width: 100%;
+  padding-bottom: 14px;
+}
+
+.transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl > div {
+  display: grid;
+  min-width: 0;
+  min-height: 78px;
+  grid-template-columns: 1fr;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid #e1e5ea;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #fff, #f7f9fb);
+  padding: 12px 13px;
+}
+
+.transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl > div.is-wide {
+  grid-column: 1 / -1;
+}
+
+.transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl dt {
+  color: #7b828e;
+  font-size: 10.5px;
+}
+
+.transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl dd {
+  color: #30343d;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
 .transaction-payment-detail-modal-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1037,6 +1079,10 @@
   .transaction-association-grid {
     grid-template-columns: 1fr;
   }
+
+  .transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
@@ -1125,5 +1171,13 @@
 
   .transaction-payment-detail-modal-summary {
     grid-template-columns: 1fr;
+  }
+
+  .transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl {
+    grid-template-columns: 1fr;
+  }
+
+  .transaction-payment-detail-modal .payment-batch-detail-panel.is-payment > dl > div.is-wide {
+    grid-column: 1;
   }
 }

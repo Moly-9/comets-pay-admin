@@ -100,6 +100,12 @@ const paymentResultValue = (
   return amount !== undefined && currency ? money(currency, amount) : '—';
 };
 
+const channelWritebackTime = (item: PaymentBatchItemSnapshot) => (
+  item.paymentStatus === '付款处理中'
+    ? '待渠道回写'
+    : displayTime(item.failure?.occurredAt ?? item.paidAt)
+);
+
 export function PaymentItemDetails({
   item,
   payout,
@@ -222,24 +228,25 @@ export function PaymentItemDetails({
           <span className={`payment-batch-detail-panel-badge ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
         </header>
         <dl>
-          <div><dt>付款单</dt><dd>{paymentBatchItemOrderCode(item)}</dd></div>
-          {paymentBatchItemAttemptNumber(item) > 1 ? <div><dt>原付款单</dt><dd>{paymentBatchItemSourceOrderCode(item)}</dd></div> : null}
-          <div><dt>付款类型</dt><dd>{paymentBatchItemAttemptLabel(item)}</dd></div>
-          <div><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
+          <div className="is-payment-order"><dt>付款单</dt><dd>{paymentBatchItemOrderCode(item)}</dd></div>
+          {paymentBatchItemAttemptNumber(item) > 1 ? <div className="is-source-payment-order"><dt>原付款单</dt><dd>{paymentBatchItemSourceOrderCode(item)}</dd></div> : null}
+          <div className="is-payment-type"><dt>付款类型</dt><dd>{paymentBatchItemAttemptLabel(item)}</dd></div>
+          <div className="is-provider-method"><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
           {mode === 'payment-only' ? (
             <>
-              <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || item.transferMethod || '待补充'}</dd></div>
-              <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
+              <div className="is-local-clearing"><dt>本地清算方式</dt><dd>{item.localClearingSystem || item.transferMethod || '待补充'}</dd></div>
+              <div className="is-recipient-country"><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
             </>
           ) : null}
-          <div><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
-          <div><dt>收款账户</dt><dd>{accountDisplayValue(item.accountSummary)}</dd></div>
-          <div><dt>费用承担</dt><dd>{paymentFeeBearerDisplayName(item.feeBearer)}</dd></div>
-          <div><dt>付款原因</dt><dd>{item.paymentReason}</dd></div>
-          <div><dt>交易附言</dt><dd>{item.transactionReference}</dd></div>
-          <div><dt>描述</dt><dd>{item.description}</dd></div>
-          <div><dt>渠道结果</dt><dd>{item.failure?.code ?? item.paymentStatus}</dd></div>
-          <div><dt>付款时间</dt><dd>{displayTime(item.paidAt)}</dd></div>
+          <div className="is-currencies"><dt>支付 / 收款币种</dt><dd>{item.currency} / {item.receiveCurrency}</dd></div>
+          <div className="is-account"><dt>收款账户</dt><dd>{accountDisplayValue(item.accountSummary)}</dd></div>
+          <div className="is-fee-bearer"><dt>费用承担</dt><dd>{paymentFeeBearerDisplayName(item.feeBearer)}</dd></div>
+          <div className="is-payment-reason is-wide"><dt>付款原因</dt><dd>{item.paymentReason}</dd></div>
+          <div className="is-transaction-reference"><dt>交易附言</dt><dd>{item.transactionReference}</dd></div>
+          <div className="is-description is-wide"><dt>描述</dt><dd>{item.description}</dd></div>
+          <div className="is-provider-result"><dt>渠道结果</dt><dd>{item.failure?.code ?? item.paymentStatus}</dd></div>
+          <div className="is-paid-at"><dt>付款时间</dt><dd>{displayTime(item.paidAt)}</dd></div>
+          <div className="is-channel-writeback"><dt>渠道回写时间</dt><dd>{channelWritebackTime(item)}</dd></div>
         </dl>
         {item.failure ? (
           <div className="payment-batch-failure-result" role="status">

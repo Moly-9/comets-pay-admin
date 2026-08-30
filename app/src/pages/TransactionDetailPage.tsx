@@ -30,7 +30,7 @@ import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import type { ContractRecord } from '../contracts';
 import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
-import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
+import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import { transactionRecordDetails, type TransactionRecord } from '../transactionRecords';
 import {
@@ -77,6 +77,7 @@ export function TransactionDetailPage({
   const [selectedContractKey, setSelectedContractKey] = useState<string | null>(null);
   const details = transactionRecordDetails(payout, context);
   const finalTime = record.occurredAt;
+  const localClearingMethod = context?.item.localClearingSystem || details.transferMethod;
   const creatorIdentity = context
     ? paymentCreatorIdentityFromBatchItem(context.item)
     : paymentCreatorIdentityFromPayout({ payout });
@@ -123,7 +124,7 @@ export function TransactionDetailPage({
       <section className="transaction-detail-summary" aria-label="交易摘要">
         <article className="is-amount transaction-summary-card">
           <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />支付金额</span>
-          <strong>{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</strong>
+          <strong className="transaction-summary-value">{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</strong>
           <small>
             手续费 {record.transferFeeAmount !== undefined && record.transferFeeCurrency
               ? formatAmount({ currency: record.transferFeeCurrency, amount: record.transferFeeAmount })
@@ -135,8 +136,8 @@ export function TransactionDetailPage({
         </article>
         <article className="is-provider transaction-summary-card">
           <span className="transaction-detail-summary-label"><Landmark size={15} aria-hidden="true" />付款渠道</span>
-          <PaymentProviderBadge provider={record.provider} />
-          <small>{details.transferMethod}</small>
+          <strong className="transaction-summary-value">{paymentProviderDisplayName(record.provider)}</strong>
+          <small>{localClearingMethod}</small>
         </article>
         <article className={`is-status transaction-summary-card ${
           record.status === '付款失败'
@@ -144,9 +145,9 @@ export function TransactionDetailPage({
             : record.status === '付款处理中'
               ? 'is-processing'
               : 'is-success'
-        }`}>
+          }`}>
           <span className="transaction-detail-summary-label"><CircleCheckBig size={15} aria-hidden="true" />交易状态</span>
-          <StatusMark status={record.status} />
+          <strong className="transaction-summary-value">{record.status}</strong>
           <small>{displayTime(finalTime)}</small>
         </article>
       </section>
@@ -172,7 +173,7 @@ export function TransactionDetailPage({
           <div className="is-payer"><dt><UserRoundCheck size={14} aria-hidden="true" />付款人</dt><dd>{details.payer}</dd></div>
           <div className="is-batch"><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
           <div className="is-account"><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{accountDisplayValue(details.accountSummary)}</dd></div>
-          <div className="is-method"><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{details.transferMethod}</dd></div>
+          <div className="is-method"><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{localClearingMethod}</dd></div>
           <div className="is-fee"><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{paymentFeeBearerDisplayName(details.feeBearer)}</dd></div>
           <div className="is-reference"><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
           <div className="is-reason"><dt><ClipboardCheck size={14} aria-hidden="true" />付款事由</dt><dd>{details.requestReason}</dd></div>

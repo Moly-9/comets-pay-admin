@@ -79,8 +79,8 @@ export function TransactionRecordsTable({
                   onChange={(event) => onToggleAll(allKeys, event.target.checked)}
                 />
               </th>
-              <th>达人 / 付款项目</th>
-              <th>Invoice</th>
+              <th>达人</th>
+              <th>关联项目</th>
               <th>渠道</th>
               <th>支付金额</th>
               <th>手续费</th>
@@ -94,7 +94,6 @@ export function TransactionRecordsTable({
             {pageItems.length ? pageItems.map((record) => {
               const { payout, context } = record;
               const details = transactionRecordDetails(payout, context);
-              const invoiceNumber = details.invoice?.invoiceNumber ?? payout.invoice;
               const payerTime = displayTimeParts(details.paymentTime);
               const creatorIdentity = context
                 ? paymentCreatorIdentityFromBatchItem(context.item)
@@ -112,13 +111,14 @@ export function TransactionRecordsTable({
                   <td>
                     <div className="transaction-creator-cell">
                       <PaymentCreatorIdentity {...creatorIdentity} />
-                      <small className="transaction-creator-project" title={payout.project}>{payout.project}</small>
                     </div>
                   </td>
                   <td>
-                    <span className="transaction-data-cell transaction-invoice-cell">
-                      <span className="transaction-primary-value">{invoiceNumber || '未记录'}</span>
-                      <small>{details.paymentBatchCode}</small>
+                    <span className="transaction-data-cell transaction-project-cell">
+                      <span className="transaction-primary-value" title={details.cooperationProjectName}>
+                        {details.cooperationProjectName || payout.project || '未记录'}
+                      </span>
+                      <small>{details.cooperationProjectCode || payout.projectId || '项目编号未记录'}</small>
                     </span>
                   </td>
                   <td><PaymentProviderBadge compact provider={record.provider} /></td>

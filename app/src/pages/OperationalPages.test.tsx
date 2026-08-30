@@ -200,10 +200,13 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('aria-selected="false">已付款<span>2</span>');
     expect(html).toContain('aria-selected="false">付款失败<span>1</span>');
     expect(html).not.toContain('aria-label="付款状态"');
-    expect(html).toContain('INV-11');
-    expect(html).toContain('INV-12');
-    expect(html).toContain('INV-13');
-    expect(html).not.toContain('INV-14');
+    expect(html).toContain('Project 11');
+    expect(html).toContain('Project 12');
+    expect(html).toContain('Project 13');
+    expect(html).not.toContain('Project 14');
+    expect(html).not.toContain('INV-11');
+    expect(html).not.toContain('INV-12');
+    expect(html).not.toContain('INV-13');
     expect(html).toContain('付款处理中');
     expect(html).toContain('USD 0.00');
     expect(html).not.toContain('等待付款');
@@ -227,8 +230,9 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('<span>导出已选（0）</span>');
     expect(html).toContain('disabled=""');
     expect(html).toContain('aria-label="选择 Creator 21 的交易"');
-    expect(html).toContain('>达人 / 付款项目</th>');
-    expect(html).toContain('>Invoice</th>');
+    expect(html).toContain('>达人</th>');
+    expect(html).toContain('>关联项目</th>');
+    expect(html).not.toContain('>Invoice</th>');
     expect(html).toContain('>渠道</th>');
     expect(html).toContain('>支付金额</th>');
     expect(html).toContain('>手续费</th>');
@@ -238,8 +242,8 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>付款状态</th>');
     expect(html).toContain('>操作</th>');
     const orderedHeaders = [
-      '>达人 / 付款项目</th>',
-      '>Invoice</th>',
+      '>达人</th>',
+      '>关联项目</th>',
       '>渠道</th>',
       '>支付金额</th>',
       '>手续费</th>',
@@ -254,7 +258,10 @@ describe('TransactionsPage currency overview', () => {
       return nextIndex;
     }, -1);
     expect(html).not.toContain('transaction-field-icon');
-    expect(html).toContain('INV-21');
+    expect(html).toContain('transaction-project-cell');
+    expect(html).toContain('Project 21');
+    expect(html).not.toContain('transaction-invoice-cell');
+    expect(html).not.toContain('INV-21');
     expect(html).toContain('USD 100');
   });
 });

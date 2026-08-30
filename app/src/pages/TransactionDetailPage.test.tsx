@@ -40,7 +40,8 @@ const context = {
   },
   item: {
     receiveCurrency: 'USD',
-    transferMethod: '本地转账',
+    transferMethod: 'LOCAL',
+    localClearingSystem: '本地清算测试值',
     accountSummary: '•••• 0007',
     feeBearer: '广告主承担',
     transactionReference: 'Racing Master creator payout',
@@ -98,6 +99,11 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('对方实收 USD 4,100');
     expect(html).toContain('付款渠道');
     expect(html).toContain('交易状态');
+    expect(html).toContain('<strong class="transaction-summary-value">Airwallex</strong>');
+    expect(html).toContain('<strong class="transaction-summary-value">已付款</strong>');
+    expect(html.match(/transaction-summary-value/g)).toHaveLength(3);
+    expect(html).not.toContain('payment-provider-badge');
+    expect(html).toContain('本地清算测试值');
     expect(html).toContain('所属关联项目');
     expect(html).toContain('所属请款项目');
     expect(html).toContain('所属付款批次');
