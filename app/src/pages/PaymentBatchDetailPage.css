@@ -1,0 +1,216 @@
+/* Keep the payment batch item table visually aligned with the payment workbench table. */
+.payment-batch-payment-detail-page {
+  --payment-batch-actions-width: 236px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table-scroll {
+  position: relative;
+  max-height: clamp(360px, calc(100dvh - 390px), 680px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #b9bec8 #f3f4f6;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table-scroll:focus-visible {
+  outline: 2px solid rgba(104, 81, 137, 0.35);
+  outline-offset: 2px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid #f3f4f6;
+  border-radius: 8px;
+  background: #b9bec8;
+}
+
+.payment-batch-payment-detail-page .data-table.payment-batch-order-table {
+  width: max-content;
+  min-width: max(100%, 1916px);
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: #373b46;
+  white-space: nowrap;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table thead th {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  height: 47px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+  background: #f7f8fa;
+  padding: 0 14px;
+  color: #363a45;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table tbody td {
+  height: 64px;
+  border-bottom: 1px solid var(--soft-line);
+  background: #fff;
+  padding: 8px 14px;
+  color: #373b46;
+  font-size: 12.5px;
+  line-height: 1.45;
+  vertical-align: middle;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table tbody tr {
+  transition: background-color 150ms ease;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table tbody tr:hover > td,
+.payment-batch-payment-detail-page .payment-batch-order-table tbody tr:focus-within > td {
+  background: #fbfbfc;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-creator {
+  width: 220px;
+  min-width: 220px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-project {
+  width: 252px;
+  min-width: 252px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-provider {
+  width: 132px;
+  min-width: 132px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-account {
+  width: 214px;
+  min-width: 214px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-date {
+  width: 144px;
+  min-width: 144px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(
+  th,
+  td
+):is(.payment-batch-col-amount, .payment-batch-col-fee, .payment-batch-col-actual) {
+  width: 158px;
+  min-width: 158px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-attempt {
+  width: 116px;
+  min-width: 116px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-status {
+  position: sticky;
+  right: var(--payment-batch-actions-width);
+  z-index: 3;
+  width: 128px;
+  min-width: 128px;
+  background: #fff;
+  box-shadow: -9px 0 12px -12px rgba(39, 43, 53, 0.58);
+  text-align: center;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-actions {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  width: var(--payment-batch-actions-width);
+  min-width: var(--payment-batch-actions-width);
+  background: #fff;
+  box-shadow: -9px 0 12px -12px rgba(39, 43, 53, 0.65);
+  text-align: center !important;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table thead :is(
+  .payment-batch-col-status,
+  .payment-batch-col-actions
+) {
+  z-index: 6;
+  background: #f7f8fa;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table tbody tr:hover > :is(
+  .payment-batch-col-status,
+  .payment-batch-col-actions
+),
+.payment-batch-payment-detail-page .payment-batch-order-table tbody tr:focus-within > :is(
+  .payment-batch-col-status,
+  .payment-batch-col-actions
+) {
+  background: #fbfbfc;
+}
+
+.payment-batch-payment-detail-page .payment-batch-table-creator-identity,
+.payment-batch-payment-detail-page .payment-batch-table-project-cell,
+.payment-batch-payment-detail-page .payment-batch-table-account-cell,
+.payment-batch-payment-detail-page .payment-batch-table-provider {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.payment-batch-payment-detail-page .payment-batch-table-creator-identity .payment-creator-identity-copy {
+  min-width: 0;
+}
+
+.payment-batch-payment-detail-page .payment-batch-table-creator-identity .payment-creator-identity-copy > :is(strong, small),
+.payment-batch-payment-detail-page .payment-batch-table-project-cell :is(strong, small),
+.payment-batch-payment-detail-page .payment-batch-table-account-cell :is(strong, small),
+.payment-batch-payment-detail-page .payment-batch-table-provider small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-batch-payment-detail-page .payment-batch-table-actions {
+  justify-content: center;
+}
+
+.payment-batch-payment-detail-page .payment-batch-table-action-cell .list-action-button {
+  width: auto;
+  min-width: 96px;
+  min-height: 34px;
+  padding-right: 11px;
+  padding-left: 11px;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .payment-batch-payment-detail-page .payment-batch-order-table-scroll {
+    max-height: min(560px, calc(100dvh - 300px));
+  }
+
+  .payment-batch-payment-detail-page .payment-batch-table-action-cell .list-action-button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  .payment-batch-payment-detail-page {
+    --payment-batch-actions-width: 124px;
+  }
+
+  .payment-batch-payment-detail-page .data-table.payment-batch-order-table {
+    min-width: max(100%, 1804px);
+  }
+}

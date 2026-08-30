@@ -43,6 +43,7 @@ import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
 import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
+import './PaymentBatchDetailPage.css';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
 

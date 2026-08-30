@@ -540,31 +540,27 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('没有可展示的付款项快照');
   });
 
-  it('uses a responsive right drawer and a content-sized table with sticky actions', () => {
+  it('uses a responsive right drawer and the workbench table rhythm with sticky status and actions', () => {
     const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const pageCss = readFileSync(new URL('./PaymentBatchDetailPage.css', import.meta.url), 'utf8');
     const detailCss = readFileSync(new URL('./PaymentProjectPaymentDetailPage.css', import.meta.url), 'utf8');
     const source = readFileSync(new URL('./PaymentBatchDetailPage.tsx', import.meta.url), 'utf8');
-    const tableCss = css.slice(
-      css.indexOf('.data-table.payment-batch-order-table'),
-      css.indexOf('.payment-batch-item-drawer-backdrop'),
-    );
 
     expect(css).toContain('.payment-batch-item-drawer-backdrop');
     expect(css).toContain('width: min(560px, 100vw)');
-    expect(tableCss).toContain('width: max-content');
-    expect(tableCss).toContain('min-width: 100%');
-    expect(tableCss).not.toContain('min-width: 1760px');
-    expect(tableCss).toContain('table-layout: auto');
-    expect(tableCss).not.toContain('.payment-batch-order-table :is(th, td).payment-batch-col-creator {');
-    expect(tableCss).toContain(':is(th, td).payment-batch-col-actions');
-    expect(tableCss).toContain('right: 0');
-    expect(tableCss).toContain('overflow: visible');
-    expect(tableCss).toContain('text-overflow: clip');
-    expect(tableCss).not.toContain('min-width: 260px');
-    expect(tableCss).not.toContain('min-width: 220px');
-    expect(tableCss).not.toContain('min-width: 200px');
-    expect(tableCss).not.toContain('width: 144px');
-    expect(css).not.toContain('.payment-batch-order-table :is(th, td):nth-child(10)');
+    expect(pageCss).toContain('min-width: max(100%, 1916px)');
+    expect(pageCss).toContain('table-layout: fixed');
+    expect(pageCss).toMatch(/\.payment-batch-order-table thead th\s*{[^}]*height:\s*47px;[^}]*padding:\s*0 14px;/s);
+    expect(pageCss).toMatch(/\.payment-batch-order-table tbody td\s*{[^}]*height:\s*64px;[^}]*padding:\s*8px 14px;/s);
+    expect(pageCss).toContain(':is(th, td).payment-batch-col-creator');
+    expect(pageCss).toContain('min-width: 220px');
+    expect(pageCss).toContain('min-width: 252px');
+    expect(pageCss).toContain('min-width: 214px');
+    expect(pageCss).toContain('min-width: 158px');
+    expect(pageCss).toContain('right: var(--payment-batch-actions-width)');
+    expect(pageCss).toContain('right: 0');
+    expect(pageCss).toContain('text-overflow: ellipsis');
+    expect(pageCss).toMatch(/@media \(max-width: 520px\)[\s\S]*?--payment-batch-actions-width:\s*124px;[\s\S]*?min-width:\s*max\(100%, 1804px\)/);
     expect(css).toContain('.payment-batch-table-actions');
     expect(css).toContain('.payment-batch-order-summary-card');
     expect(css).toContain('.payment-batch-order-items-card');
@@ -572,6 +568,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.payment-batch-order-items-tools \.button \{[\s\S]*?min-height: 44px/);
     expect(source).toContain('className="payment-batch-col-creator" scope="col"');
     expect(source).toContain('className="action-cell payment-batch-col-actions" scope="col"');
+    expect(source).toContain("import './PaymentBatchDetailPage.css'");
     expect(detailCss).toMatch(/payment-batch-payment-detail-page\.payment-batch-detail-page[\s\S]*?\.payment-project-summary-card strong,[\s\S]*?font-size: 18px/);
     expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.payment-batch-item-drawer \{[\s\S]*?width: 100vw/);
     expect(source).toContain("event.key === 'Escape'");
