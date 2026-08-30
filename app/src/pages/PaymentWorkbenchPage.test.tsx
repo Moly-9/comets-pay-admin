@@ -11,6 +11,7 @@ import {
   type WorkbenchTab,
 } from './PaymentWorkbenchPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
+import { applyPaymentBatchPrototypeScenario } from '../paymentBatchPrototypeScenario';
 
 const renderWorkbench = (
   payouts: Payout[],
@@ -173,16 +174,42 @@ describe('PaymentWorkbenchPage currency overview', () => {
   });
 
   it('routes all complete request fixtures into workbench tabs by request lifecycle', () => {
-    const input = {
+    const scenario = applyPaymentBatchPrototypeScenario({
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
       requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+      paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+    });
+    const input = {
+      payouts: scenario.payouts,
+      requests: scenario.requests,
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
 
     expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
-    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(4);
-    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(0);
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
+
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toContainEqual(expect.objectContaining({
+      requestCode: 'REQ-202607-000015',
+      status: '部分失败',
+      actionLabel: '处理失败',
+      payouts: expect.arrayContaining([
+        expect.objectContaining({ id: 'payout_fixture_15_01', status: '付款失败' }),
+        expect.objectContaining({ id: 'payout_fixture_15_02', status: '已付款' }),
+        expect.objectContaining({ id: 'payout_fixture_15_03', status: '已付款' }),
+      ]),
+    }));
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toContainEqual(expect.objectContaining({
+      requestCode: 'REQ-202607-000016',
+      status: '已退回',
+      actionLabel: '查看详情',
+      payouts: expect.arrayContaining([
+        expect.objectContaining({ id: 'payout_fixture_16_01', status: '已退回' }),
+        expect.objectContaining({ id: 'payout_fixture_16_02', status: '已退回' }),
+      ]),
+    }));
 
     const reviewRow = buildPaymentProjectRows({ ...input, tab: 'review' })[0];
     expect(reviewRow).toMatchObject({
@@ -196,7 +223,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(reviewRow.paymentOrder).not.toMatch(/、|-(?:AWX|PP)$/);
     expect(reviewRow.paymentChannels).toHaveLength(1);
     expect(reviewRow.payouts.every((item) => (
-      item.paymentRequestProjectId === INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((request) => (
+      item.paymentRequestProjectId === input.requests.find((request) => (
         request.id === reviewRow.requestId
       ))?.paymentRequestProjectId
     ))).toBe(true);

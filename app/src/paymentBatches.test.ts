@@ -21,6 +21,7 @@ import {
   paymentBatchStatusCounts,
 } from './paymentBatches';
 import {
+  PAYMENT_BATCH_PARTIAL_FAILURE_DEMO,
   PAYMENT_BATCH_RETRY_DEMO,
   paymentBatchPrototypeStatusFor,
 } from './paymentBatchPrototypeScenario';
@@ -585,10 +586,10 @@ describe('payment batch snapshots', () => {
       .sort();
     const actualPayoutIds = records.flatMap((record) => record.items.map((item) => item.payoutId));
 
-    expect(records).toHaveLength(9);
+    expect(records).toHaveLength(10);
     expect(records.map((record) => record.paymentBatchCode)).toEqual([
       PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-      ...Array.from({ length: 8 }, (_, index) => `BAT-20260805-${String(8 - index).padStart(3, '0')}`),
+      ...Array.from({ length: 9 }, (_, index) => `BAT-20260805-${String(9 - index).padStart(3, '0')}`),
     ]);
     expect(records[0].items[0]).toMatchObject({
       paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
@@ -600,9 +601,10 @@ describe('payment batch snapshots', () => {
     });
     expect(records[0].items[0].sourcePaymentOrderCode).not.toBe(records[0].items[0].paymentOrderCode);
     expect(records[0].sourcePaymentOrderCode).toBe(records[0].items[0].sourcePaymentOrderCode);
-    expect(records.map((record) => record.items.length)).toEqual([1, 5, 5, 5, 5, 5, 1, 5, 4]);
+    expect(records.map((record) => record.items.length)).toEqual([1, 3, 5, 5, 5, 5, 5, 1, 5, 4]);
     expect(records.map((record) => record.request.requestCode)).toEqual([
       'REQ-202607-000011',
+      PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode,
       'REQ-202607-000011',
       'REQ-202607-000012',
       'REQ-202607-000012',
@@ -612,14 +614,15 @@ describe('payment batch snapshots', () => {
       'REQ-202607-000014',
       'REQ-202607-000014',
     ]);
-    expect(actualPayoutIds).toHaveLength(36);
-    expect(new Set(actualPayoutIds).size).toBe(35);
+    expect(actualPayoutIds).toHaveLength(39);
+    expect(new Set(actualPayoutIds).size).toBe(38);
     expect(expectedPayoutIds.every((payoutId) => actualPayoutIds.includes(payoutId))).toBe(true);
     expect(actualPayoutIds.filter((payoutId) => payoutId === records[0].items[0].payoutId)).toHaveLength(2);
     expect(new Set(records.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
     expect(new Set(records.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
     expect(records.map((record) => record.status)).toEqual([
       '已付款',
+      '部分失败',
       '部分失败',
       '付款处理中', '付款处理中',
       '已付款', '已付款', '已付款',
@@ -678,5 +681,18 @@ describe('payment batch snapshots', () => {
       actualPaidAmount: 15_318.58,
       paymentStatus: '已付款',
     });
+
+    const partialFailureBatch = records.find((record) => (
+      record.request.requestCode === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode
+    ))!;
+    expect(partialFailureBatch).toMatchObject({
+      paymentBatchCode: 'BAT-20260805-009',
+      status: '部分失败',
+    });
+    expect(partialFailureBatch.items.map((item) => item.payoutId)).toEqual(
+      PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.payoutIds,
+    );
+    expect(partialFailureBatch.items.filter((item) => item.paymentStatus === '付款失败'))
+      .toEqual([expect.objectContaining({ payoutId: PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.failedPayoutId })]);
   });
 });

@@ -14,6 +14,7 @@ export const PAYMENT_BATCH_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<str
   'REQ-202607-000012': '付款处理中',
   'REQ-202607-000013': '已付款',
   'REQ-202607-000014': '已付款',
+  'REQ-202607-000015': '部分失败',
 };
 
 export const PAYMENT_PROJECT_PROTOTYPE_STATUS_BY_REQUEST_CODE: Readonly<Record<string, PaymentBatchPrototypeStatus>> = {
@@ -31,6 +32,16 @@ export const PAYMENT_BATCH_RETRY_DEMO = {
   retryPaymentOrderCode: 'PAY-20260806-001',
   submittedAt: '2026-08-06T10:15',
   payer: '奚文慧',
+} as const;
+
+export const PAYMENT_BATCH_PARTIAL_FAILURE_DEMO = {
+  requestCode: 'REQ-202607-000015',
+  payoutIds: [
+    'payout_fixture_15_01',
+    'payout_fixture_15_02',
+    'payout_fixture_15_03',
+  ],
+  failedPayoutId: 'payout_fixture_15_01',
 } as const;
 
 export const paymentBatchPrototypeStatusFor = (
@@ -129,10 +140,14 @@ export const applyPaymentBatchPrototypeScenario = ({
     payouts: payouts.map((payout): Payout => {
       const scenario = payoutScenario.get(payout.id);
       if (!scenario) return payout;
-      const status = paymentBatchPrototypePayoutStatus(
-        scenario.batchStatus,
-        scenario.providerItemIndex,
-      );
+      const status = scenario.requestCode === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode
+        ? payout.id === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.failedPayoutId
+          ? '付款失败'
+          : '已付款'
+        : paymentBatchPrototypePayoutStatus(
+            scenario.batchStatus,
+            scenario.providerItemIndex,
+          );
       const failed = status === '付款失败';
       const isRetrySuccess = perspective === 'project-current'
         && scenario.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode

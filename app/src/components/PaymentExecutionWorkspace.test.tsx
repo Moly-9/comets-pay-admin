@@ -332,6 +332,45 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).not.toContain('payment-execution-overview-submit-action');
   });
 
+  it('renders the dedicated two-item returned demo with its finance return reason', () => {
+    const project = buildPaymentProjectRows({
+      tab: 'returned',
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    }).find((candidate) => candidate.requestCode === 'REQ-202607-000016')!;
+    const request = INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((candidate) => (
+      candidate.id === project.requestId
+    ))!;
+    const html = renderToStaticMarkup(
+      <PaymentExecutionWorkspace
+        request={request}
+        project={project}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        paymentLists={INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists}
+        contracts={INITIAL_COMPLETE_REQUEST_RESOURCES.contracts}
+        variant="returned"
+        initialStage="payment-list"
+        canExecute
+        onExecute={vi.fn(() => true)}
+        onReturn={vi.fn(() => true)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(project.payouts).toHaveLength(2);
+    expect(project.payouts.every((payout) => payout.status === '已退回')).toBe(true);
+    expect(request.approval).toMatchObject({
+      status: 'RETURNED_TO_MEDIA_REVIEW',
+      returnedFromStage: 'FINANCE',
+      returnReason: '付款资料需要媒介复核并修正后重新提交。',
+    });
+    expect(html).toContain('2 位达人需修改 · 0 位达人已通过审核');
+    expect(html).toContain('付款资料需要媒介复核并修正后重新提交。');
+    expect(html.match(/payment-execution-payee is-returned/g)).toHaveLength(2);
+    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(2);
+  });
+
   it('marks only scoped finance-return details as rejected and keeps the rest green', () => {
     const project = buildPaymentProjectRows({
       tab: 'payment',

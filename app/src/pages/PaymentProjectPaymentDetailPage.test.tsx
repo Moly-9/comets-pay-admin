@@ -21,8 +21,42 @@ const failedRecord = createPaymentProjectPaymentRecord({
   paymentLists: resources.paymentLists,
   contracts: INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
 });
+const partialFailureRequest = resources.requests.find((request) => (
+  request.requestCode === 'REQ-202607-000015'
+))!;
+const partialFailureRecord = createPaymentProjectPaymentRecord({
+  request: partialFailureRequest,
+  payouts: resources.payouts,
+  generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+  paymentLists: resources.paymentLists,
+  contracts: INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
+});
 
 describe('PaymentProjectPaymentDetailPage', () => {
+  it('renders the dedicated three-item partial-failure demo and its failure action', () => {
+    const html = renderToStaticMarkup(
+      <PaymentProjectPaymentDetailPage
+        record={partialFailureRecord}
+        payouts={resources.payouts}
+        contracts={INITIAL_COMPLETE_REQUEST_RESOURCES.contracts}
+        invoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        canHandleFailure
+        onBack={vi.fn()}
+        onReturnPayout={vi.fn(() => true)}
+      />,
+    );
+
+    expect(partialFailureRecord.status).toBe('部分失败');
+    expect(partialFailureRecord.items).toHaveLength(3);
+    expect(partialFailureRecord.items.filter((item) => item.paymentStatus === '已付款')).toHaveLength(2);
+    expect(partialFailureRecord.items.filter((item) => item.paymentStatus === '付款失败')).toHaveLength(1);
+    expect(html).toContain('REQ-202607-000015');
+    expect(html).toContain('3 笔付款明细');
+    expect(html).toContain('1 笔付款失败需要处理');
+    expect(html).toContain('查看失败明细');
+    expect(html.match(/>查看详情<\/span>/g)).toHaveLength(3);
+  });
+
   it('renders the retried request project with its current successful payment result', () => {
     const html = renderToStaticMarkup(
       <PaymentProjectPaymentDetailPage

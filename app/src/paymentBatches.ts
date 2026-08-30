@@ -24,6 +24,7 @@ import type {
 import { accountDisplayValue } from './accountPresentation';
 import {
   applyPaymentBatchPrototypeScenario,
+  PAYMENT_BATCH_PARTIAL_FAILURE_DEMO,
   PAYMENT_BATCH_RETRY_DEMO,
   paymentBatchPrototypeStatusFor,
   type PaymentBatchPrototypeStatus,
@@ -835,8 +836,13 @@ export const createInitialPaymentBatches = ({
   const financePayers = SYSTEM_USERS
     .filter((user) => user.roleKey === 'finance' && !user.isDemo)
     .map((user) => user.name);
-  const eligibleGroups = scenarioResources.requests
+  const eligibleRequests = scenarioResources.requests
     .filter((request) => Boolean(paymentBatchPrototypeStatusFor(request)))
+    .sort((left, right) => (
+      Number((right.requestCode ?? right.id) === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode)
+      - Number((left.requestCode ?? left.id) === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode)
+    ));
+  const eligibleGroups = eligibleRequests
     .flatMap((request) => {
       const invoiceIds = requestInvoiceIds(request);
       const sourcePayoutIds = new Set(generatedInvoices
