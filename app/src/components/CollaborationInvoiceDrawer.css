@@ -129,10 +129,7 @@
 }
 
 .collaboration-invoice-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(190px, 0.7fr);
-  align-items: center;
-  gap: 18px;
+  display: block;
   border: 1px solid #e5e8ee;
   border-radius: 14px;
   background: linear-gradient(120deg, #fff8f3, #f8f5fb 62%, #f1f6fa);
@@ -141,28 +138,6 @@
 
 .collaboration-invoice-hero > .creator-identity {
   min-width: 0;
-}
-
-.collaboration-invoice-hero > div:last-child {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  border-left: 1px solid #dde2e9;
-  padding-left: 18px;
-}
-
-.collaboration-invoice-hero > div:last-child span,
-.collaboration-invoice-hero > div:last-child small {
-  color: #78818e;
-  font-size: 12px;
-}
-
-.collaboration-invoice-hero > div:last-child strong {
-  overflow: hidden;
-  color: #303640;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .collaboration-invoice-drawer-section {
@@ -251,6 +226,10 @@
   background: #e8ebf0;
 }
 
+.collaboration-project-card .collaboration-detail-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .collaboration-detail-grid > div {
   display: grid;
   min-width: 0;
@@ -284,8 +263,7 @@
 }
 
 .collaboration-resource-missing,
-.collaboration-legacy-reference,
-.collaboration-payment-warning {
+.collaboration-legacy-reference {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -297,36 +275,22 @@
 }
 
 .collaboration-resource-missing > span,
-.collaboration-legacy-reference > span,
-.collaboration-payment-warning > span {
+.collaboration-legacy-reference > span {
   display: grid;
   gap: 3px;
 }
 
 .collaboration-resource-missing strong,
-.collaboration-legacy-reference strong,
-.collaboration-payment-warning strong {
+.collaboration-legacy-reference strong {
   color: #684a25;
   font-size: 12.5px;
 }
 
 .collaboration-resource-missing small,
-.collaboration-legacy-reference small,
-.collaboration-payment-warning small {
+.collaboration-legacy-reference small {
   color: #876e4e;
   font-size: 12px;
   line-height: 1.55;
-}
-
-.collaboration-payment-warning {
-  border-color: #efcbc5;
-  background: #fff4f2;
-  color: #b55247;
-}
-
-.collaboration-payment-warning strong,
-.collaboration-payment-warning small {
-  color: #9c483f;
 }
 
 .collaboration-resource-empty {
@@ -599,17 +563,6 @@
     max-width: 126px;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .collaboration-invoice-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .collaboration-invoice-hero > div:last-child {
-    border-top: 1px solid #dde2e9;
-    border-left: 0;
-    padding-top: 12px;
-    padding-left: 0;
   }
 
   .collaboration-detail-grid {

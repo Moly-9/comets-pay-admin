@@ -155,15 +155,44 @@ describe('CollaborationsPage', () => {
     expect(html).not.toContain('查看链路');
     expect(html).not.toContain('所属项目');
   });
+
+  it('renders only the creators, projects and generated Invoices passed from current app state', () => {
+    const emptyHtml = renderToStaticMarkup(<CollaborationsPage
+      {...commonProps}
+      creators={[]}
+      projects={[]}
+      contracts={[]}
+      payouts={[]}
+      generatedInvoices={[]}
+      requests={[]}
+    />);
+
+    expect(emptyHtml).toContain('暂无符合条件的 Invoice');
+    expect(emptyHtml).not.toContain('Collaboration Display Name');
+    expect(emptyHtml).not.toContain('Launch Project');
+    expect(emptyHtml).not.toContain('INV-COLLABORATION');
+  });
 });
 
 describe('CollaborationInvoiceDrawer', () => {
-  it('renders the linked project, contracts, request, payment and full timeline as a dialog', () => {
+  it('renders the streamlined linked resources in order and keeps payment events in the timeline', () => {
+    const payoutWithFailureAttempt = {
+      ...payout,
+      paymentAttempts: [{
+        attemptNumber: 1,
+        status: '付款失败',
+        occurredAt: '2026-08-03T04:00:00.000Z',
+        principalAmount: 1500,
+        principalCurrency: 'USD',
+        errorCode: 'PROTOTYPE_DECLINE',
+        providerResponse: 'Prototype transfer declined.',
+      }],
+    } as Payout;
     const [row] = buildCollaborationInvoiceRows({
       creators: [creator],
       projects: [project],
       contracts: [contract],
-      payouts: [payout],
+      payouts: [payoutWithFailureAttempt],
       generatedInvoices: [invoice],
       externalInvoices: [],
       requests: [request],
@@ -173,15 +202,38 @@ describe('CollaborationInvoiceDrawer', () => {
 
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('aria-label="达人"');
+    const heroStart = html.indexOf('aria-label="达人"');
+    const heroEnd = html.indexOf('</section>', heroStart);
+    expect(html.slice(heroStart, heroEnd)).not.toContain('Launch Project');
     expect(html).toContain('关联项目');
     expect(html).toContain('PRJ-COLLABORATION');
+    expect(html).toContain('合作品牌');
+    expect(html).not.toContain('>项目预算</dt>');
+    expect(html).not.toContain('>媒介</dt>');
+    expect(html).not.toContain('>PM</dt>');
     expect(html).toContain('关联合同');
     expect(html).toContain('CON-COLLABORATION');
     expect(html).toContain('Launch Project Contract');
     expect(html).toContain('请款信息');
     expect(html).toContain('REQ-COLLABORATION');
-    expect(html).toContain('付款信息');
-    expect(html).toContain('已脱敏 · 尾号 1234');
+    expect(html).toContain('合作交付');
+    expect(html).toContain('YouTube launch video');
+    expect(html).not.toContain('付款信息');
+    expect(html).not.toContain('收款账户');
+    expect(html).not.toContain('付款渠道');
     expect(html).toContain('全链路时间线');
+    expect(html).toContain('渠道付款失败');
+
+    const projectIndex = html.indexOf('>关联项目</h3>');
+    const invoiceIndex = html.indexOf('>Invoice 信息</h3>');
+    const contractIndex = html.indexOf('>关联合同</h3>');
+    const requestIndex = html.indexOf('>请款信息</h3>');
+    const timelineIndex = html.indexOf('>全链路时间线</h3>');
+    expect(projectIndex).toBeGreaterThan(-1);
+    expect(invoiceIndex).toBeGreaterThan(projectIndex);
+    expect(contractIndex).toBeGreaterThan(invoiceIndex);
+    expect(requestIndex).toBeGreaterThan(contractIndex);
+    expect(timelineIndex).toBeGreaterThan(requestIndex);
   });
 });

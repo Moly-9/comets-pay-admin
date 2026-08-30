@@ -210,7 +210,9 @@ const buildRow = ({
   const descriptions = (snapshot?.items ?? [])
     .map((item) => item.description.trim())
     .filter(Boolean);
-  if (!descriptions.length && payout?.deliverable?.trim()) descriptions.push(payout.deliverable.trim());
+  if (!snapshot && payout) {
+    descriptions.push(payout.deliverable?.trim() || `${payout.project} 达人合作服务费`);
+  }
   const identity = resolveInvoiceCreatorIdentity({
     creators,
     allowLegacyEntityMatch: false,

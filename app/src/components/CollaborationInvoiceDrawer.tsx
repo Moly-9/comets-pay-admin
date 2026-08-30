@@ -9,12 +9,10 @@ import {
   Landmark,
   ReceiptText,
   UserRound,
-  WalletCards,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import {
-  paymentListEffectiveAccount,
   paymentListItemValue,
   type RequestApprovalEvent,
 } from '../businessWorkflow';
@@ -27,7 +25,7 @@ import {
   formatContractMoney,
   type ContractRecord,
 } from '../contracts';
-import { paymentProviderDisplayName, PaymentProviderBadge } from './PaymentProviderBadge';
+import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { CreatorIdentity } from './CreatorIdentity';
 import './CollaborationInvoiceDrawer.css';
 
@@ -56,18 +54,6 @@ const formatDateTime = (value?: string) => {
 const formatMoney = (currency: string, amount: number) => currency
   ? `${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   : '待核算';
-
-const maskedAccount = (value?: string) => {
-  const normalized = value?.trim();
-  if (!normalized) return '未记录';
-  if (normalized.includes('@')) {
-    const [name, domain] = normalized.split('@');
-    return `${name.slice(0, 1) || '*'}***@${domain || '***'}`;
-  }
-  const compact = normalized.replace(/\s+/g, '');
-  const tail = compact.match(/([a-zA-Z0-9]{4})$/)?.[1];
-  return tail ? `已脱敏 · 尾号 ${tail}` : '账户已脱敏';
-};
 
 const projectCodeFor = (row: CollaborationInvoiceRow) => row.project?.cooperationProjectCode
   ?? row.project?.projectCode
@@ -206,10 +192,6 @@ export function CollaborationInvoiceDrawer({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = `collaboration-invoice-drawer-${row.rowId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const timeline = useMemo(() => buildTimeline(row), [row]);
-  const effectivePaymentAccount = row.paymentItem
-    ? paymentListEffectiveAccount(row.paymentItem)
-    : undefined;
-  const accountSummary = effectivePaymentAccount?.accountSummary ?? row.payout?.account;
   const requestAmount = row.paymentItem
     ? Number(paymentListItemValue(row.paymentItem, 'amount'))
     : row.amount;
@@ -281,7 +263,7 @@ export function CollaborationInvoiceDrawer({
         </header>
 
         <div className="collaboration-invoice-drawer-content">
-          <section className="collaboration-invoice-hero" aria-label="达人与项目">
+          <section className="collaboration-invoice-hero" aria-label="达人">
             <CreatorIdentity
               creator={row.identity.creator}
               displayName={row.identity.displayName}
@@ -293,7 +275,6 @@ export function CollaborationInvoiceDrawer({
               socialAccountsMode="expanded"
               size="lg"
             />
-            <div><span>关联项目</span><strong>{row.projectName}</strong><small>{projectCodeFor(row)}</small></div>
           </section>
 
           <section className="collaboration-invoice-drawer-section" aria-labelledby={`${titleId}-project`}>
@@ -303,9 +284,6 @@ export function CollaborationInvoiceDrawer({
                 <header><div><span>{projectCodeFor(row)}</span><strong>{row.project.name}</strong></div><em>{row.project.status}</em></header>
                 <dl className="collaboration-detail-grid">
                   <div><dt>合作品牌</dt><dd>{row.project.brand || '未记录'}</dd></div>
-                  <div><dt>项目预算</dt><dd>{row.project.budget || '未记录'}</dd></div>
-                  <div><dt>媒介</dt><dd>{row.project.media || '未记录'}</dd></div>
-                  <div><dt>PM</dt><dd>{row.project.pm || '未记录'}</dd></div>
                 </dl>
               </article>
             ) : (
@@ -314,6 +292,22 @@ export function CollaborationInvoiceDrawer({
                 <span><strong>{row.projectName}</strong><small>保留 Invoice 冻结项目名称，但未找到对应的稳定项目 ID 记录。</small></span>
               </div>
             )}
+          </section>
+
+          <section className="collaboration-invoice-drawer-section" aria-labelledby={`${titleId}-invoice`}>
+            <h3 id={`${titleId}-invoice`}><ReceiptText size={17} aria-hidden="true" />Invoice 信息</h3>
+            <dl className="collaboration-detail-grid">
+              <div><dt>Invoice 类型</dt><dd>{row.invoiceType === 'EXTERNAL' ? '外部 Invoice' : '内部 Invoice'}</dd></div>
+              <div><dt>Invoice 日期</dt><dd>{row.invoiceDate || '未记录'}</dd></div>
+              <div><dt>Invoice 金额</dt><dd>{formatMoney(row.currency, row.amount)}</dd></div>
+              <div><dt>Invoice 版本</dt><dd>V{row.invoice?.version ?? row.payout?.invoiceVersion ?? 1}</dd></div>
+            </dl>
+            <div className="collaboration-description-list">
+              <span>合作交付</span>
+              {row.descriptions.length ? row.descriptions.map((description, index) => (
+                <div key={`${description}-${index}`}><i>{index + 1}</i><p>{description}</p></div>
+              )) : <p>待补充</p>}
+            </div>
           </section>
 
           <section className="collaboration-invoice-drawer-section" aria-labelledby={`${titleId}-contracts`}>
@@ -350,22 +344,6 @@ export function CollaborationInvoiceDrawer({
             ) : null}
           </section>
 
-          <section className="collaboration-invoice-drawer-section" aria-labelledby={`${titleId}-invoice`}>
-            <h3 id={`${titleId}-invoice`}><ReceiptText size={17} aria-hidden="true" />Invoice 信息</h3>
-            <dl className="collaboration-detail-grid">
-              <div><dt>Invoice 类型</dt><dd>{row.invoiceType === 'EXTERNAL' ? '外部 Invoice' : '内部 Invoice'}</dd></div>
-              <div><dt>Invoice 日期</dt><dd>{row.invoiceDate || '未记录'}</dd></div>
-              <div><dt>Invoice 金额</dt><dd>{formatMoney(row.currency, row.amount)}</dd></div>
-              <div><dt>Invoice 版本</dt><dd>V{row.invoice?.version ?? row.payout?.invoiceVersion ?? 1}</dd></div>
-            </dl>
-            <div className="collaboration-description-list">
-              <span>Description</span>
-              {row.descriptions.length ? row.descriptions.map((description, index) => (
-                <div key={`${description}-${index}`}><i>{index + 1}</i><p>{description}</p></div>
-              )) : <p>待补充</p>}
-            </div>
-          </section>
-
           <section className="collaboration-invoice-drawer-section" aria-labelledby={`${titleId}-request`}>
             <h3 id={`${titleId}-request`}><FileText size={17} aria-hidden="true" />请款信息</h3>
             <dl className="collaboration-detail-grid">
@@ -382,22 +360,6 @@ export function CollaborationInvoiceDrawer({
                 {row.requestSubmissions.map((submission) => (
                   <div key={submission.round}><strong>第 {submission.round} 轮</strong><time>{formatDateTime(submission.submittedAt)}</time></div>
                 ))}
-              </div>
-            ) : null}
-          </section>
-
-          <section className="collaboration-invoice-drawer-section" aria-labelledby={`${titleId}-payment`}>
-            <h3 id={`${titleId}-payment`}><WalletCards size={17} aria-hidden="true" />付款信息</h3>
-            <dl className="collaboration-detail-grid">
-              <div><dt>付款渠道</dt><dd>{row.payout ? <PaymentProviderBadge compact provider={row.payout.provider} /> : '未记录'}</dd></div>
-              <div><dt>收款账户</dt><dd>{maskedAccount(accountSummary)}</dd></div>
-              <div><dt>当前付款金额</dt><dd>{formatMoney(requestCurrency, requestAmount)}</dd></div>
-              <div><dt>付款完成时间</dt><dd>{row.payout?.paidAt ? formatDateTime(row.payout.paidAt) : '待处理'}</dd></div>
-            </dl>
-            {row.payout?.paymentFailure ? (
-              <div className="collaboration-payment-warning" role="note">
-                <CircleAlert size={17} aria-hidden="true" />
-                <span><strong>{row.payout.paymentFailure.errorCode}</strong><small>{row.payout.paymentFailure.providerResponse} · {formatDateTime(row.payout.paymentFailure.occurredAt)}</small></span>
               </div>
             ) : null}
           </section>

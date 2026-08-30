@@ -5,6 +5,7 @@ import {
   buildCollaborationInvoiceRows,
   collaborationLifecycleStatus,
 } from './collaborationInvoices';
+import { buildInvoiceReviewModel } from './invoice/invoiceReview';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from './types';
@@ -200,9 +201,39 @@ describe('buildCollaborationInvoiceRows', () => {
       requestSubmittedAt: '2026-08-05T02:00:00.000Z',
       status: 'PM审批中',
     });
+    expect(rows[0].descriptions).toEqual(['Instagram Reels 一条', 'Story 两条']);
     expect(rows[0].identity.displayName).toBe('Mina Display');
     expect(rows[0].contracts.map((item) => item.id)).toEqual(['CON-001', 'CON-002']);
     expect(rows[0].requestSubmissions).toHaveLength(2);
+  });
+
+  it('uses the same Description fallback as Invoice detail for a historical Payout without a snapshot', () => {
+    const historicalPayout = {
+      ...payout,
+      id: 'payout-historical',
+      invoice: 'INV-HISTORICAL',
+      deliverable: undefined,
+      invoiceSnapshot: undefined,
+    } as Payout;
+    const reviewModel = buildInvoiceReviewModel(
+      historicalPayout,
+      [creator],
+      { name: 'COMETS', address: '' },
+    );
+    const rows = buildCollaborationInvoiceRows({
+      creators: [creator],
+      projects: [project],
+      contracts: [],
+      payouts: [historicalPayout],
+      generatedInvoices: [],
+      externalInvoices: [],
+      requests: [],
+      paymentLists: [],
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].descriptions).toEqual(reviewModel.items.map((item) => item.description));
+    expect(rows[0].descriptionText).toBe(reviewModel.items[0].description);
   });
 
   it('does not include external collection tasks without a generated Invoice record', () => {
