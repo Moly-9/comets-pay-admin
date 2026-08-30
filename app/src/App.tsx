@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from './accountPresentation';
+import { buildCreatorCollaborationProjects } from './creatorCollaborationProjects';
 import { resolveCreatorSocialAccount } from './creatorSearchOptions';
 import { AppShell } from './components/AppShell';
 import { DraftExitDialog } from './components/DraftExitDialog';
@@ -491,6 +492,14 @@ export default function App() {
   );
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
   const [requestProjects, setRequestProjects] = useState(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.requests);
+  const creatorCollaborationProjects = useMemo(() => buildCreatorCollaborationProjects({
+    projects,
+    contracts,
+    generatedInvoices,
+    externalInvoices,
+    requests: requestProjects,
+    payouts,
+  }), [contracts, externalInvoices, generatedInvoices, payouts, projects, requestProjects]);
   const [paymentBatches, setPaymentBatches] = useState(() => createInitialPaymentBatches({
     payouts,
     requests: requestProjects,
@@ -3150,6 +3159,7 @@ export default function App() {
           payoutAccountVersion: nextVersion,
           accountFingerprint,
           status: 'VALIDATED' as const,
+          updatedAt: occurredAt,
           validatedAt: occurredAt,
         }
       : {
@@ -3157,6 +3167,7 @@ export default function App() {
           payoutAccountVersion: nextVersion,
           accountFingerprint,
           status: 'VALIDATED' as const,
+          updatedAt: occurredAt,
         };
     const updatedPaymentItem = applyValidatedPaymentListPayoutSnapshot(
       paymentItem,
@@ -3209,7 +3220,8 @@ export default function App() {
     const payout = payouts.find((candidate) => candidate.id === payoutId);
     if (!payout) return false;
     try {
-      const updated = simulateCreatorAccountUpdated(payout, nowIso());
+      const occurredAt = nowIso();
+      const updated = simulateCreatorAccountUpdated(payout, occurredAt);
       const recovery = updated.paymentFailureRecovery!;
       const linkedPayoutAccountId = payout.paymentFailureRecovery?.reportedPayoutAccountId
         ?? payout.payoutAccountId
@@ -3222,6 +3234,7 @@ export default function App() {
             payoutAccountVersion: recovery.reportedPayoutAccountVersion,
             accountFingerprint: recovery.reportedAccountFingerprint,
             status: 'READY_FOR_VALIDATION' as const,
+            updatedAt: occurredAt,
           };
           return account.provider === 'Airwallex'
             ? { ...account, ...identity, beneficiaryId: recovery.reportedExternalBeneficiaryId ?? account.beneficiaryId }
@@ -3324,7 +3337,7 @@ export default function App() {
       setCreators((current) => current.map((candidate) => candidate.id !== payout.creatorId ? candidate : ({
         ...candidate,
         payoutAccounts: candidate.payoutAccounts.map((account) => getPayoutAccountId(account) === linkedPayoutAccountId
-          ? { ...account, status: 'VALIDATED' as const }
+          ? { ...account, status: 'VALIDATED' as const, updatedAt: occurredAt }
           : account),
       })));
       const pendingFinance = {
@@ -4837,6 +4850,7 @@ export default function App() {
         <CreatorsPage
           notify={notify}
           creators={creators}
+          collaborationProjects={creatorCollaborationProjects}
           onSaveCreator={saveCreator}
           canEdit={canManageCreators}
           currentUserAccount={currentUser.account}

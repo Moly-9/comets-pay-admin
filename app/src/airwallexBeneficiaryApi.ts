@@ -321,12 +321,14 @@ export const synchronizeAirwallexBeneficiary = async (
     throw new AirwallexIntegrationError('Airwallex 未返回 beneficiary_id，档案未保存');
   }
 
+  const updatedAt = now();
   return {
     ...account,
     beneficiaryId: result.id,
     beneficiaryEnvironment: result.simulated ? 'MOCK' : 'LIVE',
     status: 'VALIDATED',
-    validatedAt: now(),
+    updatedAt,
+    validatedAt: updatedAt,
     verificationCode: '',
     nameMatchResult: '',
     verifiedAt: '',

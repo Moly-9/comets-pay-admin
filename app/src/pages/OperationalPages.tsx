@@ -46,7 +46,7 @@ import {
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
-import { CreatorIdentity } from '../components/CreatorIdentity';
+import { CreatorIdentity, SocialPlatformIcon } from '../components/CreatorIdentity';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
@@ -123,13 +123,29 @@ import type {
 import { requestProjectStatusesForFilter } from '../requestProjectStatusFilters';
 import { demoAccountName, demoDisplayName, demoRealName } from '../demoCreatorNames';
 import {
+  creatorCollaborationProjectsFor,
+  type CreatorCollaborationProjectRecord,
+} from '../creatorCollaborationProjects';
+import {
   creatorSocialAccounts,
   creatorSearchTerms,
   creatorSocialSelectionValue,
-  formatCreatorHandle,
   parseCreatorSocialSelectionValue,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
+import {
+  CREATOR_DIRECTORY_PROVIDER_OPTIONS,
+  createCreatorDirectoryWorkbook,
+  creatorDirectoryWorkbookFilename,
+  creatorPayoutAccountVersionResult,
+  distinctCreatorSocialPlatformCount,
+  explicitDefaultPayoutAccount,
+  filterCreatorDirectory,
+  formatCreatorPayoutAccountUpdatedAt,
+  latestCreatorPayoutAccountUpdatedAt,
+  toggleCreatorDirectorySelection,
+  type CreatorDirectoryProviderFilter,
+} from '../creatorDirectoryWorkbook';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
   ExternalInvoiceCollectionCreatePage,
@@ -2102,9 +2118,23 @@ function ProjectCreatorPicker({
   );
 }
 
-function CreatorPaymentSection({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
+type CreatorPaymentSectionTone = 'neutral' | 'identity' | 'payout' | 'collaboration';
+
+function CreatorPaymentSection({
+  icon,
+  title,
+  description,
+  children,
+  tone = 'neutral',
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+  tone?: CreatorPaymentSectionTone;
+}) {
   return (
-    <section className="creator-payment-section">
+    <section className={`creator-payment-section creator-payment-section-${tone}`}>
       <header className="creator-payment-section-head">
         <span>{icon}</span>
         <div><h3>{title}</h3><p>{description}</p></div>
@@ -2155,20 +2185,36 @@ function CreatorContactFormGrid({
   );
 }
 
-const SOCIAL_PLATFORM_META: Record<string, { abbreviation: string; tone: string }> = {
-  instagram: { abbreviation: 'IG', tone: 'instagram' },
-  tiktok: { abbreviation: 'TT', tone: 'tiktok' },
-  youtube: { abbreviation: 'YT', tone: 'youtube' },
-  x: { abbreviation: 'X', tone: 'x' },
-  twitter: { abbreviation: 'X', tone: 'x' },
-  facebook: { abbreviation: 'FB', tone: 'facebook' },
-  twitch: { abbreviation: 'TW', tone: 'twitch' },
-};
-
-const getSocialPlatformMeta = (platform: string) => (
-  SOCIAL_PLATFORM_META[platform.trim().toLowerCase()]
-  ?? { abbreviation: platform.trim().slice(0, 2).toUpperCase() || '@', tone: 'default' }
+const socialPlatformTone = (platform: string) => (
+  platform.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'default'
 );
+
+export function CreatorSocialPlatformIcons({
+  accounts,
+  size = 18,
+  className = '',
+}: {
+  accounts: readonly CreatorSocialAccount[];
+  size?: number;
+  className?: string;
+}) {
+  if (!accounts.length) return <span className="creator-social-platform-icons-empty">社媒账号待补充</span>;
+  return (
+    <span
+      className={`creator-social-platform-icons ${className}`.trim()}
+      aria-label={`社媒平台账号 ${accounts.length} 个`}
+    >
+      {accounts.map((account) => (
+        <SocialPlatformIcon
+          platform={account.platform}
+          handle={account.handle}
+          size={size}
+          key={account.id || `${account.platform}:${account.handle}`}
+        />
+      ))}
+    </span>
+  );
+}
 
 function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAccount[] }) {
   if (accounts.length === 0) {
@@ -2183,10 +2229,12 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
   return (
     <div className="creator-social-account-list">
       {accounts.map((account) => {
-        const meta = getSocialPlatformMeta(account.platform);
+        const tone = socialPlatformTone(account.platform);
         return (
           <article className="creator-social-account-card" key={account.id}>
-            <span className={`creator-social-platform-mark creator-social-platform-${meta.tone}`}>{meta.abbreviation}</span>
+            <span className={`creator-social-platform-mark creator-social-platform-${tone}`}>
+              <SocialPlatformIcon platform={account.platform} handle={account.handle} size={21} />
+            </span>
             <div>
               <strong>{account.platform || '平台待补充'}</strong>
               <small>{account.handle || '账号待补充'}</small>
@@ -2206,6 +2254,49 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
         );
       })}
     </div>
+  );
+}
+
+export function CreatorCollaborationProjectDetails({
+  projects,
+}: {
+  projects: readonly CreatorCollaborationProjectRecord[];
+}) {
+  return (
+    <CreatorPaymentSection
+      icon={<Building2 size={19} />}
+      title="合作项目"
+      description="汇总该达人在全系统中的当前及历史合作项目"
+      tone="collaboration"
+    >
+      {projects.length ? (
+        <div className="creator-collaboration-project-list">
+          {projects.map((project) => (
+            <article className="creator-collaboration-project-card" key={project.projectId}>
+              <header>
+                <span className="creator-collaboration-project-code">{project.projectCode}</span>
+                <span className={`creator-collaboration-relation is-${project.relationStatus.toLowerCase()}`}>
+                  {project.relationStatus === 'CURRENT' ? '当前关联' : '历史关联'}
+                </span>
+              </header>
+              <div className="creator-collaboration-project-title">
+                <h4>{project.projectName}</h4>
+                {!project.directoryResolved ? <span>项目资料待同步</span> : null}
+              </div>
+              <dl className="creator-collaboration-project-meta">
+                <div><dt>合作品牌</dt><dd>{project.brand}</dd></div>
+                <div><dt>Invoice 份数</dt><dd>{project.invoiceCount} 份</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="creator-collaboration-project-empty">
+          <Files size={20} />
+          <span><strong>暂无合作项目记录</strong><small>该达人尚未通过稳定 ID 关联合作项目或业务资料</small></span>
+        </div>
+      )}
+    </CreatorPaymentSection>
   );
 }
 
@@ -2305,6 +2396,7 @@ function CreatorSocialAccountsEditor({
 export function CreatorsPage({
   notify,
   creators,
+  collaborationProjects,
   onSaveCreator,
   canEdit,
   currentUserAccount,
@@ -2313,6 +2405,7 @@ export function CreatorsPage({
 }: {
   notify: Notify;
   creators: CreatorProfile[];
+  collaborationProjects: readonly CreatorCollaborationProjectRecord[];
   onSaveCreator: (creator: CreatorProfile) => void;
   canEdit: boolean;
   currentUserAccount: string;
@@ -2320,6 +2413,9 @@ export function CreatorsPage({
   onFocusCleared?: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [providerFilter, setProviderFilter] = useState<CreatorDirectoryProviderFilter>('all');
+  const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(() => new Set());
+  const [exportingCreators, setExportingCreators] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -2327,21 +2423,31 @@ export function CreatorsPage({
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [validationAttempt, setValidationAttempt] = useState(0);
   const [creatorCloseGuardOpen, setCreatorCloseGuardOpen] = useState(false);
+  const creatorSelectAllRef = useRef<HTMLInputElement>(null);
   const selected = creators.find((creator) => creator.id === selectedId) ?? null;
+  const collaborationProjectCountByCreator = useMemo(() => {
+    const counts = new Map<string, number>();
+    collaborationProjects.forEach((project) => {
+      counts.set(project.creatorId, (counts.get(project.creatorId) ?? 0) + 1);
+    });
+    return counts;
+  }, [collaborationProjects]);
 
   useEffect(() => {
     if (focusedCreatorId) setSelectedId(focusedCreatorId);
   }, [focusedCreatorId]);
 
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredCreators = creators.filter((creator) => (
-    `${creator.name}${creator.handle}${creator.region}${creator.platform}${creator.socialAccounts.map((account) => `${account.platform}${account.handle}`).join('')}`
-      .toLowerCase()
-      .includes(normalizedSearch)
-  ));
-  const verifiedCount = creators.filter((creator) => getDefaultPayoutAccount(creator.payoutAccounts)?.status === 'VERIFIED').length;
+  const normalizedSearch = search.trim().toLocaleLowerCase('zh-CN');
+  const filteredCreators = useMemo(() => filterCreatorDirectory(creators, {
+    search,
+    provider: providerFilter,
+  }), [creators, providerFilter, search]);
+  const verifiedCount = creators.filter((creator) => {
+    const defaultAccount = explicitDefaultPayoutAccount(creator);
+    return Boolean(defaultAccount && isPayoutAccountVerified(defaultAccount));
+  }).length;
   const attentionCount = creators.filter((creator) => {
-    const status = getDefaultPayoutAccount(creator.payoutAccounts)?.status ?? 'DRAFT';
+    const status = explicitDefaultPayoutAccount(creator)?.status ?? 'DRAFT';
     return ['DRAFT', 'REVIEW_REQUIRED', 'INVALID'].includes(status);
   }).length;
   const {
@@ -2350,10 +2456,46 @@ export function CreatorsPage({
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredCreators, { resetKey: normalizedSearch });
+  } = usePagination(filteredCreators, { resetKey: `${normalizedSearch}\u0000${providerFilter}` });
+
+  const filteredCreatorIds = filteredCreators.map((creator) => creator.id);
+  const selectedFilteredCount = filteredCreatorIds.filter((id) => selectedCreatorIds.has(id)).length;
+  const allFilteredCreatorsSelected = filteredCreatorIds.length > 0
+    && selectedFilteredCount === filteredCreatorIds.length;
+  const partlyFilteredCreatorsSelected = selectedFilteredCount > 0 && !allFilteredCreatorsSelected;
+  const selectedCreators = creators.filter((creator) => selectedCreatorIds.has(creator.id));
+
+  useEffect(() => {
+    if (creatorSelectAllRef.current) {
+      creatorSelectAllRef.current.indeterminate = partlyFilteredCreatorsSelected;
+    }
+  }, [partlyFilteredCreatorsSelected]);
+
+  useEffect(() => {
+    const existingIds = new Set(creators.map((creator) => creator.id));
+    setSelectedCreatorIds((current) => {
+      const next = new Set([...current].filter((id) => existingIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [creators]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
+  };
+
+  const exportSelectedCreators = async () => {
+    if (!selectedCreators.length || exportingCreators) return;
+    setExportingCreators(true);
+    try {
+      const workbook = await createCreatorDirectoryWorkbook(selectedCreators);
+      const filename = creatorDirectoryWorkbookFilename();
+      downloadBlob(workbook, filename);
+      notify('达人档案已导出', `已导出 ${selectedCreators.length} 位达人的三张数据表，收款账户标识均已脱敏。`);
+    } catch (error) {
+      notify('达人档案导出失败', error instanceof Error ? error.message : '无法生成 Excel 文件，请稍后重试。');
+    } finally {
+      setExportingCreators(false);
+    }
   };
 
   const openProfile = (creator: CreatorProfile) => {
@@ -2615,21 +2757,18 @@ export function CreatorsPage({
   };
 
   const activeProfile = editing && draft ? draft : selected;
-  const activeDefaultAccount = activeProfile ? getDefaultPayoutAccount(activeProfile.payoutAccounts) : null;
+  const activeCollaborationProjects = activeProfile
+    ? creatorCollaborationProjectsFor(collaborationProjects, activeProfile.id)
+    : [];
+  const activeDefaultAccount = activeProfile ? explicitDefaultPayoutAccount(activeProfile) : null;
   const activeStatus = getPayoutAccountStatusMeta(activeDefaultAccount?.status ?? 'DRAFT', activeDefaultAccount?.provider);
+  const activeStatusTone = activeDefaultAccount ? activeStatus.tone : 'muted';
   const activePayoutAccounts = activeProfile?.payoutAccounts.filter((account) => account.status !== 'DISABLED') ?? [];
   const activePayoutProviders = [...new Set(activePayoutAccounts.map((account) => account.provider))];
   const activeUsableAccountCount = activePayoutAccounts.filter(isPayoutAccountVerified).length;
   const activeDefaultAccountSummary = activeDefaultAccount
     ? `${activeDefaultAccount.provider === 'Airwallex' ? 'Airwallex · ' : ''}${getPayoutAccountSummary(activeDefaultAccount)}`
     : '';
-  const activeSocialPlatforms = [
-    ...new Set(
-      activeProfile?.socialAccounts
-        .map((account) => account.platform.trim())
-        .filter(Boolean) ?? [],
-    ),
-  ];
   const requiredContactFields = INVOICE_CONTACT_FIELDS.filter((field) => !field.optional);
   const completedContactFields = activeProfile
     ? requiredContactFields.filter((field) => activeProfile.contact[field.key].trim()).length
@@ -2649,48 +2788,105 @@ export function CreatorsPage({
         <MetricCard label="需要处理" value={attentionCount.toLocaleString('zh-CN')} meta="待补充、复核或无效" tone="lilac" />
       </div>
       <section className="content-card">
-        <div className="content-toolbar">
-          <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号或地区" />
-          <Button variant="secondary" icon={<Download size={16} />}>导出名单</Button>
+        <div className="content-toolbar creator-directory-toolbar">
+          <div className="creator-directory-filter-controls">
+            <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号或地区" />
+            <SelectField
+              ariaLabel="达人付款渠道筛选"
+              className="creator-directory-provider-filter"
+              value={providerFilter}
+              options={CREATOR_DIRECTORY_PROVIDER_OPTIONS}
+              onChange={setProviderFilter}
+            />
+          </div>
+          <Button
+            variant="secondary"
+            icon={exportingCreators ? <LoaderCircle className="is-spinning" size={16} /> : <Download size={16} />}
+            disabled={!selectedCreators.length || exportingCreators}
+            disabledReason={!selectedCreators.length ? '请先勾选至少一位达人。' : '达人档案正在导出，请稍候。'}
+            aria-busy={exportingCreators || undefined}
+            onClick={() => { void exportSelectedCreators(); }}
+          >
+            {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
+          </Button>
         </div>
         <div className="table-scroll">
           <table className="data-table operational-table creator-directory-table">
-            <thead><tr><th>达人</th><th>地区</th><th>社媒平台</th><th>收款账户</th><th>合作项目</th><th className="action-cell">操作</th></tr></thead>
+            <thead>
+              <tr>
+                <th className="creator-directory-select-cell">
+                  <input
+                    ref={creatorSelectAllRef}
+                    type="checkbox"
+                    aria-label="全选当前筛选结果中的达人"
+                    checked={allFilteredCreatorsSelected}
+                    disabled={!filteredCreatorIds.length}
+                    onChange={(event) => setSelectedCreatorIds((current) => (
+                      toggleCreatorDirectorySelection(current, filteredCreatorIds, event.target.checked)
+                    ))}
+                  />
+                </th>
+                <th>达人</th><th>地区</th><th>社媒平台数</th><th>收款账户</th><th>账户更新时间</th><th>合作项目</th><th className="action-cell">操作</th>
+              </tr>
+            </thead>
             <tbody>
               {visibleCreators.length > 0 ? visibleCreators.map((creator) => {
-                const defaultAccount = getDefaultPayoutAccount(creator.payoutAccounts);
-                const status = getPayoutAccountStatusMeta(defaultAccount?.status ?? 'DRAFT', defaultAccount?.provider);
+                const defaultAccount = explicitDefaultPayoutAccount(creator);
+                const accountVersionResult = creatorPayoutAccountVersionResult(defaultAccount);
+                const latestAccountUpdate = latestCreatorPayoutAccountUpdatedAt(creator);
+                const creatorSelected = selectedCreatorIds.has(creator.id);
                 return (
-                  <tr key={creator.id} onClick={() => openProfile(creator)}>
-                    <td><div className="creator-cell"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></div></td>
-                    <td>{creator.region}</td>
-                    <td>{creator.platform}</td>
+                  <tr className={creatorSelected ? 'is-selected' : ''} key={creator.id} aria-selected={creatorSelected} onClick={() => openProfile(creator)}>
+                    <td className="creator-directory-select-cell">
+                      <input
+                        type="checkbox"
+                        aria-label={`选择达人 ${creator.name}`}
+                        checked={creatorSelected}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => setSelectedCreatorIds((current) => (
+                          toggleCreatorDirectorySelection(current, [creator.id], event.target.checked)
+                        ))}
+                      />
+                    </td>
                     <td>
-                      <span className={`payout-list-status payout-list-status-${status.tone}`}>
-                        {status.tone === 'success' ? <CheckCircle2 size={16} /> : status.tone === 'danger' || status.tone === 'warning' ? <AlertCircle size={16} /> : <Clock3 size={16} />}
-                        <span>
-                          <strong>{status.label}</strong>
-                          {defaultAccount ? (
-                            <span className="payout-list-provider">
-                              <PaymentProviderBadge className="payout-list-provider-badge" compact provider={defaultAccount.provider} />
-                              <small>{defaultAccount.nickname}</small>
-                            </span>
-                          ) : <small>尚未建立收款账户</small>}
-                        </span>
+                      <CreatorIdentity
+                        creator={creator}
+                        className="creator-directory-identity"
+                        socialAccountsMode="expanded"
+                      />
+                    </td>
+                    <td>{creator.region}</td>
+                    <td><strong className="creator-directory-platform-count">{distinctCreatorSocialPlatformCount(creator)} 个</strong></td>
+                    <td>
+                      <span className={`creator-directory-payout ${defaultAccount ? 'has-default-account' : 'is-unset'}`}>
+                        {defaultAccount
+                          ? <PaymentProviderBadge compact provider={defaultAccount.provider} />
+                          : <strong>付款渠道待设置</strong>}
+                        <small>
+                          <span className={accountVersionResult === '账户已更新' ? 'is-updated' : ''}>
+                            {accountVersionResult ?? '尚未建立主账户'}
+                          </span>
+                          {defaultAccount ? <span>{defaultAccount.nickname}</span> : null}
+                        </small>
                       </span>
                     </td>
-                    <td>{creator.projects} 个</td>
+                    <td>
+                      <time className="creator-directory-updated-at" dateTime={latestAccountUpdate || undefined}>
+                        {formatCreatorPayoutAccountUpdatedAt(latestAccountUpdate)}
+                      </time>
+                    </td>
+                    <td>{collaborationProjectCountByCreator.get(creator.id) ?? 0} 个</td>
                     <td className="action-cell"><ListActionButton kind="view" onClick={(event) => { event.stopPropagation(); openProfile(creator); }}>查看档案</ListActionButton></td>
                   </tr>
                 );
               }) : (
-                <tr><td colSpan={6}><div className="empty-table">没有找到匹配的达人档案</div></td></tr>
+                <tr><td colSpan={8}><div className="empty-table">没有找到匹配的达人档案</div></td></tr>
               )}
             </tbody>
           </table>
         </div>
         <div className="table-footer">
-          <span>共 {filteredCreators.length} 条</span>
+          <span>共 {filteredCreators.length} 条 · 已选 {selectedCreators.length} 位</span>
           <Pagination
             ariaLabel="达人列表分页"
             page={page}
@@ -2720,20 +2916,17 @@ export function CreatorsPage({
           <div className="profile-summary creator-profile-summary">
             <Avatar initials={activeProfile.initials} accent={activeProfile.accent} size="lg" />
             <div className="creator-profile-summary-copy">
-              <div>
-                <h3>{activeProfile.name || '新达人'}</h3>
-                <p>{[activeProfile.handle, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p>
-              </div>
+              <div><h3>{activeProfile.name || '新达人'}</h3></div>
               <dl className="creator-profile-summary-meta">
                 <div><dt>地区</dt><dd>{activeProfile.region || '待补充'}</dd></div>
-                <div><dt>合作项目</dt><dd>{activeProfile.projects} 个</dd></div>
+                <div><dt>合作项目</dt><dd>{activeCollaborationProjects.length} 个</dd></div>
               </dl>
             </div>
             <div className="creator-profile-summary-status">
               <small>默认收款账户</small>
-              <span className={`verified-badge verified-badge-${activeStatus.tone}`}>
-                {activeStatus.tone === 'success' ? <ShieldCheck size={15} /> : activeStatus.tone === 'danger' || activeStatus.tone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
-                {activeStatus.label}
+              <span className={`verified-badge verified-badge-${activeStatusTone}`}>
+                {activeStatusTone === 'success' ? <ShieldCheck size={15} /> : activeStatusTone === 'danger' || activeStatusTone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
+                {activeDefaultAccount ? activeStatus.label : '未设置默认账户'}
               </span>
             </div>
           </div>
@@ -2756,10 +2949,10 @@ export function CreatorsPage({
                   </label>
                 </div>
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人填写个人信息时补充；分别维护各平台账号与主页链接">
+              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人填写个人信息时补充；分别维护各平台账号与主页链接" tone="identity">
                 <CreatorSocialAccountsEditor accounts={draft.socialAccounts} onChange={updateDraftSocialAccounts} showErrors={formErrors.length > 0} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="生成 Invoice 时使用，与银行账户名和 PayPal 邮箱独立维护">
+              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="生成 Invoice 时使用，与银行账户名和 PayPal 邮箱独立维护" tone="identity">
                 <CreatorContactFormGrid contact={draft.contact} onChange={updateDraftContact} showErrors={formErrors.length > 0} />
               </CreatorPaymentSection>
               <div className="creator-payment-note">
@@ -2769,7 +2962,7 @@ export function CreatorsPage({
                   <small>付款信息字段由 Airwallex Form Schema 决定；修改银行信息后需要重新点击“校验账户”。</small>
                 </span>
               </div>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户；全档案只能指定一个默认账户用于新的付款">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户；全档案只能指定一个默认账户用于新的付款" tone="payout">
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing
@@ -2788,7 +2981,7 @@ export function CreatorsPage({
                 <article>
                   <span>社媒账号</span>
                   <strong>{activeProfile.socialAccounts.length} 个</strong>
-                  <small>{activeSocialPlatforms.join(' · ') || '平台待补充'}</small>
+                  <CreatorSocialPlatformIcons accounts={activeProfile.socialAccounts} size={15} />
                 </article>
                 <article>
                   <span>Invoice 联系资料</span>
@@ -2810,13 +3003,13 @@ export function CreatorsPage({
                   </small>
                 </article>
               </section>
-              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="平台账号与主页来自达人档案；认证结论需由 C 端认证流程同步">
+              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="平台账号与主页来自达人档案；认证结论需由 C 端认证流程同步" tone="identity">
                 <CreatorSocialAccountDetails accounts={activeProfile.socialAccounts} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
+              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息" tone="identity">
                 <CreatorContactDetailsGrid contact={activeProfile.contact} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 Payer Max，默认账户决定付款时的预选资料">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 Payer Max，默认账户决定付款时的预选资料" tone="payout">
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
                   creatorId={activeProfile.id}
@@ -2824,6 +3017,7 @@ export function CreatorsPage({
                   creatorEmail={activeProfile.contact.email}
                 />
               </CreatorPaymentSection>
+              <CreatorCollaborationProjectDetails projects={activeCollaborationProjects} />
             </div>
           )}
         </Modal>

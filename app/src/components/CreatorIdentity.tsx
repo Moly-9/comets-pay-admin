@@ -1,45 +1,66 @@
 import {
   AtSign,
-  Facebook,
-  Instagram,
-  Music2,
-  Twitch,
-  Twitter,
-  Youtube,
-  type LucideIcon,
 } from 'lucide-react';
+import {
+  siFacebook,
+  siInstagram,
+  siTiktok,
+  siTwitch,
+  siX,
+  siYoutube,
+  type SimpleIcon,
+} from 'simple-icons';
 import { useState, type MouseEvent, type PointerEvent } from 'react';
 import type { CreatorProfile, CreatorSocialAccount } from '../types';
 import { creatorSocialAccounts } from '../creatorSearchOptions';
 import { Avatar } from './Common';
 import './CreatorSearchOptions.css';
 
-const PLATFORM_ICONS: Record<string, LucideIcon> = {
-  instagram: Instagram,
-  tiktok: Music2,
-  youtube: Youtube,
-  x: Twitter,
-  twitter: Twitter,
-  facebook: Facebook,
-  twitch: Twitch,
+const PLATFORM_ICONS: Record<string, SimpleIcon> = {
+  instagram: siInstagram,
+  tiktok: siTiktok,
+  youtube: siYoutube,
+  x: siX,
+  twitter: siX,
+  facebook: siFacebook,
+  twitch: siTwitch,
 };
 
 const platformKey = (platform: string) => platform.trim().toLowerCase();
 
 export type CreatorSocialAccountsMode = 'collapsible' | 'expanded';
 
-export function SocialPlatformIcon({ platform, size = 13 }: { platform: string; size?: number }) {
+export function SocialPlatformIcon({
+  platform,
+  handle,
+  size = 13,
+}: {
+  platform: string;
+  handle?: string;
+  size?: number;
+}) {
   const normalized = platformKey(platform);
-  const Icon = PLATFORM_ICONS[normalized] ?? AtSign;
-  const label = platform.trim() || '未知社媒平台';
+  const icon = PLATFORM_ICONS[normalized];
+  const platformLabel = platform.trim() || '未知社媒平台';
+  const label = [platformLabel, handle?.trim()].filter(Boolean).join(' · ');
   return (
     <span
       className={`creator-social-platform-icon is-${normalized.replace(/[^a-z0-9-]/g, '-') || 'unknown'}`}
       role="img"
       aria-label={label}
       title={label}
+      style={{
+        width: size,
+        height: size,
+        flexBasis: size,
+        ...(icon ? { color: `#${icon.hex}` } : {}),
+      }}
     >
-      <Icon size={size} aria-hidden="true" />
+      {icon ? (
+        <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d={icon.path} fill="currentColor" />
+        </svg>
+      ) : <AtSign size={size} aria-hidden="true" />}
     </span>
   );
 }
@@ -83,7 +104,7 @@ export function CreatorSocialAccounts({
         const normalizedPlatform = platformKey(account.platform).replace(/[^a-z0-9-]/g, '-') || 'unknown';
         return (
           <span className={`creator-social-account is-${normalizedPlatform}`} key={account.id || `${account.handle}:${account.platform}`}>
-            <SocialPlatformIcon platform={account.platform} />
+            <SocialPlatformIcon platform={account.platform} handle={account.handle} />
             <span>{account.handle.trim() || 'Handle 待补充'}</span>
           </span>
         );

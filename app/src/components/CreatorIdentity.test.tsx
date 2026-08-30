@@ -33,8 +33,8 @@ describe('CreatorIdentity', () => {
     expect(html).not.toContain('@mina.third');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('>+1</button>');
-    expect(html).toContain('aria-label="Instagram"');
-    expect(html).toContain('aria-label="TikTok"');
+    expect(html).toContain('aria-label="Instagram · @mina.first"');
+    expect(html).toContain('aria-label="TikTok · @mina.second"');
     expect(html).not.toContain('>Instagram<');
     expect(html).not.toContain('>TikTok<');
   });
@@ -44,7 +44,7 @@ describe('CreatorIdentity', () => {
 
     expect(html.indexOf('@mina.first')).toBeLessThan(html.indexOf('@mina.second'));
     expect(html.indexOf('@mina.second')).toBeLessThan(html.indexOf('@mina.third'));
-    expect(html).toContain('aria-label="YouTube"');
+    expect(html).toContain('aria-label="YouTube · @mina.third"');
     expect(html).not.toContain('creator-social-accounts-toggle');
     expect(html).not.toContain('<button');
   });
@@ -67,7 +67,7 @@ describe('CreatorIdentity', () => {
     ]} />);
 
     expect(html).toContain('creator-social-platform-icon is-mastodon');
-    expect(html).toContain('aria-label="Mastodon"');
+    expect(html).toContain('aria-label="Mastodon · @mina.new"');
   });
 
   it('renders the legacy frozen account when the creator profile cannot be resolved', () => {
@@ -77,7 +77,7 @@ describe('CreatorIdentity', () => {
 
     expect(html).toContain('Legacy Creator');
     expect(html).toContain('@legacy');
-    expect(html).toContain('aria-label="YouTube"');
+    expect(html).toContain('aria-label="YouTube · @legacy"');
   });
 
   it('can render only the avatar and display name for compact selections', () => {
