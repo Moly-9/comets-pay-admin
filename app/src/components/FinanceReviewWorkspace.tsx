@@ -238,6 +238,11 @@ export function ApprovalTimeline({
   }
   const currentStage = requestApprovalStage(approval.status);
   const stageOrder: RequestApprovalStage[] = ['PM', 'PROJECT_OWNER', 'OWNER', 'FINANCE'];
+  const resumedStage = approval.status === 'RETURNED_TO_MEDIA_REVIEW' && approval.resumeStatus
+    ? requestApprovalStage(approval.resumeStatus)
+    : null;
+  const progressStage = currentStage ?? resumedStage;
+  const progressStageIndex = progressStage ? stageOrder.indexOf(progressStage) : -1;
   const steps = [
     {
       id: 'submitted',
@@ -249,12 +254,15 @@ export function ApprovalTimeline({
       actorMeta: '媒介账号',
       time: approval.submittedAt,
     },
-    ...stageOrder.map((stage) => {
+    ...stageOrder.map((stage, stageIndex) => {
       const event = [...approval.history].reverse().find((candidate) => (
         candidate.round === approval.round && candidate.stage === stage
       ));
       const isCurrent = currentStage === stage;
-      const state = event?.action === 'APPROVE'
+      const hasBeenTraversed = event?.action === 'APPROVE'
+        || approval.status === 'APPROVED'
+        || (progressStageIndex >= 0 && stageIndex < progressStageIndex);
+      const state = hasBeenTraversed
         ? 'complete' as const
         : isCurrent
           ? 'current' as const
@@ -276,6 +284,8 @@ export function ApprovalTimeline({
           ? '当前轮次已审批通过'
           : event?.action === 'RETURN'
             ? '已退回媒介修改'
+            : hasBeenTraversed
+              ? '审批流已通过该节点'
             : isCurrent
               ? '等待当前节点处理'
               : '上一节点通过后进入',

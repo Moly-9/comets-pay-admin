@@ -391,6 +391,8 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).toContain('maskUnits="userSpaceOnUse"');
     expect(html).toContain('r="19"');
     expect(html).toContain('<g mask="url(#finance-approval-curve-mask-');
+    expect(html).toContain('项目负责人审批，账号 待分配，已完成');
+    expect(html).toContain('老板审批，账号 待分配，已完成');
     expect(html).toContain('财务审批，账号 finance，当前节点');
     expect(html).toContain('grid-column:1;grid-row:1');
     expect(html).toContain('grid-column:2;grid-row:1');
@@ -400,5 +402,7 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).not.toContain('第 1 轮审批已提交');
     expect(html).not.toContain('finance-approval-actor');
     expect(html).not.toContain('<time');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.finance-approval-stage-icon\s*{[^}]*stroke-width:\s*2\.1;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.finance-review-card-title-icon:is\([\s\S]*?\.is-project,[\s\S]*?\.is-invoice[\s\S]*?\)\s*{[^}]*color:\s*#5d3f7c;/s);
   });
 });

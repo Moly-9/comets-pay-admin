@@ -405,11 +405,17 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('linear-gradient(125deg, #fff2f0 0%, #f8e2df 100%)');
     expect(css).toContain('linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%)');
     expect(css).toContain('.payment-project-attempt-card');
+    expect(css).toMatch(/\.payment-project-attempt-history\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
     expect(css).toContain('.payment-project-retry-badge');
     expect(css).toContain('font-size: 28px');
     expect(css).toContain('border-radius: 14px');
     expect(css).toContain('.payment-project-info-cards');
     expect(css).toContain('min-height: 44px');
+    expect(css).toMatch(/\.is-resource-download \.custom-select-trigger:not\([^}]+\)\s*{[^}]*color:\s*#20242c;/s);
+    expect(css).toMatch(/\.is-detail-download:not\([^}]+\)\s*{[^}]*color:\s*#20242c;/s);
+    expect(css).toMatch(/\.is-confirmation-download \.custom-select-trigger:not\([^}]+\)\s*{[^}]*color:\s*#20242c;/s);
+    expect(css).toMatch(/\.payment-project-section-heading > span,[\s\S]*?\.payment-project-info-icon\s*{[^}]*color:\s*#405776;/s);
+    expect(css).toMatch(/\.payment-project-item-drawer-section h3 svg\s*{[^}]*color:\s*#405776;/s);
     expect(css).not.toContain('.payment-project-detail-item-trigger');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(source).not.toContain('份合同 PDF 压缩包');

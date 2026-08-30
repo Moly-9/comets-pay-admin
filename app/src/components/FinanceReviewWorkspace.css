@@ -65,7 +65,7 @@
   border: 1px solid #dfd4e8;
   border-radius: 8px;
   background: #f2edf7;
-  color: #675187;
+  color: #51386f;
 }
 
 .finance-review-overview-heading > div {
@@ -220,7 +220,48 @@
 
 .finance-review-workspace .finance-review-metrics .is-payment-order .finance-review-metric-icon {
   background: #eadff3;
-  color: #7256a0;
+  color: #593979;
+}
+
+.finance-review-workspace .finance-review-metrics .is-amount .finance-review-metric-icon {
+  color: #874226;
+}
+
+.finance-review-workspace .finance-review-metrics .is-resources .finance-review-metric-icon {
+  color: #593b83;
+}
+
+.finance-review-workspace .finance-review-metrics .is-status .finance-review-metric-icon {
+  color: #27694d;
+}
+
+.finance-review-workspace :is(.finance-review-title-icon, .finance-review-pane-header-icon) {
+  color: #563c77;
+}
+
+.finance-review-workspace .finance-review-card-title-icon:is(
+  .is-project,
+  .is-workflow,
+  .is-resources,
+  .is-payment,
+  .is-account,
+  .is-validation,
+  .is-creator,
+  .is-invoice
+) {
+  color: #5d3f7c;
+}
+
+.finance-review-workspace .finance-review-linked-resources .finance-review-resource-icon {
+  color: #5b3d7c;
+}
+
+.finance-review-workspace .finance-approval-timeline.is-compact .finance-approval-node {
+  color: #657282;
+}
+
+.finance-review-workspace .finance-approval-stage-icon {
+  stroke-width: 2.1;
 }
 
 .finance-review-workspace .finance-review-metrics :is(span, small) {
