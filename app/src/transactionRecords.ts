@@ -12,6 +12,7 @@ import {
   type PaymentBatchRecord,
 } from './paymentBatches';
 import type { InvoiceCurrency, Payout } from './types';
+import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 import {
   ALL_PAYMENT_STATUSES,
   aggregatePaymentStatus,
@@ -55,7 +56,7 @@ export type TransactionRecord = Readonly<{
   transferFeeAmount?: number;
   transferFeeCurrency?: InvoiceCurrency;
   recipientReceivedAmount?: number;
-  recipientReceivedCurrency: string;
+  recipientReceivedCurrency: InvoiceCurrency;
 }>;
 
 type TransactionContractDetails = Omit<PaymentBatchContractSnapshot, 'contractId'> & Readonly<{
@@ -116,29 +117,12 @@ export const transactionOccurredAt = (payout: Payout) => (
       : ''
 );
 
-const roundCurrency = (value: number) => (
-  Math.round((value + Number.EPSILON) * 100) / 100
-);
-
 const normalizedTransactionStatus = (
   status: Payout['status'],
 ): TransactionRecordStatus | null => {
   if (status === '已退回') return '付款失败';
   if (status === '付款处理中' || status === '已付款' || status === '付款失败') return status;
   return null;
-};
-
-const recipientFeeShare = ({
-  feeBearer,
-  feeAmount,
-}: {
-  feeBearer?: string;
-  feeAmount?: number;
-}) => {
-  if (feeAmount === undefined) return 0;
-  if (feeBearer === 'PUBLISHER' || feeBearer === '收款人承担') return feeAmount;
-  if (feeBearer === 'SHARED' || feeBearer === '共同承担') return feeAmount / 2;
-  return 0;
 };
 
 const batchItemPayoutSnapshot = (
@@ -229,17 +213,19 @@ const transactionRecordFromBatchItem = (
         } : undefined,
       }
     : batchItemPayoutSnapshot(batch, resolvedItem, status);
-  const recipientCurrency = resolvedItem.recipientReceivedCurrency
-    ?? resolvedItem.receiveCurrency
-    ?? resolvedItem.currency;
+  const recipientCurrency = resolvedItem.receiveCurrency;
   const explicitReceived = resolvedItem.recipientReceivedAmount;
-  const canDeriveReceived = !resolvedItem.transferFeeCurrency
-    || resolvedItem.transferFeeCurrency === resolvedItem.currency;
-  const derivedReceived = status === '已付款' && canDeriveReceived
-    ? roundCurrency(Math.max(0, resolvedItem.amount - recipientFeeShare({
+  const explicitReceivedMatchesCurrency = explicitReceived !== undefined
+    && resolvedItem.recipientReceivedCurrency === recipientCurrency;
+  const derivedReceived = status === '已付款'
+    ? prototypeRecipientReceivedAmountFor({
+        amount: resolvedItem.amount,
+        currency: resolvedItem.currency,
+        receiveCurrency: recipientCurrency,
         feeBearer: resolvedItem.feeBearer,
-        feeAmount: resolvedItem.transferFeeAmount,
-      })))
+        transferFeeAmount: resolvedItem.transferFeeAmount,
+        transferFeeCurrency: resolvedItem.transferFeeCurrency,
+      })
     : undefined;
 
   return {
@@ -257,7 +243,7 @@ const transactionRecordFromBatchItem = (
     recipientReceivedAmount: status === '付款失败'
       ? 0
       : status === '已付款'
-        ? explicitReceived ?? derivedReceived
+        ? explicitReceivedMatchesCurrency ? explicitReceived : derivedReceived
         : undefined,
     recipientReceivedCurrency: recipientCurrency,
   };

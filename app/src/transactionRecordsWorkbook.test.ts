@@ -56,7 +56,7 @@ const workbookBatch = {
     provider: records[0].provider,
     amount: records[0].amount,
     currency: records[0].currency,
-    receiveCurrency: records[0].currency,
+    receiveCurrency: 'SGD',
     accountSummary: records[0].account,
     transferMethod: 'Payer Max',
     feeBearer: '广告主承担',
@@ -66,8 +66,8 @@ const workbookBatch = {
     contracts: [],
     paymentStatus: '已付款',
     paidAt: records[0].paidAt,
-    recipientReceivedAmount: records[0].amount,
-    recipientReceivedCurrency: records[0].currency,
+    recipientReceivedAmount: 2675.68,
+    recipientReceivedCurrency: 'SGD',
   }],
 } as unknown as PaymentBatchRecord;
 
@@ -105,7 +105,8 @@ describe('transaction records workbook', () => {
     expect(worksheet?.getRow(2).getCell(6).value).toBe(1980);
     expect(worksheet?.getRow(2).getCell(6).numFmt).toContain('USD');
     expect(worksheet?.getRow(2).getCell(7).value).toBeNull();
-    expect(worksheet?.getRow(2).getCell(8).value).toBe(1980);
+    expect(worksheet?.getRow(2).getCell(8).value).toBe(2675.68);
+    expect(worksheet?.getRow(2).getCell(8).numFmt).toContain('SGD');
     expect(worksheet?.getRow(2).getCell(9).value).toBe('已付款');
     expect(worksheet?.getRow(2).getCell(10).value).toBeNull();
     expect(worksheet?.getRow(2).getCell(11).value).toBe('test-account');

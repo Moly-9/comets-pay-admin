@@ -82,11 +82,11 @@ export function TransactionRecordsTable({
               <th>达人 / 付款项目</th>
               <th>Invoice</th>
               <th>渠道</th>
-              <th>状态</th>
               <th>支付金额</th>
               <th>手续费</th>
               <th>对方实际收到金额</th>
               <th>付款人 / 付款时间</th>
+              <th>付款状态</th>
               <th className="action-cell">操作</th>
             </tr>
           </thead>
@@ -117,42 +117,42 @@ export function TransactionRecordsTable({
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-invoice-cell">
-                      <strong>{invoiceNumber || '未记录'}</strong>
+                      <span className="transaction-primary-value">{invoiceNumber || '未记录'}</span>
                       <small>{details.paymentBatchCode}</small>
                     </span>
                   </td>
                   <td><PaymentProviderBadge compact provider={record.provider} /></td>
-                  <td><StatusMark status={record.status} /></td>
                   <td>
                     <span className="transaction-data-cell transaction-amount-cell">
-                      <strong>{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</strong>
+                      <span className="transaction-primary-value">{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</span>
                       <small>收款 {details.receiveCurrency}</small>
                     </span>
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-money-cell">
-                      <strong>{displayMoney(
+                      <span className="transaction-primary-value">{displayMoney(
                         record.transferFeeCurrency,
                         record.transferFeeAmount,
                         record.status === '付款处理中' ? '待渠道回写' : '—',
-                      )}</strong>
+                      )}</span>
                     </span>
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-money-cell transaction-received-cell">
-                      <strong>{displayMoney(
+                      <span className="transaction-primary-value">{displayMoney(
                         record.recipientReceivedCurrency,
                         record.recipientReceivedAmount,
                         record.status === '付款处理中' ? '待渠道回写' : '—',
-                      )}</strong>
+                      )}</span>
                     </span>
                   </td>
                   <td>
                     <span className="transaction-data-cell transaction-payer-cell">
-                      <strong>{details.payer}</strong>
+                      <span className="transaction-primary-value">{details.payer}</span>
                       <small>{payerTime.date} {payerTime.time}</small>
                     </span>
                   </td>
+                  <td><StatusMark status={record.status} /></td>
                   <td className="action-cell">
                     <ListActionButton
                       kind="view"

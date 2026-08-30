@@ -4,7 +4,7 @@ import {
   prototypeFundingAccountOpeningBalance,
   prototypePaymentResultFor,
 } from './prototypePaymentResults';
-import type { GeneratedInvoiceRecord, Payout } from './types';
+import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
 import type { PaymentAggregateStatus } from './paymentStatusFilters';
 
 export type PaymentBatchPrototypeStatus = PaymentAggregateStatus;
@@ -156,7 +156,10 @@ export const applyPaymentBatchPrototypeScenario = ({
       const sourcePaymentOrderCode = paymentLists.find((list) => (
         linkedInvoice && list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
       ))?.paymentListCode;
-      const prototypePaymentResult = prototypePaymentResultFor(payout);
+      const receiveCurrency = (
+        linkedInvoice?.snapshot.payment.accountCurrency || payout.currency
+      ) as InvoiceCurrency;
+      const prototypePaymentResult = prototypePaymentResultFor({ ...payout, receiveCurrency });
       const paymentResult = status === '已付款' ? prototypePaymentResult : undefined;
       const failedPaymentResult = failed ? {
         transferFeeAmount: prototypePaymentResult.transferFeeAmount,
@@ -164,7 +167,7 @@ export const applyPaymentBatchPrototypeScenario = ({
         actualPaidAmount: prototypePaymentResult.transferFeeAmount,
         actualPaidCurrency: prototypePaymentResult.transferFeeCurrency,
         recipientReceivedAmount: 0,
-        recipientReceivedCurrency: payout.currency,
+        recipientReceivedCurrency: receiveCurrency,
       } : undefined;
       const retryPaymentAttempts = isRetrySuccess && paymentResult?.transferFeeAmount !== undefined
         ? [
@@ -181,7 +184,7 @@ export const applyPaymentBatchPrototypeScenario = ({
               actualPaidAmount: paymentResult.transferFeeAmount,
               actualPaidCurrency: payout.currency,
               recipientReceivedAmount: 0,
-              recipientReceivedCurrency: payout.currency,
+              recipientReceivedCurrency: receiveCurrency,
               errorCode: 'BENEFICIARY_UNAVAILABLE',
               providerResponse: 'The beneficiary is temporarily unavailable.',
               returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',

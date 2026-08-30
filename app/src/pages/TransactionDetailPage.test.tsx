@@ -84,13 +84,15 @@ const record: TransactionRecord = {
 };
 
 describe('TransactionDetailPage', () => {
-  it('renders the creator card, transaction summary, associations, and highlighted payment list', () => {
+  it('renders the creator card, independent summaries, associations, and neutral payment detail', () => {
     const html = renderToStaticMarkup(
       <TransactionDetailPage record={record} onBack={vi.fn()} onOpenPaymentBatch={vi.fn()} />,
     );
 
     expect(html).toContain('transaction-creator-summary-card');
+    expect(html).toContain('transaction-creator-summary-project');
     expect(html).not.toContain('transaction-detail-header');
+    expect(html.match(/transaction-summary-card/g)).toHaveLength(3);
     expect(html).toContain('支付金额');
     expect(html).toContain('手续费 USD 8.2');
     expect(html).toContain('对方实收 USD 4,100');
@@ -102,7 +104,8 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('查看付款批次');
     expect(html).toContain('CON-20260810-001');
     expect(html).toContain('INV-20260810-001');
-    expect(html).toContain('transaction-resource-card is-payment-list');
+    expect(html).toContain('transaction-resource-card is-payment-detail');
+    expect(html).not.toContain('transaction-resource-card is-payment-list');
     expect(html).toContain('is-cooperation-project');
     expect(html).toContain('is-request-project');
     expect(html).toContain('is-payment-batch');
@@ -118,7 +121,8 @@ describe('TransactionDetailPage', () => {
     expect(html).not.toContain('>广告主承担<');
     expect(html).toContain('aria-label="查看合同"');
     expect(html).toContain('aria-label="查看 Invoice"');
-    expect(html).toContain('aria-label="查看付款清单"');
+    expect(html).toContain('aria-label="查看付款明细"');
+    expect(html).toContain('合同、Invoice 与付款明细');
     expect(html).toContain('transaction-section-icon');
     expect(html).toContain('transaction-detail-summary-label');
   });

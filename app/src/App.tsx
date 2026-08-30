@@ -2527,6 +2527,18 @@ export default function App() {
     setFinanceReviewRequestId(request.id);
   };
 
+  const currentPaymentReceiveCurrency = (payout: Payout) => {
+    const batchId = payout.currentPaymentAttempt?.paymentBatchId
+      ?? payout.paymentFailureRecovery?.retryBatchId;
+    return paymentBatches
+      .find((batch) => (
+        (!batchId || batch.paymentBatchId === batchId)
+        && batch.items.some((item) => item.payoutId === payout.id)
+      ))
+      ?.items.find((item) => item.payoutId === payout.id)
+      ?.receiveCurrency ?? payout.currency;
+  };
+
   const advancePayout = (payout: Payout) => {
     if (!isInvoiceApprovedForPayment(payout)) {
       notify('Invoice 尚未通过', '完成媒介与财务审核后才能推进付款。');
@@ -2548,7 +2560,12 @@ export default function App() {
     const resultAt = nowIso();
     const retrySucceeded = nextStatus === '已付款'
       && payout.paymentFailureRecovery?.status === 'RETRY_SUBMITTED';
-    const paymentResult = nextStatus === '已付款' ? prototypePaymentResultFor(payout) : undefined;
+    const paymentResult = nextStatus === '已付款'
+      ? prototypePaymentResultFor({
+          ...payout,
+          receiveCurrency: currentPaymentReceiveCurrency(payout),
+        })
+      : undefined;
     const baseUpdated: Payout = {
       ...payout,
       status: nextStatus,
@@ -2743,7 +2760,10 @@ export default function App() {
     }
     const occurredAt = nowIso();
     const failureReason = '渠道付款失败：SIMULATED_PROVIDER_DECLINE';
-    const failedPaymentResult = prototypePaymentResultFor(payout);
+    const failedPaymentResult = prototypePaymentResultFor({
+      ...payout,
+      receiveCurrency: currentPaymentReceiveCurrency(payout),
+    });
     const baseUpdated: Payout = {
       ...payout,
       status: '付款失败',
@@ -2785,7 +2805,7 @@ export default function App() {
       actualPaidAmount: failedPaymentResult.transferFeeAmount,
       actualPaidCurrency: failedPaymentResult.transferFeeCurrency,
       recipientReceivedAmount: 0,
-      recipientReceivedCurrency: payout.currency,
+      recipientReceivedCurrency: failedPaymentResult.recipientReceivedCurrency,
       errorCode: baseUpdated.paymentFailure?.errorCode,
       providerResponse: baseUpdated.paymentFailure?.providerResponse,
     }));
@@ -5049,6 +5069,8 @@ export default function App() {
         <TransactionsPage
           payouts={payouts}
           paymentBatches={paymentBatches}
+          contracts={contracts}
+          generatedInvoices={generatedInvoices}
           onOpenPaymentBatch={(batchId) => {
             if (!navigate('batches')) return;
             setFocusedBatchId(batchId);

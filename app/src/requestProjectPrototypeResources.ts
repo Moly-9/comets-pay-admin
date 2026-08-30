@@ -559,7 +559,13 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     invoiceSnapshot: invoice.snapshot,
     requestApprovalRound: request.approval?.round,
     paidAt: paid ? '2026-08-05 16:00' : undefined,
-    ...(paid ? prototypePaymentResultFor({ provider, currency, amount, feeBearer: 'ADVERTISER' }) : {}),
+    ...(paid ? prototypePaymentResultFor({
+      provider,
+      currency,
+      amount,
+      feeBearer: 'ADVERTISER',
+      receiveCurrency: (invoice.snapshot.payment.accountCurrency || currency) as InvoiceCurrency,
+    }) : {}),
     issue: undefined,
     returnReason: undefined,
   };

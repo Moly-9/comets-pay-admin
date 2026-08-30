@@ -300,6 +300,7 @@ describe('transaction records', () => {
       payout({ id: 'advertiser' }),
       payout({ id: 'publisher' }),
       payout({ id: 'shared' }),
+      payout({ id: 'cross-currency' }),
     ];
     const feeBatch = {
       ...batch,
@@ -307,12 +308,25 @@ describe('transaction records', () => {
         { ...batch.items[0], payoutId: 'advertiser', amount: 100, transferFeeAmount: 10, transferFeeCurrency: 'USD', feeBearer: '广告主承担' },
         { ...batch.items[0], payoutId: 'publisher', amount: 100, transferFeeAmount: 10, transferFeeCurrency: 'USD', feeBearer: '收款人承担' },
         { ...batch.items[0], payoutId: 'shared', amount: 100, transferFeeAmount: 10, transferFeeCurrency: 'USD', feeBearer: '共同承担' },
+        {
+          ...batch.items[0],
+          payoutId: 'cross-currency',
+          amount: 100,
+          receiveCurrency: 'SGD',
+          transferFeeAmount: 10,
+          transferFeeCurrency: 'USD',
+          feeBearer: '收款人承担',
+          recipientReceivedAmount: 90,
+          recipientReceivedCurrency: 'USD',
+        },
       ],
     } as unknown as PaymentBatchRecord;
 
-    expect(createTransactionRecords(feePayouts, [feeBatch]).map((record) => (
-      record.recipientReceivedAmount
-    ))).toEqual([100, 90, 95]);
+    const records = createTransactionRecords(feePayouts, [feeBatch]);
+    expect(records.slice(0, 3).map((record) => record.recipientReceivedAmount)).toEqual([100, 90, 95]);
+    const crossCurrency = records.find((record) => record.payout.id === 'cross-currency');
+    expect(crossCurrency?.recipientReceivedAmount).toBe(121.62);
+    expect(crossCurrency?.recipientReceivedCurrency).toBe('SGD');
   });
 
   it('migrates every current legacy transaction into a linked payment batch snapshot', () => {

@@ -4114,10 +4114,14 @@ const TRANSACTION_PAID_STATUS_OPTIONS = [
 export function TransactionsPage({
   payouts,
   paymentBatches,
+  contracts = [],
+  generatedInvoices = [],
   onOpenPaymentBatch,
 }: {
   payouts: Payout[];
   paymentBatches: readonly PaymentBatchRecord[];
+  contracts?: readonly ContractRecord[];
+  generatedInvoices?: readonly GeneratedInvoiceRecord[];
   onOpenPaymentBatch?: (batchId: PaymentBatchRecord['paymentBatchId']) => void;
 }) {
   const [tab, setTab] = useState<TransactionTab>('all');
@@ -4235,6 +4239,8 @@ export function TransactionsPage({
     return (
       <TransactionDetailPage
         record={detailRecord}
+        contracts={contracts}
+        generatedInvoices={generatedInvoices}
         onBack={closeTransactionDetail}
         onOpenPaymentBatch={detailRecord.context && onOpenPaymentBatch
           ? () => onOpenPaymentBatch(detailRecord.paymentBatchId)

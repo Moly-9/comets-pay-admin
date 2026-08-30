@@ -443,6 +443,40 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].paidAt).toBe('2026-08-10T10:30');
   });
 
+  it('normalizes successful batch and attempt snapshots into the recipient currency', () => {
+    const input = buildInput();
+    input.payouts[0].status = '已付款';
+    input.payouts[0].transferFeeAmount = 8.5;
+    input.payouts[0].transferFeeCurrency = 'USD';
+    input.payouts[0].recipientReceivedAmount = 1250;
+    input.payouts[0].recipientReceivedCurrency = 'USD';
+    input.payouts[0].paymentAttempts = [{
+      attemptNumber: 1,
+      status: '已付款',
+      principalAmount: 1250,
+      principalCurrency: 'USD',
+      transferFeeAmount: 8.5,
+      transferFeeCurrency: 'USD',
+      recipientReceivedAmount: 1250,
+      recipientReceivedCurrency: 'USD',
+    }];
+    input.paymentLists[0] = {
+      ...input.paymentLists[0],
+      items: input.paymentLists[0].items.map((item) => ({
+        ...item,
+        snapshot: { ...item.snapshot, receiveCurrency: 'SGD' },
+      })),
+    };
+
+    const record = createPaymentBatchRecord({ ...input, status: '已付款', itemStatus: '已付款' });
+
+    expect(record.items[0].receiveCurrency).toBe('SGD');
+    expect(record.items[0].recipientReceivedCurrency).toBe('SGD');
+    expect(record.items[0].recipientReceivedAmount).toBe(1689.19);
+    expect(record.items[0].paymentAttempts?.[0].recipientReceivedCurrency).toBe('SGD');
+    expect(record.items[0].paymentAttempts?.[0].recipientReceivedAmount).toBe(1689.19);
+  });
+
   it('summarizes the selected batch attempt without accumulating an earlier failed retry', () => {
     const input = buildInput();
     const record = createPaymentBatchRecord({ ...input, status: '已付款', itemStatus: '已付款' });

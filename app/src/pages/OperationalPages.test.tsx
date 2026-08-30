@@ -230,13 +230,29 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>达人 / 付款项目</th>');
     expect(html).toContain('>Invoice</th>');
     expect(html).toContain('>渠道</th>');
-    expect(html).toContain('>状态</th>');
     expect(html).toContain('>支付金额</th>');
     expect(html).toContain('>手续费</th>');
     expect(html).toContain('>对方实际收到金额</th>');
     expect(html).not.toContain('>时间</th>');
     expect(html).toContain('>付款人 / 付款时间</th>');
+    expect(html).toContain('>付款状态</th>');
     expect(html).toContain('>操作</th>');
+    const orderedHeaders = [
+      '>达人 / 付款项目</th>',
+      '>Invoice</th>',
+      '>渠道</th>',
+      '>支付金额</th>',
+      '>手续费</th>',
+      '>对方实际收到金额</th>',
+      '>付款人 / 付款时间</th>',
+      '>付款状态</th>',
+      '>操作</th>',
+    ];
+    orderedHeaders.reduce((previousIndex, header) => {
+      const nextIndex = html.indexOf(header);
+      expect(nextIndex).toBeGreaterThan(previousIndex);
+      return nextIndex;
+    }, -1);
     expect(html).not.toContain('transaction-field-icon');
     expect(html).toContain('INV-21');
     expect(html).toContain('USD 100');

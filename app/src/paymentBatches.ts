@@ -34,6 +34,7 @@ import {
   type PaymentBatchPrototypeStatus,
 } from './paymentBatchPrototypeScenario';
 import { aggregatePaymentStatus } from './paymentStatusFilters';
+import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 
 export type PaymentBatchStatus = PaymentBatchPrototypeStatus;
 
@@ -85,7 +86,7 @@ export type PaymentBatchItemSnapshot = Readonly<{
   provider: Exclude<Provider, '手动打款'>;
   amount: number;
   currency: InvoiceCurrency;
-  receiveCurrency: string;
+  receiveCurrency: InvoiceCurrency;
   transferMethod: string;
   localClearingSystem?: string;
   recipientCountry?: string;
@@ -218,12 +219,24 @@ const historicalPaymentBatchRecord = (
   const status = aggregatePaymentStatus([payout.status]);
   const accountSummary = accountDisplayValue(payout.account);
   const feeBearer = feeBearerLabel(payout.feeBearer);
+  const paymentStatus = failed ? '付款失败' : '已付款';
+  const receiveCurrency = payout.recipientReceivedCurrency ?? payout.currency;
+  const recipientResult = recipientResultSnapshot({
+    status: paymentStatus,
+    amount: payout.amount,
+    currency: payout.currency,
+    receiveCurrency,
+    feeBearer,
+    transferFeeAmount: payout.transferFeeAmount,
+    transferFeeCurrency: payout.transferFeeCurrency,
+    recipientReceivedAmount: payout.recipientReceivedAmount,
+    recipientReceivedCurrency: payout.recipientReceivedCurrency,
+  });
   const paymentReason = `${payout.deliverable ?? '达人合作内容'}已验收，申请支付本期合作款。`;
   const paymentBatchId = `payment_batch_legacy_${payout.id}` as PaymentBatchId;
   const paymentRequestProjectId = `payment_request_legacy_${payout.id}` as PaymentRequestProjectId;
   const cooperationProjectId = `cooperation_project_legacy_${payout.projectId}` as CooperationProjectId;
   const paymentListId = `payment_list_legacy_${payout.id}` as PaymentListId;
-  const paymentStatus = failed ? '付款失败' : '已付款';
   const contractId = `contract_legacy_${payout.id}` as ContractId;
   const invoiceId = `invoice_legacy_${payout.id}` as InvoiceId;
 
@@ -271,7 +284,8 @@ const historicalPaymentBatchRecord = (
       paymentOrderCode: seed.paymentListCode,
       sourcePaymentOrderCode: seed.paymentListCode,
       paymentAttemptNumber: 1,
-      paymentAttempts: payout.paymentAttempts,
+      paymentAttempts: payout.paymentAttempts
+        ?.map((attempt) => normalizePaymentAttemptRecipient(attempt, receiveCurrency, feeBearer)),
       contracts: [{
         contractId,
         contractCode: payout.contract,
@@ -295,7 +309,7 @@ const historicalPaymentBatchRecord = (
       provider: payout.provider,
       amount: payout.amount,
       currency: payout.currency,
-      receiveCurrency: payout.recipientReceivedCurrency ?? payout.currency,
+      receiveCurrency,
       transferMethod: seed.transferMethod,
       localClearingSystem: payout.localClearingSystem,
       recipientCountry: payout.recipientCountry,
@@ -314,8 +328,8 @@ const historicalPaymentBatchRecord = (
       transferFeeCurrency: payout.transferFeeCurrency,
       actualPaidAmount: payout.actualPaidAmount,
       actualPaidCurrency: payout.actualPaidCurrency,
-      recipientReceivedAmount: failed ? 0 : payout.recipientReceivedAmount,
-      recipientReceivedCurrency: payout.recipientReceivedCurrency ?? payout.currency,
+      recipientReceivedAmount: recipientResult.recipientReceivedAmount,
+      recipientReceivedCurrency: recipientResult.recipientReceivedCurrency,
       postTransactionBalance: failed ? undefined : payout.postTransactionBalance,
       postTransactionBalanceCurrency: failed ? undefined : payout.postTransactionBalanceCurrency,
       failure: failed && payout.paymentFailure ? {
@@ -362,6 +376,75 @@ const feeBearerLabel = (value: unknown) => {
   if (value === 'SHARED') return '共同承担';
   return '未记录';
 };
+
+const INVOICE_CURRENCIES = new Set<InvoiceCurrency>(['USD', 'EUR', 'GBP', 'HKD', 'SGD']);
+
+const invoiceCurrency = (value: unknown, fallback: InvoiceCurrency): InvoiceCurrency => {
+  const normalized = String(value ?? '').trim() as InvoiceCurrency;
+  return INVOICE_CURRENCIES.has(normalized) ? normalized : fallback;
+};
+
+const recipientResultSnapshot = ({
+  status,
+  amount,
+  currency,
+  receiveCurrency,
+  feeBearer,
+  transferFeeAmount,
+  transferFeeCurrency,
+  recipientReceivedAmount,
+  recipientReceivedCurrency,
+}: {
+  status: Payout['status'];
+  amount: number;
+  currency: InvoiceCurrency;
+  receiveCurrency: InvoiceCurrency;
+  feeBearer?: string;
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: InvoiceCurrency;
+}) => {
+  if (status === '付款失败' || status === '已退回') {
+    return { recipientReceivedAmount: 0, recipientReceivedCurrency: receiveCurrency };
+  }
+  if (status !== '已付款') {
+    return { recipientReceivedAmount: undefined, recipientReceivedCurrency: undefined };
+  }
+  return {
+    recipientReceivedAmount: recipientReceivedAmount !== undefined
+      && recipientReceivedCurrency === receiveCurrency
+      ? recipientReceivedAmount
+      : prototypeRecipientReceivedAmountFor({
+          amount,
+          currency,
+          receiveCurrency,
+          feeBearer,
+          transferFeeAmount,
+          transferFeeCurrency,
+        }),
+    recipientReceivedCurrency: receiveCurrency,
+  };
+};
+
+const normalizePaymentAttemptRecipient = (
+  attempt: PaymentAttemptSnapshot,
+  receiveCurrency: InvoiceCurrency,
+  feeBearer?: string,
+): PaymentAttemptSnapshot => ({
+  ...attempt,
+  ...recipientResultSnapshot({
+    status: attempt.status,
+    amount: attempt.principalAmount,
+    currency: attempt.principalCurrency,
+    receiveCurrency,
+    feeBearer,
+    transferFeeAmount: attempt.transferFeeAmount,
+    transferFeeCurrency: attempt.transferFeeCurrency,
+    recipientReceivedAmount: attempt.recipientReceivedAmount,
+    recipientReceivedCurrency: attempt.recipientReceivedCurrency,
+  }),
+});
 
 const transferMethodLabel = (value: unknown, provider: PaymentBatchItemSnapshot['provider']) => {
   if (provider === 'PayPal' || value === 'PAYPAL') return 'PayPal';
@@ -519,12 +602,14 @@ const snapshotItem = ({
   const rawAccountSummary = effectiveAccount?.accountSummary
     || documentPayment?.accountName
     || payout.account;
-  const receiveCurrency = String(
-    paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : '',
-  ) || documentPayment?.accountCurrency || payout.currency;
+  const receiveCurrency = invoiceCurrency(
+    paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : documentPayment?.accountCurrency,
+    payout.currency,
+  );
   const feeBearer = paymentListItem
     ? paymentListItemValue(paymentListItem, 'feeBearer')
     : payout.feeBearer;
+  const feeBearerSnapshot = feeBearerLabel(feeBearer);
   const effectivePaymentDetails = effectiveAccount?.paymentDetails ?? documentPayment;
   const accountRecipient = paymentRecipientSnapshot({
     provider: payout.provider,
@@ -542,6 +627,17 @@ const snapshotItem = ({
   const resolvedAttemptNumber = paymentAttemptNumber
     ?? payout.currentPaymentAttempt?.attemptNumber
     ?? (resolvedPaymentOrderCode !== sourcePaymentOrderCode ? 2 : 1);
+  const recipientResult = recipientResultSnapshot({
+    status: paymentStatus,
+    amount: payout.amount,
+    currency: payout.currency,
+    receiveCurrency,
+    feeBearer: feeBearerSnapshot,
+    transferFeeAmount: payout.transferFeeAmount,
+    transferFeeCurrency: payout.transferFeeCurrency,
+    recipientReceivedAmount: payout.recipientReceivedAmount,
+    recipientReceivedCurrency: payout.recipientReceivedCurrency,
+  });
 
   return {
     payoutId: payout.id,
@@ -560,7 +656,7 @@ const snapshotItem = ({
     paymentAttemptNumber: resolvedAttemptNumber,
     paymentAttempts: payout.paymentAttempts
       ?.filter((attempt) => attempt.attemptNumber <= resolvedAttemptNumber)
-      .map((attempt) => ({ ...attempt })),
+      .map((attempt) => normalizePaymentAttemptRecipient(attempt, receiveCurrency, feeBearerSnapshot)),
     contracts: contractSnapshots,
     invoice: invoice ? {
       invoiceId: invoice.invoiceId,
@@ -597,7 +693,7 @@ const snapshotItem = ({
       ?? payout.payoutAccountVersion
       ?? invoice?.snapshot.payoutAccountVersion
       ?? 'legacy-v1',
-    feeBearer: feeBearerLabel(feeBearer),
+    feeBearer: feeBearerSnapshot,
     paymentReason: String(paymentListItem ? paymentListItemValue(paymentListItem, 'paymentReason') : '') || '未记录',
     transactionReference: String(paymentListItem ? paymentListItemValue(paymentListItem, 'transactionReference') : '') || '未记录',
     description: String(paymentListItem ? paymentListItemValue(paymentListItem, 'description') : '') || payout.deliverable || '未记录',
@@ -607,8 +703,8 @@ const snapshotItem = ({
     transferFeeCurrency: hasFinalizedResult ? payout.transferFeeCurrency : undefined,
     actualPaidAmount: hasFinalizedResult ? payout.actualPaidAmount : undefined,
     actualPaidCurrency: hasFinalizedResult ? payout.actualPaidCurrency : undefined,
-    recipientReceivedAmount: hasFinalizedResult ? payout.recipientReceivedAmount : undefined,
-    recipientReceivedCurrency: hasFinalizedResult ? payout.recipientReceivedCurrency : undefined,
+    recipientReceivedAmount: hasFinalizedResult ? recipientResult.recipientReceivedAmount : undefined,
+    recipientReceivedCurrency: hasFinalizedResult ? recipientResult.recipientReceivedCurrency : undefined,
     postTransactionBalance: hasSuccessfulResult ? payout.postTransactionBalance : undefined,
     postTransactionBalanceCurrency: hasSuccessfulResult ? payout.postTransactionBalanceCurrency : undefined,
     failure: hasFailedResult && payout.paymentFailure ? {
@@ -1002,7 +1098,25 @@ export const applyPaymentResultToCurrentBatch = ({
         && attempt.attemptNumber === target.paymentAttemptNumber
       )
     ));
+    const normalizedAttempts = payout.paymentAttempts
+      ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
+      .map((attempt) => normalizePaymentAttemptRecipient(
+        attempt,
+        item.receiveCurrency,
+        item.feeBearer,
+      ));
     if (payout.status === '已付款') {
+      const recipientResult = recipientResultSnapshot({
+        status: payout.status,
+        amount: item.amount,
+        currency: item.currency,
+        receiveCurrency: item.receiveCurrency,
+        feeBearer: item.feeBearer,
+        transferFeeAmount: payout.transferFeeAmount,
+        transferFeeCurrency: payout.transferFeeCurrency,
+        recipientReceivedAmount: payout.recipientReceivedAmount,
+        recipientReceivedCurrency: payout.recipientReceivedCurrency,
+      });
       return {
         ...item,
         paymentStatus: '已付款',
@@ -1011,11 +1125,9 @@ export const applyPaymentResultToCurrentBatch = ({
         transferFeeCurrency: payout.transferFeeCurrency,
         actualPaidAmount: payout.actualPaidAmount,
         actualPaidCurrency: payout.actualPaidCurrency,
-        recipientReceivedAmount: payout.recipientReceivedAmount,
-        recipientReceivedCurrency: payout.recipientReceivedCurrency,
-        paymentAttempts: payout.paymentAttempts
-          ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
-          .map((attempt) => ({ ...attempt })),
+        recipientReceivedAmount: recipientResult.recipientReceivedAmount,
+        recipientReceivedCurrency: recipientResult.recipientReceivedCurrency,
+        paymentAttempts: normalizedAttempts,
         failure: undefined,
       };
     }
@@ -1027,11 +1139,9 @@ export const applyPaymentResultToCurrentBatch = ({
       transferFeeCurrency: currentAttempt?.transferFeeCurrency,
       actualPaidAmount: currentAttempt?.actualPaidAmount,
       actualPaidCurrency: currentAttempt?.actualPaidCurrency,
-      recipientReceivedAmount: currentAttempt?.recipientReceivedAmount ?? 0,
-      recipientReceivedCurrency: currentAttempt?.recipientReceivedCurrency ?? item.receiveCurrency as InvoiceCurrency,
-      paymentAttempts: payout.paymentAttempts
-        ?.filter((attempt) => attempt.attemptNumber <= target.paymentAttemptNumber)
-        .map((attempt) => ({ ...attempt })),
+      recipientReceivedAmount: 0,
+      recipientReceivedCurrency: item.receiveCurrency,
+      paymentAttempts: normalizedAttempts,
       failure: payout.paymentFailure ? {
         code: payout.paymentFailure.errorCode,
         response: payout.paymentFailure.providerResponse,
