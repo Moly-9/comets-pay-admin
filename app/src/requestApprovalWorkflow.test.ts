@@ -62,7 +62,7 @@ describe('request approval workflow', () => {
 
   it('returns any active approval node and starts a new round at the intercepted node', () => {
     const pm = userFor('pm');
-    const state = createRequestApprovalState();
+    const state = createRequestApprovalState('2026-08-04T01:00:00.000Z');
     const returned = applyRequestApprovalAction(state, 'RETURN', pm, '金额需要复核');
     expect(returned.status).toBe('RETURNED_TO_MEDIA_REVIEW');
     expect(returned.returnReason).toBe('金额需要复核');
@@ -75,6 +75,10 @@ describe('request approval workflow', () => {
     expect(nextRound.round).toBe(2);
     expect(nextRound.history).toHaveLength(1);
     expect(nextRound.submittedAt).toBe('2026-08-05T01:00:00.000Z');
+    expect(nextRound.submissionHistory).toEqual([
+      { round: 1, submittedAt: '2026-08-04T01:00:00.000Z' },
+      { round: 2, submittedAt: '2026-08-05T01:00:00.000Z' },
+    ]);
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
     expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
   });

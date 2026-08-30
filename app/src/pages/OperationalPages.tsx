@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -55,7 +56,13 @@ import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../da
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
 import { Pagination, usePagination } from '../components/Pagination';
 import { InvoiceManagementTable } from '../components/InvoiceManagementTable';
+import { CollaborationInvoiceDrawer } from '../components/CollaborationInvoiceDrawer';
+import {
+  buildCollaborationInvoiceRows,
+  collaborationStatusTone,
+} from '../collaborationInvoices';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
+import { resolveInvoiceCreatorIdentity } from '../invoice/invoiceCreatorIdentity';
 import {
   filterInvoiceManagementRows,
   findInvoiceRequest,
@@ -3032,19 +3039,58 @@ export function CreatorsPage({
   );
 }
 
-const COLLABORATIONS = [
-  { creator: demoDisplayName('Mina Kato'), project: '夏日直播计划', deliverable: '直播 2 场 + 短视频 3 条', invoice: '已提交', payment: '待财务复核' },
-  { creator: demoDisplayName('Alex Ruiz'), project: '新品开箱', deliverable: 'YouTube 长视频 1 条', invoice: '已通过', payment: '等待付款' },
-  { creator: demoDisplayName('Nika Petrova'), project: 'TikTok Spark', deliverable: 'TikTok 视频 4 条', invoice: '资料异常', payment: '暂停' },
-  { creator: demoDisplayName('Luna Jones'), project: '七月联名', deliverable: 'Reels 2 条 + Story 6 条', invoice: '已通过', payment: '飞书审批中' },
-];
+const formatCollaborationRequestTime = (value?: string) => {
+  if (!value) return '未发起';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date).replace(/\//g, '-');
+};
 
-export function CollaborationsPage({ notify, canImport }: { notify: Notify; canImport: boolean }) {
+export function CollaborationsPage({
+  notify,
+  canImport,
+  creators,
+  projects,
+  contracts,
+  payouts,
+  generatedInvoices,
+  externalInvoices,
+  requests,
+  paymentLists,
+}: {
+  notify: Notify;
+  canImport: boolean;
+  creators: CreatorProfile[];
+  projects: ProjectSummary[];
+  contracts: ContractRecord[];
+  payouts: Payout[];
+  generatedInvoices: GeneratedInvoiceRecord[];
+  externalInvoices: ExternalInvoiceCollectionRecord[];
+  requests: RequestProjectSummary[];
+  paymentLists: PaymentListRecord[];
+}) {
   const [search, setSearch] = useState('');
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const collaborationRows = useMemo(() => buildCollaborationInvoiceRows({
+    creators,
+    projects,
+    contracts,
+    payouts,
+    generatedInvoices,
+    externalInvoices,
+    requests,
+    paymentLists,
+  }), [contracts, creators, externalInvoices, generatedInvoices, paymentLists, payouts, projects, requests]);
   const query = search.trim().toLowerCase();
-  const filteredCollaborations = COLLABORATIONS.filter((item) => (
-    !query || `${item.creator}${item.project}${item.deliverable}${item.invoice}${item.payment}`.toLowerCase().includes(query)
-  ));
+  const filteredCollaborations = collaborationRows.filter((item) => !query || item.searchText.includes(query));
   const {
     page,
     pageItems: visibleCollaborations,
@@ -3052,6 +3098,11 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
     setPage,
     setPageSize,
   } = usePagination(filteredCollaborations, { resetKey: query });
+  const selectedRow = selectedRowId
+    ? collaborationRows.find((row) => row.rowId === selectedRowId) ?? null
+    : null;
+  const closeDetail = useCallback(() => setSelectedRowId(null), []);
+  const waitingForPaymentCount = collaborationRows.filter((row) => row.status !== '已付款').length;
   const importAction = canImport
     ? <Button icon={<Upload size={17} />} onClick={() => notify('导入模板', '已准备达人合作名单模板。')}>导入合作名单</Button>
     : undefined;
@@ -3060,24 +3111,44 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
       <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
       <section className="content-card">
         <div className="content-toolbar">
-          <SearchBar value={search} onChange={setSearch} placeholder="搜索达人或项目" />
-          <span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span>
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索达人、项目、Invoice 或合同" />
+          <span className="collaboration-list-toolbar-note">共 {collaborationRows.length} 份 Invoice · 待付款 {waitingForPaymentCount} 份</span>
         </div>
         <div className="table-scroll">
-          <table className="data-table operational-table">
-            <thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead>
+          <table className="data-table operational-table collaboration-list-table">
+            <thead><tr><th>达人</th><th>关联项目</th><th>合作交付</th><th>Invoice 编号</th><th>付款进度</th><th>请款时间</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {visibleCollaborations.map((item) => (
-                <tr key={`${item.creator}${item.project}`}>
-                  <td><strong>{item.creator}</strong></td>
-                  <td>{item.project}</td>
-                  <td>{item.deliverable}</td>
-                  <td>{item.invoice}</td>
-                  <td><ProjectStatus status={item.payment} /></td>
-                  <td className="action-cell"><ListActionButton kind="view" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</ListActionButton></td>
+                <tr key={item.rowId}>
+                  <td className="collaboration-creator-cell">
+                    <CreatorIdentity
+                      className="creator-cell"
+                      creator={item.identity.creator}
+                      displayName={item.identity.displayName}
+                      initials={item.identity.initials}
+                      accent={item.identity.accent}
+                      accounts={item.identity.socialAccounts}
+                      fallbackHandle={item.identity.channelId}
+                      fallbackPlatform={item.identity.platform}
+                    />
+                  </td>
+                  <td className="collaboration-project-cell"><strong>{item.projectName}</strong><small>{item.project?.cooperationProjectCode ?? item.project?.projectCode ?? item.projectLinkId ?? '项目资料未找到'}</small></td>
+                  <td className="collaboration-description-cell" title={item.descriptionText}><span>{item.descriptionText}</span></td>
+                  <td><span className="collaboration-invoice-number">{item.invoiceNumber}</span></td>
+                  <td><span className={`collaboration-lifecycle-status is-${collaborationStatusTone(item.status)}`}><i />{item.status}</span></td>
+                  <td><time className="collaboration-request-time">{formatCollaborationRequestTime(item.requestSubmittedAt)}</time></td>
+                  <td className="action-cell">
+                    <ListActionButton
+                      kind="view"
+                      onClick={(event) => {
+                        detailTriggerRef.current = event.currentTarget;
+                        setSelectedRowId(item.rowId);
+                      }}
+                    >查看详情</ListActionButton>
+                  </td>
                 </tr>
               ))}
-              {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={6}>暂无符合条件的合作记录</td></tr> : null}
+              {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={7}>暂无符合条件的 Invoice 合作记录</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -3093,6 +3164,13 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
           />
         </div>
       </section>
+      {selectedRow ? (
+        <CollaborationInvoiceDrawer
+          row={selectedRow}
+          returnFocusTo={detailTriggerRef.current}
+          onClose={closeDetail}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3280,55 +3358,20 @@ export function InvoicePage({
   const invoiceSnapshotFor = (payout: Payout) => (
     generatedInvoiceByPayoutId.get(payout.id)?.snapshot ?? payout.invoiceSnapshot
   );
-  const normalizeCreatorHandle = (value?: string) => (
-    value?.trim().replace(/^@/, '').toLocaleLowerCase() ?? ''
-  );
-  const legacyCreatorForInvoice = (displayName?: string, handle?: string) => {
-    const normalizedHandle = normalizeCreatorHandle(handle);
-    const handleMatch = normalizedHandle
-      ? creators.find((candidate) => (
-          normalizeCreatorHandle(candidate.handle) === normalizedHandle
-          || candidate.socialAccounts.some((account) => (
-            normalizeCreatorHandle(account.handle) === normalizedHandle
-          ))
-        ))
-      : undefined;
-    if (handleMatch) return handleMatch;
-    const normalizedName = displayName?.trim().toLocaleLowerCase();
-    return normalizedName
-      ? creators.find((candidate) => candidate.name.trim().toLocaleLowerCase() === normalizedName)
-      : undefined;
-  };
   const invoiceIdentityFor = (payout: Payout) => {
     const snapshot = invoiceSnapshotFor(payout);
-    const creatorId = snapshot?.creatorId ?? payout.creatorId;
-    const creator = (creatorId
-      ? creators.find((candidate) => candidate.id === creatorId)
-      : undefined) ?? legacyCreatorForInvoice(
-      snapshot?.creatorName ?? payout.creator,
-      snapshot?.creatorHandle ?? payout.handle,
-    );
-    const primarySocialAccount = resolveCreatorSocialAccount(
-      creator,
-      snapshot?.creatorSocialAccountId ?? payout.creatorSocialAccountId,
-      snapshot?.creatorHandle ?? payout.handle,
-      snapshot?.creatorPlatform ?? payout.creatorPlatform,
-    );
-    return {
-      displayName: creator?.name ?? snapshot?.creatorName ?? payout.creator,
-      channelId: primarySocialAccount?.handle
-        ?? creator?.handle
-        ?? snapshot?.creatorHandle
-        ?? payout.handle,
-      platform: snapshot?.creatorPlatform
-        ?? payout.creatorPlatform
-        ?? primarySocialAccount?.platform.trim()
-        ?? creator?.platform?.trim()
-        ?? '社媒平台待补充',
-      initials: creator?.initials ?? payout.initials,
-      accent: creator?.accent ?? payout.accent,
-      socialAccounts: creator ? creatorSocialAccounts(creator).map((account) => ({ ...account })) : undefined,
-    };
+    return resolveInvoiceCreatorIdentity({
+      creators,
+      source: {
+        creatorId: snapshot?.creatorId ?? payout.creatorId,
+        creatorName: snapshot?.creatorName ?? payout.creator,
+        creatorHandle: snapshot?.creatorHandle ?? payout.handle,
+        creatorSocialAccountId: snapshot?.creatorSocialAccountId ?? payout.creatorSocialAccountId,
+        creatorPlatform: snapshot?.creatorPlatform ?? payout.creatorPlatform,
+        initials: payout.initials,
+        accent: payout.accent,
+      },
+    });
   };
   const canActOnInvoice = (payout: Payout, view: InvoiceManagementView) => (
     (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
@@ -3378,7 +3421,7 @@ export function InvoicePage({
         ?? snapshot?.from.legalName
         ?? '待补充',
       initials: identity.initials,
-      accent: identity.accent,
+      accent: identity.accent ?? payout.accent,
       projectKey: String(snapshot?.projectId ?? payout.projectId ?? snapshot?.projectName ?? payout.project),
       projectName: snapshot?.projectName ?? payout.project,
       invoiceNumber: snapshot?.invoiceNumber ?? payout.invoice,
@@ -3401,13 +3444,17 @@ export function InvoicePage({
     };
   });
   const externalRows: InvoiceManagementRow[] = externalInvoices.map((record) => {
-    const creator = creators.find((candidate) => candidate.id === record.creatorId);
-    const primarySocialAccount = resolveCreatorSocialAccount(
-      creator,
-      record.creatorSocialAccountId,
-      record.creatorHandle,
-      record.creatorPlatform,
-    );
+    const identity = resolveInvoiceCreatorIdentity({
+      creators,
+      source: {
+        creatorId: record.creatorId,
+        creatorName: record.creatorName,
+        creatorHandle: record.creatorHandle,
+        creatorSocialAccountId: record.creatorSocialAccountId,
+        creatorPlatform: record.creatorPlatform,
+      },
+    });
+    const creator = identity.creator;
     const status = externalInvoiceListStatus(record.status);
     const primaryAction = (record.status === 'WAITING_MEDIA_REVIEW' && canReviewMedia)
       || (record.status !== 'APPROVED' && record.status !== 'WAITING_MEDIA_REVIEW' && canManageInvoice);
@@ -3415,17 +3462,12 @@ export function InvoicePage({
       rowId: `external:${record.invoiceId}`,
       invoiceId: String(record.invoiceId),
       invoiceType: 'EXTERNAL',
-      creatorName: creator?.name ?? record.creatorName,
-      channelId: primarySocialAccount?.handle
-        ?? creator?.handle
-        ?? record.creatorHandle,
-      creatorPlatform: record.creatorPlatform
-        ?? primarySocialAccount?.platform.trim()
-        ?? creator?.platform?.trim()
-        ?? '社媒平台待补充',
-      creatorSocialAccounts: creator ? creatorSocialAccounts(creator).map((account) => ({ ...account })) : undefined,
-      initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
-      accent: creator?.accent ?? '#9c6f93',
+      creatorName: identity.displayName,
+      channelId: identity.channelId,
+      creatorPlatform: identity.platform,
+      creatorSocialAccounts: identity.socialAccounts,
+      initials: identity.initials,
+      accent: identity.accent ?? '#9c6f93',
       issuerName: creator?.contact.legalName ?? '待补充',
       projectKey: String(record.projectId ?? record.projectName),
       projectName: record.projectName,

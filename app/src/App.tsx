@@ -4860,7 +4860,20 @@ export default function App() {
       );
       break;
     case 'collaborations':
-      pageContent = <CollaborationsPage notify={notify} canImport={canManageCreators} />;
+      pageContent = (
+        <CollaborationsPage
+          notify={notify}
+          canImport={canManageCreators}
+          creators={creators}
+          projects={projects}
+          contracts={contracts}
+          payouts={payouts}
+          generatedInvoices={generatedInvoices}
+          externalInvoices={externalInvoices}
+          requests={requestProjects}
+          paymentLists={paymentLists}
+        />
+      );
       break;
     case 'invoice':
       pageContent = (

@@ -88,11 +88,18 @@ export type RequestApprovalEvent = {
   occurredAt: string;
 };
 
+export type RequestApprovalSubmission = {
+  round: number;
+  submittedAt: string;
+};
+
 export type RequestApprovalState = {
   status: RequestApprovalStatus;
   round: number;
   history: RequestApprovalEvent[];
   submittedAt: string;
+  /** Submission time for each approval round. Older prototype records may only retain submittedAt. */
+  submissionHistory?: RequestApprovalSubmission[];
   returnedFromStage?: RequestApprovalStage;
   resumeStatus?: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   returnReason?: string;

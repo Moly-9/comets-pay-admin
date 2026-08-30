@@ -211,15 +211,27 @@ export const canReturnRequestApproval = (
 export const createRequestApprovalState = (
   occurredAt = new Date().toISOString(),
   previous?: RequestApprovalState,
-): RequestApprovalState => ({
-  status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
-    ? previous.resumeStatus
-    : 'PENDING_PM',
-  round: (previous?.round ?? 0) + 1,
-  history: previous?.history ?? [],
-  submittedAt: occurredAt,
-  updatedAt: occurredAt,
-});
+): RequestApprovalState => {
+  const round = (previous?.round ?? 0) + 1;
+  const previousSubmissions = previous?.submissionHistory?.length
+    ? previous.submissionHistory
+    : previous
+      ? [{ round: previous.round, submittedAt: previous.submittedAt }]
+      : [];
+  return {
+    status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
+      ? previous.resumeStatus
+      : 'PENDING_PM',
+    round,
+    history: previous?.history ?? [],
+    submittedAt: occurredAt,
+    submissionHistory: [
+      ...previousSubmissions.filter((submission) => submission.round !== round),
+      { round, submittedAt: occurredAt },
+    ],
+    updatedAt: occurredAt,
+  };
+};
 
 export const applyRequestApprovalAction = (
   state: RequestApprovalState,

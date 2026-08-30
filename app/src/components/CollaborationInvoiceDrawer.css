@@ -1,0 +1,641 @@
+.collaboration-invoice-drawer-backdrop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  justify-content: flex-end;
+  inset: 0;
+  background: rgba(22, 25, 34, 0.46);
+  backdrop-filter: blur(2px);
+}
+
+.collaboration-invoice-drawer {
+  display: flex;
+  width: min(680px, 100vw);
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: -24px 0 70px rgba(23, 27, 38, 0.2);
+  animation: collaboration-drawer-in 220ms ease-out;
+}
+
+@keyframes collaboration-drawer-in {
+  from { opacity: 0.45; transform: translateX(32px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.collaboration-invoice-drawer-header,
+.collaboration-invoice-drawer-footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: var(--soft-line);
+  background: #fff;
+}
+
+.collaboration-invoice-drawer-header {
+  min-height: 82px;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+  padding: 14px 24px;
+}
+
+.collaboration-invoice-drawer-header > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.collaboration-invoice-drawer-header > div:first-child > span {
+  color: #7d8491;
+  font-size: 12px;
+}
+
+.collaboration-invoice-drawer-header h2 {
+  overflow: hidden;
+  margin: 0;
+  color: #242832;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-invoice-drawer-header-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.collaboration-invoice-drawer-header-actions .icon-button {
+  width: 44px;
+  height: 44px;
+}
+
+.collaboration-lifecycle-status {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #dfe3ea;
+  border-radius: 999px;
+  background: #f6f7f9;
+  padding: 4px 10px;
+  color: #606875;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.collaboration-lifecycle-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.collaboration-lifecycle-status.is-success {
+  border-color: #bde3cb;
+  background: #edf8f1;
+  color: #27784b;
+}
+
+.collaboration-lifecycle-status.is-danger {
+  border-color: #f0c5c0;
+  background: #fff3f1;
+  color: #b94d41;
+}
+
+.collaboration-lifecycle-status.is-processing {
+  border-color: #cdd9e8;
+  background: #f0f5fa;
+  color: #486b91;
+}
+
+.collaboration-lifecycle-status.is-pending {
+  border-color: #ead8ae;
+  background: #fff8e9;
+  color: #8b681e;
+}
+
+.collaboration-invoice-drawer-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 32px;
+}
+
+.collaboration-invoice-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(190px, 0.7fr);
+  align-items: center;
+  gap: 18px;
+  border: 1px solid #e5e8ee;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #fff8f3, #f8f5fb 62%, #f1f6fa);
+  padding: 16px;
+}
+
+.collaboration-invoice-hero > .creator-identity {
+  min-width: 0;
+}
+
+.collaboration-invoice-hero > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border-left: 1px solid #dde2e9;
+  padding-left: 18px;
+}
+
+.collaboration-invoice-hero > div:last-child span,
+.collaboration-invoice-hero > div:last-child small {
+  color: #78818e;
+  font-size: 12px;
+}
+
+.collaboration-invoice-hero > div:last-child strong {
+  overflow: hidden;
+  color: #303640;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-invoice-drawer-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.collaboration-invoice-drawer-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #303640;
+  font-size: 14px;
+}
+
+.collaboration-invoice-drawer-section > h3 svg {
+  color: #4d6684;
+}
+
+.collaboration-project-card,
+.collaboration-contract-card {
+  overflow: hidden;
+  border: 1px solid #e3e7ed;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.collaboration-project-card > header,
+.collaboration-contract-card > header {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid #e8ebf0;
+  background: #f7f9fb;
+  padding: 12px 14px;
+}
+
+.collaboration-project-card > header > div,
+.collaboration-contract-card > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.collaboration-project-card > header span,
+.collaboration-contract-card > header span {
+  color: #7c8491;
+  font-size: 12px;
+}
+
+.collaboration-project-card > header strong,
+.collaboration-contract-card > header strong {
+  overflow: hidden;
+  color: #2d333d;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-project-card > header em,
+.collaboration-contract-card > header em {
+  flex: none;
+  border-radius: 999px;
+  background: #edf2f7;
+  padding: 5px 9px;
+  color: #52677f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.collaboration-contract-list {
+  display: grid;
+  gap: 10px;
+}
+
+.collaboration-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: #e8ebf0;
+}
+
+.collaboration-detail-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.collaboration-invoice-drawer-section > .collaboration-detail-grid {
+  overflow: hidden;
+  border: 1px solid #e6e9ee;
+  border-radius: 11px;
+}
+
+.collaboration-detail-grid dt,
+.collaboration-detail-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.collaboration-detail-grid dt {
+  color: #7e8693;
+  font-size: 12px;
+}
+
+.collaboration-detail-grid dd {
+  color: #303640;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.collaboration-resource-missing,
+.collaboration-legacy-reference,
+.collaboration-payment-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #efd7b8;
+  border-radius: 10px;
+  background: #fff9f0;
+  padding: 12px;
+  color: #936322;
+}
+
+.collaboration-resource-missing > span,
+.collaboration-legacy-reference > span,
+.collaboration-payment-warning > span {
+  display: grid;
+  gap: 3px;
+}
+
+.collaboration-resource-missing strong,
+.collaboration-legacy-reference strong,
+.collaboration-payment-warning strong {
+  color: #684a25;
+  font-size: 12.5px;
+}
+
+.collaboration-resource-missing small,
+.collaboration-legacy-reference small,
+.collaboration-payment-warning small {
+  color: #876e4e;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.collaboration-payment-warning {
+  border-color: #efcbc5;
+  background: #fff4f2;
+  color: #b55247;
+}
+
+.collaboration-payment-warning strong,
+.collaboration-payment-warning small {
+  color: #9c483f;
+}
+
+.collaboration-resource-empty {
+  border: 1px dashed #dfe3e9;
+  border-radius: 10px;
+  background: #fafbfc;
+  padding: 18px;
+  color: #7d8592;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.collaboration-description-list,
+.collaboration-submission-history {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e6e9ee;
+  border-radius: 11px;
+  background: #fafbfc;
+  padding: 13px;
+}
+
+.collaboration-description-list > span,
+.collaboration-submission-history > span {
+  color: #747d8a;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.collaboration-description-list > div {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.collaboration-description-list i {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e8edf3;
+  color: #52677f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.collaboration-description-list p {
+  margin: 0;
+  color: #343a45;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.collaboration-submission-history > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #e6e9ee;
+  padding-top: 8px;
+  color: #4a515d;
+  font-size: 12px;
+}
+
+.collaboration-submission-history time {
+  color: #747d8a;
+  font-variant-numeric: tabular-nums;
+}
+
+.collaboration-invoice-timeline {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #e3e7ed;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.collaboration-invoice-timeline article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  min-height: 64px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #eef0f3;
+  padding: 10px 12px;
+}
+
+.collaboration-invoice-timeline article:last-child {
+  border-bottom: 0;
+}
+
+.collaboration-invoice-timeline article > span {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c9dfd2;
+  border-radius: 50%;
+  background: #eef8f2;
+  color: #31815a;
+}
+
+.collaboration-invoice-timeline article:not(:last-child)::after {
+  position: absolute;
+  top: 42px;
+  bottom: -22px;
+  left: 24px;
+  width: 1px;
+  background: #dfe3e8;
+  content: "";
+}
+
+.collaboration-invoice-timeline article.is-warning > span {
+  border-color: #edc7c0;
+  background: #fff2f0;
+  color: #b75349;
+}
+
+.collaboration-invoice-timeline article.is-current > span {
+  border-color: #c7d7e8;
+  background: #edf4fa;
+  color: #4c7097;
+}
+
+.collaboration-invoice-timeline article > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.collaboration-invoice-timeline strong {
+  color: #343a45;
+  font-size: 12.5px;
+}
+
+.collaboration-invoice-timeline small {
+  color: #7c8491;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.collaboration-invoice-timeline time {
+  color: #7c8491;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.collaboration-invoice-drawer-footer {
+  min-height: 72px;
+  border-top-style: solid;
+  border-top-width: 1px;
+  padding: 10px 24px;
+}
+
+.collaboration-invoice-drawer-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7b8390;
+  font-size: 12px;
+}
+
+.collaboration-invoice-drawer-footer .button {
+  min-width: 88px;
+  min-height: 44px;
+}
+
+.collaboration-list-table {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+.collaboration-list-table th:nth-child(1) { width: 210px; }
+.collaboration-list-table th:nth-child(2) { width: 170px; }
+.collaboration-list-table th:nth-child(3) { width: 220px; }
+.collaboration-list-table th:nth-child(4) { width: 170px; }
+.collaboration-list-table th:nth-child(5) { width: 130px; }
+.collaboration-list-table th:nth-child(6) { width: 150px; }
+.collaboration-list-table th:nth-child(7) { width: 90px; }
+
+.collaboration-list-table .collaboration-creator-cell {
+  min-width: 210px;
+}
+
+.collaboration-list-table .collaboration-project-cell {
+  min-width: 150px;
+  max-width: 210px;
+}
+
+.collaboration-list-table .collaboration-project-cell strong,
+.collaboration-list-table .collaboration-project-cell small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-list-table .collaboration-project-cell small {
+  margin-top: 4px;
+  color: #858d99;
+  font-size: 11.5px;
+}
+
+.collaboration-description-cell {
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.collaboration-description-cell > span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.collaboration-invoice-number {
+  color: #303640;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.collaboration-request-time {
+  color: #555e6b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.collaboration-list-toolbar-note {
+  color: #737b88;
+  font-size: 12px;
+}
+
+.collaboration-list-table .table-action-button {
+  min-height: 44px;
+}
+
+@media (max-width: 720px) {
+  .collaboration-invoice-drawer {
+    width: 100vw;
+  }
+
+  .collaboration-invoice-drawer-header,
+  .collaboration-invoice-drawer-footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .collaboration-invoice-drawer-content {
+    padding: 16px 16px 28px;
+  }
+
+  .collaboration-invoice-drawer-header-actions {
+    gap: 6px;
+  }
+
+  .collaboration-lifecycle-status {
+    max-width: 126px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .collaboration-invoice-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .collaboration-invoice-hero > div:last-child {
+    border-top: 1px solid #dde2e9;
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
+
+  .collaboration-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .collaboration-invoice-timeline article {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+
+  .collaboration-invoice-timeline time {
+    grid-column: 2;
+    white-space: normal;
+  }
+
+  .collaboration-invoice-drawer-footer > span {
+    display: none;
+  }
+
+  .collaboration-invoice-drawer-footer .button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collaboration-invoice-drawer {
+    animation: none;
+  }
+}
