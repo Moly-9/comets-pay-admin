@@ -46,7 +46,11 @@ export type RequestApprovalStatus =
 
 export type RequestApprovalStage = 'PM' | 'PROJECT_OWNER' | 'OWNER' | 'FINANCE';
 
-export type RequestApprovalReturnIssueType = 'INVOICE_CONTENT' | 'PAYMENT_LIST';
+export type RequestApprovalReturnIssueType =
+  | 'INVOICE_CONTENT'
+  | 'PAYMENT_LIST'
+  | 'CONTRACT_CONTENT'
+  | 'FULL_ITEM';
 
 export type RequestApprovalReturnAccountUpdate = {
   status: 'VALIDATED';
@@ -61,6 +65,7 @@ export type RequestApprovalReturnItem = {
   invoiceNumber: string;
   issueType: RequestApprovalReturnIssueType;
   reason: string;
+  contractIds?: ContractId[];
   paymentItems: Array<{
     paymentListId: PaymentListId;
     itemId: string;
@@ -83,11 +88,18 @@ export type RequestApprovalEvent = {
   occurredAt: string;
 };
 
+export type RequestApprovalSubmission = {
+  round: number;
+  submittedAt: string;
+};
+
 export type RequestApprovalState = {
   status: RequestApprovalStatus;
   round: number;
   history: RequestApprovalEvent[];
   submittedAt: string;
+  /** Submission time for each approval round. Older prototype records may only retain submittedAt. */
+  submissionHistory?: RequestApprovalSubmission[];
   returnedFromStage?: RequestApprovalStage;
   resumeStatus?: Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_TO_MEDIA_REVIEW'>;
   returnReason?: string;

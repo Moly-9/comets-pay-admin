@@ -158,15 +158,29 @@ describe('Invoice batch creator workbook', () => {
 });
 
 describe('Invoice batch creator text import', () => {
-  it('splits all supported delimiters and matches stable ID, handle and display name', () => {
+  it('splits all supported delimiters and matches stable ID, handle, channel URL and display name', () => {
     const tokens = parseInvoiceBatchCreatorTokens(
-      `${creators[0].id}，${creators[1].handle}；${creators[2].name}|${creators[2].name}`,
+      `${creators[0].id}，${creators[1].handle}；${creators[2].socialAccounts[0].profileUrl}?from=paste|${creators[2].name}`,
     );
     const result = matchInvoiceBatchCreatorTokens({ tokens, creators, projectReferences: references });
 
     expect(tokens).toHaveLength(4);
     expect(result.matches.map((match) => match.creatorId)).toEqual(creators.slice(0, 3).map((creator) => creator.id));
     expect(result.issues.some((issue) => issue.code === 'DUPLICATE')).toBe(true);
+  });
+
+  it('matches channel links without a protocol and reports unknown links', () => {
+    const profileUrl = creators[0].socialAccounts[0].profileUrl.replace(/^https?:\/\//, '');
+    const result = matchInvoiceBatchCreatorTokens({
+      tokens: [profileUrl, 'https://unknown.example/creator'],
+      creators,
+      projectReferences: references,
+    });
+
+    expect(result.matches.map((match) => match.creatorId)).toEqual([creators[0].id]);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'NOT_FOUND', sourceValue: 'https://unknown.example/creator' }),
+    ]));
   });
 
   it('supports append and replace while retaining locked rows and reporting overflow', () => {

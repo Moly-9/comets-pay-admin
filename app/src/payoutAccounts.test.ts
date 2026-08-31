@@ -11,6 +11,7 @@ import {
   getPayoutAccountDocumentIssues,
   getPayoutAccountForProvider,
   getPayoutAccountSelectPresentation,
+  invoicePaymentMethodForProvider,
   isPayoutAccountDocumentReady,
   normalizePayMaxStatus,
   payoutAccountToInvoicePayment,
@@ -21,6 +22,13 @@ import { setAirwallexFormValue } from './airwallexFormSchema';
 import type { CreatorProfile } from './types';
 
 describe('creator payout channels', () => {
+  it('derives the Invoice payment method from the payout provider', () => {
+    expect(invoicePaymentMethodForProvider('PayPal')).toBe('paypal');
+    expect(invoicePaymentMethodForProvider('Airwallex')).toBe('bank');
+    expect(invoicePaymentMethodForProvider('PayMax')).toBe('bank');
+    expect(invoicePaymentMethodForProvider(undefined, 'paypal')).toBe('paypal');
+  });
+
   it('presents complete Airwallex payment details and account identifiers', () => {
     const account = {
       ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-select-airwallex'),
@@ -177,6 +185,7 @@ describe('creator payout channels', () => {
     const previous = {
       ...createEmptyAirwallexAccount('Mina Kato', 'mina@example.com', 'creator-1'),
       status: 'VERIFIED' as const,
+      updatedAt: '2026-08-01T08:00:00.000Z',
       beneficiaryId: 'beneficiary_mock_1',
       bankDetails: {
         ...createEmptyAirwallexAccount().bankDetails,
@@ -191,27 +200,42 @@ describe('creator payout channels', () => {
       bankDetails: { ...previous.bankDetails, accountNumber: '0000000002' },
     };
 
-    const result = prepareCreatorPayoutAccountsForSave('creator-1', [previous], [candidate]);
+    const result = prepareCreatorPayoutAccountsForSave(
+      'creator-1',
+      [previous],
+      [candidate],
+      '2026-08-20T09:30:00.000Z',
+    );
 
     expect(result.accounts[0]).toMatchObject({
       creatorId: 'creator-1',
       payoutAccountId: previous.id,
       payoutAccountVersion: 'v2',
+      updatedAt: '2026-08-20T09:30:00.000Z',
     });
     expect(result.archived[0]).toMatchObject({
       payoutAccountId: previous.id,
       payoutAccountVersion: 'v1',
       beneficiaryId: 'beneficiary_mock_1',
+      updatedAt: '2026-08-01T08:00:00.000Z',
     });
     expect(result.accounts[0]?.accountFingerprint).not.toBe(result.archived[0]?.accountFingerprint);
+    expect(payoutAccountToInvoicePayment(result.accounts[0]).updatedAt)
+      .toBe('2026-08-20T09:30:00.000Z');
   });
 
   it('keeps draft edits in the same account version', () => {
     const previous = createEmptyPayPalAccount('Mina Kato', 'mina@example.com', 'creator-1');
     const candidate = { ...previous, transferNote: 'Invoice 2026-08' };
-    const result = prepareCreatorPayoutAccountsForSave('creator-1', [previous], [candidate]);
+    const result = prepareCreatorPayoutAccountsForSave(
+      'creator-1',
+      [previous],
+      [candidate],
+      '2026-08-20T09:30:00.000Z',
+    );
 
     expect(result.accounts[0]?.payoutAccountVersion).toBe('v1');
+    expect(result.accounts[0]?.updatedAt).toBe('2026-08-20T09:30:00.000Z');
     expect(result.archived).toEqual([]);
   });
 

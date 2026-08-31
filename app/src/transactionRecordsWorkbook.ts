@@ -1,12 +1,15 @@
-import type { Payout } from './types';
 import { accountDisplayValue } from './accountPresentation';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
-import { transactionCreatorLabel, transactionOccurredAt } from './transactionRecords';
+import {
+  transactionCreatorLabel,
+  transactionRecordDetails,
+  type TransactionRecord,
+} from './transactionRecords';
 
 export const TRANSACTION_RECORDS_TEMPLATE_PATH = '/export-assets/transactions/transaction-records-template.xlsx';
 export const TRANSACTION_RECORDS_SHEET_NAME = 'AWX payments';
 
-const TRANSACTION_RECORD_HEADERS = [
+const TEMPLATE_HEADERS = [
   '付款达人',
   '请款项目',
   '关联项目',
@@ -15,7 +18,21 @@ const TRANSACTION_RECORD_HEADERS = [
   '付款金额',
   '状态',
   '余额',
+] as const;
+
+const TRANSACTION_RECORD_HEADERS = [
+  '付款达人',
+  '请款项目',
+  '关联项目',
+  '付款日期',
+  '付款渠道',
+  '支付金额',
+  '手续费',
+  '对方实际收到金额',
+  '状态',
+  '余额',
   '收款账户',
+  '付款批次号',
 ] as const;
 
 const excelDate = (value: string) => {
@@ -35,7 +52,7 @@ export const transactionRecordsFilename = (now = new Date()) => {
 
 export const createTransactionRecordsWorkbook = async (
   template: ArrayBuffer,
-  payouts: Payout[],
+  records: readonly TransactionRecord[],
 ) => {
   const { Workbook } = await import('exceljs');
   const workbook = new Workbook();
@@ -44,33 +61,44 @@ export const createTransactionRecordsWorkbook = async (
   const worksheet = workbook.getWorksheet(TRANSACTION_RECORDS_SHEET_NAME) ?? workbook.worksheets[0];
   if (!worksheet) throw new Error('交易流水模版缺少工作表');
 
-  const templateHeaders = TRANSACTION_RECORD_HEADERS.slice(0, 8);
-  const headers = templateHeaders.map((_, index) => worksheet.getRow(1).getCell(index + 1).text.trim());
-  if (headers.some((header, index) => header !== templateHeaders[index])) {
+  const headers = TEMPLATE_HEADERS.map((_, index) => worksheet.getRow(1).getCell(index + 1).text.trim());
+  if (headers.some((header, index) => header !== TEMPLATE_HEADERS[index])) {
     throw new Error('交易流水模版字段与系统版本不一致');
   }
 
   if (worksheet.rowCount > 1) worksheet.spliceRows(2, worksheet.rowCount - 1);
   const headerRow = worksheet.getRow(1);
-  headerRow.getCell(9).value = TRANSACTION_RECORD_HEADERS[8];
-  headerRow.getCell(9).style = { ...headerRow.getCell(8).style };
-  [32, 22, 52, 21, 16, 18, 14, 18, 30].forEach((width, index) => {
+  TRANSACTION_RECORD_HEADERS.forEach((header, index) => {
+    const target = headerRow.getCell(index + 1);
+    const styleSource = headerRow.getCell(Math.min(index + 1, TEMPLATE_HEADERS.length));
+    target.value = header;
+    target.style = { ...styleSource.style };
+  });
+  [32, 22, 52, 21, 16, 18, 18, 24, 14, 18, 30, 24].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-  worksheet.autoFilter = { from: 'A1', to: 'I1' };
+  worksheet.autoFilter = { from: 'A1', to: 'L1' };
 
-  payouts.forEach((payout) => {
+  records.forEach((record) => {
+    const { payout, context } = record;
+    const details = transactionRecordDetails(payout, context);
+    const balance = record.status === '已付款'
+      ? context?.item.postTransactionBalance ?? payout.postTransactionBalance ?? null
+      : null;
     const row = worksheet.addRow([
       transactionCreatorLabel(payout),
-      payout.invoice,
-      `${payout.projectId} · ${payout.project}`,
-      excelDate(transactionOccurredAt(payout)),
-      paymentProviderDisplayName(payout.provider),
-      payout.amount,
-      payout.status,
-      null,
-      accountDisplayValue(payout.account),
+      details.invoice?.invoiceNumber ?? payout.invoice,
+      `${details.cooperationProjectCode} · ${details.cooperationProjectName}`,
+      excelDate(record.occurredAt),
+      paymentProviderDisplayName(record.provider),
+      record.paymentAmount,
+      record.transferFeeAmount ?? null,
+      record.recipientReceivedAmount ?? null,
+      record.status,
+      balance,
+      accountDisplayValue(details.accountSummary),
+      details.paymentBatchCode,
     ]);
 
     row.height = 22;
@@ -83,11 +111,19 @@ export const createTransactionRecordsWorkbook = async (
     });
     row.getCell(4).numFmt = 'yyyy-mm-dd hh:mm';
     row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(6).numFmt = `[$${payout.currency}] #,##0.00`;
-    row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+    [
+      { index: 6, currency: record.paymentCurrency },
+      { index: 7, currency: record.transferFeeCurrency },
+      { index: 8, currency: record.recipientReceivedCurrency },
+      { index: 10, currency: context?.item.postTransactionBalanceCurrency ?? payout.postTransactionBalanceCurrency },
+    ].forEach(({ index, currency }) => {
+      if (!currency || typeof row.getCell(index).value !== 'number') return;
+      row.getCell(index).numFmt = `[$${currency}] #,##0.00`;
+      row.getCell(index).alignment = { horizontal: 'right', vertical: 'middle' };
+    });
   });
 
-  if (payouts.length) worksheet.autoFilter = { from: 'A1', to: `I${payouts.length + 1}` };
+  if (records.length) worksheet.autoFilter = { from: 'A1', to: `L${records.length + 1}` };
   workbook.creator = 'COMETS Pay';
   workbook.lastModifiedBy = 'COMETS Pay';
 
@@ -99,10 +135,10 @@ export const createTransactionRecordsWorkbook = async (
 };
 
 export const loadTransactionRecordsWorkbook = async (
-  payouts: Payout[],
+  records: readonly TransactionRecord[],
   fetcher: typeof fetch = fetch,
 ) => {
   const response = await fetcher(TRANSACTION_RECORDS_TEMPLATE_PATH);
   if (!response.ok) throw new Error('交易流水模版加载失败');
-  return createTransactionRecordsWorkbook(await response.arrayBuffer(), payouts);
+  return createTransactionRecordsWorkbook(await response.arrayBuffer(), records);
 };

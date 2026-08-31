@@ -61,6 +61,7 @@ describe('payment failure recovery', () => {
     expect(payout.status).toBe('已退回');
     expect(payout.invoiceReviewStatus).toBe('已通过');
     expect(payout.paymentFailureRecovery?.status).toBe('AWAITING_CREATOR_UPDATE');
+    expect(payout.paymentFailureRecovery?.previousFailure).toEqual(failedPayout().paymentFailure);
     expect(isPaymentFailureRetryCandidate(payout)).toBe(true);
     expect(isPaymentFailureRetryReady(payout)).toBe(false);
   });
@@ -160,13 +161,40 @@ describe('payment failure recovery', () => {
       pendingFinance,
       { account: 'finance', name: '财务人员' },
     );
-    const submitted = markPaymentFailureRetrySubmitted(ready, 'batch_retry_1', 'BAT-RETRY-001');
+    const submitted = markPaymentFailureRetrySubmitted(
+      ready,
+      'batch_retry_1',
+      'BAT-RETRY-001',
+      '2026-08-11T09:00:00.000Z',
+      {
+        paymentOrderCode: 'PAY-RETRY-002',
+        sourcePaymentOrderCode: 'PAY-ORIGINAL-001',
+        attemptNumber: 2,
+      },
+    );
+    const succeeded = {
+      ...submitted,
+      status: '已付款' as const,
+      paymentFailureRecovery: submitted.paymentFailureRecovery ? {
+        ...submitted.paymentFailureRecovery,
+        status: 'RETRY_SUCCEEDED' as const,
+        retrySucceededAt: '2026-08-11T10:00:00.000Z',
+      } : undefined,
+    };
     const failedAgain = beginPaymentFailureAccountRecovery({ ...submitted, status: '付款失败' });
 
     expect(isPaymentFailureRetryCandidate(submitted)).toBe(false);
     expect(submitted.status).toBe('付款处理中');
     expect(paymentFailureRecoveryLabel(submitted)).toBe('付款处理中');
     expect(submitted.paymentFailureRecovery?.retryBatchCode).toBe('BAT-RETRY-001');
+    expect(submitted.currentPaymentAttempt).toMatchObject({
+      paymentOrderCode: 'PAY-RETRY-002',
+      sourcePaymentOrderCode: 'PAY-ORIGINAL-001',
+      attemptNumber: 2,
+    });
+    expect(submitted.paymentFailureRecovery?.previousFailure).toEqual(failedPayout().paymentFailure);
+    expect(isPaymentFailureRetryCandidate(succeeded)).toBe(false);
+    expect(paymentFailureRecoveryLabel(succeeded)).toBe('重试付款成功');
     expect(failedAgain.paymentFailureRecovery?.status).toBe('AWAITING_CREATOR_UPDATE');
     expect(failedAgain.paymentFailureRecovery?.previousAttempts).toEqual([
       expect.objectContaining({

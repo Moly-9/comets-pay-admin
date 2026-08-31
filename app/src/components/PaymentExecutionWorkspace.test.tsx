@@ -79,6 +79,10 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('请款项目信息');
     expect(html).toContain('项目编号');
     expect(html).toContain('关联项目');
+    expect(html).toContain('付款主体');
+    expect(html).toContain('项目费用归属');
+    expect(html).toContain('成本类型明细');
+    expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
     expect(html).toContain('当前审批流');
     expect(html).toContain('关联资料');
     expect(html.indexOf('请款项目信息')).toBeLessThan(html.indexOf('当前审批流'));
@@ -125,10 +129,17 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('付款渠道');
     expect(html).toContain('支付币种');
     expect(html).toContain('预计付款时间');
+    expect(html).toContain('class="is-amount"');
+    expect(html).toContain('class="is-payment-order"');
+    expect(html).toContain('class="is-provider"');
+    expect(html).toContain('class="is-currency"');
+    expect(html).toContain('class="is-expected-date"');
     expect(html.match(/payment-execution-hero-summary/g)).toHaveLength(1);
     expect(html).toContain('达人付款信息');
     expect(html).toContain('aria-label="请款项目与达人请款信息"');
-    expect(html.match(/payment-execution-board-card/g)).toHaveLength(2);
+    expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
+    expect(html.match(/payment-execution-board-card/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="校验结果"');
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain('class="payment-execution-table"');
     expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
@@ -157,6 +168,23 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('>退回媒介修改</span>');
     expect(html).toContain('>执行打款</span>');
     expect(html).toMatch(/class="button button-primary payment-execution-submit-action"(?![^>]*disabled)/);
+  });
+
+  it('uses the same soft system surfaces in payment, returned, and execution summaries', () => {
+    const source = readFileSync(new URL('./PaymentExecutionWorkspace.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
+
+    expect(source.match(/className="is-resources"/g)).toHaveLength(2);
+    expect(source.match(/className="is-payment-order"/g)).toHaveLength(3);
+    expect(styles).toContain('.payment-execution-metrics > .is-amount');
+    expect(styles).toContain('.payment-execution-metrics > .is-resources');
+    expect(styles).toContain('.payment-execution-metrics > .is-payment-order');
+    expect(styles).toContain('.payment-execution-hero-summary > .is-provider');
+    expect(styles).toContain('.payment-execution-hero-summary > .is-currency');
+    expect(styles).toContain('.payment-execution-hero-summary > .is-expected-date');
+    expect(styles).toContain('linear-gradient(125deg, #fff9ea 0%, #fff2df 100%)');
+    expect(styles).toMatch(/\.payment-execution-hero-summary span\s*{[^}]*color:\s*#747b89;/s);
+    expect(styles).toMatch(/\.payment-execution-hero-summary strong\s*{[^}]*color:\s*#20242c;/s);
   });
 
   it('treats every waiting-payment item as validated and blocks items outside that state', () => {
@@ -192,7 +220,8 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('还有 1 笔付款信息需要处理');
     expect(html).not.toContain('付款信息筛选');
     expect(html).toContain('payment-execution-table-status is-pending');
-    expect(html).toMatch(/class="button button-primary payment-execution-submit-action"[^>]*disabled=""/);
+    expect(html).toMatch(/class="button button-primary payment-execution-submit-action"[^>]*aria-disabled="true"/);
+    expect(html).toContain('data-disabled-reason="请先完成付款资料与执行账户校验。"');
   });
 
   it('also blocks direct execution from the overview when a payout is not ready', () => {
@@ -225,7 +254,8 @@ describe('PaymentExecutionWorkspace', () => {
     );
 
     expect(html).toContain('>执行打款</span>');
-    expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"[^>]*disabled=""/);
+    expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"[^>]*aria-disabled="true"/);
+    expect(html).toContain('data-disabled-reason="请先完成付款资料与执行账户校验。"');
   });
 
   it('prevents returning the whole request after any payout has started', () => {
@@ -256,7 +286,8 @@ describe('PaymentExecutionWorkspace', () => {
       />,
     );
 
-    expect(html).toMatch(/class="button button-danger payment-execution-return-action"[^>]*disabled=""/);
+    expect(html).toMatch(/class="button button-danger payment-execution-return-action"[^>]*aria-disabled="true"/);
+    expect(html).toContain('data-disabled-reason="当前账号或付款状态不允许退回媒介修改。"');
   });
 
   it('opens a returned request in a read-only overview with its return reason', () => {
@@ -317,6 +348,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html.indexOf('退回原因')).toBeLessThan(html.indexOf('请款项目信息'));
     expect(html).toContain('财务审核 · 财务测试员 · 第 1 轮');
     expect(html).toContain('审核未通过');
+    expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
     expect(html).toContain('该项目审核未通过，可展开付款清单查看具体明细和退回原因。');
     expect(html).toContain('>查看付款清单</span>');
     expect(html).toContain('>关闭</span>');
@@ -324,6 +356,48 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).not.toContain('payment-execution-return-action');
     expect(html).not.toContain('payment-execution-submit-action');
     expect(html).not.toContain('payment-execution-overview-submit-action');
+  });
+
+  it('renders the dedicated two-item returned demo with its finance return reason', () => {
+    const project = buildPaymentProjectRows({
+      tab: 'returned',
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    }).find((candidate) => candidate.requestCode === 'REQ-202607-000016')!;
+    const request = INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((candidate) => (
+      candidate.id === project.requestId
+    ))!;
+    const html = renderToStaticMarkup(
+      <PaymentExecutionWorkspace
+        request={request}
+        project={project}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        paymentLists={INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists}
+        contracts={INITIAL_COMPLETE_REQUEST_RESOURCES.contracts}
+        variant="returned"
+        initialStage="payment-list"
+        canExecute
+        onExecute={vi.fn(() => true)}
+        onReturn={vi.fn(() => true)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(project.payouts).toHaveLength(2);
+    expect(project.payouts.every((payout) => payout.status === '已退回')).toBe(true);
+    expect(request.approval).toMatchObject({
+      status: 'RETURNED_TO_MEDIA_REVIEW',
+      returnedFromStage: 'FINANCE',
+      returnReason: '付款资料需要媒介复核并修正后重新提交。',
+    });
+    expect(html).toContain('2 位达人需修改 · 0 位达人已通过审核');
+    expect(html).toContain('付款资料需要媒介复核并修正后重新提交。');
+    expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
+    expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
+    expect(html.match(/payment-execution-payee-fields/g)).toHaveLength(2);
+    expect(html.match(/payment-execution-payee is-returned/g)).toHaveLength(2);
+    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(2);
   });
 
   it('marks only scoped finance-return details as rejected and keeps the rest green', () => {

@@ -1,70 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { eligibleInvoicePayoutAccounts } from '../payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from '../pages/OperationalPages';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { GeneratedInvoiceRecord } from '../types';
 import {
-  INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL,
-  INVOICE_BATCH_PROTOTYPE_CURRENCY,
   INVOICE_BATCH_PROTOTYPE_DEMO_CURRENCY,
   INVOICE_BATCH_PROTOTYPE_DEMO_DESCRIPTION,
-  INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
   createInvoiceBatchPrototypeSeed,
   filterInvoiceBatchCreatorReferences,
   selectableInvoiceBatchEngagementIds,
-  withInvoiceBatchPrototypeAccounts,
 } from './invoiceBatchPrototype';
 
 describe('Invoice batch prototype defaults', () => {
-  it('provides every creator with one verified default Airwallex USD account', () => {
-    const creators = withInvoiceBatchPrototypeAccounts(INITIAL_CREATORS);
-
-    creators.forEach((creator) => {
-      const defaultAccount = eligibleInvoicePayoutAccounts(creator)
-        .find((account) => account.isDefault);
-      expect(defaultAccount).toMatchObject({
-        provider: 'Airwallex',
-        nickname: INVOICE_BATCH_PROTOTYPE_ACCOUNT_LABEL,
-        isDefault: true,
-        status: 'VERIFIED',
-      });
-      expect(
-        defaultAccount?.provider === 'Airwallex'
-          ? defaultAccount.bankDetails.accountCurrency
-          : '',
-      ).toBe(INVOICE_BATCH_PROTOTYPE_CURRENCY);
-    });
-  });
-
-  it('provides stable Bank and PayPal prototype choices without duplicating injected accounts', () => {
-    const creators = withInvoiceBatchPrototypeAccounts(INITIAL_CREATORS);
-    const creatorsAfterSecondInjection = withInvoiceBatchPrototypeAccounts(creators);
-
-    creatorsAfterSecondInjection.forEach((creator) => {
-      const eligibleAccounts = eligibleInvoicePayoutAccounts(creator);
-      const prototypeBankAccounts = eligibleAccounts.filter((account) => (
-        account.payoutAccountId === `awx-batch-${creator.id}`
-      ));
-      const prototypePayPalAccounts = eligibleAccounts.filter((account) => (
-        account.payoutAccountId === `paypal-batch-${creator.id}`
-      ));
-
-      expect(prototypeBankAccounts).toHaveLength(1);
-      expect(prototypePayPalAccounts).toHaveLength(1);
-      expect(prototypePayPalAccounts[0]).toMatchObject({
-        provider: 'PayPal',
-        nickname: INVOICE_BATCH_PROTOTYPE_PAYPAL_LABEL,
-        isDefault: false,
-        status: 'VERIFIED',
-      });
-      expect(
-        prototypePayPalAccounts[0].provider === 'PayPal'
-          ? prototypePayPalAccounts[0].paypalEmail
-          : '',
-      ).toMatch(/@example\.test$/);
-    });
-  });
-
   it('searches project creators by name, handle, or platform without changing order', () => {
     const references = INITIAL_PROJECTS[0].creatorProfiles!;
 
@@ -107,13 +53,10 @@ describe('Invoice batch prototype defaults', () => {
     expect(INITIAL_PROJECTS.some((project) => project.id === seed?.projectId)).toBe(true);
     expect(seed?.rows).toHaveLength(5);
     expect(new Set(seed?.rows.map((row) => row.engagementId)).size).toBe(5);
-    expect(seed?.rows.map((row) => row.payoutProvider)).toEqual([
-      'Airwallex',
-      'PayPal',
-      'Airwallex',
-      'PayPal',
-      'Airwallex',
-    ]);
+    expect(seed?.rows.every((row) => !('payoutProvider' in row))).toBe(true);
     expect(seed?.rows.every((row) => row.unitPrice > 0 && row.quantity > 0)).toBe(true);
+    expect(INITIAL_CREATORS.some((creator) => (
+      creator.payoutAccounts.some((account) => account.isDefault)
+    ))).toBe(true);
   });
 });

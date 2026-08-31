@@ -18,7 +18,7 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react';
-import { useRef, useState, type CSSProperties } from 'react';
+import { useRef, useState } from 'react';
 import {
   paymentListItemValue,
   type PaymentListItem,
@@ -43,11 +43,15 @@ import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
 import { accountDisplayValue } from '../accountPresentation';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
-import { creatorHandleForDisplay, formatCreatorHandle } from '../creatorSearchOptions';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal } from './Common';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
+import {
+  paymentCreatorIdentityFromPayout,
+  paymentCreatorIdentityFromValues,
+} from '../paymentCreatorIdentity';
 import './PaymentExecutionWorkspace.css';
 
 const formatDateTime = (value?: string) => {
@@ -409,6 +413,26 @@ export function PaymentExecutionWorkspace({
     }
   };
 
+  const renderProjectInformation = () => (
+    <dl className="payment-execution-project-info" data-testid="payment-execution-project-info">
+      <div className="payment-execution-project-field"><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
+      <div className="payment-execution-project-field"><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
+      <div className="payment-execution-project-field"><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
+      <div className="payment-execution-project-field"><dt>项目媒介</dt><dd>{project.media}</dd></div>
+      <div className="payment-execution-project-field"><dt>负责 PM</dt><dd>{project.pm}</dd></div>
+      <div className="payment-execution-project-field"><dt>提交人</dt><dd>{request.media}</dd></div>
+      <div className="payment-execution-project-field"><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
+      <div className="payment-execution-project-field"><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
+      <div className="payment-execution-project-field"><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+      <div className="payment-execution-project-field"><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
+      <div className="payment-execution-project-field"><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
+      <div className="payment-execution-project-field is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
+    </dl>
+  );
+
   return (
     <>
       <Modal
@@ -439,6 +463,7 @@ export function PaymentExecutionWorkspace({
                   className="payment-execution-overview-submit-action"
                   icon={<Send size={16} />}
                   disabled={!canSubmitPayment}
+                  disabledReason={!canExecute ? '当前账号或付款状态不允许执行打款。' : '请先完成付款资料与执行账户校验。'}
                   onClick={executePayment}
                 >
                   执行打款
@@ -465,6 +490,7 @@ export function PaymentExecutionWorkspace({
                     variant="danger"
                     icon={<AlertTriangle size={16} />}
                     disabled={!canReturnPayment}
+                    disabledReason="当前账号或付款状态不允许退回媒介修改。"
                     onClick={() => setReturnDialogOpen(true)}
                   >
                     退回媒介修改
@@ -473,6 +499,7 @@ export function PaymentExecutionWorkspace({
                     className="payment-execution-submit-action"
                     icon={<Send size={16} />}
                     disabled={!canSubmitPayment}
+                    disabledReason={!canExecute ? '当前账号或付款状态不允许执行打款。' : '请先完成付款资料与执行账户校验。'}
                     onClick={executePayment}
                   >
                     执行打款
@@ -492,12 +519,12 @@ export function PaymentExecutionWorkspace({
           {!showOverview ? (
           <main
             ref={paymentListFocusRef}
-            className={`payment-execution-main${isReturned ? ' is-returned' : ' payment-execution-board-card'}`}
+            className={`payment-execution-main${isReturned ? ' is-returned' : ''}`}
             tabIndex={-1}
             aria-label="请款项目与达人请款信息"
           >
           {!isReturned ? (
-            <section className="payment-execution-hero" aria-labelledby="payment-execution-project-title">
+            <section className="payment-execution-hero payment-execution-content-card" aria-labelledby="payment-execution-project-title">
               <div className="payment-execution-hero-heading">
                 <span className="payment-execution-section-icon"><WalletCards size={18} /></span>
                 <div>
@@ -509,10 +536,10 @@ export function PaymentExecutionWorkspace({
               </div>
               <div className="payment-execution-hero-summary" aria-label="付款项目摘要">
                 <div className="is-amount"><span>付款总金额</span><strong>{project.amount}</strong></div>
-                <div><span>付款单号</span><strong>{project.paymentOrder}</strong></div>
-                <div><span>付款渠道</span><strong>{paymentProvider}</strong></div>
-                <div><span>支付币种</span><strong>{paymentCurrencies}</strong></div>
-                <div><span>预计付款时间</span><strong>{request.expectedPaymentDate || '待补充'}</strong></div>
+                <div className="is-payment-order"><span>付款单号</span><strong>{project.paymentOrder}</strong></div>
+                <div className="is-provider"><span>付款渠道</span><strong>{paymentProvider}</strong></div>
+                <div className="is-currency"><span>支付币种</span><strong>{paymentCurrencies}</strong></div>
+                <div className="is-expected-date"><span>预计付款时间</span><strong>{request.expectedPaymentDate || '待补充'}</strong></div>
               </div>
             </section>
           ) : (
@@ -529,24 +556,12 @@ export function PaymentExecutionWorkspace({
             </header>
 
             <div className="payment-execution-metrics" aria-label="请款项目概览">
-              <div><span>请款金额</span><strong>{project.amount}</strong></div>
-              <div><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
-              <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
+              <div className="is-amount"><span>请款金额</span><strong>{project.amount}</strong></div>
+              <div className="is-resources"><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
+              <div className="is-payment-order"><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
             </div>
 
-            <dl className="payment-execution-project-info">
-              <div><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
-              <div><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
-              <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
-              <div><dt>项目媒介</dt><dd>{project.media}</dd></div>
-              <div><dt>负责 PM</dt><dd>{project.pm}</dd></div>
-              <div><dt>提交人</dt><dd>{request.media}</dd></div>
-              <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
-              <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
-              <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-              <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
-              <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
-            </dl>
+            {renderProjectInformation()}
           </section>
           )}
 
@@ -578,7 +593,7 @@ export function PaymentExecutionWorkspace({
           ) : null}
 
           {!isReturned ? (
-            <section className={`payment-execution-validation-alert is-${validationReady ? 'success' : 'warning'}`} role="status" aria-live="polite">
+            <section className={`payment-execution-validation-alert payment-execution-content-card is-${validationReady ? 'success' : 'warning'}`} role="status" aria-label="校验结果" aria-live="polite">
               <span>{validationReady ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</span>
               <div>
                 <strong>{validationReady
@@ -591,7 +606,7 @@ export function PaymentExecutionWorkspace({
             </section>
           ) : null}
 
-          <section className={`payment-execution-payees${isReturned ? ' payment-execution-content-card' : ' is-table-view'}`} aria-labelledby="payment-execution-payees-title">
+          <section className={`payment-execution-payees payment-execution-content-card${isReturned ? '' : ' is-table-view'}`} aria-labelledby="payment-execution-payees-title">
             <header>
               <div>
                 <span className="payment-execution-section-icon"><UserRound size={18} /></span>
@@ -621,8 +636,10 @@ export function PaymentExecutionWorkspace({
                   <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th></tr></thead>
                   <tbody>
                     {project.payouts.map((payout) => {
+                      const creator = creators.find((candidate) => candidate.id === payout.creatorId);
                       const informationValidated = payout.status === '等待付款';
                       const paymentItem = paymentItemForPayout(payout);
+                      const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
                       const receiveCurrency = paymentItem
                         ? String(paymentListItemValue(paymentItem, 'receiveCurrency') || payout.currency)
                         : payout.currency;
@@ -637,7 +654,7 @@ export function PaymentExecutionWorkspace({
                         : payout.feeBearer;
                       return (
                         <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
-                          <td><div className="payment-execution-creator-cell"><span style={{ '--payee-accent': payout.accent } as CSSProperties}>{payout.initials}</span><div><strong>{payout.creator}</strong><small>{formatCreatorHandle(payout.handle, payout.creatorPlatform)}</small></div></div></td>
+                          <td><div className="payment-execution-creator-cell"><PaymentCreatorIdentity {...creatorIdentity} /></div></td>
                           <td><div className="payment-execution-account-cell"><strong title={payout.account}>{accountDisplayValue(payout.account, '账户待补充')}</strong><small>{transferMethodLabel(payout)}</small></div></td>
                           <td><span className="payment-execution-currency">{payout.currency}</span></td>
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
@@ -655,6 +672,9 @@ export function PaymentExecutionWorkspace({
             ) : (
             <div className="payment-execution-payee-list">
               {project.payouts.map((payout, index) => {
+                const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+                const paymentItem = paymentItemForPayout(payout);
+                const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
                 const informationValidated = isPayoutPaymentInformationValidated(payout);
                 const returnItem = hasScopedReturnItems ? returnItemForPayout(payout) : undefined;
                 const detailReturned = isReturned && returnedPayoutIds.has(payout.id);
@@ -663,11 +683,8 @@ export function PaymentExecutionWorkspace({
                 return (
                   <article className={`payment-execution-payee${detailReturned ? ' is-returned' : ''}${detailPassed ? ' is-passed' : ''}`} key={payout.id}>
                     <header>
-                      <span className="payment-execution-payee-avatar" style={{ '--payee-accent': payout.accent } as CSSProperties}>
-                        {payout.initials}
-                      </span>
-                      <div>
-                        <strong>{payout.creator}</strong>
+                      <div className="payment-execution-payee-identity">
+                        <PaymentCreatorIdentity {...creatorIdentity} />
                         <small>{payout.invoice} · {project.paymentOrder} · {paymentProviderDisplayName(payout.provider)}</small>
                       </div>
                       <span className={`payment-execution-payee-status ${detailReturned ? 'is-error' : detailPassed || informationValidated ? 'is-valid' : 'is-pending'}`}>
@@ -689,7 +706,7 @@ export function PaymentExecutionWorkspace({
                             ? '付款信息校验成功，收款账户与付款资料均已通过审核'
                             : '付款信息尚未完成校验，暂不能执行打款'}</span>
                     </div>
-                    <dl>
+                    <dl className="payment-execution-payee-fields">
                       <div className="is-account"><dt>收款账户</dt><dd>{accountDisplayValue(payout.account)}<small>{transferMethodLabel(payout)}</small></dd></div>
                       <div><dt>支付币种</dt><dd>{payout.currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{payout.currency}</dd></div>
@@ -758,24 +775,12 @@ export function PaymentExecutionWorkspace({
                 </header>
 
                 <div className="payment-execution-metrics" aria-label="请款项目概览">
-                  <div><span>请款金额</span><strong>{project.amount}</strong></div>
-                  <div><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
-                  <div><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
+                  <div className="is-amount"><span>请款金额</span><strong>{project.amount}</strong></div>
+                  <div className="is-resources"><span>关联资料</span><strong>{project.contracts + project.invoices} 份</strong><small>{project.contracts} 份合同 · {project.invoices} 份 Invoice</small></div>
+                  <div className="is-payment-order"><span>付款单</span><strong>{project.paymentOrder}</strong><small>{paymentProvider} · {project.payouts.length} 笔明细</small></div>
                 </div>
 
-                <dl className="payment-execution-project-info">
-                  <div><dt>项目编号</dt><dd>{project.requestCode}</dd></div>
-                  <div><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
-                  <div><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
-                  <div><dt>项目媒介</dt><dd>{project.media}</dd></div>
-                  <div><dt>负责 PM</dt><dd>{project.pm}</dd></div>
-                  <div><dt>提交人</dt><dd>{request.media}</dd></div>
-                  <div><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
-                  <div><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>
-                  <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
-                  <div><dt>当前审批轮次</dt><dd>第 {request.approval?.round ?? 1} 轮</dd></div>
-                  <div className="is-wide"><dt>付款事由</dt><dd>{requestReason}</dd></div>
-                </dl>
+                {renderProjectInformation()}
               </section>
             ) : null}
             <section className={`payment-execution-approval${isReturned ? ' payment-execution-board-card' : ''}`} aria-labelledby="payment-execution-approval-title">
@@ -893,6 +898,7 @@ export function PaymentExecutionWorkspace({
                   variant="secondary"
                   icon={downloadingResource === 'contract' ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                   disabled={!linkedContracts.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? '合同文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
                   onClick={() => { void downloadContracts(); }}
                 >
                   {downloadingResource === 'contract' ? '打包中' : '下载合同汇总'}
@@ -903,6 +909,11 @@ export function PaymentExecutionWorkspace({
             <div className="finance-review-resource-card-list">
               {linkedContracts.map((contract) => {
                 const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: contract.paymentSnapshot?.accountName || contract.accountName,
+                  displayName: contract.publisher,
+                  creator,
+                });
                 const contractId = stableContractId(contract);
                 const recordKey = `contract:${contractId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -916,8 +927,7 @@ export function PaymentExecutionWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <strong>{creator?.name ?? contract.publisher ?? '达人档案缺失'}</strong>
-                      <small>{creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId, handle: contract.creatorHandle, platform: contract.creatorPlatform ?? contract.platform })}</small>
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount"><span>付款金额</span><strong>{formatContractMoney(contract)}</strong></div>
                     <span className="project-record-status"><i />{getContractReadiness(contract).label}</span>
@@ -927,6 +937,7 @@ export function PaymentExecutionWorkspace({
                         className="finance-review-resource-download"
                         icon={isDownloading ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadContract(contract); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -956,6 +967,7 @@ export function PaymentExecutionWorkspace({
                   variant="secondary"
                   icon={downloadingResource === 'invoice' ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                   disabled={!linkedInvoices.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? 'Invoice 文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
                   onClick={() => { void downloadInvoices(); }}
                 >
                   {downloadingResource === 'invoice' ? '打包中' : '下载 Invoice 汇总'}
@@ -966,6 +978,11 @@ export function PaymentExecutionWorkspace({
             <div className="finance-review-resource-card-list">
               {linkedInvoices.map((linkedInvoice) => {
                 const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: linkedInvoice.snapshot.payment.accountName,
+                  displayName: linkedInvoice.snapshot.creatorName,
+                  creator,
+                });
                 const invoiceName = invoiceDocumentName(linkedInvoice.snapshot);
                 const recordKey = `invoice:${linkedInvoice.invoiceId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -979,8 +996,7 @@ export function PaymentExecutionWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong>
-                      <small>{creatorHandleForDisplay({ creator, socialAccountId: linkedInvoice.snapshot.creatorSocialAccountId, handle: linkedInvoice.snapshot.creatorHandle, platform: linkedInvoice.snapshot.creatorPlatform })}</small>
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount"><span>Invoice 金额</span><strong>{formatInvoiceMoney(linkedInvoice.snapshot.currency, invoiceTotal(linkedInvoice.snapshot))}</strong></div>
                     <span className={`project-record-status${linkedInvoice.validationStatus === 'valid' ? '' : ' is-warning'}`}><i />{linkedInvoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span>
@@ -990,6 +1006,7 @@ export function PaymentExecutionWorkspace({
                         className="finance-review-resource-download"
                         icon={isDownloading ? <LoaderCircle className="is-spinning" size={15} /> : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadInvoice(linkedInvoice); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -1010,7 +1027,7 @@ export function PaymentExecutionWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!returnReason.trim()} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!returnReason.trim()} disabledReason="请先填写退回原因。" onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >

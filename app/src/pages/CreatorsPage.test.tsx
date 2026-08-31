@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
 import { createEmptyAirwallexAccount, createPayPalPayoutAccount } from '../payoutAccounts';
+import type { CreatorCollaborationProjectRecord } from '../creatorCollaborationProjects';
 import type { CreatorProfile } from '../types';
-import { getCreatorPayoutAccountValidationError, hasCreatorDraftContent } from './OperationalPages';
+import {
+  CreatorCollaborationProjectDetails,
+  CreatorSocialPlatformIcons,
+  CreatorsPage,
+  getCreatorPayoutAccountValidationError,
+  hasCreatorDraftContent,
+  INITIAL_CREATORS,
+} from './OperationalPages';
 
 const emptyCreatorDraft = (): CreatorProfile => {
   const id = 'creator-draft-test';
@@ -71,5 +81,105 @@ describe('CreatorsPage payout account gate', () => {
         paypalEmail: 'taylor@example.com',
       }),
     ])).toBe('一个默认 Airwallex 收款账户');
+  });
+});
+
+describe('CreatorsPage profile cards', () => {
+  it('社媒图标组件使用官方 SVG，合作项目卡仅展示项目资料和 Invoice 份数', () => {
+    const creator = INITIAL_CREATORS.find((item) => item.id === 'creator-luna');
+    if (!creator) throw new Error('演示数据缺少 Luna');
+    const collaborationProjects: CreatorCollaborationProjectRecord[] = [{
+      creatorId: creator.id as CreatorCollaborationProjectRecord['creatorId'],
+      projectId: 'project-luna-current',
+      projectCode: 'PRJ-LUNA-001',
+      projectName: 'Luna 联名项目',
+      brand: 'COMETS',
+      projectStatus: '执行中',
+      relationStatus: 'CURRENT',
+      directoryResolved: true,
+      socialAccounts: [{
+        socialAccountId: creator.socialAccounts[1].id,
+        handle: creator.socialAccounts[1].handle,
+        platform: creator.socialAccounts[1].platform,
+      }],
+      contractCount: 2,
+      invoiceCount: 1,
+      requestCount: 1,
+      paymentCount: 0,
+    }];
+    const summary = renderToStaticMarkup(
+      <CreatorSocialPlatformIcons
+        accounts={creator.socialAccounts}
+        size={19}
+        className="creator-profile-summary-platforms"
+      />,
+    );
+    const projects = renderToStaticMarkup(
+      <CreatorCollaborationProjectDetails projects={collaborationProjects} />,
+    );
+
+    expect(summary).toContain('aria-label="Instagram · @Luna_J"');
+    expect(summary).toContain('aria-label="TikTok · @luna.j.tiktok"');
+    expect(summary).toContain('<svg');
+    expect(summary).not.toContain('@Luna_J · Instagram');
+    expect(summary).not.toContain('>IG<');
+    expect(summary).not.toContain('>TT<');
+    expect(projects).toContain('creator-collaboration-project-card');
+    expect(projects).toContain('Luna 联名项目');
+    expect(projects).toContain('<dt>Invoice 份数</dt><dd>1 份</dd>');
+    expect(projects).not.toContain('该项目关联社媒账号');
+    expect(projects).not.toContain('项目关联资料数量');
+    expect(projects).not.toContain('>2</strong> 合同');
+    expect(projects).toContain('当前关联');
+  });
+
+  it('顶部摘要移除社媒图标，列表提供账号级展示、渠道筛选、多选和更新时间', () => {
+    const creator = INITIAL_CREATORS.find((item) => item.id === 'creator-luna');
+    if (!creator) throw new Error('演示数据缺少 Luna');
+    const collaborationProjects: CreatorCollaborationProjectRecord[] = [{
+      creatorId: creator.id as CreatorCollaborationProjectRecord['creatorId'],
+      projectId: 'project-luna-current',
+      projectCode: 'PRJ-LUNA-001',
+      projectName: 'Luna 联名项目',
+      brand: 'COMETS',
+      projectStatus: '执行中',
+      relationStatus: 'CURRENT',
+      directoryResolved: true,
+      socialAccounts: [],
+      contractCount: 2,
+      invoiceCount: 1,
+      requestCount: 1,
+      paymentCount: 0,
+    }];
+    const html = renderToStaticMarkup(
+      <CreatorsPage
+        notify={vi.fn()}
+        creators={[creator]}
+        collaborationProjects={collaborationProjects}
+        onSaveCreator={vi.fn()}
+        canEdit
+        currentUserAccount="admin@example.com"
+        onFocusCleared={vi.fn()}
+      />,
+    );
+    const source = readFileSync(new URL('./OperationalPages.tsx', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('className="creator-profile-summary-platforms"');
+    expect(html).toContain('aria-label="达人付款渠道筛选"');
+    expect(html).toContain('全部付款渠道');
+    expect(html).toContain('aria-label="全选当前筛选结果中的达人"');
+    expect(html).toContain(`aria-label="选择达人 ${creator.name}"`);
+    expect(html).toContain('导出所选（0）');
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('<th>社媒平台数</th>');
+    expect(html).toContain('<th>账户更新时间</th>');
+    expect(html).toContain('creator-directory-identity');
+    expect(html).toContain('@Luna_J');
+    expect(html).toContain('@luna.j.tiktok');
+    expect(html).toContain('creator-directory-payout has-default-account');
+    expect(html).toContain('账户已验证');
+    expect(source).toContain('tone="identity"');
+    expect(source).toContain('tone="payout"');
+    expect(source).toContain('tone="collaboration"');
   });
 });

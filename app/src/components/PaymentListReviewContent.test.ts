@@ -84,7 +84,7 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('付款清单');
     expect(reviewContentSource).toContain('结果');
     expect(reviewContentSource).toContain('合同信息需核对');
-    expect(reviewContentSource).toContain('<strong>{currentReview.creatorName}</strong>');
+    expect(reviewContentSource).toContain('<strong title={currentReview.creatorName}>{currentReview.creatorName}</strong>');
     expect(reviewContentSource).toContain('Real Name');
     expect(reviewContentSource).toContain('Account Name');
     expect(reviewContentSource).toContain('Account Number');
@@ -115,12 +115,14 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).not.toContain("id: 'bank-postal-code'");
   });
 
-  it('uses compact 12px comparison text and the requested payment summary header fields', () => {
-    expect(reviewContentSource).toContain('<dt>Account Name</dt><dd>{accountName}</dd>');
-    expect(reviewContentSource).toContain('<dt>付款清单编号</dt><dd>{row.list.paymentListCode}</dd>');
-    expect(reviewContentSource).toContain('<dt>支付方式</dt><dd>{transferMethodCode(row.effectiveAccount.transferMethod)}</dd>');
-    expect(reviewContentSource).toContain("if (transferMethod === 'LOCAL') return 'LOCAL'");
-    expect(reviewContentSource).toContain("if (transferMethod === 'SWIFT') return 'SWIFT'");
+  it('uses compact 12px comparison text and moves API status into the summary header', () => {
+    expect(reviewContentSource).toContain('const visibleAccountCheckStatus');
+    expect(reviewContentSource).toContain('const visibleAccountCheckLabel');
+    expect(reviewContentSource).toContain("? '已校验'");
+    expect(reviewContentSource).toContain("? '校验未通过'");
+    expect(reviewContentSource).toContain('className={`request-payment-api-result is-${visibleAccountCheckStatus');
+    expect(reviewContentSource).not.toContain('finance-payment-account-summary-meta');
+    expect(reviewContentSource).not.toContain('transferMethodCode');
     expect(workspaceStyles).toMatch(/\.finance-review-workspace \.finance-payment-list-review-content \.request-finance-comparison-table th,[\s\S]*\.request-finance-comparison-table td,[\s\S]*font-size:\s*12px;/s);
   });
 
@@ -143,11 +145,19 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('currentReview?.paymentItems');
   });
 
+  it('shows the current-version contract mismatch reason in payment-list and finance reviews', () => {
+    expect(reviewContentSource).toContain('InvoiceContractMismatchNotice');
+    expect(reviewContentSource).toContain('page.contractMismatchReview');
+    expect(reviewContentSource).toContain("variant === 'project'");
+    expect(workspaceSource).toContain('<PaymentListReviewContent');
+  });
+
   it('runs account validation automatically and keeps the finance workspace summary read-only', () => {
     expect(reviewContentSource).toContain("{variant === 'project' ? (");
     expect(reviewContentSource).toContain('void Promise.all(rows.map(async (row) => [');
-    expect(reviewContentSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators })');
-    expect(reviewContentSource).toContain('const validationScopeKey = JSON.stringify({ paymentLists, creators });');
+    expect(reviewContentSource).toContain("const validationScope = variant === 'finance-workspace' ? 'completeness' : 'full';");
+    expect(reviewContentSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators, scope: validationScope })');
+    expect(reviewContentSource).toContain('const validationScopeKey = JSON.stringify({ paymentLists, creators, validationScope });');
     expect(reviewContentSource).toContain('}, [validationScopeKey]);');
     expect(reviewContentSource).toContain('付款清单打开后自动调用 Airwallex');
     expect(reviewContentSource).not.toContain('request-payment-review-summary-action');
@@ -193,13 +203,16 @@ describe('shared payment-list finance review content', () => {
     expect(reviewContentSource).toContain('<th>Invoice 金额</th>');
     expect(reviewContentSource).toContain('<th>手续费承担方</th>');
     expect(reviewContentSource).toContain('<th>API 校验结果</th>');
-    expect(reviewContentSource).toContain('<Avatar initials={creatorInitials}');
-    expect(reviewContentSource).toContain('<small>{recipientHandle}</small>');
-    expect(reviewContentSource).toContain('creatorHandleForDisplay({');
+    expect(reviewContentSource).toContain('<PaymentCreatorIdentity {...creatorIdentity} />');
+    expect(reviewContentSource).toContain('accountName: row.effectiveAccount.paymentDetails?.accountName');
+    expect(reviewContentSource).toContain('displayName: recipientName');
+    expect(reviewContentSource).toContain('className="request-payment-account-cell"');
+    expect(reviewContentSource).toContain('title={accountValue}');
     expect(reviewContentSource).toContain('recipientSubjectName(');
     expect(reviewContentSource).toContain('request-payment-review-heading-actions');
     expect(reviewContentSource).toContain("variant === 'finance-workspace' ? (accountDisplay");
-    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*1000px;/s);
+    expect(workspaceStyles).toMatch(/\.request-payment-payee-table\s*{[^}]*min-width:\s*1080px;/s);
+    expect(workspaceStyles).toMatch(/\.request-payment-account-cell > strong\s*{[^}]*-webkit-line-clamp:\s*2;/s);
     expect(workspaceStyles).toMatch(/@media \(max-width: 640px\)[\s\S]*\.request-payment-payee-table tr\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
 
@@ -221,7 +234,7 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).toContain('data-testid="finance-review-approval-scroll"');
     expect(workspaceSource).toContain('aria-label="项目与审批详情"');
     expect(workspaceSource).toContain('tabIndex={0}');
-    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*{[^}]*height:\s*0;[^}]*grid-template-rows:\s*minmax\(0, 1fr\);[^}]*overflow:\s*hidden;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*{[^}]*height:\s*0;[^}]*grid-template-rows:\s*minmax\(0, 1fr\);[^}]*overflow-x:\s*auto;[^}]*overflow-y:\s*hidden;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-payment-scroll,\s*\.finance-review-approval-scroll\s*{[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-approval-scroll\s*{[^}]*grid-auto-rows:\s*max-content;/s);
   });
@@ -239,13 +252,27 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceSource).not.toContain('finance-review-project-page-nav');
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex - 1\)\}/g)).toHaveLength(2);
     expect(workspaceSource.match(/onClick=\{\(\) => goTo\(reviewIndex \+ 1\)\}/g)).toHaveLength(2);
-    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 4fr\) minmax\(0, 4fr\) minmax\(260px, 2fr\);/s);
+    expect(workspaceSource).toContain('const [invoicePanePercent, setInvoicePanePercent] = useState(40)');
+    expect(workspaceSource).toContain('aria-label="调整 Invoice 快照与付款清单核对看板宽度"');
+    expect(workspaceSource).toContain('aria-valuemin={MIN_INVOICE_PANE_PERCENT}');
+    expect(workspaceSource).toContain('aria-valuemax={MAX_INVOICE_PANE_PERCENT}');
+    expect(workspaceSource).toContain('const MIN_INVOICE_PANE_PERCENT = 20');
+    expect(workspaceSource).toContain('const MAX_INVOICE_PANE_PERCENT = 80');
+    expect(workspaceSource).toContain('event.currentTarget.setPointerCapture(event.pointerId)');
+    expect(workspaceSource).toContain('event.currentTarget.hasPointerCapture(event.pointerId)');
+    expect(workspaceSource).toContain("current + (event.key === 'ArrowLeft' ? -2 : 2)");
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*grid-template-columns:\s*minmax\(760px, 1fr\) minmax\(280px, 320px\);/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-comparison-panes\s*\{[\s\S]*?min-width:\s*760px;/s);
+    expect(workspaceStyles).toContain('var(--finance-review-invoice-size, 40fr)');
+    expect(workspaceStyles).toContain('var(--finance-review-payment-size, 60fr)');
+    expect(workspaceStyles).toMatch(/\.finance-review-comparison-panes\s*\{[\s\S]*?minmax\(0, var\(--finance-review-invoice-size, 40fr\)\)[\s\S]*?minmax\(0, var\(--finance-review-payment-size, 60fr\)\)/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-pane-resizer\s*\{[^}]*width:\s*44px;[^}]*min-height:\s*44px;[^}]*touch-action:\s*none;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-grid\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*8px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-pane\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*8px;/s);
-    expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\) 0fr;/s);
+    expect(workspaceStyles).toMatch(/\.finance-review-grid\.is-approval-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(760px, 1fr\) 0;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-approval-toggle\s*\{[^}]*right:\s*16px;[^}]*top:\s*15px;/s);
     expect(workspaceStyles).toMatch(/\.finance-review-invoice-edge-nav\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;[^}]*border-radius:\s*50%;/s);
-    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.finance-review-invoice-edge-nav,[\s\S]*\.finance-review-approval-toggle\s*\{[^}]*display:\s*none;/s);
     expect(workspaceStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-grid,[\s\S]*transition:\s*none;/s);
     expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.finance-review-validation-stage\s*{[^}]*transition:\s*none;/s);
   });
@@ -258,7 +285,24 @@ describe('shared payment-list finance review content', () => {
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer\s*{[^}]*width:\s*100%;[^}]*flex:\s*none;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*justify-self:\s*center;/s);
     expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 768px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
+  });
+
+  it('keeps the current creator payment summary collapsed and excludes review-only hidden fields', () => {
+    expect(reviewContentSource).toContain('const [accountDetailsExpanded, setAccountDetailsExpanded] = useState(false)');
+    expect(reviewContentSource).toContain('setAccountDetailsExpanded(false)');
+    expect(reviewContentSource).toContain('aria-expanded={accountDetailsExpanded}');
+    expect(reviewContentSource).toContain("accountDetailsExpanded ? '收起详情' : '查看详情'");
+    expect(reviewContentSource).toContain('className="finance-payment-account-detail-row"');
+    expect(reviewContentSource).not.toContain('<dt>达人</dt><dd>{row.item.snapshot.creatorName}</dd>');
+    expect(reviewContentSource).toContain("'beneficiary.date_of_birth'");
+    expect(reviewContentSource).toContain('FINANCE_WORKSPACE_HIDDEN_SCHEMA_PATHS.has(field.path)');
+    expect(reviewContentSource).not.toContain("label: '出生日期'");
+    expect(reviewContentSource).not.toContain("label: '请求编号'");
+    expect(reviewContentSource).toContain('className="finance-review-comparison-identity"');
+    expect(workspaceStyles).toMatch(/\.finance-review-comparison-identity\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s);
+    expect(workspaceStyles).toMatch(/\.finance-payment-account-snapshots\s*\{[^}]*border:\s*1px solid #e0e4e9;[^}]*background:\s*#fff;/s);
+    expect(workspaceStyles).toMatch(/\.finance-payment-account-detail-list:not\(\.is-expanded\)\s*\{[^}]*display:\s*none;/s);
   });
 
   it('does not allow an incorrect record to be overwritten as correct', () => {

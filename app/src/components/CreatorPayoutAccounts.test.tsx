@@ -21,7 +21,8 @@ describe('CreatorPayoutAccounts profile editor', () => {
     expect(html).toContain('>Payer Max</strong><small>暂未开放 · 暂不支持创建</small>');
     expect(html).toContain('title="PayPal 暂未开放"');
     expect(html).toContain('title="Payer Max 暂未开放"');
-    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(html.match(/aria-disabled="true"/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html).toContain('Beneficiary Type');
     expect(html).toContain("Beneficiary&#x27;s Bank Country/Region");
     expect(html).toContain('>Currency</small>');
@@ -48,11 +49,47 @@ describe('CreatorPayoutAccounts profile editor', () => {
     expect(html).toContain('Beneficiary&#x27;s Bank Postal Code');
     expect(html).toContain('示例：JPMorgan Chase Bank');
     expect(html).toContain('法定名');
-    expect(html).toContain('ACH routing number');
+    expect(html).toContain('Primary Routing Code');
     expect(html).not.toContain('出生日期');
     expect(html).not.toContain('收款通知邮箱');
     expect(html).not.toContain('Signature');
     expect(html).not.toContain('校验通过，已回写');
     expect(html).toContain('>校验账户</span>');
+  });
+
+  it('在只读详情中使用独立字段卡和中英文展示标题，不外显技术字段名', () => {
+    const draft = createEmptyAirwallexAccount('Taylor Morgan', 'taylor@example.com', 'creator-test');
+    const account = {
+      ...draft,
+      beneficiaryId: 'bene_test_001',
+      status: 'VERIFIED' as const,
+      verificationCode: 'VERIFIED' as const,
+      nameMatchResult: 'FULL_MATCH' as const,
+      validatedAt: '2026-08-30 10:00',
+      verifiedAt: '2026-08-30 10:01',
+      bankDetails: {
+        ...draft.bankDetails,
+        accountName: 'Taylor Morgan acc',
+        accountNumber: '50001121',
+        bankName: 'JPMorgan Chase Bank',
+      },
+    };
+    const html = renderToStaticMarkup(
+      <CreatorPayoutAccounts
+        accounts={[account]}
+        creatorId="creator-test"
+        creatorName="Taylor Morgan"
+        creatorEmail="taylor@example.com"
+      />,
+    );
+
+    expect(html.match(/creator-payment-value(?:\s|\")/g)?.length).toBeGreaterThan(12);
+    expect(html).toContain('账户名称<small>Account Name</small>');
+    expect(html).toContain('收款银行名称<small>Beneficiary&#x27;s Bank Name</small>');
+    expect(html).toContain('账户验证结果<small>Account Verification Result</small>');
+    expect(html).not.toContain('account_name');
+    expect(html).not.toContain('verificationCode');
+    expect(html).not.toContain('nameMatchResult');
+    expect(html).not.toContain('beneficiary_id');
   });
 });

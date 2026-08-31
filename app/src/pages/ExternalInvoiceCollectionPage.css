@@ -98,34 +98,28 @@
 
 .external-form-span { grid-column: 1 / -1; }
 
-.external-contract-picker {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.external-invoice-page .creator-search-combobox .contract-search-input-wrap {
+  border-color: #d8dce4;
 }
 
-.external-contract-picker > label {
-  align-items: center;
-  background: #fbfcfd;
-  border: 1px solid var(--external-line);
-  border-radius: 7px;
-  cursor: pointer;
-  display: flex;
-  gap: 10px;
-  min-height: 62px;
-  padding: 10px 12px;
+.external-invoice-page .creator-search-combobox .contract-search-input-wrap:focus-within {
+  border-color: #ad91b3;
+  box-shadow: 0 0 0 3px rgba(137, 102, 145, 0.1);
 }
 
-.external-contract-picker > label.is-selected {
-  background: #faf6fb;
-  border-color: #cda8c8;
+.external-invoice-page .form-grid .creator-search-combobox .contract-search-input-wrap input,
+.external-invoice-page .form-grid .creator-search-combobox .contract-search-input-wrap input:focus {
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
 }
 
-.external-contract-picker span,
+.external-invoice-contract-coverage .invoice-contract-options { margin-top: 12px; }
 .external-summary-grid dd > span { display: grid; gap: 3px; }
-.external-contract-picker small,
 .external-summary-grid small { color: var(--external-muted); font-size: 11px; }
-.external-empty-inline { color: var(--external-muted); font-size: 13px; grid-column: 1 / -1; padding: 10px 0; }
 
 .external-form-actions,
 .external-simulator-actions,
@@ -353,7 +347,8 @@
 .invoice-list-filter-summary button:hover,
 .invoice-list-filter-summary button:focus-visible { color: #b8422e; }
 
-.invoice-management-table { min-width: 1450px; table-layout: fixed; }
+.invoice-management-table { min-width: 1550px; table-layout: fixed; }
+.invoice-management-table .invoice-creator-column { width: 270px; min-width: 270px; }
 .invoice-management-table th,
 .invoice-management-table td { vertical-align: middle; }
 .invoice-management-table th:nth-last-child(2),
@@ -426,7 +421,6 @@
   .external-section-heading p { text-align: left; }
   .external-form-grid,
   .external-simulator-form,
-  .external-contract-picker,
   .external-summary-grid,
   .external-critical-checks { grid-template-columns: 1fr; }
   .external-form-span { grid-column: auto; }

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from './accountPresentation';
+import { buildCreatorCollaborationProjects } from './creatorCollaborationProjects';
 import { resolveCreatorSocialAccount } from './creatorSearchOptions';
 import { AppShell } from './components/AppShell';
+import { DraftExitDialog } from './components/DraftExitDialog';
 import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { paymentProviderDisplayName } from './components/PaymentProviderBadge';
-import { Toast } from './components/Common';
+import { BLOCKED_ACTION_EVENT, Toast } from './components/Common';
 import {
   canEditRequestProjectResources,
   type RequestProjectResourceActions,
@@ -13,6 +15,7 @@ import {
 import {
   completeGeneratedContractUpload,
   contractLinkedToProject,
+  createEditingContractDraft,
   createGeneratedContractDraft,
   createUploadedContract,
   INITIAL_CONTRACTS,
@@ -23,6 +26,10 @@ import {
   type ContractRecord,
   type ContractUploadInput,
 } from './contracts';
+import {
+  getContractTemplatePolicyReadiness,
+  getContractTemplateStatus,
+} from './contractTemplateFieldPolicies';
 import {
   authenticateSystemUser,
   CURRENT_USER,
@@ -45,10 +52,14 @@ import {
   type MockBatchSubmission,
 } from './batchTransfers';
 import {
+  applyPaymentResultToCurrentBatch,
   createInitialPaymentBatches,
   createPaymentBatchRecord,
   createPaymentExecutionBatchRecord,
   createPaymentProjectPaymentRecord,
+  paymentBatchItemAttemptNumber,
+  paymentBatchItemOrderCode,
+  paymentBatchItemSourceOrderCode,
 } from './paymentBatches';
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
@@ -61,6 +72,7 @@ import { PaymentProjectPaymentDetailPage } from './pages/PaymentProjectPaymentDe
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
+import { SystemConfigurationPage } from './pages/SystemConfigurationPage';
 import {
   applyInvoiceDocumentEdit,
   applyInvoiceReviewAction,
@@ -83,6 +95,7 @@ import {
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
 } from './invoice/invoiceManagement';
+import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
 import {
   buildApprovedExternalInvoice,
   correctExternalInvoiceRecognition,
@@ -202,6 +215,9 @@ import {
   paymentRequestAmountLabel,
   paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
+  paymentRequestExtraDetailIssues,
+  paymentRequestPaymentPlanFor,
+  paymentRequestPaymentPlanIssues,
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   paymentRequestCancellationIssue,
@@ -227,6 +243,13 @@ import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
+import { prototypePaymentResultFor } from './prototypePaymentResults';
+import {
+  paymentAttemptSnapshotFor,
+  withLatestFailedAttemptReturnReason,
+  withPaymentAttemptSnapshot,
+} from './paymentAttempts';
+import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
@@ -247,7 +270,10 @@ import {
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalAllowsInvoicePayoutOverride,
   requestApprovalHasScopedReturnItems,
+  requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
+  requestApprovalReturnItemForInvoiceEdit,
+  requestApprovalReturnItemForPaymentListEdit,
   requestApprovalStage,
   appendRequestApprovalReturnNotification,
   recordRequestApprovalReturnAccountUpdate,
@@ -302,6 +328,13 @@ const NEXT_STATUS: Partial<Record<Payout['status'], Payout['status']>> = {
   等待付款: '付款处理中',
   信息异常: '等待付款',
   付款处理中: '已付款',
+};
+
+const paymentBatchAttemptIssueMessage = (issue: string | undefined) => {
+  if (issue === 'AMBIGUOUS_BATCH') return '同一付款项匹配到多个处理中的批次，已停止状态更新。';
+  if (issue === 'ATTEMPT_FINALIZED') return '当前付款批次已结束，不能再次修改历史结果。';
+  if (issue === 'INVALID_RESULT') return '只有付款成功或付款失败结果可以写入付款批次。';
+  return '未找到该付款项当前正在处理的付款批次。';
 };
 
 const returnPaymentFailureApproval = (
@@ -389,6 +422,28 @@ const LOCAL_DEV_USER = LOCAL_DEV_BYPASSES_AUTH
   ? (resolveSystemUser('jeff') ?? CURRENT_USER)
   : CURRENT_USER;
 
+const getContractTemplateAvailability = (contracts: ContractRecord[]) => {
+  const template = contracts.find((contract) => (
+    contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
+  ));
+  const readiness = template
+    ? getContractTemplatePolicyReadiness(template.templateFieldPolicies)
+    : null;
+  const activeTemplate = template
+    && getContractTemplateStatus(template) === 'ACTIVE'
+    && readiness?.ready
+    ? template
+    : null;
+  const disabledReason = !template
+    ? '当前没有可用于生成合同的模板。'
+    : getContractTemplateStatus(template) !== 'ACTIVE'
+      ? '合同模板已停用，请先在系统配置中启动模板。'
+      : !readiness?.ready
+        ? '合同模板字段配置存在阻断项，请先在系统配置中修复。'
+        : undefined;
+  return { template, activeTemplate, disabledReason };
+};
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(LOCAL_DEV_BYPASSES_AUTH);
   const [currentUser, setCurrentUser] = useState<SystemUser>(LOCAL_DEV_USER);
@@ -437,6 +492,14 @@ export default function App() {
   );
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
   const [requestProjects, setRequestProjects] = useState(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.requests);
+  const creatorCollaborationProjects = useMemo(() => buildCreatorCollaborationProjects({
+    projects,
+    contracts,
+    generatedInvoices,
+    externalInvoices,
+    requests: requestProjects,
+    payouts,
+  }), [contracts, externalInvoices, generatedInvoices, payouts, projects, requestProjects]);
   const [paymentBatches, setPaymentBatches] = useState(() => createInitialPaymentBatches({
     payouts,
     requests: requestProjects,
@@ -464,6 +527,11 @@ export default function App() {
   const [focusedCreatorId, setFocusedCreatorId] = useState<string | null>(null);
   const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
   const [contractGenerationEngagementId, setContractGenerationEngagementId] = useState<EngagementId | null>(null);
+  const [editingContractDraftId, setEditingContractDraftId] = useState<string | null>(null);
+  const [contractBuilderModel, setContractBuilderModel] = useState<ContractGenerationModel | null>(null);
+  const [contractBuilderDirty, setContractBuilderDirty] = useState(false);
+  const [contractTemplateDirty, setContractTemplateDirty] = useState(false);
+  const [pendingContractExit, setPendingContractExit] = useState<{ run: () => void } | null>(null);
   const [invoiceCreationEngagementId, setInvoiceCreationEngagementId] = useState<EngagementId | null>(null);
   const [invoiceEditTarget, setInvoiceEditTarget] = useState<{
     invoiceId: InvoiceId;
@@ -509,6 +577,19 @@ export default function App() {
 
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
+  }, []);
+
+  useEffect(() => {
+    const explainBlockedAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      setToast({
+        title: '暂时无法操作',
+        message: detail?.reason?.trim() || '请先完成当前页面的必填项与校验。',
+        tone: 'warning',
+      });
+    };
+    window.addEventListener(BLOCKED_ACTION_EVENT, explainBlockedAction);
+    return () => window.removeEventListener(BLOCKED_ACTION_EVENT, explainBlockedAction);
   }, []);
 
   useEffect(() => {
@@ -746,7 +827,28 @@ export default function App() {
     return true;
   }, [contracts, notify, registerProjectMutation]);
 
+  const saveContractDraft = useCallback((model: ContractGenerationModel) => {
+    const existingDraft = contracts.find((contract) => (
+      contract.lifecycle === 'EDITING_DRAFT'
+      && ((editingContractDraftId && (contract.contractId ?? contract.id) === editingContractDraftId)
+        || contract.id === model.contractNumber)
+    ));
+    const record = createEditingContractDraft(model, existingDraft, currentUser.account);
+    setContracts((current) => existingDraft
+      ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
+      : [record, ...current]);
+    setEditingContractDraftId(record.contractId ?? record.id);
+    setContractBuilderDirty(false);
+    notify('合同草稿已保存', `${record.name} 已保存到草稿箱，可稍后继续编辑。`);
+    return record;
+  }, [contracts, currentUser.account, editingContractDraftId, notify]);
+
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
+    const existingDraft = contracts.find((contract) => (
+      contract.lifecycle === 'EDITING_DRAFT'
+      && ((editingContractDraftId && (contract.contractId ?? contract.id) === editingContractDraftId)
+        || contract.id === model.contractNumber)
+    ));
     const projectKey = String(model.cooperationProjectId ?? model.projectId);
     const existingProject = projects.find((project) => getProjectId(project) === projectKey);
     const existingReference = existingProject?.creatorProfiles?.find((reference) => (
@@ -785,22 +887,28 @@ export default function App() {
     }
     const resolvedModel = { ...model, engagementId: resolvedEngagementId };
     const documentUrl = URL.createObjectURL(files.pdfBlob);
-    const record = createGeneratedContractDraft(resolvedModel, 1, documentUrl, {
+    const record = createGeneratedContractDraft(resolvedModel, existingDraft?.generationVersion ?? 1, documentUrl, {
+      existingContractId: existingDraft?.contractId,
       generationVariant: files.variant,
       qualityReport: files.qualityReport,
       pageCount: files.pageCount,
+      uploadedByAccount: currentUser.account,
     });
-    setContracts((current) => [record, ...current]);
+    setContracts((current) => existingDraft
+      ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
+      : [record, ...current]);
+    setEditingContractDraftId(null);
+    setContractBuilderDirty(false);
     registerProjectMutation({
       projectId: resolvedModel.projectId,
       engagementId: resolvedEngagementId,
       entityType: 'contract',
       entityId: record.contractId ?? record.id,
-      action: 'create',
+      action: existingDraft ? 'update' : 'create',
       summary: `已生成合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
-  }, [contracts, creators, projects, registerProjectMutation]);
+  }, [contracts, creators, currentUser.account, editingContractDraftId, projects, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
@@ -896,20 +1004,7 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const navigate = (page: NavPage, options?: NavOptions) => {
-    if (!canAccessPage(currentUser, page)) {
-      notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
-      return false;
-    }
-    if (
-      (
-        (activePage === 'invoice-edit' && invoiceEditorDirty)
-        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
-      )
-      && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
-    ) {
-      return false;
-    }
+  const finishNavigation = (page: NavPage, options?: NavOptions) => {
     if (page === 'requests') {
       setRequestStatusFilter(options?.requestStatusFilter ?? 'all');
     }
@@ -926,7 +1021,42 @@ export default function App() {
     setSelectedPayout(null);
     setPaymentDetailRequestId(null);
     setPaymentWorkbenchInitialTab('review');
+    if (page !== 'contract-create') {
+      setEditingContractDraftId(null);
+      setContractBuilderModel(null);
+      setContractBuilderDirty(false);
+    }
+    if (page !== 'system-config') setContractTemplateDirty(false);
     return true;
+  };
+
+  const navigate = (page: NavPage, options?: NavOptions) => {
+    if (!canAccessPage(currentUser, page)) {
+      notify('暂无操作权限', `${currentUser.role}无法访问该功能。`);
+      return false;
+    }
+    if (
+      (
+        (activePage === 'invoice-edit' && invoiceEditorDirty)
+        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
+      )
+      && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
+    ) {
+      return false;
+    }
+    if (activePage === 'contract-create' && page !== 'contract-create' && contractBuilderDirty) {
+      setPendingContractExit({ run: () => { finishNavigation(page, options); } });
+      return false;
+    }
+    if (
+      activePage === 'system-config'
+      && page !== 'system-config'
+      && contractTemplateDirty
+      && !window.confirm('合同模板配置尚未保存，确定切换页面吗？')
+    ) {
+      return false;
+    }
+    return finishNavigation(page, options);
   };
 
   const saveCreator = (updated: CreatorProfile) => {
@@ -2001,15 +2131,19 @@ export default function App() {
 
   const submitMediaPaymentRequest = (request: RequestProjectSummary) => {
     const creatorLinks = request.creatorLinks ?? [];
-    const issues = paymentRequestSubmissionIssues({
-      creatorLinks,
-      invoices: generatedInvoices,
-      paymentLists,
-      paymentRequestProjectId: request.paymentRequestProjectId,
-      paymentChannel: request.paymentChannel,
-    });
-    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.paymentChannel || !request.generatedDetail?.reason || !request.costType?.trim()) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM、付款渠道、成本类型和付款事由');
+    const issues = [
+      ...paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor(request)),
+      ...paymentRequestExtraDetailIssues(request),
+      ...paymentRequestSubmissionIssues({
+        creatorLinks,
+        invoices: generatedInvoices,
+        paymentLists,
+        paymentRequestProjectId: request.paymentRequestProjectId,
+        paymentChannel: request.paymentChannel,
+      }),
+    ];
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
+      issues.unshift('项目必填资料不完整，请检查关联项目、PM 和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => (
@@ -2402,25 +2536,90 @@ export default function App() {
     setFinanceReviewRequestId(request.id);
   };
 
+  const currentPaymentReceiveCurrency = (payout: Payout) => {
+    const batchId = payout.currentPaymentAttempt?.paymentBatchId
+      ?? payout.paymentFailureRecovery?.retryBatchId;
+    return paymentBatches
+      .find((batch) => (
+        (!batchId || batch.paymentBatchId === batchId)
+        && batch.items.some((item) => item.payoutId === payout.id)
+      ))
+      ?.items.find((item) => item.payoutId === payout.id)
+      ?.receiveCurrency ?? payout.currency;
+  };
+
   const advancePayout = (payout: Payout) => {
     if (!isInvoiceApprovedForPayment(payout)) {
       notify('Invoice 尚未通过', '完成媒介与财务审核后才能推进付款。');
       return;
     }
+    if (payout.status === '等待付款') {
+      const projectPayouts = payout.paymentRequestProjectId
+        ? payouts.filter((candidate) => candidate.paymentRequestProjectId === payout.paymentRequestProjectId)
+        : [];
+      if (!projectPayouts.length) {
+        notify('无法执行打款', '该付款项未稳定关联请款项目，不能绕过付款批次直接执行。');
+        return;
+      }
+      executePaymentRequest(projectPayouts);
+      return;
+    }
     const nextStatus = NEXT_STATUS[payout.status];
     if (!nextStatus) return;
-    const updated: Payout = {
+    const resultAt = nowIso();
+    const retrySucceeded = nextStatus === '已付款'
+      && payout.paymentFailureRecovery?.status === 'RETRY_SUBMITTED';
+    const paymentResult = nextStatus === '已付款'
+      ? prototypePaymentResultFor({
+          ...payout,
+          receiveCurrency: currentPaymentReceiveCurrency(payout),
+        })
+      : undefined;
+    const baseUpdated: Payout = {
       ...payout,
       status: nextStatus,
       issue: payout.status === '信息异常' ? undefined : payout.issue,
-      paidAt: nextStatus === '已付款' ? '2026-07-17 刚刚' : payout.paidAt,
+      paidAt: nextStatus === '已付款' ? resultAt : payout.paidAt,
+      ...(paymentResult ?? {}),
+      ...(retrySucceeded ? {
+        issue: undefined,
+        returnReason: undefined,
+        paymentFailure: undefined,
+        paymentFailureReturn: undefined,
+        paymentFailureRecovery: payout.paymentFailureRecovery ? {
+          ...payout.paymentFailureRecovery,
+          status: 'RETRY_SUCCEEDED' as const,
+          retrySucceededAt: resultAt,
+        } : undefined,
+      } : {}),
     };
+    const updated = nextStatus === '已付款' && paymentResult
+      ? withPaymentAttemptSnapshot(baseUpdated, paymentAttemptSnapshotFor({
+          payout: baseUpdated,
+          status: '已付款',
+          occurredAt: resultAt,
+          transferFeeAmount: paymentResult.transferFeeAmount,
+          transferFeeCurrency: paymentResult.transferFeeCurrency,
+          actualPaidAmount: paymentResult.actualPaidAmount,
+          actualPaidCurrency: paymentResult.actualPaidCurrency,
+          recipientReceivedAmount: paymentResult.recipientReceivedAmount,
+          recipientReceivedCurrency: paymentResult.recipientReceivedCurrency,
+        }))
+      : baseUpdated;
+    if (nextStatus === '已付款') {
+      const batchUpdate = applyPaymentResultToCurrentBatch({ batches: paymentBatches, payout: updated });
+      if (!batchUpdate.updatedBatchId) {
+        notify('无法更新付款结果', paymentBatchAttemptIssueMessage(batchUpdate.issue));
+        return;
+      }
+      setPaymentBatches([...batchUpdate.batches]);
+    }
     const nextPayouts = payouts.map((item) => item.id === payout.id ? updated : item);
     const completedRequests = nextStatus === '已付款'
       ? requestProjects.filter((request) => {
           const hasSubmittedRetry = nextPayouts.some((candidate) => (
             candidate.paymentRequestProjectId === request.paymentRequestProjectId
-            && candidate.paymentFailureRecovery?.status === 'RETRY_SUBMITTED'
+            && ['RETRY_SUBMITTED', 'RETRY_SUCCEEDED'].includes(candidate.paymentFailureRecovery?.status ?? '')
           ));
           return (
             request.lifecycle === 'APPROVED'
@@ -2492,6 +2691,7 @@ export default function App() {
       notify('付款信息校验未通过', `${invalidPayout.invoice} 的 Invoice 或付款清单仍需复核。`);
       return false;
     }
+    const submittedAt = nowIso();
     let batchRecord: ReturnType<typeof createPaymentExecutionBatchRecord>;
     try {
       batchRecord = createPaymentExecutionBatchRecord({
@@ -2504,7 +2704,7 @@ export default function App() {
         paymentBatchId: createPrototypeId('batch') as PaymentBatchId,
         paymentBatchCode: createPrototypeCode('BAT'),
         payer: currentUser.name,
-        submittedAt: nowIso(),
+        submittedAt,
       });
     } catch (error) {
       notify(
@@ -2516,8 +2716,40 @@ export default function App() {
 
     const waitingPayoutIds = new Set(projectPayouts.map((payout) => payout.id));
     setPayouts((current) => current.map((payout) => (
-      waitingPayoutIds.has(payout.id) ? { ...payout, status: '付款处理中' } : payout
+      waitingPayoutIds.has(payout.id)
+        ? (() => {
+            const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
+            return {
+              ...payout,
+              status: '付款处理中' as const,
+              currentPaymentAttempt: {
+                paymentBatchId: batchRecord.paymentBatchId,
+                paymentBatchCode: batchRecord.paymentBatchCode,
+                submittedAt,
+                paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+                sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+                attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+              },
+            };
+          })()
+        : payout
     )));
+    setSelectedPayout((current) => {
+      if (!current || !waitingPayoutIds.has(current.id)) return current;
+      const batchItem = batchRecord.items.find((item) => item.payoutId === current.id)!;
+      return {
+        ...current,
+        status: '付款处理中',
+        currentPaymentAttempt: {
+          paymentBatchId: batchRecord.paymentBatchId,
+          paymentBatchCode: batchRecord.paymentBatchCode,
+          submittedAt,
+          paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+          sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+          attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+        },
+      };
+    });
     setPaymentBatches((current) => [batchRecord, ...current]);
     notify(
       '项目付款已提交渠道',
@@ -2537,9 +2769,20 @@ export default function App() {
     }
     const occurredAt = nowIso();
     const failureReason = '渠道付款失败：SIMULATED_PROVIDER_DECLINE';
-    const updated: Payout = {
+    const failedPaymentResult = prototypePaymentResultFor({
+      ...payout,
+      receiveCurrency: currentPaymentReceiveCurrency(payout),
+    });
+    const baseUpdated: Payout = {
       ...payout,
       status: '付款失败',
+      paidAt: undefined,
+      transferFeeAmount: undefined,
+      transferFeeCurrency: undefined,
+      actualPaidAmount: undefined,
+      actualPaidCurrency: undefined,
+      recipientReceivedAmount: undefined,
+      recipientReceivedCurrency: undefined,
       paymentFailure: {
         provider: payout.provider,
         errorCode: 'SIMULATED_PROVIDER_DECLINE',
@@ -2562,6 +2805,25 @@ export default function App() {
       ],
       issue: failureReason,
     };
+    const updated = withPaymentAttemptSnapshot(baseUpdated, paymentAttemptSnapshotFor({
+      payout: baseUpdated,
+      status: '付款失败',
+      occurredAt,
+      transferFeeAmount: failedPaymentResult.transferFeeAmount,
+      transferFeeCurrency: failedPaymentResult.transferFeeCurrency,
+      actualPaidAmount: failedPaymentResult.transferFeeAmount,
+      actualPaidCurrency: failedPaymentResult.transferFeeCurrency,
+      recipientReceivedAmount: 0,
+      recipientReceivedCurrency: failedPaymentResult.recipientReceivedCurrency,
+      errorCode: baseUpdated.paymentFailure?.errorCode,
+      providerResponse: baseUpdated.paymentFailure?.providerResponse,
+    }));
+    const batchUpdate = applyPaymentResultToCurrentBatch({ batches: paymentBatches, payout: updated });
+    if (!batchUpdate.updatedBatchId) {
+      notify('无法记录付款失败', paymentBatchAttemptIssueMessage(batchUpdate.issue));
+      return;
+    }
+    setPaymentBatches([...batchUpdate.batches]);
     setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify('已记录付款失败', '请由财务选择问题类型并退回媒介，当前不可直接重试付款。');
@@ -2586,7 +2848,7 @@ export default function App() {
       return false;
     }
     const occurredAt = nowIso();
-    const returnedPayout: Payout = {
+    const returnedPayout = withLatestFailedAttemptReturnReason({
       ...payout,
       status: '已退回',
       paymentFailureReturn: {
@@ -2615,7 +2877,7 @@ export default function App() {
       ],
       returnReason: normalizedReason,
       issue: `付款失败已退回：${normalizedReason}`,
-    };
+    }, normalizedReason);
     const linkedRequest = requestProjects.find((request) => (
       (Boolean(payout.paymentRequestProjectId)
         && request.paymentRequestProjectId === payout.paymentRequestProjectId)
@@ -2897,6 +3159,7 @@ export default function App() {
           payoutAccountVersion: nextVersion,
           accountFingerprint,
           status: 'VALIDATED' as const,
+          updatedAt: occurredAt,
           validatedAt: occurredAt,
         }
       : {
@@ -2904,6 +3167,7 @@ export default function App() {
           payoutAccountVersion: nextVersion,
           accountFingerprint,
           status: 'VALIDATED' as const,
+          updatedAt: occurredAt,
         };
     const updatedPaymentItem = applyValidatedPaymentListPayoutSnapshot(
       paymentItem,
@@ -2956,7 +3220,8 @@ export default function App() {
     const payout = payouts.find((candidate) => candidate.id === payoutId);
     if (!payout) return false;
     try {
-      const updated = simulateCreatorAccountUpdated(payout, nowIso());
+      const occurredAt = nowIso();
+      const updated = simulateCreatorAccountUpdated(payout, occurredAt);
       const recovery = updated.paymentFailureRecovery!;
       const linkedPayoutAccountId = payout.paymentFailureRecovery?.reportedPayoutAccountId
         ?? payout.payoutAccountId
@@ -2969,6 +3234,7 @@ export default function App() {
             payoutAccountVersion: recovery.reportedPayoutAccountVersion,
             accountFingerprint: recovery.reportedAccountFingerprint,
             status: 'READY_FOR_VALIDATION' as const,
+            updatedAt: occurredAt,
           };
           return account.provider === 'Airwallex'
             ? { ...account, ...identity, beneficiaryId: recovery.reportedExternalBeneficiaryId ?? account.beneficiaryId }
@@ -3071,7 +3337,7 @@ export default function App() {
       setCreators((current) => current.map((candidate) => candidate.id !== payout.creatorId ? candidate : ({
         ...candidate,
         payoutAccounts: candidate.payoutAccounts.map((account) => getPayoutAccountId(account) === linkedPayoutAccountId
-          ? { ...account, status: 'VALIDATED' as const }
+          ? { ...account, status: 'VALIDATED' as const, updatedAt: occurredAt }
           : account),
       })));
       const pendingFinance = {
@@ -3308,8 +3574,16 @@ export default function App() {
   ) => {
     const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
     if (!record) return;
+    const creator = creators.find((candidate) => candidate.id === record.creatorId);
     try {
-      const updated = returnExternalInvoice(record, returnType, reason, externalInvoiceActor());
+      const updated = returnExternalInvoice(
+        record,
+        returnType,
+        reason,
+        externalInvoiceActor(),
+        undefined,
+        creator?.contact.email,
+      );
       setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? updated : candidate));
       setInvoiceTab('upload');
       notify('外部 Invoice 已退回', '列表统一显示“待重新上传”，详情保留具体处理方式和原因。');
@@ -3359,11 +3633,14 @@ export default function App() {
       return;
     }
     try {
+      const creatorEmail = creators.find((creator) => creator.id === payout.creatorId)?.contact.email;
       const updated = applyInvoiceReviewAction(
         payout,
         action,
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
         reason,
+        undefined,
+        creatorEmail,
       );
       setPayouts((current) => current.map((item) => (
         item.id === payout.id ? updated : item
@@ -3556,7 +3833,9 @@ export default function App() {
     const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
     const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
     const returnContext = getInvoiceManagementReturnContext(payout, invoice?.invoiceId, request);
-    setInvoiceTab(getInvoiceManagementView(payout, request, returnContext).tab);
+    setInvoiceTab(getInvoiceManagementView(payout, request, returnContext, {
+      signed: hasInvoiceSignatureEvidence(payout, invoice),
+    }).tab);
     setFocusedInvoiceId(payout.id);
     setSelectedPayout(null);
     setActivePage('invoice');
@@ -3575,7 +3854,9 @@ export default function App() {
       if (!navigate('invoice')) return;
       const request = findInvoiceRequest(payout, generatedInvoices, requestProjects);
       const returnContext = getInvoiceManagementReturnContext(payout, invoice.invoiceId, request);
-      setInvoiceTab(getInvoiceManagementView(payout, request, returnContext).tab);
+      setInvoiceTab(getInvoiceManagementView(payout, request, returnContext, {
+        signed: hasInvoiceSignatureEvidence(payout, invoice),
+      }).tab);
       setFocusedInvoiceId(payout.id);
     } else if (target.kind === 'request-review') {
       const request = requestProjects.find((item) => (
@@ -3700,9 +3981,20 @@ export default function App() {
     requestResourceEditable(request)
     && (
       requestApprovalHasScopedReturnItems(request.approval)
-        ? Boolean(requestApprovalReturnItemForInvoice(request.approval, invoiceId, 'PAYMENT_LIST'))
+        ? Boolean(requestApprovalReturnItemForPaymentListEdit(request.approval, invoiceId))
         : !requestHasPaymentFailureRecovery(request)
       || Boolean(paymentFailurePayoutForInvoice(request, invoiceId))
+    )
+  );
+
+  const requestContractResourceEditable = (
+    request: RequestProjectSummary,
+    contractId: string,
+  ) => (
+    requestResourceEditable(request)
+    && (
+      !requestApprovalHasScopedReturnItems(request.approval)
+      || Boolean(requestApprovalReturnItemForContract(request.approval, contractId))
     )
   );
 
@@ -3712,7 +4004,7 @@ export default function App() {
     && requestResourceEditable(request)
     && (
       !requestApprovalHasScopedReturnItems(request.approval)
-      || Boolean(requestApprovalReturnItemForInvoice(request.approval, invoiceId, 'INVOICE_CONTENT'))
+      || Boolean(requestApprovalReturnItemForInvoiceEdit(request.approval, invoiceId))
     )
   ));
 
@@ -3863,6 +4155,11 @@ export default function App() {
     onGenerateContract: (request) => {
       if (!requestWholeResourceEditable(request) || requestHasPaymentFailureRecovery(request)) {
         notify('项目资料已锁定', '当前项目仅可查看，不能生成新合同。');
+        return;
+      }
+      const templateAvailability = getContractTemplateAvailability(contracts);
+      if (!templateAvailability.activeTemplate) {
+        notify('暂时无法生成合同', templateAvailability.disabledReason ?? '请先配置可用的合同模板。');
         return;
       }
       setRequestResourceReturn({ requestId: request.id, resource: 'contract', source: 'my-project' });
@@ -4106,7 +4403,7 @@ export default function App() {
     onBeginEditPaymentList: (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
       const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
-        item.issueType === 'PAYMENT_LIST'
+        ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
         && item.paymentItems.some((paymentItem) => paymentItem.paymentListId === paymentListId)
       ));
       if (
@@ -4123,7 +4420,7 @@ export default function App() {
     onGeneratePaymentListVersion: async (request, paymentListId) => {
       const list = requestListFor(request, paymentListId);
       const scopedPaymentListReturn = request.approval?.returnItems?.some((item) => (
-        item.issueType === 'PAYMENT_LIST'
+        ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
         && item.paymentItems.some((paymentItem) => paymentItem.paymentListId === paymentListId)
       ));
       if (
@@ -4219,11 +4516,21 @@ export default function App() {
       notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
       return;
     }
+    const retryItems = selected.filter(isPaymentFailureRetryReady);
+    if (retryItems.length > 0 && retryItems.length !== selected.length) {
+      notify('无法创建付款批次', '首次付款和重新付款需要分别创建付款批次及付款单。');
+      return;
+    }
     const execution = executeMockBatchSubmission(submission);
     const now = new Date();
     const localPaymentTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
       .toISOString()
       .slice(0, 16);
+    const isRetryBatch = retryItems.length > 0;
+    const retryPaymentOrderCode = isRetryBatch ? createPrototypeCode('PAY') : undefined;
+    const retryAttemptNumber = isRetryBatch
+      ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
+      : undefined;
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
@@ -4242,6 +4549,8 @@ export default function App() {
         status: '付款处理中',
         lifecycle: execution.lifecycle,
         itemStatus: '付款处理中',
+        paymentOrderCode: retryPaymentOrderCode,
+        paymentAttemptNumber: retryAttemptNumber,
       });
     } catch (error) {
       notify(
@@ -4252,9 +4561,32 @@ export default function App() {
     }
     setPayouts((current) => current.map((payout) => {
       if (!selected.some((item) => item.id === payout.id)) return payout;
+      const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
       return isPaymentFailureRetryReady(payout)
-        ? markPaymentFailureRetrySubmitted(payout, execution.batchId, execution.batchCode)
-        : { ...payout, status: '付款处理中', issue: undefined };
+        ? markPaymentFailureRetrySubmitted(
+            payout,
+            execution.batchId,
+            execution.batchCode,
+            localPaymentTime,
+            {
+              paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+              sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+              attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+            },
+          )
+        : {
+            ...payout,
+            status: '付款处理中',
+            issue: undefined,
+            currentPaymentAttempt: {
+              paymentBatchId: batchRecord.paymentBatchId,
+              paymentBatchCode: batchRecord.paymentBatchCode,
+              submittedAt: localPaymentTime,
+              paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+              sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+              attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+            },
+          };
     }));
     setPaymentBatches((current) => [batchRecord, ...current]);
     setActivePage('batches');
@@ -4292,6 +4624,11 @@ export default function App() {
   const canUploadContracts = hasPermission(currentUser, 'contract_manage');
   const canDeleteContracts = hasPermission(currentUser, 'contract_delete');
   const canEditTemplates = canEditContractTemplate(currentUser);
+  const {
+    template: configuredContractTemplate,
+    activeTemplate: activeContractTemplate,
+    disabledReason: createContractDisabledReason,
+  } = getContractTemplateAvailability(contracts);
   const canManageProjects = hasPermission(currentUser, 'project_manage');
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
@@ -4416,8 +4753,21 @@ export default function App() {
           projects={manageableCooperationProjects}
           projectDirectory={projects}
           creators={creators}
+          requestProjects={requestProjects}
           canUpload={canUploadContracts}
           canEditTemplates={canEditTemplates}
+          canEditContract={(contract) => {
+            const context = requestResourceReturn?.resource === 'contract'
+              ? requestResourceReturn
+              : null;
+            if (!context) return true;
+            if (context.source === 'finance-review') return false;
+            const request = requestProjects.find((candidate) => candidate.id === context.requestId);
+            return Boolean(request && requestContractResourceEditable(
+              request,
+              String(contract.contractId ?? contract.id),
+            ));
+          }}
           canDelete={canDeleteContracts}
           canDeleteContract={(contract) => canDeleteContract(currentUser, contract, contractDeletionOptions(contract))}
           focusedContractId={focusedContractId}
@@ -4431,6 +4781,13 @@ export default function App() {
           onBindFrameworkContract={bindFrameworkContract}
           onCreateContract={() => {
             setContractGenerationEngagementId(null);
+            setEditingContractDraftId(null);
+            setActivePage('contract-create');
+          }}
+          createContractDisabledReason={createContractDisabledReason}
+          onEditDraft={(contractId) => {
+            setContractGenerationEngagementId(null);
+            setEditingContractDraftId(contractId);
             setActivePage('contract-create');
           }}
           onUpdateContract={updateContract}
@@ -4443,10 +4800,12 @@ export default function App() {
         <ContractBuilderPage
           projects={manageableCooperationProjects}
           creators={creators}
+          contractTemplate={editingContractDraftId ? configuredContractTemplate : activeContractTemplate}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
-            contract.engagementId === contractGenerationEngagementId
-            && contract.lifecycle === 'GENERATED_DRAFT'
+            contract.lifecycle === 'EDITING_DRAFT'
+            && ((editingContractDraftId && (contract.contractId ?? contract.id) === editingContractDraftId)
+              || (!editingContractDraftId && contract.engagementId === contractGenerationEngagementId))
           ))}
           onGenerated={(model, files) => {
             const record = generateContract(model, files);
@@ -4456,15 +4815,27 @@ export default function App() {
             );
             return record;
           }}
+          onSaveDraft={saveContractDraft}
+          onDraftStateChange={(model, dirty) => {
+            setContractBuilderModel(model);
+            setContractBuilderDirty(dirty);
+          }}
           onCancel={() => {
-            setContractGenerationEngagementId(null);
-            if (requestResourceReturn?.resource === 'contract') {
-              setFocusedProjectId(requestResourceReturn.requestId);
-              setRequestResourceReturn(null);
-              setActivePage('projects');
-            } else {
-              setActivePage('contracts');
-            }
+            const run = () => {
+              setContractGenerationEngagementId(null);
+              setEditingContractDraftId(null);
+              setContractBuilderModel(null);
+              setContractBuilderDirty(false);
+              if (requestResourceReturn?.resource === 'contract') {
+                setFocusedProjectId(requestResourceReturn.requestId);
+                setRequestResourceReturn(null);
+                setActivePage('projects');
+              } else {
+                setActivePage('contracts');
+              }
+            };
+            if (contractBuilderDirty) setPendingContractExit({ run });
+            else run();
           }}
           onOpenContractManagement={(contractId) => {
             setContractGenerationEngagementId(null);
@@ -4479,6 +4850,7 @@ export default function App() {
         <CreatorsPage
           notify={notify}
           creators={creators}
+          collaborationProjects={creatorCollaborationProjects}
           onSaveCreator={saveCreator}
           canEdit={canManageCreators}
           currentUserAccount={currentUser.account}
@@ -4488,7 +4860,20 @@ export default function App() {
       );
       break;
     case 'collaborations':
-      pageContent = <CollaborationsPage notify={notify} canImport={canManageCreators} />;
+      pageContent = (
+        <CollaborationsPage
+          notify={notify}
+          canImport={canManageCreators}
+          creators={creators}
+          projects={projects}
+          contracts={contracts}
+          payouts={payouts}
+          generatedInvoices={generatedInvoices}
+          externalInvoices={externalInvoices}
+          requests={requestProjects}
+          paymentLists={paymentLists}
+        />
+      );
       break;
     case 'invoice':
       pageContent = (
@@ -4676,8 +5061,7 @@ export default function App() {
         <BatchesPage
           batches={paymentBatches}
           payouts={payouts}
-          contracts={contracts}
-          invoices={generatedInvoices}
+          creators={creators}
           onNewBatch={() => setActivePage('new-batch')}
           notify={notify}
           canCreateBatch={canExecutePayouts}
@@ -4698,6 +5082,9 @@ export default function App() {
       pageContent = (
         <BatchWizardPage
           payouts={batchReadyPayouts}
+          generatedInvoices={generatedInvoices}
+          paymentLists={paymentLists}
+          creators={creators}
           onCancel={() => setActivePage('batches')}
           onDraft={() => notify('草稿已保存', '付款选择与渠道配置已保存在当前浏览器。')}
           onSubmit={createBatch}
@@ -4705,7 +5092,19 @@ export default function App() {
       );
       break;
     case 'transactions':
-      pageContent = <TransactionsPage payouts={payouts} paymentBatches={paymentBatches} />;
+      pageContent = (
+        <TransactionsPage
+          payouts={payouts}
+          paymentBatches={paymentBatches}
+          contracts={contracts}
+          generatedInvoices={generatedInvoices}
+          onOpenPaymentBatch={(batchId) => {
+            if (!navigate('batches')) return;
+            setFocusedBatchId(batchId);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      );
       break;
     case 'organization':
       pageContent = (
@@ -4719,6 +5118,19 @@ export default function App() {
     case 'channels':
       pageContent = <ChannelsPage notify={notify} />;
       break;
+    case 'system-config':
+      pageContent = (
+        <SystemConfigurationPage
+          contracts={contracts}
+          projects={projects}
+          creators={creators}
+          notify={notify}
+          onUpdateContract={updateContract}
+          onTemplateDirtyChange={setContractTemplateDirty}
+        />
+      );
+      break;
+    case 'system-accounts':
     case 'system-settings':
       pageContent = <SystemSettingsPage notify={notify} />;
       break;
@@ -4748,7 +5160,9 @@ export default function App() {
           payouts={payouts}
           contracts={contracts}
           invoices={generatedInvoices}
+          creators={creators}
           canHandleFailure={canExecutePayouts}
+          notify={notify}
           onBack={() => setPaymentDetailRequestId(null)}
           onReturnPayout={returnPayout}
           onOpenFailurePaymentList={(requestId, payoutId) => {
@@ -4806,6 +5220,12 @@ export default function App() {
   const selectedPayoutContract = selectedPayout
     ? contracts.find((contract) => contract.id === selectedPayout.contract) ?? null
     : null;
+  const selectedPayoutPaymentItem = selectedPayout
+    ? findPaymentListItemForPayout(selectedPayout, generatedInvoices, paymentLists)
+    : undefined;
+  const selectedPayoutCreator = selectedPayout?.creatorId
+    ? creators.find((creator) => creator.id === selectedPayout.creatorId)
+    : undefined;
   const financeReviewRequest = financeReviewRequestId
     ? requestProjects.find((request) => request.id === financeReviewRequestId) ?? null
     : null;
@@ -4825,6 +5245,15 @@ export default function App() {
         document.querySelector<HTMLButtonElement>('.tab-button[aria-selected="true"]')?.focus();
       });
     });
+  };
+
+  const finishPendingContractExit = (saveDraft: boolean) => {
+    const pending = pendingContractExit;
+    if (!pending) return;
+    if (saveDraft && contractBuilderModel) saveContractDraft(contractBuilderModel);
+    setPendingContractExit(null);
+    setContractBuilderDirty(false);
+    pending.run();
   };
 
   return (
@@ -4896,6 +5325,8 @@ export default function App() {
       {selectedPayout ? (
         <PayoutDrawer
           payout={selectedPayout}
+          paymentItem={selectedPayoutPaymentItem}
+          creator={selectedPayoutCreator}
           onClose={() => setSelectedPayout(null)}
           onAdvance={advancePayout}
           onPaymentFailed={failPayout}
@@ -4908,6 +5339,14 @@ export default function App() {
           onViewInvoice={openInvoiceFromPayout}
         />
       ) : null}
+      <DraftExitDialog
+        open={Boolean(pendingContractExit)}
+        title="退出生成合同？"
+        description="当前合同内容尚未保存，你可以保存到草稿箱后退出。"
+        onDiscard={() => finishPendingContractExit(false)}
+        onSave={() => finishPendingContractExit(true)}
+        onContinue={() => setPendingContractExit(null)}
+      />
       <Toast toast={toast} onClose={() => setToast(null)} />
     </AppShell>
   );

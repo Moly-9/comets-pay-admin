@@ -13,6 +13,7 @@ import type {
   PayoutAccountVersion,
 } from './types';
 import { demoAccountName, demoRealName } from './demoCreatorNames';
+import { resolveContractTemplateOutput } from './contractTemplateFieldPolicies';
 
 export type ContractStatus =
   | '参考模板'
@@ -120,11 +121,62 @@ export type ContractPublishingChannel = {
   channelUrl: string;
 };
 
+export type ContractTemplateOutputFieldKey =
+  | 'advertiser'
+  | 'publisher'
+  | 'channel'
+  | 'campaignPeriod'
+  | 'accountName'
+  | 'accountNumber'
+  | 'beneficiaryBankName'
+  | 'beneficiaryBankAddress'
+  | 'swiftCode'
+  | 'iban'
+  | 'remittanceInformation'
+  | 'paypalUsername'
+  | 'paypalEmailAddress'
+  | 'transferNote';
+
+export type ContractTemplateFieldMode = 'SYSTEM' | 'MANUAL' | 'OMIT';
+
+export type ContractTemplateStatus = 'ACTIVE' | 'INACTIVE';
+
+export type ContractTemplateFieldPolicyMap = Record<
+  ContractTemplateOutputFieldKey,
+  ContractTemplateFieldMode
+>;
+
+export type ContractTemplateManualFieldValueMap = {
+  advertiser: string;
+  publisher: string;
+  channel: { publishingChannels: ContractPublishingChannel[] };
+  campaignPeriod: { startDate: string; endDate: string };
+  accountName: string;
+  accountNumber: string;
+  beneficiaryBankName: string;
+  beneficiaryBankAddress: string;
+  swiftCode: string;
+  iban: string;
+  remittanceInformation: string;
+  paypalUsername: string;
+  paypalEmailAddress: string;
+  transferNote: string;
+};
+
 export type ContractExtractionStage = 'parsing' | 'review' | 'confirmed' | 'applied';
 export type ContractLifecycle =
+  | 'EDITING_DRAFT'
   | 'GENERATED_DRAFT'
   | 'UPLOADED_PENDING_CONFIRMATION'
   | 'CONFIRMED';
+
+export type ContractManagementBucket =
+  | 'template'
+  | 'draft'
+  | 'signature'
+  | 'expired'
+  | 'ready'
+  | 'attention';
 
 export type ContractType = 'INDEPENDENT' | 'FRAMEWORK' | 'IO';
 export type ContractValidityStatus =
@@ -154,6 +206,12 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 
 export type ContractGenerationModel = {
   templateId: 'CON-TPL-2026-KOL';
+  /** Frozen when the generation draft is created so later template edits do not alter history. */
+  templateFieldPolicies?: ContractTemplateFieldPolicyMap;
+  /** Frozen structural field list. Missing means every catalog field for legacy drafts. */
+  templateOutputFieldKeys?: ContractTemplateOutputFieldKey[];
+  /** Document-only values. These never update the creator's verified payout account. */
+  templateManualFieldValues?: Partial<ContractTemplateManualFieldValueMap>;
   contractName: string;
   /** Optional for compatibility with older generated drafts. */
   contractType?: ContractType;
@@ -220,6 +278,12 @@ export type ContractRecord = {
   documentNote?: string;
   pageCount?: number;
   isTemplate: boolean;
+  /** Missing means ACTIVE for backward compatibility with existing templates. */
+  templateStatus?: ContractTemplateStatus;
+  /** Template-level generation policy. Older templates are migrated through the default resolver. */
+  templateFieldPolicies?: Partial<ContractTemplateFieldPolicyMap>;
+  /** Structural field membership. Missing means every catalog field for older templates. */
+  templateOutputFieldKeys?: ContractTemplateOutputFieldKey[];
   project: string;
   brand: string;
   advertiser: string;
@@ -247,7 +311,8 @@ export type ContractRecord = {
   payoutAccountFingerprint?: string;
   paymentSnapshot?: DocumentPayoutSnapshot;
   signed: boolean;
-  status: ContractStatus;
+  /** @deprecated Historical snapshot only. New workflow uses lifecycle, readiness and validity. */
+  status?: ContractStatus;
   updated: string;
   deliverables: ContractDeliverable[];
   issues: ContractIssue[];
@@ -351,6 +416,7 @@ export const getContractReadiness = (contract: ContractRecord) => {
     : contract.signed;
   const contractType = getContractType(contract);
   const requiresFinancialFields = contractType !== 'FRAMEWORK';
+  const parsing = contract.extractionStage === 'parsing';
   const ready = (
     lifecycleConfirmed
     && !contract.isTemplate
@@ -371,9 +437,11 @@ export const getContractReadiness = (contract: ContractRecord) => {
     reviewCount: nonSignatureIssues.length - blockers.length,
     label: ready
       ? '可用于付款项目'
-      : contract.lifecycle === 'GENERATED_DRAFT'
+      : contract.lifecycle === 'EDITING_DRAFT'
+        ? '草稿未生成'
+        : contract.lifecycle === 'GENERATED_DRAFT'
         ? '待上传签署合同'
-        : contract.status === '待解析'
+        : parsing
           ? '等待解析'
           : `${blockerCount} 项待处理`,
   };
@@ -489,6 +557,17 @@ export const isContractAvailableForNewAssociation = (
   referenceDate = currentContractReferenceDate(),
 ) => isPaymentContract(contract) && !getContractValidity(contract, referenceDate).expired;
 
+export const getContractManagementBucket = (
+  contract: ContractRecord,
+  referenceDate = currentContractReferenceDate(),
+): ContractManagementBucket => {
+  if (contract.isTemplate) return 'template';
+  if (contract.lifecycle === 'EDITING_DRAFT') return 'draft';
+  if (getContractValidity(contract, referenceDate).expired) return 'expired';
+  if (contract.lifecycle === 'GENERATED_DRAFT') return 'signature';
+  return getContractReadiness(contract).ready ? 'ready' : 'attention';
+};
+
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
 
 export const INITIAL_CONTRACTS: ContractRecord[] = [
@@ -556,6 +635,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     documentUrl: TEMPLATE_DOCUMENT_URL,
     pageCount: 16,
     isTemplate: true,
+    templateStatus: 'ACTIVE',
     project: '待关联',
     brand: 'Comets International Limited',
     advertiser: 'Comets International Limited',
@@ -756,17 +836,19 @@ export const createGeneratedContractDraft = (
     generationVariant?: ContractDocumentVariant;
     qualityReport?: ContractQualityReport;
     pageCount?: number;
+    uploadedByAccount?: string;
   } = {},
 ): ContractRecord => {
+  const documentModel = resolveContractTemplateOutput(model).effectiveModel;
   const totalFee = model.totalFee.trim() ? Number(model.totalFee) : null;
   const licensePrice = model.licensePrice.trim() ? Number(model.licensePrice) : null;
-  const rawAccount = model.payoutProvider === 'PayPal'
-    ? model.paymentSnapshot.paypalEmail
-    : model.paymentSnapshot.iban || model.paymentSnapshot.accountNumber;
-  const accountName = model.payoutProvider === 'PayPal'
-    ? model.paymentSnapshot.paypalUsername
-    : model.paymentSnapshot.accountName;
-  const accountFingerprint = model.paymentSnapshot.accountFingerprint || (rawAccount
+  const rawAccount = documentModel.payoutProvider === 'PayPal'
+    ? documentModel.paymentSnapshot.paypalEmail
+    : documentModel.paymentSnapshot.iban || documentModel.paymentSnapshot.accountNumber;
+  const accountName = documentModel.payoutProvider === 'PayPal'
+    ? documentModel.paymentSnapshot.paypalUsername
+    : documentModel.paymentSnapshot.accountName;
+  const accountFingerprint = documentModel.paymentSnapshot.accountFingerprint || (rawAccount
     ? `•••• ${rawAccount.replace(/\s/g, '').slice(-4)}`
     : '');
   const fileBaseName = `${model.contractNumber || 'contract'}-${model.creatorHandle.replace(/^@/, '') || 'creator'}-v${version}`;
@@ -785,14 +867,14 @@ export const createGeneratedContractDraft = (
     isTemplate: false,
     project: model.projectName,
     brand: model.brandName,
-    advertiser: model.advertiser,
-    publisher: model.publisher,
+    advertiser: documentModel.advertiser,
+    publisher: documentModel.publisher,
     channelName: model.channelName,
-    channelLink: model.channelUrl,
-    platform: model.platform,
+    channelLink: documentModel.channelUrl,
+    platform: documentModel.platform,
     effectiveDate: model.effectiveDate,
-    campaignStart: model.campaignStart,
-    campaignEnd: model.campaignEnd,
+    campaignStart: documentModel.campaignStart,
+    campaignEnd: documentModel.campaignEnd,
     currency: model.currency,
     totalFee: Number.isFinite(totalFee) ? totalFee : null,
     licensePrice: Number.isFinite(licensePrice) ? licensePrice : null,
@@ -804,12 +886,11 @@ export const createGeneratedContractDraft = (
     accountName,
     accountFingerprint,
     payoutAccountId: model.payoutAccountId || undefined,
-    payoutAccountVersion: model.payoutAccountVersion ?? model.paymentSnapshot.payoutAccountVersion,
+    payoutAccountVersion: model.payoutAccountVersion ?? documentModel.paymentSnapshot.payoutAccountVersion,
     payoutProvider: model.payoutAccountId ? model.payoutProvider : undefined,
-    payoutAccountFingerprint: model.payoutAccountFingerprint ?? model.paymentSnapshot.accountFingerprint,
-    paymentSnapshot: { ...model.paymentSnapshot },
+    payoutAccountFingerprint: model.payoutAccountFingerprint ?? documentModel.paymentSnapshot.accountFingerprint,
+    paymentSnapshot: { ...documentModel.paymentSnapshot },
     signed: false,
-    status: '待回传',
     updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
     deliverables: [
       ...model.purposeItems,
@@ -825,7 +906,7 @@ export const createGeneratedContractDraft = (
         description,
         source: '合同生成表单',
       })),
-    issues: blankFieldIssues(model),
+    issues: blankFieldIssues(documentModel),
     projectId: model.projectId,
     cooperationProjectId: model.cooperationProjectId ?? model.projectId,
     projectLinks: model.projectLinks?.length
@@ -841,11 +922,57 @@ export const createGeneratedContractDraft = (
       ...model,
       publishingChannels: model.publishingChannels.map((channel) => ({ ...channel })),
       paymentSnapshot: { ...model.paymentSnapshot },
+      templateFieldPolicies: model.templateFieldPolicies ? { ...model.templateFieldPolicies } : undefined,
+      templateOutputFieldKeys: model.templateOutputFieldKeys
+        ? [...model.templateOutputFieldKeys]
+        : undefined,
+      templateManualFieldValues: model.templateManualFieldValues ? {
+        ...model.templateManualFieldValues,
+        channel: model.templateManualFieldValues.channel ? {
+          publishingChannels: model.templateManualFieldValues.channel.publishingChannels.map((channel) => ({ ...channel })),
+        } : undefined,
+        campaignPeriod: model.templateManualFieldValues.campaignPeriod
+          ? { ...model.templateManualFieldValues.campaignPeriod }
+          : undefined,
+      } : undefined,
     },
     generationVariant: options.generationVariant ?? 'DRAFT',
     qualityReport: options.qualityReport,
     generationVersion: version,
     generatedFileBaseName: fileBaseName,
+    uploadedByAccount: options.uploadedByAccount,
+  };
+};
+
+export const createEditingContractDraft = (
+  model: ContractGenerationModel,
+  existingDraft?: ContractRecord | null,
+  uploadedByAccount?: string,
+): ContractRecord => {
+  const base = createGeneratedContractDraft(model, existingDraft?.generationVersion ?? 1, '', {
+    existingContractId: existingDraft?.contractId,
+    uploadedByAccount: uploadedByAccount ?? existingDraft?.uploadedByAccount,
+  });
+  return {
+    ...base,
+    id: existingDraft?.id ?? model.contractNumber,
+    name: model.contractName.trim() || existingDraft?.name || '未命名合同草稿',
+    sourceName: '合同文件尚未生成',
+    documentUrl: '',
+    documentNote: '生成中的合同表单草稿，可继续编辑后生成正式合同。',
+    pageCount: undefined,
+    lifecycle: 'EDITING_DRAFT',
+    projectId: model.projectId || undefined,
+    cooperationProjectId: model.cooperationProjectId || undefined,
+    projectLinks: model.cooperationProjectId || model.projectId
+      ? [{ cooperationProjectId: (model.cooperationProjectId ?? model.projectId) as CooperationProjectId, status: 'ACTIVE' }]
+      : [],
+    creatorId: model.creatorId || undefined,
+    engagementId: model.engagementId || undefined,
+    generationVariant: undefined,
+    qualityReport: undefined,
+    generatedFileBaseName: undefined,
+    updated: new Intl.DateTimeFormat('en-CA').format(new Date()),
   };
 };
 
@@ -918,7 +1045,6 @@ export const createUploadedContract = (
     accountName: '',
     accountFingerprint: '',
     signed: false,
-    status: '待补字段',
     updated: today,
     deliverables: [],
     issues: [
@@ -1102,7 +1228,7 @@ export const applyConfirmedRecognitionToContract = (
     lifecycle: 'CONFIRMED',
     confirmedAt: new Date().toISOString(),
     signed: true,
-    status: '已生效',
+    status: undefined,
     issues: contract.issues.filter((issue) => !['recognition-review', 'signature'].includes(issue.id)),
   };
 };

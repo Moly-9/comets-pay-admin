@@ -7,6 +7,7 @@ import { paymentRequestProviderForChannel, requestProjectStatusFor } from './pay
 import {
   COMPLETE_REQUEST_FINANCE_PROJECT_CODES,
   INITIAL_COMPLETE_REQUEST_RESOURCES,
+  RETURNED_PAYMENT_REQUEST_DEMO,
 } from './requestProjectPrototypeResources';
 
 const {
@@ -190,7 +191,7 @@ describe('complete request project prototype resources', () => {
     });
   });
 
-  it('provides exactly two visible projects for every cooperation-project status', () => {
+  it('provides the expected visible project mix including one returned demo', () => {
     const visibleRequests = requests.filter((request) => request.lifecycle !== 'DRAFT');
     const counts = visibleRequests.reduce<Record<string, number>>((result, request) => {
       const status = requestProjectStatusFor(request, payouts);
@@ -206,9 +207,63 @@ describe('complete request project prototype resources', () => {
       正在付款: 2,
       付款处理中: 2,
       已付款: 2,
+      已退回: 1,
     });
-    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(5);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(4);
     expect(requests.filter((request) => request.lifecycle === 'CANCELLED')).toHaveLength(1);
+  });
+
+  it('scopes the partial-failure and returned demos to stable three-item and two-item resource chains', () => {
+    const partialRequest = requests.find((request) => request.requestCode === 'REQ-202607-000015')!;
+    const returnedRequest = requests.find((request) => (
+      request.requestCode === RETURNED_PAYMENT_REQUEST_DEMO.requestCode
+    ))!;
+    const partialPayouts = payouts.filter((payout) => (
+      payout.paymentRequestProjectId === partialRequest.paymentRequestProjectId
+    ));
+    const returnedPayouts = payouts.filter((payout) => (
+      payout.paymentRequestProjectId === returnedRequest.paymentRequestProjectId
+    ));
+    const partialList = paymentLists.find((list) => (
+      list.paymentRequestProjectId === partialRequest.paymentRequestProjectId
+    ));
+    const returnedList = paymentLists.find((list) => (
+      list.paymentRequestProjectId === returnedRequest.paymentRequestProjectId
+    ));
+
+    expect(partialRequest).toMatchObject({ contracts: 3, invoices: 3 });
+    expect(partialRequest.creatorLinks).toHaveLength(3);
+    expect(partialPayouts.map((payout) => payout.id)).toEqual([
+      'payout_fixture_15_01',
+      'payout_fixture_15_02',
+      'payout_fixture_15_03',
+    ]);
+    expect(partialList?.items).toHaveLength(3);
+
+    expect(returnedRequest).toMatchObject({
+      lifecycle: 'RETURNED',
+      status: '已退回',
+      contracts: 2,
+      invoices: 2,
+      approval: {
+        status: 'RETURNED_TO_MEDIA_REVIEW',
+        returnedFromStage: 'FINANCE',
+        resumeStatus: 'PENDING_FINANCE',
+        returnReason: RETURNED_PAYMENT_REQUEST_DEMO.reason,
+      },
+    });
+    expect(returnedRequest.creatorLinks).toHaveLength(2);
+    expect(returnedRequest.approval?.history).toContainEqual(expect.objectContaining({
+      action: 'RETURN',
+      stage: 'FINANCE',
+      reason: RETURNED_PAYMENT_REQUEST_DEMO.reason,
+      occurredAt: RETURNED_PAYMENT_REQUEST_DEMO.occurredAt,
+    }));
+    expect(returnedPayouts.map((payout) => ({ id: payout.id, status: payout.status }))).toEqual([
+      { id: 'payout_fixture_16_01', status: '已退回' },
+      { id: 'payout_fixture_16_02', status: '已退回' },
+    ]);
+    expect(returnedList?.items).toHaveLength(2);
   });
 
   it('keeps the standalone available Invoice outside every existing request', async () => {

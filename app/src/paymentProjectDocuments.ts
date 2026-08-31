@@ -5,6 +5,7 @@ import { invoiceFilename } from './invoice/invoiceUtils';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
 import { formatCreatorHandle } from './creatorSearchOptions';
 import { createFlatProjectPdfArchive } from './projectResourcePdfArchive';
+import { createGenericPaymentConfirmationPdf } from './paymentProjectConfirmation';
 import type {
   PaymentBatchItemSnapshot,
   PaymentBatchRequestSnapshot,
@@ -12,6 +13,7 @@ import type {
 import type { GeneratedInvoiceRecord } from './types';
 
 const PAYMENT_PROJECT_WORKBOOK_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
 
 const safeFileSegment = (value: string, fallback: string) => (
   value
@@ -176,6 +178,155 @@ export const createPaymentProjectWorkbook = async ({
 
 export const paymentProjectWorkbookFilename = (requestCode: string) => (
   `${safeFileSegment(requestCode, '付款项目')}-付款表.xlsx`
+);
+
+const paymentDateKey = (value?: string) => {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}${match[2]}${match[3]}` : '';
+};
+
+const workbookDateLabel = (value?: string) => {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : '—';
+};
+
+const workbookMoney = (amount?: number, currency?: string) => (
+  amount !== undefined && currency ? `${currency} ${amount.toLocaleString('en-US')}` : '—'
+);
+
+export const createPaymentProjectDetailWorkbook = async ({
+  request,
+  items,
+}: {
+  request: PaymentBatchRequestSnapshot;
+  items: readonly PaymentBatchItemSnapshot[];
+}) => {
+  const { Workbook } = await import('exceljs');
+  const workbook = new Workbook();
+  workbook.creator = 'COMETS Pay';
+  workbook.created = new Date();
+  workbook.subject = `${request.requestCode} 付款明细`;
+  const sheet = workbook.addWorksheet('付款明细', { views: [{ state: 'frozen', ySplit: 1 }] });
+  sheet.columns = [
+    { header: '付款渠道', key: 'provider', width: 18 },
+    { header: '付款方式', key: 'method', width: 18 },
+    { header: '付款至', key: 'country', width: 22 },
+    { header: '账户名', key: 'accountName', width: 28 },
+    { header: '付款日期', key: 'paidAt', width: 16 },
+    { header: '付款方支付的金额', key: 'actualPaidAmount', width: 22 },
+    { header: '付款方支付的币种', key: 'actualPaidCurrency', width: 20 },
+    { header: '状态', key: 'status', width: 16 },
+    { header: '余额', key: 'balance', width: 22 },
+  ];
+  sheet.autoFilter = { from: 'A1', to: 'I1' };
+  sheet.getRow(1).height = 34;
+  sheet.getRow(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D5664' } };
+  sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+  items.forEach((item, index) => {
+    const paid = item.paymentStatus === '已付款';
+    const row = sheet.addRow({
+      provider: paymentProviderDisplayName(item.provider),
+      method: item.localClearingSystem || item.transferMethod || '待补充',
+      country: item.recipientCountry || '待补充',
+      accountName: item.accountName || '待补充',
+      paidAt: paid ? workbookDateLabel(item.paidAt) : '—',
+      actualPaidAmount: paid && item.actualPaidAmount !== undefined ? item.actualPaidAmount : '—',
+      actualPaidCurrency: paid ? item.actualPaidCurrency || '—' : '—',
+      status: item.paymentStatus,
+      balance: paid
+        ? workbookMoney(item.postTransactionBalance, item.postTransactionBalanceCurrency)
+        : '—',
+    });
+    row.height = 26;
+    row.font = { name: 'Arial', size: 10 };
+    row.alignment = { vertical: 'middle', wrapText: true };
+    if (typeof row.getCell('actualPaidAmount').value === 'number') {
+      row.getCell('actualPaidAmount').numFmt = '#,##0.00';
+    }
+    if (index % 2 === 1) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F8FA' } };
+  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob([new Uint8Array(buffer as ArrayBuffer)], { type: PAYMENT_PROJECT_WORKBOOK_MIME });
+};
+
+export const paymentProjectDetailWorkbookFilename = (requestCode: string) => (
+  `${safeFileSegment(requestCode, '付款项目')}-付款明细.xlsx`
+);
+
+type ConfirmationAssetLoader = (path: string) => Promise<Blob>;
+
+const loadConfirmationAsset: ConfirmationAssetLoader = async (path) => {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`付款确认函模板读取失败：${response.status}`);
+  return response.blob();
+};
+
+const confirmationAmountSegment = (amount: number) => (
+  Number.isInteger(amount) ? String(amount) : String(amount).replace(/0+$/, '').replace(/\.$/, '')
+);
+
+export const createPaymentItemConfirmationPdf = async ({
+  item,
+  loadAsset = loadConfirmationAsset,
+  genericPdf = createGenericPaymentConfirmationPdf,
+}: {
+  item: PaymentBatchItemSnapshot;
+  loadAsset?: ConfirmationAssetLoader;
+  genericPdf?: (item: PaymentBatchItemSnapshot) => Promise<Blob>;
+}) => {
+  if (item.paymentStatus !== '已付款' || !paymentDateKey(item.paidAt)) {
+    throw new Error('仅具备实际付款日期的已付款明细可以下载确认函。');
+  }
+  return item.provider === 'Airwallex'
+    ? loadAsset(PAYMENT_CONFIRMATION_ASSET_PATH)
+    : genericPdf(item);
+};
+
+export const paymentItemConfirmationFilename = (item: PaymentBatchItemSnapshot) => {
+  const paymentOrderCode = item.paymentOrderCode || item.paymentListCode || '付款单';
+  const invoiceNumber = item.invoice?.invoiceNumber || item.legacyInvoiceReference || item.payoutId;
+  return `${safeFileSegment(paymentOrderCode, '付款单')}-${safeFileSegment(invoiceNumber, '付款明细')}-付款确认函.pdf`;
+};
+
+export const createPaymentProjectConfirmationArchive = async ({
+  items,
+  loadAsset = loadConfirmationAsset,
+  genericPdf = createGenericPaymentConfirmationPdf,
+}: {
+  items: readonly PaymentBatchItemSnapshot[];
+  loadAsset?: ConfirmationAssetLoader;
+  genericPdf?: (item: PaymentBatchItemSnapshot) => Promise<Blob>;
+}) => {
+  const eligibleItems = items.filter((item) => item.paymentStatus === '已付款' && paymentDateKey(item.paidAt));
+  if (!eligibleItems.length) throw new Error('当前没有具备实际付款日期的已付款明细。');
+  const [{ default: JSZip }, airwallexTemplate] = await Promise.all([
+    import('jszip'),
+    eligibleItems.some((item) => item.provider === 'Airwallex')
+      ? loadAsset(PAYMENT_CONFIRMATION_ASSET_PATH)
+      : Promise.resolve(null),
+  ]);
+  const zip = new JSZip();
+  const filenameCounts = new Map<string, number>();
+  for (const item of eligibleItems) {
+    const date = paymentDateKey(item.paidAt);
+    const folderName = `${date}-${safeFileSegment(paymentProviderDisplayName(item.provider), '付款渠道')}-确认函`;
+    const accountName = safeFileSegment(item.accountName || item.creatorName, '收款方账户');
+    const baseFilename = `${date}${accountName}-${confirmationAmountSegment(item.amount)} ${item.currency}`;
+    const collisionKey = `${folderName}/${baseFilename}`;
+    const count = (filenameCounts.get(collisionKey) ?? 0) + 1;
+    filenameCounts.set(collisionKey, count);
+    const filename = `${baseFilename}${count > 1 ? `-${String(count).padStart(2, '0')}` : ''}.pdf`;
+    const pdfBlob = item.provider === 'Airwallex'
+      ? airwallexTemplate!
+      : await genericPdf(item);
+    zip.folder(folderName)?.file(filename, new Uint8Array(await pdfBlob.arrayBuffer()));
+  }
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+};
+
+export const paymentProjectConfirmationArchiveFilename = (requestCode: string) => (
+  `${safeFileSegment(requestCode, '付款项目')}-付款确认函.zip`
 );
 
 export const createPaymentProjectContractArchive = async ({

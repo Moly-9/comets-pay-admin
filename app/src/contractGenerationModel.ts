@@ -10,6 +10,7 @@ import {
   payoutAccountToInvoicePayment,
 } from './payoutAccounts';
 import type { CreatorPayoutAccount, CreatorProfile } from './types';
+import { resolveContractTemplateOutput } from './contractTemplateFieldPolicies';
 
 const legacyPublishingChannel = (
   model: Pick<ContractGenerationModel, 'platform' | 'channelUrl'>,
@@ -58,6 +59,30 @@ export const contractPublishingChannelsForCreator = (
         channelUrl: '',
       }]
     : [];
+};
+
+const comparablePublishingPlatform = (platform: string) => {
+  const normalized = platform.trim().toLowerCase();
+  return normalized === 'twitter' ? 'x' : normalized;
+};
+
+export const contractPublishingChannelForPlatform = (
+  creator: CreatorProfile | null | undefined,
+  platform: string,
+  preferredSocialAccountId = '',
+): ContractPublishingChannel => {
+  const normalizedPlatform = comparablePublishingPlatform(platform);
+  const matchesPlatform = (account: CreatorProfile['socialAccounts'][number]) => (
+    comparablePublishingPlatform(account.platform) === normalizedPlatform
+  );
+  const account = creator?.socialAccounts.find((candidate) => (
+    candidate.id === preferredSocialAccountId && matchesPlatform(candidate)
+  )) ?? creator?.socialAccounts.find(matchesPlatform);
+  return {
+    socialAccountId: account?.id ?? '',
+    platform,
+    channelUrl: account?.profileUrl.trim() ?? '',
+  };
 };
 
 export const appendContractPublishingChannel = (
@@ -148,6 +173,7 @@ const hasPartialDateRange = (start: string, end: string) => Boolean(start) !== B
 export const validateContractGenerationModel = (
   model: ContractGenerationModel,
 ) => {
+  const effectiveModel = resolveContractTemplateOutput(model).effectiveModel;
   const errors: Record<string, string> = {};
   if (!model.contractName?.trim()) {
     errors.contractName = '请输入合同名称';
@@ -162,14 +188,14 @@ export const validateContractGenerationModel = (
 
   if (model.creatorId) {
     const requiredCreatorProfile: Array<[string, string, string]> = [
-      ['publisher', '达人档案缺少法定名称', model.publisher],
-      ['publisherAddress', '达人档案缺少联系地址', model.publisherAddress],
-      ['channelName', '达人档案缺少频道名称', model.channelName],
+      ['publisher', '合同缺少 Publisher 法定名称', effectiveModel.publisher],
+      ['publisherAddress', '达人档案缺少联系地址', effectiveModel.publisherAddress],
+      ['channelName', '达人档案缺少频道名称', effectiveModel.channelName],
     ];
     requiredCreatorProfile.forEach(([key, message, value]) => {
       if (!value.trim()) errors[key] = message;
     });
-    const channels = resolveContractPublishingChannels(model);
+    const channels = resolveContractPublishingChannels(effectiveModel);
     if (!channels.length) {
       errors.platform = '达人档案缺少发布平台和频道链接';
     } else {
@@ -214,9 +240,9 @@ export const validateContractGenerationModel = (
   if (![45, 60].includes(model.paymentWorkingDays)) {
     errors.paymentWorkingDays = '付款期限只能选择 45 或 60 个工作日';
   }
-  if (hasPartialDateRange(model.campaignStart, model.campaignEnd)) {
+  if (hasPartialDateRange(effectiveModel.campaignStart, effectiveModel.campaignEnd)) {
     errors.campaignEnd = 'Campaign 日期需同时填写开始和结束日期';
-  } else if (isDateAfter(model.campaignStart, model.campaignEnd)) {
+  } else if (isDateAfter(effectiveModel.campaignStart, effectiveModel.campaignEnd)) {
     errors.campaignEnd = 'Campaign 结束日期不能早于开始日期';
   }
   if (hasPartialDateRange(model.releaseStart, model.releaseEnd)) {
@@ -238,8 +264,8 @@ export const validateContractGenerationModel = (
   }
   if (model.payoutAccountId) {
     const payoutIssues = getDocumentPayoutSnapshotIssues(
-      model.paymentSnapshot,
-      model.payoutProvider,
+      effectiveModel.paymentSnapshot,
+      effectiveModel.payoutProvider,
     );
     if (payoutIssues.length) {
       errors.payoutAccountId = payoutIssues[0].message;

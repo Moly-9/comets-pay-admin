@@ -44,6 +44,82 @@ final result: passed
 
 ---
 
+# Design QA - “我的请款”添加达人弹窗
+
+## Reference and environment
+
+- Source visual truth:
+  - Excel 导入：`/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-a9769f5f-b148-4dc5-9178-a3535077f695.png`。
+  - 粘贴链接：`/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-95607ea0-2534-449b-b8b6-05fe3ec78339.png`。
+  - 达人档案库：`/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-b95cc715-6687-425c-afaf-38cc7a38551f.png`。
+- Browser implementation:
+  - `app/design-qa-payment-request-creator-add-desktop.png`，桌面端粘贴链接页签。
+  - `app/design-qa-payment-request-creator-add-mobile.png`，`390 x 844` 达人档案库页签。
+- Implementation URL: `http://127.0.0.1:5174/`。
+- State: 管理员账号；草稿请款 `REQ-202607-000015`；已有 7 位达人；从详情页“添加达人”打开弹窗。
+
+## Comparison evidence
+
+- 三张参考图与桌面、390px 实现截图已在同一视觉对照输入中检查。
+- 实现沿用参考图的标题、三页签、内容区和底部操作区骨架，并增加当前请款、项目和资格规则上下文，避免批量选择后才发现不可加入。
+- 粘贴链接、达人档案库和 Excel 导入三个页签共用同一暂存选择；关闭、切换页签和已选数量的层级一致。
+- 档案库只展示头像、Display Name、首个社媒平台和 Handle；多账号用 `+N`，每页 10 条，非当前项目或无可用 Invoice 的达人保持可查看但不可选择。
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed；继续使用系统 Noto Sans SC 字体层级，标题、页签、帮助文案和按钮字号与现有请款页面一致，没有缩放或截断核心文案。
+- Spacing and layout rhythm: passed；桌面弹窗约 820px，内容卡、页签、输入区和固定底栏使用系统间距；`390 x 844` 下为单列，底部操作始终可见。
+- Colors and visual tokens: passed；参考图的紫色交互语义按现有 COMETS Pay 橙红主色映射，中性色、边框、禁用态和错误态沿用系统 Token。
+- Image quality and asset fidelity: passed；达人使用档案头像/首字母头像，平台、上传、搜索和关闭均复用现有 Lucide 图标，没有新增伪造位图资产。
+- Copy and content: passed；三个页签、Excel 三列表头、5MB 限制、资格说明、问题项和“添加选中达人”动作均使用完整业务文案。
+
+## Interaction, responsive and technical checks
+
+- “添加达人”和“尚未添加达人”两个入口均打开独立弹窗；仅草稿且具备编辑权限时可用。
+- 链接规范化覆盖协议、域名大小写、查询参数、锚点和末尾斜杠；有效项可部分成功，重复、未匹配、非项目和无可用 Invoice 分别提示。
+- Excel 复用系统 `.xlsx` 达人模板，验证模板版本、项目 ID、固定表头、多字段一致性、5MB 上限和部分成功导入。
+- 应用选择后追加到既有达人，不移除已有记录，并进入现有“达人单据关联”区域；新达人仍必须选择符合当前付款渠道的可用 Invoice。
+- 付款安排表单实测“项目费用归属”和“预计付款时间”控件顶部均为 `520px`，误差 `0px`。
+- `390 x 844` 验收没有页面级水平溢出，弹窗主体和底部操作区均在有效视口内。
+- Browser console warning/error log: empty。
+- 聚焦 Vitest：在本次提交的隔离快照中 3 个文件、26 项测试通过。
+- 全量 Vitest：在本次提交的隔离快照中 114 个文件、798 项测试全部通过。当前共享工作区曾出现 3 个文件、5 项测试失败，均来自本任务之外并行存在的财务审批、付款清单和请款资源修改，未纳入本次提交。
+- TypeScript/Vite production build: 在本次提交的隔离快照中通过；仅保留既有 chunk-size 提示。
+
+## Findings and comparison history
+
+1. 旧入口直接展开完整请款编辑表单，无法先按来源批量筛选达人。
+   - Fix: 新增独立三页签弹窗，并在应用选择后进入原有单据关联流程。
+2. 参考档案库包含粉丝数、地区等本次不需要的信息。
+   - Fix: 按 Invoice 列表达人列收敛为头像、Display Name、平台和 Handle，并保留 `+N` 展开。
+3. 旧付款安排标签高度不一致导致两个控件上下错位。
+   - Fix: 统一标签高度和不换行规则，浏览器测量误差为 `0px`。
+4. Post-fix desktop、390px、三页签、资格反馈、分页、控制台和布局复查未发现剩余可执行的 P0、P1 或 P2 问题。
+
+final result: passed
+---
+
+# Design QA - 达人多社媒账号统一展示
+
+## 验收范围
+
+- Invoice 列表和搜索。
+- 单笔 Invoice、合同生成、新建请款的达人选择器。
+- 桌面端默认视口、`768 x 1024` iPad 视口和 `390 x 844` 窄屏视口。
+
+## 结果
+
+- 每位达人在选择器中只出现一次，多个 Handle 按达人档案当前顺序展示。
+- 平台名称不作为可见文字重复输出，通过 Lucide 图标展示，并保留 `aria-label` 和悬浮提示。
+- Invoice 列表可通过第二个 Handle 检索到达人；选择器可通过 Real Name 和 PayPal 邮箱命中。
+- 新建请款仅展示当前项目下存在未占用、已通过 Invoice 的达人，同一达人不再按社媒账号拆分。
+- `390px` 下多账号自动换行，请款弹窗、达人选项和页面均无水平溢出； iPad 视口同样无溢出。
+- 浏览器控制台无 warning 或 error。
+
+final result: passed
+
+---
+
 # Design QA - Invoice 列表说明文案与发布按钮顺序
 
 ## Reference and environment
@@ -2236,5 +2312,56 @@ final result: passed
 1. Initial P2: after changing the outer form to CSS Grid, the table's desktop minimum width expanded the validation card to about 1603px and shifted the metric grid outside the viewport.
 2. Fix: constrained the form grid track with `minmax(0, 1fr)` and each workflow card with `min-width: 0`, keeping wide-table overflow inside its existing table wrapper.
 3. Post-fix desktop, selected-data, mobile, interaction, overflow, and console checks found no remaining actionable P0, P1, or P2 issue.
+
+final result: passed
+
+---
+
+# Badge 样式统一设计验收
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-9651e3e5-59bd-42e2-9fda-4e071d845b0a.png`
+- Implementation desktop: `design-qa-badges-desktop.png`
+- Implementation mobile: `design-qa-badges-mobile-390.png`
+- Combined comparison: `design-qa-badges-comparison.png`
+- Source pixels: 1447 × 434, 1x reference capture
+- Implementation desktop pixels: 1432 × 730, 1447 × 738 CSS viewport override, 1x capture
+- Implementation mobile pixels: 375 × 812, requested 390 × 844 responsive viewport, 1x capture
+- State: Invoice 管理“已通过”列表；桌面端包含付款渠道 Badge 和三平台达人折叠状态，窄屏端验证同一列表的自适应。
+
+## Full-view comparison evidence
+
+`design-qa-badges-comparison.png` 将参考图与实现的 Invoice 表格区域组合到同一张图中。实现保留现有 COMETS Pay 导航和表格字体，付款渠道使用与参考图一致的红、紫、蓝实色徽标，社媒账号使用浅色胶囊并横向排列。
+
+## Focused-region evidence
+
+- 付款渠道：Payer Max 红色、Airwallex 紫色、PayPal 蓝色，均保留白色文字以避免仅依赖颜色识别。
+- 社媒 Badge：平台图标和 Handle 同置于胶囊内；Oliver Chen 默认显示前 2 个并显示 `+1`。
+- 交互：点击 `+1` 后显示全部 3 个平台与“收起”，再次点击恢复折叠；`aria-expanded` 从 `false` 切换为 `true` 再恢复。
+- 选择器：Invoice 达人选择项直接展示 Oliver Chen 的全部 3 个平台，不渲染内层按钮。
+- 响应式：390px 验收中页面无水平溢出，平台 Badge 保持横排并对过长 Handle 做省略处理。
+
+## Required fidelity surfaces
+
+- Fonts and typography: 继续使用系统 Noto Sans SC 体系；Badge 的 11.5–12px 字号、粗细和行高与参考图的紧凑小标签层级一致。
+- Spacing and layout rhythm: 付款渠道与社媒 Badge 高度、内边距、圆角和间距已收紧；达人列使用稳定宽度确保两枚 Badge 横排。
+- Colors and tokens: 品牌实色渠道 Badge 和浅色平台 Badge 与参考图语义一致，对比度可读。
+- Image and icon fidelity: 使用现有 Lucide 社媒图标资产，没有使用文字字形、表情或 CSS 绘制替代图标。
+- Copy and content: 保留 `Payer Max`、`Airwallex`、`PayPal`、`+N` 和“收起”文案，选择器与普通列表的展示规则与需求一致。
+
+## Comparison history
+
+1. Initial finding [P2]: Invoice 表格达人列过窄，两枚社媒 Badge 被挤成上下两行。
+2. Fix: 为 Invoice 达人列增加稳定列宽，收紧 Badge 宽度并为折叠视图禁止换行。
+3. Post-fix evidence: `design-qa-badges-desktop.png` 中双平台 Badge 稳定横排；`design-qa-badges-mobile-390.png` 中也无页面水平溢出。
+
+## Findings
+
+无未解决的 P0、P1 或 P2 问题。参考图为独立表格，实现位于现有系统导航框架内，该差异为明确的产品结构约束。
+
+## Verification
+
+- Primary interactions: `+N` 展开、“收起”折叠、Invoice 达人选择器全量展示。
+- Responsive states: desktop and 390px narrow screen.
+- Browser console: 0 errors, 0 warnings.
 
 final result: passed

@@ -192,7 +192,7 @@ describe('InvoicePage list columns', () => {
     const html = renderInvoicePage(true);
 
     expect(html.match(/<th(?:\s|>)/g)).toHaveLength(10);
-    expect(html).toContain('<th>达人</th>');
+    expect(html).toContain('<th class="invoice-creator-column">达人</th>');
     expect(html).toContain('<th>收款主体</th>');
     expect(html).toContain('<th>关联项目</th>');
     expect(html).toContain('<th>Invoice 编号</th>');
@@ -203,7 +203,8 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('>操作</th>');
     expect(html).toContain('Signature Demo Display Name');
     expect(html).toContain('@signature-channel-id');
-    expect(html).toContain('@signature-channel-id · YouTube');
+    expect(html).toContain('aria-label="YouTube · @signature-channel-id"');
+    expect(html).not.toContain('@signature-channel-id · YouTube');
     expect(html).toContain('Signature Demo Company Ltd.');
     expect(html).toContain('Signature Demo Project');
     expect(html).toContain('内部 Invoice');
@@ -230,12 +231,13 @@ describe('InvoicePage list columns', () => {
     });
 
     expect(html).toContain('Signature Demo Display Name');
-    expect(html).toContain('@signature-channel-id · YouTube');
+    expect(html).toContain('@signature-channel-id');
+    expect(html).toContain('aria-label="YouTube · @signature-channel-id"');
   });
 
   it('renders five tabs in the required order', () => {
     const html = renderInvoicePage(true);
-    const labels = ['待签署', '待采集', '待审核', '已通过', '已退回'];
+    const labels = ['待签署', '待回收', '待审核', '已通过', '已退回'];
     labels.reduce((previousIndex, label) => {
       const index = html.indexOf(`>${label} <span>`);
       expect(index).toBeGreaterThan(previousIndex);
@@ -253,7 +255,7 @@ describe('InvoicePage list columns', () => {
     expect(html).toContain('待内部处理');
     expect(html).toContain('已通过 Invoice');
     expect(html).toContain('1 内部 · 0 外部');
-    expect(html).toContain('1 待签署 · 0 待采集');
+    expect(html).toContain('1 待签署 · 0 待回收');
   });
 
   it('shows common filters on every tab and limits Invoice type to review result tabs', () => {

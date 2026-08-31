@@ -1,4 +1,5 @@
 import type {
+  ContractId,
   PaymentListItem,
   PaymentListRecord,
   RequestApprovalReturnItem,
@@ -8,6 +9,7 @@ import { paymentListEffectiveAccount, paymentListItemValue } from './businessWor
 import type { ContractRecord } from './contracts';
 import { getAirwallexCountryProfile } from './airwallexFormSchema';
 import { bankAddress, invoiceTotal } from './invoice/invoiceUtils';
+import { currentInvoiceContractMatchReview } from './invoice/invoiceContractMatching';
 import { paymentRequestInvoiceIds, type PaymentRequestProjectLike } from './paymentRequestProjects';
 import type { GeneratedInvoiceRecord } from './types';
 
@@ -36,6 +38,13 @@ export type FinanceReviewPaymentItemRef = {
   itemId: PaymentListItem['id'];
 };
 
+export type FinanceReviewContractMismatchReview = {
+  reason: string;
+  actorName?: string;
+  actorRole?: string;
+  reviewedAt?: string;
+};
+
 export type FinanceInvoiceReview = {
   key: string;
   kind: Exclude<FinanceReviewPageKind, 'extra-payment' | 'empty-request'>;
@@ -44,6 +53,7 @@ export type FinanceInvoiceReview = {
   creatorName: string;
   paymentItems: FinanceReviewPaymentItemRef[];
   sourceVersions: string[];
+  contractMismatchReview?: FinanceReviewContractMismatchReview;
   fields: FinanceReviewField[];
   mismatchCount: number;
   warningCount: number;
@@ -57,6 +67,7 @@ export type FinanceReviewPage = FinanceInvoiceReview | {
   creatorName: string;
   paymentItems: FinanceReviewPaymentItemRef[];
   sourceVersions: string[];
+  contractMismatchReview?: FinanceReviewContractMismatchReview;
   fields: FinanceReviewField[];
   mismatchCount: number;
   warningCount: number;
@@ -82,6 +93,7 @@ export type FinanceReviewDecision =
       state: 'incorrect';
       issueType: RequestApprovalReturnIssueType;
       reason: string;
+      contractIds?: ContractId[];
       reviewedAt: string;
     };
 
@@ -267,6 +279,15 @@ const reviewInvoice = (
   matches: Array<{ list: PaymentListRecord; item: PaymentListItem }>,
   contracts: ContractRecord[],
 ): FinanceInvoiceReview => {
+  const storedContractMatchReview = currentInvoiceContractMatchReview(record);
+  const contractMismatchReview = storedContractMatchReview?.reason?.trim()
+    ? {
+        reason: storedContractMatchReview.reason.trim(),
+        actorName: storedContractMatchReview.actorName,
+        actorRole: storedContractMatchReview.actorRole,
+        reviewedAt: storedContractMatchReview.reviewedAt,
+      }
+    : undefined;
   const paymentItems = matches.map(({ list, item }) => ({
     paymentListId: list.paymentListId,
     itemId: item.id,
@@ -294,6 +315,7 @@ const reviewInvoice = (
       creatorName: record.snapshot.creatorName,
       paymentItems,
       sourceVersions,
+      contractMismatchReview,
       fields,
       mismatchCount: 1,
       warningCount: 0,
@@ -484,6 +506,7 @@ const reviewInvoice = (
     creatorName: record.snapshot.creatorName,
     paymentItems,
     sourceVersions,
+    contractMismatchReview,
     fields,
     ...fieldCounts(fields),
   };
@@ -495,14 +518,15 @@ export const financeReviewFingerprint = (pages: FinanceReviewPage[]) => pages.ma
   invoiceId: page.invoiceId,
   paymentItems: page.paymentItems,
   sourceVersions: page.sourceVersions,
-    fields: page.fields.map((field) => [
-      field.id,
-      field.contractValue,
-      field.invoiceValue,
-      field.paymentValue,
-      field.state,
-      field.warning,
-    ]),
+  contractMismatchReview: page.contractMismatchReview,
+  fields: page.fields.map((field) => [
+    field.id,
+    field.contractValue,
+    field.invoiceValue,
+    field.paymentValue,
+    field.state,
+    field.warning,
+  ]),
 })).join('\n');
 
 export const buildRequestFinanceReview = (
@@ -696,6 +720,10 @@ export const financeReviewSessionCanReturn = (
         decision?.state === 'incorrect'
         && Boolean(decision.issueType)
         && Boolean(decision.reason.trim())
+        && (
+          decision.issueType !== 'CONTRACT_CONTENT'
+          || decision.contractIds?.length === 1
+        )
       );
   })
   && review.pages.some((page) => session.decisions[page.key]?.state === 'incorrect'),
@@ -713,6 +741,7 @@ export const financeReviewReturnItems = (
         invoiceNumber: page.invoiceNumber,
         issueType: decision.issueType,
         reason: decision.reason,
+        contractIds: decision.contractIds?.length ? [...decision.contractIds] : undefined,
         paymentItems: page.paymentItems,
       }]
     : [];
@@ -722,5 +751,16 @@ export const financeReviewReturnReason = (
   session: FinanceReviewSession,
   review: RequestFinanceReview,
 ) => financeReviewReturnItems(session, review)
-  .map((item) => `${item.invoiceNumber}（${item.issueType === 'INVOICE_CONTENT' ? 'Invoice' : '付款清单'}）：${item.reason}`)
+  .map((item) => {
+    const issueLabel: Record<RequestApprovalReturnIssueType, string> = {
+      INVOICE_CONTENT: 'Invoice',
+      PAYMENT_LIST: '付款清单',
+      CONTRACT_CONTENT: '合同',
+      FULL_ITEM: '整笔请款',
+    };
+    const contractScope = item.contractIds?.length
+      ? ` · 合同范围：${item.contractIds.join('、')}`
+      : '';
+    return `${item.invoiceNumber}（${issueLabel[item.issueType]}${contractScope}）：${item.reason}`;
+  })
   .join('；');

@@ -118,10 +118,14 @@ describe('My Projects payment request progress', () => {
     const progress = progressFor(request, [], ['缺少 Invoice']);
 
     expect(progress.map((step) => step.label)).toEqual([
-      '项目创建',
+      '请款创建',
       '补充合同',
       '关联 Invoice',
       '提交审核',
+      'PM 审批',
+      '项目负责人审批',
+      '老板审批',
+      '财务审批',
       '渠道打款',
     ]);
     expect(stepFor(progress, '补充合同')).toMatchObject({ state: 'complete', time: '已跳过' });
@@ -149,10 +153,32 @@ describe('My Projects payment request progress', () => {
     const progress = progressFor(request);
 
     expect(stepFor(progress, '提交审核')).toMatchObject({
-      state: 'current',
-      description: '第 2 轮 · 财务审批中',
+      state: 'complete',
+      description: '第 2 轮 · 已提交审批',
     });
+    expect(stepFor(progress, '财务审批')).toMatchObject({
+      state: 'current',
+      description: '第 2 轮 · 等待财务审批',
+    });
+    expect(stepFor(progress, 'PM 审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '项目负责人审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '老板审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending' });
+  });
+
+  it.each([
+    ['PENDING_PM', 'PM 审批'],
+    ['PENDING_PROJECT_OWNER', '项目负责人审批'],
+    ['PENDING_OWNER', '老板审批'],
+    ['PENDING_FINANCE', '财务审批'],
+  ] as const)('marks %s as the only active approval stage', (status, label) => {
+    const progress = progressFor(baseRequest({
+      lifecycle: 'SUBMITTED',
+      approval: approval(status),
+    }));
+
+    expect(stepFor(progress, label)).toMatchObject({ state: 'current' });
+    expect(progress.filter((step) => step.state === 'current')).toHaveLength(1);
   });
 
   it('unlocks channel payment only after finance approval', () => {
@@ -164,6 +190,9 @@ describe('My Projects payment request progress', () => {
     const progress = progressFor(request, [payout('等待付款')]);
 
     expect(stepFor(progress, '提交审核')).toMatchObject({ state: 'complete' });
+    ['PM 审批', '项目负责人审批', '老板审批', '财务审批'].forEach((label) => {
+      expect(stepFor(progress, label)).toMatchObject({ state: 'complete' });
+    });
     expect(stepFor(progress, '渠道打款')).toMatchObject({
       state: 'current',
       description: '1 笔付款等待执行',
@@ -253,7 +282,67 @@ describe('My Projects payment request progress', () => {
       state: 'current',
       description: '财务审核已退回，待修改后重新提交',
     });
+    expect(stepFor(progress, '财务审批')).toMatchObject({
+      state: 'returned',
+      description: '测试财务已退回：付款资料需要修改',
+    });
+    expect(stepFor(progress, 'PM 审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '项目负责人审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '老板审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending' });
+  });
+
+  it('resumes a new round at the returned stage without resetting earlier approvals', () => {
+    const progress = progressFor(baseRequest({
+      lifecycle: 'SUBMITTED',
+      status: '财务审批中',
+      approval: approval('PENDING_FINANCE', {
+        round: 3,
+        submittedAt: '2026-08-12T02:00:00.000Z',
+        updatedAt: '2026-08-12T02:00:00.000Z',
+        history: [{
+          round: 2,
+          stage: 'PM',
+          action: 'APPROVE',
+          actorAccount: 'pm.progress',
+          actorName: '测试 PM',
+          actorRole: 'PM',
+          fromStatus: 'PENDING_PM',
+          toStatus: 'PENDING_PROJECT_OWNER',
+          occurredAt: '2026-08-10T02:30:00.000Z',
+        }],
+      }),
+    }));
+
+    expect(stepFor(progress, '提交审核')).toMatchObject({
+      state: 'complete',
+      description: '第 3 轮 · 已提交审批',
+    });
+    expect(stepFor(progress, 'PM 审批')).toMatchObject({
+      state: 'complete',
+      description: '测试 PM 已审批通过',
+    });
+    expect(stepFor(progress, '项目负责人审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '老板审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '财务审批')).toMatchObject({ state: 'current' });
+  });
+
+  it('terminates submission and payment while leaving approval stages pending after cancellation', () => {
+    const progress = progressFor(baseRequest({
+      lifecycle: 'CANCELLED',
+      status: '已取消',
+      cancelReason: '项目终止',
+      cancelledAt: '2026-08-12T03:00:00.000Z',
+    }));
+
+    expect(stepFor(progress, '提交审核')).toMatchObject({
+      state: 'current',
+      description: '请款已取消：项目终止',
+    });
+    ['PM 审批', '项目负责人审批', '老板审批', '财务审批'].forEach((label) => {
+      expect(stepFor(progress, label)).toMatchObject({ state: 'pending' });
+    });
+    expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending', time: '已终止' });
   });
 
   it('keeps payment-failure recovery at the payment stage', () => {
@@ -273,6 +362,7 @@ describe('My Projects payment request progress', () => {
     })]);
 
     expect(stepFor(progress, '提交审核')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '财务审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '渠道打款')).toMatchObject({
       state: 'current',
       description: '1 笔付款异常，待修正后重新发起',

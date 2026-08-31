@@ -17,11 +17,14 @@ import { INITIAL_CREATORS, INITIAL_PROJECTS } from '../pages/OperationalPages';
 import { PROJECT_DEMO_CONTRACTS } from '../prototypeResourceFixtures';
 import type { CreatorProfile } from '../types';
 import {
+  addInvoiceBatchCreatorLineItem,
   buildInvoiceDocumentForBatchRow,
   availableContractsForEngagement,
   clearInvoiceBatchDescriptionOverride,
   createGeneratedInvoiceRecord,
   createInvoiceBatchRow,
+  invoiceBatchLineItemScope,
+  removeInvoiceBatchCreatorLineItem,
   setInvoiceBatchDescriptionOverride,
   synchronizeInvoiceBatchDescriptions,
   synchronizeInvoiceBatchLineItems,
@@ -249,6 +252,74 @@ describe('Invoice batch rows', () => {
       'Updated Shared Video',
       'Updated Shared License',
     ]);
+  });
+
+  it('preserves creator-only line items when shared Descriptions change', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const row = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Shared Video', 'Shared License'),
+    });
+    let items = addInvoiceBatchCreatorLineItem(row.items);
+    const creatorItem = items[items.length - 1];
+    items = updateInvoiceBatchLineItem(items, creatorItem.id, {
+      description: 'Creator Rush Fee',
+      unitPrice: 75,
+      quantity: 2,
+    });
+    const synchronized = synchronizeInvoiceBatchDescriptions(
+      { ...row, items },
+      [{ templateKey: 'template_batch_1', description: 'Updated Shared Video' }],
+    );
+
+    expect(synchronized.items.map((item) => ({
+      description: item.description,
+      scope: invoiceBatchLineItemScope(item),
+    }))).toEqual([
+      { description: 'Updated Shared Video', scope: 'SHARED' },
+      { description: 'Creator Rush Fee', scope: 'CREATOR' },
+    ]);
+  });
+
+  it('adds, validates and removes a creator-only line item without leaking UI metadata', () => {
+    const creator = creatorWithAccounts([{ ...baseAccount, isDefault: true }]);
+    const context = createContext({ creator });
+    const initial = createInvoiceBatchRow({
+      ...context,
+      engagementId: context.project.creatorProfiles![0].engagementId,
+      invoiceDate: '2026-08-06',
+      lineItems: lineItemSeeds('Shared Video'),
+    });
+    let items = updateInvoiceBatchLineItem(initial.items, initial.items[0].id, {
+      unitPrice: 100,
+      quantity: 1,
+    });
+    items = addInvoiceBatchCreatorLineItem(items);
+    const creatorItem = items[items.length - 1];
+    expect(creatorItem).toEqual(expect.objectContaining({
+      description: '',
+      unitPrice: 0,
+      quantity: 1,
+      lineItemScope: 'CREATOR',
+    }));
+
+    items = updateInvoiceBatchLineItem(items, creatorItem.id, {
+      description: 'Creator Rush Fee',
+      unitPrice: 75,
+      quantity: 2,
+    });
+    const row = updateAndValidateInvoiceBatchRow(initial, { items }, context);
+    const model = buildInvoiceDocumentForBatchRow(row, context, 'INV-20260806-CREATOR');
+
+    expect(row.status).toBe('READY');
+    expect(model.items.map((item) => item.lineTotal)).toEqual([100, 150]);
+    expect(model.items[1]).not.toHaveProperty('templateKey');
+    expect(model.items[1]).not.toHaveProperty('lineItemScope');
+    expect(removeInvoiceBatchCreatorLineItem(items, creatorItem.id)).toHaveLength(1);
+    expect(removeInvoiceBatchCreatorLineItem(items, initial.items[0].id)).toEqual(items);
   });
 
   it('removes stale override keys when a shared Description is deleted', () => {

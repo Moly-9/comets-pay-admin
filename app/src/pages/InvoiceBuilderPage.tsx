@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowLeft,
   Building2,
   CheckCircle2,
@@ -16,12 +15,12 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
+import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPanel';
 import { SearchableComboBox } from '../components/SearchableComboBox';
+import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractSelector } from '../components/InvoiceContractSelector';
 import {
   creatorSearchOption,
-  creatorSocialAccountSearchOptions,
-  creatorSocialSelectionValue,
-  parseCreatorSocialSelectionValue,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import {
@@ -32,7 +31,7 @@ import {
   type InvoiceId,
   type ProjectId,
 } from '../businessWorkflow';
-import { contractLinkedToProject, formatContractMoney, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
+import { contractLinkedToProject, isContractAvailableForNewAssociation, type ContractRecord } from '../contracts';
 import {
   downloadBlob,
   formatInvoiceMoney,
@@ -47,6 +46,7 @@ import {
 } from '../invoice/invoiceDraft';
 import {
   createInvoiceContractMatchReview,
+  currentInvoiceContractMatchReview,
   evaluateInvoiceContractMatch,
   invoiceContractMatchFingerprint,
   type InvoiceContractMatchActor,
@@ -68,6 +68,7 @@ import {
   getPayoutAccountVersion,
   getPayoutAccountStatusMeta,
   getPayoutAccountSummary,
+  invoicePaymentMethodForProvider,
   invoicePaymentForCreator,
   payoutAccountToInvoicePayment,
 } from '../payoutAccounts';
@@ -87,7 +88,6 @@ import type {
   InvoiceEditContext,
   InvoiceEntity,
   InvoiceLineItem,
-  InvoicePaymentMethod,
   Payout,
 } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -150,11 +150,6 @@ const CURRENCY_OPTIONS = [
   { value: 'SGD', label: 'SGD', description: '新加坡元' },
 ] as const;
 
-const PAYMENT_OPTIONS = [
-  { value: 'bank', label: 'Bank transfer', description: '使用达人银行收款资料' },
-  { value: 'paypal', label: 'PayPal', description: '使用达人 PayPal 用户名与邮箱' },
-] as const;
-
 const createBlankLine = (index: number): InvoiceLineItem => ({
   id: `${createPrototypeId('item')}-${index}`,
   description: '',
@@ -163,7 +158,10 @@ const createBlankLine = (index: number): InvoiceLineItem => ({
   lineTotal: 0,
 });
 
-export const invoiceCreatorSearchOption = creatorSearchOption;
+export const invoiceCreatorSearchOption = (creator: CreatorProfile) => ({
+  ...creatorSearchOption(creator),
+  selectedLabel: creator.name,
+});
 
 export function InvoiceBuilderPage({
   creators,
@@ -208,10 +206,20 @@ export function InvoiceBuilderPage({
   const initialProjectId = editSnapshot?.cooperationProjectId
     ?? editSnapshot?.projectId
     ?? (initialContext ? cooperationProjectIdFor(initialContext.project) : '');
+  const initialEligiblePayoutAccounts = eligibleInvoicePayoutAccounts(initialCreator);
+  const initialPayoutAccountId = editSnapshot?.payoutAccountId
+    ?? editSnapshot?.payment.payoutAccountId;
+  const initialPayoutProvider = editSnapshot?.payment.payoutProvider
+    ?? editSnapshot?.payoutProvider
+    ?? (editSnapshot?.paymentMethod === 'paypal' ? 'PayPal' : editSnapshot ? 'Airwallex' : undefined);
   const initialPayoutAccount = initialCreator
-    ? eligibleInvoicePayoutAccounts(initialCreator).find((account) => (
-        account.provider === (editSnapshot?.paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex')
-      )) ?? eligibleInvoicePayoutAccounts(initialCreator)[0] ?? null
+    ? initialEligiblePayoutAccounts.find((account) => (
+        getPayoutAccountId(account) === initialPayoutAccountId
+      ))
+      ?? initialEligiblePayoutAccounts.find((account) => account.provider === initialPayoutProvider)
+      ?? initialEligiblePayoutAccounts.find((account) => account.isDefault)
+      ?? initialEligiblePayoutAccounts[0]
+      ?? null
     : null;
   const [creatorId, setCreatorId] = useState(initialCreator?.id ?? editSnapshot?.creatorId ?? '');
   const [creatorSocialAccountId, setCreatorSocialAccountId] = useState(
@@ -261,9 +269,6 @@ export function InvoiceBuilderPage({
       ? editSnapshot.items.map((item) => ({ ...item }))
       : [createBlankLine(0)]
   ));
-  const [paymentMethod, setPaymentMethod] = useState<InvoicePaymentMethod>(
-    editSnapshot?.paymentMethod ?? 'bank',
-  );
   const [payment, setPayment] = useState<DocumentPayoutSnapshot>(
     editSnapshot
       ? { ...editSnapshot.payment }
@@ -279,7 +284,10 @@ export function InvoiceBuilderPage({
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
-  const [contractMatchReason, setContractMatchReason] = useState('');
+  const initialContractMatchReason = editRecord
+    ? currentInvoiceContractMatchReview(editRecord)?.reason ?? ''
+    : '';
+  const [contractMatchReason, setContractMatchReason] = useState(initialContractMatchReason);
   const prototypeSeed = useMemo(() => createInvoiceBuilderPrototypeSeed({
     creators,
     payouts,
@@ -295,9 +303,7 @@ export function InvoiceBuilderPage({
     editSnapshot?.creatorHandle,
     editSnapshot?.creatorPlatform,
   );
-  const creatorSelectionValue = creatorId && selectedSocialAccount
-    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
-    : '';
+  const creatorSelectionValue = creatorId;
   const eligiblePayoutAccounts = eligibleInvoicePayoutAccounts(selectedCreator);
   const payoutAccountOptions = eligiblePayoutAccounts.map((account) => ({
     value: getPayoutAccountId(account),
@@ -331,7 +337,7 @@ export function InvoiceBuilderPage({
   const selectedContracts = selectableContracts.filter((contract) => (
     contract.contractId && contractIds.includes(contract.contractId)
   ));
-  const creatorOptions = creators.flatMap(creatorSocialAccountSearchOptions);
+  const creatorOptions = creators.map(invoiceCreatorSearchOption);
   const projectOptions = projects.map((project) => ({
     value: cooperationProjectIdFor(project),
     label: project.name,
@@ -353,6 +359,19 @@ export function InvoiceBuilderPage({
         : undefined,
     })),
   ];
+  const selectedPayoutAccount = eligiblePayoutAccounts.find((account) => (
+    getPayoutAccountId(account) === payoutAccountId
+  )) ?? null;
+  const resolvedPayoutProvider = selectedPayoutAccount?.provider
+    ?? payment.payoutProvider
+    ?? editSnapshot?.payoutProvider;
+  const paymentMethod = invoicePaymentMethodForProvider(
+    resolvedPayoutProvider,
+    editSnapshot?.paymentMethod ?? 'bank',
+  );
+  const paymentMethodDisplay = payoutAccountId
+    ? paymentMethod === 'paypal' ? 'PayPal' : 'Bank Transfer'
+    : '待选择付款账户';
 
   const model = useMemo<InvoiceDocumentModel>(() => ({
     invoiceNumber,
@@ -405,7 +424,10 @@ export function InvoiceBuilderPage({
     model,
   ), [model, selectedContracts]);
   const previousContractMatchFingerprint = useRef(contractMatchFingerprint);
-  const isDirty = Boolean(editSnapshot && invoiceDocumentChanged(editSnapshot, model));
+  const isDirty = Boolean(editSnapshot && (
+    invoiceDocumentChanged(editSnapshot, model)
+    || contractMatchReason !== initialContractMatchReason
+  ));
 
   useEffect(() => {
     if (previousContractMatchFingerprint.current === contractMatchFingerprint) return;
@@ -429,21 +451,20 @@ export function InvoiceBuilderPage({
   }, [isDirty, isEditing]);
 
   const selectCreator = (value: string) => {
-    const selection = parseCreatorSocialSelectionValue(value);
-    const creator = creators.find((item) => item.id === selection?.creatorId);
-    setCreatorId(selection?.creatorId ?? '');
-    setCreatorSocialAccountId(selection?.socialAccountId ?? '');
+    const creator = creators.find((item) => item.id === value);
+    const socialAccount = resolveCreatorSocialAccount(creator);
+    setCreatorId(creator?.id ?? '');
+    setCreatorSocialAccountId(socialAccount?.id ?? '');
     setSelectedProjectId('');
     setEngagementId('');
     setContractIds([]);
     setFrom(creator ? { ...creator.contact } : { ...EMPTY_CONTACT });
-    const account = eligibleInvoicePayoutAccounts(creator).find((candidate) => (
-      candidate.provider === (paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex')
-    )) ?? null;
+    const accounts = eligibleInvoicePayoutAccounts(creator);
+    const account = accounts.find((candidate) => candidate.isDefault) ?? accounts[0] ?? null;
     setPayoutAccountId(account ? getPayoutAccountId(account) : '');
     setPayment(account
       ? payoutAccountToInvoicePayment(account, creator?.id)
-      : invoicePaymentForCreator(creator, paymentMethod === 'paypal' ? 'PayPal' : 'Airwallex'));
+      : { ...EMPTY_PAYMENT });
     setItems([createBlankLine(0)]);
     setErrors({});
     setContractMatchReason('');
@@ -480,7 +501,6 @@ export function InvoiceBuilderPage({
       ...item,
     })));
     setPayoutAccountId(prototypeSeed.payoutAccountId);
-    setPaymentMethod(prototypeSeed.paymentMethod);
     setPayment({ ...prototypeSeed.payment });
     setErrors({});
     setContractMatchReason('');
@@ -508,7 +528,6 @@ export function InvoiceBuilderPage({
         candidate.provider === payout.provider
       )) ?? null;
       setCurrency(payout.currency);
-      setPaymentMethod(payout.provider === 'PayPal' ? 'paypal' : 'bank');
       setPayoutAccountId(account ? getPayoutAccountId(account) : '');
       setPayment(account
         ? payoutAccountToInvoicePayment(account, creator?.id)
@@ -531,24 +550,12 @@ export function InvoiceBuilderPage({
     const account = eligiblePayoutAccounts.find((candidate) => getPayoutAccountId(candidate) === id);
     if (!account) return;
     setPayoutAccountId(getPayoutAccountId(account));
-    setPaymentMethod(account.provider === 'PayPal' ? 'paypal' : 'bank');
     setPayment(payoutAccountToInvoicePayment(account, selectedCreator?.id));
     setErrors((current) => {
       const next = { ...current };
       delete next.payoutAccountId;
       return next;
     });
-    setGeneratedFiles(null);
-  };
-
-  const selectPaymentMethod = (value: InvoicePaymentMethod) => {
-    const provider = value === 'paypal' ? 'PayPal' : 'Airwallex';
-    const account = eligiblePayoutAccounts.find((candidate) => candidate.provider === provider) ?? null;
-    setPaymentMethod(value);
-    setPayoutAccountId(account ? getPayoutAccountId(account) : '');
-    setPayment(account
-      ? payoutAccountToInvoicePayment(account, selectedCreator?.id)
-      : invoicePaymentForCreator(selectedCreator, provider));
     setGeneratedFiles(null);
   };
 
@@ -648,6 +655,14 @@ export function InvoiceBuilderPage({
       : editContext === 'PAYMENT_FAILURE_CONTENT'
         ? '保存并重新发起签署'
         : '生成 PDF + DOCX';
+  const generateDisabledReason = generating
+    ? 'Invoice 文件正在生成，请稍候。'
+    : isEditing && !isDirty
+      ? '尚未修改任何 Invoice 内容。'
+      : contractMatch.blockerIssues[0]?.message
+        ?? (contractMatch.reasonRequiredIssues.length && !contractMatch.reasonValid
+          ? '请先填写 1–300 个字符的合同差异说明。'
+          : '');
 
   return (
     <div className="page-stack invoice-builder-page">
@@ -670,6 +685,7 @@ export function InvoiceBuilderPage({
                 icon={<Sparkles size={17} />}
                 data-testid="invoice-fill-demo"
                 disabled={!prototypeSeed || generating}
+                disabledReason={generating ? 'Invoice 文件正在生成，请稍候。' : '当前没有可用的演示项目、达人或付款账户数据。'}
                 onClick={fillPrototypeData}
               >
                 填充演示数据
@@ -701,6 +717,7 @@ export function InvoiceBuilderPage({
               <Button
                 icon={<Send size={16} />}
                 disabled={generatedFiles.record.status !== '草稿'}
+                disabledReason="当前 Invoice 已发布，无需重复发布。"
                 onClick={() => {
                   if (!onPublishGenerated(generatedFiles.record)) return;
                   setGeneratedFiles((current) => current ? {
@@ -728,8 +745,12 @@ export function InvoiceBuilderPage({
                   ariaLabel="合作达人"
                   className="creator-search-combobox"
                   value={creatorSelectionValue}
-                  placeholder="搜索频道链接、频道 ID、Account Name 或 Display Name"
+                  placeholder="搜索达人名称、频道 ID、频道链接…"
                   options={creatorOptions}
+                  resultUnit="位达人"
+                  renderOption={(option) => (
+                    <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />
+                  )}
                   onChange={selectCreator}
                   onClear={() => selectCreator('')}
                   disabled={isEditing}
@@ -745,90 +766,24 @@ export function InvoiceBuilderPage({
             </div>
             {selectedProjectId && engagementId ? (
               <div className="invoice-contract-coverage">
-                <div className="invoice-contract-coverage-head">
-                  <div>
-                    <strong id="invoice-contract-coverage-label">关联合同（非必填）</strong>
-                    <span>主体必须一致；金额、币种或付款账户差异填写说明后可继续。</span>
-                  </div>
-                  <em>{contractIds.length ? `已选 ${contractIds.length} 份` : '未关联合同（非必填）'}</em>
-                </div>
-                {selectableContracts.length ? (
-                  <div
-                    className="invoice-contract-options"
-                    role="group"
-                    aria-labelledby="invoice-contract-coverage-label"
-                  >
-                    {selectableContracts.map((contract) => (
-                      <label key={contract.contractId}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(contract.contractId && contractIds.includes(contract.contractId))}
-                          onChange={() => contract.contractId && toggleContract(contract.contractId)}
-                        />
-                        <span>
-                          <strong>{contract.name}</strong>
-                          <small>{contract.id} · {formatContractMoney(contract)}</small>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p>当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。</p>
-                )}
-                <div className="invoice-contract-match-panel" data-result={contractMatch.result}>
-                  <div className="invoice-contract-match-head">
-                    <span>
-                      {contractMatch.result === 'BLOCKED' ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
-                      <strong>{
-                        contractMatch.result === 'NOT_APPLICABLE'
-                          ? '未关联合同，匹配不适用'
-                          : contractMatch.result === 'BLOCKED'
-                            ? '主体不一致，暂不能生成'
-                            : contractMatch.result === 'REASON_REQUIRED'
-                              ? '存在可放行差异，请填写说明'
-                              : contractMatch.result === 'APPROVED_WITH_REASON'
-                                ? '差异说明已填写，可以生成'
-                                : '合同与 Invoice 已匹配'
-                      }</strong>
-                    </span>
-                    <em>{contractMatch.result === 'NOT_APPLICABLE'
-                      ? '不适用'
-                      : `${contractMatch.checks.filter((check) => (
-                          ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state)
-                        )).length}/${contractMatch.checks.length} 已确认`}</em>
-                  </div>
-                  <div className="invoice-contract-match-grid">
-                    {contractMatch.checks.map((check) => (
-                      <article data-state={check.state} key={check.field}>
-                        <span>{
-                          check.state === 'MATCH' || check.state === 'APPROVED_WITH_REASON'
-                            ? <CheckCircle2 size={15} />
-                            : check.state === 'NOT_APPLICABLE'
-                              ? <FileText size={15} />
-                              : <AlertTriangle size={15} />
-                        }</span>
-                        <div><strong>{check.label}</strong><small>{check.message}</small></div>
-                      </article>
-                    ))}
-                  </div>
-                  {contractMatch.reasonRequiredIssues.length ? (
-                    <label className={`invoice-contract-match-reason ${errors.contractMatch ? 'has-error' : ''}`}>
-                      <span>合同差异说明 *</span>
-                      <textarea
-                        value={contractMatchReason}
-                        maxLength={300}
-                        placeholder="说明金额、币种或付款账户与合同不一致的业务原因"
-                        onChange={(event) => {
-                          setContractMatchReason(event.target.value);
-                          setGeneratedFiles(null);
-                        }}
-                      />
-                      <small>{errors.contractMatch || `${contractMatchReason.trim().length}/300`}</small>
-                    </label>
-                  ) : contractMatch.blockerIssues.length ? (
-                    <p className="invoice-contract-match-blocker" role="alert">{contractMatch.blockerIssues.map((item) => item.message).join('；')}</p>
-                  ) : null}
-                </div>
+                <InvoiceContractSelector
+                  contracts={selectableContracts}
+                  selectedContractIds={contractIds}
+                  onToggle={toggleContract}
+                  labelId="invoice-contract-coverage-label"
+                  helperText="主体必须一致；金额、币种或付款账户差异填写说明后可继续。"
+                  emptyText="当前没有可用于校验的已确认合同，仍可按无合同流程生成 Invoice。"
+                />
+                <InvoiceContractMatchPanel
+                  match={contractMatch}
+                  reason={contractMatchReason}
+                  error={errors.contractMatch}
+                  reasonInputId="invoice-contract-match-reason"
+                  onReasonChange={(value) => {
+                    setContractMatchReason(value);
+                    setGeneratedFiles(null);
+                  }}
+                />
               </div>
             ) : null}
           </div>
@@ -850,8 +805,8 @@ export function InvoiceBuilderPage({
               {items.map((item, index) => (
                 <div className="invoice-line-row" key={item.id}>
                   <label className={`invoice-line-description ${errors[`item-${item.id}-description`] ? 'has-error' : ''}`}><span>DESCRIPTION</span><input value={item.description} placeholder="费用项目或合作交付" onChange={(event) => changeLine(item.id, 'description', event.target.value)} /><small>{errors[`item-${item.id}-description`]}</small></label>
-                  <label className={errors[`item-${item.id}-unitPrice`] ? 'has-error' : ''}><span>PRICE</span><input type="number" min="0" step="0.01" value={item.unitPrice || ''} onChange={(event) => changeLine(item.id, 'unitPrice', event.target.value)} /><small>{errors[`item-${item.id}-unitPrice`]}</small></label>
-                  <label className={errors[`item-${item.id}-quantity`] ? 'has-error' : ''}><span>AMOUNT</span><input type="number" min="0.01" step="0.01" value={item.quantity || ''} onChange={(event) => changeLine(item.id, 'quantity', event.target.value)} /><small>{errors[`item-${item.id}-quantity`]}</small></label>
+                  <label className={errors[`item-${item.id}-unitPrice`] ? 'has-error' : ''}><span>PRICE</span><input type="number" min="0" step="1" value={item.unitPrice || ''} onChange={(event) => changeLine(item.id, 'unitPrice', event.target.value)} /><small>{errors[`item-${item.id}-unitPrice`]}</small></label>
+                  <label className={errors[`item-${item.id}-quantity`] ? 'has-error' : ''}><span>AMOUNT</span><input type="number" min="0.01" step="1" value={item.quantity || ''} onChange={(event) => changeLine(item.id, 'quantity', event.target.value)} /><small>{errors[`item-${item.id}-quantity`]}</small></label>
                   <div className="invoice-line-total"><span>TOTAL</span><strong>{formatInvoiceMoney(currency, item.lineTotal)}</strong></div>
                   <button className="invoice-line-remove" type="button" aria-label={`删除第 ${index + 1} 项费用`} disabled={items.length === 1} onClick={() => setItems((current) => current.filter((line) => line.id !== item.id))}><Trash2 size={16} /></button>
                 </div>
@@ -908,7 +863,7 @@ export function InvoiceBuilderPage({
                 <h2>4. 收款方式</h2>
                 <p>
                   {allowPayoutAccountChange
-                    ? '财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户及相应付款方式。'
+                    ? '财务以 Invoice 原因退回，可重新选择达人档案中的已验证账户，付款方式将按渠道自动确定。'
                     : requiresPayoutAccountSelection
                     ? '付款失败重新发起时，必须从达人档案中重新选择已验证账户。'
                     : '从达人档案选择已验证账户，付款字段只读并冻结到本次 Invoice。'}
@@ -934,17 +889,11 @@ export function InvoiceBuilderPage({
                     : '选择达人档案中的已验证账户后，将冻结账户 ID、版本与付款快照。'}
                 </p>
               </div>
-              <div className="invoice-form-control full-width">
-                <span>付款方式 *</span>
-                <SelectField
-                  ariaLabel="付款方式"
-                  variant="form"
-                  value={paymentMethod}
-                  options={PAYMENT_OPTIONS}
-                  disabled={requiresPayoutAccountSelection}
-                  onChange={selectPaymentMethod}
-                />
-              </div>
+              <label className="full-width invoice-payment-method-readonly">
+                <span>付款方式</span>
+                <input aria-label="付款方式（根据付款账户自动确定）" value={paymentMethodDisplay} readOnly />
+                <small>根据付款账户渠道自动确定：PayPal 使用 PayPal，其余银行类渠道使用 Bank Transfer。</small>
+              </label>
               {paymentMethod === 'bank' ? (
                 <>
                   <label className={errors.accountName ? 'has-error' : ''}><span>Account Name *</span><input value={payment.accountName} readOnly /><small>{errors.accountName}</small></label>
@@ -966,7 +915,7 @@ export function InvoiceBuilderPage({
 
           <div className="invoice-builder-footer">
             <Button variant="ghost" onClick={cancel}>取消</Button>
-            <Button icon={<WandSparkles size={17} />} disabled={generating || (isEditing && !isDirty) || !contractMatch.canProceed} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
+            <Button icon={<WandSparkles size={17} />} disabled={Boolean(generateDisabledReason)} disabledReason={generateDisabledReason} onClick={generate}>{generating ? '正在生成…' : saveLabel}</Button>
           </div>
         </section>
 

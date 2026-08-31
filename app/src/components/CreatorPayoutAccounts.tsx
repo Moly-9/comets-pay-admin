@@ -35,9 +35,7 @@ import {
   normalizePayPalStatus,
 } from '../payoutAccounts';
 import {
-  AIRWALLEX_FORM_SCHEMA_API_PATH,
   AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH,
-  AIRWALLEX_SCHEMA_API_VERSION,
   applyAirwallexSchemaDefaults,
   generateLocalAirwallexFormSchema,
   getAirwallexFormValue,
@@ -77,103 +75,103 @@ type CreatorPayoutAccountsProps = {
 
 const DOCUMENT_PAYOUT_FIELD_LABELS: Record<string, { label: string; alias: string; example: string }> = {
   'beneficiary.bank_details.account_name': {
-    label: 'Account Name',
-    alias: '账户名称',
+    label: '账户名称',
+    alias: 'Account Name',
     example: 'Taylor Morgan',
   },
   'beneficiary.bank_details.account_number': {
-    label: 'Account Number',
-    alias: '银行账号',
+    label: '银行账号',
+    alias: 'Account Number',
     example: '50001121',
   },
   'beneficiary.bank_details.bank_account_category': {
-    label: 'Account Type',
-    alias: '账户类型',
+    label: '账户类型',
+    alias: 'Account Type',
     example: 'Checking',
   },
   'beneficiary.bank_details.bank_name': {
-    label: "Beneficiary's Bank Name",
-    alias: '收款银行名称',
+    label: '收款银行名称',
+    alias: "Beneficiary's Bank Name",
     example: 'JPMorgan Chase Bank',
   },
   'beneficiary.bank_details.bank_street_address': {
-    label: "Beneficiary's Bank Address",
-    alias: '收款银行地址',
+    label: '收款银行地址',
+    alias: "Beneficiary's Bank Address",
     example: '270 Park Avenue, New York, NY 10017',
   },
   'profile_supplement.beneficiary_bank_address': {
-    label: "Beneficiary's Bank Address",
-    alias: '收款银行地址',
+    label: '收款银行地址',
+    alias: "Beneficiary's Bank Address",
     example: '270 Park Avenue, New York, NY 10017',
   },
   'beneficiary.bank_details.swift_code': {
-    label: "Beneficiary's Bank SWIFT Code",
-    alias: '收款银行 SWIFT / BIC',
+    label: '收款银行 SWIFT 代码',
+    alias: "Beneficiary's Bank SWIFT Code",
     example: 'CHASUS33',
   },
   'beneficiary.bank_details.iban': {
-    label: 'IBAN',
-    alias: '国际银行账号',
+    label: '国际银行账号',
+    alias: 'IBAN',
     example: 'GB29NWBK60161331926819',
   },
   'beneficiary.bank_details.bank_country_code': {
-    label: "Beneficiary's Bank Country",
-    alias: '收款银行国家 / 地区',
+    label: '收款银行国家 / 地区',
+    alias: "Beneficiary's Bank Country",
     example: 'US',
   },
   'beneficiary.bank_details.bank_state': {
-    label: "Beneficiary's Bank State",
-    alias: '收款银行州 / 省',
+    label: '收款银行州 / 省',
+    alias: "Beneficiary's Bank State",
     example: 'New York',
   },
   'beneficiary.bank_details.bank_city': {
-    label: "Beneficiary's Bank City",
-    alias: '收款银行城市',
+    label: '收款银行城市',
+    alias: "Beneficiary's Bank City",
     example: 'New York',
   },
   'beneficiary.bank_details.bank_postcode': {
-    label: "Beneficiary's Bank Postal Code",
-    alias: '收款银行邮政编码',
+    label: '收款银行邮政编码',
+    alias: "Beneficiary's Bank Postal Code",
     example: '10017',
   },
   'beneficiary.bank_details.intermediary_bank_country_code': {
-    label: 'Intermediary Bank Country (if any)',
-    alias: '中间行国家 / 地区 · 选填',
+    label: '中间行国家 / 地区（选填）',
+    alias: 'Intermediary Bank Country (if any)',
     example: 'US',
   },
   'beneficiary.bank_details.intermediary_bank_swift_code': {
-    label: 'Intermediary Bank Code (if any)',
-    alias: '中间行代码 · 选填',
+    label: '中间行代码（选填）',
+    alias: 'Intermediary Bank Code (if any)',
     example: 'CHASUS33',
   },
   'beneficiary.additional_info.transfer_remarks': {
-    label: 'Transfer Remarks (if any)',
-    alias: '转账备注 · 选填',
+    label: '转账备注（选填）',
+    alias: 'Transfer Remarks (if any)',
     example: 'Creator campaign payout Aug 2026',
   },
   'beneficiary.bank_details.account_routing_type1': {
-    label: 'Primary Routing Code Type',
-    alias: '银行一级路由号类型',
+    label: '银行一级路由号类型',
+    alias: 'Primary Routing Code Type',
     example: 'ABA',
   },
   'beneficiary.bank_details.account_routing_value2': {
-    label: 'Primary Branch Code',
-    alias: '分行代码',
+    label: '分行代码',
+    alias: 'Primary Branch Code',
     example: '001',
   },
   'beneficiary.additional_info.personal_id_type': {
-    label: 'ID Document Type',
-    alias: '证件类型',
+    label: '证件类型',
+    alias: 'ID Document Type',
     example: 'PASSPORT',
   },
   'beneficiary.additional_info.personal_id_number': {
-    label: 'Beneficiary ID Number',
-    alias: '证件号',
+    label: '收款人证件号',
+    alias: 'Beneficiary ID Number',
     example: 'P12345678',
   },
   'beneficiary.additional_info.business_registration_number': {
-    label: 'Business Registration Number',
-    alias: '企业注册号码',
+    label: '企业注册号码',
+    alias: 'Business Registration Number',
     example: '12-3456789',
   },
 };
@@ -237,6 +235,23 @@ const SCENARIO_FIELD_LABELS: Record<string, { label: string; alias: string; exam
   [AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH]: { label: '本地清算方式', alias: 'local_clearing_system', example: 'ACH' },
 };
 
+const REQUIRED_SCHEMA_FIELD_LABELS: Record<string, { label: string; alias: string }> = {
+  'beneficiary.address.country_code': { label: '收款人所在国家 / 地区', alias: "Beneficiary's Country/Region" },
+  'beneficiary.first_name': { label: '法定名', alias: 'Legal First Name' },
+  'beneficiary.last_name': { label: '法定姓', alias: 'Legal Last Name' },
+  'beneficiary.date_of_birth': { label: '出生日期', alias: 'Date of Birth' },
+  'beneficiary.company_name': { label: '公司法定名称', alias: 'Legal Company Name' },
+  'beneficiary.address.street_address': { label: '收款人街道地址', alias: "Beneficiary's Street Address" },
+  'beneficiary.address.city': { label: '收款人城市', alias: "Beneficiary's City" },
+  'beneficiary.address.state': { label: '收款人州 / 省', alias: "Beneficiary's State/Province" },
+  'beneficiary.address.postcode': { label: '收款人邮政编码', alias: "Beneficiary's Postal Code" },
+  'beneficiary.additional_info.personal_email': { label: '收款通知邮箱', alias: 'Notification Email' },
+  'beneficiary.bank_details.account_routing_value1': { label: '银行一级路由号', alias: 'Primary Routing Code' },
+  'beneficiary.bank_details.account_routing_type2': { label: '银行二级路由号类型', alias: 'Secondary Routing Code Type' },
+  'beneficiary.bank_details.bank_branch': { label: '分行名称', alias: "Beneficiary's Bank Branch" },
+  'beneficiary.bank_details.intermediary_bank_name': { label: '中间行名称（选填）', alias: 'Intermediary Bank Name (if any)' },
+};
+
 function Section({
   icon,
   title,
@@ -249,7 +264,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="creator-payment-section">
+    <section className="creator-payment-section creator-payment-section-payout">
       <header className="creator-payment-section-head">
         <span>{icon}</span>
         <div><h3>{title}</h3><p>{description}</p></div>
@@ -367,11 +382,12 @@ function SchemaFieldControl({
   const { field } = item;
   const documentFieldLabel = DOCUMENT_PAYOUT_FIELD_LABELS[item.path];
   const scenarioFieldLabel = SCENARIO_FIELD_LABELS[item.path];
-  const label = {
-    'beneficiary.address.country_code': '收款人所在国家 / 地区',
-  }[item.path] ?? scenarioFieldLabel?.label ?? documentFieldLabel?.label ?? field.label;
+  const requiredFieldLabel = REQUIRED_SCHEMA_FIELD_LABELS[item.path];
+  const label = scenarioFieldLabel?.label ?? documentFieldLabel?.label ?? requiredFieldLabel?.label ?? field.label;
   const alias = scenarioFieldLabel?.alias
-    ?? (documentFieldLabel ? `${documentFieldLabel.alias} · ${item.path}` : item.path);
+    ?? documentFieldLabel?.alias
+    ?? requiredFieldLabel?.alias
+    ?? 'Airwallex Required Field';
   const value = getAirwallexFormValue(account, item.path) || field.default;
   const options = item.path === AIRWALLEX_LOCAL_CLEARING_SYSTEM_PATH
     ? prioritizeAirwallexLocalClearingOptions(
@@ -603,7 +619,7 @@ function StatusPanel({ account }: { account: CreatorPayoutAccount }) {
       {icon}
       <span><strong>{status.label}</strong><small>{status.description}</small></span>
       {account.provider === 'Airwallex' ? (
-        <code>{account.beneficiaryId || 'beneficiary_id 待生成'}</code>
+        <code>{account.beneficiaryId || 'Airwallex 收款人 ID 待生成'}</code>
       ) : null}
     </div>
   );
@@ -777,10 +793,9 @@ function AirwallexAccountForm({
             {account.bankDetails.bankCountryCode || '银行国家'} · {account.bankDetails.accountCurrency || '账户币种'} · {account.entityType} · {account.transferMethod}
             {account.transferMethod === 'LOCAL' && account.bankDetails.localClearingSystem ? ` · ${account.bankDetails.localClearingSystem}` : ''}
           </small>
-          <code>{AIRWALLEX_FORM_SCHEMA_API_PATH}</code>
         </span>
         <div className="dynamic-schema-meta">
-          <em>API {AIRWALLEX_SCHEMA_API_VERSION}</em>
+          <em>Airwallex 动态字段</em>
           <b>{displayedFields.length} 个字段 · {requiredFields.length} 个必填</b>
           <b className={accountIssues.length ? 'dynamic-schema-issues' : 'dynamic-schema-complete'}>
             {accountIssues.length ? `${accountIssues.length} 项待完善` : 'Schema 校验完整'}
@@ -797,9 +812,8 @@ function AirwallexAccountForm({
               ? '当前由本地 Airwallex 模拟代理返回 Schema，用于联调，不代表真实账户或真实手续费。'
               : schemaStatus === 'loading'
                 ? '正在通过 COMETS Pay 代理获取付款场景字段，请稍候。'
-                : `${schemaError}。当前使用本地同结构 Schema，不会伪造 Airwallex 校验或 beneficiary_id。`}
+                : `${schemaError}。当前使用本地同结构 Schema，不会伪造 Airwallex 校验或收款人 ID。`}
         </span>
-        <code title={conditionKey}>condition {conditionKey}</code>
       </div>
 
       <Section icon={<Landmark size={19} />} title="账户配置" description="COMETS Pay 内部账户名称，不作为 Airwallex 银行资料字段">
@@ -851,8 +865,8 @@ function AirwallexAccountForm({
               const display = DOCUMENT_PAYOUT_FIELD_LABELS[field.path];
               return (
                 <TextField
-                  label={display?.label ?? field.sourceLabel}
-                  alias={`${(display?.alias ?? field.label).replace(/\s*·\s*选填$/, '')} · 选填`}
+                  label={display?.label ?? `${field.label}（选填）`}
+                  alias={display?.alias ?? field.sourceLabel}
                   value={getAirwallexFormValue(account, field.path)}
                   onChange={(value) => commit(setAirwallexFormValue(account, field.path, value))}
                   placeholder={field.placeholder}
@@ -878,6 +892,7 @@ function AirwallexAccountForm({
         <Button
           icon={beneficiaryStatus === 'saving' ? <LoaderCircle className="airwallex-schema-spinner" size={16} /> : <ShieldCheck size={16} />}
           disabled={beneficiaryStatus === 'saving'}
+          disabledReason="收款账户正在保存，请稍候。"
           onClick={saveBeneficiary}
         >
           {beneficiaryStatus === 'saving' ? '正在校验账户' : '校验账户'}
@@ -886,7 +901,7 @@ function AirwallexAccountForm({
       {beneficiaryStatus === 'saved' ? (
         <div className="airwallex-beneficiary-success" role="status">
           <CheckCircle2 size={16} />
-          <span>校验通过，已回写 {account.beneficiaryId || 'beneficiary_id'}</span>
+          <span>校验通过，已回写 {account.beneficiaryId || 'Airwallex 收款人 ID'}</span>
         </div>
       ) : null}
       {beneficiaryError ? <div className="inline-alert"><AlertCircle size={16} />{beneficiaryError}</div> : null}
@@ -908,9 +923,9 @@ function PayPalAccountForm({
       <Section icon={<Wallet size={19} />} title="PayPal 账户" description="PayPal 与 Airwallex 银行字段独立维护">
         <div className="form-grid creator-payment-form-grid">
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：主 PayPal 账户" required />
-          <TextField label="PayPal Username" alias="PayPal 用户名 · paypalUsername" value={account.paypalUsername} onChange={(value) => commit({ ...account, paypalUsername: value })} placeholder="账户显示名称" required />
-          <TextField label="PayPal Email Address" alias="PayPal 邮箱 · paypalEmail" value={account.paypalEmail} onChange={(value) => commit({ ...account, paypalEmail: value })} placeholder="收款邮箱" type="email" required />
-          <TextField label="Transfer Note" alias="转账备注 · transferNote · 选填" value={account.transferNote ?? ''} onChange={(value) => commit({ ...account, transferNote: value })} placeholder="写入 PayPal item note" />
+          <TextField label="PayPal 用户名" alias="PayPal Username" value={account.paypalUsername} onChange={(value) => commit({ ...account, paypalUsername: value })} placeholder="账户显示名称" required />
+          <TextField label="PayPal 邮箱" alias="PayPal Email Address" value={account.paypalEmail} onChange={(value) => commit({ ...account, paypalEmail: value })} placeholder="收款邮箱" type="email" required />
+          <TextField label="转账备注（选填）" alias="Transfer Note" value={account.transferNote ?? ''} onChange={(value) => commit({ ...account, transferNote: value })} placeholder="写入 PayPal item note" />
         </div>
       </Section>
     </div>
@@ -940,12 +955,12 @@ function PayMaxAccountForm({
       <Section icon={<CircleDollarSign size={19} />} title="Payer Max 账户" description="Payer Max 收款账号与 Airwallex、PayPal 资料独立维护">
         <div className="form-grid creator-payment-form-grid">
           <TextField label="账户别名" alias="Internal nickname" value={account.nickname} onChange={(value) => onChange({ ...account, nickname: value })} placeholder="例如：Payer Max 主账户" required />
-          <TextField label="收款人名称" alias="beneficiaryName" value={account.beneficiaryName} onChange={(value) => commit({ ...account, beneficiaryName: value })} placeholder="个人姓名或公司法定名称" required />
-          <TextField label="Payer Max 收款账号" alias="payermaxAccountId" value={account.payermaxAccountId} onChange={(value) => commit({ ...account, payermaxAccountId: value })} placeholder="Payer Max 返回的收款账号" required />
-          <TextField label="联系邮箱" alias="email · 选填" value={account.email} onChange={(value) => commit({ ...account, email: value })} placeholder="creator@example.com" type="email" />
+          <TextField label="收款人名称" alias="Beneficiary Name" value={account.beneficiaryName} onChange={(value) => commit({ ...account, beneficiaryName: value })} placeholder="个人姓名或公司法定名称" required />
+          <TextField label="Payer Max 收款账号" alias="Payer Max Account ID" value={account.payermaxAccountId} onChange={(value) => commit({ ...account, payermaxAccountId: value })} placeholder="Payer Max 返回的收款账号" required />
+          <TextField label="联系邮箱（选填）" alias="Email" value={account.email} onChange={(value) => commit({ ...account, email: value })} placeholder="creator@example.com" type="email" />
           <SelectFormField
             label="收款国家 / 地区"
-            alias="countryCode"
+            alias="Country/Region"
             value={account.countryCode}
             options={countryOptions}
             placeholder="选择国家 / 地区"
@@ -954,7 +969,7 @@ function PayMaxAccountForm({
           />
           <SelectFormField
             label="收款币种"
-            alias="currency"
+            alias="Currency"
             value={account.currency}
             options={currencyOptions}
             placeholder="选择币种"
@@ -978,10 +993,6 @@ function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) 
     account.address.postcode,
     account.address.countryCode,
   ].filter(Boolean).join(', ');
-  const routing = [
-    account.bankDetails.accountRoutingType1 && `${account.bankDetails.accountRoutingType1}: ${account.bankDetails.accountRoutingValue1 || '待补充'}`,
-    account.bankDetails.accountRoutingType2 && `${account.bankDetails.accountRoutingType2}: ${account.bankDetails.accountRoutingValue2 || '待补充'}`,
-  ].filter(Boolean).join(' · ');
   const structuredBankAddress = [
     account.bankDetails.bankStreetAddress,
     getAirwallexFormValue(account, 'beneficiary.bank_details.bank_city'),
@@ -995,40 +1006,48 @@ function AirwallexAccountView({ account }: { account: AirwallexPayoutAccount }) 
       <StatusPanel account={account} />
       <Section icon={<ShieldCheck size={19} />} title="收款主体" description="Airwallex Beneficiary 身份和结构化地址">
         <DetailGrid items={[
-          { label: '主体类型', alias: 'entity_type', value: account.entityType },
-          { label: '法定名称 / Real Name', alias: account.entityType === 'COMPANY' ? 'company_name' : 'first_name / last_name', value: entityName },
-          { label: '通知邮箱', alias: 'additional_info.personal_email', value: account.notificationEmail },
-          { label: '收款人地址', alias: 'beneficiary.address', value: address, wide: true },
+          { label: '收款人类型', alias: 'Beneficiary Type', value: account.entityType },
+          { label: '法定名称', alias: 'Legal Name', value: entityName },
+          { label: '通知邮箱', alias: 'Notification Email', value: account.notificationEmail },
+          { label: '收款人地址', alias: "Beneficiary's Address", value: address, wide: true },
         ]} />
       </Section>
       <Section icon={<CircleDollarSign size={19} />} title="付款场景" description="用于获取 Airwallex 动态 Form Schema">
         <DetailGrid items={[
-          { label: '银行国家', alias: 'bank_country_code', value: `${account.bankDetails.bankCountryName} · ${account.bankDetails.bankCountryCode}` },
-          { label: '账户币种', alias: 'account_currency', value: account.bankDetails.accountCurrency },
-          { label: '转账方式', alias: 'transfer_method', value: account.transferMethod },
+          { label: '收款国家 / 地区', alias: "Beneficiary's Bank Country/Region", value: `${account.bankDetails.bankCountryName} · ${account.bankDetails.bankCountryCode}` },
+          { label: '收款币种', alias: 'Currency', value: account.bankDetails.accountCurrency },
+          { label: '付款方式', alias: 'Payment Method', value: account.transferMethod },
           { label: '本地清算方式', alias: 'local_clearing_system', value: account.transferMethod === 'LOCAL' ? account.bankDetails.localClearingSystem : '不适用' },
         ]} />
       </Section>
-      <Section icon={<Landmark size={19} />} title="Airwallex 付款信息" description="完整展示当前账户资料；字段是否必填由当前 Form Schema 决定">
+      <Section icon={<Landmark size={19} />} title="Airwallex 付款信息" description="根据 Airwallex Form Schema 展示当前付款场景需要的账户资料">
         <DetailGrid items={[
-          { label: 'Account Name', alias: '账户名称 · account_name', value: account.bankDetails.accountName },
-          { label: '账户类型', alias: 'bank_account_category', value: account.bankDetails.bankAccountCategory },
-          { label: 'Account Number', alias: '银行账号 · account_number', value: account.bankDetails.accountNumber },
-          { label: 'IBAN', alias: '国际银行账号 · iban', value: account.bankDetails.iban },
-          { label: '本地路由', alias: 'account_routing_type / value', value: routing, wide: true },
-          { label: 'Beneficiary Bank Name', alias: '收款银行名称 · bank_name', value: account.bankDetails.bankName },
-          { label: 'Beneficiary Bank Address', alias: '收款银行地址', value: bankAddress, wide: true },
-          { label: '分行名称', alias: 'bank_branch', value: account.bankDetails.bankBranch },
-          { label: 'SWIFT Code', alias: 'SWIFT / BIC · swift_code', value: account.bankDetails.swiftCode },
-          { label: '中间行', alias: 'intermediary_bank_name / swift_code', value: [account.bankDetails.intermediaryBankName, account.bankDetails.intermediaryBankSwiftCode].filter(Boolean).join(' · '), wide: true },
+          { label: '账户名称', alias: 'Account Name', value: account.bankDetails.accountName },
+          { label: '银行账号', alias: 'Account Number', value: account.bankDetails.accountNumber },
+          { label: '账户类型', alias: 'Account Type', value: account.bankDetails.bankAccountCategory },
+          { label: '收款银行 SWIFT 代码', alias: "Beneficiary's Bank SWIFT Code", value: account.bankDetails.swiftCode },
+          { label: '收款银行名称', alias: "Beneficiary's Bank Name", value: account.bankDetails.bankName },
+          { label: '收款银行地址', alias: "Beneficiary's Bank Address", value: bankAddress, wide: true },
+          { label: '收款银行国家 / 地区', alias: "Beneficiary's Bank Country", value: account.bankDetails.bankCountryCode },
+          { label: '收款银行州 / 省', alias: "Beneficiary's Bank State", value: account.bankDetails.bankState },
+          { label: '收款银行城市', alias: "Beneficiary's Bank City", value: getAirwallexFormValue(account, 'beneficiary.bank_details.bank_city') },
+          { label: '收款银行邮政编码', alias: "Beneficiary's Bank Postal Code", value: getAirwallexFormValue(account, 'beneficiary.bank_details.bank_postcode') },
+          { label: '中间行国家 / 地区（选填）', alias: 'Intermediary Bank Country (if any)', value: getAirwallexFormValue(account, 'beneficiary.bank_details.intermediary_bank_country_code') },
+          { label: '中间行代码（选填）', alias: 'Intermediary Bank Code (if any)', value: account.bankDetails.intermediaryBankSwiftCode },
+          { label: '转账备注（选填）', alias: 'Transfer Remarks (if any)', value: getAirwallexFormValue(account, 'beneficiary.additional_info.transfer_remarks'), wide: true },
+          { label: '银行一级路由号类型', alias: 'Primary Routing Code Type', value: account.bankDetails.accountRoutingType1 },
+          { label: '分行代码', alias: 'Primary Branch Code', value: account.bankDetails.accountRoutingValue2 },
+          { label: '证件类型', alias: 'ID Document Type', value: getAirwallexFormValue(account, 'beneficiary.additional_info.personal_id_type') },
+          { label: '收款人证件号', alias: 'Beneficiary ID Number', value: getAirwallexFormValue(account, 'beneficiary.additional_info.personal_id_number') },
+          { label: '企业注册号码', alias: 'Business Registration Number', value: getAirwallexFormValue(account, 'beneficiary.additional_info.business_registration_number') },
         ]} />
       </Section>
       <Section icon={<CheckCircle2 size={19} />} title="验证结果" description="接入后由 Validate 与 Verify Account API 回写">
         <DetailGrid items={[
-          { label: '账户验证结果', alias: 'verificationCode', value: account.verificationCode || '尚未执行' },
-          { label: '账户名匹配', alias: 'nameMatchResult', value: account.nameMatchResult || '尚未执行' },
-          { label: '最近校验时间', alias: 'validatedAt', value: account.validatedAt },
-          { label: '最近验证时间', alias: 'verifiedAt', value: account.verifiedAt },
+          { label: '账户验证结果', alias: 'Account Verification Result', value: account.verificationCode || '尚未执行' },
+          { label: '账户名匹配', alias: 'Account Name Match', value: account.nameMatchResult || '尚未执行' },
+          { label: '最近校验时间', alias: 'Last Validated At', value: account.validatedAt },
+          { label: '最近验证时间', alias: 'Last Verified At', value: account.verifiedAt },
         ]} />
       </Section>
     </div>
@@ -1041,10 +1060,10 @@ function PayPalAccountView({ account }: { account: PayPalPayoutAccount }) {
       <StatusPanel account={account} />
       <Section icon={<Wallet size={19} />} title="PayPal 账户" description="与 Airwallex 银行收款账户独立维护">
         <DetailGrid items={[
-          { label: '账户别名', alias: 'nickname', value: account.nickname },
-          { label: 'PayPal Username', alias: 'PayPal 用户名 · paypalUsername', value: account.paypalUsername },
-          { label: 'PayPal Email Address', alias: 'PayPal 邮箱 · paypalEmail', value: account.paypalEmail, wide: true },
-          { label: 'Transfer Note', alias: '转账备注 · transferNote · 选填', value: account.transferNote ?? '', wide: true },
+          { label: '账户别名', alias: 'Account Nickname', value: account.nickname },
+          { label: 'PayPal 用户名', alias: 'PayPal Username', value: account.paypalUsername },
+          { label: 'PayPal 邮箱', alias: 'PayPal Email Address', value: account.paypalEmail, wide: true },
+          { label: '转账备注（选填）', alias: 'Transfer Note', value: account.transferNote ?? '', wide: true },
         ]} />
       </Section>
     </div>
@@ -1057,12 +1076,12 @@ function PayMaxAccountView({ account }: { account: PayMaxPayoutAccount }) {
       <StatusPanel account={account} />
       <Section icon={<CircleDollarSign size={19} />} title="Payer Max 账户" description="与 Airwallex 和 PayPal 收款账户独立维护">
         <DetailGrid items={[
-          { label: '账户别名', alias: 'nickname', value: account.nickname },
-          { label: '收款人名称', alias: 'beneficiaryName', value: account.beneficiaryName },
-          { label: 'Payer Max 收款账号', alias: 'payermaxAccountId', value: account.payermaxAccountId },
-          { label: '国家 / 地区', alias: 'countryCode', value: account.countryCode },
-          { label: '收款币种', alias: 'currency', value: account.currency },
-          { label: '联系邮箱', alias: 'email', value: account.email },
+          { label: '账户别名', alias: 'Account Nickname', value: account.nickname },
+          { label: '收款人名称', alias: 'Beneficiary Name', value: account.beneficiaryName },
+          { label: 'Payer Max 收款账号', alias: 'Payer Max Account ID', value: account.payermaxAccountId },
+          { label: '国家 / 地区', alias: 'Country/Region', value: account.countryCode },
+          { label: '收款币种', alias: 'Currency', value: account.currency },
+          { label: '联系邮箱', alias: 'Email', value: account.email },
         ]} />
       </Section>
     </div>
@@ -1317,6 +1336,7 @@ export function CreatorPayoutAccounts({
                 icon={<Plus size={15} />}
                 key={provider.value}
                 disabled={!provider.available}
+                disabledReason={`${provider.label} 暂未开放`}
                 title={provider.available ? `新建 ${provider.label} 账户` : `${provider.label} 暂未开放`}
                 onClick={() => addAccount(provider.value)}
               >

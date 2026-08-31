@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { InvoiceBillingEntityId } from '../businessWorkflow';
+import {
+  INITIAL_INVOICE_BILLING_ENTITY_ID,
+  INITIAL_INVOICE_BILLING_SETTINGS,
+  INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID,
+} from '../data';
 import type { InvoiceBillingSettings } from '../types';
 import {
   addInvoiceBillingEntity,
@@ -23,6 +28,26 @@ const settings = (): InvoiceBillingSettings => ({
 });
 
 describe('invoice billing entity settings', () => {
+  it('preloads NovaComets as a secondary entity while keeping COMETS as default', () => {
+    expect(INITIAL_INVOICE_BILLING_SETTINGS.defaultEntityId).toBe(INITIAL_INVOICE_BILLING_ENTITY_ID);
+    expect(INITIAL_INVOICE_BILLING_SETTINGS.entities).toEqual([
+      expect.objectContaining({
+        id: INITIAL_INVOICE_BILLING_ENTITY_ID,
+        name: 'COMETS INTERNATIONAL LIMITED',
+      }),
+      {
+        id: INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID,
+        name: 'NovaComets Limited',
+        address: 'Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China',
+      },
+    ]);
+    expect(invoiceEntitySnapshot(INITIAL_INVOICE_BILLING_SETTINGS.entities[1])).toEqual({
+      billingEntityId: INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID,
+      name: 'NovaComets Limited',
+      address: 'Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China',
+    });
+  });
+
   it('resolves the unique default and ignores an unknown default id', () => {
     expect(defaultInvoiceBillingEntity(settings())?.id).toBe(primaryId);
     expect(setDefaultInvoiceBillingEntity(settings(), 'ibe_unknown' as InvoiceBillingEntityId))

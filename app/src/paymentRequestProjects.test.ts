@@ -13,7 +13,10 @@ import type {
 } from './businessWorkflow';
 import {
   DEFAULT_PAYMENT_REQUEST_COST_TYPE,
+  PAYMENT_REQUEST_COST_ATTRIBUTIONS,
   PAYMENT_REQUEST_COST_TYPES,
+  PAYMENT_REQUEST_PAYMENT_ENTITIES,
+  PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS,
   canAddCreatorToPaymentRequest,
   canCancelPaymentRequest,
   addInvoiceToPaymentRequestSelection,
@@ -35,6 +38,7 @@ import {
   isPaymentRequestFullyPaid,
   myProjectStatusFor,
   mergePaymentRequestRemarkAttachments,
+  normalizePaymentRequestProcurementCostDetail,
   normalizePaymentRequestCostType,
   paymentRequestListMetrics,
   paymentRequestSubmissionIssues,
@@ -135,17 +139,23 @@ const contract = (id: string, projectId = cooperationProjectId, contractCreatorI
 });
 
 describe('payment request payment plan', () => {
-  it('requires both the payment channel and expected payment date', () => {
+  it('requires the payment channel, payment entity, cost attribution, and expected date', () => {
     expect(paymentRequestPaymentPlanIssues(paymentRequestPaymentPlanFor())).toEqual([
       '请选择付款渠道',
+      '请选择付款主体',
+      '请选择项目费用归属',
       '请选择预计付款时间',
     ]);
     expect(paymentRequestPaymentPlanIssues({
       paymentChannel: 'Airwallex',
+      paymentEntity: '',
+      projectCostAttribution: '',
       expectedPaymentDate: '',
-    })).toEqual(['请选择预计付款时间']);
+    })).toEqual(['请选择付款主体', '请选择项目费用归属', '请选择预计付款时间']);
     expect(paymentRequestPaymentPlanIssues({
       paymentChannel: 'PayPal',
+      paymentEntity: 'Comets International Limited',
+      projectCostAttribution: '香港公司（comets）',
       expectedPaymentDate: '2026-08-20',
     })).toEqual([]);
   });
@@ -153,9 +163,13 @@ describe('payment request payment plan', () => {
   it('hydrates saved values when a request is edited', () => {
     expect(paymentRequestPaymentPlanFor({
       paymentChannel: 'Payermax',
+      paymentEntity: 'novacomets',
+      projectCostAttribution: 'novacomets',
       expectedPaymentDate: '2026-08-28',
     })).toEqual({
       paymentChannel: 'Payermax',
+      paymentEntity: 'novacomets',
+      projectCostAttribution: 'novacomets',
       expectedPaymentDate: '2026-08-28',
     });
   });
@@ -182,18 +196,30 @@ describe('payment request extra details', () => {
       '外包成本',
       '投流',
     ]);
+    expect(PAYMENT_REQUEST_PAYMENT_ENTITIES).toEqual(['Comets International Limited', 'novacomets']);
+    expect(PAYMENT_REQUEST_COST_ATTRIBUTIONS).toEqual(['日本分公司', '香港公司（comets）', 'novacomets']);
+    expect(PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS).toEqual(['实物采购', '礼品卡', '会员订阅', '版主工资']);
     expect(DEFAULT_PAYMENT_REQUEST_COST_TYPE).toBe('网红采买成本');
     expect(normalizePaymentRequestCostType('达人合作费')).toBe('网红采买成本');
     expect(normalizePaymentRequestCostType('网红采购')).toBe('网红采买成本');
     expect(normalizePaymentRequestCostType('物料采购成本')).toBe('采购成本');
     expect(normalizePaymentRequestCostType('内容外包费用')).toBe('外包成本');
     expect(normalizePaymentRequestCostType('广告投流')).toBe('投流');
+    expect(normalizePaymentRequestProcurementCostDetail('礼品卡')).toBe('礼品卡');
+    expect(normalizePaymentRequestProcurementCostDetail('历史未知明细')).toBe('');
   });
 
-  it('requires only a cost type while leaving remarks optional', () => {
+  it('requires a procurement detail only when procurement is selected', () => {
     expect(paymentRequestExtraDetailIssues({})).toEqual(['请选择成本类型']);
     expect(paymentRequestExtraDetailIssues({
       costType: '网红采买成本',
+    })).toEqual([]);
+    expect(paymentRequestExtraDetailIssues({
+      costType: '采购成本',
+    })).toEqual(['请选择采购成本明细']);
+    expect(paymentRequestExtraDetailIssues({
+      costType: '采购成本',
+      costTypeDetail: '会员订阅',
     })).toEqual([]);
   });
 

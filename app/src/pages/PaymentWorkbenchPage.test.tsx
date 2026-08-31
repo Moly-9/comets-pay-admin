@@ -11,6 +11,7 @@ import {
   type WorkbenchTab,
 } from './PaymentWorkbenchPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
+import { applyPaymentBatchPrototypeScenario } from '../paymentBatchPrototypeScenario';
 
 const renderWorkbench = (
   payouts: Payout[],
@@ -130,6 +131,8 @@ describe('PaymentWorkbenchPage currency overview', () => {
       brand: 'Test Brand',
       media: 'Media',
       pm: 'PM',
+      paymentEntity: 'novacomets',
+      projectCostAttribution: '香港公司（comets）',
       amount: 'USD 100',
       contracts: 1,
       invoices: 1,
@@ -139,10 +142,15 @@ describe('PaymentWorkbenchPage currency overview', () => {
     }]);
 
     expect(html).toContain('待审核<span>1</span>');
-    expect(html).toContain('<th>项目编号</th><th>关联项目</th>');
+    const headings = ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '实际付款金额及币种', '实际付款日期', '发起人', '项目状态', '操作'];
+    expect(headings.every((heading) => html.includes(`>${heading}</th>`))).toBe(true);
+    expect(headings.map((heading) => html.indexOf(`>${heading}</th>`))).toEqual(
+      [...headings.map((heading) => html.indexOf(`>${heading}</th>`))].sort((left, right) => left - right),
+    );
     expect(html).toContain('REQ-FINANCE-001');
     expect(html).toContain('PRJ-FINANCE-001');
     expect(html).toContain('Finance Review Project');
+    expect(html).toContain('title="novacomets">novacomets</td>');
     expect(html).toContain('待财务审核');
     expect(html).toContain('<span>审核</span>');
   });
@@ -166,16 +174,42 @@ describe('PaymentWorkbenchPage currency overview', () => {
   });
 
   it('routes all complete request fixtures into workbench tabs by request lifecycle', () => {
-    const input = {
+    const scenario = applyPaymentBatchPrototypeScenario({
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
       requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+      paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+    });
+    const input = {
+      payouts: scenario.payouts,
+      requests: scenario.requests,
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
 
     expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
-    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(4);
-    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(0);
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
+
+    expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toContainEqual(expect.objectContaining({
+      requestCode: 'REQ-202607-000015',
+      status: '部分失败',
+      actionLabel: '处理失败',
+      payouts: expect.arrayContaining([
+        expect.objectContaining({ id: 'payout_fixture_15_01', status: '付款失败' }),
+        expect.objectContaining({ id: 'payout_fixture_15_02', status: '已付款' }),
+        expect.objectContaining({ id: 'payout_fixture_15_03', status: '已付款' }),
+      ]),
+    }));
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toContainEqual(expect.objectContaining({
+      requestCode: 'REQ-202607-000016',
+      status: '已退回',
+      actionLabel: '查看详情',
+      payouts: expect.arrayContaining([
+        expect.objectContaining({ id: 'payout_fixture_16_01', status: '已退回' }),
+        expect.objectContaining({ id: 'payout_fixture_16_02', status: '已退回' }),
+      ]),
+    }));
 
     const reviewRow = buildPaymentProjectRows({ ...input, tab: 'review' })[0];
     expect(reviewRow).toMatchObject({
@@ -189,7 +223,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(reviewRow.paymentOrder).not.toMatch(/、|-(?:AWX|PP)$/);
     expect(reviewRow.paymentChannels).toHaveLength(1);
     expect(reviewRow.payouts.every((item) => (
-      item.paymentRequestProjectId === INITIAL_COMPLETE_REQUEST_RESOURCES.requests.find((request) => (
+      item.paymentRequestProjectId === input.requests.find((request) => (
         request.id === reviewRow.requestId
       ))?.paymentRequestProjectId
     ))).toBe(true);

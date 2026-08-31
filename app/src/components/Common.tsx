@@ -22,11 +22,45 @@ import type { InvoiceReviewStatus, PayoutStatus, ToastState } from '../types';
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   icon?: ReactNode;
+  disabledReason?: string;
 };
 
-export function Button({ children, className = '', variant = 'primary', icon, ...props }: ButtonProps) {
+export const BLOCKED_ACTION_EVENT = 'comets-pay:blocked-action';
+
+export function Button({
+  children,
+  className = '',
+  variant = 'primary',
+  icon,
+  disabled = false,
+  disabledReason,
+  onClick,
+  title,
+  ...props
+}: ButtonProps) {
+  const explainDisabledAction = disabled && Boolean(disabledReason);
+
   return (
-    <button className={`button button-${variant} ${className}`} type="button" {...props}>
+    <button
+      className={`button button-${variant} ${className}`}
+      type="button"
+      disabled={explainDisabledAction ? undefined : disabled}
+      aria-disabled={explainDisabledAction ? true : undefined}
+      data-disabled-reason={explainDisabledAction ? disabledReason : undefined}
+      title={explainDisabledAction ? disabledReason : title}
+      onClick={(event) => {
+        if (explainDisabledAction) {
+          event.preventDefault();
+          event.stopPropagation();
+          window.dispatchEvent(new CustomEvent(BLOCKED_ACTION_EVENT, {
+            detail: { reason: disabledReason },
+          }));
+          return;
+        }
+        onClick?.(event);
+      }}
+      {...props}
+    >
       {icon}
       <span>{children}</span>
     </button>
@@ -573,9 +607,10 @@ export function Modal({
 
 export function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
   if (!toast) return null;
+  const warning = toast.tone === 'warning';
   return (
-    <div className="toast" role="status">
-      <span className="toast-check"><Check size={16} strokeWidth={2.5} /></span>
+    <div className={`toast${warning ? ' toast-warning' : ''}`} role={warning ? 'alert' : 'status'} aria-live={warning ? 'assertive' : 'polite'}>
+      <span className="toast-check">{warning ? <CircleAlert size={16} strokeWidth={2.25} /> : <Check size={16} strokeWidth={2.5} />}</span>
       <div>
         <strong>{toast.title}</strong>
         <p>{toast.message}</p>

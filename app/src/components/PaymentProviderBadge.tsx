@@ -7,10 +7,10 @@ import {
 
 export type PaymentProviderBadgeName = PaymentProviderName;
 
-const PAYMENT_PROVIDER_META: Record<PaymentProviderBadgeName, { monogram: string; tone: string }> = {
-  Airwallex: { monogram: 'A', tone: 'airwallex' },
-  PayMax: { monogram: 'P', tone: 'paymax' },
-  PayPal: { monogram: 'P', tone: 'paypal' },
+const PAYMENT_PROVIDER_META: Record<PaymentProviderBadgeName, { tone: string }> = {
+  Airwallex: { tone: 'airwallex' },
+  PayMax: { tone: 'paymax' },
+  PayPal: { tone: 'paypal' },
 };
 
 export const normalizePaymentProviderBadgeName = (provider?: string | null): PaymentProviderBadgeName | null => {
@@ -37,7 +37,6 @@ export function PaymentProviderBadge({
       className={`payment-provider-badge is-${meta?.tone ?? 'unknown'}${compact ? ' is-compact' : ''}${className ? ` ${className}` : ''}`}
       data-payment-provider={normalizedProvider ?? 'unknown'}
     >
-      {meta ? <span className="payment-provider-mark" aria-hidden="true">{meta.monogram}</span> : null}
       <span className="payment-provider-label">{label}</span>
     </span>
   );

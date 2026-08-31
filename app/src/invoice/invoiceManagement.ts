@@ -1,7 +1,7 @@
 import type { InvoiceId, RequestApprovalStatus } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
-import type { GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
-import { requestApprovalReturnItemForInvoice } from '../requestApprovalWorkflow';
+import type { CreatorSocialAccount, GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
+import { requestApprovalReturnItemForInvoiceEdit } from '../requestApprovalWorkflow';
 
 export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
 
@@ -28,6 +28,7 @@ export type InvoiceManagementRow = {
   creatorName: string;
   channelId: string;
   creatorPlatform: string;
+  creatorSocialAccounts?: CreatorSocialAccount[];
   issuerName: string;
   initials: string;
   accent: string;
@@ -71,7 +72,7 @@ export const filterInvoiceManagementRows = (
 
   return rows.filter((row) => {
     const matchesSearch = !query || (
-      `${row.creatorName} ${row.channelId} ${row.creatorPlatform} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
+      `${row.creatorName} ${row.channelId} ${row.creatorPlatform} ${(row.creatorSocialAccounts ?? []).map((account) => `${account.handle} ${account.platform} ${account.profileUrl}`).join(' ')} ${row.issuerName} ${row.projectName} ${row.invoiceNumber} ${row.provider ?? ''} ${row.status}`
         .toLowerCase()
         .includes(query)
     );
@@ -87,6 +88,10 @@ export type InvoiceManagementView = {
   tab: InvoicePageTab;
   status: InvoiceManagementStatus;
   requestApprovalStatus?: RequestApprovalStatus;
+};
+
+export type InvoiceManagementEvidence = {
+  signed?: boolean;
 };
 
 export type InvoiceManagementReturnContext = {
@@ -118,6 +123,7 @@ export const getInvoiceManagementView = (
   payout: Pick<Payout, 'invoiceReviewStatus' | 'status' | 'paymentFailureReturn' | 'paymentFailureRecovery'>,
   request?: PaymentRequestProjectLike,
   returnContext?: InvoiceManagementReturnContext | null,
+  evidence?: InvoiceManagementEvidence,
 ): InvoiceManagementView => {
   if (returnContext) {
     return { tab: 'returned', status: '已退回', requestApprovalStatus: request?.approval?.status };
@@ -127,7 +133,13 @@ export const getInvoiceManagementView = (
     return { tab: 'signature', status: '草稿', requestApprovalStatus: request?.approval?.status };
   }
 
-  if (payout.invoiceReviewStatus === '待签署') {
+  if (
+    payout.invoiceReviewStatus === '待签署'
+    || (
+      (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
+      && evidence?.signed === false
+    )
+  ) {
     return { tab: 'signature', status: '待签署', requestApprovalStatus: request?.approval?.status };
   }
   if (payout.invoiceReviewStatus === '达人反馈') {
@@ -181,17 +193,13 @@ export const getInvoiceManagementReturnContext = (
   }
 
   if (!invoiceId || request?.approval?.status !== 'RETURNED_TO_MEDIA_REVIEW') return null;
-  const scopedReturn = requestApprovalReturnItemForInvoice(
-    request.approval,
-    invoiceId,
-    'INVOICE_CONTENT',
-  );
+  const scopedReturn = requestApprovalReturnItemForInvoiceEdit(request.approval, invoiceId);
   if (!scopedReturn) return null;
   const returnEvent = [...request.approval.history].reverse().find((event) => (
     event.action === 'RETURN'
     && event.round === request.approval?.round
     && (event.returnItems ?? request.approval?.returnItems)?.some((item) => (
-      item.invoiceId === invoiceId && item.issueType === 'INVOICE_CONTENT'
+      item.invoiceId === invoiceId && ['INVOICE_CONTENT', 'FULL_ITEM'].includes(item.issueType)
     ))
   ));
   const returnTime = Date.parse(returnEvent?.occurredAt ?? request.approval.updatedAt);

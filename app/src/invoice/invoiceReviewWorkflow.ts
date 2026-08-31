@@ -13,7 +13,11 @@ import type {
 import type { InvoicePageTab } from './invoiceManagement';
 import { todayInputValue } from './invoiceUtils';
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
-import { accountDisplayValue, emailDisplayValue } from '../accountPresentation';
+import { accountDisplayValue } from '../accountPresentation';
+import { currentInvoiceContractMatchReview } from './invoiceContractMatching';
+import {
+  createInvoiceNotificationDeliveries,
+} from './invoiceNotification';
 
 export type { InvoicePageTab } from './invoiceManagement';
 
@@ -27,11 +31,6 @@ export type InvoiceReviewActor = {
   account: string;
   name: string;
   role: string;
-};
-
-const notificationEmailIsValid = (value: string) => {
-  const [localPart, domain] = value.trim().split('@');
-  return Boolean(localPart && domain?.includes('.'));
 };
 
 const signatureDateFromOccurredAt = (occurredAt: string) => (
@@ -233,8 +232,15 @@ export const applyInvoiceReviewAction = (
   actor: InvoiceReviewActor,
   reason?: string,
   occurredAt = new Date().toISOString(),
+  notificationEmail?: string,
 ): Payout => {
-  const event = createInvoiceReviewEvent(payout, action, actor, reason, occurredAt);
+  const reviewEvent = createInvoiceReviewEvent(payout, action, actor, reason, occurredAt);
+  const event: InvoiceReviewEvent = action === 'RETURN_TO_CREATOR'
+    ? {
+        ...reviewEvent,
+        notificationDeliveries: createInvoiceNotificationDeliveries(notificationEmail),
+      }
+    : reviewEvent;
   const isCreatorFeedback = action === 'RECORD_CREATOR_FEEDBACK';
   const isSigned = action === 'MARK_SIGNED';
   const invalidatesSignature = action === 'RETURN_TO_CREATOR';
@@ -642,7 +648,6 @@ export const recordInvoiceSignatureReminder = (
     throw new Error('提醒内容不能超过 300 字。');
   }
 
-  const hasValidEmail = notificationEmailIsValid(email);
   const event: InvoiceReviewEvent = {
     stage: 'SIGNATURE',
     action: '通知达人签署',
@@ -653,20 +658,7 @@ export const recordInvoiceSignatureReminder = (
     toStatus: '待签署',
     reason: normalizedMessage,
     occurredAt,
-    notificationDeliveries: [
-      {
-        channel: 'IN_APP',
-        status: 'SIMULATED_SENT',
-        recipientLabel: '达人端 Invoice 消息中心',
-      },
-      {
-        channel: 'EMAIL',
-        status: hasValidEmail ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
-        recipientLabel: hasValidEmail
-          ? emailDisplayValue(email)
-          : '达人档案邮箱待补充',
-      },
-    ],
+    notificationDeliveries: createInvoiceNotificationDeliveries(email),
   };
 
   return {
@@ -688,7 +680,6 @@ export const publishGeneratedInvoiceDraft = (
   if (record.status !== '草稿' || payout.invoiceReviewStatus !== '草稿') {
     throw new Error('只有草稿状态的内部 Invoice 可以发布。');
   }
-  const hasValidEmail = notificationEmailIsValid(email);
   const event: InvoiceReviewEvent = {
     stage: 'SIGNATURE',
     action: '发布达人签署',
@@ -699,18 +690,7 @@ export const publishGeneratedInvoiceDraft = (
     toStatus: '待签署',
     reason: 'Invoice 已发布至达人端并生成签署待办。',
     occurredAt,
-    notificationDeliveries: [
-      {
-        channel: 'IN_APP',
-        status: 'SIMULATED_SENT',
-        recipientLabel: '达人端 Invoice 消息中心',
-      },
-      {
-        channel: 'EMAIL',
-        status: hasValidEmail ? 'SIMULATED_SENT' : 'SKIPPED_MISSING_RECIPIENT',
-        recipientLabel: hasValidEmail ? emailDisplayValue(email) : '达人档案邮箱待补充',
-      },
-    ],
+    notificationDeliveries: createInvoiceNotificationDeliveries(email),
   };
   return {
     record: {
@@ -737,6 +717,13 @@ export const markGeneratedInvoiceSigned = (
 ): Payout => {
   if (record.sourcePayoutId !== payout.id) {
     throw new Error('生成记录与付款记录的稳定关联不一致。');
+  }
+  const contractMatchReview = currentInvoiceContractMatchReview(record);
+  if (
+    contractMatchReview
+    && (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED')
+  ) {
+    throw new Error('合同与 Invoice 仍存在未处理的阻断项，不能提交审核。');
   }
   const event = createInvoiceReviewEvent(payout, 'MARK_SIGNED', actor, undefined, occurredAt);
   const signedSnapshot = {

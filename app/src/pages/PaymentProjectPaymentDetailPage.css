@@ -1,0 +1,974 @@
+.payment-project-payment-detail-page .payment-batch-detail-total > strong {
+  color: #1f232b;
+  font-size: 28px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card {
+  min-height: 116px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 7px;
+  border-color: rgba(222, 225, 231, 0.78);
+  border-radius: 14px;
+  background: linear-gradient(125deg, #fff5e9, #fff0ea);
+  padding: 20px;
+  box-shadow: var(--shadow-soft);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-provider {
+  background: linear-gradient(125deg, #f0faf6, #eaf8f6);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-result {
+  background: linear-gradient(125deg, #fff9ea, #fff2df);
+}
+
+.payment-project-payment-detail-page .payment-project-summary-card.is-updated {
+  background: linear-gradient(125deg, #fff4f8, #f9effb);
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card > div {
+  gap: 7px;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card > div > span:first-child,
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card small {
+  color: #747b89;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card > div > span:first-child {
+  font-weight: 500;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card strong {
+  color: #20232b;
+  font-size: clamp(17px, 1.55vw, 24px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider {
+  min-width: 0;
+  align-self: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider .payment-provider-badge {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #20232b;
+  font-size: clamp(17px, 1.55vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider .payment-provider-label {
+  color: #20232b;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section > header {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section .payment-progress-steps {
+  width: min(100%, 820px);
+  margin-inline: auto;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > span {
+  position: relative;
+  z-index: 2;
+  border-radius: 50%;
+  box-shadow: 0 0 0 7px #fff;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > :is(strong, small) {
+  position: relative;
+  z-index: 2;
+}
+
+.payment-project-payment-detail-page .payment-batch-lifecycle-section li > i {
+  z-index: 0;
+  left: 52px;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 8px 17px 17px;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards > div,
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n + 1),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n + 1),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 3),
+.payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 2) {
+  min-height: 72px;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid #e3e6eb;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fb 100%);
+  padding: 12px 14px;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards > .payment-batch-project-full {
+  grid-column: 1 / -1;
+  min-height: 68px;
+  border: 1px solid #e3e6eb !important;
+  padding: 12px 14px !important;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #767d89;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.payment-project-payment-detail-page .payment-project-info-cards dd {
+  padding-left: 27px;
+  color: #292d35;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.payment-project-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.payment-project-section-heading > span,
+.payment-project-info-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: #405776;
+}
+
+.payment-project-section-heading > span {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #ccd9e6;
+  border-radius: 8px;
+  background: #eaf1f8;
+}
+
+.payment-project-info-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: #e4edf6;
+}
+
+.payment-project-payment-detail-page .payment-batch-items-section > header {
+  align-items: flex-start;
+}
+
+.payment-project-resource-toolbar {
+  max-width: 100%;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.payment-project-resource-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #858b97;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payment-project-resource-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions .button,
+.payment-project-payment-detail-page .payment-project-download-select .custom-select-trigger {
+  min-height: 44px;
+  border: 1px solid #d7dce4;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 12px;
+  color: #20242c;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.payment-project-payment-detail-page .payment-project-download-select {
+  width: 154px;
+}
+
+.payment-project-payment-detail-page .payment-project-download-select .custom-select-trigger {
+  width: 100%;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #bac4d2;
+  background: #f7f9fc;
+  color: #334155;
+}
+
+.payment-project-payment-detail-page .is-resource-download .custom-select-trigger:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #cbdcf2;
+  background: linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%);
+  color: #20242c;
+  box-shadow: 0 6px 16px rgba(67, 111, 166, 0.1);
+}
+
+.payment-project-payment-detail-page .is-detail-download:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #edcfca;
+  background: linear-gradient(125deg, #fff2f0 0%, #f8e2df 100%);
+  color: #20242c;
+  box-shadow: 0 6px 16px rgba(166, 76, 67, 0.09);
+}
+
+.payment-project-payment-detail-page .is-confirmation-download .custom-select-trigger:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #dccbea;
+  background: linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%);
+  color: #20242c;
+  box-shadow: 0 6px 16px rgba(112, 78, 137, 0.1);
+}
+
+.payment-project-payment-detail-page .is-resource-download .custom-select-trigger:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #adc7e7;
+  background: linear-gradient(125deg, #e6f0fd 0%, #d7e6f8 100%);
+  color: #111827;
+}
+
+.payment-project-payment-detail-page .is-detail-download:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #e4b8b2;
+  background: linear-gradient(125deg, #ffebe8 0%, #f4d7d3 100%);
+  color: #111827;
+}
+
+.payment-project-payment-detail-page .is-confirmation-download .custom-select-trigger:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: #cdb4e0;
+  background: linear-gradient(125deg, #f1e7f9 0%, #e5d4f1 100%);
+  color: #111827;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):disabled,
+.payment-project-payment-detail-page .payment-project-resource-actions .button[aria-disabled="true"] {
+  border-color: #e1e4e9;
+  background: #e8e9ed;
+  color: #9da3ad;
+  box-shadow: none;
+}
+
+.payment-project-payment-detail-page .payment-project-resource-actions :is(.button, .custom-select-trigger):focus-visible {
+  outline: 2px solid #5273a3;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(82, 115, 163, 0.18);
+}
+
+.payment-project-payment-detail-page .payment-project-resource-error {
+  margin: 12px 16px 0;
+}
+
+.payment-project-detail-table-scroll {
+  position: relative;
+  width: 100%;
+  max-height: min(680px, calc(100dvh - 180px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #b9bec8 #f3f4f6;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.payment-project-detail-table-scroll:focus-visible {
+  outline: 2px solid rgba(76, 104, 150, 0.38);
+  outline-offset: -2px;
+}
+
+.payment-project-detail-table-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.payment-project-detail-table-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.payment-project-detail-table-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid #f3f4f6;
+  border-radius: 8px;
+  background: #b9bec8;
+}
+
+.payment-project-detail-table {
+  width: max-content;
+  min-width: max(100%, 1390px);
+  table-layout: fixed;
+  white-space: nowrap;
+}
+
+.payment-project-detail-table thead th {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  text-align: left;
+}
+
+.payment-project-detail-table .payment-project-detail-select-cell {
+  position: sticky;
+  z-index: 3;
+  left: 0;
+  width: 50px;
+  min-width: 50px;
+  padding-right: 5px;
+  padding-left: 5px;
+  background: #fff;
+  text-align: center;
+}
+
+.payment-project-detail-table thead .payment-project-detail-select-cell,
+.payment-project-detail-table thead :is(.payment-project-detail-status-cell, .payment-project-detail-action-cell) {
+  z-index: 6;
+  background: #f7f8fa;
+}
+
+.payment-project-detail-table :is(.payment-project-detail-creator-heading, .payment-project-detail-creator-cell) {
+  width: 216px;
+  min-width: 216px;
+}
+
+.payment-project-detail-table :is(.payment-project-detail-provider-heading, .payment-project-detail-provider-cell) {
+  width: 132px;
+  min-width: 132px;
+}
+
+.payment-project-detail-table :is(.payment-project-detail-account-heading, .payment-project-detail-account-cell) {
+  width: 220px;
+  min-width: 220px;
+}
+
+.payment-project-detail-table :is(.payment-project-detail-date-heading, .payment-project-detail-date-cell) {
+  width: 132px;
+  min-width: 132px;
+}
+
+.payment-project-detail-table .payment-project-detail-money-heading,
+.payment-project-detail-table .payment-project-detail-money-cell {
+  width: 152px;
+  min-width: 152px;
+}
+
+.payment-project-detail-table .payment-project-detail-status-cell {
+  position: sticky;
+  z-index: 3;
+  right: 116px;
+  width: 124px;
+  min-width: 124px;
+  background: #fff;
+  box-shadow: -9px 0 12px -12px rgba(39, 43, 53, 0.58);
+  text-align: center;
+}
+
+.payment-project-detail-table .payment-project-detail-action-cell {
+  position: sticky;
+  z-index: 3;
+  right: 0;
+  width: 116px;
+  min-width: 116px;
+  background: #fff;
+  box-shadow: -9px 0 12px -12px rgba(39, 43, 53, 0.65);
+  text-align: center !important;
+}
+
+.payment-project-detail-table .payment-project-detail-select-control {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.payment-project-detail-select-control:hover {
+  background: rgba(116, 87, 131, 0.08);
+}
+
+.payment-project-detail-select-control:has(input:focus-visible) {
+  outline: 2px solid rgba(88, 111, 151, 0.42);
+  outline-offset: -2px;
+}
+
+.payment-project-detail-select-control input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #745783;
+  cursor: pointer;
+}
+
+.payment-project-detail-select-control:has(input:disabled),
+.payment-project-detail-select-control input:disabled {
+  cursor: not-allowed;
+}
+
+.payment-project-detail-select-control input:disabled {
+  opacity: 0.48;
+}
+
+.payment-project-detail-table tbody tr.is-selected td,
+.payment-project-detail-table tbody tr.is-selected:hover td {
+  background: #faf7fc;
+}
+
+.payment-project-detail-table tbody tr:hover :is(.payment-project-detail-select-cell, .payment-project-detail-status-cell, .payment-project-detail-action-cell) {
+  background: #fbfbfc;
+}
+
+.payment-project-detail-table tbody tr.is-selected :is(.payment-project-detail-select-cell, .payment-project-detail-status-cell, .payment-project-detail-action-cell),
+.payment-project-detail-table tbody tr.is-selected:hover :is(.payment-project-detail-select-cell, .payment-project-detail-status-cell, .payment-project-detail-action-cell) {
+  background: #faf7fc;
+}
+
+.payment-project-creator-identity {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 9px;
+  vertical-align: middle;
+}
+
+.payment-project-creator-identity > .avatar {
+  flex: 0 0 auto;
+}
+
+.payment-project-creator-identity-copy,
+.payment-project-detail-account-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.payment-project-creator-identity-copy {
+  display: grid;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.payment-project-creator-identity :is(strong, small),
+.payment-project-detail-account-cell :is(strong, small) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-project-creator-identity strong {
+  color: #303640;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.payment-project-creator-identity small {
+  color: #818997;
+  font-size: 10.5px;
+}
+
+.payment-project-creator-identity.is-lg {
+  gap: 12px;
+}
+
+.payment-project-creator-identity.is-lg strong {
+  font-size: 14px;
+}
+
+.payment-project-creator-identity.is-lg small {
+  font-size: 11.5px;
+}
+
+.payment-project-detail-account-cell small {
+  margin-top: 3px;
+  color: #8b909d;
+  font-size: 11px;
+}
+
+.payment-project-detail-date-cell,
+.payment-project-detail-money-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.payment-project-detail-table .list-action-button {
+  min-width: 88px;
+  min-height: 34px;
+}
+
+.payment-project-item-drawer-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(19, 18, 25, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.payment-project-item-drawer {
+  display: flex;
+  width: min(520px, 100vw);
+  height: 100dvh;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: -20px 0 60px rgba(28, 25, 39, 0.18);
+  animation: payment-project-drawer-in 220ms ease-out;
+}
+
+@keyframes payment-project-drawer-in {
+  from { opacity: 0.4; transform: translateX(32px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.payment-project-item-drawer-header {
+  display: flex;
+  min-height: 78px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e6e8ed;
+  padding: 12px 22px;
+}
+
+.payment-project-item-drawer-header > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.payment-project-item-drawer-header > div:first-child > span {
+  color: #858b97;
+  font-size: 11px;
+}
+
+.payment-project-item-drawer-header h2 {
+  overflow: hidden;
+  margin: 0;
+  color: #242830;
+  font-size: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-project-item-drawer-header-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.payment-project-item-drawer-header-actions .icon-button {
+  width: 44px;
+  height: 44px;
+}
+
+.payment-project-item-drawer-header-actions .icon-button:focus-visible {
+  outline: 2px solid rgba(73, 102, 151, 0.45);
+  outline-offset: 2px;
+}
+
+.payment-project-retry-badge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid #e2d1f0;
+  border-radius: 999px;
+  background: #f5ebfd;
+  padding: 0 10px;
+  color: #664778;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.payment-project-item-drawer-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px;
+}
+
+.payment-project-recipient-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e1d8e9;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8f3fb 0%, #eef3fb 100%);
+  padding: 15px;
+}
+
+.payment-project-recipient-identity {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.payment-project-recipient-identity > span {
+  overflow: hidden;
+  color: #747b87;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-project-recipient-card > dl {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 2px 0 0;
+}
+
+.payment-project-recipient-card > dl > div,
+.payment-project-item-drawer-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid #e7e9ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 10px 11px;
+}
+
+.payment-project-recipient-card dt,
+.payment-project-item-drawer-grid dt {
+  color: #7b818d;
+  font-size: 10.5px;
+}
+
+.payment-project-recipient-card dd,
+.payment-project-item-drawer-grid dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #30343c;
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.5;
+}
+
+.payment-project-amount-stack {
+  display: grid;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-project-item-drawer-section {
+  margin-top: 22px;
+}
+
+.payment-project-item-drawer-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: #31353d;
+  font-size: 13px;
+}
+
+.payment-project-item-drawer-section h3 svg {
+  color: #405776;
+}
+
+.payment-project-item-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0;
+}
+
+.payment-project-item-drawer-grid > .is-full {
+  grid-column: 1 / -1;
+}
+
+.payment-project-item-return-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  border: 1px solid #edcfca;
+  border-radius: 9px;
+  background: #fff5f3;
+  padding: 11px 12px;
+  color: #a94b41;
+}
+
+.payment-project-attempt-history {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.payment-project-attempt-card {
+  min-width: 0;
+  border: 1px solid #dce3e0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f4faf7 0%, #e9f5ef 100%);
+  padding: 12px;
+  color: #30363b;
+}
+
+.payment-project-attempt-card.is-failed {
+  border-color: #edcfca;
+  background: linear-gradient(135deg, #fff5f3 0%, #fbe8e5 100%);
+}
+
+.payment-project-attempt-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.payment-project-attempt-card > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.payment-project-attempt-card > header strong {
+  color: #292e34;
+  font-size: 12.5px;
+}
+
+.payment-project-attempt-card > header span:not(.simple-status) {
+  color: #737b84;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payment-project-attempt-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 10px 0 0;
+}
+
+.payment-project-attempt-card dl > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border: 1px solid rgba(220, 225, 228, 0.92);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 8px 9px;
+}
+
+.payment-project-attempt-card dl > .is-full {
+  grid-column: 1 / -1;
+}
+
+.payment-project-attempt-card dt {
+  color: #7a818a;
+  font-size: 10px;
+}
+
+.payment-project-attempt-card dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #30353b;
+  font-size: 11.5px;
+  font-weight: 620;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-project-item-return-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.payment-project-item-return-card strong {
+  color: #7d3e37;
+  font-size: 12px;
+}
+
+.payment-project-item-return-card span,
+.payment-project-item-return-card small {
+  overflow-wrap: anywhere;
+  color: #8e5e58;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payment-project-item-drawer-footer {
+  display: flex;
+  min-height: 74px;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  border-top: 1px solid #e6e8ed;
+  padding: 10px 22px;
+}
+
+.payment-project-item-drawer-footer .button {
+  min-height: 44px;
+}
+
+@media (min-width: 1181px) {
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1399px) {
+  .payment-project-payment-detail-page .payment-project-info-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .payment-project-payment-detail-page .payment-project-info-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .payment-project-payment-detail-page .payment-batch-detail-total > strong {
+    font-size: 28px;
+  }
+
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card {
+    min-height: 108px;
+    padding: 15px;
+  }
+
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card strong,
+  .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-provider .payment-provider-badge {
+    font-size: 22px;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section .payment-progress-steps {
+    width: min(100%, 300px);
+    justify-items: center;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section li {
+    width: 100%;
+  }
+
+  .payment-project-payment-detail-page .payment-batch-lifecycle-section li > i {
+    display: block;
+    top: 42px;
+    right: auto;
+    bottom: -14px;
+    left: 20px;
+    width: 1px;
+    height: auto;
+  }
+
+  .payment-project-payment-detail-page .payment-project-info-cards {
+    grid-template-columns: 1fr;
+    padding: 6px 14px 14px;
+  }
+
+  .payment-project-payment-detail-page .payment-project-info-cards > div,
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(2n + 1),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-child(3n + 1),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 3),
+  .payment-project-payment-detail-page .payment-project-info-cards > div:nth-last-child(-n + 2) {
+    min-height: 66px;
+    border: 1px solid #e3e6eb;
+    padding: 11px 12px;
+  }
+
+  .payment-project-resource-toolbar,
+  .payment-project-resource-actions,
+  .payment-project-resource-meta {
+    width: 100%;
+  }
+
+  .payment-project-resource-meta {
+    justify-content: space-between;
+  }
+
+  .payment-project-resource-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .payment-project-payment-detail-page .payment-project-download-select,
+  .payment-project-payment-detail-page .payment-project-resource-actions .button {
+    width: 100%;
+  }
+
+  .payment-project-detail-table-scroll {
+    max-height: min(560px, calc(100dvh - 260px));
+  }
+
+  .payment-project-detail-table .list-action-button {
+    min-height: 44px;
+  }
+
+  .payment-project-item-drawer-header,
+  .payment-project-item-drawer-content,
+  .payment-project-item-drawer-footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .payment-project-item-drawer-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .payment-project-item-drawer-footer .button {
+    width: 100%;
+  }
+
+  .payment-project-attempt-history,
+  .payment-project-attempt-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-project-attempt-card dl > .is-full {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .payment-project-item-drawer { animation: none; }
+}
+
+/* Payment batch annotations use one stable value size at every responsive breakpoint. */
+.payment-project-payment-detail-page.payment-batch-payment-detail-page.payment-batch-detail-page
+  .payment-project-summary-card strong,
+.payment-project-payment-detail-page.payment-batch-payment-detail-page.payment-batch-detail-page
+  .payment-project-summary-provider .payment-provider-badge {
+  font-size: 18px;
+}

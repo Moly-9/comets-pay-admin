@@ -171,6 +171,114 @@ final result: passed
 
 ---
 
+# 合同模板顶部状态按钮与简洁页签验收
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-8cb08d0f-b598-4be7-9519-858c177a3693.png`
+- Source pixels: `443 x 114`; focused tab crop: `/tmp/comets-pay-reference-tabs.png`, `443 x 51`
+- Desktop implementation: `/tmp/comets-pay-contract-template-1281x907-final.png`, `1265 x 712` captured pixels
+- Focused implementation tab crop: `/tmp/comets-pay-contract-template-tabs-final.png`, `438 x 51`
+- Mobile implementation: `/tmp/comets-pay-contract-template-390-final.png`, `375 x 812` captured pixels
+- Requested browser viewports: `1281 x 907` and `390 x 844`; the in-app browser exposed CSS content viewports of `1280 x 720` and `390 x 844`, with scrollbar gutters producing captured content widths of `1265` and `375` pixels.
+- Density normalization: browser and source evidence were compared at device scale factor 1; focused tab crops were compared at their native 51-pixel component height.
+- State: active template, clean field-policy draft, Common tab selected.
+
+## Full-view and focused comparison
+
+The desktop and mobile captures preserve the existing COMETS Pay shell and template-reader layout. The template header contains exactly one status action, the editor has no internal status controls, and the three tabs remain readable without page-level horizontal overflow.
+
+The source and implementation tab crops were opened together at native size. Both use a white background, muted inactive labels, a darker active label, a thin bottom divider, and a two-pixel underline aligned to the active label. The focused crop was required because the tab typography and underline are too small to judge reliably in the full desktop view.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: the implementation uses the product's existing Noto Sans SC stack and matches the source's compact label size, weight hierarchy, and single-line treatment.
+- Spacing and layout rhythm: the 50-pixel tab row, 18-pixel label gap, 16-pixel horizontal padding, and label-width underline match the reference pattern while fitting the longer field-group labels.
+- Colors and visual tokens: white surface, muted gray inactive text, dark active text, soft divider, and dark underline match the reference without introducing a new palette.
+- Image quality and asset fidelity: the changed tabs contain no raster imagery or substituted visual assets. Existing Lucide status/editor icons remain part of the established application system and are outside the referenced text-tab treatment.
+- Copy and content: labels intentionally use `通用字段 / 银行转账字段 / PayPal 字段`; counters and issue badges are absent as requested.
+
+## Comparison history
+
+1. Initial mobile inspection found a 42-pixel first-tab hit target and a save button constrained to a 140-pixel auto grid track (P2). A 44-pixel tab minimum and a full-width one-column mobile action track were added. Post-fix measurements are `44 x 49` minimum for tabs and `319 x 44` for the save button.
+2. Console inspection found a repeated React maximum-update-depth warning caused by the dirty callback identity changing on every parent render (P1). The editor now stores the callback in a ref and only notifies when the dirty value changes. A fresh desktop browser session produced no errors or warnings after the fix.
+3. Post-fix desktop and mobile captures show no horizontal overflow (`scrollWidth === clientWidth`), and the focused tab comparison shows no remaining P0/P1/P2 visual mismatch.
+
+## Interactions checked
+
+- Tab click plus `ArrowLeft`, `ArrowRight`, `Home`, and `End` navigation.
+- Dirty state disables the top status action and exposes the reason.
+- Invalid active-template save confirmation and automatic deactivation.
+- Invalid activation returns to the Common tab and marks Publisher as erroneous.
+- Stop confirmation, successful stop, and successful restart.
+- Fresh browser console: no errors or warnings.
+
+## Automated verification
+
+- Isolated focused worktree: TypeScript passed.
+- Full Vitest: 118 test files, 842 tests passed.
+- Vite production build passed; only the existing large-chunk advisory remains.
+- The shared working tree also contains unrelated in-progress creator-profile changes whose tests are currently incomplete; those files are excluded from this focused verification and commit.
+
+## Follow-up polish
+
+No P3 follow-up is required for this scoped reference match.
+
+final result: passed
+
+---
+
+# 已付款详情摘要卡片与下载按钮验收
+
+验收日期：2026-08-30
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-ae1553f1-32b9-475a-a3e2-46a1323d2a58.png`。
+- Desktop implementation: `/tmp/comets-pay-paid-detail-full-1281.png`。
+- Mobile implementation: `/tmp/comets-pay-paid-detail-mobile-390.png`。
+- 页面状态：付款工作台 > 已付款 > `REQ-202607-000011` 项目详情。
+
+## Normalization
+
+- Source image: 913 × 137 px。
+- Desktop capture: 1266 × 896 px；CSS viewport 1281 × 907，device scale factor 1。
+- Mobile capture: 375 × 812 px；viewport override 390 × 844，device scale factor 1。
+- Source is a focused card-strip reference. The desktop full-view comparison keeps the card strip readable at the top of the implementation; no additional focused crop was required.
+
+## Findings
+
+- No actionable P0, P1, or P2 issue remains.
+- Typography: titles and auxiliary text render at 11px in `#747b89`; main values render in `#20232b` at an adaptive 17–24px, and mobile uses 22px. Long payment codes remain single-line and expose their full value through `title`.
+- Spacing and layout: the four cards use the Invoice overview's 116px height, 20px padding, 14px radius, and four-column desktop rhythm. At 390px they stack into 345px-wide cards with 108px height and 15px padding.
+- Colors and tokens: cards use the reference peach, mint, amber, and lilac gradients in the same order. The result card remains amber across payment states. All three download controls are white with neutral borders and dark text.
+- Image and icon quality: the reference contains no card imagery. The previous decorative card icons were removed; no replacement or synthetic asset was introduced.
+- Copy and content: existing payment order, provider, result, update time, and download labels are unchanged.
+
+## Interaction Verification
+
+- Download-data and confirmation select controls retain their combobox behavior; the detail download remains a button.
+- All three controls retain a 44px minimum height, disabled styling, hover feedback, and visible keyboard focus treatment.
+- At 390px all three controls expand to 315px without page-level horizontal overflow.
+- Browser console warning/error logs were empty.
+
+## Comparison History
+
+1. The first browser pass found that global payment-summary rules still overrode the intended black main text, adaptive size, gray auxiliary text, and four-column desktop grid.
+2. Page-scoped selector specificity was increased without modifying global styles.
+3. The post-fix pass measured four 227.5px desktop columns; every card used black 19.8555px main text and gray 11px auxiliary text. The mobile pass measured a single 345px column with no horizontal overflow.
+
+## Automated Verification
+
+- Focused Vitest: `PaymentProjectPaymentDetailPage.test.tsx`, 8 tests passed.
+- TypeScript and Vite production build passed.
+- Full Vitest: 114 test files, 805 tests passed.
+- TypeScript and Vite production build passed after the scoped visual changes.
+
+final result: passed
+
 # 合作项目付款明细展示验收
 
 验收日期：2026-08-27
@@ -734,6 +842,66 @@ Blocked. Both source images were opened and measured, but the browser policy pre
 - Compare the reference and implementation images together and resolve any remaining P0/P1/P2 difference.
 
 final result: blocked
+
+---
+
+# Invoice 批量达人身份卡片布局验收
+
+验收日期：2026-08-29
+
+## Source Visual Truth
+
+- 用户选中的身份参考图：
+  `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-d8a4660c-e757-4d27-9493-49f4c1456cbe.png`
+- 仓库内留存的参考图：`qa/invoice-batch-creator-source.png`
+- 参考图像素尺寸：321 × 65 px。
+- 目标结构：左侧达人头像；右侧第一行 Display Name，第二行按顺序横排平台图标与 Handle Badge。
+
+## Implementation Evidence
+
+- 浏览器渲染截图：`qa/invoice-batch-creator-layout-after.jpg`
+- 同尺寸身份区域：`qa/invoice-batch-creator-identity-after.png`
+- 组合对照图：`qa/invoice-batch-creator-comparison.png`
+- 桌面 CSS 视口：1281 × 908；浏览器截图：1266 × 897 px；device scale factor 1。
+- 身份区域按参考图归一化为 321 × 65 px 后并排比较。
+- 交互状态：批量生成 Invoice 页面、项目 #301164、Mina Kato 已选中、两个社媒账号可见。
+
+## Full-view Comparison Evidence
+
+- 三列达人卡片网格、搜索区、批量操作区和选择交互保持原有结构。
+- 已选卡片继续使用系统浅绿色选中态；移除右侧份数说明后，身份区获得稳定的可用宽度。
+- 390 × 844 CSS px 下卡片宽度 311 px，无页面级横向溢出。
+
+## Focused Region Comparison Evidence
+
+- 组合图左侧为用户参考，右侧为修正后的浏览器身份区域。
+- 两侧均为 38 px 圆角头像配两层文字结构；第二层两个平台 Badge 保持同一行。
+- 两个 `@MinaKato` 均完整展示，没有截断或换行。
+
+## Comparison History
+
+1. 初始实现仍受旧的 `span:nth-of-type(2)` 规则影响，头像与文字纵向堆叠，并显示“已有 3 份，可继续生成”。
+2. 第一轮修正移除份数提示，并用 `.creator-identity` 明确建立头像与文本两列；两个 Badge 因亚像素宽度差异换成两行。
+3. 第二轮提高选择器明确度、禁止 Badge 容器换行并收紧 Badge 内边距；浏览器复核两个 Badge 同行且 Handle 无截断。
+
+## Findings
+
+- 无可执行的 P0、P1 或 P2 问题。
+- 字体与排版：沿用 COMETS Pay 字体栈和现有 Display Name/Badge 字重；主次层级与参考一致。
+- 间距与布局：头像固定在左侧，右侧严格两层；10 px 水平间距和 5 px 层间距在桌面与窄屏保持稳定。
+- 颜色与视觉 Token：保留现有平台 Badge 颜色和浅绿色选中态，没有引入新的颜色体系。
+- 图片与图标质量：头像继续复用系统 Avatar，平台继续复用现有图标组件；没有伪造或占位资产。
+- 文案与内容：已移除“已有 X 份，可继续生成”和“默认空中云汇”，保留达人身份及选择逻辑。
+
+## Interaction And Automated Verification
+
+- 桌面选中状态、390 px 窄屏布局与平台 Badge 同行展示已验证。
+- 浏览器控制台 warning/error：0。
+- 完整 Vitest：105 个测试文件、710 项测试通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+
+final result: passed
 
 ---
 
@@ -1742,5 +1910,52 @@ final result: passed
 - TypeScript 与 Vite 生产构建通过。
 - `git diff --check` 通过。
 - 已检查现有浏览器页面状态；本地 URL 安全策略阻止刷新当前标签页，因此未生成更新后的浏览器截图，需在页面手动刷新后查看新构建。
+
+final result: passed
+
+---
+
+# Invoice 批量达人导入与渠道 Badge 验收
+
+验收日期：2026-08-29
+
+## Source Visual Truth
+
+- 用户本次的浏览器批注截图：Invoice 管理页渠道 Badge、待采集页签、批量输入弹窗、底部操作区与外部 Invoice 收集页。
+- 截图由浏览器批注提供，未导出为本地文件。
+
+## Implementation Evidence
+
+- 实现地址：`http://127.0.0.1:5175/`
+- 预期桌面验收视口：1281 × 908 CSS px，device scale factor 1。
+- 预期窄屏验收视口：390 CSS px 宽，device scale factor 1。
+- 本次未能生成更新后的浏览器截图：本地 URL 被当前浏览器安全策略阻止读取。
+
+## Findings
+
+- 字体与字号：实现复用现有 COMETS Pay 字体栈、按钮和达人档案字号；缺少浏览器截图证据。
+- 间距与布局：解析结果复用主页三列达人档案网格，760px 以下切换单列；缺少实际视口对比。
+- 颜色：Airwallex、PayPal、Payer Max 已切换为浅色品牌底、品牌色文字和边框；缺少截图对比。
+- 图片与图标：未新增栅格或伪造资产，继续复用现有 Lucide 图标和达人头像组件。
+- 文案：已完成“待回收”、“付款信息”、频道链接示例和导入预览文案调整。
+
+## Automated Verification
+
+- 定向 Vitest：5 个测试文件、32 项通过。
+- 完整 Vitest：104 个测试文件、702 项通过。
+- TypeScript 与 Vite 生产构建通过。
+- `git diff --check` 通过。
+
+## Blocker
+
+- 无法打开更新后的实现截图并与批注截图组合对比，因此无法完成桌面、390px、主要交互和控制台的最终视觉验收。
+
+final result: blocked
+
+---
+
+# Latest Design QA Status
+
+最新验收为本文中的“合同模板顶部状态按钮与简洁页签验收”。该报告已包含参考图、浏览器渲染截图、桌面与 390px 状态、主要交互、控制台检查、完整测试和构建结果；没有待处理的 P0、P1 或 P2 问题。
 
 final result: passed

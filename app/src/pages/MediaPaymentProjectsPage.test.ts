@@ -8,6 +8,49 @@ import {
 } from './MediaPaymentProjectsPage';
 
 describe('new payment request resource picker', () => {
+  it('uses the concise my-request page title', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('title="我的请款"');
+    expect(source).not.toContain('title="我的请款项目"');
+  });
+
+  it('uses request terminology only in the my-request list and detail', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('statusLabel="请款状态"');
+    expect(source).toContain('<th>请款编号</th>');
+    expect(source).toContain('<th>请款状态</th>');
+    expect(source).toContain('title="请款信息"');
+    expect(source).toContain('requestCodeLabel="请款编号"');
+    expect(source).toContain('countLabel="个请款"');
+    expect(source).toContain('<span>请款总数</span>');
+    expect(source).not.toContain('请款项目总数');
+    expect(source).not.toContain('返回我的请款项目');
+  });
+
+  it('requires payment ownership fields and uses a two-level procurement cost cascader', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const cascaderSource = readFileSync(
+      new URL('../components/PaymentRequestCostCascader.tsx', import.meta.url),
+      'utf8',
+    );
+    const css = readFileSync(new URL('./MediaPaymentProjectsPage.css', import.meta.url), 'utf8');
+
+    expect(source).toContain('ariaLabel="选择付款主体"');
+    expect(source).toContain('ariaLabel="选择项目费用归属"');
+    expect(source).toContain('日区项目请选择日本分公司');
+    expect(source).toContain('<PaymentRequestCostCascader');
+    expect(source).toContain('paymentEntity,');
+    expect(source).toContain('projectCostAttribution,');
+    expect(source).toContain("costTypeDetail: costType === '采购成本' ? costTypeDetail : undefined");
+    expect(cascaderSource).toContain('PAYMENT_REQUEST_PROCUREMENT_COST_DETAILS.map');
+    expect(cascaderSource).toContain("event.key === 'ArrowRight'");
+    expect(cascaderSource).toContain("event.key === 'ArrowLeft'");
+    expect(cascaderSource).toContain('aria-haspopup="tree"');
+    expect(css).toContain('.payment-request-cost-cascader-menu.has-children');
+    expect(css).toContain('@media (max-width: 559px)');
+  });
+
   it('shows selectable and selected resources before disabled resources', () => {
     const options = [
       { value: 'disabled-one', label: '置灰 1', description: '', selected: false, disabled: true },
@@ -38,6 +81,16 @@ describe('new payment request resource picker', () => {
     expect(searchStyles).toContain('height: 40px');
     expect(searchStyles).toContain('line-height: 40px');
     expect(searchStyles).toContain('white-space: nowrap');
+  });
+
+  it('uses compact selected creators and a two-column document identity layout', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('<CreatorIdentity creator={creator} showSocialAccounts={false} />');
+    expect(source).toContain('<div className="media-request-document-creator"><CreatorIdentity creator={creator} /></div>');
+    expect(css).toMatch(/\.media-request-document-creator > \.creator-identity\s*\{[^}]*grid-template-columns: auto minmax\(0, 1fr\);/s);
+    expect(css).toMatch(/\.media-request-document-creator \.creator-identity-copy\s*\{[^}]*display: grid;[^}]*gap: 3px;/s);
   });
 
   it('formats Invoice and contract titles with explicit fallbacks', () => {
@@ -116,6 +169,16 @@ describe('new payment request resource picker', () => {
     expect(tableSource).not.toContain('contract.contractNumber');
     expect(tableSource).not.toContain('付款清单${');
     expect(tableSource).toContain('actualPayoutAmountLabel(payout)');
+    expect(tableSource).toContain('socialAccountsMaxVisible={1}');
+  });
+
+  it('keeps compact creator identities aligned and the longer progress card scrollable', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+
+    expect(css).toMatch(/\.media-request-creator-cell > span\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
+    expect(css).toMatch(/\.media-request-creator-cell \.creator-identity-copy\s*{[^}]*display:\s*grid;/s);
+    expect(css).toMatch(/\.project-progress-card\s*{[^}]*max-height:\s*calc\(100vh - 118px\);[^}]*overflow-y:\s*auto;/s);
+    expect(css).toContain('.progress-returned .project-progress-node');
   });
 
   it('opens project detail from the full project row without hijacking row actions', () => {
@@ -132,8 +195,40 @@ describe('new payment request resource picker', () => {
     expect(listTableSource).toContain('onClick={() => openRequestDetail(request)}');
     expect(listTableSource).toContain("['Enter', ' '].includes(event.key)");
     expect(listTableSource).toContain('onClick={(event) => event.stopPropagation()}');
-    expect(css).toContain('tr.media-payment-project-row:hover');
+    expect(css).toContain('tr.media-payment-project-row:not(.media-request-returned-row):not(.media-request-payment-failure-row):hover');
     expect(css).toContain('tr.media-payment-project-row:focus-visible');
+    expect(css).not.toMatch(/tr\.media-payment-project-row:hover\s*\{[^}]*outline:/s);
+    expect(css).toMatch(/tr\.media-payment-project-row:focus-visible\s*\{[^}]*outline:/s);
+    expect(css).toMatch(/\.media-payment-project-table :is\(th, td\):not\(\[colspan\]\)\s*\{[^}]*padding-right: 14px;[^}]*padding-left: 14px;/s);
+    expect(css).toContain('.media-payment-project-table th:nth-child(2) { width: 26%; }');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+
+  it('opens the dedicated three-method creator modal from both detail entry points', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const modalSource = readFileSync(
+      new URL('../components/PaymentRequestCreatorAddModal.tsx', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain('<PaymentRequestCreatorAddModal');
+    expect(source).toContain('onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button>');
+    expect(source).toContain('点击使用链接、达人档案或 Excel 批量添加');
+    expect(source).toContain('onApply={(selection) => openEditForm(selectedRequest, false, selection)}');
+    expect(source).toContain('id="media-request-document-section"');
+    expect(modalSource).toContain("{ value: 'LINKS', label: '粘贴链接'");
+    expect(modalSource).toContain("{ value: 'ARCHIVE', label: '从达人档案库选择'");
+    expect(modalSource).toContain("{ value: 'EXCEL', label: 'Excel 导入'");
+    expect(modalSource).toContain('initialPageSize: 10');
+    expect(modalSource).toContain('socialAccountsMaxVisible={1}');
+    expect(modalSource).toContain('INVOICE_BATCH_CREATOR_IMPORT_MAX_FILE_SIZE');
+  });
+
+  it('keeps payment attribution and expected payment date controls horizontally aligned', () => {
+    const css = readFileSync(new URL('./MediaPaymentProjectsPage.css', import.meta.url), 'utf8');
+
+    expect(css).toMatch(/\.media-request-payment-plan \.form-field-label\s*\{[^}]*display: inline-flex;[^}]*min-height: 19px;[^}]*white-space: nowrap;/s);
+    expect(css).toMatch(/\.media-request-payment-plan \.form-field\s*\{[^}]*align-content: start;/s);
+    expect(css).toMatch(/\.media-request-payment-plan \.required-mark\s*\{[^}]*flex: 0 0 auto;/s);
   });
 });

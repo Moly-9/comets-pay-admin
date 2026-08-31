@@ -11,11 +11,10 @@ import { useMemo, useState } from 'react';
 import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
+import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractSelector } from '../components/InvoiceContractSelector';
 import {
-  creatorSocialAccountSearchOptions,
-  creatorSocialSelectionValue,
-  formatCreatorHandle,
-  parseCreatorSocialSelectionValue,
+  creatorSearchOption,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import {
@@ -27,11 +26,7 @@ import {
   type InvoiceReviewSummaryField,
   type InvoiceReviewTimelineItem,
 } from '../components/InvoiceReviewWorkspace';
-import {
-  CONTRACT_TYPE_LABELS,
-  contractLinkedToProject,
-  type ContractRecord,
-} from '../contracts';
+import { contractLinkedToProject, type ContractRecord } from '../contracts';
 import {
   EXTERNAL_INVOICE_CRITICAL_FIELDS,
   EXTERNAL_INVOICE_FIELD_LABEL,
@@ -68,6 +63,11 @@ import type { ProjectSummary } from './ProjectDetailPage';
 import './ExternalInvoiceCollectionPage.css';
 
 const CURRENCIES: InvoiceCurrency[] = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'];
+
+export const externalInvoiceCreatorSearchOption = (creator: CreatorProfile) => ({
+  ...creatorSearchOption(creator),
+  selectedLabel: creator.name,
+});
 
 const TECHNICAL_STATUS_LABEL: Record<ExternalInvoiceCollectionRecord['status'], string> = {
   DRAFT: '收集信息草稿',
@@ -119,9 +119,7 @@ export function ExternalInvoiceCollectionCreatePage({
     selectedReference?.handle,
     selectedReference?.platform,
   );
-  const creatorSelectionValue = creatorId && selectedSocialAccount
-    ? creatorSocialSelectionValue(creatorId, selectedSocialAccount.id)
-    : '';
+  const creatorSelectionValue = creatorId;
   const selectedBillingEntity = invoiceBillingSettings.entities.find((entity) => (
     entity.id === billingEntityId
   )) ?? defaultInvoiceBillingEntity(invoiceBillingSettings)!;
@@ -141,17 +139,13 @@ export function ExternalInvoiceCollectionCreatePage({
   })), [projects]);
   const creatorOptions = useMemo(() => creatorReferences.flatMap((reference) => {
     const creator = creators.find((item) => String(item.id) === String(reference.creatorId));
-    if (creator) return creatorSocialAccountSearchOptions(creator);
+    if (creator) return [externalInvoiceCreatorSearchOption(creator)];
     const channelId = reference.handle || '频道 ID 待补充';
-    const platform = reference.platform || '社媒平台待补充';
     return [{
-      value: creatorSocialSelectionValue(
-        String(reference.creatorId),
-        reference.socialAccountId ?? `legacy-reference:${reference.engagementId}`,
-      ),
+      value: String(reference.creatorId),
       label: reference.name,
-      selectedLabel: `${reference.name} · ${channelId} · ${platform}`,
-      description: `${channelId} · ${platform}`,
+      selectedLabel: reference.name,
+      description: channelId,
       searchText: [reference.name, reference.handle, reference.platform].filter(Boolean).join(' '),
     }];
   }), [creatorReferences, creators]);
@@ -214,7 +208,7 @@ export function ExternalInvoiceCollectionCreatePage({
       <button className="external-back-button" type="button" onClick={onBack}><ArrowLeft size={17} />返回 Invoice 管理</button>
       <PageHeading
         title="发起外部 Invoice 收集"
-        subtitle="先固定合作项目、达人和预期业务信息，再向对应达人档案发布上传任务。"
+        subtitle="先固定合作项目、达人和付款信息，再向对应达人档案发布上传任务。"
       />
       <div className="external-collection-form">
         <section className="content-card external-collection-card">
@@ -246,13 +240,25 @@ export function ExternalInvoiceCollectionCreatePage({
                 ariaLabel="选择项目内达人"
                 className="creator-search-combobox"
                 value={creatorSelectionValue}
-                placeholder={selectedProject ? '搜索频道链接、频道 ID、Account Name 或 Display Name' : '请先选择合作项目'}
+                placeholder={selectedProject ? '搜索达人名称、频道ID、频道链接...' : '请先选择合作项目'}
                 options={creatorOptions}
+                resultUnit="位达人"
+                renderOption={(option) => {
+                  const creator = creators.find((item) => item.id === option.value);
+                  const reference = creatorReferences.find((item) => String(item.creatorId) === option.value);
+                  return <CreatorIdentity creator={creator} displayName={reference?.name} fallbackHandle={reference?.handle} fallbackPlatform={reference?.platform} socialAccountsMode="expanded" />;
+                }}
                 disabled={!selectedProject}
                 onChange={(value) => {
-                  const selection = parseCreatorSocialSelectionValue(value);
-                  setCreatorId(selection?.creatorId ?? '');
-                  setCreatorSocialAccountId(selection?.socialAccountId ?? '');
+                  const creator = creators.find((item) => item.id === value);
+                  const reference = creatorReferences.find((item) => String(item.creatorId) === value);
+                  setCreatorId(value);
+                  setCreatorSocialAccountId(resolveCreatorSocialAccount(
+                    creator,
+                    reference?.socialAccountId,
+                    reference?.handle,
+                    reference?.platform,
+                  )?.id ?? '');
                   setContractIds([]);
                 }}
                 onClear={() => {
@@ -270,25 +276,26 @@ export function ExternalInvoiceCollectionCreatePage({
             <div><span className="external-section-kicker">02</span><h2>关联合同</h2></div>
             <p>支持不关联合同，也可同时关联多份独立合同、框架合同或 IO 单。</p>
           </div>
-          <div className="external-contract-picker">
-            {eligibleContracts.length ? eligibleContracts.map((contract) => {
-              const contractId = contract.contractId!;
-              const checked = contractIds.includes(contractId);
-              return (
-                <label key={String(contractId)} className={checked ? 'is-selected' : ''}>
-                  <input type="checkbox" checked={checked} onChange={() => setContractIds((current) => (
-                    checked ? current.filter((id) => id !== contractId) : [...current, contractId]
-                  ))} />
-                  <span><strong>{contract.id}</strong><small>{CONTRACT_TYPE_LABELS[contract.contractType ?? 'INDEPENDENT']} · {contract.name}</small></span>
-                </label>
-              );
-            }) : <div className="external-empty-inline">选择达人后展示该达人在当前项目下的已确认合同；无合同也可继续。</div>}
+          <div className="external-invoice-contract-coverage">
+            <InvoiceContractSelector
+              contracts={eligibleContracts}
+              selectedContractIds={contractIds}
+              onToggle={(contractId) => setContractIds((current) => (
+                current.includes(contractId)
+                  ? current.filter((id) => id !== contractId)
+                  : [...current, contractId]
+              ))}
+              labelId="external-invoice-contract-coverage-label"
+              heading="选择合同（非必填）"
+              helperText="合同名称、编号和金额与生成 Invoice 保持一致。"
+              emptyText="选择达人后展示该达人在当前项目下的已确认合同；无合同也可继续。"
+            />
           </div>
         </section>
 
         <section className="content-card external-collection-card external-collection-card-final">
           <div className="external-section-heading">
-            <div><span className="external-section-kicker">03</span><h2>预期业务信息</h2></div>
+            <div><span className="external-section-kicker">03</span><h2>付款信息</h2></div>
             <p>达人上传后，系统将以这些字段及达人档案账户进行校验。</p>
           </div>
           <div className="form-grid external-form-grid">
@@ -328,8 +335,8 @@ export function ExternalInvoiceCollectionCreatePage({
                   : '保存草稿后列表显示“待发布”；正式发布后才会出现在 C 端待办中。'}
             </NoticeBanner>
             <div className="external-form-actions">
-              <Button variant="secondary" disabled={!complete} onClick={() => submit(false)}>保存草稿</Button>
-              <Button icon={<Send size={16} />} disabled={!complete} onClick={() => submit(true)}>发布收集任务</Button>
+              <Button variant="secondary" disabled={!complete} disabledReason="请先完成收集任务的必填信息。" onClick={() => submit(false)}>保存草稿</Button>
+              <Button icon={<Send size={16} />} disabled={!complete} disabledReason="请先完成收集任务的必填信息。" onClick={() => submit(true)}>发布收集任务</Button>
             </div>
           </div>
         </section>
@@ -712,7 +719,7 @@ export function ExternalInvoiceCollectionDetailPage({
     || field.status === 'REUPLOAD_REQUIRED'
   )).length + contractBlockers.length;
   const collectionSummaryFields: InvoiceReviewSummaryField[] = [
-    { id: 'creator', label: '达人', value: record.creatorName, secondary: formatCreatorHandle(record.creatorHandle, record.creatorPlatform) },
+    { id: 'creator', label: '达人', value: record.creatorName, secondary: record.creatorHandle },
     { id: 'project', label: '关联项目', value: record.projectName },
     {
       id: 'expected-amount',
@@ -856,11 +863,18 @@ export function ExternalInvoiceCollectionDetailPage({
             : action;
           onReviewField(fieldId as ExternalInvoiceFieldKey, decision, note);
         } : undefined}
-        returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人' : undefined}
-        returnDialogTitle="退回外部 Invoice"
+        returnLabel={record.status === 'WAITING_MEDIA_REVIEW' ? '退回达人修改' : undefined}
+        returnDialogTitle="退回达人修改"
+        returnContext={{
+          creatorName: record.creatorName,
+          invoiceNumber: displayInvoiceNumber,
+          projectName: record.projectName,
+          recipientEmail: creator?.contact.email,
+          instruction: '请选择退回处理方式，并说明需要达人处理的具体内容。',
+        }}
         returnOptions={[
-          { value: 'CORRECTION', label: '退回纠正识别结果', description: '原文件正确，达人需按原文重新确认识别值' },
-          { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容有误，达人必须提交新文件版本' },
+          { value: 'CORRECTION', label: '纠正识别结果', description: '原文件正确，要求达人按原文重新确认识别值并提交。' },
+          { value: 'REUPLOAD', label: '要求重新上传', description: '原文件内容错误，要求达人上传新的文件版本。' },
         ]}
         onReturn={record.status === 'WAITING_MEDIA_REVIEW'
           ? (reason, option) => onReturn(option === 'REUPLOAD' ? 'REUPLOAD' : 'CORRECTION', reason)
@@ -881,7 +895,7 @@ export function ExternalInvoiceCollectionDetailPage({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setSimulatorOpen(false)}>关闭</Button>
-              {confirmation ? <Button disabled={!canSubmit} icon={<Send size={16} />} onClick={() => { onSubmit(); setSimulatorOpen(false); }}>提交审核</Button> : null}
+              {confirmation ? <Button disabled={!canSubmit} disabledReason="请先完成 Invoice 文件、日期和付款账户校验。" icon={<Send size={16} />} onClick={() => { onSubmit(); setSimulatorOpen(false); }}>提交审核</Button> : null}
             </>
           )}
         >
@@ -906,10 +920,10 @@ export function ExternalInvoiceCollectionDetailPage({
             {!accounts.length ? <NoticeBanner>达人档案没有已验证且可用于 Invoice 的账户，当前不能提交。</NoticeBanner> : null}
             {canUpload ? (
               <div className="external-simulator-actions">
-                <Button disabled={!payoutAccountId || !invoiceDate} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
-                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
-                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
-                <Button disabled={!payoutAccountId || !invoiceDate} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} icon={<Upload size={16} />} onClick={() => onSimulateUpload('NORMAL', payoutAccountId, invoiceDate)}>正常上传并识别</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} variant="secondary" onClick={() => onSimulateUpload('OCR_ERROR', payoutAccountId, invoiceDate)}>模拟 OCR 识别错误</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} variant="secondary" onClick={() => onSimulateUpload('SOURCE_FILE_ERROR', payoutAccountId, invoiceDate)}>模拟原文件错误</Button>
+                <Button disabled={!payoutAccountId || !invoiceDate} disabledReason={!payoutAccountId ? '请先选择付款账户。' : '请先填写 Invoice 日期。'} variant="secondary" onClick={() => onSimulateUpload('ACCOUNT_MISMATCH', payoutAccountId, invoiceDate)}>模拟收款账户不一致</Button>
               </div>
             ) : null}
             {(correctionCandidate || record.status === 'RETURNED_FOR_CORRECTION') && recognition ? (

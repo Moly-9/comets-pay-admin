@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -22,6 +23,8 @@ const createTestBatch = (
 ): PaymentBatchRecord => ({
   paymentBatchId: `payment_batch_${paymentBatchCode}` as PaymentBatchRecord['paymentBatchId'],
   paymentBatchCode,
+  paymentOrderCode: 'PAY-TEST-001',
+  paymentAttemptNumber: 1,
   request: {
     paymentRequestProjectId: 'request_test' as PaymentBatchRecord['request']['paymentRequestProjectId'],
     requestCode: 'REQ-TEST-001',
@@ -55,6 +58,8 @@ const createTestBatch = (
     deliverable: '测试交付',
     paymentListCode: 'PAY-TEST-001',
     paymentListStatus: 'paid',
+    paymentOrderCode: 'PAY-TEST-001',
+    paymentAttemptNumber: 1,
     contracts: [],
     provider,
     amount: 1000,
@@ -68,6 +73,10 @@ const createTestBatch = (
     transactionReference: 'TEST-001',
     description: '测试交付',
     paymentStatus: '已付款',
+    transferFeeAmount: 2.5,
+    transferFeeCurrency: 'USD',
+    actualPaidAmount: 1002.5,
+    actualPaidCurrency: 'USD',
     associationIssues: [],
   }],
 });
@@ -132,7 +141,7 @@ describe('payment batch filters and selection', () => {
     });
   });
 
-  it('renders minute filters, all-provider selection and the renamed payer column', () => {
+  it('renders filters, linked projects, financial columns and independent export buttons', () => {
     const html = renderToStaticMarkup(
       <BatchesPage batches={TEST_BATCHES} onNewBatch={vi.fn()} notify={vi.fn()} canCreateBatch />,
     );
@@ -142,21 +151,64 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('>全部付款状态</span>');
     expect(html).toContain('付款人 / 付款时间');
     expect(html).not.toContain('创建人 / 时间');
-    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('<th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th>');
+    expect(html).toContain('<strong title="测试项目">测试项目</strong><small title="PRJ-TEST-001">PRJ-TEST-001</small>');
+    expect(html).toContain('<th class="payment-batch-status-cell">状态</th>');
+    expect(html).toContain('<th class="action-cell payment-batch-action-cell">操作</th>');
+    expect(html).toContain('aria-label="付款批次导出"');
+    expect(html).toContain('payment-batch-export-button is-confirmation');
+    expect(html).toContain('payment-batch-export-button is-record');
+    expect(html).toContain('导出确认函');
+    expect(html).toContain('导出付款明细');
+    expect(html).not.toContain('aria-label="批次导出选项"');
+    expect(html).toContain('已付款批次');
     expect(html).toContain('aria-label="选择付款批次 BAT-20260715-006"');
     expect(html).toContain('aria-label="选择付款批次 BAT-20260714-005"');
     expect(html).not.toContain('不支持确认函导出');
+
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    expect(css).toContain('.payment-batch-table :is(th, td).payment-batch-status-cell');
+    expect(css).toContain('right: 132px');
+    expect(css).toContain('.payment-batch-table :is(th, td).payment-batch-action-cell');
+    expect(css).toMatch(/\.payment-batch-export-button\.is-confirmation:not\(:disabled\)[\s\S]*?color: #2f333a/);
+    expect(css).toMatch(/\.payment-batch-export-button\.is-record:not\(:disabled\)[\s\S]*?color: #2f333a/);
   });
 
-  it('derives the batch list status from live payout results', () => {
+  it('keeps the batch list status frozen when the live payout changes', () => {
     const batch = createTestBatch('BAT-LIVE-001', 'Airwallex', '2026-08-11T10:00');
     const basePayout = {
       id: batch.items[0].payoutId,
       status: '已付款',
     } as Payout;
 
-    expect(paymentBatchRows([{ ...batch, status: '部分失败' }], [basePayout])[0].status).toBe('已付款');
-    expect(paymentBatchRows([batch], [{ ...basePayout, status: '已退回' }])[0].status).toBe('全部失败');
+    expect(paymentBatchRows([{ ...batch, status: '部分失败' }])[0].status).toBe('部分失败');
+    expect(paymentBatchRows([batch])[0].status).toBe(batch.status);
+    expect(basePayout.status).toBe('已付款');
+  });
+
+  it('summarizes only the current batch attempt and marks processing results as pending', () => {
+    expect(TEST_BATCH_ROWS[0]).toMatchObject({
+      cooperationProjectCode: 'PRJ-TEST-001',
+      cooperationProjectName: '测试项目',
+      paymentAmount: 'USD 1,000',
+      transferFeeAmount: 'USD 2.5',
+      actualPaidAmount: 'USD 1,002.5',
+    });
+    const processingBatch = createTestBatch('BAT-PROCESSING', 'Airwallex', '2026-08-12T10:00');
+    const processingRow = paymentBatchRows([{
+      ...processingBatch,
+      status: '付款处理中',
+      items: processingBatch.items.map((item) => ({
+        ...item,
+        paymentStatus: '付款处理中',
+        transferFeeAmount: undefined,
+        transferFeeCurrency: undefined,
+        actualPaidAmount: undefined,
+        actualPaidCurrency: undefined,
+      })),
+    }])[0];
+    expect(processingRow.transferFeeAmount).toBe('待渠道回写');
+    expect(processingRow.actualPaidAmount).toBe('待渠道回写');
   });
 });
 

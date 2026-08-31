@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Avatar, ListActionButton } from './Common';
+import { ListActionButton } from './Common';
+import { CreatorIdentity } from './CreatorIdentity';
 import { PaymentProviderBadge } from './PaymentProviderBadge';
 import { Pagination, usePagination } from './Pagination';
 import type { InvoiceManagementRow } from '../invoice/invoiceManagement';
@@ -93,7 +94,7 @@ export function InvoiceManagementTable({
                   />
                 </th>
               ) : null}
-              <th>达人</th>
+              <th className="invoice-creator-column">达人</th>
               <th>收款主体</th>
               <th>关联项目</th>
               <th>Invoice 编号</th>
@@ -125,14 +126,16 @@ export function InvoiceManagementTable({
                     />
                   </td>
                 ) : null}
-                <td>
-                  <div className="creator-cell">
-                    <Avatar initials={row.initials} accent={row.accent} size="sm" />
-                    <span>
-                      <strong>{row.creatorName}</strong>
-                      <small>{row.channelId} · {row.creatorPlatform}</small>
-                    </span>
-                  </div>
+                <td className="invoice-creator-column">
+                  <CreatorIdentity
+                    className="creator-cell"
+                    displayName={row.creatorName}
+                    initials={row.initials}
+                    accent={row.accent}
+                    accounts={row.creatorSocialAccounts}
+                    fallbackHandle={row.channelId}
+                    fallbackPlatform={row.creatorPlatform}
+                  />
                 </td>
                 <td className="invoice-issuer-cell">{row.issuerName || '待补充'}</td>
                 <td className="invoice-project-cell">{row.projectName}</td>

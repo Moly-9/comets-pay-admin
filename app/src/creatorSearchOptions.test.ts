@@ -4,6 +4,7 @@ import type { CreatorId } from './businessWorkflow';
 import { filterSearchableOptions } from './components/SearchableComboBox';
 import {
   creatorSearchOption,
+  creatorSearchOptions,
   creatorSocialAccountMatches,
   creatorSocialAccountSearchOptions,
   parseCreatorSocialSelectionValue,
@@ -58,11 +59,14 @@ describe('shared creator search option', () => {
     const option = creatorSearchOption(creator);
     const options = [option];
 
-    expect(option.selectedLabel).toBe('Camila Costa · @camila.beauty · Instagram');
+    expect(option.selectedLabel).toBe('Camila Costa · @camila.beauty · @camila.tiktok');
     expect(filterSearchableOptions(options, 'Camila Costa')).toEqual(options);
     expect(filterSearchableOptions(options, 'channel-camila-instagram')).toEqual(options);
     expect(filterSearchableOptions(options, 'instagram.com/camila.beauty')).toEqual(options);
+    expect(filterSearchableOptions(options, 'Studio Ltd.')).toEqual(options);
     expect(filterSearchableOptions(options, 'Camila Costa Payments')).toEqual(options);
+    expect(filterSearchableOptions(options, 'payments@example.com')).toEqual(options);
+    expect(creatorSearchOptions([creator])).toHaveLength(1);
   });
 
   it('returns one stable option per social account when searching the same display name', () => {
@@ -109,12 +113,19 @@ describe('shared creator search option', () => {
     const contractBuilder = readFileSync(new URL('./pages/ContractBuilderPage.tsx', import.meta.url), 'utf8');
     const contractUpload = readFileSync(new URL('./components/ContractUploadWizard.tsx', import.meta.url), 'utf8');
     const externalCollection = readFileSync(new URL('./pages/ExternalInvoiceCollectionPage.tsx', import.meta.url), 'utf8');
+    const styles = readFileSync(new URL('./index.css', import.meta.url), 'utf8');
 
     [invoiceBuilder, contractBuilder, contractUpload, externalCollection].forEach((source) => {
-      expect(source).toContain('creatorSocialAccountSearchOptions');
+      expect(source).toMatch(/creatorSearchOptions|creatorSearchOption/);
+      expect(source).toContain('CreatorIdentity');
       expect(source).toContain('className="creator-search-combobox"');
-      expect(source).toContain('搜索频道链接、频道 ID、Account Name 或 Display Name');
     });
+    expect(contractBuilder).toContain('搜索 Display Name、频道 ID、频道链接…');
+    expect(contractBuilder).toContain('selectedLabel: option.label');
+    expect(styles).toMatch(/\.contract-builder-form \.creator-search-combobox \.contract-search-input-wrap input:focus\s*{[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s);
+    expect(invoiceBuilder).toContain('搜索达人名称、频道 ID、频道链接…');
+    expect(externalCollection).toContain('搜索达人名称、频道ID、频道链接...');
+    expect(contractUpload).toContain('支持搜索 Display Name、频道 ID、频道链接、法定真名、Account Name');
     expect(contractUpload).toContain('<SearchableComboBox');
     expect(externalCollection).toContain('<SearchableComboBox');
   });

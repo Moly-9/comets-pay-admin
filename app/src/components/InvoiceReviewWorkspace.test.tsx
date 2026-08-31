@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { InvoiceReviewWorkspace } from './InvoiceReviewWorkspace';
+import {
+  InvoiceReviewReturnDialogContent,
+  InvoiceReviewWorkspace,
+} from './InvoiceReviewWorkspace';
 
 const baseProps = {
   issueCount: 0,
@@ -164,7 +167,7 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('is-document-unavailable');
   });
 
-  it('shows the generation note inside each approved contract mismatch card', () => {
+  it('shows the current-version mismatch reason once above the contract checks', () => {
     const html = renderToStaticMarkup(
       <InvoiceReviewWorkspace
         {...baseProps}
@@ -187,9 +190,50 @@ describe('InvoiceReviewWorkspace', () => {
     );
 
     expect(html).toContain('合同匹配 0/1 · 1项需关注');
-    expect(html).toContain('invoice-review-contract-mismatch-reason');
-    expect(html).toContain('不一致原因');
+    expect(html).toContain('invoice-contract-mismatch-notice');
+    expect(html).toContain('合同差异说明');
+    expect(html.match(/合同为预算金额/g)).toHaveLength(1);
     expect(html).toContain('合同为预算金额，Invoice 按实际验收金额结算。');
     expect(html).toContain('生成 Invoice 时填写 · 媒介测试');
+  });
+
+  it('uses one return-dialog structure while keeping external handling options source-specific', () => {
+    const context = {
+      creatorName: 'Alicia Lin',
+      invoiceNumber: 'INV-20260820-00001',
+      projectName: 'Creator Campaign',
+      recipientEmail: 'alicia@example.com',
+    };
+    const externalHtml = renderToStaticMarkup(
+      <InvoiceReviewReturnDialogContent
+        context={context}
+        returnOptions={[
+          { value: 'CORRECTION', label: '纠正识别结果', description: '原文件正确，按原文重新确认。' },
+          { value: 'REUPLOAD', label: '要求重新上传', description: '原文件错误，上传新版本。' },
+        ]}
+        returnOption="CORRECTION"
+        returnReason=""
+        onOptionChange={vi.fn()}
+        onReasonChange={vi.fn()}
+      />,
+    );
+    expect(externalHtml).toContain('退回处理方式');
+    expect(externalHtml).toContain('原文件正确，按原文重新确认。');
+    expect(externalHtml).toContain('退回通知渠道');
+    expect(externalHtml).toContain('al***ia@example.com');
+
+    const internalHtml = renderToStaticMarkup(
+      <InvoiceReviewReturnDialogContent
+        context={{ ...context, instruction: '根据原因修改 Invoice 并重新签署。' }}
+        returnOptions={[]}
+        returnOption=""
+        returnReason="主体需要修改"
+        onOptionChange={vi.fn()}
+        onReasonChange={vi.fn()}
+      />,
+    );
+    expect(internalHtml).not.toContain('退回处理方式');
+    expect(internalHtml).toContain('根据原因修改 Invoice 并重新签署。');
+    expect(internalHtml).toContain('6/300');
   });
 });

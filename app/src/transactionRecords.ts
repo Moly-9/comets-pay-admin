@@ -2,12 +2,17 @@ import { isInvoiceApprovedForPayment } from './invoice/invoiceReviewWorkflow';
 import { accountDisplayValue } from './accountPresentation';
 import { formatCreatorHandle } from './creatorSearchOptions';
 import {
+  HISTORICAL_PAYMENT_BATCH_SEEDS,
+  type HistoricalPaymentBatchSeed,
+} from './historicalPaymentBatchFixtures';
+import {
   type PaymentBatchContractSnapshot,
   type PaymentBatchInvoiceSnapshot,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
 } from './paymentBatches';
-import type { Payout } from './types';
+import type { InvoiceCurrency, Payout } from './types';
+import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 import {
   ALL_PAYMENT_STATUSES,
   aggregatePaymentStatus,
@@ -31,6 +36,27 @@ export type TransactionRecordFilters = {
 export type TransactionBatchContext = Readonly<{
   batch: PaymentBatchRecord;
   item: PaymentBatchItemSnapshot;
+}>;
+
+export type TransactionRecordStatus = Extract<
+  Payout['status'],
+  '付款处理中' | '已付款' | '付款失败'
+>;
+
+export type TransactionRecord = Readonly<{
+  key: string;
+  paymentBatchId: PaymentBatchRecord['paymentBatchId'];
+  payout: Payout;
+  context: TransactionBatchContext | null;
+  status: TransactionRecordStatus;
+  occurredAt: string;
+  provider: Payout['provider'];
+  paymentAmount: number;
+  paymentCurrency: InvoiceCurrency;
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency: InvoiceCurrency;
 }>;
 
 type TransactionContractDetails = Omit<PaymentBatchContractSnapshot, 'contractId'> & Readonly<{
@@ -65,102 +91,17 @@ export type TransactionRecordDetails = Readonly<{
   failure?: PaymentBatchItemSnapshot['failure'];
 }>;
 
-type HistoricalTransactionSeed = Readonly<{
-  payer: string;
-  paymentBatchCode: string;
-  requestCode: string;
-  paymentListCode: string;
-  invoiceDate: string;
-  transferMethod: string;
-}>;
-
-const HISTORICAL_TRANSACTION_SEEDS: Readonly<Record<string, HistoricalTransactionSeed>> = {
-  'pay-005': {
-    payer: '奚文慧',
-    paymentBatchCode: 'BAT-20260716-001',
-    requestCode: 'REQ-20260716-000005',
-    paymentListCode: 'PAY-20260716-001',
-    invoiceDate: '2026-07-12',
-    transferMethod: '本地转账',
-  },
-  'pay-006': {
-    payer: '李梦',
-    paymentBatchCode: 'BAT-20260715-001',
-    requestCode: 'REQ-20260715-000006',
-    paymentListCode: 'PAY-20260715-001',
-    invoiceDate: '2026-07-11',
-    transferMethod: '本地转账',
-  },
-  'pay-017': {
-    payer: '吴雪霓',
-    paymentBatchCode: 'BAT-20260804-001',
-    requestCode: 'REQ-20260804-000017',
-    paymentListCode: 'PAY-20260804-001',
-    invoiceDate: '2026-08-02',
-    transferMethod: '本地转账',
-  },
-  'pay-018': {
-    payer: '奚文慧',
-    paymentBatchCode: 'BAT-20260725-001',
-    requestCode: 'REQ-20260725-000018',
-    paymentListCode: 'PAY-20260725-001',
-    invoiceDate: '2026-07-22',
-    transferMethod: '本地转账',
-  },
-  'pay-019': {
-    payer: '李梦',
-    paymentBatchCode: 'BAT-20260726-001',
-    requestCode: 'REQ-20260726-000019',
-    paymentListCode: 'PAY-20260726-001',
-    invoiceDate: '2026-07-23',
-    transferMethod: 'PayPal',
-  },
-  'pay-026': {
-    payer: '吴雪霓',
-    paymentBatchCode: 'BAT-20260804-002',
-    requestCode: 'REQ-20260804-000026',
-    paymentListCode: 'PAY-20260804-002',
-    invoiceDate: '2026-08-01',
-    transferMethod: '本地转账',
-  },
-  'pay-027': {
-    payer: '奚文慧',
-    paymentBatchCode: 'BAT-20260805-001',
-    requestCode: 'REQ-20260805-000027',
-    paymentListCode: 'PAY-20260805-001',
-    invoiceDate: '2026-08-02',
-    transferMethod: '本地转账',
-  },
-  'pay-028': {
-    payer: '李梦',
-    paymentBatchCode: 'BAT-20260806-001',
-    requestCode: 'REQ-20260806-000028',
-    paymentListCode: 'PAY-20260806-001',
-    invoiceDate: '2026-08-03',
-    transferMethod: 'SWIFT',
-  },
-  'pay-029': {
-    payer: '吴雪霓',
-    paymentBatchCode: 'BAT-20260807-001',
-    requestCode: 'REQ-20260807-000029',
-    paymentListCode: 'PAY-20260807-001',
-    invoiceDate: '2026-08-04',
-    transferMethod: '本地转账',
-  },
-  'pay-030': {
-    payer: '奚文慧',
-    paymentBatchCode: 'BAT-20260808-001',
-    requestCode: 'REQ-20260808-000030',
-    paymentListCode: 'PAY-20260808-001',
-    invoiceDate: '2026-08-05',
-    transferMethod: '本地转账',
-  },
-};
-
 export const findTransactionBatchContext = (
-  payout: Pick<Payout, 'id'>,
+  payout: Pick<Payout, 'id' | 'currentPaymentAttempt' | 'paymentFailureRecovery'>,
   batches: readonly PaymentBatchRecord[],
 ): TransactionBatchContext | null => {
+  const currentBatchId = payout.currentPaymentAttempt?.paymentBatchId
+    ?? payout.paymentFailureRecovery?.retryBatchId;
+  if (currentBatchId) {
+    const batch = batches.find((candidate) => candidate.paymentBatchId === currentBatchId);
+    const item = batch?.items.find((candidate) => candidate.payoutId === payout.id);
+    return batch && item ? { batch, item } : null;
+  }
   for (const batch of batches) {
     const item = batch.items.find((candidate) => candidate.payoutId === payout.id);
     if (item) return { batch, item };
@@ -176,9 +117,156 @@ export const transactionOccurredAt = (payout: Payout) => (
       : ''
 );
 
+const normalizedTransactionStatus = (
+  status: Payout['status'],
+): TransactionRecordStatus | null => {
+  if (status === '已退回') return '付款失败';
+  if (status === '付款处理中' || status === '已付款' || status === '付款失败') return status;
+  return null;
+};
+
+const batchItemPayoutSnapshot = (
+  batch: PaymentBatchRecord,
+  item: PaymentBatchItemSnapshot,
+  status: TransactionRecordStatus,
+): Payout => ({
+  id: item.payoutId,
+  paymentRequestProjectId: batch.request.paymentRequestProjectId,
+  creator: item.creatorName,
+  handle: item.creatorHandle,
+  creatorSocialAccountId: item.creatorSocialAccountId,
+  creatorPlatform: item.creatorPlatform,
+  initials: item.creatorName.trim().slice(0, 2).toLocaleUpperCase() || '—',
+  projectId: batch.request.cooperationProjectCode,
+  project: batch.request.cooperationProjectName,
+  deliverable: item.deliverable,
+  contract: item.contracts[0]?.contractCode ?? item.legacyContractReference ?? '',
+  invoice: item.invoice?.invoiceNumber ?? item.legacyInvoiceReference ?? '',
+  provider: item.provider,
+  currency: item.currency,
+  amount: item.amount,
+  account: item.accountSummary,
+  payoutAccountId: item.payoutAccountId,
+  payoutAccountVersion: item.payoutAccountVersion,
+  transferFeeAmount: item.transferFeeAmount,
+  transferFeeCurrency: item.transferFeeCurrency,
+  actualPaidAmount: item.actualPaidAmount,
+  actualPaidCurrency: item.actualPaidCurrency,
+  recipientReceivedAmount: item.recipientReceivedAmount,
+  recipientReceivedCurrency: item.recipientReceivedCurrency,
+  postTransactionBalance: item.postTransactionBalance,
+  postTransactionBalanceCurrency: item.postTransactionBalanceCurrency,
+  status,
+  invoiceReviewStatus: '已通过',
+  paymentFailure: status === '付款失败' && item.failure ? {
+    provider: item.provider,
+    errorCode: item.failure.code,
+    providerResponse: item.failure.response,
+    occurredAt: item.failure.occurredAt,
+  } : undefined,
+  accent: '#64748b',
+  paidAt: status === '已付款' ? item.paidAt : undefined,
+});
+
+const transactionRecordFromBatchItem = (
+  batch: PaymentBatchRecord,
+  item: PaymentBatchItemSnapshot,
+  livePayout?: Payout,
+): TransactionRecord | null => {
+  const attempt = item.paymentAttempts?.find((candidate) => (
+    candidate.paymentBatchId === batch.paymentBatchId
+    || (
+      !candidate.paymentBatchId
+      && candidate.attemptNumber === batch.paymentAttemptNumber
+    )
+  ));
+  const resolvedItem: PaymentBatchItemSnapshot = attempt ? {
+    ...item,
+    paymentStatus: attempt.status,
+    paidAt: attempt.occurredAt ?? item.paidAt,
+    transferFeeAmount: attempt.transferFeeAmount ?? item.transferFeeAmount,
+    transferFeeCurrency: attempt.transferFeeCurrency ?? item.transferFeeCurrency,
+    actualPaidAmount: attempt.actualPaidAmount ?? item.actualPaidAmount,
+    actualPaidCurrency: attempt.actualPaidCurrency ?? item.actualPaidCurrency,
+    recipientReceivedAmount: attempt.recipientReceivedAmount ?? item.recipientReceivedAmount,
+    recipientReceivedCurrency: attempt.recipientReceivedCurrency ?? item.recipientReceivedCurrency,
+    failure: attempt.status === '付款失败' && (attempt.errorCode || attempt.providerResponse)
+      ? {
+          code: attempt.errorCode || '未记录',
+          response: attempt.providerResponse || '未记录',
+          occurredAt: attempt.occurredAt || item.failure?.occurredAt || '未记录',
+        }
+      : item.failure,
+  } : item;
+  const status = normalizedTransactionStatus(resolvedItem.paymentStatus);
+  if (!status) return null;
+  const payout = livePayout
+    ? {
+        ...livePayout,
+        status,
+        paidAt: status === '已付款' ? resolvedItem.paidAt : undefined,
+        paymentFailure: status === '付款失败' && resolvedItem.failure ? {
+          provider: resolvedItem.provider,
+          errorCode: resolvedItem.failure.code,
+          providerResponse: resolvedItem.failure.response,
+          occurredAt: resolvedItem.failure.occurredAt,
+        } : undefined,
+      }
+    : batchItemPayoutSnapshot(batch, resolvedItem, status);
+  const recipientCurrency = resolvedItem.receiveCurrency;
+  const explicitReceived = resolvedItem.recipientReceivedAmount;
+  const explicitReceivedMatchesCurrency = explicitReceived !== undefined
+    && resolvedItem.recipientReceivedCurrency === recipientCurrency;
+  const derivedReceived = status === '已付款'
+    ? prototypeRecipientReceivedAmountFor({
+        amount: resolvedItem.amount,
+        currency: resolvedItem.currency,
+        receiveCurrency: recipientCurrency,
+        feeBearer: resolvedItem.feeBearer,
+        transferFeeAmount: resolvedItem.transferFeeAmount,
+        transferFeeCurrency: resolvedItem.transferFeeCurrency,
+      })
+    : undefined;
+
+  return {
+    key: `batch:${batch.paymentBatchId}:payout:${resolvedItem.payoutId}`,
+    paymentBatchId: batch.paymentBatchId,
+    payout,
+    context: { batch, item: resolvedItem },
+    status,
+    occurredAt: resolvedItem.failure?.occurredAt ?? resolvedItem.paidAt ?? batch.paidAt,
+    provider: resolvedItem.provider,
+    paymentAmount: resolvedItem.amount,
+    paymentCurrency: resolvedItem.currency,
+    transferFeeAmount: resolvedItem.transferFeeAmount,
+    transferFeeCurrency: resolvedItem.transferFeeCurrency,
+    recipientReceivedAmount: status === '付款失败'
+      ? 0
+      : status === '已付款'
+        ? explicitReceivedMatchesCurrency ? explicitReceived : derivedReceived
+        : undefined,
+    recipientReceivedCurrency: recipientCurrency,
+  };
+};
+
+export const createTransactionRecords = (
+  payouts: readonly Payout[],
+  batches: readonly PaymentBatchRecord[],
+): TransactionRecord[] => {
+  const payoutsById = new Map(payouts.map((payout) => [payout.id, payout]));
+  const batchRecords = batches.flatMap((batch) => batch.items.flatMap((item) => {
+    const record = transactionRecordFromBatchItem(batch, item, payoutsById.get(item.payoutId));
+    return record ? [record] : [];
+  }));
+
+  return batchRecords.sort((left, right) => (
+    right.occurredAt.localeCompare(left.occurredAt)
+  ));
+};
+
 const historicalTransactionDetails = (
   payout: Payout,
-  seed: HistoricalTransactionSeed,
+  seed: HistoricalPaymentBatchSeed,
 ): TransactionRecordDetails => {
   const failed = payout.status === '付款失败';
   const paymentTime = transactionOccurredAt(payout);
@@ -239,7 +327,10 @@ export const transactionRecordDetails = (
     return {
       source: 'batch',
       payer: context.batch.payer,
-      paymentTime: context.item.paidAt ?? context.batch.paidAt ?? transactionOccurredAt(payout),
+      paymentTime: context.item.failure?.occurredAt
+        ?? context.item.paidAt
+        ?? context.batch.paidAt
+        ?? transactionOccurredAt(payout),
       paymentBatchCode: context.batch.paymentBatchCode,
       requestCode: context.batch.request.requestCode,
       requestStatus: context.batch.request.requestStatus,
@@ -261,7 +352,7 @@ export const transactionRecordDetails = (
     };
   }
 
-  const historicalSeed = HISTORICAL_TRANSACTION_SEEDS[payout.id];
+  const historicalSeed = HISTORICAL_PAYMENT_BATCH_SEEDS[payout.id];
   if (historicalSeed) return historicalTransactionDetails(payout, historicalSeed);
 
   return {
@@ -290,6 +381,10 @@ export const transactionDateKey = (payout: Payout) => (
   transactionOccurredAt(payout).match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? ''
 );
 
+export const transactionRecordDateKey = (record: TransactionRecord) => (
+  record.occurredAt.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? ''
+);
+
 export const isFinalTransaction = (payout: Payout) => (
   isInvoiceApprovedForPayment(payout)
   && (payout.status === '已付款' || payout.status === '付款失败')
@@ -302,26 +397,19 @@ export const isPaymentTransactionRecord = (payout: Payout) => (
 
 export const transactionPaymentStatus = (
   payout: Payout,
-  payouts: readonly Payout[],
+  _payouts: readonly Payout[],
   batches: readonly PaymentBatchRecord[] = [],
 ): PaymentAggregateStatus => {
   const context = findTransactionBatchContext(payout, batches);
   if (!context) return aggregatePaymentStatus([payout.status]);
-  const payoutById = new Map(payouts.map((item) => [item.id, item]));
-  const statuses = context.batch.items.map((item) => (
-    payoutById.get(item.payoutId)?.status ?? item.paymentStatus
-  ));
-  return aggregatePaymentStatus(statuses, context.batch.status);
+  return context.batch.status;
 };
 
-const matchesTransactionSearch = (
-  payout: Payout,
-  search: string,
-  batchContext: TransactionBatchContext | null,
-) => {
+const matchesTransactionSearch = (record: TransactionRecord, search: string) => {
   const term = search.trim().toLocaleLowerCase();
   if (!term) return true;
-  const details = transactionRecordDetails(payout, batchContext);
+  const { payout, context } = record;
+  const details = transactionRecordDetails(payout, context);
   return [
     payout.creator,
     payout.handle,
@@ -329,9 +417,9 @@ const matchesTransactionSearch = (
     payout.projectId,
     payout.invoice,
     payout.contract,
-    payout.provider,
-    payout.currency,
-    payout.status,
+    record.provider,
+    record.paymentCurrency,
+    record.status,
     details.paymentBatchCode,
     details.requestCode,
     details.cooperationProjectCode,
@@ -343,24 +431,22 @@ const matchesTransactionSearch = (
 };
 
 export const filterTransactionRecords = (
-  payouts: Payout[],
+  records: readonly TransactionRecord[],
   filters: TransactionRecordFilters,
-  batches: readonly PaymentBatchRecord[] = [],
-) => payouts.filter((payout) => {
-  if (!isPaymentTransactionRecord(payout)) return false;
-  if (filters.tab === 'paid' && !['已付款', '付款处理中'].includes(payout.status)) return false;
-  if (filters.tab === 'failed' && payout.status !== '付款失败') return false;
+) => records.filter((record) => {
+  if (filters.tab === 'paid' && !['已付款', '付款处理中'].includes(record.status)) return false;
+  if (filters.tab === 'failed' && record.status !== '付款失败') return false;
   const paymentStatus = filters.status ?? ALL_PAYMENT_STATUSES;
   if (paymentStatus === '已付款' || paymentStatus === '付款处理中') {
-    if (payout.status !== paymentStatus) return false;
+    if (record.status !== paymentStatus) return false;
   } else if (!matchesPaymentStatus(
-    transactionPaymentStatus(payout, payouts, batches),
+    record.context?.batch.status ?? aggregatePaymentStatus([record.status]),
     paymentStatus,
   )) return false;
-  if (filters.provider !== 'all' && payout.provider !== filters.provider) return false;
-  if (!matchesTransactionSearch(payout, filters.search, findTransactionBatchContext(payout, batches))) return false;
+  if (filters.provider !== 'all' && record.provider !== filters.provider) return false;
+  if (!matchesTransactionSearch(record, filters.search)) return false;
 
-  const date = transactionDateKey(payout);
+  const date = transactionRecordDateKey(record);
   if (filters.startDate && (!date || date < filters.startDate)) return false;
   if (filters.endDate && (!date || date > filters.endDate)) return false;
   return true;

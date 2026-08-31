@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   INITIAL_CONTRACTS,
   contractMatchesValidityFilter,
+  getContractManagementBucket,
   getContractValidity,
   isContractAvailableForNewAssociation,
   isPaymentContract,
@@ -73,5 +74,39 @@ describe('contract validity', () => {
     expect(isPaymentContract(expired)).toBe(true);
     expect(isContractAvailableForNewAssociation(expired, REFERENCE_DATE)).toBe(false);
     expect(isContractAvailableForNewAssociation(contractEnding('2026-09-18'), REFERENCE_DATE)).toBe(true);
+  });
+
+  it('applies the contract-management bucket priority without reading legacy status', () => {
+    const expiredDate = '2026-09-17';
+    const futureDate = '2026-10-31';
+    const editingDraft = {
+      ...contractEnding(expiredDate),
+      lifecycle: 'EDITING_DRAFT' as const,
+      status: '已生效' as const,
+    };
+    const expiredGenerated = {
+      ...contractEnding(expiredDate),
+      lifecycle: 'GENERATED_DRAFT' as const,
+      signed: false,
+      status: '待签署' as const,
+    };
+    const pendingSignature = {
+      ...contractEnding(futureDate),
+      lifecycle: 'GENERATED_DRAFT' as const,
+      signed: false,
+      status: '已生效' as const,
+    };
+    const pendingConfirmation = {
+      ...contractEnding(futureDate),
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      signed: false,
+      status: '已生效' as const,
+    };
+
+    expect(getContractManagementBucket(editingDraft, REFERENCE_DATE)).toBe('draft');
+    expect(getContractManagementBucket(expiredGenerated, REFERENCE_DATE)).toBe('expired');
+    expect(getContractManagementBucket(pendingSignature, REFERENCE_DATE)).toBe('signature');
+    expect(getContractManagementBucket(pendingConfirmation, REFERENCE_DATE)).toBe('attention');
+    expect(getContractManagementBucket({ ...baseContract, campaignEnd: futureDate, status: '待解析' }, REFERENCE_DATE)).toBe('ready');
   });
 });

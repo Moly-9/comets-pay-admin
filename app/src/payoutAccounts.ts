@@ -7,6 +7,7 @@ import type {
   CreatorPayoutAccount,
   CreatorProfile,
   DocumentPayoutSnapshot,
+  InvoicePaymentMethod,
   PayMaxPayoutAccount,
   PayPalPayoutAccount,
   PayoutAccountStatus,
@@ -279,6 +280,7 @@ export const prepareCreatorPayoutAccountsForSave = (
   creatorId: string,
   previousAccounts: CreatorPayoutAccount[],
   nextAccounts: CreatorPayoutAccount[],
+  updatedAt = new Date().toISOString(),
 ) => {
   const archived: CreatorPayoutAccount[] = [];
   const accounts = nextAccounts.map((candidate) => {
@@ -296,6 +298,7 @@ export const prepareCreatorPayoutAccountsForSave = (
       return {
         ...candidate,
         ...identity,
+        updatedAt: candidate.updatedAt || updatedAt,
         payoutAccountVersion: candidate.payoutAccountVersion || 'v1',
         accountFingerprint: `fp_${fingerprintHash(payoutAccountFingerprintSource(candidate))}`,
       } as CreatorPayoutAccount;
@@ -305,6 +308,7 @@ export const prepareCreatorPayoutAccountsForSave = (
       return {
         ...candidate,
         ...identity,
+        updatedAt: previous.updatedAt || candidate.updatedAt,
         payoutAccountVersion: getPayoutAccountVersion(previous),
         accountFingerprint: getPayoutAccountFingerprint(previous),
       } as CreatorPayoutAccount;
@@ -313,6 +317,7 @@ export const prepareCreatorPayoutAccountsForSave = (
       return {
         ...candidate,
         ...identity,
+        updatedAt,
         payoutAccountVersion: getPayoutAccountVersion(previous),
         accountFingerprint: `fp_${fingerprintHash(payoutAccountFingerprintSource(candidate))}`,
       } as CreatorPayoutAccount;
@@ -328,6 +333,7 @@ export const prepareCreatorPayoutAccountsForSave = (
     return {
       ...candidate,
       ...identity,
+      updatedAt,
       payoutAccountVersion: nextPayoutAccountVersion(getPayoutAccountVersion(previous)),
       accountFingerprint: `fp_${fingerprintHash(payoutAccountFingerprintSource(candidate))}`,
     } as CreatorPayoutAccount;
@@ -575,6 +581,13 @@ export const eligibleInvoicePayoutAccounts = (
   && isPayoutAccountUsableForDocuments(account)
   && (account.provider === 'Airwallex' || account.provider === 'PayPal')
 )) ?? [];
+
+export const invoicePaymentMethodForProvider = (
+  provider?: Provider | null,
+  fallback: InvoicePaymentMethod = 'bank',
+): InvoicePaymentMethod => (
+  provider ? (provider === 'PayPal' ? 'paypal' : 'bank') : fallback
+);
 
 export const hasPayoutAccountHistory = (account: CreatorPayoutAccount) => Boolean(
   account.hasPaymentHistory
@@ -856,6 +869,7 @@ export const createDocumentPayoutSnapshot = (
     | 'accountFingerprint'
     | 'schemaKey'
     | 'validationStatus'
+    | 'updatedAt'
   > = {
     creatorId: creatorId || account.creatorId,
     payoutAccountId: getPayoutAccountId(account),
@@ -865,6 +879,7 @@ export const createDocumentPayoutSnapshot = (
     accountFingerprint: getPayoutAccountFingerprint(account),
     schemaKey: account.schemaKey || schemaKeyForAccount(account),
     validationStatus: account.status,
+    updatedAt: account.updatedAt,
   };
   if (account.provider === 'PayPal') {
     return {

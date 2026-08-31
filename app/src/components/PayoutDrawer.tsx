@@ -1,11 +1,14 @@
 import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
-import { Avatar, Button, Modal, StatusMark } from './Common';
+import type { PaymentListItem } from '../businessWorkflow';
+import { Button, Modal, StatusMark } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { accountDisplayValue } from '../accountPresentation';
 import { formatAmount, getProjectFixture, SYSTEM_USERS, type SystemUser } from '../data';
 import type { ContractRecord } from '../contracts';
-import type { PaymentFailureIssueType, Payout } from '../types';
+import { paymentCreatorIdentityFromPayout } from '../paymentCreatorIdentity';
+import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 
 type ApprovalAssignment = {
   media: string;
@@ -112,6 +115,8 @@ const frozenAccountLabel = (payout: Payout) => {
 
 export function PayoutDrawer({
   payout,
+  paymentItem,
+  creator,
   onClose,
   onAdvance,
   onPaymentFailed,
@@ -124,6 +129,8 @@ export function PayoutDrawer({
   onViewInvoice,
 }: {
   payout: Payout;
+  paymentItem?: PaymentListItem;
+  creator?: CreatorProfile;
   onClose: () => void;
   onAdvance: (payout: Payout) => void;
   onPaymentFailed: (payout: Payout) => void;
@@ -138,6 +145,7 @@ export function PayoutDrawer({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [issueType, setIssueType] = useState<PaymentFailureIssueType | ''>('');
+  const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
   const currentIndex = timelineIndex(payout.status);
   const approvalAssignment = getProjectApprovalAssignment(payout);
   const steps: Array<{ label: string; description: string; actor: ApprovalActor }> = [
@@ -195,8 +203,10 @@ export function PayoutDrawer({
 
         <div className="drawer-content">
           <div className="drawer-creator">
-            <Avatar initials={payout.initials} accent={payout.accent} size="lg" />
-            <div><strong>{payout.creator}</strong><span>{payout.project}</span></div>
+            <div className="drawer-creator-main">
+              <PaymentCreatorIdentity size="lg" {...creatorIdentity} />
+              <span className="drawer-creator-project">{payout.project}</span>
+            </div>
             <StatusMark status={payout.status} />
           </div>
 
@@ -299,9 +309,9 @@ export function PayoutDrawer({
             {actionLabel && canAdvance ? <Button onClick={() => onAdvance(payout)}>{actionLabel}</Button> : null}
             {canReturnFailure ? <Button variant="danger" onClick={openReturnDialog}>退回媒介</Button> : null}
             {payout.paymentFailureRecovery?.status === 'PENDING_FINANCE_CONFIRMATION' ? (
-              <Button icon={<ShieldCheck size={16} />} disabled={!canConfirmAccountChange} title={canConfirmAccountChange ? '确认新执行账户并解锁重试' : '需要财务账号确认'} onClick={() => onConfirmAccountChange(payout.id)}>确认新执行账户</Button>
+              <Button icon={<ShieldCheck size={16} />} disabled={!canConfirmAccountChange} disabledReason="需要财务账号确认新的执行账户。" title={canConfirmAccountChange ? '确认新执行账户并解锁重试' : '需要财务账号确认'} onClick={() => onConfirmAccountChange(payout.id)}>确认新执行账户</Button>
             ) : null}
-            {payout.status === '飞书审批中' ? <Button disabled>等待飞书审批</Button> : null}
+            {payout.status === '飞书审批中' ? <Button disabled disabledReason="飞书审批尚未完成，请等待审批结果。">等待飞书审批</Button> : null}
             {(payout.status === '已付款' || payout.status === '已退回') ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
           </footer>
         </aside>
@@ -315,7 +325,7 @@ export function PayoutDrawer({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!normalizedReturnReason || !issueType} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!normalizedReturnReason || !issueType} disabledReason={!issueType ? '请先选择问题类型。' : '请先填写退回原因。'} onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >

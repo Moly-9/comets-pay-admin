@@ -18,6 +18,10 @@ import {
   createContractQualityReport,
   replaceContractPlaceholders,
 } from './contractTemplate';
+import {
+  ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
+  DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+} from './contractTemplateFieldPolicies';
 
 const toArrayBuffer = (buffer: Buffer) => (
   buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
@@ -104,8 +108,6 @@ const optionalFieldsBlankModel = (): ContractGenerationModel => ({
   projectName: '',
   brandName: '',
   effectiveDate: '',
-  campaignStart: '',
-  campaignEnd: '',
   purposeItems: [],
   promotedProduct: '',
   hashtag: '',
@@ -165,6 +167,17 @@ describe('contract generation', () => {
     ))).toBe(false);
     expect(text).toContain('Associated Company means a company');
     expect(text).not.toContain('Associated Compan y');
+  });
+
+  it('reuses parsed template rows for repeated generation from the same source', async () => {
+    const template = await readTemplate();
+    const firstExtraction = extractContractTemplatePageLines(template);
+    const secondExtraction = extractContractTemplatePageLines(template);
+
+    expect(secondExtraction).toBe(firstExtraction);
+    const [firstPages, secondPages] = await Promise.all([firstExtraction, secondExtraction]);
+    expect(secondPages).toBe(firstPages);
+    expect(firstPages).toHaveLength(17);
   });
 
   it('replaces registered placeholders without changing unrelated text', () => {
@@ -321,4 +334,97 @@ describe('contract generation', () => {
       await writeFile(resolve(renderFixtureDir, 'synthetic-contract-formal.docx'), Buffer.from(await formalBlob.arrayBuffer()));
     }
   }, 60_000);
+
+  it('keeps manual values and structurally deleted rows identical across PDF and DOCX output', async () => {
+    const configured: ContractGenerationModel = {
+      ...model,
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        campaignPeriod: 'SYSTEM',
+        accountName: 'MANUAL',
+        accountNumber: 'OMIT',
+        iban: 'MANUAL',
+      },
+      templateOutputFieldKeys: ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => (
+        key !== 'remittanceInformation'
+      )),
+      templateManualFieldValues: {
+        accountName: 'Document-only Beneficiary',
+        iban: 'MANUAL-IBAN-2026',
+      },
+    };
+    const [template, fonts] = await Promise.all([readTemplate(), readFonts()]);
+    const [pdfBlob, docxBlob] = await Promise.all([
+      generateContractPdf(configured, template, fonts, 'FORMAL'),
+      generateContractDocx(configured, template, 'FORMAL'),
+    ]);
+    const [renderedPdf, archive] = await Promise.all([
+      pdfText(pdfBlob),
+      JSZip.loadAsync(await docxBlob.arrayBuffer()),
+    ]);
+    const documentXml = await archive.file('word/document.xml')?.async('string') ?? '';
+
+    [renderedPdf, documentXml].forEach((output) => {
+      expect(output).toContain('Document-only Beneficiary');
+      expect(output).toContain('MANUAL-IBAN-2026');
+      expect(output).not.toContain('0000001234');
+      expect(output).not.toContain('Remittance Information (optional)');
+      expect(output).not.toContain('Synthetic test only');
+    });
+    expect(model.paymentSnapshot.accountName).toBe('Sample Creator Limited');
+  }, 60_000);
+
+  it('applies PayPal manual fields and blocks omitted required inline or missing system-period fields', () => {
+    const paypal: ContractGenerationModel = {
+      ...model,
+      payoutProvider: 'PayPal',
+      paymentMethod: 'PAYPAL',
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        campaignPeriod: 'SYSTEM',
+        paypalUsername: 'MANUAL',
+        paypalEmailAddress: 'MANUAL',
+        transferNote: 'OMIT',
+      },
+      templateManualFieldValues: {
+        paypalUsername: 'Manual PayPal User',
+        paypalEmailAddress: 'manual.paypal@example.com',
+      },
+      paymentSnapshot: {
+        ...model.paymentSnapshot,
+        paypalUsername: 'System PayPal User',
+        paypalEmail: 'system.paypal@example.com',
+      },
+    };
+    const rendered = replaceContractPlaceholders(
+      '{{paypal_username}}|{{paypal_email}}|{{transfer_note}}',
+      paypal,
+      'FORMAL',
+    );
+    const omittedPublisher = createContractQualityReport({
+      ...model,
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        campaignPeriod: 'SYSTEM',
+        publisher: 'OMIT',
+      },
+    });
+    const missingSystemPeriod = createContractQualityReport({
+      ...model,
+      campaignStart: '',
+      campaignEnd: '',
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        campaignPeriod: 'SYSTEM',
+      },
+    });
+
+    expect(rendered).toBe('Manual PayPal User|manual.paypal@example.com|');
+    expect(omittedPublisher.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: 'BLOCKER', fieldKey: 'publisher' }),
+    ]));
+    expect(missingSystemPeriod.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: 'BLOCKER', fieldKey: 'campaignPeriod' }),
+    ]));
+  });
 });

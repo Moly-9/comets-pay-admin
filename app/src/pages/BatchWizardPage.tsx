@@ -1,13 +1,15 @@
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Search, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
+import type { PaymentListRecord } from '../businessWorkflow';
 import {
   createMockBatchSubmission,
   validatePayoutForBatch,
   type ExecutableBatchProvider,
   type MockBatchSubmission,
 } from '../batchTransfers';
-import { Avatar, Button, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { Button, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
 import {
@@ -15,7 +17,11 @@ import {
   isPaymentFailureRetryReady,
   paymentFailureRecoveryLabel,
 } from '../paymentFailureRecovery';
-import type { InvoiceCurrency, Payout } from '../types';
+import {
+  findPaymentListItemForPayout,
+  paymentCreatorIdentityFromPayout,
+} from '../paymentCreatorIdentity';
+import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
 
 const STEPS = ['选择付款', '校验资料', '选择渠道', '确认提交'];
 const PROVIDERS: Array<{
@@ -46,11 +52,17 @@ const FUNDING_ACCOUNTS: Record<ExecutableBatchProvider, Array<{ value: string; l
 
 export function BatchWizardPage({
   payouts,
+  generatedInvoices = [],
+  paymentLists = [],
+  creators = [],
   onCancel,
   onSubmit,
   onDraft,
 }: {
   payouts: Payout[];
+  generatedInvoices?: GeneratedInvoiceRecord[];
+  paymentLists?: PaymentListRecord[];
+  creators?: CreatorProfile[];
   onCancel: () => void;
   onSubmit: (submission: MockBatchSubmission) => void;
   onDraft: () => void;
@@ -177,6 +189,9 @@ export function BatchWizardPage({
               <thead><tr><th><input aria-label="全选付款" type="checkbox" checked={mode === 'batch' && payouts.filter((payout) => !isPaymentFailureRetryCandidate(payout) || isPaymentFailureRetryReady(payout)).every((payout) => selected.has(payout.id))} disabled={mode === 'single'} onChange={toggleAll} /></th><th>达人 / 项目</th><th>执行账户</th><th>资料校验</th><th>金额</th></tr></thead>
               <tbody>
                 {visiblePayouts.map((payout) => {
+                  const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+                  const paymentItem = findPaymentListItemForPayout(payout, generatedInvoices, paymentLists);
+                  const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
                   const accountCheck = getAccountCheck(payout);
                   const accountIssue = !accountCheck.eligible;
                   const rowIssue = selected.has(payout.id) && accountIssue;
@@ -185,7 +200,15 @@ export function BatchWizardPage({
                   return (
                     <tr className={`${rowIssue ? 'row-error ' : ''}${retryCandidate ? 'batch-retry-row' : ''}`.trim()} key={payout.id}>
                       <td><input aria-label={`选择 ${payout.creator}`} type="checkbox" checked={selected.has(payout.id)} disabled={retryBlocked} onChange={() => toggleOne(payout.id)} /></td>
-                      <td><div className="creator-cell"><Avatar initials={payout.initials} accent={payout.accent} size="sm" /><span><strong>{payout.creator}{retryCandidate ? <em className="batch-retry-badge">失败重试</em> : null}</strong><small>{payout.invoice} · {payout.project}</small></span></div></td>
+                      <td>
+                        <div className="batch-wizard-creator-cell">
+                          <PaymentCreatorIdentity {...creatorIdentity} />
+                          <span className="batch-wizard-creator-meta">
+                            <span title={`${payout.invoice} · ${payout.project}`}>{payout.invoice} · {payout.project}</span>
+                            {retryCandidate ? <em className="batch-retry-badge">失败重试</em> : null}
+                          </span>
+                        </div>
+                      </td>
                       <td>
                         <span className="batch-account-cell">
                           <strong>{provider}</strong>
@@ -260,7 +283,7 @@ export function BatchWizardPage({
 
       <footer className="batch-summary-bar">
         <div><span>已选 {selectedPayouts.length} 笔</span><strong>{Object.entries(totals).map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ') || '—'}</strong></div>
-        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} onClick={submit}>创建并提交</Button></div>
+        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} disabledReason={!selectedPayouts.length ? '请先选择付款记录。' : hasIssue ? '请先处理付款资料校验异常。' : '请先选择执行账户。'} onClick={submit}>创建并提交</Button></div>
       </footer>
 
     </div>

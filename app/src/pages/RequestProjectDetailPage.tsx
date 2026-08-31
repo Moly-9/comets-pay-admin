@@ -11,7 +11,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Avatar, Button, ListActionButton, Modal, PageHeading } from '../components/Common';
+import { Button, ListActionButton, Modal, PageHeading } from '../components/Common';
+import { CreatorIdentity } from '../components/CreatorIdentity';
+import { InvoiceContractMismatchNotice } from '../components/InvoiceContractMismatchNotice';
 import { PaymentListReviewContent } from '../components/PaymentListReviewContent';
 import { PaymentProviderBadge, paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { RequestProjectInfoCard } from '../components/RequestProjectInfoCard';
@@ -58,7 +60,6 @@ import {
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
 import { demoDisplayName } from '../demoCreatorNames';
-import { creatorHandleForDisplay } from '../creatorSearchOptions';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestExtraDetails & {
   id: string;
@@ -887,6 +888,25 @@ export function RequestProjectDetailPage({
     request.paymentChannel ?? payees.map((payee) => payee.channel),
   );
   const financeReview = buildRequestFinanceReview(request, generatedInvoices, paymentLists, contracts);
+  const contractMismatchNoticeItems = financeReview.pages.flatMap((page) => {
+    const review = page.contractMismatchReview;
+    if (!review?.reason) return [];
+    const reviewedAt = review.reviewedAt ? new Date(review.reviewedAt) : null;
+    const reviewedAtLabel = reviewedAt && !Number.isNaN(reviewedAt.getTime())
+      ? reviewedAt.toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      : review.reviewedAt;
+    return [{
+      invoiceNumber: page.invoiceNumber,
+      reason: review.reason,
+      meta: [review.actorName || review.actorRole, reviewedAtLabel].filter(Boolean).join(' · ') || undefined,
+    }];
+  });
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
   const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
   const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);
@@ -980,12 +1000,20 @@ export function RequestProjectDetailPage({
             brand={request.brand}
             pm={request.pm}
             paymentChannel={request.paymentChannel ? paymentProviderDisplayName(request.paymentChannel) : undefined}
+            paymentEntity={request.paymentEntity}
+            projectCostAttribution={request.projectCostAttribution}
             expectedPaymentDate={request.expectedPaymentDate}
             costType={request.costType}
+            costTypeDetail={request.costTypeDetail}
             media={request.media}
             createdAt={request.createdAt ?? request.approval?.submittedAt}
             reason={request.generatedDetail?.reason}
             remark={request.remark}
+          />
+
+          <InvoiceContractMismatchNotice
+            className="request-contract-mismatch-notices"
+            items={contractMismatchNoticeItems}
           />
 
           <section className="project-detail-card">
@@ -1033,9 +1061,7 @@ export function RequestProjectDetailPage({
                   const creator = payee.creatorId
                     ? creators.find((candidate) => String(candidate.id) === String(payee.creatorId))
                     : creators.find((candidate) => candidate.name === payee.name);
-                  const initials = payee.initials ?? creator?.initials ?? payee.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-                  const handle = creatorHandleForDisplay({ creator, socialAccountId: payee.socialAccountId, handle: payee.handle, platform: payee.platform });
-                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><Avatar initials={initials || '?'} accent={payee.accent ?? creator?.accent ?? '#718096'} size="sm" /><span><strong>{payee.name}</strong><small>{handle}</small></span></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
+                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><CreatorIdentity creator={creator} displayName={payee.name} initials={payee.initials} accent={payee.accent} fallbackHandle={payee.handle} fallbackPlatform={payee.platform} socialAccountsMaxVisible={1} /></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
                 })}</tbody>
               </table>
             </div>
@@ -1070,6 +1096,7 @@ export function RequestProjectDetailPage({
               {canReviewCurrentStage ? (
                 <Button
                   disabled={financeApprovalBlocked}
+                  disabledReason="财务资料校验尚未完成，当前不能审批通过。"
                   onClick={() => onApprovalAction(request, 'APPROVE')}
                 >
                   审批通过
@@ -1125,6 +1152,7 @@ export function RequestProjectDetailPage({
               <Button
                 variant="danger"
                 disabled={!normalizedReturnReason}
+                disabledReason="请先填写退回原因。"
                 onClick={() => {
                   onApprovalAction(request, 'RETURN', normalizedReturnReason);
                   setReturnDialogOpen(false);

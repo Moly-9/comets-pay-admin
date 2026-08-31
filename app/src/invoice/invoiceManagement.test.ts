@@ -162,6 +162,21 @@ describe('Invoice management presentation', () => {
     expect(getInvoiceManagementView(payout('已退回'))).toMatchObject({ tab: 'approved', status: '已通过' });
   });
 
+  it('routes an unsigned legacy review state back to the signature group', () => {
+    expect(getInvoiceManagementView(
+      payout('待媒介审核'),
+      undefined,
+      undefined,
+      { signed: false },
+    )).toMatchObject({ tab: 'signature', status: '待签署' });
+    expect(getInvoiceManagementView(
+      payout('待媒介审核'),
+      undefined,
+      undefined,
+      { signed: true },
+    )).toMatchObject({ tab: 'review', status: '待审核' });
+  });
+
   it.each(['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'] as const)(
     'presents %s as OA approval in the approved tab',
     (status) => {

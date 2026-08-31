@@ -90,11 +90,35 @@ export const requestApprovalReturnItemForInvoice = (
   && (!issueType || item.issueType === issueType)
 ));
 
+export const requestApprovalReturnItemForInvoiceEdit = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+) => state?.returnItems?.find((item) => (
+  item.invoiceId === invoiceId
+  && ['INVOICE_CONTENT', 'FULL_ITEM'].includes(item.issueType)
+));
+
+export const requestApprovalReturnItemForPaymentListEdit = (
+  state: RequestApprovalState | undefined,
+  invoiceId: RequestApprovalReturnItem['invoiceId'],
+) => state?.returnItems?.find((item) => (
+  item.invoiceId === invoiceId
+  && ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
+));
+
+export const requestApprovalReturnItemForContract = (
+  state: RequestApprovalState | undefined,
+  contractId: string,
+) => state?.returnItems?.find((item) => (
+  ['CONTRACT_CONTENT', 'FULL_ITEM'].includes(item.issueType)
+  && item.contractIds?.some((candidate) => String(candidate) === contractId)
+));
+
 export const requestApprovalAllowsInvoicePayoutOverride = (
   state: RequestApprovalState | undefined,
   invoiceId: RequestApprovalReturnItem['invoiceId'],
 ) => state?.status === 'RETURNED_TO_MEDIA_REVIEW' && Boolean(
-  requestApprovalReturnItemForInvoice(state, invoiceId, 'INVOICE_CONTENT'),
+  requestApprovalReturnItemForInvoiceEdit(state, invoiceId),
 );
 
 export const appendRequestApprovalReturnNotification = (
@@ -187,15 +211,27 @@ export const canReturnRequestApproval = (
 export const createRequestApprovalState = (
   occurredAt = new Date().toISOString(),
   previous?: RequestApprovalState,
-): RequestApprovalState => ({
-  status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
-    ? previous.resumeStatus
-    : 'PENDING_PM',
-  round: (previous?.round ?? 0) + 1,
-  history: previous?.history ?? [],
-  submittedAt: occurredAt,
-  updatedAt: occurredAt,
-});
+): RequestApprovalState => {
+  const round = (previous?.round ?? 0) + 1;
+  const previousSubmissions = previous?.submissionHistory?.length
+    ? previous.submissionHistory
+    : previous
+      ? [{ round: previous.round, submittedAt: previous.submittedAt }]
+      : [];
+  return {
+    status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
+      ? previous.resumeStatus
+      : 'PENDING_PM',
+    round,
+    history: previous?.history ?? [],
+    submittedAt: occurredAt,
+    submissionHistory: [
+      ...previousSubmissions.filter((submission) => submission.round !== round),
+      { round, submittedAt: occurredAt },
+    ],
+    updatedAt: occurredAt,
+  };
+};
 
 export const applyRequestApprovalAction = (
   state: RequestApprovalState,

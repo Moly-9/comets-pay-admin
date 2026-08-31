@@ -163,7 +163,7 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('一张付款单包含全部 Invoice');
     expect(source).toContain('ariaLabel="合同候选达人筛选"');
     expect(source).toContain('ariaLabel="Invoice 候选达人筛选"');
-    expect(source).toContain('Invoice 候选范围不会受当前请款项目达人名单限制');
+    expect(source).toContain('Invoice 候选范围不会受当前请款达人名单限制');
     expect(source).toContain('草稿尚未回传签署文件');
     expect(source).toContain('已上传，待人工确认');
     expect(source).toContain('合同尚未完成签署');
@@ -179,6 +179,7 @@ describe('request project resource aggregation', () => {
     expect(contractDialogSource).toContain('request-resource-contract-row');
     expect(contractDialogSource).toContain('request-contract-record-icon');
     expect(contractDialogSource).toContain('request-contract-name" title={contractName}');
+    expect(contractDialogSource).toContain('fallbackPlatform={contract.creatorPlatform ?? contract.platform} showAvatar={false} socialAccountsMaxVisible={1}');
     expect(contractDialogSource).toContain("readiness.ready ? ' is-success' : ''");
     expect(contractDialogSource).toContain('<span>合同金额</span><strong>{formatContractMoney(contract)}</strong>');
     expect(contractDialogSource).toContain('kind="danger"');
@@ -196,6 +197,7 @@ describe('request project resource aggregation', () => {
     expect(invoiceDialogSource).toContain('request-resource-invoice-card-list');
     expect(invoiceDialogSource).toContain('request-invoice-record-icon');
     expect(invoiceDialogSource).toContain('<ReceiptText size={19} strokeWidth={2} />');
+    expect(invoiceDialogSource).toContain('fallbackPlatform={invoice.snapshot.creatorPlatform} showAvatar={false} socialAccountsMaxVisible={1}');
     expect(invoiceDialogSource).toContain('关联已有 Invoice');
     expect(invoiceDialogSource).toContain('解除');
     expect(invoiceDialogSource).not.toContain('request-resource-select');
@@ -212,7 +214,9 @@ describe('request project resource aggregation', () => {
     expect(styles).toContain('.request-resource-invoice-card-list .request-resource-invoice-row');
     expect(styles).toContain('.request-invoice-record-icon');
     expect(styles).toContain('.request-resource-contract-card-list .request-resource-contract-row');
-    expect(styles).toContain('grid-template-columns: 40px minmax(260px, 1.8fr) minmax(150px, 1fr) minmax(120px, .65fr) auto');
+    expect(styles).toContain('grid-template-columns: 40px minmax(190px, 1.4fr) minmax(180px, 1fr) minmax(115px, .72fr) minmax(88px, .55fr) 132px');
+    expect(styles).toContain('.request-resource-contract-card-list .creator-social-account > span:last-child');
+    expect(styles).toContain('text-overflow: clip');
     expect(styles).toContain('-webkit-line-clamp: 2');
     expect(styles).toContain('.request-resource-contract-row .project-record-status.is-success');
   });
@@ -286,7 +290,7 @@ describe('request project resource aggregation', () => {
     expect(editorSource).toContain('请输入交易附言');
     expect(editorSource).toContain('onPointerUp');
     expect(editorSource).toContain('ArrowRight');
-    expect(toolbarSource).toContain('仅财务标记为“付款清单原因”的明细可修改');
+    expect(toolbarSource).toContain('仅财务退回范围内的付款明细可修改');
     expect(paymentRowsSource).toContain('payment-list-overview-state');
     expect(paymentRowsSource).toContain('is-generation-failed');
     expect(paymentRowsSource).toContain('校验未通过');
@@ -334,9 +338,10 @@ describe('request project resource aggregation', () => {
   it('keeps payment-return notifications separate from Invoice-content returns', () => {
     const source = readFileSync(new URL('./RequestProjectResourceManager.tsx', import.meta.url), 'utf8');
     const paymentRowsSource = source.slice(source.indexOf('payment-list-overview-rows'));
-    expect(paymentRowsSource).toContain("requestApprovalReturnItemForInvoice(");
-    expect(paymentRowsSource).toContain("'PAYMENT_LIST'");
-    expect(source).toContain("'INVOICE_CONTENT'");
+    expect(paymentRowsSource).toContain('requestApprovalReturnItemForPaymentListEdit(');
+    expect(paymentRowsSource).toContain("paymentListReturn.issueType === 'PAYMENT_LIST'");
+    expect(source).toContain('requestApprovalReturnItemForInvoiceEdit(');
+    expect(source).toContain('requestApprovalReturnItemForContract(');
     expect(source).toContain('通知达人修改付款明细');
     expect(source).toContain('当前仅模拟发送并保留通知记录');
   });
@@ -446,7 +451,7 @@ describe('Invoice association workflow', () => {
       request.creatorLinks ?? [],
       creators,
       [],
-    )).toBe('达人已通过其他合作关系加入当前请款项目');
+    )).toBe('达人已通过其他合作关系加入当前请款');
   });
 });
 

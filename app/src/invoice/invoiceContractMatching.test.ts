@@ -29,6 +29,7 @@ const payment = {
   payoutAccountVersion: 'v2' as const,
   payoutProvider: 'Airwallex' as const,
   accountFingerprint: 'fingerprint-1',
+  updatedAt: '2026-08-20T09:30:00.000Z',
   transferMethod: 'LOCAL' as const,
   localClearingSystem: 'ACH',
 };
@@ -128,7 +129,12 @@ describe('Invoice contract matching', () => {
       currency: 'EUR',
       totalFee: 480,
       payoutAccountId: 'account-2',
-      paymentSnapshot: { ...payment, payoutAccountId: 'account-2', accountNumber: '0000000002' },
+      paymentSnapshot: {
+        ...payment,
+        payoutAccountId: 'account-2',
+        accountNumber: '0000000002',
+        updatedAt: '2026-08-01T08:00:00.000Z',
+      },
     });
     const unresolved = evaluateInvoiceContractMatch([mismatched], model());
     expect(unresolved.reasonRequiredIssues.map((issue) => issue.field)).toEqual([
@@ -137,10 +143,44 @@ describe('Invoice contract matching', () => {
       'PAYMENT_ACCOUNT',
     ]);
     expect(unresolved.result).toBe('REASON_REQUIRED');
+    const accountIssue = unresolved.reasonRequiredIssues.find((issue) => issue.field === 'PAYMENT_ACCOUNT');
+    expect(accountIssue?.message).toBe('付款账户信息存在差异。');
+    expect(accountIssue?.message).not.toContain('CON-TEST-1');
+    expect(accountIssue?.paymentAccountDifference).toEqual({
+      fieldLabels: ['Account Number'],
+      technicalMetadataOnly: false,
+      contractAccounts: [{
+        contractReference: 'CON-TEST-1',
+        updatedAt: '2026-08-01T08:00:00.000Z',
+      }],
+      invoiceAccountUpdatedAt: '2026-08-20T09:30:00.000Z',
+    });
 
     const approved = evaluateInvoiceContractMatch([mismatched], model(), '合同为预算金额，Invoice 按本次实际交付结算。');
     expect(approved.result).toBe('APPROVED_WITH_REASON');
     expect(approved.canProceed).toBe(true);
+  });
+
+  it('keeps technical account identity matching without exposing raw metadata as payment fields', () => {
+    const result = evaluateInvoiceContractMatch([
+      contract({
+        payoutAccountId: 'account-2',
+        paymentSnapshot: {
+          ...payment,
+          payoutAccountId: 'account-2',
+          updatedAt: undefined,
+          verifiedAt: '2026-08-01 10:31',
+        },
+      }),
+    ], model());
+    const accountIssue = result.reasonRequiredIssues.find((issue) => issue.field === 'PAYMENT_ACCOUNT');
+
+    expect(accountIssue?.message).toBe('账户记录版本不同，付款信息字段一致。');
+    expect(accountIssue?.paymentAccountDifference).toMatchObject({
+      fieldLabels: [],
+      technicalMetadataOnly: true,
+      contractAccounts: [{ updatedAt: '2026-08-01 10:31' }],
+    });
   });
 
   it('sums populated contracts while leaving blank framework fields not applicable', () => {

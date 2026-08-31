@@ -13,7 +13,8 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Avatar, Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { CreatorIdentity } from '../components/CreatorIdentity';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import type { ContractRecord } from '../contracts';
 import type {
@@ -43,8 +44,8 @@ import { demoDisplayName } from '../demoCreatorNames';
 import {
   creatorSocialAccounts,
   creatorSocialSelectionValue,
+  creatorSearchTerms,
   findCreatorSocialAccount,
-  formatCreatorHandle,
   parseCreatorSocialSelectionValue,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
@@ -88,6 +89,7 @@ export type ProjectSummary = {
 };
 
 type ProjectCreator = {
+  creatorId?: CreatorId;
   name: string;
   platform: string;
   deliverable: string;
@@ -584,7 +586,8 @@ function projectCreatorRows(
   const activeStatuses = ['脚本确认中', '待发布', '待验收', '已交付'];
 
   return resolveProjectCreatorReferences(project, creatorArchive).map((creator, index) => ({
-    name: creator.handle ? formatCreatorHandle(creator.handle, creator.platform) : creator.name,
+    creatorId: creator.creatorId,
+    name: creator.name,
     platform: creator.platform,
     deliverable: deliverables[index % deliverables.length],
     status: project.status === '已完成' ? '已完成' : activeStatuses[index % activeStatuses.length],
@@ -696,13 +699,13 @@ function ProjectCreatorManagerModal({
   onSave: (creatorHandles: string[]) => void;
   onClose: () => void;
 }) {
-  const creatorAccounts = useMemo(() => creatorArchive.flatMap((creator) => (
-    creatorSocialAccounts(creator).map((socialAccount) => ({
+  const creatorEntries = useMemo(() => creatorArchive.flatMap((creator) => {
+    const primaryAccount = creatorSocialAccounts(creator)[0];
+    return primaryAccount ? [{
       creator,
-      socialAccount,
-      value: creatorSocialSelectionValue(creator.id, socialAccount.id),
-    }))
-  )), [creatorArchive]);
+      value: creatorSocialSelectionValue(creator.id, primaryAccount.id),
+    }] : [];
+  }), [creatorArchive]);
   const initialHandles = project.creatorProfiles?.flatMap((reference) => {
     const creator = creatorArchive.find((item) => item.id === reference.creatorId);
     const socialAccount = resolveCreatorSocialAccount(
@@ -730,24 +733,26 @@ function ProjectCreatorManagerModal({
     })),
   ], [creatorArchive]);
   const platformOptions = useMemo(() => {
-    const platforms = Array.from(new Set(creatorAccounts.map(({ socialAccount }) => socialAccount.platform)));
+    const platforms = Array.from(new Set(creatorArchive.flatMap((creator) => (
+      creatorSocialAccounts(creator).map((socialAccount) => socialAccount.platform)
+    ))));
     return [
-      { value: 'all', label: '全部平台', description: `${creatorAccounts.length} 个账号` },
+      { value: 'all', label: '全部平台', description: `${creatorArchive.length} 位达人` },
       ...platforms.map((item) => ({
         value: item,
         label: item,
-        description: `${creatorAccounts.filter(({ socialAccount }) => socialAccount.platform === item).length} 个账号`,
+        description: `${creatorArchive.filter((creator) => creatorSocialAccounts(creator).some((account) => account.platform === item)).length} 位达人`,
       })),
     ];
-  }, [creatorAccounts]);
-  const visibleCreators = useMemo(() => creatorAccounts.filter(({ creator, socialAccount }) => {
+  }, [creatorArchive]);
+  const visibleCreators = useMemo(() => creatorEntries.filter(({ creator }) => {
     const matchesSearch = !normalizedSearch || (
-      `${creator.name}${socialAccount.handle}${creator.region}${socialAccount.platform}${socialAccount.profileUrl}`.toLowerCase().includes(normalizedSearch)
+      `${creatorSearchTerms(creator)} ${creator.region}`.toLowerCase().includes(normalizedSearch)
     );
     const matchesRegion = region === 'all' || creator.region === region;
-    const matchesPlatform = platform === 'all' || socialAccount.platform === platform;
+    const matchesPlatform = platform === 'all' || creatorSocialAccounts(creator).some((account) => account.platform === platform);
     return matchesSearch && matchesRegion && matchesPlatform;
-  }), [creatorAccounts, normalizedSearch, platform, region]);
+  }), [creatorEntries, normalizedSearch, platform, region]);
   const hasFilters = Boolean(normalizedSearch || region !== 'all' || platform !== 'all');
 
   const toggleCreator = (creatorId: string, value: string) => {
@@ -830,7 +835,7 @@ function ProjectCreatorManagerModal({
         <div className="project-creator-modal-list-header">
           <span>
             达人档案
-            <small>显示 {visibleCreators.length} / {creatorAccounts.length} 个账号</small>
+            <small>显示 {visibleCreators.length} / {creatorEntries.length} 位达人</small>
           </span>
           <div>
             {selectedHandles.length > 0 ? (
@@ -841,7 +846,7 @@ function ProjectCreatorManagerModal({
         </div>
 
         <div className="project-creator-modal-list" role="listbox" aria-label="项目达人档案" aria-multiselectable="true">
-          {visibleCreators.map(({ creator, socialAccount, value }) => {
+          {visibleCreators.map(({ creator, value }) => {
             const selected = selectedHandleSet.has(value);
             return (
               <button
@@ -849,15 +854,14 @@ function ProjectCreatorManagerModal({
                 type="button"
                 role="option"
                 aria-selected={selected}
-                data-creator-handle={socialAccount.handle}
+                data-creator-handle={creatorSocialAccounts(creator)[0]?.handle}
                 key={value}
                 onClick={() => toggleCreator(creator.id, value)}
               >
                 <span className="project-creator-modal-profile">
-                  <Avatar initials={creator.initials} accent={creator.accent} size="md" />
-                  <span><strong>{creator.name}</strong><small>{socialAccount.handle} · {socialAccount.platform}</small></span>
+                  <CreatorIdentity creator={creator} size="md" socialAccountsMode="expanded" />
                 </span>
-                <span className="project-creator-modal-meta"><strong>{creator.region}</strong><small>{socialAccount.platform}</small></span>
+                <span className="project-creator-modal-meta"><strong>{creator.region}</strong><small>{creatorSocialAccounts(creator).length} 个社媒账号</small></span>
                 <span className="project-creator-modal-projects">参与 {creator.projects} 个项目</span>
                 {selected
                   ? <CheckCircle2 className="project-creator-modal-check project-creator-modal-check-selected" size={20} />
@@ -1212,8 +1216,8 @@ export function ProjectDetailPage({
             {detail.creators.length > 0 ? (
               <div className="table-scroll">
                 <table className="data-table project-creator-table">
-                  <thead><tr><th>达人</th><th>平台</th><th>合作内容</th><th>交付状态</th></tr></thead>
-                  <tbody>{detail.creators.map((creator) => <tr key={`${project.id}${creator.name}`}><td><strong>{creator.name}</strong></td><td>{creator.platform}</td><td>{creator.deliverable}</td><td><span className="simple-status"><i />{creator.status}</span></td></tr>)}</tbody>
+                  <thead><tr><th>达人</th><th>合作内容</th><th>交付状态</th></tr></thead>
+                  <tbody>{detail.creators.map((creator) => <tr key={`${project.id}${creator.creatorId ?? creator.name}`}><td><CreatorIdentity creator={creator.creatorId ? creatorArchive.find((profile) => profile.id === creator.creatorId) : null} displayName={creator.name} fallbackPlatform={creator.platform} /></td><td>{creator.deliverable}</td><td><span className="simple-status"><i />{creator.status}</span></td></tr>)}</tbody>
                 </table>
               </div>
             ) : (

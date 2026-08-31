@@ -121,8 +121,8 @@
 
 .payment-project-table {
   width: max-content;
-  min-width: max(100%, 1520px);
-  table-layout: auto;
+  min-width: max(100%, 1740px);
+  table-layout: fixed;
   white-space: nowrap;
 }
 
@@ -149,57 +149,54 @@
   background: #f7f8fa;
 }
 
-.payment-project-table th:nth-child(2),
-.payment-project-table td:nth-child(2) {
-  min-width: 174px;
+.payment-project-table :is(.payment-project-code-heading, .payment-project-code) {
+  width: 166px;
+  min-width: 166px;
 }
 
-.payment-project-table th:nth-child(3),
-.payment-project-table td:nth-child(3) {
-  min-width: 368px;
+.payment-project-table :is(.payment-project-channel-heading, .payment-project-channel) {
+  width: 132px;
+  min-width: 132px;
 }
 
-.payment-project-table th:nth-child(4),
-.payment-project-table td:nth-child(4) {
-  min-width: 92px;
+.payment-project-table :is(.payment-project-entity-heading, .payment-project-entity) {
+  width: 214px;
+  min-width: 214px;
 }
 
-.payment-project-table th:nth-child(5),
-.payment-project-table td:nth-child(5) {
-  min-width: 78px;
+.payment-project-table :is(.payment-project-associated-heading, .payment-project-associated) {
+  width: 252px;
+  min-width: 252px;
 }
 
-.payment-project-table th:nth-child(6),
-.payment-project-table td:nth-child(6) {
-  min-width: 96px;
+.payment-project-table .payment-project-money-heading,
+.payment-project-table .payment-project-money-cell {
+  width: 158px;
+  min-width: 158px;
 }
 
-.payment-project-table th:nth-child(7),
-.payment-project-table td:nth-child(7) {
-  min-width: 62px;
+.payment-project-table :is(.payment-project-date-heading, .payment-project-date-cell) {
+  width: 144px;
+  min-width: 144px;
 }
 
-.payment-project-table th:nth-child(8),
-.payment-project-table td:nth-child(8) {
-  min-width: 68px;
+.payment-project-table :is(.payment-project-initiator-heading, .payment-project-initiator) {
+  width: 116px;
+  min-width: 116px;
 }
 
-.payment-project-table th:nth-child(9),
-.payment-project-table td:nth-child(9) {
-  min-width: 150px;
+.payment-project-table .payment-project-status-cell {
+  position: sticky;
+  right: 116px;
+  z-index: 3;
+  width: 128px;
+  min-width: 128px;
+  background: #fff;
+  box-shadow: -9px 0 12px -12px rgba(39, 43, 53, 0.58);
+  text-align: center;
 }
 
-.payment-project-table th:nth-child(10),
-.payment-project-table td:nth-child(10) {
-  min-width: 96px;
-}
-
-.payment-project-table th:nth-child(11),
-.payment-project-table td:nth-child(11) {
-  min-width: 112px;
-}
-
-.payment-project-table .action-cell {
+.payment-project-table .payment-project-action-cell {
   position: sticky;
   right: 0;
   z-index: 3;
@@ -210,7 +207,7 @@
   text-align: center !important;
 }
 
-.payment-project-table thead .action-cell {
+.payment-project-table thead :is(.payment-project-status-cell, .payment-project-action-cell) {
   z-index: 6;
   background: #f7f8fa;
 }
@@ -260,20 +257,70 @@
   background: #fff8f5;
 }
 
-.payment-project-table tbody tr:hover :is(.payment-project-select-cell, .action-cell) {
+.payment-project-table tbody tr:hover :is(.payment-project-select-cell, .payment-project-status-cell, .payment-project-action-cell) {
   background: #fbfbfc;
 }
 
-.payment-project-table tbody tr.is-selected :is(.payment-project-select-cell, .action-cell),
-.payment-project-table tbody tr.is-selected:hover :is(.payment-project-select-cell, .action-cell) {
+.payment-project-table tbody tr.is-selected :is(.payment-project-select-cell, .payment-project-status-cell, .payment-project-action-cell),
+.payment-project-table tbody tr.is-selected:hover :is(.payment-project-select-cell, .payment-project-status-cell, .payment-project-action-cell) {
   background: #fff8f5;
 }
 
 .payment-project-channel {
-  width: 132px;
-  max-width: 156px;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.payment-project-entity,
+.payment-project-initiator {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.payment-project-associated {
+  overflow: hidden;
+}
+
+.payment-project-associated strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-project-associated small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-project-value-stack {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.payment-project-value-stack > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.payment-project-value-stack strong {
+  font-weight: 620;
+}
+
+.payment-project-value-muted {
+  color: #8a909c;
+}
+
+.payment-project-date-cell {
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 860px) {
@@ -317,7 +364,6 @@
 .payment-project-channel {
   width: auto;
   max-width: none;
-  white-space: nowrap;
 }
 
 @media (min-width: 861px) {

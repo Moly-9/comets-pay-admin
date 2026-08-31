@@ -1,9 +1,41 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
+import type { PaymentBatchRecord } from '../paymentBatches';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
-import { InvoicePage, INITIAL_CREATORS, TransactionsPage } from './OperationalPages';
+import { InvoicePage, INITIAL_CREATORS, OrganizationPage, TransactionsPage } from './OperationalPages';
+
+describe('request page labels', () => {
+  it('uses the cooperation approval title and business-side description', () => {
+    const source = readFileSync(new URL('./OperationalPages.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('title="请款审批"');
+    expect(source).toContain('subtitle="业务侧已提交的请款项目列表，仅展示与当前系统账号有关的项目。"');
+    expect(source).not.toContain('subtitle="媒介已提交的请款项目列表，仅展示与当前系统账号有关的项目。"');
+  });
+});
+
+describe('OrganizationPage invoice billing entities', () => {
+  it('shows NovaComets as a selectable non-default Invoice entity', () => {
+    const html = renderToStaticMarkup(
+      <OrganizationPage
+        notify={vi.fn()}
+        invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
+        onInvoiceBillingSettingsChange={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('COMETS INTERNATIONAL LIMITED');
+    expect(html).toContain('NovaComets Limited');
+    expect(html).toContain('Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China');
+    expect(html).toContain('checked=""');
+    expect(html).toContain('<span>\u9ed8\u8ba4\u4e3b\u4f53</span>');
+    expect(html).toContain('<span>\u8bbe\u4e3a\u9ed8\u8ba4</span>');
+    expect(html).toContain('aria-label="\u7f16\u8f91 NovaComets Limited"');
+    expect(html).toContain('aria-label="\u5220\u9664 NovaComets Limited"');
+  });
+});
 
 const transactionPayout = (
   currency: InvoiceCurrency,
@@ -29,21 +61,85 @@ const transactionPayout = (
   accent: '#8b5cf6',
 });
 
+const transactionBatches = (payouts: readonly Payout[]): PaymentBatchRecord[] => payouts
+  .filter((payout) => ['付款处理中', '已付款', '付款失败'].includes(payout.status))
+  .map((payout, index) => {
+    const paidAt = `2026-08-05T${String(10 + index).padStart(2, '0')}:00:00.000Z`;
+    return {
+      paymentBatchId: `payment-batch-${payout.id}`,
+      paymentBatchCode: `BAT-${payout.id}`,
+      paymentOrderCode: `PAY-${payout.id}`,
+      paymentAttemptNumber: 1,
+      request: {
+        paymentRequestProjectId: `request-${payout.id}`,
+        requestCode: `REQ-${payout.id}`,
+        requestStatus: payout.status,
+        lifecycle: payout.status === '已付款' ? 'PAID' : 'APPROVED',
+        amount: `${payout.currency} ${payout.amount}`,
+        reason: '达人合作款',
+        expectedPaymentDate: '2026-08-05',
+        cooperationProjectId: `cooperation-${payout.id}`,
+        cooperationProjectCode: payout.projectId,
+        cooperationProjectName: payout.project,
+        brand: 'COMETS',
+        media: payout.creator,
+        pm: 'PM',
+      },
+      provider: payout.provider,
+      fundingAccountId: `funding-${payout.provider}`,
+      sourceCurrency: payout.currency,
+      payer: '财务测试员',
+      paidAt,
+      status: payout.status === '付款失败' ? '全部失败' : payout.status,
+      lifecycle: ['CREATED'],
+      items: [{
+        payoutId: payout.id,
+        creatorName: payout.creator,
+        creatorHandle: payout.handle,
+        deliverable: '测试交付物',
+        paymentListCode: `PAY-${payout.id}`,
+        paymentListStatus: payout.status,
+        contracts: [],
+        legacyContractReference: payout.contract,
+        legacyInvoiceReference: payout.invoice,
+        provider: payout.provider,
+        amount: payout.amount,
+        currency: payout.currency,
+        receiveCurrency: payout.currency,
+        transferMethod: payout.provider,
+        accountSummary: payout.account,
+        payoutAccountVersion: 'legacy-v1',
+        feeBearer: '广告主承担',
+        paymentReason: '达人合作款',
+        transactionReference: `TEST-${payout.id}`,
+        description: '测试交付物',
+        paymentStatus: payout.status,
+        paidAt,
+        recipientReceivedAmount: payout.status === '付款失败'
+          ? 0
+          : payout.status === '已付款' ? payout.amount : undefined,
+        recipientReceivedCurrency: payout.currency,
+        associationIssues: [],
+      }],
+    } as unknown as PaymentBatchRecord;
+  });
+
 describe('TransactionsPage currency overview', () => {
   it('uses USD as the primary paid total and lists secondary currencies below it', () => {
     const currencySpace = '\u00a0';
+    const payouts = [
+      transactionPayout('USD', 100, 1),
+      transactionPayout('USD', 200, 2),
+      transactionPayout('EUR', 300, 3),
+      transactionPayout('GBP', 400, 4),
+      transactionPayout('HKD', 500, 5),
+      transactionPayout('SGD', 600, 6),
+      transactionPayout('USD', 700, 7, '付款失败'),
+    ];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[
-          transactionPayout('USD', 100, 1),
-          transactionPayout('USD', 200, 2),
-          transactionPayout('EUR', 300, 3),
-          transactionPayout('GBP', 400, 4),
-          transactionPayout('HKD', 500, 5),
-          transactionPayout('SGD', 600, 6),
-          transactionPayout('USD', 700, 7, '付款失败'),
-        ]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -60,19 +156,20 @@ describe('TransactionsPage currency overview', () => {
   });
 
   it('shows the overall success rate above each provider success rate and failure count', () => {
+    const payouts = [
+      transactionPayout('USD', 100, 1, '已付款', 'Airwallex'),
+      transactionPayout('USD', 100, 2, '已付款', 'Airwallex'),
+      transactionPayout('USD', 100, 3, '付款失败', 'Airwallex'),
+      transactionPayout('USD', 100, 4, '已付款', 'PayPal'),
+      transactionPayout('USD', 100, 5, '付款失败', 'PayPal'),
+      transactionPayout('USD', 100, 6, '已付款', 'PayMax'),
+      transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
+      transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
+    ];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[
-          transactionPayout('USD', 100, 1, '已付款', 'Airwallex'),
-          transactionPayout('USD', 100, 2, '已付款', 'Airwallex'),
-          transactionPayout('USD', 100, 3, '付款失败', 'Airwallex'),
-          transactionPayout('USD', 100, 4, '已付款', 'PayPal'),
-          transactionPayout('USD', 100, 5, '付款失败', 'PayPal'),
-          transactionPayout('USD', 100, 6, '已付款', 'PayMax'),
-          transactionPayout('USD', 100, 7, '已付款', 'PayMax'),
-          transactionPayout('USD', 100, 8, '已付款', 'PayMax'),
-        ]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -85,15 +182,16 @@ describe('TransactionsPage currency overview', () => {
   });
 
   it('shows paid, processing, and failed payment transactions in the all tab', () => {
+    const payouts = [
+      transactionPayout('USD', 100, 11, '已付款'),
+      transactionPayout('USD', 100, 12, '付款失败'),
+      transactionPayout('USD', 100, 13, '付款处理中'),
+      transactionPayout('USD', 100, 14, '等待付款'),
+    ];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[
-          transactionPayout('USD', 100, 11, '已付款'),
-          transactionPayout('USD', 100, 12, '付款失败'),
-          transactionPayout('USD', 100, 13, '付款处理中'),
-          transactionPayout('USD', 100, 14, '等待付款'),
-        ]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -102,19 +200,24 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('aria-selected="false">已付款<span>2</span>');
     expect(html).toContain('aria-selected="false">付款失败<span>1</span>');
     expect(html).not.toContain('aria-label="付款状态"');
-    expect(html).toContain('INV-11');
-    expect(html).toContain('INV-12');
-    expect(html).toContain('INV-13');
-    expect(html).not.toContain('INV-14');
+    expect(html).toContain('Project 11');
+    expect(html).toContain('Project 12');
+    expect(html).toContain('Project 13');
+    expect(html).not.toContain('Project 14');
+    expect(html).not.toContain('INV-11');
+    expect(html).not.toContain('INV-12');
+    expect(html).not.toContain('INV-13');
     expect(html).toContain('付款处理中');
+    expect(html).toContain('USD 0.00');
     expect(html).not.toContain('等待付款');
   });
 
   it('renders workbench-style search, date, provider, and export controls', () => {
+    const payouts = [transactionPayout('USD', 100, 21)];
     const html = renderToStaticMarkup(
       <TransactionsPage
-        payouts={[transactionPayout('USD', 100, 21)]}
-        paymentBatches={[]}
+        payouts={payouts}
+        paymentBatches={transactionBatches(payouts)}
       />,
     );
 
@@ -127,16 +230,38 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('<span>导出已选（0）</span>');
     expect(html).toContain('disabled=""');
     expect(html).toContain('aria-label="选择 Creator 21 的交易"');
-    expect(html).toContain('>达人 / 付款项目</th>');
-    expect(html).toContain('>Invoice</th>');
+    expect(html).toContain('>达人</th>');
+    expect(html).toContain('>关联项目</th>');
+    expect(html).not.toContain('>Invoice</th>');
     expect(html).toContain('>渠道</th>');
-    expect(html).toContain('>状态</th>');
-    expect(html).toContain('>金额</th>');
+    expect(html).toContain('>支付金额</th>');
+    expect(html).toContain('>手续费</th>');
+    expect(html).toContain('>对方实际收到金额</th>');
     expect(html).not.toContain('>时间</th>');
     expect(html).toContain('>付款人 / 付款时间</th>');
+    expect(html).toContain('>付款状态</th>');
     expect(html).toContain('>操作</th>');
+    const orderedHeaders = [
+      '>达人</th>',
+      '>关联项目</th>',
+      '>渠道</th>',
+      '>支付金额</th>',
+      '>手续费</th>',
+      '>对方实际收到金额</th>',
+      '>付款人 / 付款时间</th>',
+      '>付款状态</th>',
+      '>操作</th>',
+    ];
+    orderedHeaders.reduce((previousIndex, header) => {
+      const nextIndex = html.indexOf(header);
+      expect(nextIndex).toBeGreaterThan(previousIndex);
+      return nextIndex;
+    }, -1);
     expect(html).not.toContain('transaction-field-icon');
-    expect(html).toContain('INV-21');
+    expect(html).toContain('transaction-project-cell');
+    expect(html).toContain('Project 21');
+    expect(html).not.toContain('transaction-invoice-cell');
+    expect(html).not.toContain('INV-21');
     expect(html).toContain('USD 100');
   });
 });
@@ -211,7 +336,7 @@ describe('InvoicePage OA states', () => {
 });
 
 describe('request project fixtures', () => {
-  it('provides two projects at every visible approval and payment stage', () => {
+  it('provides stable fixture coverage for every visible approval and payment stage', () => {
     const requests = INITIAL_COMPLETE_REQUEST_RESOURCES.requests;
     ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER', 'PENDING_FINANCE'].forEach((status) => {
       expect(requests.filter((request) => (
@@ -220,8 +345,8 @@ describe('request project fixtures', () => {
     });
     expect(requests.filter((request) => request.lifecycle === 'APPROVED')).toHaveLength(4);
     expect(requests.filter((request) => request.lifecycle === 'COMPLETED')).toHaveLength(2);
-    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(5);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(4);
     expect(requests.filter((request) => request.lifecycle === 'CANCELLED')).toHaveLength(1);
-    expect(requests.some((request) => request.lifecycle === 'RETURNED')).toBe(false);
+    expect(requests.filter((request) => request.lifecycle === 'RETURNED')).toHaveLength(1);
   });
 });

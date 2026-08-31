@@ -209,12 +209,26 @@ describe('Invoice review workflow', () => {
       'RETURN_TO_CREATOR',
       actor,
       '签署页主体错误',
+      '2026-08-04T02:00:00.000Z',
+      'creator@example.test',
     );
     expect(returned.invoiceReviewStatus).toBe('待签署');
     expect(returned.invoiceSignedAt).toBeUndefined();
     expect(returned.invoiceSnapshot?.signatureDate).toBeUndefined();
     expect(returned.invoiceSnapshot?.signatureText).toBeUndefined();
     expect(returned.invoiceVersion).toBe(2);
+    expect(returned.invoiceReviewHistory?.slice(-1)[0]?.notificationDeliveries).toEqual([
+      {
+        channel: 'IN_APP',
+        status: 'SIMULATED_SENT',
+        recipientLabel: '达人端 Invoice 消息中心',
+      },
+      {
+        channel: 'EMAIL',
+        status: 'SIMULATED_SENT',
+        recipientLabel: 'cr***or@example.test',
+      },
+    ]);
   });
 
   it('only allows Invoice-content failures to enter the edit flow', () => {
@@ -494,7 +508,7 @@ describe('Invoice review workflow', () => {
         {
           channel: 'EMAIL',
           status: 'SIMULATED_SENT',
-          recipientLabel: 'creator@example.test',
+          recipientLabel: 'cr***or@example.test',
         },
       ],
     });
@@ -571,6 +585,56 @@ describe('Invoice review workflow', () => {
       actor,
     )).toThrow(/稳定关联/);
   });
+
+  it.each(['BLOCKED', 'REASON_REQUIRED'] as const)(
+    'does not move a %s contract match into media review',
+    (result) => {
+      const record: GeneratedInvoiceRecord = {
+        id: 'INV-BLOCKED',
+        invoiceId: 'inv_blocked' as never,
+        sourcePayoutId: payout.id,
+        status: '待签署',
+        generatedAt: '2026-08-04 10:00',
+        snapshot,
+        validationStatus: 'valid',
+        version: 1,
+        contractMatchReviews: [{
+          version: 1,
+          contractIds: [],
+          result,
+          issues: [],
+        }],
+      };
+
+      expect(() => markGeneratedInvoiceSigned(payout, record, actor))
+        .toThrow(/未处理的阻断项/);
+    },
+  );
+
+  it.each(['MATCHED', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'] as const)(
+    'allows a %s contract match to move into media review',
+    (result) => {
+      const record: GeneratedInvoiceRecord = {
+        id: 'INV-READY',
+        invoiceId: 'inv_ready' as never,
+        sourcePayoutId: payout.id,
+        status: '待签署',
+        generatedAt: '2026-08-04 10:00',
+        snapshot,
+        validationStatus: 'valid',
+        version: 1,
+        contractMatchReviews: [{
+          version: 1,
+          contractIds: [],
+          result,
+          issues: [],
+        }],
+      };
+
+      expect(markGeneratedInvoiceSigned(payout, record, actor).invoiceReviewStatus)
+        .toBe('待媒介审核');
+    },
+  );
 
   it('blocks payment and batches until finance approval', () => {
     expect(isInvoiceApprovedForPayment(payout)).toBe(false);

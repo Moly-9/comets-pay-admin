@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { TransactionBatchContext } from '../transactionRecords';
+import type { TransactionBatchContext, TransactionRecord } from '../transactionRecords';
 import type { Payout } from '../types';
 import { TransactionDetailPage } from './TransactionDetailPage';
 
@@ -40,7 +40,8 @@ const context = {
   },
   item: {
     receiveCurrency: 'USD',
-    transferMethod: '本地转账',
+    transferMethod: 'LOCAL',
+    localClearingSystem: '本地清算测试值',
     accountSummary: '•••• 0007',
     feeBearer: '广告主承担',
     transactionReference: 'Racing Master creator payout',
@@ -67,23 +68,50 @@ const context = {
   },
 } as unknown as TransactionBatchContext;
 
+const record: TransactionRecord = {
+  key: 'batch:payment-batch-test:payout:pay-detail-test',
+  paymentBatchId: 'payment-batch-test' as TransactionRecord['paymentBatchId'],
+  payout,
+  context,
+  status: '已付款',
+  occurredAt: '2026-08-10 16:30',
+  provider: 'Airwallex',
+  paymentAmount: 4100,
+  paymentCurrency: 'USD',
+  transferFeeAmount: 8.2,
+  transferFeeCurrency: 'USD',
+  recipientReceivedAmount: 4100,
+  recipientReceivedCurrency: 'USD',
+};
+
 describe('TransactionDetailPage', () => {
-  it('renders the creator card, transaction summary, associations, and highlighted payment list', () => {
+  it('renders the creator card, independent summaries, associations, and neutral payment detail', () => {
     const html = renderToStaticMarkup(
-      <TransactionDetailPage payout={payout} context={context} onBack={vi.fn()} />,
+      <TransactionDetailPage record={record} onBack={vi.fn()} onOpenPaymentBatch={vi.fn()} />,
     );
 
     expect(html).toContain('transaction-creator-summary-card');
+    expect(html).toContain('transaction-creator-summary-project');
     expect(html).not.toContain('transaction-detail-header');
-    expect(html).toContain('付款金额');
+    expect(html.match(/transaction-summary-card/g)).toHaveLength(3);
+    expect(html).toContain('支付金额');
+    expect(html).toContain('手续费 USD 8.2');
+    expect(html).toContain('对方实收 USD 4,100');
     expect(html).toContain('付款渠道');
     expect(html).toContain('交易状态');
+    expect(html).toContain('<strong class="transaction-summary-value">Airwallex</strong>');
+    expect(html).toContain('<strong class="transaction-summary-value">已付款</strong>');
+    expect(html.match(/transaction-summary-value/g)).toHaveLength(3);
+    expect(html).not.toContain('payment-provider-badge');
+    expect(html).toContain('本地清算测试值');
     expect(html).toContain('所属关联项目');
     expect(html).toContain('所属请款项目');
-    expect(html).toContain('所属请款批次');
+    expect(html).toContain('所属付款批次');
+    expect(html).toContain('查看付款批次');
     expect(html).toContain('CON-20260810-001');
     expect(html).toContain('INV-20260810-001');
-    expect(html).toContain('transaction-resource-card is-payment-list');
+    expect(html).toContain('transaction-resource-card is-payment-detail');
+    expect(html).not.toContain('transaction-resource-card is-payment-list');
     expect(html).toContain('is-cooperation-project');
     expect(html).toContain('is-request-project');
     expect(html).toContain('is-payment-batch');
@@ -95,16 +123,19 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('PAY-20260810-001');
     expect(html).toContain('付款事由');
     expect(html).toContain('达人合作内容验收完成');
+    expect(html).toContain('我方承担');
+    expect(html).not.toContain('>广告主承担<');
     expect(html).toContain('aria-label="查看合同"');
     expect(html).toContain('aria-label="查看 Invoice"');
-    expect(html).toContain('aria-label="查看付款清单"');
+    expect(html).toContain('aria-label="查看付款明细"');
+    expect(html).toContain('合同、Invoice 与付款明细');
     expect(html).toContain('transaction-section-icon');
     expect(html).toContain('transaction-detail-summary-label');
   });
 
   it('marks unknown historical records for completion without hiding known payout data', () => {
     const html = renderToStaticMarkup(
-      <TransactionDetailPage payout={payout} context={null} onBack={vi.fn()} />,
+      <TransactionDetailPage record={{ ...record, key: 'historical:payout:pay-detail-test', context: null }} onBack={vi.fn()} />,
     );
 
     expect(html).toContain('历史数据待补全');

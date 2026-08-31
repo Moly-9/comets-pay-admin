@@ -1,9 +1,44 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ListActionButton, NoticeBanner, SelectField } from './Common';
+import { Button, ListActionButton, NoticeBanner, SelectField, Toast } from './Common';
 
 const commonSource = readFileSync(new URL('./Common.tsx', import.meta.url), 'utf8');
+
+describe('Button', () => {
+  it('keeps a reason-enabled blocked action focusable and exposes its explanation', () => {
+    const markup = renderToStaticMarkup(
+      <Button disabled disabledReason="请先选择 Invoice。">生成付款清单</Button>,
+    );
+
+    expect(markup).toContain('aria-disabled="true"');
+    expect(markup).toContain('data-disabled-reason="请先选择 Invoice。"');
+    expect(markup).toContain('title="请先选择 Invoice。"');
+    expect(markup).not.toContain('disabled=""');
+    expect(commonSource).toContain('window.dispatchEvent(new CustomEvent(BLOCKED_ACTION_EVENT');
+  });
+
+  it('preserves native disabled behavior when no reason is supplied', () => {
+    const markup = renderToStaticMarkup(<Button disabled>上一页</Button>);
+
+    expect(markup).toContain('disabled=""');
+    expect(markup).not.toContain('aria-disabled="true"');
+  });
+
+  it('renders warning toasts as assertive alerts', () => {
+    const markup = renderToStaticMarkup(
+      <Toast
+        toast={{ title: '暂时无法操作', message: '请先完成校验。', tone: 'warning' }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('toast toast-warning');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('aria-live="assertive"');
+    expect(markup).toContain('lucide-circle-alert');
+  });
+});
 
 describe('ListActionButton', () => {
   it.each([

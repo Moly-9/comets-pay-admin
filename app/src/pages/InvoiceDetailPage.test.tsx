@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { INITIAL_CONTRACTS } from '../contracts';
 import type { GeneratedInvoiceRecord, InvoiceEditContext, Payout } from '../types';
 import {
   buildInvoiceSignatureReminderMessage,
@@ -98,6 +99,46 @@ const renderDetail = (
 );
 
 describe('InvoiceDetailPage edit actions', () => {
+  it('uses the linked contract Publisher and shows completed signature evidence', () => {
+    const signedModel = {
+      ...model,
+      creatorName: 'Synthetic Display Name',
+      from: { ...model.from, legalName: 'Synthetic Legal Name' },
+    };
+    const signedPayout: Payout = {
+      ...basePayout,
+      creator: 'Synthetic Display Name',
+      contract: 'CON-SYNTHETIC',
+      invoiceReviewStatus: '待媒介审核',
+      invoiceSignedAt: '2026-08-14T02:00:00.000Z',
+      invoiceSnapshot: signedModel,
+    };
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      id: 'CON-SYNTHETIC',
+      publisher: 'Synthetic Legal Name',
+    };
+    const html = renderToStaticMarkup(
+      <InvoiceDetailPage
+        source={{ kind: 'payout', payout: signedPayout }}
+        model={signedModel}
+        contracts={[contract]}
+        onBack={() => undefined}
+        onMarkSigned={() => undefined}
+        onReviewAction={() => undefined}
+        canManageInvoice={false}
+        canReviewMedia
+        canReviewFinance={false}
+        notify={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Synthetic Legal Name');
+    expect(html).toContain('已完成 5/6 项');
+    expect(html).toContain('已签名');
+    expect(html).not.toContain('达人尚未完成签署，不能进行审核');
+  });
+
   it('preserves the existing Invoice heading and shows Invoice type first in the four metric cards', () => {
     const html = renderDetail(basePayout, { manage: false, media: true });
     expect(html).toContain('INV-SYNTHETIC');
@@ -111,6 +152,19 @@ describe('InvoiceDetailPage edit actions', () => {
     expect(html).not.toContain('待媒介复核');
     expect(html.indexOf('Invoice类型')).toBeLessThan(html.indexOf('当前状态'));
     expect(html.indexOf('contract-metric-grid')).toBeLessThan(html.indexOf('invoice-review-workspace'));
+  });
+
+  it('keeps the review summary concise and exposes the unsigned signature state', () => {
+    const html = renderDetail(basePayout, { manage: false, media: true });
+
+    expect(html).toContain('核对主体、金额、币种、付款信息和签名状态');
+    expect(html).not.toContain('项目及合作项');
+    expect(html).toContain('金额和币种');
+    expect(html).toContain('USD 100.00');
+    expect(html).not.toContain('<small>USD</small>');
+    expect(html).toContain('签名区域');
+    expect(html).toContain('未签名');
+    expect(html).toContain('等待达人签署');
   });
 
   it('shows the five fixed header actions and enables publish, edit and withdraw for a draft', () => {
@@ -197,6 +251,9 @@ describe('InvoiceDetailPage edit actions', () => {
     );
     expect(signedHtml).toContain('5/5项资料校验通过');
     expect(signedHtml).toContain('aria-label="电子签名">Synthetic Creator');
+    expect(signedHtml).toContain('签名区域');
+    expect(signedHtml).toContain('已签名');
+    expect(signedHtml).toContain('2026-08-14');
     expect(signedHtml).toContain('审核通过');
     expect(signedHtml).toContain('待审核');
     expect(signedHtml).not.toContain('待媒介审核');
@@ -275,7 +332,7 @@ describe('InvoiceDetailPage edit actions', () => {
 
     expect(html).toContain('达人端站内信');
     expect(html).toContain('邮件（站外信）');
-    expect(html).toContain('creator@example.test');
+    expect(html).toContain('cr***or@example.test');
     expect(html).toContain('当前仅模拟发送');
     expect(html).toContain('失败原因和重试结果');
     expect(html).toContain('操作审计');

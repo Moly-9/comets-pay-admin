@@ -19,20 +19,21 @@ import {
   formatContractMoney,
   getContractType,
   getContractReadiness,
+  getContractManagementBucket,
   getContractValidity,
-  isContractAvailableForNewAssociation,
   type ContractRecord,
   type ContractUploadInput,
   type ContractValidityFilter,
 } from '../contracts';
 import type { ContractId } from '../businessWorkflow';
 import type { CreatorProfile } from '../types';
+import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import { ContractDetailPage } from './ContractDetailPage';
 import type { ProjectSummary } from './ProjectDetailPage';
 
 type Notify = (title: string, message: string) => void;
-type ContractFilter = 'all' | 'ready' | 'attention' | 'template';
+type ContractFilter = 'all' | 'ready' | 'attention' | 'draft' | 'signature' | 'expired';
 
 const CONTRACT_VALIDITY_FILTERS: Array<{ value: ContractValidityFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -290,11 +291,6 @@ function ContractProjectFilter({
   );
 }
 
-const templateReadinessFor = (contract: ContractRecord) => {
-  const blockerCount = contract.issues.filter((issue) => issue.severity === 'blocker').length;
-  return { ready: blockerCount === 0, label: blockerCount === 0 ? '可使用' : '待完善' };
-};
-
 function ContractValidityCell({ contract, referenceDate }: { contract: ContractRecord; referenceDate: string }) {
   const validity = getContractValidity(contract, referenceDate);
   if (validity.status === 'ACTIVE') {
@@ -331,8 +327,10 @@ export function ContractsPage({
   projects,
   projectDirectory = projects,
   creators,
+  requestProjects = [],
   canUpload,
   canEditTemplates = false,
+  canEditContract,
   canDelete,
   canDeleteContract,
   focusedContractId,
@@ -341,6 +339,8 @@ export function ContractsPage({
   onUploadContract,
   onBindFrameworkContract,
   onCreateContract,
+  createContractDisabledReason,
+  onEditDraft,
   onUpdateContract,
   onDeleteContracts,
   notify,
@@ -349,8 +349,10 @@ export function ContractsPage({
   projects: ProjectSummary[];
   projectDirectory?: ProjectSummary[];
   creators: CreatorProfile[];
+  requestProjects?: PaymentRequestProjectLike[];
   canUpload: boolean;
   canEditTemplates?: boolean;
+  canEditContract?: (contract: ContractRecord) => boolean;
   canDelete: boolean;
   canDeleteContract: (contract: ContractRecord) => boolean;
   focusedContractId: string | null;
@@ -359,6 +361,8 @@ export function ContractsPage({
   onUploadContract?: (input: ContractUploadInput) => ContractRecord;
   onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onCreateContract?: () => void;
+  createContractDisabledReason?: string;
+  onEditDraft?: (contractId: string) => void;
   onUpdateContract: (contract: ContractRecord) => void;
   onDeleteContracts: (contractIds: string[]) => number;
   notify: Notify;
@@ -379,7 +383,10 @@ export function ContractsPage({
   const [exporting, setExporting] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectedContract = selectedContractId
-    ? contracts.find((contract) => contract.id === selectedContractId)
+    ? contracts.find((contract) => (
+        contract.id === selectedContractId
+        || String(contract.contractId ?? '') === selectedContractId
+      ))
     : null;
   const referenceDate = currentContractReferenceDate();
 
@@ -431,8 +438,6 @@ export function ContractsPage({
   const filteredContracts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return contracts.filter((contract) => {
-      const readiness = getContractReadiness(contract);
-      const validity = getContractValidity(contract, referenceDate);
       const realName = creatorRealNameFor(contract, creators);
       const project = projectDisplayFor(contract, displayProjects);
       const matchesQuery = !query || `${contract.id}${contract.ioId}${contract.name}${contract.project}${contract.brand}${contract.publisher}${realName}${project.name}${project.code}`
@@ -440,14 +445,11 @@ export function ContractsPage({
         .includes(query);
       const matchesFilter = (
         (filter === 'all' && !contract.isTemplate)
-        || (filter === 'ready' && isContractAvailableForNewAssociation(contract, referenceDate))
-        || (filter === 'attention' && (!readiness.ready || validity.expired) && !contract.isTemplate)
-        || (filter === 'template' && contract.isTemplate)
+        || (filter !== 'all' && getContractManagementBucket(contract, referenceDate) === filter)
       );
-      const matchesValidity = contract.isTemplate
+      const matchesValidity = filter === 'expired'
         || contractMatchesValidityFilter(contract, validityFilter, referenceDate);
-      const matchesProject = contract.isTemplate
-        || !projectFilter
+      const matchesProject = !projectFilter
         || projectFilterKeyFor(contract, displayProjects) === projectFilter;
       return matchesQuery && matchesFilter && matchesProject && matchesValidity;
     });
@@ -460,27 +462,28 @@ export function ContractsPage({
     setPageSize,
   } = usePagination(filteredContracts, { resetKey: `${search}\u0000${filter}\u0000${projectFilter}\u0000${validityFilter}` });
 
-  const readyCount = contracts.filter((contract) => (
-    isContractAvailableForNewAssociation(contract, referenceDate)
-  )).length;
-  const attentionCount = contracts.filter((contract) => (
-    !contract.isTemplate
-    && (!getContractReadiness(contract).ready || getContractValidity(contract, referenceDate).expired)
-  )).length;
-  const templateCount = contracts.filter((contract) => contract.isTemplate).length;
-  const businessContractCount = contracts.length - templateCount;
+  const bucketCounts = contracts.reduce<Record<Exclude<ContractFilter, 'all'>, number>>((counts, contract) => {
+    const bucket = getContractManagementBucket(contract, referenceDate);
+    if (bucket !== 'template') counts[bucket] += 1;
+    return counts;
+  }, { ready: 0, attention: 0, draft: 0, signature: 0, expired: 0 });
+  const readyCount = bucketCounts.ready;
+  const attentionCount = bucketCounts.attention;
+  const businessContractCount = contracts.filter((contract) => !contract.isTemplate).length;
   const contractFilterCounts: Record<ContractFilter, number> = {
     all: businessContractCount,
     ready: readyCount,
     attention: attentionCount,
-    template: templateCount,
+    draft: bucketCounts.draft,
+    signature: bucketCounts.signature,
+    expired: bucketCounts.expired,
   };
   const selected = useMemo(
     () => selectedContracts(contracts, selectedIds),
     [contracts, selectedIds],
   );
   const visibleIds = useMemo(
-    () => filter === 'template' ? [] : filteredContracts.map(contractSelectionId),
+    () => filteredContracts.map(contractSelectionId),
     [filter, filteredContracts],
   );
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
@@ -516,6 +519,10 @@ export function ContractsPage({
       notify('请选择合同', '请先勾选需要导出的合同。');
       return;
     }
+    if (selected.some((contract) => contract.lifecycle === 'EDITING_DRAFT')) {
+      notify('草稿不能导出', '请先生成正式合同，或取消勾选草稿后再导出。');
+      return;
+    }
     setExporting(true);
     try {
       const archive = await createContractExportArchive(selected);
@@ -544,11 +551,14 @@ export function ContractsPage({
     setDeleteConfirmOpen(true);
   };
   const openContract = (contractId: string) => {
+    const contract = contracts.find((candidate) => candidate.id === contractId);
+    if (contract?.lifecycle === 'EDITING_DRAFT') {
+      onEditDraft?.(contract.contractId ?? contract.id);
+      return;
+    }
     setSelectedContractId(contractId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const isTemplateTab = filter === 'template';
-
   if (selectedContract) {
     return (
       <ContractDetailPage
@@ -557,7 +567,9 @@ export function ContractsPage({
         projects={projects}
         projectDirectory={displayProjects}
         creators={creators}
+        requestProjects={requestProjects}
         canEditTemplate={canEditTemplates}
+        canEdit={canEditContract?.(selectedContract) ?? true}
         notify={notify}
         onUpdateContract={onUpdateContract}
         onBindFrameworkContract={onBindFrameworkContract}
@@ -579,7 +591,13 @@ export function ContractsPage({
         actions={canUpload ? (
           <div className="page-heading-actions">
             {onCreateContract
-              ? <Button variant="secondary" icon={<FilePlus2 size={17} />} onClick={onCreateContract}>生成合同</Button>
+              ? <Button
+                  variant="secondary"
+                  icon={<FilePlus2 size={17} />}
+                  disabled={Boolean(createContractDisabledReason)}
+                  disabledReason={createContractDisabledReason}
+                  onClick={onCreateContract}
+                >生成合同</Button>
               : null}
             <Button icon={<Upload size={17} />} onClick={() => setUploadOpen(true)}>上传合同</Button>
           </div>
@@ -589,8 +607,8 @@ export function ContractsPage({
       <div className="contract-overview-strip">
         <article className="contract-overview-card contract-overview-card-peach">
           <span>合同总数</span>
-          <strong>{contracts.length}</strong>
-          <small>{businessContractCount} 份业务合同 · {templateCount} 份参考模板</small>
+          <strong>{businessContractCount}</strong>
+          <small>{bucketCounts.draft} 份草稿 · {bucketCounts.signature} 份待签署</small>
         </article>
         <article className="contract-overview-card contract-overview-card-mint">
           <span>可用于付款项目</span>
@@ -605,49 +623,55 @@ export function ContractsPage({
       </div>
 
       <section className="content-card">
-        <div className="tabs-row contract-filter-tabs" role="tablist" aria-label="合同筛选">
-          {([
-            ['all', '全部'],
-            ['ready', '可付款'],
-            ['attention', '待处理'],
-            ['template', '模板'],
-          ] as Array<[ContractFilter, string]>).map(([value, label]) => (
-            <button
-              className={`tab-button ${filter === value ? 'tab-active' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={filter === value}
-              key={value}
-              onClick={() => setFilter(value)}
-            >
-              {label}
-              <span>{contractFilterCounts[value]}</span>
-            </button>
-          ))}
-          {!isTemplateTab ? (
-            <div className="contract-bulk-actions">
-              <Button
-                variant="secondary"
-                data-testid="contract-bulk-export"
-                icon={<Download size={15} />}
-                disabled={exporting}
-                onClick={() => { void exportSelectedContracts(); }}
+        <div className="contract-filter-bar">
+          <div className="tabs-row contract-filter-tabs" role="tablist" aria-label="合同筛选">
+            {([
+              ['all', '全部'],
+              ['ready', '可付款'],
+              ['attention', '待处理'],
+              ['draft', '草稿箱'],
+              ['signature', '待签署'],
+              ['expired', '已到期'],
+            ] as Array<[ContractFilter, string]>).map(([value, label]) => (
+              <button
+                className={`tab-button ${filter === value ? 'tab-active' : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={filter === value}
+                key={value}
+                onClick={() => {
+                  setFilter(value);
+                  if (value === 'expired') setValidityFilter('all');
+                }}
               >
-                {exporting ? '导出中...' : '导出'}
+                {label}
+                <span>{contractFilterCounts[value]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="contract-bulk-actions">
+            <Button
+              variant="secondary"
+              data-testid="contract-bulk-export"
+              icon={<Download size={15} />}
+              disabled={exporting}
+              disabledReason="合同正在导出，请稍候。"
+              onClick={() => { void exportSelectedContracts(); }}
+            >
+              {exporting ? '导出中...' : '导出'}
+            </Button>
+            {canDelete ? (
+              <Button
+                variant="danger"
+                data-testid="contract-bulk-delete"
+                icon={<Trash2 size={15} />}
+                title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
+                onClick={requestDeleteSelectedContracts}
+              >
+                删除
               </Button>
-              {canDelete ? (
-                <Button
-                  variant="danger"
-                  data-testid="contract-bulk-delete"
-                  icon={<Trash2 size={15} />}
-                  title={selected.length && !selectedCanBeDeleted ? '所选合同中包含无权删除的记录' : undefined}
-                  onClick={requestDeleteSelectedContracts}
-                >
-                  删除
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
         <div className="content-toolbar contract-toolbar">
           <label className="contract-toolbar-field contract-toolbar-search-field">
@@ -662,13 +686,13 @@ export function ContractsPage({
               />
             </span>
           </label>
-          {!isTemplateTab ? (
-            <div className="contract-toolbar-filters">
-              <ContractProjectFilter
-                value={projectFilter}
-                options={projectFilterOptions}
-                onChange={setProjectFilter}
-              />
+          <div className="contract-toolbar-filters">
+            <ContractProjectFilter
+              value={projectFilter}
+              options={projectFilterOptions}
+              onChange={setProjectFilter}
+            />
+            {filter !== 'expired' ? (
               <div className="contract-toolbar-field contract-validity-filter-field">
                 <span className="contract-toolbar-field-label">有效期</span>
                 <SelectField
@@ -686,85 +710,45 @@ export function ContractsPage({
                   onChange={setValidityFilter}
                 />
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
 
         <div className="table-scroll">
-          <table className={`data-table operational-table contract-table${isTemplateTab ? ' contract-template-table' : ''}`}>
+          <table className="data-table operational-table contract-table">
             <thead>
-              {isTemplateTab ? (
-                <tr>
-                  <th>模板名称</th>
-                  <th>合同类型</th>
-                  <th className="contract-date-cell">更新日期</th>
-                  <th>使用就绪度</th>
-                  <th className="action-cell">操作</th>
-                </tr>
-              ) : (
-                <tr>
-                  <th className="contract-select-cell">
-                    <input
-                      ref={selectAllRef}
-                      type="checkbox"
-                      aria-label="全选当前列表合同"
-                      checked={allVisibleSelected}
-                      disabled={!filteredContracts.length}
-                      onChange={() => setSelectedIds((current) => toggleVisibleContractSelection(current, filteredContracts))}
-                    />
-                  </th>
-                  <th>合同名称 / IO 单名称</th>
-                  <th>Publisher</th>
-                  <th>关联项目</th>
-                  <th>合同金额</th>
-                  <th>到期时间</th>
-                  <th>付款就绪度</th>
-                  <th className="action-cell">操作</th>
-                </tr>
-              )}
+              <tr>
+                <th className="contract-select-cell">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    aria-label="全选当前列表合同"
+                    checked={allVisibleSelected}
+                    disabled={!filteredContracts.length}
+                    onChange={() => setSelectedIds((current) => toggleVisibleContractSelection(current, filteredContracts))}
+                  />
+                </th>
+                <th>合同名称 / IO 单名称</th>
+                <th>Publisher</th>
+                <th>关联项目</th>
+                <th>合同金额</th>
+                <th>到期时间</th>
+                <th>付款就绪度</th>
+                <th className="action-cell">操作</th>
+              </tr>
             </thead>
             <tbody>
               {visible.map((contract) => {
                 const readiness = getContractReadiness(contract);
-                const validity = getContractValidity(contract, referenceDate);
+                const bucket = getContractManagementBucket(contract, referenceDate);
+                const contractType = getContractType(contract);
+                const displayNumber = contractType === 'IO'
+                  ? contract.ioId || 'IO 单号待补充'
+                  : contract.id;
                 const stableId = contractSelectionId(contract);
                 const rowSelected = selectedIds.has(stableId);
                 const project = projectDisplayFor(contract, displayProjects);
                 const realName = creatorRealNameFor(contract, creators);
-                const templateReadiness = templateReadinessFor(contract);
-                if (isTemplateTab) {
-                  return (
-                    <tr className="clickable-table-row" key={stableId} onClick={() => openContract(contract.id)}>
-                      <td>
-                        <button
-                          className="contract-name-link"
-                          type="button"
-                          onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}
-                        >
-                          <strong>{contract.name}</strong>
-                          <small>{contract.id}</small>
-                        </button>
-                      </td>
-                      <td>
-                        <span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>
-                          {CONTRACT_TYPE_LABELS[getContractType(contract)]}
-                        </span>
-                      </td>
-                      <td className="contract-date-cell">{contract.updated}</td>
-                      <td>
-                        <span className={`contract-readiness contract-readiness-${templateReadiness.ready ? 'ready' : 'attention'}`}>
-                          <i />
-                          {templateReadiness.label}
-                        </span>
-                      </td>
-                      <td className="action-cell">
-                        <ListActionButton kind={canEditTemplates ? 'edit' : 'view'} onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>
-                          {canEditTemplates ? '编辑模板' : '查看模板'}
-                        </ListActionButton>
-                      </td>
-                    </tr>
-                  );
-                }
                 return (
                   <tr
                     className={`clickable-table-row${rowSelected ? ' is-selected' : ''}`}
@@ -784,18 +768,19 @@ export function ContractsPage({
                       <button
                         className="contract-name-link"
                         type="button"
-                        title={`${contract.name} · ${contract.id}${contract.ioId ? ` · ${contract.ioId}` : ''}`}
+                        title={contract.name}
                         onClick={(event) => {
                           event.stopPropagation();
                           openContract(contract.id);
                         }}
                       >
                         <strong>{contract.name}</strong>
-                        <span className={`contract-type-badge contract-type-${getContractType(contract).toLowerCase()}`}>
-                          {CONTRACT_TYPE_LABELS[getContractType(contract)]}
+                        <span className="contract-name-meta">
+                          <span className={`contract-type-badge contract-type-${contractType.toLowerCase()}`}>
+                            {CONTRACT_TYPE_LABELS[contractType]}
+                          </span>
+                          <small>{displayNumber}</small>
                         </span>
-                        <small>{contract.id}{contract.ioId ? ` · ${contract.ioId}` : ''}</small>
-                        {contract.frameworkContractId ? <small className="contract-relation-subtext">框架合同：{contract.frameworkContractId}</small> : null}
                       </button>
                     </td>
                     <td title={realName}>{realName}</td>
@@ -803,18 +788,20 @@ export function ContractsPage({
                     <td>{formatContractMoney(contract)}</td>
                     <td><ContractValidityCell contract={contract} referenceDate={referenceDate} /></td>
                     <td>
-                      <span className={`contract-readiness contract-readiness-${validity.expired ? 'expired' : readiness.ready ? 'ready' : contract.isTemplate ? 'template' : 'attention'}`}>
+                      <span className={`contract-readiness contract-readiness-${bucket === 'expired' ? 'expired' : readiness.ready ? 'ready' : 'attention'}`}>
                         <i />
-                        {validity.expired ? '已失效' : contract.isTemplate ? '参考模板' : readiness.label}
+                        {bucket === 'expired' ? '已失效' : readiness.label}
                       </span>
                     </td>
                     <td className="action-cell">
-                      <ListActionButton kind="view" onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>查看合同</ListActionButton>
+                      <ListActionButton kind={bucket === 'draft' ? 'edit' : 'view'} onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>
+                        {bucket === 'draft' ? '继续编辑' : '查看合同'}
+                      </ListActionButton>
                     </td>
                   </tr>
                 );
               })}
-              {visible.length === 0 ? <tr><td className="request-project-empty" colSpan={isTemplateTab ? 5 : 8}>暂无符合条件的合同</td></tr> : null}
+              {visible.length === 0 ? <tr><td className="request-project-empty" colSpan={8}>暂无符合条件的合同</td></tr> : null}
             </tbody>
           </table>
         </div>

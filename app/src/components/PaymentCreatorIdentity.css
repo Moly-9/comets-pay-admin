@@ -1,0 +1,94 @@
+.payment-creator-identity {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 9px;
+  vertical-align: middle;
+}
+
+.payment-creator-identity > .avatar {
+  flex: 0 0 auto;
+}
+
+.payment-creator-identity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.payment-creator-identity-copy > strong,
+.payment-creator-identity-copy > small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-creator-identity-copy > strong {
+  color: #303640;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.payment-creator-identity-copy > small {
+  color: #818997;
+  font-size: 10.5px;
+  font-weight: 450;
+}
+
+.payment-creator-identity.is-md {
+  gap: 10px;
+}
+
+.payment-creator-identity.is-md .payment-creator-identity-copy > strong {
+  font-size: 13px;
+}
+
+.payment-creator-identity.is-md .payment-creator-identity-copy > small {
+  font-size: 11px;
+}
+
+.payment-creator-identity.is-lg {
+  gap: 12px;
+}
+
+.payment-creator-identity.is-lg .payment-creator-identity-copy > strong {
+  font-size: 14px;
+}
+
+.payment-creator-identity.is-lg .payment-creator-identity-copy > small {
+  font-size: 11.5px;
+}
+
+@media (max-width: 520px) {
+  .payment-creator-identity {
+    width: 100%;
+  }
+}
+
+.batch-wizard-creator-cell {
+  display: grid;
+  min-width: 210px;
+  gap: 5px;
+}
+
+.batch-wizard-creator-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding-left: 42px;
+  color: #858d99;
+  font-size: 10.5px;
+}
+
+.batch-wizard-creator-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

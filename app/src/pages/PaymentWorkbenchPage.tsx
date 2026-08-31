@@ -110,7 +110,11 @@ export type PaymentProjectRow = {
   invoices: number;
   paymentOrder: string;
   paymentChannels: Payout['provider'][];
+  paymentEntity: string;
   amountTotals: PaymentCurrencyItem[];
+  transferFeeTotals: PaymentCurrencyItem[];
+  actualPaidTotals: PaymentCurrencyItem[];
+  actualPaidDates: string[];
   status: string;
   actionLabel: string;
   payouts: Payout[];
@@ -155,6 +159,46 @@ const paymentAmountTotalsFor = (payouts: Payout[], fallback: string) => (
   payouts.length ? aggregatePayoutCurrencies(payouts) : parsePaymentAmountSummary(fallback)
 );
 
+const aggregateOptionalPaymentAmounts = (
+  payouts: Payout[],
+  amountFor: (payout: Payout) => number | undefined,
+  currencyFor: (payout: Payout) => Payout['currency'] | undefined,
+) => sortPaymentCurrencyItems(Array.from(payouts.reduce<Map<string, PaymentCurrencyItem>>((result, payout) => {
+  const amount = amountFor(payout);
+  const currency = currencyFor(payout);
+  if (amount === undefined || !Number.isFinite(amount) || !currency) return result;
+  const current = result.get(currency) ?? { currency, amount: 0, count: 0 };
+  result.set(currency, {
+    currency,
+    amount: current.amount + amount,
+    count: current.count + 1,
+  });
+  return result;
+}, new Map()).values()));
+
+const paymentResultFieldsFor = (payouts: Payout[]) => {
+  const paidPayouts = payouts.filter((payout) => payout.status === '已付款');
+  return {
+    transferFeeTotals: aggregateOptionalPaymentAmounts(
+      paidPayouts,
+      (payout) => payout.transferFeeAmount,
+      (payout) => payout.transferFeeCurrency,
+    ),
+    actualPaidTotals: aggregateOptionalPaymentAmounts(
+      paidPayouts,
+      (payout) => payout.actualPaidAmount,
+      (payout) => payout.actualPaidCurrency,
+    ),
+    actualPaidDates: [...new Set(paidPayouts.flatMap((payout) => (
+      payout.paidAt ? [payout.paidAt.split(/[T ]/)[0]] : []
+    )))].sort(),
+  };
+};
+
+const paymentResultFallback = (project: PaymentProjectRow) => (
+  project.payouts.some((payout) => payout.status === '付款处理中') ? '待渠道回写' : '—'
+);
+
 const paymentProjectSearchText = (project: PaymentProjectRow) => [
   project.requestCode,
   project.cooperationProjectCode,
@@ -162,6 +206,10 @@ const paymentProjectSearchText = (project: PaymentProjectRow) => [
   project.media,
   project.pm,
   project.amount,
+  project.paymentEntity,
+  ...project.transferFeeTotals.map((item) => `${item.currency} ${item.amount}`),
+  ...project.actualPaidTotals.map((item) => `${item.currency} ${item.amount}`),
+  ...project.actualPaidDates,
   `${project.contracts}份合同`,
   `${project.invoices}份invoice`,
   project.paymentOrder,
@@ -303,6 +351,7 @@ export const buildPaymentProjectRows = ({
       if (!requestMatchesWorkbenchTab(request, tab, projectPayouts)) return [];
       const amount = projectPayouts.length ? summarizePayoutAmounts(projectPayouts) : request.amount;
       const presentation = paymentProjectPresentation(tab, projectPayouts);
+      const paymentResults = paymentResultFieldsFor(projectPayouts);
       return [{
         id: String(request.paymentRequestProjectId ?? request.id),
         requestId: request.id,
@@ -316,7 +365,9 @@ export const buildPaymentProjectRows = ({
         invoices: invoiceIds.size || request.invoices,
         paymentOrder: request.paymentOrder,
         paymentChannels: paymentChannelForRequest(request, projectPayouts),
+        paymentEntity: request.paymentEntity || '待补充',
         amountTotals: paymentAmountTotalsFor(projectPayouts, amount),
+        ...paymentResults,
         status: presentation.status,
         actionLabel: presentation.actionLabel,
         payouts: projectPayouts,
@@ -340,6 +391,7 @@ export const buildPaymentProjectRows = ({
   const legacyRows = [...legacyByProject.entries()].map(([projectId, projectPayouts]): PaymentProjectRow => {
     const project = getProjectFixture(projectId);
     const presentation = paymentProjectPresentation(tab, projectPayouts);
+    const paymentResults = paymentResultFieldsFor(projectPayouts);
     return {
       id: `legacy:${projectId}`,
       requestCode: projectId,
@@ -352,7 +404,9 @@ export const buildPaymentProjectRows = ({
       invoices: new Set(projectPayouts.map((payout) => payout.invoice)).size,
       paymentOrder: project?.paymentOrder ?? '待生成',
       paymentChannels: paymentChannelsFor(projectPayouts),
+      paymentEntity: '待补充',
       amountTotals: aggregatePayoutCurrencies(projectPayouts),
+      ...paymentResults,
       status: presentation.status,
       actionLabel: presentation.actionLabel,
       payouts: projectPayouts,
@@ -417,17 +471,17 @@ function PaymentProjectTable({
                   />
                 </label>
               </th>
-              <th>项目编号</th>
-              <th>关联项目</th>
-              <th>媒介</th>
-              <th>负责 PM</th>
-              <th>请款金额</th>
-              <th>合同</th>
-              <th>invoice</th>
-              <th>付款单</th>
-              <th>付款渠道</th>
-              <th>项目状态</th>
-              <th className="action-cell">操作</th>
+              <th className="payment-project-code-heading">项目编号</th>
+              <th className="payment-project-channel-heading">付款渠道</th>
+              <th className="payment-project-entity-heading">付款主体</th>
+              <th className="payment-project-associated-heading">关联项目</th>
+              <th className="payment-project-money-heading">请款金额及币种</th>
+              <th className="payment-project-money-heading">转账手续费及币种</th>
+              <th className="payment-project-money-heading">实际付款金额及币种</th>
+              <th className="payment-project-date-heading">实际付款日期</th>
+              <th className="payment-project-initiator-heading">发起人</th>
+              <th className="payment-project-status-cell">项目状态</th>
+              <th className="action-cell payment-project-action-cell">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -463,21 +517,43 @@ function PaymentProjectTable({
                       <strong>{project.requestCode}</strong>
                     </button>
                   </td>
-                  <td className="payment-project-associated">
-                    <strong>{project.cooperationProjectName}</strong>
-                    <small className="cell-subtext">{project.cooperationProjectCode}</small>
-                  </td>
-                  <td>{project.media}</td>
-                  <td>{project.pm}</td>
-                  <td>{project.amount}</td>
-                  <td>{project.contracts} 份</td>
-                  <td>{project.invoices} 份</td>
-                  <td className="mono-cell">{project.paymentOrder}</td>
                   <td className="payment-project-channel">
                     <PaymentProviderBadges compact providers={project.paymentChannels} />
                   </td>
-                  <td><span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span></td>
-                  <td className="action-cell">
+                  <td className="payment-project-entity" title={project.paymentEntity}>{project.paymentEntity}</td>
+                  <td className="payment-project-associated">
+                    <strong title={project.cooperationProjectName}>{project.cooperationProjectName}</strong>
+                    <small className="cell-subtext">{project.cooperationProjectCode}</small>
+                  </td>
+                  <td className="payment-project-money-cell">
+                    <span className="payment-project-value-stack">
+                      {project.amountTotals.length ? project.amountTotals.map((item) => (
+                        <span key={item.currency}><strong>{item.currency}</strong> {formatOverviewAmount(item.amount)}</span>
+                      )) : <span>{project.amount || '—'}</span>}
+                    </span>
+                  </td>
+                  <td className="payment-project-money-cell">
+                    <span className="payment-project-value-stack">
+                      {project.transferFeeTotals.length ? project.transferFeeTotals.map((item) => (
+                        <span key={item.currency}><strong>{item.currency}</strong> {formatOverviewAmount(item.amount)}</span>
+                      )) : <span className="payment-project-value-muted">{paymentResultFallback(project)}</span>}
+                    </span>
+                  </td>
+                  <td className="payment-project-money-cell">
+                    <span className="payment-project-value-stack">
+                      {project.actualPaidTotals.length ? project.actualPaidTotals.map((item) => (
+                        <span key={item.currency}><strong>{item.currency}</strong> {formatOverviewAmount(item.amount)}</span>
+                      )) : <span className="payment-project-value-muted">{paymentResultFallback(project)}</span>}
+                    </span>
+                  </td>
+                  <td className="payment-project-date-cell">
+                    <span className="payment-project-value-stack">
+                      {project.actualPaidDates.length ? project.actualPaidDates.map((date) => <span key={date}>{date}</span>) : <span className="payment-project-value-muted">{paymentResultFallback(project)}</span>}
+                    </span>
+                  </td>
+                  <td className="payment-project-initiator" title={project.media}>{project.media}</td>
+                  <td className="payment-project-status-cell"><span className={`simple-status ${paymentProjectStatusTone(project.status)}`.trim()}><i />{project.status}</span></td>
+                  <td className="action-cell payment-project-action-cell">
                     <ListActionButton
                       kind={workbenchActionKind(project.actionLabel)}
                       onClick={(event) => {
@@ -727,7 +803,7 @@ export function PaymentWorkbenchPage({
             <input
               type="search"
               aria-label={`搜索${activeTabLabel}付款项目`}
-              placeholder="搜索项目编号、名称、付款单等"
+              placeholder="搜索项目编号、关联项目、付款主体等"
               value={activeSearch}
               onChange={(event) => updateSearch(event.target.value)}
             />

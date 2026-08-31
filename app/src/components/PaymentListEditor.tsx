@@ -220,14 +220,14 @@ export function PaymentListEditor({
                 付款原因
                 <div>
                   <input aria-label="整单付款原因" placeholder="输入后填入全部付款行" value={bulkPaymentReason} disabled={!paymentFieldsEditable} onChange={(event) => setBulkPaymentReason(event.target.value)} />
-                  <Button variant="secondary" disabled={!paymentFieldsEditable || !bulkPaymentReason.trim() || !list.items.length} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
+                  <Button variant="secondary" disabled={!paymentFieldsEditable || !bulkPaymentReason.trim() || !list.items.length} disabledReason={!paymentFieldsEditable ? '当前付款清单已锁定，不能批量修改。' : !list.items.length ? '付款清单没有可填写的明细。' : '请先填写付款原因。'} onClick={() => applyBulkField('paymentReason', bulkPaymentReason)}>填入全部</Button>
                 </div>
               </label>
               <label>
                 交易附言
                 <div>
                   <input aria-label="整单交易附言" placeholder="输入后填入全部付款行" value={bulkTransactionReference} disabled={!paymentFieldsEditable} onChange={(event) => setBulkTransactionReference(event.target.value)} />
-                  <Button variant="secondary" disabled={!paymentFieldsEditable || !bulkTransactionReference.trim() || !list.items.length} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
+                  <Button variant="secondary" disabled={!paymentFieldsEditable || !bulkTransactionReference.trim() || !list.items.length} disabledReason={!paymentFieldsEditable ? '当前付款清单已锁定，不能批量修改。' : !list.items.length ? '付款清单没有可填写的明细。' : '请先填写交易附言。'} onClick={() => applyBulkField('transactionReference', bulkTransactionReference)}>填入全部</Button>
                 </div>
               </label>
             </div>

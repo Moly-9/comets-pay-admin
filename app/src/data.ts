@@ -1,6 +1,7 @@
 import type { InvoiceBillingEntityId } from './businessWorkflow';
 import type { InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
 import { demoDisplayName } from './demoCreatorNames';
+import { prototypePaymentResultFor } from './prototypePaymentResults';
 
 export type SystemRoleKey = 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project';
 export type LoginSessionPolicy = 'single_device' | 'multi_device';
@@ -386,6 +387,7 @@ export const authenticateSystemUser = (account: string, password: string): { use
 };
 
 export const INITIAL_INVOICE_BILLING_ENTITY_ID = 'ibe_fixture_comets_international' as InvoiceBillingEntityId;
+export const INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID = 'ibe_fixture_novacomets_limited' as InvoiceBillingEntityId;
 
 export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
   billingEntityId: INITIAL_INVOICE_BILLING_ENTITY_ID,
@@ -394,11 +396,18 @@ export const INITIAL_INVOICE_ENTITY: InvoiceEntity = {
 };
 
 export const INITIAL_INVOICE_BILLING_SETTINGS: InvoiceBillingSettings = {
-  entities: [{
-    id: INITIAL_INVOICE_BILLING_ENTITY_ID,
-    name: INITIAL_INVOICE_ENTITY.name,
-    address: INITIAL_INVOICE_ENTITY.address,
-  }],
+  entities: [
+    {
+      id: INITIAL_INVOICE_BILLING_ENTITY_ID,
+      name: INITIAL_INVOICE_ENTITY.name,
+      address: INITIAL_INVOICE_ENTITY.address,
+    },
+    {
+      id: INITIAL_NOVACOMETS_INVOICE_BILLING_ENTITY_ID,
+      name: 'NovaComets Limited',
+      address: 'Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China',
+    },
+  ],
   defaultEntityId: INITIAL_INVOICE_BILLING_ENTITY_ID,
 };
 
@@ -446,6 +455,7 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
     account: '0000000001',
     status: '未进入付款',
     invoiceReviewStatus: '待媒介审核',
+    invoiceSignedAt: '2026-07-31T10:00:00.000Z',
     accent: '#f59e0b',
   },
   {
@@ -1044,13 +1054,14 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
 export const INITIAL_PAYOUTS: Payout[] = RAW_INITIAL_PAYOUTS.map((payout) => ({
   ...payout,
   creator: demoDisplayName(payout.creator),
+  ...(payout.status === '已付款' ? prototypePaymentResultFor(payout) : {}),
 }));
 
 export const PAGE_TITLES = {
   dashboard: '数据工作台',
   'payment-workbench': '付款工作台',
-  projects: '我的请款项目',
-  requests: '请款项目',
+  projects: '我的请款',
+  requests: '请款审批',
   contracts: '合同管理',
   'contract-create': '生成合同',
   creators: '达人档案',
@@ -1064,6 +1075,8 @@ export const PAGE_TITLES = {
   transactions: '交易记录',
   organization: '组织信息',
   channels: '渠道设置',
+  'system-accounts': '系统账号',
+  'system-config': '系统配置',
   'system-settings': '系统设置',
   notifications: '通知',
 } as const;

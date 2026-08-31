@@ -45,6 +45,10 @@ export type InvoiceBatchLineItemSeed = Pick<
   'templateKey' | 'description'
 >;
 
+export const invoiceBatchLineItemScope = (
+  item: Pick<InvoiceBatchLineItem, 'lineItemScope'>,
+) => item.lineItemScope ?? 'SHARED';
+
 const createBatchLineItem = (
   seed: InvoiceBatchLineItemSeed,
   current?: InvoiceBatchLineItem,
@@ -56,6 +60,7 @@ const createBatchLineItem = (
     quantity: current?.quantity ?? 1,
   }),
   templateKey: seed.templateKey,
+  lineItemScope: 'SHARED',
 });
 
 export const synchronizeInvoiceBatchLineItems = (
@@ -63,16 +68,21 @@ export const synchronizeInvoiceBatchLineItems = (
   seeds: InvoiceBatchLineItemSeed[],
   descriptionOverrideKeys: string[] = [],
   forceTemplateKeys: string[] = [],
-) => seeds.map((seed) => {
-  const existing = current.find((item) => item.templateKey === seed.templateKey);
-  const preservesOverride = existing
-    && descriptionOverrideKeys.includes(seed.templateKey)
-    && !forceTemplateKeys.includes(seed.templateKey);
-  return createBatchLineItem(
-    preservesOverride ? { ...seed, description: existing.description } : seed,
-    existing,
-  );
-});
+) => {
+  const sharedItems = current.filter((item) => invoiceBatchLineItemScope(item) === 'SHARED');
+  const creatorItems = current.filter((item) => invoiceBatchLineItemScope(item) === 'CREATOR');
+  const synchronizedSharedItems = seeds.map((seed) => {
+    const existing = sharedItems.find((item) => item.templateKey === seed.templateKey);
+    const preservesOverride = existing
+      && descriptionOverrideKeys.includes(seed.templateKey)
+      && !forceTemplateKeys.includes(seed.templateKey);
+    return createBatchLineItem(
+      preservesOverride ? { ...seed, description: existing.description } : seed,
+      existing,
+    );
+  });
+  return [...synchronizedSharedItems, ...creatorItems];
+};
 
 export const synchronizeInvoiceBatchDescriptions = (
   row: Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'>,
@@ -102,9 +112,12 @@ export const setInvoiceBatchDescriptionOverride = (
 ): Pick<InvoiceBatchRow, 'items' | 'descriptionOverrideKeys'> => {
   const item = row.items.find((candidate) => candidate.id === lineItemId);
   if (!item) return row;
+  const descriptionOverrideKeys = invoiceBatchLineItemScope(item) === 'CREATOR'
+    ? row.descriptionOverrideKeys
+    : [...new Set([...row.descriptionOverrideKeys, item.templateKey])];
   return {
     items: updateInvoiceBatchLineItem(row.items, lineItemId, { description }),
-    descriptionOverrideKeys: [...new Set([...row.descriptionOverrideKeys, item.templateKey])],
+    descriptionOverrideKeys,
   };
 };
 
@@ -125,6 +138,29 @@ export const updateInvoiceBatchLineItem = (
     ...patch,
   }),
 }) : item);
+
+export const addInvoiceBatchCreatorLineItem = (
+  items: InvoiceBatchLineItem[],
+): InvoiceBatchLineItem[] => {
+  const id = createPrototypeId('item');
+  return [...items, {
+    ...normalizeLineItem({
+      id,
+      description: '',
+      unitPrice: 0,
+      quantity: 1,
+    }),
+    templateKey: id,
+    lineItemScope: 'CREATOR',
+  }];
+};
+
+export const removeInvoiceBatchCreatorLineItem = (
+  items: InvoiceBatchLineItem[],
+  lineItemId: string,
+): InvoiceBatchLineItem[] => items.filter((item) => (
+  item.id !== lineItemId || invoiceBatchLineItemScope(item) !== 'CREATOR'
+));
 
 const projectIdFor = (project: ProjectSummary) => (
   (project.cooperationProjectId ?? project.projectId ?? project.id) as ProjectId
@@ -259,7 +295,11 @@ export const buildInvoiceDocumentForBatchRow = (
     contractIds: [...row.contractIds],
     from: { ...creator.contact },
     currency: row.currency,
-    items: row.items.map(({ templateKey: _templateKey, ...item }) => normalizeLineItem(item)),
+    items: row.items.map(({
+      templateKey: _templateKey,
+      lineItemScope: _lineItemScope,
+      ...item
+    }) => normalizeLineItem(item)),
     payoutAccountId: getPayoutAccountId(account),
     payoutAccountVersion: payment.payoutAccountVersion,
     payoutProvider: account.provider,

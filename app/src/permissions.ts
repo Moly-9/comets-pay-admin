@@ -106,6 +106,8 @@ const PAGE_PERMISSION_RULES: Partial<Record<NavPage, PermissionId[]>> = {
   transactions: ['payment_view'],
   organization: ['account_manage'],
   channels: ['channel_manage'],
+  'system-accounts': ['account_manage', 'approval_manage'],
+  'system-config': ['contract_template_manage'],
   'system-settings': ['account_manage', 'approval_manage'],
 };
 

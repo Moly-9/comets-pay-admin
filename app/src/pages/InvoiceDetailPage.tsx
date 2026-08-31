@@ -3,8 +3,6 @@ import {
   Clipboard,
   Download,
   FileSearch,
-  Info,
-  Mail,
   MessageSquareText,
   Pencil,
   Send,
@@ -14,9 +12,12 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { accountDisplayValue, emailDisplayValue, isLegacyMaskedAccountValue } from '../accountPresentation';
-import { formatCreatorHandle } from '../creatorSearchOptions';
+import { accountDisplayValue, isLegacyMaskedAccountValue } from '../accountPresentation';
 import { Button, Modal, PageHeading, StatusMark } from '../components/Common';
+import {
+  InvoiceFeedbackDeliveryNotice,
+  InvoiceSignatureReminderDeliveryNotice,
+} from '../components/InvoiceDeliveryNotice';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
@@ -37,6 +38,7 @@ import {
   invoiceAccountSummary,
 } from '../invoice/invoiceReview';
 import { invoicePayoutAccountPresentationRows } from '../invoice/invoicePayoutAccountPresentation';
+import { hasInvoiceSignatureEvidence } from '../invoice/invoiceSignature';
 import {
   getApprovedInvoicePaymentStatus,
   getInvoiceEditContext,
@@ -119,72 +121,15 @@ const formatReviewTime = (value: string) => {
   }).format(date);
 };
 
-const deliveryEmailIsValid = (value: string) => {
-  const [localPart, domain] = value.trim().split('@');
-  return Boolean(localPart && domain?.includes('.'));
-};
-
 export const buildInvoiceSignatureReminderMessage = (model: InvoiceDocumentModel) => {
   const creatorName = model.creatorName || model.from.legalName || '达人';
   return `Hi ${creatorName}，Invoice ${model.invoiceNumber} 已准备好，请登录达人端系统，在 Invoice 中心查看并完成签署。如有疑问，可通过站内信反馈。`;
 };
 
-function InvoiceDeliveryNotice({
-  email,
-  purpose,
-}: {
-  email: string;
-  purpose: 'feedback' | 'signature';
-}) {
-  const signatureReminder = purpose === 'signature';
-  const hasEmail = deliveryEmailIsValid(email);
-  return (
-    <div
-      className="invoice-feedback-delivery"
-      role="note"
-      aria-label={signatureReminder ? '签署提醒发送渠道说明' : '回复发送渠道说明'}
-    >
-      <div className="invoice-feedback-delivery-title">
-        <Send size={16} />
-        <span>
-          <strong>{signatureReminder ? '通知发送渠道' : '回复发送渠道'}</strong>
-          <small>{signatureReminder ? '发送后将通过两个渠道同步提醒达人签署' : '提交后将通过两个渠道同步触达达人'}</small>
-        </span>
-      </div>
-      <ul>
-        <li>
-          <MessageSquareText size={16} />
-          <span>
-            <strong>达人端站内信</strong>
-            <small>{signatureReminder ? '发送至达人端 Invoice 消息中心，并引导进入签署' : '发送至达人端的 Invoice 消息中心'}</small>
-          </span>
-        </li>
-        <li>
-          <Mail size={16} />
-          <span>
-            <strong>邮件（站外信）</strong>
-            <small>{hasEmail ? `发送至达人档案邮箱：${emailDisplayValue(email)}` : '未发送 · 达人档案邮箱待补充'}</small>
-          </span>
-        </li>
-      </ul>
-      <p>
-        <Info size={15} />
-        <span>
-          <strong>原型说明：</strong>
-          {signatureReminder ? '当前仅模拟发送并保留通知记录' : '当前仅模拟发送并保留回复记录'}，不会真实触发站内信或邮件。正式接入后需分别记录双渠道发送状态、失败原因和重试结果，并保留操作审计。
-        </span>
-      </p>
-    </div>
-  );
-}
-
-export function InvoiceFeedbackDeliveryNotice({ email }: { email: string }) {
-  return <InvoiceDeliveryNotice email={email} purpose="feedback" />;
-}
-
-export function InvoiceSignatureReminderDeliveryNotice({ email }: { email: string }) {
-  return <InvoiceDeliveryNotice email={email} purpose="signature" />;
-}
+export {
+  InvoiceFeedbackDeliveryNotice,
+  InvoiceSignatureReminderDeliveryNotice,
+} from '../components/InvoiceDeliveryNotice';
 
 const sameText = (left: string, right: string) => (
   left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
@@ -199,6 +144,7 @@ const sameAccount = (left: string, right: string) => {
 function buildReviewChecks(
   source: InvoiceDetailSource,
   model: InvoiceDocumentModel,
+  contracts: ContractRecord[],
 ): InvoiceReviewCheck[] {
   if (source.kind === 'generated') {
     const signed = Boolean(model.signatureText || model.signatureDate || source.payout?.invoiceSignedAt);
@@ -270,7 +216,7 @@ function buildReviewChecks(
       {
         id: 'signature',
         label: '签署完整性',
-        contractValue: '需要完整签署',
+        contractValue: signaturePending ? '需要完整签署' : '已签署',
         invoiceValue: signaturePending ? '等待签署或补充资料' : '签名页已归档',
         passed: !signaturePending,
         note: signaturePending ? '当前资料尚未满足付款条件' : '签名区域检查通过',
@@ -280,10 +226,18 @@ function buildReviewChecks(
 
   const { payout } = source;
   const reference = getInvoiceContractReference(payout);
+  const linkedContract = contracts.find((contract) => (
+    Boolean(contract.contractId && model.contractIds?.includes(contract.contractId))
+    || contract.id === payout.contract
+    || String(contract.contractId ?? '') === payout.contract
+  ));
+  const contractPublisher = linkedContract?.publisher?.trim() ?? '';
+  const invoicePublisher = model.from.legalName?.trim() ?? '';
   const accountSummary = invoiceAccountSummary(model);
   const accountIssue = Boolean(payout.issue && /(账户|收款资料|路由)/.test(payout.issue));
   const partyIssue = Boolean(payout.issue && /(主体|名称)/.test(payout.issue));
   const signatureIssue = Boolean(payout.issue && /签字|签名/.test(payout.issue));
+  const signed = hasInvoiceSignatureEvidence(payout);
   const modelTotal = invoiceTotal(model);
 
   return [
@@ -298,10 +252,18 @@ function buildReviewChecks(
     {
       id: 'party',
       label: '收款主体',
-      contractValue: model.creatorName || model.from.legalName,
-      invoiceValue: model.from.legalName || '待补充',
-      passed: !partyIssue && sameText(model.creatorName || model.from.legalName, model.from.legalName),
-      note: partyIssue ? payout.issue ?? '收款主体需复核' : 'Invoice From与合同Publisher一致',
+      contractValue: contractPublisher || '合同 Publisher 缺失',
+      invoiceValue: invoicePublisher || '待补充',
+      passed: Boolean(contractPublisher && invoicePublisher)
+        && !partyIssue
+        && sameText(contractPublisher, invoicePublisher),
+      note: !linkedContract
+        ? '未找到关联合同，不能通过达人名称推断合同 Publisher'
+        : partyIssue
+          ? payout.issue ?? '收款主体需复核'
+          : contractPublisher && invoicePublisher && sameText(contractPublisher, invoicePublisher)
+            ? 'Invoice From与合同Publisher一致'
+            : 'Invoice From与合同Publisher不一致',
     },
     {
       id: 'bill-to',
@@ -332,10 +294,14 @@ function buildReviewChecks(
     {
       id: 'signature',
       label: '签署完整性',
-      contractValue: '需要完整签署',
-      invoiceValue: signatureIssue ? '签字页缺失' : '签名页已识别',
-      passed: !signatureIssue,
-      note: signatureIssue ? payout.issue ?? '签名信息不完整' : '签名区域检查通过',
+      contractValue: signed && !signatureIssue ? '已签署' : '需要完整签署',
+      invoiceValue: signed && !signatureIssue ? '已签署' : signatureIssue ? '签字页缺失' : '等待签署',
+      passed: signed && !signatureIssue,
+      note: signed && !signatureIssue
+        ? '签名区域检查通过'
+        : signatureIssue
+          ? payout.issue ?? '签名信息不完整'
+          : '等待达人完成签署',
     },
   ];
 }
@@ -458,14 +424,14 @@ export function InvoiceDetailPage({
         passed: ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state),
         note: check.message,
       }))
-    : buildReviewChecks(source, model), [contractMatch, model, source]);
+    : buildReviewChecks(source, model, contracts), [contractMatch, contracts, model, source]);
   const passedCount = checks.filter((check) => check.passed).length;
   const allPassed = checks.length > 0 && passedCount === checks.length;
-  const signedForMediaReview = Boolean(model.signatureText || model.signatureDate || payout?.invoiceSignedAt);
+  const signedForMediaReview = hasInvoiceSignatureEvidence(payout, generatedRecord);
   const contractMatchEnforced = Boolean(storedContractMatchReview);
   const mediaApprovalReady = signedForMediaReview
     && (!contractMatchEnforced || Boolean(contractMatch?.canProceed));
-  const availableActions = invoiceReviewStatus
+  const availableActions = invoiceReviewStatus && managementView?.tab !== 'signature'
     ? getInvoiceDetailReviewActions(invoiceReviewStatus, {
         manage: canManageInvoice,
         mediaReview: canReviewMedia,
@@ -655,10 +621,22 @@ export function InvoiceDetailPage({
     { id: 'invoice-date', label: 'Invoice Date', value: model.invoiceDate || '待补充', secondary: 'Date of Invoice', evidenceTarget: '.invoice-paper-meta > section:nth-child(2)' },
     { id: 'invoice-from', label: 'Invoice From', value: model.from.legalName || '待补充', secondary: model.from.email || '联系邮箱待补充', evidenceTarget: '.invoice-paper-meta > section:first-child' },
     { id: 'bill-to', label: 'Bill To', value: model.billTo.name || '待补充', secondary: model.billTo.address || '地址待补充', evidenceTarget: '.invoice-paper-bill-to' },
-    { id: 'project', label: '项目及合作项', value: model.projectName || '待关联', secondary: model.projectId || '项目编号待关联', evidenceTarget: '.invoice-paper-table-wrap' },
     { id: 'description', label: 'Description', value: model.items.map((item) => item.description).filter(Boolean).join('；') || '待补充', secondary: `${model.items.length} 项费用明细`, evidenceTarget: '.invoice-paper-table-wrap' },
-    { id: 'amount', label: '金额和币种', value: formatInvoiceMoney(model.currency, invoiceTotal(model)), secondary: model.currency, evidenceTarget: '.invoice-paper-total' },
+    { id: 'amount', label: '金额和币种', value: formatInvoiceMoney(model.currency, invoiceTotal(model)), evidenceTarget: '.invoice-paper-total' },
     { id: 'payment', label: '付款方式与账户', value: model.paymentMethod === 'bank' ? '银行转账' : 'PayPal', secondary: invoiceAccountSummary(model), evidenceTarget: '.invoice-paper-payment' },
+    {
+      id: 'signature',
+      label: '签名区域',
+      value: signedForMediaReview ? '已签名' : '未签名',
+      secondary: signedForMediaReview
+        ? model.signatureDate
+          ? model.signatureDate
+          : payout?.invoiceSignedAt
+            ? formatReviewTime(payout.invoiceSignedAt)
+            : '签名已归档'
+        : '等待达人签署',
+      evidenceTarget: '.invoice-paper-signature',
+    },
   ];
   const workspaceContractChecks: InvoiceReviewContractCheck[] = checks.map((check) => ({
     id: check.id,
@@ -811,7 +789,6 @@ export function InvoiceDetailPage({
     };
   })();
   const workspaceBlockingReasons = [
-    ...(primaryAction === 'APPROVE_MEDIA' && !signedForMediaReview ? ['达人尚未完成签署，不能进行审核'] : []),
     ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatch?.canProceed
       ? ['合同与 Invoice 存在未处理的阻断项']
       : []),
@@ -827,7 +804,7 @@ export function InvoiceDetailPage({
 
       <PageHeading
         title={model.invoiceNumber}
-        subtitle={`${model.creatorHandle ? formatCreatorHandle(model.creatorHandle, model.creatorPlatform) : model.creatorName} · ${model.projectName || '待关联项目'}`}
+        subtitle={`${model.creatorName} · ${model.projectName || '待关联项目'}`}
         actions={(
           <div className="invoice-detail-header-actions">
             <Button variant="secondary" icon={<Clipboard size={16} />} onClick={copyInvoiceId}>复制编号</Button>
@@ -835,6 +812,7 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Send size={16} />}
               disabled={isDraft ? !canPublishDraft : !canSendSignatureReminder}
+              disabledReason={isDraft ? '当前账号不能发布该草稿' : '仅待签署状态可以发送提醒'}
               title={isDraft
                 ? canPublishDraft ? '发布并通知达人签署' : '当前账号不能发布该草稿'
                 : canSendSignatureReminder ? '再次通知达人签署' : '仅待签署状态可以发送提醒'}
@@ -846,6 +824,7 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Pencil size={16} />}
               disabled={!canEditHeader}
+              disabledReason="当前状态不可编辑"
               title={canEditHeader ? '编辑 Invoice' : '当前状态不可编辑'}
               onClick={() => { if (payout && editContext) onEditInvoice?.(payout, editContext); }}
             >
@@ -855,12 +834,13 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Undo2 size={16} />}
               disabled={!canWithdrawDraft}
+              disabledReason="只有未发布草稿可以撤销"
               title={canWithdrawDraft ? '撤销并删除当前草稿' : '只有未发布草稿可以撤销'}
               onClick={() => setWithdrawDialogOpen(true)}
             >
               撤销
             </Button>
-            <Button icon={<Download size={16} />} disabled={Boolean(downloading)} onClick={() => downloadInvoice('pdf')}>
+            <Button icon={<Download size={16} />} disabled={Boolean(downloading)} disabledReason="文件正在生成，请稍候。" onClick={() => downloadInvoice('pdf')}>
               {downloading === 'pdf' ? '生成中…' : '下载PDF'}
             </Button>
           </div>
@@ -949,6 +929,13 @@ export function InvoiceDetailPage({
         blockingReasons={workspaceBlockingReasons}
         returnLabel={returnAction ? ACTION_LABEL[returnAction] : undefined}
         returnDialogTitle={returnAction === 'RECORD_CREATOR_FEEDBACK' ? '记录达人反馈' : '退回达人修改'}
+        returnContext={returnAction === 'RETURN_TO_CREATOR' ? {
+          creatorName: model.creatorName || payout?.creator || '关联达人',
+          invoiceNumber: model.invoiceNumber,
+          projectName: model.projectName || payout?.project || '关联项目待补充',
+          recipientEmail: model.from.email,
+          instruction: '请达人根据退回原因修改 Invoice，并重新完成签署。',
+        } : undefined}
         onReturn={payout && returnAction ? (reason) => onReviewAction(payout, returnAction, reason) : undefined}
         onSave={primaryAction === 'APPROVE_MEDIA' && canReviewMedia
           ? () => notify('审核进度已保存', `${model.invoiceNumber} 的审核进度已保留在当前前端原型中。`)
@@ -964,7 +951,7 @@ export function InvoiceDetailPage({
         additionalFooterActions={(
           <>
             {source.kind !== 'payout' ? (
-              <Button variant="secondary" disabled={Boolean(downloading)} onClick={() => downloadInvoice('docx')}>
+              <Button variant="secondary" disabled={Boolean(downloading)} disabledReason="文件正在生成，请稍候。" onClick={() => downloadInvoice('docx')}>
                 {downloading === 'docx' ? '生成中…' : '下载DOCX'}
               </Button>
             ) : null}
@@ -994,6 +981,7 @@ export function InvoiceDetailPage({
               <Button
                 icon={<Send size={16} />}
                 disabled={!normalizedSignatureReminderMessage}
+                disabledReason="请先填写签署提醒内容。"
                 onClick={submitSignatureReminder}
               >
                 发送签署提醒
@@ -1038,6 +1026,7 @@ export function InvoiceDetailPage({
                 <Button
                   icon={<Send size={16} />}
                   disabled={!normalizedReplyMessage}
+                  disabledReason="请先填写回复内容。"
                   onClick={submitFeedbackReply}
                 >
                   回复反馈

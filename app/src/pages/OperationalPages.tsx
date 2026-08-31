@@ -18,6 +18,7 @@ import {
   Files,
   Link2,
   ListFilter,
+  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -33,19 +34,20 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
   useRef,
   useState,
   type Dispatch,
-  type KeyboardEvent,
   type ReactNode,
   type SetStateAction,
 } from 'react';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
+import { CreatorIdentity, SocialPlatformIcon } from '../components/CreatorIdentity';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
@@ -54,7 +56,13 @@ import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../da
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
 import { Pagination, usePagination } from '../components/Pagination';
 import { InvoiceManagementTable } from '../components/InvoiceManagementTable';
+import { CollaborationInvoiceDrawer } from '../components/CollaborationInvoiceDrawer';
+import {
+  buildCollaborationInvoiceRows,
+  collaborationStatusTone,
+} from '../collaborationInvoices';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
+import { resolveInvoiceCreatorIdentity } from '../invoice/invoiceCreatorIdentity';
 import {
   filterInvoiceManagementRows,
   findInvoiceRequest,
@@ -65,6 +73,7 @@ import {
   type InvoiceManagementRow,
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
+import { hasInvoiceSignatureEvidence } from '../invoice/invoiceSignature';
 import {
   externalInvoiceListStatus,
   externalInvoicePageTab,
@@ -121,12 +130,29 @@ import type {
 import { requestProjectStatusesForFilter } from '../requestProjectStatusFilters';
 import { demoAccountName, demoDisplayName, demoRealName } from '../demoCreatorNames';
 import {
+  creatorCollaborationProjectsFor,
+  type CreatorCollaborationProjectRecord,
+} from '../creatorCollaborationProjects';
+import {
   creatorSocialAccounts,
+  creatorSearchTerms,
   creatorSocialSelectionValue,
-  formatCreatorHandle,
   parseCreatorSocialSelectionValue,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
+import {
+  CREATOR_DIRECTORY_PROVIDER_OPTIONS,
+  createCreatorDirectoryWorkbook,
+  creatorDirectoryWorkbookFilename,
+  creatorPayoutAccountVersionResult,
+  distinctCreatorSocialPlatformCount,
+  explicitDefaultPayoutAccount,
+  filterCreatorDirectory,
+  formatCreatorPayoutAccountUpdatedAt,
+  latestCreatorPayoutAccountUpdatedAt,
+  toggleCreatorDirectorySelection,
+  type CreatorDirectoryProviderFilter,
+} from '../creatorDirectoryWorkbook';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
   ExternalInvoiceCollectionCreatePage,
@@ -163,9 +189,9 @@ import type { RequestApprovalReminderSummary } from '../requestApprovalReminders
 import { aggregatePayoutCurrencies } from '../paymentCurrencyOverview';
 import { downloadBlob, todayInputValue } from '../invoice/invoiceUtils';
 import {
-  findTransactionBatchContext,
+  createTransactionRecords,
   filterTransactionRecords,
-  isPaymentTransactionRecord,
+  type TransactionRecord,
   type TransactionTab,
   type TransactionProvider,
 } from '../transactionRecords';
@@ -175,13 +201,14 @@ import {
 } from '../transactionRecordsWorkbook';
 import {
   paymentBatchAmountLabel,
+  paymentBatchFinancialSummary,
+  paymentBatchMoneyTotalsLabel,
   paymentBatchStatusCounts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
 import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
-  aggregatePaymentStatus,
   matchesPaymentStatus,
   type PaymentAggregateStatus,
   type PaymentStatusFilter,
@@ -423,6 +450,11 @@ export function ProjectInlineFilterPanel({
   onSearchChange,
   onFiltersChange,
   onClear,
+  entityLabel = '项目',
+  statusLabel = '项目状态',
+  searchPlaceholder = '搜索项目名称或编号',
+  listAriaLabel = '项目列表筛选',
+  countLabel = '个项目',
 }: {
   search: string;
   filters: ProjectListFilters;
@@ -436,6 +468,11 @@ export function ProjectInlineFilterPanel({
   onSearchChange: (value: string) => void;
   onFiltersChange: Dispatch<SetStateAction<ProjectListFilters>>;
   onClear: () => void;
+  entityLabel?: string;
+  statusLabel?: string;
+  searchPlaceholder?: string;
+  listAriaLabel?: string;
+  countLabel?: string;
 }) {
   const hasBudgetFilter = filters.currency !== 'all' || Boolean(filters.minBudget || filters.maxBudget);
   const activeFilterCount = Number(filters.customers.length > 0)
@@ -456,11 +493,11 @@ export function ProjectInlineFilterPanel({
         : 'active');
 
   return (
-    <div className="project-inline-filter-panel" aria-label="项目列表筛选">
+    <div className="project-inline-filter-panel" aria-label={listAriaLabel}>
       <div className="project-inline-filters">
         <div className="project-filter-field project-inline-filter-search">
-          <span className="project-filter-field-label">项目</span>
-          <SearchBar value={search} onChange={onSearchChange} placeholder="搜索项目名称或编号" />
+          <span className="project-filter-field-label">{entityLabel}</span>
+          <SearchBar value={search} onChange={onSearchChange} placeholder={searchPlaceholder} />
         </div>
         <SearchableMultiFilter
           className="project-inline-filter-customer"
@@ -522,9 +559,9 @@ export function ProjectInlineFilterPanel({
           {invalidBudgetRange ? <small className="project-budget-error">最高金额不能低于最低金额，当前暂不应用金额区间</small> : null}
         </div>
         <div className="project-filter-field project-inline-filter-status">
-          <span className="project-filter-field-label">项目状态</span>
+          <span className="project-filter-field-label">{statusLabel}</span>
           <SelectField
-            ariaLabel="项目状态"
+            ariaLabel={statusLabel}
             className={`project-status-select project-status-select-${selectedStatusTone}`}
             variant="form"
             value={selectedStatus}
@@ -541,8 +578,8 @@ export function ProjectInlineFilterPanel({
         <div className="project-inline-filter-meta">
           <span>
             {hasActiveFilters
-              ? `显示 ${resultCount} / ${totalCount} 个项目`
-              : `共 ${totalCount} 个项目`}
+              ? `显示 ${resultCount} / ${totalCount} ${countLabel}`
+              : `共 ${totalCount} ${countLabel}`}
           </span>
           {hasActiveFilters ? <button type="button" onClick={onClear}>清除全部</button> : null}
         </div>
@@ -935,7 +972,7 @@ export function ProjectsPage({
   return (
     <div className="page-stack">
       <PageHeading
-        title="我的项目"
+        title="我的请款"
         subtitle="仅展示与当前账号关联的项目，集中管理项目合同与invoice、达人名单、请款进度。"
         actions={canCreateProject ? <Button icon={<Plus size={17} />} onClick={openProjectModal}>新建项目</Button> : undefined}
       />
@@ -991,7 +1028,7 @@ export function ProjectsPage({
           title="新建项目"
           onClose={requestCloseProjectModal}
           width="760px"
-          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} onClick={createProject}>创建项目</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} disabledReason={!name.trim() ? '请先填写项目名称。' : !selectedPM ? '请先选择项目负责人。' : '请至少选择一位合作达人。'} onClick={createProject}>创建项目</Button></>}
         >
           <div className="form-grid single-column project-create-form">
             <label>
@@ -1123,6 +1160,14 @@ export const INITIAL_REQUEST_PROJECTS: RequestProjectSummary[] = [
     brand: project.brand,
     media: project.media,
     pm: project.pm,
+    paymentEntity: projectIndex % 6 === 5 ? 'novacomets' as const : 'Comets International Limited' as const,
+    projectCostAttribution: /\bJapan\b|日本/i.test(project.name)
+      ? '日本分公司' as const
+      : projectIndex % 6 === 5
+        ? 'novacomets' as const
+        : '香港公司（comets）' as const,
+    costType: projectIndex % 4 === 1 ? '采购成本' as const : '网红采买成本' as const,
+    costTypeDetail: projectIndex % 4 === 1 ? '实物采购' as const : undefined,
     amount: project.budget,
     contracts: project.creators,
     invoices: project.creators,
@@ -1333,8 +1378,8 @@ export function RequestsPage({
   return (
     <div className="page-stack">
       <PageHeading
-        title="请款项目"
-      subtitle="媒介已提交的请款项目列表，仅展示与当前系统账号有关的项目。"
+        title="请款审批"
+        subtitle="业务侧已提交的请款项目列表，仅展示与当前系统账号有关的项目。"
       />
       <div className="metrics-grid">
         <MetricCard
@@ -1747,6 +1792,7 @@ const createSeedCreator = ({
         : status === 'REVIEW_REQUIRED'
           ? 'PARTIAL_MATCH'
           : '',
+      updatedAt: isValidated ? '2026-07-18T10:31:00.000Z' : '2026-07-18T10:30:00.000Z',
       validatedAt: isValidated ? '2026-07-18 10:30' : '',
       verifiedAt: status === 'VERIFIED' || status === 'REVIEW_REQUIRED' || status === 'CANNOT_VERIFY'
         ? '2026-07-18 10:31'
@@ -1761,6 +1807,7 @@ const createSeedCreator = ({
       nickname: paypal.nickname ?? (resolvedBank ? 'PayPal 备用账户' : 'PayPal 主账户'),
       isDefault: paypalIsDefault,
       status: paypal.status ?? 'READY_FOR_VALIDATION',
+      updatedAt: '2026-07-18T10:31:00.000Z',
       paypalUsername: demoAccountName(paypal.username),
       paypalEmail: paypal.email,
     }));
@@ -1840,6 +1887,11 @@ export const INITIAL_CREATORS: CreatorProfile[] = [
   }),
   createSeedCreator({
     id: 'creator-oliver', initials: 'OC', accent: '#06b6d4', name: 'Oliver Chen', handle: '@oliver.tech', region: '新加坡', platform: 'YouTube', projects: 2,
+    socialAccounts: [
+      createSocialAccount('social-creator-oliver-youtube', 'YouTube', '@oliver.tech'),
+      createSocialAccount('social-creator-oliver-x', 'X', '@olivertech'),
+      createSocialAccount('social-creator-oliver-twitch', 'Twitch', '@oliver_live'),
+    ],
     contact: createInvoiceContact('Oliver Chen', 'oliver.chen@creator.example', '+65 8000 5319', 'Tanjong Pagar, Singapore'),
     bank: { countryCode: 'SG', countryName: 'Singapore', currency: 'SGD', accountNumber: '0000000003', bankName: 'DBS Bank', clearingSystem: 'FAST', routingType1: 'bank_code', routingValue1: '7171', routingType2: 'branch_code', routingValue2: '006', streetAddress: '12 Marina Boulevard', city: 'Singapore', state: 'Singapore', postcode: '018982', status: 'VERIFIED' },
   }),
@@ -1974,19 +2026,18 @@ function ProjectCreatorPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const normalizedSearch = search.trim().toLowerCase();
-  const creatorAccounts = creators.flatMap((creator) => creatorSocialAccounts(creator).map((socialAccount) => ({
-    creator,
-    socialAccount,
-    value: creatorSocialSelectionValue(creator.id, socialAccount.id),
-  })));
-  const visibleCreators = creatorAccounts.filter(({ creator, socialAccount }) => !normalizedSearch || (
-    `${creator.name}${socialAccount.handle}${creator.region}${socialAccount.platform}${socialAccount.profileUrl}`.toLowerCase().includes(normalizedSearch)
+  const creatorEntries = creators.flatMap((creator) => {
+    const socialAccount = creatorSocialAccounts(creator)[0];
+    return socialAccount ? [{ creator, value: creatorSocialSelectionValue(creator.id, socialAccount.id) }] : [];
+  });
+  const visibleCreators = creatorEntries.filter(({ creator }) => !normalizedSearch || (
+    `${creatorSearchTerms(creator)} ${creator.region}`.toLowerCase().includes(normalizedSearch)
   ));
   const selectedCreators = selectedHandles.flatMap((value) => {
     const selection = parseCreatorSocialSelectionValue(value);
     const creator = creators.find((item) => item.id === selection?.creatorId);
     const socialAccount = resolveCreatorSocialAccount(creator, selection?.socialAccountId);
-    return creator && socialAccount ? [{ creator, socialAccount, value }] : [];
+    return creator && socialAccount ? [{ creator, value }] : [];
   });
 
   const toggleCreator = (creatorId: string, value: string) => {
@@ -2019,7 +2070,7 @@ function ProjectCreatorPicker({
 
       {selectedCreators.length > 0 ? (
         <div className="creator-selection-chips" aria-label="已选择的合作达人">
-          {selectedCreators.map(({ creator, socialAccount, value }) => (
+          {selectedCreators.map(({ creator, value }) => (
             <button
               className="creator-selection-chip"
               type="button"
@@ -2027,8 +2078,7 @@ function ProjectCreatorPicker({
               key={value}
               onClick={() => toggleCreator(creator.id, value)}
             >
-              <Avatar initials={creator.initials} accent={creator.accent} size="sm" />
-              <span>{creator.name} · {formatCreatorHandle(socialAccount.handle, socialAccount.platform)}</span>
+              <CreatorIdentity creator={creator} socialAccountsMode="expanded" />
               <X size={13} aria-hidden="true" />
             </button>
           ))}
@@ -2041,31 +2091,28 @@ function ProjectCreatorPicker({
           <div className="creator-picker-search-row">
             <label className="creator-picker-search">
               <Search size={16} aria-hidden="true" />
-              <input aria-label="搜索达人档案" placeholder="搜索姓名、账号、地区或平台" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <input aria-label="搜索达人档案" placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" value={search} onChange={(event) => setSearch(event.target.value)} />
             </label>
             <span className="creator-picker-result-count" aria-live="polite">
               <strong>{visibleCreators.length}</strong>
-              <span>/ {creatorAccounts.length} 个账号</span>
+              <span>/ {creatorEntries.length} 位达人</span>
             </span>
           </div>
           <div className="creator-option-list">
-            {visibleCreators.map(({ creator, socialAccount, value }) => {
-              const selected = selectedHandles.includes(value);
+            {visibleCreators.map(({ creator, value }) => {
+              const selected = selectedHandles.some((selectedValue) => parseCreatorSocialSelectionValue(selectedValue)?.creatorId === creator.id);
               return (
                 <button
                   className={`creator-option ${selected ? 'creator-option-selected' : ''}`}
-                  data-creator-handle={socialAccount.handle}
+                  data-creator-handle={creatorSocialAccounts(creator)[0]?.handle}
                   type="button"
                   role="option"
                   aria-selected={selected}
                   key={value}
                   onClick={() => toggleCreator(creator.id, value)}
                 >
-                  <span className="creator-option-profile">
-                    <Avatar initials={creator.initials} accent={creator.accent} size="sm" />
-                    <span><strong>{creator.name}</strong><small>{socialAccount.handle} · {socialAccount.platform}</small></span>
-                  </span>
-                  <span className="creator-option-meta"><strong>{creator.region}</strong><small>{socialAccount.platform}</small></span>
+                  <CreatorIdentity creator={creator} className="creator-option-profile" socialAccountsMode="expanded" />
+                  <span className="creator-option-meta"><strong>{creator.region}</strong><small>{creatorSocialAccounts(creator).length} 个社媒账号</small></span>
                   {selected ? <CheckCircle2 className="creator-option-mark creator-option-mark-selected" size={18} /> : <Circle className="creator-option-mark" size={18} />}
                 </button>
               );
@@ -2078,9 +2125,23 @@ function ProjectCreatorPicker({
   );
 }
 
-function CreatorPaymentSection({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
+type CreatorPaymentSectionTone = 'neutral' | 'identity' | 'payout' | 'collaboration';
+
+function CreatorPaymentSection({
+  icon,
+  title,
+  description,
+  children,
+  tone = 'neutral',
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+  tone?: CreatorPaymentSectionTone;
+}) {
   return (
-    <section className="creator-payment-section">
+    <section className={`creator-payment-section creator-payment-section-${tone}`}>
       <header className="creator-payment-section-head">
         <span>{icon}</span>
         <div><h3>{title}</h3><p>{description}</p></div>
@@ -2131,20 +2192,36 @@ function CreatorContactFormGrid({
   );
 }
 
-const SOCIAL_PLATFORM_META: Record<string, { abbreviation: string; tone: string }> = {
-  instagram: { abbreviation: 'IG', tone: 'instagram' },
-  tiktok: { abbreviation: 'TT', tone: 'tiktok' },
-  youtube: { abbreviation: 'YT', tone: 'youtube' },
-  x: { abbreviation: 'X', tone: 'x' },
-  twitter: { abbreviation: 'X', tone: 'x' },
-  facebook: { abbreviation: 'FB', tone: 'facebook' },
-  twitch: { abbreviation: 'TW', tone: 'twitch' },
-};
-
-const getSocialPlatformMeta = (platform: string) => (
-  SOCIAL_PLATFORM_META[platform.trim().toLowerCase()]
-  ?? { abbreviation: platform.trim().slice(0, 2).toUpperCase() || '@', tone: 'default' }
+const socialPlatformTone = (platform: string) => (
+  platform.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'default'
 );
+
+export function CreatorSocialPlatformIcons({
+  accounts,
+  size = 18,
+  className = '',
+}: {
+  accounts: readonly CreatorSocialAccount[];
+  size?: number;
+  className?: string;
+}) {
+  if (!accounts.length) return <span className="creator-social-platform-icons-empty">社媒账号待补充</span>;
+  return (
+    <span
+      className={`creator-social-platform-icons ${className}`.trim()}
+      aria-label={`社媒平台账号 ${accounts.length} 个`}
+    >
+      {accounts.map((account) => (
+        <SocialPlatformIcon
+          platform={account.platform}
+          handle={account.handle}
+          size={size}
+          key={account.id || `${account.platform}:${account.handle}`}
+        />
+      ))}
+    </span>
+  );
+}
 
 function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAccount[] }) {
   if (accounts.length === 0) {
@@ -2159,10 +2236,12 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
   return (
     <div className="creator-social-account-list">
       {accounts.map((account) => {
-        const meta = getSocialPlatformMeta(account.platform);
+        const tone = socialPlatformTone(account.platform);
         return (
           <article className="creator-social-account-card" key={account.id}>
-            <span className={`creator-social-platform-mark creator-social-platform-${meta.tone}`}>{meta.abbreviation}</span>
+            <span className={`creator-social-platform-mark creator-social-platform-${tone}`}>
+              <SocialPlatformIcon platform={account.platform} handle={account.handle} size={21} />
+            </span>
             <div>
               <strong>{account.platform || '平台待补充'}</strong>
               <small>{account.handle || '账号待补充'}</small>
@@ -2182,6 +2261,49 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
         );
       })}
     </div>
+  );
+}
+
+export function CreatorCollaborationProjectDetails({
+  projects,
+}: {
+  projects: readonly CreatorCollaborationProjectRecord[];
+}) {
+  return (
+    <CreatorPaymentSection
+      icon={<Building2 size={19} />}
+      title="合作项目"
+      description="汇总该达人在全系统中的当前及历史合作项目"
+      tone="collaboration"
+    >
+      {projects.length ? (
+        <div className="creator-collaboration-project-list">
+          {projects.map((project) => (
+            <article className="creator-collaboration-project-card" key={project.projectId}>
+              <header>
+                <span className="creator-collaboration-project-code">{project.projectCode}</span>
+                <span className={`creator-collaboration-relation is-${project.relationStatus.toLowerCase()}`}>
+                  {project.relationStatus === 'CURRENT' ? '当前关联' : '历史关联'}
+                </span>
+              </header>
+              <div className="creator-collaboration-project-title">
+                <h4>{project.projectName}</h4>
+                {!project.directoryResolved ? <span>项目资料待同步</span> : null}
+              </div>
+              <dl className="creator-collaboration-project-meta">
+                <div><dt>合作品牌</dt><dd>{project.brand}</dd></div>
+                <div><dt>Invoice 份数</dt><dd>{project.invoiceCount} 份</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="creator-collaboration-project-empty">
+          <Files size={20} />
+          <span><strong>暂无合作项目记录</strong><small>该达人尚未通过稳定 ID 关联合作项目或业务资料</small></span>
+        </div>
+      )}
+    </CreatorPaymentSection>
   );
 }
 
@@ -2281,6 +2403,7 @@ function CreatorSocialAccountsEditor({
 export function CreatorsPage({
   notify,
   creators,
+  collaborationProjects,
   onSaveCreator,
   canEdit,
   currentUserAccount,
@@ -2289,6 +2412,7 @@ export function CreatorsPage({
 }: {
   notify: Notify;
   creators: CreatorProfile[];
+  collaborationProjects: readonly CreatorCollaborationProjectRecord[];
   onSaveCreator: (creator: CreatorProfile) => void;
   canEdit: boolean;
   currentUserAccount: string;
@@ -2296,6 +2420,9 @@ export function CreatorsPage({
   onFocusCleared?: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [providerFilter, setProviderFilter] = useState<CreatorDirectoryProviderFilter>('all');
+  const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(() => new Set());
+  const [exportingCreators, setExportingCreators] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -2303,21 +2430,31 @@ export function CreatorsPage({
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [validationAttempt, setValidationAttempt] = useState(0);
   const [creatorCloseGuardOpen, setCreatorCloseGuardOpen] = useState(false);
+  const creatorSelectAllRef = useRef<HTMLInputElement>(null);
   const selected = creators.find((creator) => creator.id === selectedId) ?? null;
+  const collaborationProjectCountByCreator = useMemo(() => {
+    const counts = new Map<string, number>();
+    collaborationProjects.forEach((project) => {
+      counts.set(project.creatorId, (counts.get(project.creatorId) ?? 0) + 1);
+    });
+    return counts;
+  }, [collaborationProjects]);
 
   useEffect(() => {
     if (focusedCreatorId) setSelectedId(focusedCreatorId);
   }, [focusedCreatorId]);
 
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredCreators = creators.filter((creator) => (
-    `${creator.name}${creator.handle}${creator.region}${creator.platform}${creator.socialAccounts.map((account) => `${account.platform}${account.handle}`).join('')}`
-      .toLowerCase()
-      .includes(normalizedSearch)
-  ));
-  const verifiedCount = creators.filter((creator) => getDefaultPayoutAccount(creator.payoutAccounts)?.status === 'VERIFIED').length;
+  const normalizedSearch = search.trim().toLocaleLowerCase('zh-CN');
+  const filteredCreators = useMemo(() => filterCreatorDirectory(creators, {
+    search,
+    provider: providerFilter,
+  }), [creators, providerFilter, search]);
+  const verifiedCount = creators.filter((creator) => {
+    const defaultAccount = explicitDefaultPayoutAccount(creator);
+    return Boolean(defaultAccount && isPayoutAccountVerified(defaultAccount));
+  }).length;
   const attentionCount = creators.filter((creator) => {
-    const status = getDefaultPayoutAccount(creator.payoutAccounts)?.status ?? 'DRAFT';
+    const status = explicitDefaultPayoutAccount(creator)?.status ?? 'DRAFT';
     return ['DRAFT', 'REVIEW_REQUIRED', 'INVALID'].includes(status);
   }).length;
   const {
@@ -2326,10 +2463,46 @@ export function CreatorsPage({
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredCreators, { resetKey: normalizedSearch });
+  } = usePagination(filteredCreators, { resetKey: `${normalizedSearch}\u0000${providerFilter}` });
+
+  const filteredCreatorIds = filteredCreators.map((creator) => creator.id);
+  const selectedFilteredCount = filteredCreatorIds.filter((id) => selectedCreatorIds.has(id)).length;
+  const allFilteredCreatorsSelected = filteredCreatorIds.length > 0
+    && selectedFilteredCount === filteredCreatorIds.length;
+  const partlyFilteredCreatorsSelected = selectedFilteredCount > 0 && !allFilteredCreatorsSelected;
+  const selectedCreators = creators.filter((creator) => selectedCreatorIds.has(creator.id));
+
+  useEffect(() => {
+    if (creatorSelectAllRef.current) {
+      creatorSelectAllRef.current.indeterminate = partlyFilteredCreatorsSelected;
+    }
+  }, [partlyFilteredCreatorsSelected]);
+
+  useEffect(() => {
+    const existingIds = new Set(creators.map((creator) => creator.id));
+    setSelectedCreatorIds((current) => {
+      const next = new Set([...current].filter((id) => existingIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [creators]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
+  };
+
+  const exportSelectedCreators = async () => {
+    if (!selectedCreators.length || exportingCreators) return;
+    setExportingCreators(true);
+    try {
+      const workbook = await createCreatorDirectoryWorkbook(selectedCreators);
+      const filename = creatorDirectoryWorkbookFilename();
+      downloadBlob(workbook, filename);
+      notify('达人档案已导出', `已导出 ${selectedCreators.length} 位达人的三张数据表，收款账户标识均已脱敏。`);
+    } catch (error) {
+      notify('达人档案导出失败', error instanceof Error ? error.message : '无法生成 Excel 文件，请稍后重试。');
+    } finally {
+      setExportingCreators(false);
+    }
   };
 
   const openProfile = (creator: CreatorProfile) => {
@@ -2591,21 +2764,18 @@ export function CreatorsPage({
   };
 
   const activeProfile = editing && draft ? draft : selected;
-  const activeDefaultAccount = activeProfile ? getDefaultPayoutAccount(activeProfile.payoutAccounts) : null;
+  const activeCollaborationProjects = activeProfile
+    ? creatorCollaborationProjectsFor(collaborationProjects, activeProfile.id)
+    : [];
+  const activeDefaultAccount = activeProfile ? explicitDefaultPayoutAccount(activeProfile) : null;
   const activeStatus = getPayoutAccountStatusMeta(activeDefaultAccount?.status ?? 'DRAFT', activeDefaultAccount?.provider);
+  const activeStatusTone = activeDefaultAccount ? activeStatus.tone : 'muted';
   const activePayoutAccounts = activeProfile?.payoutAccounts.filter((account) => account.status !== 'DISABLED') ?? [];
   const activePayoutProviders = [...new Set(activePayoutAccounts.map((account) => account.provider))];
   const activeUsableAccountCount = activePayoutAccounts.filter(isPayoutAccountVerified).length;
   const activeDefaultAccountSummary = activeDefaultAccount
     ? `${activeDefaultAccount.provider === 'Airwallex' ? 'Airwallex · ' : ''}${getPayoutAccountSummary(activeDefaultAccount)}`
     : '';
-  const activeSocialPlatforms = [
-    ...new Set(
-      activeProfile?.socialAccounts
-        .map((account) => account.platform.trim())
-        .filter(Boolean) ?? [],
-    ),
-  ];
   const requiredContactFields = INVOICE_CONTACT_FIELDS.filter((field) => !field.optional);
   const completedContactFields = activeProfile
     ? requiredContactFields.filter((field) => activeProfile.contact[field.key].trim()).length
@@ -2625,48 +2795,105 @@ export function CreatorsPage({
         <MetricCard label="需要处理" value={attentionCount.toLocaleString('zh-CN')} meta="待补充、复核或无效" tone="lilac" />
       </div>
       <section className="content-card">
-        <div className="content-toolbar">
-          <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号或地区" />
-          <Button variant="secondary" icon={<Download size={16} />}>导出名单</Button>
+        <div className="content-toolbar creator-directory-toolbar">
+          <div className="creator-directory-filter-controls">
+            <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号或地区" />
+            <SelectField
+              ariaLabel="达人付款渠道筛选"
+              className="creator-directory-provider-filter"
+              value={providerFilter}
+              options={CREATOR_DIRECTORY_PROVIDER_OPTIONS}
+              onChange={setProviderFilter}
+            />
+          </div>
+          <Button
+            variant="secondary"
+            icon={exportingCreators ? <LoaderCircle className="is-spinning" size={16} /> : <Download size={16} />}
+            disabled={!selectedCreators.length || exportingCreators}
+            disabledReason={!selectedCreators.length ? '请先勾选至少一位达人。' : '达人档案正在导出，请稍候。'}
+            aria-busy={exportingCreators || undefined}
+            onClick={() => { void exportSelectedCreators(); }}
+          >
+            {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
+          </Button>
         </div>
         <div className="table-scroll">
           <table className="data-table operational-table creator-directory-table">
-            <thead><tr><th>达人</th><th>地区</th><th>社媒平台</th><th>收款账户</th><th>合作项目</th><th className="action-cell">操作</th></tr></thead>
+            <thead>
+              <tr>
+                <th className="creator-directory-select-cell">
+                  <input
+                    ref={creatorSelectAllRef}
+                    type="checkbox"
+                    aria-label="全选当前筛选结果中的达人"
+                    checked={allFilteredCreatorsSelected}
+                    disabled={!filteredCreatorIds.length}
+                    onChange={(event) => setSelectedCreatorIds((current) => (
+                      toggleCreatorDirectorySelection(current, filteredCreatorIds, event.target.checked)
+                    ))}
+                  />
+                </th>
+                <th>达人</th><th>地区</th><th>社媒平台数</th><th>收款账户</th><th>账户更新时间</th><th>合作项目</th><th className="action-cell">操作</th>
+              </tr>
+            </thead>
             <tbody>
               {visibleCreators.length > 0 ? visibleCreators.map((creator) => {
-                const defaultAccount = getDefaultPayoutAccount(creator.payoutAccounts);
-                const status = getPayoutAccountStatusMeta(defaultAccount?.status ?? 'DRAFT', defaultAccount?.provider);
+                const defaultAccount = explicitDefaultPayoutAccount(creator);
+                const accountVersionResult = creatorPayoutAccountVersionResult(defaultAccount);
+                const latestAccountUpdate = latestCreatorPayoutAccountUpdatedAt(creator);
+                const creatorSelected = selectedCreatorIds.has(creator.id);
                 return (
-                  <tr key={creator.id} onClick={() => openProfile(creator)}>
-                    <td><div className="creator-cell"><Avatar initials={creator.initials} accent={creator.accent} size="sm" /><span><strong>{creator.name}</strong><small>{creator.handle}</small></span></div></td>
-                    <td>{creator.region}</td>
-                    <td>{creator.platform}</td>
+                  <tr className={creatorSelected ? 'is-selected' : ''} key={creator.id} aria-selected={creatorSelected} onClick={() => openProfile(creator)}>
+                    <td className="creator-directory-select-cell">
+                      <input
+                        type="checkbox"
+                        aria-label={`选择达人 ${creator.name}`}
+                        checked={creatorSelected}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => setSelectedCreatorIds((current) => (
+                          toggleCreatorDirectorySelection(current, [creator.id], event.target.checked)
+                        ))}
+                      />
+                    </td>
                     <td>
-                      <span className={`payout-list-status payout-list-status-${status.tone}`}>
-                        {status.tone === 'success' ? <CheckCircle2 size={16} /> : status.tone === 'danger' || status.tone === 'warning' ? <AlertCircle size={16} /> : <Clock3 size={16} />}
-                        <span>
-                          <strong>{status.label}</strong>
-                          {defaultAccount ? (
-                            <span className="payout-list-provider">
-                              <PaymentProviderBadge className="payout-list-provider-badge" compact provider={defaultAccount.provider} />
-                              <small>{defaultAccount.nickname}</small>
-                            </span>
-                          ) : <small>尚未建立收款账户</small>}
-                        </span>
+                      <CreatorIdentity
+                        creator={creator}
+                        className="creator-directory-identity"
+                        socialAccountsMode="expanded"
+                      />
+                    </td>
+                    <td>{creator.region}</td>
+                    <td><strong className="creator-directory-platform-count">{distinctCreatorSocialPlatformCount(creator)} 个</strong></td>
+                    <td>
+                      <span className={`creator-directory-payout ${defaultAccount ? 'has-default-account' : 'is-unset'}`}>
+                        {defaultAccount
+                          ? <PaymentProviderBadge compact provider={defaultAccount.provider} />
+                          : <strong>付款渠道待设置</strong>}
+                        <small>
+                          <span className={accountVersionResult === '账户已更新' ? 'is-updated' : ''}>
+                            {accountVersionResult ?? '尚未建立主账户'}
+                          </span>
+                          {defaultAccount ? <span>{defaultAccount.nickname}</span> : null}
+                        </small>
                       </span>
                     </td>
-                    <td>{creator.projects} 个</td>
+                    <td>
+                      <time className="creator-directory-updated-at" dateTime={latestAccountUpdate || undefined}>
+                        {formatCreatorPayoutAccountUpdatedAt(latestAccountUpdate)}
+                      </time>
+                    </td>
+                    <td>{collaborationProjectCountByCreator.get(creator.id) ?? 0} 个</td>
                     <td className="action-cell"><ListActionButton kind="view" onClick={(event) => { event.stopPropagation(); openProfile(creator); }}>查看档案</ListActionButton></td>
                   </tr>
                 );
               }) : (
-                <tr><td colSpan={6}><div className="empty-table">没有找到匹配的达人档案</div></td></tr>
+                <tr><td colSpan={8}><div className="empty-table">没有找到匹配的达人档案</div></td></tr>
               )}
             </tbody>
           </table>
         </div>
         <div className="table-footer">
-          <span>共 {filteredCreators.length} 条</span>
+          <span>共 {filteredCreators.length} 条 · 已选 {selectedCreators.length} 位</span>
           <Pagination
             ariaLabel="达人列表分页"
             page={page}
@@ -2696,20 +2923,17 @@ export function CreatorsPage({
           <div className="profile-summary creator-profile-summary">
             <Avatar initials={activeProfile.initials} accent={activeProfile.accent} size="lg" />
             <div className="creator-profile-summary-copy">
-              <div>
-                <h3>{activeProfile.name || '新达人'}</h3>
-                <p>{[activeProfile.handle, activeProfile.platform].filter(Boolean).join(' · ') || '请先完善达人基本资料'}</p>
-              </div>
+              <div><h3>{activeProfile.name || '新达人'}</h3></div>
               <dl className="creator-profile-summary-meta">
                 <div><dt>地区</dt><dd>{activeProfile.region || '待补充'}</dd></div>
-                <div><dt>合作项目</dt><dd>{activeProfile.projects} 个</dd></div>
+                <div><dt>合作项目</dt><dd>{activeCollaborationProjects.length} 个</dd></div>
               </dl>
             </div>
             <div className="creator-profile-summary-status">
               <small>默认收款账户</small>
-              <span className={`verified-badge verified-badge-${activeStatus.tone}`}>
-                {activeStatus.tone === 'success' ? <ShieldCheck size={15} /> : activeStatus.tone === 'danger' || activeStatus.tone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
-                {activeStatus.label}
+              <span className={`verified-badge verified-badge-${activeStatusTone}`}>
+                {activeStatusTone === 'success' ? <ShieldCheck size={15} /> : activeStatusTone === 'danger' || activeStatusTone === 'warning' ? <AlertCircle size={15} /> : <Clock3 size={15} />}
+                {activeDefaultAccount ? activeStatus.label : '未设置默认账户'}
               </span>
             </div>
           </div>
@@ -2732,10 +2956,10 @@ export function CreatorsPage({
                   </label>
                 </div>
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人填写个人信息时补充；分别维护各平台账号与主页链接">
+              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="达人填写个人信息时补充；分别维护各平台账号与主页链接" tone="identity">
                 <CreatorSocialAccountsEditor accounts={draft.socialAccounts} onChange={updateDraftSocialAccounts} showErrors={formErrors.length > 0} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="生成 Invoice 时使用，与银行账户名和 PayPal 邮箱独立维护">
+              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="生成 Invoice 时使用，与银行账户名和 PayPal 邮箱独立维护" tone="identity">
                 <CreatorContactFormGrid contact={draft.contact} onChange={updateDraftContact} showErrors={formErrors.length > 0} />
               </CreatorPaymentSection>
               <div className="creator-payment-note">
@@ -2745,7 +2969,7 @@ export function CreatorsPage({
                   <small>付款信息字段由 Airwallex Form Schema 决定；修改银行信息后需要重新点击“校验账户”。</small>
                 </span>
               </div>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户；全档案只能指定一个默认账户用于新的付款">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="按付款渠道管理账户；全档案只能指定一个默认账户用于新的付款" tone="payout">
                 <CreatorPayoutAccounts
                   accounts={draft.payoutAccounts}
                   editing
@@ -2764,7 +2988,7 @@ export function CreatorsPage({
                 <article>
                   <span>社媒账号</span>
                   <strong>{activeProfile.socialAccounts.length} 个</strong>
-                  <small>{activeSocialPlatforms.join(' · ') || '平台待补充'}</small>
+                  <CreatorSocialPlatformIcons accounts={activeProfile.socialAccounts} size={15} />
                 </article>
                 <article>
                   <span>Invoice 联系资料</span>
@@ -2786,13 +3010,13 @@ export function CreatorsPage({
                   </small>
                 </article>
               </section>
-              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="平台账号与主页来自达人档案；认证结论需由 C 端认证流程同步">
+              <CreatorPaymentSection icon={<Link2 size={19} />} title="社媒账号" description="平台账号与主页来自达人档案；认证结论需由 C 端认证流程同步" tone="identity">
                 <CreatorSocialAccountDetails accounts={activeProfile.socialAccounts} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息">
+              <CreatorPaymentSection icon={<FileText size={19} />} title="Invoice 联系资料" description="用于 Invoice 的 From 信息" tone="identity">
                 <CreatorContactDetailsGrid contact={activeProfile.contact} />
               </CreatorPaymentSection>
-              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 Payer Max，默认账户决定付款时的预选资料">
+              <CreatorPaymentSection icon={<WalletCards size={19} />} title="收款账户" description="支持 Airwallex、PayPal 和 Payer Max，默认账户决定付款时的预选资料" tone="payout">
                 <CreatorPayoutAccounts
                   accounts={activeProfile.payoutAccounts}
                   creatorId={activeProfile.id}
@@ -2800,6 +3024,7 @@ export function CreatorsPage({
                   creatorEmail={activeProfile.contact.email}
                 />
               </CreatorPaymentSection>
+              <CreatorCollaborationProjectDetails projects={activeCollaborationProjects} />
             </div>
           )}
         </Modal>
@@ -2814,19 +3039,58 @@ export function CreatorsPage({
   );
 }
 
-const COLLABORATIONS = [
-  { creator: demoDisplayName('Mina Kato'), project: '夏日直播计划', deliverable: '直播 2 场 + 短视频 3 条', invoice: '已提交', payment: '待财务复核' },
-  { creator: demoDisplayName('Alex Ruiz'), project: '新品开箱', deliverable: 'YouTube 长视频 1 条', invoice: '已通过', payment: '等待付款' },
-  { creator: demoDisplayName('Nika Petrova'), project: 'TikTok Spark', deliverable: 'TikTok 视频 4 条', invoice: '资料异常', payment: '暂停' },
-  { creator: demoDisplayName('Luna Jones'), project: '七月联名', deliverable: 'Reels 2 条 + Story 6 条', invoice: '已通过', payment: '飞书审批中' },
-];
+const formatCollaborationRequestTime = (value?: string) => {
+  if (!value) return '未发起';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date).replace(/\//g, '-');
+};
 
-export function CollaborationsPage({ notify, canImport }: { notify: Notify; canImport: boolean }) {
+export function CollaborationsPage({
+  notify,
+  canImport,
+  creators,
+  projects,
+  contracts,
+  payouts,
+  generatedInvoices,
+  externalInvoices,
+  requests,
+  paymentLists,
+}: {
+  notify: Notify;
+  canImport: boolean;
+  creators: CreatorProfile[];
+  projects: ProjectSummary[];
+  contracts: ContractRecord[];
+  payouts: Payout[];
+  generatedInvoices: GeneratedInvoiceRecord[];
+  externalInvoices: ExternalInvoiceCollectionRecord[];
+  requests: RequestProjectSummary[];
+  paymentLists: PaymentListRecord[];
+}) {
   const [search, setSearch] = useState('');
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const collaborationRows = useMemo(() => buildCollaborationInvoiceRows({
+    creators,
+    projects,
+    contracts,
+    payouts,
+    generatedInvoices,
+    externalInvoices,
+    requests,
+    paymentLists,
+  }), [contracts, creators, externalInvoices, generatedInvoices, paymentLists, payouts, projects, requests]);
   const query = search.trim().toLowerCase();
-  const filteredCollaborations = COLLABORATIONS.filter((item) => (
-    !query || `${item.creator}${item.project}${item.deliverable}${item.invoice}${item.payment}`.toLowerCase().includes(query)
-  ));
+  const filteredCollaborations = collaborationRows.filter((item) => !query || item.searchText.includes(query));
   const {
     page,
     pageItems: visibleCollaborations,
@@ -2834,6 +3098,11 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
     setPage,
     setPageSize,
   } = usePagination(filteredCollaborations, { resetKey: query });
+  const selectedRow = selectedRowId
+    ? collaborationRows.find((row) => row.rowId === selectedRowId) ?? null
+    : null;
+  const closeDetail = useCallback(() => setSelectedRowId(null), []);
+  const waitingForPaymentCount = collaborationRows.filter((row) => row.status !== '已付款').length;
   const importAction = canImport
     ? <Button icon={<Upload size={17} />} onClick={() => notify('导入模板', '已准备达人合作名单模板。')}>导入合作名单</Button>
     : undefined;
@@ -2842,24 +3111,44 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
       <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
       <section className="content-card">
         <div className="content-toolbar">
-          <SearchBar value={search} onChange={setSearch} placeholder="搜索达人或项目" />
-          <span className="toolbar-note">本月合作 28 人 · 待付款 12 人</span>
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索达人、项目、Invoice 或合同" />
+          <span className="collaboration-list-toolbar-note">共 {collaborationRows.length} 份 Invoice · 待付款 {waitingForPaymentCount} 份</span>
         </div>
         <div className="table-scroll">
-          <table className="data-table operational-table">
-            <thead><tr><th>达人</th><th>所属项目</th><th>合作交付</th><th>Invoice</th><th>付款进度</th><th className="action-cell">操作</th></tr></thead>
+          <table className="data-table operational-table collaboration-list-table">
+            <thead><tr><th>达人</th><th>关联项目</th><th>合作交付</th><th>Invoice 编号</th><th>付款进度</th><th>请款时间</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {visibleCollaborations.map((item) => (
-                <tr key={`${item.creator}${item.project}`}>
-                  <td><strong>{item.creator}</strong></td>
-                  <td>{item.project}</td>
-                  <td>{item.deliverable}</td>
-                  <td>{item.invoice}</td>
-                  <td><ProjectStatus status={item.payment} /></td>
-                  <td className="action-cell"><ListActionButton kind="view" onClick={() => notify('合作详情', `${item.creator} 的交付与付款链路已打开。`)}>查看链路</ListActionButton></td>
+                <tr key={item.rowId}>
+                  <td className="collaboration-creator-cell">
+                    <CreatorIdentity
+                      className="creator-cell"
+                      creator={item.identity.creator}
+                      displayName={item.identity.displayName}
+                      initials={item.identity.initials}
+                      accent={item.identity.accent}
+                      accounts={item.identity.socialAccounts}
+                      fallbackHandle={item.identity.channelId}
+                      fallbackPlatform={item.identity.platform}
+                    />
+                  </td>
+                  <td className="collaboration-project-cell"><strong>{item.projectName}</strong><small>{item.project?.cooperationProjectCode ?? item.project?.projectCode ?? item.projectLinkId ?? '项目资料未找到'}</small></td>
+                  <td className="collaboration-description-cell" title={item.descriptionText}><span>{item.descriptionText}</span></td>
+                  <td><span className="collaboration-invoice-number">{item.invoiceNumber}</span></td>
+                  <td><span className={`collaboration-lifecycle-status is-${collaborationStatusTone(item.status)}`}><i />{item.status}</span></td>
+                  <td><time className="collaboration-request-time">{formatCollaborationRequestTime(item.requestSubmittedAt)}</time></td>
+                  <td className="action-cell">
+                    <ListActionButton
+                      kind="view"
+                      onClick={(event) => {
+                        detailTriggerRef.current = event.currentTarget;
+                        setSelectedRowId(item.rowId);
+                      }}
+                    >查看详情</ListActionButton>
+                  </td>
                 </tr>
               ))}
-              {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={6}>暂无符合条件的合作记录</td></tr> : null}
+              {!filteredCollaborations.length ? <tr><td className="project-list-empty" colSpan={7}>暂无符合条件的 Invoice 合作记录</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -2875,6 +3164,13 @@ export function CollaborationsPage({ notify, canImport }: { notify: Notify; canI
           />
         </div>
       </section>
+      {selectedRow ? (
+        <CollaborationInvoiceDrawer
+          row={selectedRow}
+          returnFocusTo={detailTriggerRef.current}
+          onClose={closeDetail}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3055,63 +3351,33 @@ export function InvoicePage({
       generatedInvoiceByPayoutId.get(payout.id)?.invoiceId,
       request,
     );
-    return getInvoiceManagementView(payout, request, returnContext);
+    return getInvoiceManagementView(payout, request, returnContext, {
+      signed: hasInvoiceSignatureEvidence(payout, generatedInvoiceByPayoutId.get(payout.id)),
+    });
   };
   const invoiceSnapshotFor = (payout: Payout) => (
     generatedInvoiceByPayoutId.get(payout.id)?.snapshot ?? payout.invoiceSnapshot
   );
-  const normalizeCreatorHandle = (value?: string) => (
-    value?.trim().replace(/^@/, '').toLocaleLowerCase() ?? ''
-  );
-  const legacyCreatorForInvoice = (displayName?: string, handle?: string) => {
-    const normalizedHandle = normalizeCreatorHandle(handle);
-    const handleMatch = normalizedHandle
-      ? creators.find((candidate) => (
-          normalizeCreatorHandle(candidate.handle) === normalizedHandle
-          || candidate.socialAccounts.some((account) => (
-            normalizeCreatorHandle(account.handle) === normalizedHandle
-          ))
-        ))
-      : undefined;
-    if (handleMatch) return handleMatch;
-    const normalizedName = displayName?.trim().toLocaleLowerCase();
-    return normalizedName
-      ? creators.find((candidate) => candidate.name.trim().toLocaleLowerCase() === normalizedName)
-      : undefined;
-  };
   const invoiceIdentityFor = (payout: Payout) => {
     const snapshot = invoiceSnapshotFor(payout);
-    const creatorId = snapshot?.creatorId ?? payout.creatorId;
-    const creator = (creatorId
-      ? creators.find((candidate) => candidate.id === creatorId)
-      : undefined) ?? legacyCreatorForInvoice(
-      snapshot?.creatorName ?? payout.creator,
-      snapshot?.creatorHandle ?? payout.handle,
-    );
-    const primarySocialAccount = resolveCreatorSocialAccount(
-      creator,
-      snapshot?.creatorSocialAccountId ?? payout.creatorSocialAccountId,
-      snapshot?.creatorHandle ?? payout.handle,
-      snapshot?.creatorPlatform ?? payout.creatorPlatform,
-    );
-    return {
-      displayName: creator?.name ?? snapshot?.creatorName ?? payout.creator,
-      channelId: primarySocialAccount?.handle
-        ?? creator?.handle
-        ?? snapshot?.creatorHandle
-        ?? payout.handle,
-      platform: snapshot?.creatorPlatform
-        ?? payout.creatorPlatform
-        ?? primarySocialAccount?.platform.trim()
-        ?? creator?.platform?.trim()
-        ?? '社媒平台待补充',
-      initials: creator?.initials ?? payout.initials,
-      accent: creator?.accent ?? payout.accent,
-    };
+    return resolveInvoiceCreatorIdentity({
+      creators,
+      source: {
+        creatorId: snapshot?.creatorId ?? payout.creatorId,
+        creatorName: snapshot?.creatorName ?? payout.creator,
+        creatorHandle: snapshot?.creatorHandle ?? payout.handle,
+        creatorSocialAccountId: snapshot?.creatorSocialAccountId ?? payout.creatorSocialAccountId,
+        creatorPlatform: snapshot?.creatorPlatform ?? payout.creatorPlatform,
+        initials: payout.initials,
+        accent: payout.accent,
+      },
+    });
   };
-  const canActOnInvoice = (payout: Payout) => (
+  const canActOnInvoice = (payout: Payout, view: InvoiceManagementView) => (
     (payout.invoiceReviewStatus === '达人反馈' && canManageInvoice)
     || (
+      view.tab === 'review'
+      &&
       (payout.invoiceReviewStatus === '待媒介审核' || payout.invoiceReviewStatus === '待媒介复核')
       && canReviewMedia
     )
@@ -3128,8 +3394,10 @@ export function InvoicePage({
     const identity = invoiceIdentityFor(payout);
     const request = findInvoiceRequest(payout, generatedInvoices, requests);
     const returnContext = getInvoiceManagementReturnContext(payout, generated?.invoiceId, request);
-    const view = getInvoiceManagementView(payout, request, returnContext);
-    const canAct = canActOnInvoice(payout);
+    const view = getInvoiceManagementView(payout, request, returnContext, {
+      signed: hasInvoiceSignatureEvidence(payout, generated),
+    });
+    const canAct = canActOnInvoice(payout, view);
     const actionLabel = view.status === '已退回'
       ? '查看详情'
       : payout.invoiceReviewStatus === '草稿'
@@ -3148,11 +3416,12 @@ export function InvoicePage({
       creatorName: identity.displayName,
       channelId: identity.channelId,
       creatorPlatform: identity.platform,
+      creatorSocialAccounts: identity.socialAccounts,
       issuerName: creators.find((creator) => creator.id === snapshot?.creatorId)?.contact?.legalName
         ?? snapshot?.from.legalName
         ?? '待补充',
       initials: identity.initials,
-      accent: identity.accent,
+      accent: identity.accent ?? payout.accent,
       projectKey: String(snapshot?.projectId ?? payout.projectId ?? snapshot?.projectName ?? payout.project),
       projectName: snapshot?.projectName ?? payout.project,
       invoiceNumber: snapshot?.invoiceNumber ?? payout.invoice,
@@ -3175,13 +3444,17 @@ export function InvoicePage({
     };
   });
   const externalRows: InvoiceManagementRow[] = externalInvoices.map((record) => {
-    const creator = creators.find((candidate) => candidate.id === record.creatorId);
-    const primarySocialAccount = resolveCreatorSocialAccount(
-      creator,
-      record.creatorSocialAccountId,
-      record.creatorHandle,
-      record.creatorPlatform,
-    );
+    const identity = resolveInvoiceCreatorIdentity({
+      creators,
+      source: {
+        creatorId: record.creatorId,
+        creatorName: record.creatorName,
+        creatorHandle: record.creatorHandle,
+        creatorSocialAccountId: record.creatorSocialAccountId,
+        creatorPlatform: record.creatorPlatform,
+      },
+    });
+    const creator = identity.creator;
     const status = externalInvoiceListStatus(record.status);
     const primaryAction = (record.status === 'WAITING_MEDIA_REVIEW' && canReviewMedia)
       || (record.status !== 'APPROVED' && record.status !== 'WAITING_MEDIA_REVIEW' && canManageInvoice);
@@ -3189,16 +3462,12 @@ export function InvoicePage({
       rowId: `external:${record.invoiceId}`,
       invoiceId: String(record.invoiceId),
       invoiceType: 'EXTERNAL',
-      creatorName: creator?.name ?? record.creatorName,
-      channelId: primarySocialAccount?.handle
-        ?? creator?.handle
-        ?? record.creatorHandle,
-      creatorPlatform: record.creatorPlatform
-        ?? primarySocialAccount?.platform.trim()
-        ?? creator?.platform?.trim()
-        ?? '社媒平台待补充',
-      initials: creator?.initials ?? record.creatorName.slice(0, 2).toUpperCase(),
-      accent: creator?.accent ?? '#9c6f93',
+      creatorName: identity.displayName,
+      channelId: identity.channelId,
+      creatorPlatform: identity.platform,
+      creatorSocialAccounts: identity.socialAccounts,
+      initials: identity.initials,
+      accent: identity.accent ?? '#9c6f93',
       issuerName: creator?.contact.legalName ?? '待补充',
       projectKey: String(record.projectId ?? record.projectName),
       projectName: record.projectName,
@@ -3480,7 +3749,7 @@ export function InvoicePage({
         <article className="invoice-overview-card invoice-overview-card-mint">
           <span>待达人处理</span>
           <strong>{invoiceOverview.creatorPending}</strong>
-          <small>{groupedRows.signature.length} 待签署 · {groupedRows.upload.length} 待采集</small>
+          <small>{groupedRows.signature.length} 待签署 · {groupedRows.upload.length} 待回收</small>
         </article>
         <article className="invoice-overview-card invoice-overview-card-amber">
           <span>待内部处理</span>
@@ -3496,7 +3765,7 @@ export function InvoicePage({
       <section className="content-card">
         <div className="tabs-row">
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedRows.signature.length}</span></button>
-          <button className={`tab-button ${tab === 'upload' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('upload')}>待采集 <span>{groupedRows.upload.length}</span></button>
+          <button className={`tab-button ${tab === 'upload' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('upload')}>待回收 <span>{groupedRows.upload.length}</span></button>
           <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedRows.review.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedRows.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedRows.returned.length}</span></button>
@@ -3565,6 +3834,7 @@ export function InvoicePage({
                 <Button
                   icon={<Send size={16} />}
                   disabled={!selectedPublishRows.length}
+                  disabledReason="请先选择需要发布的 Invoice。"
                   onClick={publishSelectedRows}
                 >
                   一键发布{selectedPublishRows.length ? `（${selectedPublishRows.length}）` : ''}
@@ -3593,9 +3863,13 @@ export function InvoicePage({
 export type PaymentBatchRow = {
   paymentBatchId: PaymentBatchRecord['paymentBatchId'];
   id: string;
+  cooperationProjectCode: string;
+  cooperationProjectName: string;
   provider: string;
   count: number;
-  amount: string;
+  paymentAmount: string;
+  transferFeeAmount: string;
+  actualPaidAmount: string;
   payer: string;
   paidAt: string;
   status: PaymentAggregateStatus;
@@ -3616,23 +3890,29 @@ export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
 export const paymentBatchRows = (
   batches: readonly PaymentBatchRecord[],
-  payouts: readonly Payout[] = [],
 ): PaymentBatchRow[] => (
-  batches.map((batch) => ({
-    paymentBatchId: batch.paymentBatchId,
-    id: batch.paymentBatchCode,
-    provider: batch.provider,
-    count: batch.items.length,
-    amount: paymentBatchAmountLabel(batch),
-    payer: batch.payer,
-    paidAt: batch.paidAt,
-    status: (() => {
-      const itemStatuses = batch.items.map((item) => (
-        payouts.find((payout) => payout.id === item.payoutId)?.status ?? item.paymentStatus
-      ));
-      return aggregatePaymentStatus(itemStatuses, batch.status);
-    })(),
-  }))
+  batches.map((batch) => {
+    const financialSummary = paymentBatchFinancialSummary(batch);
+    const resultPending = batch.status === '付款处理中';
+    return {
+      paymentBatchId: batch.paymentBatchId,
+      id: batch.paymentBatchCode,
+      cooperationProjectCode: batch.request.cooperationProjectCode,
+      cooperationProjectName: batch.request.cooperationProjectName,
+      provider: batch.provider,
+      count: batch.items.length,
+      paymentAmount: paymentBatchAmountLabel(batch),
+      transferFeeAmount: resultPending
+        ? '待渠道回写'
+        : paymentBatchMoneyTotalsLabel(financialSummary.transferFeeAmounts),
+      actualPaidAmount: resultPending
+        ? '待渠道回写'
+        : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts),
+      payer: batch.payer,
+      paidAt: batch.paidAt,
+      status: batch.status,
+    };
+  })
 );
 
 type ExportAssetLoader = (path: string) => Promise<Blob>;
@@ -3716,8 +3996,7 @@ const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
 export function BatchesPage({
   batches,
   payouts = [],
-  contracts = [],
-  invoices = [],
+  creators = [],
   onNewBatch,
   notify,
   canCreateBatch,
@@ -3727,8 +4006,7 @@ export function BatchesPage({
 }: {
   batches: readonly PaymentBatchRecord[];
   payouts?: readonly Payout[];
-  contracts?: readonly ContractRecord[];
-  invoices?: readonly GeneratedInvoiceRecord[];
+  creators?: readonly CreatorProfile[];
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
@@ -3743,15 +4021,11 @@ export function BatchesPage({
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [exporting, setExporting] = useState<'confirmations' | 'records' | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-  const exportTriggerRef = useRef<HTMLButtonElement>(null);
-  const exportItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const detailTriggerRefs = useRef(new Map<PaymentBatchRecord['paymentBatchId'], HTMLButtonElement>());
   const listScrollPositionRef = useRef(0);
-  const rows = useMemo(() => paymentBatchRows(batches, payouts), [batches, payouts]);
+  const rows = useMemo(() => paymentBatchRows(batches), [batches]);
   const filteredRows = useMemo(() => filterPaymentBatchRows(rows, {
     search,
     start,
@@ -3771,7 +4045,6 @@ export function BatchesPage({
   const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
   const allVisibleSelected = filteredRows.length > 0 && selectedVisibleCount === filteredRows.length;
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
-  const exportDisabled = !exportAvailability.records || exporting !== null;
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
   const selectedProjectItems = useMemo(() => {
     if (!selectedBatch) return [];
@@ -3800,7 +4073,10 @@ export function BatchesPage({
     return {
       ...totals,
       processingBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).processing > 0).length,
-      failedBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).failed > 0).length,
+      paidBatches: batches.filter((batch) => batch.status === '已付款').length,
+      paidBatchItems: batches
+        .filter((batch) => batch.status === '已付款')
+        .reduce((count, batch) => count + batch.items.length, 0),
       successRate: total ? `${((totals.succeeded / total) * 100).toFixed(1)}%` : '—',
       total,
     };
@@ -3822,15 +4098,6 @@ export function BatchesPage({
     }
   }, [allVisibleSelected, selectedVisibleCount]);
 
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!exportMenuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePointer);
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
-  }, [menuOpen]);
-
   const updateStart = (value: string) => {
     const [nextStart, nextEnd] = correctedPaymentBatchDateRange(value, end, 'start');
     setStart(nextStart);
@@ -3849,54 +4116,8 @@ export function BatchesPage({
       return next;
     });
   };
-  const availableExportItemIndexes = [
-    exportAvailability.confirmations ? 0 : -1,
-    exportAvailability.records ? 1 : -1,
-  ].filter((index) => index >= 0);
-  const focusExportItem = (index: number) => {
-    window.requestAnimationFrame(() => exportItemRefs.current[index]?.focus());
-  };
-  const openExportMenu = (focusEdge?: 'first' | 'last') => {
-    setMenuOpen(true);
-    if (focusEdge && availableExportItemIndexes.length) {
-      focusExportItem(focusEdge === 'first'
-        ? availableExportItemIndexes[0]
-        : availableExportItemIndexes[availableExportItemIndexes.length - 1]);
-    }
-  };
-  const closeExportMenu = (restoreFocus = false) => {
-    setMenuOpen(false);
-    if (restoreFocus) window.requestAnimationFrame(() => exportTriggerRef.current?.focus());
-  };
-  const handleExportTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      openExportMenu(event.key === 'ArrowDown' ? 'first' : 'last');
-    } else if (event.key === 'Escape' && menuOpen) {
-      event.preventDefault();
-      closeExportMenu();
-    }
-  };
-  const handleExportItemKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const currentPosition = availableExportItemIndexes.indexOf(index);
-      const offset = event.key === 'ArrowDown' ? 1 : -1;
-      const nextPosition = (currentPosition + offset + availableExportItemIndexes.length)
-        % availableExportItemIndexes.length;
-      exportItemRefs.current[availableExportItemIndexes[nextPosition]]?.focus();
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      const targetPosition = event.key === 'Home' ? 0 : availableExportItemIndexes.length - 1;
-      exportItemRefs.current[availableExportItemIndexes[targetPosition]]?.focus();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      closeExportMenu(true);
-    }
-  };
   const exportConfirmations = async () => {
     if (!exportAvailability.confirmations || exporting !== null) return;
-    setMenuOpen(false);
     setExporting('confirmations');
     try {
       const archive = await createBatchConfirmationArchive(selectedAirwallexRows.map((row) => row.id));
@@ -3911,7 +4132,6 @@ export function BatchesPage({
   };
   const exportPaymentData = async () => {
     if (!exportAvailability.records || exporting !== null) return;
-    setMenuOpen(false);
     setExporting('records');
     try {
       const workbook = await loadPaymentDataRecord();
@@ -3942,8 +4162,7 @@ export function BatchesPage({
       <PaymentBatchDetailPage
         batch={selectedBatch}
         payouts={payouts}
-        contracts={contracts}
-        invoices={invoices}
+        creators={creators}
         projectItems={selectedProjectItems}
         canHandleFailure={canCreateBatch}
         onBack={closeBatchDetail}
@@ -3971,7 +4190,7 @@ export function BatchesPage({
       <div className="metrics-grid">
         <MetricCard label="处理中批次" value={String(batchMetrics.processingBatches)} meta={`共 ${batchMetrics.processing} 笔付款`} tone="peach" />
         <MetricCard label="付款成功率" value={batchMetrics.successRate} meta={`${batchMetrics.succeeded} / ${batchMetrics.total} 笔`} />
-        <MetricCard label="需人工处理" value={String(batchMetrics.failed)} meta={`来自 ${batchMetrics.failedBatches} 个批次`} tone="lilac" />
+        <MetricCard label="已付款批次" value={String(batchMetrics.paidBatches)} meta={`共 ${batchMetrics.paidBatchItems} 笔付款`} tone="lilac" />
       </div>
       <section className="content-card">
         <div className="content-toolbar payment-batch-toolbar">
@@ -4006,55 +4225,35 @@ export function BatchesPage({
             ]}
             onChange={setProvider}
           />
-          <div
-            className="payment-batch-export"
-            ref={exportMenuRef}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
-            }}
-          >
-            <button
-              ref={exportTriggerRef}
-              className="button button-secondary payment-batch-export-trigger"
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              disabled={exporting !== null}
-              onKeyDown={handleExportTriggerKeyDown}
-              onClick={() => setMenuOpen((current) => !current)}
+          <div className="payment-batch-export-actions" aria-label="付款批次导出">
+            <Button
+              variant="secondary"
+              className="payment-batch-export-button is-confirmation"
+              icon={exporting === 'confirmations'
+                ? <LoaderCircle className="is-spinning" size={16} />
+                : <FileArchive size={16} />}
+              disabled={!exportAvailability.confirmations || exporting !== null}
+              disabledReason={exporting
+                ? '文件正在导出，请稍候。'
+                : '请先选择至少一个 Airwallex 付款批次。'}
+              onClick={() => { void exportConfirmations(); }}
             >
-              <Download size={16} aria-hidden="true" />
-              <span>{exporting ? '导出中...' : selectedRows.length ? `导出（${selectedRows.length}）` : '导出'}</span>
-              <ChevronDown className="payment-batch-export-chevron" size={15} aria-hidden="true" />
-            </button>
-            {menuOpen ? (
-              <div className="payment-batch-export-menu" role="menu" aria-label="批次导出选项">
-                <button
-                  ref={(node) => { exportItemRefs.current[0] = node; }}
-                  type="button"
-                  role="menuitem"
-                  disabled={!exportAvailability.confirmations || exporting !== null}
-                  tabIndex={-1}
-                  onKeyDown={(event) => handleExportItemKeyDown(event, 0)}
-                  onClick={() => { void exportConfirmations(); }}
-                >
-                  <FileArchive size={17} aria-hidden="true" />
-                  <span><strong>导出确认函</strong><small>按批次目录生成 ZIP</small></span>
-                </button>
-                <button
-                  ref={(node) => { exportItemRefs.current[1] = node; }}
-                  type="button"
-                  role="menuitem"
-                  disabled={exportDisabled}
-                  tabIndex={-1}
-                  onKeyDown={(event) => handleExportItemKeyDown(event, 1)}
-                  onClick={() => { void exportPaymentData(); }}
-                >
-                  <FileSpreadsheet size={17} aria-hidden="true" />
-                  <span><strong>导出付款数据记录</strong><small>下载原始 Excel 文件</small></span>
-                </button>
-              </div>
-            ) : null}
+              {exporting === 'confirmations' ? '正在导出' : '导出确认函'}
+            </Button>
+            <Button
+              variant="secondary"
+              className="payment-batch-export-button is-record"
+              icon={exporting === 'records'
+                ? <LoaderCircle className="is-spinning" size={16} />
+                : <FileSpreadsheet size={16} />}
+              disabled={!exportAvailability.records || exporting !== null}
+              disabledReason={exporting
+                ? '文件正在导出，请稍候。'
+                : '请先选择至少一个付款批次。'}
+              onClick={() => { void exportPaymentData(); }}
+            >
+              {exporting === 'records' ? '正在导出' : '导出付款明细'}
+            </Button>
           </div>
         </div>
         <div className="payment-batch-selection-summary" aria-live="polite">
@@ -4074,7 +4273,7 @@ export function BatchesPage({
                     onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, filteredRows))}
                   />
                 </th>
-                <th>批次号</th><th>付款渠道</th><th>笔数</th><th>金额</th><th>付款人 / 付款时间</th><th>状态</th><th className="action-cell">操作</th>
+                <th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th><th>付款人 / 付款时间</th><th className="payment-batch-status-cell">状态</th><th className="action-cell payment-batch-action-cell">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -4091,12 +4290,18 @@ export function BatchesPage({
                       />
                     </td>
                     <td className="mono-cell">{batch.id}</td>
+                    <td className="payment-batch-project-cell">
+                      <strong title={batch.cooperationProjectName}>{batch.cooperationProjectName}</strong>
+                      <small title={batch.cooperationProjectCode}>{batch.cooperationProjectCode}</small>
+                    </td>
                     <td><PaymentProviderBadge compact provider={batch.provider} /></td>
                     <td>{batch.count} 笔</td>
-                    <td>{batch.amount}</td>
+                    <td className="payment-batch-money-cell">{batch.paymentAmount}</td>
+                    <td className="payment-batch-money-cell">{batch.transferFeeAmount}</td>
+                    <td className="payment-batch-money-cell"><strong>{batch.actualPaidAmount}</strong></td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
-                    <td><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
-                    <td className="action-cell">
+                    <td className="payment-batch-status-cell"><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
+                    <td className="action-cell payment-batch-action-cell">
                       <ListActionButton
                         ref={(node) => { if (node) detailTriggerRefs.current.set(batch.paymentBatchId, node); }}
                         kind="view"
@@ -4109,7 +4314,7 @@ export function BatchesPage({
                   </tr>
                 );
               })}
-              {!filteredRows.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
+              {!filteredRows.length ? <tr><td colSpan={11} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -4145,9 +4350,15 @@ const TRANSACTION_PAID_STATUS_OPTIONS = [
 export function TransactionsPage({
   payouts,
   paymentBatches,
+  contracts = [],
+  generatedInvoices = [],
+  onOpenPaymentBatch,
 }: {
   payouts: Payout[];
   paymentBatches: readonly PaymentBatchRecord[];
+  contracts?: readonly ContractRecord[];
+  generatedInvoices?: readonly GeneratedInvoiceRecord[];
+  onOpenPaymentBatch?: (batchId: PaymentBatchRecord['paymentBatchId']) => void;
 }) {
   const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
@@ -4155,40 +4366,46 @@ export function TransactionsPage({
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [detailPayoutId, setDetailPayoutId] = useState<string | null>(null);
-  const detailReturnIdRef = useRef<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const [detailRecordKey, setDetailRecordKey] = useState<string | null>(null);
+  const detailReturnKeyRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const transactions = payouts.filter(isPaymentTransactionRecord);
-  const visible = filterTransactionRecords(payouts, {
+  const transactions = useMemo(
+    () => createTransactionRecords(payouts, paymentBatches),
+    [payouts, paymentBatches],
+  );
+  const visible = filterTransactionRecords(transactions, {
     tab,
     status: tab === 'paid' ? paymentStatus : ALL_PAYMENT_STATUSES,
     search,
     provider,
     startDate,
     endDate,
-  }, paymentBatches);
-  const selectedTransactions = transactions.filter((payout) => selectedIds.has(payout.id));
-  const detailPayout = detailPayoutId
-    ? transactions.find((payout) => payout.id === detailPayoutId) ?? null
+  });
+  const selectedTransactions = transactions.filter((record) => selectedKeys.has(record.key));
+  const detailRecord = detailRecordKey
+    ? transactions.find((record) => record.key === detailRecordKey) ?? null
     : null;
-  const paid = transactions.filter((payout) => payout.status === '已付款');
-  const failed = transactions.filter((payout) => payout.status === '付款失败');
+  const paid = transactions.filter((record) => record.status === '已付款');
+  const failed = transactions.filter((record) => record.status === '付款失败');
   const transactionTabCounts: Record<TransactionTab, number> = {
     all: transactions.length,
-    paid: transactions.filter((payout) => ['已付款', '付款处理中'].includes(payout.status)).length,
+    paid: transactions.filter((record) => ['已付款', '付款处理中'].includes(record.status)).length,
     failed: failed.length,
   };
-  const paidCurrencies = aggregatePayoutCurrencies(paid, true);
+  const paidCurrencies = aggregatePayoutCurrencies(paid.map((record) => ({
+    amount: record.paymentAmount,
+    currency: record.paymentCurrency,
+  })), true);
   const formatSuccessRate = (successfulCount: number, failedCount: number) => {
     const total = successfulCount + failedCount;
     return total ? `${((successfulCount / total) * 100).toFixed(1)}%` : '—';
   };
   const successRate = formatSuccessRate(paid.length, failed.length);
   const providerSuccessRates = (['Airwallex', 'PayPal', 'PayMax'] as const).map((provider) => {
-    const successfulCount = paid.filter((payout) => payout.provider === provider).length;
-    const failedCount = failed.filter((payout) => payout.provider === provider).length;
+    const successfulCount = paid.filter((record) => record.provider === provider).length;
+    const failedCount = failed.filter((record) => record.provider === provider).length;
     return {
       provider,
       successRate: formatSuccessRate(successfulCount, failedCount),
@@ -4208,35 +4425,35 @@ export function TransactionsPage({
     setTab(nextTab);
     setPaymentStatus(ALL_PAYMENT_STATUSES);
   };
-  const toggleTransaction = (payoutId: string, checked: boolean) => {
-    setSelectedIds((current) => {
+  const toggleTransaction = (recordKey: string, checked: boolean) => {
+    setSelectedKeys((current) => {
       const next = new Set(current);
-      if (checked) next.add(payoutId);
-      else next.delete(payoutId);
+      if (checked) next.add(recordKey);
+      else next.delete(recordKey);
       return next;
     });
   };
-  const toggleTransactions = (payoutIds: readonly string[], checked: boolean) => {
-    setSelectedIds((current) => {
+  const toggleTransactions = (recordKeys: readonly string[], checked: boolean) => {
+    setSelectedKeys((current) => {
       const next = new Set(current);
-      payoutIds.forEach((payoutId) => {
-        if (checked) next.add(payoutId);
-        else next.delete(payoutId);
+      recordKeys.forEach((recordKey) => {
+        if (checked) next.add(recordKey);
+        else next.delete(recordKey);
       });
       return next;
     });
   };
-  const openTransactionDetail = (payout: Payout) => {
-    detailReturnIdRef.current = payout.id;
-    setDetailPayoutId(payout.id);
+  const openTransactionDetail = (record: TransactionRecord) => {
+    detailReturnKeyRef.current = record.key;
+    setDetailRecordKey(record.key);
   };
   const closeTransactionDetail = () => {
-    const returnId = detailReturnIdRef.current;
-    setDetailPayoutId(null);
+    const returnKey = detailReturnKeyRef.current;
+    setDetailRecordKey(null);
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        if (!returnId) return;
-        const button = document.querySelector<HTMLButtonElement>(`[data-transaction-detail="${returnId}"]`);
+        if (!returnKey) return;
+        const button = document.querySelector<HTMLButtonElement>(`[data-transaction-detail="${returnKey}"]`);
         button?.focus();
       });
     });
@@ -4254,12 +4471,16 @@ export function TransactionsPage({
     }
   };
 
-  if (detailPayout) {
+  if (detailRecord) {
     return (
       <TransactionDetailPage
-        payout={detailPayout}
-        context={findTransactionBatchContext(detailPayout, paymentBatches)}
+        record={detailRecord}
+        contracts={contracts}
+        generatedInvoices={generatedInvoices}
         onBack={closeTransactionDetail}
+        onOpenPaymentBatch={detailRecord.context && onOpenPaymentBatch
+          ? () => onOpenPaymentBatch(detailRecord.paymentBatchId)
+          : undefined}
       />
     );
   }
@@ -4347,7 +4568,7 @@ export function TransactionsPage({
           {selectedTransactions.length ? (
             <span className="transaction-selection-summary" aria-live="polite">
               <strong>已选 {selectedTransactions.length} 条</strong>
-              <button className="transaction-selection-clear" type="button" onClick={() => setSelectedIds(new Set())}>清空</button>
+              <button className="transaction-selection-clear" type="button" onClick={() => setSelectedKeys(new Set())}>清空</button>
             </span>
           ) : null}
           <Button
@@ -4355,6 +4576,7 @@ export function TransactionsPage({
             variant="secondary"
             icon={<Download size={16} />}
             disabled={exporting || !selectedTransactions.length}
+            disabledReason={exporting ? '交易记录正在导出，请稍候。' : '请先选择需要导出的交易记录。'}
             onClick={exportTransactions}
           >
             {exporting ? '导出中...' : `导出已选（${selectedTransactions.length}）`}
@@ -4362,9 +4584,8 @@ export function TransactionsPage({
         </div>
         {exportError ? <p className="transaction-export-error" role="alert">{exportError}</p> : null}
         <TransactionRecordsTable
-          payouts={visible}
-          paymentBatches={paymentBatches}
-          selectedIds={selectedIds}
+          records={visible}
+          selectedKeys={selectedKeys}
           onToggle={toggleTransaction}
           onToggleAll={toggleTransactions}
           onOpenDetail={openTransactionDetail}
@@ -4608,7 +4829,7 @@ export function ChannelsPage({ notify }: { notify: Notify }) {
       notify(`${name} 连接正常`, 'API 凭证有效，回调地址可访问。');
     }, 700);
   };
-  return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
+  return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} disabledReason="连接正在校验，请稍候。" onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
 }
 
 export type NotificationNavigationTarget =

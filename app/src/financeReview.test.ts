@@ -145,6 +145,53 @@ const requestWithContract = {
 };
 
 describe('request finance review', () => {
+  it('carries only the current Invoice version contract mismatch reason into later approval review', () => {
+    const currentInvoice = {
+      ...invoice,
+      version: 2,
+      contractMatchReviews: [
+        { version: 1, contractIds: [], result: 'APPROVED_WITH_REASON', issues: [], reason: '旧版本说明' },
+        {
+          version: 2,
+          contractIds: [],
+          result: 'APPROVED_WITH_REASON',
+          issues: [],
+          reason: '当前版本合同金额差异已由项目确认',
+          actorName: 'Mina Media',
+          actorRole: '媒介',
+          reviewedAt: '2026-08-09T08:30:00.000Z',
+        },
+      ],
+    } as unknown as GeneratedInvoiceRecord;
+
+    const review = buildRequestFinanceReview(request, [currentInvoice], [paymentList()]);
+    expect(review.pages[0].contractMismatchReview).toEqual({
+      reason: '当前版本合同金额差异已由项目确认',
+      actorName: 'Mina Media',
+      actorRole: '媒介',
+      reviewedAt: '2026-08-09T08:30:00.000Z',
+    });
+    expect(review.fingerprint).toContain('当前版本合同金额差异已由项目确认');
+    expect(review.fingerprint).not.toContain('旧版本说明');
+  });
+
+  it('does not reuse a mismatch reason from an older Invoice version', () => {
+    const revisedInvoice = {
+      ...invoice,
+      version: 2,
+      contractMatchReviews: [{
+        version: 1,
+        contractIds: [],
+        result: 'APPROVED_WITH_REASON',
+        issues: [],
+        reason: '上一版本说明',
+      }],
+    } as unknown as GeneratedInvoiceRecord;
+
+    const review = buildRequestFinanceReview(request, [revisedInvoice], [paymentList()]);
+    expect(review.pages[0].contractMismatchReview).toBeUndefined();
+  });
+
   it('approves only a one-to-one matching invoice and payment row', () => {
     const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
     expect(review.canApprove).toBe(true);
@@ -492,5 +539,48 @@ describe('request finance review', () => {
       { ...allReviewed, fingerprint: 'stale-fingerprint' },
       review,
     )).toBe(false);
+  });
+
+  it('requires one stable contract for contract returns and preserves full-item scope', () => {
+    const review = buildRequestFinanceReview(request, [invoice], [paymentList()]);
+    const initial = createFinanceReviewSession({
+      requestId: request.id,
+      approvalRound: 1,
+      reviewerAccount: 'finance.test',
+      review,
+    });
+    const missingContract = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      issueType: 'CONTRACT_CONTENT',
+      reason: '需修改合同',
+      reviewedAt: '2026-08-09T10:00:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(missingContract, review)).toBe(false);
+
+    const contractReturn = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      issueType: 'CONTRACT_CONTENT',
+      reason: '需修改合同',
+      contractIds: ['contract-stable-id' as never],
+      reviewedAt: '2026-08-09T10:01:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(contractReturn, review)).toBe(true);
+    expect(financeReviewReturnItems(contractReturn, review)[0]).toMatchObject({
+      issueType: 'CONTRACT_CONTENT',
+      contractIds: ['contract-stable-id'],
+    });
+    expect(financeReviewReturnReason(contractReturn, review))
+      .toBe('INV-TEST（合同 · 合同范围：contract-stable-id）：需修改合同');
+
+    const fullReturn = setFinanceReviewDecision(initial, review.pages[0].key, {
+      state: 'incorrect',
+      issueType: 'FULL_ITEM',
+      reason: '整笔退回修改',
+      contractIds: ['contract-a' as never, 'contract-b' as never],
+      reviewedAt: '2026-08-09T10:02:00.000Z',
+    });
+    expect(financeReviewSessionCanReturn(fullReturn, review)).toBe(true);
+    expect(financeReviewReturnReason(fullReturn, review))
+      .toBe('INV-TEST（整笔请款 · 合同范围：contract-a、contract-b）：整笔退回修改');
   });
 });

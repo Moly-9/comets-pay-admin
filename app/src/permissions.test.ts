@@ -72,6 +72,19 @@ describe('Invoice review permissions', () => {
     expect(canEditContractTemplate(userFor('finance'))).toBe(false);
   });
 
+  it('moves contract templates to the restricted system configuration page', () => {
+    for (const role of ['project', 'owner', 'admin'] as const) {
+      expect(canAccessPage(userFor(role), 'system-config')).toBe(true);
+    }
+    for (const role of ['media', 'pm', 'finance'] as const) {
+      expect(canAccessPage(userFor(role), 'system-config')).toBe(false);
+    }
+    expect(canAccessPage(userFor('admin'), 'system-accounts')).toBe(true);
+    expect(canAccessPage(userFor('owner'), 'system-accounts')).toBe(true);
+    expect(canAccessPage(userFor('project'), 'system-accounts')).toBe(false);
+    expect(canAccessPage(userFor('admin'), 'system-settings')).toBe(true);
+  });
+
   it('lets privileged roles delete every contract and limits media to unused own uploads', () => {
     const media = userFor('media');
     const ownUpload: ContractRecord = { ...INITIAL_CONTRACTS[0], uploadedByAccount: media.account };

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { PageHeading } from '../components/Common';
-import type { ContractRecord } from '../contracts';
+import { getContractManagementBucket, type ContractRecord } from '../contracts';
 import { MY_PROJECT_APPROVAL_STATUSES, myProjectStatusFor } from '../paymentRequestProjects';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type {
@@ -173,9 +173,8 @@ export function DashboardPage({
     )).length;
 
     const uploadedContracts = contracts.filter((contract) => !contract.isTemplate);
-    const ongoingContractStatuses = new Set(['待解析', '待补字段', '已生效', '履约中', '待签署']);
     const ongoingContracts = uploadedContracts.filter((contract) => (
-      ongoingContractStatuses.has(contract.status)
+      !['draft', 'expired'].includes(getContractManagementBucket(contract))
     )).length;
     const paidProjects = new Set(
       payouts.filter((payout) => payout.status === '已付款').map((payout) => payout.project),

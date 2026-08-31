@@ -20,11 +20,13 @@ import type {
   InvoiceCurrency,
   InvoiceDocumentModel,
   InvoiceEntity,
+  InvoiceNotificationDelivery,
   DocumentPayoutSnapshot,
   Payout,
 } from '../types';
 import { formatInvoiceNumber, invoiceDatePart, nextInvoiceNumber } from './invoiceUtils';
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
+import { createInvoiceNotificationDeliveries } from './invoiceNotification';
 
 export type ExternalInvoiceCollectionStatus =
   | 'DRAFT'
@@ -185,6 +187,7 @@ export type ExternalInvoiceReviewEvent = {
   fieldDecision?: ExternalInvoiceMediaReviewDecision;
   fromStatus?: ExternalInvoiceCollectionStatus;
   toStatus: ExternalInvoiceCollectionStatus;
+  notificationDeliveries?: InvoiceNotificationDelivery[];
 };
 
 export type ExternalInvoiceExpectedValues = {
@@ -833,6 +836,7 @@ export const returnExternalInvoice = (
   reason: string,
   actor: ExternalInvoiceActor,
   occurredAt = new Date().toISOString(),
+  notificationEmail?: string,
 ): ExternalInvoiceCollectionRecord => {
   if (record.status !== 'WAITING_MEDIA_REVIEW') throw new Error('只有待审核的外部 Invoice 可以退回。');
   if (!reason.trim()) throw new Error('退回原因不能为空。');
@@ -848,6 +852,7 @@ export const returnExternalInvoice = (
       reason: reason.trim(),
       fromStatus: record.status,
       toStatus,
+      notificationDeliveries: createInvoiceNotificationDeliveries(notificationEmail),
     }],
   };
 };

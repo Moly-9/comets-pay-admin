@@ -1,10 +1,5 @@
 import fontkit from '@pdf-lib/fontkit';
-import regularLatinUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-400-normal.woff?url';
-import regularLatinExtUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-ext-400-normal.woff?url';
-import regularChineseUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff?url';
-import boldLatinUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-700-normal.woff?url';
-import boldLatinExtUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-latin-ext-700-normal.woff?url';
-import boldChineseUrl from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-700-normal.woff?url';
+import unicodeFontUrl from './assets/fonts/NotoSansSC-Regular.ttf?url';
 import {
   AlignmentType,
   BorderStyle,
@@ -28,6 +23,7 @@ import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
   PDFDocument,
+  StandardFonts,
   degrees,
   rgb,
   type PDFFont,
@@ -41,6 +37,7 @@ import type {
   ContractQualityIssue,
   ContractQualityReport,
   ContractTemplateFieldKey,
+  ContractTemplateOutputFieldKey,
 } from './contracts';
 import { formatContractPublishingChannelLinks } from './contractGenerationModel';
 import {
@@ -56,6 +53,10 @@ import {
   placeholderToken,
   replaceContractPlaceholders,
 } from './contractTemplate';
+import {
+  isContractTemplateOutputFieldOmitted,
+  resolveContractTemplateOutput,
+} from './contractTemplateFieldPolicies';
 export { contractGenerationFilename } from './contractGenerationFilename';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -104,6 +105,7 @@ type ResolvedTable = {
 
 type ResolvedSignature = {
   type: 'signature';
+  advertiser: string;
   publisher: string;
   publisherAddress: string;
 };
@@ -136,10 +138,22 @@ const DOCX_LABEL_WIDTH = 2450;
 const DOCX_VALUE_WIDTH = DOCX_CONTENT_WIDTH - DOCX_LABEL_WIDTH;
 const DOCX_BORDER = { style: BorderStyle.SINGLE, size: 4, color: 'D8DCE4' };
 
-const loadBytes = async (url: string) => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(TEMPLATE_FETCH_ERROR);
-  return response.arrayBuffer();
+const resourceBytesCache = new Map<string, Promise<ArrayBuffer>>();
+
+const loadBytes = (url: string) => {
+  const cached = resourceBytesCache.get(url);
+  if (cached) return cached;
+  const pending = fetch(url)
+    .then((response) => {
+      if (!response.ok) throw new Error(TEMPLATE_FETCH_ERROR);
+      return response.arrayBuffer();
+    })
+    .catch((error) => {
+      resourceBytesCache.delete(url);
+      throw error;
+    });
+  resourceBytesCache.set(url, pending);
+  return pending;
 };
 
 const normalizePdfText = (value: string) => (
@@ -176,30 +190,44 @@ const joinPdfTextRow = (items: Array<{ x: number; width: number; text: string }>
   return normalizePdfText(result);
 };
 
-export const extractContractTemplatePageLines = async (bytes: ArrayBuffer) => {
-  const loadingTask = getDocument({ data: new Uint8Array(bytes.slice(0)) });
-  const document = await loadingTask.promise;
-  const pages: string[][] = [];
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-    const page = await document.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const rows = new Map<number, Array<{ x: number; width: number; text: string }>>();
-    content.items.forEach((item) => {
-      if (!('str' in item)) return;
-      const y = Math.round(item.transform[5] * 2) / 2;
-      const row = rows.get(y) ?? [];
-      row.push({ x: item.transform[4], width: item.width, text: item.str });
-      rows.set(y, row);
-    });
-    pages.push(
-      [...rows.entries()]
-        .sort(([left], [right]) => right - left)
-        .map(([, row]) => joinPdfTextRow(row))
-        .filter(Boolean),
-    );
-  }
-  await document.destroy();
-  return pages;
+const templatePageLinesCache = new WeakMap<ArrayBuffer, Promise<string[][]>>();
+
+export const extractContractTemplatePageLines = (bytes: ArrayBuffer) => {
+  const cached = templatePageLinesCache.get(bytes);
+  if (cached) return cached;
+  const pending = (async () => {
+    const loadingTask = getDocument({ data: new Uint8Array(bytes.slice(0)) });
+    const document = await loadingTask.promise;
+    const pages: string[][] = [];
+    try {
+      for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+        const page = await document.getPage(pageNumber);
+        const content = await page.getTextContent();
+        const rows = new Map<number, Array<{ x: number; width: number; text: string }>>();
+        content.items.forEach((item) => {
+          if (!('str' in item)) return;
+          const y = Math.round(item.transform[5] * 2) / 2;
+          const row = rows.get(y) ?? [];
+          row.push({ x: item.transform[4], width: item.width, text: item.str });
+          rows.set(y, row);
+        });
+        pages.push(
+          [...rows.entries()]
+            .sort(([left], [right]) => right - left)
+            .map(([, row]) => joinPdfTextRow(row))
+            .filter(Boolean),
+        );
+      }
+      return pages;
+    } finally {
+      await document.destroy();
+    }
+  })().catch((error) => {
+    templatePageLinesCache.delete(bytes);
+    throw error;
+  });
+  templatePageLinesCache.set(bytes, pending);
+  return pending;
 };
 
 const isHeading = (value: string) => (
@@ -212,12 +240,13 @@ const stripTemplateArtifacts = (
   variant: ContractDocumentVariant,
   pageNumber: number,
 ) => {
-  const channelLinks = formatContractPublishingChannelLinks(model);
+  const effectiveModel = resolveContractTemplateOutput(model).effectiveModel;
+  const channelLinks = formatContractPublishingChannelLinks(effectiveModel);
   let result = value
     .replace(/_+/g, ' ')
     .replace(/\[\s*please fill[^\]]*\]/gi, variant === 'DRAFT' ? '待填写' : '')
-    .replace(/please fill in REAL NAME or Company NAME/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
-    .replace(/\[REAL NAME or Company Name\]/gi, model.publisher || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/please fill in REAL NAME or Company NAME/gi, effectiveModel.publisher || (variant === 'DRAFT' ? '待填写' : ''))
+    .replace(/\[REAL NAME or Company Name\]/gi, effectiveModel.publisher || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/please fill in the promoted channel link/gi, channelLinks || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/https:\/\/www\.youtube\.com\/x+/gi, channelLinks || (variant === 'DRAFT' ? '待填写' : ''))
     .replace(/\bXXX\b/gi, variant === 'DRAFT' ? '待填写' : '')
@@ -269,7 +298,7 @@ const standardTermsOpening = (
       fieldKey: 'publisher',
       align: 'justify',
       text: replaceContractPlaceholders(
-        `This Standard Terms And Conditions (the "Standard Terms") constitute an integrated part of all Insertion Orders (the "IO") between Comets International Limited ("Advertiser") and ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher"). Publisher is required to have their own accounts on ${placeholderToken('platform')}. The Standard Terms and IO are collectively referred to herein as the "Agreement". In the event of a contradiction between the provisions of these Standard Terms and the IO, the provisions of the IO shall prevail.`,
+        `This Standard Terms And Conditions (the "Standard Terms") constitute an integrated part of all Insertion Orders (the "IO") between ${placeholderToken('advertiser_name')} ("Advertiser") and ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher"). Publisher is required to have their own accounts on ${placeholderToken('platform')}. The Standard Terms and IO are collectively referred to herein as the "Agreement". In the event of a contradiction between the provisions of these Standard Terms and the IO, the provisions of the IO shall prevail.`,
         model,
         variant,
       ),
@@ -277,6 +306,14 @@ const standardTermsOpening = (
     ...sourcePageBlocks(1, fixedTerms, model, variant),
   ];
 };
+
+const configuredOutputRow = (
+  model: ContractGenerationModel,
+  outputFieldKey: ContractTemplateOutputFieldKey,
+  row: ResolvedTableRow,
+): ResolvedTableRow[] => (
+  isContractTemplateOutputFieldOmitted(model, outputFieldKey) ? [] : [row]
+);
 
 const paymentPage = (
   lines: string[],
@@ -301,18 +338,18 @@ const paymentPage = (
       type: 'table',
       rows: bank ? [
         { label: 'Payment Method', value: 'Bank transfer', fieldKey: 'payoutAccount' },
-        { label: 'Account Name', value: replaceContractPlaceholders(placeholderToken('payout_account_name'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Account Number / IBAN', value: replaceContractPlaceholders(placeholderToken('payout_account_locator'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Beneficiary Bank', value: replaceContractPlaceholders(placeholderToken('bank_name'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Bank Address', value: replaceContractPlaceholders(placeholderToken('bank_address'), model, variant), fieldKey: 'payoutAccount', optional: true },
-        { label: 'SWIFT Code', value: replaceContractPlaceholders(placeholderToken('swift_code'), model, variant), fieldKey: 'payoutAccount', optional: true },
-        { label: 'IBAN', value: replaceContractPlaceholders(placeholderToken('iban'), model, variant), fieldKey: 'payoutAccount', optional: true },
-        { label: 'Remittance Information', value: model.paymentSnapshot.transferRemarks, fieldKey: 'payoutAccount', optional: true },
+        ...configuredOutputRow(model, 'accountName', { label: 'Account Name', value: replaceContractPlaceholders(placeholderToken('account_name'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'accountNumber', { label: 'Account Number', value: replaceContractPlaceholders(placeholderToken('account_number'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'beneficiaryBankName', { label: 'Beneficiary Bank Name', value: replaceContractPlaceholders(placeholderToken('beneficiary_bank_name'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'beneficiaryBankAddress', { label: 'Beneficiary Bank Address', value: replaceContractPlaceholders(placeholderToken('beneficiary_bank_address'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'swiftCode', { label: 'Swift Code', value: replaceContractPlaceholders(placeholderToken('swift_code'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'iban', { label: 'IBAN', value: replaceContractPlaceholders(placeholderToken('iban'), model, variant), fieldKey: 'payoutAccount', optional: true }),
+        ...configuredOutputRow(model, 'remittanceInformation', { label: 'Remittance Information (optional)', value: replaceContractPlaceholders(placeholderToken('remittance_information'), model, variant), fieldKey: 'payoutAccount', optional: true }),
       ] : [
         { label: 'Payment Method', value: 'PayPal', fieldKey: 'payoutAccount' },
-        { label: 'PayPal Name', value: replaceContractPlaceholders(placeholderToken('payout_account_name'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'PayPal Email', value: replaceContractPlaceholders(placeholderToken('paypal_email'), model, variant), fieldKey: 'payoutAccount' },
-        { label: 'Remittance Information', value: model.paymentSnapshot.transferRemarks, fieldKey: 'payoutAccount', optional: true },
+        ...configuredOutputRow(model, 'paypalUsername', { label: 'PayPal Username', value: replaceContractPlaceholders(placeholderToken('paypal_username'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'paypalEmailAddress', { label: 'PayPal Email Address', value: replaceContractPlaceholders(placeholderToken('paypal_email'), model, variant), fieldKey: 'payoutAccount' }),
+        ...configuredOutputRow(model, 'transferNote', { label: 'Transfer Note (optional)', value: replaceContractPlaceholders(placeholderToken('transfer_note'), model, variant), fieldKey: 'payoutAccount', optional: true }),
       ],
     },
   ];
@@ -321,15 +358,23 @@ const paymentPage = (
 const insertionOrderPage = (
   model: ContractGenerationModel,
   variant: ContractDocumentVariant,
-): ResolvedBlock[] => [
+): ResolvedBlock[] => {
+  const partyRows: ResolvedTableRow[] = [
+    ...configuredOutputRow(model, 'advertiser', { label: 'Advertiser', value: replaceContractPlaceholders(placeholderToken('advertiser_name'), model, variant), fieldKey: 'signature' }),
+    { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
+    ...configuredOutputRow(model, 'publisher', { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' }),
+    { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
+  ];
+  const campaignRows: ResolvedTableRow[] = [
+    { label: 'Project Name', value: replaceContractPlaceholders(placeholderToken('project_name'), model, variant), fieldKey: 'projectName' },
+    { label: 'Service Provider Name', value: replaceContractPlaceholders(placeholderToken('channel_name'), model, variant), fieldKey: 'channelName' },
+    ...configuredOutputRow(model, 'campaignPeriod', { label: 'Start Date', value: replaceContractPlaceholders(placeholderToken('campaign_start'), model, variant), fieldKey: 'campaignPeriod' }),
+    ...configuredOutputRow(model, 'campaignPeriod', { label: 'End Date', value: replaceContractPlaceholders(placeholderToken('campaign_end'), model, variant), fieldKey: 'campaignPeriod' }),
+  ];
+  return [
   {
     type: 'table',
-    rows: [
-      { label: 'Advertiser', value: 'Comets International Limited', fieldKey: 'signature' },
-      { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
-      { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' },
-      { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
-    ],
+    rows: partyRows,
   },
   { type: 'paragraph', style: 'title', align: 'center', text: 'Insertion Order' },
   {
@@ -338,7 +383,7 @@ const insertionOrderPage = (
     fieldKey: 'effectiveDate',
     align: 'justify',
     text: replaceContractPlaceholders(
-      `This Insertion Order ("this IO") relates to the services provided under the Standard Terms And Conditions For Digital Marketing Services entered into by ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher") and Comets International Limited ("Advertiser") with effect as of ${placeholderToken('effective_date')} ("the Agreement").`,
+      `This Insertion Order ("this IO") relates to the services provided under the Standard Terms And Conditions For Digital Marketing Services entered into by ${placeholderToken('publisher_name')} on behalf of (${placeholderToken('channel_url')}) ("Publisher") and ${placeholderToken('advertiser_name')} ("Advertiser") with effect as of ${placeholderToken('effective_date')} ("the Agreement").`,
       model,
       variant,
     ),
@@ -361,14 +406,10 @@ const insertionOrderPage = (
   { type: 'paragraph', style: 'heading', text: '2. Campaign Details' },
   {
     type: 'table',
-    rows: [
-      { label: 'Project Name', value: replaceContractPlaceholders(placeholderToken('project_name'), model, variant), fieldKey: 'projectName' },
-      { label: 'Service Provider Name', value: replaceContractPlaceholders(placeholderToken('channel_name'), model, variant), fieldKey: 'channelName' },
-      { label: 'Start Date', value: replaceContractPlaceholders(placeholderToken('campaign_start'), model, variant), fieldKey: 'campaignPeriod' },
-      { label: 'End Date', value: replaceContractPlaceholders(placeholderToken('campaign_end'), model, variant), fieldKey: 'campaignPeriod' },
-    ],
+    rows: campaignRows,
   },
-];
+  ];
+};
 
 const campaignDetailsPage = (
   model: ContractGenerationModel,
@@ -395,8 +436,8 @@ const campaignDetailsPage = (
         { label: 'Format', value: replaceContractPlaceholders(placeholderToken('content_format'), model, variant), fieldKey: 'contentFormat' },
         { label: 'Release Date', value: replaceContractPlaceholders(`${placeholderToken('release_start')} to ${placeholderToken('release_end')}`, model, variant), fieldKey: 'releasePeriod' },
         { label: 'Language', value: replaceContractPlaceholders(placeholderToken('language'), model, variant), fieldKey: 'language' },
-        { label: 'Publishing Platform', value: replaceContractPlaceholders(placeholderToken('platform'), model, variant), fieldKey: 'platform' },
-        { label: 'Channel Link', value: replaceContractPlaceholders(placeholderToken('channel_url'), model, variant), fieldKey: 'channelUrl' },
+        ...configuredOutputRow(model, 'channel', { label: 'Publishing Platform', value: replaceContractPlaceholders(placeholderToken('platform'), model, variant), fieldKey: 'platform' }),
+        ...configuredOutputRow(model, 'channel', { label: 'Channel Link', value: replaceContractPlaceholders(placeholderToken('channel_url'), model, variant), fieldKey: 'channelUrl' }),
         { label: 'Length of Content', value: replaceContractPlaceholders(placeholderToken('content_length'), model, variant), fieldKey: 'contentLength' },
         { label: 'License Period', value: replaceContractPlaceholders(placeholderToken('license_period'), model, variant), fieldKey: 'licensePeriod', optional: true },
         { label: 'License Price', value: replaceContractPlaceholders(placeholderToken('license_price'), model, variant), fieldKey: 'licensePrice', optional: true },
@@ -409,7 +450,9 @@ const campaignDetailsPage = (
 const signaturePage = (
   model: ContractGenerationModel,
   variant: ContractDocumentVariant,
-): ResolvedBlock[] => [
+): ResolvedBlock[] => {
+  const output = resolveContractTemplateOutput(model);
+  return [
   { type: 'paragraph', style: 'title', align: 'center', text: 'Execution' },
   {
     type: 'paragraph',
@@ -418,10 +461,12 @@ const signaturePage = (
   },
   {
     type: 'signature',
-    publisher: model.publisher || (variant === 'DRAFT' ? '待填写' : ''),
+    advertiser: output.values.advertiser || (variant === 'DRAFT' ? '待填写' : ''),
+    publisher: output.values.publisher || (variant === 'DRAFT' ? '待填写' : ''),
     publisherAddress: model.publisherAddress || (variant === 'DRAFT' ? '待填写' : ''),
   },
-];
+  ];
+};
 
 const prepareContractDocument = async (
   model: ContractGenerationModel,
@@ -449,7 +494,7 @@ const prepareContractDocument = async (
       ? [block.text]
       : block.type === 'table'
         ? block.rows.flatMap((row) => [row.label, row.value])
-        : [block.publisher, block.publisherAddress];
+        : [block.advertiser, block.publisher, block.publisherAddress];
     return values.some((value) => /\{\{[^}]+\}\}/.test(value))
       ? [{
           id: `unresolved-page-${page.sourcePage}`,
@@ -475,9 +520,42 @@ const fontForCharacter = (character: string, fonts: EmbeddedFonts, bold: boolean
   return isCjk(character) ? set.chinese : isBasicLatin(character) ? set.latin : set.latinExt;
 };
 
-const textWidth = (value: string, size: number, fonts: EmbeddedFonts, bold = false) => (
+type FontWidthCache = WeakMap<PDFFont, Map<number, Map<string, number>>>;
+
+const characterWidth = (
+  character: string,
+  size: number,
+  fonts: EmbeddedFonts,
+  bold: boolean,
+  cache: FontWidthCache,
+) => {
+  const font = fontForCharacter(character, fonts, bold);
+  let sizes = cache.get(font);
+  if (!sizes) {
+    sizes = new Map();
+    cache.set(font, sizes);
+  }
+  let characters = sizes.get(size);
+  if (!characters) {
+    characters = new Map();
+    sizes.set(size, characters);
+  }
+  const cached = characters.get(character);
+  if (cached !== undefined) return cached;
+  const measured = font.widthOfTextAtSize(character, size);
+  characters.set(character, measured);
+  return measured;
+};
+
+const textWidth = (
+  value: string,
+  size: number,
+  fonts: EmbeddedFonts,
+  bold = false,
+  cache: FontWidthCache = new WeakMap(),
+) => (
   Array.from(value).reduce(
-    (total, character) => total + fontForCharacter(character, fonts, bold).widthOfTextAtSize(character, size),
+    (total, character) => total + characterWidth(character, size, fonts, bold, cache),
     0,
   )
 );
@@ -488,6 +566,7 @@ const wrapText = (
   size: number,
   fonts: EmbeddedFonts,
   bold = false,
+  cache: FontWidthCache = new WeakMap(),
 ) => {
   const lines: string[] = [];
   value.split(/\r?\n/).forEach((sourceLine) => {
@@ -496,19 +575,23 @@ const wrapText = (
       return;
     }
     let line = '';
+    let lineWidth = 0;
     Array.from(sourceLine).forEach((character) => {
-      const next = `${line}${character}`;
-      if (line && textWidth(next, size, fonts, bold) > width) {
+      const nextWidth = lineWidth + characterWidth(character, size, fonts, bold, cache);
+      if (line && nextWidth > width) {
         const breakAt = line.lastIndexOf(' ');
         if (breakAt > 0) {
           lines.push(line.slice(0, breakAt).trimEnd());
           line = `${line.slice(breakAt + 1)}${character}`.trimStart();
+          lineWidth = textWidth(line, size, fonts, bold, cache);
         } else {
           lines.push(line.trimEnd());
           line = character.trimStart();
+          lineWidth = line ? characterWidth(character, size, fonts, bold, cache) : 0;
         }
       } else {
-        line = next;
+        line += character;
+        lineWidth = nextWidth;
       }
     });
     lines.push(line);
@@ -548,23 +631,27 @@ const loadEmbeddedFonts = async (
   pdf: PDFDocument,
   fontBytes?: ContractFontBytes,
 ): Promise<EmbeddedFonts> => {
-  const bytes = fontBytes ?? {
-    latin: await loadBytes(regularLatinUrl),
-    latinExt: await loadBytes(regularLatinExtUrl),
-    chinese: await loadBytes(regularChineseUrl),
-    boldLatin: await loadBytes(boldLatinUrl),
-    boldLatinExt: await loadBytes(boldLatinExtUrl),
-    boldChinese: await loadBytes(boldChineseUrl),
-  };
+  if (!fontBytes) {
+    // Keep Latin text on PDF-native fonts and parse one Unicode fallback instead of six WOFF subsets.
+    const [latin, boldLatin, unicode] = await Promise.all([
+      pdf.embedFont(StandardFonts.Helvetica),
+      pdf.embedFont(StandardFonts.HelveticaBold),
+      loadBytes(unicodeFontUrl).then((bytes) => pdf.embedFont(bytes, { subset: true })),
+    ]);
+    return {
+      regular: { latin, latinExt: unicode, chinese: unicode },
+      bold: { latin: boldLatin, latinExt: unicode, chinese: unicode },
+    };
+  }
   const regular = await Promise.all([
-    pdf.embedFont(bytes.latin, { subset: true }),
-    pdf.embedFont(bytes.latinExt, { subset: true }),
-    pdf.embedFont(bytes.chinese, { subset: true }),
+    pdf.embedFont(fontBytes.latin, { subset: true }),
+    pdf.embedFont(fontBytes.latinExt, { subset: true }),
+    pdf.embedFont(fontBytes.chinese, { subset: true }),
   ]);
   const bold = await Promise.all([
-    pdf.embedFont(bytes.boldLatin ?? bytes.latin, { subset: true }),
-    pdf.embedFont(bytes.boldLatinExt ?? bytes.latinExt, { subset: true }),
-    pdf.embedFont(bytes.boldChinese ?? bytes.chinese, { subset: true }),
+    pdf.embedFont(fontBytes.boldLatin ?? fontBytes.latin, { subset: true }),
+    pdf.embedFont(fontBytes.boldLatinExt ?? fontBytes.latinExt, { subset: true }),
+    pdf.embedFont(fontBytes.boldChinese ?? fontBytes.chinese, { subset: true }),
   ]);
   return {
     regular: { latin: regular[0], latinExt: regular[1], chinese: regular[2] },
@@ -589,6 +676,7 @@ const buildContractPdf = async (
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const fonts = await loadEmbeddedFonts(pdf, fontBytes);
+  const widthCache: FontWidthCache = new WeakMap();
   const anchors: ContractFieldAnchor[] = [];
   let page: PDFPage;
   let cursorY = 0;
@@ -627,7 +715,7 @@ const buildContractPdf = async (
   const drawParagraph = (block: ResolvedParagraph) => {
     const tokens = paragraphTokens(block.style);
     const width = CONTRACT_TEMPLATE_WIDTH - CONTRACT_TEMPLATE_MARGIN * 2;
-    const lines = wrapText(block.text, width, tokens.size, fonts, tokens.bold);
+    const lines = wrapText(block.text, width, tokens.size, fonts, tokens.bold, widthCache);
     cursorY -= tokens.before;
     let chunkTop = CONTRACT_TEMPLATE_HEIGHT - cursorY;
     let chunkHeight = 0;
@@ -638,7 +726,7 @@ const buildContractPdf = async (
         chunkTop = CONTRACT_TEMPLATE_HEIGHT - cursorY;
         chunkHeight = 0;
       }
-      const lineWidth = textWidth(line, tokens.size, fonts, tokens.bold);
+      const lineWidth = textWidth(line, tokens.size, fonts, tokens.bold, widthCache);
       const x = block.align === 'center'
         ? Math.max(CONTRACT_TEMPLATE_MARGIN, (CONTRACT_TEMPLATE_WIDTH - lineWidth) / 2)
         : CONTRACT_TEMPLATE_MARGIN;
@@ -660,9 +748,9 @@ const buildContractPdf = async (
     const paddingX = 7;
     const paddingY = 6;
     block.rows.forEach((row) => {
-      const labelLines = wrapText(row.label, labelWidth - paddingX * 2, size, fonts, true);
+      const labelLines = wrapText(row.label, labelWidth - paddingX * 2, size, fonts, true, widthCache);
       const displayValue = row.value || (variant === 'DRAFT' && !row.optional ? '待填写' : '');
-      const valueLines = wrapText(displayValue, valueWidth - paddingX * 2, size, fonts);
+      const valueLines = wrapText(displayValue, valueWidth - paddingX * 2, size, fonts, false, widthCache);
       const lineCount = Math.max(1, labelLines.length, valueLines.length);
       const height = lineCount * lineHeight + paddingY * 2;
       ensureSpace(height + 1);
@@ -714,8 +802,8 @@ const buildContractPdf = async (
     const parties = [
       {
         x: CONTRACT_TEMPLATE_MARGIN,
-        party: 'For and on behalf of Comets International Limited',
-        name: 'Comets International Limited',
+        party: `For and on behalf of ${block.advertiser}`,
+        name: block.advertiser,
         title: 'Influencer Manager',
         address: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong',
       },
@@ -728,7 +816,7 @@ const buildContractPdf = async (
       },
     ];
     parties.forEach((party, partyIndex) => {
-      const partyLines = wrapText(party.party, columnWidth, 10.5, fonts, true);
+      const partyLines = wrapText(party.party, columnWidth, 10.5, fonts, true, widthCache);
       partyLines.forEach((line, index) => drawMixedLine(page, line, party.x, top - 14 - index * 13.125, 10.5, fonts, true));
       const details = [
         ['Name', party.name],
@@ -738,7 +826,7 @@ const buildContractPdf = async (
       let detailY = top - 54;
       details.forEach(([label, value]) => {
         drawMixedLine(page, `${label}:`, party.x, detailY, 10.5, fonts, true);
-        const lines = wrapText(value, columnWidth - 54, 10.5, fonts);
+        const lines = wrapText(value, columnWidth - 54, 10.5, fonts, false, widthCache);
         lines.forEach((line, index) => drawMixedLine(page, line, party.x + 54, detailY - index * 13.125, 10.5, fonts));
         detailY -= Math.max(28, lines.length * 13.125 + 8);
       });
@@ -937,8 +1025,8 @@ const docxSignature = (block: ResolvedSignature) => {
       cantSplit: true,
       children: [
         signatureCell(
-          'For and on behalf of Comets International Limited',
-          'Comets International Limited',
+          `For and on behalf of ${block.advertiser}`,
+          block.advertiser,
           'Influencer Manager',
           'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong',
           width,
@@ -1069,6 +1157,10 @@ export const generateContractFiles = async (
   const variant = options.variant ?? 'FORMAL';
   const templateBytes = await loadBytes(CONTRACT_TEMPLATE_URL);
   const prepared = await prepareContractDocument(model, variant, templateBytes);
+  if (variant === 'FORMAL' && prepared.qualityReport.hasBlockers) {
+    const firstBlocker = prepared.qualityReport.issues.find((issue) => issue.severity === 'BLOCKER');
+    throw new Error(firstBlocker?.message ?? '合同存在未完成的必需字段，不能生成正式文件。');
+  }
   const [pdfResult, docxBlob] = await Promise.all([
     buildContractPdf(prepared, variant, model),
     buildContractDocx(prepared, variant, model),

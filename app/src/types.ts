@@ -5,6 +5,7 @@ import type {
   EngagementId,
   InvoiceBillingEntityId,
   InvoiceId,
+  PaymentBatchId,
   PaymentRequestProjectId,
   ProjectId,
 } from './businessWorkflow';
@@ -27,6 +28,8 @@ export type NavPage =
   | 'transactions'
   | 'organization'
   | 'channels'
+  | 'system-accounts'
+  | 'system-config'
   | 'system-settings'
   | 'notifications';
 
@@ -63,6 +66,7 @@ export type PayoutAccountIdentity = {
   providerAccountScope?: string;
   schemaKey?: string;
   accountFingerprint?: string;
+  updatedAt?: string;
 };
 
 export type AirwallexVerificationCode =
@@ -222,6 +226,7 @@ export type DocumentPayoutSnapshot = CreatorPaymentDetails & {
   accountCurrency?: string;
   schemaKey?: string;
   validationStatus?: PayoutAccountStatus;
+  updatedAt?: string;
   validatedAt?: string;
   verifiedAt?: string;
   schemaValues?: Record<string, string>;
@@ -370,6 +375,17 @@ export type InvoiceContractMatchIssue = {
   contractValue: string;
   invoiceValue: string;
   message: string;
+  paymentAccountDifference?: InvoicePaymentAccountDifference;
+};
+
+export type InvoicePaymentAccountDifference = {
+  fieldLabels: string[];
+  technicalMetadataOnly: boolean;
+  contractAccounts: Array<{
+    contractReference: string;
+    updatedAt?: string;
+  }>;
+  invoiceAccountUpdatedAt?: string;
 };
 
 export type InvoiceContractMatchReview = {
@@ -459,6 +475,7 @@ export type InvoiceBatchGeneratedFiles = {
 
 export type InvoiceBatchLineItem = InvoiceLineItem & {
   templateKey: string;
+  lineItemScope?: 'SHARED' | 'CREATOR';
 };
 
 export type InvoiceBatchRow = {
@@ -547,7 +564,36 @@ export type PaymentFailureRecoveryStatus =
   | 'CREATOR_UPDATED'
   | 'PENDING_FINANCE_CONFIRMATION'
   | 'READY_FOR_RETRY'
-  | 'RETRY_SUBMITTED';
+  | 'RETRY_SUBMITTED'
+  | 'RETRY_SUCCEEDED';
+
+export type PaymentAttemptRef = {
+  paymentBatchId: PaymentBatchId;
+  paymentBatchCode: string;
+  submittedAt: string;
+  paymentOrderCode?: string;
+  sourcePaymentOrderCode?: string;
+  attemptNumber?: number;
+};
+
+export type PaymentAttemptSnapshot = Readonly<{
+  paymentBatchId?: PaymentBatchId;
+  paymentBatchCode?: string;
+  attemptNumber: number;
+  status: Extract<PayoutStatus, '付款失败' | '已付款'>;
+  occurredAt?: string;
+  principalAmount: number;
+  principalCurrency: InvoiceCurrency;
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  actualPaidAmount?: number;
+  actualPaidCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: InvoiceCurrency;
+  errorCode?: string;
+  providerResponse?: string;
+  returnReason?: string;
+}>;
 
 export type PaymentNotificationDelivery = {
   channel: 'IN_APP' | 'GMAIL';
@@ -572,6 +618,7 @@ export type PaymentFailureNotification = PaymentNotification;
 export type PaymentFailureRecovery = {
   status: PaymentFailureRecoveryStatus;
   notifications: PaymentFailureNotification[];
+  previousFailure?: PaymentFailureRecord;
   readyReason?: 'ACCOUNT_UNCHANGED' | 'REVALIDATED';
   failureCode?: string;
   returnReason?: string;
@@ -587,18 +634,20 @@ export type PaymentFailureRecovery = {
   financeConfirmedByName?: string;
   retryBatchId?: string;
   retryBatchCode?: string;
+  retrySucceededAt?: string;
   previousAttempts?: Array<{
     status: PaymentFailureRecoveryStatus;
     notifications: PaymentFailureNotification[];
+    previousFailure?: PaymentFailureRecord;
     failureCode?: string;
     returnReason?: string;
-      creatorUpdatedAt?: string;
-      revalidatedAt?: string;
-      financeConfirmedAt?: string;
-      financeConfirmedByAccount?: string;
-      financeConfirmedByName?: string;
-      retryBatchId?: string;
-      retryBatchCode?: string;
+    creatorUpdatedAt?: string;
+    revalidatedAt?: string;
+    financeConfirmedAt?: string;
+    financeConfirmedByAccount?: string;
+    financeConfirmedByName?: string;
+    retryBatchId?: string;
+    retryBatchCode?: string;
   }>;
 };
 
@@ -626,7 +675,16 @@ export type Payout = {
   externalBeneficiaryId?: string;
   transferMethod?: AirwallexTransferMethod | 'PAYPAL';
   localClearingSystem?: string;
+  recipientCountry?: string;
   feeBearer?: 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  actualPaidAmount?: number;
+  actualPaidCurrency?: InvoiceCurrency;
+  recipientReceivedAmount?: number;
+  recipientReceivedCurrency?: InvoiceCurrency;
+  postTransactionBalance?: number;
+  postTransactionBalanceCurrency?: InvoiceCurrency;
   paymentListRequiresRevalidation?: boolean;
   paymentListValidationIssues?: string[];
   status: PayoutStatus;
@@ -658,6 +716,8 @@ export type Payout = {
   paymentFailure?: PaymentFailureRecord;
   paymentFailureReturn?: PaymentFailureReturn;
   paymentFailureRecovery?: PaymentFailureRecovery;
+  currentPaymentAttempt?: PaymentAttemptRef;
+  paymentAttempts?: readonly PaymentAttemptSnapshot[];
   invoiceSnapshot?: InvoiceDocumentModel;
   invoicePaymentFreezeSnapshot?: InvoicePaymentFreezeSnapshot;
   accent: string;
@@ -669,4 +729,5 @@ export type Payout = {
 export type ToastState = {
   title: string;
   message: string;
+  tone?: 'success' | 'warning';
 } | null;

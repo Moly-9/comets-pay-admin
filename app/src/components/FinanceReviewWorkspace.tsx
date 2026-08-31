@@ -16,6 +16,7 @@ import {
   Eye,
   FileText,
   Files,
+  GripVertical,
   Landmark,
   LoaderCircle,
   PanelRightClose,
@@ -46,6 +47,7 @@ import {
 export { contractsForFinanceReviewPage } from '../financeReview';
 import {
   type RequestApprovalReturnIssueType,
+  type ContractId,
   paymentListProviders,
   type InvoiceId,
   type PaymentListId,
@@ -71,13 +73,14 @@ import {
   type ProjectPdfArchiveKind,
 } from '../projectResourcePdfArchive';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
-import { creatorHandleForDisplay } from '../creatorSearchOptions';
+import { paymentCreatorIdentityFromValues } from '../paymentCreatorIdentity';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import { ContractDocumentView } from './ContractDocumentView';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { PaymentListReviewContent } from './PaymentListReviewContent';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal, SelectField, type SelectOption } from './Common';
+import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './FinanceReviewWorkspace.css';
 
@@ -97,14 +100,22 @@ const REVIEW_PANE_OPTIONS: Array<{
 export const FINANCE_RETURN_ISSUE_OPTIONS: readonly SelectOption<RequestApprovalReturnIssueType>[] = [
   { value: 'INVOICE_CONTENT', label: 'Invoice 原因', description: '仅开放该份 Invoice 修改权限' },
   { value: 'PAYMENT_LIST', label: '付款清单原因', description: '仅开放对应付款明细修改权限' },
+  { value: 'CONTRACT_CONTENT', label: '合同原因', description: '仅开放指定的一份合同修改权限' },
+  { value: 'FULL_ITEM', label: '整笔退回', description: '开放该达人本笔请款的合同、Invoice 和付款明细' },
 ];
 
+const FINANCE_RETURN_ISSUE_LABEL: Record<RequestApprovalReturnIssueType, string> = {
+  INVOICE_CONTENT: 'Invoice 原因',
+  PAYMENT_LIST: '付款清单原因',
+  CONTRACT_CONTENT: '合同原因',
+  FULL_ITEM: '整笔退回',
+};
+
 const financeReturnIssueLabel = (issueType: RequestApprovalReturnIssueType) => (
-  issueType === 'INVOICE_CONTENT' ? 'Invoice 原因' : '付款清单原因'
+  FINANCE_RETURN_ISSUE_LABEL[issueType]
 );
 
-const PAGE_KIND_LABEL: Record<FinanceReviewPage['kind'], string> = {
-  pair: '一一对应',
+const PAGE_KIND_LABEL: Record<Exclude<FinanceReviewPage['kind'], 'pair'>, string> = {
   'missing-invoice': '缺少 Invoice',
   'missing-payment': '缺少付款明细',
   'duplicate-payment': '重复付款明细',
@@ -158,6 +169,9 @@ const reviewStatusLabel = (state: 'unreviewed' | 'correct' | 'incorrect') => {
 const MIN_INVOICE_ZOOM = 0.6;
 const MAX_INVOICE_ZOOM = 2.2;
 const INVOICE_ZOOM_STEP = 0.1;
+const MIN_INVOICE_PANE_PERCENT = 20;
+const MAX_INVOICE_PANE_PERCENT = 80;
+const FINANCE_REVIEW_RESIZER_WIDTH = 44;
 
 const ACCOUNT_VALIDATION_FIELD_IDS = new Set([
   'account-id',
@@ -224,6 +238,11 @@ export function ApprovalTimeline({
   }
   const currentStage = requestApprovalStage(approval.status);
   const stageOrder: RequestApprovalStage[] = ['PM', 'PROJECT_OWNER', 'OWNER', 'FINANCE'];
+  const resumedStage = approval.status === 'RETURNED_TO_MEDIA_REVIEW' && approval.resumeStatus
+    ? requestApprovalStage(approval.resumeStatus)
+    : null;
+  const progressStage = currentStage ?? resumedStage;
+  const progressStageIndex = progressStage ? stageOrder.indexOf(progressStage) : -1;
   const steps = [
     {
       id: 'submitted',
@@ -235,12 +254,15 @@ export function ApprovalTimeline({
       actorMeta: '媒介账号',
       time: approval.submittedAt,
     },
-    ...stageOrder.map((stage) => {
+    ...stageOrder.map((stage, stageIndex) => {
       const event = [...approval.history].reverse().find((candidate) => (
         candidate.round === approval.round && candidate.stage === stage
       ));
       const isCurrent = currentStage === stage;
-      const state = event?.action === 'APPROVE'
+      const hasBeenTraversed = event?.action === 'APPROVE'
+        || approval.status === 'APPROVED'
+        || (progressStageIndex >= 0 && stageIndex < progressStageIndex);
+      const state = hasBeenTraversed
         ? 'complete' as const
         : isCurrent
           ? 'current' as const
@@ -262,6 +284,8 @@ export function ApprovalTimeline({
           ? '当前轮次已审批通过'
           : event?.action === 'RETURN'
             ? '已退回媒介修改'
+            : hasBeenTraversed
+              ? '审批流已通过该节点'
             : isCurrent
               ? '等待当前节点处理'
               : '上一节点通过后进入',
@@ -486,6 +510,11 @@ function FinanceReviewProjectOverview({
           <strong>{request.contracts + request.invoices} 份</strong>
           <small>{request.contracts} 份合同 · {request.invoices} 份 Invoice</small>
         </article>
+        <article className="is-payment-order">
+          <span><span className="finance-review-metric-icon" aria-hidden="true"><ReceiptText size={13} /></span>付款单</span>
+          <strong>{request.paymentOrder || '待生成'}</strong>
+          <small>当前请款项目付款单</small>
+        </article>
         <article className="is-status">
           <span><span className="finance-review-metric-icon" aria-hidden="true"><ShieldCheck size={13} /></span>当前审批状态</span>
           <strong>{approvalLabel}</strong>
@@ -502,6 +531,7 @@ function FinanceReviewProjectOverview({
             icon={exportingPaymentLists ? <LoaderCircle className="is-spinning" size={14} /> : <Download size={14} />}
             title="导出该项目的全部付款清单"
             disabled={!canExportPaymentLists || exportingPaymentLists}
+            disabledReason={exportingPaymentLists ? '付款清单正在导出，请稍候。' : '当前没有可导出的付款清单。'}
             onClick={onExportPaymentLists}
           >
             {exportingPaymentLists ? '导出中' : '导出 Excel'}
@@ -513,8 +543,11 @@ function FinanceReviewProjectOverview({
           <div><dt>品牌</dt><dd>{projectBrand}</dd></div>
           <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
           <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(paymentChannel)}</dd></div>
+          <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
+          <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
           <div><dt>预计付款时间</dt><dd>{request.expectedPaymentDate || '待补充'}</dd></div>
           <div><dt>成本类型</dt><dd>{request.costType || '待补充'}</dd></div>
+          <div><dt>成本类型明细</dt><dd>{request.costType === '采购成本' ? request.costTypeDetail || '待补充' : '—'}</dd></div>
           <div><dt>手续费承担方</dt><dd>{request.feeBearer || '待补充'}</dd></div>
           <div><dt>项目媒介</dt><dd>{request.media}</dd></div>
           <div><dt>创建时间</dt><dd>{createdAt}</dd></div>
@@ -652,6 +685,8 @@ export function FinanceReviewWorkspace({
   const [reviewIndex, setReviewIndex] = useState(firstPendingIndex);
   const [activePane, setActivePane] = useState<FinanceReviewPane>('invoice');
   const [approvalCollapsed, setApprovalCollapsed] = useState(false);
+  const [invoicePanePercent, setInvoicePanePercent] = useState(40);
+  const [paneResizing, setPaneResizing] = useState(false);
   const [documentKind, setDocumentKind] = useState<ReviewDocumentKind>('invoice');
   const [selectedContractId, setSelectedContractId] = useState('');
   const [invoiceZoom, setInvoiceZoom] = useState(1);
@@ -663,11 +698,13 @@ export function FinanceReviewWorkspace({
   const [downloadingResourceRecord, setDownloadingResourceRecord] = useState('');
   const [resourceDownloadError, setResourceDownloadError] = useState('');
   const [issueType, setIssueType] = useState<RequestApprovalReturnIssueType | ''>('');
+  const [issueContractId, setIssueContractId] = useState('');
   const [issueReason, setIssueReason] = useState('');
   const invoiceCanvasRef = useRef<HTMLDivElement>(null);
   const invoiceZoomRef = useRef(1);
   const overviewFocusRef = useRef<HTMLDivElement>(null);
   const validationFocusRef = useRef<HTMLDivElement>(null);
+  const comparisonPanesRef = useRef<HTMLDivElement>(null);
   const resourceListRef = useRef<HTMLDivElement>(null);
   const restoredResourceRef = useRef('');
 
@@ -691,10 +728,24 @@ export function FinanceReviewWorkspace({
 
   const changeStage = (nextStage: FinanceReviewStage) => {
     setStage(nextStage);
+    setApprovalCollapsed(nextStage === 'validation');
+    if (nextStage === 'validation') setActivePane('invoice');
     window.requestAnimationFrame(() => {
       if (nextStage === 'validation') validationFocusRef.current?.focus();
       else overviewFocusRef.current?.focus();
     });
+  };
+
+  const updateInvoicePanePercentFromPointer = (clientX: number) => {
+    const bounds = comparisonPanesRef.current?.getBoundingClientRect();
+    const availableWidth = (bounds?.width ?? 0) - FINANCE_REVIEW_RESIZER_WIDTH;
+    if (!bounds || availableWidth <= 0) return;
+    const pointerPosition = clientX - bounds.left - FINANCE_REVIEW_RESIZER_WIDTH / 2;
+    const nextPercent = (pointerPosition / availableWidth) * 100;
+    setInvoicePanePercent(Math.min(
+      MAX_INVOICE_PANE_PERCENT,
+      Math.max(MIN_INVOICE_PANE_PERCENT, nextPercent),
+    ));
   };
 
   const openResourceDialog = (kind: 'contract' | 'invoice') => {
@@ -809,6 +860,16 @@ export function FinanceReviewWorkspace({
     description: [contract.name, contract.sourceName].filter(Boolean).join(' · ') || '合同快照',
     leading: <FileText size={15} />,
   }));
+  const returnIssueOptions: readonly SelectOption<RequestApprovalReturnIssueType>[] = FINANCE_RETURN_ISSUE_OPTIONS.map((option) => (
+    option.value === 'CONTRACT_CONTENT' && currentContracts.length === 0
+      ? {
+          ...option,
+          disabled: true,
+          title: '当前达人无关联合同',
+          description: '当前达人无关联合同',
+        }
+      : option
+  ));
   const accountValidationIssueCount = financeReview.pages.reduce((count, page) => (
     page.kind !== 'pair'
       ? count + 1
@@ -886,15 +947,48 @@ export function FinanceReviewWorkspace({
   const openIssueEditor = () => {
     setIssueType(currentDecision.state === 'incorrect' ? currentDecision.issueType : '');
     setIssueReason(currentDecision.state === 'incorrect' ? currentDecision.reason : '');
+    const savedContractId = currentDecision.state === 'incorrect'
+      ? currentDecision.contractIds?.[0]
+      : undefined;
+    const suggestedContractId = documentKind === 'contract' && selectedContractId
+      ? selectedContractId
+      : currentContracts.length === 1
+        ? stableContractId(currentContracts[0])
+        : '';
+    setIssueContractId(savedContractId ? String(savedContractId) : suggestedContractId);
     setIssueEditorOpen(true);
   };
 
+  const changeIssueType = (nextIssueType: RequestApprovalReturnIssueType | '') => {
+    setIssueType(nextIssueType);
+    if (nextIssueType !== 'CONTRACT_CONTENT') {
+      setIssueContractId('');
+      return;
+    }
+    if (documentKind === 'contract' && selectedContractId) {
+      setIssueContractId(selectedContractId);
+      return;
+    }
+    setIssueContractId(currentContracts.length === 1 ? stableContractId(currentContracts[0]) : '');
+  };
+
   const saveIssue = () => {
-    if (!currentPage || !issueType || !issueReason.trim()) return;
+    if (
+      !currentPage
+      || !issueType
+      || !issueReason.trim()
+      || (issueType === 'CONTRACT_CONTENT' && !issueContractId)
+    ) return;
+    const contractIds = issueType === 'CONTRACT_CONTENT'
+      ? [issueContractId as ContractId]
+      : issueType === 'FULL_ITEM'
+        ? currentContracts.map((contract) => stableContractId(contract) as ContractId)
+        : undefined;
     onSessionChange(setFinanceReviewDecision(activeSession, currentPage.key, {
       state: 'incorrect',
       issueType,
       reason: issueReason.trim(),
+      contractIds,
       reviewedAt: new Date().toISOString(),
     }));
     setIssueEditorOpen(false);
@@ -1088,6 +1182,7 @@ export function FinanceReviewWorkspace({
                   variant="secondary"
                   icon={<CircleAlert size={16} />}
                   disabled={!currentPage}
+                  disabledReason="当前没有可记录的审核项目。"
                   onClick={openIssueEditor}
                 >
                   {currentDecision.state === 'incorrect' ? '编辑有误记录' : '记录有误'}
@@ -1096,6 +1191,7 @@ export function FinanceReviewWorkspace({
                   variant="secondary"
                   icon={<CheckCircle2 size={16} />}
                   disabled={!canConfirmCurrentPage}
+                  disabledReason="请先完成当前记录的必填核对项。"
                   onClick={confirmCurrentPage}
                 >
                   确认本页无误
@@ -1112,6 +1208,7 @@ export function FinanceReviewWorkspace({
                   variant="danger"
                   icon={<AlertTriangle size={16} />}
                   disabled={!canReturn}
+                  disabledReason={`仍有 ${counts.unreviewed} 份记录待核对。`}
                   title={canReturn ? '汇总全部有误记录并退回媒介' : `仍有 ${counts.unreviewed} 份记录待核对`}
                   onClick={openReturnDialog}
                 >
@@ -1125,7 +1222,7 @@ export function FinanceReviewWorkspace({
               >
                 返回项目概览
               </Button>
-              <Button icon={<ShieldCheck size={16} />} disabled={!canApprove} onClick={submitApproval}>
+              <Button icon={<ShieldCheck size={16} />} disabled={!canApprove} disabledReason={counts.incorrect ? '存在有误记录，请先退回媒介修改。' : `仍有 ${counts.unreviewed} 份记录待核对。`} onClick={submitApproval}>
                 通过财务审核
               </Button>
             </div>
@@ -1249,6 +1346,14 @@ export function FinanceReviewWorkspace({
               </div>
 
               <div className={`finance-review-grid${approvalCollapsed ? ' is-approval-collapsed' : ''}`}>
+            <div
+              className={`finance-review-comparison-panes${paneResizing ? ' is-resizing' : ''}`}
+              ref={comparisonPanesRef}
+              style={{
+                '--finance-review-invoice-size': `${invoicePanePercent}fr`,
+                '--finance-review-payment-size': `${100 - invoicePanePercent}fr`,
+              } as CSSProperties}
+            >
             <section className={`finance-review-pane finance-review-invoice-pane${activePane === 'invoice' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true">{documentKind === 'contract' ? <Files size={17} /> : <FileText size={17} />}</span><span><strong>{activeDocumentLabel}</strong><small title={activeDocumentMeta}>{activeDocumentMeta}</small></span></div>
@@ -1290,7 +1395,7 @@ export function FinanceReviewWorkspace({
                   ) : null}
                 </div>
                 <div className="finance-review-invoice-header-actions">
-                  {currentPage ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
+                  {currentPage && currentPage.kind !== 'pair' ? <span className={`finance-review-kind is-${currentPage.kind}`}>{PAGE_KIND_LABEL[currentPage.kind]}</span> : null}
                   <div className="finance-review-zoom-controls" role="group" aria-label={`${activeDocumentLabel}缩放`}>
                     <button
                       className="icon-button"
@@ -1396,6 +1501,53 @@ export function FinanceReviewWorkspace({
               </button>
             </section>
 
+            <div
+              className="finance-review-pane-resizer"
+              role="separator"
+              aria-label="调整 Invoice 快照与付款清单核对看板宽度"
+              aria-orientation="vertical"
+              aria-valuemin={MIN_INVOICE_PANE_PERCENT}
+              aria-valuemax={MAX_INVOICE_PANE_PERCENT}
+              aria-valuenow={Math.round(invoicePanePercent)}
+              aria-valuetext={`Invoice ${Math.round(invoicePanePercent)}%，付款清单 ${Math.round(100 - invoicePanePercent)}%`}
+              tabIndex={0}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setPaneResizing(true);
+                updateInvoicePanePercentFromPointer(event.clientX);
+              }}
+              onPointerMove={(event) => {
+                if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                updateInvoicePanePercentFromPointer(event.clientX);
+              }}
+              onPointerUp={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                setPaneResizing(false);
+              }}
+              onPointerCancel={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                setPaneResizing(false);
+              }}
+              onLostPointerCapture={() => setPaneResizing(false)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                if (event.key === 'Home') setInvoicePanePercent(MIN_INVOICE_PANE_PERCENT);
+                else if (event.key === 'End') setInvoicePanePercent(MAX_INVOICE_PANE_PERCENT);
+                else setInvoicePanePercent((current) => Math.min(MAX_INVOICE_PANE_PERCENT, Math.max(
+                  MIN_INVOICE_PANE_PERCENT,
+                  current + (event.key === 'ArrowLeft' ? -2 : 2),
+                )));
+              }}
+            >
+              <GripVertical size={18} aria-hidden="true" />
+            </div>
+
             <section className={`finance-review-pane finance-review-payment-pane${activePane === 'payment' ? ' is-mobile-active' : ''}`}>
               <header className="finance-review-pane-header">
                 <div className="finance-review-pane-heading"><span className="finance-review-pane-header-icon" aria-hidden="true"><WalletCards size={17} /></span><span><strong>付款清单核对</strong><small>{currentPaymentRowCount} 条当前页冻结记录</small></span></div>
@@ -1421,6 +1573,7 @@ export function FinanceReviewWorkspace({
                 />
               </div>
             </section>
+            </div>
 
             <aside
               id="finance-review-approval-panel"
@@ -1504,6 +1657,7 @@ export function FinanceReviewWorkspace({
                     ? <LoaderCircle className="is-spinning" size={15} />
                     : <Download size={15} />}
                   disabled={!linkedContracts.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? '合同文件正在导出，请稍候。' : '当前没有可导出的合同文件。'}
                   onClick={() => { void downloadProjectContracts(); }}
                 >
                   {downloadingResource === 'contract' ? '打包中' : '下载合同汇总'}
@@ -1514,6 +1668,11 @@ export function FinanceReviewWorkspace({
             <div className="finance-review-resource-card-list" ref={resourceListRef}>
               {linkedContracts.map((contract) => {
                 const creator = creators.find((candidate) => candidate.id === contract.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: contract.paymentSnapshot?.accountName || contract.accountName,
+                  displayName: creator?.name || contract.publisher || '达人档案缺失',
+                  creator,
+                });
                 const contractId = contract.contractId ?? contract.id;
                 const recordKey = `contract:${contractId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -1533,8 +1692,7 @@ export function FinanceReviewWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <strong>{creator?.name ?? '达人档案缺失'}</strong>
-                      <small>{creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId, handle: contract.creatorHandle, platform: contract.creatorPlatform ?? contract.platform })}</small>
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>付款金额</span>
@@ -1554,6 +1712,7 @@ export function FinanceReviewWorkspace({
                           ? <LoaderCircle className="is-spinning" size={15} />
                           : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadContract(contract); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -1585,6 +1744,7 @@ export function FinanceReviewWorkspace({
                     ? <LoaderCircle className="is-spinning" size={15} />
                     : <Download size={15} />}
                   disabled={!linkedInvoices.length || Boolean(downloadingResource || downloadingResourceRecord)}
+                  disabledReason={downloadingResource || downloadingResourceRecord ? 'Invoice 文件正在导出，请稍候。' : '当前没有可导出的 Invoice 文件。'}
                   onClick={() => { void downloadProjectInvoices(); }}
                 >
                   {downloadingResource === 'invoice' ? '打包中' : '下载 Invoice 汇总'}
@@ -1595,6 +1755,11 @@ export function FinanceReviewWorkspace({
             <div className="finance-review-resource-card-list" ref={resourceListRef}>
               {linkedInvoices.map((linkedInvoice) => {
                 const creator = creators.find((candidate) => candidate.id === linkedInvoice.snapshot.creatorId);
+                const creatorIdentity = paymentCreatorIdentityFromValues({
+                  accountName: linkedInvoice.snapshot.payment.accountName,
+                  displayName: linkedInvoice.snapshot.creatorName,
+                  creator,
+                });
                 const invoiceName = invoiceDocumentName(linkedInvoice.snapshot);
                 const recordKey = `invoice:${linkedInvoice.invoiceId}`;
                 const isDownloading = downloadingResourceRecord === recordKey;
@@ -1614,8 +1779,7 @@ export function FinanceReviewWorkspace({
                     </div>
                     <div className="finance-review-resource-card-person">
                       <span>达人</span>
-                      <strong>{creator?.name ?? linkedInvoice.snapshot.creatorName}</strong>
-                      <small>{creatorHandleForDisplay({ creator, socialAccountId: linkedInvoice.snapshot.creatorSocialAccountId, handle: linkedInvoice.snapshot.creatorHandle, platform: linkedInvoice.snapshot.creatorPlatform })}</small>
+                      <PaymentCreatorIdentity {...creatorIdentity} />
                     </div>
                     <div className="finance-review-resource-card-amount">
                       <span>Invoice 金额</span>
@@ -1635,6 +1799,7 @@ export function FinanceReviewWorkspace({
                           ? <LoaderCircle className="is-spinning" size={15} />
                           : <Download size={15} />}
                         disabled={Boolean(downloadingResource || downloadingResourceRecord)}
+                        disabledReason="文件正在导出，请稍候。"
                         onClick={() => { void downloadInvoice(linkedInvoice); }}
                       >{isDownloading ? '下载中' : '下载'}</Button>
                     </div>
@@ -1655,7 +1820,16 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setIssueEditorOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!issueType || !issueReason.trim()} onClick={saveIssue}>保存有误记录</Button>
+              <Button
+                variant="danger"
+                disabled={!issueType || !issueReason.trim() || (issueType === 'CONTRACT_CONTENT' && !issueContractId)}
+                disabledReason={!issueType
+                  ? '请先选择问题类型。'
+                  : issueType === 'CONTRACT_CONTENT' && !issueContractId
+                    ? '请先选择需修改的合同。'
+                    : '请先填写问题说明。'}
+                onClick={saveIssue}
+              >保存有误记录</Button>
             </>
           )}
         >
@@ -1664,14 +1838,31 @@ export function FinanceReviewWorkspace({
             <SelectField<RequestApprovalReturnIssueType | ''>
               ariaLabel="财务退回问题类型"
               value={issueType}
-              placeholder="请选择 Invoice 原因或付款清单原因"
+              placeholder="请选择退回问题类型"
               variant="form"
               menuStrategy="fixed"
-              options={FINANCE_RETURN_ISSUE_OPTIONS}
-              onChange={setIssueType}
+              options={returnIssueOptions}
+              onChange={changeIssueType}
             />
-            <small>所选类型决定媒介侧仅开放 Invoice 或对应付款明细。</small>
+            <small>所选类型决定媒介侧可修改的合同、Invoice 和付款明细范围。</small>
           </label>
+          {issueType === 'CONTRACT_CONTENT' ? (
+            <label className="finance-review-reason-field">
+              <span>需修改合同 <em>*</em></span>
+              <SelectField<string>
+                ariaLabel="选择需修改合同"
+                value={issueContractId}
+                placeholder="请选择一份合同"
+                variant="form"
+                menuStrategy="fixed"
+                menuWidth={320}
+                options={contractOptions}
+                disabled={!contractOptions.length}
+                onChange={setIssueContractId}
+              />
+              <small>只会开放选中合同，其他关联资料继续锁定。</small>
+            </label>
+          ) : null}
           <label className="finance-review-reason-field">
             <span>问题说明 <em>*</em></span>
             <textarea
@@ -1682,6 +1873,10 @@ export function FinanceReviewWorkspace({
                 ? '请说明该份 Invoice 需要修改的内容'
                 : issueType === 'PAYMENT_LIST'
                   ? '请说明对应付款明细需要修改的内容'
+                  : issueType === 'CONTRACT_CONTENT'
+                    ? '请说明选中合同需要修改的内容'
+                    : issueType === 'FULL_ITEM'
+                      ? '请说明该达人本笔请款需要整体修改的内容'
                   : '请先选择问题类型，再填写具体原因'}
               onChange={(event) => setIssueReason(event.target.value)}
             />
@@ -1698,7 +1893,7 @@ export function FinanceReviewWorkspace({
           footer={(
             <>
               <Button variant="ghost" onClick={() => setReturnDialogOpen(false)}>取消</Button>
-              <Button variant="danger" disabled={!canReturn || !returnReason} onClick={submitReturn}>确认退回</Button>
+              <Button variant="danger" disabled={!canReturn || !returnReason} disabledReason={!canReturn ? '仍有审核记录尚未完成核对。' : '请先填写退回原因。'} onClick={submitReturn}>确认退回</Button>
             </>
           )}
         >
@@ -1713,6 +1908,12 @@ export function FinanceReviewWorkspace({
                 return decision?.state === 'incorrect' ? (
                   <article key={page.key}>
                     <strong>{page.invoiceNumber}<span>{financeReturnIssueLabel(decision.issueType)}</span></strong>
+                    {decision.contractIds?.length ? (
+                      <small>合同范围：{decision.contractIds.map((contractId) => (
+                        contracts.find((contract) => stableContractId(contract) === String(contractId))?.id
+                        ?? String(contractId)
+                      )).join('、')}</small>
+                    ) : null}
                     <p>{decision.reason}</p>
                   </article>
                 ) : [];

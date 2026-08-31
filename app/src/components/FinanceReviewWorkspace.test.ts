@@ -37,10 +37,11 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain('onClick={() => changeStage(\'validation\')}');
     expect(workspaceSource).toContain('校验审核');
     expect(workspaceSource).toContain('icon={<ArrowLeft size={16} />}');
-    expect(workspaceSource).not.toContain('ArrowRight');
+    expect(workspaceSource).toContain("setApprovalCollapsed(nextStage === 'validation')");
+    expect(workspaceSource).toContain("if (nextStage === 'validation') setActivePane('invoice')");
   });
 
-  it('returns to the overview without resetting review, page, zoom, or drawer state', () => {
+  it('returns to the overview without resetting review, page, or zoom state', () => {
     expect(workspaceSource).toContain('onClick={() => changeStage(\'overview\')}');
     expect(workspaceSource).toContain('返回项目概览');
     expect(workspaceSource).toContain("const [reviewIndex, setReviewIndex] = useState(firstPendingIndex)");
@@ -64,7 +65,7 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer-primary\s*{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;/s);
     expect(workspaceStageStyles).not.toMatch(/\.finance-review-footer-primary\s*{[^}]*position:\s*absolute;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-footer > \.finance-review-footer-actions\s*{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 901px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 1280px\) and \(min-width: 768px\)[\s\S]*\.finance-review-footer\s*{[^}]*grid-template-rows:\s*auto auto;[^}]*row-gap:\s*8px;/s);
   });
 
   it('reuses the same project overview for the drawer and approval board', () => {
@@ -83,6 +84,23 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceSource).toContain("onOpenContracts={() => openResourceDialog('contract')}");
     expect(workspaceSource).toContain("onOpenInvoices={() => openResourceDialog('invoice')}");
     expect(workspaceSource).toContain('await onExportPaymentList(list.paymentListId)');
+  });
+
+  it('shows four neutral-text overview cards with system soft backgrounds', () => {
+    expect(workspaceSource).toContain('<article className="is-amount">');
+    expect(workspaceSource).toContain('<article className="is-resources">');
+    expect(workspaceSource).toContain('<article className="is-payment-order">');
+    expect(workspaceSource).toContain("<strong>{request.paymentOrder || '待生成'}</strong>");
+    expect(workspaceSource).toContain('<article className="is-status">');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-amount');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-resources');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-payment-order');
+    expect(workspaceStageStyles).toContain('.finance-review-workspace .finance-review-metrics article.is-status');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #fff5e9 0%, #fff0ea 100%)');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%)');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%)');
+    expect(workspaceStageStyles).toContain('linear-gradient(125deg, #f0faf6 0%, #eaf8f6 100%)');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.finance-review-metrics strong\s*{[^}]*color:\s*#20242c;/s);
   });
 
   it('keeps the overview scrollable and places the approval flow before linked resources', () => {
@@ -106,8 +124,11 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
       '品牌',
       '负责 PM',
       '付款渠道',
+      '付款主体',
+      '项目费用归属',
       '预计付款时间',
       '成本类型',
+      '成本类型明细',
       '手续费承担方',
       '项目媒介',
       '创建时间',
@@ -127,7 +148,7 @@ describe('FinanceReviewWorkspace progressive review stages', () => {
     expect(workspaceStageStyles).toMatch(/\.modal-backdrop:has\(\.finance-review-workspace\)\s*{[^}]*justify-content:\s*flex-end;/s);
     expect(workspaceStageStyles).toMatch(/\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*min\(520px, 100vw\);/s);
     expect(workspaceStageStyles).toMatch(/transition:\s*width 220ms ease-out, max-width 220ms ease-out/s);
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*100vw;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.modal-panel\.finance-review-workspace\.is-overview\s*{[^}]*width:\s*100vw;/s);
     expect(workspaceStageStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.modal-panel\.finance-review-workspace,[\s\S]*transition:\s*none;/s);
   });
 });
@@ -145,7 +166,28 @@ describe('FinanceReviewWorkspace return issue types', () => {
         label: '付款清单原因',
         description: '仅开放对应付款明细修改权限',
       },
+      {
+        value: 'CONTRACT_CONTENT',
+        label: '合同原因',
+        description: '仅开放指定的一份合同修改权限',
+      },
+      {
+        value: 'FULL_ITEM',
+        label: '整笔退回',
+        description: '开放该达人本笔请款的合同、Invoice 和付款明细',
+      },
     ]);
+    expect(workspaceSource).toContain('ariaLabel="选择需修改合同"');
+    expect(workspaceSource).toContain("issueType === 'CONTRACT_CONTENT' && !issueContractId");
+    expect(workspaceSource).toContain("issueType === 'FULL_ITEM'");
+    expect(workspaceSource).toContain("title: '当前达人无关联合同'");
+    expect(workspaceSource).toContain('合同范围：{decision.contractIds.map');
+  });
+
+  it('hides the normal pair badge while preserving exception badges', () => {
+    expect(workspaceSource).toContain("currentPage.kind !== 'pair'");
+    expect(workspaceSource).not.toContain("pair: '一一对应'");
+    expect(workspaceSource).toContain("'missing-payment': '缺少付款明细'");
   });
 });
 
@@ -181,7 +223,9 @@ describe('FinanceReviewWorkspace project resource cards', () => {
     expect(workspaceSource).toContain('<small><b>Invoice 编号</b>{linkedInvoice.id}</small>');
     expect(workspaceSource.match(/className="finance-review-resource-card-person"/g)).toHaveLength(2);
     expect(workspaceSource.match(/<span>达人<\/span>/g)).toHaveLength(2);
-    expect(workspaceSource).toContain('creatorHandleForDisplay({ creator, socialAccountId: contract.creatorSocialAccountId');
+    expect(workspaceSource.match(/<PaymentCreatorIdentity \{\.\.\.creatorIdentity\} \/>/g)).toHaveLength(2);
+    expect(workspaceSource).toContain('accountName: contract.paymentSnapshot?.accountName || contract.accountName');
+    expect(workspaceSource).toContain('accountName: linkedInvoice.snapshot.payment.accountName');
     expect(workspaceSource).toContain('invoiceDocumentName(linkedInvoice.snapshot)');
     expect(workspaceSource).toContain('contractDocumentFilename(contract)');
     expect(workspaceSource).toContain("invoiceFilename(linkedInvoice.snapshot, 'pdf')");
@@ -206,7 +250,7 @@ describe('FinanceReviewWorkspace project resource cards', () => {
   it('keeps cards readable without horizontal overflow on narrow screens', () => {
     expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*44px minmax\(220px, 1fr\) minmax\(150px, \.7fr\) minmax\(140px, \.55fr\) auto auto;/s);
     expect(workspaceStageStyles).toContain('.finance-review-resource-card-person');
-    expect(workspaceStageStyles).toMatch(/@media \(max-width: 900px\)[\s\S]*\.finance-review-resource-card-person\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.finance-review-resource-card-person\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
     expect(workspaceStageStyles).toMatch(/@media \(max-width: 480px\)[\s\S]*\.finance-review-resource-card\s*{[^}]*grid-template-columns:\s*38px minmax\(0, 1fr\);[^}]*height:\s*max-content;[^}]*min-height:\s*0;/s);
     expect(workspaceStageStyles).toMatch(/\.finance-review-resource-card-actions\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
   });
@@ -298,7 +342,10 @@ describe('FinanceReviewWorkspace document switching', () => {
     expect(workspaceSource).not.toContain('<div className="finance-review-document-switcher"');
     expect(workspaceStageStyles).toContain('.finance-review-document-switcher');
     expect(workspaceStageStyles).toContain('.finance-review-document-header-controls');
-    expect(workspaceStageStyles).toContain('@media (max-width: 900px)');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-document-header-controls \.finance-review-document-kind-select\s*\{[^}]*width:\s*112px;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-document-header-controls \.finance-review-document-switch-field:not\(\.is-contract\) \.custom-select-trigger\s*\{[^}]*height:\s*34px;/s);
+    expect(workspaceStageStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*\.finance-review-document-switcher \.custom-select-trigger\s*\{[^}]*min-height:\s*44px;/s);
+    expect(workspaceStageStyles).toContain('@media (max-width: 767px)');
   });
 });
 
@@ -344,6 +391,8 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).toContain('maskUnits="userSpaceOnUse"');
     expect(html).toContain('r="19"');
     expect(html).toContain('<g mask="url(#finance-approval-curve-mask-');
+    expect(html).toContain('项目负责人审批，账号 待分配，已完成');
+    expect(html).toContain('老板审批，账号 待分配，已完成');
     expect(html).toContain('财务审批，账号 finance，当前节点');
     expect(html).toContain('grid-column:1;grid-row:1');
     expect(html).toContain('grid-column:2;grid-row:1');
@@ -353,5 +402,7 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).not.toContain('第 1 轮审批已提交');
     expect(html).not.toContain('finance-approval-actor');
     expect(html).not.toContain('<time');
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.finance-approval-stage-icon\s*{[^}]*stroke-width:\s*2\.1;/s);
+    expect(workspaceStageStyles).toMatch(/\.finance-review-workspace \.finance-review-card-title-icon:is\([\s\S]*?\.is-project,[\s\S]*?\.is-invoice[\s\S]*?\)\s*{[^}]*color:\s*#5d3f7c;/s);
   });
 });

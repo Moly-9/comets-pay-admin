@@ -65,7 +65,7 @@
   border: 1px solid #dfd4e8;
   border-radius: 8px;
   background: #f2edf7;
-  color: #675187;
+  color: #51386f;
 }
 
 .finance-review-overview-heading > div {
@@ -189,6 +189,87 @@
 .finance-review-overview-stage .finance-review-metrics article {
   gap: 6px;
   padding: 12px;
+}
+
+.finance-review-workspace .finance-review-metrics article {
+  border: 1px solid rgba(222, 225, 231, 0.82);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(37, 43, 55, 0.05);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-amount {
+  border-color: #f0ddd5;
+  background: linear-gradient(125deg, #fff5e9 0%, #fff0ea 100%);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-resources {
+  border-color: #dbe7f5;
+  background: linear-gradient(125deg, #eef5ff 0%, #e1ecfb 100%);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-payment-order {
+  border-color: #e4d8ee;
+  background: linear-gradient(125deg, #f7f0fc 0%, #ecdef6 100%);
+}
+
+.finance-review-workspace .finance-review-metrics article.is-status {
+  grid-column: auto;
+  border-color: #d8ebe3;
+  background: linear-gradient(125deg, #f0faf6 0%, #eaf8f6 100%);
+}
+
+.finance-review-workspace .finance-review-metrics .is-payment-order .finance-review-metric-icon {
+  background: #eadff3;
+  color: #593979;
+}
+
+.finance-review-workspace .finance-review-metrics .is-amount .finance-review-metric-icon {
+  color: #874226;
+}
+
+.finance-review-workspace .finance-review-metrics .is-resources .finance-review-metric-icon {
+  color: #593b83;
+}
+
+.finance-review-workspace .finance-review-metrics .is-status .finance-review-metric-icon {
+  color: #27694d;
+}
+
+.finance-review-workspace :is(.finance-review-title-icon, .finance-review-pane-header-icon) {
+  color: #563c77;
+}
+
+.finance-review-workspace .finance-review-card-title-icon:is(
+  .is-project,
+  .is-workflow,
+  .is-resources,
+  .is-payment,
+  .is-account,
+  .is-validation,
+  .is-creator,
+  .is-invoice
+) {
+  color: #5d3f7c;
+}
+
+.finance-review-workspace .finance-review-linked-resources .finance-review-resource-icon {
+  color: #5b3d7c;
+}
+
+.finance-review-workspace .finance-approval-timeline.is-compact .finance-approval-node {
+  color: #657282;
+}
+
+.finance-review-workspace .finance-approval-stage-icon {
+  stroke-width: 2.1;
+}
+
+.finance-review-workspace .finance-review-metrics :is(span, small) {
+  color: #747b89;
+}
+
+.finance-review-workspace .finance-review-metrics strong {
+  color: #20242c;
 }
 
 .finance-review-overview-stage .finance-review-metrics span,
@@ -362,7 +443,7 @@
   justify-self: end;
 }
 
-@media (max-width: 1280px) and (min-width: 901px) {
+@media (max-width: 1280px) and (min-width: 768px) {
   .finance-review-workspace .modal-footer {
     min-height: 0;
   }
@@ -424,7 +505,7 @@
 }
 
 .finance-review-document-header-controls .finance-review-document-switch-field {
-  flex-basis: 132px;
+  flex-basis: 112px;
 }
 
 .finance-review-document-switch-field.is-contract {
@@ -454,7 +535,7 @@
 }
 
 .finance-review-document-header-controls .finance-review-document-kind-select {
-  width: 132px;
+  width: 112px;
 }
 
 .finance-review-document-contract-select {
@@ -465,6 +546,10 @@
   min-height: 34px;
   padding-top: 6px;
   padding-bottom: 6px;
+}
+
+.finance-review-document-header-controls .finance-review-document-switch-field:not(.is-contract) .custom-select-trigger {
+  height: 34px;
 }
 
 .finance-review-document-switcher .custom-select-option-description {
@@ -650,7 +735,7 @@
   box-shadow: 0 3px 10px rgb(91 62 125 / 16%);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   .modal-panel.finance-review-workspace.is-overview {
     width: 100vw;
     max-width: 100vw !important;
@@ -701,6 +786,11 @@
     gap: 7px;
   }
 
+  .finance-review-document-switcher .custom-select-trigger {
+    height: 44px;
+    min-height: 44px;
+  }
+
   .finance-review-document-switch-field,
   .finance-review-document-switch-field.is-contract,
   .finance-review-document-kind-select,
@@ -710,7 +800,7 @@
   }
 
   .finance-review-document-switch-field:first-child {
-    flex: 0 0 132px;
+    flex: 0 0 112px;
   }
 
   .finance-review-document-switch-field.is-contract {
@@ -781,11 +871,11 @@
   }
 
   .finance-review-document-switch-field:first-child {
-    flex-basis: 124px;
+    flex-basis: 112px;
   }
 
   .finance-review-document-kind-select {
-    width: 124px;
+    width: 112px;
   }
 
   .finance-review-document-switch-field.is-contract {

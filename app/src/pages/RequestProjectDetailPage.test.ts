@@ -103,8 +103,11 @@ describe('request project payment presentation', () => {
     expect(sharedProjectInfo).not.toContain('<dt>提交人</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>备注附件</dt>');
     expect(sharedProjectInfo).toContain('<dt>付款渠道</dt>');
+    expect(sharedProjectInfo).toContain('<dt>付款主体</dt>');
+    expect(sharedProjectInfo).toContain('<dt>项目费用归属</dt>');
     expect(sharedProjectInfo).toContain('<dt>预计付款时间</dt>');
     expect(sharedProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(sharedProjectInfo).toContain('<dt>成本类型明细</dt>');
     expect(sharedProjectInfo).toContain('<dt>项目媒介</dt>');
     expect(sharedProjectInfo).toContain('<dt>创建时间</dt>');
     expect(sharedProjectInfo).toContain('<dt>备注</dt>');
@@ -114,14 +117,16 @@ describe('request project payment presentation', () => {
     expect(paymentTable).toContain('<th>付款渠道</th>');
     expect(paymentTable).toContain('<th>付款方式</th>');
     expect(paymentTable).toContain('<th>状态</th>');
-    expect(paymentTable).toContain('<Avatar');
+    expect(paymentTable).toContain('<CreatorIdentity');
     expect(paymentTable).toContain('<PaymentProviderBadge compact provider={payee.channel} />');
     expect(paymentTable).toContain('request-detail-transfer-method');
-    expect(paymentTable).toContain('{handle}');
-    expect(source).toContain('creatorHandleForDisplay({ creator, socialAccountId: payee.socialAccountId');
+    expect(paymentTable).toContain('fallbackHandle={payee.handle}');
+    expect(paymentTable).toContain('fallbackPlatform={payee.platform}');
+    expect(paymentTable).toContain('socialAccountsMaxVisible={1}');
     expect(paymentTable).toContain('<span className="simple-status is-success"><i />已校验</span>');
     expect(paymentTable).not.toContain('requestPaymentStatusLabel(payee.status)');
     expect(styles).toContain('.request-detail-creator-cell');
+    expect(styles).toMatch(/\.request-detail-creator-cell > \.creator-identity\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
     expect(approvalActions.indexOf('退回媒介修改')).toBeLessThan(approvalActions.indexOf('审批通过'));
     expect(styles).toMatch(/\.request-approval-actions\s*{[^}]*justify-content:\s*flex-end;/s);
     expect(styles).toMatch(/\.request-payment-review-modal \.modal-content\s*{[^}]*overflow:\s*hidden;/s);
@@ -149,6 +154,9 @@ describe('request project payment presentation', () => {
 
     expect(myProjectsSource).toContain('<RequestProjectInfoCard');
     expect(sharedProjectInfo).toContain('<dt>成本类型</dt>');
+    expect(sharedProjectInfo).toContain('<dt>付款主体</dt>');
+    expect(sharedProjectInfo).toContain('<dt>项目费用归属</dt>');
+    expect(sharedProjectInfo).toContain('<dt>成本类型明细</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>手续费承担方</dt>');
     expect(sharedProjectInfo).toContain('<dt>备注</dt>');
     expect(sharedProjectInfo).not.toContain('<dt>备注附件</dt>');
@@ -277,8 +285,11 @@ describe('request project payment presentation', () => {
     );
 
     expect(source).toContain('<PaymentListReviewContent');
+    expect(source).toContain('<InvoiceContractMismatchNotice');
+    expect(source).toContain('financeReview.pages.flatMap');
     expect(viewerSource).not.toContain('校验 Airwallex 付款信息完整性</Button>');
-    expect(viewerSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators })');
+    expect(viewerSource).toContain('<InvoiceContractMismatchNotice');
+    expect(viewerSource).toContain('await validatePaymentListAccountViaApi({ item: row.item, creators, scope: validationScope })');
     expect(viewerSource).toContain('导出 Excel');
     expect(viewerSource).toContain('<th>收款人名称</th>');
     expect(viewerSource).toContain('<th>收款主体</th>');
@@ -289,7 +300,7 @@ describe('request project payment presentation', () => {
     expect(viewerSource).toContain('<th>手续费承担方</th>');
     expect(viewerSource).toContain('<th>API 校验结果</th>');
     expect(viewerSource).toContain('projectPaymentReviewPassed(');
-    expect(viewerSource).toContain('<Avatar initials={creatorInitials}');
+    expect(viewerSource).toContain('<PaymentCreatorIdentity {...creatorIdentity} />');
     expect(viewerSource).toContain('validatePaymentListAccountViaApi');
     expect(viewerSource).toContain('onExportPaymentList(list.paymentListId)');
     expect(viewerSource).not.toContain('添加付款行');
