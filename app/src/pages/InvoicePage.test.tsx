@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_INVOICE_BILLING_SETTINGS } from '../data';
-import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
+import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCreationDraft, Payout } from '../types';
 import { InvoicePage } from './OperationalPages';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 
@@ -108,7 +108,8 @@ const renderInvoicePage = (
     generatedInvoices?: GeneratedInvoiceRecord[];
     creators?: CreatorProfile[];
     requests?: RequestProjectSummary[];
-    tab?: 'signature' | 'upload' | 'review' | 'approved' | 'returned';
+    tab?: 'drafts' | 'signature' | 'upload' | 'review' | 'approved' | 'returned';
+    creationDrafts?: InvoiceCreationDraft[];
     focusedInvoiceId?: string | null;
     canEditProjectResourceInvoice?: boolean;
   } = {},
@@ -118,6 +119,7 @@ const renderInvoicePage = (
     creators={options.creators ?? [creator]}
     invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
     generatedInvoices={options.generatedInvoices ?? [record]}
+    creationDrafts={options.creationDrafts}
     requests={options.requests ?? []}
     tab={options.tab ?? 'signature'}
     onTabChange={vi.fn()}
@@ -165,7 +167,7 @@ describe('InvoicePage waiting-signature actions', () => {
 
     expect(html).toContain('一键发布');
     expect(html).toContain('title="选择并发布"');
-    expect(html).toContain('草稿');
+    expect(html).toContain('待发布');
     expect(html).not.toContain('模拟达人完成签署');
   });
 
@@ -184,6 +186,28 @@ describe('InvoicePage waiting-signature actions', () => {
     });
 
     expect(html).toContain('<b>Date:</b> 14 Aug 2026');
+  });
+});
+
+describe('InvoicePage creation draft inbox', () => {
+  it('renders the draft inbox before signature and keeps a batch as one resumable row', () => {
+    const draft = {
+      draftId: 'draft-batch-1', schemaVersion: '1.0', kind: 'BATCH', batchId: 'batch-1',
+      createdByAccount: 'jeff', createdByName: 'Jeff', createdAt: '2026-09-09T01:00:00.000Z', updatedAt: '2026-09-09T02:00:00.000Z',
+      projectId: '', invoiceDate: '2026-09-09', selectedBillingEntityId: 'entity-1', currency: 'USD',
+      selectedEngagementIds: [], sharedDescriptions: [], generationProgress: { current: 1, total: 2 },
+      rows: [
+        { creatorName: 'Creator A', status: 'GENERATED', generated: { record } },
+        { creatorName: 'Creator B', status: 'NEEDS_INPUT' },
+      ],
+    } as unknown as InvoiceCreationDraft;
+    const html = renderInvoicePage(true, { tab: 'drafts', creationDrafts: [draft] });
+
+    expect(html.indexOf('>草稿箱 <span')).toBeLessThan(html.indexOf('>待签署 <span'));
+    expect(html).toContain('1/2 已生成 · 1 待生成');
+    expect(html).toContain('继续编辑');
+    expect(html).toContain('删除');
+    expect(html.match(/draft-batch-1/g)).toHaveLength(1);
   });
 });
 

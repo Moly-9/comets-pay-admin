@@ -485,12 +485,14 @@ export function StatusMark({
   status,
   label,
 }: {
-  status: PayoutStatus | InvoiceReviewStatus;
+  status: PayoutStatus | InvoiceReviewStatus | string;
   label?: string;
 }) {
-  const color = status in INVOICE_REVIEW_STATUS_META
+  const color = status === '待发布'
+    ? '#4b56a5'
+    : status in INVOICE_REVIEW_STATUS_META
     ? INVOICE_REVIEW_STATUS_META[status as InvoiceReviewStatus].color
-    : STATUS_COLORS[status as PayoutStatus];
+    : STATUS_COLORS[status as PayoutStatus] ?? '#7a8fae';
   return (
     <span className="status-mark">
       <span className="status-tick" style={{ backgroundColor: color }} />

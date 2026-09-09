@@ -88,6 +88,7 @@ import type {
   InvoiceEditContext,
   InvoiceEntity,
   InvoiceLineItem,
+  InvoiceSingleCreationDraft,
   Payout,
 } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -109,6 +110,12 @@ type InvoiceBuilderPageProps = {
     contractMatchReview: InvoiceContractMatchReview,
   ) => GeneratedInvoiceRecord;
   onDirtyChange?: (dirty: boolean) => void;
+  initialDraft?: InvoiceSingleCreationDraft;
+  onDraftChange?: (
+    draft: Omit<InvoiceSingleCreationDraft, 'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>,
+    meaningful: boolean,
+  ) => void;
+  onDraftCompleted?: () => void;
   onCancel: () => void;
   onOpenInvoiceManagement: () => void;
   onPublishGenerated?: (record: GeneratedInvoiceRecord) => boolean;
@@ -177,6 +184,9 @@ export function InvoiceBuilderPage({
   contractMatchActor,
   onEdited,
   onDirtyChange,
+  initialDraft,
+  onDraftChange,
+  onDraftCompleted,
   onCancel,
   onOpenInvoiceManagement,
   onPublishGenerated,
@@ -184,31 +194,37 @@ export function InvoiceBuilderPage({
 }: InvoiceBuilderPageProps) {
   const isEditing = Boolean(editRecord && editContext);
   const editSnapshot = editRecord?.snapshot;
+  const initialCreationDraftRef = useRef(initialDraft);
+  const creationDraft = isEditing ? undefined : initialCreationDraftRef.current;
   const defaultBillingEntity = defaultInvoiceBillingEntity(invoiceBillingSettings)!;
   const matchedBillingEntity = findInvoiceBillingEntityForSnapshot(
     invoiceBillingSettings,
     editSnapshot?.billTo,
   );
   const historicalBillingEntityValue = '__current_invoice_snapshot__';
-  const initialInvoiceDate = editSnapshot?.invoiceDate ?? todayInputValue();
+  const initialInvoiceDate = editSnapshot?.invoiceDate ?? creationDraft?.invoiceDate ?? todayInputValue();
   const initialContext = projects
     .flatMap((project) => (project.creatorProfiles ?? []).map((reference) => ({ project, reference })))
-    .find((item) => item.reference.engagementId === (editSnapshot?.engagementId ?? initialEngagementId));
+    .find((item) => item.reference.engagementId === (
+      editSnapshot?.engagementId ?? creationDraft?.engagementId ?? initialEngagementId
+    ));
   const initialCreator = creators.find((creator) => (
-    creator.id === (editSnapshot?.creatorId ?? initialContext?.reference.creatorId)
+    creator.id === (editSnapshot?.creatorId ?? creationDraft?.creatorId ?? initialContext?.reference.creatorId)
   ));
   const initialSocialAccount = resolveCreatorSocialAccount(
     initialCreator,
-    editSnapshot?.creatorSocialAccountId ?? initialContext?.reference.socialAccountId,
+    editSnapshot?.creatorSocialAccountId ?? creationDraft?.creatorSocialAccountId ?? initialContext?.reference.socialAccountId,
     editSnapshot?.creatorHandle ?? initialContext?.reference.handle,
     editSnapshot?.creatorPlatform ?? initialContext?.reference.platform,
   );
   const initialProjectId = editSnapshot?.cooperationProjectId
     ?? editSnapshot?.projectId
+    ?? creationDraft?.projectId
     ?? (initialContext ? cooperationProjectIdFor(initialContext.project) : '');
   const initialEligiblePayoutAccounts = eligibleInvoicePayoutAccounts(initialCreator);
   const initialPayoutAccountId = editSnapshot?.payoutAccountId
-    ?? editSnapshot?.payment.payoutAccountId;
+    ?? editSnapshot?.payment.payoutAccountId
+    ?? creationDraft?.payoutAccountId;
   const initialPayoutProvider = editSnapshot?.payment.payoutProvider
     ?? editSnapshot?.payoutProvider
     ?? (editSnapshot?.paymentMethod === 'paypal' ? 'PayPal' : editSnapshot ? 'Airwallex' : undefined);
@@ -226,7 +242,9 @@ export function InvoiceBuilderPage({
     editSnapshot?.creatorSocialAccountId ?? initialSocialAccount?.id ?? '',
   );
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId);
-  const [engagementId, setEngagementId] = useState(editSnapshot?.engagementId ?? initialEngagementId ?? '');
+  const [engagementId, setEngagementId] = useState(
+    editSnapshot?.engagementId ?? creationDraft?.engagementId ?? initialEngagementId ?? '',
+  );
   const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
     projects.flatMap((project) => creators.map((creator) => {
       const projectId = cooperationProjectIdFor(project);
@@ -242,7 +260,11 @@ export function InvoiceBuilderPage({
     })),
   ));
   const [contractIds, setContractIds] = useState<ContractId[]>(() => (
-    editSnapshot?.contractIds ? [...editSnapshot.contractIds] : []
+    editSnapshot?.contractIds
+      ? [...editSnapshot.contractIds]
+      : creationDraft?.contractIds
+        ? [...creationDraft.contractIds]
+        : []
   ));
   const [invoiceDate, setInvoiceDate] = useState(initialInvoiceDate);
   const [invoiceNumber, setInvoiceNumber] = useState(() => (
@@ -251,33 +273,47 @@ export function InvoiceBuilderPage({
   const [prototypePayoutId] = useState(() => createPrototypeId('payout'));
   const [selectedBillingEntityId, setSelectedBillingEntityId] = useState<string>(
     matchedBillingEntity?.id
+      ?? creationDraft?.selectedBillingEntityId
       ?? (editSnapshot ? historicalBillingEntityValue : defaultBillingEntity.id),
   );
   const [billTo, setBillTo] = useState<InvoiceEntity>(
-    editSnapshot ? { ...editSnapshot.billTo } : invoiceEntitySnapshot(defaultBillingEntity),
+    editSnapshot
+      ? { ...editSnapshot.billTo }
+      : creationDraft
+        ? { ...creationDraft.billTo }
+        : invoiceEntitySnapshot(defaultBillingEntity),
   );
   const [from, setFrom] = useState<CreatorInvoiceContact>(
     editSnapshot
       ? { ...editSnapshot.from }
+      : creationDraft
+        ? { ...creationDraft.from }
       : initialCreator
         ? { ...initialCreator.contact }
         : { ...EMPTY_CONTACT },
   );
-  const [currency, setCurrency] = useState<InvoiceCurrency>(editSnapshot?.currency ?? 'USD');
+  const [currency, setCurrency] = useState<InvoiceCurrency>(
+    editSnapshot?.currency ?? creationDraft?.currency ?? 'USD',
+  );
   const [items, setItems] = useState<InvoiceLineItem[]>(() => (
     editSnapshot
       ? editSnapshot.items.map((item) => ({ ...item }))
+      : creationDraft
+        ? creationDraft.items.map((item) => ({ ...item }))
       : [createBlankLine(0)]
   ));
   const [payment, setPayment] = useState<DocumentPayoutSnapshot>(
     editSnapshot
       ? { ...editSnapshot.payment }
+      : creationDraft
+        ? { ...creationDraft.payment }
       : initialPayoutAccount
         ? payoutAccountToInvoicePayment(initialPayoutAccount, initialCreator?.id)
         : { ...EMPTY_PAYMENT },
   );
   const [payoutAccountId, setPayoutAccountId] = useState(
     editSnapshot?.payoutAccountId
+    ?? creationDraft?.payoutAccountId
     ?? (initialPayoutAccount ? getPayoutAccountId(initialPayoutAccount) : ''),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -286,7 +322,7 @@ export function InvoiceBuilderPage({
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFiles>(null);
   const initialContractMatchReason = editRecord
     ? currentInvoiceContractMatchReview(editRecord)?.reason ?? ''
-    : '';
+    : creationDraft?.contractMatchReason ?? '';
   const [contractMatchReason, setContractMatchReason] = useState(initialContractMatchReason);
   const prototypeSeed = useMemo(() => createInvoiceBuilderPrototypeSeed({
     creators,
@@ -362,6 +398,20 @@ export function InvoiceBuilderPage({
   const selectedPayoutAccount = eligiblePayoutAccounts.find((account) => (
     getPayoutAccountId(account) === payoutAccountId
   )) ?? null;
+  const restorationWarnings = creationDraft ? [
+    creationDraft.creatorId && !creators.some((creator) => creator.id === creationDraft.creatorId)
+      ? '原草稿中的达人档案已失效，请重新选择达人。'
+      : '',
+    creationDraft.projectId && !projects.some((project) => cooperationProjectIdFor(project) === creationDraft.projectId)
+      ? '原草稿中的关联项目已失效，请重新选择项目。'
+      : '',
+    creationDraft.contractIds.some((contractId) => !contracts.some((contract) => contract.contractId === contractId))
+      ? '部分关联合同已失效，请重新核对合同选择。'
+      : '',
+    creationDraft.payoutAccountId && selectedCreator && !selectedPayoutAccount
+      ? '原草稿中的付款账户已失效，请重新选择账户。'
+      : '',
+  ].filter(Boolean) : [];
   const resolvedPayoutProvider = selectedPayoutAccount?.provider
     ?? payment.payoutProvider
     ?? editSnapshot?.payoutProvider;
@@ -424,10 +474,20 @@ export function InvoiceBuilderPage({
     model,
   ), [model, selectedContracts]);
   const previousContractMatchFingerprint = useRef(contractMatchFingerprint);
-  const isDirty = Boolean(editSnapshot && (
-    invoiceDocumentChanged(editSnapshot, model)
-    || contractMatchReason !== initialContractMatchReason
-  ));
+  const hasMeaningfulCreationContent = Boolean(
+    creatorId
+    || selectedProjectId
+    || contractIds.length
+    || payoutAccountId
+    || contractMatchReason.trim()
+    || items.some((item) => item.description.trim() || item.unitPrice > 0 || item.quantity > 0)
+  );
+  const isDirty = !generatedFiles && (isEditing
+    ? Boolean(editSnapshot && (
+        invoiceDocumentChanged(editSnapshot, model)
+        || contractMatchReason !== initialContractMatchReason
+      ))
+    : hasMeaningfulCreationContent);
 
   useEffect(() => {
     if (previousContractMatchFingerprint.current === contractMatchFingerprint) return;
@@ -441,14 +501,34 @@ export function InvoiceBuilderPage({
   }, [isDirty, onDirtyChange]);
 
   useEffect(() => {
-    if (!isEditing || !isDirty) return undefined;
+    if (!isDirty) return undefined;
     const guard = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
-  }, [isDirty, isEditing]);
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (isEditing || generatedFiles || !onDraftChange) return;
+    onDraftChange({
+      creatorId,
+      creatorSocialAccountId,
+      projectId: selectedProjectId,
+      engagementId,
+      contractIds: [...contractIds],
+      invoiceDate,
+      selectedBillingEntityId,
+      billTo: { ...billTo },
+      from: { ...from },
+      currency,
+      items: items.map((item) => ({ ...item })),
+      payoutAccountId,
+      payment: { ...payment },
+      contractMatchReason,
+    }, hasMeaningfulCreationContent);
+  }, [billTo, contractIds, contractMatchReason, creatorId, creatorSocialAccountId, currency, engagementId, from, generatedFiles, hasMeaningfulCreationContent, invoiceDate, isEditing, items, onDraftChange, payment, payoutAccountId, selectedBillingEntityId, selectedProjectId]);
 
   const selectCreator = (value: string) => {
     const creator = creators.find((item) => item.id === value);
@@ -633,6 +713,7 @@ export function InvoiceBuilderPage({
       if (!record) throw new Error(isEditing ? '修改记录保存失败。' : 'Invoice 生成回调未配置。');
       if (!isEditing) onGenerated?.(record);
       setGeneratedFiles({ record, pdfBlob, docxBlob });
+      if (!isEditing) onDraftCompleted?.();
       if (!isEditing) setInvoiceNumber(nextInvoiceNumber([record, ...generatedInvoices], invoiceDate));
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : '文件生成失败，请稍后重试');
@@ -647,7 +728,7 @@ export function InvoiceBuilderPage({
   };
 
   const saveLabel = editContext === 'DRAFT'
-    ? '保存草稿'
+    ? '保存待发布 Invoice'
     : editContext === 'CREATOR_FEEDBACK'
     ? '保存并重新发送达人'
     : editContext === 'MEDIA_RECHECK'
@@ -674,7 +755,7 @@ export function InvoiceBuilderPage({
         title={isEditing ? '修改 Invoice' : '生成 Invoice'}
         subtitle={isEditing
           ? editContext === 'DRAFT'
-            ? '修改尚未发布的 Invoice 草稿；保存后保持当前版本，不会通知达人。'
+            ? '修改尚未发布的 Invoice；保存后保持当前版本，不会通知达人。'
             : '保留稳定关联并生成新文件版本；保存后原签署失效，重新进入待签署。'
           : '从达人档案与项目费用中自动带入资料，确认后同时生成 PDF 与 DOCX。'}
         actions={(
@@ -699,6 +780,9 @@ export function InvoiceBuilderPage({
           ? `正在修改 ${editRecord?.id} · v${editRecord?.version ?? 1}。达人、项目及 Invoice 编号已锁定；版本历史仅在当前浏览器会话保留。`
           : '生成文件会保留空白签名区；当前为前端原型，生成记录仅在本次会话内保留。'}
       </NoticeBanner>
+      {restorationWarnings.length ? (
+        <div className="invoice-builder-error" role="alert"><strong>草稿已恢复，但部分资料需重新选择</strong><span>{restorationWarnings.join('；')}</span></div>
+      ) : null}
       {Object.keys(errors).length > 0 ? (
         <div className="invoice-builder-error" role="alert"><strong>还有 {Object.keys(errors).length} 项资料需要完善</strong><span>{Object.values(errors)[0]}</span></div>
       ) : null}
@@ -707,7 +791,7 @@ export function InvoiceBuilderPage({
         <section className="invoice-generation-success" data-testid="invoice-generation-success">
           <span><CheckCircle2 size={22} /></span>
           <div>
-            <strong>{generatedFiles.record.id} {generatedFiles.record.status === '草稿' ? '草稿已生成' : '已发布待签署'}</strong>
+            <strong>{generatedFiles.record.id} {generatedFiles.record.status === '草稿' ? '已生成·待发布' : '已发布待签署'}</strong>
             <p>{generatedFiles.record.status === '草稿' ? 'PDF 与 DOCX 使用同一份数据快照，发布后才会通知达人签署。' : '已生成达人端签署待办，并记录模拟通知。'}</p>
           </div>
           <div className="invoice-generation-actions">
@@ -729,7 +813,7 @@ export function InvoiceBuilderPage({
                 {generatedFiles.record.status === '草稿' ? '发布达人签署' : '已发布'}
               </Button>
             ) : null}
-            <Button onClick={onOpenInvoiceManagement}>查看 Invoice 草稿</Button>
+            <Button onClick={onOpenInvoiceManagement}>查看待发布 Invoice</Button>
           </div>
         </section>
       ) : null}

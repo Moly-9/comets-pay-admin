@@ -74,6 +74,7 @@ import {
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
 import { hasInvoiceSignatureEvidence } from '../invoice/invoiceSignature';
+import { invoiceBatchDraftGeneratedCount } from '../invoice/invoiceCreationDrafts';
 import {
   externalInvoiceListStatus,
   externalInvoicePageTab,
@@ -121,6 +122,7 @@ import type {
   GeneratedInvoiceRecord,
   InvoiceBillingEntity,
   InvoiceBillingSettings,
+  InvoiceCreationDraft,
   InvoiceEditContext,
   PaymentFailureIssueType,
   Payout,
@@ -3192,6 +3194,14 @@ const invoiceTypeFilterVisible = (tab: InvoicePageTab) => (
   tab === 'review' || tab === 'approved' || tab === 'returned'
 );
 
+const formatInvoiceCreationDraftTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || '未记录';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+};
+
 export function InvoicePage({
   payouts,
   creators,
@@ -3199,12 +3209,15 @@ export function InvoicePage({
   invoiceBillingSettings,
   projects = [],
   generatedInvoices,
+  creationDrafts = [],
   externalInvoices = [],
   requests,
   tab,
   onTabChange,
   onCreateInvoice,
   onCreateBatchInvoice,
+  onResumeCreationDraft = () => undefined,
+  onDeleteCreationDraft = () => undefined,
   onCreateExternalInvoice = () => undefined,
   onPublishExternalInvoice = () => undefined,
   onPublishExternalInvoices = () => false,
@@ -3240,12 +3253,15 @@ export function InvoicePage({
   invoiceBillingSettings: InvoiceBillingSettings;
   projects?: ProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  creationDrafts?: InvoiceCreationDraft[];
   externalInvoices?: ExternalInvoiceCollectionRecord[];
   requests: RequestProjectSummary[];
   tab: InvoicePageTab;
   onTabChange: (tab: InvoicePageTab) => void;
   onCreateInvoice: () => void;
   onCreateBatchInvoice: () => void;
+  onResumeCreationDraft?: (draft: InvoiceCreationDraft) => void;
+  onDeleteCreationDraft?: (draftId: string) => void;
   onCreateExternalInvoice?: (input: ExternalInvoiceCollectionInput, publish: boolean) => void;
   onPublishExternalInvoice?: (invoiceId: string) => void;
   onPublishExternalInvoices?: (invoiceIds: string[]) => boolean;
@@ -3295,10 +3311,49 @@ export function InvoicePage({
   const [providerFilter, setProviderFilter] = useState<InvoiceManagementFilters['provider']>('all');
   const [statusFilter, setStatusFilter] = useState<InvoiceManagementFilters['status']>('all');
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState<InvoiceManagementFilters['invoiceType']>('all');
+  const [draftSearch, setDraftSearch] = useState('');
+  const [draftTypeFilter, setDraftTypeFilter] = useState<'all' | 'SINGLE' | 'BATCH'>('all');
+  const [draftPendingDelete, setDraftPendingDelete] = useState<InvoiceCreationDraft | null>(null);
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedExternalInvoiceId, setSelectedExternalInvoiceId] = useState<string | null>(null);
   const [showExternalCreate, setShowExternalCreate] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const draftRows = useMemo(() => creationDrafts.map((draft) => {
+    const project = projects.find((candidate) => (
+      String(candidate.cooperationProjectId ?? candidate.projectId ?? candidate.id) === String(draft.projectId)
+    ));
+    if (draft.kind === 'SINGLE') {
+      const creator = creators.find((candidate) => candidate.id === draft.creatorId);
+      return {
+        draft,
+        typeLabel: '单份 Invoice',
+        creatorLabel: creator?.name ?? (draft.creatorId ? '达人档案已失效' : '待选择达人'),
+        projectLabel: project?.name ?? (draft.projectId ? '项目已失效，请重新选择' : '待选择项目'),
+        progressLabel: '尚未生成文件',
+      };
+    }
+    const names = draft.rows.map((row) => row.creatorName).filter(Boolean);
+    const generatedCount = invoiceBatchDraftGeneratedCount(draft);
+    return {
+      draft,
+      typeLabel: '批量 Invoice',
+      creatorLabel: names.length
+        ? `${names.slice(0, 2).join('、')}${names.length > 2 ? ` 等 ${names.length} 位` : ''}`
+        : '待选择达人',
+      projectLabel: project?.name ?? (draft.projectId ? '项目已失效，请重新选择' : '待选择项目'),
+      progressLabel: `${generatedCount}/${draft.rows.length} 已生成 · ${Math.max(0, draft.rows.length - generatedCount)} 待生成`,
+    };
+  }), [creationDrafts, creators, projects]);
+  const normalizedDraftSearch = draftSearch.trim().toLocaleLowerCase();
+  const filteredDraftRows = draftRows.filter((row) => (
+    (draftTypeFilter === 'all' || row.draft.kind === draftTypeFilter)
+    && (!normalizedDraftSearch || (
+      `${row.typeLabel} ${row.creatorLabel} ${row.projectLabel}`.toLocaleLowerCase().includes(normalizedDraftSearch)
+    ))
+  ));
+  const draftPagination = usePagination(filteredDraftRows, {
+    resetKey: `${draftSearch}:${draftTypeFilter}:${filteredDraftRows.map((row) => row.draft.draftId).join('|')}`,
+  });
   const effectiveSourceKey = selectedSourceKey ?? (
     focusedInvoiceId
       ? focusedInvoiceId.startsWith('generated:') || focusedInvoiceId.startsWith('payout:')
@@ -3401,7 +3456,7 @@ export function InvoicePage({
     const actionLabel = view.status === '已退回'
       ? '查看详情'
       : payout.invoiceReviewStatus === '草稿'
-      ? '查看草稿'
+      ? '查看详情'
       : canAct
       ? payout.invoiceReviewStatus === '达人反馈'
         ? '查看详情'
@@ -3492,6 +3547,7 @@ export function InvoicePage({
     };
   });
   const groupedRows: Record<InvoicePageTab, InvoiceManagementRow[]> = {
+    drafts: [],
     signature: [],
     upload: [],
     review: [],
@@ -3575,7 +3631,7 @@ export function InvoicePage({
   }, [invoiceTypeFilter, providerFilter, search, selectedProjectKeys, statusFilter, tab]);
   const selectionEnabled = tab === 'signature' || tab === 'upload';
   const selectableRowIds = new Set(visibleRows.filter((row) => (
-    (tab === 'signature' && row.invoiceType === 'INTERNAL' && row.status === '草稿')
+    (tab === 'signature' && row.invoiceType === 'INTERNAL' && row.status === '待发布')
     || (tab === 'upload' && row.invoiceType === 'EXTERNAL' && row.status === '待发布')
   )).map((row) => row.rowId));
   const selectedPublishRows = visibleRows.filter((row) => selectedRowIds.has(row.rowId));
@@ -3764,12 +3820,81 @@ export function InvoicePage({
       </section>
       <section className="content-card">
         <div className="tabs-row">
+          <button className={`tab-button ${tab === 'drafts' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('drafts')}>草稿箱 <span>{creationDrafts.length}</span></button>
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedRows.signature.length}</span></button>
           <button className={`tab-button ${tab === 'upload' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('upload')}>待回收 <span>{groupedRows.upload.length}</span></button>
           <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedRows.review.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedRows.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedRows.returned.length}</span></button>
         </div>
+        {tab === 'drafts' ? (
+          <div className="invoice-creation-drafts" aria-label="Invoice 生成中草稿">
+            <div className="invoice-creation-draft-toolbar">
+              <div className="project-filter-field invoice-creation-draft-search">
+                <span className="project-filter-field-label">搜索</span>
+                <SearchBar value={draftSearch} onChange={setDraftSearch} placeholder="搜索达人或关联项目" />
+              </div>
+              <div className="project-filter-field invoice-creation-draft-type-filter">
+                <span className="project-filter-field-label">草稿类型</span>
+                <SelectField
+                  ariaLabel="Invoice 草稿类型筛选"
+                  variant="form"
+                  value={draftTypeFilter}
+                  options={[
+                    { value: 'all', label: '全部类型' },
+                    { value: 'SINGLE', label: '单份 Invoice' },
+                    { value: 'BATCH', label: '批量 Invoice' },
+                  ]}
+                  onChange={setDraftTypeFilter}
+                />
+              </div>
+              <span className="invoice-creation-draft-count">已显示 <strong>{filteredDraftRows.length}</strong> / {creationDrafts.length} 条</span>
+            </div>
+            <div className="table-shell invoice-creation-draft-table-shell">
+              <div className="table-scroll">
+                <table className="data-table invoice-creation-draft-table">
+                  <thead><tr><th>草稿类型</th><th>达人</th><th>关联项目</th><th>生成进度</th><th>最近编辑时间</th><th className="action-cell">操作</th></tr></thead>
+                  <tbody>
+                    {draftPagination.pageItems.length ? draftPagination.pageItems.map((row) => (
+                      <tr key={row.draft.draftId} data-draft-id={row.draft.draftId}>
+                        <td><span className={`invoice-creation-draft-kind is-${row.draft.kind.toLowerCase()}`}>{row.typeLabel}</span></td>
+                        <td><strong className="invoice-creation-draft-creator">{row.creatorLabel}</strong></td>
+                        <td><span className="invoice-creation-draft-project">{row.projectLabel}</span></td>
+                        <td><span className="invoice-creation-draft-progress">{row.progressLabel}</span></td>
+                        <td><time dateTime={row.draft.updatedAt}>{formatInvoiceCreationDraftTime(row.draft.updatedAt)}</time></td>
+                        <td className="action-cell">
+                          <div className="table-action-group">
+                            <ListActionButton kind="edit" onClick={() => onResumeCreationDraft(row.draft)}>继续编辑</ListActionButton>
+                            <ListActionButton kind="danger" onClick={() => setDraftPendingDelete(row.draft)}>删除</ListActionButton>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={6}><div className="invoice-creation-draft-empty">
+                        <FileText size={28} />
+                        <strong>{creationDrafts.length ? '没有符合筛选条件的草稿' : '暂无生成中草稿'}</strong>
+                        <small>只有尚未完成文件生成的单份或批量 Invoice 会显示在这里。</small>
+                        {!creationDrafts.length && canCreateInvoice ? <div><Button variant="secondary" onClick={onCreateBatchInvoice}>批量生成</Button><Button onClick={onCreateInvoice}>生成 Invoice</Button></div> : null}
+                      </div></td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-footer">
+                <span>共 {filteredDraftRows.length} 条</span>
+                <Pagination
+                  ariaLabel="Invoice 草稿箱分页"
+                  page={draftPagination.page}
+                  pageSize={draftPagination.pageSize}
+                  total={filteredDraftRows.length}
+                  onPageChange={draftPagination.setPage}
+                  onPageSizeChange={draftPagination.setPageSize}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
         <div className="invoice-list-filter-panel" aria-label="Invoice 列表筛选">
           <div className="invoice-list-filter-fields">
             <div className="project-filter-field invoice-list-filter-search">
@@ -3855,7 +3980,22 @@ export function InvoicePage({
             if (row.source.kind === 'payout') simulateCreatorSignature(row.source.payout);
           }}
         />
+          </>
+        )}
       </section>
+      {draftPendingDelete ? (
+        <Modal
+          title="删除 Invoice 草稿"
+          width="460px"
+          onClose={() => setDraftPendingDelete(null)}
+          footer={<><Button variant="secondary" onClick={() => setDraftPendingDelete(null)}>取消</Button><Button variant="danger" onClick={() => { onDeleteCreationDraft(draftPendingDelete.draftId); setDraftPendingDelete(null); }}>确认删除</Button></>}
+        >
+          <div className="invoice-creation-draft-delete-copy">
+            <span><Trash2 size={22} /></span>
+            <div><strong>删除后无法继续恢复这份表单</strong><p>{draftPendingDelete.kind === 'BATCH' ? '本次批量生成中尚未完成的内容会被移除；已经生成的 Invoice 仍保留在待签署页签。' : '该单份 Invoice 未完成内容会从当前账号的本地草稿箱中删除。'}</p></div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

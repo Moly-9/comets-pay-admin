@@ -502,15 +502,51 @@ export type InvoiceBatchRow = {
   generated?: InvoiceBatchGeneratedFiles;
 };
 
-export type InvoiceBatchDraft = {
-  batchId: string;
+export type InvoiceBatchDraftRow = Omit<InvoiceBatchRow, 'generated'> & {
+  generated?: { record: GeneratedInvoiceRecord };
+};
+
+export type InvoiceCreationDraftBase = {
+  draftId: string;
   schemaVersion: '1.0';
+  createdByAccount: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InvoiceSingleCreationDraft = InvoiceCreationDraftBase & {
+  kind: 'SINGLE';
+  creatorId: string;
+  creatorSocialAccountId: string;
+  projectId: string;
+  engagementId: string;
+  contractIds: ContractId[];
+  invoiceDate: string;
+  selectedBillingEntityId: string;
+  billTo: InvoiceEntity;
+  from: CreatorInvoiceContact;
+  currency: InvoiceCurrency;
+  items: InvoiceLineItem[];
+  payoutAccountId: string;
+  payment: DocumentPayoutSnapshot;
+  contractMatchReason: string;
+};
+
+export type InvoiceBatchDraft = InvoiceCreationDraftBase & {
+  kind: 'BATCH';
+  batchId: string;
   projectId: ProjectId | '';
   invoiceDate: string;
+  selectedBillingEntityId: string;
+  currency: InvoiceCurrency;
   selectedEngagementIds: EngagementId[];
   sharedDescriptions: Array<Pick<InvoiceBatchLineItem, 'templateKey' | 'description'>>;
-  rows: InvoiceBatchRow[];
+  rows: InvoiceBatchDraftRow[];
+  generationProgress: { current: number; total: number };
 };
+
+export type InvoiceCreationDraft = InvoiceSingleCreationDraft | InvoiceBatchDraft;
 
 export type InvoiceEditContext =
   | 'DRAFT'

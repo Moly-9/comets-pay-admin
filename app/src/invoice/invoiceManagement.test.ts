@@ -155,7 +155,7 @@ describe('Invoice management presentation', () => {
   });
 
   it('uses the expected management groups without an approval tab', () => {
-    expect(getInvoiceManagementView(payout('草稿'))).toMatchObject({ tab: 'signature', status: '草稿' });
+    expect(getInvoiceManagementView(payout('草稿'))).toMatchObject({ tab: 'signature', status: '待发布' });
     expect(getInvoiceManagementView(payout('待签署'))).toMatchObject({ tab: 'signature', status: '待签署' });
     expect(getInvoiceManagementView(payout('待媒介审核'))).toMatchObject({ tab: 'review', status: '待审核' });
     expect(getInvoiceManagementView(payout('已通过'))).toMatchObject({ tab: 'approved', status: '已通过' });

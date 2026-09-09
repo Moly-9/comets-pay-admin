@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { accountDisplayValue } from './accountPresentation';
 import { buildCreatorCollaborationProjects } from './creatorCollaborationProjects';
 import { resolveCreatorSocialAccount } from './creatorSearchOptions';
@@ -95,6 +95,13 @@ import {
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
 } from './invoice/invoiceManagement';
+import {
+  INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+  loadInvoiceCreationDrafts,
+  removeInvoiceCreationDraft,
+  saveInvoiceCreationDrafts,
+  upsertInvoiceCreationDraft,
+} from './invoice/invoiceCreationDrafts';
 import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
 import {
   buildApprovedExternalInvoice,
@@ -153,7 +160,10 @@ import type {
   InvoiceDocumentModel,
   InvoiceContractMatchReview,
   InvoiceEditContext,
+  InvoiceBatchDraft,
   InvoiceBillingSettings,
+  InvoiceCreationDraft,
+  InvoiceSingleCreationDraft,
   NavOptions,
   NavPage,
   PaymentFailureIssueType,
@@ -422,6 +432,19 @@ const LOCAL_DEV_USER = LOCAL_DEV_BYPASSES_AUTH
   ? (resolveSystemUser('jeff') ?? CURRENT_USER)
   : CURRENT_USER;
 
+const readInvoiceCreationDrafts = (account: string) => {
+  try {
+    return typeof window === 'undefined' ? [] : loadInvoiceCreationDrafts(account);
+  } catch {
+    return [];
+  }
+};
+
+type InvoiceSingleDraftState = Omit<InvoiceSingleCreationDraft,
+  'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>;
+type InvoiceBatchDraftState = Omit<InvoiceBatchDraft,
+  'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>;
+
 const getContractTemplateAvailability = (contracts: ContractRecord[]) => {
   const template = contracts.find((contract) => (
     contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
@@ -539,6 +562,15 @@ export default function App() {
   } | null>(null);
   const [invoiceEditorDirty, setInvoiceEditorDirty] = useState(false);
   const [invoiceBatchDirty, setInvoiceBatchDirty] = useState(false);
+  const [invoiceCreationDrafts, setInvoiceCreationDrafts] = useState<InvoiceCreationDraft[]>(
+    () => readInvoiceCreationDrafts(LOCAL_DEV_USER.account),
+  );
+  const [activeInvoiceCreationDraftId, setActiveInvoiceCreationDraftId] = useState<string | null>(null);
+  const activeInvoiceCreationDraftIdRef = useRef<string | null>(null);
+  const invoiceCreationDraftsRef = useRef(invoiceCreationDrafts);
+  const invoiceDraftOwnerRef = useRef(LOCAL_DEV_USER.account);
+  const invoiceDraftStorageFailedRef = useRef(false);
+  const [pendingInvoiceCreationExit, setPendingInvoiceCreationExit] = useState<{ run: () => void } | null>(null);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [paymentDetailRequestId, setPaymentDetailRequestId] = useState<string | null>(null);
   const [paymentWorkbenchInitialTab, setPaymentWorkbenchInitialTab] = useState<WorkbenchTab>('review');
@@ -578,6 +610,136 @@ export default function App() {
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
   }, []);
+
+  const setActiveInvoiceDraft = useCallback((draftId: string | null) => {
+    activeInvoiceCreationDraftIdRef.current = draftId;
+    setActiveInvoiceCreationDraftId(draftId);
+  }, []);
+
+  const persistInvoiceDrafts = useCallback((drafts: InvoiceCreationDraft[]) => {
+    try {
+      saveInvoiceCreationDrafts(currentUser.account, drafts);
+      invoiceDraftStorageFailedRef.current = false;
+    } catch {
+      if (!invoiceDraftStorageFailedRef.current) {
+        invoiceDraftStorageFailedRef.current = true;
+        notify('草稿保存失败', '浏览器本地存储暂时不可用，当前页面内容仍会保留到本次会话结束。');
+      }
+    }
+  }, [currentUser.account, notify]);
+
+  const updateInvoiceCreationDraftCollection = useCallback((
+    update: (current: InvoiceCreationDraft[]) => InvoiceCreationDraft[],
+  ) => {
+    setInvoiceCreationDrafts((current) => {
+      const next = update(current);
+      invoiceCreationDraftsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (invoiceDraftOwnerRef.current === currentUser.account) return;
+    invoiceDraftOwnerRef.current = currentUser.account;
+    const drafts = readInvoiceCreationDrafts(currentUser.account);
+    invoiceCreationDraftsRef.current = drafts;
+    setInvoiceCreationDrafts(drafts);
+    setActiveInvoiceDraft(null);
+  }, [currentUser.account, setActiveInvoiceDraft]);
+
+  useEffect(() => {
+    invoiceCreationDraftsRef.current = invoiceCreationDrafts;
+    if (invoiceDraftOwnerRef.current !== currentUser.account) return undefined;
+    const timeout = window.setTimeout(() => persistInvoiceDrafts(invoiceCreationDrafts), 350);
+    return () => window.clearTimeout(timeout);
+  }, [currentUser.account, invoiceCreationDrafts, persistInvoiceDrafts]);
+
+  useEffect(() => {
+    const flushInvoiceDrafts = () => {
+      if (invoiceDraftOwnerRef.current === currentUser.account) {
+        persistInvoiceDrafts(invoiceCreationDraftsRef.current);
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushInvoiceDrafts();
+    };
+    window.addEventListener('pagehide', flushInvoiceDrafts);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushInvoiceDrafts);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentUser.account, persistInvoiceDrafts]);
+
+  const updateSingleInvoiceCreationDraft = useCallback((
+    snapshot: InvoiceSingleDraftState,
+    meaningful: boolean,
+  ) => {
+    if (!meaningful) {
+      const draftId = activeInvoiceCreationDraftIdRef.current;
+      if (!draftId) return;
+      updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+      setActiveInvoiceDraft(null);
+      return;
+    }
+    const occurredAt = nowIso();
+    const draftId = activeInvoiceCreationDraftIdRef.current ?? `draft-${createPrototypeId('invoice')}`;
+    if (!activeInvoiceCreationDraftIdRef.current) setActiveInvoiceDraft(draftId);
+    updateInvoiceCreationDraftCollection((current) => {
+      const existing = current.find((draft): draft is InvoiceSingleCreationDraft => (
+        draft.draftId === draftId && draft.kind === 'SINGLE'
+      ));
+      return upsertInvoiceCreationDraft(current, {
+        ...snapshot,
+        draftId,
+        schemaVersion: INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+        kind: 'SINGLE',
+        createdByAccount: currentUser.account,
+        createdByName: currentUser.name,
+        createdAt: existing?.createdAt ?? occurredAt,
+        updatedAt: occurredAt,
+      });
+    });
+  }, [currentUser.account, currentUser.name, setActiveInvoiceDraft, updateInvoiceCreationDraftCollection]);
+
+  const updateBatchInvoiceCreationDraft = useCallback((
+    snapshot: InvoiceBatchDraftState,
+    meaningful: boolean,
+  ) => {
+    if (!meaningful || !snapshot.rows.some((row) => row.status !== 'GENERATED')) {
+      const draftId = activeInvoiceCreationDraftIdRef.current;
+      if (!draftId) return;
+      updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+      setActiveInvoiceDraft(null);
+      return;
+    }
+    const occurredAt = nowIso();
+    const draftId = activeInvoiceCreationDraftIdRef.current ?? `draft-${createPrototypeId('invoice')}`;
+    if (!activeInvoiceCreationDraftIdRef.current) setActiveInvoiceDraft(draftId);
+    updateInvoiceCreationDraftCollection((current) => {
+      const existing = current.find((draft): draft is InvoiceBatchDraft => (
+        draft.draftId === draftId && draft.kind === 'BATCH'
+      ));
+      return upsertInvoiceCreationDraft(current, {
+        ...snapshot,
+        draftId,
+        schemaVersion: INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+        kind: 'BATCH',
+        createdByAccount: currentUser.account,
+        createdByName: currentUser.name,
+        createdAt: existing?.createdAt ?? occurredAt,
+        updatedAt: occurredAt,
+      });
+    });
+  }, [currentUser.account, currentUser.name, setActiveInvoiceDraft, updateInvoiceCreationDraftCollection]);
+
+  const completeActiveInvoiceCreationDraft = useCallback(() => {
+    const draftId = activeInvoiceCreationDraftIdRef.current;
+    if (draftId) updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+    setActiveInvoiceDraft(null);
+    setInvoiceEditorDirty(false);
+    setInvoiceBatchDirty(false);
+  }, [setActiveInvoiceDraft, updateInvoiceCreationDraftCollection]);
 
   useEffect(() => {
     const explainBlockedAction = (event: Event) => {
@@ -1012,6 +1174,10 @@ export default function App() {
     setInvoiceEditTarget(null);
     setInvoiceEditorDirty(false);
     setInvoiceBatchDirty(false);
+    if (
+      (activePage === 'invoice-create' || activePage === 'invoice-batch-create')
+      && page !== activePage
+    ) setActiveInvoiceDraft(null);
     setFocusedInvoiceId(null);
     setFocusedContractId(null);
     setFocusedProjectId(null);
@@ -1036,10 +1202,16 @@ export default function App() {
       return false;
     }
     if (
-      (
-        (activePage === 'invoice-edit' && invoiceEditorDirty)
-        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
-      )
+      page !== activePage
+      && (activePage === 'invoice-create' || activePage === 'invoice-batch-create')
+      && (invoiceEditorDirty || invoiceBatchDirty)
+    ) {
+      setPendingInvoiceCreationExit({ run: () => { finishNavigation(page, options); } });
+      return false;
+    }
+    if (
+      activePage === 'invoice-edit'
+      && invoiceEditorDirty
       && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
     ) {
       return false;
@@ -1179,8 +1351,8 @@ export default function App() {
     notify(
       records.length === 1 ? 'Invoice 已生成' : '批量 Invoice 已生成',
       records.length === 1
-        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，当前保存为草稿，尚未通知达人。`
-        : `${records.length} 张 Invoice 已保存为草稿，发布后才会通知对应达人。`,
+        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，当前为待发布，尚未通知达人。`
+        : `${records.length} 张 Invoice 已生成并进入待发布，发布后才会通知对应达人。`,
     );
   };
 
@@ -1523,7 +1695,7 @@ export default function App() {
           entityId: result.record.invoiceId,
           action: 'update',
           actor: `${currentUser.name}（${currentUser.role}）`,
-          summary: `已更新 Invoice 草稿 ${result.record.id}，仍保持 v${result.record.version ?? 1}`,
+          summary: `已更新待发布 Invoice ${result.record.id}，仍保持 v${result.record.version ?? 1}`,
         }),
         ...current,
       ]);
@@ -1532,7 +1704,7 @@ export default function App() {
       setFocusedInvoiceId(`generated:${result.record.id}`);
       setInvoiceTab('signature');
       setActivePage('invoice');
-      notify('Invoice 草稿已保存', `${result.record.id} 仍为 v${result.record.version ?? 1}，尚未发布给达人。`);
+      notify('待发布 Invoice 已保存', `${result.record.id} 仍为 v${result.record.version ?? 1}，尚未发布给达人。`);
       return result.record;
     }
     const refreshedPaymentItem = invoicePaymentListItem(result.record, contracts);
@@ -3722,13 +3894,13 @@ export default function App() {
 
   const publishInternalInvoiceDrafts = (invoiceIds: string[]) => {
     if (!hasPermission(currentUser, 'invoice_manage')) {
-      notify('暂无操作权限', `${currentUser.role}不能发布 Invoice 草稿。`);
+      notify('暂无操作权限', `${currentUser.role}不能发布待发布 Invoice。`);
       return false;
     }
     const selectedIds = new Set(invoiceIds);
     const records = generatedInvoices.filter((record) => selectedIds.has(String(record.invoiceId)));
     if (!records.length || records.length !== selectedIds.size) {
-      notify('发布失败', '部分 Invoice 草稿已不存在，请刷新列表后重试。');
+      notify('发布失败', '部分待发布 Invoice 已不存在，请刷新列表后重试。');
       return false;
     }
     const occurredAt = nowIso();
@@ -3750,24 +3922,24 @@ export default function App() {
       );
       return true;
     } catch (error) {
-      notify('发布失败', error instanceof Error ? error.message : 'Invoice 草稿暂时无法发布。');
+      notify('发布失败', error instanceof Error ? error.message : '待发布 Invoice 暂时无法发布。');
       return false;
     }
   };
 
   const withdrawInternalInvoiceDraft = (invoiceId: string) => {
     if (!hasPermission(currentUser, 'invoice_manage')) {
-      notify('暂无操作权限', `${currentUser.role}不能撤销 Invoice 草稿。`);
+      notify('暂无操作权限', `${currentUser.role}不能撤销待发布 Invoice。`);
       return false;
     }
     const record = generatedInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
     const payout = record ? payouts.find((candidate) => candidate.id === record.sourcePayoutId) : undefined;
     if (!record || !payout) {
-      notify('撤销失败', '未找到完整的 Invoice 草稿记录。');
+      notify('撤销失败', '未找到完整的待发布 Invoice 记录。');
       return false;
     }
     if (record.status !== '草稿' || payout.invoiceReviewStatus !== '草稿') {
-      notify('无法撤销', '只有尚未发布的 Invoice 草稿可以撤销。');
+      notify('无法撤销', '只有尚未发布的 Invoice 可以撤销。');
       return false;
     }
     if (findInvoiceRequest(payout, generatedInvoices, requestProjects)) {
@@ -3787,7 +3959,7 @@ export default function App() {
     });
     setFocusedInvoiceId(null);
     setInvoiceTab('signature');
-    notify('Invoice 草稿已撤销', `${record.id} 已从当前前端会话中删除。`);
+    notify('待发布 Invoice 已撤销', `${record.id} 已从当前前端会话中删除。`);
     return true;
   };
 
@@ -4675,6 +4847,26 @@ export default function App() {
     setActivePage('projects');
   };
 
+  const accountInvoiceCreationDrafts = invoiceDraftOwnerRef.current === currentUser.account
+    ? invoiceCreationDrafts
+    : [];
+  const activeInvoiceCreationDraft = accountInvoiceCreationDrafts.find((draft) => (
+    draft.draftId === activeInvoiceCreationDraftId
+  ));
+  const runInvoiceCreationExit = (run: () => void) => {
+    if (invoiceEditorDirty || invoiceBatchDirty) {
+      setPendingInvoiceCreationExit({ run: () => {
+        setInvoiceEditorDirty(false);
+        setInvoiceBatchDirty(false);
+        setActiveInvoiceDraft(null);
+        run();
+      } });
+      return;
+    }
+    setActiveInvoiceDraft(null);
+    run();
+  };
+
   let pageContent;
   switch (activePage) {
     case 'projects':
@@ -4884,12 +5076,39 @@ export default function App() {
           invoiceBillingSettings={invoiceBillingSettings}
           projects={projects}
           generatedInvoices={generatedInvoices}
+          creationDrafts={accountInvoiceCreationDrafts}
           externalInvoices={externalInvoices}
           requests={requestProjects}
           tab={invoiceTab}
           onTabChange={setInvoiceTab}
-          onCreateInvoice={() => setActivePage('invoice-create')}
-          onCreateBatchInvoice={() => setActivePage('invoice-batch-create')}
+          onCreateInvoice={() => {
+            setActiveInvoiceDraft(null);
+            setActivePage('invoice-create');
+          }}
+          onCreateBatchInvoice={() => {
+            setActiveInvoiceDraft(null);
+            setActivePage('invoice-batch-create');
+          }}
+          onResumeCreationDraft={(draft) => {
+            setActiveInvoiceDraft(draft.draftId);
+            if (draft.kind === 'BATCH') {
+              const knownInvoiceIds = new Set(generatedInvoices.map((record) => record.invoiceId));
+              const missingRecords = draft.rows.flatMap((row) => (
+                row.generated && !knownInvoiceIds.has(row.generated.record.invoiceId)
+                  ? [row.generated.record]
+                  : []
+              ));
+              if (missingRecords.length) addGeneratedInvoices(missingRecords);
+              setActivePage('invoice-batch-create');
+            } else {
+              setActivePage('invoice-create');
+            }
+          }}
+          onDeleteCreationDraft={(draftId) => {
+            updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+            if (activeInvoiceCreationDraftIdRef.current === draftId) setActiveInvoiceDraft(null);
+            notify('草稿已删除', '该生成中 Invoice 草稿已从当前账号的本地草稿箱移除。');
+          }}
           onCreateExternalInvoice={createExternalInvoiceTask}
           onPublishExternalInvoice={publishExternalInvoiceTask}
           onPublishExternalInvoices={publishExternalInvoiceTasks}
@@ -4997,21 +5216,29 @@ export default function App() {
           contracts={contracts}
           invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
+          initialDraft={activeInvoiceCreationDraft?.kind === 'SINGLE'
+            ? activeInvoiceCreationDraft
+            : undefined}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={(record) => {
             addGeneratedInvoice(record);
             setInvoiceCreationEngagementId(null);
           }}
           onPublishGenerated={(record) => publishInternalInvoiceDrafts([String(record.invoiceId)])}
+          onDirtyChange={setInvoiceEditorDirty}
+          onDraftChange={updateSingleInvoiceCreationDraft}
+          onDraftCompleted={completeActiveInvoiceCreationDraft}
           onCancel={() => {
-            setInvoiceCreationEngagementId(null);
-            if (requestResourceReturn?.resource === 'invoice') {
-              setFocusedProjectId(requestResourceReturn.requestId);
-              setRequestResourceReturn(null);
-              setActivePage('projects');
-            } else {
-              setActivePage('invoice');
-            }
+            runInvoiceCreationExit(() => {
+              setInvoiceCreationEngagementId(null);
+              if (requestResourceReturn?.resource === 'invoice') {
+                setFocusedProjectId(requestResourceReturn.requestId);
+                setRequestResourceReturn(null);
+                setActivePage('projects');
+              } else {
+                setActivePage('invoice');
+              }
+            });
           }}
           onOpenInvoiceManagement={() => {
             setInvoiceCreationEngagementId(null);
@@ -5037,13 +5264,17 @@ export default function App() {
           contracts={contracts}
           invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
+          initialDraft={activeInvoiceCreationDraft?.kind === 'BATCH'
+            ? activeInvoiceCreationDraft
+            : undefined}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={addGeneratedInvoices}
           onPublishGenerated={(records) => publishInternalInvoiceDrafts(records.map((record) => String(record.invoiceId)))}
           onDirtyChange={setInvoiceBatchDirty}
+          onDraftChange={updateBatchInvoiceCreationDraft}
+          onDraftCompleted={completeActiveInvoiceCreationDraft}
           onCancel={() => {
-            setInvoiceBatchDirty(false);
-            setActivePage('invoice');
+            runInvoiceCreationExit(() => setActivePage('invoice'));
           }}
           onOpenInvoiceManagement={() => {
             setInvoiceBatchDirty(false);
@@ -5339,6 +5570,32 @@ export default function App() {
           onViewInvoice={openInvoiceFromPayout}
         />
       ) : null}
+      <DraftExitDialog
+        open={Boolean(pendingInvoiceCreationExit)}
+        title="退出 Invoice 生成？"
+        description="当前 Invoice 还没有完成文件生成。你可以保存到当前账号的草稿箱，稍后继续编辑。"
+        discardLabel="放弃本次内容"
+        onDiscard={() => {
+          const draftId = activeInvoiceCreationDraftIdRef.current;
+          const nextDrafts = draftId
+            ? removeInvoiceCreationDraft(invoiceCreationDraftsRef.current, draftId)
+            : invoiceCreationDraftsRef.current;
+          invoiceCreationDraftsRef.current = nextDrafts;
+          setInvoiceCreationDrafts(nextDrafts);
+          persistInvoiceDrafts(nextDrafts);
+          const pending = pendingInvoiceCreationExit;
+          setPendingInvoiceCreationExit(null);
+          pending?.run();
+        }}
+        onSave={() => {
+          persistInvoiceDrafts(invoiceCreationDraftsRef.current);
+          notify('草稿已保存', '可在 Invoice 管理的草稿箱中继续编辑。');
+          const pending = pendingInvoiceCreationExit;
+          setPendingInvoiceCreationExit(null);
+          pending?.run();
+        }}
+        onContinue={() => setPendingInvoiceCreationExit(null)}
+      />
       <DraftExitDialog
         open={Boolean(pendingContractExit)}
         title="退出生成合同？"
