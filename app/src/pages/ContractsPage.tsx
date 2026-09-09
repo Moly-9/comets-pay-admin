@@ -33,7 +33,7 @@ import { ContractDetailPage } from './ContractDetailPage';
 import type { ProjectSummary } from './ProjectDetailPage';
 
 type Notify = (title: string, message: string) => void;
-type ContractFilter = 'all' | 'ready' | 'attention' | 'draft' | 'signature' | 'expired';
+type ContractFilter = 'all' | 'ready' | 'attention' | 'draft' | 'upload' | 'signature' | 'expired';
 
 const CONTRACT_VALIDITY_FILTERS: Array<{ value: ContractValidityFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -378,6 +378,7 @@ export function ContractsPage({
   const [validityFilter, setValidityFilter] = useState<ContractValidityFilter>('all');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(focusedContractId);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadTargetId, setUploadTargetId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -387,6 +388,9 @@ export function ContractsPage({
         contract.id === selectedContractId
         || String(contract.contractId ?? '') === selectedContractId
       ))
+    : null;
+  const uploadTarget = uploadTargetId
+    ? contracts.find((contract) => contractSelectionId(contract) === uploadTargetId) ?? null
     : null;
   const referenceDate = currentContractReferenceDate();
 
@@ -466,7 +470,7 @@ export function ContractsPage({
     const bucket = getContractManagementBucket(contract, referenceDate);
     if (bucket !== 'template') counts[bucket] += 1;
     return counts;
-  }, { ready: 0, attention: 0, draft: 0, signature: 0, expired: 0 });
+  }, { ready: 0, attention: 0, draft: 0, upload: 0, signature: 0, expired: 0 });
   const readyCount = bucketCounts.ready;
   const attentionCount = bucketCounts.attention;
   const businessContractCount = contracts.filter((contract) => !contract.isTemplate).length;
@@ -475,6 +479,7 @@ export function ContractsPage({
     ready: readyCount,
     attention: attentionCount,
     draft: bucketCounts.draft,
+    upload: bucketCounts.upload,
     signature: bucketCounts.signature,
     expired: bucketCounts.expired,
   };
@@ -587,7 +592,7 @@ export function ContractsPage({
     <div className="page-stack contracts-page">
       <PageHeading
         title="合同管理"
-        subtitle="生成合同草稿、上传线下签署文件，并确认合同是否可进入 Invoice 校验。"
+        subtitle="生成合同、上传并确认识别信息，再发送给 C 端达人完成签署。"
         actions={canUpload ? (
           <div className="page-heading-actions">
             {onCreateContract
@@ -599,7 +604,7 @@ export function ContractsPage({
                   onClick={onCreateContract}
                 >生成合同</Button>
               : null}
-            <Button icon={<Upload size={17} />} onClick={() => setUploadOpen(true)}>上传合同</Button>
+            <Button icon={<Upload size={17} />} onClick={() => { setUploadTargetId(null); setUploadOpen(true); }}>上传合同</Button>
           </div>
         ) : undefined}
       />
@@ -608,7 +613,7 @@ export function ContractsPage({
         <article className="contract-overview-card contract-overview-card-peach">
           <span>合同总数</span>
           <strong>{businessContractCount}</strong>
-          <small>{bucketCounts.draft} 份草稿 · {bucketCounts.signature} 份待签署</small>
+          <small>{bucketCounts.draft} 份草稿 · {bucketCounts.upload} 份待上传 · {bucketCounts.signature} 份待签署</small>
         </article>
         <article className="contract-overview-card contract-overview-card-mint">
           <span>可用于付款项目</span>
@@ -630,6 +635,7 @@ export function ContractsPage({
               ['ready', '可付款'],
               ['attention', '待处理'],
               ['draft', '草稿箱'],
+              ['upload', '待上传'],
               ['signature', '待签署'],
               ['expired', '已到期'],
             ] as Array<[ContractFilter, string]>).map(([value, label]) => (
@@ -794,8 +800,19 @@ export function ContractsPage({
                       </span>
                     </td>
                     <td className="action-cell">
-                      <ListActionButton kind={bucket === 'draft' ? 'edit' : 'view'} onClick={(event) => { event.stopPropagation(); openContract(contract.id); }}>
-                        {bucket === 'draft' ? '继续编辑' : '查看合同'}
+                      <ListActionButton
+                        kind={bucket === 'draft' || bucket === 'upload' ? 'edit' : 'view'}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (bucket === 'upload') {
+                            setUploadTargetId(stableId);
+                            setUploadOpen(true);
+                            return;
+                          }
+                          openContract(contract.id);
+                        }}
+                      >
+                        {bucket === 'draft' ? '继续编辑' : bucket === 'upload' ? '上传合同' : '查看合同'}
                       </ListActionButton>
                     </td>
                   </tr>
@@ -822,10 +839,18 @@ export function ContractsPage({
           projects={projects}
           creators={creators}
           contracts={contracts}
-          onClose={() => setUploadOpen(false)}
+          initialProjectId={uploadTarget ? String(uploadTarget.cooperationProjectId ?? uploadTarget.projectId ?? '') : undefined}
+          initialCreatorId={uploadTarget?.creatorId}
+          initialDraftContractId={uploadTarget?.contractId}
+          initialContractType={uploadTarget ? getContractType(uploadTarget) : undefined}
+          allowedContractTypes={uploadTarget ? [getContractType(uploadTarget)] : undefined}
+          title={uploadTarget ? '上传合同文件' : '上传合同'}
+          submitLabel={uploadTarget ? '保存并进入识别确认' : undefined}
+          onClose={() => { setUploadOpen(false); setUploadTargetId(null); }}
           onSave={(inputs) => {
             const records = handleUploadContracts(inputs);
             setUploadOpen(false);
+            setUploadTargetId(null);
             if (records[0]) openContract(records[0].id);
             const first = inputs[0];
             notify('合同已保存', `${records[0]?.name ?? first?.contractName ?? '新上传合同'} 已关联 ${first?.projectName ?? '当前项目'} / ${first?.creatorName ?? '当前达人'}，等待字段人工确认。`);

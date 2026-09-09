@@ -164,7 +164,7 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('ariaLabel="合同候选达人筛选"');
     expect(source).toContain('ariaLabel="Invoice 候选达人筛选"');
     expect(source).toContain('Invoice 候选范围不会受当前请款达人名单限制');
-    expect(source).toContain('草稿尚未回传签署文件');
+    expect(source).toContain('正式合同已生成，尚未上传待签署文件');
     expect(source).toContain('已上传，待人工确认');
     expect(source).toContain('合同尚未完成签署');
     expect(source).toContain('查看合同详情');

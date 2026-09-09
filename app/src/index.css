@@ -20078,6 +20078,17 @@ button:disabled {
   min-width: 0;
 }
 
+.contract-publishing-channel-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed #ddd5e8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 11px 12px;
+  color: #85809a;
+  font-size: 10px;
+  text-align: center;
+}
+
 .contract-publishing-channel-remove {
   display: inline-flex;
   width: 34px;
@@ -20104,8 +20115,12 @@ button:disabled {
 
 .contract-publishing-channels > small {
   min-height: 0;
-  color: #d44f42;
+  color: #858b98;
   font-size: 9.5px;
+}
+
+.contract-publishing-channels.has-error > small {
+  color: #d44f42;
 }
 
 .contract-builder-resizer {
@@ -27432,6 +27447,17 @@ button:disabled {
 
 .contract-recognition-apply-complete small {
   color: #70857a;
+}
+
+@media (max-width: 640px) {
+  .contract-recognition-apply {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .contract-recognition-apply > .button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 
 .contract-docx-source-text {

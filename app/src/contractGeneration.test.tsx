@@ -206,9 +206,9 @@ describe('contract generation', () => {
     expect(incomplete.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'REQUIRED_MISSING', fieldKey: 'publisherAddress' }),
       expect.objectContaining({ kind: 'FORMAT_INVALID', fieldKey: 'totalFee' }),
-      expect.objectContaining({ kind: 'FORMAT_INVALID', fieldKey: 'campaignPeriod' }),
       expect.objectContaining({ kind: 'OVERFLOW_RISK', fieldKey: 'contentLength' }),
     ]));
+    expect(incomplete.issues.some((issue) => issue.fieldKey === 'campaignPeriod')).toBe(false);
   });
 
   it('keeps optional blank fields empty without creating quality blockers', () => {
@@ -224,6 +224,23 @@ describe('contract generation', () => {
     expect(report.missingRequired).toBe(0);
     expect(rendered).toBe('||||');
     expect(rendered).not.toContain('待填写');
+  });
+
+  it('keeps Channel optional and renders an explicit dash when no profile channel is selected', () => {
+    const withoutChannel: ContractGenerationModel = {
+      ...model,
+      platform: '',
+      channelName: '',
+      channelUrl: '',
+      publishingChannels: [],
+    };
+
+    expect(createContractQualityReport(withoutChannel).hasBlockers).toBe(false);
+    expect(replaceContractPlaceholders(
+      '{{platform}}|{{channel_url}}|{{channel_name}}',
+      withoutChannel,
+      'FORMAL',
+    )).toBe('—|—|—');
   });
 
   it('reports one selector issue before validating derived creator or payout fields', () => {
@@ -280,6 +297,7 @@ describe('contract generation', () => {
     expect(formalText).toContain('https://example.invalid/sample-studio');
     expect(formalText).toContain('Instagram');
     expect(formalText).toContain('https://instagram.com/sample-studio');
+    expect(formalText).not.toContain('Campaign Period');
     expect(formalText).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(optionalBlankText).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
     if (renderFixtureDir) {
@@ -320,6 +338,7 @@ describe('contract generation', () => {
     expect(documentXml).toContain(model.projectName);
     expect(documentXml).toContain('YouTube: https://example.invalid/sample-studio');
     expect(documentXml).toContain('Instagram: https://instagram.com/sample-studio');
+    expect(documentXml).not.toContain('Campaign Period');
     expect(documentXml).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(documentXml).not.toContain('________________');
     expect(optionalBlankXml).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
@@ -374,7 +393,7 @@ describe('contract generation', () => {
     expect(model.paymentSnapshot.accountName).toBe('Sample Creator Limited');
   }, 60_000);
 
-  it('applies PayPal manual fields and blocks omitted required inline or missing system-period fields', () => {
+  it('applies PayPal manual fields, preserves legacy omitted output, and ignores removed Campaign Period', () => {
     const paypal: ContractGenerationModel = {
       ...model,
       payoutProvider: 'PayPal',
@@ -423,8 +442,6 @@ describe('contract generation', () => {
     expect(omittedPublisher.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ severity: 'BLOCKER', fieldKey: 'publisher' }),
     ]));
-    expect(missingSystemPeriod.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ severity: 'BLOCKER', fieldKey: 'campaignPeriod' }),
-    ]));
+    expect(missingSystemPeriod.issues.some((issue) => issue.fieldKey === 'campaignPeriod')).toBe(false);
   });
 });

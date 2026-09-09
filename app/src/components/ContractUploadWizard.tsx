@@ -48,6 +48,7 @@ type Props = {
   onSave: (inputs: ContractUploadInput[]) => void;
   initialProjectId?: string;
   initialCreatorId?: string;
+  initialDraftContractId?: string;
   initialContractType?: ContractType;
   allowedContractTypes?: ContractType[];
   title?: string;
@@ -89,6 +90,7 @@ export function ContractUploadWizard({
   onSave,
   initialProjectId = '',
   initialCreatorId = '',
+  initialDraftContractId = '',
   initialContractType = 'INDEPENDENT',
   allowedContractTypes = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[],
   title = '上传合同',
@@ -105,7 +107,7 @@ export function ContractUploadWizard({
   const [frameworkSelections, setFrameworkSelections] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<ContractRecognitionField[]>([]);
   const [systemContractNumber] = useState(() => createPrototypeCode('CON'));
-  const [draftContractId, setDraftContractId] = useState('');
+  const [draftContractId, setDraftContractId] = useState(initialDraftContractId);
   const [error, setError] = useState('');
   const [parsing, setParsing] = useState(false);
   const selectedProject = projects.find((project) => cooperationProjectIdFor(project) === projectId) ?? null;
@@ -142,7 +144,9 @@ export function ContractUploadWizard({
       description: '保存后作为本批次可复用的框架合同',
     }));
   const conflictCount = fields.filter((field) => field.status === 'conflict').length;
-  const missingCount = fields.filter((field) => field.status === 'missing').length;
+  const missingCount = fields.filter((field) => (
+    field.status === 'missing' && field.fieldKey !== 'platformChannel'
+  )).length;
   const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id && creator.status !== 'removed');
   const canSave = Boolean(selectedProject && selectedCreator && contractName.trim() && documents.length === 1 && !parsing);
 
@@ -222,7 +226,6 @@ export function ContractUploadWizard({
     ));
     setSelectedFiles(nextSelected);
     setDocuments(nextDocuments);
-    if (contractType !== 'INDEPENDENT') setDraftContractId('');
     if (contractType !== 'IO') {
       setFrameworkSelections((current) => {
         const next = { ...current };
@@ -235,9 +238,7 @@ export function ContractUploadWizard({
   const save = () => {
     if (!selectedProject || !selectedCreator || !contractName.trim() || selectedFiles.length !== 1 || documents.length !== 1) return;
     const reference = selectedProject.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator.id && creator.status !== 'removed');
-    const selectedDraft = selectedFiles.length === 1 && selectedFiles[0].contractType === 'INDEPENDENT'
-      ? draftCandidates.find((contract) => contract.contractId === draftContractId)
-      : undefined;
+    const selectedDraft = draftCandidates.find((contract) => contract.contractId === draftContractId);
     const inputs = documents.map((document, index) => {
       const selected = selectedFiles.find((item) => item.id === document.id);
       const contractType = selected?.contractType ?? 'INDEPENDENT';
@@ -386,7 +387,7 @@ export function ContractUploadWizard({
               />
               <small>{selectedProject ? '支持搜索全系统达人的 Display Name、频道 ID、频道链接、法定真名和 Account Name；未关联当前项目时保存会自动补建合作关系' : '选择项目后加载全系统达人'}</small>
             </div>
-            {allowedContractTypes.includes('INDEPENDENT') ? <div className="contract-upload-field">
+            <div className="contract-upload-field">
               <span>历史生成合同</span>
               <SelectField
                 ariaLabel="历史生成合同"
@@ -398,14 +399,14 @@ export function ContractUploadWizard({
                   ...draftCandidates.map((contract) => ({
                     value: contract.contractId!,
                     label: contract.id,
-                    description: `版本 v${contract.generationVersion ?? 1} · ${contract.updated}`,
+                    description: `${CONTRACT_TYPE_LABELS[getContractType(contract)]} · 版本 v${contract.generationVersion ?? 1} · ${contract.updated}`,
                   })),
                 ]}
                 disabled={!creatorId}
                 onChange={setDraftContractId}
               />
               <small>选择后沿用历史生成合同 ID</small>
-            </div> : null}
+            </div>
           </div>
           {selectedProject && selectedCreator && !engagementReference ? (
             <p className="contract-upload-empty">该达人尚未关联当前项目，保存时会自动建立项目合作关系。</p>
@@ -513,7 +514,7 @@ export function ContractUploadWizard({
             <span><FileText size={18} /></span>
             <div>
               <h3 id="contract-upload-recognition-title">识别结果</h3>
-              <p>上传后展示完整的原型演示字段，保存后同步到合同详情逐项确认。</p>
+              <p>上传后展示完整的原型演示字段，Channel 可留空，其余适用字段保存后到合同详情确认。</p>
             </div>
             {fields.length ? <em>{fields.length} 项</em> : null}
           </header>

@@ -91,9 +91,15 @@ describe('contract validity', () => {
       signed: false,
       status: '待签署' as const,
     };
-    const pendingSignature = {
+    const pendingUpload = {
       ...contractEnding(futureDate),
       lifecycle: 'GENERATED_DRAFT' as const,
+      signed: false,
+      status: '已生效' as const,
+    };
+    const pendingSignature = {
+      ...contractEnding(futureDate),
+      lifecycle: 'SENT_FOR_SIGNATURE' as const,
       signed: false,
       status: '已生效' as const,
     };
@@ -106,12 +112,13 @@ describe('contract validity', () => {
 
     expect(getContractManagementBucket(editingDraft, REFERENCE_DATE)).toBe('draft');
     expect(getContractManagementBucket(expiredGenerated, REFERENCE_DATE)).toBe('expired');
+    expect(getContractManagementBucket(pendingUpload, REFERENCE_DATE)).toBe('upload');
     expect(getContractManagementBucket(pendingSignature, REFERENCE_DATE)).toBe('signature');
     expect(getContractManagementBucket(pendingConfirmation, REFERENCE_DATE)).toBe('attention');
     expect(getContractManagementBucket({ ...baseContract, campaignEnd: futureDate, status: '待解析' }, REFERENCE_DATE)).toBe('ready');
   });
 
-  it('provides two resumable demo records for each pending management tab', () => {
+  it('moves the generated demo records from pending signature to pending upload', () => {
     const bucketCounts = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.reduce<Record<string, number>>((counts, contract) => {
       const bucket = getContractManagementBucket(contract, '2026-09-09');
       counts[bucket] = (counts[bucket] ?? 0) + 1;
@@ -119,7 +126,8 @@ describe('contract validity', () => {
     }, {});
 
     expect(CONTRACT_MANAGEMENT_DEMO_CONTRACTS).toHaveLength(6);
-    expect(bucketCounts).toMatchObject({ attention: 2, draft: 2, signature: 2 });
+    expect(bucketCounts).toMatchObject({ attention: 2, draft: 2, upload: 2 });
+    expect(bucketCounts.signature ?? 0).toBe(0);
     expect(bucketCounts.ready ?? 0).toBe(0);
     expect(bucketCounts.expired ?? 0).toBe(0);
 

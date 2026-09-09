@@ -42,6 +42,7 @@ describe('ContractsPage batch actions', () => {
     expect(html).toContain('role="tab" aria-selected="false">可付款<span>');
     expect(html).toContain('role="tab" aria-selected="false">待处理<span>');
     expect(html).toContain('role="tab" aria-selected="false">草稿箱<span>0</span>');
+    expect(html).toContain('role="tab" aria-selected="false">待上传<span>0</span>');
     expect(html).toContain('role="tab" aria-selected="false">待签署<span>0</span>');
     expect(html).toContain('role="tab" aria-selected="false">已到期<span>0</span>');
     expect(html).not.toContain('role="tab" aria-selected="false">模板<span>');

@@ -26,10 +26,6 @@ export function ContractDocumentView({
     contract.creatorHandle ?? contract.channelName,
     contract.creatorPlatform ?? contract.platform,
   );
-  const campaignPeriod = contract.campaignStart && contract.campaignEnd
-    ? `${contract.campaignStart} to ${contract.campaignEnd}`
-    : 'To be confirmed';
-
   return (
     <article className="contract-paper" aria-label={ariaLabel}>
       <header className="contract-paper-title">
@@ -128,7 +124,6 @@ export function ContractDocumentView({
             <tr><th>Project / Brand</th><td>{contract.project} / {contract.brand}</td></tr>
             <tr><th>Publisher</th><td>{contract.publisher || 'To be confirmed'}</td></tr>
             <tr><th>Platform / Channel</th><td>{contract.platform || '—'} / {channelName}</td></tr>
-            <tr><th>Campaign Period</th><td>{campaignPeriod}</td></tr>
             <tr><th>Project Total Fees</th><td>{formatContractMoney(contract)}</td></tr>
             <tr><th>Linked Payment Account</th><td>{contract.accountName || 'To be confirmed'} {contract.accountFingerprint}</td></tr>
           </tbody>

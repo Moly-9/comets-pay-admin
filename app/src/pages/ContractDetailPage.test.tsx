@@ -11,6 +11,7 @@ import {
 } from '../contracts';
 import {
   ContractDetailPage,
+  contractRecognitionKeysToConfirm,
   contractExpiryDisplayValue,
   contractSummaryFieldsFor,
   recognitionCampaignEndValue,
@@ -135,6 +136,25 @@ describe('ContractDetailPage expiry presentation', () => {
     });
   });
 
+  it('excludes a missing optional Channel from confirmation but includes it when populated', () => {
+    const missingChannel = recognitionField('platformChannel', '', {});
+    const populatedChannel = recognitionField('platformChannel', 'YouTube: @sample', {
+      platform: 'YouTube',
+      handle: '@sample',
+      channelUrl: 'https://youtube.com/@sample',
+    });
+    const publisher = recognitionField('publisher', 'Sample Creator', 'Sample Creator');
+
+    expect(contractRecognitionKeysToConfirm(
+      [publisher, missingChannel],
+      ['publisher', 'platformChannel'],
+    )).toEqual(['publisher']);
+    expect(contractRecognitionKeysToConfirm(
+      [publisher, populatedChannel],
+      ['publisher', 'platformChannel'],
+    )).toEqual(['publisher', 'platformChannel']);
+  });
+
   it('keeps contract header actions side by side when the title wraps', () => {
     const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
@@ -164,10 +184,11 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(html).toContain('通用字段');
     expect(html).toContain('银行转账字段');
     expect(html).toContain('PayPal 字段');
-    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(4);
-    expect((html.match(/>系统自动带入</g) ?? [])).toHaveLength(4);
-    expect((html.match(/>生成时人工填写</g) ?? [])).toHaveLength(4);
-    expect((html.match(/>不生成</g) ?? [])).toHaveLength(4);
+    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(3);
+    expect((html.match(/>系统自动带入</g) ?? [])).toHaveLength(3);
+    expect((html.match(/>生成时人工填写</g) ?? [])).toHaveLength(3);
+    expect(html).not.toContain('>不生成<');
+    expect(html).not.toContain('Campaign Period');
     expect(html).not.toContain('添加字段');
     expect(html).not.toContain('删除字段');
     expect(html).not.toContain('已启动');

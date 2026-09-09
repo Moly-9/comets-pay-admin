@@ -3,6 +3,7 @@ import type { CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import { createGeneratedContractDraft, INITIAL_CONTRACTS, type ContractGenerationModel } from './contracts';
 import {
   CONTRACT_TEMPLATE_OUTPUT_FIELDS,
+  CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS,
   ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
   DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
   contractTemplateOutputFieldApplies,
@@ -14,6 +15,7 @@ import {
   getContractTemplateSupportedPayoutProviders,
   hasManualPayoutDocumentDifferences,
   resolveContractTemplateFieldPolicies,
+  resolveEditableContractTemplateFieldPolicies,
   resolveContractTemplateOutput,
   resolveContractTemplateOutputFieldKeys,
   validateContractTemplateFieldPolicies,
@@ -85,16 +87,18 @@ const model = (): ContractGenerationModel => ({
 });
 
 describe('contract template field policies', () => {
-  it('migrates old templates to 14 complete defaults', () => {
+  it('keeps 14 legacy definitions while exposing 13 current fields without Campaign Period', () => {
     const resolved = resolveContractTemplateFieldPolicies();
 
     expect(CONTRACT_TEMPLATE_OUTPUT_FIELDS).toHaveLength(14);
+    expect(CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS).toHaveLength(13);
     expect(resolved).toEqual(DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES);
     expect(resolved.campaignPeriod).toBe('MANUAL');
     expect(resolved.remittanceInformation).toBe('SYSTEM');
     expect(resolved.transferNote).toBe('SYSTEM');
     expect(Object.values(resolved).filter((mode) => mode === 'SYSTEM')).toHaveLength(13);
     expect(resolveContractTemplateOutputFieldKeys()).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
+    expect(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS).not.toContain('campaignPeriod');
     expect(getContractTemplateStatus({})).toBe('ACTIVE');
     expect(getContractTemplateStatus(INITIAL_CONTRACTS[1])).toBe('ACTIVE');
   });
@@ -117,6 +121,7 @@ describe('contract template field policies', () => {
       },
       campaignPeriod: { startDate: '2026-09-01', endDate: '2026-09-30' },
     };
+    source.templateOutputFieldKeys = [...ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS, 'campaignPeriod'];
 
     const output = resolveContractTemplateOutput(source);
 
@@ -145,21 +150,23 @@ describe('contract template field policies', () => {
     )).toEqual(['PayPal']);
   });
 
-  it('enforces the Account Number / IBAN alternative at template level', () => {
+  it('normalizes legacy omitted modes to current defaults', () => {
     const invalid = {
       ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
       accountNumber: 'OMIT' as const,
       iban: 'OMIT' as const,
     };
 
-    expect(validateContractTemplateFieldPolicies(invalid)).toEqual([
-      expect.objectContaining({ id: 'bank-account-locator-omitted', fieldKeys: ['accountNumber', 'iban'] }),
-    ]);
-    expect(getContractTemplatePolicyReadiness(invalid).ready).toBe(false);
+    expect(validateContractTemplateFieldPolicies(invalid)).toEqual([]);
+    expect(getContractTemplatePolicyReadiness(invalid).ready).toBe(true);
+    expect(resolveEditableContractTemplateFieldPolicies(invalid)).toMatchObject({
+      accountNumber: 'SYSTEM',
+      iban: 'SYSTEM',
+    });
     expect(validateContractTemplateFieldPolicies({ ...invalid, iban: 'MANUAL' })).toEqual([]);
   });
 
-  it('marks omitted inline fields as not ready while allowing a valid update to be saved', () => {
+  it('preserves omitted legacy output but removes OMIT when an editable template is saved', () => {
     const omittedPublisher = { ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, publisher: 'OMIT' as const };
     const readiness = getContractTemplatePolicyReadiness(omittedPublisher);
     const update = createContractTemplatePolicyUpdate(
@@ -172,18 +179,14 @@ describe('contract template field policies', () => {
       { updated: '2026-08-30' },
     );
 
-    expect(readiness.ready).toBe(false);
-    expect(readiness.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'required-inline-missing-publisher' }),
-    ]));
-    expect(update.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'required-inline-missing-publisher' }),
-    ]));
+    expect(readiness.ready).toBe(true);
+    expect(readiness.blockers).toEqual([]);
+    expect(update.issues).toEqual([]);
     expect(update.contract?.updated).toBe('2026-08-30');
-    expect(update.contract?.templateFieldPolicies?.publisher).toBe('OMIT');
+    expect(update.contract?.templateFieldPolicies?.publisher).toBe('SYSTEM');
     expect(update.contract.templateOutputFieldKeys).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
     expect(contractTemplatePoliciesAreDirty(DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES, omittedPublisher)).toBe(true);
-    expect(contractTemplatePoliciesAreDirty(omittedPublisher, update.contract?.templateFieldPolicies)).toBe(false);
+    expect(contractTemplatePoliciesAreDirty(omittedPublisher, update.contract?.templateFieldPolicies)).toBe(true);
   });
 
   it('freezes policy and manual document values without mutating the verified account snapshot', () => {
@@ -238,7 +241,7 @@ describe('contract template field policies', () => {
     expect(resolveContractTemplateOutputFieldKeys([])).toEqual([]);
   });
 
-  it('blocks invalid activation and auto-deactivates an active template when invalid changes are saved', () => {
+  it('normalizes legacy OMIT values during activation and saving without deactivation', () => {
     const invalidPolicies = {
       ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
       publisher: 'OMIT' as const,
@@ -258,10 +261,11 @@ describe('contract template field policies', () => {
       templateOutputFieldKeys: ['advertiser', 'publisher'],
     }, 'INACTIVE');
 
-    expect(activation.contract).toBeUndefined();
-    expect(activation.issues[0]?.groupKeys).toContain('COMMON');
-    expect(save.autoDeactivated).toBe(true);
-    expect(save.contract.templateStatus).toBe('INACTIVE');
+    expect(activation.contract?.templateFieldPolicies?.publisher).toBe('SYSTEM');
+    expect(activation.issues).toEqual([]);
+    expect(save.autoDeactivated).toBe(false);
+    expect(save.contract.templateStatus).toBe('ACTIVE');
+    expect(save.contract.templateFieldPolicies?.publisher).toBe('SYSTEM');
     expect(save.contract.templateOutputFieldKeys).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
     expect(deactivation.contract?.templateOutputFieldKeys).toEqual(ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS);
   });

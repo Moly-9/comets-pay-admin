@@ -183,8 +183,10 @@ export const contractAssociationCandidates = (
 
 const contractStateUnavailableReason = (contract: ContractRecord) => {
   if (getContractValidity(contract).expired) return '合同已失效';
-  if (contract.lifecycle === 'GENERATED_DRAFT') return '草稿尚未回传签署文件';
+  if (contract.lifecycle === 'GENERATED_DRAFT') return '正式合同已生成，尚未上传待签署文件';
   if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '已上传，待人工确认';
+  if (contract.lifecycle === 'RECOGNITION_CONFIRMED') return '识别信息已确认，待发送达人签署';
+  if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return '已发送达人，待完成签署';
   if (!contract.signed) return '合同尚未完成签署';
   return getContractReadiness(contract).label;
 };
