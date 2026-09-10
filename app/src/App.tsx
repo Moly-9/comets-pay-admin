@@ -5083,6 +5083,7 @@ export default function App() {
         generatedInvoices,
         paymentLists,
         contracts,
+        paymentBatches,
       })
     : null;
 
@@ -5688,6 +5689,7 @@ export default function App() {
           paymentLists={paymentLists}
           contracts={contracts}
           creators={creators}
+          paymentBatches={paymentBatches}
           initialTab={paymentWorkbenchInitialTab}
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}

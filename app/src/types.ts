@@ -620,6 +620,9 @@ export type PaymentAttemptSnapshot = Readonly<{
   paymentCode?: string;
   attemptNumber: number;
   status: Extract<PayoutStatus, '付款失败' | '已付款'>;
+  /** 财务执行打款并提交付款渠道的时间；与渠道回写时间 occurredAt 分离。 */
+  submittedAt?: string;
+  /** 付款渠道回写成功或失败结果的时间。 */
   occurredAt?: string;
   principalAmount: number;
   principalCurrency: InvoiceCurrency;

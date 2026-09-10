@@ -19,6 +19,10 @@ import {
 } from '../paymentCurrencyOverview';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import {
+  paymentExecutionDatesForPayouts,
+  type PaymentBatchRecord,
+} from '../paymentBatches';
+import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
   aggregatePaymentStatus,
@@ -149,7 +153,7 @@ export type PaymentProjectRow = {
   amountTotals: PaymentCurrencyItem[];
   transferFeeTotals: PaymentCurrencyItem[];
   actualPaidTotals: PaymentCurrencyItem[];
-  actualPaidDates: string[];
+  paymentSubmittedDates: string[];
   invoiceIds: string[];
   invoiceCurrencyById: Record<string, string>;
   status: string;
@@ -214,7 +218,10 @@ const aggregateOptionalPaymentAmounts = (
   return result;
 }, new Map()).values()));
 
-const paymentResultFieldsFor = (payouts: Payout[]) => {
+const paymentResultFieldsFor = (
+  payouts: Payout[],
+  paymentBatches: readonly PaymentBatchRecord[] = [],
+) => {
   const paidPayouts = payouts.filter((payout) => payout.status === '已付款');
   return {
     transferFeeTotals: aggregateOptionalPaymentAmounts(
@@ -227,9 +234,7 @@ const paymentResultFieldsFor = (payouts: Payout[]) => {
       (payout) => payout.actualPaidAmount,
       (payout) => payout.actualPaidCurrency,
     ),
-    actualPaidDates: [...new Set(paidPayouts.flatMap((payout) => (
-      payout.paidAt ? [payout.paidAt.split(/[T ]/)[0]] : []
-    )))].sort(),
+    paymentSubmittedDates: paymentExecutionDatesForPayouts(payouts, paymentBatches),
   };
 };
 
@@ -247,7 +252,7 @@ const paymentProjectSearchText = (project: PaymentProjectRow) => [
   project.paymentEntity,
   ...project.transferFeeTotals.map((item) => `${item.currency} ${item.amount}`),
   ...project.actualPaidTotals.map((item) => `${item.currency} ${item.amount}`),
-  ...project.actualPaidDates,
+  ...project.paymentSubmittedDates,
   `${project.contracts}份合同`,
   `${project.invoices}份invoice`,
   project.paymentOrder,
@@ -396,11 +401,13 @@ export const buildPaymentProjectRows = ({
   payouts,
   requests,
   generatedInvoices,
+  paymentBatches = [],
 }: {
   tab: WorkbenchTab;
   payouts: Payout[];
   requests: RequestProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  paymentBatches?: readonly PaymentBatchRecord[];
 }): PaymentProjectRow[] => {
   const invoiceById = new Map(generatedInvoices.map((invoice) => [invoice.invoiceId, invoice]));
   const requestProjectCodes = new Set(requests.flatMap((request) => [
@@ -426,7 +433,7 @@ export const buildPaymentProjectRows = ({
         ? request.amount
         : projectPayouts.length ? summarizePayoutAmounts(projectPayouts) : request.amount;
       const presentation = paymentProjectPresentation(tab, projectPayouts, request.approval?.status);
-      const paymentResults = paymentResultFieldsFor(projectPayouts);
+      const paymentResults = paymentResultFieldsFor(projectPayouts, paymentBatches);
       const invoiceCurrencyCounts = [...invoiceIds].reduce<Map<string, number>>((counts, invoiceId) => {
         const currency = invoiceById.get(invoiceId)?.snapshot.currency;
         if (currency) counts.set(currency, (counts.get(currency) ?? 0) + 1);
@@ -486,7 +493,7 @@ export const buildPaymentProjectRows = ({
   const legacyRows = [...legacyByProject.entries()].map(([projectId, projectPayouts]): PaymentProjectRow => {
     const project = getProjectFixture(projectId);
     const presentation = paymentProjectPresentation(tab, projectPayouts);
-    const paymentResults = paymentResultFieldsFor(projectPayouts);
+    const paymentResults = paymentResultFieldsFor(projectPayouts, paymentBatches);
     return {
       id: `legacy:${projectId}`,
       requestCode: projectId,
@@ -645,7 +652,9 @@ function PaymentProjectTable({
                   </td>
                   <td className="payment-project-date-cell">
                     <span className="payment-project-value-stack">
-                      {project.actualPaidDates.length ? project.actualPaidDates.map((date) => <span key={date}>{date}</span>) : <span className="payment-project-value-muted">{paymentResultFallback(project)}</span>}
+                      {project.paymentSubmittedDates.length
+                        ? project.paymentSubmittedDates.map((date) => <span key={date}>{date}</span>)
+                        : <span className="payment-project-value-muted">—</span>}
                     </span>
                   </td>
                   <td className="payment-project-initiator" title={project.media}>{project.media}</td>
@@ -693,6 +702,7 @@ export function PaymentWorkbenchPage({
   paymentLists = [],
   contracts = [],
   creators = [],
+  paymentBatches = [],
   onNewBatch,
   onSelectPayout,
   onSelectPaidProject,
@@ -712,6 +722,7 @@ export function PaymentWorkbenchPage({
   paymentLists?: PaymentListRecord[];
   contracts?: ContractRecord[];
   creators?: CreatorProfile[];
+  paymentBatches?: readonly PaymentBatchRecord[];
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
   onSelectPaidProject: (project: PaymentProjectRow) => void;
@@ -753,8 +764,8 @@ export function PaymentWorkbenchPage({
 
   const rowsByTab = useMemo(() => Object.fromEntries(TAB_LABELS.map((tab) => [
     tab.id,
-    buildPaymentProjectRows({ tab: tab.id, payouts, requests, generatedInvoices }),
-  ])) as Record<WorkbenchTab, PaymentProjectRow[]>, [generatedInvoices, payouts, requests]);
+    buildPaymentProjectRows({ tab: tab.id, payouts, requests, generatedInvoices, paymentBatches }),
+  ])) as Record<WorkbenchTab, PaymentProjectRow[]>, [generatedInvoices, paymentBatches, payouts, requests]);
   const reviewSummary = useMemo(
     () => summarizePaymentProjectRows(rowsByTab.review),
     [rowsByTab],

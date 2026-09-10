@@ -77,7 +77,8 @@ const item = {
   transactionReference: 'COMETS-MINA-0818',
   description: 'Instagram Reels 内容合作',
   paymentStatus: '已付款',
-  paidAt: '2026-08-18T12:00',
+  paymentSubmittedAt: '2026-08-18T12:00',
+  paidAt: '2026-08-19T00:05',
   associationIssues: [],
 } satisfies PaymentBatchItemSnapshot;
 
@@ -177,7 +178,7 @@ describe('payment project documents', () => {
       '付款方式',
       '付款至',
       '账户名',
-      '付款日期',
+      '实际付款日期',
       '付款方支付的金额',
       '付款方支付的币种',
       '状态',
@@ -203,7 +204,8 @@ describe('payment project documents', () => {
     const baseConfirmationItem = {
       ...item,
       accountName: 'Mina Kato',
-      paidAt: '2026-08-18T23:59:59-11:00',
+      paymentSubmittedAt: '2026-08-18T23:59:59-11:00',
+      paidAt: '2026-08-20T00:05:00+08:00',
     } satisfies PaymentBatchItemSnapshot;
     const archiveBlob = await createPaymentProjectConfirmationArchive({
       items: [
@@ -222,7 +224,8 @@ describe('payment project documents', () => {
           provider: 'PayMax',
           accountName: 'PayMax Account',
           amount: 10,
-          paidAt: '2026-08-19T00:01:00+14:00',
+          paymentSubmittedAt: '2026-08-19T00:01:00+14:00',
+          paidAt: '2026-08-20T00:10:00+08:00',
         },
         {
           ...baseConfirmationItem,
@@ -232,7 +235,7 @@ describe('payment project documents', () => {
         {
           ...baseConfirmationItem,
           payoutId: 'payout_documents_no_date',
-          paidAt: undefined,
+          paymentSubmittedAt: undefined,
         },
       ],
       loadAsset: async (path) => {
@@ -258,7 +261,7 @@ describe('payment project documents', () => {
 
   it('blocks confirmation export when no paid item has an actual payment date', async () => {
     await expect(createPaymentProjectConfirmationArchive({
-      items: [{ ...item, paidAt: undefined }],
+      items: [{ ...item, paymentSubmittedAt: undefined }],
       loadAsset: async () => new Blob(['unused']),
     })).rejects.toThrow('当前没有具备实际付款日期的已付款明细');
   });

@@ -214,7 +214,7 @@ export const createPaymentProjectDetailWorkbook = async ({
     { header: '付款方式', key: 'method', width: 18 },
     { header: '付款至', key: 'country', width: 22 },
     { header: '账户名', key: 'accountName', width: 28 },
-    { header: '付款日期', key: 'paidAt', width: 16 },
+    { header: '实际付款日期', key: 'paidAt', width: 16 },
     { header: '付款方支付的金额', key: 'actualPaidAmount', width: 22 },
     { header: '付款方支付的币种', key: 'actualPaidCurrency', width: 20 },
     { header: '状态', key: 'status', width: 16 },
@@ -232,7 +232,7 @@ export const createPaymentProjectDetailWorkbook = async ({
       method: item.localClearingSystem || item.transferMethod || '待补充',
       country: item.recipientCountry || '待补充',
       accountName: item.accountName || '待补充',
-      paidAt: paid ? workbookDateLabel(item.paidAt) : '—',
+      paidAt: paid ? workbookDateLabel(item.paymentSubmittedAt) : '—',
       actualPaidAmount: paid && item.actualPaidAmount !== undefined ? item.actualPaidAmount : '—',
       actualPaidCurrency: paid ? item.actualPaidCurrency || '—' : '—',
       status: item.paymentStatus,
@@ -277,7 +277,7 @@ export const createPaymentItemConfirmationPdf = async ({
   loadAsset?: ConfirmationAssetLoader;
   genericPdf?: (item: PaymentBatchItemSnapshot) => Promise<Blob>;
 }) => {
-  if (item.paymentStatus !== '已付款' || !paymentDateKey(item.paidAt)) {
+  if (item.paymentStatus !== '已付款' || !paymentDateKey(item.paymentSubmittedAt)) {
     throw new Error('仅具备实际付款日期的已付款明细可以下载确认函。');
   }
   return item.provider === 'Airwallex'
@@ -300,7 +300,9 @@ export const createPaymentProjectConfirmationArchive = async ({
   loadAsset?: ConfirmationAssetLoader;
   genericPdf?: (item: PaymentBatchItemSnapshot) => Promise<Blob>;
 }) => {
-  const eligibleItems = items.filter((item) => item.paymentStatus === '已付款' && paymentDateKey(item.paidAt));
+  const eligibleItems = items.filter((item) => (
+    item.paymentStatus === '已付款' && paymentDateKey(item.paymentSubmittedAt)
+  ));
   if (!eligibleItems.length) throw new Error('当前没有具备实际付款日期的已付款明细。');
   const [{ default: JSZip }, airwallexTemplate] = await Promise.all([
     import('jszip'),
@@ -311,7 +313,7 @@ export const createPaymentProjectConfirmationArchive = async ({
   const zip = new JSZip();
   const filenameCounts = new Map<string, number>();
   for (const item of eligibleItems) {
-    const date = paymentDateKey(item.paidAt);
+    const date = paymentDateKey(item.paymentSubmittedAt);
     const folderName = `${date}-${safeFileSegment(paymentProviderDisplayName(item.provider), '付款渠道')}-确认函`;
     const accountName = safeFileSegment(item.accountName || item.creatorName, '收款方账户');
     const baseFilename = `${date}${accountName}-${confirmationAmountSegment(item.amount)} ${item.currency}`;

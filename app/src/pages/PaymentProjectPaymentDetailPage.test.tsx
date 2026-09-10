@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { applyPaymentBatchPrototypeScenario, PAYMENT_BATCH_RETRY_DEMO } from '../paymentBatchPrototypeScenario';
-import { createPaymentProjectPaymentRecord } from '../paymentBatches';
+import { createInitialPaymentBatches, createPaymentProjectPaymentRecord } from '../paymentBatches';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import {
   buildPaymentProjectAttemptRows,
@@ -16,6 +16,13 @@ const resources = applyPaymentBatchPrototypeScenario({
   generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
   paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
 });
+const paymentBatches = createInitialPaymentBatches({
+  payouts: resources.payouts,
+  requests: resources.requests,
+  generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+  paymentLists: resources.paymentLists,
+  contracts: INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
+});
 
 const failedRequest = resources.requests.find((request) => request.requestCode === 'REQ-202607-000011')!;
 const failedRecord = createPaymentProjectPaymentRecord({
@@ -24,6 +31,7 @@ const failedRecord = createPaymentProjectPaymentRecord({
   generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
   paymentLists: resources.paymentLists,
   contracts: INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
+  paymentBatches,
 });
 const partialFailureRequest = resources.requests.find((request) => (
   request.requestCode === 'REQ-202607-000015'
@@ -34,6 +42,7 @@ const partialFailureRecord = createPaymentProjectPaymentRecord({
   generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
   paymentLists: resources.paymentLists,
   contracts: INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
+  paymentBatches,
 });
 
 describe('PaymentProjectPaymentDetailPage', () => {
@@ -81,7 +90,12 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('付款项目信息');
     expect(html).toContain('本页面仅展示当前付款项目，不混入同批次的其他项目');
     expect(html).toContain('>付款编号</dt>');
+    expect(html).toContain('>付款渠道</dt>');
     expect(html).toContain('>付款金额</dt>');
+    const projectInfoStart = html.indexOf('payment-batch-project-grid payment-project-info-cards');
+    const projectInfo = html.slice(projectInfoStart, html.indexOf('</dl>', projectInfoStart));
+    expect(projectInfo.indexOf('付款编号')).toBeLessThan(projectInfo.indexOf('付款渠道'));
+    expect(projectInfo.indexOf('付款渠道')).toBeLessThan(projectInfo.indexOf('付款金额'));
     expect(html).toContain(`simple-status is-success"><i></i>${failedRecord.status}`);
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
@@ -93,7 +107,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
       '付款类型',
       '付款渠道',
       '收款银行账号',
-      '付款日期',
+      '实际付款日期',
       '付款金额',
       '实际付款金额',
       '实际总手续费',
@@ -199,6 +213,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     const paidItem = {
       ...sourceItem,
       paymentStatus: '已付款' as const,
+      paymentSubmittedAt: '2026-08-25T23:55:00.000Z',
       paidAt: '2026-08-26T18:30:00.000Z',
       transferFeeAmount: 8.5,
       transferFeeCurrency: 'USD' as const,
@@ -217,7 +232,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
       />,
     );
 
-    expect(paidHtml).toContain('2026-08-26');
+    expect(paidHtml).toContain('2026-08-25');
+    expect(paidHtml).not.toContain('2026-08-26');
     expect(paidHtml).toContain('USD 1,258.5');
     expect(paidHtml).toContain('USD 8.5');
     expect(paidHtml).toContain('simple-status is-success');
@@ -243,7 +259,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
       />,
     );
 
-    expect((processingHtml.match(/待渠道回写/g) ?? [])).toHaveLength(3);
+    expect((processingHtml.match(/待渠道回写/g) ?? [])).toHaveLength(2);
+    expect(processingHtml).toContain('2026-08-25');
     expect(processingHtml).not.toContain('USD 1,258.5');
     expect(processingHtml).not.toContain('USD 8.5');
 
@@ -268,7 +285,8 @@ describe('PaymentProjectPaymentDetailPage', () => {
     const failedRowStart = failedHtml.indexOf('<tbody>');
     const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</tr>', failedRowStart));
 
-    expect(failedDataRow).toContain('2026-08-26');
+    expect(failedDataRow).toContain('2026-08-25');
+    expect(failedDataRow).not.toContain('2026-08-26');
     expect(failedDataRow).not.toContain('USD 1,258.5');
     expect((failedDataRow.match(/USD 8.5/g) ?? [])).toHaveLength(2);
   });
@@ -344,11 +362,15 @@ describe('PaymentProjectPaymentDetailPage', () => {
 
     expect((drawerHtml.match(/payment-project-attempt-card/g) ?? [])).toHaveLength(2);
     expect(drawerHtml).toContain('首次付款');
+    expect(drawerHtml).toContain('付款批次号');
     expect(drawerHtml).toContain('所属批次');
     expect(drawerHtml).toContain('BAT-20260805-008');
     expect(drawerHtml).toContain('BAT-20260806-001');
-    expect(drawerHtml).toContain('付款时间');
-    expect(drawerHtml).toContain('2026-08-05 16:05');
+    expect(drawerHtml).toContain('执行打款时间');
+    expect(drawerHtml).toContain('2026-08-05 16:00');
+    expect(drawerHtml).toContain('2026-08-06 10:15');
+    expect(drawerHtml).toContain('渠道回写时间');
+    expect(drawerHtml).toContain('2026-08-06 10:20');
     expect(drawerHtml).toContain('HKD 30.58');
     expect(drawerHtml).toContain('HKD 15,318.58');
     expect(drawerHtml).toContain('累计实际付款金额');
@@ -363,6 +385,23 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(paymentInfo).not.toContain('<dt>支付总金额</dt>');
     expect(paymentInfo).not.toContain('<dt>手续费金额</dt>');
     expect(paymentInfo).not.toContain('<dt>交易后余额</dt>');
+
+    const firstAttemptDrawerHtml = renderToStaticMarkup(
+      <PaymentProjectItemDrawer
+        item={retryItem!}
+        payout={retryPayout}
+        selectedAttemptNumber={1}
+        canHandleFailure={false}
+        onClose={vi.fn()}
+      />,
+    );
+    const resultGridStart = firstAttemptDrawerHtml.indexOf('payment-project-item-drawer-grid');
+    const resultGrid = firstAttemptDrawerHtml.slice(
+      resultGridStart,
+      firstAttemptDrawerHtml.indexOf('</dl>', resultGridStart),
+    );
+    expect(resultGrid).toContain(`<dt>付款批次号</dt><dd class="payment-project-drawer-payment-code">${PAYMENT_BATCH_RETRY_DEMO.originalBatchCode}</dd>`);
+    expect(resultGrid).not.toContain(PAYMENT_BATCH_RETRY_DEMO.retryBatchCode);
   });
 
   it('uses legacy successful results and keeps abnormal multi-currency attempts separated', () => {

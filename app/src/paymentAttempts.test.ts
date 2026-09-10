@@ -54,6 +54,8 @@ describe('payment attempt snapshots', () => {
       expect.objectContaining({
         principalAmount: 1_250,
         paymentCode: 'PMT-2608300001',
+        submittedAt: '2026-08-30T10:00:00.000Z',
+        occurredAt: '2026-08-30T10:05:00.000Z',
         transferFeeAmount: 2.5,
         actualPaidAmount: 2.5,
         recipientReceivedAmount: 0,

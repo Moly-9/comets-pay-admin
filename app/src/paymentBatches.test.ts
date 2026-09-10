@@ -22,6 +22,7 @@ import {
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
   paymentBatchStatusCounts,
+  paymentExecutionDatesForPayouts,
 } from './paymentBatches';
 import {
   PAYMENT_BATCH_PARTIAL_FAILURE_DEMO,
@@ -245,6 +246,55 @@ const buildInput = () => {
 };
 
 describe('payment batch snapshots', () => {
+  it('matches legacy attempt execution dates by attempt number instead of the latest batch', () => {
+    const input = buildInput();
+    const template = createPaymentBatchRecord(input);
+    const payout = {
+      ...input.payouts[0],
+      currentPaymentAttempt: {
+        paymentBatchId: 'payment_batch_retry' as PaymentBatchId,
+        paymentBatchCode: 'BAT-RETRY-002',
+        submittedAt: '2026-08-06T10:15',
+        attemptNumber: 2,
+      },
+      paymentAttempts: [
+        {
+          attemptNumber: 1,
+          status: '付款失败' as const,
+          occurredAt: '2026-08-05T16:05',
+          principalAmount: input.payouts[0].amount,
+          principalCurrency: input.payouts[0].currency,
+        },
+        {
+          attemptNumber: 2,
+          status: '已付款' as const,
+          occurredAt: '2026-08-06T10:20',
+          principalAmount: input.payouts[0].amount,
+          principalCurrency: input.payouts[0].currency,
+        },
+      ],
+    } satisfies Payout;
+    const originalBatch = {
+      ...template,
+      paymentBatchId: 'payment_batch_original' as PaymentBatchId,
+      paymentBatchCode: 'BAT-ORIGINAL-001',
+      paymentAttemptNumber: 1,
+      submittedAt: '2026-08-05T16:00',
+    };
+    const retryBatch = {
+      ...template,
+      paymentBatchId: payout.currentPaymentAttempt.paymentBatchId,
+      paymentBatchCode: payout.currentPaymentAttempt.paymentBatchCode,
+      paymentAttemptNumber: 2,
+      submittedAt: payout.currentPaymentAttempt.submittedAt,
+    };
+
+    expect(paymentExecutionDatesForPayouts([payout], [retryBatch, originalBatch])).toEqual([
+      '2026-08-05',
+      '2026-08-06',
+    ]);
+  });
+
   it('creates one processing batch when a request project starts payment execution', () => {
     const input = buildInput();
     const record = createPaymentExecutionBatchRecord({
@@ -268,6 +318,7 @@ describe('payment batch snapshots', () => {
       fundingAccountId: 'mock-awx-operating',
       sourceCurrency: 'USD',
       payer: '财务测试员',
+      submittedAt: '2026-08-11T10:30:00.000Z',
       paidAt: '2026-08-11T10:30:00.000Z',
       status: '付款处理中',
       lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
@@ -275,6 +326,10 @@ describe('payment batch snapshots', () => {
     expect(record.request.paymentRequestProjectId).toBe(input.requests[0].paymentRequestProjectId);
     expect(record.items).toHaveLength(input.payouts.length);
     expect(record.items.every((item) => item.paymentOrderCode === record.paymentOrderCode)).toBe(true);
+    expect(record.items.every((item) => item.paymentBatchId === record.paymentBatchId)).toBe(true);
+    expect(record.items.every((item) => item.paymentBatchCode === record.paymentBatchCode)).toBe(true);
+    expect(record.items.every((item) => item.paymentSubmittedAt === record.submittedAt)).toBe(true);
+    expect(record.items.every((item) => item.paidAt === undefined)).toBe(true);
     expect(record.items.every((item) => item.paymentStatus === '付款处理中')).toBe(true);
     expect(record.items.every((item) => item.postTransactionBalance === undefined)).toBe(true);
   });
@@ -440,7 +495,9 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].recipientCountry).toBe('United States');
     expect(record.items[0].postTransactionBalance).toBe(48_741.5);
     expect(record.items[0].postTransactionBalanceCurrency).toBe('USD');
-    expect(record.items[0].paidAt).toBe('2026-08-10T10:30');
+    expect(record.submittedAt).toBe('2026-08-10T10:30');
+    expect(record.items[0].paymentSubmittedAt).toBe('2026-08-10T10:30');
+    expect(record.items[0].paidAt).toBeUndefined();
   });
 
   it('normalizes successful batch and attempt snapshots into the recipient currency', () => {
@@ -629,11 +686,18 @@ describe('payment batch snapshots', () => {
 
   it('builds a project-level payment record without including payouts from other requests', () => {
     const input = buildInput();
+    const paymentBatch = createPaymentBatchRecord(input);
     const failedPayout: Payout = {
       ...input.payouts[0],
       paymentRequestProjectId: input.requests[0].paymentRequestProjectId,
       status: '付款失败',
       paidAt: '2026-08-10T10:30',
+      currentPaymentAttempt: {
+        paymentBatchId: paymentBatch.paymentBatchId,
+        paymentBatchCode: paymentBatch.paymentBatchCode,
+        submittedAt: '2026-08-10T10:25',
+        attemptNumber: 1,
+      },
       paymentFailure: {
         provider: 'Airwallex',
         errorCode: 'BENEFICIARY_UNAVAILABLE',
@@ -647,6 +711,7 @@ describe('payment batch snapshots', () => {
       generatedInvoices: input.generatedInvoices,
       paymentLists: input.paymentLists,
       contracts: input.contracts,
+      paymentBatches: [paymentBatch],
     });
 
     expect(record.request.requestCode).toBe('REQ-TEST-001');
@@ -655,6 +720,12 @@ describe('payment batch snapshots', () => {
     expect(record.providers).toEqual(['Airwallex']);
     expect(record.status).toBe('部分失败');
     expect(record.lastActivityAt).toBe('2026-08-10T10:35');
+    expect(record.items[0]).toMatchObject({
+      paymentBatchId: paymentBatch.paymentBatchId,
+      paymentBatchCode: paymentBatch.paymentBatchCode,
+      paymentSubmittedAt: '2026-08-10T10:30',
+      paidAt: '2026-08-10T10:30',
+    });
   });
 
   it('builds all prototype batch states with consistent request and item snapshots', () => {
@@ -734,7 +805,8 @@ describe('payment batch snapshots', () => {
       expect(new Set(record.items.map((item) => item.provider))).toEqual(new Set([record.provider]));
       expect(record.items.every((item) => item.paymentOrderCode === record.paymentOrderCode)).toBe(true);
       expect(record.items.every((item) => item.paymentAttemptNumber === record.paymentAttemptNumber)).toBe(true);
-      expect(record.items.every((item) => item.paidAt === record.paidAt)).toBe(true);
+      expect(record.submittedAt).toBe(record.paidAt);
+      expect(record.items.every((item) => item.paymentSubmittedAt === record.submittedAt)).toBe(true);
       expect(record.items.every((item) => item.invoice && item.contracts.length && item.paymentListId)).toBe(true);
       expect(record.items.every((item) => item.associationIssues.length === 0)).toBe(true);
       expect(new Set(record.items.map((item) => item.currency))).toEqual(new Set([record.sourceCurrency]));

@@ -55,6 +55,7 @@ export const paymentAttemptSnapshotFor = ({
       ?? (payout.paymentAttempts?.length ? payout.paymentAttempts.length + 1 : 1),
   ),
   status,
+  submittedAt: payout.currentPaymentAttempt?.submittedAt,
   occurredAt,
   principalAmount: payout.amount,
   principalCurrency: payout.currency,
