@@ -413,6 +413,8 @@ export type ProjectListFilters = {
   currency: string;
   minBudget: string;
   maxBudget: string;
+  startDate: string;
+  endDate: string;
   statuses: string[];
 };
 
@@ -422,8 +424,19 @@ export const createEmptyProjectListFilters = (): ProjectListFilters => ({
   currency: 'all',
   minBudget: '',
   maxBudget: '',
+  startDate: '',
+  endDate: '',
   statuses: [],
 });
+
+export const correctedProjectFilterDateRange = (
+  startDate: string,
+  endDate: string,
+  changedBoundary: 'start' | 'end',
+): [string, string] => {
+  if (!startDate || !endDate || startDate <= endDate) return [startDate, endDate];
+  return changedBoundary === 'start' ? [startDate, startDate] : [endDate, endDate];
+};
 
 export const REQUEST_PROJECT_STATUS_OPTIONS = [
   'PM审批中',
@@ -472,6 +485,7 @@ export function ProjectInlineFilterPanel({
   searchPlaceholder = '搜索项目名称或编号',
   listAriaLabel = '项目列表筛选',
   countLabel = '个项目',
+  dateRangeLabel,
 }: {
   search: string;
   filters: ProjectListFilters;
@@ -490,11 +504,14 @@ export function ProjectInlineFilterPanel({
   searchPlaceholder?: string;
   listAriaLabel?: string;
   countLabel?: string;
+  dateRangeLabel?: string;
 }) {
   const hasBudgetFilter = filters.currency !== 'all' || Boolean(filters.minBudget || filters.maxBudget);
+  const hasDateFilter = Boolean(filters.startDate || filters.endDate);
   const activeFilterCount = Number(filters.customers.length > 0)
     + Number(filters.pms.length > 0)
     + Number(hasBudgetFilter)
+    + Number(hasDateFilter)
     + Number(filters.statuses.length > 0);
   const hasActiveFilters = activeFilterCount > 0 || Boolean(search.trim());
   const selectedStatusOption = statusOptions.find((option) => {
@@ -592,6 +609,37 @@ export function ProjectInlineFilterPanel({
             }}
           />
         </div>
+        {dateRangeLabel ? (
+          <div className="project-filter-field project-inline-filter-date">
+            <span className="project-filter-field-label">{dateRangeLabel}</span>
+            <div className="project-filter-date-range" role="group" aria-label={`${dateRangeLabel}区间`}>
+              <CalendarDays size={16} aria-hidden="true" />
+              <label>
+                <span className="sr-only">{dateRangeLabel}开始日期</span>
+                <input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(event) => onFiltersChange((current) => {
+                    const [startDate, endDate] = correctedProjectFilterDateRange(event.target.value, current.endDate, 'start');
+                    return { ...current, startDate, endDate };
+                  })}
+                />
+              </label>
+              <span className="project-filter-date-divider" aria-hidden="true">—</span>
+              <label>
+                <span className="sr-only">{dateRangeLabel}结束日期</span>
+                <input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(event) => onFiltersChange((current) => {
+                    const [startDate, endDate] = correctedProjectFilterDateRange(current.startDate, event.target.value, 'end');
+                    return { ...current, startDate, endDate };
+                  })}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
         <div className="project-inline-filter-meta">
           <span>
             {hasActiveFilters

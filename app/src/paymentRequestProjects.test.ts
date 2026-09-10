@@ -29,6 +29,7 @@ import {
   paymentRequestCreatorPresentation,
   paymentRequestExtraDetailIssues,
   paymentRequestDraftCreatorsReady,
+  paymentRequestFirstSubmittedAt,
   paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
   paymentRequestPaymentPlanFor,
@@ -868,6 +869,75 @@ describe('media payment request list presentation', () => {
     const result = filterPaymentRequestList({ requests, search: 'streaming', filters });
     expect(result.invalidBudgetRange).toBe(false);
     expect(result.visible.map((request) => request.id)).toEqual(['request-2']);
+  });
+
+  it('keeps the first approval submission time across later approval rounds', () => {
+    const request = {
+      approval: {
+        ...approvalState('PENDING_PM'),
+        round: 3,
+        submittedAt: '2026-08-09T02:00:00.000Z',
+        submissionHistory: [
+          { round: 3, submittedAt: '2026-08-09T02:00:00.000Z' },
+          { round: 1, submittedAt: '2026-08-07T02:00:00.000Z' },
+          { round: 2, submittedAt: '2026-08-08T02:00:00.000Z' },
+        ],
+      },
+    };
+
+    expect(paymentRequestFirstSubmittedAt(request)).toBe('2026-08-07T02:00:00.000Z');
+    expect(paymentRequestFirstSubmittedAt({ approval: approvalState('PENDING_PM') }))
+      .toBe('2026-08-07T02:00:00.000Z');
+    expect(paymentRequestFirstSubmittedAt({})).toBeUndefined();
+  });
+
+  it('filters inclusive Shanghai submission dates and excludes unsubmitted drafts', () => {
+    const datedRequests: PaymentRequestListItem[] = [
+      {
+        ...requests[0],
+        id: 'shanghai-august-7',
+        approval: { ...approvalState('PENDING_PM'), submittedAt: '2026-08-07T15:59:00.000Z' },
+      },
+      {
+        ...requests[1],
+        id: 'shanghai-august-8',
+        approval: { ...approvalState('PENDING_FINANCE'), submittedAt: '2026-08-07T16:00:00.000Z' },
+      },
+      {
+        ...requests[2],
+        id: 'unsubmitted-draft',
+        lifecycle: 'DRAFT',
+        approval: undefined,
+      },
+    ];
+
+    const august8Only = filterPaymentRequestList({
+      requests: datedRequests,
+      search: '',
+      filters: { ...createEmptyPaymentRequestListFilters(), startDate: '2026-08-08', endDate: '2026-08-08' },
+    });
+    expect(august8Only.visible.map((request) => request.id)).toEqual(['shanghai-august-8']);
+
+    const throughAugust7 = filterPaymentRequestList({
+      requests: datedRequests,
+      search: '',
+      filters: { ...createEmptyPaymentRequestListFilters(), endDate: '2026-08-07' },
+    });
+    expect(throughAugust7.visible.map((request) => request.id)).toEqual(['shanghai-august-7']);
+
+    const fromAugust8ForPmB = filterPaymentRequestList({
+      requests: datedRequests,
+      search: '',
+      filters: { ...createEmptyPaymentRequestListFilters(), startDate: '2026-08-08', pms: ['PM B'] },
+    });
+    expect(fromAugust8ForPmB.visible.map((request) => request.id)).toEqual(['shanghai-august-8']);
+
+    const withoutDateFilter = filterPaymentRequestList({
+      requests: datedRequests,
+      search: '',
+      filters: createEmptyPaymentRequestListFilters(),
+    });
+    expect(withoutDateFilter.visible).toHaveLength(3);
   });
 
   it('accepts a live payment-status resolver for the My Projects status filter', () => {

@@ -5,7 +5,26 @@ import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { PaymentBatchRecord } from '../paymentBatches';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
-import { InvoicePage, INITIAL_CREATORS, OrganizationPage, TransactionsPage } from './OperationalPages';
+import {
+  correctedProjectFilterDateRange,
+  InvoicePage,
+  INITIAL_CREATORS,
+  OrganizationPage,
+  TransactionsPage,
+} from './OperationalPages';
+
+describe('shared project date filter', () => {
+  it('keeps valid and one-sided ranges and corrects crossed boundaries from the changed side', () => {
+    expect(correctedProjectFilterDateRange('2026-09-01', '2026-09-10', 'start'))
+      .toEqual(['2026-09-01', '2026-09-10']);
+    expect(correctedProjectFilterDateRange('2026-09-01', '', 'end'))
+      .toEqual(['2026-09-01', '']);
+    expect(correctedProjectFilterDateRange('2026-09-11', '2026-09-10', 'start'))
+      .toEqual(['2026-09-11', '2026-09-11']);
+    expect(correctedProjectFilterDateRange('2026-09-11', '2026-09-10', 'end'))
+      .toEqual(['2026-09-10', '2026-09-10']);
+  });
+});
 
 describe('request page labels', () => {
   it('uses the cooperation approval title and business-side description', () => {

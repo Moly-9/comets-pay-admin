@@ -73,6 +73,7 @@ import {
   paymentRequestAmountLabel,
   paymentRequestCreatorPresentation,
   paymentRequestDraftCreatorsReady,
+  paymentRequestFirstSubmittedAt,
   paymentRequestHasPaymentActivity,
   paymentRequestInvoiceIds,
   paymentRequestListMetrics,
@@ -398,6 +399,22 @@ const formatCreatedAt = (value?: string) => {
     minute: '2-digit',
     hour12: false,
   }).format(date);
+};
+
+export const formatPaymentRequestSubmittedAt = (value?: string) => {
+  if (!value) return '未提交';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 };
 
 const formatReturnTime = (value?: string) => {
@@ -1925,10 +1942,11 @@ export function MediaPaymentProjectsPage({
           searchPlaceholder="搜索请款编号或关联项目"
           listAriaLabel="请款列表筛选"
           countLabel="个请款"
+          dateRangeLabel="请款时间"
         />
         <div className="table-scroll">
           <table className="data-table operational-table media-payment-project-table">
-            <thead><tr><th>请款编号</th><th>关联项目</th><th>品牌</th><th>负责 PM</th><th>达人</th><th>请款金额</th><th>请款状态</th><th className="action-cell">操作</th></tr></thead>
+            <thead><tr><th>请款编号</th><th>关联项目</th><th>品牌</th><th>负责 PM</th><th>达人</th><th>请款金额</th><th>请款时间</th><th>请款状态</th><th className="action-cell">操作</th></tr></thead>
             <tbody>
               {paginatedRequests.map((request) => {
                 const returnDetails = requestApprovalReturnDetails(request.approval);
@@ -1944,6 +1962,7 @@ export function MediaPaymentProjectsPage({
                   ? mediaConfirmationItemsFor(request, paymentLists)
                   : [];
                 const isExporting = exportingRequestId === request.id;
+                const firstSubmittedAt = paymentRequestFirstSubmittedAt(request);
                 return (
                   <tr
                     className={`media-payment-project-row${hasPaymentFailure ? ' media-request-payment-failure-row' : isReturned ? ' media-request-returned-row' : ''}`}
@@ -1964,6 +1983,11 @@ export function MediaPaymentProjectsPage({
                     <td>{request.pm}</td>
                     <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
                     <td>{request.amount}</td>
+                    <td className="media-request-submitted-at">
+                      {firstSubmittedAt
+                        ? <time dateTime={firstSubmittedAt}>{formatPaymentRequestSubmittedAt(firstSubmittedAt)}</time>
+                        : <span>未提交</span>}
+                    </td>
                     <td>
                       <div className="media-request-list-status">
                         <ProjectStatus status={requestStatusForDisplay(request)} />
@@ -2007,7 +2031,7 @@ export function MediaPaymentProjectsPage({
                   </tr>
                 );
               })}
-              {!filteredRequests.length ? <tr><td colSpan={8} className="project-list-empty">暂无符合当前搜索与筛选条件的请款</td></tr> : null}
+              {!filteredRequests.length ? <tr><td colSpan={9} className="project-list-empty">暂无符合当前搜索与筛选条件的请款</td></tr> : null}
             </tbody>
           </table>
         </div>
