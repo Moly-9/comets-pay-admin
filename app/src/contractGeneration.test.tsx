@@ -44,6 +44,7 @@ const model: ContractGenerationModel = {
   contractNumber: 'CON-SYNTHETIC-001',
   ioNumber: '',
   advertiser: 'Comets International Limited',
+  advertiserAddress: '99 Synthetic Advertiser Road, Hong Kong',
   publisher: 'Sample Creator Limited',
   publisherAddress: '1 Example Road, Sample City',
   platform: 'YouTube',
@@ -292,6 +293,8 @@ describe('contract generation', () => {
     expect(draftText).toContain('DRAFT');
     expect(formalText).not.toContain('DRAFT');
     expect(formalText).toContain('Standard Terms And Conditions');
+    expect(formalText).toContain(model.advertiser);
+    expect(formalText).toContain(model.advertiserAddress!);
     expect(formalText).toContain(model.publisher);
     expect(formalText).toContain('YouTube');
     expect(formalText).toContain('https://example.invalid/sample-studio');
@@ -334,6 +337,8 @@ describe('contract generation', () => {
 
     expect(formalBlob.type).toContain('officedocument.wordprocessingml.document');
     expect(documentXml).toContain('Standard Terms And Conditions');
+    expect(documentXml).toContain(model.advertiser);
+    expect(documentXml).toContain(model.advertiserAddress);
     expect(documentXml).toContain(model.publisher);
     expect(documentXml).toContain(model.projectName);
     expect(documentXml).toContain('YouTube: https://example.invalid/sample-studio');
@@ -392,6 +397,38 @@ describe('contract generation', () => {
     });
     expect(model.paymentSnapshot.accountName).toBe('Sample Creator Limited');
   }, 60_000);
+
+  it('uses the manual Advertiser name and address and omits both rows together', () => {
+    const manual: ContractGenerationModel = {
+      ...model,
+      advertiserAddress: '88 Manual Advertiser Avenue, Singapore',
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        advertiser: 'MANUAL',
+      },
+      templateManualFieldValues: {
+        advertiser: 'Manual Advertiser Pte. Ltd.',
+      },
+    };
+    expect(replaceContractPlaceholders(
+      '{{advertiser_name}}|{{advertiser_address}}',
+      manual,
+      'FORMAL',
+    )).toBe('Manual Advertiser Pte. Ltd.|88 Manual Advertiser Avenue, Singapore');
+
+    const omitted = createContractQualityReport({
+      ...model,
+      advertiser: '',
+      advertiserAddress: '',
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        advertiser: 'OMIT',
+      },
+    });
+    expect(omitted.issues.some((issue) => (
+      issue.id === 'missing-advertiser_name' || issue.id === 'missing-advertiser_address'
+    ))).toBe(false);
+  });
 
   it('applies PayPal manual fields, preserves legacy omitted output, and ignores removed Campaign Period', () => {
     const paypal: ContractGenerationModel = {

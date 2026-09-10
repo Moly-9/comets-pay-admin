@@ -103,8 +103,24 @@ const isRequired = (
     : definition.required
 );
 
+const contractAdvertiserApplies = (model: ContractGenerationModel) => {
+  const output = resolveContractTemplateOutput(model);
+  return output.outputFieldKeys.includes('advertiser') && output.policies.advertiser !== 'OMIT';
+};
+
 export const CONTRACT_PLACEHOLDER_DEFINITIONS: ContractPlaceholderDefinition[] = [
-  { token: 'advertiser_name', label: 'Advertiser', fieldKey: 'signature', kind: 'text', required: true, pageHint: 1, overflowAt: 100, value: (model) => resolveContractTemplateOutput(model).values.advertiser },
+  { token: 'advertiser_name', label: 'Advertiser', fieldKey: 'signature', kind: 'text', required: true, pageHint: 1, overflowAt: 100, value: (model) => resolveContractTemplateOutput(model).values.advertiser, applicable: contractAdvertiserApplies },
+  {
+    token: 'advertiser_address',
+    label: 'Advertiser Address',
+    fieldKey: 'signature',
+    kind: 'longText',
+    required: true,
+    pageHint: 14,
+    overflowAt: 180,
+    value: (model) => model.advertiserAddress ?? '',
+    applicable: contractAdvertiserApplies,
+  },
   { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 72, value: (model) => resolveContractTemplateOutput(model).values.publisher },
   { token: 'publisher_address', label: 'Publisher Address', fieldKey: 'publisherAddress', kind: 'longText', required: hasCreator, pageHint: 14, overflowAt: 180, value: (model) => model.publisherAddress },
   { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'longText', required: false, pageHint: 1, overflowAt: 240, value: (model) => formatContractPublishingChannelLinks(resolveContractTemplateOutput(model).effectiveModel) || '—' },

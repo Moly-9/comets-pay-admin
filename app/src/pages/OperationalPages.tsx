@@ -52,6 +52,7 @@ import {
 } from '../components/CreatorInvitationDialogs';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { CreatorIdentity, SocialPlatformIcon } from '../components/CreatorIdentity';
+import { EntitySettingsCard } from '../components/EntitySettingsCard';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
@@ -102,8 +103,14 @@ import {
   setDefaultInvoiceBillingEntity,
   updateInvoiceBillingEntity,
   validateInvoiceBillingEntity,
-  type InvoiceBillingEntityErrors,
 } from '../invoice/invoiceBillingEntities';
+import {
+  addContractAdvertiserEntity,
+  removeContractAdvertiserEntity,
+  setDefaultContractAdvertiserEntity,
+  updateContractAdvertiserEntity,
+  validateContractAdvertiserEntity,
+} from '../contractAdvertiserEntities';
 import {
   buildMockElectronicSignature,
   isInvoiceApprovedForPayment,
@@ -125,6 +132,8 @@ import {
 } from '../payoutAccounts';
 import type {
   AirwallexTransferMethod,
+  ContractAdvertiserEntity,
+  ContractAdvertiserSettings,
   CreatorInvoiceContact,
   CreatorProfile,
   CreatorSocialAccount,
@@ -185,6 +194,7 @@ import { RequestProjectDetailPage, type RequestProjectSummary } from './RequestP
 import {
   canEditProject,
   type CooperationProjectId,
+  type ContractAdvertiserEntityId,
   type CreatorId,
   createPrototypeCode,
   createPrototypeId,
@@ -4915,221 +4925,104 @@ export function TransactionsPage({
   );
 }
 
-const ORGANIZATION_COUNTRY_OPTIONS = [
-  { value: 'Hong Kong SAR China', label: 'Hong Kong SAR China', description: '中国香港特别行政区' },
-  { value: 'Singapore', label: 'Singapore', description: '新加坡' },
-  { value: 'United States', label: 'United States', description: '美国' },
-] as const;
-
 export function OrganizationPage({
   notify,
+  contractAdvertiserSettings,
+  onContractAdvertiserSettingsChange,
   invoiceBillingSettings,
   onInvoiceBillingSettingsChange,
 }: {
   notify: Notify;
+  contractAdvertiserSettings: ContractAdvertiserSettings;
+  onContractAdvertiserSettingsChange: (settings: ContractAdvertiserSettings) => void;
   invoiceBillingSettings: InvoiceBillingSettings;
   onInvoiceBillingSettingsChange: (settings: InvoiceBillingSettings) => void;
 }) {
-  const [company, setCompany] = useState('Muse Commerce Limited');
-  const [country, setCountry] = useState('Hong Kong SAR China');
-  const [contact, setContact] = useState<string>(CURRENT_USER.name);
-  const [email, setEmail] = useState('finance@musepay.co');
-  const [address, setAddress] = useState('Unit 18, 16/F, Harbour Centre, Hong Kong');
-  const [entityEditor, setEntityEditor] = useState<{
-    mode: 'create' | 'edit';
-    id?: InvoiceBillingEntityId;
-    name: string;
-    address: string;
-  } | null>(null);
-  const [entityErrors, setEntityErrors] = useState<InvoiceBillingEntityErrors>({});
-  const [deleteTarget, setDeleteTarget] = useState<InvoiceBillingEntity | null>(null);
-
-  const openEntityEditor = (entity?: InvoiceBillingEntity) => {
-    setEntityErrors({});
-    setEntityEditor(entity ? {
-      mode: 'edit',
-      id: entity.id,
-      name: entity.name,
-      address: entity.address,
-    } : {
-      mode: 'create',
-      name: '',
-      address: '',
-    });
-  };
-
-  const saveEntity = () => {
-    if (!entityEditor) return;
-    const errors = validateInvoiceBillingEntity(
-      entityEditor,
-      invoiceBillingSettings.entities,
-      entityEditor.id,
-    );
-    setEntityErrors(errors);
-    if (Object.keys(errors).length) return;
-    if (entityEditor.mode === 'edit' && entityEditor.id) {
-      onInvoiceBillingSettingsChange(updateInvoiceBillingEntity(invoiceBillingSettings, {
-        id: entityEditor.id,
-        name: entityEditor.name,
-        address: entityEditor.address,
-      }));
-      notify('开票主体已更新', `${entityEditor.name.trim()} 的 Bill To 资料已更新。`);
-    } else {
-      onInvoiceBillingSettingsChange(addInvoiceBillingEntity(invoiceBillingSettings, {
-        id: createPrototypeId('invoice-billing-entity') as InvoiceBillingEntityId,
-        name: entityEditor.name,
-        address: entityEditor.address,
-      }));
-      notify('开票主体已添加', `${entityEditor.name.trim()} 已加入可选的 Bill To 主体。`);
-    }
-    setEntityEditor(null);
-  };
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    onInvoiceBillingSettingsChange(removeInvoiceBillingEntity(invoiceBillingSettings, deleteTarget.id));
-    notify('开票主体已删除', `${deleteTarget.name} 已从可选主体中移除，历史 Invoice 快照不受影响。`);
-    setDeleteTarget(null);
-  };
-
   return (
     <div className="page-stack">
       <PageHeading
         title="组织信息"
         subtitle="维护签约与付款流程中使用的企业主体资料。"
-        actions={<Button onClick={() => notify('组织信息已保存', '公司资料与 Invoice 开票主体已在本次会话中更新。')}>保存修改</Button>}
+        actions={<Button onClick={() => notify('组织信息已保存', '合同 Advertiser 与 Invoice 开票主体已在本次会话中更新。')}>保存修改</Button>}
       />
-      <section className="profile-form-card">
-        <div className="form-section-head">
-          <span><Building2 size={21} /></span>
-          <div><h2>公司 / 工作室信息</h2><p>这些信息会显示在请款单、Invoice 审核与付款资料中。</p></div>
-        </div>
-        <div className="form-grid">
-          <label className="full-width">
-            <span>公司 / 工作室名称 <small>{company.length} / 100</small></span>
-            <input value={company} onChange={(event) => setCompany(event.target.value)} />
-          </label>
-          <div className="form-control full-width">
-            <span>国家 / 地区</span>
-            <SelectField
-              ariaLabel="国家 / 地区"
-              variant="form"
-              value={country}
-              options={ORGANIZATION_COUNTRY_OPTIONS}
-              onChange={setCountry}
-            />
-          </div>
-          <label><span>联系人</span><input value={contact} onChange={(event) => setContact(event.target.value)} /></label>
-          <label><span>联系邮箱 *</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label className="full-width"><span>注册地址 <small>{address.length} / 2000</small></span><textarea value={address} onChange={(event) => setAddress(event.target.value)} /></label>
-        </div>
-        <button className="add-contact-button" type="button"><Plus size={16} />添加更多联系方式</button>
-      </section>
-      <section className="profile-form-card invoice-entity-card">
-        <div className="invoice-entity-section-head">
-          <div className="form-section-head">
-            <span><FileText size={21} /></span>
-            <div><h2>Invoice 开票主体</h2><p>作为生成文件中的 Bill To 信息，与公司 / 工作室资料独立维护。</p></div>
-          </div>
-          <Button variant="secondary" icon={<Plus size={16} />} onClick={() => openEntityEditor()}>新增开票主体</Button>
-        </div>
-        <div className="invoice-entity-list" role="radiogroup" aria-label="默认 Invoice 开票主体">
-          {invoiceBillingSettings.entities.map((entity) => {
-            const isDefault = entity.id === invoiceBillingSettings.defaultEntityId;
-            const deleteDisabled = isDefault || invoiceBillingSettings.entities.length === 1;
-            const deleteHint = invoiceBillingSettings.entities.length === 1
-              ? '至少需要保留一个开票主体'
-              : isDefault
-                ? '请先将其他主体设为默认后再删除'
-                : `删除 ${entity.name}`;
-            return (
-              <div className={`invoice-entity-row${isDefault ? ' is-default' : ''}`} key={entity.id}>
-                <label className="invoice-entity-default-control">
-                  <input
-                    type="radio"
-                    name="default-invoice-entity"
-                    checked={isDefault}
-                    onChange={() => {
-                      onInvoiceBillingSettingsChange(setDefaultInvoiceBillingEntity(invoiceBillingSettings, entity.id));
-                      notify('默认开票主体已更新', `${entity.name} 将在新建 Invoice 时默认选中。`);
-                    }}
-                  />
-                  <span>{isDefault ? '默认主体' : '设为默认'}</span>
-                </label>
-                <div className="invoice-entity-row-content">
-                  <strong>{entity.name}</strong>
-                  <p>{entity.address}</p>
-                </div>
-                <div className="invoice-entity-row-actions">
-                  <button className="icon-button" type="button" aria-label={`编辑 ${entity.name}`} title="编辑开票主体" onClick={() => openEntityEditor(entity)}>
-                    <Pencil size={17} />
-                  </button>
-                  <button className="icon-button is-danger" type="button" aria-label={`删除 ${entity.name}`} title={deleteHint} disabled={deleteDisabled} onClick={() => setDeleteTarget(entity)}>
-                    <Trash2 size={17} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="invoice-entity-note"><CheckCircle2 size={16} /><span>新建 Invoice 默认带入默认主体；单张 Invoice 仍可临时修改地址。</span></div>
-      </section>
-      {entityEditor ? (
-        <Modal
-          title={entityEditor.mode === 'create' ? '新增开票主体' : '编辑开票主体'}
-          className="invoice-entity-editor-modal"
-          onClose={() => setEntityEditor(null)}
-          footer={(
-            <>
-              <Button variant="secondary" onClick={() => setEntityEditor(null)}>取消</Button>
-              <Button onClick={saveEntity}>{entityEditor.mode === 'create' ? '确认添加' : '保存修改'}</Button>
-            </>
-          )}
-        >
-          <div className="form-grid invoice-entity-editor-form">
-            <label className={`full-width ${entityErrors.name || entityErrors.duplicate ? 'has-error' : ''}`}>
-              <span>Bill To 公司名称 * <small>{entityEditor.name.length} / 100</small></span>
-              <input
-                value={entityEditor.name}
-                maxLength={100}
-                autoComplete="organization"
-                onChange={(event) => {
-                  setEntityEditor((current) => current ? { ...current, name: event.target.value } : current);
-                  setEntityErrors((current) => ({ ...current, name: undefined, duplicate: undefined }));
-                }}
-              />
-              <small role={entityErrors.name || entityErrors.duplicate ? 'alert' : undefined}>{entityErrors.name ?? entityErrors.duplicate}</small>
-            </label>
-            <label className={`full-width ${entityErrors.address ? 'has-error' : ''}`}>
-              <span>Bill To 地址 * <small>{entityEditor.address.length} / 500</small></span>
-              <textarea
-                value={entityEditor.address}
-                maxLength={500}
-                autoComplete="street-address"
-                onChange={(event) => {
-                  setEntityEditor((current) => current ? { ...current, address: event.target.value } : current);
-                  setEntityErrors((current) => ({ ...current, address: undefined, duplicate: undefined }));
-                }}
-              />
-              <small role={entityErrors.address ? 'alert' : undefined}>{entityErrors.address}</small>
-            </label>
-          </div>
-        </Modal>
-      ) : null}
-      {deleteTarget ? (
-        <Modal
-          title="删除开票主体"
-          onClose={() => setDeleteTarget(null)}
-          footer={(
-            <>
-              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>取消</Button>
-              <Button variant="danger" onClick={confirmDelete}>确认删除</Button>
-            </>
-          )}
-        >
-          <p>确定删除“{deleteTarget.name}”吗？已生成的历史 Invoice 会继续保留原 Bill To 快照。</p>
-        </Modal>
-      ) : null}
+      <EntitySettingsCard<ContractAdvertiserEntityId>
+        icon={<Building2 size={21} />}
+        title="公司 / 工作室信息"
+        description="这些信息会出现在合同的Advertiser中"
+        addLabel="新增 Advertiser 主体"
+        createTitle="新增 Advertiser 主体"
+        editTitle="编辑 Advertiser 主体"
+        deleteTitle="删除 Advertiser 主体"
+        nameLabel="Advertiser 公司名称"
+        addressLabel="Advertiser 地址"
+        entityNoun="合同 Advertiser 主体"
+        defaultGroupLabel="默认合同 Advertiser 主体"
+        defaultInputName="default-contract-advertiser-entity"
+        note="新建合同默认带入默认主体；每份合同仍可选择其他主体。"
+        deleteHistoryNote="已生成的历史合同会继续保留原 Advertiser 快照。"
+        entities={contractAdvertiserSettings.entities}
+        defaultEntityId={contractAdvertiserSettings.defaultEntityId}
+        validate={validateContractAdvertiserEntity}
+        onCreate={(draft) => {
+          onContractAdvertiserSettingsChange(addContractAdvertiserEntity(contractAdvertiserSettings, {
+            id: createPrototypeId('contract-advertiser-entity') as ContractAdvertiserEntityId,
+            ...draft,
+          }));
+          notify('Advertiser 主体已添加', `${draft.name} 已加入合同可选主体。`);
+        }}
+        onUpdate={(entity) => {
+          onContractAdvertiserSettingsChange(updateContractAdvertiserEntity(contractAdvertiserSettings, entity));
+          notify('Advertiser 主体已更新', `${entity.name} 的合同主体资料已更新。`);
+        }}
+        onDefaultChange={(id) => {
+          const entity = contractAdvertiserSettings.entities.find((candidate) => candidate.id === id);
+          onContractAdvertiserSettingsChange(setDefaultContractAdvertiserEntity(contractAdvertiserSettings, id));
+          if (entity) notify('默认 Advertiser 已更新', `${entity.name} 将在新建合同时默认选中。`);
+        }}
+        onDelete={(entity: ContractAdvertiserEntity) => {
+          onContractAdvertiserSettingsChange(removeContractAdvertiserEntity(contractAdvertiserSettings, entity.id));
+          notify('Advertiser 主体已删除', `${entity.name} 已从合同可选主体中移除，历史合同快照不受影响。`);
+        }}
+      />
+      <EntitySettingsCard<InvoiceBillingEntityId>
+        icon={<FileText size={21} />}
+        title="Invoice 开票主体"
+        description="作为生成文件中的 Bill To 信息，与公司 / 工作室资料独立维护。"
+        addLabel="新增开票主体"
+        createTitle="新增开票主体"
+        editTitle="编辑开票主体"
+        deleteTitle="删除开票主体"
+        nameLabel="Bill To 公司名称"
+        addressLabel="Bill To 地址"
+        entityNoun="开票主体"
+        defaultGroupLabel="默认 Invoice 开票主体"
+        defaultInputName="default-invoice-entity"
+        note="新建 Invoice 默认带入默认主体；单张 Invoice 仍可临时修改地址。"
+        deleteHistoryNote="已生成的历史 Invoice 会继续保留原 Bill To 快照。"
+        entities={invoiceBillingSettings.entities}
+        defaultEntityId={invoiceBillingSettings.defaultEntityId}
+        validate={validateInvoiceBillingEntity}
+        onCreate={(draft) => {
+          onInvoiceBillingSettingsChange(addInvoiceBillingEntity(invoiceBillingSettings, {
+            id: createPrototypeId('invoice-billing-entity') as InvoiceBillingEntityId,
+            ...draft,
+          }));
+          notify('开票主体已添加', `${draft.name} 已加入可选的 Bill To 主体。`);
+        }}
+        onUpdate={(entity) => {
+          onInvoiceBillingSettingsChange(updateInvoiceBillingEntity(invoiceBillingSettings, entity));
+          notify('开票主体已更新', `${entity.name} 的 Bill To 资料已更新。`);
+        }}
+        onDefaultChange={(id) => {
+          const entity = invoiceBillingSettings.entities.find((candidate) => candidate.id === id);
+          onInvoiceBillingSettingsChange(setDefaultInvoiceBillingEntity(invoiceBillingSettings, id));
+          if (entity) notify('默认开票主体已更新', `${entity.name} 将在新建 Invoice 时默认选中。`);
+        }}
+        onDelete={(entity: InvoiceBillingEntity) => {
+          onInvoiceBillingSettingsChange(removeInvoiceBillingEntity(invoiceBillingSettings, entity.id));
+          notify('开票主体已删除', `${entity.name} 已从可选主体中移除，历史 Invoice 快照不受影响。`);
+        }}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { ContractRecognitionField, ContractSourceDocument } from './contrac
 import {
   createPrototypeId,
   type CooperationProjectId,
+  type ContractAdvertiserEntityId,
   type ContractId,
   type CreatorId,
   type EngagementId,
@@ -245,7 +246,11 @@ export type ContractGenerationModel = {
   engagementId: EngagementId;
   contractNumber: string;
   ioNumber: string;
+  /** Selected configured entity; absent on legacy drafts and manual one-off values. */
+  advertiserEntityId?: ContractAdvertiserEntityId;
   advertiser: string;
+  /** Frozen with the draft so later organization-setting edits do not alter history. */
+  advertiserAddress?: string;
   publisher: string;
   publisherAddress: string;
   platform: string;

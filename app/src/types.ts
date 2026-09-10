@@ -1,5 +1,6 @@
 import type {
   CooperationProjectId,
+  ContractAdvertiserEntityId,
   ContractId,
   CreatorId,
   EngagementId,
@@ -282,6 +283,17 @@ export type InvoiceBillingEntity = {
 export type InvoiceBillingSettings = {
   entities: InvoiceBillingEntity[];
   defaultEntityId: InvoiceBillingEntityId;
+};
+
+export type ContractAdvertiserEntity = {
+  id: ContractAdvertiserEntityId;
+  name: string;
+  address: string;
+};
+
+export type ContractAdvertiserSettings = {
+  entities: ContractAdvertiserEntity[];
+  defaultEntityId: ContractAdvertiserEntityId;
 };
 
 export type InvoiceLineItem = {

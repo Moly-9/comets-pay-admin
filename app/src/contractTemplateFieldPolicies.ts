@@ -432,6 +432,9 @@ export const resolveContractTemplateOutput = (
   const effectiveModel: ContractGenerationModel = {
     ...model,
     advertiser: values.advertiser,
+    advertiserAddress: activeFields.has('advertiser') && policies.advertiser !== 'OMIT'
+      ? model.advertiserAddress
+      : '',
     publisher: values.publisher,
     publishingChannels,
     platform: publishingChannels.map((channel) => channel.platform.trim()).filter(Boolean).join(' · '),

@@ -53,6 +53,11 @@ import {
   removeContractPublishingChannelAt,
   validateContractGenerationModel,
 } from '../contractGenerationModel';
+import {
+  defaultContractAdvertiserEntity,
+  findContractAdvertiserEntityForSnapshot,
+  LEGACY_CONTRACT_ADVERTISER_ADDRESS,
+} from '../contractAdvertiserEntities';
 import type {
   ContractGeneratedFiles,
   ContractGenerationModel,
@@ -70,7 +75,7 @@ import {
   getPayoutAccountSummary,
 } from '../payoutAccounts';
 import { downloadBlob } from '../invoice/invoiceUtils';
-import type { CreatorProfile } from '../types';
+import type { ContractAdvertiserSettings, CreatorProfile } from '../types';
 import { createContractQualityReport } from '../contractTemplate';
 import {
   ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
@@ -90,6 +95,7 @@ type GeneratedFiles = {
 type Props = {
   projects: ProjectSummary[];
   creators: CreatorProfile[];
+  contractAdvertiserSettings: ContractAdvertiserSettings;
   initialEngagementId?: EngagementId | null;
   existingDraft?: ContractRecord | null;
   contractTemplate?: ContractRecord | null;
@@ -217,6 +223,7 @@ export const contractBuilderTemplateOutputFieldKeys = (
 export function ContractBuilderPage({
   projects,
   creators,
+  contractAdvertiserSettings,
   initialEngagementId,
   existingDraft,
   contractTemplate,
@@ -234,6 +241,8 @@ export function ContractBuilderPage({
     () => contractBuilderTemplateOutputFieldKeys(draftModel),
     [draftModel],
   );
+  const configuredAdvertiserMode = draftModel?.templateFieldPolicies?.advertiser
+    ?? contractTemplate?.templateFieldPolicies?.advertiser;
   const supportedPayoutProviders = useMemo(() => getContractTemplateSupportedPayoutProviders(
     templateFieldPolicies,
     templateOutputFieldKeys,
@@ -241,6 +250,12 @@ export function ContractBuilderPage({
   const templateHasOutputField = (key: ContractTemplateOutputFieldKey) => (
     templateOutputFieldKeys.includes(key)
   );
+  const defaultAdvertiserEntity = defaultContractAdvertiserEntity(contractAdvertiserSettings)!;
+  const matchedDraftAdvertiserEntity = findContractAdvertiserEntityForSnapshot(
+    contractAdvertiserSettings,
+    draftModel,
+  );
+  const historicalAdvertiserEntityValue = '__contract_advertiser_snapshot__';
   const initialContext = findInitialContext(projects, initialEngagementId);
   const initialProjectId = findProjectIdForDraft(existingDraft)
     || String(initialContext?.project.cooperationProjectId ?? initialContext?.project.projectId ?? initialContext?.project.id ?? '');
@@ -277,6 +292,11 @@ export function ContractBuilderPage({
   const [contractType, setContractType] = useState<NonNullable<ContractGenerationModel['contractType']>>(draftModel?.contractType ?? existingDraft?.contractType ?? 'INDEPENDENT');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
   const [contractName, setContractName] = useState(draftModel?.contractName ?? existingDraft?.name ?? '');
+  const [selectedAdvertiserEntityId, setSelectedAdvertiserEntityId] = useState<string>(() => (
+    draftModel
+      ? matchedDraftAdvertiserEntity?.id ?? historicalAdvertiserEntityValue
+      : defaultAdvertiserEntity.id
+  ));
   const [projectName, setProjectName] = useState(draftModel?.projectName ?? initialProject?.name ?? '');
   const [effectiveDate, setEffectiveDate] = useState(draftModel?.effectiveDate ?? '');
   const [campaignStart] = useState('');
@@ -312,6 +332,9 @@ export function ContractBuilderPage({
     }
     return {};
   });
+  const [manualAdvertiserAddress, setManualAdvertiserAddress] = useState(
+    draftModel?.advertiserAddress ?? (draftModel ? LEGACY_CONTRACT_ADVERTISER_ADDRESS : ''),
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generationError, setGenerationError] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -334,6 +357,33 @@ export function ContractBuilderPage({
   const previewTimerRef = useRef<number | null>(null);
 
   const selectedCreator = creators.find((creator) => creator.id === creatorId) ?? null;
+  const selectedAdvertiserEntity = contractAdvertiserSettings.entities.find((entity) => (
+    entity.id === selectedAdvertiserEntityId
+  ));
+  const historicalAdvertiserSnapshot = draftModel ? {
+    id: draftModel.advertiserEntityId,
+    name: draftModel.advertiser,
+    address: draftModel.advertiserAddress ?? LEGACY_CONTRACT_ADVERTISER_ADDRESS,
+  } : null;
+  const systemAdvertiser = selectedAdvertiserEntityId === historicalAdvertiserEntityValue
+    ? historicalAdvertiserSnapshot
+    : selectedAdvertiserEntity ?? defaultAdvertiserEntity;
+  const advertiserOptions = [
+    ...(selectedAdvertiserEntityId === historicalAdvertiserEntityValue && historicalAdvertiserSnapshot ? [{
+      value: historicalAdvertiserEntityValue,
+      label: `${historicalAdvertiserSnapshot.name} · 历史快照`,
+      description: historicalAdvertiserSnapshot.address,
+      badges: [{ label: '历史', tone: 'neutral' as const }],
+    }] : []),
+    ...contractAdvertiserSettings.entities.map((entity) => ({
+      value: entity.id,
+      label: entity.name,
+      description: entity.address,
+      badges: entity.id === contractAdvertiserSettings.defaultEntityId
+        ? [{ label: '默认', tone: 'success' as const }]
+        : undefined,
+    })),
+  ];
   const selectedSocialAccount = resolveCreatorSocialAccount(
     selectedCreator,
     creatorSocialAccountId,
@@ -404,10 +454,31 @@ export function ContractBuilderPage({
   }));
   const resolvedProjectId = String(selectedProject?.cooperationProjectId ?? selectedProject?.projectId ?? selectedProject?.id ?? '');
   const resolvedEngagementId = selectedReference?.engagementId ?? engagementId;
+  const advertiserMode = templateHasOutputField('advertiser')
+    ? configuredAdvertiserMode === 'OMIT' ? 'OMIT' : templateFieldPolicies.advertiser
+    : 'OMIT';
+  const manualAdvertiserName = typeof templateManualFieldValues.advertiser === 'string'
+    ? templateManualFieldValues.advertiser
+    : '';
+  const advertiser = advertiserMode === 'MANUAL'
+    ? manualAdvertiserName
+    : advertiserMode === 'SYSTEM'
+      ? systemAdvertiser?.name ?? ''
+      : '';
+  const advertiserAddress = advertiserMode === 'MANUAL'
+    ? manualAdvertiserAddress
+    : advertiserMode === 'SYSTEM'
+      ? systemAdvertiser?.address ?? ''
+      : '';
+  const advertiserEntityId = advertiserMode === 'SYSTEM'
+    ? (selectedAdvertiserEntityId === historicalAdvertiserEntityValue
+        ? historicalAdvertiserSnapshot?.id
+        : selectedAdvertiserEntity?.id ?? defaultAdvertiserEntity.id)
+    : undefined;
 
   const model = useMemo<ContractGenerationModel>(() => ({
     templateId: 'CON-TPL-2026-KOL',
-    templateFieldPolicies: { ...templateFieldPolicies },
+    templateFieldPolicies: { ...templateFieldPolicies, advertiser: advertiserMode },
     templateOutputFieldKeys: [...templateOutputFieldKeys],
     templateManualFieldValues: cloneTemplateManualValues(templateManualFieldValues),
     contractName,
@@ -428,7 +499,9 @@ export function ContractBuilderPage({
     engagementId: resolvedEngagementId as EngagementId,
     contractNumber,
     ioNumber: '',
-    advertiser: 'Comets International Limited',
+    advertiserEntityId,
+    advertiser,
+    advertiserAddress,
     publisher,
     publisherAddress,
     platform,
@@ -460,6 +533,10 @@ export function ContractBuilderPage({
     payoutProvider,
     paymentSnapshot,
   }), [
+    advertiser,
+    advertiserAddress,
+    advertiserEntityId,
+    advertiserMode,
     campaignEnd,
     campaignStart,
     channelName,
@@ -935,17 +1012,60 @@ export function ContractBuilderPage({
                 />
                 <small>{errors.contractName || '用于合同列表、详情和后续签署文件匹配'}</small>
               </label>
-              {templateHasOutputField('advertiser') && templateFieldPolicies.advertiser !== 'OMIT' ? (
-                <label className={errors.advertiser ? 'has-error' : ''} data-contract-field="signature" {...fieldProps('signature')}>
+              {advertiserMode === 'SYSTEM' ? (
+                <div
+                  className={`invoice-form-control full-width ${errors.advertiser || errors.advertiserAddress ? 'has-error' : ''}`}
+                  data-contract-field="signature"
+                  onFocus={() => setActiveField('signature')}
+                >
                   <span>Advertiser *</span>
-                  <input
-                    value={templateFieldPolicies.advertiser === 'MANUAL' ? manualScalarFieldValue('advertiser') : 'Comets International Limited'}
-                    readOnly={templateFieldPolicies.advertiser !== 'MANUAL'}
-                    placeholder="输入合同 Advertiser"
-                    onChange={(event) => setManualScalarField('advertiser', event.target.value)}
+                  <SelectField
+                    ariaLabel="合同 Advertiser 主体"
+                    variant="form"
+                    menuStrategy="fixed"
+                    value={selectedAdvertiserEntityId}
+                    options={advertiserOptions}
+                    onChange={(value) => {
+                      setSelectedAdvertiserEntityId(value);
+                      setErrors((current) => {
+                        const { advertiser: _advertiser, advertiserAddress: _advertiserAddress, ...rest } = current;
+                        return rest;
+                      });
+                      resetOutput();
+                    }}
                   />
-                  <small>{errors.advertiser || (templateFieldPolicies.advertiser === 'SYSTEM' ? '系统组织信息' : '仅写入本次合同快照')}</small>
-                </label>
+                  <small>{errors.advertiser || errors.advertiserAddress || systemAdvertiser?.address}</small>
+                </div>
+              ) : advertiserMode === 'MANUAL' ? (
+                <>
+                  <label className={errors.advertiser ? 'has-error' : ''} data-contract-field="signature" {...fieldProps('signature')}>
+                    <span>Advertiser *</span>
+                    <input
+                      value={manualScalarFieldValue('advertiser')}
+                      placeholder="输入合同 Advertiser"
+                      maxLength={100}
+                      onChange={(event) => setManualScalarField('advertiser', event.target.value)}
+                    />
+                    <small>{errors.advertiser || '仅写入本次合同快照'}</small>
+                  </label>
+                  <label className={`full-width ${errors.advertiserAddress ? 'has-error' : ''}`} data-contract-field="advertiserAddress" {...fieldProps('signature')}>
+                    <span>Advertiser Address *</span>
+                    <textarea
+                      value={manualAdvertiserAddress}
+                      placeholder="输入合同 Advertiser 地址"
+                      maxLength={500}
+                      onChange={(event) => {
+                        setManualAdvertiserAddress(event.target.value);
+                        setErrors((current) => {
+                          const { advertiserAddress: _advertiserAddress, ...rest } = current;
+                          return rest;
+                        });
+                        resetOutput();
+                      }}
+                    />
+                    <small>{errors.advertiserAddress || '仅写入本次合同快照'}</small>
+                  </label>
+                </>
               ) : null}
               {templateHasOutputField('publisher') && templateFieldPolicies.publisher !== 'OMIT' ? (
                 <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}>

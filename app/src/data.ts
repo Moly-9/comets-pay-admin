@@ -1,5 +1,5 @@
-import type { InvoiceBillingEntityId } from './businessWorkflow';
-import type { InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
+import type { ContractAdvertiserEntityId, InvoiceBillingEntityId } from './businessWorkflow';
+import type { ContractAdvertiserSettings, InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
 import { demoDisplayName } from './demoCreatorNames';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
 import { assignMissingDemoPaymentCodes } from './paymentNumbering';
@@ -410,6 +410,25 @@ export const INITIAL_INVOICE_BILLING_SETTINGS: InvoiceBillingSettings = {
     },
   ],
   defaultEntityId: INITIAL_INVOICE_BILLING_ENTITY_ID,
+};
+
+export const INITIAL_CONTRACT_ADVERTISER_ENTITY_ID = 'cae_fixture_comets_international' as ContractAdvertiserEntityId;
+export const INITIAL_NOVACOMETS_CONTRACT_ADVERTISER_ENTITY_ID = 'cae_fixture_novacomets_limited' as ContractAdvertiserEntityId;
+
+export const INITIAL_CONTRACT_ADVERTISER_SETTINGS: ContractAdvertiserSettings = {
+  entities: [
+    {
+      id: INITIAL_CONTRACT_ADVERTISER_ENTITY_ID,
+      name: INITIAL_INVOICE_ENTITY.name,
+      address: INITIAL_INVOICE_ENTITY.address,
+    },
+    {
+      id: INITIAL_NOVACOMETS_CONTRACT_ADVERTISER_ENTITY_ID,
+      name: INITIAL_INVOICE_BILLING_SETTINGS.entities[1].name,
+      address: INITIAL_INVOICE_BILLING_SETTINGS.entities[1].address,
+    },
+  ],
+  defaultEntityId: INITIAL_CONTRACT_ADVERTISER_ENTITY_ID,
 };
 
 const returnedInvoiceReviewFixture = (

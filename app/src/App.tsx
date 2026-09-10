@@ -33,6 +33,7 @@ import {
 import {
   authenticateSystemUser,
   CURRENT_USER,
+  INITIAL_CONTRACT_ADVERTISER_SETTINGS,
   INITIAL_INVOICE_BILLING_SETTINGS,
   INITIAL_PAYOUTS,
   PAGE_TITLES,
@@ -156,6 +157,7 @@ import {
 } from './pages/OperationalPages';
 import { MediaPaymentProjectsPage } from './pages/MediaPaymentProjectsPage';
 import type {
+  ContractAdvertiserSettings,
   CreatorProfile,
   GeneratedInvoiceRecord,
   InvoiceDocumentModel,
@@ -578,6 +580,9 @@ export default function App() {
   })));
   const [invoiceBillingSettings, setInvoiceBillingSettings] = useState<InvoiceBillingSettings>(
     INITIAL_INVOICE_BILLING_SETTINGS,
+  );
+  const [contractAdvertiserSettings, setContractAdvertiserSettings] = useState<ContractAdvertiserSettings>(
+    INITIAL_CONTRACT_ADVERTISER_SETTINGS,
   );
   const invoiceEntity = invoiceEntitySnapshot(
     defaultInvoiceBillingEntity(invoiceBillingSettings)
@@ -5269,6 +5274,7 @@ export default function App() {
         <ContractBuilderPage
           projects={manageableCooperationProjects}
           creators={creators}
+          contractAdvertiserSettings={contractAdvertiserSettings}
           contractTemplate={editingContractDraftId ? configuredContractTemplate : activeContractTemplate}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
@@ -5619,6 +5625,8 @@ export default function App() {
       pageContent = (
         <OrganizationPage
           notify={notify}
+          contractAdvertiserSettings={contractAdvertiserSettings}
+          onContractAdvertiserSettingsChange={setContractAdvertiserSettings}
           invoiceBillingSettings={invoiceBillingSettings}
           onInvoiceBillingSettingsChange={setInvoiceBillingSettings}
         />

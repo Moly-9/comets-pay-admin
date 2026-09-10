@@ -169,7 +169,8 @@ const hasPartialDateRange = (start: string, end: string) => Boolean(start) !== B
 export const validateContractGenerationModel = (
   model: ContractGenerationModel,
 ) => {
-  const effectiveModel = resolveContractTemplateOutput(model).effectiveModel;
+  const resolvedOutput = resolveContractTemplateOutput(model);
+  const effectiveModel = resolvedOutput.effectiveModel;
   const errors: Record<string, string> = {};
   if (!model.contractName?.trim()) {
     errors.contractName = '请输入合同名称';
@@ -181,6 +182,15 @@ export const validateContractGenerationModel = (
   requiredSelections.forEach(([key, message, value]) => {
     if (!value) errors[key] = message;
   });
+
+  const advertiserApplies = resolvedOutput.outputFieldKeys.includes('advertiser')
+    && resolvedOutput.policies.advertiser !== 'OMIT';
+  if (advertiserApplies && !effectiveModel.advertiser.trim()) {
+    errors.advertiser = '请选择或填写合同 Advertiser';
+  }
+  if (advertiserApplies && !(effectiveModel.advertiserAddress ?? '').trim()) {
+    errors.advertiserAddress = '请填写合同 Advertiser 地址';
+  }
 
   if (model.creatorId) {
     const requiredCreatorProfile: Array<[string, string, string]> = [

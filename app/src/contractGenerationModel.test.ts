@@ -14,6 +14,7 @@ import {
   validateContractGenerationModel,
 } from './contractGenerationModel';
 import { createGeneratedContractDraft, type ContractGenerationModel } from './contracts';
+import { DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES } from './contractTemplateFieldPolicies';
 import {
   createAirwallexPayoutAccount,
   createPayMaxPayoutAccount,
@@ -89,6 +90,7 @@ const validModel = (): ContractGenerationModel => ({
   contractNumber: 'CON-SYNTHETIC-001',
   ioNumber: '',
   advertiser: 'Comets International Limited',
+  advertiserAddress: '99 Synthetic Advertiser Road, Hong Kong',
   publisher: 'Sample Creator Limited',
   publisherAddress: '1 Example Road, Sample City',
   platform: 'YouTube',
@@ -469,6 +471,26 @@ describe('contract generation model', () => {
     expect(model.projectId).toBe('project-synthetic');
     expect(model.creatorId).toBe('creator-synthetic');
     expect(model.engagementId).toBe('engagement-synthetic');
+  });
+
+  it('requires Advertiser name and address unless the template omits the party', () => {
+    const missing = validModel();
+    missing.advertiser = '';
+    missing.advertiserAddress = '';
+    expect(validateContractGenerationModel(missing)).toMatchObject({
+      advertiser: expect.any(String),
+      advertiserAddress: expect.any(String),
+    });
+
+    const omitted = {
+      ...missing,
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        advertiser: 'OMIT' as const,
+      },
+    };
+    expect(validateContractGenerationModel(omitted)).not.toHaveProperty('advertiser');
+    expect(validateContractGenerationModel(omitted)).not.toHaveProperty('advertiserAddress');
   });
 
   it('persists the selected contract type and keeps legacy models independent', () => {

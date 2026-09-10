@@ -361,7 +361,7 @@ const insertionOrderPage = (
 ): ResolvedBlock[] => {
   const partyRows: ResolvedTableRow[] = [
     ...configuredOutputRow(model, 'advertiser', { label: 'Advertiser', value: replaceContractPlaceholders(placeholderToken('advertiser_name'), model, variant), fieldKey: 'signature' }),
-    { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
+    ...configuredOutputRow(model, 'advertiser', { label: 'Advertiser Address', value: replaceContractPlaceholders(placeholderToken('advertiser_address'), model, variant), fieldKey: 'signature' }),
     ...configuredOutputRow(model, 'publisher', { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' }),
     { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
   ];

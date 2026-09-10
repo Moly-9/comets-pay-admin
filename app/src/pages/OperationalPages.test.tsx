@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
+import { INITIAL_CONTRACT_ADVERTISER_SETTINGS, INITIAL_INVOICE_BILLING_SETTINGS, INITIAL_PAYOUTS } from '../data';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import type { PaymentBatchRecord } from '../paymentBatches';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
@@ -35,16 +35,22 @@ describe('request page labels', () => {
   });
 });
 
-describe('OrganizationPage invoice billing entities', () => {
-  it('shows NovaComets as a selectable non-default Invoice entity', () => {
+describe('OrganizationPage document entities', () => {
+  it('shows independent contract and Invoice entities with the shared settings-card layout', () => {
     const html = renderToStaticMarkup(
       <OrganizationPage
         notify={vi.fn()}
+        contractAdvertiserSettings={INITIAL_CONTRACT_ADVERTISER_SETTINGS}
+        onContractAdvertiserSettingsChange={vi.fn()}
         invoiceBillingSettings={INITIAL_INVOICE_BILLING_SETTINGS}
         onInvoiceBillingSettingsChange={vi.fn()}
       />,
     );
 
+    expect(html).toContain('这些信息会出现在合同的Advertiser中');
+    expect(html).toContain('新增 Advertiser 主体');
+    expect(html).toContain('默认合同 Advertiser 主体');
+    expect(html).toContain('默认 Invoice 开票主体');
     expect(html).toContain('COMETS INTERNATIONAL LIMITED');
     expect(html).toContain('NovaComets Limited');
     expect(html).toContain('Unit 04-05, 16F, The Broadway No.54-62 Lockhart Road, Wanchai, Hong Kong, China');
@@ -53,6 +59,10 @@ describe('OrganizationPage invoice billing entities', () => {
     expect(html).toContain('<span>\u8bbe\u4e3a\u9ed8\u8ba4</span>');
     expect(html).toContain('aria-label="\u7f16\u8f91 NovaComets Limited"');
     expect(html).toContain('aria-label="\u5220\u9664 NovaComets Limited"');
+    expect(html).not.toContain('国家 / 地区');
+    expect(html).not.toContain('添加更多联系方式');
+    expect(html.match(/name="default-contract-advertiser-entity"/g)).toHaveLength(2);
+    expect(html.match(/name="default-invoice-entity"/g)).toHaveLength(2);
   });
 });
 

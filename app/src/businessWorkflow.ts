@@ -24,6 +24,7 @@ export type ProjectId = CooperationProjectId;
 export type CreatorId = EntityId<'creator'>;
 export type EngagementId = EntityId<'engagement'>;
 export type ContractId = EntityId<'contract'>;
+export type ContractAdvertiserEntityId = EntityId<'contract-advertiser-entity'>;
 export type InvoiceId = EntityId<'invoice'>;
 export type InvoiceBillingEntityId = EntityId<'invoice-billing-entity'>;
 export type PaymentListId = EntityId<'payment-list'>;
@@ -321,6 +322,7 @@ const PROTOTYPE_ID_PREFIXES = {
   creator: 'crt',
   engagement: 'col',
   contract: 'con',
+  'contract-advertiser-entity': 'cae',
   invoice: 'inv',
   'invoice-billing-entity': 'ibe',
   payout: 'payout',
