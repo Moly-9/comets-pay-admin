@@ -260,6 +260,7 @@ import {
   withPaymentAttemptSnapshot,
 } from './paymentAttempts';
 import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
+import { nextPaymentBusinessCode } from './paymentNumbering';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
@@ -1240,6 +1241,7 @@ export default function App() {
   const payoutFromGeneratedInvoice = (
     record: GeneratedInvoiceRecord,
     existing?: Payout,
+    paymentCode?: string,
   ): Payout => {
       const creator = creators.find((item) => item.id === record.snapshot.creatorId);
       const cooperationProjectId = record.snapshot.cooperationProjectId ?? record.snapshot.projectId;
@@ -1256,6 +1258,7 @@ export default function App() {
       return {
         ...existing,
         id: record.sourcePayoutId,
+        paymentCode: existing?.paymentCode ?? paymentCode,
         creator: record.snapshot.creatorName,
         handle: record.snapshot.creatorHandle,
         creatorSocialAccountId: record.snapshot.creatorSocialAccountId,
@@ -1301,6 +1304,20 @@ export default function App() {
   const addGeneratedInvoices = (records: GeneratedInvoiceRecord[]) => {
     if (!records.length) return;
     const normalized = records.map((record) => ({ ...record, version: record.version ?? 1 }));
+    const reservedPaymentCodes = payouts.map((payout) => payout.paymentCode);
+    const paymentCodesByPayoutId = new Map<string, string>();
+    try {
+      normalized.forEach((record) => {
+        const existing = payouts.find((payout) => payout.id === record.sourcePayoutId);
+        const paymentCode = existing?.paymentCode
+          ?? nextPaymentBusinessCode('PMT', reservedPaymentCodes);
+        paymentCodesByPayoutId.set(record.sourcePayoutId, paymentCode);
+        if (!existing?.paymentCode) reservedPaymentCodes.push(paymentCode);
+      });
+    } catch (error) {
+      notify('无法生成付款明细', error instanceof Error ? error.message : '付款编号生成失败。');
+      return;
+    }
     const relationshipCreatedAt = nowIso();
     const applyEngagements = (projectState: ProjectSummary[], creatorState: CreatorProfile[]) => (
       upsertGeneratedInvoiceEngagements({
@@ -1322,10 +1339,10 @@ export default function App() {
         const record = bySourcePayoutId.get(payout.id);
         if (!record) return payout;
         bySourcePayoutId.delete(payout.id);
-        return payoutFromGeneratedInvoice(record, payout);
+        return payoutFromGeneratedInvoice(record, payout, paymentCodesByPayoutId.get(record.sourcePayoutId));
       });
       const additions = [...bySourcePayoutId.values()].map((record) => (
-        payoutFromGeneratedInvoice(record)
+        payoutFromGeneratedInvoice(record, undefined, paymentCodesByPayoutId.get(record.sourcePayoutId))
       ));
       return [...additions, ...updated];
     });
@@ -1788,10 +1805,20 @@ export default function App() {
       notify('尚无可加入付款清单的 Invoice', '请先为项目达人生成包含付款账户的 Invoice。');
       return;
     }
+    let paymentListCode: string;
+    try {
+      paymentListCode = nextPaymentBusinessCode('PAY', [
+        ...paymentLists.map((item) => item.paymentListCode),
+        ...paymentBatches.map((item) => item.paymentOrderCode),
+      ]);
+    } catch (error) {
+      notify('无法创建付款单', error instanceof Error ? error.message : '付款单编号生成失败。');
+      return;
+    }
     const items = invoices.map((invoice) => invoicePaymentListItem(invoice, contracts));
     const list: PaymentListRecord = {
       paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-      paymentListCode: createPrototypeCode('PAY'),
+      paymentListCode,
       projectId,
       provider: paymentListProviderForItems(items),
       status: 'draft',
@@ -2253,7 +2280,10 @@ export default function App() {
       const actor = { account: currentUser.account, name: currentUser.name, role: currentUser.role };
       const baseList: PaymentListRecord = existingList ?? {
         paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-        paymentListCode: createPrototypeCode('PAY'),
+        paymentListCode: nextPaymentBusinessCode('PAY', [
+          ...paymentLists.map((item) => item.paymentListCode),
+          ...paymentBatches.map((item) => item.paymentOrderCode),
+        ]),
         projectId: request.cooperationProjectId as ProjectId,
         paymentRequestProjectId: request.paymentRequestProjectId,
         provider: requestPaymentProvider,
@@ -3780,9 +3810,13 @@ export default function App() {
           .flatMap((candidate) => candidate.sourceInvoiceNumber ? [candidate.sourceInvoiceNumber] : []),
         actor: externalInvoiceActor(),
       });
+      const paymentCode = nextPaymentBusinessCode('PMT', payouts.map((payout) => payout.paymentCode));
       setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? result.collection : candidate));
       setGeneratedInvoices((current) => [result.invoice, ...current]);
-      setPayouts((current) => [result.payout, ...current]);
+      setPayouts((current) => [{
+        ...result.payout,
+        paymentCode,
+      }, ...current]);
       setInvoiceTab('approved');
       notify('外部 Invoice 审核通过', `${result.invoice.id} 已跳过签署并进入“待发起请款”。`);
     } catch (error) {
@@ -4699,7 +4733,16 @@ export default function App() {
       .toISOString()
       .slice(0, 16);
     const isRetryBatch = retryItems.length > 0;
-    const retryPaymentOrderCode = isRetryBatch ? createPrototypeCode('PAY') : undefined;
+    let retryPaymentOrderCode: string | undefined;
+    try {
+      retryPaymentOrderCode = isRetryBatch ? nextPaymentBusinessCode('PAY', [
+        ...paymentLists.map((item) => item.paymentListCode),
+        ...paymentBatches.map((item) => item.paymentOrderCode),
+      ]) : undefined;
+    } catch (error) {
+      notify('无法创建付款批次', error instanceof Error ? error.message : '付款单编号生成失败。');
+      return;
+    }
     const retryAttemptNumber = isRetryBatch
       ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
       : undefined;

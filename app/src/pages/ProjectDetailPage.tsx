@@ -266,7 +266,7 @@ function createPaymentRecords({
 }): ProjectResourceRecord[] {
   const projectCode = projectId.replace('PRJ-', '');
   return invoices.map((invoice, index) => {
-    const id = `PAY-${projectCode}-${String(index + 1).padStart(2, '0')}`;
+    const id = `PMT-${projectCode}${String(index + 1).padStart(4, '0')}`;
     const channel = invoice.channel ?? '待确认';
     return {
       id,
@@ -387,7 +387,7 @@ const PROJECT_RESOURCE_RECORDS: Record<string, ProjectResourceRecords> = {
     payment: createPaymentRecords({
       projectId: 'PRJ-260718',
       projectName: '夏日直播计划',
-      batchId: 'PAY-260718-04',
+      batchId: 'PAY-2607180004',
       status: '待打款',
       processedAt: '财务复核通过后执行',
       invoices: SUMMER_INVOICE_RECORDS,
@@ -418,7 +418,7 @@ const PROJECT_RESOURCE_RECORDS: Record<string, ProjectResourceRecords> = {
     payment: createPaymentRecords({
       projectId: 'PRJ-260702',
       projectName: '七月联名',
-      batchId: 'PAY-260702-08',
+      batchId: 'PAY-2607020008',
       status: '付款处理中',
       processedAt: '2026-07-17 18:05',
       invoices: COLLAB_INVOICE_RECORDS,
@@ -437,7 +437,7 @@ const PROJECT_RESOURCE_RECORDS: Record<string, ProjectResourceRecords> = {
     payment: createPaymentRecords({
       projectId: 'PRJ-260625',
       projectName: '日本市场测评',
-      batchId: 'PAY-260625-12',
+      batchId: 'PAY-2606250012',
       status: '已完成',
       processedAt: '2026-07-16 14:32',
       invoices: JAPAN_INVOICE_RECORDS,
@@ -453,7 +453,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     updatedAt: '今天 09:36',
     contract: { id: '12 份合同', meta: '对应 12 位达人 · 已关联 12 份 Invoice', status: '履约中' },
     invoice: { id: '12 份 Invoice', meta: '对应 12 份合同 · 请款金额 USD 18,420', status: '财务复核中' },
-    payment: { id: 'PAY-260718-04', meta: 'Airwallex · 12 笔付款', status: '待打款' },
+    payment: { id: 'PAY-2607180004', meta: 'Airwallex · 12 笔付款', status: '待打款' },
     creators: [
       { name: 'Mina Kato', platform: 'TikTok / Instagram', deliverable: '直播 2 场 + 短视频 3 条', status: '已验收' },
       { name: 'Yuki Tanaka', platform: 'Instagram', deliverable: 'Reels 2 条', status: '内容制作中' },
@@ -495,7 +495,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     updatedAt: '2026-07-17 18:05',
     contract: { id: '5 份合同', meta: '对应 5 位达人 · 已关联 5 份 Invoice', status: '已签署' },
     invoice: { id: '5 份 Invoice', meta: '对应 5 份合同 · 请款金额 USD 12,600', status: '已通过' },
-    payment: { id: 'PAY-260702-08', meta: 'Airwallex · 批量付款', status: '付款处理中' },
+    payment: { id: 'PAY-2607020008', meta: 'Airwallex · 批量付款', status: '付款处理中' },
     creators: [
       { name: 'Luna Jones', platform: 'Instagram', deliverable: 'Reels 2 条 + Story 6 条', status: '已验收' },
       { name: 'Emily Wong', platform: 'YouTube', deliverable: '长视频 1 条', status: '已验收' },
@@ -505,7 +505,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
       { label: '项目创建', description: '项目已建立', time: '07-02 10:35', state: 'complete' },
       { label: '合同归档', description: '5 份达人合同已归档', time: '07-08 12:10', state: 'complete' },
       { label: 'Invoice 审核', description: '5 份 Invoice 均已通过', time: '07-15 17:25', state: 'complete' },
-      { label: '付款单生成', description: 'PAY-260702-08', time: '07-16 09:15', state: 'complete' },
+      { label: '付款单生成', description: 'PAY-2607020008', time: '07-16 09:15', state: 'complete' },
       { label: '渠道打款', description: 'Airwallex 正在处理', time: '07-17 18:05', state: 'current' },
     ],
   },
@@ -516,7 +516,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
     updatedAt: '2026-07-16 14:32',
     contract: { id: '16 份合同', meta: '对应 16 位达人 · 已关联 16 份 Invoice', status: '已归档' },
     invoice: { id: '16 份 Invoice', meta: '对应 16 份合同 · 请款金额 USD 41,200', status: '已通过' },
-    payment: { id: 'PAY-260625-12', meta: 'Airwallex · 16 笔付款', status: '已完成' },
+    payment: { id: 'PAY-2606250012', meta: 'Airwallex · 16 笔付款', status: '已完成' },
     creators: [
       { name: 'Kenji Mori', platform: 'YouTube', deliverable: '测评视频 1 条', status: '已完成' },
       { name: 'Mina Kato', platform: 'TikTok', deliverable: '短视频 2 条', status: '已完成' },

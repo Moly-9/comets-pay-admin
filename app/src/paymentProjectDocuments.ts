@@ -117,7 +117,8 @@ export const createPaymentProjectWorkbook = async ({
   sheet.columns = [
     { header: '序号', key: 'sequence', width: 8 },
     { header: '付款项目编号', key: 'requestCode', width: 24 },
-    { header: '付款清单', key: 'paymentListCode', width: 24 },
+    { header: '付款单', key: 'paymentOrderCode', width: 22 },
+    { header: '付款编号', key: 'paymentCode', width: 22 },
     { header: '达人', key: 'creatorName', width: 22 },
     { header: '达人账号', key: 'creatorHandle', width: 22 },
     { header: '合同', key: 'contracts', width: 34 },
@@ -135,7 +136,7 @@ export const createPaymentProjectWorkbook = async ({
     { header: '付款状态', key: 'paymentStatus', width: 16 },
     { header: '付款时间', key: 'paidAt', width: 22 },
   ];
-  sheet.autoFilter = { from: 'A1', to: 'S1' };
+  sheet.autoFilter = { from: 'A1', to: 'T1' };
   sheet.getRow(1).height = 34;
   sheet.getRow(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D5664' } };
@@ -145,7 +146,8 @@ export const createPaymentProjectWorkbook = async ({
     const row = sheet.addRow({
       sequence: index + 1,
       requestCode: request.requestCode,
-      paymentListCode: item.paymentListCode,
+      paymentOrderCode: item.paymentOrderCode || item.paymentListCode,
+      paymentCode: item.paymentCode || '付款编号待补全',
       creatorName: item.creatorName,
       creatorHandle: formatCreatorHandle(item.creatorHandle, item.creatorPlatform),
       contracts: item.contracts.map((contract) => contract.contractCode).join('、') || item.legacyContractReference || '未关联',

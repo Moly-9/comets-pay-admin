@@ -47,6 +47,21 @@ Handle、合同号、Invoice 号、收款账号和第三方 ID 只能作为业�
 - 编号不携带用户、地区、渠道、金额或其他业务含义。
 - 编号允许在页面搜索，但不得用于数据库表之间的关联。
 
+付款域有两类经业务确认的编号例外，不使用上述随机段：
+
+```text
+付款单：PAY-YYMMDDXXXX
+付款明细：PMT-YYMMDDXXXX
+```
+
+- `YYMMDD` 使用 `Asia/Shanghai` 业务日期。
+- `XXXX` 是四位当日顺序号，分别在 `PAY` 与 `PMT` 序列内从 `0001` 开始，
+  每个业务日重新计数，达到 `9999` 后必须阻止继续创建。
+- `PAY` 标识一次渠道付款对应的付款单；重新付款创建新的 `PAY` 编号。
+- `PMT` 标识一笔业务付款明细；同一付款明细重新付款时沿用原 `PMT` 编号。
+- 当前前端内存原型仅通过扫描当前会话数据模拟顺序号。真实系统必须由后端事务、
+  唯一索引或等价的原子序列服务保证并发唯一性，不能依赖前端分配。
+
 ## 3. 对象与编号
 
 | 对象 | 主键字段 | 可读编号/业务字段 | 前缀 |
@@ -64,6 +79,7 @@ Handle、合同号、Invoice 号、收款账号和第三方 ID 只能作为业�
 | 收款账户 | `payout_account_id` | `payout_account_code` | `PAC` |
 | 付款申请 | `payment_request_id` | `payment_request_code` | `REQ` |
 | 付款单 | `payment_order_id` | `payment_order_code` | `PAY` |
+| 付款明细 | `payout_id` | `payment_code` | `PMT` |
 | 付款批次 | `payment_batch_id` | `payment_batch_code` | `BAT` |
 | 渠道转账 | `transfer_id` | `transfer_code` | `TRF` |
 | 审批实例 | `approval_id` | `approval_code` | `APR` |

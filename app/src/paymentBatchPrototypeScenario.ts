@@ -29,7 +29,7 @@ export const PAYMENT_BATCH_RETRY_DEMO = {
   originalFailedAt: '2026-08-05T16:05',
   retryBatchId: 'payment_batch_fixture_retry_001',
   retryBatchCode: 'BAT-20260806-001',
-  retryPaymentOrderCode: 'PAY-20260806-001',
+  retryPaymentOrderCode: 'PAY-2608060001',
   submittedAt: '2026-08-06T10:15',
   payer: '奚文慧',
 } as const;

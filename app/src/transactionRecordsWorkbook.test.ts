@@ -14,6 +14,7 @@ const templatePath = new URL('../public/export-assets/transactions/transaction-r
 
 const records: Payout[] = [{
   id: 'pay-test',
+  paymentCode: 'PMT-2608050001',
   creator: 'Mina Kato',
   handle: '@MinaKato',
   creatorPlatform: 'Instagram',
@@ -35,6 +36,7 @@ const records: Payout[] = [{
 const workbookBatch = {
   paymentBatchId: 'payment-batch-workbook',
   paymentBatchCode: 'BAT-20260805-001',
+  paymentOrderCode: 'PAY-2608050001',
   payer: '财务测试员',
   paidAt: '2026-08-05 16:00',
   status: '已付款',
@@ -49,6 +51,7 @@ const workbookBatch = {
   },
   items: [{
     payoutId: records[0].id,
+    paymentCode: records[0].paymentCode,
     creatorName: records[0].creator,
     creatorHandle: records[0].handle,
     creatorPlatform: records[0].creatorPlatform,
@@ -96,6 +99,8 @@ describe('transaction records workbook', () => {
       '余额',
       '收款账户',
       '付款批次号',
+      '付款单号',
+      '付款编号',
     ]);
     expect(worksheet?.getRow(2).getCell(1).value).toBe('Mina Kato (@MinaKato · Instagram)');
     expect(worksheet?.getRow(2).getCell(2).value).toBe('INV-20260801-TEST01');
@@ -111,6 +116,8 @@ describe('transaction records workbook', () => {
     expect(worksheet?.getRow(2).getCell(10).value).toBeNull();
     expect(worksheet?.getRow(2).getCell(11).value).toBe('test-account');
     expect(worksheet?.getRow(2).getCell(12).value).toBe('BAT-20260805-001');
+    expect(worksheet?.getRow(2).getCell(13).value).toBe('PAY-2608050001');
+    expect(worksheet?.getRow(2).getCell(14).value).toBe('PMT-2608050001');
   });
 
   it('creates a stable date-based filename', () => {

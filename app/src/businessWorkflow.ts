@@ -349,7 +349,7 @@ const randomCodePart = (length: number) => {
   return Array.from(values, (value) => CODE_ALPHABET[value % CODE_ALPHABET.length]).join('');
 };
 
-export const createPrototypeCode = (prefix: 'PRJ' | 'CON' | 'INV' | 'PAY' | 'REQ' | 'BAT', now = new Date()) => {
+export const createPrototypeCode = (prefix: 'PRJ' | 'CON' | 'INV' | 'REQ' | 'BAT', now = new Date()) => {
   const date = now.toISOString().slice(0, 10).replace(/-/g, '');
   return `${prefix}-${date}-${randomCodePart(6)}`;
 };

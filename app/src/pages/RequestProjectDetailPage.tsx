@@ -245,6 +245,8 @@ const requestFeeBearerLabel = (value: unknown) => {
 export const paymentRecordsFromLists = (
   paymentLists: PaymentListRecord[],
   projectName: string,
+  generatedInvoices: GeneratedInvoiceRecord[] = [],
+  payouts: Payout[] = [],
 ): ProjectResourceRecord[] => paymentLists.flatMap((list) => (
   list.items.map((item, index) => {
     const effectiveAccount = paymentListEffectiveAccount(item);
@@ -252,7 +254,11 @@ export const paymentRecordsFromLists = (
     const currency = String(paymentListItemValue(item, 'currency') || '待确认');
     const receiveCurrency = String(paymentListItemValue(item, 'receiveCurrency') || '待确认');
     const amount = Number(paymentListItemValue(item, 'amount') || 0);
-    const recordId = `${list.paymentListCode}-${String(index + 1).padStart(2, '0')}`;
+    const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === item.invoiceId);
+    const payout = invoice
+      ? payouts.find((candidate) => candidate.id === invoice.sourcePayoutId)
+      : payouts.find((candidate) => candidate.invoice === item.snapshot.invoiceNumber);
+    const recordId = payout?.paymentCode || '付款编号待补全';
     const status = item.requiresRevalidation
       ? '需重新校验'
       : requestPaymentListStatusLabel(list);
@@ -472,7 +478,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     reason: '结算夏日直播计划首期达人合作、内容制作及素材授权费用。',
     contract: { id: 'CON-260718-01', meta: '1 份已签署合同 · USD 32,000', status: '已归档' },
     invoice: { id: '6 份 Invoice', meta: '请款金额 USD 18,420', status: '已校验' },
-    payment: { id: 'PAY-260718-04', meta: '多渠道 · 分组付款', status: '待打款' },
+    payment: { id: 'PAY-2607180004', meta: '多渠道 · 分组付款', status: '待打款' },
     payees: [
       { name: 'Mina Kato', invoice: 'INV-20240718-00001', amount: 'USD 3,240', channel: 'Airwallex', status: '待打款' },
       { name: 'Yuki Tanaka', invoice: 'INV-20240719-00001', amount: 'USD 2,180', channel: 'PayPal', status: '待打款' },
@@ -544,7 +550,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     reason: '结算日本市场测评项目全部达人合作与内容授权费用。',
     contract: { id: 'CON-260625-06', meta: '1 份合同 · USD 41,200', status: '已归档' },
     invoice: { id: '16 份 Invoice', meta: '请款金额 USD 41,200', status: '已通过' },
-    payment: { id: 'PAY-260625-12', meta: 'Airwallex · 16 笔付款', status: '已完成' },
+    payment: { id: 'PAY-2606250012', meta: 'Airwallex · 16 笔付款', status: '已完成' },
     payees: [
       { name: 'Kenji Mori', invoice: 'INV-20240625-00001', amount: 'USD 3,800', channel: 'Airwallex', status: '已付款' },
       { name: 'Mina Kato', invoice: 'INV-20240625-00002', amount: 'USD 3,240', channel: 'Airwallex', status: '已付款' },
@@ -721,6 +727,8 @@ function getRequestProjectResourceRecords(
   detail: RequestProjectDetail,
   payees: RequestPayee[],
   paymentLists: PaymentListRecord[],
+  generatedInvoices: GeneratedInvoiceRecord[],
+  payouts: Payout[],
 ): ProjectResourceRecords {
   const projectCode = request.id.replace('PRJ-', '');
   const invoices: ProjectResourceRecord[] = payees.map((payee, index) => ({
@@ -764,27 +772,36 @@ function getRequestProjectResourceRecords(
   });
   const fallbackPayments: ProjectResourceRecord[] = detail.payment.id === '待生成'
     ? []
-    : invoices.map((invoice, index) => ({
-      id: `${detail.payment.id}-${String(index + 1).padStart(2, '0')}`,
-      title: invoice.title,
-      subtitle: `${detail.payment.id} · ${invoice.channel}`,
-      amount: invoice.amount,
-      status: detail.payment.status,
-      channel: invoice.channel,
-      fields: [
-        { label: '付款明细编号', value: `${detail.payment.id}-${String(index + 1).padStart(2, '0')}` },
-        { label: '付款批次', value: detail.payment.id },
-        { label: '收款人', value: invoice.title },
-        { label: '关联项目', value: request.project },
-        { label: '关联 Invoice', value: invoice.id },
-        { label: '付款渠道', value: invoice.channel ?? '待确认' },
-        { label: '付款方式', value: requestPaymentMethodLabel(invoice.channel ?? '') },
-        { label: '付款金额', value: invoice.amount },
-        { label: '付款状态', value: detail.payment.status },
-      ],
-    }));
+    : invoices.map((invoice, index) => {
+      const paymentDate = detail.payment.id.match(/^PAY-(\d{6})\d{4}$/)?.[1] ?? projectCode;
+      const paymentCode = `PMT-${paymentDate}${String(index + 1).padStart(4, '0')}`;
+      return {
+        id: paymentCode,
+        title: invoice.title,
+        subtitle: `${detail.payment.id} · ${invoice.channel}`,
+        amount: invoice.amount,
+        status: detail.payment.status,
+        channel: invoice.channel,
+        fields: [
+          { label: '付款明细编号', value: paymentCode },
+          { label: '付款批次', value: detail.payment.id },
+          { label: '收款人', value: invoice.title },
+          { label: '关联项目', value: request.project },
+          { label: '关联 Invoice', value: invoice.id },
+          { label: '付款渠道', value: invoice.channel ?? '待确认' },
+          { label: '付款方式', value: requestPaymentMethodLabel(invoice.channel ?? '') },
+          { label: '付款金额', value: invoice.amount },
+          { label: '付款状态', value: detail.payment.status },
+        ],
+      };
+    });
   const payments = paymentLists.length
-    ? paymentRecordsFromLists(paymentLists, request.cooperationProjectName ?? request.project)
+    ? paymentRecordsFromLists(
+        paymentLists,
+        request.cooperationProjectName ?? request.project,
+        generatedInvoices,
+        payouts,
+      )
     : fallbackPayments;
   return { contract: contracts, invoice: invoices, payment: payments };
 }
@@ -909,7 +926,14 @@ export function RequestProjectDetailPage({
   });
   const financeApprovalBlocked = request.approval?.status === 'PENDING_FINANCE' && !financeReview.canApprove;
   const isFinanceApprovalStage = request.approval?.status === 'PENDING_FINANCE';
-  const records = getRequestProjectResourceRecords(request, detail, payees, requestPaymentLists);
+  const records = getRequestProjectResourceRecords(
+    request,
+    detail,
+    payees,
+    requestPaymentLists,
+    generatedInvoices,
+    payouts,
+  );
   const paymentListItemCount = requestPaymentLists.reduce((sum, list) => sum + list.items.length, 0);
   const currentPaymentList = requestPaymentLists[0] ?? null;
   const projectContext = {

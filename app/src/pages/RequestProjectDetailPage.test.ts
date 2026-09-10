@@ -204,7 +204,7 @@ describe('request project payment presentation', () => {
 
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
-      id: 'PAY-301164-01-01',
+      id: '付款编号待补全',
       title: '项目达人 01',
       subtitle: 'PAY-301164-01 · Airwallex',
       amount: 'USD 3,800.00',

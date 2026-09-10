@@ -50,6 +50,8 @@ const recordIds = (records: ReturnType<typeof createTransactionRecords>) => (
 const batch = {
   paymentBatchId: 'payment-batch-test',
   paymentBatchCode: 'PAY-20260810-TEST',
+  paymentOrderCode: 'PAY-2608050001',
+  paymentAttemptNumber: 1,
   request: {
     paymentRequestProjectId: 'request-test',
     requestCode: 'REQ-20260810-TEST',
@@ -74,6 +76,7 @@ const batch = {
   lifecycle: ['COMPLETED'],
   items: [{
     payoutId: 'pay-test',
+    paymentCode: 'PMT-2608050001',
     paymentListCode: 'PL-20260810-TEST',
     provider: 'Airwallex',
     amount: 1980,
@@ -205,7 +208,7 @@ describe('transaction records', () => {
     expect(findTransactionBatchContext(payout(), [batch])?.batch.paymentBatchCode).toBe('PAY-20260810-TEST');
     expect(findTransactionBatchContext(payout({ id: 'other' }), [batch])).toBeNull();
 
-    ['REQ-20260810-TEST', 'PAY-20260810-TEST', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
+    ['REQ-20260810-TEST', 'PAY-20260810-TEST', 'PAY-2608050001', 'PMT-2608050001', '财务测试员', 'PL-20260810-TEST'].forEach((search) => {
       expect(filterTransactionRecords(
         createTransactionRecords([payout()], [batch]),
         filters({ search }),

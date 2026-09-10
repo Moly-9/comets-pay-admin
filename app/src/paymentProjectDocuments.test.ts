@@ -35,12 +35,14 @@ const request = {
 
 const item = {
   payoutId: 'payout_documents',
+  paymentCode: 'PMT-2608180001',
   creatorId: 'creator_documents',
   creatorName: 'Mina Kato',
   creatorHandle: '@minakato',
   deliverable: 'Instagram Reels',
   paymentListId: 'payment_list_documents' as NonNullable<PaymentBatchItemSnapshot['paymentListId']>,
-  paymentListCode: 'PAY-202608-000019',
+  paymentListCode: 'PAY-2608180019',
+  paymentOrderCode: 'PAY-2608180019',
   paymentListStatus: 'paid',
   paymentListVersion: 2,
   contracts: [{
@@ -140,11 +142,13 @@ describe('payment project documents', () => {
 
     expect(sheet?.rowCount).toBe(2);
     expect(sheet?.getCell('B2').value).toBe('REQ-202608-000019');
-    expect(sheet?.getCell('D2').value).toBe('Mina Kato');
-    expect(sheet?.getCell('G2').value).toBe('INV-202608-000019');
-    expect(sheet?.getCell('H2').value).toBe('Payer Max');
-    expect(sheet?.getCell('L2').value).toBe(1250);
-    expect(sheet?.getCell('M2').value).toBe('0000002401');
+    expect(sheet?.getCell('C2').value).toBe('PAY-2608180019');
+    expect(sheet?.getCell('D2').value).toBe('PMT-2608180001');
+    expect(sheet?.getCell('E2').value).toBe('Mina Kato');
+    expect(sheet?.getCell('H2').value).toBe('INV-202608-000019');
+    expect(sheet?.getCell('I2').value).toBe('Payer Max');
+    expect(sheet?.getCell('M2').value).toBe(1250);
+    expect(sheet?.getCell('N2').value).toBe('0000002401');
   });
 
   it('exports the nine payment-result fields with the frozen post-transaction balance', async () => {

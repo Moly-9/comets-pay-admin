@@ -380,9 +380,11 @@ export function PaymentBatchItemDrawer({
             </div>
             <dl>
               <div><dt>{item.accountIdentifierLabel || '收款账户'}</dt><dd>{item.accountIdentifier || item.accountSummary || '待补充'}</dd></div>
-              <div><dt>所属批次</dt><dd>{batch.paymentBatchCode}</dd></div>
-              <div><dt>付款单</dt><dd>{batch.paymentOrderCode}</dd></div>
-              {batch.sourcePaymentOrderCode ? <div><dt>原付款单</dt><dd>{batch.sourcePaymentOrderCode}</dd></div> : null}
+              <div><dt>所属批次</dt><dd className="payment-batch-drawer-code" title={batch.paymentBatchCode}>{batch.paymentBatchCode}</dd></div>
+              <div><dt>所属付款项目</dt><dd className="payment-batch-drawer-code" title={batch.request.requestCode}>{batch.request.requestCode}</dd></div>
+              <div><dt>付款编号</dt><dd className="payment-batch-drawer-code" title={item.paymentCode || '付款编号待补全'}>{item.paymentCode || '付款编号待补全'}</dd></div>
+              <div><dt>付款单</dt><dd className="payment-batch-drawer-code" title={batch.paymentOrderCode}>{batch.paymentOrderCode}</dd></div>
+              {batch.sourcePaymentOrderCode ? <div><dt>原付款单</dt><dd className="payment-batch-drawer-code" title={batch.sourcePaymentOrderCode}>{batch.sourcePaymentOrderCode}</dd></div> : null}
             </dl>
           </section>
           <PaymentItemDetails
@@ -569,7 +571,7 @@ export function PaymentBatchDetailPage({
                     <div>
                       <small>付款单</small>
                       <h2 id="payment-batch-order-title">{batch.paymentOrderCode}</h2>
-                      <p>{batch.paymentAttemptNumber > 1 ? `${paymentTypeLabel} · 关联原付款单 ${sourcePaymentOrderCode ?? '未记录'}` : paymentTypeLabel} · {batchItems.length} 笔付款明细</p>
+                      <p>{batch.paymentAttemptNumber > 1 ? `${paymentTypeLabel} · 关联原付款单 ${sourcePaymentOrderCode ?? '未记录'}` : paymentTypeLabel} · 请款项目 {batch.request.requestCode} · {batchItems.length} 笔付款明细</p>
                     </div>
                   </div>
                   <div className="payment-batch-order-result">

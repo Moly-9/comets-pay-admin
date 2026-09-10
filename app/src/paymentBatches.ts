@@ -35,6 +35,7 @@ import {
 } from './paymentBatchPrototypeScenario';
 import { aggregatePaymentStatus } from './paymentStatusFilters';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
+import { nextPaymentBusinessCode } from './paymentNumbering';
 
 export type PaymentBatchStatus = PaymentBatchPrototypeStatus;
 
@@ -65,6 +66,8 @@ export type PaymentBatchInvoiceSnapshot = Readonly<{
 
 export type PaymentBatchItemSnapshot = Readonly<{
   payoutId: string;
+  /** 冻结的单笔业务付款编号；旧快照可能缺失。 */
+  paymentCode?: string;
   creatorId?: string;
   creatorName: string;
   creatorHandle: string;
@@ -271,6 +274,7 @@ const historicalPaymentBatchRecord = (
       : ['CREATED', 'ITEMS_ADDED', 'SUBMITTED', 'COMPLETED'],
     items: [{
       payoutId: payout.id,
+      paymentCode: payout.paymentCode,
       creatorId: payout.creatorId,
       creatorName: payout.creator,
       creatorHandle: payout.handle,
@@ -641,6 +645,7 @@ const snapshotItem = ({
 
   return {
     payoutId: payout.id,
+    paymentCode: payout.paymentCode,
     creatorId: payout.creatorId ?? invoice?.snapshot.creatorId,
     creatorName: invoice?.snapshot.creatorName ?? payout.creator,
     creatorHandle: invoice?.snapshot.creatorHandle ?? payout.handle,
@@ -1223,6 +1228,12 @@ export const createInitialPaymentBatches = ({
       });
     });
 
+  const usedInitialPaymentOrderCodes = new Set<string>();
+  const reservedPaymentOrderCodes = new Set([
+    ...scenarioResources.paymentLists.map((list) => list.paymentListCode),
+    ...Object.values(HISTORICAL_PAYMENT_BATCH_SEEDS).map((seed) => seed.paymentListCode),
+    PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+  ]);
   const initialAttempts = eligibleGroups.map(({ provider, payouts: groupedPayouts, status }, index) => {
     const ordinal = eligibleGroups.length - index;
     const ordinalLabel = String(ordinal).padStart(3, '0');
@@ -1230,7 +1241,7 @@ export const createInitialPaymentBatches = ({
     const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
     const minutes = String(totalMinutes % 60).padStart(2, '0');
     const paidAt = `2026-08-05T${hours}:${minutes}`;
-    return createPaymentBatchRecord({
+    const recordInput = {
       requests: scenarioResources.requests,
       generatedInvoices,
       paymentLists: scenarioResources.paymentLists,
@@ -1249,7 +1260,24 @@ export const createInitialPaymentBatches = ({
         : status === '部分失败'
           ? ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'PARTIALLY_FAILED']
           : ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
-    });
+    } satisfies CreatePaymentBatchRecordInput;
+    const sourceRecord = createPaymentBatchRecord(recordInput);
+    const paymentOrderCode = usedInitialPaymentOrderCodes.has(sourceRecord.paymentOrderCode)
+      ? nextPaymentBusinessCode(
+          'PAY',
+          reservedPaymentOrderCodes,
+          new Date(`${paidAt}:00+08:00`),
+        )
+      : sourceRecord.paymentOrderCode;
+    usedInitialPaymentOrderCodes.add(paymentOrderCode);
+    reservedPaymentOrderCodes.add(paymentOrderCode);
+    return paymentOrderCode === sourceRecord.paymentOrderCode
+      ? sourceRecord
+      : createPaymentBatchRecord({
+          ...recordInput,
+          paymentOrderCode,
+          paymentAttemptNumber: 1,
+        });
   });
 
   const originalFailedBatch = initialAttempts.find((batch) => (

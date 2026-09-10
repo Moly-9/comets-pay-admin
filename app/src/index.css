@@ -1243,6 +1243,11 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   line-height: 1.5;
 }
 
+.payment-batch-drawer-recipient dd.payment-batch-drawer-code {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 .payment-batch-item-drawer .payment-batch-item-details {
   display: block;
   border: 0;

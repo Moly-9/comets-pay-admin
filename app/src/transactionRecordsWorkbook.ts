@@ -33,6 +33,8 @@ const TRANSACTION_RECORD_HEADERS = [
   '余额',
   '收款账户',
   '付款批次号',
+  '付款单号',
+  '付款编号',
 ] as const;
 
 const excelDate = (value: string) => {
@@ -74,11 +76,11 @@ export const createTransactionRecordsWorkbook = async (
     target.value = header;
     target.style = { ...styleSource.style };
   });
-  [32, 22, 52, 21, 16, 18, 18, 24, 14, 18, 30, 24].forEach((width, index) => {
+  [32, 22, 52, 21, 16, 18, 18, 24, 14, 18, 30, 24, 22, 22].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-  worksheet.autoFilter = { from: 'A1', to: 'L1' };
+  worksheet.autoFilter = { from: 'A1', to: 'N1' };
 
   records.forEach((record) => {
     const { payout, context } = record;
@@ -99,6 +101,8 @@ export const createTransactionRecordsWorkbook = async (
       balance,
       accountDisplayValue(details.accountSummary),
       details.paymentBatchCode,
+      context?.batch.paymentOrderCode || context?.item.paymentOrderCode || details.paymentListCode,
+      context?.item.paymentCode || payout.paymentCode || '付款编号待补全',
     ]);
 
     row.height = 22;
@@ -123,7 +127,7 @@ export const createTransactionRecordsWorkbook = async (
     });
   });
 
-  if (records.length) worksheet.autoFilter = { from: 'A1', to: `L${records.length + 1}` };
+  if (records.length) worksheet.autoFilter = { from: 'A1', to: `N${records.length + 1}` };
   workbook.creator = 'COMETS Pay';
   workbook.lastModifiedBy = 'COMETS Pay';
 

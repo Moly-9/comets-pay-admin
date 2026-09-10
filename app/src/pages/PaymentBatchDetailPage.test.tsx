@@ -8,7 +8,7 @@ import { PaymentBatchDetailPage, PaymentBatchItemDrawer, PaymentItemDetails } fr
 const DETAIL_BATCH: PaymentBatchRecord = {
   paymentBatchId: 'payment_batch_detail_test' as PaymentBatchRecord['paymentBatchId'],
   paymentBatchCode: 'BAT-20260810-001',
-  paymentOrderCode: 'PAY-202608-000001',
+  paymentOrderCode: 'PAY-2608100001',
   paymentAttemptNumber: 1,
   request: {
     paymentRequestProjectId: 'payment_request_detail_test' as PaymentBatchRecord['request']['paymentRequestProjectId'],
@@ -34,15 +34,16 @@ const DETAIL_BATCH: PaymentBatchRecord = {
   lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'PARTIALLY_FAILED'],
   items: [{
     payoutId: 'payout_detail_test',
+    paymentCode: 'PMT-2608100001',
     creatorId: 'creator_detail_test',
     creatorName: 'Mina Kato',
     creatorHandle: '@minakato',
     deliverable: 'Instagram Reels 内容合作',
     paymentListId: 'payment_list_detail_test' as NonNullable<PaymentBatchRecord['items'][number]['paymentListId']>,
-    paymentListCode: 'PAY-202608-000001',
+    paymentListCode: 'PAY-2608100001',
     paymentListStatus: 'submitted',
     paymentListVersion: 2,
-    paymentOrderCode: 'PAY-202608-000001',
+    paymentOrderCode: 'PAY-2608100001',
     paymentAttemptNumber: 1,
     contracts: [{
       contractId: 'contract_detail_test' as PaymentBatchRecord['items'][number]['contracts'][number]['contractId'],
@@ -101,7 +102,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('BAT-20260810-001');
     expect(html).toContain('COMETS 夏季内容项目');
     expect(html).toContain('PRJ-202608-000001');
-    expect(html).toContain('PAY-202608-000001');
+    expect(html).toContain('PAY-2608100001');
     expect(html).not.toContain('INV-202608-000001');
     expect(html).not.toContain('CON-202608-000001');
     expect(html).toContain('data-payment-provider="Airwallex"');
@@ -120,7 +121,8 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('payment-batch-order-items payment-batch-order-items-card');
     expect(html).toContain('class="payment-batch-order-items-heading"');
     expect(html).toContain('<span>付款类型</span><strong>首次付款</strong><small>1 笔付款明细</small>');
-    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-202608-000001</h2>');
+    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-2608100001</h2>');
+    expect(html).toContain('请款项目 REQ-202608-000001');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
     expect(html).toContain('<span>支付币种</span><strong>USD</strong>');
@@ -208,7 +210,7 @@ describe('PaymentBatchDetailPage', () => {
       creatorName: 'Alex Ruiz',
       creatorHandle: '@alexbuilds',
       paymentListId: 'payment_list_detail_second' as NonNullable<PaymentBatchRecord['items'][number]['paymentListId']>,
-      paymentListCode: 'PAY-202608-000002',
+      paymentListCode: 'PAY-2608100002',
       paymentStatus: '已付款',
       failure: undefined,
       associationIssues: [],
@@ -218,8 +220,8 @@ describe('PaymentBatchDetailPage', () => {
     );
 
     expect(html.match(/class="payment-batch-order-card"/g)).toHaveLength(1);
-    expect(html).toContain('PAY-202608-000001');
-    expect(html).not.toContain('PAY-202608-000002');
+    expect(html).toContain('PAY-2608100001');
+    expect(html).not.toContain('PAY-2608100002');
     expect(html).toContain('<small>2 笔付款明细</small>');
     expect(html).not.toContain('1 张付款单 · 2 笔明细');
   });
@@ -227,8 +229,8 @@ describe('PaymentBatchDetailPage', () => {
   it('renders a retry in a new payment order while linking the original order', () => {
     const retryItem = {
       ...DETAIL_BATCH.items[0],
-      paymentOrderCode: 'PAY-20260811-000002',
-      sourcePaymentOrderCode: 'PAY-202608-000001',
+      paymentOrderCode: 'PAY-2608110002',
+      sourcePaymentOrderCode: 'PAY-2608100001',
       paymentAttemptNumber: 2,
       paymentStatus: '已付款',
       failure: undefined,
@@ -242,8 +244,8 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage
         batch={{
           ...DETAIL_BATCH,
-          paymentOrderCode: 'PAY-20260811-000002',
-          sourcePaymentOrderCode: 'PAY-202608-000001',
+          paymentOrderCode: 'PAY-2608110002',
+          sourcePaymentOrderCode: 'PAY-2608100001',
           paymentAttemptNumber: 2,
           status: '已付款',
           items: [retryItem],
@@ -252,9 +254,9 @@ describe('PaymentBatchDetailPage', () => {
       />,
     );
 
-    expect(html).toContain('<span>付款类型</span><strong>二次付款</strong><small>关联原付款单 PAY-202608-000001</small>');
-    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-20260811-000002</h2>');
-    expect(html).toContain('二次付款 · 关联原付款单 PAY-202608-000001 · 1 笔付款明细');
+    expect(html).toContain('<span>付款类型</span><strong>二次付款</strong><small>关联原付款单 PAY-2608100001</small>');
+    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-2608110002</h2>');
+    expect(html).toContain('二次付款 · 关联原付款单 PAY-2608100001 · 请款项目 REQ-202608-000001 · 1 笔付款明细');
     expect(html).toContain('payment-batch-attempt-badge is-retry">二次付款</span>');
     expect(html).toContain('USD 8.5');
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 1,258.5<\/strong>/);
@@ -320,6 +322,12 @@ describe('PaymentBatchDetailPage', () => {
     expect(drawerHtml).toContain('<span>付款金额</span><strong>USD 1,250</strong>');
     expect(drawerHtml).toContain('<span>手续费金额</span><strong>USD 2.5</strong>');
     expect(drawerHtml).toContain('<span>实际付款金额</span><strong>USD 2.5</strong>');
+    expect(drawerHtml).toContain('<dt>所属付款项目</dt><dd class="payment-batch-drawer-code" title="REQ-202608-000001">REQ-202608-000001</dd>');
+    expect(drawerHtml).toContain('<dt>付款编号</dt><dd class="payment-batch-drawer-code" title="PMT-2608100001">PMT-2608100001</dd>');
+    expect(drawerHtml).toContain('<dt>付款单</dt><dd class="payment-batch-drawer-code" title="PAY-2608100001">PAY-2608100001</dd>');
+    expect(drawerHtml).toContain('<dt>所属付款项目</dt><dd class="payment-batch-drawer-code" title="REQ-202608-000001">REQ-202608-000001</dd>');
+    expect(drawerHtml).toContain('<dt>付款编号</dt><dd class="payment-batch-drawer-code" title="PMT-2608100001">PMT-2608100001</dd>');
+    expect(drawerHtml).toContain('<dt>付款单</dt><dd class="payment-batch-drawer-code" title="PAY-2608100001">PAY-2608100001</dd>');
     expect(drawerHtml).toContain('我方承担');
     expect(drawerHtml.indexOf('付款渠道 / 方式')).toBeLessThan(drawerHtml.indexOf('本地清算方式'));
     expect(drawerHtml.indexOf('本地清算方式')).toBeLessThan(drawerHtml.indexOf('收款国家 / 地区'));
@@ -383,6 +391,20 @@ describe('PaymentBatchDetailPage', () => {
     );
     expect(drawerHtml).toContain('BENEFICIARY_DISABLED');
     expect(drawerHtml).not.toContain('退回媒介处理');
+  });
+
+  it('shows an explicit placeholder for a legacy item without a payment code', () => {
+    const drawerHtml = renderToStaticMarkup(
+      <PaymentBatchItemDrawer
+        batch={DETAIL_BATCH}
+        item={{ ...DETAIL_BATCH.items[0], paymentCode: undefined }}
+        canHandleFailure={false}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(drawerHtml).toContain('<dt>付款编号</dt><dd class="payment-batch-drawer-code" title="付款编号待补全">付款编号待补全</dd>');
+    expect(drawerHtml).not.toContain('<dt>付款编号</dt><dd>payout_detail_test</dd>');
   });
 
   it('uses the simplified three-stage channel progress', () => {

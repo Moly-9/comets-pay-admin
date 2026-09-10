@@ -689,6 +689,8 @@ export type PaymentFailureRecovery = {
 
 export type Payout = {
   id: string;
+  /** 用户可见的单笔业务付款编号；重新付款时保持不变。 */
+  paymentCode?: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
   handle: string;

@@ -40,6 +40,7 @@ import { demoAccountName } from './demoCreatorNames';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
+import { assignMissingDemoPaymentCodes, normalizeLegacyPaymentOrderCode } from './paymentNumbering';
 
 const FINANCE_REVIEW_PROJECT_CODES = new Set([
   'PRJ-260727-07',
@@ -599,7 +600,11 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requ
   });
   const status = paymentListStatusFor(request);
   const version = status === 'draft' ? 0 : 1;
-  const paymentListCode = `PAY-${(request.cooperationProjectCode ?? request.id).replace(/^PRJ-/, '')}`;
+  const paymentListCode = normalizeLegacyPaymentOrderCode(
+    `PAY-${(request.cooperationProjectCode ?? request.id).replace(/^PRJ-/, '')}`,
+    '260727',
+    requestIndex + 1,
+  );
   return {
     paymentListId: `payment_list_request_fixture_${String(requestIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
     paymentListCode,
@@ -681,7 +686,9 @@ export const INITIAL_COMPLETE_REQUEST_RESOURCES = {
   ], (contract) => String(contract.contractId ?? contract.id)),
   invoices: uniqueBy([...requestInvoices, ...specialInvoices], (invoice) => String(invoice.invoiceId)),
   paymentLists: requestPaymentLists,
-  payouts: uniqueBy([...requestPayouts, ...specialPayouts], (payout) => payout.id),
+  payouts: assignMissingDemoPaymentCodes(
+    uniqueBy([...requestPayouts, ...specialPayouts], (payout) => payout.id),
+  ),
 };
 
 export const COMPLETE_REQUEST_FINANCE_PROJECT_CODES = FINANCE_REVIEW_PROJECT_CODES;

@@ -2,6 +2,7 @@ import type { InvoiceBillingEntityId } from './businessWorkflow';
 import type { InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
 import { demoDisplayName } from './demoCreatorNames';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
+import { assignMissingDemoPaymentCodes } from './paymentNumbering';
 
 export type SystemRoleKey = 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project';
 export type LoginSessionPolicy = 'single_device' | 'multi_device';
@@ -98,7 +99,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-301164-01',
+    paymentOrder: 'PAY-2607270001',
   },
   {
     id: 'PRJ-260727-02',
@@ -111,7 +112,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-02',
+    paymentOrder: 'PAY-2607270002',
   },
   {
     id: 'PRJ-260727-03',
@@ -124,7 +125,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-03',
+    paymentOrder: 'PAY-2607270003',
   },
   {
     id: 'PRJ-260727-04',
@@ -137,7 +138,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-04',
+    paymentOrder: 'PAY-2607270004',
   },
   {
     id: 'PRJ-260727-05',
@@ -150,7 +151,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待补资料',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-05',
+    paymentOrder: 'PAY-2607270005',
   },
   {
     id: 'PRJ-260727-06',
@@ -163,7 +164,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待打款',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-06',
+    paymentOrder: 'PAY-2607270006',
   },
   {
     id: 'PRJ-260727-07',
@@ -176,7 +177,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-07',
+    paymentOrder: 'PAY-2607270007',
   },
   {
     id: 'PRJ-260727-08',
@@ -189,7 +190,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-08',
+    paymentOrder: 'PAY-2607270008',
   },
   {
     id: 'PRJ-260727-09',
@@ -202,7 +203,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-09',
+    paymentOrder: 'PAY-2607270009',
   },
   {
     id: 'PRJ-260727-10',
@@ -215,7 +216,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-10',
+    paymentOrder: 'PAY-2607270010',
   },
   {
     id: 'PRJ-260727-11',
@@ -228,7 +229,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-11',
+    paymentOrder: 'PAY-2607270011',
   },
   {
     id: 'PRJ-260727-12',
@@ -241,7 +242,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-12',
+    paymentOrder: 'PAY-2607270012',
   },
   {
     id: 'PRJ-260801-01',
@@ -254,7 +255,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-01',
+    paymentOrder: 'PAY-2608010001',
   },
   {
     id: 'PRJ-260801-02',
@@ -267,7 +268,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-02',
+    paymentOrder: 'PAY-2608010002',
   },
   {
     id: 'PRJ-260801-03',
@@ -280,7 +281,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待打款',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-03',
+    paymentOrder: 'PAY-2608010003',
   },
   {
     id: 'PRJ-260801-04',
@@ -293,7 +294,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待打款',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-04',
+    paymentOrder: 'PAY-2608010004',
   },
   {
     id: 'PRJ-260801-05',
@@ -306,7 +307,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260801-05',
+    paymentOrder: 'PAY-2608010005',
   },
   {
     id: 'PRJ-260801-06',
@@ -319,7 +320,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260801-06',
+    paymentOrder: 'PAY-2608010006',
   },
   {
     id: 'PRJ-260801-07',
@@ -332,7 +333,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-07',
+    paymentOrder: 'PAY-2608010007',
   },
   {
     id: 'PRJ-260801-08',
@@ -345,7 +346,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-08',
+    paymentOrder: 'PAY-2608010008',
   },
 ];
 
@@ -1051,11 +1052,11 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
   },
 ];
 
-export const INITIAL_PAYOUTS: Payout[] = RAW_INITIAL_PAYOUTS.map((payout) => ({
+export const INITIAL_PAYOUTS: Payout[] = assignMissingDemoPaymentCodes(RAW_INITIAL_PAYOUTS.map((payout) => ({
   ...payout,
   creator: demoDisplayName(payout.creator),
   ...(payout.status === '已付款' ? prototypePaymentResultFor(payout) : {}),
-}));
+})));
 
 export const PAGE_TITLES = {
   dashboard: '数据工作台',

@@ -20,6 +20,7 @@ import {
 } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 import { demoAccountName } from './demoCreatorNames';
+import { normalizeLegacyPaymentOrderCode } from './paymentNumbering';
 import type {
   ContractId,
   CreatorId,
@@ -1477,9 +1478,13 @@ export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_
       generatedBy: actor,
       items: cloneFixtureItems(historicalItems),
     }] : undefined;
-    const paymentListCode = project.paymentOrder && project.paymentOrder !== '待生成'
-      ? project.paymentOrder
-      : `PAY-${project.id.replace(/^PRJ-/, '')}-01`;
+    const paymentListCode = normalizeLegacyPaymentOrderCode(
+      project.paymentOrder && project.paymentOrder !== '待生成'
+        ? project.paymentOrder
+        : `PAY-${project.id.replace(/^PRJ-/, '')}-01`,
+      '260806',
+      projectIndex + 1,
+    );
     return {
       paymentListId: `payment_list_fixture_${String(projectIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
       paymentListCode,
