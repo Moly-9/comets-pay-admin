@@ -122,7 +122,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('class="payment-batch-order-items-heading"');
     expect(html).toContain('<span>付款类型</span><strong>首次付款</strong><small>1 笔付款明细</small>');
     expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-2608100001</h2>');
-    expect(html).toContain('请款项目 REQ-202608-000001');
+    expect(html).toContain('<p>首次付款</p><p>关联请款项目 REQ-202608-000001</p>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
     expect(html).toContain('<span>支付币种</span><strong>USD</strong>');
@@ -256,7 +256,7 @@ describe('PaymentBatchDetailPage', () => {
 
     expect(html).toContain('<span>付款类型</span><strong>二次付款</strong><small>关联原付款单 PAY-2608100001</small>');
     expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-2608110002</h2>');
-    expect(html).toContain('二次付款 · 关联原付款单 PAY-2608100001 · 请款项目 REQ-202608-000001 · 1 笔付款明细');
+    expect(html).toContain('<p>二次付款</p><p>关联原付款单 PAY-2608100001</p><p>关联请款项目 REQ-202608-000001</p>');
     expect(html).toContain('payment-batch-attempt-badge is-retry">二次付款</span>');
     expect(html).toContain('USD 8.5');
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 1,258.5<\/strong>/);

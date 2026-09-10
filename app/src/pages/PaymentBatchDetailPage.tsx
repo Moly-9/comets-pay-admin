@@ -571,7 +571,9 @@ export function PaymentBatchDetailPage({
                     <div>
                       <small>付款单</small>
                       <h2 id="payment-batch-order-title">{batch.paymentOrderCode}</h2>
-                      <p>{batch.paymentAttemptNumber > 1 ? `${paymentTypeLabel} · 关联原付款单 ${sourcePaymentOrderCode ?? '未记录'}` : paymentTypeLabel} · 请款项目 {batch.request.requestCode} · {batchItems.length} 笔付款明细</p>
+                      <p>{paymentTypeLabel}</p>
+                      {batch.paymentAttemptNumber > 1 ? <p>关联原付款单 {sourcePaymentOrderCode ?? '未记录'}</p> : null}
+                      <p>关联请款项目 {batch.request.requestCode}</p>
                     </div>
                   </div>
                   <div className="payment-batch-order-result">
