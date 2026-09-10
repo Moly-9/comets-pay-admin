@@ -62,6 +62,11 @@ import { Pagination, usePagination } from '../components/Pagination';
 import { InvoiceManagementTable } from '../components/InvoiceManagementTable';
 import { CollaborationInvoiceDrawer } from '../components/CollaborationInvoiceDrawer';
 import {
+  buildCollaborationProjectFilterOptions,
+  CollaborationProjectFilter,
+  filterCollaborationRowsByProject,
+} from '../components/CollaborationProjectFilter';
+import {
   buildCollaborationInvoiceRows,
   collaborationStatusTone,
 } from '../collaborationInvoices';
@@ -3236,6 +3241,7 @@ export function CollaborationsPage({
   paymentLists: PaymentListRecord[];
 }) {
   const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const collaborationRows = useMemo(() => buildCollaborationInvoiceRows({
@@ -3248,15 +3254,20 @@ export function CollaborationsPage({
     requests,
     paymentLists,
   }), [contracts, creators, externalInvoices, generatedInvoices, paymentLists, payouts, projects, requests]);
+  const projectFilterOptions = useMemo(
+    () => buildCollaborationProjectFilterOptions(collaborationRows),
+    [collaborationRows],
+  );
   const query = search.trim().toLowerCase();
-  const filteredCollaborations = collaborationRows.filter((item) => !query || item.searchText.includes(query));
+  const projectFilteredCollaborations = filterCollaborationRowsByProject(collaborationRows, projectFilter);
+  const filteredCollaborations = projectFilteredCollaborations.filter((item) => !query || item.searchText.includes(query));
   const {
     page,
     pageItems: visibleCollaborations,
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredCollaborations, { resetKey: query });
+  } = usePagination(filteredCollaborations, { resetKey: `${query}\u0000${projectFilter}` });
   const selectedRow = selectedRowId
     ? collaborationRows.find((row) => row.rowId === selectedRowId) ?? null
     : null;
@@ -3269,8 +3280,13 @@ export function CollaborationsPage({
     <div className="page-stack">
       <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
       <section className="content-card">
-        <div className="content-toolbar">
+        <div className="content-toolbar collaboration-list-toolbar">
           <SearchBar value={search} onChange={setSearch} placeholder="搜索达人、项目、Invoice 或合同" />
+          <CollaborationProjectFilter
+            value={projectFilter}
+            options={projectFilterOptions}
+            onChange={setProjectFilter}
+          />
           <span className="collaboration-list-toolbar-note">共 {collaborationRows.length} 份 Invoice · 待付款 {waitingForPaymentCount} 份</span>
         </div>
         <div className="table-scroll">

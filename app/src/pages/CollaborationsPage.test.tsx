@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { CollaborationInvoiceDrawer } from '../components/CollaborationInvoiceDrawer';
+import {
+  buildCollaborationProjectFilterOptions,
+  filterCollaborationRowsByProject,
+} from '../components/CollaborationProjectFilter';
 import { buildCollaborationInvoiceRows } from '../collaborationInvoices';
 import type { ContractRecord } from '../contracts';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -151,9 +155,41 @@ describe('CollaborationsPage', () => {
     expect(html).toContain('YouTube launch video');
     expect(html).toContain('INV-COLLABORATION');
     expect(html).toContain('财务审批中');
+    expect(html).toContain('aria-label="关联项目筛选"');
+    expect(html).toContain('全部关联项目');
     expect(html).toContain('查看详情');
     expect(html).not.toContain('查看链路');
     expect(html).not.toContain('所属项目');
+  });
+
+  it('builds searchable project options and filters rows by the stable project link', () => {
+    const rows = buildCollaborationInvoiceRows({
+      ...commonProps,
+      generatedInvoices: [
+        invoice,
+        {
+          ...invoice,
+          id: 'INV-COLLABORATION-2',
+          invoiceId: 'invoice-collaboration-2',
+          sourcePayoutId: 'payout-collaboration-2',
+          snapshot: {
+            ...invoice.snapshot,
+            invoiceNumber: 'INV-COLLABORATION-2',
+          },
+        } as GeneratedInvoiceRecord,
+      ],
+    });
+    const options = buildCollaborationProjectFilterOptions(rows);
+    const launchProject = options.find((option) => option.label === 'Launch Project');
+
+    expect(options[0]).toMatchObject({ value: 'all', invoiceCount: 2 });
+    expect(launchProject).toMatchObject({
+      value: 'project:project-collaboration',
+      invoiceCount: 2,
+    });
+    expect(launchProject?.searchText).toContain('PRJ-COLLABORATION');
+    expect(filterCollaborationRowsByProject(rows, launchProject?.value ?? '')).toHaveLength(2);
+    expect(filterCollaborationRowsByProject(rows, 'project:missing')).toHaveLength(0);
   });
 
   it('renders only the creators, projects and generated Invoices passed from current app state', () => {
