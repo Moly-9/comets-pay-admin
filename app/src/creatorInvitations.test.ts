@@ -227,4 +227,17 @@ describe('creator invitation records', () => {
       now: new Date('2026-09-10T00:00:00.000Z'),
     }).map((record) => record.id)).toEqual(['cinv-existing']);
   });
+
+  it('保留状态枚举并将验证码请求阶段展示为已请求邀请码', () => {
+    expect(resolveCreatorInvitationStatus(storedInvitation({
+      status: 'VERIFICATION_REQUESTED',
+    }), new Date('2026-09-10T00:00:00.000Z'))).toBe('VERIFICATION_REQUESTED');
+    expect(filterCreatorInvitationRecords([storedInvitation({
+      status: 'VERIFICATION_REQUESTED',
+    })], {
+      search: '已请求邀请码',
+      status: 'VERIFICATION_REQUESTED',
+      now: new Date('2026-09-10T00:00:00.000Z'),
+    })).toHaveLength(1);
+  });
 });

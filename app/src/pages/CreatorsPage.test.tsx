@@ -189,5 +189,9 @@ describe('CreatorsPage profile cards', () => {
     expect(source).toContain('CreatorInvitationSendDialog');
     expect(source).toContain('CreatorInvitationRecordsDialog');
     expect(source).not.toContain('达人 C 端入驻');
+    expect(source).toContain('Display name · 默认跟随首个 Handle');
+    expect(source).toContain('readOnly value={draft.region || \'待识别\'}');
+    expect(source).toContain('请在联系地址末尾填写国家名');
+    expect(source).not.toContain('<span>地区<em className="required-mark"');
   });
 });

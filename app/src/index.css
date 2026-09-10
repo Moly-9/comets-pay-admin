@@ -16296,6 +16296,20 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(189, 75, 69, 0.14);
 }
 
+.creator-profile-editor-modal .creator-derived-readonly-field {
+  border-color: #e1e4ea;
+  background: #f4f5f7;
+  color: #6f7682;
+  cursor: default;
+  box-shadow: inset 0 0 0 1px rgba(92, 101, 116, 0.02);
+}
+
+.creator-profile-editor-modal .creator-derived-readonly-field:focus-visible {
+  border-color: #cbd0d9;
+  outline: 2px solid rgba(105, 115, 132, 0.16);
+  outline-offset: 1px;
+}
+
 .form-grid label > span.creator-payment-field-label {
   display: grid;
   justify-content: initial;

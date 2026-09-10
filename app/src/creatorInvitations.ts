@@ -115,7 +115,7 @@ export type CreatorInvitationImportPreview = {
 
 export const CREATOR_INVITATION_STATUS_LABELS: Record<CreatorInvitationStatus, string> = {
   SENT: '已发送',
-  VERIFICATION_REQUESTED: '已请求验证码',
+  VERIFICATION_REQUESTED: '已请求邀请码',
   REGISTERING: '注册中',
   COMPLETED: '已完成',
   EXPIRED: '已失效',

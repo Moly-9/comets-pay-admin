@@ -160,6 +160,12 @@ import {
   type CreatorDirectoryProviderFilter,
 } from '../creatorDirectoryWorkbook';
 import {
+  creatorInitialsFromName,
+  creatorNameFromPrimaryHandle,
+  creatorRegionFromContactAddress,
+  isCreatorNameAutoDerived,
+} from '../creatorProfileDefaults';
+import {
   loadCreatorInvitationRecords,
   saveCreatorInvitationRecords,
   type CreatorInvitationRecord,
@@ -1486,7 +1492,7 @@ const INVOICE_CONTACT_FIELDS: ContactFieldDefinition[] = [
   { key: 'legalName', label: '真实姓名', alias: 'Real Name', placeholder: '请输入证件或合同中的真实姓名' },
   { key: 'phone', label: '联系电话', alias: 'Tel', placeholder: '选填：请输入含国家区号的联系电话', inputType: 'tel', optional: true },
   { key: 'email', label: '联系邮箱', alias: 'Email', placeholder: '请输入达人联系邮箱', inputType: 'email' },
-  { key: 'address', label: '联系地址', alias: 'Address', placeholder: '请输入 Invoice 中展示的完整地址', fullWidth: true },
+  { key: 'address', label: '联系地址', alias: 'Address', placeholder: '例如：New York, NY, United States（请将国家名放在末尾）', fullWidth: true },
 ];
 
 const createInvoiceContact = (
@@ -2186,19 +2192,29 @@ function CreatorContactFormGrid({
 }) {
   return (
     <div className="form-grid creator-payment-form-grid">
-      {INVOICE_CONTACT_FIELDS.map((field) => (
-        <label className={`${field.fullWidth ? 'full-width' : ''} ${showErrors && !field.optional && !contact[field.key].trim() ? 'creator-form-field-error' : ''}`} key={field.key}>
-          <span className="creator-payment-field-label">
-            <span>{field.label}{field.optional ? null : <em className="required-mark" aria-hidden="true">*</em>}</span>
-            <small>{field.alias}{field.optional ? ' · 选填' : ''}</small>
-          </span>
-          {field.fullWidth ? (
-            <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={showErrors && !field.optional && !contact[field.key].trim() ? true : undefined} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
-          ) : (
-            <input aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={showErrors && !field.optional && (!contact[field.key].trim() || (field.key === 'email' && !/^\S+@\S+\.\S+$/.test(contact.email))) ? true : undefined} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
-          )}
-        </label>
-      ))}
+      {INVOICE_CONTACT_FIELDS.map((field) => {
+        const addressCountryMissing = field.key === 'address'
+          && Boolean(contact.address.trim())
+          && !creatorRegionFromContactAddress(contact.address);
+        const invalid = showErrors && !field.optional && (
+          !contact[field.key].trim()
+          || (field.key === 'email' && !/^\S+@\S+\.\S+$/.test(contact.email))
+          || addressCountryMissing
+        );
+        return (
+          <label className={`${field.fullWidth ? 'full-width' : ''} ${invalid ? 'creator-form-field-error' : ''}`} key={field.key}>
+            <span className="creator-payment-field-label">
+              <span>{field.label}{field.optional ? null : <em className="required-mark" aria-hidden="true">*</em>}</span>
+              <small>{field.alias}{field.optional ? ' · 选填' : ''}</small>
+            </span>
+            {field.fullWidth ? (
+              <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={invalid || undefined} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            ) : (
+              <input aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={invalid || undefined} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            )}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -2449,6 +2465,7 @@ export function CreatorsPage({
   const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [creatorNameManuallyEdited, setCreatorNameManuallyEdited] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [validationAttempt, setValidationAttempt] = useState(0);
@@ -2548,6 +2565,7 @@ export function CreatorsPage({
     onFocusCleared?.();
     setEditing(false);
     setCreating(false);
+    setCreatorNameManuallyEdited(false);
     setDraft(null);
     setFormErrors([]);
     setValidationAttempt(0);
@@ -2559,6 +2577,7 @@ export function CreatorsPage({
     onFocusCleared?.();
     setEditing(false);
     setCreating(false);
+    setCreatorNameManuallyEdited(false);
     setDraft(null);
     setFormErrors([]);
     setValidationAttempt(0);
@@ -2576,6 +2595,7 @@ export function CreatorsPage({
     });
     setEditing(true);
     setCreating(false);
+    setCreatorNameManuallyEdited(true);
     setFormErrors([]);
     setValidationAttempt(0);
   };
@@ -2590,6 +2610,7 @@ export function CreatorsPage({
           setSelectedId(null);
           setDraft({
             ...stored.profile,
+            region: stored.profile.region || creatorRegionFromContactAddress(stored.profile.contact.address),
             socialAccounts: stored.profile.socialAccounts.map((account) => ({ ...account })),
             contact: { ...stored.profile.contact },
             payoutAccounts: clonePayoutAccounts(stored.profile.payoutAccounts),
@@ -2597,6 +2618,7 @@ export function CreatorsPage({
           });
           setEditing(true);
           setCreating(true);
+          setCreatorNameManuallyEdited(!isCreatorNameAutoDerived(stored.profile.name, stored.profile.socialAccounts));
           setFormErrors([]);
           setValidationAttempt(0);
           setCreatorCloseGuardOpen(false);
@@ -2632,6 +2654,7 @@ export function CreatorsPage({
     });
     setEditing(true);
     setCreating(true);
+    setCreatorNameManuallyEdited(false);
     setFormErrors([]);
     setValidationAttempt(0);
     setCreatorCloseGuardOpen(false);
@@ -2683,36 +2706,44 @@ export function CreatorsPage({
     setValidationAttempt(0);
   };
 
-  const updateDraftProfile = (
-    field: 'name' | 'region',
-    value: string,
-  ) => {
-    setDraft((current) => current ? { ...current, [field]: value } : current);
+  const updateDraftName = (value: string) => {
+    const hasManualName = Boolean(value.trim());
+    setCreatorNameManuallyEdited(hasManualName);
+    setDraft((current) => current ? {
+      ...current,
+      name: hasManualName ? value : creatorNameFromPrimaryHandle(current.socialAccounts),
+    } : current);
   };
 
   const updateDraftSocialAccounts = (socialAccounts: CreatorSocialAccount[]) => {
     setDraft((current) => {
       if (!current) return current;
       const platforms = [...new Set(socialAccounts.map((account) => account.platform.trim()).filter(Boolean))];
-      const primaryHandle = socialAccounts.find((account) => account.handle.trim())?.handle.trim() ?? '';
+      const primaryHandle = creatorNameFromPrimaryHandle(socialAccounts);
       return {
         ...current,
         socialAccounts,
         handle: primaryHandle,
         platform: platforms.join(' · '),
+        name: creatorNameManuallyEdited
+          ? current.name
+          : creatorNameFromPrimaryHandle(socialAccounts),
       };
     });
   };
 
   const updateDraftContact = (field: keyof CreatorInvoiceContact, value: string) => {
-    setDraft((current) => current ? { ...current, contact: { ...current.contact, [field]: value } } : current);
+    setDraft((current) => current ? {
+      ...current,
+      contact: { ...current.contact, [field]: value },
+      ...(field === 'address' ? { region: creatorRegionFromContactAddress(value) } : {}),
+    } : current);
   };
 
   const saveCreatorDetails = () => {
     if (!draft) return;
     const nextErrors: string[] = [];
-    if (!draft.name.trim()) nextErrors.push('达人名称');
-    if (!draft.region.trim()) nextErrors.push('地区');
+    if (!draft.region.trim()) nextErrors.push('请在联系地址末尾填写国家名');
     if (draft.socialAccounts.length === 0) nextErrors.push('至少一个社媒账号');
     if (draft.socialAccounts.some((account) => !account.platform.trim() || !account.handle.trim())) {
       nextErrors.push('每个社媒账号的平台与账号');
@@ -2743,8 +2774,6 @@ export function CreatorsPage({
       return;
     }
 
-    const normalizedName = draft.name.trim();
-    const initials = normalizedName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'NA';
     const normalizedSocialAccounts = draft.socialAccounts.map((account) => {
       const platform = account.platform.trim();
       const handle = normalizeSocialHandle(account.handle);
@@ -2755,6 +2784,8 @@ export function CreatorsPage({
         profileUrl: account.profileUrl.trim() || defaultSocialProfileUrl(platform, handle),
       };
     });
+    const normalizedName = draft.name.trim() || creatorNameFromPrimaryHandle(normalizedSocialAccounts);
+    const initials = creatorInitialsFromName(normalizedName);
     const platformSummary = [...new Set(normalizedSocialAccounts.map((account) => account.platform))].join(' · ');
     const preparedAccounts = prepareCreatorPayoutAccountsForSave(
       draft.id,
@@ -2995,12 +3026,12 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<Users size={19} />} title="达人基本资料" description="用于项目选择与档案检索，不参与银行账户验证">
                 <div className="form-grid creator-payment-form-grid">
                   <label>
-                    <span className="creator-payment-field-label"><span>达人名称<em className="required-mark" aria-hidden="true">*</em></span><small>Display name</small></span>
-                    <input aria-label="达人名称" aria-invalid={formErrors.length > 0 && !draft.name.trim() ? true : undefined} placeholder="例如：Mina Kato" value={draft.name} onChange={(event) => updateDraftProfile('name', event.target.value)} />
+                    <span className="creator-payment-field-label"><span>达人名称</span><small>Display name · 默认跟随首个 Handle</small></span>
+                    <input aria-label="达人名称" placeholder="录入首个 Handle 后自动带入" value={draft.name} onChange={(event) => updateDraftName(event.target.value)} />
                   </label>
                   <label>
-                    <span className="creator-payment-field-label"><span>地区<em className="required-mark" aria-hidden="true">*</em></span><small>Creator region</small></span>
-                    <input aria-label="达人地区" aria-invalid={formErrors.length > 0 && !draft.region.trim() ? true : undefined} placeholder="例如：美国" value={draft.region} onChange={(event) => updateDraftProfile('region', event.target.value)} />
+                    <span className="creator-payment-field-label"><span>地区</span><small>From contact address · 自动带入</small></span>
+                    <input className="creator-derived-readonly-field" aria-label="达人地区（根据联系地址自动带入）" readOnly value={draft.region || '待识别'} />
                   </label>
                 </div>
               </CreatorPaymentSection>

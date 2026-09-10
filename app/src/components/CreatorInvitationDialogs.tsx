@@ -317,7 +317,7 @@ const RECORD_STATUS_OPTIONS: ReadonlyArray<{ value: CreatorInvitationStatusFilte
   { value: 'all', label: '全部入驻状态' },
   { value: 'SENT', label: '已发送' },
   { value: 'EXPIRED', label: '已失效' },
-  { value: 'VERIFICATION_REQUESTED', label: '已请求验证码' },
+  { value: 'VERIFICATION_REQUESTED', label: '已请求邀请码' },
   { value: 'REGISTERING', label: '注册中' },
   { value: 'COMPLETED', label: '已完成' },
 ];
