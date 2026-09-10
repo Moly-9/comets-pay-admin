@@ -46,6 +46,10 @@ import {
 } from 'react';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
+import {
+  CreatorInvitationRecordsDialog,
+  CreatorInvitationSendDialog,
+} from '../components/CreatorInvitationDialogs';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { CreatorIdentity, SocialPlatformIcon } from '../components/CreatorIdentity';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
@@ -155,6 +159,11 @@ import {
   toggleCreatorDirectorySelection,
   type CreatorDirectoryProviderFilter,
 } from '../creatorDirectoryWorkbook';
+import {
+  loadCreatorInvitationRecords,
+  saveCreatorInvitationRecords,
+  type CreatorInvitationRecord,
+} from '../creatorInvitations';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
   ExternalInvoiceCollectionCreatePage,
@@ -2425,6 +2434,18 @@ export function CreatorsPage({
   const [providerFilter, setProviderFilter] = useState<CreatorDirectoryProviderFilter>('all');
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(() => new Set());
   const [exportingCreators, setExportingCreators] = useState(false);
+  const invitationStorageLoadFailedRef = useRef(false);
+  const [invitationRecords, setInvitationRecords] = useState<CreatorInvitationRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return loadCreatorInvitationRecords(window.localStorage);
+    } catch {
+      invitationStorageLoadFailedRef.current = true;
+      return [];
+    }
+  });
+  const [invitationSendOpen, setInvitationSendOpen] = useState(false);
+  const [invitationRecordsOpen, setInvitationRecordsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -2445,6 +2466,12 @@ export function CreatorsPage({
   useEffect(() => {
     if (focusedCreatorId) setSelectedId(focusedCreatorId);
   }, [focusedCreatorId]);
+
+  useEffect(() => {
+    if (!invitationStorageLoadFailedRef.current) return;
+    invitationStorageLoadFailedRef.current = false;
+    notify('邀请记录读取失败', '浏览器本地存储暂时不可用，本次仍可在当前页面中模拟发送。');
+  }, [notify]);
 
   const normalizedSearch = search.trim().toLocaleLowerCase('zh-CN');
   const filteredCreators = useMemo(() => filterCreatorDirectory(creators, {
@@ -2504,6 +2531,15 @@ export function CreatorsPage({
       notify('达人档案导出失败', error instanceof Error ? error.message : '无法生成 Excel 文件，请稍后重试。');
     } finally {
       setExportingCreators(false);
+    }
+  };
+
+  const updateInvitationRecords = (nextRecords: CreatorInvitationRecord[]) => {
+    setInvitationRecords(nextRecords);
+    try {
+      saveCreatorInvitationRecords(nextRecords, window.localStorage);
+    } catch {
+      notify('邀请记录保存失败', '模拟发送结果已保留在当前页面，但刷新后可能无法恢复。');
     }
   };
 
@@ -2789,7 +2825,12 @@ export function CreatorsPage({
       <PageHeading
         title="达人档案"
         subtitle="分开维护达人身份、Invoice 联系资料及多个收款账户。"
-        actions={canEdit ? <Button icon={<Plus size={17} />} onClick={startCreating}>新建达人档案</Button> : undefined}
+        actions={canEdit ? (
+          <>
+            <Button icon={<Plus size={17} />} onClick={startCreating}>新建达人档案</Button>
+            <Button variant="secondary" icon={<Send size={17} />} onClick={() => setInvitationSendOpen(true)}>发送邀请链接</Button>
+          </>
+        ) : undefined}
       />
       <div className="metrics-grid">
         <MetricCard label="达人总数" value={creators.length.toLocaleString('zh-CN')} meta="当前档案" tone="peach" />
@@ -2808,16 +2849,21 @@ export function CreatorsPage({
               onChange={setProviderFilter}
             />
           </div>
-          <Button
-            variant="secondary"
-            icon={exportingCreators ? <LoaderCircle className="is-spinning" size={16} /> : <Download size={16} />}
-            disabled={!selectedCreators.length || exportingCreators}
-            disabledReason={!selectedCreators.length ? '请先勾选至少一位达人。' : '达人档案正在导出，请稍候。'}
-            aria-busy={exportingCreators || undefined}
-            onClick={() => { void exportSelectedCreators(); }}
-          >
-            {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
-          </Button>
+          <div className="creator-directory-toolbar-actions">
+            <Button
+              variant="secondary"
+              icon={exportingCreators ? <LoaderCircle className="is-spinning" size={16} /> : <Download size={16} />}
+              disabled={!selectedCreators.length || exportingCreators}
+              disabledReason={!selectedCreators.length ? '请先勾选至少一位达人。' : '达人档案正在导出，请稍候。'}
+              aria-busy={exportingCreators || undefined}
+              onClick={() => { void exportSelectedCreators(); }}
+            >
+              {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
+            </Button>
+            <Button variant="secondary" icon={<ClipboardCheck size={16} />} onClick={() => setInvitationRecordsOpen(true)}>
+              邀请记录
+            </Button>
+          </div>
         </div>
         <div className="table-scroll">
           <table className="data-table operational-table creator-directory-table">
@@ -3037,6 +3083,26 @@ export function CreatorsPage({
         onSave={saveCreatorDraft}
         onContinue={() => setCreatorCloseGuardOpen(false)}
       />
+      {invitationSendOpen ? (
+        <CreatorInvitationSendDialog
+          creators={creators}
+          records={invitationRecords}
+          notify={notify}
+          onClose={() => setInvitationSendOpen(false)}
+          onRecordsChange={updateInvitationRecords}
+          onOpenRecords={() => {
+            setInvitationSendOpen(false);
+            setInvitationRecordsOpen(true);
+          }}
+        />
+      ) : null}
+      {invitationRecordsOpen ? (
+        <CreatorInvitationRecordsDialog
+          records={invitationRecords}
+          notify={notify}
+          onClose={() => setInvitationRecordsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
