@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { ContractRecognitionField, ContractSourceLocation } from '../contractRecognitionTypes';
+import type { DocumentPayoutSnapshot } from '../types';
 import {
   INITIAL_CONTRACTS,
   applyConfirmedRecognitionToContract,
@@ -10,7 +11,11 @@ import {
   type ContractType,
 } from '../contracts';
 import {
+  ContractPaymentList,
   ContractDetailPage,
+  contractPaymentAccountRows,
+  contractPaymentChannelDisplayValue,
+  contractPaymentFieldsFor,
   contractRecognitionKeysToConfirm,
   contractExpiryDisplayValue,
   contractSummaryFieldsFor,
@@ -40,6 +45,29 @@ const recognitionField = (
   confidence: 0.98,
   status: 'confirmed',
   candidates: [],
+});
+
+const paymentSnapshot = (
+  payoutProvider: DocumentPayoutSnapshot['payoutProvider'],
+): DocumentPayoutSnapshot => ({
+  payoutProvider,
+  bankCountry: 'United States',
+  accountName: 'Sample Creator LLC',
+  accountType: 'Checking',
+  swiftCode: 'CHASUS33',
+  accountNumber: '50002401',
+  iban: 'GB82WEST12345698765432',
+  beneficiaryType: 'COMPANY',
+  bankName: 'JPMorgan Chase Bank',
+  bankStreetAddress: '270 Park Avenue',
+  bankCity: 'New York',
+  bankState: 'NY',
+  bankPostalCode: '10017',
+  intermediaryBankCountry: '',
+  intermediaryBankCode: '',
+  transferRemarks: 'COMETS contract payout',
+  paypalUsername: 'sample.creator',
+  paypalEmail: 'sample.creator@example.com',
 });
 
 describe('ContractDetailPage expiry presentation', () => {
@@ -161,6 +189,91 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(styles).toMatch(/\.contract-detail-page > \.page-heading-row > div:first-child\s*{[^}]*min-width:\s*0;/s);
     expect(styles).toMatch(/\.contract-detail-page > \.page-heading-row \.page-heading-actions\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-wrap:\s*nowrap;/s);
     expect(styles).toMatch(/\.contract-detail-page \.page-heading-actions\s*{[^}]*grid-template-columns:\s*1fr 1fr;/s);
+  });
+
+  it('preserves payment-rule differences between contract types', () => {
+    expect(contractPaymentFieldsFor('INDEPENDENT').map((field) => field.label)).toEqual([
+      '付款金额',
+      'Invoice 开具期限',
+      '付款期限',
+      '付款渠道',
+      '手续费费用承担方',
+    ]);
+    expect(contractPaymentFieldsFor('FRAMEWORK').map((field) => field.label)).toEqual([
+      '手续费费用承担方',
+    ]);
+    expect(contractPaymentFieldsFor('IO').map((field) => field.label)).toEqual([
+      '付款金额',
+      'Invoice 开具期限',
+      '付款期限',
+      '付款渠道',
+    ]);
+  });
+
+  it('flattens bank payment details and keeps full account values', () => {
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      payoutProvider: 'Airwallex' as const,
+      paymentMethod: 'BANK' as const,
+    };
+    const snapshot = paymentSnapshot('Airwallex');
+    const rows = contractPaymentAccountRows(contract, snapshot);
+    const html = renderToStaticMarkup(
+      <ContractPaymentList
+        contract={contract}
+        fields={contractPaymentFieldsFor('INDEPENDENT')}
+        paymentSnapshot={snapshot}
+      />,
+    );
+
+    expect(contractPaymentChannelDisplayValue(contract, snapshot)).toBe('Airwallex');
+    expect(rows.map((row) => row.label)).toEqual([
+      'Account Name',
+      'Account Number',
+      'Beneficiary Bank Name',
+      'Beneficiary Bank Address',
+      'SWIFT Code',
+      'IBAN',
+      'Remittance Information (optional)',
+    ]);
+    expect(rows.find((row) => row.key === 'beneficiary-bank-address')?.value).toBe(
+      '270 Park Avenue, New York, NY, 10017, United States',
+    );
+    expect(html).toContain('50002401');
+    expect(html).not.toContain('付款信息');
+    expect(html).not.toContain('达人付款账户');
+    expect((html.match(/Remittance Information \(optional\)/g) ?? [])).toHaveLength(1);
+
+    expect(contractPaymentAccountRows(contract, {
+      ...snapshot,
+      accountNumber: '•••• 2401',
+    }).find((row) => row.key === 'account-number')?.value).toBe('历史记录未保存完整账号');
+  });
+
+  it('shows only PayPal fields and falls back to the legacy payment method when no provider exists', () => {
+    const paypalContract = {
+      ...INITIAL_CONTRACTS[0],
+      payoutProvider: 'Airwallex' as const,
+      paymentMethod: 'BANK' as const,
+    };
+    const rows = contractPaymentAccountRows(paypalContract, paymentSnapshot('PayPal'));
+
+    expect(contractPaymentChannelDisplayValue(paypalContract, paymentSnapshot('PayPal'))).toBe('PayPal');
+    expect(rows.map((row) => row.label)).toEqual([
+      'PayPal Username',
+      'PayPal Email Address',
+      'Transfer Note (optional)',
+    ]);
+    expect(rows.some((row) => row.label === 'Account Number')).toBe(false);
+    expect(contractPaymentAccountRows({
+      ...paypalContract,
+      payoutProvider: 'PayMax',
+    }, paymentSnapshot('PayMax')).some((row) => row.label === 'Account Number')).toBe(true);
+    expect(contractPaymentChannelDisplayValue({
+      ...paypalContract,
+      payoutProvider: undefined,
+      paymentMethod: 'BANK',
+    }, null)).toBe('银行转账');
   });
 
   it('renders template-only cards and the paged field editor without ordinary contract controls', () => {

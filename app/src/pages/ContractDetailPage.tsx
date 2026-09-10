@@ -26,7 +26,6 @@ import { Button, Modal, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { ContractTemplateFieldEditor } from '../components/ContractTemplateFieldEditor';
-import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import {
   canConfirmRecognitionFields,
   confirmRecognitionFields,
@@ -61,6 +60,7 @@ import { contractDocumentFilename } from '../documentFilenames';
 import { resolveSystemUser } from '../data';
 import type { ContractId } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
+import { normalizePaymentProviderName, paymentProviderDisplayName } from '../paymentProviderPresentation';
 import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -75,18 +75,25 @@ type ContractDetailTab = 'summary' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
 
 type ContractDetailField = {
-  key: ContractFieldKey | 'campaignEnd' | 'paymentInfo';
+  key: ContractFieldKey | 'campaignEnd';
   label: string;
 };
 
+type ContractPaymentRuleKey =
+  | 'projectTotalFees'
+  | 'invoiceIssuePeriod'
+  | 'paymentTerm'
+  | 'paymentMethod'
+  | 'transferFee';
+
 type ContractPaymentField = {
-  key: ContractFieldKey | 'paymentInfo';
+  key: ContractPaymentRuleKey;
   label: string;
 };
 
 const isRecognitionFieldKey = (
   key: ContractDetailField['key'],
-): key is ContractFieldKey => key !== 'campaignEnd' && key !== 'paymentInfo';
+): key is ContractFieldKey => key !== 'campaignEnd';
 
 const recognitionFieldHasValue = (field: ContractRecognitionField | undefined) => Boolean(
   field && (field.editedValue?.trim() || field.rawValue.trim()),
@@ -137,21 +144,23 @@ const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractPaymentField[]> = {
     { key: 'projectTotalFees', label: '付款金额' },
     { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
     { key: 'paymentTerm', label: '付款期限' },
-    { key: 'paymentMethod', label: '付款方式' },
+    { key: 'paymentMethod', label: '付款渠道' },
     { key: 'transferFee', label: '手续费费用承担方' },
-    { key: 'paymentInfo', label: '付款信息' },
   ],
   FRAMEWORK: [
     { key: 'transferFee', label: '手续费费用承担方' },
-    { key: 'paymentInfo', label: '付款信息' },
   ],
   IO: [
     { key: 'projectTotalFees', label: '付款金额' },
     { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
     { key: 'paymentTerm', label: '付款期限' },
-    { key: 'paymentMethod', label: '付款方式' },
+    { key: 'paymentMethod', label: '付款渠道' },
   ],
 };
+
+export const contractPaymentFieldsFor = (contractType: ContractType) => (
+  PAYMENT_FIELDS_BY_TYPE[contractType]
+);
 
 const DETAIL_FIELD_LABELS: Partial<Record<ContractFieldKey, string>> = Object.fromEntries(
   [...SUMMARY_FIELDS_BY_TYPE.INDEPENDENT, ...PAYMENT_FIELDS_BY_TYPE.INDEPENDENT]
@@ -193,8 +202,66 @@ const PAYMENT_METHOD_LABELS = {
   BANK: '银行转账',
   PAYPAL: 'PayPal',
   AIRWALLEX: 'Airwallex',
-  '': '待选择',
+  '': '待补充',
 } as const;
+
+type ContractPaymentIdentity = Pick<ContractRecord, 'payoutProvider' | 'paymentMethod'>;
+
+export type ContractPaymentDisplayRow = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+const paymentProviderForContract = (
+  contract: ContractPaymentIdentity,
+  paymentSnapshot: DocumentPayoutSnapshot | null,
+) => paymentSnapshot?.payoutProvider || contract.payoutProvider;
+
+export const contractPaymentChannelDisplayValue = (
+  contract: ContractPaymentIdentity,
+  paymentSnapshot: DocumentPayoutSnapshot | null,
+) => {
+  const provider = paymentProviderForContract(contract, paymentSnapshot);
+  return provider
+    ? paymentProviderDisplayName(provider)
+    : PAYMENT_METHOD_LABELS[contract.paymentMethod] || '待补充';
+};
+
+export const contractPaymentAccountRows = (
+  contract: ContractPaymentIdentity,
+  paymentSnapshot: DocumentPayoutSnapshot | null,
+): ContractPaymentDisplayRow[] => {
+  const snapshotValue = (value?: string | null) => value?.trim() || '待补充';
+  const provider = normalizePaymentProviderName(paymentProviderForContract(contract, paymentSnapshot));
+  const isPayPal = provider === 'PayPal' || (!provider && contract.paymentMethod === 'PAYPAL');
+
+  if (isPayPal) {
+    return [
+      { key: 'paypal-username', label: 'PayPal Username', value: accountDisplayValue(paymentSnapshot?.paypalUsername) },
+      { key: 'paypal-email', label: 'PayPal Email Address', value: accountDisplayValue(paymentSnapshot?.paypalEmail) },
+      { key: 'transfer-note', label: 'Transfer Note (optional)', value: snapshotValue(paymentSnapshot?.transferRemarks) },
+    ];
+  }
+
+  const bankAddress = [
+    paymentSnapshot?.bankStreetAddress,
+    paymentSnapshot?.bankCity,
+    paymentSnapshot?.bankState,
+    paymentSnapshot?.bankPostalCode,
+    paymentSnapshot?.bankCountry,
+  ].map((value) => value?.trim()).filter(Boolean).join(', ');
+
+  return [
+    { key: 'account-name', label: 'Account Name', value: accountDisplayValue(paymentSnapshot?.accountName) },
+    { key: 'account-number', label: 'Account Number', value: accountDisplayValue(paymentSnapshot?.accountNumber) },
+    { key: 'beneficiary-bank-name', label: 'Beneficiary Bank Name', value: snapshotValue(paymentSnapshot?.bankName) },
+    { key: 'beneficiary-bank-address', label: 'Beneficiary Bank Address', value: snapshotValue(bankAddress) },
+    { key: 'swift-code', label: 'SWIFT Code', value: accountDisplayValue(paymentSnapshot?.swiftCode) },
+    { key: 'iban', label: 'IBAN', value: accountDisplayValue(paymentSnapshot?.iban) },
+    { key: 'remittance-information', label: 'Remittance Information (optional)', value: snapshotValue(paymentSnapshot?.transferRemarks) },
+  ];
+};
 
 const createDemoAirwallexSnapshot = (contract: ContractRecord): DocumentPayoutSnapshot => {
   const accountName = contract.accountName || contract.publisher || 'Demo Creator';
@@ -299,7 +366,7 @@ function ContractDefinitionList({
   );
 }
 
-function ContractPaymentList({
+export function ContractPaymentList({
   contract,
   fields,
   paymentSnapshot,
@@ -307,119 +374,11 @@ function ContractPaymentList({
 }: {
   contract: ContractRecord;
   fields: ContractPaymentField[];
-  paymentSnapshot: ReturnType<typeof invoicePaymentForCreator> | null;
+  paymentSnapshot: DocumentPayoutSnapshot | null;
   formalFieldsHidden?: boolean;
 }) {
-  const provider = paymentSnapshot?.payoutProvider || contract.payoutProvider;
-  const accountName = paymentSnapshot?.accountName
-    || paymentSnapshot?.paypalUsername
-    || contract.accountName;
-  const snapshotValue = (value?: string | null) => value?.trim() || '待补充';
-  const transferMethodLabel = (value?: string) => {
-    if (value === 'LOCAL') return '本地转账 · LOCAL';
-    if (value === 'SWIFT') return '国际电汇 · SWIFT';
-    if (value === 'PAYPAL') return 'PayPal';
-    return '待补充';
-  };
-  type PaymentAccountRow = [string, string, boolean?];
-  const displayedSchemaPaths = new Set([
-    'beneficiary.bank_details.account_name',
-    'beneficiary.bank_details.account_number',
-    'beneficiary.bank_details.bank_account_category',
-    'beneficiary.bank_details.bank_name',
-    'beneficiary.bank_details.bank_street_address',
-    'beneficiary.bank_details.swift_code',
-    'beneficiary.bank_details.iban',
-    'beneficiary.bank_details.bank_country_code',
-    'beneficiary.bank_details.account_currency',
-    'beneficiary.bank_details.bank_state',
-    'beneficiary.bank_details.bank_city',
-    'beneficiary.bank_details.bank_postcode',
-    'beneficiary.bank_details.intermediary_bank_country_code',
-    'beneficiary.bank_details.intermediary_bank_swift_code',
-    'beneficiary.bank_details.local_clearing_system',
-  ]);
-  const requiredSchemaRows = paymentSnapshot
-    ? (paymentSnapshot.schemaFields ?? [])
-      .filter((field) => (
-        field.required
-        && (field.path === 'transfer_method' || field.path.startsWith('beneficiary.bank_details.'))
-        && !displayedSchemaPaths.has(field.path)
-        && paymentSnapshot.schemaValues?.[field.path]?.trim()
-      ))
-      .map((field): PaymentAccountRow => [field.label, snapshotValue(paymentSnapshot.schemaValues?.[field.path])])
-    : [];
-  const paymentInfo = [
-    accountName,
-    paymentProviderDisplayName(provider),
-    provider === 'PayPal'
-      ? paymentSnapshot?.paypalEmail || paymentSnapshot?.paypalUsername
-      : provider === 'PayMax'
-        ? accountDisplayValue(paymentSnapshot?.accountNumber)
-        : paymentSnapshot?.iban
-          ? `IBAN ${accountDisplayValue(paymentSnapshot.iban)}`
-          : accountDisplayValue(paymentSnapshot?.accountNumber),
-  ].filter(Boolean).join(' · ') || '待补充';
-  const accountSections: Array<{ title: string; items: PaymentAccountRow[] }> = paymentSnapshot ? [
-    {
-      title: '付款路由',
-      items: [
-        ['付款渠道', paymentProviderDisplayName(paymentSnapshot.payoutProvider)],
-        ['Beneficiary ID', snapshotValue(paymentSnapshot.externalBeneficiaryId)],
-        ['收款人类型', snapshotValue(paymentSnapshot.beneficiaryType)],
-        ['银行国家 / 地区', snapshotValue(paymentSnapshot.bankCountry)],
-        ['支付币种', snapshotValue(paymentSnapshot.accountCurrency)],
-        ['转账方式', transferMethodLabel(paymentSnapshot.transferMethod)],
-        ...(paymentSnapshot.localClearingSystem
-          ? [['本地清算系统', snapshotValue(paymentSnapshot.localClearingSystem)] as PaymentAccountRow]
-          : []),
-        ...requiredSchemaRows,
-      ],
-    },
-    ...(provider === 'PayPal'
-      ? [{
-        title: 'PayPal 账户',
-        items: [
-          ['PayPal 用户名', snapshotValue(paymentSnapshot.paypalUsername)],
-          ['PayPal 邮箱', snapshotValue(paymentSnapshot.paypalEmail)],
-          ['付款备注', snapshotValue(paymentSnapshot.transferRemarks), true],
-        ] as PaymentAccountRow[],
-      }]
-      : provider === 'PayMax'
-        ? [{
-          title: 'Payer Max 账户',
-          items: [
-            ['收款账户名称', snapshotValue(paymentSnapshot.accountName)],
-            ['Payer Max 账户 ID', snapshotValue(paymentSnapshot.accountNumber)],
-            ['付款国家 / 地区', snapshotValue(paymentSnapshot.bankCountry)],
-            ['付款备注', snapshotValue(paymentSnapshot.transferRemarks), true],
-          ] as PaymentAccountRow[],
-        }]
-        : [{
-          title: '收款银行',
-          items: [
-            ['Account Name', snapshotValue(paymentSnapshot.accountName)],
-            ['账户类型', snapshotValue(paymentSnapshot.accountType)],
-            ['Account Number', accountDisplayValue(paymentSnapshot.accountNumber)],
-            ['IBAN', accountDisplayValue(paymentSnapshot.iban)],
-            ['收款银行名称', snapshotValue(paymentSnapshot.bankName)],
-            ['SWIFT / BIC', snapshotValue(paymentSnapshot.swiftCode)],
-            ['收款银行地址', snapshotValue(paymentSnapshot.bankStreetAddress), true],
-            ['收款银行城市', snapshotValue(paymentSnapshot.bankCity)],
-            ['收款银行州 / 省', snapshotValue(paymentSnapshot.bankState)],
-            ['收款银行邮编', snapshotValue(paymentSnapshot.bankPostalCode)],
-            ...(paymentSnapshot.intermediaryBankCountry || paymentSnapshot.intermediaryBankCode
-              ? [
-                ['中间行国家 / 地区', snapshotValue(paymentSnapshot.intermediaryBankCountry)],
-                ['中间行 SWIFT / BIC', snapshotValue(paymentSnapshot.intermediaryBankCode)],
-              ] as PaymentAccountRow[]
-              : []),
-            ['付款备注', snapshotValue(paymentSnapshot.transferRemarks), true],
-          ] as PaymentAccountRow[],
-        }]),
-  ] : [];
-  const valueFor = (key: ContractFieldKey | 'paymentInfo') => {
-    if (formalFieldsHidden && key !== 'paymentInfo') return '待补充';
+  const valueFor = (key: ContractPaymentRuleKey) => {
+    if (formalFieldsHidden) return '待补充';
     switch (key) {
       case 'projectTotalFees': return formatContractMoney(contract);
       case 'invoiceIssuePeriod': return contract.invoiceWithinWorkingDays
@@ -428,44 +387,24 @@ function ContractPaymentList({
       case 'paymentTerm': return contract.paymentWithinWorkingDays
         ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日`
         : '待补充';
-      case 'paymentMethod': return PAYMENT_METHOD_LABELS[contract.paymentMethod];
+      case 'paymentMethod': return contractPaymentChannelDisplayValue(contract, paymentSnapshot);
       case 'transferFee': return FEE_BEARER_LABELS[contract.feeBearer];
-      case 'paymentInfo': return paymentInfo;
       default: return '待补充';
     }
   };
+  const rows: ContractPaymentDisplayRow[] = [
+    ...fields.map((field) => ({ key: field.key, label: field.label, value: valueFor(field.key) })),
+    ...contractPaymentAccountRows(contract, paymentSnapshot),
+  ];
   return (
-    <div className="contract-payment-content">
-      <dl className="contract-payment-list contract-payment-rules-list">
-        {fields.map((field) => (
-          <div key={field.key}>
-            <dt>{field.label}</dt>
-            <dd>{valueFor(field.key)}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <section className="contract-payment-account-card" aria-label="达人付款账户">
-        <header>
-          <span className="contract-payment-card-icon" aria-hidden="true"><Landmark size={16} /></span>
-          <span><strong>达人付款账户</strong><small>仅展示本次付款所需的账户和银行信息</small></span>
-        </header>
-        {accountSections.map((section) => (
-          <div className="contract-payment-account-section" key={section.title}>
-            <h4>{section.title}</h4>
-            <dl className="contract-payment-data-grid">
-              {section.items.map(([label, value, wide], itemIndex) => (
-                <div className={wide ? 'is-wide' : ''} key={`${section.title}-${label}-${itemIndex}`}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        ))}
-        {!paymentSnapshot ? <p className="contract-payment-empty">未找到可用于付款的达人账户，请先在达人档案补充并验证账户信息。</p> : null}
-      </section>
-    </div>
+    <dl className="contract-payment-list contract-payment-rules-list">
+      {rows.map((row) => (
+        <div key={row.key}>
+          <dt>{row.label}</dt>
+          <dd>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
