@@ -1,5 +1,8 @@
 import {
   CONTRACT_FIELD_LABELS,
+  CONTRACT_UPLOAD_BANK_FIELD_KEYS,
+  CONTRACT_UPLOAD_CORE_FIELD_KEYS,
+  CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS,
   type ContractDocumentType,
   type ContractFieldCandidate,
   type ContractFieldKey,
@@ -20,6 +23,12 @@ const ALIASES: Record<ContractFieldKey, AliasDefinition> = {
   },
   publisher: {
     aliases: ['Publisher', 'Creator', 'Influencer', 'Service Provider', '发布方', '达人', '创作者', '服务提供方', '乙方'],
+  },
+  signatureStatus: {
+    aliases: ['Signature Status', 'Signing Status', '签署状态', '签字状态'],
+  },
+  contractExpiry: {
+    aliases: ['Contract End Date', 'Expiration Date', 'Expiry Date', 'Campaign End', 'End Date', '合同有效期', '合同到期日', '到期日期', '失效日期'],
   },
   contractNumber: {
     aliases: ['Contract Number', 'Contract No.', 'Contract No', 'Agreement Number', 'Agreement ID', '合同编号', '协议编号'],
@@ -56,6 +65,36 @@ const ALIASES: Record<ContractFieldKey, AliasDefinition> = {
   },
   beneficiaryAccount: {
     aliases: ['Beneficiary', 'Beneficiary Name', 'Bank Account', 'Account Name', 'Account Number', '收款主体', '收款账户', '银行账户', '账户名称'],
+  },
+  accountName: {
+    aliases: ['Account Name', 'Account Holder Name', 'Beneficiary Name', 'Beneficiary Account Name', 'Bank Account Name', '账户名称', '开户名称', '收款账户名'],
+  },
+  accountNumber: {
+    aliases: ['Account Number', 'Beneficiary Account Number', 'Bank Account Number', 'A/C Number', 'A/C No.', '银行账号', '收款账号', '账户号码'],
+  },
+  beneficiaryBankName: {
+    aliases: ['Beneficiary Bank Name', 'Beneficiary Bank', 'Bank Name', '收款银行名称', '收款银行', '开户银行'],
+  },
+  beneficiaryBankAddress: {
+    aliases: ['Beneficiary Bank Address', 'Bank Address', '收款银行地址', '开户行地址'],
+  },
+  swiftCode: {
+    aliases: ['SWIFT Code', 'SWIFT/BIC', 'SWIFT', 'BIC Code', 'BIC', '银行国际代码'],
+  },
+  iban: {
+    aliases: ['IBAN', 'International Bank Account Number', '国际银行账号'],
+  },
+  remittanceInformation: {
+    aliases: ['Remittance Information', 'Remittance Info', 'Wire Instructions', '汇款信息', '汇款附言'],
+  },
+  paypalUsername: {
+    aliases: ['PayPal Username', 'Paypal UserName', 'PayPal User Name', 'PayPal Account Name', 'PayPal 用户名', 'PayPal 账号'],
+  },
+  paypalEmail: {
+    aliases: ['PayPal Email Address', 'Paypal Email Address', 'PayPal Email', 'PayPal 邮箱'],
+  },
+  transferNote: {
+    aliases: ['Transfer Note', 'PayPal Transfer Note', '转账备注', '付款备注'],
   },
 };
 
@@ -102,6 +141,8 @@ const sourceFor = (
 
 const matchLabeledValue = (text: string, aliases: string[]) => {
   const pattern = aliases.map(escapeRegExp).sort((left, right) => right.length - left.length).join('|');
+  const tableMatch = text.match(new RegExp(`(?:^|\\|\\s*)(?:${pattern})\\s*\\|\\s*([^|]+)`, 'iu'));
+  if (tableMatch?.[1]) return cleanValue(tableMatch[1]);
   const match = text.match(new RegExp(`(?:^|[\\s|])(?:${pattern})\\s*(?::|：|[-–—]|\\|)\\s*(.+)$`, 'iu'));
   return cleanValue(match?.[1] ?? '');
 };
@@ -207,13 +248,22 @@ const normalizeTransferFee = (raw: string) => {
 };
 
 const documentPriority = (fieldKey: ContractFieldKey, type: ContractDocumentType) => {
-  if (['ioNumber', 'projectBrand', 'platformChannel', 'campaignPeriod'].includes(fieldKey)) {
+  if (['ioNumber', 'projectBrand', 'platformChannel', 'campaignPeriod', 'contractExpiry'].includes(fieldKey)) {
     return type === 'IO' ? 50 : type === 'STANDARD_TERMS' ? 20 : 10;
   }
-  if (['advertiser', 'publisher', 'effectiveDate'].includes(fieldKey)) {
+  if (['advertiser', 'publisher', 'effectiveDate', 'signatureStatus'].includes(fieldKey)) {
     return type === 'STANDARD_TERMS' ? 50 : type === 'SIGNATURE_PAGE' ? 35 : 15;
   }
-  if (['projectTotalFees', 'invoiceIssuePeriod', 'paymentTerm', 'paymentMethod', 'transferFee', 'beneficiaryAccount'].includes(fieldKey)) {
+  if ([
+    'projectTotalFees',
+    'invoiceIssuePeriod',
+    'paymentTerm',
+    'paymentMethod',
+    'transferFee',
+    'beneficiaryAccount',
+    ...CONTRACT_UPLOAD_BANK_FIELD_KEYS,
+    ...CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS,
+  ].includes(fieldKey)) {
     return type === 'PAYMENT_ADDENDUM' ? 60 : type === 'IO' ? 50 : type === 'STANDARD_TERMS' ? 40 : 10;
   }
   return type === 'STANDARD_TERMS' ? 40 : type === 'IO' ? 35 : 10;
@@ -356,6 +406,69 @@ const effectiveDateCandidates = (documents: ParsedContractDocument[]) => {
   ).filter((candidate) => Boolean((candidate.normalizedValue as { date: string }).date));
 };
 
+const signatureStatusCandidates = (documents: ParsedContractDocument[]) => documents.flatMap((document) => (
+  document.parseStatus !== 'parsed'
+    ? []
+    : document.blocks.flatMap((block) => {
+        const text = block.text.trim();
+        const statusValue = matchLabeledValue(text, ALIASES.signatureStatus.aliases);
+        const labeledValue = text.match(/(?:signed\s+by|date\s+signed|signed|signature|签署人|签署日期|签字人|签字日期)\s*[:：]\s*(.+)$/i)?.[1]?.trim() ?? '';
+        const explicitlyUnsigned = /\b(?:not\s+signed|unsigned|awaiting\s+signature|pending\s+signature)\b|未签署|尚未签署|待签署/i.test(text)
+          || /^(?:no|false|pending|unsigned|not\s+signed|否|未签署|待签署)$/i.test(statusValue)
+          || /^(?:no|false|pending|unsigned|not\s+signed|否|未签署|待签署)$/i.test(labeledValue);
+        const hasFilledSignatureValue = Boolean(
+          labeledValue
+          && /[\p{L}\p{N}]/u.test(labeledValue)
+          && !/^(?:n\/?a|none|no|false|pending|unsigned|not\s+signed|否|待签署|未签署)$/i.test(labeledValue),
+        );
+        const explicitlySigned = hasFilledSignatureValue
+          || /^(?:signed|executed|complete|completed|yes)$/i.test(statusValue)
+          || /^(?:signed|executed)$/i.test(text)
+          || /已签署|已签字|已盖章/i.test(text);
+        if (!explicitlyUnsigned && !explicitlySigned) return [];
+        const signed = !explicitlyUnsigned;
+        const signedAt = signed ? normalizeContractDate(text) : '';
+        return [{
+          rawValue: signed ? '已签署' : '未签署',
+          normalizedValue: { signed, signedAt: signedAt || undefined },
+          source: sourceFor(document, block),
+          confidence: explicitlyUnsigned ? 0.96 : 0.9,
+        } satisfies ContractFieldCandidate];
+      })
+));
+
+const contractExpiryCandidates = (documents: ParsedContractDocument[]) => {
+  const explicit = candidatesForAliases(
+    documents,
+    ALIASES.contractExpiry.aliases,
+    (raw) => ({ endDate: normalizeContractDate(raw), isLongTerm: false }),
+    0.95,
+  ).filter((candidate) => Boolean((candidate.normalizedValue as { endDate?: string }).endDate));
+  const ranges = campaignCandidates(documents)
+    .filter((candidate) => Boolean((candidate.normalizedValue as { endDate?: string }).endDate))
+    .map((candidate) => ({
+      ...candidate,
+      rawValue: (candidate.normalizedValue as { endDate: string }).endDate,
+      normalizedValue: {
+        endDate: (candidate.normalizedValue as { endDate: string }).endDate,
+        isLongTerm: false,
+      },
+    }));
+  const longTerm = documents.flatMap((document) => (
+    document.parseStatus !== 'parsed'
+      ? []
+      : document.blocks
+        .filter((block) => /\b(?:perpetual|indefinite|no\s+fixed\s+(?:end|term)|long[-\s]?term)\b|长期有效|永久有效|无固定期限/i.test(block.text))
+        .map((block) => ({
+          rawValue: '长期有效',
+          normalizedValue: { endDate: '', isLongTerm: true },
+          source: sourceFor(document, block),
+          confidence: 0.9,
+        } satisfies ContractFieldCandidate))
+  ));
+  return [...explicit, ...ranges, ...longTerm];
+};
+
 const totalFeeCandidates = (documents: ParsedContractDocument[]) => {
   const direct = candidatesForAliases(documents, ALIASES.projectTotalFees.aliases, normalizeMoney, 0.95);
   return direct.map((candidate) => {
@@ -394,8 +507,10 @@ export const recognizeContractFields = (
   const candidates: Record<ContractFieldKey, ContractFieldCandidate[]> = {
     advertiser: candidatesForAliases(documents, ALIASES.advertiser.aliases),
     publisher: candidatesForAliases(documents, ALIASES.publisher.aliases),
+    signatureStatus: signatureStatusCandidates(documents),
+    contractExpiry: contractExpiryCandidates(documents),
     contractNumber: context.systemContractNumber
-      ? [systemContractCandidate(context.systemContractNumber), ...fileContractNumbers]
+      ? [systemContractCandidate(context.systemContractNumber)]
       : fileContractNumbers,
     ioNumber: candidatesForAliases(documents, ALIASES.ioNumber.aliases, (raw) => raw, 0.94),
     projectBrand: projectBrandCandidates(documents),
@@ -428,10 +543,28 @@ export const recognizeContractFields = (
     transferFee: candidatesForAliases(documents, ALIASES.transferFee.aliases, normalizeTransferFee, 0.9)
       .filter((candidate) => Boolean(candidate.normalizedValue)),
     beneficiaryAccount: candidatesForAliases(documents, ALIASES.beneficiaryAccount.aliases, (raw) => raw, 0.82),
+    accountName: candidatesForAliases(documents, ALIASES.accountName.aliases, (raw) => raw, 0.92),
+    accountNumber: candidatesForAliases(documents, ALIASES.accountNumber.aliases, (raw) => raw, 0.94),
+    beneficiaryBankName: candidatesForAliases(documents, ALIASES.beneficiaryBankName.aliases, (raw) => raw, 0.92),
+    beneficiaryBankAddress: candidatesForAliases(documents, ALIASES.beneficiaryBankAddress.aliases, (raw) => raw, 0.9),
+    swiftCode: candidatesForAliases(documents, ALIASES.swiftCode.aliases, (raw) => raw.toUpperCase(), 0.94),
+    iban: candidatesForAliases(documents, ALIASES.iban.aliases, (raw) => raw.replace(/\s+/g, '').toUpperCase(), 0.94),
+    remittanceInformation: candidatesForAliases(documents, ALIASES.remittanceInformation.aliases, (raw) => raw, 0.86),
+    paypalUsername: candidatesForAliases(documents, ALIASES.paypalUsername.aliases, (raw) => raw, 0.94),
+    paypalEmail: candidatesForAliases(documents, ALIASES.paypalEmail.aliases, (raw) => raw.trim().toLowerCase(), 0.96),
+    transferNote: candidatesForAliases(documents, ALIASES.transferNote.aliases, (raw) => raw, 0.86),
   };
 
   const results = (Object.keys(CONTRACT_FIELD_LABELS) as ContractFieldKey[])
     .map((fieldKey) => resultFromCandidates(fieldKey, candidates[fieldKey]));
+  const systemContractNumber = results.find((field) => field.fieldKey === 'contractNumber');
+  if (systemContractNumber && context.systemContractNumber) {
+    systemContractNumber.status = 'confirmed';
+    systemContractNumber.origin = 'system';
+    systemContractNumber.group = 'summary';
+    systemContractNumber.readOnly = true;
+    systemContractNumber.requiredForConfirmation = false;
+  }
   const beneficiary = results.find((field) => field.fieldKey === 'beneficiaryAccount');
   if (beneficiary && beneficiary.status !== 'missing' && context.beneficiaryReferences?.length) {
     const recognizedValue = beneficiary.rawValue.toLocaleLowerCase().replace(/\s+/g, '');
@@ -450,15 +583,85 @@ export const recognizeContractFields = (
   return results;
 };
 
+export const recognizeUploadContractFields = (
+  documents: ParsedContractDocument[],
+  context: ContractRecognitionContext,
+): ContractRecognitionField[] => {
+  const results = recognizeContractFields(documents, context);
+  const fieldFor = (fieldKey: ContractFieldKey) => results.find((field) => field.fieldKey === fieldKey);
+  const hasBankFields = CONTRACT_UPLOAD_BANK_FIELD_KEYS.some((fieldKey) => Boolean(fieldFor(fieldKey)?.rawValue.trim()));
+  const hasPaypalFields = CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS.some((fieldKey) => Boolean(fieldFor(fieldKey)?.rawValue.trim()));
+  const hasNoAccountFields = !hasBankFields && !hasPaypalFields;
+  const contractType = documents[0]?.contractType ?? 'INDEPENDENT';
+  const orderedKeys: ContractFieldKey[] = [
+    ...CONTRACT_UPLOAD_CORE_FIELD_KEYS,
+    ...(hasBankFields || hasNoAccountFields ? CONTRACT_UPLOAD_BANK_FIELD_KEYS : []),
+    ...(hasPaypalFields || hasNoAccountFields ? CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS : []),
+    'platformChannel',
+    ...(contractType === 'IO' ? ['ioNumber' as const] : []),
+    'contractNumber',
+  ];
+  const optionalKeys = new Set<ContractFieldKey>([
+    ...CONTRACT_UPLOAD_BANK_FIELD_KEYS,
+    ...CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS,
+    'platformChannel',
+  ]);
+  return orderedKeys.flatMap((fieldKey) => {
+    const field = fieldFor(fieldKey);
+    if (!field) return [];
+    return [{
+      ...field,
+      label: fieldKey === 'projectTotalFees'
+        ? '合同金额'
+        : fieldKey === 'transferFee'
+          ? '手续费承担方'
+          : field.label,
+      origin: fieldKey === 'contractNumber' ? 'system' : 'document',
+      group: CONTRACT_UPLOAD_BANK_FIELD_KEYS.includes(fieldKey)
+        ? 'bank'
+        : CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS.includes(fieldKey)
+          ? 'paypal'
+          : 'summary',
+      applicable: CONTRACT_UPLOAD_BANK_FIELD_KEYS.includes(fieldKey)
+        ? hasBankFields
+        : CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS.includes(fieldKey)
+          ? hasPaypalFields
+          : true,
+      requiredForConfirmation: fieldKey === 'projectTotalFees' && contractType === 'FRAMEWORK'
+        ? false
+        : !optionalKeys.has(fieldKey) && fieldKey !== 'contractNumber',
+      readOnly: fieldKey === 'contractNumber',
+      status: fieldKey === 'contractNumber' ? 'confirmed' : field.status,
+    }];
+  });
+};
+
+export const recognitionFieldDisplayValue = (field: ContractRecognitionField) => {
+  if (field.fieldKey === 'signatureStatus' && field.normalizedValue && typeof field.normalizedValue === 'object') {
+    return (field.normalizedValue as { signed?: boolean }).signed ? '已签署' : '未签署';
+  }
+  if (field.fieldKey === 'contractExpiry' && field.normalizedValue && typeof field.normalizedValue === 'object') {
+    const value = field.normalizedValue as { endDate?: string; isLongTerm?: boolean };
+    return value.isLongTerm ? '长期有效' : value.endDate || field.rawValue;
+  }
+  return field.rawValue;
+};
+
 export const editRecognitionField = (
   field: ContractRecognitionField,
   editedValue: string,
 ): ContractRecognitionField => {
-  if (field.status === 'confirmed') return field;
+  if (field.status === 'confirmed' || field.readOnly) return field;
   const parts = editedValue.split(/\s*[·|]\s*/);
-  const normalizedValue = field.fieldKey === 'campaignPeriod'
-    ? normalizeCampaignPeriod(editedValue)
-    : field.fieldKey === 'effectiveDate'
+  const normalizedValue = field.fieldKey === 'signatureStatus'
+    ? { signed: editedValue === 'SIGNED', signedAt: undefined }
+    : field.fieldKey === 'contractExpiry'
+      ? /长期|perpetual|indefinite|long[-\s]?term/i.test(editedValue)
+        ? { endDate: '', isLongTerm: true }
+        : { endDate: normalizeContractDate(editedValue), isLongTerm: false }
+      : field.fieldKey === 'campaignPeriod'
+        ? normalizeCampaignPeriod(editedValue)
+        : field.fieldKey === 'effectiveDate'
       ? { date: normalizeContractDate(editedValue), basis: 'manual' }
       : field.fieldKey === 'projectTotalFees'
         ? normalizeMoney(editedValue)
@@ -479,13 +682,23 @@ export const editRecognitionField = (
                 : field.fieldKey === 'platformChannel'
                   ? { platform: parts[0] ?? '', channelName: parts[1] ?? '', handle: '', channelUrl: '' }
                   : editedValue;
+  const rawValue = field.fieldKey === 'signatureStatus'
+    ? editedValue === 'SIGNED'
+      ? '已签署'
+      : editedValue === 'UNSIGNED'
+        ? '未签署'
+        : ''
+    : editedValue;
+  const validValue = field.fieldKey !== 'contractExpiry'
+    || Boolean((normalizedValue as { endDate?: string; isLongTerm?: boolean }).endDate)
+    || Boolean((normalizedValue as { endDate?: string; isLongTerm?: boolean }).isLongTerm);
   return {
     ...field,
-    rawValue: editedValue,
+    rawValue,
     normalizedValue,
-    editedValue,
+    editedValue: rawValue,
     confidence: 1,
-    status: editedValue.trim() ? 'detected' : 'missing',
+    status: rawValue.trim() && validValue ? 'detected' : 'missing',
     profileComparison: field.fieldKey === 'beneficiaryAccount'
       ? undefined
       : field.profileComparison,
@@ -505,7 +718,7 @@ export const canConfirmRecognitionFields = (
   fieldKeys: readonly ContractFieldKey[],
 ) => fieldKeys.length > 0 && fieldKeys.every((fieldKey) => {
   const field = fields.find((item) => item.fieldKey === fieldKey);
-  return Boolean(field?.rawValue.trim()) && field?.status !== 'conflict';
+  return Boolean(field?.rawValue.trim()) && field?.status !== 'missing' && field?.status !== 'conflict';
 });
 
 export const confirmRecognitionFields = (
@@ -525,7 +738,7 @@ export const reopenRecognitionFields = (
 ): ContractRecognitionField[] => {
   const targetKeys = new Set(fieldKeys);
   return fields.map((field) => (
-    targetKeys.has(field.fieldKey) && field.status === 'confirmed'
+    targetKeys.has(field.fieldKey) && field.status === 'confirmed' && !field.readOnly
       ? { ...field, status: 'detected' }
       : field
   ));

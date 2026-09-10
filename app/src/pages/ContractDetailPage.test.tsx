@@ -14,6 +14,7 @@ import {
   ContractPaymentList,
   ContractDetailPage,
   contractPaymentAccountRows,
+  contractRecognizedAccountRows,
   contractPaymentChannelDisplayValue,
   contractPaymentFieldsFor,
   contractRecognitionKeysToConfirm,
@@ -270,6 +271,74 @@ describe('ContractDetailPage expiry presentation', () => {
       payoutProvider: undefined,
       paymentMethod: 'BANK',
     }, null)).toBe('银行转账');
+  });
+
+  it('applies the recognized expiry, signed state, and isolated contract account snapshot', () => {
+    const originalPaymentSnapshot = paymentSnapshot('Airwallex');
+    const fields: ContractRecognitionField[] = [
+      recognitionField('contractExpiry', '2026-12-31', { endDate: '2026-12-31', isLongTerm: false }),
+      recognitionField('signatureStatus', '已签署', { signed: true }),
+      recognitionField('accountName', 'Mina Kato Studio', 'Mina Kato Studio'),
+      recognitionField('accountNumber', '0000004826', '0000004826'),
+      recognitionField('beneficiaryBankName', 'Example Bank', 'Example Bank'),
+    ];
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      signed: false,
+      campaignEnd: '',
+      paymentSnapshot: originalPaymentSnapshot,
+      recognitionResults: fields,
+      issues: [
+        { id: 'recognition-review', label: '待确认', description: '待确认', severity: 'blocker' as const, source: '识别' },
+        { id: 'signature', label: '待签署', description: '待签署', severity: 'blocker' as const, source: '签署' },
+      ],
+    } satisfies ContractRecord;
+
+    const applied = applyConfirmedRecognitionToContract(contract, fields.map((field) => field.fieldKey));
+
+    expect(applied).toMatchObject({
+      campaignEnd: '2026-12-31',
+      lifecycle: 'CONFIRMED',
+      signed: true,
+      recognizedPaymentDetails: {
+        detectedChannel: 'BANK',
+        accountName: 'Mina Kato Studio',
+        accountNumber: '0000004826',
+        beneficiaryBankName: 'Example Bank',
+      },
+    });
+    expect(applied?.paymentSnapshot).toEqual(originalPaymentSnapshot);
+    expect({
+      payoutAccountId: applied?.payoutAccountId,
+      payoutAccountVersion: applied?.payoutAccountVersion,
+      payoutAccountFingerprint: applied?.payoutAccountFingerprint,
+      accountName: applied?.accountName,
+      accountFingerprint: applied?.accountFingerprint,
+    }).toEqual({
+      payoutAccountId: contract.payoutAccountId,
+      payoutAccountVersion: contract.payoutAccountVersion,
+      payoutAccountFingerprint: contract.payoutAccountFingerprint,
+      accountName: contract.accountName,
+      accountFingerprint: contract.accountFingerprint,
+    });
+    expect(applied?.issues.some((issue) => issue.id === 'signature')).toBe(false);
+  });
+
+  it('renders recognized mixed account groups without duplicating remittance information', () => {
+    const rows = contractRecognizedAccountRows({
+      detectedChannel: 'MIXED',
+      accountName: 'Mina Kato Studio',
+      accountNumber: '0000004826',
+      remittanceInformation: 'Creator campaign',
+      paypalUsername: 'mina.kato',
+      paypalEmail: 'mina@example.com',
+      transferNote: 'Summer campaign',
+    });
+
+    expect(rows.some((row) => row.label === 'Account Number')).toBe(true);
+    expect(rows.some((row) => row.label === 'PayPal Email Address')).toBe(true);
+    expect(rows.filter((row) => row.label === 'Remittance Information (optional)')).toHaveLength(1);
   });
 
   it('renders template-only cards and the paged field editor without ordinary contract controls', () => {

@@ -31,9 +31,12 @@ import {
   confirmRecognitionFields,
   editRecognitionField,
   normalizeCampaignPeriod,
+  recognitionFieldDisplayValue,
   reopenRecognitionFields,
 } from '../contractRecognition';
 import {
+  CONTRACT_UPLOAD_BANK_FIELD_KEYS,
+  CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS,
   CONTRACT_DOCUMENT_TYPE_LABELS,
   type ContractFieldCandidate,
   type ContractFieldKey,
@@ -53,6 +56,7 @@ import {
   isIoContract,
   sendContractForSignature,
   type ContractType,
+  type ContractRecognizedAccountSnapshot,
   type ContractRecord,
   type ContractUploadInput,
 } from '../contracts';
@@ -100,10 +104,12 @@ const recognitionFieldHasValue = (field: ContractRecognitionField | undefined) =
 export const contractRecognitionKeysToConfirm = (
   fields: ContractRecognitionField[],
   fieldKeys: readonly ContractFieldKey[],
-) => fieldKeys.filter((fieldKey) => (
-  fieldKey !== 'platformChannel'
-  || recognitionFieldHasValue(fields.find((field) => field.fieldKey === fieldKey))
-));
+) => fieldKeys.filter((fieldKey) => {
+  const field = fields.find((item) => item.fieldKey === fieldKey);
+  if (field?.readOnly) return false;
+  if (field?.requiredForConfirmation === false) return recognitionFieldHasValue(field);
+  return fieldKey !== 'platformChannel' || recognitionFieldHasValue(field);
+});
 
 const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
   INDEPENDENT: [
@@ -257,6 +263,32 @@ export const contractPaymentAccountRows = (
   ];
 };
 
+export const contractRecognizedAccountRows = (
+  snapshot: ContractRecognizedAccountSnapshot,
+): ContractPaymentDisplayRow[] => {
+  const value = (item?: string) => item?.trim() || '待补充';
+  const rows: ContractPaymentDisplayRow[] = [];
+  if (snapshot.detectedChannel === 'BANK' || snapshot.detectedChannel === 'MIXED') {
+    rows.push(
+      { key: 'recognized-account-name', label: 'Account Name', value: accountDisplayValue(snapshot.accountName) },
+      { key: 'recognized-account-number', label: 'Account Number', value: accountDisplayValue(snapshot.accountNumber) },
+      { key: 'recognized-beneficiary-bank-name', label: 'Beneficiary Bank Name', value: value(snapshot.beneficiaryBankName) },
+      { key: 'recognized-beneficiary-bank-address', label: 'Beneficiary Bank Address', value: value(snapshot.beneficiaryBankAddress) },
+      { key: 'recognized-swift-code', label: 'SWIFT Code', value: accountDisplayValue(snapshot.swiftCode) },
+      { key: 'recognized-iban', label: 'IBAN', value: accountDisplayValue(snapshot.iban) },
+      { key: 'recognized-remittance-information', label: 'Remittance Information (optional)', value: value(snapshot.remittanceInformation) },
+    );
+  }
+  if (snapshot.detectedChannel === 'PAYPAL' || snapshot.detectedChannel === 'MIXED') {
+    rows.push(
+      { key: 'recognized-paypal-username', label: 'PayPal Username', value: accountDisplayValue(snapshot.paypalUsername) },
+      { key: 'recognized-paypal-email', label: 'PayPal Email Address', value: accountDisplayValue(snapshot.paypalEmail) },
+      { key: 'recognized-transfer-note', label: 'Transfer Note (optional)', value: value(snapshot.transferNote) },
+    );
+  }
+  return rows;
+};
+
 const createDemoAirwallexSnapshot = (contract: ContractRecord): DocumentPayoutSnapshot => {
   const accountName = contract.accountName || contract.publisher || 'Demo Creator';
   const accountTail = contract.id.replace(/\D/g, '').slice(-4).padStart(4, '0');
@@ -375,14 +407,22 @@ export function ContractPaymentList({
     if (formalFieldsHidden) return '待补充';
     switch (key) {
       case 'projectTotalFees': return formatContractMoney(contract);
-      case 'paymentMethod': return contractPaymentChannelDisplayValue(contract, paymentSnapshot);
+      case 'paymentMethod': return contract.recognizedPaymentDetails?.detectedChannel === 'PAYPAL'
+        ? 'PayPal'
+        : contract.recognizedPaymentDetails?.detectedChannel === 'BANK'
+          ? '银行转账'
+          : contract.recognizedPaymentDetails?.detectedChannel === 'MIXED'
+            ? '银行转账 / PayPal'
+            : contractPaymentChannelDisplayValue(contract, paymentSnapshot);
       case 'transferFee': return FEE_BEARER_LABELS[contract.feeBearer];
       default: return '待补充';
     }
   };
   const rows: ContractPaymentDisplayRow[] = [
     ...fields.map((field) => ({ key: field.key, label: field.label, value: valueFor(field.key) })),
-    ...contractPaymentAccountRows(contract, paymentSnapshot),
+    ...(contract.recognizedPaymentDetails
+      ? contractRecognizedAccountRows(contract.recognizedPaymentDetails)
+      : contractPaymentAccountRows(contract, paymentSnapshot)),
   ];
   return (
     <dl className="contract-payment-list contract-payment-rules-list">
@@ -422,7 +462,13 @@ function RecognitionFieldList({
       {fieldKeys.map((fieldKey) => {
         const field = fields.find((item) => item.fieldKey === fieldKey);
         if (!field) return null;
-        const fieldLocked = recognitionLocked || field.status === 'confirmed';
+        const fieldLocked = recognitionLocked || field.status === 'confirmed' || field.readOnly;
+        const signatureValue = field.fieldKey === 'signatureStatus'
+          && field.normalizedValue
+          && typeof field.normalizedValue === 'object'
+          && 'signed' in field.normalizedValue
+          ? (field.normalizedValue as { signed?: boolean }).signed ? 'SIGNED' : 'UNSIGNED'
+          : '';
         return (
           <Fragment key={field.fieldKey}>
             {showCampaignEnd && fieldKey === 'campaignPeriod' ? (
@@ -454,13 +500,26 @@ function RecognitionFieldList({
             >
               <div className="contract-recognition-label">{fieldLabels[field.fieldKey] ?? field.label}</div>
               <div className="contract-recognition-value">
-                <input
-                  aria-label={fieldLabels[field.fieldKey] ?? field.label}
-                  value={field.rawValue}
-                  placeholder="待补充"
-                  readOnly={fieldLocked}
-                  onChange={(event) => onChange(field.fieldKey, event.target.value)}
-                />
+                {field.fieldKey === 'signatureStatus' ? (
+                  <select
+                    aria-label={fieldLabels[field.fieldKey] ?? field.label}
+                    value={signatureValue}
+                    disabled={fieldLocked}
+                    onChange={(event) => onChange(field.fieldKey, event.target.value)}
+                  >
+                    <option value="">待确认</option>
+                    <option value="SIGNED">已签署</option>
+                    <option value="UNSIGNED">未签署</option>
+                  </select>
+                ) : (
+                  <input
+                    aria-label={fieldLabels[field.fieldKey] ?? field.label}
+                    value={recognitionFieldDisplayValue(field)}
+                    placeholder={field.fieldKey === 'contractExpiry' ? 'YYYY-MM-DD 或长期有效' : '待补充'}
+                    readOnly={fieldLocked}
+                    onChange={(event) => onChange(field.fieldKey, event.target.value)}
+                  />
+                )}
                 {field.source ? (
                   <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
                     <FileSearch size={12} />
@@ -486,7 +545,7 @@ function RecognitionFieldList({
                 ) : null}
               </div>
               <div className="contract-recognition-actions">
-                <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
+                <span className="contract-recognition-status">{field.readOnly ? '系统生成' : FIELD_STATUS_LABELS[field.status]}</span>
               </div>
             </article>
           </Fragment>
@@ -568,12 +627,51 @@ export function ContractDetailPage({
   const contractType = getContractType(contract);
   const summaryFields = SUMMARY_FIELDS_BY_TYPE[contractType];
   const paymentFields = PAYMENT_FIELDS_BY_TYPE[contractType];
-  const summaryFieldKeys = summaryFields
-    .map((field) => field.key)
-    .filter(isRecognitionFieldKey);
-  const paymentFieldKeys = paymentFields
-    .map((field) => field.key)
-    .filter(isRecognitionFieldKey);
+  const usesModernUploadRecognition = draftFields.some((field) => (
+    field.fieldKey === 'signatureStatus'
+    || field.fieldKey === 'contractExpiry'
+    || CONTRACT_UPLOAD_BANK_FIELD_KEYS.includes(field.fieldKey)
+    || CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS.includes(field.fieldKey)
+  ));
+  const presentRecognitionKeys = new Set(
+    draftFields.filter((field) => field.applicable !== false).map((field) => field.fieldKey),
+  );
+  const hasBankRecognitionFields = draftFields.some((field) => field.group === 'bank');
+  const hasPaypalRecognitionFields = draftFields.some((field) => field.group === 'paypal');
+  const hasDetectedAccountEvidence = draftFields.some((field) => (
+    (field.group === 'bank' || field.group === 'paypal')
+    && field.candidates.length > 0
+  ));
+  const bankRecognitionApplicable = draftFields.some((field) => field.group === 'bank' && field.applicable !== false);
+  const paypalRecognitionApplicable = draftFields.some((field) => field.group === 'paypal' && field.applicable !== false);
+  const accountRecognitionMode = bankRecognitionApplicable && paypalRecognitionApplicable
+    ? 'MIXED'
+    : bankRecognitionApplicable
+      ? 'BANK'
+      : paypalRecognitionApplicable
+        ? 'PAYPAL'
+        : '';
+  const modernSummaryFieldKeys: ContractFieldKey[] = [
+    'advertiser',
+    'publisher',
+    'signatureStatus',
+    'contractExpiry',
+    'platformChannel',
+    ...(contractType === 'IO' ? ['ioNumber' as const] : []),
+    'contractNumber',
+  ];
+  const modernPaymentFieldKeys: ContractFieldKey[] = [
+    'projectTotalFees',
+    'transferFee',
+    ...CONTRACT_UPLOAD_BANK_FIELD_KEYS,
+    ...CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS,
+  ];
+  const summaryFieldKeys: ContractFieldKey[] = usesModernUploadRecognition
+    ? modernSummaryFieldKeys.filter((fieldKey) => presentRecognitionKeys.has(fieldKey))
+    : summaryFields.map((field) => field.key).filter(isRecognitionFieldKey);
+  const paymentFieldKeys: ContractFieldKey[] = usesModernUploadRecognition
+    ? modernPaymentFieldKeys.filter((fieldKey) => presentRecognitionKeys.has(fieldKey))
+    : paymentFields.map((field) => field.key).filter(isRecognitionFieldKey);
   const recognitionFieldKeys = Array.from(new Set([...summaryFieldKeys, ...paymentFieldKeys]));
   const recognitionKeysToConfirm = (fieldKeys: readonly ContractFieldKey[]) => (
     contractRecognitionKeysToConfirm(draftFields, fieldKeys)
@@ -726,6 +824,21 @@ export function ContractDetailPage({
     )));
   };
 
+  const updateAccountRecognitionMode = (mode: string) => {
+    if (!canEditCurrentContract || recognitionApplied) return;
+    const next = draftFields.map((field) => {
+      if (field.group === 'bank') return { ...field, applicable: mode === 'BANK' || mode === 'MIXED' };
+      if (field.group === 'paypal') return { ...field, applicable: mode === 'PAYPAL' || mode === 'MIXED' };
+      return field;
+    });
+    setDraftFields(next);
+    onUpdateContract?.({
+      ...contract,
+      recognitionResults: next,
+      extractionStage: 'review',
+    });
+  };
+
   const confirmPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
     if (!canEditCurrentContract) return;
     if (recognitionApplied) return;
@@ -830,7 +943,12 @@ export function ContractDetailPage({
       return;
     }
     onUpdateContract?.(applied);
-    notify('合同资料已确认', '上传文件和结构化字段已应用，可以发送给 C 端达人签署。');
+    notify(
+      '合同资料已确认',
+      applied.signed
+        ? '上传文件和结构化字段已应用，合同已按确认的签署状态完成归档。'
+        : '上传文件和结构化字段已应用，可以发送给 C 端达人签署。',
+    );
   };
 
   const sendForSignature = () => {
@@ -1120,9 +1238,9 @@ export function ContractDetailPage({
                     onChange={updateField}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
-                    fieldLabels={DETAIL_FIELD_LABELS}
+                    fieldLabels={usesModernUploadRecognition ? {} : DETAIL_FIELD_LABELS}
                     recognitionLocked={recognitionApplied || !canEditCurrentContract}
-                    showCampaignEnd
+                    showCampaignEnd={!usesModernUploadRecognition}
                     isLongTerm={Boolean(contract.isLongTerm)}
                   />
                 ) : (
@@ -1147,6 +1265,23 @@ export function ContractDetailPage({
                   </span>
                   {renderPageAction(paymentFieldKeys, '付款与Invoice', paymentPageState)}
                 </div>
+                {usesModernUploadRecognition && hasBankRecognitionFields && hasPaypalRecognitionFields && !hasDetectedAccountEvidence && !recognitionApplied ? (
+                  <label className="contract-recognition-account-mode">
+                    <span>合同账户类型</span>
+                    <select
+                      aria-label="合同账户类型"
+                      value={accountRecognitionMode}
+                      disabled={!canEditCurrentContract}
+                      onChange={(event) => updateAccountRecognitionMode(event.target.value)}
+                    >
+                      <option value="">未识别，请选择</option>
+                      <option value="BANK">银行账户</option>
+                      <option value="PAYPAL">PayPal</option>
+                      <option value="MIXED">银行账户和 PayPal</option>
+                    </select>
+                    <small>仅用于补充合同识别快照，不会修改达人档案中的付款账户。</small>
+                  </label>
+                ) : null}
                 {pendingGeneratedUpload ? (
                   <div className="contract-generated-payment-snapshot">
                     <div className="contract-generated-payment-snapshot-head">
@@ -1165,7 +1300,7 @@ export function ContractDetailPage({
                       onChange={updateField}
                       onSelectCandidate={selectCandidate}
                       onOpenSource={openSource}
-                      fieldLabels={DETAIL_FIELD_LABELS}
+                      fieldLabels={usesModernUploadRecognition ? {} : DETAIL_FIELD_LABELS}
                       recognitionLocked={recognitionApplied || !canEditCurrentContract}
                     />
                   </>

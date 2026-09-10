@@ -26982,6 +26982,49 @@ button:disabled {
   color: #23765a;
 }
 
+.contract-recognition-account-empty {
+  grid-column: 1 / -1;
+  min-height: 74px;
+  border-style: dashed;
+  background: #faf9fd;
+}
+
+.contract-recognition-account-mode {
+  display: grid;
+  grid-template-columns: 112px minmax(180px, 260px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 8px;
+  padding: 10px 12px;
+  border: 1px dashed #dcd5eb;
+  border-radius: 8px;
+  background: #faf9fd;
+  color: #676d7a;
+  font-size: 10.5px;
+}
+
+.contract-recognition-account-mode > span {
+  color: #454a56;
+  font-weight: 650;
+}
+
+.contract-recognition-account-mode select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #d9dce5;
+  border-radius: 7px;
+  outline: 0;
+  background: #fff;
+  padding: 0 9px;
+  color: #343945;
+  font: inherit;
+}
+
+.contract-recognition-account-mode select:focus {
+  border-color: #8e7ab5;
+  box-shadow: 0 0 0 3px rgba(142, 122, 181, 0.12);
+}
+
 .contract-recognition-detail-derived .contract-recognition-status {
   background: #f2e8fb;
   color: #7b4bb2;
@@ -27145,7 +27188,8 @@ button:disabled {
   gap: 3px;
 }
 
-.contract-recognition-value input {
+.contract-recognition-value input,
+.contract-recognition-value select {
   width: 100%;
   min-width: 0;
   height: 25px;
@@ -27168,25 +27212,30 @@ button:disabled {
   opacity: 1;
 }
 
-.contract-recognition-value input:hover {
+.contract-recognition-value input:hover,
+.contract-recognition-value select:hover {
   border-bottom-color: #aeb6c5;
   background: #fafbfc;
 }
 
-.contract-recognition-value input:focus {
+.contract-recognition-value input:focus,
+.contract-recognition-value select:focus {
   border-bottom: 2px solid #6b79a5;
   outline: 0;
   background: #fff;
 }
 
-.contract-recognition-detail-readonly .contract-recognition-value input {
+.contract-recognition-detail-readonly .contract-recognition-value input,
+.contract-recognition-detail-readonly .contract-recognition-value select {
   border-bottom-color: transparent;
   background: transparent;
   cursor: text;
 }
 
 .contract-recognition-detail-readonly .contract-recognition-value input:hover,
-.contract-recognition-detail-readonly .contract-recognition-value input:focus {
+.contract-recognition-detail-readonly .contract-recognition-value input:focus,
+.contract-recognition-detail-readonly .contract-recognition-value select:hover,
+.contract-recognition-detail-readonly .contract-recognition-value select:focus {
   border-bottom-color: transparent;
   outline: 0;
   background: transparent;
@@ -27530,6 +27579,11 @@ button:disabled {
   .contract-upload-save-grid {
     grid-template-columns: 1fr;
     padding: 12px;
+  }
+
+  .contract-recognition-account-mode {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .contract-upload-association-summary {

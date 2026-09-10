@@ -6,7 +6,10 @@ import {
   type SelectedContractFile,
   validateContractFile,
 } from '../contractParserClient';
-import { createPrototypeRecognitionFields } from '../contractRecognitionPrototype';
+import {
+  recognitionFieldDisplayValue,
+  recognizeUploadContractFields,
+} from '../contractRecognition';
 import {
   CONTRACT_DOCUMENT_TYPE_LABELS,
   type ContractRecognitionField,
@@ -144,9 +147,13 @@ export function ContractUploadWizard({
       description: '保存后作为本批次可复用的框架合同',
     }));
   const conflictCount = fields.filter((field) => field.status === 'conflict').length;
-  const missingCount = fields.filter((field) => (
-    field.status === 'missing' && field.fieldKey !== 'platformChannel'
+  const visibleFields = fields.filter((field) => field.applicable !== false);
+  const missingCount = visibleFields.filter((field) => (
+    field.status === 'missing'
+    && field.requiredForConfirmation !== false
+    && !field.readOnly
   )).length;
+  const hasRecognizedAccountFields = visibleFields.some((field) => field.group === 'bank' || field.group === 'paypal');
   const engagementReference = selectedProject?.creatorProfiles?.find((creator) => creator.creatorId === selectedCreator?.id && creator.status !== 'removed');
   const canSave = Boolean(selectedProject && selectedCreator && contractName.trim() && documents.length === 1 && !parsing);
 
@@ -155,22 +162,9 @@ export function ContractUploadWizard({
       setFields([]);
       return;
     }
-    setFields(createPrototypeRecognitionFields({
-      documents,
-      systemContractNumber,
-      projectName: selectedProject?.name ?? 'Creator Campaign 2026',
-      brandName: selectedProject?.brand ?? 'COMETS Demo Brand',
-      creatorName: selectedCreator?.name ?? 'Demo Creator',
-      creatorHandle: selectedSocialAccount?.handle ?? selectedCreator?.handle ?? '@demo.creator',
-      creatorPlatform: selectedSocialAccount?.platform ?? selectedCreator?.platform ?? 'YouTube',
-    }));
+    setFields(recognizeUploadContractFields(documents, { systemContractNumber }));
   }, [
     documents,
-    selectedCreator?.name,
-    selectedSocialAccount?.handle,
-    selectedSocialAccount?.platform,
-    selectedProject?.brand,
-    selectedProject?.name,
     systemContractNumber,
   ]);
 
@@ -249,15 +243,10 @@ export function ContractUploadWizard({
       const frameworkUploadKey = frameworkSelection.startsWith('upload:')
         ? frameworkSelection.slice('upload:'.length)
         : undefined;
-      const recognitionResults = createPrototypeRecognitionFields({
-        documents: [{ ...document, contractType }],
-        systemContractNumber: selectedDraft?.id ?? (index === 0 ? systemContractNumber : createPrototypeCode('CON')),
-        projectName: selectedProject.name,
-        brandName: selectedProject.brand,
-        creatorName: selectedCreator.name,
-        creatorHandle: selectedSocialAccount?.handle ?? selectedCreator.handle,
-        creatorPlatform: selectedSocialAccount?.platform ?? selectedCreator.platform,
-      });
+      const recognitionResults = recognizeUploadContractFields(
+        [{ ...document, contractType }],
+        { systemContractNumber: selectedDraft?.id ?? (index === 0 ? systemContractNumber : createPrototypeCode('CON')) },
+      );
       return {
         systemContractNumber: selectedDraft?.id ?? (index === 0 ? systemContractNumber : createPrototypeCode('CON')),
         contractName: contractName.trim() || selectedDraft?.name,
@@ -304,7 +293,7 @@ export function ContractUploadWizard({
         <>
           <div className="contract-upload-footer-status" aria-live="polite">
             <span>{documents.length ? '1 份文件已解析' : '尚未选择合同文件'}</span>
-            <small>{documents.length ? `${fields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成关联信息并上传文件后，可确认合同名称并保存'}</small>
+            <small>{documents.length ? `${visibleFields.length} 个字段 · ${conflictCount} 项需核对 · ${missingCount} 项待补充` : '完成关联信息并上传文件后，可确认合同名称并保存'}</small>
           </div>
           <Button variant="ghost" onClick={onClose}>取消</Button>
           <Button
@@ -514,19 +503,19 @@ export function ContractUploadWizard({
             <span><FileText size={18} /></span>
             <div>
               <h3 id="contract-upload-recognition-title">识别结果</h3>
-              <p>上传后展示完整的原型演示字段，Channel 可留空，其余适用字段保存后到合同详情确认。</p>
+              <p>从合同原文识别主体、金额、签署、有效期、账户及平台频道，系统合同编号自动带入。</p>
             </div>
-            {fields.length ? <em>{fields.length} 项</em> : null}
+            {visibleFields.length ? <em>{visibleFields.length} 项</em> : null}
           </header>
-          {fields.length ? (
+          {visibleFields.length ? (
             <div className="contract-recognition-field-list">
-              {fields.map((field) => (
+              {visibleFields.map((field) => (
                 <article className={`contract-recognition-field contract-recognition-field-${field.status}`} key={field.fieldKey}>
                   <div>
                     <strong>{field.label}</strong>
-                    <span className="contract-recognition-status">{FIELD_STATUS_LABELS[field.status]}</span>
+                    <span className="contract-recognition-status">{field.readOnly ? '系统生成' : FIELD_STATUS_LABELS[field.status]}</span>
                   </div>
-                  <p>{field.rawValue || '待补充'}</p>
+                  <p>{recognitionFieldDisplayValue(field) || '待补充'}</p>
                   <small>
                     {field.source
                       ? `${field.source.documentId === 'system-contract' ? '系统字段' : CONTRACT_DOCUMENT_TYPE_LABELS[field.source.documentType]}${field.source.pageNumber ? ` · 第 ${field.source.pageNumber} 页` : ` · ${field.source.section}`}`
@@ -535,13 +524,23 @@ export function ContractUploadWizard({
                   {field.status === 'conflict' ? <em><AlertTriangle size={13} />发现 {field.candidates.length} 个候选值，保存后需人工核对</em> : null}
                 </article>
               ))}
+              {!hasRecognizedAccountFields ? (
+                <article className="contract-recognition-field contract-recognition-field-missing contract-recognition-account-empty">
+                  <div>
+                    <strong>收款账户信息</strong>
+                    <span className="contract-recognition-status">未识别</span>
+                  </div>
+                  <p>未识别到银行或 PayPal 账户信息</p>
+                  <small>不会生成或覆盖达人档案中的付款账户</small>
+                </article>
+              ) : null}
             </div>
           ) : (
             <div className="contract-recognition-empty">
               <FileText size={22} />
               <div>
-                <strong>{parsing ? '正在准备演示识别结果' : '等待合同文件'}</strong>
-                <span>{parsing ? '文件解析完成后会展示完整字段与来源' : '上传文件后无需切换页面，演示结果会在当前表单中展开'}</span>
+                <strong>{parsing ? '正在识别合同字段' : '等待合同文件'}</strong>
+                <span>{parsing ? '文件解析完成后会展示字段值与原文来源' : '上传文件后，识别结果会在当前表单中展开'}</span>
               </div>
             </div>
           )}
@@ -558,7 +557,7 @@ export function ContractUploadWizard({
           <div className="contract-upload-save-grid">
             <div><span>系统合同编号</span><strong>{systemContractNumber}</strong></div>
             <div><span>保存状态</span><strong>待人工确认</strong></div>
-            <p><AlertTriangle size={15} />金额、主体、日期与收款账户仍需在合同详情中逐项核对后才能应用。</p>
+            <p><AlertTriangle size={15} />主体、金额、签署状态、有效期及识别到的账户字段仍需在合同详情中核对后才能应用。</p>
           </div>
         </section>
       </form>
