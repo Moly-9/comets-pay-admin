@@ -33,6 +33,7 @@ const NAV_ENTRIES: NavEntry[] = [
     label: '请款协作',
     icon: Handshake,
     items: [
+      { label: '飞书关联项目', page: 'feishu-projects' },
       { label: '我的请款', page: 'projects' },
       { label: '合作审批', page: 'requests' },
     ],

@@ -4,10 +4,16 @@ export type FeishuCooperationProjectDto = {
   externalProjectId: string;
   projectCode: string;
   name: string;
+  projectType: string;
   status: 'ACTIVE' | 'ARCHIVED';
+  initiatorName: string;
+  startDate: string;
+  endDate: string;
   ownerName?: string;
   updatedAt: string;
 };
+
+export type FeishuProjectMetadata = { projectTypes: string[]; projectStatuses: string[] };
 
 export type CooperationProjectIdentity = {
   cooperationProjectId: CooperationProjectId;
@@ -19,13 +25,15 @@ export type CooperationProjectIdentity = {
 };
 
 export type CooperationProjectSyncResult = {
+  records: FeishuCooperationProjectDto[];
   projects: CooperationProjectIdentity[];
   syncedAt: string;
   source: 'MOCK_FEISHU_ADAPTER';
 };
 
 export type CooperationProjectSource = {
-  listProjects: () => Promise<CooperationProjectSyncResult>;
+  getMetadata: () => Promise<FeishuProjectMetadata>;
+  listProjects: (projectTypes: string[]) => Promise<CooperationProjectSyncResult>;
 };
 
 const assertUniqueExternalProjects = (records: FeishuCooperationProjectDto[]) => {
@@ -46,9 +54,7 @@ export const mapFeishuCooperationProjects = (
   assertUniqueExternalProjects(records);
   return records.map((record) => {
     const cooperationProjectId = internalIds[record.externalProjectId];
-    if (!cooperationProjectId) {
-      throw new Error(`合作项目 ${record.externalProjectId} 缺少 COMETS Pay 内部 ID 映射`);
-    }
+    if (!cooperationProjectId) throw new Error(`合作项目 ${record.externalProjectId} 缺少 COMETS Pay 内部 ID 映射`);
     return {
       cooperationProjectId,
       cooperationProjectCode: record.projectCode,
@@ -64,10 +70,21 @@ export const createMockFeishuCooperationProjectSource = (
   records: FeishuCooperationProjectDto[],
   internalIds: Record<string, CooperationProjectId>,
 ): CooperationProjectSource => ({
-  listProjects: async () => {
-    const syncedAt = '2026-08-07T02:00:00.000Z';
+  getMetadata: async () => {
+    await Promise.resolve();
     return {
-      projects: mapFeishuCooperationProjects(records, internalIds, syncedAt),
+      projectTypes: [...new Set(records.map((record) => record.projectType))],
+      projectStatuses: [...new Set(records.map((record) => record.status))],
+    };
+  },
+  listProjects: async (projectTypes) => {
+    await Promise.resolve();
+    const allowlist = new Set(projectTypes);
+    const filtered = records.filter((record) => allowlist.has(record.projectType));
+    const syncedAt = new Date().toISOString();
+    return {
+      records: filtered,
+      projects: mapFeishuCooperationProjects(filtered, internalIds, syncedAt),
       syncedAt,
       source: 'MOCK_FEISHU_ADAPTER',
     };

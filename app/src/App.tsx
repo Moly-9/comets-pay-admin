@@ -73,6 +73,7 @@ import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
 import { SystemConfigurationPage } from './pages/SystemConfigurationPage';
+import { FeishuCooperationProjectsPage } from './pages/FeishuCooperationProjectsPage';
 import {
   applyInvoiceDocumentEdit,
   applyInvoiceReviewAction,
@@ -250,6 +251,15 @@ import {
   PaymentListWorkbookError,
 } from './paymentListWorkbook';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
+import {
+  emptyCooperationProjectDirectoryStore,
+  loadCooperationProjectDirectory,
+  saveCooperationProjectDirectory,
+  synchronizeFeishuDirectory,
+  type CooperationProjectDirectoryRecord,
+  type CooperationProjectDirectoryStore,
+} from './cooperationProjectDirectory';
+import type { FeishuProjectMetadata } from './cooperationProjects';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
@@ -441,6 +451,66 @@ const readInvoiceCreationDrafts = (account: string) => {
   }
 };
 
+const directoryRecordFromProject = (project: ProjectSummary): CooperationProjectDirectoryRecord => ({
+  id: String(project.cooperationProjectId ?? project.projectId ?? project.id),
+  projectCode: project.cooperationProjectCode ?? project.projectCode ?? project.id,
+  externalProjectId: project.externalProjectId,
+  name: project.name,
+  projectType: project.projectType ?? '未分类',
+  projectStatus: project.status,
+  initiatorName: project.initiatorName ?? project.media,
+  startDate: project.startDate ?? '2026-01-01',
+  endDate: project.endDate ?? '2026-12-31',
+  source: project.source ?? (project.externalProjectId ? 'FEISHU' : 'MANUAL'),
+  availability: project.availability ?? 'ACTIVE',
+  sourceUpdatedAt: project.sourceUpdatedAt,
+  localUpdatedAt: project.localUpdatedAt ?? project.syncedAt ?? new Date(0).toISOString(),
+  syncedAt: project.syncedAt,
+});
+
+const projectFromDirectoryRecord = (record: CooperationProjectDirectoryRecord): ProjectSummary => ({
+  id: record.id,
+  projectId: record.id as ProjectId,
+  projectCode: record.projectCode,
+  cooperationProjectId: record.id as ProjectSummary['cooperationProjectId'],
+  cooperationProjectCode: record.projectCode,
+  externalProjectId: record.externalProjectId,
+  externalSystem: record.source === 'FEISHU' ? 'FEISHU' : undefined,
+  syncStatus: record.source === 'FEISHU' ? 'SYNCED' : undefined,
+  syncedAt: record.syncedAt,
+  name: record.name,
+  brand: record.name,
+  media: record.initiatorName,
+  pm: '待分配',
+  creators: 0,
+  budget: '待补充',
+  status: record.projectStatus,
+  projectType: record.projectType,
+  initiatorName: record.initiatorName,
+  startDate: record.startDate,
+  endDate: record.endDate,
+  source: record.source,
+  availability: record.availability,
+  sourceUpdatedAt: record.sourceUpdatedAt,
+  localUpdatedAt: record.localUpdatedAt,
+});
+
+const loadInitialProjectDirectory = (): CooperationProjectDirectoryStore => {
+  const stored = typeof window === 'undefined'
+    ? emptyCooperationProjectDirectoryStore()
+    : loadCooperationProjectDirectory(window.localStorage);
+  const baseline = INITIAL_PROJECTS.map(directoryRecordFromProject);
+  if (!stored.records.length) return { ...stored, records: baseline };
+  const storedById = new Map(stored.records.map((record) => [record.id, record]));
+  return {
+    ...stored,
+    records: [
+      ...baseline.map((record) => storedById.get(record.id) ?? record),
+      ...stored.records.filter((record) => !baseline.some((item) => item.id === record.id)),
+    ],
+  };
+};
+
 type InvoiceSingleDraftState = Omit<InvoiceSingleCreationDraft,
   'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>;
 type InvoiceBatchDraftState = Omit<InvoiceBatchDraft,
@@ -475,7 +545,22 @@ export default function App() {
   const [requestStatusFilter, setRequestStatusFilter] = useState<RequestProjectStatusFilter>('all');
   const [payouts, setPayouts] = useState<Payout[]>(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const [projectDirectory, setProjectDirectory] = useState(loadInitialProjectDirectory);
+  const [projects, setProjects] = useState<ProjectSummary[]>(() => {
+    const baselineById = new Map(INITIAL_PROJECTS.map((project) => [String(project.cooperationProjectId ?? project.id), project]));
+    return projectDirectory.records.map((record) => ({
+      ...(baselineById.get(record.id) ?? projectFromDirectoryRecord(record)),
+      ...projectFromDirectoryRecord(record),
+      creatorProfiles: baselineById.get(record.id)?.creatorProfiles,
+      creators: baselineById.get(record.id)?.creators ?? 0,
+      brand: baselineById.get(record.id)?.brand ?? record.name,
+      budget: baselineById.get(record.id)?.budget ?? '待补充',
+      pm: baselineById.get(record.id)?.pm ?? '待分配',
+    }));
+  });
+  const [feishuProjectMetadata, setFeishuProjectMetadata] = useState<FeishuProjectMetadata>({ projectTypes: [], projectStatuses: [] });
+  const [projectSyncing, setProjectSyncing] = useState(false);
+  const [projectSyncError, setProjectSyncError] = useState<string>();
   const [contracts, setContracts] = useState<ContractRecord[]>(() => [
     ...INITIAL_CONTRACTS,
     ...INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
@@ -757,21 +842,17 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    void MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.listProjects()
-      .then((result) => {
-        if (!active) return;
-        const identities = new Map(result.projects.map((project) => [project.cooperationProjectId, project]));
-        setProjects((current) => current.map((project) => ({
-          ...project,
-          ...(identities.get(getProjectId(project)) ?? {}),
-        })));
-      })
-      .catch(() => {
-        if (!active) return;
-        setProjects((current) => current.map((project) => ({ ...project, syncStatus: 'FAILED' })));
-      });
+    void MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.getMetadata().then((metadata) => {
+      if (active) setFeishuProjectMetadata(metadata);
+    }).catch(() => {
+      if (active) setProjectSyncError('暂时无法读取飞书项目类型和状态选项。');
+    });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') saveCooperationProjectDirectory(window.localStorage, projectDirectory);
+  }, [projectDirectory]);
 
   const registerProjectMutation = useCallback(({
     projectId,
@@ -4873,6 +4954,75 @@ export default function App() {
     disabledReason: createContractDisabledReason,
   } = getContractTemplateAvailability(contracts);
   const canManageProjects = hasPermission(currentUser, 'project_manage');
+  const canManageCooperationDirectory = hasPermission(currentUser, 'cooperation_project_manage');
+  const synchronizeCooperationProjects = async () => {
+    if (!projectDirectory.typeAllowlist.length || projectSyncing) return;
+    setProjectSyncing(true);
+    setProjectSyncError(undefined);
+    try {
+      const result = await MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.listProjects(projectDirectory.typeAllowlist);
+      const nextRecords = synchronizeFeishuDirectory({
+        current: projectDirectory.records,
+        incoming: result.records,
+        syncedAt: result.syncedAt,
+        internalIdFor: (externalProjectId) => {
+          const existing = projectDirectory.records.find((record) => record.externalProjectId === externalProjectId);
+          return existing
+            ? { id: existing.id, projectCode: existing.projectCode }
+            : { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ') };
+        },
+      });
+      setProjectDirectory((current) => ({ ...current, records: nextRecords, lastSyncedAt: result.syncedAt }));
+      setProjects((current) => {
+        const currentById = new Map(current.map((project) => [String(project.cooperationProjectId ?? project.id), project]));
+        return nextRecords.map((record) => ({
+          ...(currentById.get(record.id) ?? projectFromDirectoryRecord(record)),
+          ...projectFromDirectoryRecord(record),
+          creatorProfiles: currentById.get(record.id)?.creatorProfiles,
+          creators: currentById.get(record.id)?.creators ?? 0,
+          brand: currentById.get(record.id)?.brand ?? record.name,
+          budget: currentById.get(record.id)?.budget ?? '待补充',
+          pm: currentById.get(record.id)?.pm ?? '待分配',
+          reviewStatus: currentById.get(record.id)?.reviewStatus ?? 'draft',
+        }));
+      });
+      notify('飞书同步完成', `已同步 ${result.records.length} 个白名单范围内项目。`);
+    } catch (error) {
+      setProjectSyncError(error instanceof Error ? error.message : '飞书同步失败，已保留现有项目数据。');
+    } finally {
+      setProjectSyncing(false);
+    }
+  };
+  const saveManualCooperationProject = (
+    draft: Pick<CooperationProjectDirectoryRecord, 'name' | 'projectType' | 'projectStatus' | 'initiatorName' | 'startDate' | 'endDate'>,
+    editingId?: string,
+  ) => {
+    const duplicate = projectDirectory.records.find((record) => record.id !== editingId
+      && record.availability === 'ACTIVE' && record.name.trim().toLowerCase() === draft.name.trim().toLowerCase());
+    if (duplicate && !window.confirm(`已存在同名可用项目“${duplicate.name}”。仍要作为独立项目保存吗？`)) return '已取消保存，同名项目不会自动合并。';
+    const occurredAt = nowIso();
+    const previous = editingId ? projectDirectory.records.find((record) => record.id === editingId && record.source === 'MANUAL') : undefined;
+    const record: CooperationProjectDirectoryRecord = {
+      ...(previous ?? { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ'), source: 'MANUAL' as const, availability: 'ACTIVE' as const }),
+      ...draft,
+      localUpdatedAt: occurredAt,
+    };
+    setProjectDirectory((current) => ({ ...current, records: previous
+      ? current.records.map((item) => item.id === record.id ? record : item)
+      : [record, ...current.records] }));
+    setProjects((current) => previous
+      ? current.map((project) => String(project.cooperationProjectId ?? project.id) === record.id ? { ...project, ...projectFromDirectoryRecord(record) } : project)
+      : [projectFromDirectoryRecord(record), ...current]);
+    notify(previous ? '项目已更新' : '项目已添加', `${record.projectCode} 已保存。`);
+    return undefined;
+  };
+  const disableManualCooperationProject = (id: string) => {
+    if (!window.confirm('停用后该项目不再进入新请款候选，历史关联仍保留。确认停用？')) return;
+    const occurredAt = nowIso();
+    setProjectDirectory((current) => ({ ...current, records: current.records.map((record) => record.id === id ? { ...record, availability: 'DISABLED', localUpdatedAt: occurredAt } : record) }));
+    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability: 'DISABLED', localUpdatedAt: occurredAt } : project));
+    notify('项目已停用', '历史请款、合同和 Invoice 关联不受影响。');
+  };
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
   ));
@@ -4940,6 +5090,23 @@ export default function App() {
 
   let pageContent;
   switch (activePage) {
+    case 'feishu-projects':
+      pageContent = (
+        <FeishuCooperationProjectsPage
+          records={projectDirectory.records}
+          metadata={feishuProjectMetadata}
+          typeAllowlist={projectDirectory.typeAllowlist}
+          lastSyncedAt={projectDirectory.lastSyncedAt}
+          canManage={canManageCooperationDirectory}
+          syncing={projectSyncing}
+          syncError={projectSyncError}
+          onAllowlistChange={(typeAllowlist) => setProjectDirectory((current) => ({ ...current, typeAllowlist }))}
+          onSync={() => { void synchronizeCooperationProjects(); }}
+          onSaveManual={saveManualCooperationProject}
+          onDisable={disableManualCooperationProject}
+        />
+      );
+      break;
     case 'projects':
       pageContent = (
         <MediaPaymentProjectsPage

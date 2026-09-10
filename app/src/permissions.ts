@@ -14,6 +14,8 @@ export type PermissionId =
   | 'invoice_media_review'
   | 'invoice_finance_review'
   | 'request_project_view'
+  | 'cooperation_project_view'
+  | 'cooperation_project_manage'
   | 'project_manage'
   | 'request_list_view'
   | 'request_create'
@@ -44,6 +46,8 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'invoice_media_review', group: '业务资料', label: '执行 Invoice 媒介审核', description: '在媒介审核阶段通过或退回 Invoice。' },
   { id: 'invoice_finance_review', group: '财务与付款', label: '执行 Invoice 财务审核', description: '在财务审核阶段通过或退回 Invoice。' },
   { id: 'request_project_view', group: '业务资料', label: '查看我的项目', description: '查看当前媒介创建的请款草稿与提交进度。' },
+  { id: 'cooperation_project_view', group: '业务资料', label: '查看飞书关联项目', description: '查看飞书同步与手动维护的合作项目目录。' },
+  { id: 'cooperation_project_manage', group: '业务资料', label: '维护飞书关联项目', description: '配置同步范围、同步飞书以及手动维护合作项目。' },
   { id: 'project_manage', group: '业务资料', label: '新建与维护请款项目', description: '关联飞书合作项目、达人、合同与多份 Invoice。' },
   { id: 'request_list_view', group: '业务资料', label: '查看请款清单', description: '查看已提交的请款明细与状态。' },
   { id: 'request_create', group: '业务资料', label: '新建并提交请款项目', description: '关联合同与 Invoice，生成付款清单并提交审批。' },
@@ -61,6 +65,7 @@ export const PERMISSION_GROUPS: PermissionOption['group'][] = ['业务资料', '
 
 export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
   media: [
+    'cooperation_project_view',
     'creator_records_view',
     'creator_records_manage',
     'contract_view',
@@ -72,11 +77,13 @@ export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
     'request_project_view',
     'project_manage',
   ],
-  pm: ['request_list_view', 'request_material_view', 'request_review'],
-  finance: ['request_material_view', 'request_review', 'invoice_finance_review', 'payout_execute', 'payment_view'],
+  pm: ['cooperation_project_view', 'request_list_view', 'request_material_view', 'request_review'],
+  finance: ['cooperation_project_view', 'request_material_view', 'request_review', 'invoice_finance_review', 'payout_execute', 'payment_view'],
   admin: [...ALL_PERMISSION_IDS],
   owner: ALL_PERMISSION_IDS,
   project: [
+    'cooperation_project_view',
+    'cooperation_project_manage',
     'creator_records_view',
     'contract_view',
     'contract_template_manage',
@@ -90,6 +97,7 @@ export const ROLE_PERMISSION_IDS: Record<SystemRoleKey, PermissionId[]> = {
 };
 
 const PAGE_PERMISSION_RULES: Partial<Record<NavPage, PermissionId[]>> = {
+  'feishu-projects': ['cooperation_project_view'],
   projects: ['request_project_view'],
   requests: ['request_list_view', 'request_material_view'],
   contracts: ['contract_view', 'request_material_view'],

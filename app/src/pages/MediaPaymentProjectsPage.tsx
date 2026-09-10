@@ -931,7 +931,9 @@ export function MediaPaymentProjectsPage({
     counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
     return counts;
   }, new Map()), [requests]);
-  const selectableCooperationProjects = cooperationProjects;
+  const selectableCooperationProjects = cooperationProjects.filter((project) => (
+    (project.availability ?? 'ACTIVE') === 'ACTIVE'
+  ));
   const selectedProjectRequestCount = requestCountByCooperationProject.get(cooperationProjectId) ?? 0;
   const selectedProjectAvailableInvoiceCount = [...resolutions.values()].reduce((count, resolution) => (
     count + (resolution?.availableInvoices.length ?? 0)

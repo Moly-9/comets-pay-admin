@@ -14,6 +14,11 @@ describe('new payment request resource picker', () => {
     expect(source).not.toContain('title="我的请款项目"');
   });
 
+  it('only offers active cooperation projects to new payment requests', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("(project.availability ?? 'ACTIVE') === 'ACTIVE'");
+  });
+
   it('uses request terminology only in the my-request list and detail', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
 

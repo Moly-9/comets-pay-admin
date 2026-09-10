@@ -1061,6 +1061,7 @@ export const INITIAL_PAYOUTS: Payout[] = assignMissingDemoPaymentCodes(RAW_INITI
 export const PAGE_TITLES = {
   dashboard: '数据工作台',
   'payment-workbench': '付款工作台',
+  'feishu-projects': '飞书关联项目',
   projects: '我的请款',
   requests: '请款审批',
   contracts: '合同管理',

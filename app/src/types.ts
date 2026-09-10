@@ -13,6 +13,7 @@ import type {
 export type NavPage =
   | 'dashboard'
   | 'payment-workbench'
+  | 'feishu-projects'
   | 'projects'
   | 'requests'
   | 'contracts'

@@ -60,6 +60,14 @@ export type ProjectSummary = {
   externalSystem?: 'FEISHU';
   syncStatus?: 'SYNCED' | 'STALE' | 'FAILED';
   syncedAt?: string;
+  projectType?: string;
+  initiatorName?: string;
+  startDate?: string;
+  endDate?: string;
+  source?: 'FEISHU' | 'MANUAL';
+  availability?: 'ACTIVE' | 'OUT_OF_SCOPE' | 'DISABLED';
+  sourceUpdatedAt?: string;
+  localUpdatedAt?: string;
   name: string;
   brand: string;
   media: string;
