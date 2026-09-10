@@ -81,8 +81,6 @@ type ContractDetailField = {
 
 type ContractPaymentRuleKey =
   | 'projectTotalFees'
-  | 'invoiceIssuePeriod'
-  | 'paymentTerm'
   | 'paymentMethod'
   | 'transferFee';
 
@@ -142,8 +140,6 @@ export const contractSummaryFieldsFor = (contractType: ContractType) => (
 const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractPaymentField[]> = {
   INDEPENDENT: [
     { key: 'projectTotalFees', label: '付款金额' },
-    { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
-    { key: 'paymentTerm', label: '付款期限' },
     { key: 'paymentMethod', label: '付款渠道' },
     { key: 'transferFee', label: '手续费费用承担方' },
   ],
@@ -152,8 +148,6 @@ const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractPaymentField[]> = {
   ],
   IO: [
     { key: 'projectTotalFees', label: '付款金额' },
-    { key: 'invoiceIssuePeriod', label: 'Invoice 开具期限' },
-    { key: 'paymentTerm', label: '付款期限' },
     { key: 'paymentMethod', label: '付款渠道' },
   ],
 };
@@ -381,12 +375,6 @@ export function ContractPaymentList({
     if (formalFieldsHidden) return '待补充';
     switch (key) {
       case 'projectTotalFees': return formatContractMoney(contract);
-      case 'invoiceIssuePeriod': return contract.invoiceWithinWorkingDays
-        ? `最终验收后${contract.invoiceWithinWorkingDays}个工作日内`
-        : '待补充';
-      case 'paymentTerm': return contract.paymentWithinWorkingDays
-        ? `发布、验收且收到Invoice后${contract.paymentWithinWorkingDays}个工作日`
-        : '待补充';
       case 'paymentMethod': return contractPaymentChannelDisplayValue(contract, paymentSnapshot);
       case 'transferFee': return FEE_BEARER_LABELS[contract.feeBearer];
       default: return '待补充';

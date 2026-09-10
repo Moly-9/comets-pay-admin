@@ -194,8 +194,6 @@ describe('ContractDetailPage expiry presentation', () => {
   it('preserves payment-rule differences between contract types', () => {
     expect(contractPaymentFieldsFor('INDEPENDENT').map((field) => field.label)).toEqual([
       '付款金额',
-      'Invoice 开具期限',
-      '付款期限',
       '付款渠道',
       '手续费费用承担方',
     ]);
@@ -204,8 +202,6 @@ describe('ContractDetailPage expiry presentation', () => {
     ]);
     expect(contractPaymentFieldsFor('IO').map((field) => field.label)).toEqual([
       '付款金额',
-      'Invoice 开具期限',
-      '付款期限',
       '付款渠道',
     ]);
   });
@@ -265,10 +261,10 @@ describe('ContractDetailPage expiry presentation', () => {
       'Transfer Note (optional)',
     ]);
     expect(rows.some((row) => row.label === 'Account Number')).toBe(false);
-    expect(contractPaymentAccountRows({
-      ...paypalContract,
-      payoutProvider: 'PayMax',
-    }, paymentSnapshot('PayMax')).some((row) => row.label === 'Account Number')).toBe(true);
+    expect(contractPaymentAccountRows(
+      paypalContract,
+      paymentSnapshot('PayMax'),
+    ).some((row) => row.label === 'Account Number')).toBe(true);
     expect(contractPaymentChannelDisplayValue({
       ...paypalContract,
       payoutProvider: undefined,
