@@ -35,6 +35,7 @@ export function FeishuCooperationProjectsPage({
   onSync,
   onSaveManual,
   onDisable,
+  onProjectStatusChange,
 }: {
   records: CooperationProjectDirectoryRecord[];
   metadata: FeishuProjectMetadata;
@@ -47,6 +48,7 @@ export function FeishuCooperationProjectsPage({
   onSync: () => void;
   onSaveManual: (draft: ManualDraft, editingId?: string) => string | undefined;
   onDisable: (id: string) => void;
+  onProjectStatusChange: (id: string, status: 'ACTIVE' | 'ARCHIVED') => void;
 }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<FilterValue>('all');
@@ -113,19 +115,19 @@ export function FeishuCooperationProjectsPage({
       {syncError ? <div className="feishu-project-feedback is-error" role="alert">{syncError}</div> : null}
       {!typeAllowlist.length && canManage ? <div className="feishu-project-feedback"><CloudDownload size={17} />白名单当前为空，请先配置项目类型再同步。</div> : null}
 
-      <section className="feishu-project-directory">
-        <div className="feishu-project-filters">
+      <section className="content-card feishu-project-directory">
+        <div className="project-inline-filter-panel feishu-project-filters">
           <label className="feishu-project-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索项目名称、发起人或编号" /></label>
           <SelectField ariaLabel="按项目类型筛选" value={typeFilter} options={[{ value: 'all', label: '全部类型' }, ...allTypes.map((value) => ({ value, label: value }))]} onChange={setTypeFilter} />
-          <SelectField ariaLabel="按项目状态筛选" value={statusFilter} options={[{ value: 'all', label: '全部状态' }, ...allStatuses.map((value) => ({ value, label: projectStatusLabel(value) }))]} onChange={setStatusFilter} />
-          <SelectField ariaLabel="按数据来源筛选" value={sourceFilter} options={[{ value: 'all', label: '全部来源' }, { value: 'FEISHU', label: '飞书同步' }, { value: 'MANUAL', label: '手动添加' }]} onChange={setSourceFilter} />
-          <SelectField ariaLabel="按同步状态筛选" value={availabilityFilter} options={[{ value: 'all', label: '全部可用状态' }, { value: 'ACTIVE', label: '可用' }, { value: 'OUT_OF_SCOPE', label: '已移出同步范围' }, { value: 'DISABLED', label: '已停用' }]} onChange={setAvailabilityFilter} />
+          <SelectField ariaLabel="按项目状态筛选" value={statusFilter} options={[{ value: 'all', label: '全部项目状态' }, ...allStatuses.map((value) => ({ value, label: projectStatusLabel(value) }))]} onChange={setStatusFilter} />
+          <SelectField ariaLabel="按数据来源筛选" value={sourceFilter} options={[{ value: 'all', label: '全部数据来源' }, { value: 'FEISHU', label: '飞书同步' }, { value: 'MANUAL', label: '手动添加' }]} onChange={setSourceFilter} />
+          <SelectField ariaLabel="按同步状态筛选" value={availabilityFilter} options={[{ value: 'all', label: '全部同步状态' }, { value: 'ACTIVE', label: '可用' }, { value: 'DISABLED', label: '已停用' }]} onChange={setAvailabilityFilter} />
         </div>
-        <div className="feishu-project-table-wrap">
-          <table className="data-table feishu-project-table"><thead><tr><th>项目名称</th><th>项目类型</th><th>项目状态</th><th>项目发起人</th><th>项目周期</th><th>项目更新时间</th><th>数据来源</th><th>同步状态</th>{canManage ? <th>操作</th> : null}</tr></thead>
+        <div className="table-scroll feishu-project-table-wrap">
+          <table className="data-table operational-table feishu-project-table"><thead><tr><th>项目名称</th><th>项目类型</th><th>项目状态</th><th>项目发起人</th><th>项目周期</th><th>项目更新时间</th><th>数据来源</th><th>同步状态</th>{canManage ? <th>操作</th> : null}</tr></thead>
             <tbody>{pagination.pageItems.map((record) => <tr key={record.id} className={record.availability !== 'ACTIVE' ? 'is-muted' : ''}>
               <td data-label="项目名称"><strong>{record.name}</strong><small>{record.projectCode}</small></td>
-              <td data-label="项目类型">{record.projectType}</td><td data-label="项目状态">{projectStatusLabel(record.projectStatus)}</td><td data-label="项目发起人">{record.initiatorName}</td>
+              <td data-label="项目类型">{record.projectType}</td><td data-label="项目状态">{canManage ? <SelectField<'ACTIVE' | 'ARCHIVED'> ariaLabel={`修改 ${record.name} 的项目状态`} variant="compact" menuStrategy="fixed" className={`feishu-project-row-status is-${record.projectStatus.toLowerCase()}`} value={record.projectStatus as 'ACTIVE' | 'ARCHIVED'} options={[{ value: 'ACTIVE', label: '进行中', leading: <i className="feishu-project-status-dot is-active" /> }, { value: 'ARCHIVED', label: '已归档', leading: <i className="feishu-project-status-dot is-archived" /> }]} onChange={(status) => onProjectStatusChange(record.id, status)} /> : <span className={`feishu-project-status is-${record.projectStatus.toLowerCase()}`}><i />{projectStatusLabel(record.projectStatus)}</span>}</td><td data-label="项目发起人">{record.initiatorName}</td>
               <td data-label="项目周期">{record.startDate}<small>至 {record.endDate}</small></td><td data-label="项目更新时间">{formatTime(record.sourceUpdatedAt ?? record.localUpdatedAt)}</td>
               <td data-label="数据来源"><span className={`feishu-project-source is-${record.source.toLowerCase()}`}>{record.source === 'FEISHU' ? '飞书同步' : '手动添加'}</span></td>
               <td data-label="同步状态"><span className={`feishu-project-availability is-${record.availability.toLowerCase()}`}>{availabilityLabel[record.availability]}</span></td>
@@ -136,11 +138,11 @@ export function FeishuCooperationProjectsPage({
         <Pagination total={filtered.length} page={pagination.page} pageSize={pagination.pageSize} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} />
       </section>
 
-      {configOpen ? <Modal title="配置飞书同步范围" width="520px" onClose={() => setConfigOpen(false)} footer={<Button onClick={() => setConfigOpen(false)}>完成</Button>}><div className="feishu-project-allowlist"><p>只同步精确匹配以下类型的多维表格项目。取消选中后，已同步记录会在下次同步时标记为移出范围。</p>{metadata.projectTypes.map((type) => <label key={type}><input type="checkbox" checked={typeAllowlist.includes(type)} onChange={() => onAllowlistChange(typeAllowlist.includes(type) ? typeAllowlist.filter((item) => item !== type) : [...typeAllowlist, type])} /><span>{type}</span></label>)}</div></Modal> : null}
+      {configOpen ? <Modal className="feishu-project-modal" title="配置飞书同步范围" width="520px" onClose={() => setConfigOpen(false)} footer={<Button onClick={() => setConfigOpen(false)}>完成</Button>}><div className="feishu-project-allowlist"><p>只同步精确匹配以下类型的多维表格项目。取消选中后，已同步记录会在下次同步时标记为移出范围。</p>{metadata.projectTypes.map((type) => <label key={type}><input type="checkbox" checked={typeAllowlist.includes(type)} onChange={() => onAllowlistChange(typeAllowlist.includes(type) ? typeAllowlist.filter((item) => item !== type) : [...typeAllowlist, type])} /><span>{type}</span></label>)}</div></Modal> : null}
 
-      {formOpen ? <Modal title={editingId ? '编辑手动项目' : '手动添加合作项目'} width="640px" onClose={() => setFormOpen(false)} footer={<><Button variant="secondary" onClick={() => setFormOpen(false)}>取消</Button><Button onClick={submit}>保存</Button></>}><div className="feishu-project-form">{([
+      {formOpen ? <Modal className="feishu-project-modal" title={editingId ? '编辑手动项目' : '手动添加合作项目'} width="640px" onClose={() => setFormOpen(false)} footer={<><Button variant="secondary" onClick={() => setFormOpen(false)}>取消</Button><Button onClick={submit}>保存</Button></>}><div className="feishu-project-form">{([
         ['name', '项目名称', 'text'], ['projectType', '项目类型', 'text'], ['projectStatus', '项目状态', 'text'], ['initiatorName', '项目发起人', 'text'], ['startDate', '开始时间', 'date'], ['endDate', '结束时间', 'date'],
-      ] as const).map(([key, label, type]) => <label key={key}><span>{label} *</span><input type={type} value={draft[key]} onChange={(event) => { setDraft((current) => ({ ...current, [key]: event.target.value })); setFormError(''); }} /></label>)}{formError ? <div className="feishu-project-form-error" role="alert">{formError}</div> : null}</div></Modal> : null}
+      ] as const).map(([key, label, type]) => <label key={key}><span>{label} *</span>{key === 'projectStatus' ? <SelectField<'ACTIVE' | 'ARCHIVED' | ''> ariaLabel="手动项目状态" variant="form" value={draft.projectStatus as 'ACTIVE' | 'ARCHIVED' | ''} placeholder="请选择项目状态" options={[{ value: 'ACTIVE', label: '进行中', leading: <i className="feishu-project-status-dot is-active" /> }, { value: 'ARCHIVED', label: '已归档', leading: <i className="feishu-project-status-dot is-archived" /> }]} onChange={(projectStatus) => { setDraft((current) => ({ ...current, projectStatus })); setFormError(''); }} /> : <input type={type} value={draft[key]} onChange={(event) => { setDraft((current) => ({ ...current, [key]: event.target.value })); setFormError(''); }} />}</label>)}{formError ? <div className="feishu-project-form-error" role="alert">{formError}</div> : null}</div></Modal> : null}
     </div>
   );
 }

@@ -10,6 +10,8 @@ export type CooperationProjectDirectoryRecord = {
   name: string;
   projectType: string;
   projectStatus: string;
+  sourceProjectStatus?: string;
+  statusOverriddenAt?: string;
   initiatorName: string;
   startDate: string;
   endDate: string;
@@ -97,7 +99,9 @@ export const synchronizeFeishuDirectory = ({ current, incoming, internalIdFor, s
       externalProjectId: source.externalProjectId,
       name: source.name,
       projectType: source.projectType,
-      projectStatus: source.status,
+      projectStatus: previous?.statusOverriddenAt ? previous.projectStatus : source.status,
+      sourceProjectStatus: source.status,
+      statusOverriddenAt: previous?.statusOverriddenAt,
       initiatorName: source.initiatorName,
       startDate: source.startDate,
       endDate: source.endDate,

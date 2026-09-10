@@ -451,13 +451,17 @@ const readInvoiceCreationDrafts = (account: string) => {
   }
 };
 
+const normalizeDirectoryProjectStatus = (status: string) => (
+  ['ARCHIVED', '已归档', '已完成'].includes(status) ? 'ARCHIVED' : 'ACTIVE'
+);
+
 const directoryRecordFromProject = (project: ProjectSummary): CooperationProjectDirectoryRecord => ({
   id: String(project.cooperationProjectId ?? project.projectId ?? project.id),
   projectCode: project.cooperationProjectCode ?? project.projectCode ?? project.id,
   externalProjectId: project.externalProjectId,
   name: project.name,
   projectType: project.projectType ?? '未分类',
-  projectStatus: project.status,
+  projectStatus: normalizeDirectoryProjectStatus(project.status),
   initiatorName: project.initiatorName ?? project.media,
   startDate: project.startDate ?? '2026-01-01',
   endDate: project.endDate ?? '2026-12-31',
@@ -500,13 +504,17 @@ const loadInitialProjectDirectory = (): CooperationProjectDirectoryStore => {
     ? emptyCooperationProjectDirectoryStore()
     : loadCooperationProjectDirectory(window.localStorage);
   const baseline = INITIAL_PROJECTS.map(directoryRecordFromProject);
-  if (!stored.records.length) return { ...stored, records: baseline };
-  const storedById = new Map(stored.records.map((record) => [record.id, record]));
+  const storedRecords = stored.records.map((record) => ({
+    ...record,
+    projectStatus: normalizeDirectoryProjectStatus(record.projectStatus),
+  }));
+  if (!storedRecords.length) return { ...stored, records: baseline };
+  const storedById = new Map(storedRecords.map((record) => [record.id, record]));
   return {
     ...stored,
     records: [
       ...baseline.map((record) => storedById.get(record.id) ?? record),
-      ...stored.records.filter((record) => !baseline.some((item) => item.id === record.id)),
+      ...storedRecords.filter((record) => !baseline.some((item) => item.id === record.id)),
     ],
   };
 };
@@ -843,7 +851,13 @@ export default function App() {
   useEffect(() => {
     let active = true;
     void MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.getMetadata().then((metadata) => {
-      if (active) setFeishuProjectMetadata(metadata);
+      if (!active) return;
+      const supportedProjectTypes: string[] = metadata.projectTypes.filter((type) => type === '品牌营销');
+      setFeishuProjectMetadata({ ...metadata, projectTypes: supportedProjectTypes });
+      setProjectDirectory((current) => ({
+        ...current,
+        typeAllowlist: current.typeAllowlist.filter((type) => supportedProjectTypes.includes(type)),
+      }));
     }).catch(() => {
       if (active) setProjectSyncError('暂时无法读取飞书项目类型和状态选项。');
     });
@@ -5023,6 +5037,24 @@ export default function App() {
     setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability: 'DISABLED', localUpdatedAt: occurredAt } : project));
     notify('项目已停用', '历史请款、合同和 Invoice 关联不受影响。');
   };
+  const updateCooperationProjectStatus = (id: string, projectStatus: 'ACTIVE' | 'ARCHIVED') => {
+    const occurredAt = nowIso();
+    setProjectDirectory((current) => ({
+      ...current,
+      records: current.records.map((record) => record.id === id ? {
+        ...record,
+        projectStatus,
+        localUpdatedAt: occurredAt,
+        ...(record.source === 'FEISHU' ? { statusOverriddenAt: occurredAt } : {}),
+      } : record),
+    }));
+    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? {
+      ...project,
+      status: projectStatus,
+      localUpdatedAt: occurredAt,
+    } : project));
+    notify('项目状态已更新', `已改为${projectStatus === 'ACTIVE' ? '进行中' : '已归档'}。`);
+  };
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
   ));
@@ -5104,6 +5136,7 @@ export default function App() {
           onSync={() => { void synchronizeCooperationProjects(); }}
           onSaveManual={saveManualCooperationProject}
           onDisable={disableManualCooperationProject}
+          onProjectStatusChange={updateCooperationProjectStatus}
         />
       );
       break;

@@ -20,7 +20,13 @@ const incoming: FeishuCooperationProjectDto = {
 describe('cooperation project directory', () => {
   it('updates by external id while retaining the internal identity', () => {
     const result = synchronizeFeishuDirectory({ current: [existing], incoming: [incoming], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
-    expect(result[0]).toMatchObject({ id: existing.id, projectCode: existing.projectCode, name: 'New name', availability: 'ACTIVE' });
+    expect(result[0]).toMatchObject({ id: existing.id, projectCode: existing.projectCode, name: 'New name', projectStatus: 'ARCHIVED', sourceProjectStatus: 'ARCHIVED', availability: 'ACTIVE' });
+  });
+
+  it('keeps a local status override when the Feishu source is synchronized again', () => {
+    const overridden = { ...existing, projectStatus: 'ARCHIVED', statusOverriddenAt: '2026-02-01T00:00:00Z' };
+    const result = synchronizeFeishuDirectory({ current: [overridden], incoming: [{ ...incoming, status: 'ACTIVE' }], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
+    expect(result[0]).toMatchObject({ projectStatus: 'ARCHIVED', sourceProjectStatus: 'ACTIVE', statusOverriddenAt: overridden.statusOverriddenAt });
   });
 
   it('marks missing Feishu records out of scope without removing manual records', () => {
