@@ -957,6 +957,7 @@ export const paymentBatchItemForAttempt = (
   if (!attempt) return item;
   return {
     ...item,
+    paymentCode: attempt.paymentCode ?? item.paymentCode,
     paymentOrderCode: batch.paymentOrderCode,
     sourcePaymentOrderCode: batch.sourcePaymentOrderCode ?? item.sourcePaymentOrderCode,
     paymentAttemptNumber: batch.paymentAttemptNumber,

@@ -26,6 +26,7 @@ const payout = (): Payout => ({
   currentPaymentAttempt: {
     paymentBatchId: 'payment_batch_attempt_test' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'],
     paymentBatchCode: 'BAT-ATTEMPT-TEST',
+    paymentCode: 'PMT-2608300001',
     submittedAt: '2026-08-30T10:00:00.000Z',
     attemptNumber: 1,
   },
@@ -52,6 +53,7 @@ describe('payment attempt snapshots', () => {
     expect(failed.paymentAttempts).toEqual([
       expect.objectContaining({
         principalAmount: 1_250,
+        paymentCode: 'PMT-2608300001',
         transferFeeAmount: 2.5,
         actualPaidAmount: 2.5,
         recipientReceivedAmount: 0,

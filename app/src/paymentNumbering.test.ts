@@ -59,7 +59,7 @@ describe('payment business numbering', () => {
     expect(new Set(payoutCodes).size).toBe(payoutCodes.length);
   });
 
-  it('keeps one PMT code across the failed and successful retry batches', () => {
+  it('assigns a new PMT code to the successful retry batch', () => {
     const batches = createInitialPaymentBatches({
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
       requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
@@ -78,6 +78,7 @@ describe('payment business numbering', () => {
     const retry = batches.find((batch) => batch.paymentBatchId === PAYMENT_BATCH_RETRY_DEMO.retryBatchId);
     const originalFailed = original?.items.find((item) => item.paymentStatus === '付款失败');
     expect(retry?.paymentOrderCode).not.toBe(original?.paymentOrderCode);
-    expect(retry?.items[0].paymentCode).toBe(originalFailed?.paymentCode);
+    expect(retry?.items[0].paymentCode).toBe(PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode);
+    expect(retry?.items[0].paymentCode).not.toBe(originalFailed?.paymentCode);
   });
 });

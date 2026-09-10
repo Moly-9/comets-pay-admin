@@ -1,10 +1,14 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { applyPaymentBatchPrototypeScenario } from '../paymentBatchPrototypeScenario';
+import { applyPaymentBatchPrototypeScenario, PAYMENT_BATCH_RETRY_DEMO } from '../paymentBatchPrototypeScenario';
 import { createPaymentProjectPaymentRecord } from '../paymentBatches';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
-import { PaymentProjectItemDrawer, PaymentProjectPaymentDetailPage } from './PaymentProjectPaymentDetailPage';
+import {
+  buildPaymentProjectAttemptRows,
+  PaymentProjectItemDrawer,
+  PaymentProjectPaymentDetailPage,
+} from './PaymentProjectPaymentDetailPage';
 
 const resources = applyPaymentBatchPrototypeScenario({
   payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -82,9 +86,11 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
     expect(html).not.toContain('<dt>请款金额</dt>');
-    expect(html).toContain(`${failedRecord.items.length} 笔付款明细`);
+    expect(html).toContain(`${failedRecord.items.length + 1} 笔付款明细`);
     const headings = [
       '达人名称',
+      '付款编号',
+      '付款类型',
       '付款渠道',
       '收款银行账号',
       '付款日期',
@@ -114,8 +120,11 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('class="avatar avatar-sm"');
     expect(html).toContain('查看详情');
     expect(html).toContain('HKD 15,288');
-    expect(html).toContain('HKD 15,349.16');
-    expect(html).toContain('HKD 61.16');
+    expect(html).toContain(PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode);
+    expect(html).toContain('首次付款');
+    expect(html).toContain('二次付款');
+    expect(html).toContain('HKD 15,318.58');
+    expect(html).toContain('HKD 30.58');
     expect(html).not.toContain('下载项目资料');
     expect(html).not.toContain('查看合同附件');
     expect(html).not.toContain('查看 Invoice 附件');
@@ -152,7 +161,40 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('<small>IBAN</small>');
   });
 
-  it('uses channel result amounts only after payment succeeds and keeps status inside the eighth column', () => {
+  it('expands retry history into independently numbered attempt rows', () => {
+    const rows = buildPaymentProjectAttemptRows({ items: failedRecord.items, payouts: resources.payouts });
+    const retriedPayout = resources.payouts.find((payout) => (
+      payout.currentPaymentAttempt?.paymentBatchCode === PAYMENT_BATCH_RETRY_DEMO.retryBatchCode
+    ));
+    const retryRows = rows.filter((row) => row.item.payoutId === retriedPayout?.id);
+
+    expect(rows).toHaveLength(failedRecord.items.length + 1);
+    expect(retryRows).toHaveLength(2);
+    expect(retryRows.map((row) => row.attemptNumber)).toEqual([1, 2]);
+    expect(retryRows.map((row) => row.item.paymentStatus)).toEqual(['付款失败', '已付款']);
+    expect(retryRows.map((row) => row.item.paymentCode)).toEqual([
+      expect.stringMatching(/^PMT-/),
+      PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+    ]);
+    expect(new Set(retryRows.map((row) => row.item.paymentCode)).size).toBe(2);
+    expect(retryRows[0].item.actualPaidAmount).toBe(30.58);
+    expect(retryRows[1].item.actualPaidAmount).toBe(15_318.58);
+
+    const legacyPayout = {
+      ...retriedPayout!,
+      paymentAttempts: retriedPayout!.paymentAttempts?.map(({ paymentCode: _paymentCode, ...attempt }) => attempt),
+    };
+    const legacyRows = buildPaymentProjectAttemptRows({
+      items: failedRecord.items.filter((item) => item.payoutId === retriedPayout?.id),
+      payouts: [legacyPayout],
+    });
+    expect(legacyRows.map((row) => row.item.paymentCode)).toEqual([
+      undefined,
+      PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+    ]);
+  });
+
+  it('uses attempt-level channel results and keeps status inside the fixed status column', () => {
     const sourceItem = failedRecord.items[0];
     const paidItem = {
       ...sourceItem,
@@ -226,7 +268,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     const failedRowStart = failedHtml.indexOf('<tbody>');
     const failedDataRow = failedHtml.slice(failedRowStart, failedHtml.indexOf('</tr>', failedRowStart));
 
-    expect(failedDataRow).not.toContain('2026-08-26');
+    expect(failedDataRow).toContain('2026-08-26');
     expect(failedDataRow).not.toContain('USD 1,258.5');
     expect((failedDataRow.match(/USD 8.5/g) ?? [])).toHaveLength(2);
   });
@@ -282,6 +324,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(drawerHtml).not.toContain('付款关联文件');
     expect(drawerHtml).not.toContain('Invoice 日期');
     expect(drawerHtml).not.toContain('关联资料缺失');
+    expect(drawerHtml).not.toContain('账户版本');
   });
 
   it('shows two frozen payment attempts and cumulative spend before payment information', () => {
@@ -299,7 +342,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
       />,
     );
 
-    expect((drawerHtml.match(/二次付款/g) ?? [])).toHaveLength(2);
+    expect((drawerHtml.match(/payment-project-attempt-card/g) ?? [])).toHaveLength(2);
     expect(drawerHtml).toContain('首次付款');
     expect(drawerHtml).toContain('所属批次');
     expect(drawerHtml).toContain('BAT-20260805-008');
@@ -390,6 +433,11 @@ describe('PaymentProjectPaymentDetailPage', () => {
     const source = readFileSync(new URL('./PaymentProjectPaymentDetailPage.tsx', import.meta.url), 'utf8');
 
     expect(css).toContain('.payment-project-detail-table');
+    expect(css).toContain('min-width: max(100%, 1696px)');
+    expect(css).toContain('.payment-project-detail-code-heading');
+    expect(css).toContain('.payment-project-detail-type-heading');
+    expect(css).toContain('.payment-project-attempt-badge');
+    expect(css).toContain('.payment-project-attempt-card.is-current');
     expect(css).toContain('position: sticky');
     expect(css).toContain('right: 116px');
     expect(css).toContain('right: 0');
@@ -442,9 +490,9 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('<strong>已付款</strong>');
     expect(html).not.toContain('<strong>已完成</strong>');
     expect(html).toContain('payment-progress-steps');
-    expect(html).toContain('5 成功 · 0 失败');
+    expect(html).toContain('5 成功 · 1 失败');
     expect(html).toContain('以渠道回写时间为准');
-    expect(html).not.toContain('disabled=""');
+    expect(html).toContain('title="仅已付款明细可以生成确认函。"');
     expect(html).toContain('payment-project-summary-card is-order');
     expect(html).toContain('payment-project-summary-card is-provider');
     expect(html).toContain('payment-project-summary-card is-result');

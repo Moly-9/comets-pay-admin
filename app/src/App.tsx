@@ -260,7 +260,7 @@ import {
   withPaymentAttemptSnapshot,
 } from './paymentAttempts';
 import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
-import { nextPaymentBusinessCode } from './paymentNumbering';
+import { nextPaymentBusinessCode, reservePaymentBusinessCodes } from './paymentNumbering';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
@@ -2928,6 +2928,7 @@ export default function App() {
                 paymentBatchId: batchRecord.paymentBatchId,
                 paymentBatchCode: batchRecord.paymentBatchCode,
                 submittedAt,
+                paymentCode: batchItem.paymentCode,
                 paymentOrderCode: paymentBatchItemOrderCode(batchItem),
                 sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
                 attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -2946,6 +2947,7 @@ export default function App() {
           paymentBatchId: batchRecord.paymentBatchId,
           paymentBatchCode: batchRecord.paymentBatchCode,
           submittedAt,
+          paymentCode: batchItem.paymentCode,
           paymentOrderCode: paymentBatchItemOrderCode(batchItem),
           sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
           attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -4734,22 +4736,46 @@ export default function App() {
       .slice(0, 16);
     const isRetryBatch = retryItems.length > 0;
     let retryPaymentOrderCode: string | undefined;
+    let retryPaymentCodesByPayoutId = new Map<string, string>();
     try {
       retryPaymentOrderCode = isRetryBatch ? nextPaymentBusinessCode('PAY', [
         ...paymentLists.map((item) => item.paymentListCode),
         ...paymentBatches.map((item) => item.paymentOrderCode),
       ]) : undefined;
+      if (isRetryBatch) {
+        const reservedPaymentCodes = [
+          ...payouts.flatMap((payout) => [
+            payout.paymentCode,
+            payout.currentPaymentAttempt?.paymentCode,
+            ...(payout.paymentAttempts ?? []).map((attempt) => attempt.paymentCode),
+          ]),
+          ...paymentBatches.flatMap((batch) => batch.items.map((item) => item.paymentCode)),
+        ];
+        const retryPaymentCodes = reservePaymentBusinessCodes(
+          'PMT',
+          reservedPaymentCodes,
+          retryItems.length,
+          now,
+        );
+        retryPaymentCodesByPayoutId = new Map(retryItems.map((payout, index) => (
+          [payout.id, retryPaymentCodes[index]]
+        )));
+      }
     } catch (error) {
-      notify('无法创建付款批次', error instanceof Error ? error.message : '付款单编号生成失败。');
+      notify('无法创建付款批次', error instanceof Error ? error.message : '付款编号生成失败。');
       return;
     }
     const retryAttemptNumber = isRetryBatch
       ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
       : undefined;
+    const selectedForBatch = selected.map((payout) => {
+      const paymentCode = retryPaymentCodesByPayoutId.get(payout.id);
+      return paymentCode ? { ...payout, paymentCode } : payout;
+    });
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
-        payouts: selected,
+        payouts: selectedForBatch,
         requests: requestProjects,
         generatedInvoices,
         paymentLists,
@@ -4784,6 +4810,7 @@ export default function App() {
             execution.batchCode,
             localPaymentTime,
             {
+              paymentCode: batchItem.paymentCode || retryPaymentCodesByPayoutId.get(payout.id)!,
               paymentOrderCode: paymentBatchItemOrderCode(batchItem),
               sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
               attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -4797,6 +4824,7 @@ export default function App() {
               paymentBatchId: batchRecord.paymentBatchId,
               paymentBatchCode: batchRecord.paymentBatchCode,
               submittedAt: localPaymentTime,
+              paymentCode: batchItem.paymentCode,
               paymentOrderCode: paymentBatchItemOrderCode(batchItem),
               sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
               attemptNumber: paymentBatchItemAttemptNumber(batchItem),

@@ -126,6 +126,7 @@ describe('payment batch prototype scenario', () => {
       status: '已付款',
       currentPaymentAttempt: {
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+        paymentCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
         paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
         sourcePaymentOrderCode: originalPaymentOrderCode,
         attemptNumber: 2,
@@ -144,6 +145,7 @@ describe('payment batch prototype scenario', () => {
     expect(retriedPayout?.paymentAttempts).toEqual([
       expect.objectContaining({
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.originalBatchCode,
+        paymentCode: expect.not.stringMatching(PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode),
         attemptNumber: 1,
         status: '付款失败',
         actualPaidAmount: 30.58,
@@ -152,6 +154,7 @@ describe('payment batch prototype scenario', () => {
       }),
       expect.objectContaining({
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+        paymentCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
         attemptNumber: 2,
         status: '已付款',
         actualPaidAmount: 15_318.58,

@@ -607,6 +607,7 @@ export type PaymentAttemptRef = {
   paymentBatchId: PaymentBatchId;
   paymentBatchCode: string;
   submittedAt: string;
+  paymentCode?: string;
   paymentOrderCode?: string;
   sourcePaymentOrderCode?: string;
   attemptNumber?: number;
@@ -615,6 +616,7 @@ export type PaymentAttemptRef = {
 export type PaymentAttemptSnapshot = Readonly<{
   paymentBatchId?: PaymentBatchId;
   paymentBatchCode?: string;
+  paymentCode?: string;
   attemptNumber: number;
   status: Extract<PayoutStatus, '付款失败' | '已付款'>;
   occurredAt?: string;
@@ -689,7 +691,7 @@ export type PaymentFailureRecovery = {
 
 export type Payout = {
   id: string;
-  /** 用户可见的单笔业务付款编号；重新付款时保持不变。 */
+  /** 用户可见的当前付款尝试编号；重新付款时生成新编号，历史编号保存在 paymentAttempts。 */
   paymentCode?: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
