@@ -258,6 +258,7 @@ describe('transaction records', () => {
       status: '全部失败',
       items: [{
         ...batch.items[0],
+        paymentCode: 'PMT-2608050001',
         paymentStatus: '付款失败',
         paidAt: '2026-08-05T15:05:00.000Z',
         transferFeeAmount: 6,
@@ -278,6 +279,7 @@ describe('transaction records', () => {
       paidAt: '2026-08-06T10:00:00.000Z',
       items: [{
         ...batch.items[0],
+        paymentCode: 'PMT-2608060001',
         paidAt: '2026-08-06T10:05:00.000Z',
         transferFeeAmount: 6,
         transferFeeCurrency: 'USD',
@@ -286,7 +288,9 @@ describe('transaction records', () => {
       }],
     } as unknown as PaymentBatchRecord;
 
-    const records = createTransactionRecords([payout()], [failedBatch, retryBatch]);
+    const records = createTransactionRecords([
+      payout({ paymentCode: 'PMT-2608060001' }),
+    ], [failedBatch, retryBatch]);
 
     expect(records).toHaveLength(2);
     expect(records.map((record) => record.context?.batch.paymentBatchCode)).toEqual([
@@ -295,7 +299,36 @@ describe('transaction records', () => {
     ]);
     expect(records.map((record) => record.status)).toEqual(['已付款', '付款失败']);
     expect(records.map((record) => record.recipientReceivedAmount)).toEqual([1980, 0]);
+    expect(records.map((record) => transactionRecordDetails(
+      record.payout,
+      record.context,
+    ).paymentCode)).toEqual(['PMT-2608060001', 'PMT-2608050001']);
     expect(new Set(records.map((record) => record.key)).size).toBe(2);
+  });
+
+  it('uses the attempt payment code and marks missing historical codes for completion', () => {
+    const attemptBatch = {
+      ...batch,
+      items: [{
+        ...batch.items[0],
+        paymentCode: 'PMT-2608050099',
+        paymentAttempts: [{
+          paymentBatchId: batch.paymentBatchId,
+          paymentBatchCode: batch.paymentBatchCode,
+          paymentCode: 'PMT-2608050001',
+          attemptNumber: 1,
+          status: '已付款',
+          occurredAt: '2026-08-05 16:00',
+          principalAmount: 1980,
+          principalCurrency: 'USD',
+        }],
+      }],
+    } as unknown as PaymentBatchRecord;
+    const [attemptRecord] = createTransactionRecords([payout()], [attemptBatch]);
+
+    expect(transactionRecordDetails(attemptRecord.payout, attemptRecord.context).paymentCode)
+      .toBe('PMT-2608050001');
+    expect(transactionRecordDetails(payout(), null).paymentCode).toBe('付款编号待补全');
   });
 
   it('derives successful recipient amounts from each fee-bearer snapshot', () => {
@@ -348,6 +381,7 @@ describe('transaction records', () => {
       const requiredValues = [
         details.payer,
         details.paymentTime,
+        details.paymentCode,
         details.paymentBatchCode,
         details.requestCode,
         details.requestReason,
