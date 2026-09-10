@@ -699,7 +699,7 @@ export default function App() {
 
   const contractDeletionPolicyMessage = currentUser.roleKey === 'media'
     ? '媒介只能删除本人上传且尚未用于请款项目的合同。'
-    : '管理员、项目负责人和老板可以删除任意合同；PM 和财务账号不可删除合同。';
+    : '管理员、媒介负责人和老板可以删除任意合同；PM 和财务账号不可删除合同。';
 
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
@@ -1170,7 +1170,7 @@ export default function App() {
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
-      notify('暂无模板编辑权限', '仅项目负责人、老板或管理员可以修改合同模板。');
+      notify('暂无模板编辑权限', '仅媒介负责人、老板或管理员可以修改合同模板。');
       return;
     }
     const cooperationProjectId = updated.cooperationProjectId ?? updated.projectId;
@@ -2831,6 +2831,11 @@ export default function App() {
     }));
     setFinanceReviewResourceRestore(null);
     setFinanceReviewRequestId(request.id);
+  };
+
+  const openPaymentRequestDetail = (requestId: string) => {
+    if (!navigate('requests', { requestStatusFilter: 'approving' })) return;
+    setFocusedRequestId(requestId);
   };
 
   const currentPaymentReceiveCurrency = (payout: Payout) => {
@@ -5695,6 +5700,7 @@ export default function App() {
             const payout = project.payouts[0];
             if (payout) setSelectedPayout(payout);
           }}
+          onOpenRequest={openPaymentRequestDetail}
           onReviewRequest={openFinanceReview}
           onExecuteRequest={executePaymentRequest}
           onReturnRequest={returnPaymentRequestToMedia}

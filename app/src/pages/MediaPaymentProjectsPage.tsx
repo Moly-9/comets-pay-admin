@@ -444,7 +444,7 @@ const REQUEST_APPROVAL_PROGRESS_STAGES: Array<{
   label: string;
 }> = [
   { stage: 'PM', status: 'PENDING_PM', label: 'PM 审批' },
-  { stage: 'PROJECT_OWNER', status: 'PENDING_PROJECT_OWNER', label: '项目负责人审批' },
+  { stage: 'PROJECT_OWNER', status: 'PENDING_PROJECT_OWNER', label: '媒介负责人审批' },
   { stage: 'OWNER', status: 'PENDING_OWNER', label: '老板审批' },
   { stage: 'FINANCE', status: 'PENDING_FINANCE', label: '财务审批' },
 ];

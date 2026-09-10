@@ -79,7 +79,7 @@ const contractPeriodLabel = (contract: ContractRecord) => {
 const approvalStageLabel = (event: RequestApprovalEvent) => {
   const stage = {
     PM: 'PM 审批',
-    PROJECT_OWNER: '项目负责人审批',
+    PROJECT_OWNER: '媒介负责人审批',
     OWNER: '老板审批',
     FINANCE: '财务审批',
   }[event.stage];

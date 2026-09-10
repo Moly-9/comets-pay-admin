@@ -376,7 +376,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '执行中': 'active',
   'PM 审批中': 'active',
   'PM审批中': 'active',
-  '项目负责人审批中': 'active',
+  '媒介负责人审批中': 'active',
   '老板审批中': 'active',
   '财务审批中': 'active',
   '飞书审批中': 'active',
@@ -386,7 +386,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '待补资料': 'review',
   '待财务复核': 'review',
   'PM审批通过': 'active',
-  '项目负责人审批通过': 'active',
+  '媒介负责人审批通过': 'active',
   '老板审批通过': 'active',
   '财务审批通过': 'payment',
   '正在付款': 'payment',
@@ -408,8 +408,9 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
 };
 
 export function ProjectStatus({ status }: { status: string }) {
-  const tone = PROJECT_STATUS_TONES[status] ?? 'default';
-  return <span className={`simple-status project-status project-status-${tone}`} data-project-status={status}><i aria-hidden="true" />{status}</span>;
+  const visibleStatus = status.replace(/项目负责人/g, '媒介负责人');
+  const tone = PROJECT_STATUS_TONES[visibleStatus] ?? 'default';
+  return <span className={`simple-status project-status project-status-${tone}`} data-project-status={visibleStatus}><i aria-hidden="true" />{visibleStatus}</span>;
 }
 
 export type ProjectListFilters = {
@@ -445,7 +446,7 @@ export const correctedProjectFilterDateRange = (
 
 export const REQUEST_PROJECT_STATUS_OPTIONS = [
   'PM审批中',
-  '项目负责人审批中',
+  '媒介负责人审批中',
   '老板审批中',
   '财务审批中',
   '正在付款',
@@ -1098,7 +1099,7 @@ export function ProjectsPage({
           title="新建项目"
           onClose={requestCloseProjectModal}
           width="760px"
-          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} disabledReason={!name.trim() ? '请先填写项目名称。' : !selectedPM ? '请先选择项目负责人。' : '请至少选择一位合作达人。'} onClick={createProject}>创建项目</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} disabledReason={!name.trim() ? '请先填写项目名称。' : !selectedPM ? '请先选择媒介负责人。' : '请至少选择一位合作达人。'} onClick={createProject}>创建项目</Button></>}
         >
           <div className="form-grid single-column project-create-form">
             <label>
@@ -1165,7 +1166,7 @@ const createFixtureRequestApproval = (
 ): RequestApprovalState => {
   const status: RequestApprovalStatus = statusOverride ?? (requestStatus.includes('财务')
     ? 'PENDING_FINANCE'
-    : requestStatus.includes('项目负责人')
+    : requestStatus.includes('媒介负责人') || requestStatus.includes('项目负责人')
       ? 'PENDING_PROJECT_OWNER'
       : requestStatus.includes('老板')
         ? 'PENDING_OWNER'
@@ -1178,7 +1179,7 @@ const createFixtureRequestApproval = (
   const currentIndex = status === 'APPROVED' ? ordered.length : ordered.indexOf(status as typeof ordered[number]);
   const actorByStage = {
     PM: pmName,
-    PROJECT_OWNER: '项目负责人',
+    PROJECT_OWNER: '媒介负责人',
     OWNER: '老板',
     FINANCE: '财务',
   };

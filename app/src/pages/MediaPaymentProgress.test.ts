@@ -123,7 +123,7 @@ describe('My Projects payment request progress', () => {
       '关联 Invoice',
       '提交审核',
       'PM 审批',
-      '项目负责人审批',
+      '媒介负责人审批',
       '老板审批',
       '财务审批',
       '渠道打款',
@@ -161,14 +161,14 @@ describe('My Projects payment request progress', () => {
       description: '第 2 轮 · 等待财务审批',
     });
     expect(stepFor(progress, 'PM 审批')).toMatchObject({ state: 'complete' });
-    expect(stepFor(progress, '项目负责人审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '媒介负责人审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '老板审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending' });
   });
 
   it.each([
     ['PENDING_PM', 'PM 审批'],
-    ['PENDING_PROJECT_OWNER', '项目负责人审批'],
+    ['PENDING_PROJECT_OWNER', '媒介负责人审批'],
     ['PENDING_OWNER', '老板审批'],
     ['PENDING_FINANCE', '财务审批'],
   ] as const)('marks %s as the only active approval stage', (status, label) => {
@@ -190,7 +190,7 @@ describe('My Projects payment request progress', () => {
     const progress = progressFor(request, [payout('等待付款')]);
 
     expect(stepFor(progress, '提交审核')).toMatchObject({ state: 'complete' });
-    ['PM 审批', '项目负责人审批', '老板审批', '财务审批'].forEach((label) => {
+    ['PM 审批', '媒介负责人审批', '老板审批', '财务审批'].forEach((label) => {
       expect(stepFor(progress, label)).toMatchObject({ state: 'complete' });
     });
     expect(stepFor(progress, '渠道打款')).toMatchObject({
@@ -287,7 +287,7 @@ describe('My Projects payment request progress', () => {
       description: '测试财务已退回：付款资料需要修改',
     });
     expect(stepFor(progress, 'PM 审批')).toMatchObject({ state: 'complete' });
-    expect(stepFor(progress, '项目负责人审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '媒介负责人审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '老板审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending' });
   });
@@ -322,7 +322,7 @@ describe('My Projects payment request progress', () => {
       state: 'complete',
       description: '测试 PM 已审批通过',
     });
-    expect(stepFor(progress, '项目负责人审批')).toMatchObject({ state: 'complete' });
+    expect(stepFor(progress, '媒介负责人审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '老板审批')).toMatchObject({ state: 'complete' });
     expect(stepFor(progress, '财务审批')).toMatchObject({ state: 'current' });
   });
@@ -339,7 +339,7 @@ describe('My Projects payment request progress', () => {
       state: 'current',
       description: '请款已取消：项目终止',
     });
-    ['PM 审批', '项目负责人审批', '老板审批', '财务审批'].forEach((label) => {
+    ['PM 审批', '媒介负责人审批', '老板审批', '财务审批'].forEach((label) => {
       expect(stepFor(progress, label)).toMatchObject({ state: 'pending' });
     });
     expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending', time: '已终止' });

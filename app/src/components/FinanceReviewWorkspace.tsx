@@ -125,7 +125,7 @@ const PAGE_KIND_LABEL: Record<Exclude<FinanceReviewPage['kind'], 'pair'>, string
 
 const STAGE_LABEL: Record<RequestApprovalStage, string> = {
   PM: 'PM 审批',
-  PROJECT_OWNER: '项目负责人审批',
+  PROJECT_OWNER: '媒介负责人审批',
   OWNER: '老板审批',
   FINANCE: '财务审批',
 };

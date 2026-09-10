@@ -47,7 +47,7 @@ describe('payment batch prototype scenario', () => {
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
 
-    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(2);
+    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(8);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
     expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);

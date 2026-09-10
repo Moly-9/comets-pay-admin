@@ -201,7 +201,7 @@ describe('complete request project prototype resources', () => {
 
     expect(counts).toEqual({
       PM审批中: 2,
-      项目负责人审批中: 2,
+      媒介负责人审批中: 2,
       老板审批中: 2,
       财务审批中: 2,
       正在付款: 2,

@@ -391,7 +391,7 @@ describe('FinanceReviewWorkspace approval timeline', () => {
     expect(html).toContain('maskUnits="userSpaceOnUse"');
     expect(html).toContain('r="19"');
     expect(html).toContain('<g mask="url(#finance-approval-curve-mask-');
-    expect(html).toContain('项目负责人审批，账号 待分配，已完成');
+    expect(html).toContain('媒介负责人审批，账号 待分配，已完成');
     expect(html).toContain('老板审批，账号 待分配，已完成');
     expect(html).toContain('财务审批，账号 finance，当前节点');
     expect(html).toContain('grid-column:1;grid-row:1');

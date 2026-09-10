@@ -64,7 +64,7 @@ describe('request approval reminder surfaces', () => {
     expect(html).toContain('aria-label="关闭提示"');
     expect(REQUEST_PROJECT_STATUS_OPTIONS).toEqual([
       'PM审批中',
-      '项目负责人审批中',
+      '媒介负责人审批中',
       '老板审批中',
       '财务审批中',
       '正在付款',

@@ -965,7 +965,7 @@ describe('media payment request list presentation', () => {
 describe('payment request module status presentation', () => {
   it.each([
     ['PENDING_PM', 'PM审批中', 'PM审批中'],
-    ['PENDING_PROJECT_OWNER', '项目负责人审批中', '项目负责人审批中'],
+    ['PENDING_PROJECT_OWNER', '媒介负责人审批中', '媒介负责人审批中'],
     ['PENDING_OWNER', '老板审批中', '老板审批中'],
     ['PENDING_FINANCE', '财务审批中', '财务审批中'],
     ['APPROVED', '待打款', '正在付款'],
@@ -982,6 +982,13 @@ describe('payment request module status presentation', () => {
     };
     expect(myProjectStatusFor(source)).toBe(myStatus);
     expect(requestProjectStatusFor(source)).toBe(requestStatus);
+  });
+
+  it('normalizes the historical project-owner label to the media-owner terminology', () => {
+    const legacy = { lifecycle: 'SUBMITTED' as const, status: '项目负责人审批中' };
+
+    expect(myProjectStatusFor(legacy)).toBe('媒介负责人审批中');
+    expect(requestProjectStatusFor(legacy)).toBe('媒介负责人审批中');
   });
 
   it('keeps drafts out of request-project status and maps completed requests to paid', () => {

@@ -19,12 +19,20 @@
   flex-wrap: wrap;
 }
 
-.payment-workbench-page .payment-status-select {
+.payment-workbench-page .payment-status-select,
+.payment-workbench-page .payment-review-status-select {
   width: 168px;
 }
 
+@media (min-width: 561px) and (max-width: 1320px) {
+  .payment-workbench-page .date-filter input {
+    width: 100px;
+  }
+}
+
 @media (max-width: 560px) {
-  .payment-workbench-page .payment-status-select {
+  .payment-workbench-page .payment-status-select,
+  .payment-workbench-page .payment-review-status-select {
     width: 100%;
   }
 }

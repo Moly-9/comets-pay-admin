@@ -1,6 +1,6 @@
 import { CalendarDays, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PaymentListRecord } from '../businessWorkflow';
+import type { PaymentListRecord, RequestApprovalStatus } from '../businessWorkflow';
 import { Button, ListActionButton, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
@@ -86,8 +86,14 @@ const TAB_ACTION_LABELS: Record<WorkbenchTab, string> = {
 };
 
 const ALL_PAYMENT_PROVIDERS = '全部付款渠道' as const;
+export const ALL_REVIEW_STATUSES = '全部项目状态' as const;
 
 type PaymentProviderFilter = typeof ALL_PAYMENT_PROVIDERS | Payout['provider'];
+export type ReviewApprovalStatus = Extract<
+  RequestApprovalStatus,
+  'PENDING_PM' | 'PENDING_PROJECT_OWNER' | 'PENDING_OWNER' | 'PENDING_FINANCE'
+>;
+export type ReviewStatusFilter = typeof ALL_REVIEW_STATUSES | ReviewApprovalStatus;
 
 const PAYMENT_PROVIDER_OPTIONS = [
   { value: ALL_PAYMENT_PROVIDERS, label: ALL_PAYMENT_PROVIDERS, description: '显示所有付款渠道' },
@@ -97,6 +103,35 @@ const PAYMENT_PROVIDER_OPTIONS = [
 ] as const;
 
 const PAYMENT_PROVIDERS: Payout['provider'][] = ['Airwallex', 'PayMax', 'PayPal'];
+
+const REVIEW_STATUS_PRESENTATION: Record<ReviewApprovalStatus, {
+  status: string;
+  actionLabel: '查看详情' | '审核';
+}> = {
+  PENDING_PM: { status: '待PM审核', actionLabel: '查看详情' },
+  PENDING_PROJECT_OWNER: { status: '待媒介负责人审核', actionLabel: '查看详情' },
+  PENDING_OWNER: { status: '待老板审核', actionLabel: '查看详情' },
+  PENDING_FINANCE: { status: '待财务审核', actionLabel: '审核' },
+};
+
+export const REVIEW_STATUS_FILTER_OPTIONS = [
+  { value: ALL_REVIEW_STATUSES, label: ALL_REVIEW_STATUSES, description: '显示全部审批节点' },
+  { value: 'PENDING_PM', label: REVIEW_STATUS_PRESENTATION.PENDING_PM.status, description: 'PM 审批节点' },
+  { value: 'PENDING_PROJECT_OWNER', label: REVIEW_STATUS_PRESENTATION.PENDING_PROJECT_OWNER.status, description: '媒介负责人审批节点' },
+  { value: 'PENDING_OWNER', label: REVIEW_STATUS_PRESENTATION.PENDING_OWNER.status, description: '老板审批节点' },
+  { value: 'PENDING_FINANCE', label: REVIEW_STATUS_PRESENTATION.PENDING_FINANCE.status, description: '财务审批节点' },
+] as const;
+
+const REVIEW_APPROVAL_STATUSES = new Set<ReviewApprovalStatus>([
+  'PENDING_PM',
+  'PENDING_PROJECT_OWNER',
+  'PENDING_OWNER',
+  'PENDING_FINANCE',
+]);
+
+const isReviewApprovalStatus = (
+  status?: RequestApprovalStatus,
+): status is ReviewApprovalStatus => Boolean(status && REVIEW_APPROVAL_STATUSES.has(status as ReviewApprovalStatus));
 
 export type PaymentProjectRow = {
   id: string;
@@ -115,10 +150,13 @@ export type PaymentProjectRow = {
   transferFeeTotals: PaymentCurrencyItem[];
   actualPaidTotals: PaymentCurrencyItem[];
   actualPaidDates: string[];
+  invoiceIds: string[];
+  invoiceCurrencyById: Record<string, string>;
   status: string;
   actionLabel: string;
   payouts: Payout[];
   requestId?: string;
+  approvalStatus?: ReviewApprovalStatus;
 };
 
 const summarizePayoutAmounts = (payouts: Payout[]) => {
@@ -230,7 +268,12 @@ const paymentProjectSearchText = (project: PaymentProjectRow) => [
 
 export const filterPaymentProjectRows = (
   projects: PaymentProjectRow[],
-  filters: { search: string; provider: PaymentProviderFilter; status?: PaymentStatusFilter },
+  filters: {
+    search: string;
+    provider: PaymentProviderFilter;
+    status?: PaymentStatusFilter;
+    reviewStatus?: ReviewStatusFilter;
+  },
 ) => {
   const searchTerms = filters.search.trim().toLocaleLowerCase('zh-CN').split(/\s+/).filter(Boolean);
   return projects.filter((project) => {
@@ -240,13 +283,22 @@ export const filterPaymentProjectRows = (
       aggregatePaymentStatus(project.payouts.map((payout) => payout.status)),
       filters.status ?? ALL_PAYMENT_STATUSES,
     );
-    if (!matchesProvider || !matchesStatus || !searchTerms.length) return matchesProvider && matchesStatus;
+    const matchesReviewStatus = !filters.reviewStatus
+      || filters.reviewStatus === ALL_REVIEW_STATUSES
+      || project.approvalStatus === filters.reviewStatus;
+    if (!matchesProvider || !matchesStatus || !matchesReviewStatus || !searchTerms.length) {
+      return matchesProvider && matchesStatus && matchesReviewStatus;
+    }
     const searchText = paymentProjectSearchText(project);
     return searchTerms.every((term) => searchText.includes(term));
   });
 };
 
 export const summarizePaymentProjectRows = (projects: PaymentProjectRow[]) => {
+  const reviewRows = projects.filter((project) => project.approvalStatus);
+  const reviewInvoiceCurrencyById = new Map(reviewRows.flatMap((project) => (
+    Object.entries(project.invoiceCurrencyById)
+  )));
   const amountTotals = projects.flatMap((project) => project.amountTotals)
     .reduce<Map<string, PaymentCurrencyItem>>((result, item) => {
       const current = result.get(item.currency) ?? { currency: item.currency, amount: 0, count: 0 };
@@ -257,10 +309,24 @@ export const summarizePaymentProjectRows = (projects: PaymentProjectRow[]) => {
       });
       return result;
     }, new Map());
+  if (reviewRows.length) {
+    amountTotals.forEach((item, currency) => {
+      amountTotals.set(currency, {
+        ...item,
+        count: [...reviewInvoiceCurrencyById.values()].filter((candidate) => candidate === currency).length,
+      });
+    });
+  }
+  const knownReviewInvoiceIds = new Set(reviewRows.flatMap((project) => project.invoiceIds));
+  const reviewInvoiceFallbackCount = reviewRows.reduce((total, project) => (
+    total + Math.max(0, project.invoices - project.invoiceIds.length)
+  ), 0);
   return {
     projects: projects.length,
     contracts: projects.reduce((total, project) => total + project.contracts, 0),
-    invoices: projects.reduce((total, project) => total + project.invoices, 0),
+    invoices: reviewRows.length
+      ? knownReviewInvoiceIds.size + reviewInvoiceFallbackCount
+      : projects.reduce((total, project) => total + project.invoices, 0),
     amounts: sortPaymentCurrencyItems(Array.from(amountTotals.values())),
   };
 };
@@ -284,7 +350,7 @@ const requestMatchesWorkbenchTab = (
   projectPayouts: Payout[],
 ) => {
   if (tab === 'review') {
-    return request.lifecycle === 'SUBMITTED' && request.approval?.status === 'PENDING_FINANCE';
+    return request.lifecycle === 'SUBMITTED' && isReviewApprovalStatus(request.approval?.status);
   }
   if (tab === 'returned') return request.lifecycle === 'RETURNED';
   if (request.lifecycle === 'COMPLETED') return tab === 'paid';
@@ -299,8 +365,15 @@ const requestMatchesWorkbenchTab = (
   ));
 };
 
-const paymentProjectPresentation = (tab: WorkbenchTab, payouts: Payout[]) => {
-  if (tab === 'review') return { status: '待财务审核', actionLabel: '审核' };
+const paymentProjectPresentation = (
+  tab: WorkbenchTab,
+  payouts: Payout[],
+  approvalStatus?: RequestApprovalStatus,
+) => {
+  if (tab === 'review' && isReviewApprovalStatus(approvalStatus)) {
+    return REVIEW_STATUS_PRESENTATION[approvalStatus];
+  }
+  if (tab === 'review') return { status: '待审核', actionLabel: '查看详情' };
   if (tab === 'returned') return { status: '已退回', actionLabel: '查看详情' };
   if (tab === 'payment') return { status: '待打款', actionLabel: '执行打款' };
   const status = aggregatePaymentStatus(payouts.map((payout) => payout.status));
@@ -349,9 +422,26 @@ export const buildPaymentProjectRows = ({
         || sourcePayoutIds.has(payout.id)
       ));
       if (!requestMatchesWorkbenchTab(request, tab, projectPayouts)) return [];
-      const amount = projectPayouts.length ? summarizePayoutAmounts(projectPayouts) : request.amount;
-      const presentation = paymentProjectPresentation(tab, projectPayouts);
+      const amount = tab === 'review'
+        ? request.amount
+        : projectPayouts.length ? summarizePayoutAmounts(projectPayouts) : request.amount;
+      const presentation = paymentProjectPresentation(tab, projectPayouts, request.approval?.status);
       const paymentResults = paymentResultFieldsFor(projectPayouts);
+      const invoiceCurrencyCounts = [...invoiceIds].reduce<Map<string, number>>((counts, invoiceId) => {
+        const currency = invoiceById.get(invoiceId)?.snapshot.currency;
+        if (currency) counts.set(currency, (counts.get(currency) ?? 0) + 1);
+        return counts;
+      }, new Map());
+      const invoiceCurrencyById = Object.fromEntries([...invoiceIds].flatMap((invoiceId) => {
+        const currency = invoiceById.get(invoiceId)?.snapshot.currency;
+        return currency ? [[invoiceId, currency]] : [];
+      }));
+      const amountTotals = tab === 'review'
+        ? parsePaymentAmountSummary(request.amount).map((item) => ({
+          ...item,
+          count: invoiceCurrencyCounts.get(item.currency) ?? 0,
+        }))
+        : paymentAmountTotalsFor(projectPayouts, amount);
       return [{
         id: String(request.paymentRequestProjectId ?? request.id),
         requestId: request.id,
@@ -366,11 +456,16 @@ export const buildPaymentProjectRows = ({
         paymentOrder: request.paymentOrder,
         paymentChannels: paymentChannelForRequest(request, projectPayouts),
         paymentEntity: request.paymentEntity || '待补充',
-        amountTotals: paymentAmountTotalsFor(projectPayouts, amount),
+        amountTotals,
         ...paymentResults,
+        invoiceIds: [...invoiceIds],
+        invoiceCurrencyById,
         status: presentation.status,
         actionLabel: presentation.actionLabel,
         payouts: projectPayouts,
+        approvalStatus: isReviewApprovalStatus(request.approval?.status)
+          ? request.approval.status
+          : undefined,
       }];
     });
 
@@ -407,6 +502,8 @@ export const buildPaymentProjectRows = ({
       paymentEntity: '待补充',
       amountTotals: aggregatePayoutCurrencies(projectPayouts),
       ...paymentResults,
+      invoiceIds: [...new Set(projectPayouts.map((payout) => payout.invoice))],
+      invoiceCurrencyById: Object.fromEntries(projectPayouts.map((payout) => [payout.invoice, payout.currency])),
       status: presentation.status,
       actionLabel: presentation.actionLabel,
       payouts: projectPayouts,
@@ -599,6 +696,7 @@ export function PaymentWorkbenchPage({
   onNewBatch,
   onSelectPayout,
   onSelectPaidProject,
+  onOpenRequest,
   onReviewRequest,
   onExecuteRequest,
   onReturnRequest,
@@ -617,6 +715,7 @@ export function PaymentWorkbenchPage({
   onNewBatch: () => void;
   onSelectPayout: (payout: Payout) => void;
   onSelectPaidProject: (project: PaymentProjectRow) => void;
+  onOpenRequest: (requestId: string) => void;
   onReviewRequest: (requestId: string) => void;
   onExecuteRequest: (payouts: Payout[]) => boolean;
   onReturnRequest: (requestId: string, reason: string) => boolean;
@@ -630,6 +729,7 @@ export function PaymentWorkbenchPage({
   const [activeTab, setActiveTab] = useState<WorkbenchTab>(initialTab);
   const [provider, setProvider] = useState<PaymentProviderFilter>(ALL_PAYMENT_PROVIDERS);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatusFilter>(ALL_REVIEW_STATUSES);
   const [searchByTab, setSearchByTab] = useState<Record<WorkbenchTab, string>>({
     review: '',
     payment: '',
@@ -655,6 +755,17 @@ export function PaymentWorkbenchPage({
     tab.id,
     buildPaymentProjectRows({ tab: tab.id, payouts, requests, generatedInvoices }),
   ])) as Record<WorkbenchTab, PaymentProjectRow[]>, [generatedInvoices, payouts, requests]);
+  const reviewSummary = useMemo(
+    () => summarizePaymentProjectRows(rowsByTab.review),
+    [rowsByTab],
+  );
+  const pendingCurrencyOverview = useMemo(() => {
+    const amounts = [...reviewSummary.amounts];
+    if (!amounts.some((item) => item.currency === 'USD')) {
+      amounts.push({ currency: 'USD', amount: 0, count: 0 });
+    }
+    return sortPaymentCurrencyItems(amounts);
+  }, [reviewSummary.amounts]);
   const paymentExecutionProject = paymentExecutionProjectId
     ? [...rowsByTab.payment, ...rowsByTab.returned]
       .find((project) => project.id === paymentExecutionProjectId)
@@ -673,8 +784,9 @@ export function PaymentWorkbenchPage({
       provider,
       search: activeSearch,
       status: activeTab === 'paid' ? paymentStatus : ALL_PAYMENT_STATUSES,
+      reviewStatus: activeTab === 'review' ? reviewStatus : ALL_REVIEW_STATUSES,
     }),
-    [activeSearch, activeTab, paymentStatus, provider, rowsByTab],
+    [activeSearch, activeTab, paymentStatus, provider, reviewStatus, rowsByTab],
   );
   const selectedProjects = useMemo(
     () => filteredProjects.filter((project) => selectedIds.has(project.id)),
@@ -736,6 +848,11 @@ export function PaymentWorkbenchPage({
     clearActiveSelection();
   };
 
+  const updateReviewStatus = (value: ReviewStatusFilter) => {
+    setReviewStatus(value);
+    clearActiveSelection();
+  };
+
   const toggleProject = (projectId: string) => {
     setSelectedIdsByTab((current) => ({
       ...current,
@@ -766,9 +883,10 @@ export function PaymentWorkbenchPage({
 
       <section className="summary-surface payment-workbench-summary" aria-label="付款概览">
         <PaymentCurrencySummaryCard
-          items={currencyOverviews.pending}
+          items={pendingCurrencyOverview}
           summaryLabel={CURRENCY_OVERVIEW_META.pending.summaryLabel}
           detailTitle={CURRENCY_OVERVIEW_META.pending.detailTitle}
+          summaryCount={reviewSummary.invoices}
           tone="peach"
           icon="pending"
         />
@@ -827,6 +945,15 @@ export function PaymentWorkbenchPage({
             options={PAYMENT_PROVIDER_OPTIONS}
             onChange={updateProvider}
           />
+          {activeTab === 'review' ? (
+            <SelectField<ReviewStatusFilter>
+              ariaLabel="项目状态"
+              className="payment-review-status-select"
+              value={reviewStatus}
+              options={REVIEW_STATUS_FILTER_OPTIONS}
+              onChange={updateReviewStatus}
+            />
+          ) : null}
           {activeTab === 'paid' ? (
             <SelectField<PaymentStatusFilter>
               ariaLabel="付款状态"
@@ -855,14 +982,15 @@ export function PaymentWorkbenchPage({
           </span>
         </div>
         <PaymentProjectTable
-          key={`${activeTab}-${provider}-${paymentStatus}-${activeSearch}`}
+          key={`${activeTab}-${provider}-${paymentStatus}-${reviewStatus}-${activeSearch}`}
           projects={filteredProjects}
           selectedIds={selectedIds}
           onToggleProject={toggleProject}
           onToggleAll={toggleAllProjects}
           onSelect={(project) => {
             if (activeTab === 'review' && project.requestId) {
-              onReviewRequest(project.requestId);
+              if (project.approvalStatus === 'PENDING_FINANCE') onReviewRequest(project.requestId);
+              else onOpenRequest(project.requestId);
               return;
             }
             if (activeTab === 'payment' && project.requestId) {
@@ -884,6 +1012,8 @@ export function PaymentWorkbenchPage({
             ? `未找到与“${activeSearch.trim()}”匹配的${activeTabLabel}付款项目，请尝试其他关键词`
             : activeTab === 'paid' && paymentStatus !== ALL_PAYMENT_STATUSES
               ? `当前付款状态下没有${activeTabLabel}付款项目`
+              : activeTab === 'review' && reviewStatus !== ALL_REVIEW_STATUSES
+                ? `当前项目状态下没有${activeTabLabel}付款项目`
               : provider !== ALL_PAYMENT_PROVIDERS
               ? `当前付款渠道下没有${activeTabLabel}付款项目`
               : `当前没有${activeTabLabel}付款项目`}

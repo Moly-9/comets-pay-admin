@@ -379,7 +379,7 @@ const APPROVAL_STEPS: Array<{
   label: string;
 }> = [
   { status: 'PENDING_PM', stage: 'PM', label: 'PM 审批' },
-  { status: 'PENDING_PROJECT_OWNER', stage: 'PROJECT_OWNER', label: '项目负责人审批' },
+  { status: 'PENDING_PROJECT_OWNER', stage: 'PROJECT_OWNER', label: '媒介负责人审批' },
   { status: 'PENDING_OWNER', stage: 'OWNER', label: '老板审批' },
   { status: 'PENDING_FINANCE', stage: 'FINANCE', label: '财务审批' },
 ];
@@ -487,7 +487,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已提交', time: '07-18 09:36', state: 'complete' },
       { label: 'PM 审批', description: '张咏诗已确认项目资料与请款范围', time: '07-18 10:05', state: 'complete' },
-      { label: '项目负责人审批', description: '项目资料与预算已通过', time: '07-18 11:10', state: 'complete' },
+      { label: '媒介负责人审批', description: '项目资料与预算已通过', time: '07-18 11:10', state: 'complete' },
       { label: '老板审批', description: 'heather 已完成最终业务审批', time: '07-19 09:20', state: 'complete' },
       { label: '财务审批', description: '正在核对收款主体与金额', time: '今天 10:12', state: 'current' },
       { label: '渠道付款', description: '按各达人收款账户渠道分组执行', time: '待开始', state: 'pending' },
@@ -511,8 +511,8 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     progress: [
       { label: '请款提交', description: '项目资料已提交', time: '07-16 14:20', state: 'complete' },
       { label: 'PM 审批', description: '等待霍舜华确认项目资料与请款范围', time: '待审批', state: 'current' },
-      { label: '项目负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
-      { label: '老板审批', description: '项目负责人审批通过后进入', time: '待开始', state: 'pending' },
+      { label: '媒介负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
+      { label: '老板审批', description: '媒介负责人审批通过后进入', time: '待开始', state: 'pending' },
       { label: '财务审批', description: '老板审批通过后进入', time: '待开始', state: 'pending' },
       { label: '渠道付款', description: '付款单生成后执行', time: '待开始', state: 'pending' },
     ],
@@ -535,8 +535,8 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     progress: [
       { label: '请款提交', description: '发现 1 份 PayPal 收款资料不完整，等待媒介补充', time: '07-18 17:40', state: 'current' },
       { label: 'PM 审批', description: '资料补齐后由陈旸媛审批', time: '待开始', state: 'pending' },
-      { label: '项目负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
-      { label: '老板审批', description: '项目负责人审批通过后进入', time: '待开始', state: 'pending' },
+      { label: '媒介负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
+      { label: '老板审批', description: '媒介负责人审批通过后进入', time: '待开始', state: 'pending' },
       { label: '财务审批', description: '老板审批通过后进入', time: '待开始', state: 'pending' },
       { label: '渠道付款', description: '付款单生成后执行', time: '待开始', state: 'pending' },
     ],
@@ -559,7 +559,7 @@ const RAW_REQUEST_PROJECT_DETAILS: Record<string, RequestProjectDetail> = {
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已提交', time: '06-25 14:00', state: 'complete' },
       { label: 'PM 审批', description: '张咏诗已确认项目资料与请款范围', time: '06-25 16:10', state: 'complete' },
-      { label: '项目负责人审批', description: '项目与请款金额已通过', time: '06-26 10:20', state: 'complete' },
+      { label: '媒介负责人审批', description: '项目与请款金额已通过', time: '06-26 10:20', state: 'complete' },
       { label: '老板审批', description: 'theo 已完成最终业务审批', time: '06-27 11:30', state: 'complete' },
       { label: '财务审批', description: '收款主体与金额已通过', time: '06-28 16:45', state: 'complete' },
       { label: '渠道付款', description: '16 笔付款全部成功', time: '07-16 14:32', state: 'complete' },
@@ -632,8 +632,8 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
           state: 'complete',
         },
         { label: 'PM 审批', description: `等待${request.pm}确认项目资料与请款范围`, time: '待审批', state: 'current' },
-        { label: '项目负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
-        { label: '老板审批', description: '项目负责人审批通过后进入', time: '待开始', state: 'pending' },
+        { label: '媒介负责人审批', description: 'PM 审批通过后进入', time: '待开始', state: 'pending' },
+        { label: '老板审批', description: '媒介负责人审批通过后进入', time: '待开始', state: 'pending' },
         { label: '财务审批', description: '老板审批通过后进入', time: '待开始', state: 'pending' },
         { label: '渠道付款', description: `审批完成后通过${paymentProviderDisplayName(generated.provider)}执行`, time: '待开始', state: 'pending' },
       ],
@@ -669,8 +669,8 @@ function getRequestProjectDetail(request: RequestProjectSummary): RequestProject
     progress: [
       { label: '请款提交', description: '合同、Invoice 与付款名单已同步', time: '已完成', state: 'complete' },
       { label: 'PM 审批', description: approved ? `${request.pm}已完成审核` : `由${request.pm}审核项目资料`, time: approved ? '已完成' : '处理中', state: approved ? 'complete' : 'current' },
-      { label: '项目负责人审批', description: approved ? '项目资料与预算已通过' : 'PM 审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
-      { label: '老板审批', description: approved ? '业务审批已完成' : '项目负责人审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '媒介负责人审批', description: approved ? '项目资料与预算已通过' : 'PM 审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
+      { label: '老板审批', description: approved ? '业务审批已完成' : '媒介负责人审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
       { label: '财务审批', description: approved ? '收款主体与金额已通过' : '老板审批通过后进入', time: approved ? '已完成' : '待开始', state: approved ? 'complete' : 'pending' },
       { label: '渠道付款', description: paid ? '付款已完成' : '全部审批完成后执行', time: paid ? '已完成' : '待开始', state: paid ? 'complete' : approved ? 'current' : 'pending' },
     ],

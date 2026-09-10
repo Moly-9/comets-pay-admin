@@ -127,7 +127,7 @@ const paymentApprovalSteps = (
   if (!approval) return [];
   const stageDefinitions = [
     { stage: 'PM' as const, label: 'PM 审批', fallback: request.pm },
-    { stage: 'PROJECT_OWNER' as const, label: '项目负责人审批', fallback: '项目负责人' },
+    { stage: 'PROJECT_OWNER' as const, label: '媒介负责人审批', fallback: '媒介负责人' },
     { stage: 'OWNER' as const, label: '老板审批', fallback: '老板' },
     { stage: 'FINANCE' as const, label: '财务审核', fallback: '财务' },
   ];

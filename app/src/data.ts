@@ -45,7 +45,7 @@ export const CURRENT_USER: SystemUser = {
 export const DEMO_SYSTEM_USERS: SystemUser[] = [
   { account: 'media.demo', name: '媒介体验账号', email: 'demo.media@cometsgame.com', initials: 'ME', roleKey: 'media', role: '媒介账号', scopeName: '赖丽红', isDemo: true },
   { account: 'pm.demo', name: 'PM 体验账号', email: 'demo.pm@cometsgame.com', initials: 'PM', roleKey: 'pm', role: 'PM 账号', scopeName: '张咏诗', isDemo: true },
-  { account: 'project.demo', name: '项目负责人体验账号', email: 'demo.project@cometsgame.com', initials: 'PJ', roleKey: 'project', role: '项目负责人账号', isDemo: true },
+  { account: 'project.demo', name: '媒介负责人体验账号', email: 'demo.project@cometsgame.com', initials: 'PJ', roleKey: 'project', role: '媒介负责人账号', isDemo: true },
   { account: 'owner.demo', name: '老板体验账号', email: 'demo.owner@cometsgame.com', initials: 'OW', roleKey: 'owner', role: '老板账号', isDemo: true },
   { account: 'finance.demo', name: '财务体验账号', email: 'demo.finance@cometsgame.com', initials: 'FI', roleKey: 'finance', role: '财务账号', isDemo: true },
   { account: 'admin.demo', name: '管理员体验账号', email: 'demo.admin@cometsgame.com', initials: 'AD', roleKey: 'admin', role: '管理员账号', isDemo: true },
@@ -61,7 +61,7 @@ export const SYSTEM_USERS: SystemUser[] = [
   CURRENT_USER,
   { account: 'limeng', name: '李梦', email: 'limeng@cometspay.co', initials: 'LM', roleKey: 'finance', role: '财务账号' },
   { account: 'wuxueni', name: '吴雪霓', email: 'wuxueni@cometspay.co', initials: 'WX', roleKey: 'finance', role: '财务账号' },
-  { account: 'linyanming', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', roleKey: 'project', role: '项目负责人账号' },
+  { account: 'linyanming', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', roleKey: 'project', role: '媒介负责人账号' },
   { account: 'jeff', name: 'jeff', email: 'jeff@cometspay.co', initials: 'J', roleKey: 'admin', role: '管理员账号' },
   { account: LOCAL_ADMIN_ACCOUNT, name: 'Liu Yao', email: LOCAL_ADMIN_ACCOUNT, initials: 'LY', roleKey: 'admin', role: '管理员账号' },
   { account: 'heather', name: 'heather', email: 'heather@cometspay.co', initials: 'H', roleKey: 'owner', role: '老板账号' },

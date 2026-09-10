@@ -879,7 +879,7 @@ export function ContractDetailPage({
   ) => {
     if (!hasRecognition || !onUpdateContract) return null;
     if (!canEditCurrentContract) {
-      return <span className="contract-page-readonly">仅允许项目负责人、老板或管理员编辑</span>;
+      return <span className="contract-page-readonly">仅允许媒介负责人、老板或管理员编辑</span>;
     }
     if (pageState.allConfirmed) {
       return recognitionApplied ? (
@@ -933,7 +933,7 @@ export function ContractDetailPage({
 
   const applyRecognition = () => {
     if (!canEditCurrentContract) {
-      notify('暂无模板编辑权限', '仅项目负责人、老板或管理员可以修改合同模板。');
+      notify('暂无模板编辑权限', '仅媒介负责人、老板或管理员可以修改合同模板。');
       return;
     }
     const candidate = { ...contract, recognitionResults: draftFields };

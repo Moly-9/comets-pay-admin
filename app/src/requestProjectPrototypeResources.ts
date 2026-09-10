@@ -194,7 +194,7 @@ const financeApprovalHistory = (
 ): RequestApprovalState => {
   const statuses = ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER'] as const;
   const stages = ['PM', 'PROJECT_OWNER', 'OWNER'] as const;
-  const names = [request.pm, '项目负责人', '老板'];
+  const names = [request.pm, '媒介负责人', '老板'];
   const history: RequestApprovalEvent[] = statuses.map((fromStatus, index) => ({
     round: 1,
     stage: stages[index],

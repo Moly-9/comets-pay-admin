@@ -30,7 +30,7 @@ export type CollaborationLifecycleStatus =
   | '请款草稿'
   | '待发起请款'
   | 'PM审批中'
-  | '项目负责人审批中'
+  | '媒介负责人审批中'
   | '老板审批中'
   | '财务审批中'
   | '审批中'
@@ -110,7 +110,7 @@ const requestApprovalStatus = (request: RequestProjectSummary): CollaborationLif
   if (request.lifecycle === 'COMPLETED') return '已付款';
   if (request.lifecycle === 'APPROVED' || request.approval?.status === 'APPROVED') return '待打款';
   if (request.approval?.status === 'PENDING_PM') return 'PM审批中';
-  if (request.approval?.status === 'PENDING_PROJECT_OWNER') return '项目负责人审批中';
+  if (request.approval?.status === 'PENDING_PROJECT_OWNER') return '媒介负责人审批中';
   if (request.approval?.status === 'PENDING_OWNER') return '老板审批中';
   if (request.approval?.status === 'PENDING_FINANCE') return '财务审批中';
   return '审批中';

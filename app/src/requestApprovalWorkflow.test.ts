@@ -36,8 +36,8 @@ describe('request approval workflow', () => {
 
     state = applyRequestApprovalAction(state, 'APPROVE', pm, undefined, '2026-08-04T02:00:00.000Z');
     expect(state.status).toBe('PENDING_PROJECT_OWNER');
-    expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('项目负责人审批中');
-    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('项目负责人审批中');
+    expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('媒介负责人审批中');
+    expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: state })).toBe('媒介负责人审批中');
     expect(state.submittedAt).toBe('2026-08-04T01:00:00.000Z');
     expect(state.updatedAt).toBe('2026-08-04T02:00:00.000Z');
     state = applyRequestApprovalAction(state, 'APPROVE', projectOwner);

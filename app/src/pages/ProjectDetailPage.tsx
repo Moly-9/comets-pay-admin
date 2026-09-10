@@ -492,7 +492,7 @@ const RAW_PROJECT_DETAILS: Record<string, ProjectDetail> = {
       { label: '项目创建', description: '项目与达人名单已建立', time: '07-14 11:10', state: 'complete' },
       { label: '合同签署', description: '8 份达人合同等待完成签署', time: '处理中', state: 'current' },
       { label: 'Invoice 汇总', description: '已收到并关联 8 份 Invoice', time: '07-16 15:40', state: 'complete' },
-      { label: '飞书审批', description: '等待项目负责人审批', time: '昨天 16:20', state: 'current' },
+      { label: '飞书审批', description: '等待媒介负责人审批', time: '昨天 16:20', state: 'current' },
       { label: '生成付款清单', description: '审批完成后自动生成', time: '待开始', state: 'pending' },
     ],
   },
