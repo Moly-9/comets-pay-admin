@@ -8,13 +8,14 @@ import {
   correctedPaymentBatchDateRange,
   createBatchConfirmationArchive,
   filterPaymentBatchRows,
-  loadPaymentDataRecord,
   paymentBatchExportAvailability,
+  paymentBatchCurrentRequestStatus,
   paymentBatchRows,
   toggleVisiblePaymentBatchSelection,
 } from './OperationalPages';
 import type { PaymentBatchRecord } from '../paymentBatches';
 import type { Payout } from '../types';
+import type { RequestProjectSummary } from './RequestProjectDetailPage';
 
 const createTestBatch = (
   paymentBatchCode: string,
@@ -186,6 +187,19 @@ describe('payment batch filters and selection', () => {
     expect(basePayout.status).toBe('已付款');
   });
 
+  it('exports the current request-project status with a frozen snapshot fallback', () => {
+    const source = TEST_BATCHES[0];
+    const currentRequest = {
+      id: 'request_test',
+      paymentRequestProjectId: source.request.paymentRequestProjectId,
+      lifecycle: 'COMPLETED',
+      status: '已完成',
+    } as RequestProjectSummary;
+
+    expect(paymentBatchCurrentRequestStatus(source, [currentRequest], [])).toBe('已付款');
+    expect(paymentBatchCurrentRequestStatus(source, [], [])).toBe('待打款');
+  });
+
   it('summarizes only the current batch attempt and marks processing results as pending', () => {
     expect(TEST_BATCH_ROWS[0]).toMatchObject({
       cooperationProjectCode: 'PRJ-TEST-001',
@@ -233,16 +247,5 @@ describe('payment batch export assets', () => {
       const bytes = await archive.file(`${batchId}/${PAYMENT_CONFIRMATION_FILENAME}`)?.async('uint8array');
       expect(bytes).toEqual(source);
     }));
-  });
-
-  it('loads the original Excel exactly once without wrapping it in a ZIP', async () => {
-    const source = new Uint8Array([80, 75, 3, 4, 88, 76, 83, 88]);
-    const loader = vi.fn(async () => new Blob([source], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    }));
-    const workbook = await loadPaymentDataRecord(loader);
-
-    expect(loader).toHaveBeenCalledTimes(1);
-    expect(new Uint8Array(await workbook.arrayBuffer())).toEqual(source);
   });
 });

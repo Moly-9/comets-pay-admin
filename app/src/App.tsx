@@ -5570,6 +5570,7 @@ export default function App() {
           batches={paymentBatches}
           payouts={payouts}
           creators={creators}
+          requests={requestProjects}
           onNewBatch={() => setActivePage('new-batch')}
           notify={notify}
           canCreateBatch={canExecutePayouts}

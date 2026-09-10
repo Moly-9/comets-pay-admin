@@ -35,10 +35,12 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import {
   createPaymentItemConfirmationPdf,
-  createPaymentProjectWorkbook,
   paymentItemConfirmationFilename,
-  paymentProjectWorkbookFilename,
 } from '../paymentProjectDocuments';
+import {
+  createPaymentBatchWorkbook,
+  paymentBatchDetailWorkbookFilename,
+} from '../paymentBatchWorkbook';
 import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
@@ -417,7 +419,7 @@ export function PaymentBatchDetailPage({
   batch,
   payouts = [],
   creators = [],
-  projectItems,
+  currentRequestStatus,
   canHandleFailure = false,
   onBack,
   onReturnPayout,
@@ -426,7 +428,7 @@ export function PaymentBatchDetailPage({
   batch: PaymentBatchRecord;
   payouts?: readonly Payout[];
   creators?: readonly CreatorProfile[];
-  projectItems?: readonly PaymentBatchItemSnapshot[];
+  currentRequestStatus?: string;
   canHandleFailure?: boolean;
   onBack: () => void;
   onReturnPayout?: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
@@ -443,15 +445,6 @@ export function PaymentBatchDetailPage({
   const actualPaidTotal = batch.status === '付款处理中'
     ? '待渠道回写'
     : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts);
-  const projectArchiveItems = useMemo(() => {
-    const sourceItems = projectItems?.length ? projectItems : batch.items;
-    const seen = new Set<string>();
-    return sourceItems.filter((item) => {
-      if (seen.has(item.payoutId)) return false;
-      seen.add(item.payoutId);
-      return true;
-    });
-  }, [batch.items, projectItems]);
   const batchItems = financialSummary.items;
   const orderCounts = paymentBatchStatusCounts({ items: batchItems });
   const orderStatus = paymentOrderStatus(batchItems);
@@ -482,13 +475,13 @@ export function PaymentBatchDetailPage({
   };
 
   const downloadProjectWorkbook = async () => {
-    if (!projectArchiveItems.length || downloadingResource) return;
+    if (!batchItems.length || downloadingResource) return;
     setDownloadingResource('workbook');
     setResourceError('');
     try {
       downloadBlob(
-        await createPaymentProjectWorkbook({ request: batch.request, items: projectArchiveItems }),
-        paymentProjectWorkbookFilename(batch.request.requestCode),
+        await createPaymentBatchWorkbook([{ batch, currentRequestStatus }]),
+        paymentBatchDetailWorkbookFilename(batch.paymentBatchCode),
       );
     } catch (error) {
       setResourceError(error instanceof Error ? error.message : '项目资料下载失败，请稍后重试。');
@@ -593,7 +586,7 @@ export function PaymentBatchDetailPage({
                       <Button
                         variant="secondary"
                         icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
-                        disabled={!projectArchiveItems.length || downloadingResource !== null}
+                        disabled={!batchItems.length || downloadingResource !== null}
                         disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款明细。'}
                         onClick={downloadProjectWorkbook}
                       >

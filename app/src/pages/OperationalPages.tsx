@@ -229,6 +229,10 @@ import {
   type PaymentBatchRecord,
 } from '../paymentBatches';
 import {
+  createPaymentBatchWorkbook,
+  paymentBatchWorkbookFilename,
+} from '../paymentBatchWorkbook';
+import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
   matchesPaymentStatus,
@@ -4198,9 +4202,7 @@ export type PaymentBatchFilters = {
 };
 
 const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
-const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明细表.xlsx';
 export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
-export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
 export const paymentBatchRows = (
   batches: readonly PaymentBatchRecord[],
@@ -4295,10 +4297,6 @@ export const createBatchConfirmationArchive = async (
   return zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
 };
 
-export const loadPaymentDataRecord = async (
-  loadAsset: ExportAssetLoader = loadExportAsset,
-) => loadAsset(PAYMENT_DATA_ASSET_PATH);
-
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
 
 const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
@@ -4307,10 +4305,26 @@ const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
   return 'is-success';
 };
 
+export const paymentBatchCurrentRequestStatus = (
+  batch: PaymentBatchRecord,
+  requests: readonly RequestProjectSummary[],
+  payouts: readonly Payout[],
+) => {
+  const request = requests.find((candidate) => (
+    candidate.paymentRequestProjectId === batch.request.paymentRequestProjectId
+  ));
+  if (!request) return batch.request.requestStatus || '待同步';
+  return requestProjectStatusFor(request, [...payouts])
+    ?? myProjectStatusFor(request)
+    ?? batch.request.requestStatus
+    ?? '待同步';
+};
+
 export function BatchesPage({
   batches,
   payouts = [],
   creators = [],
+  requests = [],
   onNewBatch,
   notify,
   canCreateBatch,
@@ -4321,6 +4335,7 @@ export function BatchesPage({
   batches: readonly PaymentBatchRecord[];
   payouts?: readonly Payout[];
   creators?: readonly CreatorProfile[];
+  requests?: readonly RequestProjectSummary[];
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
@@ -4355,25 +4370,12 @@ export function BatchesPage({
     setPageSize: setBatchPageSize,
   } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}\u0000${paymentStatus}` });
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
+  const selectedBatches = batches.filter((batch) => selectedIds.has(batch.paymentBatchCode));
   const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
   const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
   const allVisibleSelected = filteredRows.length > 0 && selectedVisibleCount === filteredRows.length;
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
-  const selectedProjectItems = useMemo(() => {
-    if (!selectedBatch) return [];
-    const seen = new Set<string>();
-    return batches
-      .filter((batch) => (
-        batch.request.paymentRequestProjectId === selectedBatch.request.paymentRequestProjectId
-      ))
-      .flatMap((batch) => batch.items)
-      .filter((item) => {
-        if (seen.has(item.payoutId)) return false;
-        seen.add(item.payoutId);
-        return true;
-      });
-  }, [batches, selectedBatch]);
   const batchMetrics = useMemo(() => {
     const totals = batches.reduce((result, batch) => {
       const counts = paymentBatchStatusCounts(batch);
@@ -4448,11 +4450,15 @@ export function BatchesPage({
     if (!exportAvailability.records || exporting !== null) return;
     setExporting('records');
     try {
-      const workbook = await loadPaymentDataRecord();
-      downloadBlob(workbook, PAYMENT_DATA_FILENAME);
-      notify('付款数据记录已导出', `已下载 ${PAYMENT_DATA_FILENAME}。`);
+      const workbook = await createPaymentBatchWorkbook(selectedBatches.map((batch) => ({
+        batch,
+        currentRequestStatus: paymentBatchCurrentRequestStatus(batch, requests, payouts),
+      })));
+      const filename = paymentBatchWorkbookFilename();
+      downloadBlob(workbook, filename);
+      notify('付款明细已导出', `已导出 ${selectedBatches.length} 个付款批次。`);
     } catch {
-      notify('付款数据记录导出失败', '无法读取付款数据 Excel，请检查导出资源后重试。');
+      notify('付款明细导出失败', '无法生成付款批次明细 Excel，请稍后重试。');
     } finally {
       setExporting(null);
     }
@@ -4477,7 +4483,7 @@ export function BatchesPage({
         batch={selectedBatch}
         payouts={payouts}
         creators={creators}
-        projectItems={selectedProjectItems}
+        currentRequestStatus={paymentBatchCurrentRequestStatus(selectedBatch, requests, payouts)}
         canHandleFailure={canCreateBatch}
         onBack={closeBatchDetail}
         onReturnPayout={onReturnPayout}
