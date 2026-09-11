@@ -1,0 +1,234 @@
+.content-toolbar.collaboration-list-toolbar {
+  position: relative;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.collaboration-list-toolbar > .page-search {
+  margin-bottom: 0;
+}
+
+.collaboration-list-toolbar-note {
+  align-self: center;
+  margin-left: auto;
+}
+
+.collaboration-project-filter {
+  position: relative;
+  z-index: 25;
+  display: grid;
+  width: 220px;
+  min-width: 0;
+  flex: 0 0 220px;
+  gap: 6px;
+}
+
+.collaboration-project-filter-label {
+  color: #55505c;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.collaboration-project-filter-trigger {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d9dde5;
+  border-radius: 9px;
+  outline: 0;
+  background: #fff;
+  padding: 0 10px 0 12px;
+  color: #505663;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.collaboration-project-filter-trigger > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-project-filter-trigger > svg {
+  flex: none;
+  color: #8d929c;
+  transition: transform 160ms ease;
+}
+
+.collaboration-project-filter-trigger:hover {
+  border-color: #c9cdd6;
+  background: #fcfcfd;
+}
+
+.collaboration-project-filter.is-open .collaboration-project-filter-trigger,
+.collaboration-project-filter-trigger:focus-visible {
+  border-color: #ff9e87;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 158, 135, 0.14);
+}
+
+.collaboration-project-filter.is-open .collaboration-project-filter-trigger > svg {
+  transform: rotate(180deg);
+}
+
+.collaboration-project-filter-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  width: min(320px, calc(100vw - 32px));
+  max-height: 330px;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid #e2e5eb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  box-shadow: 0 16px 34px rgba(42, 47, 57, 0.13), 0 3px 9px rgba(42, 47, 57, 0.07);
+}
+
+.collaboration-project-filter-search {
+  display: flex;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dcdfe7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 10px;
+  color: #9196a1;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.collaboration-project-filter-search:focus-within {
+  border-color: #ff9e87;
+  box-shadow: 0 0 0 3px rgba(255, 158, 135, 0.12);
+}
+
+.collaboration-project-filter-search > svg {
+  flex: none;
+}
+
+.collaboration-project-filter-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #3f444f;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.collaboration-project-filter-search input::placeholder {
+  color: #9a9faa;
+}
+
+.collaboration-project-filter-options {
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 7px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.collaboration-project-filter-option {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 7px;
+  outline: 0;
+  background: transparent;
+  padding: 8px;
+  color: #404651;
+  font-family: inherit;
+  text-align: left;
+}
+
+.collaboration-project-filter-option:hover,
+.collaboration-project-filter-option.is-active:not(.is-selected),
+.collaboration-project-filter-option:focus-visible {
+  background: #faf7f6;
+}
+
+.collaboration-project-filter-option.is-selected {
+  background: #fff3ef;
+  color: #8c4a3d;
+}
+
+.collaboration-project-filter-radio {
+  color: #cbd0d8;
+  stroke-width: 1.5;
+}
+
+.collaboration-project-filter-radio.is-selected {
+  color: #ec775e;
+  stroke-width: 1.8;
+}
+
+.collaboration-project-filter-option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.collaboration-project-filter-option-copy strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-project-filter-option-copy small {
+  color: #8b919c;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.collaboration-project-filter-empty {
+  padding: 20px 10px;
+  color: #8a909c;
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .collaboration-list-toolbar > .page-search,
+  .collaboration-project-filter {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .collaboration-list-toolbar > .page-search input,
+  .collaboration-project-filter-menu {
+    width: 100%;
+  }
+
+  .collaboration-list-toolbar-note {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collaboration-project-filter-trigger,
+  .collaboration-project-filter-trigger > svg,
+  .collaboration-project-filter-search {
+    transition: none;
+  }
+}

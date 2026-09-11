@@ -83,6 +83,7 @@ describe('PaymentWorkbenchPage project list controls', () => {
         onNewBatch={vi.fn()}
         onSelectPayout={vi.fn()}
         onSelectPaidProject={vi.fn()}
+        onOpenRequest={vi.fn()}
         onReviewRequest={vi.fn()}
         onExecuteRequest={vi.fn(() => true)}
         onReturnRequest={vi.fn(() => true)}
@@ -168,6 +169,11 @@ describe('PaymentWorkbenchPage project list controls', () => {
       ...projectPayouts[0],
       paymentRequestProjectId,
       status: '已付款',
+      currentPaymentAttempt: {
+        paymentBatchId: 'payment_batch_entity_test' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'],
+        paymentBatchCode: 'BAT-ENTITY-001',
+        submittedAt: '2026-08-27 23:55',
+      },
       transferFeeAmount: 8,
       transferFeeCurrency: 'USD',
       actualPaidAmount: 1208,
@@ -184,8 +190,24 @@ describe('PaymentWorkbenchPage project list controls', () => {
     expect(row.paymentEntity).toBe('novacomets');
     expect(row.transferFeeTotals).toEqual([{ currency: 'USD', amount: 8, count: 1 }]);
     expect(row.actualPaidTotals).toEqual([{ currency: 'USD', amount: 1208, count: 1 }]);
-    expect(row.actualPaidDates).toEqual(['2026-08-28']);
-    expect(filterPaymentProjectRows([row], { provider: '全部付款渠道', search: 'novacomets 1208 2026-08-28' })).toEqual([row]);
+    expect(row.paymentSubmittedDates).toEqual(['2026-08-27']);
+    expect(filterPaymentProjectRows([row], { provider: '全部付款渠道', search: 'novacomets 1208 2026-08-27' })).toEqual([row]);
+
+    const [processingRow] = buildPaymentProjectRows({
+      tab: 'paid',
+      payouts: [{ ...paidPayout, status: '付款处理中', paidAt: undefined }],
+      requests: [request],
+      generatedInvoices: [],
+    });
+    expect(processingRow.paymentSubmittedDates).toEqual(['2026-08-27']);
+
+    const [legacyDateRow] = buildPaymentProjectRows({
+      tab: 'paid',
+      payouts: [{ ...paidPayout, currentPaymentAttempt: undefined }],
+      requests: [request],
+      generatedInvoices: [],
+    });
+    expect(legacyDateRow.paymentSubmittedDates).toEqual([]);
   });
 
   it('toggles one or all filtered project ids without losing other tab selections', () => {

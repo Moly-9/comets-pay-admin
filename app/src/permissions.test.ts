@@ -17,6 +17,13 @@ const userFor = (role: 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project
 };
 
 describe('Invoice review permissions', () => {
+  it('lets every business role view the cooperation project directory and limits maintenance', () => {
+    for (const role of ['media', 'pm', 'finance', 'admin', 'owner', 'project'] as const) {
+      expect(canAccessPage(userFor(role), 'feishu-projects')).toBe(true);
+      expect(hasPermission(userFor(role), 'cooperation_project_manage')).toBe(['admin', 'owner', 'project'].includes(role));
+    }
+  });
+
   it('allows media and project owner to perform media review', () => {
     expect(hasPermission(userFor('media'), 'invoice_media_review')).toBe(true);
     expect(hasPermission(userFor('project'), 'invoice_media_review')).toBe(true);

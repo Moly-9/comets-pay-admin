@@ -99,11 +99,7 @@ export const appendContractPublishingChannel = (
 export const removeContractPublishingChannelAt = (
   channels: ContractPublishingChannel[],
   index: number,
-): ContractPublishingChannel[] => (
-  channels.length <= 1
-    ? channels
-    : channels.filter((_, channelIndex) => channelIndex !== index)
-);
+): ContractPublishingChannel[] => channels.filter((_, channelIndex) => channelIndex !== index);
 
 export const formatContractPublishingPlatforms = (
   model: Pick<ContractGenerationModel, 'platform' | 'channelUrl'> & {
@@ -173,7 +169,8 @@ const hasPartialDateRange = (start: string, end: string) => Boolean(start) !== B
 export const validateContractGenerationModel = (
   model: ContractGenerationModel,
 ) => {
-  const effectiveModel = resolveContractTemplateOutput(model).effectiveModel;
+  const resolvedOutput = resolveContractTemplateOutput(model);
+  const effectiveModel = resolvedOutput.effectiveModel;
   const errors: Record<string, string> = {};
   if (!model.contractName?.trim()) {
     errors.contractName = '请输入合同名称';
@@ -186,39 +183,36 @@ export const validateContractGenerationModel = (
     if (!value) errors[key] = message;
   });
 
+  const advertiserApplies = resolvedOutput.outputFieldKeys.includes('advertiser')
+    && resolvedOutput.policies.advertiser !== 'OMIT';
+  if (advertiserApplies && !effectiveModel.advertiser.trim()) {
+    errors.advertiser = '请选择或填写合同 Advertiser';
+  }
+  if (advertiserApplies && !(effectiveModel.advertiserAddress ?? '').trim()) {
+    errors.advertiserAddress = '请填写合同 Advertiser 地址';
+  }
+
   if (model.creatorId) {
     const requiredCreatorProfile: Array<[string, string, string]> = [
       ['publisher', '合同缺少 Publisher 法定名称', effectiveModel.publisher],
       ['publisherAddress', '达人档案缺少联系地址', effectiveModel.publisherAddress],
-      ['channelName', '达人档案缺少频道名称', effectiveModel.channelName],
     ];
     requiredCreatorProfile.forEach(([key, message, value]) => {
       if (!value.trim()) errors[key] = message;
     });
     const channels = resolveContractPublishingChannels(effectiveModel);
-    if (!channels.length) {
-      errors.platform = '达人档案缺少发布平台和频道链接';
-    } else {
-      const missingPlatformIndex = channels.findIndex((channel) => !channel.platform.trim());
-      const missingChannelUrlIndex = channels.findIndex((channel) => !channel.channelUrl.trim());
-      const invalidChannelUrlIndex = channels.findIndex((channel) => {
-        const value = channel.channelUrl.trim();
-        if (!value) return false;
-        try {
-          const url = new URL(value);
-          return url.protocol !== 'http:' && url.protocol !== 'https:';
-        } catch {
-          return true;
-        }
-      });
-      if (missingPlatformIndex >= 0) {
-        errors.platform = `第 ${missingPlatformIndex + 1} 个频道缺少发布平台`;
+    const invalidChannelUrlIndex = channels.findIndex((channel) => {
+      const value = channel.channelUrl.trim();
+      if (!value) return false;
+      try {
+        const url = new URL(value);
+        return url.protocol !== 'http:' && url.protocol !== 'https:';
+      } catch {
+        return true;
       }
-      if (missingChannelUrlIndex >= 0) {
-        errors.channelUrl = `第 ${missingChannelUrlIndex + 1} 个频道缺少频道链接`;
-      } else if (invalidChannelUrlIndex >= 0) {
-        errors.channelUrl = `第 ${invalidChannelUrlIndex + 1} 个频道链接格式无效`;
-      }
+    });
+    if (invalidChannelUrlIndex >= 0) {
+      errors.channelUrl = `第 ${invalidChannelUrlIndex + 1} 个频道链接格式无效`;
     }
   }
 
@@ -239,11 +233,6 @@ export const validateContractGenerationModel = (
   }
   if (![45, 60].includes(model.paymentWorkingDays)) {
     errors.paymentWorkingDays = '付款期限只能选择 45 或 60 个工作日';
-  }
-  if (hasPartialDateRange(effectiveModel.campaignStart, effectiveModel.campaignEnd)) {
-    errors.campaignEnd = 'Campaign 日期需同时填写开始和结束日期';
-  } else if (isDateAfter(effectiveModel.campaignStart, effectiveModel.campaignEnd)) {
-    errors.campaignEnd = 'Campaign 结束日期不能早于开始日期';
   }
   if (hasPartialDateRange(model.releaseStart, model.releaseEnd)) {
     errors.releaseEnd = '发布日期需同时填写开始和结束日期';

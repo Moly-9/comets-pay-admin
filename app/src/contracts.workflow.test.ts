@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   completeGeneratedContractUpload,
+  completeContractSignature,
   contractLinkedToProject,
   contractProjectLinksFor,
   contractProjectIds,
@@ -10,6 +11,7 @@ import {
   frameworkIoContracts,
   getContractReadiness,
   isPaymentContract,
+  sendContractForSignature,
   applyConfirmedRecognitionToContract,
   type ContractGenerationModel,
   type ContractRecord,
@@ -418,11 +420,46 @@ describe('generated contract upload workflow', () => {
       'beneficiaryAccount',
     ]);
 
-    expect(applied?.lifecycle).toBe('CONFIRMED');
+    expect(applied?.lifecycle).toBe('RECOGNITION_CONFIRMED');
+    expect(applied?.signed).toBe(false);
     expect(applied?.feeBearer).toBe('ADVERTISER');
     expect(applied?.project).toBe('Keep this project');
     expect(applied?.platform).toBe('Keep this platform');
     expect(applied?.totalFee).toBeNull();
     expect(applied?.currency).toBe('');
+  });
+
+  it('requires a separate send step before a creator can complete signing', () => {
+    const recognized = {
+      ...createGeneratedContractDraft(generationModel),
+      lifecycle: 'RECOGNITION_CONFIRMED' as const,
+      extractionStage: 'applied' as const,
+      signed: false,
+      issues: [{
+        id: 'signature',
+        label: '合同待发送达人签署',
+        description: '待发送',
+        severity: 'blocker' as const,
+        source: '达人签署',
+      }],
+    };
+
+    expect(completeContractSignature(recognized, '2026-09-09T10:00:00.000Z')).toBeNull();
+    const sent = sendContractForSignature(recognized, '2026-09-09T10:00:00.000Z');
+    expect(sent).toMatchObject({
+      lifecycle: 'SENT_FOR_SIGNATURE',
+      signed: false,
+      sentForSignatureAt: '2026-09-09T10:00:00.000Z',
+    });
+
+    const completed = completeContractSignature(sent!, '2026-09-10T11:00:00.000Z');
+    expect(completed).toMatchObject({
+      lifecycle: 'CONFIRMED',
+      signed: true,
+      signedAt: '2026-09-10T11:00:00.000Z',
+      confirmedAt: '2026-09-10T11:00:00.000Z',
+    });
+    expect(completed?.issues.some((issue) => issue.id === 'signature')).toBe(false);
+    expect(isPaymentContract(completed!)).toBe(true);
   });
 });

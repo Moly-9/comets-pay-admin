@@ -9,7 +9,7 @@ describe('request project dashboard status filters', () => {
     expect(requestProjectStatusesForFilter('all')).toEqual([]);
     expect(requestProjectStatusesForFilter('approving')).toEqual([
       'PM审批中',
-      '项目负责人审批中',
+      '媒介负责人审批中',
       '老板审批中',
       '财务审批中',
     ]);

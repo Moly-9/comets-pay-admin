@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { accountDisplayValue } from './accountPresentation';
 import { buildCreatorCollaborationProjects } from './creatorCollaborationProjects';
 import { resolveCreatorSocialAccount } from './creatorSearchOptions';
@@ -33,6 +33,7 @@ import {
 import {
   authenticateSystemUser,
   CURRENT_USER,
+  INITIAL_CONTRACT_ADVERTISER_SETTINGS,
   INITIAL_INVOICE_BILLING_SETTINGS,
   INITIAL_PAYOUTS,
   PAGE_TITLES,
@@ -73,6 +74,7 @@ import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
 import { SystemConfigurationPage } from './pages/SystemConfigurationPage';
+import { FeishuCooperationProjectsPage } from './pages/FeishuCooperationProjectsPage';
 import {
   applyInvoiceDocumentEdit,
   applyInvoiceReviewAction,
@@ -95,6 +97,13 @@ import {
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
 } from './invoice/invoiceManagement';
+import {
+  INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+  loadInvoiceCreationDrafts,
+  removeInvoiceCreationDraft,
+  saveInvoiceCreationDrafts,
+  upsertInvoiceCreationDraft,
+} from './invoice/invoiceCreationDrafts';
 import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
 import {
   buildApprovedExternalInvoice,
@@ -148,12 +157,16 @@ import {
 } from './pages/OperationalPages';
 import { MediaPaymentProjectsPage } from './pages/MediaPaymentProjectsPage';
 import type {
+  ContractAdvertiserSettings,
   CreatorProfile,
   GeneratedInvoiceRecord,
   InvoiceDocumentModel,
   InvoiceContractMatchReview,
   InvoiceEditContext,
+  InvoiceBatchDraft,
   InvoiceBillingSettings,
+  InvoiceCreationDraft,
+  InvoiceSingleCreationDraft,
   NavOptions,
   NavPage,
   PaymentFailureIssueType,
@@ -240,6 +253,15 @@ import {
   PaymentListWorkbookError,
 } from './paymentListWorkbook';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
+import {
+  emptyCooperationProjectDirectoryStore,
+  loadCooperationProjectDirectory,
+  saveCooperationProjectDirectory,
+  synchronizeFeishuDirectory,
+  type CooperationProjectDirectoryRecord,
+  type CooperationProjectDirectoryStore,
+} from './cooperationProjectDirectory';
+import type { FeishuProjectMetadata } from './cooperationProjects';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
@@ -250,6 +272,7 @@ import {
   withPaymentAttemptSnapshot,
 } from './paymentAttempts';
 import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
+import { nextPaymentBusinessCode, reservePaymentBusinessCodes } from './paymentNumbering';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
@@ -422,6 +445,87 @@ const LOCAL_DEV_USER = LOCAL_DEV_BYPASSES_AUTH
   ? (resolveSystemUser('jeff') ?? CURRENT_USER)
   : CURRENT_USER;
 
+const readInvoiceCreationDrafts = (account: string) => {
+  try {
+    return typeof window === 'undefined' ? [] : loadInvoiceCreationDrafts(account);
+  } catch {
+    return [];
+  }
+};
+
+const normalizeDirectoryProjectStatus = (status: string) => (
+  ['ARCHIVED', '已归档', '已完成'].includes(status) ? 'ARCHIVED' : 'ACTIVE'
+);
+
+const directoryRecordFromProject = (project: ProjectSummary): CooperationProjectDirectoryRecord => ({
+  id: String(project.cooperationProjectId ?? project.projectId ?? project.id),
+  projectCode: project.cooperationProjectCode ?? project.projectCode ?? project.id,
+  externalProjectId: project.externalProjectId,
+  name: project.name,
+  projectType: project.projectType ?? '未分类',
+  projectStatus: normalizeDirectoryProjectStatus(project.status),
+  initiatorName: project.initiatorName ?? project.media,
+  startDate: project.startDate ?? '2026-01-01',
+  endDate: project.endDate ?? '2026-12-31',
+  source: project.source ?? (project.externalProjectId ? 'FEISHU' : 'MANUAL'),
+  availability: project.availability ?? 'ACTIVE',
+  sourceUpdatedAt: project.sourceUpdatedAt,
+  localUpdatedAt: project.localUpdatedAt ?? project.syncedAt ?? new Date(0).toISOString(),
+  syncedAt: project.syncedAt,
+});
+
+const projectFromDirectoryRecord = (record: CooperationProjectDirectoryRecord): ProjectSummary => ({
+  id: record.id,
+  projectId: record.id as ProjectId,
+  projectCode: record.projectCode,
+  cooperationProjectId: record.id as ProjectSummary['cooperationProjectId'],
+  cooperationProjectCode: record.projectCode,
+  externalProjectId: record.externalProjectId,
+  externalSystem: record.source === 'FEISHU' ? 'FEISHU' : undefined,
+  syncStatus: record.source === 'FEISHU' ? 'SYNCED' : undefined,
+  syncedAt: record.syncedAt,
+  name: record.name,
+  brand: record.name,
+  media: record.initiatorName,
+  pm: '待分配',
+  creators: 0,
+  budget: '待补充',
+  status: record.projectStatus,
+  projectType: record.projectType,
+  initiatorName: record.initiatorName,
+  startDate: record.startDate,
+  endDate: record.endDate,
+  source: record.source,
+  availability: record.availability,
+  sourceUpdatedAt: record.sourceUpdatedAt,
+  localUpdatedAt: record.localUpdatedAt,
+});
+
+const loadInitialProjectDirectory = (): CooperationProjectDirectoryStore => {
+  const stored = typeof window === 'undefined'
+    ? emptyCooperationProjectDirectoryStore()
+    : loadCooperationProjectDirectory(window.localStorage);
+  const baseline = INITIAL_PROJECTS.map(directoryRecordFromProject);
+  const storedRecords = stored.records.map((record) => ({
+    ...record,
+    projectStatus: normalizeDirectoryProjectStatus(record.projectStatus),
+  }));
+  if (!storedRecords.length) return { ...stored, records: baseline };
+  const storedById = new Map(storedRecords.map((record) => [record.id, record]));
+  return {
+    ...stored,
+    records: [
+      ...baseline.map((record) => storedById.get(record.id) ?? record),
+      ...storedRecords.filter((record) => !baseline.some((item) => item.id === record.id)),
+    ],
+  };
+};
+
+type InvoiceSingleDraftState = Omit<InvoiceSingleCreationDraft,
+  'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>;
+type InvoiceBatchDraftState = Omit<InvoiceBatchDraft,
+  'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>;
+
 const getContractTemplateAvailability = (contracts: ContractRecord[]) => {
   const template = contracts.find((contract) => (
     contract.isTemplate && contract.id === 'CON-TPL-2026-KOL'
@@ -451,7 +555,22 @@ export default function App() {
   const [requestStatusFilter, setRequestStatusFilter] = useState<RequestProjectStatusFilter>('all');
   const [payouts, setPayouts] = useState<Payout[]>(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const [projectDirectory, setProjectDirectory] = useState(loadInitialProjectDirectory);
+  const [projects, setProjects] = useState<ProjectSummary[]>(() => {
+    const baselineById = new Map(INITIAL_PROJECTS.map((project) => [String(project.cooperationProjectId ?? project.id), project]));
+    return projectDirectory.records.map((record) => ({
+      ...(baselineById.get(record.id) ?? projectFromDirectoryRecord(record)),
+      ...projectFromDirectoryRecord(record),
+      creatorProfiles: baselineById.get(record.id)?.creatorProfiles,
+      creators: baselineById.get(record.id)?.creators ?? 0,
+      brand: baselineById.get(record.id)?.brand ?? record.name,
+      budget: baselineById.get(record.id)?.budget ?? '待补充',
+      pm: baselineById.get(record.id)?.pm ?? '待分配',
+    }));
+  });
+  const [feishuProjectMetadata, setFeishuProjectMetadata] = useState<FeishuProjectMetadata>({ projectTypes: [], projectStatuses: [] });
+  const [projectSyncing, setProjectSyncing] = useState(false);
+  const [projectSyncError, setProjectSyncError] = useState<string>();
   const [contracts, setContracts] = useState<ContractRecord[]>(() => [
     ...INITIAL_CONTRACTS,
     ...INITIAL_COMPLETE_REQUEST_RESOURCES.contracts,
@@ -461,6 +580,9 @@ export default function App() {
   })));
   const [invoiceBillingSettings, setInvoiceBillingSettings] = useState<InvoiceBillingSettings>(
     INITIAL_INVOICE_BILLING_SETTINGS,
+  );
+  const [contractAdvertiserSettings, setContractAdvertiserSettings] = useState<ContractAdvertiserSettings>(
+    INITIAL_CONTRACT_ADVERTISER_SETTINGS,
   );
   const invoiceEntity = invoiceEntitySnapshot(
     defaultInvoiceBillingEntity(invoiceBillingSettings)
@@ -539,6 +661,15 @@ export default function App() {
   } | null>(null);
   const [invoiceEditorDirty, setInvoiceEditorDirty] = useState(false);
   const [invoiceBatchDirty, setInvoiceBatchDirty] = useState(false);
+  const [invoiceCreationDrafts, setInvoiceCreationDrafts] = useState<InvoiceCreationDraft[]>(
+    () => readInvoiceCreationDrafts(LOCAL_DEV_USER.account),
+  );
+  const [activeInvoiceCreationDraftId, setActiveInvoiceCreationDraftId] = useState<string | null>(null);
+  const activeInvoiceCreationDraftIdRef = useRef<string | null>(null);
+  const invoiceCreationDraftsRef = useRef(invoiceCreationDrafts);
+  const invoiceDraftOwnerRef = useRef(LOCAL_DEV_USER.account);
+  const invoiceDraftStorageFailedRef = useRef(false);
+  const [pendingInvoiceCreationExit, setPendingInvoiceCreationExit] = useState<{ run: () => void } | null>(null);
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   const [paymentDetailRequestId, setPaymentDetailRequestId] = useState<string | null>(null);
   const [paymentWorkbenchInitialTab, setPaymentWorkbenchInitialTab] = useState<WorkbenchTab>('review');
@@ -573,11 +704,141 @@ export default function App() {
 
   const contractDeletionPolicyMessage = currentUser.roleKey === 'media'
     ? '媒介只能删除本人上传且尚未用于请款项目的合同。'
-    : '管理员、项目负责人和老板可以删除任意合同；PM 和财务账号不可删除合同。';
+    : '管理员、媒介负责人和老板可以删除任意合同；PM 和财务账号不可删除合同。';
 
   const notify = useCallback((title: string, message: string) => {
     setToast({ title, message });
   }, []);
+
+  const setActiveInvoiceDraft = useCallback((draftId: string | null) => {
+    activeInvoiceCreationDraftIdRef.current = draftId;
+    setActiveInvoiceCreationDraftId(draftId);
+  }, []);
+
+  const persistInvoiceDrafts = useCallback((drafts: InvoiceCreationDraft[]) => {
+    try {
+      saveInvoiceCreationDrafts(currentUser.account, drafts);
+      invoiceDraftStorageFailedRef.current = false;
+    } catch {
+      if (!invoiceDraftStorageFailedRef.current) {
+        invoiceDraftStorageFailedRef.current = true;
+        notify('草稿保存失败', '浏览器本地存储暂时不可用，当前页面内容仍会保留到本次会话结束。');
+      }
+    }
+  }, [currentUser.account, notify]);
+
+  const updateInvoiceCreationDraftCollection = useCallback((
+    update: (current: InvoiceCreationDraft[]) => InvoiceCreationDraft[],
+  ) => {
+    setInvoiceCreationDrafts((current) => {
+      const next = update(current);
+      invoiceCreationDraftsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (invoiceDraftOwnerRef.current === currentUser.account) return;
+    invoiceDraftOwnerRef.current = currentUser.account;
+    const drafts = readInvoiceCreationDrafts(currentUser.account);
+    invoiceCreationDraftsRef.current = drafts;
+    setInvoiceCreationDrafts(drafts);
+    setActiveInvoiceDraft(null);
+  }, [currentUser.account, setActiveInvoiceDraft]);
+
+  useEffect(() => {
+    invoiceCreationDraftsRef.current = invoiceCreationDrafts;
+    if (invoiceDraftOwnerRef.current !== currentUser.account) return undefined;
+    const timeout = window.setTimeout(() => persistInvoiceDrafts(invoiceCreationDrafts), 350);
+    return () => window.clearTimeout(timeout);
+  }, [currentUser.account, invoiceCreationDrafts, persistInvoiceDrafts]);
+
+  useEffect(() => {
+    const flushInvoiceDrafts = () => {
+      if (invoiceDraftOwnerRef.current === currentUser.account) {
+        persistInvoiceDrafts(invoiceCreationDraftsRef.current);
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushInvoiceDrafts();
+    };
+    window.addEventListener('pagehide', flushInvoiceDrafts);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushInvoiceDrafts);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentUser.account, persistInvoiceDrafts]);
+
+  const updateSingleInvoiceCreationDraft = useCallback((
+    snapshot: InvoiceSingleDraftState,
+    meaningful: boolean,
+  ) => {
+    if (!meaningful) {
+      const draftId = activeInvoiceCreationDraftIdRef.current;
+      if (!draftId) return;
+      updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+      setActiveInvoiceDraft(null);
+      return;
+    }
+    const occurredAt = nowIso();
+    const draftId = activeInvoiceCreationDraftIdRef.current ?? `draft-${createPrototypeId('invoice')}`;
+    if (!activeInvoiceCreationDraftIdRef.current) setActiveInvoiceDraft(draftId);
+    updateInvoiceCreationDraftCollection((current) => {
+      const existing = current.find((draft): draft is InvoiceSingleCreationDraft => (
+        draft.draftId === draftId && draft.kind === 'SINGLE'
+      ));
+      return upsertInvoiceCreationDraft(current, {
+        ...snapshot,
+        draftId,
+        schemaVersion: INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+        kind: 'SINGLE',
+        createdByAccount: currentUser.account,
+        createdByName: currentUser.name,
+        createdAt: existing?.createdAt ?? occurredAt,
+        updatedAt: occurredAt,
+      });
+    });
+  }, [currentUser.account, currentUser.name, setActiveInvoiceDraft, updateInvoiceCreationDraftCollection]);
+
+  const updateBatchInvoiceCreationDraft = useCallback((
+    snapshot: InvoiceBatchDraftState,
+    meaningful: boolean,
+  ) => {
+    if (!meaningful || !snapshot.rows.some((row) => row.status !== 'GENERATED')) {
+      const draftId = activeInvoiceCreationDraftIdRef.current;
+      if (!draftId) return;
+      updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+      setActiveInvoiceDraft(null);
+      return;
+    }
+    const occurredAt = nowIso();
+    const draftId = activeInvoiceCreationDraftIdRef.current ?? `draft-${createPrototypeId('invoice')}`;
+    if (!activeInvoiceCreationDraftIdRef.current) setActiveInvoiceDraft(draftId);
+    updateInvoiceCreationDraftCollection((current) => {
+      const existing = current.find((draft): draft is InvoiceBatchDraft => (
+        draft.draftId === draftId && draft.kind === 'BATCH'
+      ));
+      return upsertInvoiceCreationDraft(current, {
+        ...snapshot,
+        draftId,
+        schemaVersion: INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+        kind: 'BATCH',
+        createdByAccount: currentUser.account,
+        createdByName: currentUser.name,
+        createdAt: existing?.createdAt ?? occurredAt,
+        updatedAt: occurredAt,
+      });
+    });
+  }, [currentUser.account, currentUser.name, setActiveInvoiceDraft, updateInvoiceCreationDraftCollection]);
+
+  const completeActiveInvoiceCreationDraft = useCallback(() => {
+    const draftId = activeInvoiceCreationDraftIdRef.current;
+    if (draftId) updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+    setActiveInvoiceDraft(null);
+    setInvoiceEditorDirty(false);
+    setInvoiceBatchDirty(false);
+  }, [setActiveInvoiceDraft, updateInvoiceCreationDraftCollection]);
 
   useEffect(() => {
     const explainBlockedAction = (event: Event) => {
@@ -594,21 +855,23 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    void MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.listProjects()
-      .then((result) => {
-        if (!active) return;
-        const identities = new Map(result.projects.map((project) => [project.cooperationProjectId, project]));
-        setProjects((current) => current.map((project) => ({
-          ...project,
-          ...(identities.get(getProjectId(project)) ?? {}),
-        })));
-      })
-      .catch(() => {
-        if (!active) return;
-        setProjects((current) => current.map((project) => ({ ...project, syncStatus: 'FAILED' })));
-      });
+    void MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.getMetadata().then((metadata) => {
+      if (!active) return;
+      const supportedProjectTypes: string[] = metadata.projectTypes.filter((type) => type === '品牌营销');
+      setFeishuProjectMetadata({ ...metadata, projectTypes: supportedProjectTypes });
+      setProjectDirectory((current) => ({
+        ...current,
+        typeAllowlist: current.typeAllowlist.filter((type) => supportedProjectTypes.includes(type)),
+      }));
+    }).catch(() => {
+      if (active) setProjectSyncError('暂时无法读取飞书项目类型和状态选项。');
+    });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') saveCooperationProjectDirectory(window.localStorage, projectDirectory);
+  }, [projectDirectory]);
 
   const registerProjectMutation = useCallback(({
     projectId,
@@ -912,7 +1175,7 @@ export default function App() {
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
-      notify('暂无模板编辑权限', '仅项目负责人、老板或管理员可以修改合同模板。');
+      notify('暂无模板编辑权限', '仅媒介负责人、老板或管理员可以修改合同模板。');
       return;
     }
     const cooperationProjectId = updated.cooperationProjectId ?? updated.projectId;
@@ -1012,6 +1275,10 @@ export default function App() {
     setInvoiceEditTarget(null);
     setInvoiceEditorDirty(false);
     setInvoiceBatchDirty(false);
+    if (
+      (activePage === 'invoice-create' || activePage === 'invoice-batch-create')
+      && page !== activePage
+    ) setActiveInvoiceDraft(null);
     setFocusedInvoiceId(null);
     setFocusedContractId(null);
     setFocusedProjectId(null);
@@ -1036,10 +1303,16 @@ export default function App() {
       return false;
     }
     if (
-      (
-        (activePage === 'invoice-edit' && invoiceEditorDirty)
-        || (activePage === 'invoice-batch-create' && invoiceBatchDirty)
-      )
+      page !== activePage
+      && (activePage === 'invoice-create' || activePage === 'invoice-batch-create')
+      && (invoiceEditorDirty || invoiceBatchDirty)
+    ) {
+      setPendingInvoiceCreationExit({ run: () => { finishNavigation(page, options); } });
+      return false;
+    }
+    if (
+      activePage === 'invoice-edit'
+      && invoiceEditorDirty
       && !window.confirm('当前 Invoice 内容尚未保存，确定切换页面吗？')
     ) {
       return false;
@@ -1068,6 +1341,7 @@ export default function App() {
   const payoutFromGeneratedInvoice = (
     record: GeneratedInvoiceRecord,
     existing?: Payout,
+    paymentCode?: string,
   ): Payout => {
       const creator = creators.find((item) => item.id === record.snapshot.creatorId);
       const cooperationProjectId = record.snapshot.cooperationProjectId ?? record.snapshot.projectId;
@@ -1084,6 +1358,7 @@ export default function App() {
       return {
         ...existing,
         id: record.sourcePayoutId,
+        paymentCode: existing?.paymentCode ?? paymentCode,
         creator: record.snapshot.creatorName,
         handle: record.snapshot.creatorHandle,
         creatorSocialAccountId: record.snapshot.creatorSocialAccountId,
@@ -1129,6 +1404,20 @@ export default function App() {
   const addGeneratedInvoices = (records: GeneratedInvoiceRecord[]) => {
     if (!records.length) return;
     const normalized = records.map((record) => ({ ...record, version: record.version ?? 1 }));
+    const reservedPaymentCodes = payouts.map((payout) => payout.paymentCode);
+    const paymentCodesByPayoutId = new Map<string, string>();
+    try {
+      normalized.forEach((record) => {
+        const existing = payouts.find((payout) => payout.id === record.sourcePayoutId);
+        const paymentCode = existing?.paymentCode
+          ?? nextPaymentBusinessCode('PMT', reservedPaymentCodes);
+        paymentCodesByPayoutId.set(record.sourcePayoutId, paymentCode);
+        if (!existing?.paymentCode) reservedPaymentCodes.push(paymentCode);
+      });
+    } catch (error) {
+      notify('无法生成付款明细', error instanceof Error ? error.message : '付款编号生成失败。');
+      return;
+    }
     const relationshipCreatedAt = nowIso();
     const applyEngagements = (projectState: ProjectSummary[], creatorState: CreatorProfile[]) => (
       upsertGeneratedInvoiceEngagements({
@@ -1150,10 +1439,10 @@ export default function App() {
         const record = bySourcePayoutId.get(payout.id);
         if (!record) return payout;
         bySourcePayoutId.delete(payout.id);
-        return payoutFromGeneratedInvoice(record, payout);
+        return payoutFromGeneratedInvoice(record, payout, paymentCodesByPayoutId.get(record.sourcePayoutId));
       });
       const additions = [...bySourcePayoutId.values()].map((record) => (
-        payoutFromGeneratedInvoice(record)
+        payoutFromGeneratedInvoice(record, undefined, paymentCodesByPayoutId.get(record.sourcePayoutId))
       ));
       return [...additions, ...updated];
     });
@@ -1179,8 +1468,8 @@ export default function App() {
     notify(
       records.length === 1 ? 'Invoice 已生成' : '批量 Invoice 已生成',
       records.length === 1
-        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，当前保存为草稿，尚未通知达人。`
-        : `${records.length} 张 Invoice 已保存为草稿，发布后才会通知对应达人。`,
+        ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，当前为待发布，尚未通知达人。`
+        : `${records.length} 张 Invoice 已生成并进入待发布，发布后才会通知对应达人。`,
     );
   };
 
@@ -1523,7 +1812,7 @@ export default function App() {
           entityId: result.record.invoiceId,
           action: 'update',
           actor: `${currentUser.name}（${currentUser.role}）`,
-          summary: `已更新 Invoice 草稿 ${result.record.id}，仍保持 v${result.record.version ?? 1}`,
+          summary: `已更新待发布 Invoice ${result.record.id}，仍保持 v${result.record.version ?? 1}`,
         }),
         ...current,
       ]);
@@ -1532,7 +1821,7 @@ export default function App() {
       setFocusedInvoiceId(`generated:${result.record.id}`);
       setInvoiceTab('signature');
       setActivePage('invoice');
-      notify('Invoice 草稿已保存', `${result.record.id} 仍为 v${result.record.version ?? 1}，尚未发布给达人。`);
+      notify('待发布 Invoice 已保存', `${result.record.id} 仍为 v${result.record.version ?? 1}，尚未发布给达人。`);
       return result.record;
     }
     const refreshedPaymentItem = invoicePaymentListItem(result.record, contracts);
@@ -1616,10 +1905,20 @@ export default function App() {
       notify('尚无可加入付款清单的 Invoice', '请先为项目达人生成包含付款账户的 Invoice。');
       return;
     }
+    let paymentListCode: string;
+    try {
+      paymentListCode = nextPaymentBusinessCode('PAY', [
+        ...paymentLists.map((item) => item.paymentListCode),
+        ...paymentBatches.map((item) => item.paymentOrderCode),
+      ]);
+    } catch (error) {
+      notify('无法创建付款单', error instanceof Error ? error.message : '付款单编号生成失败。');
+      return;
+    }
     const items = invoices.map((invoice) => invoicePaymentListItem(invoice, contracts));
     const list: PaymentListRecord = {
       paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-      paymentListCode: createPrototypeCode('PAY'),
+      paymentListCode,
       projectId,
       provider: paymentListProviderForItems(items),
       status: 'draft',
@@ -2081,7 +2380,10 @@ export default function App() {
       const actor = { account: currentUser.account, name: currentUser.name, role: currentUser.role };
       const baseList: PaymentListRecord = existingList ?? {
         paymentListId: createPrototypeId('payment-list') as PaymentListRecord['paymentListId'],
-        paymentListCode: createPrototypeCode('PAY'),
+        paymentListCode: nextPaymentBusinessCode('PAY', [
+          ...paymentLists.map((item) => item.paymentListCode),
+          ...paymentBatches.map((item) => item.paymentOrderCode),
+        ]),
         projectId: request.cooperationProjectId as ProjectId,
         paymentRequestProjectId: request.paymentRequestProjectId,
         provider: requestPaymentProvider,
@@ -2536,6 +2838,11 @@ export default function App() {
     setFinanceReviewRequestId(request.id);
   };
 
+  const openPaymentRequestDetail = (requestId: string) => {
+    if (!navigate('requests', { requestStatusFilter: 'approving' })) return;
+    setFocusedRequestId(requestId);
+  };
+
   const currentPaymentReceiveCurrency = (payout: Payout) => {
     const batchId = payout.currentPaymentAttempt?.paymentBatchId
       ?? payout.paymentFailureRecovery?.retryBatchId;
@@ -2726,6 +3033,7 @@ export default function App() {
                 paymentBatchId: batchRecord.paymentBatchId,
                 paymentBatchCode: batchRecord.paymentBatchCode,
                 submittedAt,
+                paymentCode: batchItem.paymentCode,
                 paymentOrderCode: paymentBatchItemOrderCode(batchItem),
                 sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
                 attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -2744,6 +3052,7 @@ export default function App() {
           paymentBatchId: batchRecord.paymentBatchId,
           paymentBatchCode: batchRecord.paymentBatchCode,
           submittedAt,
+          paymentCode: batchItem.paymentCode,
           paymentOrderCode: paymentBatchItemOrderCode(batchItem),
           sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
           attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -3608,9 +3917,13 @@ export default function App() {
           .flatMap((candidate) => candidate.sourceInvoiceNumber ? [candidate.sourceInvoiceNumber] : []),
         actor: externalInvoiceActor(),
       });
+      const paymentCode = nextPaymentBusinessCode('PMT', payouts.map((payout) => payout.paymentCode));
       setExternalInvoices((current) => current.map((candidate) => candidate.invoiceId === record.invoiceId ? result.collection : candidate));
       setGeneratedInvoices((current) => [result.invoice, ...current]);
-      setPayouts((current) => [result.payout, ...current]);
+      setPayouts((current) => [{
+        ...result.payout,
+        paymentCode,
+      }, ...current]);
       setInvoiceTab('approved');
       notify('外部 Invoice 审核通过', `${result.invoice.id} 已跳过签署并进入“待发起请款”。`);
     } catch (error) {
@@ -3722,13 +4035,13 @@ export default function App() {
 
   const publishInternalInvoiceDrafts = (invoiceIds: string[]) => {
     if (!hasPermission(currentUser, 'invoice_manage')) {
-      notify('暂无操作权限', `${currentUser.role}不能发布 Invoice 草稿。`);
+      notify('暂无操作权限', `${currentUser.role}不能发布待发布 Invoice。`);
       return false;
     }
     const selectedIds = new Set(invoiceIds);
     const records = generatedInvoices.filter((record) => selectedIds.has(String(record.invoiceId)));
     if (!records.length || records.length !== selectedIds.size) {
-      notify('发布失败', '部分 Invoice 草稿已不存在，请刷新列表后重试。');
+      notify('发布失败', '部分待发布 Invoice 已不存在，请刷新列表后重试。');
       return false;
     }
     const occurredAt = nowIso();
@@ -3750,24 +4063,24 @@ export default function App() {
       );
       return true;
     } catch (error) {
-      notify('发布失败', error instanceof Error ? error.message : 'Invoice 草稿暂时无法发布。');
+      notify('发布失败', error instanceof Error ? error.message : '待发布 Invoice 暂时无法发布。');
       return false;
     }
   };
 
   const withdrawInternalInvoiceDraft = (invoiceId: string) => {
     if (!hasPermission(currentUser, 'invoice_manage')) {
-      notify('暂无操作权限', `${currentUser.role}不能撤销 Invoice 草稿。`);
+      notify('暂无操作权限', `${currentUser.role}不能撤销待发布 Invoice。`);
       return false;
     }
     const record = generatedInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
     const payout = record ? payouts.find((candidate) => candidate.id === record.sourcePayoutId) : undefined;
     if (!record || !payout) {
-      notify('撤销失败', '未找到完整的 Invoice 草稿记录。');
+      notify('撤销失败', '未找到完整的待发布 Invoice 记录。');
       return false;
     }
     if (record.status !== '草稿' || payout.invoiceReviewStatus !== '草稿') {
-      notify('无法撤销', '只有尚未发布的 Invoice 草稿可以撤销。');
+      notify('无法撤销', '只有尚未发布的 Invoice 可以撤销。');
       return false;
     }
     if (findInvoiceRequest(payout, generatedInvoices, requestProjects)) {
@@ -3787,7 +4100,7 @@ export default function App() {
     });
     setFocusedInvoiceId(null);
     setInvoiceTab('signature');
-    notify('Invoice 草稿已撤销', `${record.id} 已从当前前端会话中删除。`);
+    notify('待发布 Invoice 已撤销', `${record.id} 已从当前前端会话中删除。`);
     return true;
   };
 
@@ -4527,14 +4840,47 @@ export default function App() {
       .toISOString()
       .slice(0, 16);
     const isRetryBatch = retryItems.length > 0;
-    const retryPaymentOrderCode = isRetryBatch ? createPrototypeCode('PAY') : undefined;
+    let retryPaymentOrderCode: string | undefined;
+    let retryPaymentCodesByPayoutId = new Map<string, string>();
+    try {
+      retryPaymentOrderCode = isRetryBatch ? nextPaymentBusinessCode('PAY', [
+        ...paymentLists.map((item) => item.paymentListCode),
+        ...paymentBatches.map((item) => item.paymentOrderCode),
+      ]) : undefined;
+      if (isRetryBatch) {
+        const reservedPaymentCodes = [
+          ...payouts.flatMap((payout) => [
+            payout.paymentCode,
+            payout.currentPaymentAttempt?.paymentCode,
+            ...(payout.paymentAttempts ?? []).map((attempt) => attempt.paymentCode),
+          ]),
+          ...paymentBatches.flatMap((batch) => batch.items.map((item) => item.paymentCode)),
+        ];
+        const retryPaymentCodes = reservePaymentBusinessCodes(
+          'PMT',
+          reservedPaymentCodes,
+          retryItems.length,
+          now,
+        );
+        retryPaymentCodesByPayoutId = new Map(retryItems.map((payout, index) => (
+          [payout.id, retryPaymentCodes[index]]
+        )));
+      }
+    } catch (error) {
+      notify('无法创建付款批次', error instanceof Error ? error.message : '付款编号生成失败。');
+      return;
+    }
     const retryAttemptNumber = isRetryBatch
       ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
       : undefined;
+    const selectedForBatch = selected.map((payout) => {
+      const paymentCode = retryPaymentCodesByPayoutId.get(payout.id);
+      return paymentCode ? { ...payout, paymentCode } : payout;
+    });
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
-        payouts: selected,
+        payouts: selectedForBatch,
         requests: requestProjects,
         generatedInvoices,
         paymentLists,
@@ -4569,6 +4915,7 @@ export default function App() {
             execution.batchCode,
             localPaymentTime,
             {
+              paymentCode: batchItem.paymentCode || retryPaymentCodesByPayoutId.get(payout.id)!,
               paymentOrderCode: paymentBatchItemOrderCode(batchItem),
               sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
               attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -4582,6 +4929,7 @@ export default function App() {
               paymentBatchId: batchRecord.paymentBatchId,
               paymentBatchCode: batchRecord.paymentBatchCode,
               submittedAt: localPaymentTime,
+              paymentCode: batchItem.paymentCode,
               paymentOrderCode: paymentBatchItemOrderCode(batchItem),
               sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
               attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -4630,6 +4978,93 @@ export default function App() {
     disabledReason: createContractDisabledReason,
   } = getContractTemplateAvailability(contracts);
   const canManageProjects = hasPermission(currentUser, 'project_manage');
+  const canManageCooperationDirectory = hasPermission(currentUser, 'cooperation_project_manage');
+  const synchronizeCooperationProjects = async () => {
+    if (!projectDirectory.typeAllowlist.length || projectSyncing) return;
+    setProjectSyncing(true);
+    setProjectSyncError(undefined);
+    try {
+      const result = await MOCK_FEISHU_COOPERATION_PROJECT_SOURCE.listProjects(projectDirectory.typeAllowlist);
+      const nextRecords = synchronizeFeishuDirectory({
+        current: projectDirectory.records,
+        incoming: result.records,
+        syncedAt: result.syncedAt,
+        internalIdFor: (externalProjectId) => {
+          const existing = projectDirectory.records.find((record) => record.externalProjectId === externalProjectId);
+          return existing
+            ? { id: existing.id, projectCode: existing.projectCode }
+            : { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ') };
+        },
+      });
+      setProjectDirectory((current) => ({ ...current, records: nextRecords, lastSyncedAt: result.syncedAt }));
+      setProjects((current) => {
+        const currentById = new Map(current.map((project) => [String(project.cooperationProjectId ?? project.id), project]));
+        return nextRecords.map((record) => ({
+          ...(currentById.get(record.id) ?? projectFromDirectoryRecord(record)),
+          ...projectFromDirectoryRecord(record),
+          creatorProfiles: currentById.get(record.id)?.creatorProfiles,
+          creators: currentById.get(record.id)?.creators ?? 0,
+          brand: currentById.get(record.id)?.brand ?? record.name,
+          budget: currentById.get(record.id)?.budget ?? '待补充',
+          pm: currentById.get(record.id)?.pm ?? '待分配',
+          reviewStatus: currentById.get(record.id)?.reviewStatus ?? 'draft',
+        }));
+      });
+      notify('飞书同步完成', `已同步 ${result.records.length} 个白名单范围内项目。`);
+    } catch (error) {
+      setProjectSyncError(error instanceof Error ? error.message : '飞书同步失败，已保留现有项目数据。');
+    } finally {
+      setProjectSyncing(false);
+    }
+  };
+  const saveManualCooperationProject = (
+    draft: Pick<CooperationProjectDirectoryRecord, 'name' | 'projectType' | 'projectStatus' | 'initiatorName' | 'startDate' | 'endDate'>,
+    editingId?: string,
+  ) => {
+    const duplicate = projectDirectory.records.find((record) => record.id !== editingId
+      && record.availability === 'ACTIVE' && record.name.trim().toLowerCase() === draft.name.trim().toLowerCase());
+    if (duplicate && !window.confirm(`已存在同名可用项目“${duplicate.name}”。仍要作为独立项目保存吗？`)) return '已取消保存，同名项目不会自动合并。';
+    const occurredAt = nowIso();
+    const previous = editingId ? projectDirectory.records.find((record) => record.id === editingId && record.source === 'MANUAL') : undefined;
+    const record: CooperationProjectDirectoryRecord = {
+      ...(previous ?? { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ'), source: 'MANUAL' as const, availability: 'ACTIVE' as const }),
+      ...draft,
+      localUpdatedAt: occurredAt,
+    };
+    setProjectDirectory((current) => ({ ...current, records: previous
+      ? current.records.map((item) => item.id === record.id ? record : item)
+      : [record, ...current.records] }));
+    setProjects((current) => previous
+      ? current.map((project) => String(project.cooperationProjectId ?? project.id) === record.id ? { ...project, ...projectFromDirectoryRecord(record) } : project)
+      : [projectFromDirectoryRecord(record), ...current]);
+    notify(previous ? '项目已更新' : '项目已添加', `${record.projectCode} 已保存。`);
+    return undefined;
+  };
+  const disableManualCooperationProject = (id: string) => {
+    if (!window.confirm('停用后该项目不再进入新请款候选，历史关联仍保留。确认停用？')) return;
+    const occurredAt = nowIso();
+    setProjectDirectory((current) => ({ ...current, records: current.records.map((record) => record.id === id ? { ...record, availability: 'DISABLED', localUpdatedAt: occurredAt } : record) }));
+    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability: 'DISABLED', localUpdatedAt: occurredAt } : project));
+    notify('项目已停用', '历史请款、合同和 Invoice 关联不受影响。');
+  };
+  const updateCooperationProjectStatus = (id: string, projectStatus: 'ACTIVE' | 'ARCHIVED') => {
+    const occurredAt = nowIso();
+    setProjectDirectory((current) => ({
+      ...current,
+      records: current.records.map((record) => record.id === id ? {
+        ...record,
+        projectStatus,
+        localUpdatedAt: occurredAt,
+        ...(record.source === 'FEISHU' ? { statusOverriddenAt: occurredAt } : {}),
+      } : record),
+    }));
+    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? {
+      ...project,
+      status: projectStatus,
+      localUpdatedAt: occurredAt,
+    } : project));
+    notify('项目状态已更新', `已改为${projectStatus === 'ACTIVE' ? '进行中' : '已归档'}。`);
+  };
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
   ));
@@ -4653,6 +5088,7 @@ export default function App() {
         generatedInvoices,
         paymentLists,
         contracts,
+        paymentBatches,
       })
     : null;
 
@@ -4675,8 +5111,46 @@ export default function App() {
     setActivePage('projects');
   };
 
+  const accountInvoiceCreationDrafts = invoiceDraftOwnerRef.current === currentUser.account
+    ? invoiceCreationDrafts
+    : [];
+  const activeInvoiceCreationDraft = accountInvoiceCreationDrafts.find((draft) => (
+    draft.draftId === activeInvoiceCreationDraftId
+  ));
+  const runInvoiceCreationExit = (run: () => void) => {
+    if (invoiceEditorDirty || invoiceBatchDirty) {
+      setPendingInvoiceCreationExit({ run: () => {
+        setInvoiceEditorDirty(false);
+        setInvoiceBatchDirty(false);
+        setActiveInvoiceDraft(null);
+        run();
+      } });
+      return;
+    }
+    setActiveInvoiceDraft(null);
+    run();
+  };
+
   let pageContent;
   switch (activePage) {
+    case 'feishu-projects':
+      pageContent = (
+        <FeishuCooperationProjectsPage
+          records={projectDirectory.records}
+          metadata={feishuProjectMetadata}
+          typeAllowlist={projectDirectory.typeAllowlist}
+          lastSyncedAt={projectDirectory.lastSyncedAt}
+          canManage={canManageCooperationDirectory}
+          syncing={projectSyncing}
+          syncError={projectSyncError}
+          onAllowlistChange={(typeAllowlist) => setProjectDirectory((current) => ({ ...current, typeAllowlist }))}
+          onSync={() => { void synchronizeCooperationProjects(); }}
+          onSaveManual={saveManualCooperationProject}
+          onDisable={disableManualCooperationProject}
+          onProjectStatusChange={updateCooperationProjectStatus}
+        />
+      );
+      break;
     case 'projects':
       pageContent = (
         <MediaPaymentProjectsPage
@@ -4800,6 +5274,7 @@ export default function App() {
         <ContractBuilderPage
           projects={manageableCooperationProjects}
           creators={creators}
+          contractAdvertiserSettings={contractAdvertiserSettings}
           contractTemplate={editingContractDraftId ? configuredContractTemplate : activeContractTemplate}
           initialEngagementId={contractGenerationEngagementId}
           existingDraft={contracts.find((contract) => (
@@ -4884,12 +5359,39 @@ export default function App() {
           invoiceBillingSettings={invoiceBillingSettings}
           projects={projects}
           generatedInvoices={generatedInvoices}
+          creationDrafts={accountInvoiceCreationDrafts}
           externalInvoices={externalInvoices}
           requests={requestProjects}
           tab={invoiceTab}
           onTabChange={setInvoiceTab}
-          onCreateInvoice={() => setActivePage('invoice-create')}
-          onCreateBatchInvoice={() => setActivePage('invoice-batch-create')}
+          onCreateInvoice={() => {
+            setActiveInvoiceDraft(null);
+            setActivePage('invoice-create');
+          }}
+          onCreateBatchInvoice={() => {
+            setActiveInvoiceDraft(null);
+            setActivePage('invoice-batch-create');
+          }}
+          onResumeCreationDraft={(draft) => {
+            setActiveInvoiceDraft(draft.draftId);
+            if (draft.kind === 'BATCH') {
+              const knownInvoiceIds = new Set(generatedInvoices.map((record) => record.invoiceId));
+              const missingRecords = draft.rows.flatMap((row) => (
+                row.generated && !knownInvoiceIds.has(row.generated.record.invoiceId)
+                  ? [row.generated.record]
+                  : []
+              ));
+              if (missingRecords.length) addGeneratedInvoices(missingRecords);
+              setActivePage('invoice-batch-create');
+            } else {
+              setActivePage('invoice-create');
+            }
+          }}
+          onDeleteCreationDraft={(draftId) => {
+            updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
+            if (activeInvoiceCreationDraftIdRef.current === draftId) setActiveInvoiceDraft(null);
+            notify('草稿已删除', '该生成中 Invoice 草稿已从当前账号的本地草稿箱移除。');
+          }}
           onCreateExternalInvoice={createExternalInvoiceTask}
           onPublishExternalInvoice={publishExternalInvoiceTask}
           onPublishExternalInvoices={publishExternalInvoiceTasks}
@@ -4997,21 +5499,29 @@ export default function App() {
           contracts={contracts}
           invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
+          initialDraft={activeInvoiceCreationDraft?.kind === 'SINGLE'
+            ? activeInvoiceCreationDraft
+            : undefined}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={(record) => {
             addGeneratedInvoice(record);
             setInvoiceCreationEngagementId(null);
           }}
           onPublishGenerated={(record) => publishInternalInvoiceDrafts([String(record.invoiceId)])}
+          onDirtyChange={setInvoiceEditorDirty}
+          onDraftChange={updateSingleInvoiceCreationDraft}
+          onDraftCompleted={completeActiveInvoiceCreationDraft}
           onCancel={() => {
-            setInvoiceCreationEngagementId(null);
-            if (requestResourceReturn?.resource === 'invoice') {
-              setFocusedProjectId(requestResourceReturn.requestId);
-              setRequestResourceReturn(null);
-              setActivePage('projects');
-            } else {
-              setActivePage('invoice');
-            }
+            runInvoiceCreationExit(() => {
+              setInvoiceCreationEngagementId(null);
+              if (requestResourceReturn?.resource === 'invoice') {
+                setFocusedProjectId(requestResourceReturn.requestId);
+                setRequestResourceReturn(null);
+                setActivePage('projects');
+              } else {
+                setActivePage('invoice');
+              }
+            });
           }}
           onOpenInvoiceManagement={() => {
             setInvoiceCreationEngagementId(null);
@@ -5037,13 +5547,17 @@ export default function App() {
           contracts={contracts}
           invoiceBillingSettings={invoiceBillingSettings}
           generatedInvoices={generatedInvoices}
+          initialDraft={activeInvoiceCreationDraft?.kind === 'BATCH'
+            ? activeInvoiceCreationDraft
+            : undefined}
           contractMatchActor={{ account: currentUser.account, name: currentUser.name, role: currentUser.role }}
           onGenerated={addGeneratedInvoices}
           onPublishGenerated={(records) => publishInternalInvoiceDrafts(records.map((record) => String(record.invoiceId)))}
           onDirtyChange={setInvoiceBatchDirty}
+          onDraftChange={updateBatchInvoiceCreationDraft}
+          onDraftCompleted={completeActiveInvoiceCreationDraft}
           onCancel={() => {
-            setInvoiceBatchDirty(false);
-            setActivePage('invoice');
+            runInvoiceCreationExit(() => setActivePage('invoice'));
           }}
           onOpenInvoiceManagement={() => {
             setInvoiceBatchDirty(false);
@@ -5062,6 +5576,7 @@ export default function App() {
           batches={paymentBatches}
           payouts={payouts}
           creators={creators}
+          requests={requestProjects}
           onNewBatch={() => setActivePage('new-batch')}
           notify={notify}
           canCreateBatch={canExecutePayouts}
@@ -5110,6 +5625,8 @@ export default function App() {
       pageContent = (
         <OrganizationPage
           notify={notify}
+          contractAdvertiserSettings={contractAdvertiserSettings}
+          onContractAdvertiserSettingsChange={setContractAdvertiserSettings}
           invoiceBillingSettings={invoiceBillingSettings}
           onInvoiceBillingSettingsChange={setInvoiceBillingSettings}
         />
@@ -5181,6 +5698,7 @@ export default function App() {
           paymentLists={paymentLists}
           contracts={contracts}
           creators={creators}
+          paymentBatches={paymentBatches}
           initialTab={paymentWorkbenchInitialTab}
           onNewBatch={() => setActivePage('new-batch')}
           onSelectPayout={setSelectedPayout}
@@ -5193,6 +5711,7 @@ export default function App() {
             const payout = project.payouts[0];
             if (payout) setSelectedPayout(payout);
           }}
+          onOpenRequest={openPaymentRequestDetail}
           onReviewRequest={openFinanceReview}
           onExecuteRequest={executePaymentRequest}
           onReturnRequest={returnPaymentRequestToMedia}
@@ -5339,6 +5858,32 @@ export default function App() {
           onViewInvoice={openInvoiceFromPayout}
         />
       ) : null}
+      <DraftExitDialog
+        open={Boolean(pendingInvoiceCreationExit)}
+        title="退出 Invoice 生成？"
+        description="当前 Invoice 还没有完成文件生成。你可以保存到当前账号的草稿箱，稍后继续编辑。"
+        discardLabel="放弃本次内容"
+        onDiscard={() => {
+          const draftId = activeInvoiceCreationDraftIdRef.current;
+          const nextDrafts = draftId
+            ? removeInvoiceCreationDraft(invoiceCreationDraftsRef.current, draftId)
+            : invoiceCreationDraftsRef.current;
+          invoiceCreationDraftsRef.current = nextDrafts;
+          setInvoiceCreationDrafts(nextDrafts);
+          persistInvoiceDrafts(nextDrafts);
+          const pending = pendingInvoiceCreationExit;
+          setPendingInvoiceCreationExit(null);
+          pending?.run();
+        }}
+        onSave={() => {
+          persistInvoiceDrafts(invoiceCreationDraftsRef.current);
+          notify('草稿已保存', '可在 Invoice 管理的草稿箱中继续编辑。');
+          const pending = pendingInvoiceCreationExit;
+          setPendingInvoiceCreationExit(null);
+          pending?.run();
+        }}
+        onContinue={() => setPendingInvoiceCreationExit(null)}
+      />
       <DraftExitDialog
         open={Boolean(pendingContractExit)}
         title="退出生成合同？"

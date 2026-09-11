@@ -44,6 +44,7 @@ const model: ContractGenerationModel = {
   contractNumber: 'CON-SYNTHETIC-001',
   ioNumber: '',
   advertiser: 'Comets International Limited',
+  advertiserAddress: '99 Synthetic Advertiser Road, Hong Kong',
   publisher: 'Sample Creator Limited',
   publisherAddress: '1 Example Road, Sample City',
   platform: 'YouTube',
@@ -206,9 +207,9 @@ describe('contract generation', () => {
     expect(incomplete.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'REQUIRED_MISSING', fieldKey: 'publisherAddress' }),
       expect.objectContaining({ kind: 'FORMAT_INVALID', fieldKey: 'totalFee' }),
-      expect.objectContaining({ kind: 'FORMAT_INVALID', fieldKey: 'campaignPeriod' }),
       expect.objectContaining({ kind: 'OVERFLOW_RISK', fieldKey: 'contentLength' }),
     ]));
+    expect(incomplete.issues.some((issue) => issue.fieldKey === 'campaignPeriod')).toBe(false);
   });
 
   it('keeps optional blank fields empty without creating quality blockers', () => {
@@ -224,6 +225,23 @@ describe('contract generation', () => {
     expect(report.missingRequired).toBe(0);
     expect(rendered).toBe('||||');
     expect(rendered).not.toContain('待填写');
+  });
+
+  it('keeps Channel optional and renders an explicit dash when no profile channel is selected', () => {
+    const withoutChannel: ContractGenerationModel = {
+      ...model,
+      platform: '',
+      channelName: '',
+      channelUrl: '',
+      publishingChannels: [],
+    };
+
+    expect(createContractQualityReport(withoutChannel).hasBlockers).toBe(false);
+    expect(replaceContractPlaceholders(
+      '{{platform}}|{{channel_url}}|{{channel_name}}',
+      withoutChannel,
+      'FORMAL',
+    )).toBe('—|—|—');
   });
 
   it('reports one selector issue before validating derived creator or payout fields', () => {
@@ -275,11 +293,14 @@ describe('contract generation', () => {
     expect(draftText).toContain('DRAFT');
     expect(formalText).not.toContain('DRAFT');
     expect(formalText).toContain('Standard Terms And Conditions');
+    expect(formalText).toContain(model.advertiser);
+    expect(formalText).toContain(model.advertiserAddress!);
     expect(formalText).toContain(model.publisher);
     expect(formalText).toContain('YouTube');
     expect(formalText).toContain('https://example.invalid/sample-studio');
     expect(formalText).toContain('Instagram');
     expect(formalText).toContain('https://instagram.com/sample-studio');
+    expect(formalText).not.toContain('Campaign Period');
     expect(formalText).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(optionalBlankText).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
     if (renderFixtureDir) {
@@ -316,10 +337,13 @@ describe('contract generation', () => {
 
     expect(formalBlob.type).toContain('officedocument.wordprocessingml.document');
     expect(documentXml).toContain('Standard Terms And Conditions');
+    expect(documentXml).toContain(model.advertiser);
+    expect(documentXml).toContain(model.advertiserAddress);
     expect(documentXml).toContain(model.publisher);
     expect(documentXml).toContain(model.projectName);
     expect(documentXml).toContain('YouTube: https://example.invalid/sample-studio');
     expect(documentXml).toContain('Instagram: https://instagram.com/sample-studio');
+    expect(documentXml).not.toContain('Campaign Period');
     expect(documentXml).not.toMatch(/\{\{[^}]+\}\}|please fill|example only/i);
     expect(documentXml).not.toContain('________________');
     expect(optionalBlankXml).not.toMatch(/\{\{[^}]+\}\}|待填写|please fill|example only/i);
@@ -374,7 +398,39 @@ describe('contract generation', () => {
     expect(model.paymentSnapshot.accountName).toBe('Sample Creator Limited');
   }, 60_000);
 
-  it('applies PayPal manual fields and blocks omitted required inline or missing system-period fields', () => {
+  it('uses the manual Advertiser name and address and omits both rows together', () => {
+    const manual: ContractGenerationModel = {
+      ...model,
+      advertiserAddress: '88 Manual Advertiser Avenue, Singapore',
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        advertiser: 'MANUAL',
+      },
+      templateManualFieldValues: {
+        advertiser: 'Manual Advertiser Pte. Ltd.',
+      },
+    };
+    expect(replaceContractPlaceholders(
+      '{{advertiser_name}}|{{advertiser_address}}',
+      manual,
+      'FORMAL',
+    )).toBe('Manual Advertiser Pte. Ltd.|88 Manual Advertiser Avenue, Singapore');
+
+    const omitted = createContractQualityReport({
+      ...model,
+      advertiser: '',
+      advertiserAddress: '',
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        advertiser: 'OMIT',
+      },
+    });
+    expect(omitted.issues.some((issue) => (
+      issue.id === 'missing-advertiser_name' || issue.id === 'missing-advertiser_address'
+    ))).toBe(false);
+  });
+
+  it('applies PayPal manual fields, preserves legacy omitted output, and ignores removed Campaign Period', () => {
     const paypal: ContractGenerationModel = {
       ...model,
       payoutProvider: 'PayPal',
@@ -423,8 +479,6 @@ describe('contract generation', () => {
     expect(omittedPublisher.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ severity: 'BLOCKER', fieldKey: 'publisher' }),
     ]));
-    expect(missingSystemPeriod.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ severity: 'BLOCKER', fieldKey: 'campaignPeriod' }),
-    ]));
+    expect(missingSystemPeriod.issues.some((issue) => issue.fieldKey === 'campaignPeriod')).toBe(false);
   });
 });

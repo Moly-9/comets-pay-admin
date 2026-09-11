@@ -1,5 +1,16 @@
-import type { ContractRecord } from './contracts';
+import {
+  createEditingContractDraft,
+  createGeneratedContractDraft,
+  type ContractGenerationModel,
+  type ContractRecord,
+} from './contracts';
 import { accountDisplayValue } from './accountPresentation';
+import {
+  contractPaymentMethodForAccount,
+  contractPayoutSnapshot,
+  defaultContractPayoutAccount,
+} from './contractGenerationModel';
+import { createPrototypeRecognitionFields } from './contractRecognitionPrototype';
 import { INITIAL_INVOICE_ENTITY, INITIAL_PAYOUTS, PROJECT_FIXTURES } from './data';
 import {
   createDocumentPayoutSnapshot,
@@ -9,6 +20,7 @@ import {
 } from './payoutAccounts';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 import { demoAccountName } from './demoCreatorNames';
+import { normalizeLegacyPaymentOrderCode } from './paymentNumbering';
 import type {
   ContractId,
   CreatorId,
@@ -451,6 +463,226 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
     lifecycle: spec.lifecycle ?? 'CONFIRMED',
     confirmedAt: (spec.lifecycle ?? 'CONFIRMED') === 'CONFIRMED' ? DEMO_TIMESTAMP : undefined,
     extractionStage: spec.lifecycle === 'UPLOADED_PENDING_CONFIRMATION' ? 'review' : 'applied',
+  };
+});
+
+type ContractManagementDemoBucket = 'attention' | 'draft' | 'signature';
+
+type ContractManagementDemoSpec = {
+  bucket: ContractManagementDemoBucket;
+  contractId: ContractId;
+  contractCode: string;
+  ioNumber: string;
+  creatorIndex: number;
+  amount: number;
+  title: string;
+};
+
+const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
+  {
+    bucket: 'attention',
+    contractId: 'contract_fixture_management_attention_01' as ContractId,
+    contractCode: 'CON-20260909-MGT-A01',
+    ioNumber: 'IO-20260909-MGT-A01',
+    creatorIndex: 0,
+    amount: 3600,
+    title: 'TikTok 短视频合作待确认',
+  },
+  {
+    bucket: 'attention',
+    contractId: 'contract_fixture_management_attention_02' as ContractId,
+    contractCode: 'CON-20260909-MGT-A02',
+    ioNumber: 'IO-20260909-MGT-A02',
+    creatorIndex: 1,
+    amount: 4200,
+    title: 'YouTube 开箱合作待确认',
+  },
+  {
+    bucket: 'draft',
+    contractId: 'contract_fixture_management_draft_01' as ContractId,
+    contractCode: 'CON-20260909-MGT-D01',
+    ioNumber: 'IO-20260909-MGT-D01',
+    creatorIndex: 2,
+    amount: 2800,
+    title: 'TikTok 内容合作草稿',
+  },
+  {
+    bucket: 'draft',
+    contractId: 'contract_fixture_management_draft_02' as ContractId,
+    contractCode: 'CON-20260909-MGT-D02',
+    ioNumber: 'IO-20260909-MGT-D02',
+    creatorIndex: 3,
+    amount: 5100,
+    title: '多平台推广合作草稿',
+  },
+  {
+    bucket: 'signature',
+    contractId: 'contract_fixture_management_signature_01' as ContractId,
+    contractCode: 'CON-20260909-MGT-S01',
+    ioNumber: 'IO-20260909-MGT-S01',
+    creatorIndex: 4,
+    amount: 2400,
+    title: 'Instagram 图文合作协议',
+  },
+  {
+    bucket: 'signature',
+    contractId: 'contract_fixture_management_signature_02' as ContractId,
+    contractCode: 'CON-20260909-MGT-S02',
+    ioNumber: 'IO-20260909-MGT-S02',
+    creatorIndex: 5,
+    amount: 3300,
+    title: 'Reels 内容制作协议',
+  },
+];
+
+const CONTRACT_MANAGEMENT_DEMO_DATE = '2026-09-09';
+const CONTRACT_MANAGEMENT_DEMO_END_DATE = '2027-12-31';
+const CONTRACT_MANAGEMENT_DEMO_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
+
+const contractManagementGenerationModel = (
+  spec: ContractManagementDemoSpec,
+): ContractGenerationModel => {
+  const reference = demoReferences[spec.creatorIndex];
+  const creator = creatorForReference(reference.creatorId);
+  const socialAccount = creator.socialAccounts[0];
+  const payoutAccount = defaultContractPayoutAccount(creator);
+  const paymentSnapshot = contractPayoutSnapshot(payoutAccount, creator.id);
+  const platform = socialAccount?.platform ?? creator.platform;
+  const handle = socialAccount?.handle ?? creator.handle;
+  const channelUrl = socialAccount?.profileUrl ?? '';
+
+  return {
+    templateId: 'CON-TPL-2026-KOL',
+    contractName: `${creator.name} · ${spec.title}`,
+    contractType: 'INDEPENDENT',
+    projectId: demoProject.projectId as ProjectId,
+    cooperationProjectId: demoCooperationProjectId,
+    projectLinks: [{ cooperationProjectId: demoCooperationProjectId, status: 'ACTIVE' }],
+    projectName: demoProject.name,
+    brandName: demoProject.brand,
+    creatorId: reference.creatorId,
+    creatorName: creator.name,
+    creatorHandle: handle,
+    creatorSocialAccountId: socialAccount?.id,
+    creatorPlatform: platform,
+    engagementId: reference.engagementId,
+    contractNumber: spec.contractCode,
+    ioNumber: spec.ioNumber,
+    advertiser: 'COMETS INTERNATIONAL LIMITED',
+    publisher: creator.contact.legalName || creator.name,
+    publisherAddress: creator.contact.address,
+    platform,
+    channelName: handle,
+    channelUrl,
+    publishingChannels: [{
+      socialAccountId: socialAccount?.id ?? '',
+      platform,
+      channelUrl,
+    }],
+    effectiveDate: CONTRACT_MANAGEMENT_DEMO_DATE,
+    campaignStart: '2026-09-15',
+    campaignEnd: CONTRACT_MANAGEMENT_DEMO_END_DATE,
+    purposeItems: [spec.title, '社媒内容制作与发布 1 条'],
+    promotedProduct: demoProject.brand,
+    hashtag: '#COMETSPayDemo',
+    contentFormat: platform,
+    releaseStart: '2026-09-15',
+    releaseEnd: '2026-12-31',
+    language: 'English',
+    contentLength: '1 条',
+    licensePeriod: '90 天',
+    licensePrice: '',
+    currency: 'USD',
+    totalFee: String(spec.amount),
+    invoiceIssueWorkingDays: 5,
+    paymentWorkingDays: 45,
+    paymentMethod: contractPaymentMethodForAccount(payoutAccount),
+    feeBearer: 'ADVERTISER',
+    payoutAccountId: paymentSnapshot.payoutAccountId ?? '',
+    payoutAccountVersion: paymentSnapshot.payoutAccountVersion,
+    payoutAccountFingerprint: paymentSnapshot.accountFingerprint,
+    payoutProvider: payoutAccount?.provider === 'PayPal' ? 'PayPal' : 'Airwallex',
+    paymentSnapshot,
+  };
+};
+
+export const CONTRACT_MANAGEMENT_DEMO_CONTRACTS: ContractRecord[] = CONTRACT_MANAGEMENT_DEMO_SPECS.map((spec) => {
+  const model = contractManagementGenerationModel(spec);
+  const generated = createGeneratedContractDraft(
+    model,
+    1,
+    CONTRACT_MANAGEMENT_DEMO_DOCUMENT_URL,
+    {
+      existingContractId: spec.contractId,
+      generationVariant: 'FORMAL',
+      pageCount: 16,
+      uploadedByAccount: 'prototype.fixture',
+    },
+  );
+
+  if (spec.bucket === 'draft') {
+    return {
+      ...createEditingContractDraft(model, generated, 'prototype.fixture'),
+      updated: CONTRACT_MANAGEMENT_DEMO_DATE,
+    };
+  }
+
+  if (spec.bucket === 'signature') {
+    return {
+      ...generated,
+      status: '待回传',
+      updated: CONTRACT_MANAGEMENT_DEMO_DATE,
+    };
+  }
+
+  const sourceDocuments = [{
+    id: `document_${spec.contractId}`,
+    fileName: `${spec.contractCode}-signed.pdf`,
+    mimeType: 'application/pdf',
+    documentType: 'STANDARD_TERMS' as const,
+    parseStatus: 'parsed' as const,
+    pageCount: 16,
+    blocks: [],
+    documentUrl: CONTRACT_MANAGEMENT_DEMO_DOCUMENT_URL,
+  }];
+  const creator = creatorForReference(model.creatorId);
+
+  return {
+    ...generated,
+    sourceName: sourceDocuments[0].fileName,
+    documentNote: '已上传签署文件，识别结果待逐项人工确认。',
+    signed: false,
+    status: '待补字段',
+    updated: CONTRACT_MANAGEMENT_DEMO_DATE,
+    lifecycle: 'UPLOADED_PENDING_CONFIRMATION',
+    extractionStage: 'review',
+    uploadedFromDraftId: spec.contractId,
+    sourceDocuments,
+    recognitionResults: createPrototypeRecognitionFields({
+      documents: sourceDocuments,
+      systemContractNumber: spec.contractCode,
+      projectName: demoProject.name,
+      brandName: demoProject.brand,
+      creatorName: creator.contact.legalName || creator.name,
+      creatorHandle: model.creatorHandle,
+      creatorPlatform: model.creatorPlatform ?? model.platform,
+    }),
+    issues: [
+      {
+        id: 'recognition-review',
+        label: '合同识别结果待人工确认',
+        description: '请逐项核对合同摘要和付款字段，确认后再应用到正式合同资料。',
+        severity: 'blocker',
+        source: '本地合同识别',
+      },
+      {
+        id: 'signature',
+        label: '上传合同尚未确认',
+        description: '需要人工确认当前文件是线下完成后的最终签署版本。',
+        severity: 'blocker',
+        source: '回传文件',
+      },
+    ],
   };
 });
 
@@ -1246,9 +1478,13 @@ export const ALL_PROJECT_PROTOTYPE_PAYMENT_LISTS: PaymentListRecord[] = INITIAL_
       generatedBy: actor,
       items: cloneFixtureItems(historicalItems),
     }] : undefined;
-    const paymentListCode = project.paymentOrder && project.paymentOrder !== '待生成'
-      ? project.paymentOrder
-      : `PAY-${project.id.replace(/^PRJ-/, '')}-01`;
+    const paymentListCode = normalizeLegacyPaymentOrderCode(
+      project.paymentOrder && project.paymentOrder !== '待生成'
+        ? project.paymentOrder
+        : `PAY-${project.id.replace(/^PRJ-/, '')}-01`,
+      '260806',
+      projectIndex + 1,
+    );
     return {
       paymentListId: `payment_list_fixture_${String(projectIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
       paymentListCode,

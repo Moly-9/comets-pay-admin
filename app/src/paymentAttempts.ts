@@ -48,12 +48,14 @@ export const paymentAttemptSnapshotFor = ({
 }): PaymentAttemptSnapshot => ({
   paymentBatchId: payout.currentPaymentAttempt?.paymentBatchId,
   paymentBatchCode: payout.currentPaymentAttempt?.paymentBatchCode,
+  paymentCode: payout.currentPaymentAttempt?.paymentCode ?? payout.paymentCode,
   attemptNumber: Math.max(
     1,
     payout.currentPaymentAttempt?.attemptNumber
       ?? (payout.paymentAttempts?.length ? payout.paymentAttempts.length + 1 : 1),
   ),
   status,
+  submittedAt: payout.currentPaymentAttempt?.submittedAt,
   occurredAt,
   principalAmount: payout.amount,
   principalCurrency: payout.currency,

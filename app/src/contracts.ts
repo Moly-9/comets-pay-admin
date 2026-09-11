@@ -3,6 +3,7 @@ import type { ContractRecognitionField, ContractSourceDocument } from './contrac
 import {
   createPrototypeId,
   type CooperationProjectId,
+  type ContractAdvertiserEntityId,
   type ContractId,
   type CreatorId,
   type EngagementId,
@@ -28,6 +29,20 @@ export type ContractStatus =
 export type ContractFeeBearer = 'ADVERTISER' | 'PUBLISHER' | 'SHARED' | '';
 export type ContractPaymentMethod = 'BANK' | 'PAYPAL' | 'AIRWALLEX' | '';
 export type ContractDocumentVariant = 'DRAFT' | 'FORMAL';
+
+export type ContractRecognizedAccountSnapshot = {
+  detectedChannel: 'BANK' | 'PAYPAL' | 'MIXED';
+  accountName?: string;
+  accountNumber?: string;
+  beneficiaryBankName?: string;
+  beneficiaryBankAddress?: string;
+  swiftCode?: string;
+  iban?: string;
+  remittanceInformation?: string;
+  paypalUsername?: string;
+  paypalEmail?: string;
+  transferNote?: string;
+};
 
 export type ContractTemplateFieldKey =
   | 'publisher'
@@ -168,11 +183,14 @@ export type ContractLifecycle =
   | 'EDITING_DRAFT'
   | 'GENERATED_DRAFT'
   | 'UPLOADED_PENDING_CONFIRMATION'
+  | 'RECOGNITION_CONFIRMED'
+  | 'SENT_FOR_SIGNATURE'
   | 'CONFIRMED';
 
 export type ContractManagementBucket =
   | 'template'
   | 'draft'
+  | 'upload'
   | 'signature'
   | 'expired'
   | 'ready'
@@ -228,7 +246,11 @@ export type ContractGenerationModel = {
   engagementId: EngagementId;
   contractNumber: string;
   ioNumber: string;
+  /** Selected configured entity; absent on legacy drafts and manual one-off values. */
+  advertiserEntityId?: ContractAdvertiserEntityId;
   advertiser: string;
+  /** Frozen with the draft so later organization-setting edits do not alter history. */
+  advertiserAddress?: string;
   publisher: string;
   publisherAddress: string;
   platform: string;
@@ -310,6 +332,7 @@ export type ContractRecord = {
   payoutProvider?: 'Airwallex' | 'PayPal';
   payoutAccountFingerprint?: string;
   paymentSnapshot?: DocumentPayoutSnapshot;
+  recognizedPaymentDetails?: ContractRecognizedAccountSnapshot;
   signed: boolean;
   /** @deprecated Historical snapshot only. New workflow uses lifecycle, readiness and validity. */
   status?: ContractStatus;
@@ -331,6 +354,8 @@ export type ContractRecord = {
   generatedFileBaseName?: string;
   uploadedFromDraftId?: ContractId;
   uploadedByAccount?: string;
+  sentForSignatureAt?: string;
+  signedAt?: string;
   confirmedAt?: string;
   extractionStage?: ContractExtractionStage;
   recognitionResults?: ContractRecognitionField[];
@@ -440,7 +465,11 @@ export const getContractReadiness = (contract: ContractRecord) => {
       : contract.lifecycle === 'EDITING_DRAFT'
         ? '草稿未生成'
         : contract.lifecycle === 'GENERATED_DRAFT'
-        ? '待上传签署合同'
+        ? '待上传合同文件'
+        : contract.lifecycle === 'RECOGNITION_CONFIRMED'
+          ? '待发送达人签署'
+          : contract.lifecycle === 'SENT_FOR_SIGNATURE'
+            ? '待达人签署'
         : parsing
           ? '等待解析'
           : `${blockerCount} 项待处理`,
@@ -564,7 +593,8 @@ export const getContractManagementBucket = (
   if (contract.isTemplate) return 'template';
   if (contract.lifecycle === 'EDITING_DRAFT') return 'draft';
   if (getContractValidity(contract, referenceDate).expired) return 'expired';
-  if (contract.lifecycle === 'GENERATED_DRAFT') return 'signature';
+  if (contract.lifecycle === 'GENERATED_DRAFT') return 'upload';
+  if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return 'signature';
   return getContractReadiness(contract).ready ? 'ready' : 'attention';
 };
 
@@ -811,9 +841,6 @@ const blankFieldIssues = (model: ContractGenerationModel): ContractIssue[] => {
     ['project', '关联项目', model.projectId],
     ['publisher', 'Publisher', model.publisher],
     ['publisher-address', 'Publisher Address', model.publisherAddress],
-    ['platform', 'Publishing Platform', model.platform],
-    ['channel-name', 'Channel Name', model.channelName],
-    ['channel-link', 'Channel Link', model.channelUrl],
     ['payout-account', 'Payout Account', model.payoutAccountId],
   ];
   return fields
@@ -862,7 +889,7 @@ export const createGeneratedContractDraft = (
     templateFamily: '欧美单次商单合作模板 v1',
     sourceName: `${fileBaseName}.pdf`,
     documentUrl,
-    documentNote: '合同由系统在浏览器本地生成，等待双方线下签署后回传。',
+    documentNote: '合同由系统在浏览器本地生成，请上传待发送达人的合同文件。',
     pageCount: options.pageCount ?? 17,
     isTemplate: false,
     project: model.projectName,
@@ -1020,7 +1047,7 @@ export const createUploadedContract = (
     documentNote: [
       frameworkUploadKey && !frameworkContractId ? `待绑定本批次框架合同 ${frameworkUploadKey}` : '',
       parseWarnings.join('；'),
-      '识别结果保留原文来源，全部字段需逐项人工确认。',
+      '识别结果保留原文来源；系统合同编号自动确认，账户字段仅保存为合同识别快照。',
     ].filter(Boolean).join('；'),
     pageCount: primaryDocument?.pageCount ?? undefined,
     isTemplate: false,
@@ -1051,16 +1078,16 @@ export const createUploadedContract = (
       {
         id: 'recognition-review',
         label: '合同识别结果待人工确认',
-        description: '所有摘要及付款字段逐项确认后，才能写入正式合同资料。',
+        description: '主体、金额、签署状态、有效期及其他适用字段确认后，才能写入正式合同资料。',
         severity: 'blocker',
         source: '本地合同识别',
       },
       {
         id: 'signature',
-        label: '上传合同尚未确认',
-        description: '请人工确认当前上传文件是线下完成后的最终合同版本，再用于 Invoice 校验。',
+        label: '合同尚未完成签署',
+        description: '请先确认上传文件的识别信息，再发送给 C 端达人签署。',
         severity: 'blocker',
-        source: '回传文件',
+        source: '达人签署',
       },
     ],
     projectId,
@@ -1099,6 +1126,12 @@ export const completeGeneratedContractUpload = (
     contractId: draft.contractId,
     id: draft.id,
     name: input.contractName?.trim() || draft.name,
+    advertiser: draft.advertiser,
+    publisher: draft.publisher,
+    channelName: draft.channelName,
+    channelLink: draft.channelLink,
+    platform: draft.platform,
+    effectiveDate: draft.effectiveDate,
     currency: draft.currency,
     totalFee: draft.totalFee,
     licensePrice: draft.licensePrice,
@@ -1151,6 +1184,8 @@ export const applyConfirmedRecognitionToContract = (
   const platformChannel = confirmedField(contract, 'platformChannel');
   const effectiveDate = confirmedField(contract, 'effectiveDate');
   const campaignPeriod = confirmedField(contract, 'campaignPeriod');
+  const contractExpiry = confirmedField(contract, 'contractExpiry');
+  const signatureStatus = confirmedField(contract, 'signatureStatus');
   const totalFees = confirmedField(contract, 'projectTotalFees');
   const invoicePeriod = confirmedField(contract, 'invoiceIssuePeriod');
   const paymentTerm = confirmedField(contract, 'paymentTerm');
@@ -1172,6 +1207,8 @@ export const applyConfirmedRecognitionToContract = (
   const channelData = objectValue<{ platform?: string; channelName?: string; handle?: string; channelUrl?: string }>(platformChannel);
   const effectiveData = objectValue<{ date?: string }>(effectiveDate);
   const campaignData = objectValue<{ startDate?: string; endDate?: string }>(campaignPeriod);
+  const expiryData = objectValue<{ endDate?: string; isLongTerm?: boolean }>(contractExpiry);
+  const signatureData = objectValue<{ signed?: boolean; signedAt?: string }>(signatureStatus);
   const moneyData = typeof totalFees?.normalizedValue === 'object' && totalFees.normalizedValue
     ? totalFees.normalizedValue as { amount?: number | null; currency?: string }
     : normalizeMoney(fieldText(totalFees));
@@ -1193,6 +1230,36 @@ export const applyConfirmedRecognitionToContract = (
   const fallbackAccountName = contract.accountName
     || generatedPayment?.paymentSnapshot.accountName
     || '';
+  const recognizedBankDetails = {
+    accountName: fieldText(confirmedField(contract, 'accountName')),
+    accountNumber: fieldText(confirmedField(contract, 'accountNumber')),
+    beneficiaryBankName: fieldText(confirmedField(contract, 'beneficiaryBankName')),
+    beneficiaryBankAddress: fieldText(confirmedField(contract, 'beneficiaryBankAddress')),
+    swiftCode: fieldText(confirmedField(contract, 'swiftCode')),
+    iban: fieldText(confirmedField(contract, 'iban')),
+    remittanceInformation: fieldText(confirmedField(contract, 'remittanceInformation')),
+  };
+  const recognizedPaypalDetails = {
+    paypalUsername: fieldText(confirmedField(contract, 'paypalUsername')),
+    paypalEmail: fieldText(confirmedField(contract, 'paypalEmail')),
+    transferNote: fieldText(confirmedField(contract, 'transferNote')),
+  };
+  const hasRecognizedBankDetails = Object.values(recognizedBankDetails).some(Boolean);
+  const hasRecognizedPaypalDetails = Object.values(recognizedPaypalDetails).some(Boolean);
+  const recognizedPaymentDetails = hasRecognizedBankDetails || hasRecognizedPaypalDetails
+    ? {
+        detectedChannel: hasRecognizedBankDetails && hasRecognizedPaypalDetails
+          ? 'MIXED' as const
+          : hasRecognizedPaypalDetails
+            ? 'PAYPAL' as const
+            : 'BANK' as const,
+        ...Object.fromEntries(Object.entries(recognizedBankDetails).filter(([, value]) => Boolean(value))),
+        ...Object.fromEntries(Object.entries(recognizedPaypalDetails).filter(([, value]) => Boolean(value))),
+      }
+    : contract.recognizedPaymentDetails;
+  const recognitionAppliedAt = new Date().toISOString();
+  const signatureWasApplied = appliesField('signatureStatus') && Boolean(signatureStatus);
+  const recognizedSigned = signatureWasApplied && signatureData.signed === true;
 
   return {
     ...contract,
@@ -1206,7 +1273,14 @@ export const applyConfirmedRecognitionToContract = (
     channelLink: appliesField('platformChannel') ? channelData.channelUrl ?? '' : contract.channelLink,
     effectiveDate: appliesField('effectiveDate') ? effectiveData.date ?? '' : contract.effectiveDate,
     campaignStart: appliesField('campaignPeriod') ? campaignData.startDate ?? '' : contract.campaignStart,
-    campaignEnd: appliesField('campaignPeriod') ? campaignData.endDate ?? '' : contract.campaignEnd,
+    campaignEnd: appliesField('contractExpiry')
+      ? expiryData.endDate ?? ''
+      : appliesField('campaignPeriod')
+        ? campaignData.endDate ?? ''
+        : contract.campaignEnd,
+    isLongTerm: appliesField('contractExpiry')
+      ? Boolean(expiryData.isLongTerm)
+      : contract.isLongTerm,
     totalFee: appliesField('projectTotalFees') ? moneyData.amount ?? fallbackTotalFee : contract.totalFee,
     currency: appliesField('projectTotalFees') ? moneyData.currency || fallbackCurrency : contract.currency,
     invoiceWithinWorkingDays: appliesField('invoiceIssuePeriod') ? invoiceData.normalizedDays ?? normalizeDays(fieldText(invoicePeriod)) ?? fallbackInvoiceDays : contract.invoiceWithinWorkingDays,
@@ -1223,12 +1297,65 @@ export const applyConfirmedRecognitionToContract = (
       : appliesField('transferFee') ? fallbackFeeBearer : contract.feeBearer,
     accountName: appliesField('beneficiaryAccount') ? beneficiary || fallbackAccountName : contract.accountName,
     accountFingerprint: appliesField('beneficiaryAccount') && beneficiary ? '合同识别快照' : contract.accountFingerprint,
+    recognizedPaymentDetails,
     extractionStage: 'applied',
-    recognitionAppliedAt: new Date().toISOString(),
-    lifecycle: 'CONFIRMED',
-    confirmedAt: new Date().toISOString(),
-    signed: true,
+    recognitionAppliedAt,
+    lifecycle: recognizedSigned ? 'CONFIRMED' : 'RECOGNITION_CONFIRMED',
+    confirmedAt: recognizedSigned ? recognitionAppliedAt : undefined,
+    signedAt: recognizedSigned ? signatureData.signedAt : undefined,
+    signed: recognizedSigned,
     status: undefined,
-    issues: contract.issues.filter((issue) => !['recognition-review', 'signature'].includes(issue.id)),
+    issues: contract.issues
+      .filter((issue) => issue.id !== 'recognition-review' && (!recognizedSigned || issue.id !== 'signature'))
+      .map((issue) => issue.id === 'signature'
+        ? {
+            ...issue,
+            label: '合同待发送达人签署',
+            description: '结构化信息已确认，发送给 C 端达人后等待签署完成。',
+            source: '达人签署',
+          }
+        : issue),
+  };
+};
+
+export const sendContractForSignature = (
+  contract: ContractRecord,
+  occurredAt = new Date().toISOString(),
+): ContractRecord | null => {
+  if (
+    contract.lifecycle !== 'RECOGNITION_CONFIRMED'
+    || contract.extractionStage !== 'applied'
+    || contract.signed
+  ) return null;
+  return {
+    ...contract,
+    lifecycle: 'SENT_FOR_SIGNATURE',
+    sentForSignatureAt: occurredAt,
+    signed: false,
+    updated: occurredAt.slice(0, 10),
+    issues: contract.issues.map((issue) => issue.id === 'signature'
+      ? {
+          ...issue,
+          label: '等待达人签署',
+          description: '合同已发送给 C 端达人，完成签署前不能参与付款流程。',
+          source: '达人签署',
+        }
+      : issue),
+  };
+};
+
+export const completeContractSignature = (
+  contract: ContractRecord,
+  occurredAt = new Date().toISOString(),
+): ContractRecord | null => {
+  if (contract.lifecycle !== 'SENT_FOR_SIGNATURE' || contract.signed) return null;
+  return {
+    ...contract,
+    lifecycle: 'CONFIRMED',
+    signed: true,
+    signedAt: occurredAt,
+    confirmedAt: occurredAt,
+    updated: occurredAt.slice(0, 10),
+    issues: contract.issues.filter((issue) => issue.id !== 'signature'),
   };
 };

@@ -39,6 +39,7 @@ const context = {
     },
   },
   item: {
+    paymentCode: 'PMT-2608100001',
     receiveCurrency: 'USD',
     transferMethod: 'LOCAL',
     localClearingSystem: '本地清算测试值',
@@ -119,6 +120,9 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('transaction-resource-icon is-invoice');
     expect(html).toContain('PL-20260810-001');
     expect(html).not.toContain('交易记录 ID');
+    expect(html).toContain('付款编号');
+    expect(html).toContain('PMT-2608100001');
+    expect(html).not.toContain('>付款方式<');
     expect(html).toContain('付款批次号');
     expect(html).toContain('PAY-20260810-001');
     expect(html).toContain('付款事由');

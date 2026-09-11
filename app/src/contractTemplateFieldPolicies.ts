@@ -26,14 +26,13 @@ export const CONTRACT_TEMPLATE_FIELD_MODES: Array<{
 }> = [
   { value: 'SYSTEM', label: '系统自动带入', description: '从当前系统资料读取并冻结到合同快照' },
   { value: 'MANUAL', label: '生成时人工填写', description: '生成合同时填写，仅写入合同文档快照' },
-  { value: 'OMIT', label: '不生成', description: '独立字段行不输出；正文必需字段会阻止正式生成' },
 ];
 
 export const CONTRACT_TEMPLATE_OUTPUT_FIELDS: ContractTemplateOutputFieldDefinition[] = [
   { key: 'advertiser', label: 'Advertiser', description: '系统组织主体', group: 'COMMON', requiredInline: true },
   { key: 'publisher', label: 'Publisher', description: '达人法定名称', group: 'COMMON', requiredInline: true },
-  { key: 'channel', label: 'Channel', description: '社媒平台及频道链接', group: 'COMMON', requiredInline: true },
-  { key: 'campaignPeriod', label: 'Campaign Period', description: '项目开始与结束日期', group: 'COMMON', requiredInline: true },
+  { key: 'channel', label: 'Channel', description: '社媒平台及频道链接（可选）', group: 'COMMON' },
+  { key: 'campaignPeriod', label: 'Campaign Period', description: '仅用于旧快照兼容', group: 'COMMON' },
   { key: 'accountName', label: 'Account Name', description: '银行账户名称', group: 'BANK' },
   { key: 'accountNumber', label: 'Account Number', description: '银行账号', group: 'BANK' },
   { key: 'beneficiaryBankName', label: 'Beneficiary Bank Name', description: '收款银行名称', group: 'BANK' },
@@ -56,11 +55,14 @@ export const CONTRACT_TEMPLATE_FIELD_GROUPS: Array<{
   { key: 'PAYPAL', label: 'PayPal 字段', description: '选择 PayPal 账户时生效' },
 ];
 
-export const ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS = CONTRACT_TEMPLATE_OUTPUT_FIELDS
+export const CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS = CONTRACT_TEMPLATE_OUTPUT_FIELDS
+  .filter((field) => field.key !== 'campaignPeriod');
+
+export const ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS = CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS
   .map((field) => field.key);
 
 const VALID_OUTPUT_FIELD_KEYS = new Set<ContractTemplateOutputFieldKey>(
-  ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS,
+  CONTRACT_TEMPLATE_OUTPUT_FIELDS.map((field) => field.key),
 );
 
 export const DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES: ContractTemplateFieldPolicyMap = {
@@ -87,7 +89,9 @@ export const resolveContractTemplateOutputFieldKeys = (
 ): ContractTemplateOutputFieldKey[] => {
   if (fieldKeys == null) return [...ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS];
   const requested = new Set(fieldKeys.filter((key) => VALID_OUTPUT_FIELD_KEYS.has(key)));
-  return ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS.filter((key) => requested.has(key));
+  return CONTRACT_TEMPLATE_OUTPUT_FIELDS
+    .map((field) => field.key)
+    .filter((key) => requested.has(key));
 };
 
 export const getContractTemplateStatus = (
@@ -105,6 +109,16 @@ export const resolveContractTemplateFieldPolicies = (
   return resolved;
 };
 
+export const resolveEditableContractTemplateFieldPolicies = (
+  policies?: Partial<ContractTemplateFieldPolicyMap> | null,
+): ContractTemplateFieldPolicyMap => {
+  const resolved = resolveContractTemplateFieldPolicies(policies);
+  CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS.forEach(({ key }) => {
+    if (resolved[key] === 'OMIT') resolved[key] = DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES[key];
+  });
+  return resolved;
+};
+
 export type ContractTemplatePolicyIssue = {
   id: string;
   fieldKeys: ContractTemplateOutputFieldKey[];
@@ -116,7 +130,7 @@ export const validateContractTemplateFieldPolicies = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
   fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
 ): ContractTemplatePolicyIssue[] => {
-  const resolved = resolveContractTemplateFieldPolicies(policies);
+  const resolved = resolveEditableContractTemplateFieldPolicies(policies);
   const activeFields = new Set(resolveContractTemplateOutputFieldKeys(fieldKeys));
   const issues: ContractTemplatePolicyIssue[] = [];
 
@@ -137,7 +151,7 @@ export const validateContractTemplateFieldPolicies = (
         id: `required-inline-missing-${field.key}`,
         fieldKeys: [field.key],
         groupKeys: [field.group],
-        message: `${field.label} 出现在合同正文中，必须保留且不能设为“不生成”。`,
+        message: `${field.label} 是合同正文必需字段，必须保留。`,
       });
     });
 
@@ -157,7 +171,7 @@ export const validateContractTemplateFieldPolicies = (
       id: 'bank-account-name-missing',
       fieldKeys: ['accountName'],
       groupKeys: ['BANK'],
-      message: '启用银行转账时必须保留 Account Name，且不能设为“不生成”。',
+      message: '启用银行转账时必须保留 Account Name。',
     });
   }
   if (bankEnabled && !usable('beneficiaryBankName')) {
@@ -165,7 +179,7 @@ export const validateContractTemplateFieldPolicies = (
       id: 'bank-name-missing',
       fieldKeys: ['beneficiaryBankName'],
       groupKeys: ['BANK'],
-      message: '启用银行转账时必须保留 Beneficiary Bank Name，且不能设为“不生成”。',
+      message: '启用银行转账时必须保留 Beneficiary Bank Name。',
     });
   }
   if (bankEnabled && !usable('accountNumber') && !usable('iban')) {
@@ -173,7 +187,7 @@ export const validateContractTemplateFieldPolicies = (
       id: 'bank-account-locator-omitted',
       fieldKeys: ['accountNumber', 'iban'],
       groupKeys: ['BANK'],
-      message: '启用银行转账时，Account Number 与 IBAN 至少保留一项，且不能同时设为“不生成”。',
+      message: '启用银行转账时，Account Number 与 IBAN 至少保留一项。',
     });
   }
   if (paypalEnabled && !usable('paypalUsername')) {
@@ -181,7 +195,7 @@ export const validateContractTemplateFieldPolicies = (
       id: 'paypal-username-missing',
       fieldKeys: ['paypalUsername'],
       groupKeys: ['PAYPAL'],
-      message: '启用 PayPal 时必须保留 PayPal Username，且不能设为“不生成”。',
+      message: '启用 PayPal 时必须保留 PayPal Username。',
     });
   }
   if (paypalEnabled && !usable('paypalEmailAddress')) {
@@ -189,7 +203,7 @@ export const validateContractTemplateFieldPolicies = (
       id: 'paypal-email-missing',
       fieldKeys: ['paypalEmailAddress'],
       groupKeys: ['PAYPAL'],
-      message: '启用 PayPal 时必须保留 PayPal Email Address，且不能设为“不生成”。',
+      message: '启用 PayPal 时必须保留 PayPal Email Address。',
     });
   }
   return issues;
@@ -219,7 +233,7 @@ export const createContractTemplatePolicyUpdate = (
     updated?: string;
   } = {},
 ): { contract: ContractRecord; issues: ContractTemplatePolicyIssue[]; autoDeactivated: boolean } => {
-  const resolved = resolveContractTemplateFieldPolicies(policies);
+  const resolved = resolveEditableContractTemplateFieldPolicies(policies);
   const issues = validateContractTemplateFieldPolicies(resolved);
   const autoDeactivated = Boolean(
     issues.length
@@ -243,7 +257,7 @@ export const getContractTemplatePolicyReadiness = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
   fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
 ) => {
-  const resolved = resolveContractTemplateFieldPolicies(policies);
+  const resolved = resolveEditableContractTemplateFieldPolicies(policies);
   const blockers = validateContractTemplateFieldPolicies(resolved, fieldKeys);
   return {
     ready: blockers.length === 0,
@@ -256,7 +270,7 @@ export const getContractTemplateSupportedPayoutProviders = (
   policies?: Partial<ContractTemplateFieldPolicyMap> | null,
   fieldKeys?: readonly ContractTemplateOutputFieldKey[] | null,
 ): Array<ContractGenerationModel['payoutProvider']> => {
-  const resolved = resolveContractTemplateFieldPolicies(policies);
+  const resolved = resolveEditableContractTemplateFieldPolicies(policies);
   const activeFields = new Set(resolveContractTemplateOutputFieldKeys(fieldKeys));
   const providers: Array<ContractGenerationModel['payoutProvider']> = [];
   if (CONTRACT_TEMPLATE_OUTPUT_FIELDS.some((field) => (
@@ -282,6 +296,7 @@ export const createContractTemplateStatusUpdate = (
     contract: {
       ...contract,
       templateStatus: status,
+      templateFieldPolicies: resolveEditableContractTemplateFieldPolicies(contract.templateFieldPolicies),
       templateOutputFieldKeys: [...ALL_CONTRACT_TEMPLATE_OUTPUT_FIELD_KEYS],
       updated,
     },
@@ -417,6 +432,9 @@ export const resolveContractTemplateOutput = (
   const effectiveModel: ContractGenerationModel = {
     ...model,
     advertiser: values.advertiser,
+    advertiserAddress: activeFields.has('advertiser') && policies.advertiser !== 'OMIT'
+      ? model.advertiserAddress
+      : '',
     publisher: values.publisher,
     publishingChannels,
     platform: publishingChannels.map((channel) => channel.platform.trim()).filter(Boolean).join(' · '),

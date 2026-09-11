@@ -62,8 +62,10 @@ const projectCodeFor = (row: CollaborationInvoiceRow) => row.project?.cooperatio
 
 const contractLifecycleLabel = (contract: ContractRecord) => {
   if (contract.lifecycle === 'EDITING_DRAFT') return '编辑中';
-  if (contract.lifecycle === 'GENERATED_DRAFT') return '合同草稿';
+  if (contract.lifecycle === 'GENERATED_DRAFT') return '待上传';
   if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '待人工确认';
+  if (contract.lifecycle === 'RECOGNITION_CONFIRMED') return '待发送签署';
+  if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return '待签署';
   if (contract.lifecycle === 'CONFIRMED') return '已确认';
   return contract.status ?? (contract.signed ? '已签署' : '待签署');
 };
@@ -77,7 +79,7 @@ const contractPeriodLabel = (contract: ContractRecord) => {
 const approvalStageLabel = (event: RequestApprovalEvent) => {
   const stage = {
     PM: 'PM 审批',
-    PROJECT_OWNER: '项目负责人审批',
+    PROJECT_OWNER: '媒介负责人审批',
     OWNER: '老板审批',
     FINANCE: '财务审批',
   }[event.stage];

@@ -528,7 +528,7 @@
 }
 
 .transaction-detail-info-grid .is-time dt svg,
-.transaction-detail-info-grid .is-method dt svg {
+.transaction-detail-info-grid .is-payment-code dt svg {
   color: var(--transaction-cyan);
 }
 

@@ -28,7 +28,7 @@ const NEXT_STATUS: Record<Exclude<RequestApprovalStatus, 'APPROVED' | 'RETURNED_
 
 export const REQUEST_APPROVAL_STATUS_LABEL: Record<RequestApprovalStatus, string> = {
   PENDING_PM: '待 PM 审批',
-  PENDING_PROJECT_OWNER: '待项目负责人审批',
+  PENDING_PROJECT_OWNER: '待媒介负责人审批',
   PENDING_OWNER: '待老板审批',
   PENDING_FINANCE: '待财务审批',
   APPROVED: '已通过',
@@ -37,7 +37,7 @@ export const REQUEST_APPROVAL_STATUS_LABEL: Record<RequestApprovalStatus, string
 
 export const REQUEST_APPROVAL_STAGE_LABEL: Record<RequestApprovalStage, string> = {
   PM: 'PM 审批',
-  PROJECT_OWNER: '项目负责人审批',
+  PROJECT_OWNER: '媒介负责人审批',
   OWNER: '老板审批',
   FINANCE: '财务审核',
 };

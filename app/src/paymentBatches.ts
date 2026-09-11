@@ -35,6 +35,7 @@ import {
 } from './paymentBatchPrototypeScenario';
 import { aggregatePaymentStatus } from './paymentStatusFilters';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
+import { nextPaymentBusinessCode } from './paymentNumbering';
 
 export type PaymentBatchStatus = PaymentBatchPrototypeStatus;
 
@@ -65,6 +66,12 @@ export type PaymentBatchInvoiceSnapshot = Readonly<{
 
 export type PaymentBatchItemSnapshot = Readonly<{
   payoutId: string;
+  /** 冻结的单笔业务付款编号；旧快照可能缺失。 */
+  paymentCode?: string;
+  paymentBatchId?: PaymentBatchId;
+  paymentBatchCode?: string;
+  /** 财务执行打款并提交付款渠道的时间。 */
+  paymentSubmittedAt?: string;
   creatorId?: string;
   creatorName: string;
   creatorHandle: string;
@@ -149,6 +156,9 @@ export type PaymentBatchRecord = Readonly<{
   fundingAccountId: string;
   sourceCurrency: InvoiceCurrency;
   payer: string;
+  /** 财务执行打款并提交付款渠道的时间；旧批次可能缺失。 */
+  submittedAt?: string;
+  /** @deprecated 旧字段，保留供既有批次页面和历史结果兼容。 */
   paidAt: string;
   status: PaymentBatchStatus;
   lifecycle: readonly string[];
@@ -165,6 +175,86 @@ export type PaymentProjectPaymentRecord = Readonly<{
   lastActivityAt?: string;
   items: readonly PaymentBatchItemSnapshot[];
 }>;
+
+const paymentBatchForAttempt = ({
+  paymentBatches,
+  payoutId,
+  paymentBatchId,
+  attemptNumber,
+}: {
+  paymentBatches: readonly PaymentBatchRecord[];
+  payoutId: string;
+  paymentBatchId?: PaymentBatchId;
+  attemptNumber?: number;
+}) => {
+  if (paymentBatchId) {
+    const exactBatch = paymentBatches.find((batch) => (
+      batch.paymentBatchId === paymentBatchId
+      && batch.items.some((item) => item.payoutId === payoutId)
+    ));
+    if (exactBatch) return exactBatch;
+  }
+  if (attemptNumber) {
+    const attemptBatch = paymentBatches.find((batch) => (
+      batch.paymentAttemptNumber === attemptNumber
+      && batch.items.some((item) => item.payoutId === payoutId)
+    ));
+    if (attemptBatch) return attemptBatch;
+  }
+  const matches = paymentBatches.filter((batch) => (
+    batch.items.some((item) => item.payoutId === payoutId)
+  ));
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
+const paymentAttemptSubmittedAt = ({
+  attempt,
+  payout,
+  paymentBatches,
+}: {
+  attempt?: PaymentAttemptSnapshot;
+  payout: Payout;
+  paymentBatches: readonly PaymentBatchRecord[];
+}) => {
+  if (attempt?.submittedAt) return attempt.submittedAt;
+  const currentAttempt = payout.currentPaymentAttempt;
+  const currentAttemptMatches = !attempt || (
+    (attempt.paymentBatchId && attempt.paymentBatchId === currentAttempt?.paymentBatchId)
+    || attempt.attemptNumber === currentAttempt?.attemptNumber
+  );
+  const matchingBatch = paymentBatchForAttempt({
+    paymentBatches,
+    payoutId: payout.id,
+    paymentBatchId: attempt?.paymentBatchId
+      ?? (currentAttemptMatches ? currentAttempt?.paymentBatchId : undefined),
+    attemptNumber: attempt?.attemptNumber ?? currentAttempt?.attemptNumber,
+  });
+  if (matchingBatch?.submittedAt) return matchingBatch.submittedAt;
+  if (
+    currentAttempt?.submittedAt
+    && currentAttemptMatches
+  ) {
+    return currentAttempt.submittedAt;
+  }
+  return undefined;
+};
+
+export const paymentExecutionDatesForPayouts = (
+  payouts: readonly Payout[],
+  paymentBatches: readonly PaymentBatchRecord[] = [],
+) => [...new Set(payouts.flatMap((payout) => {
+  const attempts = payout.paymentAttempts ?? [];
+  if (attempts.length) {
+    return attempts.flatMap((attempt) => {
+      const submittedAt = paymentAttemptSubmittedAt({ attempt, payout, paymentBatches });
+      const date = submittedAt?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+      return date ? [date] : [];
+    });
+  }
+  const submittedAt = paymentAttemptSubmittedAt({ payout, paymentBatches });
+  const date = submittedAt?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+  return date ? [date] : [];
+}))].sort();
 
 type PaymentBatchSourceData = Readonly<{
   payouts: readonly Payout[];
@@ -271,6 +361,7 @@ const historicalPaymentBatchRecord = (
       : ['CREATED', 'ITEMS_ADDED', 'SUBMITTED', 'COMPLETED'],
     items: [{
       payoutId: payout.id,
+      paymentCode: payout.paymentCode,
       creatorId: payout.creatorId,
       creatorName: payout.creator,
       creatorHandle: payout.handle,
@@ -558,6 +649,8 @@ const snapshotItem = ({
   contracts,
   itemStatus,
   batchPaidAt,
+  paymentBatchId,
+  paymentBatchCode,
   paymentOrderCode,
   paymentAttemptNumber,
 }: {
@@ -568,6 +661,8 @@ const snapshotItem = ({
   contracts: readonly ContractRecord[];
   itemStatus?: Payout['status'];
   batchPaidAt: string;
+  paymentBatchId?: PaymentBatchId;
+  paymentBatchCode?: string;
   paymentOrderCode?: string;
   paymentAttemptNumber?: number;
 }): PaymentBatchItemSnapshot => {
@@ -641,6 +736,10 @@ const snapshotItem = ({
 
   return {
     payoutId: payout.id,
+    paymentCode: payout.paymentCode,
+    paymentBatchId,
+    paymentBatchCode,
+    paymentSubmittedAt: batchPaidAt || undefined,
     creatorId: payout.creatorId ?? invoice?.snapshot.creatorId,
     creatorName: invoice?.snapshot.creatorName ?? payout.creator,
     creatorHandle: invoice?.snapshot.creatorHandle ?? payout.handle,
@@ -698,7 +797,7 @@ const snapshotItem = ({
     transactionReference: String(paymentListItem ? paymentListItemValue(paymentListItem, 'transactionReference') : '') || '未记录',
     description: String(paymentListItem ? paymentListItemValue(paymentListItem, 'description') : '') || payout.deliverable || '未记录',
     paymentStatus,
-    paidAt: payout.paidAt ?? batchPaidAt,
+    paidAt: payout.paidAt,
     transferFeeAmount: hasFinalizedResult ? payout.transferFeeAmount : undefined,
     transferFeeCurrency: hasFinalizedResult ? payout.transferFeeCurrency : undefined,
     actualPaidAmount: hasFinalizedResult ? payout.actualPaidAmount : undefined,
@@ -752,6 +851,8 @@ export const createPaymentBatchRecord = ({
     contracts,
     itemStatus,
     batchPaidAt: batch.paidAt,
+    paymentBatchId: batch.paymentBatchId,
+    paymentBatchCode: batch.paymentBatchCode,
     paymentOrderCode: '',
     paymentAttemptNumber: 1,
   }));
@@ -769,6 +870,7 @@ export const createPaymentBatchRecord = ({
   );
   return {
     ...batch,
+    submittedAt: batch.paidAt,
     paymentOrderCode: resolvedPaymentOrderCode,
     sourcePaymentOrderCode: resolvedPaymentAttemptNumber > 1
       ? resolvedSourcePaymentOrderCode
@@ -783,6 +885,8 @@ export const createPaymentBatchRecord = ({
       contracts,
       itemStatus,
       batchPaidAt: batch.paidAt,
+      paymentBatchId: batch.paymentBatchId,
+      paymentBatchCode: batch.paymentBatchCode,
       paymentOrderCode: resolvedPaymentOrderCode,
       paymentAttemptNumber: resolvedPaymentAttemptNumber,
     })),
@@ -862,8 +966,10 @@ export const createPaymentProjectPaymentRecord = ({
   generatedInvoices,
   paymentLists,
   contracts,
+  paymentBatches = [],
 }: Omit<PaymentBatchSourceData, 'requests'> & Readonly<{
   request: RequestProjectSummary;
+  paymentBatches?: readonly PaymentBatchRecord[];
 }>): PaymentProjectPaymentRecord => {
   const invoiceIds = requestInvoiceIds(request);
   const sourcePayoutIds = new Set(generatedInvoices
@@ -892,14 +998,51 @@ export const createPaymentProjectPaymentRecord = ({
   ]
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => right.localeCompare(left))[0];
-  const items = linkedPayouts.map((payout) => snapshotItem({
-    payout,
-    request,
-    generatedInvoices,
-    paymentLists,
-    contracts,
-    batchPaidAt: lastActivityAt ?? '',
-  }));
+  const items = linkedPayouts.map((payout) => {
+    const item = snapshotItem({
+      payout,
+      request,
+      generatedInvoices,
+      paymentLists,
+      contracts,
+      batchPaidAt: '',
+    });
+    const paymentAttempts = item.paymentAttempts?.map((attempt) => ({
+      ...attempt,
+      submittedAt: paymentAttemptSubmittedAt({ attempt, payout, paymentBatches }),
+    }));
+    const currentAttemptNumber = Math.max(
+      1,
+      payout.currentPaymentAttempt?.attemptNumber
+        ?? item.paymentAttemptNumber
+        ?? paymentAttempts?.[paymentAttempts.length - 1]?.attemptNumber
+        ?? 1,
+    );
+    const currentAttempt = paymentAttempts?.find((attempt) => (
+      attempt.attemptNumber === currentAttemptNumber
+    ));
+    const currentBatch = paymentBatchForAttempt({
+      paymentBatches,
+      payoutId: payout.id,
+      paymentBatchId: currentAttempt?.paymentBatchId ?? payout.currentPaymentAttempt?.paymentBatchId,
+      attemptNumber: currentAttemptNumber,
+    });
+    return {
+      ...item,
+      paymentBatchId: currentAttempt?.paymentBatchId
+        ?? payout.currentPaymentAttempt?.paymentBatchId
+        ?? currentBatch?.paymentBatchId,
+      paymentBatchCode: currentAttempt?.paymentBatchCode
+        ?? payout.currentPaymentAttempt?.paymentBatchCode
+        ?? currentBatch?.paymentBatchCode,
+      paymentSubmittedAt: paymentAttemptSubmittedAt({
+        attempt: currentAttempt,
+        payout,
+        paymentBatches,
+      }),
+      paymentAttempts,
+    };
+  });
   const statuses = new Set(items.map((item) => item.paymentStatus));
   const status: PaymentProjectPaymentStatus = statuses.has('付款失败')
     ? '部分失败'
@@ -952,6 +1095,10 @@ export const paymentBatchItemForAttempt = (
   if (!attempt) return item;
   return {
     ...item,
+    paymentBatchId: batch.paymentBatchId,
+    paymentBatchCode: batch.paymentBatchCode,
+    paymentSubmittedAt: attempt.submittedAt ?? batch.submittedAt,
+    paymentCode: attempt.paymentCode ?? item.paymentCode,
     paymentOrderCode: batch.paymentOrderCode,
     sourcePaymentOrderCode: batch.sourcePaymentOrderCode ?? item.sourcePaymentOrderCode,
     paymentAttemptNumber: batch.paymentAttemptNumber,
@@ -1223,6 +1370,12 @@ export const createInitialPaymentBatches = ({
       });
     });
 
+  const usedInitialPaymentOrderCodes = new Set<string>();
+  const reservedPaymentOrderCodes = new Set([
+    ...scenarioResources.paymentLists.map((list) => list.paymentListCode),
+    ...Object.values(HISTORICAL_PAYMENT_BATCH_SEEDS).map((seed) => seed.paymentListCode),
+    PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+  ]);
   const initialAttempts = eligibleGroups.map(({ provider, payouts: groupedPayouts, status }, index) => {
     const ordinal = eligibleGroups.length - index;
     const ordinalLabel = String(ordinal).padStart(3, '0');
@@ -1230,7 +1383,7 @@ export const createInitialPaymentBatches = ({
     const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
     const minutes = String(totalMinutes % 60).padStart(2, '0');
     const paidAt = `2026-08-05T${hours}:${minutes}`;
-    return createPaymentBatchRecord({
+    const recordInput = {
       requests: scenarioResources.requests,
       generatedInvoices,
       paymentLists: scenarioResources.paymentLists,
@@ -1249,7 +1402,24 @@ export const createInitialPaymentBatches = ({
         : status === '部分失败'
           ? ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'PARTIALLY_FAILED']
           : ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
-    });
+    } satisfies CreatePaymentBatchRecordInput;
+    const sourceRecord = createPaymentBatchRecord(recordInput);
+    const paymentOrderCode = usedInitialPaymentOrderCodes.has(sourceRecord.paymentOrderCode)
+      ? nextPaymentBusinessCode(
+          'PAY',
+          reservedPaymentOrderCodes,
+          new Date(`${paidAt}:00+08:00`),
+        )
+      : sourceRecord.paymentOrderCode;
+    usedInitialPaymentOrderCodes.add(paymentOrderCode);
+    reservedPaymentOrderCodes.add(paymentOrderCode);
+    return paymentOrderCode === sourceRecord.paymentOrderCode
+      ? sourceRecord
+      : createPaymentBatchRecord({
+          ...recordInput,
+          paymentOrderCode,
+          paymentAttemptNumber: 1,
+        });
   });
 
   const originalFailedBatch = initialAttempts.find((batch) => (

@@ -1,5 +1,6 @@
 import type {
   CooperationProjectId,
+  ContractAdvertiserEntityId,
   ContractId,
   CreatorId,
   EngagementId,
@@ -13,6 +14,7 @@ import type {
 export type NavPage =
   | 'dashboard'
   | 'payment-workbench'
+  | 'feishu-projects'
   | 'projects'
   | 'requests'
   | 'contracts'
@@ -283,6 +285,17 @@ export type InvoiceBillingSettings = {
   defaultEntityId: InvoiceBillingEntityId;
 };
 
+export type ContractAdvertiserEntity = {
+  id: ContractAdvertiserEntityId;
+  name: string;
+  address: string;
+};
+
+export type ContractAdvertiserSettings = {
+  entities: ContractAdvertiserEntity[];
+  defaultEntityId: ContractAdvertiserEntityId;
+};
+
 export type InvoiceLineItem = {
   id: string;
   description: string;
@@ -502,15 +515,51 @@ export type InvoiceBatchRow = {
   generated?: InvoiceBatchGeneratedFiles;
 };
 
-export type InvoiceBatchDraft = {
-  batchId: string;
+export type InvoiceBatchDraftRow = Omit<InvoiceBatchRow, 'generated'> & {
+  generated?: { record: GeneratedInvoiceRecord };
+};
+
+export type InvoiceCreationDraftBase = {
+  draftId: string;
   schemaVersion: '1.0';
+  createdByAccount: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InvoiceSingleCreationDraft = InvoiceCreationDraftBase & {
+  kind: 'SINGLE';
+  creatorId: string;
+  creatorSocialAccountId: string;
+  projectId: string;
+  engagementId: string;
+  contractIds: ContractId[];
+  invoiceDate: string;
+  selectedBillingEntityId: string;
+  billTo: InvoiceEntity;
+  from: CreatorInvoiceContact;
+  currency: InvoiceCurrency;
+  items: InvoiceLineItem[];
+  payoutAccountId: string;
+  payment: DocumentPayoutSnapshot;
+  contractMatchReason: string;
+};
+
+export type InvoiceBatchDraft = InvoiceCreationDraftBase & {
+  kind: 'BATCH';
+  batchId: string;
   projectId: ProjectId | '';
   invoiceDate: string;
+  selectedBillingEntityId: string;
+  currency: InvoiceCurrency;
   selectedEngagementIds: EngagementId[];
   sharedDescriptions: Array<Pick<InvoiceBatchLineItem, 'templateKey' | 'description'>>;
-  rows: InvoiceBatchRow[];
+  rows: InvoiceBatchDraftRow[];
+  generationProgress: { current: number; total: number };
 };
+
+export type InvoiceCreationDraft = InvoiceSingleCreationDraft | InvoiceBatchDraft;
 
 export type InvoiceEditContext =
   | 'DRAFT'
@@ -571,6 +620,7 @@ export type PaymentAttemptRef = {
   paymentBatchId: PaymentBatchId;
   paymentBatchCode: string;
   submittedAt: string;
+  paymentCode?: string;
   paymentOrderCode?: string;
   sourcePaymentOrderCode?: string;
   attemptNumber?: number;
@@ -579,8 +629,12 @@ export type PaymentAttemptRef = {
 export type PaymentAttemptSnapshot = Readonly<{
   paymentBatchId?: PaymentBatchId;
   paymentBatchCode?: string;
+  paymentCode?: string;
   attemptNumber: number;
   status: Extract<PayoutStatus, '付款失败' | '已付款'>;
+  /** 财务执行打款并提交付款渠道的时间；与渠道回写时间 occurredAt 分离。 */
+  submittedAt?: string;
+  /** 付款渠道回写成功或失败结果的时间。 */
   occurredAt?: string;
   principalAmount: number;
   principalCurrency: InvoiceCurrency;
@@ -653,6 +707,8 @@ export type PaymentFailureRecovery = {
 
 export type Payout = {
   id: string;
+  /** 用户可见的当前付款尝试编号；重新付款时生成新编号，历史编号保存在 paymentAttempts。 */
+  paymentCode?: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
   handle: string;

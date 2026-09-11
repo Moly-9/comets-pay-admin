@@ -361,15 +361,13 @@ const insertionOrderPage = (
 ): ResolvedBlock[] => {
   const partyRows: ResolvedTableRow[] = [
     ...configuredOutputRow(model, 'advertiser', { label: 'Advertiser', value: replaceContractPlaceholders(placeholderToken('advertiser_name'), model, variant), fieldKey: 'signature' }),
-    { label: 'Advertiser Address', value: 'Unit 04-05, 16th Floor, The Broadway No. 54-62 Lockhart Road, Wanchai, Hong Kong', fieldKey: 'signature' },
+    ...configuredOutputRow(model, 'advertiser', { label: 'Advertiser Address', value: replaceContractPlaceholders(placeholderToken('advertiser_address'), model, variant), fieldKey: 'signature' }),
     ...configuredOutputRow(model, 'publisher', { label: 'Publisher', value: replaceContractPlaceholders(placeholderToken('publisher_name'), model, variant), fieldKey: 'publisher' }),
     { label: 'Publisher Address', value: replaceContractPlaceholders(placeholderToken('publisher_address'), model, variant), fieldKey: 'publisherAddress' },
   ];
   const campaignRows: ResolvedTableRow[] = [
     { label: 'Project Name', value: replaceContractPlaceholders(placeholderToken('project_name'), model, variant), fieldKey: 'projectName' },
     { label: 'Service Provider Name', value: replaceContractPlaceholders(placeholderToken('channel_name'), model, variant), fieldKey: 'channelName' },
-    ...configuredOutputRow(model, 'campaignPeriod', { label: 'Start Date', value: replaceContractPlaceholders(placeholderToken('campaign_start'), model, variant), fieldKey: 'campaignPeriod' }),
-    ...configuredOutputRow(model, 'campaignPeriod', { label: 'End Date', value: replaceContractPlaceholders(placeholderToken('campaign_end'), model, variant), fieldKey: 'campaignPeriod' }),
   ];
   return [
   {
@@ -393,17 +391,7 @@ const insertionOrderPage = (
     style: 'body',
     text: 'All defined terms in this IO have the same meaning as in the Agreement unless this IO expressly states otherwise. If there is any conflict between this IO and the Agreement, this IO will take precedence.',
   },
-  {
-    type: 'paragraph',
-    style: 'heading',
-    fieldKey: 'campaignPeriod',
-    text: replaceContractPlaceholders(
-      `1. Campaign Period: ${placeholderToken('campaign_start')} to ${placeholderToken('campaign_end')}`,
-      model,
-      variant,
-    ),
-  },
-  { type: 'paragraph', style: 'heading', text: '2. Campaign Details' },
+  { type: 'paragraph', style: 'heading', text: '1. Campaign Details' },
   {
     type: 'table',
     rows: campaignRows,

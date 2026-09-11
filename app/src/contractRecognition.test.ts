@@ -6,7 +6,9 @@ import {
   editRecognitionField,
   normalizeCampaignPeriod,
   normalizeMoney,
+  recognitionFieldDisplayValue,
   recognizeContractFields,
+  recognizeUploadContractFields,
   reopenRecognitionFields,
 } from './contractRecognition';
 import type {
@@ -96,14 +98,15 @@ describe('contract field recognition', () => {
     expect(normalizeMoney(raw)).toEqual(expected);
   });
 
-  it('keeps the system contract number selected and marks a file mismatch as conflict', () => {
+  it('keeps the system contract number authoritative when the file contains another number', () => {
     const standardTerms = documentFixture('standard', 'STANDARD_TERMS', ['Contract Number: FILE-100']);
     const result = field([standardTerms], 'contractNumber', 'SYS-200');
 
-    expect(result.status).toBe('conflict');
+    expect(result.status).toBe('confirmed');
     expect(result.rawValue).toBe('SYS-200');
     expect(result.source?.documentId).toBe('system-contract');
-    expect(result.candidates.map((candidate) => candidate.rawValue)).toEqual(['SYS-200', 'FILE-100']);
+    expect(result.candidates.map((candidate) => candidate.rawValue)).toEqual(['SYS-200']);
+    expect(result.readOnly).toBe(true);
   });
 
   it('marks different payment terms from multiple documents as conflict', () => {
@@ -228,5 +231,154 @@ describe('contract field recognition', () => {
       status: 'detected',
     });
     expect(result.source?.sourceText).toBe('Payment Term: Net 30 days after receipt of Invoice');
+  });
+
+  it('builds the new upload field set from real contract text and keeps only the expiry date', () => {
+    const contract = {
+      ...documentFixture('signed-bank-contract', 'STANDARD_TERMS', [
+        'Advertiser: COMETS INTERNATIONAL LIMITED',
+        'Publisher: Mina Kato',
+        'Project Total Fees: USD 12,500',
+        'Signed by: Mina Kato',
+        'Campaign Period: August 10, 2026 to September 17, 2026',
+        'Transfer Fee: All transfer fees shall be borne by Advertiser',
+        'Publishing Platform: Instagram',
+        'Channel Name: @MinaKato',
+        'Account Name: Mina Kato Studio',
+        'Account Number: 0000004826',
+        'Beneficiary Bank Name: Example Bank',
+        'Beneficiary Bank Address: 1 Example Road, Tokyo',
+        'SWIFT Code: EXAMPLE1',
+        'IBAN: GB82 WEST 1234 5698 7654 32',
+        'Remittance Information: Creator campaign',
+        'Contract Number: FILE-IGNORED',
+      ]),
+      contractType: 'INDEPENDENT' as const,
+    };
+    const fields = recognizeUploadContractFields([contract], { systemContractNumber: 'CON-SYSTEM-001' });
+
+    expect(fields.map((item) => item.fieldKey)).toEqual([
+      'advertiser',
+      'publisher',
+      'projectTotalFees',
+      'signatureStatus',
+      'contractExpiry',
+      'transferFee',
+      'accountName',
+      'accountNumber',
+      'beneficiaryBankName',
+      'beneficiaryBankAddress',
+      'swiftCode',
+      'iban',
+      'remittanceInformation',
+      'platformChannel',
+      'contractNumber',
+    ]);
+    expect(recognitionFieldDisplayValue(fields.find((item) => item.fieldKey === 'signatureStatus')!)).toBe('已签署');
+    expect(recognitionFieldDisplayValue(fields.find((item) => item.fieldKey === 'contractExpiry')!)).toBe('2026-09-17');
+    expect(fields.find((item) => item.fieldKey === 'contractNumber')).toMatchObject({
+      rawValue: 'CON-SYSTEM-001',
+      status: 'confirmed',
+      readOnly: true,
+    });
+    expect(fields.some((item) => item.fieldKey === 'paymentTerm')).toBe(false);
+  });
+
+  it('shows PayPal fields only when the document contains PayPal account evidence', () => {
+    const contract = {
+      ...documentFixture('paypal-contract', 'STANDARD_TERMS', [
+        'PayPal Username: mina.kato',
+        'PayPal Email Address: mina@example.com',
+        'Transfer Note: Summer campaign',
+      ]),
+      contractType: 'INDEPENDENT' as const,
+    };
+    const fields = recognizeUploadContractFields([contract], { systemContractNumber: 'CON-SYSTEM-002' });
+
+    expect(fields.filter((item) => item.group === 'paypal').map((item) => item.fieldKey)).toEqual([
+      'paypalUsername',
+      'paypalEmail',
+      'transferNote',
+    ]);
+    expect(fields.some((item) => item.group === 'bank' && item.applicable !== false)).toBe(false);
+  });
+
+  it('keeps empty account fields available for later manual supplementation without displaying fake values', () => {
+    const contract = {
+      ...documentFixture('no-account-contract', 'STANDARD_TERMS', ['Publisher: Mina Kato']),
+      contractType: 'INDEPENDENT' as const,
+    };
+    const fields = recognizeUploadContractFields([contract], { systemContractNumber: 'CON-SYSTEM-003' });
+    const accountFields = fields.filter((item) => item.group === 'bank' || item.group === 'paypal');
+
+    expect(accountFields).toHaveLength(10);
+    expect(accountFields.every((item) => item.applicable === false && item.rawValue === '')).toBe(true);
+  });
+
+  it('keeps an unknown signature status empty until it is selected manually', () => {
+    const signature = recognizeContractFields([], {}).find((item) => item.fieldKey === 'signatureStatus')!;
+    const selected = editRecognitionField(signature, 'UNSIGNED');
+
+    expect(signature.status).toBe('missing');
+    expect(selected).toMatchObject({
+      rawValue: '未签署',
+      normalizedValue: { signed: false },
+      status: 'detected',
+    });
+  });
+
+  it('recognizes an explicit signed status but does not guess from a blank signature line', () => {
+    const signed = documentFixture('signed-status', 'SIGNATURE_PAGE', ['Signature Status: Signed']);
+    const unsigned = documentFixture('unsigned-status', 'SIGNATURE_PAGE', ['Signed: No']);
+    const blank = documentFixture('blank-signature', 'SIGNATURE_PAGE', ['Signature: ____________________']);
+
+    expect(field([signed], 'signatureStatus')).toMatchObject({
+      rawValue: '已签署',
+      normalizedValue: { signed: true },
+      status: 'detected',
+    });
+    expect(field([unsigned], 'signatureStatus')).toMatchObject({
+      rawValue: '未签署',
+      normalizedValue: { signed: false },
+      status: 'detected',
+    });
+    expect(field([blank], 'signatureStatus')).toMatchObject({
+      rawValue: '',
+      normalizedValue: null,
+      status: 'missing',
+    });
+  });
+
+  it('rejects an invalid manually entered expiry date until it is corrected', () => {
+    const expiry = editRecognitionField(field([], 'contractExpiry'), 'not a date');
+
+    expect(expiry).toMatchObject({ rawValue: 'not a date', status: 'missing' });
+    expect(canConfirmRecognitionFields([expiry], ['contractExpiry'])).toBe(false);
+  });
+
+  it('keeps the IO number immediately before the system contract number for IO uploads', () => {
+    const io = {
+      ...documentFixture('io-upload', 'IO', ['IO Number: IO-2026-0099']),
+      contractType: 'IO' as const,
+    };
+    const fields = recognizeUploadContractFields([io], { systemContractNumber: 'CON-SYSTEM-IO' });
+
+    expect(fields.slice(-3).map((item) => item.fieldKey)).toEqual([
+      'platformChannel',
+      'ioNumber',
+      'contractNumber',
+    ]);
+  });
+
+  it('extracts multiple label-value pairs from one DOCX table row independently', () => {
+    const bankTable = documentFixture('bank-table', 'PAYMENT_ADDENDUM', [
+      'Account Name | Mina Kato Studio | Account Number | 0000004826',
+      'Beneficiary Bank Name | Example Bank | SWIFT Code | EXAMPLE1',
+    ]);
+
+    expect(field([bankTable], 'accountName').rawValue).toBe('Mina Kato Studio');
+    expect(field([bankTable], 'accountNumber').rawValue).toBe('0000004826');
+    expect(field([bankTable], 'beneficiaryBankName').rawValue).toBe('Example Bank');
+    expect(field([bankTable], 'swiftCode').rawValue).toBe('EXAMPLE1');
   });
 });

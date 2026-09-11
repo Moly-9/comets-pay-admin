@@ -1,13 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { INITIAL_PAYOUTS } from '../data';
-import type { InvoiceCurrency, Payout } from '../types';
+import type { Payout } from '../types';
+import { getPaymentCurrencyOverviews } from '../paymentCurrencyOverview';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import {
+  ALL_REVIEW_STATUSES,
   CURRENCY_FLAG_PATHS,
+  REVIEW_STATUS_FILTER_OPTIONS,
   buildPaymentProjectRows,
   filterPaymentProjectRows,
   PaymentWorkbenchPage,
+  summarizePaymentProjectRows,
   type WorkbenchTab,
 } from './PaymentWorkbenchPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
@@ -17,14 +20,16 @@ const renderWorkbench = (
   payouts: Payout[],
   requests: RequestProjectSummary[] = [],
   initialTab: WorkbenchTab = 'review',
+  generatedInvoices = INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
 ) => renderToStaticMarkup(
   <PaymentWorkbenchPage
     payouts={payouts}
     requests={requests}
-    generatedInvoices={[]}
+    generatedInvoices={generatedInvoices}
     onNewBatch={vi.fn()}
     onSelectPayout={vi.fn()}
     onSelectPaidProject={vi.fn()}
+    onOpenRequest={vi.fn()}
     onReviewRequest={vi.fn()}
     onExecuteRequest={vi.fn(() => true)}
     onReturnRequest={vi.fn(() => true)}
@@ -34,42 +39,52 @@ const renderWorkbench = (
   />,
 );
 
-const payout = (currency: InvoiceCurrency, index: number): Payout => ({
-  id: `test-payout-${index}`,
-  creator: `Creator ${index}`,
-  handle: `@creator-${index}`,
-  initials: 'CR',
-  projectId: `test-project-${index}`,
-  project: `Project ${index}`,
-  contract: `CON-TEST-${index}`,
-  invoice: `INV-TEST-${index}`,
-  provider: 'Airwallex',
-  currency,
-  amount: index * 100,
-  account: `00000000${index}`,
-  status: '等待付款',
-  invoiceReviewStatus: '已通过',
-  accent: '#8b5cf6',
-});
-
 describe('PaymentWorkbenchPage currency overview', () => {
   it('places secondary currencies below the primary amount and renders icon detail actions', () => {
-    const html = renderWorkbench(INITIAL_PAYOUTS);
+    const scenario = applyPaymentBatchPrototypeScenario({
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+      paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+    });
+    const reviewRows = buildPaymentProjectRows({
+      tab: 'review',
+      payouts: scenario.payouts,
+      requests: scenario.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    });
+    const reviewSummary = summarizePaymentProjectRows(reviewRows);
+    const html = renderWorkbench(
+      scenario.payouts,
+      scenario.requests,
+      'review',
+      INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    );
     const currencySpace = '\u00a0';
+    const usdPending = reviewSummary.amounts.find((item) => item.currency === 'USD');
+    const paidOverview = getPaymentCurrencyOverviews(
+      scenario.payouts,
+      new Date('2026-08-09T00:00:00.000Z'),
+    ).paid;
+    const usdPaid = paidOverview.find((item) => item.currency === 'USD');
 
     expect(html).toContain('summary-surface payment-workbench-summary');
     expect(html).toContain('summary-card summary-card-peach');
     expect(html).toContain('summary-card summary-card-lilac');
     expect(html).not.toContain('payment-currency-card');
-    expect(html).toContain(`USD${currencySpace}7,840`);
-    expect(html).toContain('待付款总额 · 3 笔');
-    expect(html).toContain(`USD${currencySpace}4,860`);
-    expect(html).toContain('本月已付款 · 1 笔');
+    expect(usdPending).toBeTruthy();
+    expect(html).toContain(`USD${currencySpace}${usdPending!.amount.toLocaleString('en-US')}`);
+    expect(html).toContain(`待付款总额 · ${reviewSummary.invoices} 笔`);
+    expect(usdPaid).toBeTruthy();
+    expect(html).toContain(`USD${currencySpace}${usdPaid!.amount.toLocaleString('en-US')}`);
+    expect(html).toContain(`本月已付款 · ${usdPaid!.count} 笔`);
     const secondaryRows = Array.from(
       html.matchAll(/<div class="payment-summary-secondary-row">([\s\S]*?)<\/div>/g),
       (match) => match[1],
     );
-    expect(secondaryRows).toHaveLength(8);
+    const visibleSecondaryCount = [reviewSummary.amounts, paidOverview]
+      .reduce((total, items) => total + Math.min(4, items.filter((item) => item.currency !== 'USD').length), 0);
+    expect(secondaryRows).toHaveLength(visibleSecondaryCount);
     expect(html).toMatch(new RegExp(`>EUR${currencySpace}[\\d,]+<`));
     expect(html).toMatch(new RegExp(`>GBP${currencySpace}[\\d,]+<`));
     expect(html).toMatch(new RegExp(`>HKD${currencySpace}[\\d,]+<`));
@@ -78,11 +93,13 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(secondaryRows.every((row) => !row.includes('<strong>'))).toBe(true);
     expect(html.match(/class="payment-summary-content"/g)).toHaveLength(2);
     const detailButtons = html.match(/<button class="payment-summary-details-button"[\s\S]*?<\/button>/g) ?? [];
-    expect(detailButtons).toHaveLength(2);
+    const detailCardCount = [reviewSummary.amounts, paidOverview]
+      .filter((items) => items.length > 4).length;
+    expect(detailButtons).toHaveLength(detailCardCount);
     expect(detailButtons.every((button) => button.includes('lucide-chevron-right'))).toBe(true);
     expect(detailButtons.every((button) => !button.includes('查看详情'))).toBe(true);
     expect(html).toContain('aria-label="查看待付款币种详情"');
-    expect(html).toContain('aria-label="查看本月已付款币种详情"');
+    expect(html.includes('aria-label="查看本月已付款币种详情"')).toBe(paidOverview.length > 4);
   });
 
   it('maps every supported currency to a flag asset for the detail list', () => {
@@ -96,18 +113,39 @@ describe('PaymentWorkbenchPage currency overview', () => {
   });
 
   it('hides the detail action when a card has no more than four currencies', () => {
-    const html = renderWorkbench(['USD', 'EUR', 'GBP', 'HKD'].map((currency, index) => (
-      payout(currency as InvoiceCurrency, index + 1)
-    )));
+    const requests = ['USD', 'EUR', 'GBP', 'HKD'].map((currency, index): RequestProjectSummary => ({
+      id: `review-${currency}`,
+      requestCode: `REQ-${currency}`,
+      lifecycle: 'SUBMITTED',
+      approval: {
+        status: 'PENDING_PM',
+        round: 1,
+        history: [],
+        submittedAt: '2026-08-09T00:00:00.000Z',
+        updatedAt: '2026-08-09T00:00:00.000Z',
+      },
+      project: `${currency} Review`,
+      brand: 'Test Brand',
+      media: 'Media',
+      pm: 'PM',
+      amount: `${currency} ${(index + 1) * 100}`,
+      contracts: 1,
+      invoices: 1,
+      paymentOrder: '待生成',
+      status: 'PM审批中',
+      filter: 'pending',
+    }));
+    const html = renderWorkbench([], requests, 'review', []);
 
-    expect(html).not.toContain('查看详情');
+    expect(html).not.toContain('aria-label="查看待付款币种详情"');
+    expect(html).not.toContain('aria-label="查看本月已付款币种详情"');
     expect(html).toContain('>EUR\u00a0200<');
     expect(html).toContain('>GBP\u00a0300<');
     expect(html).toContain('>HKD\u00a0400<');
   });
 
-  it('renders the USD zero-value fallback when no USD payout exists', () => {
-    const html = renderWorkbench([payout('EUR', 1)]);
+  it('renders the USD zero-value fallback when no review request exists', () => {
+    const html = renderWorkbench([]);
 
     expect(html).toContain('USD\u00a00');
     expect(html).toContain('待付款总额 · 0 笔');
@@ -186,7 +224,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
 
-    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(2);
+    expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(8);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
     expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
@@ -211,12 +249,33 @@ describe('PaymentWorkbenchPage currency overview', () => {
       ]),
     }));
 
-    const reviewRow = buildPaymentProjectRows({ ...input, tab: 'review' })[0];
+    const reviewRows = buildPaymentProjectRows({ ...input, tab: 'review' });
+    expect(reviewRows.map((row) => row.approvalStatus)).toEqual([
+      'PENDING_PM',
+      'PENDING_PM',
+      'PENDING_PROJECT_OWNER',
+      'PENDING_PROJECT_OWNER',
+      'PENDING_OWNER',
+      'PENDING_OWNER',
+      'PENDING_FINANCE',
+      'PENDING_FINANCE',
+    ]);
+    expect(reviewRows.filter((row) => row.actionLabel === '查看详情')).toHaveLength(6);
+    expect(reviewRows.filter((row) => row.actionLabel === '审核')).toHaveLength(2);
+    expect(reviewRows.map((row) => row.status)).toEqual([
+      '待PM审核',
+      '待PM审核',
+      '待媒介负责人审核',
+      '待媒介负责人审核',
+      '待老板审核',
+      '待老板审核',
+      '待财务审核',
+      '待财务审核',
+    ]);
+    const reviewRow = reviewRows[0];
     expect(reviewRow).toMatchObject({
       requestCode: expect.stringMatching(/^REQ-/),
       cooperationProjectCode: expect.stringMatching(/^PRJ-/),
-      status: '待财务审核',
-      actionLabel: '审核',
     });
     expect(reviewRow.requestId).toBeTruthy();
     expect(reviewRow.paymentOrder).toMatch(/^PAY-/);
@@ -299,5 +358,41 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(paidHtml).toContain('class="custom-select custom-select-toolbar payment-status-select"');
     expect(paidHtml).toContain('>全部付款状态</span>');
     expect(reviewHtml).not.toContain('class="custom-select custom-select-toolbar payment-status-select"');
+    expect(reviewHtml).toContain('class="custom-select custom-select-toolbar payment-review-status-select"');
+    expect(reviewHtml).toContain('aria-label="项目状态"');
+    expect(reviewHtml).toContain('>全部项目状态</span>');
+    expect(paidHtml).not.toContain('payment-review-status-select');
+    expect(REVIEW_STATUS_FILTER_OPTIONS.map((option) => option.label)).toEqual([
+      ALL_REVIEW_STATUSES,
+      '待PM审核',
+      '待媒介负责人审核',
+      '待老板审核',
+      '待财务审核',
+    ]);
+  });
+
+  it('filters review rows by approval state while keeping request amounts and invoice counts', () => {
+    const input = {
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    };
+    const reviewRows = buildPaymentProjectRows({ ...input, tab: 'review' });
+    const ownerRows = filterPaymentProjectRows(reviewRows, {
+      provider: '全部付款渠道',
+      search: '',
+      reviewStatus: 'PENDING_OWNER',
+    });
+
+    expect(ownerRows).toHaveLength(2);
+    expect(ownerRows.every((row) => row.status === '待老板审核')).toBe(true);
+    reviewRows.forEach((row) => {
+      const request = input.requests.find((candidate) => candidate.id === row.requestId);
+      expect(row.amount).toBe(request?.amount);
+    });
+
+    const reviewSummary = summarizePaymentProjectRows(reviewRows);
+    const uniqueInvoiceIds = new Set(reviewRows.flatMap((row) => row.invoiceIds));
+    expect(reviewSummary.invoices).toBe(uniqueInvoiceIds.size);
   });
 });

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { ContractRecognitionField, ContractSourceLocation } from '../contractRecognitionTypes';
+import type { DocumentPayoutSnapshot } from '../types';
 import {
   INITIAL_CONTRACTS,
   applyConfirmedRecognitionToContract,
@@ -10,7 +11,13 @@ import {
   type ContractType,
 } from '../contracts';
 import {
+  ContractPaymentList,
   ContractDetailPage,
+  contractPaymentAccountRows,
+  contractRecognizedAccountRows,
+  contractPaymentChannelDisplayValue,
+  contractPaymentFieldsFor,
+  contractRecognitionKeysToConfirm,
   contractExpiryDisplayValue,
   contractSummaryFieldsFor,
   recognitionCampaignEndValue,
@@ -39,6 +46,29 @@ const recognitionField = (
   confidence: 0.98,
   status: 'confirmed',
   candidates: [],
+});
+
+const paymentSnapshot = (
+  payoutProvider: DocumentPayoutSnapshot['payoutProvider'],
+): DocumentPayoutSnapshot => ({
+  payoutProvider,
+  bankCountry: 'United States',
+  accountName: 'Sample Creator LLC',
+  accountType: 'Checking',
+  swiftCode: 'CHASUS33',
+  accountNumber: '50002401',
+  iban: 'GB82WEST12345698765432',
+  beneficiaryType: 'COMPANY',
+  bankName: 'JPMorgan Chase Bank',
+  bankStreetAddress: '270 Park Avenue',
+  bankCity: 'New York',
+  bankState: 'NY',
+  bankPostalCode: '10017',
+  intermediaryBankCountry: '',
+  intermediaryBankCode: '',
+  transferRemarks: 'COMETS contract payout',
+  paypalUsername: 'sample.creator',
+  paypalEmail: 'sample.creator@example.com',
 });
 
 describe('ContractDetailPage expiry presentation', () => {
@@ -135,12 +165,180 @@ describe('ContractDetailPage expiry presentation', () => {
     });
   });
 
+  it('excludes a missing optional Channel from confirmation but includes it when populated', () => {
+    const missingChannel = recognitionField('platformChannel', '', {});
+    const populatedChannel = recognitionField('platformChannel', 'YouTube: @sample', {
+      platform: 'YouTube',
+      handle: '@sample',
+      channelUrl: 'https://youtube.com/@sample',
+    });
+    const publisher = recognitionField('publisher', 'Sample Creator', 'Sample Creator');
+
+    expect(contractRecognitionKeysToConfirm(
+      [publisher, missingChannel],
+      ['publisher', 'platformChannel'],
+    )).toEqual(['publisher']);
+    expect(contractRecognitionKeysToConfirm(
+      [publisher, populatedChannel],
+      ['publisher', 'platformChannel'],
+    )).toEqual(['publisher', 'platformChannel']);
+  });
+
   it('keeps contract header actions side by side when the title wraps', () => {
     const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
     expect(styles).toMatch(/\.contract-detail-page > \.page-heading-row > div:first-child\s*{[^}]*min-width:\s*0;/s);
     expect(styles).toMatch(/\.contract-detail-page > \.page-heading-row \.page-heading-actions\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-wrap:\s*nowrap;/s);
     expect(styles).toMatch(/\.contract-detail-page \.page-heading-actions\s*{[^}]*grid-template-columns:\s*1fr 1fr;/s);
+  });
+
+  it('preserves payment-rule differences between contract types', () => {
+    expect(contractPaymentFieldsFor('INDEPENDENT').map((field) => field.label)).toEqual([
+      '付款金额',
+      '付款渠道',
+      '手续费费用承担方',
+    ]);
+    expect(contractPaymentFieldsFor('FRAMEWORK').map((field) => field.label)).toEqual([
+      '手续费费用承担方',
+    ]);
+    expect(contractPaymentFieldsFor('IO').map((field) => field.label)).toEqual([
+      '付款金额',
+      '付款渠道',
+    ]);
+  });
+
+  it('flattens bank payment details and keeps full account values', () => {
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      payoutProvider: 'Airwallex' as const,
+      paymentMethod: 'BANK' as const,
+    };
+    const snapshot = paymentSnapshot('Airwallex');
+    const rows = contractPaymentAccountRows(contract, snapshot);
+    const html = renderToStaticMarkup(
+      <ContractPaymentList
+        contract={contract}
+        fields={contractPaymentFieldsFor('INDEPENDENT')}
+        paymentSnapshot={snapshot}
+      />,
+    );
+
+    expect(contractPaymentChannelDisplayValue(contract, snapshot)).toBe('Airwallex');
+    expect(rows.map((row) => row.label)).toEqual([
+      'Account Name',
+      'Account Number',
+      'Beneficiary Bank Name',
+      'Beneficiary Bank Address',
+      'SWIFT Code',
+      'IBAN',
+      'Remittance Information (optional)',
+    ]);
+    expect(rows.find((row) => row.key === 'beneficiary-bank-address')?.value).toBe(
+      '270 Park Avenue, New York, NY, 10017, United States',
+    );
+    expect(html).toContain('50002401');
+    expect(html).not.toContain('付款信息');
+    expect(html).not.toContain('达人付款账户');
+    expect((html.match(/Remittance Information \(optional\)/g) ?? [])).toHaveLength(1);
+
+    expect(contractPaymentAccountRows(contract, {
+      ...snapshot,
+      accountNumber: '•••• 2401',
+    }).find((row) => row.key === 'account-number')?.value).toBe('历史记录未保存完整账号');
+  });
+
+  it('shows only PayPal fields and falls back to the legacy payment method when no provider exists', () => {
+    const paypalContract = {
+      ...INITIAL_CONTRACTS[0],
+      payoutProvider: 'Airwallex' as const,
+      paymentMethod: 'BANK' as const,
+    };
+    const rows = contractPaymentAccountRows(paypalContract, paymentSnapshot('PayPal'));
+
+    expect(contractPaymentChannelDisplayValue(paypalContract, paymentSnapshot('PayPal'))).toBe('PayPal');
+    expect(rows.map((row) => row.label)).toEqual([
+      'PayPal Username',
+      'PayPal Email Address',
+      'Transfer Note (optional)',
+    ]);
+    expect(rows.some((row) => row.label === 'Account Number')).toBe(false);
+    expect(contractPaymentAccountRows(
+      paypalContract,
+      paymentSnapshot('PayMax'),
+    ).some((row) => row.label === 'Account Number')).toBe(true);
+    expect(contractPaymentChannelDisplayValue({
+      ...paypalContract,
+      payoutProvider: undefined,
+      paymentMethod: 'BANK',
+    }, null)).toBe('银行转账');
+  });
+
+  it('applies the recognized expiry, signed state, and isolated contract account snapshot', () => {
+    const originalPaymentSnapshot = paymentSnapshot('Airwallex');
+    const fields: ContractRecognitionField[] = [
+      recognitionField('contractExpiry', '2026-12-31', { endDate: '2026-12-31', isLongTerm: false }),
+      recognitionField('signatureStatus', '已签署', { signed: true }),
+      recognitionField('accountName', 'Mina Kato Studio', 'Mina Kato Studio'),
+      recognitionField('accountNumber', '0000004826', '0000004826'),
+      recognitionField('beneficiaryBankName', 'Example Bank', 'Example Bank'),
+    ];
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      signed: false,
+      campaignEnd: '',
+      paymentSnapshot: originalPaymentSnapshot,
+      recognitionResults: fields,
+      issues: [
+        { id: 'recognition-review', label: '待确认', description: '待确认', severity: 'blocker' as const, source: '识别' },
+        { id: 'signature', label: '待签署', description: '待签署', severity: 'blocker' as const, source: '签署' },
+      ],
+    } satisfies ContractRecord;
+
+    const applied = applyConfirmedRecognitionToContract(contract, fields.map((field) => field.fieldKey));
+
+    expect(applied).toMatchObject({
+      campaignEnd: '2026-12-31',
+      lifecycle: 'CONFIRMED',
+      signed: true,
+      recognizedPaymentDetails: {
+        detectedChannel: 'BANK',
+        accountName: 'Mina Kato Studio',
+        accountNumber: '0000004826',
+        beneficiaryBankName: 'Example Bank',
+      },
+    });
+    expect(applied?.paymentSnapshot).toEqual(originalPaymentSnapshot);
+    expect({
+      payoutAccountId: applied?.payoutAccountId,
+      payoutAccountVersion: applied?.payoutAccountVersion,
+      payoutAccountFingerprint: applied?.payoutAccountFingerprint,
+      accountName: applied?.accountName,
+      accountFingerprint: applied?.accountFingerprint,
+    }).toEqual({
+      payoutAccountId: contract.payoutAccountId,
+      payoutAccountVersion: contract.payoutAccountVersion,
+      payoutAccountFingerprint: contract.payoutAccountFingerprint,
+      accountName: contract.accountName,
+      accountFingerprint: contract.accountFingerprint,
+    });
+    expect(applied?.issues.some((issue) => issue.id === 'signature')).toBe(false);
+  });
+
+  it('renders recognized mixed account groups without duplicating remittance information', () => {
+    const rows = contractRecognizedAccountRows({
+      detectedChannel: 'MIXED',
+      accountName: 'Mina Kato Studio',
+      accountNumber: '0000004826',
+      remittanceInformation: 'Creator campaign',
+      paypalUsername: 'mina.kato',
+      paypalEmail: 'mina@example.com',
+      transferNote: 'Summer campaign',
+    });
+
+    expect(rows.some((row) => row.label === 'Account Number')).toBe(true);
+    expect(rows.some((row) => row.label === 'PayPal Email Address')).toBe(true);
+    expect(rows.filter((row) => row.label === 'Remittance Information (optional)')).toHaveLength(1);
   });
 
   it('renders template-only cards and the paged field editor without ordinary contract controls', () => {
@@ -164,10 +362,11 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(html).toContain('通用字段');
     expect(html).toContain('银行转账字段');
     expect(html).toContain('PayPal 字段');
-    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(4);
-    expect((html.match(/>系统自动带入</g) ?? [])).toHaveLength(4);
-    expect((html.match(/>生成时人工填写</g) ?? [])).toHaveLength(4);
-    expect((html.match(/>不生成</g) ?? [])).toHaveLength(4);
+    expect((html.match(/data-template-output-field=/g) ?? [])).toHaveLength(3);
+    expect((html.match(/>系统自动带入</g) ?? [])).toHaveLength(3);
+    expect((html.match(/>生成时人工填写</g) ?? [])).toHaveLength(3);
+    expect(html).not.toContain('>不生成<');
+    expect(html).not.toContain('Campaign Period');
     expect(html).not.toContain('添加字段');
     expect(html).not.toContain('删除字段');
     expect(html).not.toContain('已启动');

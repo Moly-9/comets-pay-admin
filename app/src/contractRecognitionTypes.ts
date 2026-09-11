@@ -16,6 +16,8 @@ export type ContractFieldStatus = 'detected' | 'missing' | 'conflict' | 'confirm
 export type ContractFieldKey =
   | 'advertiser'
   | 'publisher'
+  | 'signatureStatus'
+  | 'contractExpiry'
   | 'contractNumber'
   | 'ioNumber'
   | 'projectBrand'
@@ -27,7 +29,17 @@ export type ContractFieldKey =
   | 'paymentTerm'
   | 'paymentMethod'
   | 'transferFee'
-  | 'beneficiaryAccount';
+  | 'beneficiaryAccount'
+  | 'accountName'
+  | 'accountNumber'
+  | 'beneficiaryBankName'
+  | 'beneficiaryBankAddress'
+  | 'swiftCode'
+  | 'iban'
+  | 'remittanceInformation'
+  | 'paypalUsername'
+  | 'paypalEmail'
+  | 'transferNote';
 
 export type ContractSourceLocation = {
   documentId: string;
@@ -56,6 +68,11 @@ export type ContractRecognitionField = {
   status: ContractFieldStatus;
   candidates: ContractFieldCandidate[];
   editedValue?: string;
+  origin?: 'document' | 'system';
+  group?: 'summary' | 'bank' | 'paypal' | 'legacy';
+  applicable?: boolean;
+  requiredForConfirmation?: boolean;
+  readOnly?: boolean;
   profileComparison?: {
     status: 'matched' | 'conflict';
     referenceLabels: string[];
@@ -147,6 +164,8 @@ export const CONTRACT_UPLOAD_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
 export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
   advertiser: 'Advertiser',
   publisher: 'Publisher',
+  signatureStatus: '签署状态',
+  contractExpiry: '合同有效期',
   contractNumber: '合同编号',
   ioNumber: 'IO 编号',
   projectBrand: '项目 / 品牌',
@@ -159,7 +178,47 @@ export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
   paymentMethod: 'Payment Method',
   transferFee: 'Transfer Fee',
   beneficiaryAccount: 'Beneficiary / Bank Account',
+  accountName: 'Account Name',
+  accountNumber: 'Account Number',
+  beneficiaryBankName: 'Beneficiary Bank Name',
+  beneficiaryBankAddress: 'Beneficiary Bank Address',
+  swiftCode: 'SWIFT Code',
+  iban: 'IBAN',
+  remittanceInformation: 'Remittance Information (optional)',
+  paypalUsername: 'PayPal Username',
+  paypalEmail: 'PayPal Email Address',
+  transferNote: 'Transfer Note (optional)',
 };
+
+export const CONTRACT_UPLOAD_CORE_FIELD_KEYS: ContractFieldKey[] = [
+  'advertiser',
+  'publisher',
+  'projectTotalFees',
+  'signatureStatus',
+  'contractExpiry',
+  'transferFee',
+];
+
+export const CONTRACT_UPLOAD_BANK_FIELD_KEYS: ContractFieldKey[] = [
+  'accountName',
+  'accountNumber',
+  'beneficiaryBankName',
+  'beneficiaryBankAddress',
+  'swiftCode',
+  'iban',
+  'remittanceInformation',
+];
+
+export const CONTRACT_UPLOAD_PAYPAL_FIELD_KEYS: ContractFieldKey[] = [
+  'paypalUsername',
+  'paypalEmail',
+  'transferNote',
+];
+
+export const CONTRACT_UPLOAD_TRAILING_FIELD_KEYS: ContractFieldKey[] = [
+  'platformChannel',
+  'contractNumber',
+];
 
 export const SUMMARY_FIELD_KEYS: ContractFieldKey[] = [
   'advertiser',

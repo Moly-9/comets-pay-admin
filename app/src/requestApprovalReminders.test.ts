@@ -41,10 +41,10 @@ describe('request approval reminders', () => {
   });
 
   it('counts the current approval node for project and finance reviewers', () => {
-    expect(requestApprovalReminderFor(user('project', '项目负责人'), requests)).toMatchObject({
+    expect(requestApprovalReminderFor(user('project', '媒介负责人'), requests)).toMatchObject({
       count: 1,
       requestIds: ['project-one'],
-      stageSummary: '项目负责人审批 1 个',
+      stageSummary: '媒介负责人审批 1 个',
     });
     expect(requestApprovalReminderFor(user('finance', '财务'), requests)).toMatchObject({
       count: 1,
@@ -57,7 +57,7 @@ describe('request approval reminders', () => {
     expect(requestApprovalReminderFor(user('owner', '老板'), requests)).toEqual({
       count: 5,
       requestIds: ['pm-one', 'pm-other', 'project-one', 'owner-one', 'finance-one'],
-      stageSummary: 'PM 审批 2 个、项目负责人审批 1 个、老板审批 1 个、财务审批 1 个',
+      stageSummary: 'PM 审批 2 个、媒介负责人审批 1 个、老板审批 1 个、财务审批 1 个',
     });
   });
 

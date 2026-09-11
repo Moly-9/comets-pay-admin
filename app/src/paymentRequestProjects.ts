@@ -318,7 +318,7 @@ export const paymentRequestCancellationIssue = (
 export type MyProjectStatus =
   | '草稿'
   | 'PM审批中'
-  | '项目负责人审批中'
+  | '媒介负责人审批中'
   | '老板审批中'
   | '财务审批中'
   | '待打款'
@@ -329,7 +329,7 @@ export type MyProjectStatus =
 
 export type RequestProjectStatus =
   | 'PM审批中'
-  | '项目负责人审批中'
+  | '媒介负责人审批中'
   | '老板审批中'
   | '财务审批中'
   | '正在付款'
@@ -339,7 +339,7 @@ export type RequestProjectStatus =
 
 const MY_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], MyProjectStatus> = {
   PENDING_PM: 'PM审批中',
-  PENDING_PROJECT_OWNER: '项目负责人审批中',
+  PENDING_PROJECT_OWNER: '媒介负责人审批中',
   PENDING_OWNER: '老板审批中',
   PENDING_FINANCE: '财务审批中',
   APPROVED: '待打款',
@@ -348,7 +348,7 @@ const MY_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], MyProje
 
 const REQUEST_PROJECT_APPROVAL_STATUS: Record<RequestApprovalState['status'], RequestProjectStatus> = {
   PENDING_PM: 'PM审批中',
-  PENDING_PROJECT_OWNER: '项目负责人审批中',
+  PENDING_PROJECT_OWNER: '媒介负责人审批中',
   PENDING_OWNER: '老板审批中',
   PENDING_FINANCE: '财务审批中',
   APPROVED: '正在付款',
@@ -362,7 +362,7 @@ const legacyMyProjectStatus = (status?: string): MyProjectStatus => {
   if (status === '已退回' || status === '待补资料' || status === '待媒介复核') return '已退回';
   if (status?.includes('财务')) return '财务审批中';
   if (status?.includes('老板')) return '老板审批中';
-  if (status?.includes('项目负责人')) return '项目负责人审批中';
+  if (status?.includes('媒介负责人') || status?.includes('项目负责人')) return '媒介负责人审批中';
   if (status?.includes('PM') || status === '待审批') return 'PM审批中';
   return '草稿';
 };
@@ -402,7 +402,7 @@ export const requestProjectStatusFor = (
   if (legacyStatus === '已付款') return '已付款';
   if (legacyStatus === '待打款') return '正在付款';
   if (legacyStatus === '已退回') return '已退回';
-  if (legacyStatus === '项目负责人审批中') return '项目负责人审批中';
+  if (legacyStatus === '媒介负责人审批中') return '媒介负责人审批中';
   if (legacyStatus === '老板审批中') return '老板审批中';
   if (legacyStatus === '财务审批中') return '财务审批中';
   return 'PM审批中';
@@ -410,7 +410,7 @@ export const requestProjectStatusFor = (
 
 export const MY_PROJECT_APPROVAL_STATUSES = new Set<MyProjectStatus>([
   'PM审批中',
-  '项目负责人审批中',
+  '媒介负责人审批中',
   '老板审批中',
   '财务审批中',
 ]);
@@ -430,6 +430,8 @@ export type PaymentRequestListFilters = {
   currency: string;
   minBudget: string;
   maxBudget: string;
+  startDate: string;
+  endDate: string;
   statuses: string[];
 };
 
@@ -439,8 +441,35 @@ export const createEmptyPaymentRequestListFilters = (): PaymentRequestListFilter
   currency: 'all',
   minBudget: '',
   maxBudget: '',
+  startDate: '',
+  endDate: '',
   statuses: [],
 });
+
+export const paymentRequestFirstSubmittedAt = (
+  request: Pick<PaymentRequestProjectLike, 'approval'>,
+) => {
+  const submissions = request.approval?.submissionHistory;
+  if (submissions?.length) {
+    return [...submissions]
+      .sort((left, right) => left.round - right.round || left.submittedAt.localeCompare(right.submittedAt))[0]
+      ?.submittedAt;
+  }
+  return request.approval?.submittedAt;
+};
+
+const paymentRequestSubmittedDateKey = (request: Pick<PaymentRequestProjectLike, 'approval'>) => {
+  const submittedAt = paymentRequestFirstSubmittedAt(request);
+  if (!submittedAt) return '';
+  const date = new Date(submittedAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
 
 export const paymentRequestAmount = (value: string) => ({
   currency: value.match(/\b[A-Z]{3}\b/)?.[0] ?? '',
@@ -482,8 +511,20 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
     const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;
+    const submittedDate = paymentRequestSubmittedDateKey(request);
+    const hasDateFilter = Boolean(filters.startDate || filters.endDate);
+    const matchesStartDate = !hasDateFilter || Boolean(submittedDate && (!filters.startDate || submittedDate >= filters.startDate));
+    const matchesEndDate = !hasDateFilter || Boolean(submittedDate && (!filters.endDate || submittedDate <= filters.endDate));
     const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(statusFor(request));
-    return matchesSearch && matchesCustomer && matchesPM && matchesCurrency && matchesMinBudget && matchesMaxBudget && matchesStatus;
+    return matchesSearch
+      && matchesCustomer
+      && matchesPM
+      && matchesCurrency
+      && matchesMinBudget
+      && matchesMaxBudget
+      && matchesStartDate
+      && matchesEndDate
+      && matchesStatus;
   });
   return { visible, invalidBudgetRange };
 };

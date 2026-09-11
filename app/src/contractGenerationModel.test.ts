@@ -14,6 +14,7 @@ import {
   validateContractGenerationModel,
 } from './contractGenerationModel';
 import { createGeneratedContractDraft, type ContractGenerationModel } from './contracts';
+import { DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES } from './contractTemplateFieldPolicies';
 import {
   createAirwallexPayoutAccount,
   createPayMaxPayoutAccount,
@@ -89,6 +90,7 @@ const validModel = (): ContractGenerationModel => ({
   contractNumber: 'CON-SYNTHETIC-001',
   ioNumber: '',
   advertiser: 'Comets International Limited',
+  advertiserAddress: '99 Synthetic Advertiser Road, Hong Kong',
   publisher: 'Sample Creator Limited',
   publisherAddress: '1 Example Road, Sample City',
   platform: 'YouTube',
@@ -251,7 +253,7 @@ describe('contract generation model', () => {
     expect(defaultContractPayoutAccount(profile)?.id).toBe('airwallex-verified');
   });
 
-  it('rejects reversed dates and missing verified payout snapshots', () => {
+  it('ignores legacy Campaign dates while rejecting reversed release dates and missing payout snapshots', () => {
     const model = validModel();
     model.campaignEnd = '2026-08-01';
     model.releaseEnd = '2026-08-01';
@@ -260,10 +262,10 @@ describe('contract generation model', () => {
     model.paymentSnapshot.accountNumber = '';
 
     expect(validateContractGenerationModel(model)).toMatchObject({
-      campaignEnd: expect.any(String),
       releaseEnd: expect.any(String),
       payoutAccountId: expect.any(String),
     });
+    expect(validateContractGenerationModel(model)).not.toHaveProperty('campaignEnd');
   });
 
   it('requires a contract name before a formal contract can be generated', () => {
@@ -334,7 +336,7 @@ describe('contract generation model', () => {
     expect(validateContractGenerationModel(withoutAccount).payoutAccountId).toContain('已验证');
   });
 
-  it('blocks selected creators whose legal or channel profile is incomplete', () => {
+  it('requires legal profile fields but allows an empty optional Channel', () => {
     const model = validModel();
     Object.assign(model, {
       publisher: '',
@@ -352,10 +354,10 @@ describe('contract generation model', () => {
     expect(validateContractGenerationModel(model)).toMatchObject({
       publisher: expect.any(String),
       publisherAddress: expect.any(String),
-      platform: expect.any(String),
-      channelName: expect.any(String),
-      channelUrl: expect.any(String),
     });
+    expect(validateContractGenerationModel(model)).not.toHaveProperty('platform');
+    expect(validateContractGenerationModel(model)).not.toHaveProperty('channelName');
+    expect(validateContractGenerationModel(model)).not.toHaveProperty('channelUrl');
   });
 
   it('validates selected Airwallex and PayPal account snapshots', () => {
@@ -392,7 +394,7 @@ describe('contract generation model', () => {
     expect(validateContractGenerationModel(paypal)).toEqual({});
   });
 
-  it('blocks incomplete or invalid publishing-channel rows', () => {
+  it('allows incomplete optional Channel rows but still rejects an invalid URL', () => {
     const missing = validModel();
     missing.publishingChannels = [
       {
@@ -407,23 +409,24 @@ describe('contract generation model', () => {
       },
     ];
 
-    expect(validateContractGenerationModel(missing)).toMatchObject({
-      platform: '第 2 个频道缺少发布平台',
-      channelUrl: '第 1 个频道缺少频道链接',
+    expect(validateContractGenerationModel(missing)).toEqual({
+      channelUrl: '第 2 个频道链接格式无效',
     });
 
     missing.publishingChannels[0].channelUrl = 'https://youtube.com/@sample';
     expect(validateContractGenerationModel(missing).channelUrl).toBe('第 2 个频道链接格式无效');
+    missing.publishingChannels[1].channelUrl = '';
+    expect(validateContractGenerationModel(missing)).toEqual({});
   });
 
-  it('adds and removes publishing-channel rows while retaining at least one row', () => {
+  it('adds publishing-channel rows and allows removing the final row', () => {
     const initial = validModel().publishingChannels;
     const added = appendContractPublishingChannel(initial);
 
     expect(added).toHaveLength(2);
     expect(added[1]).toEqual({ socialAccountId: '', platform: '', channelUrl: '' });
     expect(removeContractPublishingChannelAt(added, 0)).toEqual([added[1]]);
-    expect(removeContractPublishingChannelAt(initial, 0)).toEqual(initial);
+    expect(removeContractPublishingChannelAt(initial, 0)).toEqual([]);
   });
 
   it('refreshes the read-only payment snapshot when the selected account changes', () => {
@@ -456,9 +459,9 @@ describe('contract generation model', () => {
     expect(validateContractGenerationModel(model)).toMatchObject({
       totalFee: expect.any(String),
       licensePrice: expect.any(String),
-      campaignEnd: expect.any(String),
       releaseEnd: expect.any(String),
     });
+    expect(validateContractGenerationModel(model)).not.toHaveProperty('campaignEnd');
   });
 
   it('accepts complete synthetic contract data with stable relationship IDs', () => {
@@ -468,6 +471,26 @@ describe('contract generation model', () => {
     expect(model.projectId).toBe('project-synthetic');
     expect(model.creatorId).toBe('creator-synthetic');
     expect(model.engagementId).toBe('engagement-synthetic');
+  });
+
+  it('requires Advertiser name and address unless the template omits the party', () => {
+    const missing = validModel();
+    missing.advertiser = '';
+    missing.advertiserAddress = '';
+    expect(validateContractGenerationModel(missing)).toMatchObject({
+      advertiser: expect.any(String),
+      advertiserAddress: expect.any(String),
+    });
+
+    const omitted = {
+      ...missing,
+      templateFieldPolicies: {
+        ...DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
+        advertiser: 'OMIT' as const,
+      },
+    };
+    expect(validateContractGenerationModel(omitted)).not.toHaveProperty('advertiser');
+    expect(validateContractGenerationModel(omitted)).not.toHaveProperty('advertiserAddress');
   });
 
   it('persists the selected contract type and keeps legacy models independent', () => {

@@ -151,7 +151,7 @@ export function PayoutDrawer({
   const steps: Array<{ label: string; description: string; actor: ApprovalActor }> = [
     { label: '请款提交', description: '提交Invoice、付款清单及已关联合同', actor: getApprovalActor(approvalAssignment.media) },
     { label: 'PM 审批', description: '确认项目资料与请款范围', actor: getApprovalActor(approvalAssignment.pm) },
-    { label: '项目负责人审批', description: '审核项目预算与执行信息', actor: getApprovalActor(approvalAssignment.project) },
+    { label: '媒介负责人审批', description: '审核项目预算与执行信息', actor: getApprovalActor(approvalAssignment.project) },
     { label: '老板审批', description: '完成最终业务审批', actor: getApprovalActor(approvalAssignment.owner) },
     { label: '财务复核', description: '核对主体、金额与收款账户', actor: getApprovalActor(approvalAssignment.finance) },
     {

@@ -7,7 +7,6 @@ import {
   CalendarClock,
   CircleCheckBig,
   ClipboardCheck,
-  CreditCard,
   Eye,
   FileSpreadsheet,
   FileText,
@@ -173,7 +172,7 @@ export function TransactionDetailPage({
           <div className="is-payer"><dt><UserRoundCheck size={14} aria-hidden="true" />付款人</dt><dd>{details.payer}</dd></div>
           <div className="is-batch"><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
           <div className="is-account"><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{accountDisplayValue(details.accountSummary)}</dd></div>
-          <div className="is-method"><dt><CreditCard size={14} aria-hidden="true" />付款方式</dt><dd>{localClearingMethod}</dd></div>
+          <div className="is-payment-code"><dt><ReceiptText size={14} aria-hidden="true" />付款编号</dt><dd>{details.paymentCode}</dd></div>
           <div className="is-fee"><dt><ShieldCheck size={14} aria-hidden="true" />费用承担</dt><dd>{paymentFeeBearerDisplayName(details.feeBearer)}</dd></div>
           <div className="is-reference"><dt><MessageSquareText size={14} aria-hidden="true" />交易附言</dt><dd>{details.transactionReference}</dd></div>
           <div className="is-reason"><dt><ClipboardCheck size={14} aria-hidden="true" />付款事由</dt><dd>{details.requestReason}</dd></div>

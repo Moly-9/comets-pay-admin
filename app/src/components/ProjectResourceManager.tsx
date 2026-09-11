@@ -126,8 +126,10 @@ const referenceLabel = (reference: ProjectReference, creators: CreatorProfile[])
 };
 
 const contractStatusLabel = (contract: ContractRecord) => {
-  if (contract.lifecycle === 'GENERATED_DRAFT') return '待回传';
+  if (contract.lifecycle === 'GENERATED_DRAFT') return '待上传';
   if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '待确认';
+  if (contract.lifecycle === 'RECOGNITION_CONFIRMED') return '待发送';
+  if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return '待签署';
   return getContractReadiness(contract).label;
 };
 
@@ -573,7 +575,7 @@ export function ProjectResourceManager({
                       <div className="project-contract-record-main">
                         <strong>{contract.id}</strong>
                         <span>{contract.name}</span>
-                        <small>{contract.lifecycle === 'GENERATED_DRAFT' ? '生成草稿' : contract.sourceName}</small>
+                        <small>{contract.lifecycle === 'GENERATED_DRAFT' ? '已生成，待上传' : contract.sourceName}</small>
                       </div>
                       <div className="project-contract-record-person">
                         <span>对应达人</span>

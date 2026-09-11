@@ -2365,3 +2365,59 @@ final result: passed
 - Browser console: 0 errors, 0 warnings.
 
 final result: passed
+
+---
+
+# 合作名单关联项目筛选 Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/rf/2q5dyfp52bl2053nt7fy31yr0000gn/T/codex-clipboard-4ed55327-f686-498d-8ed2-70538e2e6c43.png`
+- Source pixels: `462 × 370`, desktop component crop, density not embedded.
+- Implementation: `http://127.0.0.1:5173/`, 合作名单页面；implementation screenshots were captured inline through the Codex in-app Browser.
+- Desktop viewport: `967 × 907` CSS px at DPR 1. Focused component measurements: trigger `220 × 40`, menu `320 × 330`, search `302 × 38`, option row `291 × 52` CSS px.
+- Narrow viewport: `390 × 844` CSS px at DPR 1. Menu bounds were `x=29…346`; document width was `375`, so the filter introduced no horizontal overflow.
+- State: default “全部关联项目”, dropdown open, project-name/project-code search, selected project, and dropdown closed.
+
+## Full-view comparison
+
+The implementation keeps the existing COMETS Pay page hierarchy and places the filter between the page search and result summary. It does not change the collaboration table, page heading, or primary import action. The dropdown overlays the table instead of shifting rows, matching the source interaction model.
+
+## Focused-region comparison
+
+- Fonts and typography: existing COMETS Pay sans-serif stack is preserved. Label, option title, and count metadata follow the same hierarchy as the source.
+- Spacing and layout rhythm: label-over-trigger layout, 40px trigger, 38px search field, 52px option rows, rounded menu, and compact vertical spacing reproduce the source structure. The menu is wider and taller than the crop because project names are longer and the dataset contains more options; scrolling is contained inside the menu.
+- Colors and visual tokens: white surfaces, neutral borders, soft shadow, coral open/focus border, and pale coral selected row match the source while remaining consistent with the current product palette.
+- Image and icon fidelity: there are no raster assets in the source control. Search, chevron, and radio-state affordances use the existing Lucide vector icon family; no emoji, text glyph, or custom SVG substitute is used.
+- Copy and content: “关联项目 / 全部关联项目 / 搜索关联项目” and per-project Invoice counts use live system data. Search also matches project code without exposing extra technical text in the option.
+
+## Interaction and accessibility
+
+- The trigger exposes combobox/listbox semantics, expanded state, current value, and selected option state.
+- Pointer selection, outside click, Arrow Up/Down, Enter, and Escape were verified.
+- Search by `Racing Master` and `PRJ-301164` returned the expected project.
+- Selecting `Racing Master NA/EU KOC 4-6月` reduced the list and pagination total from 251 to 17 records.
+- The 390px layout stacks search, filter, and summary; the menu remains fully inside the viewport.
+- Browser console check returned no errors or warnings.
+
+## Comparison history
+
+1. First pass found a P2 alignment drift: the unlabeled page search was vertically centered while the labeled project trigger sat lower.
+2. The toolbar selector specificity was tightened so controls align on their bottom edge.
+3. The post-fix desktop capture showed the search and project trigger aligned, with no remaining P0/P1/P2 issue.
+
+## Findings
+
+No actionable P0, P1, or P2 mismatch remains. The larger menu height is an intentional content adaptation, not a fidelity defect.
+
+## Implementation checklist
+
+- [x] Searchable single-select project filter
+- [x] Stable project ID filtering with name fallback
+- [x] Live Invoice count per project
+- [x] Pagination reset after filter change
+- [x] Keyboard and focus behavior
+- [x] Desktop and 390px responsive verification
+- [x] Reduced-motion handling
+
+final result: passed

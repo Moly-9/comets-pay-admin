@@ -68,7 +68,7 @@ export const INVOICE_REVIEW_STATUS_META: Record<
   InvoiceReviewStatus,
   { label: string; color: string }
 > = {
-  草稿: { label: '草稿', color: '#6b7280' },
+  草稿: { label: '待发布', color: '#4b56a5' },
   待签署: { label: '待签署', color: '#8b5cf6' },
   达人反馈: { label: '达人反馈', color: '#e8792e' },
   待媒介审核: { label: '待审核', color: '#f59e0b' },
@@ -144,7 +144,7 @@ export const getApprovedInvoicePaymentStatus = (
 };
 
 export const getInvoiceRowStatus = (payout: Pick<Payout, 'invoiceReviewStatus' | 'status'>) => {
-  if (payout.invoiceReviewStatus === '草稿') return '草稿';
+  if (payout.invoiceReviewStatus === '草稿') return '待发布';
   if (payout.invoiceReviewStatus === '待签署') return '待签署';
   if (payout.invoiceReviewStatus === '达人反馈') return '达人反馈';
   if (payout.invoiceReviewStatus === '待媒介审核') return '待审核';
@@ -675,10 +675,10 @@ export const publishGeneratedInvoiceDraft = (
   occurredAt = new Date().toISOString(),
 ): { record: GeneratedInvoiceRecord; payout: Payout } => {
   if (record.sourcePayoutId !== payout.id) {
-    throw new Error('Invoice 草稿与付款记录的稳定关联不一致。');
+    throw new Error('待发布 Invoice 与付款记录的稳定关联不一致。');
   }
   if (record.status !== '草稿' || payout.invoiceReviewStatus !== '草稿') {
-    throw new Error('只有草稿状态的内部 Invoice 可以发布。');
+    throw new Error('只有待发布状态的内部 Invoice 可以发布。');
   }
   const event: InvoiceReviewEvent = {
     stage: 'SIGNATURE',

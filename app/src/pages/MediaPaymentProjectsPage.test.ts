@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   contractRequestResourceTitle,
+  formatPaymentRequestSubmittedAt,
   invoiceRequestResourceTitle,
   positionRequestResourcePreview,
   sortRequestResourcePickerOptions,
@@ -12,6 +13,11 @@ describe('new payment request resource picker', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     expect(source).toContain('title="我的请款"');
     expect(source).not.toContain('title="我的请款项目"');
+  });
+
+  it('only offers active cooperation projects to new payment requests', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("(project.availability ?? 'ACTIVE') === 'ACTIVE'");
   });
 
   it('uses request terminology only in the my-request list and detail', () => {
@@ -26,6 +32,27 @@ describe('new payment request resource picker', () => {
     expect(source).toContain('<span>请款总数</span>');
     expect(source).not.toContain('请款项目总数');
     expect(source).not.toContain('返回我的请款项目');
+  });
+
+  it('adds the first request submission time beside the amount and enables date filtering', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const css = readFileSync(new URL('./MediaPaymentProjectsPage.css', import.meta.url), 'utf8');
+    const tableSource = source.slice(
+      source.indexOf('<table className="data-table operational-table media-payment-project-table">'),
+      source.indexOf('</table>', source.indexOf('<table className="data-table operational-table media-payment-project-table">')),
+    );
+    const headingSource = tableSource.slice(tableSource.indexOf('<thead>'), tableSource.indexOf('</thead>'));
+
+    expect(source).toContain('dateRangeLabel="请款时间"');
+    expect(headingSource.indexOf('<th>请款金额</th>')).toBeLessThan(headingSource.indexOf('<th>请款时间</th>'));
+    expect(headingSource.indexOf('<th>请款时间</th>')).toBeLessThan(headingSource.indexOf('<th>请款状态</th>'));
+    expect(tableSource).toContain('paymentRequestFirstSubmittedAt(request)');
+    expect(tableSource).toContain('<time dateTime={firstSubmittedAt}>');
+    expect(tableSource).toContain('colSpan={9}');
+    expect(css).toContain('min-width: 1200px');
+    expect(css).toContain('.media-payment-project-table th:nth-child(9) { width: 9%; }');
+    expect(formatPaymentRequestSubmittedAt('2026-08-07T16:00:00.000Z')).toBe('2026-08-08 00:00');
+    expect(formatPaymentRequestSubmittedAt()).toBe('未提交');
   });
 
   it('requires payment ownership fields and uses a two-level procurement cost cascader', () => {
@@ -200,7 +227,7 @@ describe('new payment request resource picker', () => {
     expect(css).not.toMatch(/tr\.media-payment-project-row:hover\s*\{[^}]*outline:/s);
     expect(css).toMatch(/tr\.media-payment-project-row:focus-visible\s*\{[^}]*outline:/s);
     expect(css).toMatch(/\.media-payment-project-table :is\(th, td\):not\(\[colspan\]\)\s*\{[^}]*padding-right: 14px;[^}]*padding-left: 14px;/s);
-    expect(css).toContain('.media-payment-project-table th:nth-child(2) { width: 26%; }');
+    expect(css).toContain('.media-payment-project-table th:nth-child(2) { width: 20%; }');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 

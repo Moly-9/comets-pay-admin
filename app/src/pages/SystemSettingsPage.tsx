@@ -154,15 +154,15 @@ const ROLE_DEFINITIONS: Record<RoleKey, RoleDefinition> = {
   },
   project: {
     key: 'project',
-    label: '项目负责人账号',
-    shortLabel: '项目负责人',
+    label: '媒介负责人账号',
+    shortLabel: '媒介负责人',
     description: '负责项目协作、达人合作资料与请款进度跟进。',
     icon: BriefcaseBusiness,
-    summary: '项目维护、业务资料、项目负责人审批',
+    summary: '项目维护、业务资料、媒介负责人审批',
     permissions: [
       '查看达人、合同、Invoice 与请款资料',
       '新建并维护项目、达人关联、PM 与预算信息',
-      '作为项目负责人审批节点完成业务审核',
+      '作为媒介负责人审批节点完成业务审核',
       '通过或退回请款项目并记录审批意见',
     ],
   },
@@ -233,7 +233,7 @@ const INITIAL_APPROVAL_FLOWS: ApprovalFlow[] = [
     updatedAt: '今天 10:32',
     nodes: [
       { id: 'NODE-PM', name: 'PM 审批', role: 'pm' },
-      { id: 'NODE-PROJECT', name: '项目负责人审核', role: 'project' },
+      { id: 'NODE-PROJECT', name: '媒介负责人审核', role: 'project' },
       { id: 'NODE-OWNER', name: '老板审批', role: 'owner' },
       { id: 'NODE-FINANCE', name: '财务审批', role: 'finance' },
     ],
@@ -248,7 +248,7 @@ const createDefaultApprovalFlow = (sequence: number): ApprovalFlow => ({
   updatedAt: '尚未保存',
   nodes: [
     { id: `NODE-${sequence}-PM`, name: 'PM 审批', role: 'pm' },
-    { id: `NODE-${sequence}-PROJECT`, name: '项目负责人审核', role: 'project' },
+    { id: `NODE-${sequence}-PROJECT`, name: '媒介负责人审核', role: 'project' },
     { id: `NODE-${sequence}-OWNER`, name: '老板审批', role: 'owner' },
     { id: `NODE-${sequence}-FINANCE`, name: '财务审批', role: 'finance' },
   ],

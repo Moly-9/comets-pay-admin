@@ -46,8 +46,13 @@ import {
 } from 'react';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
+import {
+  CreatorInvitationRecordsDialog,
+  CreatorInvitationSendDialog,
+} from '../components/CreatorInvitationDialogs';
 import { CreatorPayoutAccounts } from '../components/CreatorPayoutAccounts';
 import { CreatorIdentity, SocialPlatformIcon } from '../components/CreatorIdentity';
+import { EntitySettingsCard } from '../components/EntitySettingsCard';
 import { PaymentCurrencySummaryCard } from '../components/PaymentCurrencySummaryCard';
 import { paymentProviderDisplayName, PaymentProviderBadge } from '../components/PaymentProviderBadge';
 import { TransactionRecordsTable } from '../components/TransactionRecordsTable';
@@ -57,6 +62,11 @@ import { createMockFeishuCooperationProjectSource } from '../cooperationProjects
 import { Pagination, usePagination } from '../components/Pagination';
 import { InvoiceManagementTable } from '../components/InvoiceManagementTable';
 import { CollaborationInvoiceDrawer } from '../components/CollaborationInvoiceDrawer';
+import {
+  buildCollaborationProjectFilterOptions,
+  CollaborationProjectFilter,
+  filterCollaborationRowsByProject,
+} from '../components/CollaborationProjectFilter';
 import {
   buildCollaborationInvoiceRows,
   collaborationStatusTone,
@@ -74,6 +84,7 @@ import {
   type InvoiceManagementView,
 } from '../invoice/invoiceManagement';
 import { hasInvoiceSignatureEvidence } from '../invoice/invoiceSignature';
+import { invoiceBatchDraftGeneratedCount } from '../invoice/invoiceCreationDrafts';
 import {
   externalInvoiceListStatus,
   externalInvoicePageTab,
@@ -92,8 +103,14 @@ import {
   setDefaultInvoiceBillingEntity,
   updateInvoiceBillingEntity,
   validateInvoiceBillingEntity,
-  type InvoiceBillingEntityErrors,
 } from '../invoice/invoiceBillingEntities';
+import {
+  addContractAdvertiserEntity,
+  removeContractAdvertiserEntity,
+  setDefaultContractAdvertiserEntity,
+  updateContractAdvertiserEntity,
+  validateContractAdvertiserEntity,
+} from '../contractAdvertiserEntities';
 import {
   buildMockElectronicSignature,
   isInvoiceApprovedForPayment,
@@ -115,12 +132,15 @@ import {
 } from '../payoutAccounts';
 import type {
   AirwallexTransferMethod,
+  ContractAdvertiserEntity,
+  ContractAdvertiserSettings,
   CreatorInvoiceContact,
   CreatorProfile,
   CreatorSocialAccount,
   GeneratedInvoiceRecord,
   InvoiceBillingEntity,
   InvoiceBillingSettings,
+  InvoiceCreationDraft,
   InvoiceEditContext,
   PaymentFailureIssueType,
   Payout,
@@ -153,6 +173,17 @@ import {
   toggleCreatorDirectorySelection,
   type CreatorDirectoryProviderFilter,
 } from '../creatorDirectoryWorkbook';
+import {
+  creatorInitialsFromName,
+  creatorNameFromPrimaryHandle,
+  creatorRegionFromContactAddress,
+  isCreatorNameAutoDerived,
+} from '../creatorProfileDefaults';
+import {
+  loadCreatorInvitationRecords,
+  saveCreatorInvitationRecords,
+  type CreatorInvitationRecord,
+} from '../creatorInvitations';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
   ExternalInvoiceCollectionCreatePage,
@@ -163,6 +194,7 @@ import { RequestProjectDetailPage, type RequestProjectSummary } from './RequestP
 import {
   canEditProject,
   type CooperationProjectId,
+  type ContractAdvertiserEntityId,
   type CreatorId,
   createPrototypeCode,
   createPrototypeId,
@@ -206,6 +238,10 @@ import {
   paymentBatchStatusCounts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
+import {
+  createPaymentBatchWorkbook,
+  paymentBatchWorkbookFilename,
+} from '../paymentBatchWorkbook';
 import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
@@ -354,7 +390,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '执行中': 'active',
   'PM 审批中': 'active',
   'PM审批中': 'active',
-  '项目负责人审批中': 'active',
+  '媒介负责人审批中': 'active',
   '老板审批中': 'active',
   '财务审批中': 'active',
   '飞书审批中': 'active',
@@ -364,7 +400,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '待补资料': 'review',
   '待财务复核': 'review',
   'PM审批通过': 'active',
-  '项目负责人审批通过': 'active',
+  '媒介负责人审批通过': 'active',
   '老板审批通过': 'active',
   '财务审批通过': 'payment',
   '正在付款': 'payment',
@@ -386,8 +422,9 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
 };
 
 export function ProjectStatus({ status }: { status: string }) {
-  const tone = PROJECT_STATUS_TONES[status] ?? 'default';
-  return <span className={`simple-status project-status project-status-${tone}`} data-project-status={status}><i aria-hidden="true" />{status}</span>;
+  const visibleStatus = status.replace(/项目负责人/g, '媒介负责人');
+  const tone = PROJECT_STATUS_TONES[visibleStatus] ?? 'default';
+  return <span className={`simple-status project-status project-status-${tone}`} data-project-status={visibleStatus}><i aria-hidden="true" />{visibleStatus}</span>;
 }
 
 export type ProjectListFilters = {
@@ -396,6 +433,8 @@ export type ProjectListFilters = {
   currency: string;
   minBudget: string;
   maxBudget: string;
+  startDate: string;
+  endDate: string;
   statuses: string[];
 };
 
@@ -405,12 +444,23 @@ export const createEmptyProjectListFilters = (): ProjectListFilters => ({
   currency: 'all',
   minBudget: '',
   maxBudget: '',
+  startDate: '',
+  endDate: '',
   statuses: [],
 });
 
+export const correctedProjectFilterDateRange = (
+  startDate: string,
+  endDate: string,
+  changedBoundary: 'start' | 'end',
+): [string, string] => {
+  if (!startDate || !endDate || startDate <= endDate) return [startDate, endDate];
+  return changedBoundary === 'start' ? [startDate, startDate] : [endDate, endDate];
+};
+
 export const REQUEST_PROJECT_STATUS_OPTIONS = [
   'PM审批中',
-  '项目负责人审批中',
+  '媒介负责人审批中',
   '老板审批中',
   '财务审批中',
   '正在付款',
@@ -455,6 +505,7 @@ export function ProjectInlineFilterPanel({
   searchPlaceholder = '搜索项目名称或编号',
   listAriaLabel = '项目列表筛选',
   countLabel = '个项目',
+  dateRangeLabel,
 }: {
   search: string;
   filters: ProjectListFilters;
@@ -473,11 +524,14 @@ export function ProjectInlineFilterPanel({
   searchPlaceholder?: string;
   listAriaLabel?: string;
   countLabel?: string;
+  dateRangeLabel?: string;
 }) {
   const hasBudgetFilter = filters.currency !== 'all' || Boolean(filters.minBudget || filters.maxBudget);
+  const hasDateFilter = Boolean(filters.startDate || filters.endDate);
   const activeFilterCount = Number(filters.customers.length > 0)
     + Number(filters.pms.length > 0)
     + Number(hasBudgetFilter)
+    + Number(hasDateFilter)
     + Number(filters.statuses.length > 0);
   const hasActiveFilters = activeFilterCount > 0 || Boolean(search.trim());
   const selectedStatusOption = statusOptions.find((option) => {
@@ -575,6 +629,37 @@ export function ProjectInlineFilterPanel({
             }}
           />
         </div>
+        {dateRangeLabel ? (
+          <div className="project-filter-field project-inline-filter-date">
+            <span className="project-filter-field-label">{dateRangeLabel}</span>
+            <div className="project-filter-date-range" role="group" aria-label={`${dateRangeLabel}区间`}>
+              <CalendarDays size={16} aria-hidden="true" />
+              <label>
+                <span className="sr-only">{dateRangeLabel}开始日期</span>
+                <input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(event) => onFiltersChange((current) => {
+                    const [startDate, endDate] = correctedProjectFilterDateRange(event.target.value, current.endDate, 'start');
+                    return { ...current, startDate, endDate };
+                  })}
+                />
+              </label>
+              <span className="project-filter-date-divider" aria-hidden="true">—</span>
+              <label>
+                <span className="sr-only">{dateRangeLabel}结束日期</span>
+                <input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(event) => onFiltersChange((current) => {
+                    const [startDate, endDate] = correctedProjectFilterDateRange(current.startDate, event.target.value, 'end');
+                    return { ...current, startDate, endDate };
+                  })}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
         <div className="project-inline-filter-meta">
           <span>
             {hasActiveFilters
@@ -1028,7 +1113,7 @@ export function ProjectsPage({
           title="新建项目"
           onClose={requestCloseProjectModal}
           width="760px"
-          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} disabledReason={!name.trim() ? '请先填写项目名称。' : !selectedPM ? '请先选择项目负责人。' : '请至少选择一位合作达人。'} onClick={createProject}>创建项目</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseProjectModal}>取消</Button><Button disabled={!name.trim() || !selectedPM || selectedCreatorHandles.length === 0} disabledReason={!name.trim() ? '请先填写项目名称。' : !selectedPM ? '请先选择媒介负责人。' : '请至少选择一位合作达人。'} onClick={createProject}>创建项目</Button></>}
         >
           <div className="form-grid single-column project-create-form">
             <label>
@@ -1095,7 +1180,7 @@ const createFixtureRequestApproval = (
 ): RequestApprovalState => {
   const status: RequestApprovalStatus = statusOverride ?? (requestStatus.includes('财务')
     ? 'PENDING_FINANCE'
-    : requestStatus.includes('项目负责人')
+    : requestStatus.includes('媒介负责人') || requestStatus.includes('项目负责人')
       ? 'PENDING_PROJECT_OWNER'
       : requestStatus.includes('老板')
         ? 'PENDING_OWNER'
@@ -1108,7 +1193,7 @@ const createFixtureRequestApproval = (
   const currentIndex = status === 'APPROVED' ? ordered.length : ordered.indexOf(status as typeof ordered[number]);
   const actorByStage = {
     PM: pmName,
-    PROJECT_OWNER: '项目负责人',
+    PROJECT_OWNER: '媒介负责人',
     OWNER: '老板',
     FINANCE: '财务',
   };
@@ -1475,7 +1560,7 @@ const INVOICE_CONTACT_FIELDS: ContactFieldDefinition[] = [
   { key: 'legalName', label: '真实姓名', alias: 'Real Name', placeholder: '请输入证件或合同中的真实姓名' },
   { key: 'phone', label: '联系电话', alias: 'Tel', placeholder: '选填：请输入含国家区号的联系电话', inputType: 'tel', optional: true },
   { key: 'email', label: '联系邮箱', alias: 'Email', placeholder: '请输入达人联系邮箱', inputType: 'email' },
-  { key: 'address', label: '联系地址', alias: 'Address', placeholder: '请输入 Invoice 中展示的完整地址', fullWidth: true },
+  { key: 'address', label: '联系地址', alias: 'Address', placeholder: '例如：New York, NY, United States（请将国家名放在末尾）', fullWidth: true },
 ];
 
 const createInvoiceContact = (
@@ -1979,6 +2064,14 @@ export const INITIAL_PROJECTS: ProjectSummary[] = PROJECT_FIXTURES.map((project,
   externalSystem: 'FEISHU',
   syncStatus: 'SYNCED',
   syncedAt: '2026-08-07T02:00:00.000Z',
+  projectType: projectIndex % 3 === 0 ? '品牌营销' : projectIndex % 3 === 1 ? '达人种草' : '游戏发行',
+  initiatorName: project.media,
+  startDate: `2026-${String((projectIndex % 6) + 1).padStart(2, '0')}-01`,
+  endDate: `2026-${String((projectIndex % 6) + 4).padStart(2, '0')}-28`,
+  source: 'FEISHU',
+  availability: 'ACTIVE',
+  sourceUpdatedAt: '2026-08-07T01:00:00.000Z',
+  localUpdatedAt: '2026-08-07T02:00:00.000Z',
   name: project.name,
   brand: project.brand,
   media: project.media,
@@ -2004,7 +2097,11 @@ export const MOCK_FEISHU_COOPERATION_PROJECT_SOURCE = createMockFeishuCooperatio
     externalProjectId: `feishu-project-${String(projectIndex + 1).padStart(3, '0')}`,
     projectCode: project.id,
     name: project.name,
+    projectType: projectIndex % 3 === 0 ? '品牌营销' : projectIndex % 3 === 1 ? '达人种草' : '游戏发行',
     status: project.projectStatus === '已完成' ? 'ARCHIVED' as const : 'ACTIVE' as const,
+    initiatorName: project.media,
+    startDate: `2026-${String((projectIndex % 6) + 1).padStart(2, '0')}-01`,
+    endDate: `2026-${String((projectIndex % 6) + 4).padStart(2, '0')}-28`,
     ownerName: project.media,
     updatedAt: '2026-08-07T01:00:00.000Z',
   })),
@@ -2175,19 +2272,29 @@ function CreatorContactFormGrid({
 }) {
   return (
     <div className="form-grid creator-payment-form-grid">
-      {INVOICE_CONTACT_FIELDS.map((field) => (
-        <label className={`${field.fullWidth ? 'full-width' : ''} ${showErrors && !field.optional && !contact[field.key].trim() ? 'creator-form-field-error' : ''}`} key={field.key}>
-          <span className="creator-payment-field-label">
-            <span>{field.label}{field.optional ? null : <em className="required-mark" aria-hidden="true">*</em>}</span>
-            <small>{field.alias}{field.optional ? ' · 选填' : ''}</small>
-          </span>
-          {field.fullWidth ? (
-            <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={showErrors && !field.optional && !contact[field.key].trim() ? true : undefined} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
-          ) : (
-            <input aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={showErrors && !field.optional && (!contact[field.key].trim() || (field.key === 'email' && !/^\S+@\S+\.\S+$/.test(contact.email))) ? true : undefined} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
-          )}
-        </label>
-      ))}
+      {INVOICE_CONTACT_FIELDS.map((field) => {
+        const addressCountryMissing = field.key === 'address'
+          && Boolean(contact.address.trim())
+          && !creatorRegionFromContactAddress(contact.address);
+        const invalid = showErrors && !field.optional && (
+          !contact[field.key].trim()
+          || (field.key === 'email' && !/^\S+@\S+\.\S+$/.test(contact.email))
+          || addressCountryMissing
+        );
+        return (
+          <label className={`${field.fullWidth ? 'full-width' : ''} ${invalid ? 'creator-form-field-error' : ''}`} key={field.key}>
+            <span className="creator-payment-field-label">
+              <span>{field.label}{field.optional ? null : <em className="required-mark" aria-hidden="true">*</em>}</span>
+              <small>{field.alias}{field.optional ? ' · 选填' : ''}</small>
+            </span>
+            {field.fullWidth ? (
+              <textarea aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={invalid || undefined} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            ) : (
+              <input aria-label={field.optional ? `${field.label}（选填）` : field.label} aria-invalid={invalid || undefined} type={field.inputType ?? 'text'} placeholder={field.placeholder} value={contact[field.key]} onChange={(event) => onChange(field.key, event.target.value)} />
+            )}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -2423,9 +2530,22 @@ export function CreatorsPage({
   const [providerFilter, setProviderFilter] = useState<CreatorDirectoryProviderFilter>('all');
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(() => new Set());
   const [exportingCreators, setExportingCreators] = useState(false);
+  const invitationStorageLoadFailedRef = useRef(false);
+  const [invitationRecords, setInvitationRecords] = useState<CreatorInvitationRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return loadCreatorInvitationRecords(window.localStorage);
+    } catch {
+      invitationStorageLoadFailedRef.current = true;
+      return [];
+    }
+  });
+  const [invitationSendOpen, setInvitationSendOpen] = useState(false);
+  const [invitationRecordsOpen, setInvitationRecordsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [creatorNameManuallyEdited, setCreatorNameManuallyEdited] = useState(false);
   const [draft, setDraft] = useState<CreatorProfile | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [validationAttempt, setValidationAttempt] = useState(0);
@@ -2443,6 +2563,12 @@ export function CreatorsPage({
   useEffect(() => {
     if (focusedCreatorId) setSelectedId(focusedCreatorId);
   }, [focusedCreatorId]);
+
+  useEffect(() => {
+    if (!invitationStorageLoadFailedRef.current) return;
+    invitationStorageLoadFailedRef.current = false;
+    notify('邀请记录读取失败', '浏览器本地存储暂时不可用，本次仍可在当前页面中模拟发送。');
+  }, [notify]);
 
   const normalizedSearch = search.trim().toLocaleLowerCase('zh-CN');
   const filteredCreators = useMemo(() => filterCreatorDirectory(creators, {
@@ -2505,11 +2631,21 @@ export function CreatorsPage({
     }
   };
 
+  const updateInvitationRecords = (nextRecords: CreatorInvitationRecord[]) => {
+    setInvitationRecords(nextRecords);
+    try {
+      saveCreatorInvitationRecords(nextRecords, window.localStorage);
+    } catch {
+      notify('邀请记录保存失败', '模拟发送结果已保留在当前页面，但刷新后可能无法恢复。');
+    }
+  };
+
   const openProfile = (creator: CreatorProfile) => {
     setSelectedId(creator.id);
     onFocusCleared?.();
     setEditing(false);
     setCreating(false);
+    setCreatorNameManuallyEdited(false);
     setDraft(null);
     setFormErrors([]);
     setValidationAttempt(0);
@@ -2521,6 +2657,7 @@ export function CreatorsPage({
     onFocusCleared?.();
     setEditing(false);
     setCreating(false);
+    setCreatorNameManuallyEdited(false);
     setDraft(null);
     setFormErrors([]);
     setValidationAttempt(0);
@@ -2538,6 +2675,7 @@ export function CreatorsPage({
     });
     setEditing(true);
     setCreating(false);
+    setCreatorNameManuallyEdited(true);
     setFormErrors([]);
     setValidationAttempt(0);
   };
@@ -2552,6 +2690,7 @@ export function CreatorsPage({
           setSelectedId(null);
           setDraft({
             ...stored.profile,
+            region: stored.profile.region || creatorRegionFromContactAddress(stored.profile.contact.address),
             socialAccounts: stored.profile.socialAccounts.map((account) => ({ ...account })),
             contact: { ...stored.profile.contact },
             payoutAccounts: clonePayoutAccounts(stored.profile.payoutAccounts),
@@ -2559,6 +2698,7 @@ export function CreatorsPage({
           });
           setEditing(true);
           setCreating(true);
+          setCreatorNameManuallyEdited(!isCreatorNameAutoDerived(stored.profile.name, stored.profile.socialAccounts));
           setFormErrors([]);
           setValidationAttempt(0);
           setCreatorCloseGuardOpen(false);
@@ -2594,6 +2734,7 @@ export function CreatorsPage({
     });
     setEditing(true);
     setCreating(true);
+    setCreatorNameManuallyEdited(false);
     setFormErrors([]);
     setValidationAttempt(0);
     setCreatorCloseGuardOpen(false);
@@ -2645,36 +2786,44 @@ export function CreatorsPage({
     setValidationAttempt(0);
   };
 
-  const updateDraftProfile = (
-    field: 'name' | 'region',
-    value: string,
-  ) => {
-    setDraft((current) => current ? { ...current, [field]: value } : current);
+  const updateDraftName = (value: string) => {
+    const hasManualName = Boolean(value.trim());
+    setCreatorNameManuallyEdited(hasManualName);
+    setDraft((current) => current ? {
+      ...current,
+      name: hasManualName ? value : creatorNameFromPrimaryHandle(current.socialAccounts),
+    } : current);
   };
 
   const updateDraftSocialAccounts = (socialAccounts: CreatorSocialAccount[]) => {
     setDraft((current) => {
       if (!current) return current;
       const platforms = [...new Set(socialAccounts.map((account) => account.platform.trim()).filter(Boolean))];
-      const primaryHandle = socialAccounts.find((account) => account.handle.trim())?.handle.trim() ?? '';
+      const primaryHandle = creatorNameFromPrimaryHandle(socialAccounts);
       return {
         ...current,
         socialAccounts,
         handle: primaryHandle,
         platform: platforms.join(' · '),
+        name: creatorNameManuallyEdited
+          ? current.name
+          : creatorNameFromPrimaryHandle(socialAccounts),
       };
     });
   };
 
   const updateDraftContact = (field: keyof CreatorInvoiceContact, value: string) => {
-    setDraft((current) => current ? { ...current, contact: { ...current.contact, [field]: value } } : current);
+    setDraft((current) => current ? {
+      ...current,
+      contact: { ...current.contact, [field]: value },
+      ...(field === 'address' ? { region: creatorRegionFromContactAddress(value) } : {}),
+    } : current);
   };
 
   const saveCreatorDetails = () => {
     if (!draft) return;
     const nextErrors: string[] = [];
-    if (!draft.name.trim()) nextErrors.push('达人名称');
-    if (!draft.region.trim()) nextErrors.push('地区');
+    if (!draft.region.trim()) nextErrors.push('请在联系地址末尾填写国家名');
     if (draft.socialAccounts.length === 0) nextErrors.push('至少一个社媒账号');
     if (draft.socialAccounts.some((account) => !account.platform.trim() || !account.handle.trim())) {
       nextErrors.push('每个社媒账号的平台与账号');
@@ -2705,8 +2854,6 @@ export function CreatorsPage({
       return;
     }
 
-    const normalizedName = draft.name.trim();
-    const initials = normalizedName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'NA';
     const normalizedSocialAccounts = draft.socialAccounts.map((account) => {
       const platform = account.platform.trim();
       const handle = normalizeSocialHandle(account.handle);
@@ -2717,6 +2864,8 @@ export function CreatorsPage({
         profileUrl: account.profileUrl.trim() || defaultSocialProfileUrl(platform, handle),
       };
     });
+    const normalizedName = draft.name.trim() || creatorNameFromPrimaryHandle(normalizedSocialAccounts);
+    const initials = creatorInitialsFromName(normalizedName);
     const platformSummary = [...new Set(normalizedSocialAccounts.map((account) => account.platform))].join(' · ');
     const preparedAccounts = prepareCreatorPayoutAccountsForSave(
       draft.id,
@@ -2787,7 +2936,12 @@ export function CreatorsPage({
       <PageHeading
         title="达人档案"
         subtitle="分开维护达人身份、Invoice 联系资料及多个收款账户。"
-        actions={canEdit ? <Button icon={<Plus size={17} />} onClick={startCreating}>新建达人档案</Button> : undefined}
+        actions={canEdit ? (
+          <>
+            <Button icon={<Plus size={17} />} onClick={startCreating}>新建达人档案</Button>
+            <Button variant="secondary" icon={<Send size={17} />} onClick={() => setInvitationSendOpen(true)}>发送邀请链接</Button>
+          </>
+        ) : undefined}
       />
       <div className="metrics-grid">
         <MetricCard label="达人总数" value={creators.length.toLocaleString('zh-CN')} meta="当前档案" tone="peach" />
@@ -2806,16 +2960,21 @@ export function CreatorsPage({
               onChange={setProviderFilter}
             />
           </div>
-          <Button
-            variant="secondary"
-            icon={exportingCreators ? <LoaderCircle className="is-spinning" size={16} /> : <Download size={16} />}
-            disabled={!selectedCreators.length || exportingCreators}
-            disabledReason={!selectedCreators.length ? '请先勾选至少一位达人。' : '达人档案正在导出，请稍候。'}
-            aria-busy={exportingCreators || undefined}
-            onClick={() => { void exportSelectedCreators(); }}
-          >
-            {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
-          </Button>
+          <div className="creator-directory-toolbar-actions">
+            <Button
+              variant="secondary"
+              icon={exportingCreators ? <LoaderCircle className="is-spinning" size={16} /> : <Download size={16} />}
+              disabled={!selectedCreators.length || exportingCreators}
+              disabledReason={!selectedCreators.length ? '请先勾选至少一位达人。' : '达人档案正在导出，请稍候。'}
+              aria-busy={exportingCreators || undefined}
+              onClick={() => { void exportSelectedCreators(); }}
+            >
+              {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
+            </Button>
+            <Button variant="secondary" icon={<ClipboardCheck size={16} />} onClick={() => setInvitationRecordsOpen(true)}>
+              邀请记录
+            </Button>
+          </div>
         </div>
         <div className="table-scroll">
           <table className="data-table operational-table creator-directory-table">
@@ -2947,12 +3106,12 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<Users size={19} />} title="达人基本资料" description="用于项目选择与档案检索，不参与银行账户验证">
                 <div className="form-grid creator-payment-form-grid">
                   <label>
-                    <span className="creator-payment-field-label"><span>达人名称<em className="required-mark" aria-hidden="true">*</em></span><small>Display name</small></span>
-                    <input aria-label="达人名称" aria-invalid={formErrors.length > 0 && !draft.name.trim() ? true : undefined} placeholder="例如：Mina Kato" value={draft.name} onChange={(event) => updateDraftProfile('name', event.target.value)} />
+                    <span className="creator-payment-field-label"><span>达人名称</span><small>Display name · 默认跟随首个 Handle</small></span>
+                    <input aria-label="达人名称" placeholder="录入首个 Handle 后自动带入" value={draft.name} onChange={(event) => updateDraftName(event.target.value)} />
                   </label>
                   <label>
-                    <span className="creator-payment-field-label"><span>地区<em className="required-mark" aria-hidden="true">*</em></span><small>Creator region</small></span>
-                    <input aria-label="达人地区" aria-invalid={formErrors.length > 0 && !draft.region.trim() ? true : undefined} placeholder="例如：美国" value={draft.region} onChange={(event) => updateDraftProfile('region', event.target.value)} />
+                    <span className="creator-payment-field-label"><span>地区</span><small>From contact address · 自动带入</small></span>
+                    <input className="creator-derived-readonly-field" aria-label="达人地区（根据联系地址自动带入）" readOnly value={draft.region || '待识别'} />
                   </label>
                 </div>
               </CreatorPaymentSection>
@@ -3035,6 +3194,26 @@ export function CreatorsPage({
         onSave={saveCreatorDraft}
         onContinue={() => setCreatorCloseGuardOpen(false)}
       />
+      {invitationSendOpen ? (
+        <CreatorInvitationSendDialog
+          creators={creators}
+          records={invitationRecords}
+          notify={notify}
+          onClose={() => setInvitationSendOpen(false)}
+          onRecordsChange={updateInvitationRecords}
+          onOpenRecords={() => {
+            setInvitationSendOpen(false);
+            setInvitationRecordsOpen(true);
+          }}
+        />
+      ) : null}
+      {invitationRecordsOpen ? (
+        <CreatorInvitationRecordsDialog
+          records={invitationRecords}
+          notify={notify}
+          onClose={() => setInvitationRecordsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3077,6 +3256,7 @@ export function CollaborationsPage({
   paymentLists: PaymentListRecord[];
 }) {
   const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const collaborationRows = useMemo(() => buildCollaborationInvoiceRows({
@@ -3089,15 +3269,20 @@ export function CollaborationsPage({
     requests,
     paymentLists,
   }), [contracts, creators, externalInvoices, generatedInvoices, paymentLists, payouts, projects, requests]);
+  const projectFilterOptions = useMemo(
+    () => buildCollaborationProjectFilterOptions(collaborationRows),
+    [collaborationRows],
+  );
   const query = search.trim().toLowerCase();
-  const filteredCollaborations = collaborationRows.filter((item) => !query || item.searchText.includes(query));
+  const projectFilteredCollaborations = filterCollaborationRowsByProject(collaborationRows, projectFilter);
+  const filteredCollaborations = projectFilteredCollaborations.filter((item) => !query || item.searchText.includes(query));
   const {
     page,
     pageItems: visibleCollaborations,
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredCollaborations, { resetKey: query });
+  } = usePagination(filteredCollaborations, { resetKey: `${query}\u0000${projectFilter}` });
   const selectedRow = selectedRowId
     ? collaborationRows.find((row) => row.rowId === selectedRowId) ?? null
     : null;
@@ -3110,8 +3295,13 @@ export function CollaborationsPage({
     <div className="page-stack">
       <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
       <section className="content-card">
-        <div className="content-toolbar">
+        <div className="content-toolbar collaboration-list-toolbar">
           <SearchBar value={search} onChange={setSearch} placeholder="搜索达人、项目、Invoice 或合同" />
+          <CollaborationProjectFilter
+            value={projectFilter}
+            options={projectFilterOptions}
+            onChange={setProjectFilter}
+          />
           <span className="collaboration-list-toolbar-note">共 {collaborationRows.length} 份 Invoice · 待付款 {waitingForPaymentCount} 份</span>
         </div>
         <div className="table-scroll">
@@ -3192,6 +3382,14 @@ const invoiceTypeFilterVisible = (tab: InvoicePageTab) => (
   tab === 'review' || tab === 'approved' || tab === 'returned'
 );
 
+const formatInvoiceCreationDraftTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || '未记录';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+};
+
 export function InvoicePage({
   payouts,
   creators,
@@ -3199,12 +3397,15 @@ export function InvoicePage({
   invoiceBillingSettings,
   projects = [],
   generatedInvoices,
+  creationDrafts = [],
   externalInvoices = [],
   requests,
   tab,
   onTabChange,
   onCreateInvoice,
   onCreateBatchInvoice,
+  onResumeCreationDraft = () => undefined,
+  onDeleteCreationDraft = () => undefined,
   onCreateExternalInvoice = () => undefined,
   onPublishExternalInvoice = () => undefined,
   onPublishExternalInvoices = () => false,
@@ -3240,12 +3441,15 @@ export function InvoicePage({
   invoiceBillingSettings: InvoiceBillingSettings;
   projects?: ProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
+  creationDrafts?: InvoiceCreationDraft[];
   externalInvoices?: ExternalInvoiceCollectionRecord[];
   requests: RequestProjectSummary[];
   tab: InvoicePageTab;
   onTabChange: (tab: InvoicePageTab) => void;
   onCreateInvoice: () => void;
   onCreateBatchInvoice: () => void;
+  onResumeCreationDraft?: (draft: InvoiceCreationDraft) => void;
+  onDeleteCreationDraft?: (draftId: string) => void;
   onCreateExternalInvoice?: (input: ExternalInvoiceCollectionInput, publish: boolean) => void;
   onPublishExternalInvoice?: (invoiceId: string) => void;
   onPublishExternalInvoices?: (invoiceIds: string[]) => boolean;
@@ -3295,10 +3499,49 @@ export function InvoicePage({
   const [providerFilter, setProviderFilter] = useState<InvoiceManagementFilters['provider']>('all');
   const [statusFilter, setStatusFilter] = useState<InvoiceManagementFilters['status']>('all');
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState<InvoiceManagementFilters['invoiceType']>('all');
+  const [draftSearch, setDraftSearch] = useState('');
+  const [draftTypeFilter, setDraftTypeFilter] = useState<'all' | 'SINGLE' | 'BATCH'>('all');
+  const [draftPendingDelete, setDraftPendingDelete] = useState<InvoiceCreationDraft | null>(null);
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedExternalInvoiceId, setSelectedExternalInvoiceId] = useState<string | null>(null);
   const [showExternalCreate, setShowExternalCreate] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const draftRows = useMemo(() => creationDrafts.map((draft) => {
+    const project = projects.find((candidate) => (
+      String(candidate.cooperationProjectId ?? candidate.projectId ?? candidate.id) === String(draft.projectId)
+    ));
+    if (draft.kind === 'SINGLE') {
+      const creator = creators.find((candidate) => candidate.id === draft.creatorId);
+      return {
+        draft,
+        typeLabel: '单份 Invoice',
+        creatorLabel: creator?.name ?? (draft.creatorId ? '达人档案已失效' : '待选择达人'),
+        projectLabel: project?.name ?? (draft.projectId ? '项目已失效，请重新选择' : '待选择项目'),
+        progressLabel: '尚未生成文件',
+      };
+    }
+    const names = draft.rows.map((row) => row.creatorName).filter(Boolean);
+    const generatedCount = invoiceBatchDraftGeneratedCount(draft);
+    return {
+      draft,
+      typeLabel: '批量 Invoice',
+      creatorLabel: names.length
+        ? `${names.slice(0, 2).join('、')}${names.length > 2 ? ` 等 ${names.length} 位` : ''}`
+        : '待选择达人',
+      projectLabel: project?.name ?? (draft.projectId ? '项目已失效，请重新选择' : '待选择项目'),
+      progressLabel: `${generatedCount}/${draft.rows.length} 已生成 · ${Math.max(0, draft.rows.length - generatedCount)} 待生成`,
+    };
+  }), [creationDrafts, creators, projects]);
+  const normalizedDraftSearch = draftSearch.trim().toLocaleLowerCase();
+  const filteredDraftRows = draftRows.filter((row) => (
+    (draftTypeFilter === 'all' || row.draft.kind === draftTypeFilter)
+    && (!normalizedDraftSearch || (
+      `${row.typeLabel} ${row.creatorLabel} ${row.projectLabel}`.toLocaleLowerCase().includes(normalizedDraftSearch)
+    ))
+  ));
+  const draftPagination = usePagination(filteredDraftRows, {
+    resetKey: `${draftSearch}:${draftTypeFilter}:${filteredDraftRows.map((row) => row.draft.draftId).join('|')}`,
+  });
   const effectiveSourceKey = selectedSourceKey ?? (
     focusedInvoiceId
       ? focusedInvoiceId.startsWith('generated:') || focusedInvoiceId.startsWith('payout:')
@@ -3401,7 +3644,7 @@ export function InvoicePage({
     const actionLabel = view.status === '已退回'
       ? '查看详情'
       : payout.invoiceReviewStatus === '草稿'
-      ? '查看草稿'
+      ? '查看详情'
       : canAct
       ? payout.invoiceReviewStatus === '达人反馈'
         ? '查看详情'
@@ -3492,6 +3735,7 @@ export function InvoicePage({
     };
   });
   const groupedRows: Record<InvoicePageTab, InvoiceManagementRow[]> = {
+    drafts: [],
     signature: [],
     upload: [],
     review: [],
@@ -3575,7 +3819,7 @@ export function InvoicePage({
   }, [invoiceTypeFilter, providerFilter, search, selectedProjectKeys, statusFilter, tab]);
   const selectionEnabled = tab === 'signature' || tab === 'upload';
   const selectableRowIds = new Set(visibleRows.filter((row) => (
-    (tab === 'signature' && row.invoiceType === 'INTERNAL' && row.status === '草稿')
+    (tab === 'signature' && row.invoiceType === 'INTERNAL' && row.status === '待发布')
     || (tab === 'upload' && row.invoiceType === 'EXTERNAL' && row.status === '待发布')
   )).map((row) => row.rowId));
   const selectedPublishRows = visibleRows.filter((row) => selectedRowIds.has(row.rowId));
@@ -3764,12 +4008,81 @@ export function InvoicePage({
       </section>
       <section className="content-card">
         <div className="tabs-row">
+          <button className={`tab-button ${tab === 'drafts' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('drafts')}>草稿箱 <span>{creationDrafts.length}</span></button>
           <button className={`tab-button ${tab === 'signature' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('signature')}>待签署 <span>{groupedRows.signature.length}</span></button>
           <button className={`tab-button ${tab === 'upload' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('upload')}>待回收 <span>{groupedRows.upload.length}</span></button>
           <button className={`tab-button ${tab === 'review' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('review')}>待审核 <span>{groupedRows.review.length}</span></button>
           <button className={`tab-button ${tab === 'approved' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('approved')}>已通过 <span>{groupedRows.approved.length}</span></button>
           <button className={`tab-button ${tab === 'returned' ? 'tab-active' : ''}`} type="button" onClick={() => onTabChange('returned')}>已退回 <span>{groupedRows.returned.length}</span></button>
         </div>
+        {tab === 'drafts' ? (
+          <div className="invoice-creation-drafts" aria-label="Invoice 生成中草稿">
+            <div className="invoice-creation-draft-toolbar">
+              <div className="project-filter-field invoice-creation-draft-search">
+                <span className="project-filter-field-label">搜索</span>
+                <SearchBar value={draftSearch} onChange={setDraftSearch} placeholder="搜索达人或关联项目" />
+              </div>
+              <div className="project-filter-field invoice-creation-draft-type-filter">
+                <span className="project-filter-field-label">草稿类型</span>
+                <SelectField
+                  ariaLabel="Invoice 草稿类型筛选"
+                  variant="form"
+                  value={draftTypeFilter}
+                  options={[
+                    { value: 'all', label: '全部类型' },
+                    { value: 'SINGLE', label: '单份 Invoice' },
+                    { value: 'BATCH', label: '批量 Invoice' },
+                  ]}
+                  onChange={setDraftTypeFilter}
+                />
+              </div>
+              <span className="invoice-creation-draft-count">已显示 <strong>{filteredDraftRows.length}</strong> / {creationDrafts.length} 条</span>
+            </div>
+            <div className="table-shell invoice-creation-draft-table-shell">
+              <div className="table-scroll">
+                <table className="data-table invoice-creation-draft-table">
+                  <thead><tr><th>草稿类型</th><th>达人</th><th>关联项目</th><th>生成进度</th><th>最近编辑时间</th><th className="action-cell">操作</th></tr></thead>
+                  <tbody>
+                    {draftPagination.pageItems.length ? draftPagination.pageItems.map((row) => (
+                      <tr key={row.draft.draftId} data-draft-id={row.draft.draftId}>
+                        <td><span className={`invoice-creation-draft-kind is-${row.draft.kind.toLowerCase()}`}>{row.typeLabel}</span></td>
+                        <td><strong className="invoice-creation-draft-creator">{row.creatorLabel}</strong></td>
+                        <td><span className="invoice-creation-draft-project">{row.projectLabel}</span></td>
+                        <td><span className="invoice-creation-draft-progress">{row.progressLabel}</span></td>
+                        <td><time dateTime={row.draft.updatedAt}>{formatInvoiceCreationDraftTime(row.draft.updatedAt)}</time></td>
+                        <td className="action-cell">
+                          <div className="table-action-group">
+                            <ListActionButton kind="edit" onClick={() => onResumeCreationDraft(row.draft)}>继续编辑</ListActionButton>
+                            <ListActionButton kind="danger" onClick={() => setDraftPendingDelete(row.draft)}>删除</ListActionButton>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={6}><div className="invoice-creation-draft-empty">
+                        <FileText size={28} />
+                        <strong>{creationDrafts.length ? '没有符合筛选条件的草稿' : '暂无生成中草稿'}</strong>
+                        <small>只有尚未完成文件生成的单份或批量 Invoice 会显示在这里。</small>
+                        {!creationDrafts.length && canCreateInvoice ? <div><Button variant="secondary" onClick={onCreateBatchInvoice}>批量生成</Button><Button onClick={onCreateInvoice}>生成 Invoice</Button></div> : null}
+                      </div></td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-footer">
+                <span>共 {filteredDraftRows.length} 条</span>
+                <Pagination
+                  ariaLabel="Invoice 草稿箱分页"
+                  page={draftPagination.page}
+                  pageSize={draftPagination.pageSize}
+                  total={filteredDraftRows.length}
+                  onPageChange={draftPagination.setPage}
+                  onPageSizeChange={draftPagination.setPageSize}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
         <div className="invoice-list-filter-panel" aria-label="Invoice 列表筛选">
           <div className="invoice-list-filter-fields">
             <div className="project-filter-field invoice-list-filter-search">
@@ -3855,7 +4168,22 @@ export function InvoicePage({
             if (row.source.kind === 'payout') simulateCreatorSignature(row.source.payout);
           }}
         />
+          </>
+        )}
       </section>
+      {draftPendingDelete ? (
+        <Modal
+          title="删除 Invoice 草稿"
+          width="460px"
+          onClose={() => setDraftPendingDelete(null)}
+          footer={<><Button variant="secondary" onClick={() => setDraftPendingDelete(null)}>取消</Button><Button variant="danger" onClick={() => { onDeleteCreationDraft(draftPendingDelete.draftId); setDraftPendingDelete(null); }}>确认删除</Button></>}
+        >
+          <div className="invoice-creation-draft-delete-copy">
+            <span><Trash2 size={22} /></span>
+            <div><strong>删除后无法继续恢复这份表单</strong><p>{draftPendingDelete.kind === 'BATCH' ? '本次批量生成中尚未完成的内容会被移除；已经生成的 Invoice 仍保留在待签署页签。' : '该单份 Invoice 未完成内容会从当前账号的本地草稿箱中删除。'}</p></div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }
@@ -3884,9 +4212,7 @@ export type PaymentBatchFilters = {
 };
 
 const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
-const PAYMENT_DATA_ASSET_PATH = '/export-assets/airwallex/空中云汇对账明细表.xlsx';
 export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
-export const PAYMENT_DATA_FILENAME = '空中云汇对账明细表.xlsx';
 
 export const paymentBatchRows = (
   batches: readonly PaymentBatchRecord[],
@@ -3981,10 +4307,6 @@ export const createBatchConfirmationArchive = async (
   return zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
 };
 
-export const loadPaymentDataRecord = async (
-  loadAsset: ExportAssetLoader = loadExportAsset,
-) => loadAsset(PAYMENT_DATA_ASSET_PATH);
-
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
 
 const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
@@ -3993,10 +4315,26 @@ const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
   return 'is-success';
 };
 
+export const paymentBatchCurrentRequestStatus = (
+  batch: PaymentBatchRecord,
+  requests: readonly RequestProjectSummary[],
+  payouts: readonly Payout[],
+) => {
+  const request = requests.find((candidate) => (
+    candidate.paymentRequestProjectId === batch.request.paymentRequestProjectId
+  ));
+  if (!request) return batch.request.requestStatus || '待同步';
+  return requestProjectStatusFor(request, [...payouts])
+    ?? myProjectStatusFor(request)
+    ?? batch.request.requestStatus
+    ?? '待同步';
+};
+
 export function BatchesPage({
   batches,
   payouts = [],
   creators = [],
+  requests = [],
   onNewBatch,
   notify,
   canCreateBatch,
@@ -4007,6 +4345,7 @@ export function BatchesPage({
   batches: readonly PaymentBatchRecord[];
   payouts?: readonly Payout[];
   creators?: readonly CreatorProfile[];
+  requests?: readonly RequestProjectSummary[];
   onNewBatch: () => void;
   notify: Notify;
   canCreateBatch: boolean;
@@ -4041,25 +4380,12 @@ export function BatchesPage({
     setPageSize: setBatchPageSize,
   } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}\u0000${paymentStatus}` });
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
+  const selectedBatches = batches.filter((batch) => selectedIds.has(batch.paymentBatchCode));
   const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
   const selectedVisibleCount = filteredRows.filter((row) => selectedIds.has(row.id)).length;
   const allVisibleSelected = filteredRows.length > 0 && selectedVisibleCount === filteredRows.length;
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
-  const selectedProjectItems = useMemo(() => {
-    if (!selectedBatch) return [];
-    const seen = new Set<string>();
-    return batches
-      .filter((batch) => (
-        batch.request.paymentRequestProjectId === selectedBatch.request.paymentRequestProjectId
-      ))
-      .flatMap((batch) => batch.items)
-      .filter((item) => {
-        if (seen.has(item.payoutId)) return false;
-        seen.add(item.payoutId);
-        return true;
-      });
-  }, [batches, selectedBatch]);
   const batchMetrics = useMemo(() => {
     const totals = batches.reduce((result, batch) => {
       const counts = paymentBatchStatusCounts(batch);
@@ -4134,11 +4460,15 @@ export function BatchesPage({
     if (!exportAvailability.records || exporting !== null) return;
     setExporting('records');
     try {
-      const workbook = await loadPaymentDataRecord();
-      downloadBlob(workbook, PAYMENT_DATA_FILENAME);
-      notify('付款数据记录已导出', `已下载 ${PAYMENT_DATA_FILENAME}。`);
+      const workbook = await createPaymentBatchWorkbook(selectedBatches.map((batch) => ({
+        batch,
+        currentRequestStatus: paymentBatchCurrentRequestStatus(batch, requests, payouts),
+      })));
+      const filename = paymentBatchWorkbookFilename();
+      downloadBlob(workbook, filename);
+      notify('付款明细已导出', `已导出 ${selectedBatches.length} 个付款批次。`);
     } catch {
-      notify('付款数据记录导出失败', '无法读取付款数据 Excel，请检查导出资源后重试。');
+      notify('付款明细导出失败', '无法生成付款批次明细 Excel，请稍后重试。');
     } finally {
       setExporting(null);
     }
@@ -4163,7 +4493,7 @@ export function BatchesPage({
         batch={selectedBatch}
         payouts={payouts}
         creators={creators}
-        projectItems={selectedProjectItems}
+        currentRequestStatus={paymentBatchCurrentRequestStatus(selectedBatch, requests, payouts)}
         canHandleFailure={canCreateBatch}
         onBack={closeBatchDetail}
         onReturnPayout={onReturnPayout}
@@ -4595,221 +4925,104 @@ export function TransactionsPage({
   );
 }
 
-const ORGANIZATION_COUNTRY_OPTIONS = [
-  { value: 'Hong Kong SAR China', label: 'Hong Kong SAR China', description: '中国香港特别行政区' },
-  { value: 'Singapore', label: 'Singapore', description: '新加坡' },
-  { value: 'United States', label: 'United States', description: '美国' },
-] as const;
-
 export function OrganizationPage({
   notify,
+  contractAdvertiserSettings,
+  onContractAdvertiserSettingsChange,
   invoiceBillingSettings,
   onInvoiceBillingSettingsChange,
 }: {
   notify: Notify;
+  contractAdvertiserSettings: ContractAdvertiserSettings;
+  onContractAdvertiserSettingsChange: (settings: ContractAdvertiserSettings) => void;
   invoiceBillingSettings: InvoiceBillingSettings;
   onInvoiceBillingSettingsChange: (settings: InvoiceBillingSettings) => void;
 }) {
-  const [company, setCompany] = useState('Muse Commerce Limited');
-  const [country, setCountry] = useState('Hong Kong SAR China');
-  const [contact, setContact] = useState<string>(CURRENT_USER.name);
-  const [email, setEmail] = useState('finance@musepay.co');
-  const [address, setAddress] = useState('Unit 18, 16/F, Harbour Centre, Hong Kong');
-  const [entityEditor, setEntityEditor] = useState<{
-    mode: 'create' | 'edit';
-    id?: InvoiceBillingEntityId;
-    name: string;
-    address: string;
-  } | null>(null);
-  const [entityErrors, setEntityErrors] = useState<InvoiceBillingEntityErrors>({});
-  const [deleteTarget, setDeleteTarget] = useState<InvoiceBillingEntity | null>(null);
-
-  const openEntityEditor = (entity?: InvoiceBillingEntity) => {
-    setEntityErrors({});
-    setEntityEditor(entity ? {
-      mode: 'edit',
-      id: entity.id,
-      name: entity.name,
-      address: entity.address,
-    } : {
-      mode: 'create',
-      name: '',
-      address: '',
-    });
-  };
-
-  const saveEntity = () => {
-    if (!entityEditor) return;
-    const errors = validateInvoiceBillingEntity(
-      entityEditor,
-      invoiceBillingSettings.entities,
-      entityEditor.id,
-    );
-    setEntityErrors(errors);
-    if (Object.keys(errors).length) return;
-    if (entityEditor.mode === 'edit' && entityEditor.id) {
-      onInvoiceBillingSettingsChange(updateInvoiceBillingEntity(invoiceBillingSettings, {
-        id: entityEditor.id,
-        name: entityEditor.name,
-        address: entityEditor.address,
-      }));
-      notify('开票主体已更新', `${entityEditor.name.trim()} 的 Bill To 资料已更新。`);
-    } else {
-      onInvoiceBillingSettingsChange(addInvoiceBillingEntity(invoiceBillingSettings, {
-        id: createPrototypeId('invoice-billing-entity') as InvoiceBillingEntityId,
-        name: entityEditor.name,
-        address: entityEditor.address,
-      }));
-      notify('开票主体已添加', `${entityEditor.name.trim()} 已加入可选的 Bill To 主体。`);
-    }
-    setEntityEditor(null);
-  };
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    onInvoiceBillingSettingsChange(removeInvoiceBillingEntity(invoiceBillingSettings, deleteTarget.id));
-    notify('开票主体已删除', `${deleteTarget.name} 已从可选主体中移除，历史 Invoice 快照不受影响。`);
-    setDeleteTarget(null);
-  };
-
   return (
     <div className="page-stack">
       <PageHeading
         title="组织信息"
         subtitle="维护签约与付款流程中使用的企业主体资料。"
-        actions={<Button onClick={() => notify('组织信息已保存', '公司资料与 Invoice 开票主体已在本次会话中更新。')}>保存修改</Button>}
+        actions={<Button onClick={() => notify('组织信息已保存', '合同 Advertiser 与 Invoice 开票主体已在本次会话中更新。')}>保存修改</Button>}
       />
-      <section className="profile-form-card">
-        <div className="form-section-head">
-          <span><Building2 size={21} /></span>
-          <div><h2>公司 / 工作室信息</h2><p>这些信息会显示在请款单、Invoice 审核与付款资料中。</p></div>
-        </div>
-        <div className="form-grid">
-          <label className="full-width">
-            <span>公司 / 工作室名称 <small>{company.length} / 100</small></span>
-            <input value={company} onChange={(event) => setCompany(event.target.value)} />
-          </label>
-          <div className="form-control full-width">
-            <span>国家 / 地区</span>
-            <SelectField
-              ariaLabel="国家 / 地区"
-              variant="form"
-              value={country}
-              options={ORGANIZATION_COUNTRY_OPTIONS}
-              onChange={setCountry}
-            />
-          </div>
-          <label><span>联系人</span><input value={contact} onChange={(event) => setContact(event.target.value)} /></label>
-          <label><span>联系邮箱 *</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label className="full-width"><span>注册地址 <small>{address.length} / 2000</small></span><textarea value={address} onChange={(event) => setAddress(event.target.value)} /></label>
-        </div>
-        <button className="add-contact-button" type="button"><Plus size={16} />添加更多联系方式</button>
-      </section>
-      <section className="profile-form-card invoice-entity-card">
-        <div className="invoice-entity-section-head">
-          <div className="form-section-head">
-            <span><FileText size={21} /></span>
-            <div><h2>Invoice 开票主体</h2><p>作为生成文件中的 Bill To 信息，与公司 / 工作室资料独立维护。</p></div>
-          </div>
-          <Button variant="secondary" icon={<Plus size={16} />} onClick={() => openEntityEditor()}>新增开票主体</Button>
-        </div>
-        <div className="invoice-entity-list" role="radiogroup" aria-label="默认 Invoice 开票主体">
-          {invoiceBillingSettings.entities.map((entity) => {
-            const isDefault = entity.id === invoiceBillingSettings.defaultEntityId;
-            const deleteDisabled = isDefault || invoiceBillingSettings.entities.length === 1;
-            const deleteHint = invoiceBillingSettings.entities.length === 1
-              ? '至少需要保留一个开票主体'
-              : isDefault
-                ? '请先将其他主体设为默认后再删除'
-                : `删除 ${entity.name}`;
-            return (
-              <div className={`invoice-entity-row${isDefault ? ' is-default' : ''}`} key={entity.id}>
-                <label className="invoice-entity-default-control">
-                  <input
-                    type="radio"
-                    name="default-invoice-entity"
-                    checked={isDefault}
-                    onChange={() => {
-                      onInvoiceBillingSettingsChange(setDefaultInvoiceBillingEntity(invoiceBillingSettings, entity.id));
-                      notify('默认开票主体已更新', `${entity.name} 将在新建 Invoice 时默认选中。`);
-                    }}
-                  />
-                  <span>{isDefault ? '默认主体' : '设为默认'}</span>
-                </label>
-                <div className="invoice-entity-row-content">
-                  <strong>{entity.name}</strong>
-                  <p>{entity.address}</p>
-                </div>
-                <div className="invoice-entity-row-actions">
-                  <button className="icon-button" type="button" aria-label={`编辑 ${entity.name}`} title="编辑开票主体" onClick={() => openEntityEditor(entity)}>
-                    <Pencil size={17} />
-                  </button>
-                  <button className="icon-button is-danger" type="button" aria-label={`删除 ${entity.name}`} title={deleteHint} disabled={deleteDisabled} onClick={() => setDeleteTarget(entity)}>
-                    <Trash2 size={17} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="invoice-entity-note"><CheckCircle2 size={16} /><span>新建 Invoice 默认带入默认主体；单张 Invoice 仍可临时修改地址。</span></div>
-      </section>
-      {entityEditor ? (
-        <Modal
-          title={entityEditor.mode === 'create' ? '新增开票主体' : '编辑开票主体'}
-          className="invoice-entity-editor-modal"
-          onClose={() => setEntityEditor(null)}
-          footer={(
-            <>
-              <Button variant="secondary" onClick={() => setEntityEditor(null)}>取消</Button>
-              <Button onClick={saveEntity}>{entityEditor.mode === 'create' ? '确认添加' : '保存修改'}</Button>
-            </>
-          )}
-        >
-          <div className="form-grid invoice-entity-editor-form">
-            <label className={`full-width ${entityErrors.name || entityErrors.duplicate ? 'has-error' : ''}`}>
-              <span>Bill To 公司名称 * <small>{entityEditor.name.length} / 100</small></span>
-              <input
-                value={entityEditor.name}
-                maxLength={100}
-                autoComplete="organization"
-                onChange={(event) => {
-                  setEntityEditor((current) => current ? { ...current, name: event.target.value } : current);
-                  setEntityErrors((current) => ({ ...current, name: undefined, duplicate: undefined }));
-                }}
-              />
-              <small role={entityErrors.name || entityErrors.duplicate ? 'alert' : undefined}>{entityErrors.name ?? entityErrors.duplicate}</small>
-            </label>
-            <label className={`full-width ${entityErrors.address ? 'has-error' : ''}`}>
-              <span>Bill To 地址 * <small>{entityEditor.address.length} / 500</small></span>
-              <textarea
-                value={entityEditor.address}
-                maxLength={500}
-                autoComplete="street-address"
-                onChange={(event) => {
-                  setEntityEditor((current) => current ? { ...current, address: event.target.value } : current);
-                  setEntityErrors((current) => ({ ...current, address: undefined, duplicate: undefined }));
-                }}
-              />
-              <small role={entityErrors.address ? 'alert' : undefined}>{entityErrors.address}</small>
-            </label>
-          </div>
-        </Modal>
-      ) : null}
-      {deleteTarget ? (
-        <Modal
-          title="删除开票主体"
-          onClose={() => setDeleteTarget(null)}
-          footer={(
-            <>
-              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>取消</Button>
-              <Button variant="danger" onClick={confirmDelete}>确认删除</Button>
-            </>
-          )}
-        >
-          <p>确定删除“{deleteTarget.name}”吗？已生成的历史 Invoice 会继续保留原 Bill To 快照。</p>
-        </Modal>
-      ) : null}
+      <EntitySettingsCard<ContractAdvertiserEntityId>
+        icon={<Building2 size={21} />}
+        title="公司 / 工作室信息"
+        description="这些信息会出现在合同的Advertiser中"
+        addLabel="新增 Advertiser 主体"
+        createTitle="新增 Advertiser 主体"
+        editTitle="编辑 Advertiser 主体"
+        deleteTitle="删除 Advertiser 主体"
+        nameLabel="Advertiser 公司名称"
+        addressLabel="Advertiser 地址"
+        entityNoun="合同 Advertiser 主体"
+        defaultGroupLabel="默认合同 Advertiser 主体"
+        defaultInputName="default-contract-advertiser-entity"
+        note="新建合同默认带入默认主体；每份合同仍可选择其他主体。"
+        deleteHistoryNote="已生成的历史合同会继续保留原 Advertiser 快照。"
+        entities={contractAdvertiserSettings.entities}
+        defaultEntityId={contractAdvertiserSettings.defaultEntityId}
+        validate={validateContractAdvertiserEntity}
+        onCreate={(draft) => {
+          onContractAdvertiserSettingsChange(addContractAdvertiserEntity(contractAdvertiserSettings, {
+            id: createPrototypeId('contract-advertiser-entity') as ContractAdvertiserEntityId,
+            ...draft,
+          }));
+          notify('Advertiser 主体已添加', `${draft.name} 已加入合同可选主体。`);
+        }}
+        onUpdate={(entity) => {
+          onContractAdvertiserSettingsChange(updateContractAdvertiserEntity(contractAdvertiserSettings, entity));
+          notify('Advertiser 主体已更新', `${entity.name} 的合同主体资料已更新。`);
+        }}
+        onDefaultChange={(id) => {
+          const entity = contractAdvertiserSettings.entities.find((candidate) => candidate.id === id);
+          onContractAdvertiserSettingsChange(setDefaultContractAdvertiserEntity(contractAdvertiserSettings, id));
+          if (entity) notify('默认 Advertiser 已更新', `${entity.name} 将在新建合同时默认选中。`);
+        }}
+        onDelete={(entity: ContractAdvertiserEntity) => {
+          onContractAdvertiserSettingsChange(removeContractAdvertiserEntity(contractAdvertiserSettings, entity.id));
+          notify('Advertiser 主体已删除', `${entity.name} 已从合同可选主体中移除，历史合同快照不受影响。`);
+        }}
+      />
+      <EntitySettingsCard<InvoiceBillingEntityId>
+        icon={<FileText size={21} />}
+        title="Invoice 开票主体"
+        description="作为生成文件中的 Bill To 信息，与公司 / 工作室资料独立维护。"
+        addLabel="新增开票主体"
+        createTitle="新增开票主体"
+        editTitle="编辑开票主体"
+        deleteTitle="删除开票主体"
+        nameLabel="Bill To 公司名称"
+        addressLabel="Bill To 地址"
+        entityNoun="开票主体"
+        defaultGroupLabel="默认 Invoice 开票主体"
+        defaultInputName="default-invoice-entity"
+        note="新建 Invoice 默认带入默认主体；单张 Invoice 仍可临时修改地址。"
+        deleteHistoryNote="已生成的历史 Invoice 会继续保留原 Bill To 快照。"
+        entities={invoiceBillingSettings.entities}
+        defaultEntityId={invoiceBillingSettings.defaultEntityId}
+        validate={validateInvoiceBillingEntity}
+        onCreate={(draft) => {
+          onInvoiceBillingSettingsChange(addInvoiceBillingEntity(invoiceBillingSettings, {
+            id: createPrototypeId('invoice-billing-entity') as InvoiceBillingEntityId,
+            ...draft,
+          }));
+          notify('开票主体已添加', `${draft.name} 已加入可选的 Bill To 主体。`);
+        }}
+        onUpdate={(entity) => {
+          onInvoiceBillingSettingsChange(updateInvoiceBillingEntity(invoiceBillingSettings, entity));
+          notify('开票主体已更新', `${entity.name} 的 Bill To 资料已更新。`);
+        }}
+        onDefaultChange={(id) => {
+          const entity = invoiceBillingSettings.entities.find((candidate) => candidate.id === id);
+          onInvoiceBillingSettingsChange(setDefaultInvoiceBillingEntity(invoiceBillingSettings, id));
+          if (entity) notify('默认开票主体已更新', `${entity.name} 将在新建 Invoice 时默认选中。`);
+        }}
+        onDelete={(entity: InvoiceBillingEntity) => {
+          onInvoiceBillingSettingsChange(removeInvoiceBillingEntity(invoiceBillingSettings, entity.id));
+          notify('开票主体已删除', `${entity.name} 已从可选主体中移除，历史 Invoice 快照不受影响。`);
+        }}
+      />
     </div>
   );
 }

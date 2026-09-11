@@ -25,7 +25,7 @@ const project = (
   name: `项目 ${id}`,
   brand: `品牌 ${id}`,
   media: '媒介',
-  pm: '项目负责人',
+  pm: '媒介负责人',
   creators: 1,
   budget: 'USD 1,000',
   status: status === 'active' ? '执行中' : '已完成',

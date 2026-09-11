@@ -80,10 +80,23 @@ const paymentResultPlaceholder = (status: Payout['status']) => (
   status === '付款处理中' ? '待渠道回写' : '—'
 );
 
-const paymentResultDate = (status: Payout['status'], paidAt?: string) => {
-  if (status !== '已付款') return paymentResultPlaceholder(status);
-  if (!paidAt) return '—';
-  return paidAt.replace('T', ' ').split(' ')[0] || '—';
+const paymentSubmittedDate = (submittedAt?: string) => (
+  submittedAt?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? '—'
+);
+
+const paymentAttemptLabel = (attemptNumber: number) => {
+  if (attemptNumber === 1) return '首次付款';
+  if (attemptNumber === 2) return '二次付款';
+  return `第 ${attemptNumber} 次付款`;
+};
+
+const paymentAttemptResultMoney = (
+  status: Payout['status'],
+  amount?: number,
+  currency?: string,
+) => {
+  if (status === '付款处理中') return '待渠道回写';
+  return amount !== undefined && currency ? money(currency, amount) : '—';
 };
 
 const paymentAttemptMoney = (amount?: number, currency?: string) => (
@@ -123,9 +136,11 @@ const paymentAttemptsForDrawer = (
     fallbackAttempts.push({
       paymentBatchId: payout?.currentPaymentAttempt?.paymentBatchId,
       paymentBatchCode: payout?.currentPaymentAttempt?.paymentBatchCode,
+      paymentCode: payout?.currentPaymentAttempt?.paymentCode ?? item.paymentCode,
       attemptNumber: currentAttemptNumber,
       status: item.paymentStatus,
-      occurredAt: item.paymentStatus === '已付款' ? item.paidAt : item.failure?.occurredAt,
+      submittedAt: payout?.currentPaymentAttempt?.submittedAt ?? item.paymentSubmittedAt,
+      occurredAt: item.paymentStatus === '已付款' ? item.paidAt : item.failure?.occurredAt ?? item.paidAt,
       principalAmount: item.amount,
       principalCurrency: item.currency,
       transferFeeAmount: item.transferFeeAmount,
@@ -158,6 +173,148 @@ type ProjectDownloadAction = 'contract' | 'invoice' | 'payment-list' | 'payment-
 
 const hasPaymentDate = (value?: string) => /^(\d{4})-(\d{2})-(\d{2})/.test(value ?? '');
 
+export type PaymentProjectAttemptRow = Readonly<{
+  rowId: string;
+  attemptNumber: number;
+  item: PaymentBatchItemSnapshot;
+  payout?: Payout;
+}>;
+
+const paymentAttemptRowCode = ({
+  attempt,
+  attemptCount,
+  currentAttemptNumber,
+  item,
+  payout,
+}: {
+  attempt?: PaymentAttemptSnapshot;
+  attemptCount: number;
+  currentAttemptNumber: number;
+  item: PaymentBatchItemSnapshot;
+  payout?: Payout;
+}) => {
+  if (attempt?.paymentCode) return attempt.paymentCode;
+  if (!attempt || attemptCount <= 1 || attempt.attemptNumber === currentAttemptNumber) {
+    return payout?.currentPaymentAttempt?.paymentCode ?? item.paymentCode ?? payout?.paymentCode;
+  }
+  return undefined;
+};
+
+export const buildPaymentProjectAttemptRows = ({
+  items,
+  payouts,
+}: {
+  items: readonly PaymentBatchItemSnapshot[];
+  payouts: readonly Payout[];
+}): PaymentProjectAttemptRow[] => items.flatMap((item) => {
+  const payout = payouts.find((candidate) => candidate.id === item.payoutId);
+  const attempts = paymentAttemptsForDrawer(item, payout);
+  const currentAttemptNumber = Math.max(
+    1,
+    payout?.currentPaymentAttempt?.attemptNumber
+      ?? item.paymentAttemptNumber
+      ?? attempts[attempts.length - 1]?.attemptNumber
+      ?? 1,
+  );
+  const hasCurrentAttemptSnapshot = attempts.some((attempt) => attempt.attemptNumber === currentAttemptNumber);
+  const displayAttemptCount = attempts.length + (attempts.length && !hasCurrentAttemptSnapshot ? 1 : 0);
+  if (!attempts.length) {
+    const paymentCode = paymentAttemptRowCode({
+      attemptCount: 0,
+      currentAttemptNumber,
+      item,
+      payout,
+    });
+    return [{
+      rowId: `${item.payoutId}:attempt:${currentAttemptNumber}`,
+      attemptNumber: currentAttemptNumber,
+      payout,
+      item: {
+        ...item,
+        paymentBatchId: payout?.currentPaymentAttempt?.paymentBatchId ?? item.paymentBatchId,
+        paymentBatchCode: payout?.currentPaymentAttempt?.paymentBatchCode ?? item.paymentBatchCode,
+        paymentSubmittedAt: payout?.currentPaymentAttempt?.submittedAt ?? item.paymentSubmittedAt,
+        paymentCode,
+        paymentAttemptNumber: currentAttemptNumber,
+      },
+    }];
+  }
+
+  const finalizedRows = attempts.map((attempt) => {
+    const paymentCode = paymentAttemptRowCode({
+      attempt,
+      attemptCount: displayAttemptCount,
+      currentAttemptNumber,
+      item,
+      payout,
+    });
+    const isCurrentAttempt = attempt.attemptNumber === currentAttemptNumber;
+    return {
+      rowId: `${item.payoutId}:attempt:${attempt.paymentBatchId ?? attempt.attemptNumber}`,
+      attemptNumber: attempt.attemptNumber,
+      payout,
+      item: {
+        ...item,
+        paymentBatchId: attempt.paymentBatchId,
+        paymentBatchCode: attempt.paymentBatchCode,
+        paymentSubmittedAt: attempt.submittedAt,
+        paymentCode,
+        paymentAttemptNumber: attempt.attemptNumber,
+        paymentStatus: attempt.status,
+        paidAt: attempt.occurredAt,
+        amount: attempt.principalAmount,
+        currency: attempt.principalCurrency,
+        transferFeeAmount: attempt.transferFeeAmount,
+        transferFeeCurrency: attempt.transferFeeCurrency,
+        actualPaidAmount: attempt.actualPaidAmount,
+        actualPaidCurrency: attempt.actualPaidCurrency,
+        recipientReceivedAmount: attempt.recipientReceivedAmount,
+        recipientReceivedCurrency: attempt.recipientReceivedCurrency,
+        postTransactionBalance: isCurrentAttempt && attempt.status === '已付款'
+          ? item.postTransactionBalance
+          : undefined,
+        postTransactionBalanceCurrency: isCurrentAttempt && attempt.status === '已付款'
+          ? item.postTransactionBalanceCurrency
+          : undefined,
+        failure: attempt.status === '付款失败' && (attempt.errorCode || attempt.providerResponse)
+          ? {
+              code: attempt.errorCode || '未记录',
+              response: attempt.providerResponse || '未记录',
+              occurredAt: attempt.occurredAt || '未记录',
+            }
+          : undefined,
+        paymentAttempts: attempts,
+      },
+    };
+  });
+  if (hasCurrentAttemptSnapshot) {
+    return finalizedRows;
+  }
+  const paymentCode = paymentAttemptRowCode({
+    attemptCount: displayAttemptCount,
+    currentAttemptNumber,
+    item,
+    payout,
+  });
+  return [
+    ...finalizedRows,
+    {
+      rowId: `${item.payoutId}:attempt:${payout?.currentPaymentAttempt?.paymentBatchId ?? currentAttemptNumber}`,
+      attemptNumber: currentAttemptNumber,
+      payout,
+      item: {
+        ...item,
+        paymentBatchId: payout?.currentPaymentAttempt?.paymentBatchId ?? item.paymentBatchId,
+        paymentBatchCode: payout?.currentPaymentAttempt?.paymentBatchCode ?? item.paymentBatchCode,
+        paymentSubmittedAt: payout?.currentPaymentAttempt?.submittedAt ?? item.paymentSubmittedAt,
+        paymentCode,
+        paymentAttemptNumber: currentAttemptNumber,
+        paymentAttempts: attempts,
+      },
+    },
+  ];
+});
+
 function PaymentProjectInfoCard({
   className = '',
   icon,
@@ -185,6 +342,7 @@ export function PaymentProjectItemDrawer({
   onOpenFailurePaymentList,
   onRequestFailureReturn,
   payout,
+  selectedAttemptNumber,
 }: {
   canHandleFailure: boolean;
   creator?: CreatorProfile;
@@ -193,6 +351,7 @@ export function PaymentProjectItemDrawer({
   onOpenFailurePaymentList?: () => void;
   onRequestFailureReturn?: () => void;
   payout?: Payout;
+  selectedAttemptNumber?: number;
 }) {
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -219,7 +378,22 @@ export function PaymentProjectItemDrawer({
     item.paymentStatus,
   );
   const canReturnFailure = item.paymentStatus === '付款失败' && !failureReturn && Boolean(onRequestFailureReturn);
-  const titleId = `payment-project-item-drawer-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const focusedAttemptNumber = selectedAttemptNumber ?? item.paymentAttemptNumber ?? 1;
+  const focusedAttempt = paymentAttempts.find((attempt) => (
+    attempt.attemptNumber === focusedAttemptNumber
+  ));
+  const focusedBatchCode = focusedAttempt?.paymentBatchCode
+    ?? item.paymentBatchCode
+    ?? (payout?.currentPaymentAttempt?.attemptNumber === focusedAttemptNumber
+      ? payout.currentPaymentAttempt.paymentBatchCode
+      : undefined);
+  const channelResultAt = focusedAttempt?.occurredAt
+    ?? failure?.occurredAt
+    ?? item.paidAt;
+  const channelResultTime = channelResultAt
+    ? displayTime(channelResultAt)
+    : item.paymentStatus === '付款处理中' ? '待渠道回写' : '未记录';
+  const titleId = `payment-project-item-drawer-${item.payoutId.replace(/[^a-zA-Z0-9_-]/g, '-')}-${focusedAttemptNumber}`;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -277,7 +451,7 @@ export function PaymentProjectItemDrawer({
             <h2 id={titleId}>{accountName}</h2>
           </div>
           <div className="payment-project-item-drawer-header-actions">
-            {isSecondaryPayment ? <span className="payment-project-retry-badge">二次付款</span> : null}
+            {isSecondaryPayment ? <span className="payment-project-retry-badge">{paymentAttemptLabel(focusedAttemptNumber)}</span> : null}
             <span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
             <button ref={closeButtonRef} className="icon-button" type="button" aria-label="关闭付款明细" onClick={onClose}>
               <X size={20} aria-hidden="true" />
@@ -296,7 +470,6 @@ export function PaymentProjectItemDrawer({
               <div><dt>{item.accountIdentifierLabel || '收款账户'}</dt><dd>{accountIdentifier}</dd></div>
               <div><dt>收款国家 / 地区</dt><dd>{item.recipientCountry || '待补充'}</dd></div>
               <div><dt>收款币种</dt><dd>{item.receiveCurrency || '待补充'}</dd></div>
-              <div><dt>账户版本</dt><dd>{item.payoutAccountVersion}</dd></div>
               <div>
                 <dt>累计实际付款金额</dt>
                 <dd className="payment-project-amount-stack">{cumulativePaidAmounts.map((amount) => <span key={amount}>{amount}</span>)}</dd>
@@ -311,8 +484,11 @@ export function PaymentProjectItemDrawer({
           <section className="payment-project-item-drawer-section" aria-labelledby={`${titleId}-result`}>
             <h3 id={`${titleId}-result`}><CircleAlert size={17} aria-hidden="true" />渠道结果</h3>
             <dl className="payment-project-item-drawer-grid">
+              <div><dt>付款编号</dt><dd className="payment-project-drawer-payment-code">{item.paymentCode || '付款编号待补全'}</dd></div>
+              <div><dt>付款批次号</dt><dd className="payment-project-drawer-payment-code">{focusedBatchCode || '未记录'}</dd></div>
+              <div><dt>付款类型</dt><dd>{paymentAttemptLabel(focusedAttemptNumber)}</dd></div>
               <div><dt>付款状态</dt><dd>{item.paymentStatus}</dd></div>
-              <div><dt>渠道回写时间</dt><dd>{failure?.occurredAt ? displayTime(failure.occurredAt) : displayTime(item.paidAt)}</dd></div>
+              <div><dt>渠道回写时间</dt><dd>{channelResultTime}</dd></div>
               {failure ? (
                 <>
                   <div><dt>错误码</dt><dd>{failure.code}</dd></div>
@@ -324,20 +500,22 @@ export function PaymentProjectItemDrawer({
               <div className="payment-project-attempt-history" role="list" aria-label="多次付款记录">
                 {paymentAttempts.map((attempt) => (
                   <article
-                    className={`payment-project-attempt-card is-${attempt.status === '付款失败' ? 'failed' : 'succeeded'}`}
+                    aria-current={attempt.attemptNumber === focusedAttemptNumber ? 'true' : undefined}
+                    className={`payment-project-attempt-card is-${attempt.status === '付款失败' ? 'failed' : 'succeeded'}${attempt.attemptNumber === focusedAttemptNumber ? ' is-current' : ''}`}
                     key={`${attempt.paymentBatchId ?? attempt.attemptNumber}-${attempt.status}`}
                     role="listitem"
                   >
                     <header>
                       <div>
-                        <strong>{attempt.attemptNumber === 1 ? '首次付款' : attempt.attemptNumber === 2 ? '二次付款' : `第 ${attempt.attemptNumber} 次付款`}</strong>
+                        <strong>{paymentAttemptLabel(attempt.attemptNumber)}</strong>
                         <span>{attempt.status === '付款失败' ? '渠道付款失败' : '渠道付款成功'}</span>
                       </div>
                       <span className={`simple-status ${paymentStatusTone(attempt.status)}`}><i />{attempt.status}</span>
                     </header>
                     <dl>
+                      <div><dt>付款编号</dt><dd>{attempt.paymentCode || '付款编号待补全'}</dd></div>
                       <div><dt>所属批次</dt><dd>{attempt.paymentBatchCode || '未记录'}</dd></div>
-                      <div><dt>付款时间</dt><dd>{displayTime(attempt.occurredAt)}</dd></div>
+                      <div><dt>执行打款时间</dt><dd>{displayTime(attempt.submittedAt)}</dd></div>
                       <div><dt>支付金额</dt><dd>{paymentAttemptMoney(attempt.principalAmount, attempt.principalCurrency)}</dd></div>
                       <div><dt>手续费</dt><dd>{paymentAttemptMoney(attempt.transferFeeAmount, attempt.transferFeeCurrency)}</dd></div>
                       <div className="is-full"><dt>实际付款金额</dt><dd>{paymentAttemptMoney(attempt.actualPaidAmount, attempt.actualPaidCurrency)}</dd></div>
@@ -374,7 +552,7 @@ export function PaymentProjectItemDrawer({
               <div><dt>本地清算方式</dt><dd>{item.localClearingSystem || '待补充'}</dd></div>
               <div><dt>付款金额</dt><dd>{money(item.currency, item.amount)}</dd></div>
               <div><dt>手续费承担方</dt><dd>{paymentFeeBearerDisplayName(item.feeBearer)}</dd></div>
-              <div><dt>付款日期</dt><dd>{paymentResultDate(item.paymentStatus, item.paidAt)}</dd></div>
+              <div><dt>实际付款日期</dt><dd>{paymentSubmittedDate(item.paymentSubmittedAt)}</dd></div>
               <div className="is-full"><dt>付款原因</dt><dd>{item.paymentReason || '未记录'}</dd></div>
               <div className="is-full"><dt>交易附言</dt><dd>{item.transactionReference || '未记录'}</dd></div>
               <div className="is-full"><dt>付款描述</dt><dd>{item.description || '未记录'}</dd></div>
@@ -427,7 +605,7 @@ export function PaymentProjectPaymentDetailPage({
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
   notify?: (title: string, message: string) => void;
 }) {
-  const [selectedDetailItemId, setSelectedDetailItemId] = useState<string | null>(null);
+  const [selectedDetailRowId, setSelectedDetailRowId] = useState<string | null>(null);
   const [failureDialogPayoutId, setFailureDialogPayoutId] = useState<string | null>(null);
   const [downloadingResource, setDownloadingResource] = useState<ProjectDownloadAction | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
@@ -443,6 +621,9 @@ export function PaymentProjectPaymentDetailPage({
       ...item,
       paymentStatus: payout.status,
       paidAt: payout.paidAt ?? item.paidAt,
+      paymentBatchId: payout.currentPaymentAttempt?.paymentBatchId ?? item.paymentBatchId,
+      paymentBatchCode: payout.currentPaymentAttempt?.paymentBatchCode ?? item.paymentBatchCode,
+      paymentSubmittedAt: payout.currentPaymentAttempt?.submittedAt ?? item.paymentSubmittedAt,
       transferFeeAmount: succeeded ? payout.transferFeeAmount ?? item.transferFeeAmount : undefined,
       transferFeeCurrency: succeeded ? payout.transferFeeCurrency ?? item.transferFeeCurrency : undefined,
       actualPaidAmount: succeeded ? payout.actualPaidAmount ?? item.actualPaidAmount : undefined,
@@ -461,33 +642,41 @@ export function PaymentProjectPaymentDetailPage({
       } : item.failure,
     };
   }), [payouts, record.items]);
+  const attemptRows = useMemo(
+    () => buildPaymentProjectAttemptRows({ items: liveItems, payouts }),
+    [liveItems, payouts],
+  );
+  const attemptItems = useMemo(() => attemptRows.map((row) => row.item), [attemptRows]);
   const totals = paymentBatchAmountLabel(record);
-  const statusCounts = paymentBatchStatusCounts({ items: liveItems });
-  const failedItems = useMemo(
+  const statusCounts = paymentBatchStatusCounts({ items: attemptItems });
+  const unresolvedFailedItems = useMemo(
     () => liveItems.filter((item) => item.paymentStatus === '付款失败'),
     [liveItems],
   );
   const dialogItem = liveItems.find((item) => item.payoutId === failureDialogPayoutId);
-  const selectedDetailItem = liveItems.find((item) => item.payoutId === selectedDetailItemId);
-  const selectedDetailPayout = selectedDetailItem
-    ? payouts.find((payout) => payout.id === selectedDetailItem.payoutId)
-    : undefined;
+  const selectedDetailRow = attemptRows.find((row) => row.rowId === selectedDetailRowId);
+  const selectedDetailItem = selectedDetailRow?.item;
+  const selectedDetailPayout = selectedDetailRow?.payout;
   const selectedDetailCreator = selectedDetailItem
     ? creators.find((creator) => creator.id === selectedDetailItem.creatorId)
     : undefined;
-  const confirmationEligibleItems = useMemo(() => liveItems.filter((item) => (
-    item.paymentStatus === '已付款' && hasPaymentDate(item.paidAt)
-  )), [liveItems]);
+  const confirmationEligibleRows = useMemo(() => attemptRows.filter((row) => (
+    row.item.paymentStatus === '已付款' && hasPaymentDate(row.item.paymentSubmittedAt)
+  )), [attemptRows]);
   const confirmationEligibleIds = useMemo(
-    () => new Set(confirmationEligibleItems.map((item) => item.payoutId)),
-    [confirmationEligibleItems],
+    () => new Set(confirmationEligibleRows.map((row) => row.rowId)),
+    [confirmationEligibleRows],
+  );
+  const selectedConfirmationRows = useMemo(
+    () => confirmationEligibleRows.filter((row) => selectedItemIds.has(row.rowId)),
+    [confirmationEligibleRows, selectedItemIds],
   );
   const selectedConfirmationItems = useMemo(
-    () => confirmationEligibleItems.filter((item) => selectedItemIds.has(item.payoutId)),
-    [confirmationEligibleItems, selectedItemIds],
+    () => selectedConfirmationRows.map((row) => row.item),
+    [selectedConfirmationRows],
   );
-  const allEligibleSelected = confirmationEligibleItems.length > 0
-    && selectedConfirmationItems.length === confirmationEligibleItems.length;
+  const allEligibleSelected = confirmationEligibleRows.length > 0
+    && selectedConfirmationRows.length === confirmationEligibleRows.length;
   const projectDocuments = useMemo(() => resolvePaymentProjectDocuments({
     items: liveItems,
     contracts,
@@ -516,13 +705,13 @@ export function PaymentProjectPaymentDetailPage({
         );
       } else if (kind === 'payment-detail') {
         downloadBlob(
-          await createPaymentProjectDetailWorkbook({ request: record.request, items: liveItems }),
+          await createPaymentProjectDetailWorkbook({ request: record.request, items: attemptItems }),
           paymentProjectDetailWorkbookFilename(record.request.requestCode),
         );
       } else {
         const confirmationItems = kind === 'confirmation-selected'
           ? selectedConfirmationItems
-          : confirmationEligibleItems;
+          : confirmationEligibleRows.map((row) => row.item);
         downloadBlob(
           await createPaymentProjectConfirmationArchive({ items: confirmationItems }),
           paymentProjectConfirmationArchiveFilename(record.request.requestCode),
@@ -533,7 +722,7 @@ export function PaymentProjectPaymentDetailPage({
         invoice: 'Invoice 压缩包已生成。',
         'payment-list': '付款清单已导出。',
         'payment-detail': '付款明细已导出。',
-        'confirmation-all': `已生成 ${confirmationEligibleItems.length} 份付款确认函。`,
+        'confirmation-all': `已生成 ${confirmationEligibleRows.length} 份付款确认函。`,
         'confirmation-selected': `已生成 ${selectedConfirmationItems.length} 份所选付款确认函。`,
       };
       notify?.('下载已开始', successCopy[kind]);
@@ -551,9 +740,9 @@ export function PaymentProjectPaymentDetailPage({
   }, []);
 
   useEffect(() => {
-    if (!selectedDetailItemId || liveItems.some((item) => item.payoutId === selectedDetailItemId)) return;
-    setSelectedDetailItemId(null);
-  }, [liveItems, selectedDetailItemId]);
+    if (!selectedDetailRowId || attemptRows.some((row) => row.rowId === selectedDetailRowId)) return;
+    setSelectedDetailRowId(null);
+  }, [attemptRows, selectedDetailRowId]);
 
   useEffect(() => {
     setSelectedItemIds((current) => {
@@ -563,9 +752,9 @@ export function PaymentProjectPaymentDetailPage({
   }, [confirmationEligibleIds]);
 
   useEffect(() => {
-    const indeterminate = selectedConfirmationItems.length > 0 && !allEligibleSelected;
+    const indeterminate = selectedConfirmationRows.length > 0 && !allEligibleSelected;
     if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
-  }, [allEligibleSelected, selectedConfirmationItems.length]);
+  }, [allEligibleSelected, selectedConfirmationRows.length]);
 
   const openFailureDialog = (payoutId: string) => {
     setFailureDialogPayoutId(payoutId);
@@ -575,30 +764,33 @@ export function PaymentProjectPaymentDetailPage({
     setFailureDialogPayoutId(null);
   };
 
-  const openDetailDrawer = (payoutId: string, trigger?: HTMLButtonElement | null) => {
+  const openDetailDrawer = (rowId: string, trigger?: HTMLButtonElement | null) => {
     detailTriggerRef.current = trigger ?? null;
-    setSelectedDetailItemId(payoutId);
+    setSelectedDetailRowId(rowId);
   };
 
   const closeDetailDrawer = useCallback(() => {
-    setSelectedDetailItemId(null);
+    setSelectedDetailRowId(null);
     const trigger = detailTriggerRef.current;
     detailTriggerRef.current = null;
     window.requestAnimationFrame(() => trigger?.focus());
   }, []);
 
   const revealFirstFailure = (trigger?: HTMLButtonElement | null) => {
-    const first = failedItems[0];
-    if (!first) return;
-    openDetailDrawer(first.payoutId, trigger);
+    const first = unresolvedFailedItems[0];
+    const failedRow = first ? attemptRows.find((row) => (
+      row.item.payoutId === first.payoutId && row.item.paymentStatus === '付款失败'
+    )) : undefined;
+    if (!failedRow) return;
+    openDetailDrawer(failedRow.rowId, trigger);
   };
 
-  const toggleConfirmationItem = (payoutId: string) => {
-    if (!confirmationEligibleIds.has(payoutId)) return;
+  const toggleConfirmationItem = (rowId: string) => {
+    if (!confirmationEligibleIds.has(rowId)) return;
     setSelectedItemIds((current) => {
       const next = new Set(current);
-      if (next.has(payoutId)) next.delete(payoutId);
-      else next.add(payoutId);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
       return next;
     });
   };
@@ -606,7 +798,7 @@ export function PaymentProjectPaymentDetailPage({
   const toggleAllConfirmationItems = () => {
     setSelectedItemIds(allEligibleSelected
       ? new Set()
-      : new Set(confirmationEligibleItems.map((item) => item.payoutId)));
+      : new Set(confirmationEligibleRows.map((row) => row.rowId)));
   };
 
   const resourceDownloadOptions: readonly SelectOption<ProjectDownloadAction>[] = [
@@ -638,8 +830,8 @@ export function PaymentProjectPaymentDetailPage({
       value: 'confirmation-all',
       label: '导出所有',
       leading: <FileArchive size={16} />,
-      disabled: !confirmationEligibleItems.length,
-      title: !confirmationEligibleItems.length ? '没有具备实际付款日期的已付款明细。' : undefined,
+      disabled: !confirmationEligibleRows.length,
+      title: !confirmationEligibleRows.length ? '没有具备实际付款日期的已付款明细。' : undefined,
     },
     {
       value: 'confirmation-selected',
@@ -666,7 +858,7 @@ export function PaymentProjectPaymentDetailPage({
         <div className="payment-batch-detail-total">
           <span className={`simple-status ${projectStatusTone(record.status)}`}><i />{record.status}</span>
           <strong>{totals}</strong>
-          <small>{record.items.length} 笔付款明细</small>
+          <small>{attemptRows.length} 笔付款明细</small>
         </div>
       </header>
 
@@ -701,11 +893,11 @@ export function PaymentProjectPaymentDetailPage({
         </div>
       </section>
 
-      {failedItems.length ? (
+      {unresolvedFailedItems.length ? (
         <section className="payment-project-failure-overview" role="status" aria-live="polite">
           <span aria-hidden="true"><AlertTriangle size={19} /></span>
           <div>
-            <strong>{failedItems.length} 笔付款失败需要处理</strong>
+            <strong>{unresolvedFailedItems.length} 笔付款失败需要处理</strong>
             <p>请打开失败明细核对渠道结果，并逐笔退回媒介修正对应资料。</p>
           </div>
           <Button
@@ -742,6 +934,13 @@ export function PaymentProjectPaymentDetailPage({
         </div>
         <dl className="payment-batch-project-grid payment-project-info-cards">
           <PaymentProjectInfoCard icon={<ReceiptText size={16} />} label="付款编号" value={record.request.requestCode} />
+          <PaymentProjectInfoCard
+            icon={<WalletCards size={16} />}
+            label="付款渠道"
+            value={record.providers.length
+              ? <PaymentProviderBadges compact providers={record.providers} />
+              : '待补充'}
+          />
           <PaymentProjectInfoCard icon={<Coins size={16} />} label="付款金额" value={record.request.amount} />
           <PaymentProjectInfoCard icon={<Building2 size={16} />} label="品牌 / 客户" value={record.request.brand} />
           <PaymentProjectInfoCard icon={<UserRound size={16} />} label="项目媒介" value={record.request.media} />
@@ -790,7 +989,7 @@ export function PaymentProjectPaymentDetailPage({
                 variant="secondary"
                 className="payment-project-download-button is-detail-download"
                 icon={downloadingResource === 'payment-detail' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
-                disabled={!liveItems.length || downloadingResource !== null}
+                disabled={!attemptRows.length || downloadingResource !== null}
                 disabledReason={downloadingResource ? '文件正在导出，请稍候。' : '当前没有可导出的付款明细。'}
                 onClick={() => { void downloadProjectResource('payment-detail'); }}
               >
@@ -812,7 +1011,7 @@ export function PaymentProjectPaymentDetailPage({
               />
             </div>
             <div className="payment-project-resource-meta">
-              <span>{liveItems.length} 笔 · 已选 {selectedConfirmationItems.length} 笔</span>
+              <span>{attemptRows.length} 笔 · 已选 {selectedConfirmationRows.length} 笔</span>
             </div>
           </div>
         </header>
@@ -835,16 +1034,18 @@ export function PaymentProjectPaymentDetailPage({
                         type="checkbox"
                         aria-label="选择全部可导出确认函的付款明细"
                         checked={allEligibleSelected}
-                        disabled={!confirmationEligibleItems.length}
-                        title={confirmationEligibleItems.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
+                        disabled={!confirmationEligibleRows.length}
+                        title={confirmationEligibleRows.length ? '选择全部可导出确认函的付款明细' : '没有可导出确认函的付款明细'}
                         onChange={toggleAllConfirmationItems}
                       />
                     </label>
                   </th>
                   <th className="payment-project-detail-creator-heading">达人名称</th>
+                  <th className="payment-project-detail-code-heading">付款编号</th>
+                  <th className="payment-project-detail-type-heading">付款类型</th>
                   <th className="payment-project-detail-provider-heading">付款渠道</th>
                   <th className="payment-project-detail-account-heading">收款银行账号</th>
-                  <th className="payment-project-detail-date-heading">付款日期</th>
+                  <th className="payment-project-detail-date-heading">实际付款日期</th>
                   <th className="payment-project-detail-money-heading">付款金额</th>
                   <th className="payment-project-detail-money-heading">实际付款金额</th>
                   <th className="payment-project-detail-money-heading">实际总手续费</th>
@@ -853,35 +1054,22 @@ export function PaymentProjectPaymentDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {liveItems.length ? liveItems.map((item) => {
+                {attemptRows.length ? attemptRows.map((row) => {
+                  const item = row.item;
                   const currentStatus = item.paymentStatus;
                   const creator = creators.find((candidate) => candidate.id === item.creatorId);
                   const creatorIdentity = paymentCreatorIdentityFromBatchItem(item, creator);
                   const accountName = creatorIdentity.accountName;
                   const accountIdentifier = item.accountIdentifier || item.accountSummary || '待补充';
-                  const livePayout = payouts.find((payout) => payout.id === item.payoutId);
-                  const paymentAttempts = paymentAttemptsForDrawer(item, livePayout);
-                  const cumulativeActualAmounts = paymentAttemptAggregate(
-                    paymentAttempts,
-                    'actualPaidAmount',
-                    'actualPaidCurrency',
-                    currentStatus,
-                  );
-                  const cumulativeFeeAmounts = paymentAttemptAggregate(
-                    paymentAttempts,
-                    'transferFeeAmount',
-                    'transferFeeCurrency',
-                    currentStatus,
-                  );
-                  const canSelect = confirmationEligibleIds.has(item.payoutId);
-                  const selected = selectedItemIds.has(item.payoutId);
+                  const canSelect = confirmationEligibleIds.has(row.rowId);
+                  const selected = selectedItemIds.has(row.rowId);
                   const selectReason = currentStatus !== '已付款'
                     ? '仅已付款明细可以生成确认函。'
-                    : !hasPaymentDate(item.paidAt)
+                    : !hasPaymentDate(item.paymentSubmittedAt)
                       ? '缺少实际付款时间，无法生成确认函。'
                       : '选择此付款明细';
                   return (
-                    <tr className={selected ? 'is-selected' : ''} key={item.payoutId} aria-selected={selected}>
+                    <tr className={selected ? 'is-selected' : ''} key={row.rowId} aria-selected={selected}>
                       <td className="payment-project-detail-select-cell">
                         <label className="payment-project-detail-select-control">
                           <span className="sr-only">选择 {accountName} 的付款确认函</span>
@@ -891,29 +1079,37 @@ export function PaymentProjectPaymentDetailPage({
                             checked={selected}
                             disabled={!canSelect}
                             title={selectReason}
-                            onChange={() => toggleConfirmationItem(item.payoutId)}
+                            onChange={() => toggleConfirmationItem(row.rowId)}
                           />
                         </label>
                       </td>
                       <td className="payment-project-detail-creator-cell">
                         <PaymentCreatorIdentity {...creatorIdentity} />
                       </td>
+                      <td className="payment-project-detail-code-cell">
+                        <strong title={item.paymentCode || '付款编号待补全'}>{item.paymentCode || '付款编号待补全'}</strong>
+                      </td>
+                      <td className="payment-project-detail-type-cell">
+                        <span className={`payment-project-attempt-badge${row.attemptNumber > 1 ? ' is-retry' : ''}`}>
+                          {paymentAttemptLabel(row.attemptNumber)}
+                        </span>
+                      </td>
                       <td className="payment-project-detail-provider-cell"><PaymentProviderBadge compact provider={item.provider} /></td>
                       <td className="payment-project-detail-account-cell">
                         <strong title={accountIdentifier}>{accountIdentifier}</strong>
                         <small>{item.accountIdentifierLabel || '收款账户快照'}</small>
                       </td>
-                      <td className="payment-project-detail-date-cell">{paymentResultDate(currentStatus, item.paidAt)}</td>
+                      <td className="payment-project-detail-date-cell">{paymentSubmittedDate(item.paymentSubmittedAt)}</td>
                       <td className="payment-project-detail-money-cell">{money(item.currency, item.amount)}</td>
-                      <td className="payment-project-detail-money-cell"><span className="payment-project-amount-stack">{cumulativeActualAmounts.map((amount) => <span key={amount}>{amount}</span>)}</span></td>
-                      <td className="payment-project-detail-money-cell"><span className="payment-project-amount-stack">{cumulativeFeeAmounts.map((amount) => <span key={amount}>{amount}</span>)}</span></td>
+                      <td className="payment-project-detail-money-cell">{paymentAttemptResultMoney(currentStatus, item.actualPaidAmount, item.actualPaidCurrency)}</td>
+                      <td className="payment-project-detail-money-cell">{paymentAttemptResultMoney(currentStatus, item.transferFeeAmount, item.transferFeeCurrency)}</td>
                       <td className="payment-project-detail-status-cell">
                         <span className={`simple-status ${paymentStatusTone(currentStatus)}`}><i />{currentStatus}</span>
                       </td>
                       <td className="action-cell payment-project-detail-action-cell">
                         <ListActionButton
                           kind="view"
-                          onClick={(event) => openDetailDrawer(item.payoutId, event.currentTarget)}
+                          onClick={(event) => openDetailDrawer(row.rowId, event.currentTarget)}
                         >
                           查看详情
                         </ListActionButton>
@@ -922,7 +1118,7 @@ export function PaymentProjectPaymentDetailPage({
                   );
                 }) : (
                   <tr>
-                    <td className="request-project-empty" colSpan={10}>该项目暂无付款明细</td>
+                    <td className="request-project-empty" colSpan={12}>该项目暂无付款明细</td>
                   </tr>
                 )}
               </tbody>
@@ -933,13 +1129,16 @@ export function PaymentProjectPaymentDetailPage({
 
       {selectedDetailItem ? (
         <PaymentProjectItemDrawer
-          key={selectedDetailItem.payoutId}
+          key={selectedDetailRow?.rowId}
           item={selectedDetailItem}
           payout={selectedDetailPayout}
           creator={selectedDetailCreator}
+          selectedAttemptNumber={selectedDetailRow?.attemptNumber}
           canHandleFailure={canHandleFailure}
           onClose={closeDetailDrawer}
-          onRequestFailureReturn={selectedDetailPayout ? () => openFailureDialog(selectedDetailItem.payoutId) : undefined}
+          onRequestFailureReturn={selectedDetailPayout?.status === '付款失败'
+            ? () => openFailureDialog(selectedDetailItem.payoutId)
+            : undefined}
           onOpenFailurePaymentList={selectedDetailPayout?.paymentFailureReturn && onOpenFailurePaymentList
             ? () => onOpenFailurePaymentList(record.request.paymentRequestProjectId, selectedDetailItem.payoutId)
             : undefined}

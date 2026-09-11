@@ -108,6 +108,7 @@ import type {
   CreatorProfile,
   CreatorPayoutAccount,
   GeneratedInvoiceRecord,
+  InvoiceBatchDraft,
   InvoiceBatchRow,
   InvoiceBillingSettings,
   InvoiceCurrency,
@@ -131,6 +132,12 @@ type InvoiceBatchBuilderPageProps = {
   onPublishGenerated?: (records: GeneratedInvoiceRecord[]) => boolean;
   onOpenCreatorPaymentInformation: (creatorId: CreatorId) => void;
   contractMatchActor?: InvoiceContractMatchActor;
+  initialDraft?: InvoiceBatchDraft;
+  onDraftChange?: (
+    draft: Omit<InvoiceBatchDraft, 'draftId' | 'schemaVersion' | 'kind' | 'createdByAccount' | 'createdByName' | 'createdAt' | 'updatedAt'>,
+    meaningful: boolean,
+  ) => void;
+  onDraftCompleted?: () => void;
 };
 
 type CreatorImportReview = {
@@ -195,7 +202,7 @@ export function InvoiceBatchResultSection({
         <span><PackageCheck size={18} /></span>
         <div>
           <h2>生成结果</h2>
-          <p>成功记录将保存为草稿，可在这里查看结果并下载文件，发布后才会通知达人。</p>
+          <p>成功记录将保存为待发布，可在这里查看结果并下载文件，发布后才会通知达人。</p>
         </div>
       </header>
 
@@ -219,7 +226,7 @@ export function InvoiceBatchResultSection({
               </Button>
               {onPublishAll ? (
                 <Button icon={<Send size={16} />} onClick={onPublishAll}>
-                  一键发布草稿
+                  一键发布
                 </Button>
               ) : null}
             </div>
@@ -298,7 +305,7 @@ export function InvoiceBatchResultSection({
                         {row.generated ? (
                           <span className="invoice-batch-result-status is-success">
                             <CheckCircle2 size={14} />
-                            已生成
+                            待发布
                           </span>
                         ) : (
                           <span className="invoice-batch-result-status is-failure" title={row.issues.join('；')}>
@@ -1016,9 +1023,16 @@ export function InvoiceBatchBuilderPage({
   onPublishGenerated,
   onOpenCreatorPaymentInformation,
   contractMatchActor,
+  initialDraft,
+  onDraftChange,
+  onDraftCompleted,
 }: InvoiceBatchBuilderPageProps) {
-  const [projectId, setProjectId] = useState('');
-  const [selectedEngagementIds, setSelectedEngagementIds] = useState<EngagementId[]>([]);
+  const initialBatchDraftRef = useRef(initialDraft);
+  const restoredDraft = initialBatchDraftRef.current;
+  const [projectId, setProjectId] = useState<string>(restoredDraft?.projectId ?? '');
+  const [selectedEngagementIds, setSelectedEngagementIds] = useState<EngagementId[]>(
+    () => restoredDraft?.selectedEngagementIds ? [...restoredDraft.selectedEngagementIds] : [],
+  );
   const [creatorSearch, setCreatorSearch] = useState('');
   const [bulkCreatorInput, setBulkCreatorInput] = useState('');
   const [bulkCreatorInputOpen, setBulkCreatorInputOpen] = useState(false);
@@ -1026,16 +1040,35 @@ export function InvoiceBatchBuilderPage({
   const [creatorSelectionMode, setCreatorSelectionMode] = useState<'APPEND' | 'REPLACE'>('APPEND');
   const [importingCreators, setImportingCreators] = useState(false);
   const [forceDescriptionKey, setForceDescriptionKey] = useState<string | null>(null);
-  const [invoiceDate, setInvoiceDate] = useState(todayInputValue());
+  const [invoiceDate, setInvoiceDate] = useState(restoredDraft?.invoiceDate ?? todayInputValue());
   const [selectedBillingEntityId, setSelectedBillingEntityId] = useState(
-    () => defaultInvoiceBillingEntity(invoiceBillingSettings)!.id,
+    () => restoredDraft?.selectedBillingEntityId ?? defaultInvoiceBillingEntity(invoiceBillingSettings)!.id,
   );
-  const [currency, setCurrency] = useState<InvoiceCurrency>(INVOICE_BATCH_PROTOTYPE_CURRENCY);
+  const [currency, setCurrency] = useState<InvoiceCurrency>(
+    restoredDraft?.currency ?? INVOICE_BATCH_PROTOTYPE_CURRENCY,
+  );
   const [sharedDescriptions, setSharedDescriptions] = useState<InvoiceBatchLineItemSeed[]>(
-    () => [createSharedDescription()],
+    () => restoredDraft?.sharedDescriptions?.length
+      ? restoredDraft.sharedDescriptions.map((item) => ({ ...item }))
+      : [createSharedDescription()],
   );
-  const [rows, setRows] = useState<InvoiceBatchRow[]>([]);
-  const [batchId] = useState(() => createPrototypeId('batch'));
+  const [rows, setRows] = useState<InvoiceBatchRow[]>(() => restoredDraft?.rows.map((row) => ({
+    ...row,
+    items: row.items.map((item) => ({ ...item })),
+    descriptionOverrideKeys: [...row.descriptionOverrideKeys],
+    contractIds: [...row.contractIds],
+    availableContractIds: [...row.availableContractIds],
+    status: row.status === 'GENERATING' ? 'FAILED' : row.status,
+    issues: row.status === 'GENERATING'
+      ? ['上次生成在页面关闭前未完成，请重新生成。']
+      : [...row.issues],
+    generated: row.generated ? {
+      record: row.generated.record,
+      pdfBlob: new Blob([], { type: 'application/pdf' }),
+      docxBlob: new Blob([], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }),
+    } : undefined,
+  })) ?? []);
+  const [batchId] = useState(() => restoredDraft?.batchId ?? createPrototypeId('batch'));
   const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
     projects.flatMap((project) => creators.map((creator) => {
       const projectId = projectIdFor(project);
@@ -1052,7 +1085,9 @@ export function InvoiceBatchBuilderPage({
   ));
   const [onlyProblems, setOnlyProblems] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
+  const [generationProgress, setGenerationProgress] = useState(
+    restoredDraft?.generationProgress ?? { current: 0, total: 0 },
+  );
   const [generationError, setGenerationError] = useState('');
   const [preview, setPreview] = useState<{
     creatorName: string;
@@ -1061,6 +1096,7 @@ export function InvoiceBatchBuilderPage({
   const [contractPreview, setContractPreview] = useState<ContractRecord | null>(null);
   const [collapsedMatchRows, setCollapsedMatchRows] = useState<Set<EngagementId>>(() => new Set());
   const creatorFileInputRef = useRef<HTMLInputElement>(null);
+  const restoredFilesRef = useRef(false);
 
   const invoiceProjects = useMemo(() => projects.map((project) => {
     const stableProjectId = projectIdFor(project);
@@ -1078,6 +1114,24 @@ export function InvoiceBatchBuilderPage({
     };
   }), [creators, draftEngagementIds, projects]);
   const selectedProject = invoiceProjects.find((project) => projectIdFor(project) === projectId) ?? null;
+  const restorationWarnings = restoredDraft ? [
+    restoredDraft.projectId && !selectedProject
+      ? '原草稿中的关联项目已失效，请重新选择项目。'
+      : '',
+    restoredDraft.rows.some((row) => !creators.some((creator) => creator.id === row.creatorId))
+      ? '部分达人档案已失效，请重新选择达人。'
+      : '',
+    restoredDraft.rows.some((row) => row.contractIds.some((contractId) => (
+      !contracts.some((contract) => contract.contractId === contractId)
+    ))) ? '部分关联合同已失效，请重新核对合同选择。' : '',
+    restoredDraft.rows.some((row) => {
+      if (!row.payoutAccountId) return false;
+      const creator = creators.find((candidate) => candidate.id === row.creatorId);
+      return !eligibleInvoicePayoutAccounts(creator).some((account) => (
+        getPayoutAccountId(account) === row.payoutAccountId
+      ));
+    }) ? '部分付款账户已失效，请重新选择账户。' : '',
+  ].filter(Boolean) : [];
   const selectedBillingEntity = invoiceBillingSettings.entities.find((entity) => (
     entity.id === selectedBillingEntityId
   )) ?? defaultInvoiceBillingEntity(invoiceBillingSettings)!;
@@ -1148,6 +1202,51 @@ export function InvoiceBatchBuilderPage({
   useEffect(() => {
     onDirtyChange(isDirty && hasPendingRows);
   }, [hasPendingRows, isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!onDraftChange || !hasPendingRows) return;
+    onDraftChange({
+      batchId,
+      projectId: projectId as ProjectId | '',
+      invoiceDate,
+      selectedBillingEntityId,
+      currency,
+      selectedEngagementIds: [...selectedEngagementIds],
+      sharedDescriptions: sharedDescriptions.map((item) => ({ ...item })),
+      rows: rows.map((row) => ({
+        ...row,
+        items: row.items.map((item) => ({ ...item })),
+        descriptionOverrideKeys: [...row.descriptionOverrideKeys],
+        contractIds: [...row.contractIds],
+        availableContractIds: [...row.availableContractIds],
+        generated: row.generated ? { record: row.generated.record } : undefined,
+      })),
+      generationProgress,
+    }, isDirty);
+  }, [batchId, currency, generationProgress, hasPendingRows, invoiceDate, isDirty, onDraftChange, projectId, rows, selectedBillingEntityId, selectedEngagementIds, sharedDescriptions]);
+
+  useEffect(() => {
+    if (!restoredDraft || restoredFilesRef.current) return;
+    restoredFilesRef.current = true;
+    const generatedRows = rows.filter((row) => row.generated);
+    if (!generatedRows.length) return;
+    let cancelled = false;
+    void Promise.all(generatedRows.map(async (row) => {
+      const { generateInvoiceFiles } = await import('../invoice/generateInvoice');
+      const files = await generateInvoiceFiles(row.generated!.record.snapshot);
+      return { engagementId: row.engagementId, files };
+    })).then((restored) => {
+      if (cancelled) return;
+      const filesByEngagement = new Map(restored.map((item) => [item.engagementId, item.files]));
+      setRows((current) => current.map((row) => {
+        const files = filesByEngagement.get(row.engagementId);
+        return files && row.generated ? { ...row, generated: { ...row.generated, ...files } } : row;
+      }));
+    }).catch(() => {
+      if (!cancelled) setGenerationError('部分已生成文件的下载预览恢复失败，可继续处理未生成记录。');
+    });
+    return () => { cancelled = true; };
+  }, [restoredDraft, rows]);
 
   useEffect(() => {
     if (!isDirty || !hasPendingRows) return undefined;
@@ -1520,6 +1619,9 @@ export function InvoiceBatchBuilderPage({
     }
 
     if (successfulRecords.length) onGenerated(successfulRecords);
+    if (workingRows.length && workingRows.every((row) => row.status === 'GENERATED')) {
+      onDraftCompleted?.();
+    }
     setGenerating(false);
   };
 
@@ -1541,12 +1643,6 @@ export function InvoiceBatchBuilderPage({
   };
 
   const leave = () => {
-    if (
-      isDirty
-      && hasPendingRows
-      && !window.confirm('当前批量生成内容尚未完成，确定离开吗？')
-    ) return;
-    onDirtyChange(false);
     onCancel();
   };
 
@@ -1603,6 +1699,13 @@ export function InvoiceBatchBuilderPage({
           </>
         )}
       />
+
+      {restorationWarnings.length ? (
+        <div className="invoice-batch-alert" role="alert">
+          <AlertTriangle size={18} />
+          <div><strong>草稿已恢复，但部分资料需重新选择</strong><span>{restorationWarnings.join('；')}</span></div>
+        </div>
+      ) : null}
 
       <section className="invoice-builder-form invoice-batch-form">
         <section

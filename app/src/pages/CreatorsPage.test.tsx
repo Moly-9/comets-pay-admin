@@ -170,6 +170,11 @@ describe('CreatorsPage profile cards', () => {
     expect(html).toContain('aria-label="全选当前筛选结果中的达人"');
     expect(html).toContain(`aria-label="选择达人 ${creator.name}"`);
     expect(html).toContain('导出所选（0）');
+    expect(html).toContain('新建达人档案');
+    expect(html).toContain('发送邀请链接');
+    expect(html.indexOf('发送邀请链接')).toBeGreaterThan(html.indexOf('新建达人档案'));
+    expect(html).toContain('邀请记录');
+    expect(html.indexOf('邀请记录')).toBeGreaterThan(html.indexOf('导出所选（0）'));
     expect(html).toContain('aria-disabled="true"');
     expect(html).toContain('<th>社媒平台数</th>');
     expect(html).toContain('<th>账户更新时间</th>');
@@ -181,5 +186,12 @@ describe('CreatorsPage profile cards', () => {
     expect(source).toContain('tone="identity"');
     expect(source).toContain('tone="payout"');
     expect(source).toContain('tone="collaboration"');
+    expect(source).toContain('CreatorInvitationSendDialog');
+    expect(source).toContain('CreatorInvitationRecordsDialog');
+    expect(source).not.toContain('达人 C 端入驻');
+    expect(source).toContain('Display name · 默认跟随首个 Handle');
+    expect(source).toContain('readOnly value={draft.region || \'待识别\'}');
+    expect(source).toContain('请在联系地址末尾填写国家名');
+    expect(source).not.toContain('<span>地区<em className="required-mark"');
   });
 });

@@ -16,12 +16,12 @@ import type {
 import {
   CONTRACT_TEMPLATE_FIELD_GROUPS,
   CONTRACT_TEMPLATE_FIELD_MODES,
-  CONTRACT_TEMPLATE_OUTPUT_FIELDS,
+  CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS,
   contractTemplatePoliciesAreDirty,
   createContractTemplatePolicyUpdate,
   getContractTemplatePolicyReadiness,
   getContractTemplateStatus,
-  resolveContractTemplateFieldPolicies,
+  resolveEditableContractTemplateFieldPolicies,
   type ContractTemplateFieldGroupKey,
   type ContractTemplatePolicyIssue,
 } from '../contractTemplateFieldPolicies';
@@ -40,7 +40,7 @@ type ConfirmationKind = 'SAVE_AND_DEACTIVATE' | null;
 
 const groupForIssue = (issue: ContractTemplatePolicyIssue): ContractTemplateFieldGroupKey => (
   issue.groupKeys[0]
-  ?? CONTRACT_TEMPLATE_OUTPUT_FIELDS.find((field) => issue.fieldKeys.includes(field.key))?.group
+  ?? CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS.find((field) => issue.fieldKeys.includes(field.key))?.group
   ?? 'COMMON'
 );
 
@@ -53,7 +53,7 @@ export function ContractTemplateFieldEditor({
   notify,
 }: Props) {
   const resolvedPolicies = useMemo(
-    () => resolveContractTemplateFieldPolicies(contract.templateFieldPolicies),
+    () => resolveEditableContractTemplateFieldPolicies(contract.templateFieldPolicies),
     [contract.templateFieldPolicies],
   );
   const [draftPolicies, setDraftPolicies] = useState(resolvedPolicies);
@@ -155,7 +155,7 @@ export function ContractTemplateFieldEditor({
   };
 
   const activeGroupDefinition = CONTRACT_TEMPLATE_FIELD_GROUPS.find((group) => group.key === activeGroup)!;
-  const visibleFields = CONTRACT_TEMPLATE_OUTPUT_FIELDS.filter((field) => field.group === activeGroup);
+  const visibleFields = CONTRACT_TEMPLATE_EDITABLE_OUTPUT_FIELDS.filter((field) => field.group === activeGroup);
 
   return (
     <div className="contract-template-editor" data-testid="contract-template-field-editor">
@@ -168,7 +168,7 @@ export function ContractTemplateFieldEditor({
       </header>
 
       <div className="contract-template-editor-intro">
-        <p>为每个字段选择“系统自动带入 / 生成时人工填写 / 不生成”。人工值只进入合同文档快照，不会修改达人已验证账户。</p>
+        <p>为每个字段选择“系统自动带入 / 生成时人工填写”。人工值只进入合同文档快照，不会修改达人已验证账户。</p>
       </div>
 
       <div className="contract-template-editor-tabs" role="tablist" aria-label="合同模板字段组">

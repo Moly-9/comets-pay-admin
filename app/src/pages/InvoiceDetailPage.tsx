@@ -100,7 +100,7 @@ const timelineIndex = (status: InvoiceReviewStatus) => {
 export const getInvoiceTimelineState = (status: InvoiceReviewStatus) => ({
   currentIndex: timelineIndex(status),
   currentStepText: status === '草稿'
-    ? '草稿待发布'
+    ? '待发布'
     : status === '达人反馈' ? '达人反馈 · 待重新签署' : '当前步骤',
 });
 
@@ -390,8 +390,8 @@ export function InvoiceDetailPage({
     : source.kind === 'project'
       ? source.status
     : '');
-  const displayStatusKey = managementView?.status === '已通过'
-    ? '已通过'
+  const displayStatusKey = managementView?.status
+    ? managementView.status
     : invoiceReviewStatus === '已通过' && payout
     ? getApprovedInvoicePaymentStatus(payout)
     : invoiceReviewStatus ?? '未进入付款';
@@ -733,10 +733,10 @@ export function InvoiceDetailPage({
       ?? '未记录';
     if (invoiceReviewStatus === '草稿') return {
       title: '执行审核',
-      transition: '草稿 → 发布达人签署 → 待签署',
+      transition: '待发布 → 发布达人签署 → 待签署',
       assignee: generatedRecord?.publishedBy?.name ?? 'Invoice 制作人',
       updatedAt: formatReviewTime(updatedAt),
-      instruction: '确认 Invoice 内容无误后发布；发布前仍可编辑或撤销草稿。',
+      instruction: '确认 Invoice 内容无误后发布；发布前仍可编辑或撤销。',
       tone: 'neutral' as const,
     };
     if (invoiceReviewStatus === '待签署' || invoiceReviewStatus === '达人反馈') return {
@@ -812,9 +812,9 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Send size={16} />}
               disabled={isDraft ? !canPublishDraft : !canSendSignatureReminder}
-              disabledReason={isDraft ? '当前账号不能发布该草稿' : '仅待签署状态可以发送提醒'}
+              disabledReason={isDraft ? '当前账号不能发布该 Invoice' : '仅待签署状态可以发送提醒'}
               title={isDraft
-                ? canPublishDraft ? '发布并通知达人签署' : '当前账号不能发布该草稿'
+                ? canPublishDraft ? '发布并通知达人签署' : '当前账号不能发布该 Invoice'
                 : canSendSignatureReminder ? '再次通知达人签署' : '仅待签署状态可以发送提醒'}
               onClick={publishOrNotifyCreator}
             >
@@ -834,8 +834,8 @@ export function InvoiceDetailPage({
               variant="secondary"
               icon={<Undo2 size={16} />}
               disabled={!canWithdrawDraft}
-              disabledReason="只有未发布草稿可以撤销"
-              title={canWithdrawDraft ? '撤销并删除当前草稿' : '只有未发布草稿可以撤销'}
+              disabledReason="只有待发布 Invoice 可以撤销"
+              title={canWithdrawDraft ? '撤销并删除当前待发布 Invoice' : '只有待发布 Invoice 可以撤销'}
               onClick={() => setWithdrawDialogOpen(true)}
             >
               撤销
@@ -924,7 +924,7 @@ export function InvoiceDetailPage({
         timeline={processTimeline}
         historySummary={invoiceHistorySummary}
         currentTask={currentTask}
-        historyStatusText={displayStatus === '草稿' ? '等待发布达人签署' : `当前状态：${displayStatus}`}
+        historyStatusText={displayStatus === '待发布' ? '等待发布达人签署' : `当前状态：${displayStatus}`}
         completion={{ completed: passedCount, total: checks.length }}
         blockingReasons={workspaceBlockingReasons}
         returnLabel={returnAction ? ACTION_LABEL[returnAction] : undefined}
@@ -1080,7 +1080,7 @@ export function InvoiceDetailPage({
 
       {withdrawDialogOpen && generatedRecord ? (
         <Modal
-          title="撤销 Invoice 草稿"
+          title="撤销待发布 Invoice"
           width="520px"
           onClose={() => setWithdrawDialogOpen(false)}
           footer={(
@@ -1101,7 +1101,7 @@ export function InvoiceDetailPage({
             <span><Undo2 size={20} /></span>
             <div>
               <strong>撤销后将删除 {model.invoiceNumber}</strong>
-              <p>对应的 Invoice 草稿、原型付款记录和项目资源关联会从当前前端会话中移除。该操作仅允许尚未发布的草稿执行。</p>
+              <p>对应的待发布 Invoice、原型付款记录和项目资源关联会从当前前端会话中移除。该操作仅允许尚未发布的 Invoice 执行。</p>
             </div>
           </div>
         </Modal>

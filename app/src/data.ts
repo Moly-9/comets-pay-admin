@@ -1,7 +1,8 @@
-import type { InvoiceBillingEntityId } from './businessWorkflow';
-import type { InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
+import type { ContractAdvertiserEntityId, InvoiceBillingEntityId } from './businessWorkflow';
+import type { ContractAdvertiserSettings, InvoiceBillingSettings, InvoiceEntity, Payout } from './types';
 import { demoDisplayName } from './demoCreatorNames';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
+import { assignMissingDemoPaymentCodes } from './paymentNumbering';
 
 export type SystemRoleKey = 'media' | 'pm' | 'finance' | 'admin' | 'owner' | 'project';
 export type LoginSessionPolicy = 'single_device' | 'multi_device';
@@ -44,7 +45,7 @@ export const CURRENT_USER: SystemUser = {
 export const DEMO_SYSTEM_USERS: SystemUser[] = [
   { account: 'media.demo', name: '媒介体验账号', email: 'demo.media@cometsgame.com', initials: 'ME', roleKey: 'media', role: '媒介账号', scopeName: '赖丽红', isDemo: true },
   { account: 'pm.demo', name: 'PM 体验账号', email: 'demo.pm@cometsgame.com', initials: 'PM', roleKey: 'pm', role: 'PM 账号', scopeName: '张咏诗', isDemo: true },
-  { account: 'project.demo', name: '项目负责人体验账号', email: 'demo.project@cometsgame.com', initials: 'PJ', roleKey: 'project', role: '项目负责人账号', isDemo: true },
+  { account: 'project.demo', name: '媒介负责人体验账号', email: 'demo.project@cometsgame.com', initials: 'PJ', roleKey: 'project', role: '媒介负责人账号', isDemo: true },
   { account: 'owner.demo', name: '老板体验账号', email: 'demo.owner@cometsgame.com', initials: 'OW', roleKey: 'owner', role: '老板账号', isDemo: true },
   { account: 'finance.demo', name: '财务体验账号', email: 'demo.finance@cometsgame.com', initials: 'FI', roleKey: 'finance', role: '财务账号', isDemo: true },
   { account: 'admin.demo', name: '管理员体验账号', email: 'demo.admin@cometsgame.com', initials: 'AD', roleKey: 'admin', role: '管理员账号', isDemo: true },
@@ -60,7 +61,7 @@ export const SYSTEM_USERS: SystemUser[] = [
   CURRENT_USER,
   { account: 'limeng', name: '李梦', email: 'limeng@cometspay.co', initials: 'LM', roleKey: 'finance', role: '财务账号' },
   { account: 'wuxueni', name: '吴雪霓', email: 'wuxueni@cometspay.co', initials: 'WX', roleKey: 'finance', role: '财务账号' },
-  { account: 'linyanming', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', roleKey: 'project', role: '项目负责人账号' },
+  { account: 'linyanming', name: '林嫣明', email: 'linyanming@cometspay.co', initials: 'LY', roleKey: 'project', role: '媒介负责人账号' },
   { account: 'jeff', name: 'jeff', email: 'jeff@cometspay.co', initials: 'J', roleKey: 'admin', role: '管理员账号' },
   { account: LOCAL_ADMIN_ACCOUNT, name: 'Liu Yao', email: LOCAL_ADMIN_ACCOUNT, initials: 'LY', roleKey: 'admin', role: '管理员账号' },
   { account: 'heather', name: 'heather', email: 'heather@cometspay.co', initials: 'H', roleKey: 'owner', role: '老板账号' },
@@ -98,7 +99,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-301164-01',
+    paymentOrder: 'PAY-2607270001',
   },
   {
     id: 'PRJ-260727-02',
@@ -111,7 +112,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-02',
+    paymentOrder: 'PAY-2607270002',
   },
   {
     id: 'PRJ-260727-03',
@@ -124,7 +125,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-03',
+    paymentOrder: 'PAY-2607270003',
   },
   {
     id: 'PRJ-260727-04',
@@ -137,7 +138,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-04',
+    paymentOrder: 'PAY-2607270004',
   },
   {
     id: 'PRJ-260727-05',
@@ -150,7 +151,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待补资料',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-05',
+    paymentOrder: 'PAY-2607270005',
   },
   {
     id: 'PRJ-260727-06',
@@ -163,7 +164,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待打款',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-06',
+    paymentOrder: 'PAY-2607270006',
   },
   {
     id: 'PRJ-260727-07',
@@ -176,7 +177,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-07',
+    paymentOrder: 'PAY-2607270007',
   },
   {
     id: 'PRJ-260727-08',
@@ -189,7 +190,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-08',
+    paymentOrder: 'PAY-2607270008',
   },
   {
     id: 'PRJ-260727-09',
@@ -202,7 +203,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-09',
+    paymentOrder: 'PAY-2607270009',
   },
   {
     id: 'PRJ-260727-10',
@@ -215,7 +216,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260727-10',
+    paymentOrder: 'PAY-2607270010',
   },
   {
     id: 'PRJ-260727-11',
@@ -228,7 +229,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-11',
+    paymentOrder: 'PAY-2607270011',
   },
   {
     id: 'PRJ-260727-12',
@@ -241,7 +242,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260727-12',
+    paymentOrder: 'PAY-2607270012',
   },
   {
     id: 'PRJ-260801-01',
@@ -254,7 +255,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-01',
+    paymentOrder: 'PAY-2608010001',
   },
   {
     id: 'PRJ-260801-02',
@@ -267,7 +268,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-02',
+    paymentOrder: 'PAY-2608010002',
   },
   {
     id: 'PRJ-260801-03',
@@ -280,7 +281,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待打款',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-03',
+    paymentOrder: 'PAY-2608010003',
   },
   {
     id: 'PRJ-260801-04',
@@ -293,7 +294,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '待打款',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-04',
+    paymentOrder: 'PAY-2608010004',
   },
   {
     id: 'PRJ-260801-05',
@@ -306,7 +307,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260801-05',
+    paymentOrder: 'PAY-2608010005',
   },
   {
     id: 'PRJ-260801-06',
@@ -319,7 +320,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '已完成',
     requestStatus: '已完成',
     requestFilter: 'processed',
-    paymentOrder: 'PAY-260801-06',
+    paymentOrder: 'PAY-2608010006',
   },
   {
     id: 'PRJ-260801-07',
@@ -332,7 +333,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-07',
+    paymentOrder: 'PAY-2608010007',
   },
   {
     id: 'PRJ-260801-08',
@@ -345,7 +346,7 @@ export const PROJECT_FIXTURES: ProjectFixture[] = [
     projectStatus: '执行中',
     requestStatus: '财务审批中',
     requestFilter: 'pending',
-    paymentOrder: 'PAY-260801-08',
+    paymentOrder: 'PAY-2608010008',
   },
 ];
 
@@ -409,6 +410,25 @@ export const INITIAL_INVOICE_BILLING_SETTINGS: InvoiceBillingSettings = {
     },
   ],
   defaultEntityId: INITIAL_INVOICE_BILLING_ENTITY_ID,
+};
+
+export const INITIAL_CONTRACT_ADVERTISER_ENTITY_ID = 'cae_fixture_comets_international' as ContractAdvertiserEntityId;
+export const INITIAL_NOVACOMETS_CONTRACT_ADVERTISER_ENTITY_ID = 'cae_fixture_novacomets_limited' as ContractAdvertiserEntityId;
+
+export const INITIAL_CONTRACT_ADVERTISER_SETTINGS: ContractAdvertiserSettings = {
+  entities: [
+    {
+      id: INITIAL_CONTRACT_ADVERTISER_ENTITY_ID,
+      name: INITIAL_INVOICE_ENTITY.name,
+      address: INITIAL_INVOICE_ENTITY.address,
+    },
+    {
+      id: INITIAL_NOVACOMETS_CONTRACT_ADVERTISER_ENTITY_ID,
+      name: INITIAL_INVOICE_BILLING_SETTINGS.entities[1].name,
+      address: INITIAL_INVOICE_BILLING_SETTINGS.entities[1].address,
+    },
+  ],
+  defaultEntityId: INITIAL_CONTRACT_ADVERTISER_ENTITY_ID,
 };
 
 const returnedInvoiceReviewFixture = (
@@ -1051,15 +1071,16 @@ const RAW_INITIAL_PAYOUTS: Payout[] = [
   },
 ];
 
-export const INITIAL_PAYOUTS: Payout[] = RAW_INITIAL_PAYOUTS.map((payout) => ({
+export const INITIAL_PAYOUTS: Payout[] = assignMissingDemoPaymentCodes(RAW_INITIAL_PAYOUTS.map((payout) => ({
   ...payout,
   creator: demoDisplayName(payout.creator),
   ...(payout.status === '已付款' ? prototypePaymentResultFor(payout) : {}),
-}));
+})));
 
 export const PAGE_TITLES = {
   dashboard: '数据工作台',
   'payment-workbench': '付款工作台',
+  'feishu-projects': '飞书关联项目',
   projects: '我的请款',
   requests: '请款审批',
   contracts: '合同管理',

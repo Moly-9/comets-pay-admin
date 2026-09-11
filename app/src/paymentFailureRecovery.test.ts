@@ -167,6 +167,7 @@ describe('payment failure recovery', () => {
       'BAT-RETRY-001',
       '2026-08-11T09:00:00.000Z',
       {
+        paymentCode: 'PMT-2608110002',
         paymentOrderCode: 'PAY-RETRY-002',
         sourcePaymentOrderCode: 'PAY-ORIGINAL-001',
         attemptNumber: 2,
@@ -188,10 +189,12 @@ describe('payment failure recovery', () => {
     expect(paymentFailureRecoveryLabel(submitted)).toBe('付款处理中');
     expect(submitted.paymentFailureRecovery?.retryBatchCode).toBe('BAT-RETRY-001');
     expect(submitted.currentPaymentAttempt).toMatchObject({
+      paymentCode: 'PMT-2608110002',
       paymentOrderCode: 'PAY-RETRY-002',
       sourcePaymentOrderCode: 'PAY-ORIGINAL-001',
       attemptNumber: 2,
     });
+    expect(submitted.paymentCode).toBe('PMT-2608110002');
     expect(submitted.paymentFailureRecovery?.previousFailure).toEqual(failedPayout().paymentFailure);
     expect(isPaymentFailureRetryCandidate(succeeded)).toBe(false);
     expect(paymentFailureRecoveryLabel(succeeded)).toBe('重试付款成功');

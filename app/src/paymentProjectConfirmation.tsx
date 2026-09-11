@@ -67,9 +67,9 @@ function GenericPaymentConfirmationDocument({ item }: { item: PaymentBatchItemSn
     : `${item.currency} ${item.amount.toLocaleString('en-US')}`;
   const rows = [
     ['付款渠道', paymentProviderDisplayName(item.provider)],
-    ['付款编号', item.paymentListCode],
+    ['付款编号', item.paymentCode || '付款编号待补全'],
     ['收款方账户名', item.accountName || '待补充'],
-    ['实际付款日期', confirmationDateLabel(item.paidAt)],
+    ['实际付款日期', confirmationDateLabel(item.paymentSubmittedAt)],
     ['付款方式', item.localClearingSystem || item.transferMethod],
     ['收款国家 / 地区', item.recipientCountry || '待补充'],
     ['付款状态', item.paymentStatus],

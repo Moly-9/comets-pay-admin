@@ -9,6 +9,8 @@ export function DraftExitDialog({
   onDiscard,
   onSave,
   onContinue,
+  discardLabel = '放弃修改并退出',
+  saveLabel = '保存草稿并退出',
 }: {
   open: boolean;
   title: string;
@@ -16,6 +18,8 @@ export function DraftExitDialog({
   onDiscard: () => void;
   onSave: () => void;
   onContinue: () => void;
+  discardLabel?: string;
+  saveLabel?: string;
 }) {
   useEffect(() => {
     if (!open) return undefined;
@@ -39,8 +43,8 @@ export function DraftExitDialog({
       width="448px"
       footer={(
         <div className="creator-draft-confirm-actions">
-          <Button className="creator-draft-confirm-discard" variant="ghost" onClick={onDiscard}>放弃修改并退出</Button>
-          <Button className="creator-draft-confirm-save" variant="secondary" onClick={onSave}>保存草稿并退出</Button>
+          <Button className="creator-draft-confirm-discard" variant="ghost" onClick={onDiscard}>{discardLabel}</Button>
+          <Button className="creator-draft-confirm-save" variant="secondary" onClick={onSave}>{saveLabel}</Button>
           <Button className="creator-draft-confirm-continue" autoFocus onClick={onContinue}>继续编辑</Button>
         </div>
       )}

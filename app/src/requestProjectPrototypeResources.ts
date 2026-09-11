@@ -18,6 +18,7 @@ import {
   ALL_PROJECT_PROTOTYPE_INVOICES,
   ALL_PROJECT_PROTOTYPE_PAYOUTS,
   AVAILABLE_PAYMENT_REQUEST_INVOICE_ID,
+  CONTRACT_MANAGEMENT_DEMO_CONTRACTS,
   PAYMENT_REQUEST_CREATION_DEMO_INVOICES,
   PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
   PROJECT_DEMO_CONTRACTS,
@@ -39,6 +40,7 @@ import { demoAccountName } from './demoCreatorNames';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
 import type { GeneratedInvoiceRecord, InvoiceCurrency, Payout } from './types';
+import { assignMissingDemoPaymentCodes, normalizeLegacyPaymentOrderCode } from './paymentNumbering';
 
 const FINANCE_REVIEW_PROJECT_CODES = new Set([
   'PRJ-260727-07',
@@ -192,7 +194,7 @@ const financeApprovalHistory = (
 ): RequestApprovalState => {
   const statuses = ['PENDING_PM', 'PENDING_PROJECT_OWNER', 'PENDING_OWNER'] as const;
   const stages = ['PM', 'PROJECT_OWNER', 'OWNER'] as const;
-  const names = [request.pm, '项目负责人', '老板'];
+  const names = [request.pm, '媒介负责人', '老板'];
   const history: RequestApprovalEvent[] = statuses.map((fromStatus, index) => ({
     round: 1,
     stage: stages[index],
@@ -598,7 +600,11 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requ
   });
   const status = paymentListStatusFor(request);
   const version = status === 'draft' ? 0 : 1;
-  const paymentListCode = `PAY-${(request.cooperationProjectCode ?? request.id).replace(/^PRJ-/, '')}`;
+  const paymentListCode = normalizeLegacyPaymentOrderCode(
+    `PAY-${(request.cooperationProjectCode ?? request.id).replace(/^PRJ-/, '')}`,
+    '260727',
+    requestIndex + 1,
+  );
   return {
     paymentListId: `payment_list_request_fixture_${String(requestIndex + 1).padStart(2, '0')}` as PaymentListRecord['paymentListId'],
     paymentListCode,
@@ -673,13 +679,16 @@ const uniqueBy = <T,>(items: T[], keyFor: (item: T) => string) => (
 export const INITIAL_COMPLETE_REQUEST_RESOURCES = {
   requests,
   contracts: uniqueBy([
+    ...CONTRACT_MANAGEMENT_DEMO_CONTRACTS,
     ...PROJECT_DEMO_CONTRACTS,
     ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
     ...requestContracts,
   ], (contract) => String(contract.contractId ?? contract.id)),
   invoices: uniqueBy([...requestInvoices, ...specialInvoices], (invoice) => String(invoice.invoiceId)),
   paymentLists: requestPaymentLists,
-  payouts: uniqueBy([...requestPayouts, ...specialPayouts], (payout) => payout.id),
+  payouts: assignMissingDemoPaymentCodes(
+    uniqueBy([...requestPayouts, ...specialPayouts], (payout) => payout.id),
+  ),
 };
 
 export const COMPLETE_REQUEST_FINANCE_PROJECT_CODES = FINANCE_REVIEW_PROJECT_CODES;

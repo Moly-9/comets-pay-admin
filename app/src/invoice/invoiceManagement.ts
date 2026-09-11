@@ -3,7 +3,7 @@ import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import type { CreatorSocialAccount, GeneratedInvoiceRecord, InvoiceType, Payout, Provider } from '../types';
 import { requestApprovalReturnItemForInvoiceEdit } from '../requestApprovalWorkflow';
 
-export type InvoicePageTab = 'signature' | 'upload' | 'review' | 'approved' | 'returned';
+export type InvoicePageTab = 'drafts' | 'signature' | 'upload' | 'review' | 'approved' | 'returned';
 
 export type InvoiceManagementStatus =
   | '草稿'
@@ -56,7 +56,8 @@ export type InvoiceManagementFilters = {
 };
 
 export const INVOICE_MANAGEMENT_STATUSES_BY_TAB: Record<InvoicePageTab, InvoiceManagementStatus[]> = {
-  signature: ['草稿', '待签署'],
+  drafts: [],
+  signature: ['待发布', '待签署'],
   upload: ['待发布', '待上传', '待重新上传'],
   review: ['达人反馈', '待审核', '待复核'],
   approved: ['待发起请款', '已通过', 'OA审批中', '付款中', '已付款'],
@@ -130,7 +131,7 @@ export const getInvoiceManagementView = (
   }
 
   if (payout.invoiceReviewStatus === '草稿') {
-    return { tab: 'signature', status: '草稿', requestApprovalStatus: request?.approval?.status };
+    return { tab: 'signature', status: '待发布', requestApprovalStatus: request?.approval?.status };
   }
 
   if (

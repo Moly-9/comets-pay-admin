@@ -283,6 +283,7 @@ export const markPaymentFailureRetrySubmitted = (
   batchCode: string,
   submittedAt = new Date().toISOString(),
   paymentOrder?: {
+    paymentCode?: string;
     paymentOrderCode: string;
     sourcePaymentOrderCode: string;
     attemptNumber: number;
@@ -293,6 +294,7 @@ export const markPaymentFailureRetrySubmitted = (
   }
   return {
     ...payout,
+    paymentCode: paymentOrder?.paymentCode ?? payout.paymentCode,
     status: '付款处理中',
     issue: undefined,
     returnReason: undefined,

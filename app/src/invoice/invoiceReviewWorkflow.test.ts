@@ -189,7 +189,7 @@ describe('Invoice review workflow', () => {
       published.payout,
       actor,
       snapshot.from.email,
-    )).toThrow(/只有草稿/);
+    )).toThrow(/只有待发布/);
   });
 
   it('groups media-approved Invoices under the approved business tab', () => {

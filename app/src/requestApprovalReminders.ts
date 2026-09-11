@@ -23,7 +23,7 @@ export type RequestApprovalReminderSummary = {
 
 const STAGE_LABELS: Partial<Record<RequestApprovalStatus, string>> = {
   PENDING_PM: 'PM 审批',
-  PENDING_PROJECT_OWNER: '项目负责人审批',
+  PENDING_PROJECT_OWNER: '媒介负责人审批',
   PENDING_OWNER: '老板审批',
   PENDING_FINANCE: '财务审批',
 };

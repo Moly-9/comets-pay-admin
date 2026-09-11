@@ -71,6 +71,7 @@ export type TransactionRecordDetails = Readonly<{
   source: 'batch' | 'historical' | 'incomplete';
   payer: string;
   paymentTime: string;
+  paymentCode: string;
   paymentBatchCode: string;
   requestCode: string;
   requestStatus: string;
@@ -131,6 +132,7 @@ const batchItemPayoutSnapshot = (
   status: TransactionRecordStatus,
 ): Payout => ({
   id: item.payoutId,
+  paymentCode: item.paymentCode,
   paymentRequestProjectId: batch.request.paymentRequestProjectId,
   creator: item.creatorName,
   handle: item.creatorHandle,
@@ -182,6 +184,7 @@ const transactionRecordFromBatchItem = (
   ));
   const resolvedItem: PaymentBatchItemSnapshot = attempt ? {
     ...item,
+    paymentCode: attempt.paymentCode ?? item.paymentCode,
     paymentStatus: attempt.status,
     paidAt: attempt.occurredAt ?? item.paidAt,
     transferFeeAmount: attempt.transferFeeAmount ?? item.transferFeeAmount,
@@ -294,6 +297,7 @@ const historicalTransactionDetails = (
     source: 'historical',
     payer: seed.payer,
     paymentTime,
+    paymentCode: payout.paymentCode || '付款编号待补全',
     paymentBatchCode: seed.paymentBatchCode,
     requestCode: seed.requestCode,
     requestStatus: payout.status,
@@ -331,6 +335,7 @@ export const transactionRecordDetails = (
         ?? context.item.paidAt
         ?? context.batch.paidAt
         ?? transactionOccurredAt(payout),
+      paymentCode: context.item.paymentCode || '付款编号待补全',
       paymentBatchCode: context.batch.paymentBatchCode,
       requestCode: context.batch.request.requestCode,
       requestStatus: context.batch.request.requestStatus,
@@ -359,6 +364,7 @@ export const transactionRecordDetails = (
     source: 'incomplete',
     payer: '历史数据待补全',
     paymentTime: transactionOccurredAt(payout),
+    paymentCode: payout.paymentCode || '付款编号待补全',
     paymentBatchCode: '历史数据待补全',
     requestCode: '历史数据待补全',
     requestStatus: payout.status,
@@ -417,10 +423,14 @@ const matchesTransactionSearch = (record: TransactionRecord, search: string) => 
     payout.projectId,
     payout.invoice,
     payout.contract,
+    payout.paymentCode,
     record.provider,
     record.paymentCurrency,
     record.status,
     details.paymentBatchCode,
+    context?.batch.paymentOrderCode,
+    context?.batch.sourcePaymentOrderCode,
+    context?.item.paymentCode,
     details.requestCode,
     details.cooperationProjectCode,
     details.cooperationProjectName,

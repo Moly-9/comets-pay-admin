@@ -94,7 +94,6 @@ export const formatContractMoneyValue = (currency: string, value: string) => {
 
 const hasCreator = (model: ContractGenerationModel) => Boolean(model.creatorId);
 const hasPayoutAccount = (model: ContractGenerationModel) => Boolean(model.payoutAccountId);
-const hasProject = (model: ContractGenerationModel) => Boolean(model.projectId);
 const isRequired = (
   definition: ContractPlaceholderDefinition,
   model: ContractGenerationModel,
@@ -104,17 +103,31 @@ const isRequired = (
     : definition.required
 );
 
+const contractAdvertiserApplies = (model: ContractGenerationModel) => {
+  const output = resolveContractTemplateOutput(model);
+  return output.outputFieldKeys.includes('advertiser') && output.policies.advertiser !== 'OMIT';
+};
+
 export const CONTRACT_PLACEHOLDER_DEFINITIONS: ContractPlaceholderDefinition[] = [
-  { token: 'advertiser_name', label: 'Advertiser', fieldKey: 'signature', kind: 'text', required: true, pageHint: 1, overflowAt: 100, value: (model) => resolveContractTemplateOutput(model).values.advertiser },
+  { token: 'advertiser_name', label: 'Advertiser', fieldKey: 'signature', kind: 'text', required: true, pageHint: 1, overflowAt: 100, value: (model) => resolveContractTemplateOutput(model).values.advertiser, applicable: contractAdvertiserApplies },
+  {
+    token: 'advertiser_address',
+    label: 'Advertiser Address',
+    fieldKey: 'signature',
+    kind: 'longText',
+    required: true,
+    pageHint: 14,
+    overflowAt: 180,
+    value: (model) => model.advertiserAddress ?? '',
+    applicable: contractAdvertiserApplies,
+  },
   { token: 'publisher_name', label: 'Publisher', fieldKey: 'publisher', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 72, value: (model) => resolveContractTemplateOutput(model).values.publisher },
   { token: 'publisher_address', label: 'Publisher Address', fieldKey: 'publisherAddress', kind: 'longText', required: hasCreator, pageHint: 14, overflowAt: 180, value: (model) => model.publisherAddress },
-  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'longText', required: hasCreator, pageHint: 1, overflowAt: 240, value: (model) => formatContractPublishingChannelLinks(resolveContractTemplateOutput(model).effectiveModel) },
-  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: hasCreator, pageHint: 1, overflowAt: 120, value: (model) => formatContractPublishingPlatforms(resolveContractTemplateOutput(model).effectiveModel) },
+  { token: 'channel_url', label: 'Channel Link', fieldKey: 'channelUrl', kind: 'longText', required: false, pageHint: 1, overflowAt: 240, value: (model) => formatContractPublishingChannelLinks(resolveContractTemplateOutput(model).effectiveModel) || '—' },
+  { token: 'platform', label: 'Publishing Platform', fieldKey: 'platform', kind: 'text', required: false, pageHint: 1, overflowAt: 120, value: (model) => formatContractPublishingPlatforms(resolveContractTemplateOutput(model).effectiveModel) || '—' },
   { token: 'effective_date', label: 'Effective Date', fieldKey: 'effectiveDate', kind: 'date', required: false, pageHint: 14, value: (model) => formatContractDate(model.effectiveDate) },
-  { token: 'campaign_start', label: 'Campaign Start', fieldKey: 'campaignPeriod', kind: 'date', required: hasProject, pageHint: 14, value: (model) => formatContractDate(resolveContractTemplateOutput(model).campaignStart) },
-  { token: 'campaign_end', label: 'Campaign End', fieldKey: 'campaignPeriod', kind: 'date', required: hasProject, pageHint: 14, value: (model) => formatContractDate(resolveContractTemplateOutput(model).campaignEnd) },
   { token: 'project_name', label: 'Project Name', fieldKey: 'projectName', kind: 'longText', required: false, pageHint: 14, overflowAt: 120, value: (model) => model.projectName },
-  { token: 'channel_name', label: 'Channel Name', fieldKey: 'channelName', kind: 'text', required: hasCreator, pageHint: 14, overflowAt: 90, value: (model) => model.channelName },
+  { token: 'channel_name', label: 'Channel Name', fieldKey: 'channelName', kind: 'text', required: false, pageHint: 14, overflowAt: 90, value: (model) => model.channelName || '—' },
   { token: 'campaign_purpose', label: 'Campaign Purpose', fieldKey: 'purposeItems', kind: 'longText', required: false, pageHint: 15, overflowAt: 280, value: (model) => model.purposeItems.join('\n') },
   { token: 'promoted_product', label: 'Promoted Product', fieldKey: 'promotedProduct', kind: 'longText', required: false, pageHint: 15, overflowAt: 120, value: (model) => model.promotedProduct },
   { token: 'hashtag', label: 'Hashtag', fieldKey: 'hashtag', kind: 'text', required: false, pageHint: 15, overflowAt: 70, value: (model) => model.hashtag },
@@ -210,8 +223,6 @@ export const createContractQualityReport = (
   }
   if (effectiveModel.creatorId) {
     const publishingChannels = resolveContractPublishingChannels(effectiveModel);
-    const missingPlatformIndex = publishingChannels.findIndex((channel) => !channel.platform.trim());
-    const missingUrlIndex = publishingChannels.findIndex((channel) => !channel.channelUrl.trim());
     const invalidUrlIndex = publishingChannels.findIndex((channel) => {
       const value = channel.channelUrl.trim();
       if (!value) return false;
@@ -222,28 +233,7 @@ export const createContractQualityReport = (
         return true;
       }
     });
-    if (!publishingChannels.length || missingPlatformIndex >= 0) {
-      issues.push({
-        id: 'missing-publishing-platform',
-        kind: 'REQUIRED_MISSING',
-        severity: 'BLOCKER',
-        fieldKey: 'platform',
-        pageNumber: 1,
-        message: missingPlatformIndex >= 0
-          ? `第 ${missingPlatformIndex + 1} 个频道缺少发布平台`
-          : '至少需要一个发布平台',
-      });
-    }
-    if (missingUrlIndex >= 0) {
-      issues.push({
-        id: 'missing-channel-url',
-        kind: 'REQUIRED_MISSING',
-        severity: 'BLOCKER',
-        fieldKey: 'channelUrl',
-        pageNumber: 1,
-        message: `第 ${missingUrlIndex + 1} 个频道缺少频道链接`,
-      });
-    } else if (invalidUrlIndex >= 0) {
+    if (invalidUrlIndex >= 0) {
       issues.push({
         id: 'format-channel-url',
         kind: 'FORMAT_INVALID',
@@ -321,26 +311,6 @@ export const createContractQualityReport = (
       fieldKey: 'payoutAccount',
       pageNumber: 5,
       message: 'PayPal Email 格式无效',
-    });
-  }
-  if (Boolean(effectiveModel.campaignStart) !== Boolean(effectiveModel.campaignEnd)) {
-    issues.push({
-      id: 'format-campaign-period-incomplete',
-      kind: 'FORMAT_INVALID',
-      severity: 'BLOCKER',
-      fieldKey: 'campaignPeriod',
-      pageNumber: 14,
-      message: 'Campaign 日期需同时填写开始和结束日期',
-    });
-  }
-  if (isDateAfter(effectiveModel.campaignStart, effectiveModel.campaignEnd)) {
-    issues.push({
-      id: 'format-campaign-period',
-      kind: 'FORMAT_INVALID',
-      severity: 'BLOCKER',
-      fieldKey: 'campaignPeriod',
-      pageNumber: 14,
-      message: 'Campaign 结束日期不能早于开始日期',
     });
   }
   if (Boolean(effectiveModel.releaseStart) !== Boolean(effectiveModel.releaseEnd)) {

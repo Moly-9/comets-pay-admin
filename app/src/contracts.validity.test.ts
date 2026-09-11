@@ -8,6 +8,7 @@ import {
   isPaymentContract,
   type ContractRecord,
 } from './contracts';
+import { CONTRACT_MANAGEMENT_DEMO_CONTRACTS } from './prototypeResourceFixtures';
 
 const REFERENCE_DATE = '2026-09-18';
 const baseContract = {
@@ -90,9 +91,15 @@ describe('contract validity', () => {
       signed: false,
       status: '待签署' as const,
     };
-    const pendingSignature = {
+    const pendingUpload = {
       ...contractEnding(futureDate),
       lifecycle: 'GENERATED_DRAFT' as const,
+      signed: false,
+      status: '已生效' as const,
+    };
+    const pendingSignature = {
+      ...contractEnding(futureDate),
+      lifecycle: 'SENT_FOR_SIGNATURE' as const,
       signed: false,
       status: '已生效' as const,
     };
@@ -105,8 +112,54 @@ describe('contract validity', () => {
 
     expect(getContractManagementBucket(editingDraft, REFERENCE_DATE)).toBe('draft');
     expect(getContractManagementBucket(expiredGenerated, REFERENCE_DATE)).toBe('expired');
+    expect(getContractManagementBucket(pendingUpload, REFERENCE_DATE)).toBe('upload');
     expect(getContractManagementBucket(pendingSignature, REFERENCE_DATE)).toBe('signature');
     expect(getContractManagementBucket(pendingConfirmation, REFERENCE_DATE)).toBe('attention');
     expect(getContractManagementBucket({ ...baseContract, campaignEnd: futureDate, status: '待解析' }, REFERENCE_DATE)).toBe('ready');
+  });
+
+  it('moves the generated demo records from pending signature to pending upload', () => {
+    const bucketCounts = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.reduce<Record<string, number>>((counts, contract) => {
+      const bucket = getContractManagementBucket(contract, '2026-09-09');
+      counts[bucket] = (counts[bucket] ?? 0) + 1;
+      return counts;
+    }, {});
+
+    expect(CONTRACT_MANAGEMENT_DEMO_CONTRACTS).toHaveLength(6);
+    expect(bucketCounts).toMatchObject({ attention: 2, draft: 2, upload: 2 });
+    expect(bucketCounts.signature ?? 0).toBe(0);
+    expect(bucketCounts.ready ?? 0).toBe(0);
+    expect(bucketCounts.expired ?? 0).toBe(0);
+
+    const drafts = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => contract.lifecycle === 'EDITING_DRAFT');
+    expect(drafts).toHaveLength(2);
+    drafts.forEach((draft) => {
+      expect(draft.generationSnapshot).toMatchObject({
+        contractNumber: draft.id,
+        projectId: draft.projectId,
+        creatorId: draft.creatorId,
+      });
+      expect(draft.documentUrl).toBe('');
+    });
+
+    const attention = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => (
+      contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION'
+    ));
+    expect(attention).toHaveLength(2);
+    attention.forEach((contract) => {
+      expect(contract.extractionStage).toBe('review');
+      expect(contract.recognitionResults?.length).toBeGreaterThan(0);
+      expect(contract.issues.some((issue) => issue.id === 'recognition-review')).toBe(true);
+    });
+
+    const signatures = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => (
+      contract.lifecycle === 'GENERATED_DRAFT'
+    ));
+    expect(signatures).toHaveLength(2);
+    signatures.forEach((contract) => {
+      expect(contract.generationVersion).toBe(1);
+      expect(contract.generationSnapshot).toBeTruthy();
+      expect(contract.documentUrl).toBeTruthy();
+    });
   });
 });

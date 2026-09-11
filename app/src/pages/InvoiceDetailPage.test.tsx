@@ -201,7 +201,7 @@ describe('InvoiceDetailPage edit actions', () => {
       return index;
     }, -1);
     expect(html).toContain('title="发布并通知达人签署"');
-    expect(html).toContain('title="撤销并删除当前草稿"');
+    expect(html).toContain('title="撤销并删除当前待发布 Invoice"');
   });
 
   it('enables media approval after the generated Invoice has been signed', () => {
