@@ -642,6 +642,10 @@ export type PaymentAttemptSnapshot = Readonly<{
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  /** 渠道确认的实际冲退金额；底层保存正数，资金流展示时转为负数。 */
+  refundAmount?: number;
+  refundCurrency?: InvoiceCurrency;
+  refundedAt?: string;
   recipientReceivedAmount?: number;
   recipientReceivedCurrency?: InvoiceCurrency;
   errorCode?: string;
@@ -707,7 +711,7 @@ export type PaymentFailureRecovery = {
 
 export type Payout = {
   id: string;
-  /** 用户可见的当前付款尝试编号；重新付款时生成新编号，历史编号保存在 paymentAttempts。 */
+  /** 用户可见的业务付款明细编号；重新付款时继续沿用。 */
   paymentCode?: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
@@ -737,6 +741,10 @@ export type Payout = {
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  /** 当前失败付款对应的渠道冲退结果。 */
+  refundAmount?: number;
+  refundCurrency?: InvoiceCurrency;
+  refundedAt?: string;
   recipientReceivedAmount?: number;
   recipientReceivedCurrency?: InvoiceCurrency;
   postTransactionBalance?: number;

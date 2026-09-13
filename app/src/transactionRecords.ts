@@ -104,6 +104,7 @@ export const findTransactionBatchContext = (
     return batch && item ? { batch, item } : null;
   }
   for (const batch of batches) {
+    if (batch.purpose === 'REVERSAL') continue;
     const item = batch.items.find((candidate) => candidate.payoutId === payout.id);
     if (item) return { batch, item };
   }
@@ -119,7 +120,7 @@ export const transactionOccurredAt = (payout: Payout) => (
 );
 
 const normalizedTransactionStatus = (
-  status: Payout['status'],
+  status: PaymentBatchItemSnapshot['paymentStatus'],
 ): TransactionRecordStatus | null => {
   if (status === '已退回') return '付款失败';
   if (status === '付款处理中' || status === '已付款' || status === '付款失败') return status;
@@ -257,7 +258,7 @@ export const createTransactionRecords = (
   batches: readonly PaymentBatchRecord[],
 ): TransactionRecord[] => {
   const payoutsById = new Map(payouts.map((payout) => [payout.id, payout]));
-  const batchRecords = batches.flatMap((batch) => batch.items.flatMap((item) => {
+  const batchRecords = batches.filter((batch) => batch.purpose !== 'REVERSAL').flatMap((batch) => batch.items.flatMap((item) => {
     const record = transactionRecordFromBatchItem(batch, item, payoutsById.get(item.payoutId));
     return record ? [record] : [];
   }));
@@ -408,7 +409,9 @@ export const transactionPaymentStatus = (
 ): PaymentAggregateStatus => {
   const context = findTransactionBatchContext(payout, batches);
   if (!context) return aggregatePaymentStatus([payout.status]);
-  return context.batch.status;
+  return context.batch.purpose === 'REVERSAL'
+    ? aggregatePaymentStatus([payout.status])
+    : context.batch.status as PaymentAggregateStatus;
 };
 
 const matchesTransactionSearch = (record: TransactionRecord, search: string) => {
@@ -450,7 +453,9 @@ export const filterTransactionRecords = (
   if (paymentStatus === '已付款' || paymentStatus === '付款处理中') {
     if (record.status !== paymentStatus) return false;
   } else if (!matchesPaymentStatus(
-    record.context?.batch.status ?? aggregatePaymentStatus([record.status]),
+    record.context?.batch.purpose === 'REVERSAL'
+      ? aggregatePaymentStatus([record.status])
+      : record.context?.batch.status as PaymentAggregateStatus ?? aggregatePaymentStatus([record.status]),
     paymentStatus,
   )) return false;
   if (filters.provider !== 'all' && record.provider !== filters.provider) return false;

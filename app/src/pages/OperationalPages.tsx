@@ -235,8 +235,11 @@ import {
   paymentBatchAmountLabel,
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
+  paymentBatchPurposeLabel,
   paymentBatchStatusCounts,
+  type PaymentBatchPurpose,
   type PaymentBatchRecord,
+  type PaymentBatchStatus,
 } from '../paymentBatches';
 import {
   createPaymentBatchWorkbook,
@@ -4191,25 +4194,49 @@ export function InvoicePage({
 export type PaymentBatchRow = {
   paymentBatchId: PaymentBatchRecord['paymentBatchId'];
   id: string;
-  cooperationProjectCode: string;
-  cooperationProjectName: string;
+  purpose: PaymentBatchPurpose;
+  requestCode: string;
   provider: string;
-  count: number;
+  paymentEntity: string;
+  projectName: string;
   paymentAmount: string;
   transferFeeAmount: string;
   actualPaidAmount: string;
+  initiator: string;
   payer: string;
   paidAt: string;
-  status: PaymentAggregateStatus;
+  status: PaymentBatchStatus;
 };
+
+export type PaymentBatchPurposeFilter = 'all' | PaymentBatchPurpose;
+export type PaymentBatchStatusFilter = typeof ALL_PAYMENT_STATUSES | PaymentBatchStatus;
 
 export type PaymentBatchFilters = {
   search: string;
   start: string;
   end: string;
   provider: string;
-  status?: PaymentStatusFilter;
+  purpose?: PaymentBatchPurposeFilter;
+  status?: PaymentBatchStatusFilter;
 };
+
+export const PAYMENT_BATCH_PURPOSE_FILTER_OPTIONS = [
+  { value: 'all', label: '全部批次用途' },
+  { value: 'NORMAL', label: '正常付款' },
+  { value: 'REVERSAL', label: '冲退付款' },
+  { value: 'RETRY', label: '重新付款' },
+] as const satisfies ReadonlyArray<{ value: PaymentBatchPurposeFilter; label: string }>;
+
+export const PAYMENT_BATCH_STATUS_FILTER_OPTIONS = [
+  { value: ALL_PAYMENT_STATUSES, label: ALL_PAYMENT_STATUSES },
+  { value: '付款处理中', label: '付款处理中' },
+  { value: '已付款', label: '已付款' },
+  { value: '部分失败', label: '部分失败' },
+  { value: '全部失败', label: '全部失败' },
+  { value: '冲退处理中', label: '冲退处理中' },
+  { value: '已冲退', label: '已冲退' },
+  { value: '冲退失败', label: '冲退失败' },
+] as const satisfies ReadonlyArray<{ value: PaymentBatchStatusFilter; label: string }>;
 
 const PAYMENT_CONFIRMATION_ASSET_PATH = '/export-assets/airwallex/airwallex付款单-支付确认函.pdf';
 export const PAYMENT_CONFIRMATION_FILENAME = 'airwallex付款单-支付确认函.pdf';
@@ -4219,14 +4246,15 @@ export const paymentBatchRows = (
 ): PaymentBatchRow[] => (
   batches.map((batch) => {
     const financialSummary = paymentBatchFinancialSummary(batch);
-    const resultPending = batch.status === '付款处理中';
+    const resultPending = batch.status === '付款处理中' || batch.status === '冲退处理中';
     return {
       paymentBatchId: batch.paymentBatchId,
       id: batch.paymentBatchCode,
-      cooperationProjectCode: batch.request.cooperationProjectCode,
-      cooperationProjectName: batch.request.cooperationProjectName,
+      purpose: batch.purpose,
+      requestCode: batch.request.requestCode,
       provider: batch.provider,
-      count: batch.items.length,
+      paymentEntity: batch.request.paymentEntity || '待补充',
+      projectName: batch.request.cooperationProjectName,
       paymentAmount: paymentBatchAmountLabel(batch),
       transferFeeAmount: resultPending
         ? '待渠道回写'
@@ -4234,6 +4262,7 @@ export const paymentBatchRows = (
       actualPaidAmount: resultPending
         ? '待渠道回写'
         : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts),
+      initiator: batch.request.media || '待补充',
       payer: batch.payer,
       paidAt: batch.paidAt,
       status: batch.status,
@@ -4259,7 +4288,8 @@ export const filterPaymentBatchRows = (
     && (!filters.start || row.paidAt >= filters.start)
     && (!filters.end || row.paidAt <= filters.end)
     && (filters.provider === 'all' || row.provider === filters.provider)
-    && matchesPaymentStatus(row.status, filters.status ?? ALL_PAYMENT_STATUSES)
+    && (!filters.purpose || filters.purpose === 'all' || row.purpose === filters.purpose)
+    && (!filters.status || filters.status === ALL_PAYMENT_STATUSES || row.status === filters.status)
   ));
 };
 
@@ -4309,9 +4339,9 @@ export const createBatchConfirmationArchive = async (
 
 const displayPaymentBatchTime = (value: string) => value.replace('T', ' ');
 
-const paymentBatchStatusTone = (status: PaymentAggregateStatus) => {
-  if (status === '部分失败' || status === '全部失败') return 'is-danger';
-  if (status === '付款处理中') return 'is-processing';
+const paymentBatchStatusTone = (status: PaymentBatchStatus) => {
+  if (status === '部分失败' || status === '全部失败' || status === '冲退失败') return 'is-danger';
+  if (status === '付款处理中' || status === '冲退处理中') return 'is-processing';
   return 'is-success';
 };
 
@@ -4357,7 +4387,8 @@ export function BatchesPage({
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [provider, setProvider] = useState('all');
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
+  const [purpose, setPurpose] = useState<PaymentBatchPurposeFilter>('all');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentBatchStatusFilter>(ALL_PAYMENT_STATUSES);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedBatchId, setSelectedBatchId] = useState<PaymentBatchRecord['paymentBatchId'] | null>(null);
   const [exporting, setExporting] = useState<'confirmations' | 'records' | null>(null);
@@ -4370,15 +4401,16 @@ export function BatchesPage({
     start,
     end,
     provider,
+    purpose,
     status: paymentStatus,
-  }), [end, paymentStatus, provider, rows, search, start]);
+  }), [end, paymentStatus, provider, purpose, rows, search, start]);
   const {
     page: batchPage,
     pageItems: visibleRows,
     pageSize: batchPageSize,
     setPage: setBatchPage,
     setPageSize: setBatchPageSize,
-  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}\u0000${paymentStatus}` });
+  } = usePagination(filteredRows, { resetKey: `${search}\u0000${start}\u0000${end}\u0000${provider}\u0000${purpose}\u0000${paymentStatus}` });
   const selectedRows = rows.filter((row) => selectedIds.has(row.id));
   const selectedBatches = batches.filter((batch) => selectedIds.has(batch.paymentBatchCode));
   const selectedAirwallexRows = selectedRows.filter((row) => row.provider === 'Airwallex');
@@ -4387,7 +4419,7 @@ export function BatchesPage({
   const exportAvailability = paymentBatchExportAvailability(selectedRows);
   const selectedBatch = batches.find((batch) => batch.paymentBatchId === selectedBatchId);
   const batchMetrics = useMemo(() => {
-    const totals = batches.reduce((result, batch) => {
+    const totals = batches.filter((batch) => batch.purpose !== 'REVERSAL').reduce((result, batch) => {
       const counts = paymentBatchStatusCounts(batch);
       return {
         succeeded: result.succeeded + counts.succeeded,
@@ -4398,10 +4430,10 @@ export function BatchesPage({
     const total = totals.succeeded + totals.failed + totals.processing;
     return {
       ...totals,
-      processingBatches: batches.filter((batch) => paymentBatchStatusCounts(batch).processing > 0).length,
-      paidBatches: batches.filter((batch) => batch.status === '已付款').length,
+      processingBatches: batches.filter((batch) => batch.purpose !== 'REVERSAL' && paymentBatchStatusCounts(batch).processing > 0).length,
+      paidBatches: batches.filter((batch) => batch.purpose !== 'REVERSAL' && batch.status === '已付款').length,
       paidBatchItems: batches
-        .filter((batch) => batch.status === '已付款')
+        .filter((batch) => batch.purpose !== 'REVERSAL' && batch.status === '已付款')
         .reduce((count, batch) => count + batch.items.length, 0),
       successRate: total ? `${((totals.succeeded / total) * 100).toFixed(1)}%` : '—',
       total,
@@ -4536,11 +4568,18 @@ export function BatchesPage({
               <input aria-label="付款结束时间" type="datetime-local" step="60" value={end} onChange={(event) => updateEnd(event.target.value)} />
             </label>
           </div>
-          <SelectField
+          <SelectField<PaymentBatchPurposeFilter>
+            ariaLabel="批次用途筛选"
+            className="payment-batch-purpose-filter"
+            value={purpose}
+            options={PAYMENT_BATCH_PURPOSE_FILTER_OPTIONS}
+            onChange={setPurpose}
+          />
+          <SelectField<PaymentBatchStatusFilter>
             ariaLabel="付款状态筛选"
             className="payment-batch-status-filter"
             value={paymentStatus}
-            options={PAYMENT_STATUS_FILTER_OPTIONS}
+            options={PAYMENT_BATCH_STATUS_FILTER_OPTIONS}
             onChange={setPaymentStatus}
           />
           <SelectField
@@ -4603,7 +4642,19 @@ export function BatchesPage({
                     onChange={() => setSelectedIds((current) => toggleVisiblePaymentBatchSelection(current, filteredRows))}
                   />
                 </th>
-                <th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th><th>付款人 / 付款时间</th><th className="payment-batch-status-cell">状态</th><th className="action-cell payment-batch-action-cell">操作</th>
+                <th>批次号</th>
+                <th>批次用途</th>
+                <th>请款项目编号</th>
+                <th>付款渠道</th>
+                <th>付款主体</th>
+                <th>项目名称</th>
+                <th>请款金额及币种</th>
+                <th>转账手续费及币种</th>
+                <th>实际付款金额及币种</th>
+                <th>发起人</th>
+                <th>付款人 / 时间</th>
+                <th className="payment-batch-status-cell">付款状态</th>
+                <th className="action-cell payment-batch-action-cell">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -4620,15 +4671,15 @@ export function BatchesPage({
                       />
                     </td>
                     <td className="mono-cell">{batch.id}</td>
-                    <td className="payment-batch-project-cell">
-                      <strong title={batch.cooperationProjectName}>{batch.cooperationProjectName}</strong>
-                      <small title={batch.cooperationProjectCode}>{batch.cooperationProjectCode}</small>
-                    </td>
+                    <td><span className={`payment-batch-purpose-badge is-${batch.purpose.toLowerCase()}`}>{paymentBatchPurposeLabel(batch.purpose)}</span></td>
+                    <td className="mono-cell" title={batch.requestCode}>{batch.requestCode}</td>
                     <td><PaymentProviderBadge compact provider={batch.provider} /></td>
-                    <td>{batch.count} 笔</td>
+                    <td className="payment-batch-text-cell" title={batch.paymentEntity}>{batch.paymentEntity}</td>
+                    <td className="payment-batch-project-cell" title={batch.projectName}><strong>{batch.projectName}</strong></td>
                     <td className="payment-batch-money-cell">{batch.paymentAmount}</td>
                     <td className="payment-batch-money-cell">{batch.transferFeeAmount}</td>
                     <td className="payment-batch-money-cell"><strong>{batch.actualPaidAmount}</strong></td>
+                    <td className="payment-batch-text-cell" title={batch.initiator}>{batch.initiator}</td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
                     <td className="payment-batch-status-cell"><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
                     <td className="action-cell payment-batch-action-cell">
@@ -4644,7 +4695,7 @@ export function BatchesPage({
                   </tr>
                 );
               })}
-              {!filteredRows.length ? <tr><td colSpan={11} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
+              {!filteredRows.length ? <tr><td colSpan={14} className="project-list-empty">暂无符合当前搜索与筛选条件的付款批次</td></tr> : null}
             </tbody>
           </table>
         </div>

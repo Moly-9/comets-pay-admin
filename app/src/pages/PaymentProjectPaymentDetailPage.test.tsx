@@ -134,7 +134,10 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('class="avatar avatar-sm"');
     expect(html).toContain('查看详情');
     expect(html).toContain('HKD 15,288');
-    expect(html).toContain(PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode);
+    const retriedPayout = resources.payouts.find((payout) => (
+      payout.currentPaymentAttempt?.paymentBatchCode === PAYMENT_BATCH_RETRY_DEMO.retryBatchCode
+    ));
+    expect(html).toContain(retriedPayout?.paymentCode);
     expect(html).toContain('首次付款');
     expect(html).toContain('二次付款');
     expect(html).toContain('HKD 15,318.58');
@@ -187,11 +190,11 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(retryRows.map((row) => row.attemptNumber)).toEqual([1, 2]);
     expect(retryRows.map((row) => row.item.paymentStatus)).toEqual(['付款失败', '已付款']);
     expect(retryRows.map((row) => row.item.paymentCode)).toEqual([
-      expect.stringMatching(/^PMT-/),
-      PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+      retriedPayout?.paymentCode,
+      retriedPayout?.paymentCode,
     ]);
-    expect(new Set(retryRows.map((row) => row.item.paymentCode)).size).toBe(2);
-    expect(retryRows[0].item.actualPaidAmount).toBe(30.58);
+    expect(new Set(retryRows.map((row) => row.item.paymentCode)).size).toBe(1);
+    expect(retryRows[0].item.actualPaidAmount).toBe(15_318.58);
     expect(retryRows[1].item.actualPaidAmount).toBe(15_318.58);
 
     const legacyPayout = {
@@ -204,7 +207,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     });
     expect(legacyRows.map((row) => row.item.paymentCode)).toEqual([
       undefined,
-      PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+      retriedPayout?.paymentCode,
     ]);
   });
 

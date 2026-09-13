@@ -33,7 +33,7 @@ const payout = (): Payout => ({
 });
 
 describe('payment attempt snapshots', () => {
-  it('freezes a failed attempt fee without counting the untransferred principal', () => {
+  it('freezes a failed attempt debit and its confirmed refund', () => {
     const source = payout();
     const snapshot = paymentAttemptSnapshotFor({
       payout: source,
@@ -41,8 +41,11 @@ describe('payment attempt snapshots', () => {
       occurredAt: '2026-08-30T10:05:00.000Z',
       transferFeeAmount: 2.5,
       transferFeeCurrency: 'USD',
-      actualPaidAmount: 2.5,
+      actualPaidAmount: 1_252.5,
       actualPaidCurrency: 'USD',
+      refundAmount: 1_250,
+      refundCurrency: 'USD',
+      refundedAt: '2026-08-30T10:06:00.000Z',
       recipientReceivedAmount: 0,
       recipientReceivedCurrency: 'USD',
       errorCode: 'PROTOTYPE_DECLINE',
@@ -57,7 +60,8 @@ describe('payment attempt snapshots', () => {
         submittedAt: '2026-08-30T10:00:00.000Z',
         occurredAt: '2026-08-30T10:05:00.000Z',
         transferFeeAmount: 2.5,
-        actualPaidAmount: 2.5,
+        actualPaidAmount: 1_252.5,
+        refundAmount: 1_250,
         recipientReceivedAmount: 0,
         status: '付款失败',
       }),
@@ -118,5 +122,37 @@ describe('payment attempt snapshots', () => {
       { currency: 'USD', amount: 2.5 },
       { currency: 'EUR', amount: 3 },
     ]);
+  });
+
+  it('subtracts confirmed refunds from cumulative actual payment without changing fees', () => {
+    const attempts = [{
+      paymentBatchId: 'payment_batch_failed' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'],
+      attemptNumber: 1,
+      status: '付款失败' as const,
+      principalAmount: 1_000,
+      principalCurrency: 'USD' as const,
+      transferFeeAmount: 2,
+      transferFeeCurrency: 'USD' as const,
+      actualPaidAmount: 1_002,
+      actualPaidCurrency: 'USD' as const,
+      refundAmount: 1_000,
+      refundCurrency: 'USD' as const,
+      refundedAt: '2026-08-20T09:00',
+    }, {
+      paymentBatchId: 'payment_batch_retry' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'],
+      attemptNumber: 2,
+      status: '已付款' as const,
+      principalAmount: 1_000,
+      principalCurrency: 'USD' as const,
+      transferFeeAmount: 2,
+      transferFeeCurrency: 'USD' as const,
+      actualPaidAmount: 1_002,
+      actualPaidCurrency: 'USD' as const,
+    }];
+
+    expect(paymentAttemptAmountTotals(attempts, 'actualPaidAmount', 'actualPaidCurrency'))
+      .toEqual([{ currency: 'USD', amount: 1_004 }]);
+    expect(paymentAttemptAmountTotals(attempts, 'transferFeeAmount', 'transferFeeCurrency'))
+      .toEqual([{ currency: 'USD', amount: 4 }]);
   });
 });

@@ -5404,6 +5404,10 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   width: 158px;
 }
 
+.payment-batch-purpose-filter.custom-select-toolbar {
+  width: 164px;
+}
+
 .payment-batch-status-filter.custom-select-toolbar {
   width: 168px;
 }
@@ -5449,7 +5453,7 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 }
 
 .payment-batch-table {
-  min-width: 1540px;
+  min-width: 1880px;
 }
 
 .payment-batch-table .payment-batch-select-cell {
@@ -5470,15 +5474,48 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 }
 
 .payment-batch-project-cell {
-  width: 220px;
+  width: 230px;
 }
 
 .payment-batch-project-cell :is(strong, small) {
   display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-batch-text-cell {
   max-width: 210px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.payment-batch-purpose-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid #dfe3e9;
+  border-radius: 999px;
+  background: #f6f7f9;
+  padding: 2px 9px;
+  color: #505865;
+  font-size: 10.5px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.payment-batch-purpose-badge.is-reversal {
+  border-color: #ead9c7;
+  background: #fff8ef;
+  color: #8a6238;
+}
+
+.payment-batch-purpose-badge.is-retry {
+  border-color: #decfe5;
+  background: #f8f3fa;
+  color: #6f527d;
 }
 
 .payment-batch-project-cell strong {
@@ -5540,6 +5577,19 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 .payment-batch-money-cell strong {
   color: #303741;
   font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .payment-batch-table :is(th, td).payment-batch-action-cell {
+    width: 112px;
+    min-width: 112px;
+  }
+
+  .payment-batch-table :is(th, td).payment-batch-status-cell {
+    right: 112px;
+    width: 104px;
+    min-width: 104px;
+  }
 }
 
 .media-project-row-actions {

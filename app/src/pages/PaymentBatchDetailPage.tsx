@@ -23,11 +23,9 @@ import {
   paymentBatchFinancialSummary,
   paymentBatchItemForAttempt,
   paymentBatchItemAttemptLabel,
-  paymentBatchItemAttemptNumber,
   paymentBatchItemOrderCode,
-  paymentBatchItemSourceOrderCode,
   paymentBatchMoneyTotalsLabel,
-  paymentBatchStatusCounts,
+  paymentBatchPurposeLabel,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
 } from '../paymentBatches';
@@ -65,8 +63,8 @@ const paymentStatusTone = (status: string) => {
 };
 
 const batchStatusTone = (status: PaymentBatchRecord['status']) => {
-  if (status === '部分失败' || status === '全部失败') return 'is-danger';
-  if (status === '付款处理中') return 'is-processing';
+  if (status === '部分失败' || status === '全部失败' || status === '冲退失败') return 'is-danger';
+  if (status === '付款处理中' || status === '冲退处理中') return 'is-processing';
   return 'is-success';
 };
 
@@ -74,19 +72,12 @@ const money = (currency: string, amount: number | null) => (
   amount === null ? '未记录' : `${currency} ${amount.toLocaleString('en-US')}`
 );
 
-const paymentOrderStatus = (items: readonly PaymentBatchItemSnapshot[]) => {
-  if (items.length > 0 && items.every((item) => ['付款失败', '已退回'].includes(item.paymentStatus))) return '全部失败';
-  if (items.some((item) => ['付款失败', '已退回'].includes(item.paymentStatus))) return '部分失败';
-  if (items.length > 0 && items.every((item) => item.paymentStatus === '已付款')) return '已付款';
-  return '付款处理中';
-};
-
 const paymentDateLabel = (value?: string) => value
   ? value.replace('T', ' ').split(' ')[0]
   : '—';
 
 const paymentFeeLabel = (item: PaymentBatchItemSnapshot) => (
-  item.paymentStatus === '付款处理中'
+  item.paymentStatus === '付款处理中' || item.paymentStatus === '冲退处理中'
     ? '待渠道回写'
     : item.transferFeeAmount !== undefined && item.transferFeeCurrency
       ? money(item.transferFeeCurrency, item.transferFeeAmount)
@@ -98,20 +89,35 @@ const paymentResultValue = (
   amount?: number,
   currency?: string,
 ) => {
-  if (item.paymentStatus === '付款处理中') return '待渠道回写';
+  if (item.paymentStatus === '付款处理中' || item.paymentStatus === '冲退处理中') return '待渠道回写';
   return amount !== undefined && currency ? money(currency, amount) : '—';
 };
 
 const channelWritebackTime = (item: PaymentBatchItemSnapshot) => (
-  item.paymentStatus === '付款处理中'
+  item.paymentStatus === '付款处理中' || item.paymentStatus === '冲退处理中'
     ? '待渠道回写'
     : displayTime(item.failure?.occurredAt ?? item.paidAt)
 );
+
+function PaymentBatchProjectInfo({ label, value, mono = false, full = false }: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  full?: boolean;
+}) {
+  return (
+    <div className={full ? 'payment-batch-project-full' : undefined}>
+      <dt>{label}</dt>
+      <dd className={mono ? 'payment-batch-project-code' : undefined} title={value}>{value}</dd>
+    </div>
+  );
+}
 
 export function PaymentItemDetails({
   item,
   payout,
   mode = 'complete',
+  batchPurpose,
   onOpenFailurePaymentList,
   onViewContractAttachment,
   onViewInvoiceAttachment,
@@ -119,6 +125,7 @@ export function PaymentItemDetails({
   item: PaymentBatchItemSnapshot;
   payout?: Payout;
   mode?: 'complete' | 'payment-only';
+  batchPurpose?: PaymentBatchRecord['purpose'];
   onOpenFailurePaymentList?: () => void;
   onViewContractAttachment?: (contract: PaymentBatchItemSnapshot['contracts'][number]) => void;
   onViewInvoiceAttachment?: (invoiceId: NonNullable<PaymentBatchItemSnapshot['invoice']>['invoiceId']) => void;
@@ -231,8 +238,7 @@ export function PaymentItemDetails({
         </header>
         <dl>
           <div className="is-payment-order"><dt>付款单</dt><dd>{paymentBatchItemOrderCode(item)}</dd></div>
-          {paymentBatchItemAttemptNumber(item) > 1 ? <div className="is-source-payment-order"><dt>原付款单</dt><dd>{paymentBatchItemSourceOrderCode(item)}</dd></div> : null}
-          <div className="is-payment-type"><dt>付款类型</dt><dd>{paymentBatchItemAttemptLabel(item)}</dd></div>
+          <div className="is-payment-type"><dt>付款类型</dt><dd>{batchPurpose ? paymentBatchPurposeLabel(batchPurpose) : paymentBatchItemAttemptLabel(item)}</dd></div>
           <div className="is-provider-method"><dt>付款渠道 / 方式</dt><dd>{paymentProviderDisplayName(item.provider)} · {item.transferMethod}</dd></div>
           {mode === 'payment-only' ? (
             <>
@@ -362,7 +368,7 @@ export function PaymentBatchItemDrawer({
         <header className="payment-batch-item-drawer-header">
           <div><span>付款明细</span><h2 id={titleId}>{creatorIdentity.accountName}</h2></div>
           <div className="payment-batch-item-drawer-header-actions">
-            <span className={`payment-batch-attempt-badge${batch.paymentAttemptNumber > 1 ? ' is-retry' : ''}`}>{paymentBatchItemAttemptLabel(item)}</span>
+            <span className={`payment-batch-attempt-badge${batch.purpose !== 'NORMAL' ? ' is-retry' : ''}`}>{paymentBatchPurposeLabel(batch.purpose)}</span>
             <span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span>
             <button ref={closeButtonRef} className="icon-button" type="button" aria-label="关闭付款明细" onClick={onClose}>
               <X size={20} aria-hidden="true" />
@@ -386,13 +392,14 @@ export function PaymentBatchItemDrawer({
               <div><dt>所属付款项目</dt><dd className="payment-batch-drawer-code" title={batch.request.requestCode}>{batch.request.requestCode}</dd></div>
               <div><dt>付款编号</dt><dd className="payment-batch-drawer-code" title={item.paymentCode || '付款编号待补全'}>{item.paymentCode || '付款编号待补全'}</dd></div>
               <div><dt>付款单</dt><dd className="payment-batch-drawer-code" title={batch.paymentOrderCode}>{batch.paymentOrderCode}</dd></div>
-              {batch.sourcePaymentOrderCode ? <div><dt>原付款单</dt><dd className="payment-batch-drawer-code" title={batch.sourcePaymentOrderCode}>{batch.sourcePaymentOrderCode}</dd></div> : null}
+              {batch.sourcePaymentBatchCode ? <div><dt>来源批次</dt><dd className="payment-batch-drawer-code" title={batch.sourcePaymentBatchCode}>{batch.sourcePaymentBatchCode}</dd></div> : null}
             </dl>
           </section>
           <PaymentItemDetails
             item={item}
             payout={payout}
             mode="payment-only"
+            batchPurpose={batch.purpose}
             onOpenFailurePaymentList={onOpenFailurePaymentList}
           />
         </div>
@@ -442,15 +449,12 @@ export function PaymentBatchDetailPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const financialSummary = useMemo(() => paymentBatchFinancialSummary(batch), [batch]);
-  const actualPaidTotal = batch.status === '付款处理中'
+  const actualPaidTotal = batch.status === '付款处理中' || batch.status === '冲退处理中'
     ? '待渠道回写'
     : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts);
   const batchItems = financialSummary.items;
-  const orderCounts = paymentBatchStatusCounts({ items: batchItems });
-  const orderStatus = paymentOrderStatus(batchItems);
-  const paymentTypeLabel = batch.paymentAttemptNumber > 1 ? '二次付款' : '首次付款';
-  const sourcePaymentOrderCode = batch.sourcePaymentOrderCode
-    ?? (batchItems[0] ? paymentBatchItemSourceOrderCode(batchItems[0]) : undefined);
+  const paymentTypeLabel = paymentBatchPurposeLabel(batch.purpose);
+  const projectStatus = currentRequestStatus || batch.request.requestStatus || '待同步';
   const failureDialogItem = batchItems.find((item) => item.payoutId === failureDialogPayoutId);
   const selectedDetailItem = batchItems.find((item) => item.payoutId === selectedDetailItemId);
   const selectedDetailCreator = selectedDetailItem
@@ -533,9 +537,9 @@ export function PaymentBatchDetailPage({
       <section className="payment-batch-detail-summary payment-project-summary-grid" aria-label="批次摘要">
         <div className="payment-project-summary-card is-order">
           <div>
-            <span>付款类型</span>
+            <span>批次用途</span>
             <strong>{paymentTypeLabel}</strong>
-            <small>{batch.paymentAttemptNumber > 1 ? `关联原付款单 ${sourcePaymentOrderCode ?? '未记录'}` : `${batch.items.length} 笔付款明细`}</small>
+            <small>{batch.sourcePaymentBatchCode ? `来源批次 ${batch.sourcePaymentBatchCode}` : `${batch.items.length} 笔付款明细`}</small>
           </div>
         </div>
         <div className="payment-project-summary-card is-updated">
@@ -554,27 +558,39 @@ export function PaymentBatchDetailPage({
         <PaymentProgressSteps ariaLabel="渠道处理进度" status={batch.status} />
       </section>
 
-      <section className="payment-batch-orders-section" aria-label="付款单与付款明细">
+      <section className="payment-batch-orders-section" aria-label="付款项目信息与付款明细">
         {batchItems.length ? (
           <div className="payment-batch-order-list">
               <article className="payment-batch-order-card" aria-labelledby="payment-batch-order-title">
-                <header className="payment-batch-order-header payment-batch-order-summary-card">
-                  <div className="payment-batch-order-identity">
-                    <span aria-hidden="true"><WalletCards size={20} /></span>
-                    <div>
-                      <small>付款单</small>
-                      <h2 id="payment-batch-order-title">{batch.paymentOrderCode}</h2>
-                      <p>{paymentTypeLabel}</p>
-                      {batch.paymentAttemptNumber > 1 ? <p>关联原付款单 {sourcePaymentOrderCode ?? '未记录'}</p> : null}
-                      <p>关联请款项目 {batch.request.requestCode}</p>
+                <section className="payment-batch-order-summary-card payment-batch-project-summary-card" aria-labelledby="payment-batch-order-title">
+                  <header className="payment-batch-project-card-heading">
+                    <div className="payment-batch-project-heading">
+                      <span aria-hidden="true"><ReceiptText size={20} /></span>
+                      <div>
+                        <small>付款项目信息</small>
+                        <h2 id="payment-batch-order-title" className="payment-batch-project-name">{batch.request.cooperationProjectName}</h2>
+                        <small>{batch.request.cooperationProjectCode}</small>
+                      </div>
                     </div>
-                  </div>
-                  <div className="payment-batch-order-result">
-                    <span className={`simple-status ${paymentStatusTone(orderStatus)}`}><i />{orderStatus}</span>
-                    <strong>{actualPaidTotal}</strong>
-                    <small>{orderCounts.succeeded} 成功 · {orderCounts.failed} 失败 · {orderCounts.processing} 处理中</small>
-                  </div>
-                </header>
+                    <span className={`simple-status ${paymentStatusTone(projectStatus)}`}><i />{projectStatus}</span>
+                  </header>
+                  <dl className="payment-batch-project-grid payment-batch-project-info-grid">
+                    <PaymentBatchProjectInfo label="请款项目编号" value={batch.request.requestCode} mono />
+                    <PaymentBatchProjectInfo label="付款单号" value={batch.paymentOrderCode} mono />
+                    <PaymentBatchProjectInfo label="批次用途" value={paymentTypeLabel} />
+                    {batch.sourcePaymentBatchCode ? <PaymentBatchProjectInfo label="来源批次" value={batch.sourcePaymentBatchCode} mono /> : null}
+                    <PaymentBatchProjectInfo label="付款主体" value={batch.request.paymentEntity || '待补充'} />
+                    <PaymentBatchProjectInfo label="项目费用归属" value={batch.request.projectCostAttribution || '待补充'} />
+                    <PaymentBatchProjectInfo label="成本类型" value={batch.request.costType || '待补充'} />
+                    <PaymentBatchProjectInfo label="成本类型明细" value={batch.request.costType === '采购成本' ? batch.request.costTypeDetail || '待补充' : '—'} />
+                    <PaymentBatchProjectInfo label="请款金额" value={batch.request.amount} />
+                    <PaymentBatchProjectInfo label="发起人" value={batch.request.media || '待补充'} />
+                    <PaymentBatchProjectInfo label="项目 PM" value={batch.request.pm || '待补充'} />
+                    <PaymentBatchProjectInfo label="项目状态" value={projectStatus} />
+                    <PaymentBatchProjectInfo label="预计付款时间" value={batch.request.expectedPaymentDate || '未设置'} />
+                    <PaymentBatchProjectInfo label="付款事由" value={batch.request.reason || '未单独填写'} full />
+                  </dl>
+                </section>
 
                 <section className="payment-batch-order-items payment-batch-order-items-card" aria-label={`${batch.paymentOrderCode} 付款明细`}>
                   <header>
@@ -638,7 +654,7 @@ export function PaymentBatchDetailPage({
                               <td className="payment-batch-col-amount payment-batch-table-money-cell"><strong>{money(item.currency, item.amount)}</strong></td>
                               <td className="payment-batch-col-fee payment-batch-table-money-cell">{paymentFeeLabel(item)}</td>
                               <td className="payment-batch-col-actual payment-batch-table-money-cell"><strong>{paymentResultValue(item, item.actualPaidAmount, item.actualPaidCurrency)}</strong></td>
-                              <td className="payment-batch-col-attempt"><span className={`payment-batch-attempt-badge${paymentBatchItemAttemptNumber(item) > 1 ? ' is-retry' : ''}`}>{paymentBatchItemAttemptLabel(item)}</span></td>
+                              <td className="payment-batch-col-attempt"><span className={`payment-batch-attempt-badge${batch.purpose !== 'NORMAL' ? ' is-retry' : ''}`}>{paymentBatchPurposeLabel(batch.purpose)}</span></td>
                               <td className="payment-batch-col-status"><span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span></td>
                               <td className="action-cell payment-batch-col-actions payment-batch-table-action-cell">
                                 <div className="payment-batch-table-actions">

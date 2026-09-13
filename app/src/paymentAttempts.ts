@@ -27,6 +27,9 @@ export const paymentAttemptSnapshotFor = ({
   transferFeeCurrency,
   actualPaidAmount,
   actualPaidCurrency,
+  refundAmount,
+  refundCurrency,
+  refundedAt,
   recipientReceivedAmount,
   recipientReceivedCurrency,
   errorCode,
@@ -40,6 +43,9 @@ export const paymentAttemptSnapshotFor = ({
   transferFeeCurrency?: PaymentAttemptSnapshot['transferFeeCurrency'];
   actualPaidAmount?: number;
   actualPaidCurrency?: PaymentAttemptSnapshot['actualPaidCurrency'];
+  refundAmount?: number;
+  refundCurrency?: PaymentAttemptSnapshot['refundCurrency'];
+  refundedAt?: string;
   recipientReceivedAmount?: number;
   recipientReceivedCurrency?: PaymentAttemptSnapshot['recipientReceivedCurrency'];
   errorCode?: string;
@@ -63,6 +69,9 @@ export const paymentAttemptSnapshotFor = ({
   transferFeeCurrency,
   actualPaidAmount,
   actualPaidCurrency,
+  refundAmount,
+  refundCurrency,
+  refundedAt,
   recipientReceivedAmount,
   recipientReceivedCurrency,
   errorCode,
@@ -111,6 +120,17 @@ export const paymentAttemptAmountTotals = (
     if (amount === undefined || !currency) return result;
     const total = (result.get(currency) ?? 0) + amount;
     result.set(currency, Math.round((total + Number.EPSILON) * 100) / 100);
+    if (
+      amountKey === 'actualPaidAmount'
+      && attempt.refundAmount !== undefined
+      && attempt.refundCurrency
+    ) {
+      const refundTotal = (result.get(attempt.refundCurrency) ?? 0) - attempt.refundAmount;
+      result.set(
+        attempt.refundCurrency,
+        Math.round((refundTotal + Number.EPSILON) * 100) / 100,
+      );
+    }
     return result;
   }, new Map());
   return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));

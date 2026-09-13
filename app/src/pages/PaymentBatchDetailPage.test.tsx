@@ -8,6 +8,7 @@ import { PaymentBatchDetailPage, PaymentBatchItemDrawer, PaymentItemDetails } fr
 const DETAIL_BATCH: PaymentBatchRecord = {
   paymentBatchId: 'payment_batch_detail_test' as PaymentBatchRecord['paymentBatchId'],
   paymentBatchCode: 'BAT-20260810-001',
+  purpose: 'NORMAL',
   paymentOrderCode: 'PAY-2608100001',
   paymentAttemptNumber: 1,
   request: {
@@ -115,14 +116,15 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('>MK</span>');
     expect(html).toContain('aria-label="查看 Mina Kato 的付款详情"');
     expect(html).not.toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
-    expect(html).toContain('aria-label="付款单与付款明细"');
+    expect(html).toContain('aria-label="付款项目信息与付款明细"');
     expect(html).toContain('class="payment-batch-order-card"');
-    expect(html).toContain('payment-batch-order-header payment-batch-order-summary-card');
+    expect(html).toContain('payment-batch-order-summary-card payment-batch-project-summary-card');
     expect(html).toContain('payment-batch-order-items payment-batch-order-items-card');
     expect(html).toContain('class="payment-batch-order-items-heading"');
-    expect(html).toContain('<span>付款类型</span><strong>首次付款</strong><small>1 笔付款明细</small>');
-    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-2608100001</h2>');
-    expect(html).toContain('<p>首次付款</p><p>关联请款项目 REQ-202608-000001</p>');
+    expect(html).toContain('<span>批次用途</span><strong>正常付款</strong><small>1 笔付款明细</small>');
+    expect(html).toContain('<small>付款项目信息</small>');
+    expect(html).toContain('<dt>付款单号</dt><dd class="payment-batch-project-code" title="PAY-2608100001">PAY-2608100001</dd>');
+    expect(html).toContain('<dt>请款项目编号</dt>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
     expect(html).toContain('<span>支付币种</span><strong>USD</strong>');
@@ -135,20 +137,20 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('class="data-table payment-batch-order-table"');
     expect(html).toContain('<strong title="COMETS 夏季内容项目">COMETS 夏季内容项目</strong><small title="PRJ-202608-000001">PRJ-202608-000001</small>');
     expect(html).toContain('<strong title="Mina Kato Account">Mina Kato Account</strong><small title="Mina Kato">Mina Kato</small>');
-    expect(html).toContain('class="payment-batch-attempt-badge">首次付款</span>');
+    expect(html).toContain('class="payment-batch-attempt-badge">正常付款</span>');
     expect(html).toContain('下载确认函');
     expect(html).toContain('查看详情');
     expect(html).toContain('payment-project-payment-detail-page payment-batch-payment-detail-page');
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 2.5<\/strong>/);
     expect(html).toContain('<small>实际付款金额 USD 2.5</small>');
-    expect(html).toMatch(/payment-batch-order-result[\s\S]*?<strong>USD 2.5<\/strong>/);
+    expect(html).not.toContain('payment-batch-order-result');
     expect(html).not.toContain('payment_batch_detail_test');
     expect(html).not.toContain('请款项目 / 所属项目');
     expect(html).not.toContain('<dt>请款编号</dt>');
-    expect(html).not.toContain('<dt>请款金额</dt>');
+    expect(html).toContain('<dt>请款金额</dt>');
   });
 
-  it('uses the processing status in the payment order card', () => {
+  it('uses the processing status in the batch header', () => {
     const processingBatch: PaymentBatchRecord = {
       ...DETAIL_BATCH,
       request: { ...DETAIL_BATCH.request, requestStatus: '已付款' },
@@ -164,10 +166,10 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage batch={processingBatch} onBack={vi.fn()} />,
     );
 
-    expect(html).toMatch(/class="payment-batch-order-card"[\s\S]*?<span class="simple-status is-processing"><i><\/i>付款处理中<\/span>/);
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<span class="simple-status is-processing"><i><\/i>付款处理中<\/span>/);
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>待渠道回写<\/strong>/);
     expect(html).toContain('<small>实际付款金额 待渠道回写</small>');
-    expect(html).toMatch(/payment-batch-order-result[\s\S]*?<strong>待渠道回写<\/strong>/);
+    expect(html).not.toContain('payment-batch-order-result');
   });
 
   it('highlights every supported payment provider in payment detail rows', () => {
@@ -226,10 +228,10 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('1 张付款单 · 2 笔明细');
   });
 
-  it('renders a retry in a new payment order while linking the original order', () => {
+  it('renders a retry batch while keeping the original payment order', () => {
     const retryItem = {
       ...DETAIL_BATCH.items[0],
-      paymentOrderCode: 'PAY-2608110002',
+      paymentOrderCode: 'PAY-2608100001',
       sourcePaymentOrderCode: 'PAY-2608100001',
       paymentAttemptNumber: 2,
       paymentStatus: '已付款',
@@ -244,8 +246,13 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage
         batch={{
           ...DETAIL_BATCH,
-          paymentOrderCode: 'PAY-2608110002',
-          sourcePaymentOrderCode: 'PAY-2608100001',
+          purpose: 'RETRY',
+          sourcePaymentBatchId: DETAIL_BATCH.paymentBatchId,
+          sourcePaymentBatchCode: DETAIL_BATCH.paymentBatchCode,
+          paymentBatchId: 'payment_batch_retry' as PaymentBatchRecord['paymentBatchId'],
+          paymentBatchCode: 'BAT-20260811-001',
+          paymentOrderCode: 'PAY-2608100001',
+          sourcePaymentOrderCode: undefined,
           paymentAttemptNumber: 2,
           status: '已付款',
           items: [retryItem],
@@ -254,13 +261,12 @@ describe('PaymentBatchDetailPage', () => {
       />,
     );
 
-    expect(html).toContain('<span>付款类型</span><strong>二次付款</strong><small>关联原付款单 PAY-2608100001</small>');
-    expect(html).toContain('<small>付款单</small><h2 id="payment-batch-order-title">PAY-2608110002</h2>');
-    expect(html).toContain('<p>二次付款</p><p>关联原付款单 PAY-2608100001</p><p>关联请款项目 REQ-202608-000001</p>');
-    expect(html).toContain('payment-batch-attempt-badge is-retry">二次付款</span>');
+    expect(html).toContain('<span>批次用途</span><strong>重新付款</strong><small>来源批次 BAT-20260810-001</small>');
+    expect(html).toContain('<dt>付款单号</dt><dd class="payment-batch-project-code" title="PAY-2608100001">PAY-2608100001</dd>');
+    expect(html).toContain('payment-batch-attempt-badge is-retry">重新付款</span>');
     expect(html).toContain('USD 8.5');
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 1,258.5<\/strong>/);
-    expect(html).toMatch(/payment-batch-order-result[\s\S]*?<strong>USD 1,258.5<\/strong>/);
+    expect(html).not.toContain('PAY-2608110002');
   });
 
   it('exposes the shared return action for a failed item in the batch detail', () => {
@@ -550,7 +556,7 @@ describe('PaymentBatchDetailPage', () => {
       <PaymentBatchDetailPage batch={DETAIL_BATCH} payouts={[payout]} onBack={vi.fn()} />,
     );
 
-    expect(html).toContain('<span class="simple-status is-danger"><i></i>全部失败</span>');
+    expect(html).toContain('<span class="simple-status is-danger"><i></i>部分失败</span>');
   });
 
   it('shows an explicit empty state when a stored batch has no item snapshots', () => {

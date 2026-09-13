@@ -91,7 +91,7 @@ const paymentAttemptLabel = (attemptNumber: number) => {
 };
 
 const paymentAttemptResultMoney = (
-  status: Payout['status'],
+  status: PaymentBatchItemSnapshot['paymentStatus'],
   amount?: number,
   currency?: string,
 ) => {
@@ -159,7 +159,7 @@ const paymentAttemptAggregate = (
   attempts: readonly PaymentAttemptSnapshot[],
   amountKey: 'actualPaidAmount' | 'transferFeeAmount',
   currencyKey: 'actualPaidCurrency' | 'transferFeeCurrency',
-  status: Payout['status'],
+  status: PaymentBatchItemSnapshot['paymentStatus'],
 ) => {
   if (!attempts.length) return [status === '付款处理中' ? '待渠道回写' : '待补充'];
   if (attempts.some((attempt) => attempt[amountKey] === undefined || !attempt[currencyKey])) {

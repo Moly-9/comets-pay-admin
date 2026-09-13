@@ -1,6 +1,7 @@
 import { CircleDollarSign, RadioTower, Send } from 'lucide-react';
 
-export type PaymentProgressStatus = '付款处理中' | '部分失败' | '全部失败' | '已退回' | '已付款';
+export type PaymentProgressStatus = '付款处理中' | '部分失败' | '全部失败' | '已退回' | '已付款'
+  | '冲退处理中' | '已冲退' | '冲退失败';
 
 const PAYMENT_PROGRESS_STEPS = [
   { label: '已提交', icon: Send },
@@ -9,8 +10,8 @@ const PAYMENT_PROGRESS_STEPS = [
 ] as const;
 
 const progressStepState = (status: PaymentProgressStatus, index: number) => {
-  if (status === '已付款') return 'complete';
-  if (status === '部分失败' || status === '全部失败' || status === '已退回') return index < 2 ? 'complete' : 'failed';
+  if (status === '已付款' || status === '已冲退') return 'complete';
+  if (status === '部分失败' || status === '全部失败' || status === '已退回' || status === '冲退失败') return index < 2 ? 'complete' : 'failed';
   if (index === 0) return 'complete';
   return index === 1 ? 'current' : 'pending';
 };
@@ -22,9 +23,16 @@ export function PaymentProgressSteps({
   ariaLabel: string;
   status: PaymentProgressStatus;
 }) {
+  const reversal = status === '冲退处理中' || status === '已冲退' || status === '冲退失败';
+  const steps = reversal
+    ? PAYMENT_PROGRESS_STEPS.map((step, index) => ({
+        ...step,
+        label: ['已发起冲退', '渠道处理中', '已冲退'][index],
+      }))
+    : PAYMENT_PROGRESS_STEPS;
   return (
     <ol className="payment-progress-steps" aria-label={ariaLabel}>
-      {PAYMENT_PROGRESS_STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const StepIcon = step.icon;
         const state = progressStepState(status, index);
         const stateLabel = state === 'complete'
@@ -39,7 +47,7 @@ export function PaymentProgressSteps({
             <span aria-hidden="true"><StepIcon size={18} /></span>
             <strong>{step.label}</strong>
             <small>{stateLabel}</small>
-            {index < PAYMENT_PROGRESS_STEPS.length - 1 ? <i aria-hidden="true" /> : null}
+            {index < steps.length - 1 ? <i aria-hidden="true" /> : null}
           </li>
         );
       })}
