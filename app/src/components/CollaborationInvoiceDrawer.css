@@ -238,6 +238,10 @@
   padding: 12px 14px;
 }
 
+.collaboration-detail-grid > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .collaboration-invoice-drawer-section > .collaboration-detail-grid {
   overflow: hidden;
   border: 1px solid #e6e9ee;
@@ -567,6 +571,10 @@
 
   .collaboration-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .collaboration-detail-grid > div:last-child:nth-child(odd) {
+    grid-column: auto;
   }
 
   .collaboration-invoice-timeline article {
