@@ -106,7 +106,7 @@ function PaymentBatchProjectInfo({ label, value, mono = false, full = false }: {
   full?: boolean;
 }) {
   return (
-    <div className={full ? 'payment-batch-project-full' : undefined}>
+    <div className={`payment-batch-project-info-card${full ? ' payment-batch-project-full' : ''}`}>
       <dt>{label}</dt>
       <dd className={mono ? 'payment-batch-project-code' : undefined} title={value}>{value}</dd>
     </div>
@@ -558,7 +558,7 @@ export function PaymentBatchDetailPage({
         <PaymentProgressSteps ariaLabel="渠道处理进度" status={batch.status} />
       </section>
 
-      <section className="payment-batch-orders-section" aria-label="付款项目信息与付款明细">
+      <section className="payment-batch-orders-section" aria-label="付款项目信息与付款记录">
         {batchItems.length ? (
           <div className="payment-batch-order-list">
               <article className="payment-batch-order-card" aria-labelledby="payment-batch-order-title">
@@ -592,13 +592,13 @@ export function PaymentBatchDetailPage({
                   </dl>
                 </section>
 
-                <section className="payment-batch-order-items payment-batch-order-items-card" aria-label={`${batch.paymentOrderCode} 付款明细`}>
+                <section className="payment-batch-order-items payment-batch-order-items-card" aria-label={`${batch.paymentOrderCode} 付款记录`}>
                   <header>
                     <div className="payment-batch-order-items-heading">
                       <span aria-hidden="true"><ListChecks size={17} /></span>
-                      <div><h3>付款明细</h3><p>查看本次付款的账户快照、费用和渠道结果。</p></div>
+                      <div><h3>付款记录</h3><p>查看本批次每笔付款的账户快照、费用和渠道结果。</p></div>
                     </div>
-                    <div className="payment-batch-order-items-tools" aria-label="付款明细工具">
+                    <div className="payment-batch-order-items-tools" aria-label="付款记录工具">
                       <Button
                         variant="secondary"
                         icon={downloadingResource === 'workbook' ? <LoaderCircle className="is-spinning" size={15} /> : <FileSpreadsheet size={15} />}
@@ -612,11 +612,12 @@ export function PaymentBatchDetailPage({
                     </div>
                   </header>
                   {resourceError ? <p className="payment-project-resource-error" role="alert">{resourceError}</p> : null}
-                  <div className="payment-batch-order-table-scroll" role="region" aria-label={`${batch.paymentOrderCode} 付款明细表，可横向滚动`} tabIndex={0}>
+                  <div className="payment-batch-order-table-scroll" role="region" aria-label={`${batch.paymentOrderCode} 付款记录表，可横向滚动`} tabIndex={0}>
                     <table className="data-table payment-batch-order-table">
                       <thead>
                         <tr>
                           <th className="payment-batch-col-creator" scope="col">达人</th>
+                          <th className="payment-batch-col-code" scope="col">付款编号</th>
                           <th className="payment-batch-col-project" scope="col">关联项目</th>
                           <th className="payment-batch-col-provider" scope="col">付款渠道</th>
                           <th className="payment-batch-col-account" scope="col">收款银行账号</th>
@@ -642,6 +643,9 @@ export function PaymentBatchDetailPage({
                           <tr key={item.payoutId}>
                               <td className="payment-batch-col-creator payment-batch-table-creator-cell">
                                 <PaymentCreatorIdentity {...creatorIdentity} className="payment-batch-table-creator-identity" />
+                              </td>
+                              <td className="payment-batch-col-code">
+                                <span className="payment-batch-table-payment-code" title={item.paymentCode || '付款编号待补全'}>{item.paymentCode || '付款编号待补全'}</span>
                               </td>
                               <td className="payment-batch-col-project">
                                 <span className="payment-batch-table-project-cell"><strong title={batch.request.cooperationProjectName}>{batch.request.cooperationProjectName}</strong><small title={batch.request.cooperationProjectCode}>{batch.request.cooperationProjectCode}</small></span>

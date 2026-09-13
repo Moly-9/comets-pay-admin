@@ -36,7 +36,7 @@
 
 .payment-batch-payment-detail-page .data-table.payment-batch-order-table {
   width: max-content;
-  min-width: max(100%, 1916px);
+  min-width: max(100%, 2082px);
   border-collapse: collapse;
   table-layout: fixed;
   color: #373b46;
@@ -83,6 +83,11 @@
 .payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-creator {
   width: 220px;
   min-width: 220px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-code {
+  width: 166px;
+  min-width: 166px;
 }
 
 .payment-batch-payment-detail-page .payment-batch-order-table :is(th, td).payment-batch-col-project {
@@ -173,6 +178,7 @@
 }
 
 .payment-batch-payment-detail-page .payment-batch-table-creator-identity .payment-creator-identity-copy > :is(strong, small),
+.payment-batch-payment-detail-page .payment-batch-table-payment-code,
 .payment-batch-payment-detail-page .payment-batch-table-project-cell :is(strong, small),
 .payment-batch-payment-detail-page .payment-batch-table-account-cell :is(strong, small),
 .payment-batch-payment-detail-page .payment-batch-table-provider small {
@@ -180,6 +186,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.payment-batch-payment-detail-page .payment-batch-table-payment-code {
+  display: block;
+  color: #4a515e;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
 }
 
 .payment-batch-payment-detail-page .payment-batch-table-actions {
@@ -211,7 +224,7 @@
   }
 
   .payment-batch-payment-detail-page .data-table.payment-batch-order-table {
-    min-width: max(100%, 1804px);
+    min-width: max(100%, 1970px);
   }
 }
 
@@ -246,6 +259,28 @@
 
 .payment-batch-payment-detail-page .payment-batch-project-info-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.payment-batch-payment-detail-page .payment-batch-project-info-grid > .payment-batch-project-info-card,
+.payment-batch-payment-detail-page .payment-batch-project-info-grid > .payment-batch-project-info-card:nth-child(n) {
+  min-height: 76px;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid #e5e8ed;
+  border-radius: 10px;
+  background: #fafbfc;
+  padding: 13px 14px !important;
+}
+
+.payment-batch-payment-detail-page .payment-batch-project-info-grid > .payment-batch-project-info-card:hover {
+  border-color: #d9dee6;
+  background: #fff;
+}
+
+.payment-batch-payment-detail-page .payment-batch-project-info-grid > .payment-batch-project-full {
+  grid-column: 1 / -1;
 }
 
 .payment-batch-payment-detail-page .payment-batch-project-code {
@@ -253,13 +288,19 @@
   font-size: 10.75px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 980px) {
+  .payment-batch-payment-detail-page .payment-batch-project-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
   .payment-batch-payment-detail-page .payment-batch-project-card-heading {
     align-items: flex-start;
     padding-right: 14px;
   }
 
-  .payment-batch-payment-detail-page .payment-batch-project-info-grid {
+  .payment-batch-payment-detail-page .payment-batch-order-card .payment-batch-project-info-grid {
     grid-template-columns: 1fr;
   }
 }

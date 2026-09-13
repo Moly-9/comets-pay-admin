@@ -116,7 +116,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('>MK</span>');
     expect(html).toContain('aria-label="查看 Mina Kato 的付款详情"');
     expect(html).not.toContain('<h2 id="payment-batch-orders-title">付款单与付款明细</h2>');
-    expect(html).toContain('aria-label="付款项目信息与付款明细"');
+    expect(html).toContain('aria-label="付款项目信息与付款记录"');
     expect(html).toContain('class="payment-batch-order-card"');
     expect(html).toContain('payment-batch-order-summary-card payment-batch-project-summary-card');
     expect(html).toContain('payment-batch-order-items payment-batch-order-items-card');
@@ -124,6 +124,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('<span>批次用途</span><strong>正常付款</strong><small>1 笔付款明细</small>');
     expect(html).toContain('<small>付款项目信息</small>');
     expect(html).toContain('<dt>付款单号</dt><dd class="payment-batch-project-code" title="PAY-2608100001">PAY-2608100001</dd>');
+    expect(html).toContain('class="payment-batch-project-info-card"');
     expect(html).toContain('<dt>请款项目编号</dt>');
     expect(html).toContain('<span>付款人 / 时间</span><strong>奚文慧</strong>');
     expect(html).toContain('<span>付款渠道</span><strong>Airwallex</strong>');
@@ -132,6 +133,10 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('<dt>付款项目编号</dt>');
     expect(html).not.toContain('payment-batch-order-project');
     expect(html).toContain('<th class="payment-batch-col-creator" scope="col">达人</th>');
+    expect(html).toContain('<th class="payment-batch-col-code" scope="col">付款编号</th>');
+    expect(html.indexOf('scope="col">达人</th>')).toBeLessThan(html.indexOf('scope="col">付款编号</th>'));
+    expect(html.indexOf('scope="col">付款编号</th>')).toBeLessThan(html.indexOf('scope="col">关联项目</th>'));
+    expect(html).toContain('class="payment-batch-table-payment-code" title="PMT-2608100001">PMT-2608100001</span>');
     expect(html).toContain('<th class="payment-batch-col-project" scope="col">关联项目</th>');
     expect(html).toContain('<th class="action-cell payment-batch-col-actions" scope="col">操作</th>');
     expect(html).toContain('class="data-table payment-batch-order-table"');
@@ -576,11 +581,13 @@ describe('PaymentBatchDetailPage', () => {
 
     expect(css).toContain('.payment-batch-item-drawer-backdrop');
     expect(css).toContain('width: min(560px, 100vw)');
-    expect(pageCss).toContain('min-width: max(100%, 1916px)');
+    expect(pageCss).toContain('min-width: max(100%, 2082px)');
     expect(pageCss).toContain('table-layout: fixed');
     expect(pageCss).toMatch(/\.payment-batch-order-table thead th\s*{[^}]*height:\s*47px;[^}]*padding:\s*0 14px;/s);
     expect(pageCss).toMatch(/\.payment-batch-order-table tbody td\s*{[^}]*height:\s*64px;[^}]*padding:\s*8px 14px;/s);
     expect(pageCss).toContain(':is(th, td).payment-batch-col-creator');
+    expect(pageCss).toContain(':is(th, td).payment-batch-col-code');
+    expect(pageCss).toMatch(/@media \(max-width: 520px\)[\s\S]*?\.payment-batch-order-card \.payment-batch-project-info-grid\s*{[^}]*grid-template-columns:\s*1fr/);
     expect(pageCss).toContain('min-width: 220px');
     expect(pageCss).toContain('min-width: 252px');
     expect(pageCss).toContain('min-width: 214px');
@@ -588,13 +595,14 @@ describe('PaymentBatchDetailPage', () => {
     expect(pageCss).toContain('right: var(--payment-batch-actions-width)');
     expect(pageCss).toContain('right: 0');
     expect(pageCss).toContain('text-overflow: ellipsis');
-    expect(pageCss).toMatch(/@media \(max-width: 520px\)[\s\S]*?--payment-batch-actions-width:\s*124px;[\s\S]*?min-width:\s*max\(100%, 1804px\)/);
+    expect(pageCss).toMatch(/@media \(max-width: 520px\)[\s\S]*?--payment-batch-actions-width:\s*124px;[\s\S]*?min-width:\s*max\(100%, 1970px\)/);
     expect(css).toContain('.payment-batch-table-actions');
     expect(css).toContain('.payment-batch-order-summary-card');
     expect(css).toContain('.payment-batch-order-items-card');
     expect(css).toContain('.payment-batch-drawer-financial-summary');
     expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.payment-batch-order-items-tools \.button \{[\s\S]*?min-height: 44px/);
     expect(source).toContain('className="payment-batch-col-creator" scope="col"');
+    expect(source).toContain('className="payment-batch-col-code" scope="col"');
     expect(source).toContain('className="action-cell payment-batch-col-actions" scope="col"');
     expect(source).toContain("import './PaymentBatchDetailPage.css'");
     expect(detailCss).toMatch(/payment-batch-payment-detail-page\.payment-batch-detail-page[\s\S]*?\.payment-project-summary-card strong,[\s\S]*?font-size: 18px/);
