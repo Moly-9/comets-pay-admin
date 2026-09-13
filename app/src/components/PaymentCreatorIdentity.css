@@ -76,6 +76,11 @@
   gap: 5px;
 }
 
+.batch-wizard-creator-cell > .batch-retry-badge {
+  justify-self: start;
+  margin-left: 42px;
+}
+
 .batch-wizard-creator-meta {
   display: flex;
   min-width: 0;

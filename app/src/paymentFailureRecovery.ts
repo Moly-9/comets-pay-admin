@@ -27,12 +27,16 @@ export const markPaymentFailureAccountChanged = (
   }
   return {
     ...payout,
-    paymentListRequiresRevalidation: true,
-    paymentListValidationIssues: ['收款账户已修改，请重新校验'],
+    payoutAccountId: account.payoutAccountId ?? payout.payoutAccountId,
+    payoutAccountVersion: account.payoutAccountVersion ?? payout.payoutAccountVersion,
+    payoutAccountFingerprint: account.accountFingerprint ?? payout.payoutAccountFingerprint,
+    externalBeneficiaryId: account.externalBeneficiaryId ?? payout.externalBeneficiaryId,
+    paymentListRequiresRevalidation: false,
+    paymentListValidationIssues: [],
     paymentFailureRecovery: {
       ...payout.paymentFailureRecovery,
-      status: 'CREATOR_UPDATED',
-      readyReason: undefined,
+      status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
       creatorUpdatedAt: occurredAt,
       reportedPayoutAccountId: account.payoutAccountId,
       reportedPayoutAccountVersion: account.payoutAccountVersion,
@@ -60,25 +64,35 @@ export const isPaymentFailureRetryCandidate = (payout: Payout) => (
 
 export const isPaymentFailureRetryReady = (payout: Payout) => (
   isPaymentFailureRetryCandidate(payout)
-  && payout.paymentFailureRecovery?.status === 'READY_FOR_RETRY'
   && (
-    payout.paymentFailureRecovery.readyReason === 'ACCOUNT_UNCHANGED'
-    || Boolean(payout.paymentFailureRecovery.financeConfirmedAt)
+    (
+      payout.paymentFailureRecovery?.status === 'READY_FOR_RETRY'
+      && ['ACCOUNT_UNCHANGED', 'REVALIDATED'].includes(payout.paymentFailureRecovery.readyReason ?? '')
+    )
+    || (
+      ['CREATOR_UPDATED', 'PENDING_FINANCE_CONFIRMATION'].includes(payout.paymentFailureRecovery?.status ?? '')
+      && Boolean(payout.paymentFailureRecovery?.reportedPayoutAccountVersion)
+      && Boolean(payout.paymentFailureRecovery?.reportedAccountFingerprint)
+      && (
+        payout.provider !== 'Airwallex'
+        || Boolean(payout.paymentFailureRecovery?.reportedExternalBeneficiaryId)
+      )
+      && !(payout.paymentFailureRecovery?.revalidationIssues?.length)
+    )
   )
 );
 
 export const paymentFailureRecoveryLabel = (payout: Payout) => {
   const status = payout.paymentFailureRecovery?.status;
-  if (status === 'CREATOR_UPDATED') return '达人已更新，待重新校验';
-  if (status === 'PENDING_FINANCE_CONFIRMATION') return '账户已校验，待财务确认';
+  if (status === 'CREATOR_UPDATED' || status === 'PENDING_FINANCE_CONFIRMATION') return '达人已更新 · 可重试';
   if (status === 'READY_FOR_RETRY') {
     return payout.paymentFailureRecovery?.readyReason === 'ACCOUNT_UNCHANGED'
-      ? '已通知，可重试'
-      : '已重新校验，可重试';
+      ? '原账户未变 · 可重试'
+      : '达人已更新 · 可重试';
   }
   if (status === 'RETRY_SUBMITTED') return '付款处理中';
   if (status === 'RETRY_SUCCEEDED') return '重试付款成功';
-  return '等待达人更新账户';
+  return '尚未更新';
 };
 
 export const beginPaymentFailureAccountRecovery = (
@@ -168,12 +182,19 @@ export const simulateCreatorAccountUpdated = (
   const revision = payout.paymentFailureRecovery.notifications.length;
   return {
     ...payout,
-    paymentListRequiresRevalidation: true,
-    paymentListValidationIssues: ['达人已更新账户，待重新校验'],
+    payoutAccountVersion: nextAccountVersion(
+      payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion,
+    ),
+    payoutAccountFingerprint: `fp_recovery_${payout.id}_${revision}`,
+    externalBeneficiaryId: payout.provider === 'Airwallex'
+      ? `${payout.externalBeneficiaryId ?? payout.invoiceSnapshot?.payment.externalBeneficiaryId ?? 'beneficiary'}-updated-${revision}`
+      : payout.externalBeneficiaryId,
+    paymentListRequiresRevalidation: false,
+    paymentListValidationIssues: [],
     paymentFailureRecovery: {
       ...payout.paymentFailureRecovery,
-      status: 'CREATOR_UPDATED',
-      readyReason: undefined,
+      status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
       creatorUpdatedAt: occurredAt,
       reportedPayoutAccountId: payout.payoutAccountId ?? payout.invoiceSnapshot?.payoutAccountId,
       reportedPayoutAccountVersion: nextAccountVersion(
@@ -227,8 +248,8 @@ export const completePaymentFailureRevalidation = (
     paymentListValidationIssues: [],
     paymentFailureRecovery: {
       ...recovery,
-      status: 'PENDING_FINANCE_CONFIRMATION',
-      readyReason: undefined,
+      status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
       revalidatedAt: occurredAt,
       revalidationIssues: [],
     },
@@ -262,7 +283,13 @@ export const paymentFailureRevalidationIssues = (
   account: PaymentFailureRevalidationAccount | null,
 ) => {
   const recovery = payout.paymentFailureRecovery;
-  if (!recovery || recovery.status !== 'CREATOR_UPDATED') return ['达人账户尚未更新'];
+  if (
+    !recovery
+    || !(
+      recovery.status === 'CREATOR_UPDATED'
+      || (recovery.status === 'READY_FOR_RETRY' && recovery.readyReason === 'REVALIDATED')
+    )
+  ) return ['达人账户尚未更新'];
   if (!account) return ['达人档案中未找到失败款关联的收款账户'];
   const expectedPayoutAccountId = recovery.reportedPayoutAccountId
     ?? payout.payoutAccountId
@@ -290,7 +317,7 @@ export const markPaymentFailureRetrySubmitted = (
   },
 ): Payout => {
   if (!isPaymentFailureRetryReady(payout)) {
-    throw new Error('失败款尚未完成账户校验和财务确认。');
+    throw new Error('失败款尚未完成达人端账户校验。');
   }
   return {
     ...payout,

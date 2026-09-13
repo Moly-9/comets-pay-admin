@@ -1013,14 +1013,14 @@ export function RequestProjectResourceManager({
                             >
                               更换执行账户
                             </Button>
-                            <Button
-                              icon={<RefreshCw size={15} />}
-                              disabled={recovery.status !== 'CREATOR_UPDATED'}
-                              disabledReason="达人尚未完成执行账户更新。"
-                              onClick={() => onRevalidatePaymentFailureAccount?.(failurePayout.id)}
-                            >
-                              重新校验
-                            </Button>
+                            {recovery.status === 'CREATOR_UPDATED' ? (
+                              <Button
+                                icon={<RefreshCw size={15} />}
+                                onClick={() => onRevalidatePaymentFailureAccount?.(failurePayout.id)}
+                              >
+                                兼容旧数据校验
+                              </Button>
+                            ) : null}
                           </div>
                         ) : null}
                       </section>

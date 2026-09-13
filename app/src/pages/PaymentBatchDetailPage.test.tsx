@@ -523,7 +523,7 @@ describe('PaymentBatchDetailPage', () => {
 
     expect(html).toContain('失败款已转交媒介恢复');
     expect(html).toContain('付款清单账户快照已失效，请达人更新账户。');
-    expect(html).toContain('等待达人更新账户');
+    expect(html).toContain('尚未更新');
     expect(html).toContain('查看付款清单');
   });
 

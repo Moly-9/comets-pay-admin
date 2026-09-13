@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   airwallexFeeOptions,
+  batchWizardDemoStateFor,
   createMockBatchSubmission,
   executeMockBatchSubmission,
   selectBatchWizardPayouts,
+  validatePayoutForBatch,
 } from './batchTransfers';
 import type { Payout } from './types';
 
@@ -134,7 +136,7 @@ describe('batch transfer contract', () => {
     expect(execution.simulated).toBe(true);
   });
 
-  it('keeps only the four diagnostic samples in the batch wizard', () => {
+  it('keeps two concise demo rows for each batch-wizard account state', () => {
     const samples = [
       payout({ id: 'sample-1', creatorId: undefined }),
       payout({ id: 'sample-2', payoutAccountId: undefined }),
@@ -142,6 +144,8 @@ describe('batch transfer contract', () => {
       payout({ id: 'sample-4', feeBearer: '' }),
       payout({ id: 'ready-1', invoice: 'INV-READY-001' }),
       payout({ id: 'ready-2', invoice: 'INV-READY-002' }),
+      payout({ id: 'standard-1', invoice: 'INV-STANDARD-001' }),
+      payout({ id: 'standard-2', invoice: 'INV-STANDARD-002' }),
     ];
 
     const selected = selectBatchWizardPayouts(samples);
@@ -150,8 +154,24 @@ describe('batch transfer contract', () => {
       'sample-1',
       'sample-2',
       'sample-3',
+      'ready-1',
+      'ready-2',
+      'standard-1',
+      'standard-2',
       'sample-4',
     ]);
+    expect(selected.map(batchWizardDemoStateFor)).toEqual([
+      'AWAITING_UPDATE',
+      'AWAITING_UPDATE',
+      'CREATOR_UPDATED',
+      'CREATOR_UPDATED',
+      'ACCOUNT_UNCHANGED',
+      'ACCOUNT_UNCHANGED',
+      'STANDARD',
+      'STANDARD',
+    ]);
+    expect(selected.slice(2, 6).every((item) => validatePayoutForBatch(item, 'Airwallex').length === 0)).toBe(true);
+    expect(selected.slice(2, 4).map((item) => item.account)).toEqual(['9000009202', '9000009203']);
   });
 
   it('blocks the whole batch when providers are mixed or fee data is missing', () => {
@@ -185,6 +205,18 @@ describe('batch transfer contract', () => {
       fundingAccountId: 'mock-funding',
       sourceCurrency: 'USD',
     })).toThrow('手续费承担方');
+  });
+
+  it('rejects payouts from different request projects before submission', () => {
+    expect(() => createMockBatchSubmission({
+      payouts: [
+        payout({ paymentRequestProjectId: 'request-1' as Payout['paymentRequestProjectId'] }),
+        payout({ id: 'payout-2', paymentRequestProjectId: 'request-2' as Payout['paymentRequestProjectId'] }),
+      ],
+      provider: 'Airwallex',
+      fundingAccountId: 'mock-funding',
+      sourceCurrency: 'USD',
+    })).toThrow('一个付款批次只能关联一个请款项目');
   });
 
   it('keeps PayPal Transfer Note in a separate PayPal batch', () => {

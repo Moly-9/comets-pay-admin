@@ -2,13 +2,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
   beginPaymentFailureAccountRecovery,
-  completePaymentFailureRevalidation,
-  confirmPaymentFailureAccountChange,
   recordPaymentFailureNotification,
   simulateCreatorAccountUpdated,
 } from '../paymentFailureRecovery';
 import type { Payout } from '../types';
-import { BatchWizardPage } from './BatchWizardPage';
+import {
+  BatchWizardPage,
+  batchWizardSelectionScopeIssue,
+  buildBatchWizardRows,
+  filterBatchWizardRows,
+  type BatchWizardRequestProject,
+} from './BatchWizardPage';
 
 const retryPayout = (): Payout => ({
   id: 'retry-payout',
@@ -51,6 +55,18 @@ const retryPayout = (): Payout => ({
   },
 });
 
+const requestProject = (overrides: Partial<BatchWizardRequestProject> = {}): BatchWizardRequestProject => ({
+  id: 'request-summary-1',
+  paymentRequestProjectId: 'request-1' as NonNullable<Payout['paymentRequestProjectId']>,
+  requestCode: 'REQ-202609-000001',
+  cooperationProjectId: 'project-1' as NonNullable<BatchWizardRequestProject['cooperationProjectId']>,
+  cooperationProjectCode: 'PRJ-260901-01',
+  cooperationProjectName: '合作项目一',
+  projectId: 'project-1' as NonNullable<BatchWizardRequestProject['projectId']>,
+  project: '合作项目一',
+  ...overrides,
+});
+
 describe('BatchWizardPage payment failure retries', () => {
   it('shows an awaiting retry immediately, unchecked and disabled', () => {
     const payout = beginPaymentFailureAccountRecovery(retryPayout());
@@ -60,12 +76,12 @@ describe('BatchWizardPage payment failure retries', () => {
 
     expect(html).toContain('Retry Creator');
     expect(html).toContain('失败重试');
-    expect(html).toContain('等待达人更新账户');
+    expect(html).toContain('尚未更新');
     expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" checked=""');
   });
 
-  it('keeps a revalidated account blocked until finance confirms it', () => {
+  it('makes a creator-side validated update immediately retryable', () => {
     const started = beginPaymentFailureAccountRecovery(retryPayout());
     const notified = recordPaymentFailureNotification(
       started,
@@ -73,17 +89,18 @@ describe('BatchWizardPage payment failure retries', () => {
       '请更新收款账户',
       'creator@example.com',
     );
-    const ready = completePaymentFailureRevalidation(simulateCreatorAccountUpdated(notified));
+    const ready = simulateCreatorAccountUpdated(notified);
     const html = renderToStaticMarkup(
       <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
     );
 
-    expect(html).toContain('账户已校验，待财务确认');
-    expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
+    expect(html).toContain('达人已更新 · 可重试');
+    expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox"');
+    expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" checked=""');
   });
 
-  it('makes a revalidated retry selectable after finance confirmation', () => {
+  it('keeps legacy validated update states retryable without finance confirmation', () => {
     const started = beginPaymentFailureAccountRecovery(retryPayout());
     const notified = recordPaymentFailureNotification(
       started,
@@ -91,16 +108,20 @@ describe('BatchWizardPage payment failure retries', () => {
       '请更新收款账户',
       'creator@example.com',
     );
-    const pendingFinance = completePaymentFailureRevalidation(simulateCreatorAccountUpdated(notified));
-    const ready = confirmPaymentFailureAccountChange(
-      pendingFinance,
-      { account: 'finance', name: '财务审核人' },
-    );
+    const current = simulateCreatorAccountUpdated(notified);
+    const ready = {
+      ...current,
+      paymentFailureRecovery: current.paymentFailureRecovery ? {
+        ...current.paymentFailureRecovery,
+        status: 'PENDING_FINANCE_CONFIRMATION' as const,
+        readyReason: undefined,
+      } : undefined,
+    };
     const html = renderToStaticMarkup(
       <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
     );
 
-    expect(html).toContain('已重新校验，可重试');
+    expect(html).toContain('达人已更新 · 可重试');
     expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox"');
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" checked=""');
@@ -118,8 +139,8 @@ describe('BatchWizardPage payment failure retries', () => {
       <BatchWizardPage payouts={[updated]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
     );
 
-    expect(html).toContain('达人已更新，待重新校验');
-    expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
+    expect(html).toContain('达人已更新 · 可重试');
+    expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
   });
 
   it('makes an unchanged account selectable immediately after the failure notice', () => {
@@ -133,8 +154,105 @@ describe('BatchWizardPage payment failure retries', () => {
       <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
     );
 
-    expect(html).toContain('已通知，可重试');
+    expect(html).toContain('原账户未变 · 可重试');
     expect(html).toContain('aria-label="选择 Retry Creator" type="checkbox"');
     expect(html).not.toContain('aria-label="选择 Retry Creator" type="checkbox" disabled=""');
+  });
+
+  it('renders the requested toolbar order and exact payment columns without Invoice content', () => {
+    const html = renderToStaticMarkup(
+      <BatchWizardPage
+        payouts={[retryPayout()]}
+        requests={[requestProject()]}
+        onCancel={vi.fn()}
+        onSubmit={vi.fn()}
+        onDraft={vi.fn()}
+      />,
+    );
+
+    expect(html.indexOf('aria-label="搜索付款"')).toBeLessThan(html.indexOf('aria-label="按合作项目筛选付款"'));
+    expect(html.indexOf('aria-label="按合作项目筛选付款"')).toBeLessThan(html.indexOf('已选择的付款'));
+    expect(html).toContain('<th class="batch-wizard-col-creator">达人</th>');
+    expect(html).toContain('<th class="batch-wizard-col-request">请款编号</th>');
+    expect(html).toContain('<th class="batch-wizard-col-project">合作项目</th>');
+    expect(html).toContain('<th class="batch-wizard-col-account">银行账号</th>');
+    expect(html).toContain('<th class="batch-wizard-col-validation">账户校验</th>');
+    expect(html).toContain('REQ-202609-000001');
+    expect(html).toContain('合作项目一');
+    expect(html).not.toContain('INV-RETRY-1');
+  });
+
+  it('combines creator/request search with stable cooperation-project filtering', () => {
+    const secondPayout = {
+      ...retryPayout(),
+      id: 'retry-payout-2',
+      paymentRequestProjectId: 'request-2' as NonNullable<Payout['paymentRequestProjectId']>,
+      creator: 'Second Creator',
+      projectId: 'project-2',
+      project: '合作项目二',
+      invoice: 'INV-ONLY-SEARCH',
+    };
+    const rows = buildBatchWizardRows({
+      payouts: [retryPayout(), secondPayout],
+      requests: [
+        requestProject(),
+        requestProject({
+          id: 'request-summary-2',
+          paymentRequestProjectId: 'request-2' as NonNullable<Payout['paymentRequestProjectId']>,
+          requestCode: 'REQ-202609-000002',
+          cooperationProjectId: 'project-2' as NonNullable<BatchWizardRequestProject['cooperationProjectId']>,
+          cooperationProjectCode: 'PRJ-260901-02',
+          cooperationProjectName: '合作项目二',
+          projectId: 'project-2' as NonNullable<BatchWizardRequestProject['projectId']>,
+          project: '合作项目二',
+        }),
+      ],
+      generatedInvoices: [],
+      paymentLists: [],
+      creators: [],
+    });
+
+    expect(filterBatchWizardRows(rows, 'REQ-202609-000002', 'all').map((row) => row.payout.id)).toEqual(['retry-payout-2']);
+    expect(filterBatchWizardRows(rows, 'Second Creator', 'project-2').map((row) => row.payout.id)).toEqual(['retry-payout-2']);
+    expect(filterBatchWizardRows(rows, 'Second Creator', 'project-1')).toEqual([]);
+    expect(filterBatchWizardRows(rows, 'INV-ONLY-SEARCH', 'all')).toEqual([]);
+  });
+
+  it('locks batch selection to one request, provider, payment type, and original order', () => {
+    const readyRetry = recordPaymentFailureNotification(
+      beginPaymentFailureAccountRecovery(retryPayout()),
+      { account: 'media', name: '项目媒介' },
+      '原账户未变，可重试',
+      'creator@example.com',
+    );
+    const baseRows = buildBatchWizardRows({
+      payouts: [readyRetry, { ...readyRetry, id: 'other' }],
+      requests: [requestProject()],
+      generatedInvoices: [],
+      paymentLists: [],
+      creators: [],
+    });
+    const selectedRow = { ...baseRows[0], sourcePaymentOrderKey: 'PAY-2609010001' };
+
+    expect(batchWizardSelectionScopeIssue({
+      ...baseRows[1],
+      requestKey: 'request-2',
+    }, selectedRow)).toBe('一个付款批次只能关联一个请款项目');
+    expect(batchWizardSelectionScopeIssue({
+      ...baseRows[1],
+      payout: { ...baseRows[1].payout, provider: 'PayPal' },
+    }, selectedRow)).toBe('一个付款批次只能使用同一付款渠道');
+    expect(batchWizardSelectionScopeIssue({
+      ...baseRows[1],
+      payout: { ...baseRows[1].payout, paymentFailureRecovery: undefined },
+    }, selectedRow)).toBe('首次付款和重新付款需要分别创建付款批次');
+    expect(batchWizardSelectionScopeIssue({
+      ...baseRows[1],
+      sourcePaymentOrderKey: 'PAY-2609010002',
+    }, selectedRow)).toBe('重新付款只能选择同一张原付款单的失败明细');
+    expect(batchWizardSelectionScopeIssue({
+      ...baseRows[1],
+      sourcePaymentOrderKey: selectedRow.sourcePaymentOrderKey,
+    }, selectedRow)).toBe('');
   });
 });

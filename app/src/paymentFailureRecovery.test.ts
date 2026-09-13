@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
-  confirmPaymentFailureAccountChange,
   isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
   markPaymentFailureRetrySubmitted,
@@ -101,7 +100,7 @@ describe('payment failure recovery', () => {
     expect(() => simulateCreatorAccountUpdated(startRecovery())).toThrow('请先向达人发送付款失败通知');
   });
 
-  it('keeps concrete account mismatches blocked and becomes ready only after all identities match', () => {
+  it('treats the creator-side validated update as ready and retains identity diagnostics', () => {
     const notified = recordPaymentFailureNotification(
       startRecovery(),
       { account: 'media', name: '项目媒介' },
@@ -116,35 +115,42 @@ describe('payment failure recovery', () => {
       accountFingerprint: 'wrong-fingerprint',
       externalBeneficiaryId: 'wrong-beneficiary',
     });
-    const blocked = completePaymentFailureRevalidation(updated, '2026-08-10T10:30:00.000Z', mismatches);
-
     expect(mismatches).toEqual([
       '收款账户版本与达人反馈不一致',
       '收款账户资料指纹与达人反馈不一致',
       'Airwallex beneficiary_id 与达人反馈不一致',
     ]);
-    expect(blocked.paymentFailureRecovery?.status).toBe('CREATOR_UPDATED');
-    expect(blocked.paymentFailureRecovery?.revalidationIssues).toEqual(mismatches);
-    expect(isPaymentFailureRetryReady(blocked)).toBe(false);
+    expect(updated.paymentFailureRecovery).toMatchObject({
+      status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
+    });
+    expect(updated.paymentListValidationIssues).toEqual([]);
+    expect(isPaymentFailureRetryReady(updated)).toBe(true);
+    expect(paymentFailureRecoveryLabel(updated)).toBe('达人已更新 · 可重试');
+  });
 
-    const recovery = updated.paymentFailureRecovery!;
-    const pendingFinance = completePaymentFailureRevalidation(updated, '2026-08-10T10:31:00.000Z', paymentFailureRevalidationIssues(updated, {
-      payoutAccountId: updated.payoutAccountId,
-      payoutAccountVersion: recovery.reportedPayoutAccountVersion,
-      accountFingerprint: recovery.reportedAccountFingerprint,
-      externalBeneficiaryId: recovery.reportedExternalBeneficiaryId,
-    }));
-    const ready = confirmPaymentFailureAccountChange(
-      pendingFinance,
-      { account: 'finance', name: '财务人员' },
-      '2026-08-10T10:32:00.000Z',
-    );
+  it('upgrades legacy creator-updated records directly to retry-ready after validation', () => {
+    const updated = simulateCreatorAccountUpdated(recordPaymentFailureNotification(
+      startRecovery(),
+      { account: 'media', name: '项目媒介' },
+      '请更新收款账户。',
+      'mina@example.com',
+    ));
+    const legacyUpdated = {
+      ...updated,
+      paymentFailureRecovery: {
+        ...updated.paymentFailureRecovery!,
+        status: 'CREATOR_UPDATED' as const,
+        readyReason: undefined,
+      },
+    };
 
-    expect(pendingFinance.paymentFailureRecovery?.status).toBe('PENDING_FINANCE_CONFIRMATION');
-    expect(isPaymentFailureRetryReady(pendingFinance)).toBe(false);
-    expect(ready.paymentFailureRecovery?.status).toBe('READY_FOR_RETRY');
-    expect(ready.paymentFailureRecovery?.financeConfirmedByAccount).toBe('finance');
-    expect(ready.paymentListValidationIssues).toEqual([]);
+    const ready = completePaymentFailureRevalidation(legacyUpdated);
+
+    expect(ready.paymentFailureRecovery).toMatchObject({
+      status: 'READY_FOR_RETRY',
+      readyReason: 'REVALIDATED',
+    });
     expect(isPaymentFailureRetryReady(ready)).toBe(true);
   });
 
@@ -155,12 +161,7 @@ describe('payment failure recovery', () => {
       '请更新收款账户。',
       'mina@example.com',
     );
-    const creatorUpdated = simulateCreatorAccountUpdated(notified);
-    const pendingFinance = completePaymentFailureRevalidation(creatorUpdated);
-    const ready = confirmPaymentFailureAccountChange(
-      pendingFinance,
-      { account: 'finance', name: '财务人员' },
-    );
+    const ready = simulateCreatorAccountUpdated(notified);
     const submitted = markPaymentFailureRetrySubmitted(
       ready,
       'batch_retry_1',

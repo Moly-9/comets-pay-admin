@@ -258,7 +258,7 @@ describe('media returned payment request handling', () => {
     expect(detailHtml).toContain('1 笔失败款待处理');
     expect(detailHtml).toContain('达人收款账户不可用，请更新后重新校验。');
     expect(detailHtml).toContain('付款失败原因：');
-    expect(detailHtml).toContain('等待达人更新账户');
+    expect(detailHtml).toContain('尚未更新');
     expect(detailHtml).toContain('media-payment-failure-action');
     expect(detailHtml).toContain('查看付款清单');
     expect(detailHtml).not.toContain('修改请款内容');

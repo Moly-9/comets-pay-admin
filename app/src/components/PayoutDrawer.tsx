@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, Check, FileSignature, FileText, Landmark, MessageSquareText, X } from 'lucide-react';
 import { useState } from 'react';
 import type { PaymentListItem } from '../businessWorkflow';
 import { Button, Modal, StatusMark } from './Common';
@@ -121,9 +121,7 @@ export function PayoutDrawer({
   onAdvance,
   onPaymentFailed,
   onReturn,
-  onConfirmAccountChange,
   canExecutePayout,
-  canConfirmAccountChange,
   contract,
   onViewContract,
   onViewInvoice,
@@ -135,9 +133,7 @@ export function PayoutDrawer({
   onAdvance: (payout: Payout) => void;
   onPaymentFailed: (payout: Payout) => void;
   onReturn: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => void;
-  onConfirmAccountChange: (payoutId: string) => boolean;
   canExecutePayout: boolean;
-  canConfirmAccountChange: boolean;
   contract: ContractRecord | null;
   onViewContract: (contract: ContractRecord) => void;
   onViewInvoice: (payout: Payout) => void;
@@ -255,10 +251,11 @@ export function PayoutDrawer({
                   <div><span>Invoice 签署账户</span><strong>{frozenAccountLabel(payout)}</strong></div>
                   <i aria-hidden="true">→</i>
                   <div><span>本次执行账户</span><strong>{accountDisplayValue(payout.account)}</strong></div>
-                  <small>{payout.paymentFailureRecovery.status === 'PENDING_FINANCE_CONFIRMATION'
-                    ? '新账户资料已校验，等待财务确认'
-                    : payout.paymentFailureRecovery.financeConfirmedAt
-                      ? `财务已确认 · ${payout.paymentFailureRecovery.financeConfirmedByName ?? '财务审核人'}`
+                  <small>{payout.paymentFailureRecovery.readyReason === 'ACCOUNT_UNCHANGED'
+                    ? '达人确认原账户未变，可重试'
+                    : payout.paymentFailureRecovery.readyReason === 'REVALIDATED'
+                      || ['CREATOR_UPDATED', 'PENDING_FINANCE_CONFIRMATION'].includes(payout.paymentFailureRecovery.status)
+                      ? '达人端已完成新账户校验，可重试'
                       : 'Invoice 原账户快照保持不变'}</small>
                 </div>
               ) : null}
@@ -308,9 +305,6 @@ export function PayoutDrawer({
             ) : null}
             {actionLabel && canAdvance ? <Button onClick={() => onAdvance(payout)}>{actionLabel}</Button> : null}
             {canReturnFailure ? <Button variant="danger" onClick={openReturnDialog}>退回媒介</Button> : null}
-            {payout.paymentFailureRecovery?.status === 'PENDING_FINANCE_CONFIRMATION' ? (
-              <Button icon={<ShieldCheck size={16} />} disabled={!canConfirmAccountChange} disabledReason="需要财务账号确认新的执行账户。" title={canConfirmAccountChange ? '确认新执行账户并解锁重试' : '需要财务账号确认'} onClick={() => onConfirmAccountChange(payout.id)}>确认新执行账户</Button>
-            ) : null}
             {payout.status === '飞书审批中' ? <Button disabled disabledReason="飞书审批尚未完成，请等待审批结果。">等待飞书审批</Button> : null}
             {(payout.status === '已付款' || payout.status === '已退回') ? <Button variant="secondary" onClick={onClose}>关闭</Button> : null}
           </footer>
@@ -369,7 +363,7 @@ export function PayoutDrawer({
               issueType === 'INVOICE_CONTENT'
                 ? '确认后进入“已退回”，必须先修改 Invoice 并从达人签署开始。'
                 : issueType === 'PAYMENT_LIST'
-                  ? '确认后仅开放失败明细的执行账户；新账户校验并由财务确认后可重新付款，无需修改或重签 Invoice。'
+                  ? '确认后仅开放失败明细的执行账户；达人端完成账户校验后可重新付款，无需修改或重签 Invoice。'
                   : '确认后，该笔付款将进入“已退回”，且不能直接重试付款。'
             }</span></div>
           </div>
