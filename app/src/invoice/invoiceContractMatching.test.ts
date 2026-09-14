@@ -115,12 +115,13 @@ describe('Invoice contract matching', () => {
     expect(result.result).toBe('MATCHED');
   });
 
-  it('hard-blocks missing or mismatched Publisher and Advertiser', () => {
+  it('hard-blocks missing or mismatched From and Bill To', () => {
     const result = evaluateInvoiceContractMatch([
       contract({ publisher: '', advertiser: 'Different Company' }),
     ], model());
     expect(result.result).toBe('BLOCKED');
     expect(result.blockerIssues.map((issue) => issue.field)).toEqual(['PUBLISHER', 'ADVERTISER']);
+    expect(result.blockerIssues.map((issue) => issue.label)).toEqual(['From', 'Bill To']);
     expect(result.canProceed).toBe(false);
   });
 

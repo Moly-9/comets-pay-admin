@@ -3470,6 +3470,8 @@ export function InvoicePage({
   onSubmitExternalInvoice = () => undefined,
   onReviewExternalInvoiceField = () => undefined,
   onReturnExternalInvoice = () => undefined,
+  onSaveExternalInvoiceContractMatch = () => undefined,
+  onConfirmExternalInvoiceSignature = () => undefined,
   onApproveExternalInvoice = () => undefined,
   canCreateInvoice,
   canManageInvoice,
@@ -3524,7 +3526,9 @@ export function InvoicePage({
     note?: string,
   ) => void;
   onReturnExternalInvoice?: (invoiceId: string, returnType: 'CORRECTION' | 'REUPLOAD', reason: string) => void;
-  onApproveExternalInvoice?: (invoiceId: string) => void;
+  onSaveExternalInvoiceContractMatch?: (invoiceId: string, reason: string) => void;
+  onConfirmExternalInvoiceSignature?: (invoiceId: string) => void;
+  onApproveExternalInvoice?: (invoiceId: string, contractMatchReason?: string) => void;
   canCreateInvoice: boolean;
   canManageInvoice: boolean;
   canReviewMedia: boolean;
@@ -3981,10 +3985,11 @@ export function InvoicePage({
           returnType,
           reason,
         )}
-        onApprove={() => onApproveExternalInvoice(String(selectedExternalInvoice.invoiceId))}
-        onSaveReviewProgress={() => notify(
-          '审核进度已保存',
-          `${selectedExternalInvoice.invoiceNumber ?? '当前外部 Invoice'} 的字段复核结果已保留在当前前端原型中。`,
+        onConfirmInvoiceSignature={() => onConfirmExternalInvoiceSignature(String(selectedExternalInvoice.invoiceId))}
+        onApprove={(contractMatchReason) => onApproveExternalInvoice(String(selectedExternalInvoice.invoiceId), contractMatchReason)}
+        onSaveReviewProgress={(contractMatchReason) => onSaveExternalInvoiceContractMatch(
+          String(selectedExternalInvoice.invoiceId),
+          contractMatchReason,
         )}
         onBack={() => {
           setSelectedExternalInvoiceId(null);

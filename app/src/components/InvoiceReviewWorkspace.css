@@ -181,6 +181,7 @@
 .invoice-review-status-chip.is-success { border-color: #c9e2d6; background: #edf8f3; color: #2c7156; }
 .invoice-review-issue-count.is-pending { border-color: #d9dde4; background: #f4f5f7; color: #656d7a; }
 .invoice-review-status-chip.is-danger { border-color: #ecc8cc; background: #fcedef; color: #a43e48; }
+.invoice-review-status-chip.is-neutral { border-color: #dce1e7; background: #f4f6f8; color: #66707d; }
 
 .invoice-review-tabs {
   display: grid;
@@ -322,6 +323,7 @@
 }
 .invoice-review-field-row.is-warning { border-left-color: #d49a43; background: #fffdf8; }
 .invoice-review-field-row.is-danger { border-left-color: #c95862; background: #fffafb; }
+.invoice-review-field-row.is-neutral { border-left-color: #aeb6c2; background: #fafbfc; }
 .invoice-review-field-name { display: grid; gap: 7px; min-width: 0; padding-left: 10px; }
 .invoice-review-field-name > strong { color: #343945; font-size: 11px; line-height: 1.45; }
 .invoice-review-field-name .invoice-review-status-chip { justify-self: start; min-height: 23px; padding: 3px 6px; font-size: 9.5px; white-space: normal; }

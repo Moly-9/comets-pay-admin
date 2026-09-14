@@ -109,11 +109,13 @@ import {
 import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
 import {
   buildApprovedExternalInvoice,
+  confirmExternalInvoiceSignature,
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
   publishExternalInvoiceCollection,
   reviewExternalInvoiceField,
   returnExternalInvoice,
+  saveExternalInvoiceContractMatchReview,
   simulateExternalInvoiceUpload,
   submitExternalInvoiceForReview,
   type ExternalInvoiceActor,
@@ -3720,6 +3722,8 @@ export default function App() {
     try {
       const record = createExternalInvoiceCollection({
         ...input,
+        creator: creators.find((candidate) => candidate.id === input.creatorId),
+        contracts,
         actor: externalInvoiceActor(),
         publish,
       });
@@ -3751,6 +3755,7 @@ export default function App() {
         record,
         externalInvoiceActor(),
         occurredAt,
+        creators.find((creator) => creator.id === record.creatorId),
       ));
       const updatedById = new Map(updated.map((record) => [record.invoiceId, record]));
       setExternalInvoices((current) => current.map((candidate) => updatedById.get(candidate.invoiceId) ?? candidate));
@@ -3903,7 +3908,50 @@ export default function App() {
     }
   };
 
-  const approveExternalInvoiceTask = (invoiceId: string) => {
+  const saveExternalInvoiceContractMatchTask = (invoiceId: string, reason: string) => {
+    if (!hasPermission(currentUser, 'invoice_media_review')) {
+      notify('暂无审核权限', `${currentUser.role}不能保存外部 Invoice 合同差异说明。`);
+      return;
+    }
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
+    if (!record) return;
+    try {
+      const updated = saveExternalInvoiceContractMatchReview({
+        record,
+        creator,
+        contracts,
+        reason,
+        actor: externalInvoiceActor(),
+      });
+      setExternalInvoices((current) => current.map((candidate) => (
+        candidate.invoiceId === record.invoiceId ? updated : candidate
+      )));
+      notify('合同差异说明已保存', '匹配结果、说明、操作人和时间已写入当前前端原型审核记录。');
+    } catch (error) {
+      notify('合同差异说明未保存', error instanceof Error ? error.message : '当前合同匹配结果无法保存。');
+    }
+  };
+
+  const confirmExternalInvoiceSignatureTask = (invoiceId: string) => {
+    if (!hasPermission(currentUser, 'invoice_media_review')) {
+      notify('暂无审核权限', `${currentUser.role}不能确认外部 Invoice 签名。`);
+      return;
+    }
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    if (!record) return;
+    try {
+      const updated = confirmExternalInvoiceSignature(record, externalInvoiceActor());
+      setExternalInvoices((current) => current.map((candidate) => (
+        candidate.invoiceId === record.invoiceId ? updated : candidate
+      )));
+      notify('Invoice 签名已确认', '确认已绑定当前文件版本；重新上传后需要重新确认。');
+    } catch (error) {
+      notify('签名确认失败', error instanceof Error ? error.message : '当前 Invoice 无法确认签名。');
+    }
+  };
+
+  const approveExternalInvoiceTask = (invoiceId: string, contractMatchReason = '') => {
     const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
     const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
     if (!record || !creator) return;
@@ -3917,6 +3965,7 @@ export default function App() {
           .flatMap((candidate) => candidate.invoiceNumber ? [candidate.invoiceNumber] : []),
         reservedSourceInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
           .flatMap((candidate) => candidate.sourceInvoiceNumber ? [candidate.sourceInvoiceNumber] : []),
+        contractMatchReason,
         actor: externalInvoiceActor(),
       });
       const paymentCode = nextPaymentBusinessCode('PMT', payouts.map((payout) => payout.paymentCode));
@@ -5392,6 +5441,8 @@ export default function App() {
           onSubmitExternalInvoice={submitExternalInvoiceTask}
           onReviewExternalInvoiceField={reviewExternalInvoiceTaskField}
           onReturnExternalInvoice={returnExternalInvoiceTask}
+          onSaveExternalInvoiceContractMatch={saveExternalInvoiceContractMatchTask}
+          onConfirmExternalInvoiceSignature={confirmExternalInvoiceSignatureTask}
           onApproveExternalInvoice={approveExternalInvoiceTask}
           canCreateInvoice={canGenerateInvoices}
           canManageInvoice={canGenerateInvoices}

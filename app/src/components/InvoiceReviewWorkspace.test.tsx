@@ -197,6 +197,22 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html).toContain('生成 Invoice 时填写 · 媒介测试');
   });
 
+  it('renders shared contract content when an external Invoice has linked contracts', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="EXTERNAL_UPLOADED"
+        initialTab="contract"
+        noContract={false}
+        contractChecks={[]}
+        contractContent={<div data-testid="external-contract-content">外部合同匹配与签名</div>}
+      />,
+    );
+
+    expect(html).toContain('external-contract-content');
+    expect(html).toContain('外部合同匹配与签名');
+  });
+
   it('uses one return-dialog structure while keeping external handling options source-specific', () => {
     const context = {
       creatorName: 'Alicia Lin',

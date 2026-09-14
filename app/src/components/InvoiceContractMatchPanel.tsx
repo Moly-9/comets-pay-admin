@@ -20,17 +20,18 @@ type InvoiceContractMatchPanelProps = {
   className?: string;
   reasonInputId?: string;
   onCollapse?: () => void;
+  actionLabel?: string;
 };
 
 const confirmedCheck = (check: InvoiceContractMatchCheck) => (
   ['MATCH', 'NOT_APPLICABLE', 'APPROVED_WITH_REASON'].includes(check.state)
 );
 
-const resultTitle = (result: InvoiceContractMatchPanelValue['result']) => {
+const resultTitle = (result: InvoiceContractMatchPanelValue['result'], actionLabel: string) => {
   if (result === 'NOT_APPLICABLE') return '未关联合同，匹配不适用';
-  if (result === 'BLOCKED') return '主体不一致，暂不能生成';
+  if (result === 'BLOCKED') return `主体不一致，暂不能${actionLabel}`;
   if (result === 'REASON_REQUIRED') return '存在可放行差异，请填写说明';
-  if (result === 'APPROVED_WITH_REASON') return '差异说明已填写，可以生成';
+  if (result === 'APPROVED_WITH_REASON') return `差异说明已填写，可以${actionLabel}`;
   return '合同与 Invoice 已匹配';
 };
 
@@ -52,6 +53,7 @@ export function InvoiceContractMatchPanel({
   className = '',
   reasonInputId,
   onCollapse,
+  actionLabel = '生成',
 }: InvoiceContractMatchPanelProps) {
   const generatedReasonId = useId();
   const reasonId = reasonInputId ?? generatedReasonId;
@@ -73,7 +75,7 @@ export function InvoiceContractMatchPanel({
       <div className="invoice-contract-match-head">
         <span>
           {match.result === 'BLOCKED' ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
-          <strong>{resultTitle(match.result)}</strong>
+          <strong>{resultTitle(match.result, actionLabel)}</strong>
         </span>
         <div className="invoice-contract-match-head-actions">
           <em>{match.result === 'NOT_APPLICABLE'

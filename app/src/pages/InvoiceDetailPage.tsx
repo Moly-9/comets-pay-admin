@@ -183,19 +183,19 @@ function buildReviewChecks(
       },
       {
         id: 'party',
-        label: '收款主体',
+        label: 'From',
         contractValue: model.creatorName || model.from.legalName,
         invoiceValue: model.from.legalName || '待补充',
         passed: Boolean(model.from.legalName),
-        note: 'Invoice From与项目合同Publisher一致',
+        note: 'Invoice From 与项目合同 From 一致',
       },
       {
         id: 'bill-to',
-        label: '付款主体 / Bill To',
+        label: 'Bill To',
         contractValue: model.billTo.name,
         invoiceValue: model.billTo.name,
         passed: Boolean(model.billTo.name),
-        note: '付款主体一致',
+        note: 'Bill To 一致',
       },
       {
         id: 'amount',
@@ -251,27 +251,27 @@ function buildReviewChecks(
     },
     {
       id: 'party',
-      label: '收款主体',
-      contractValue: contractPublisher || '合同 Publisher 缺失',
+      label: 'From',
+      contractValue: contractPublisher || '合同 From 缺失',
       invoiceValue: invoicePublisher || '待补充',
       passed: Boolean(contractPublisher && invoicePublisher)
         && !partyIssue
         && sameText(contractPublisher, invoicePublisher),
       note: !linkedContract
-        ? '未找到关联合同，不能通过达人名称推断合同 Publisher'
+        ? '未找到关联合同，不能通过达人名称推断合同 From'
         : partyIssue
-          ? payout.issue ?? '收款主体需复核'
+          ? payout.issue ?? 'From 需复核'
           : contractPublisher && invoicePublisher && sameText(contractPublisher, invoicePublisher)
-            ? 'Invoice From与合同Publisher一致'
-            : 'Invoice From与合同Publisher不一致',
+            ? 'Invoice From 与合同 From 一致'
+            : 'Invoice From 与合同 From 不一致',
     },
     {
       id: 'bill-to',
-      label: '付款主体 / Bill To',
+      label: 'Bill To',
       contractValue: model.billTo.name,
       invoiceValue: model.billTo.name,
       passed: Boolean(model.billTo.name),
-      note: '付款主体一致',
+      note: 'Bill To 一致',
     },
     {
       id: 'amount',

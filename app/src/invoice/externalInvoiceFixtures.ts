@@ -2,7 +2,6 @@ import type { ContractRecord } from '../contracts';
 import { contractLinkedToProject } from '../contracts';
 import type { CooperationProjectId, ContractId, ProjectId } from '../businessWorkflow';
 import {
-  createDocumentPayoutSnapshot,
   eligibleInvoicePayoutAccounts,
   getPayoutAccountId,
 } from '../payoutAccounts';
@@ -66,12 +65,14 @@ export const createInitialExternalInvoiceCollections = ({
       engagementId: reference.engagementId,
       creatorId: reference.creatorId,
       creatorName: creator.name,
+      creatorLegalName: creator.contact.legalName,
       creatorHandle: socialAccount?.handle ?? creator.handle,
       creatorSocialAccountId: socialAccount?.id,
       creatorPlatform: socialAccount?.platform ?? creator.platform,
       contractIds: index === 2 ? [] : contractIds,
-      presetPayoutAccountId,
-      presetPayoutAccountSnapshot: createDocumentPayoutSnapshot(defaultAccount, creator.id),
+      contractMatchReason: contractIds.length && index !== 2
+        ? '外部 Invoice 按本次实际交付金额与币种开具，合同金额仅作为合作上限参考。'
+        : undefined,
       expected: {
         amount: 3600 + index * 600,
         currency: index % 2 === 0 ? 'USD' : 'EUR',
@@ -81,6 +82,8 @@ export const createInitialExternalInvoiceCollections = ({
       },
       actor,
       publish: index !== 0,
+      creator,
+      contracts,
       occurredAt: `2026-08-${String(18 + index).padStart(2, '0')}T02:30:00.000Z`,
     });
 
