@@ -587,6 +587,7 @@ describe('PaymentBatchDetailPage', () => {
     expect(pageCss).toMatch(/\.payment-batch-order-table tbody td\s*{[^}]*height:\s*64px;[^}]*padding:\s*8px 14px;/s);
     expect(pageCss).toContain(':is(th, td).payment-batch-col-creator');
     expect(pageCss).toContain(':is(th, td).payment-batch-col-code');
+    expect(pageCss).toMatch(/\.payment-batch-order-card \.payment-batch-project-info-grid\s*{[^}]*gap:\s*12px;[^}]*padding:\s*2px;/);
     expect(pageCss).toMatch(/@media \(max-width: 520px\)[\s\S]*?\.payment-batch-order-card \.payment-batch-project-info-grid\s*{[^}]*grid-template-columns:\s*1fr/);
     expect(pageCss).toContain('min-width: 220px');
     expect(pageCss).toContain('min-width: 252px');

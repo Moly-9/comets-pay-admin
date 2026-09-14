@@ -257,10 +257,10 @@
   margin: 0;
 }
 
-.payment-batch-payment-detail-page .payment-batch-project-info-grid {
+.payment-batch-payment-detail-page .payment-batch-order-card .payment-batch-project-info-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  padding: 16px;
+  padding: 2px;
 }
 
 .payment-batch-payment-detail-page .payment-batch-project-info-grid > .payment-batch-project-info-card,
@@ -289,7 +289,7 @@
 }
 
 @media (max-width: 980px) {
-  .payment-batch-payment-detail-page .payment-batch-project-info-grid {
+  .payment-batch-payment-detail-page .payment-batch-order-card .payment-batch-project-info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
