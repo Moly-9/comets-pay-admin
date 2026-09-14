@@ -585,7 +585,7 @@ export function PaymentBatchDetailPage({
                     <PaymentBatchProjectInfo label="成本类型明细" value={batch.request.costType === '采购成本' ? batch.request.costTypeDetail || '待补充' : '—'} />
                     <PaymentBatchProjectInfo label="请款金额" value={batch.request.amount} />
                     <PaymentBatchProjectInfo label="发起人" value={batch.request.media || '待补充'} />
-                    <PaymentBatchProjectInfo label="项目 PM" value={batch.request.pm || '待补充'} />
+                    <PaymentBatchProjectInfo label="项目 PM" value={batch.request.pm || '未指定'} />
                     <PaymentBatchProjectInfo label="项目状态" value={projectStatus} />
                     <PaymentBatchProjectInfo label="预计付款时间" value={batch.request.expectedPaymentDate || '未设置'} />
                     <PaymentBatchProjectInfo label="付款事由" value={batch.request.reason || '未单独填写'} full />

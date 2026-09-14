@@ -871,6 +871,17 @@ describe('media payment request list presentation', () => {
     expect(result.visible.map((request) => request.id)).toEqual(['request-2']);
   });
 
+  it('supports filtering requests that do not have an assigned PM', () => {
+    const unassigned = { ...requests[0], id: 'request-unassigned', pm: '' };
+    const result = filterPaymentRequestList({
+      requests: [...requests, unassigned],
+      search: '',
+      filters: { ...createEmptyPaymentRequestListFilters(), pms: ['__UNASSIGNED__'] },
+    });
+
+    expect(result.visible.map((request) => request.id)).toEqual(['request-unassigned']);
+  });
+
   it('keeps the first approval submission time across later approval rounds', () => {
     const request = {
       approval: {

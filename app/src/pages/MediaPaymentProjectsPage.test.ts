@@ -78,6 +78,17 @@ describe('new payment request resource picker', () => {
     expect(css).toContain('@media (max-width: 559px)');
   });
 
+  it('treats the project PM as optional and starts unassigned requests at the media owner', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('项目 PM <small className="request-optional-label">选填</small>');
+    expect(source).toContain("{ value: '', label: '不指定 PM', description: '将从媒介负责人审批开始' }");
+    expect(source).toContain("const [pm, setPm] = useState('')");
+    expect(source).toContain("setPm('')");
+    expect(source).not.toContain("!pm ? '请选择项目 PM' : ''");
+    expect(source).not.toMatch(/selectedProject\s*&&\s*pm\s*&&\s*paymentChannel/);
+  });
+
   it('shows selectable and selected resources before disabled resources', () => {
     const options = [
       { value: 'disabled-one', label: '置灰 1', description: '', selected: false, disabled: true },

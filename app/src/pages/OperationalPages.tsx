@@ -1369,15 +1369,22 @@ export function RequestsPage({
   }));
   const requestPmCounts = relatedRequests.reduce<Record<string, number>>((result, request) => ({
     ...result,
-    [request.pm]: (result[request.pm] ?? 0) + 1,
+    [request.pm || '__UNASSIGNED__']: (result[request.pm || '__UNASSIGNED__'] ?? 0) + 1,
   }), {});
-  const requestPmFilterOptions = PM_USERS
+  const requestPmFilterOptions = [
+    ...(requestPmCounts.__UNASSIGNED__ ? [{
+      value: '__UNASSIGNED__',
+      label: '未指定',
+      description: `${requestPmCounts.__UNASSIGNED__} 个项目`,
+    }] : []),
+    ...PM_USERS
     .filter((user) => requestPmCounts[user.name])
     .map((user) => ({
       value: user.name,
       label: user.name,
       description: `${requestPmCounts[user.name]} 个项目 · ${user.email}`,
-    }));
+    })),
+  ];
   const requestStatusFilterOptions = REQUEST_PROJECT_STATUS_OPTIONS.map((status) => ({
     value: status,
     label: status,
@@ -1448,7 +1455,7 @@ export function RequestsPage({
     const budget = parseProjectBudget(request.amount);
     const matchesSearch = !requestQuery || `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.cooperationProjectCode ?? ''}`.toLowerCase().includes(requestQuery);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
-    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm);
+    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm || '__UNASSIGNED__');
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidRequestBudgetRange || requestMinBudget === null || budget.amount >= requestMinBudget;
     const matchesMaxBudget = invalidRequestBudgetRange || requestMaxBudget === null || budget.amount <= requestMaxBudget;
@@ -1562,7 +1569,7 @@ export function RequestsPage({
                   <td><button className="request-project-link" type="button" onClick={(event) => { event.stopPropagation(); openRequest(request.id); }}><strong>{request.requestCode ?? request.id}</strong></button></td>
                   <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                   <td>{request.media}</td>
-                  <td>{request.pm}</td>
+                  <td>{request.pm || '未指定'}</td>
                   <td>{request.amount}</td>
                   <td>{request.contracts} 份</td>
                   <td>{request.invoices} 份</td>

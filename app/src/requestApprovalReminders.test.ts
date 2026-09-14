@@ -68,4 +68,20 @@ describe('request approval reminders', () => {
       stageSummary: '',
     });
   });
+
+  it('routes an unassigned request only to the media owner reminder', () => {
+    const unassigned: RequestApprovalReminderCandidate[] = [{
+      id: 'project-unassigned',
+      pm: '',
+      lifecycle: 'SUBMITTED',
+      approval: approval('PENDING_PROJECT_OWNER'),
+    }];
+
+    expect(requestApprovalReminderFor(user('pm', 'PM 体验账号', '张咏诗'), unassigned).count).toBe(0);
+    expect(requestApprovalReminderFor(user('project', '媒介负责人'), unassigned)).toMatchObject({
+      count: 1,
+      requestIds: ['project-unassigned'],
+      stageSummary: '媒介负责人审批 1 个',
+    });
+  });
 });

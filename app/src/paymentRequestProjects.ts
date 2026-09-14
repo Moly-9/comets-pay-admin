@@ -515,7 +515,7 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
     const searchable = `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.project}`.toLowerCase();
     const matchesSearch = !query || searchable.includes(query);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
-    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm);
+    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm || '__UNASSIGNED__');
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
     const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;

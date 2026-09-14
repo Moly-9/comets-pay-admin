@@ -42,6 +42,20 @@ export const REQUEST_APPROVAL_STAGE_LABEL: Record<RequestApprovalStage, string> 
   FINANCE: '财务审核',
 };
 
+const REQUEST_APPROVAL_STAGES: RequestApprovalStage[] = ['PM', 'PROJECT_OWNER', 'OWNER', 'FINANCE'];
+
+export const requestApprovalStagesFor = (
+  assignedPmName: string,
+  state?: RequestApprovalState,
+): RequestApprovalStage[] => {
+  const hasPmHistory = state?.status === 'PENDING_PM'
+    || state?.resumeStatus === 'PENDING_PM'
+    || state?.history.some((event) => event.round === state.round && event.stage === 'PM');
+  return assignedPmName.trim() || hasPmHistory
+    ? REQUEST_APPROVAL_STAGES
+    : REQUEST_APPROVAL_STAGES.slice(1);
+};
+
 export type RequestApprovalReturnDetails = {
   stage: RequestApprovalStage;
   stageLabel: string;
@@ -211,17 +225,23 @@ export const canReturnRequestApproval = (
 export const createRequestApprovalState = (
   occurredAt = new Date().toISOString(),
   previous?: RequestApprovalState,
+  assignedPmName?: string,
 ): RequestApprovalState => {
   const round = (previous?.round ?? 0) + 1;
+  const hasAssignedPm = assignedPmName === undefined || Boolean(assignedPmName.trim());
+  const resumeStatus = previous?.status === 'RETURNED_TO_MEDIA_REVIEW'
+    ? previous.resumeStatus
+    : undefined;
+  const status = resumeStatus === 'PENDING_PM' && !hasAssignedPm
+    ? 'PENDING_PROJECT_OWNER'
+    : resumeStatus ?? (hasAssignedPm ? 'PENDING_PM' : 'PENDING_PROJECT_OWNER');
   const previousSubmissions = previous?.submissionHistory?.length
     ? previous.submissionHistory
     : previous
       ? [{ round: previous.round, submittedAt: previous.submittedAt }]
       : [];
   return {
-    status: previous?.status === 'RETURNED_TO_MEDIA_REVIEW' && previous.resumeStatus
-      ? previous.resumeStatus
-      : 'PENDING_PM',
+    status,
     round,
     history: previous?.history ?? [],
     submittedAt: occurredAt,

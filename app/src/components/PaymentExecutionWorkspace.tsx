@@ -40,7 +40,7 @@ import {
 } from '../projectResourcePdfArchive';
 import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
-import { requestApprovalReturnDetails } from '../requestApprovalWorkflow';
+import { requestApprovalReturnDetails, requestApprovalStagesFor } from '../requestApprovalWorkflow';
 import { accountDisplayValue } from '../accountPresentation';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
@@ -130,7 +130,7 @@ const paymentApprovalSteps = (
     { stage: 'PROJECT_OWNER' as const, label: '媒介负责人审批', fallback: '媒介负责人' },
     { stage: 'OWNER' as const, label: '老板审批', fallback: '老板' },
     { stage: 'FINANCE' as const, label: '财务审核', fallback: '财务' },
-  ];
+  ].filter(({ stage }) => requestApprovalStagesFor(request.pm, approval).includes(stage));
   return [
     {
       id: 'submitted',
@@ -419,7 +419,7 @@ export function PaymentExecutionWorkspace({
       <div className="payment-execution-project-field"><dt>关联项目</dt><dd>{project.cooperationProjectName}<small>{project.cooperationProjectCode}</small></dd></div>
       <div className="payment-execution-project-field"><dt>品牌 / 客户</dt><dd>{projectBrand}</dd></div>
       <div className="payment-execution-project-field"><dt>项目媒介</dt><dd>{project.media}</dd></div>
-      <div className="payment-execution-project-field"><dt>负责 PM</dt><dd>{project.pm}</dd></div>
+      <div className="payment-execution-project-field"><dt>负责 PM</dt><dd>{project.pm || '未指定'}</dd></div>
       <div className="payment-execution-project-field"><dt>提交人</dt><dd>{request.media}</dd></div>
       <div className="payment-execution-project-field"><dt>提交时间</dt><dd>{formatDateTime(submittedAt)}</dd></div>
       <div className="payment-execution-project-field"><dt>付款渠道</dt><dd>{paymentProvider}</dd></div>

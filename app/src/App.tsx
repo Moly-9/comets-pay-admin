@@ -2448,8 +2448,8 @@ export default function App() {
         paymentChannel: request.paymentChannel,
       }),
     ];
-    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM 和付款事由');
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.generatedDetail?.reason) {
+      issues.unshift('项目必填资料不完整，请检查关联项目和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => (
@@ -2472,7 +2472,7 @@ export default function App() {
     }
 
     const submittedAt = nowIso();
-    const approval = createRequestApprovalState(submittedAt, request.approval);
+    const approval = createRequestApprovalState(submittedAt, request.approval, request.pm);
     const paymentListId = requestList.paymentListId;
     const paymentListCode = requestList.paymentListCode;
     const sourcePayoutIds = new Set(
@@ -2525,7 +2525,10 @@ export default function App() {
       }),
       ...current,
     ]);
-    notify('申请已提交', `${request.requestCode ?? request.id} 已进入 PM 审批。`);
+    notify(
+      '申请已提交',
+      `${request.requestCode ?? request.id} 已进入${approval.status === 'PENDING_PM' ? ' PM 审批' : '媒介负责人审批'}。`,
+    );
   };
 
   const cancelMediaPaymentRequest = (request: RequestProjectSummary, reason: string) => {

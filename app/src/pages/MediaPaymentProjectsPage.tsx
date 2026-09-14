@@ -102,6 +102,7 @@ import {
 import {
   requestApprovalHasScopedReturnItems,
   requestApprovalReturnDetails,
+  requestApprovalStagesFor,
 } from '../requestApprovalWorkflow';
 import {
   ProjectInlineFilterPanel,
@@ -459,22 +460,25 @@ const approvalProgressSteps = ({
   hasPaymentFailureRecovery: boolean;
 }): MyProjectRequestProgressStep[] => {
   const approval = request.approval;
+  const visibleStages = REQUEST_APPROVAL_PROGRESS_STAGES.filter((item) => (
+    requestApprovalStagesFor(request.pm, approval).includes(item.stage)
+  ));
   if (!approval || request.lifecycle === 'CANCELLED') {
-    return REQUEST_APPROVAL_PROGRESS_STAGES.map((item, index) => ({
+    return visibleStages.map((item, index) => ({
       label: item.label,
-      description: index === 0 ? '提交审核后进入' : `${REQUEST_APPROVAL_PROGRESS_STAGES[index - 1].label}通过后进入`,
+      description: index === 0 ? '提交审核后进入' : `${visibleStages[index - 1].label}通过后进入`,
       time: '待开始',
       state: 'pending',
     }));
   }
 
-  const currentStageIndex = REQUEST_APPROVAL_PROGRESS_STAGES.findIndex((item) => item.status === approval.status);
-  const returnedStageIndex = REQUEST_APPROVAL_PROGRESS_STAGES.findIndex((item) => item.stage === approval.returnedFromStage);
+  const currentStageIndex = visibleStages.findIndex((item) => item.status === approval.status);
+  const returnedStageIndex = visibleStages.findIndex((item) => item.stage === approval.returnedFromStage);
   const latestEventForStage = (stage: RequestApprovalStage, action: 'APPROVE' | 'RETURN') => (
     [...approval.history].reverse().find((event) => event.stage === stage && event.action === action)
   );
 
-  return REQUEST_APPROVAL_PROGRESS_STAGES.map((item, index) => {
+  return visibleStages.map((item, index) => {
     const approvedEvent = latestEventForStage(item.stage, 'APPROVE');
     const stageComplete = approvalCompleted
       || approval.status === 'APPROVED'
@@ -509,7 +513,7 @@ const approvalProgressSteps = ({
     }
     return {
       label: item.label,
-      description: index === 0 ? '提交审核后进入' : `${REQUEST_APPROVAL_PROGRESS_STAGES[index - 1].label}通过后进入`,
+      description: index === 0 ? '提交审核后进入' : `${visibleStages[index - 1].label}通过后进入`,
       time: '待开始',
       state: 'pending',
     };
@@ -837,7 +841,7 @@ export function MediaPaymentProjectsPage({
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedProjectId);
   const [cooperationProjectId, setCooperationProjectId] = useState('');
   const [brand, setBrand] = useState('');
-  const [pm, setPm] = useState(PM_USERS[0]?.name ?? '');
+  const [pm, setPm] = useState('');
   const [paymentChannel, setPaymentChannel] = useState<PaymentRequestPaymentChannel | ''>('');
   const [paymentEntity, setPaymentEntity] = useState<PaymentRequestPaymentEntity | ''>('');
   const [projectCostAttribution, setProjectCostAttribution] = useState<PaymentRequestCostAttribution | ''>('');
@@ -994,10 +998,10 @@ export function MediaPaymentProjectsPage({
   const customerCounts = visibleRequests.reduce<Record<string, number>>((result, request) => (
     request.brand ? { ...result, [request.brand]: (result[request.brand] ?? 0) + 1 } : result
   ), {});
-  const pmCounts = visibleRequests.reduce<Record<string, number>>((result, request) => ({
-    ...result,
-    [request.pm]: (result[request.pm] ?? 0) + 1,
-  }), {});
+  const pmCounts = visibleRequests.reduce<Record<string, number>>((result, request) => {
+    const pmName = request.pm || '__UNASSIGNED__';
+    return { ...result, [pmName]: (result[pmName] ?? 0) + 1 };
+  }, {});
   const customerFilterOptions = Object.entries(customerCounts).map(([customer, count]) => ({
     value: customer,
     label: customer,
@@ -1005,7 +1009,7 @@ export function MediaPaymentProjectsPage({
   }));
   const pmFilterOptions = Object.entries(pmCounts).map(([pmName, count]) => ({
     value: pmName,
-    label: pmName,
+    label: pmName === '__UNASSIGNED__' ? '未指定' : pmName,
     description: `${count} 个请款${PM_USERS.find((user) => user.name === pmName)?.email ? ` · ${PM_USERS.find((user) => user.name === pmName)?.email}` : ''}`,
   }));
   const currencies = Array.from(new Set(visibleRequests
@@ -1053,7 +1057,7 @@ export function MediaPaymentProjectsPage({
   const resetForm = () => {
     setCooperationProjectId('');
     setBrand('');
-    setPm(PM_USERS[0]?.name ?? '');
+    setPm('');
     setPaymentChannel('');
     setPaymentEntity('');
     setProjectCostAttribution('');
@@ -1357,7 +1361,6 @@ export function MediaPaymentProjectsPage({
   };
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
-    !pm ? '请选择项目 PM' : '',
     ...paymentRequestPaymentPlanIssues({
       paymentChannel,
       paymentEntity,
@@ -1387,7 +1390,6 @@ export function MediaPaymentProjectsPage({
   ].filter(Boolean);
   const canCreateRequest = Boolean(
     selectedProject
-    && pm
     && paymentChannel
     && paymentEntity
     && projectCostAttribution
@@ -1980,7 +1982,7 @@ export function MediaPaymentProjectsPage({
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
-                    <td>{request.pm}</td>
+                    <td>{request.pm || '未指定'}</td>
                     <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
                     <td>{request.amount}</td>
                     <td className="media-request-submitted-at">
@@ -2076,7 +2078,7 @@ export function MediaPaymentProjectsPage({
               />
             </div>
             <label><span>品牌 <small className="request-optional-label">选填</small></span><input placeholder="输入品牌或客户名称" value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
-            <div className="form-field"><span className="form-field-label">项目 PM <em className="required-mark" aria-hidden="true">*</em></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))} onChange={setPm} /></div>
+            <div className="form-field"><span className="form-field-label">项目 PM <small className="request-optional-label">选填</small></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={[{ value: '', label: '不指定 PM', description: '将从媒介负责人审批开始' }, ...PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))]} onChange={setPm} placeholder="不指定 PM" /></div>
             <div className="media-request-payment-plan">
               <div className="form-field">
                 <span className="form-field-label">付款渠道 <em className="required-mark" aria-hidden="true">*</em></span>

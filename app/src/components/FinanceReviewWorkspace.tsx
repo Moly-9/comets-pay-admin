@@ -57,6 +57,7 @@ import {
 import {
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalStage,
+  requestApprovalStagesFor,
 } from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
@@ -237,7 +238,7 @@ export function ApprovalTimeline({
     );
   }
   const currentStage = requestApprovalStage(approval.status);
-  const stageOrder: RequestApprovalStage[] = ['PM', 'PROJECT_OWNER', 'OWNER', 'FINANCE'];
+  const stageOrder: RequestApprovalStage[] = requestApprovalStagesFor(request.pm, approval);
   const resumedStage = approval.status === 'RETURNED_TO_MEDIA_REVIEW' && approval.resumeStatus
     ? requestApprovalStage(approval.resumeStatus)
     : null;
@@ -541,7 +542,7 @@ function FinanceReviewProjectOverview({
           <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
           <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
           <div><dt>品牌</dt><dd>{projectBrand}</dd></div>
-          <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
+          <div><dt>负责 PM</dt><dd>{request.pm || '未指定'}</dd></div>
           <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(paymentChannel)}</dd></div>
           <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
           <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>

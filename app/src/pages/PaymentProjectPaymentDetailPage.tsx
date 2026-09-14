@@ -944,7 +944,7 @@ export function PaymentProjectPaymentDetailPage({
           <PaymentProjectInfoCard icon={<Coins size={16} />} label="付款金额" value={record.request.amount} />
           <PaymentProjectInfoCard icon={<Building2 size={16} />} label="品牌 / 客户" value={record.request.brand} />
           <PaymentProjectInfoCard icon={<UserRound size={16} />} label="项目媒介" value={record.request.media} />
-          <PaymentProjectInfoCard icon={<UserRound size={16} />} label="负责 PM" value={record.request.pm} />
+          <PaymentProjectInfoCard icon={<UserRound size={16} />} label="负责 PM" value={record.request.pm || '未指定'} />
           <PaymentProjectInfoCard icon={<Landmark size={16} />} label="付款主体" value={record.request.paymentEntity || '待补充'} />
           <PaymentProjectInfoCard icon={<Building2 size={16} />} label="项目费用归属" value={record.request.projectCostAttribution || '待补充'} />
           <PaymentProjectInfoCard icon={<CalendarClock size={16} />} label="预计付款时间" value={record.request.expectedPaymentDate} />
