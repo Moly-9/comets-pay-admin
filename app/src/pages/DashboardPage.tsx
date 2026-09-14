@@ -398,7 +398,7 @@ export function DashboardPage({
             <DashboardOverviewRow
               id="contracts"
               title="合同"
-              description="待处理、待上传合同与付款可用状态"
+              description="待上传、待签署合同与付款可用状态"
               icon={FileSignature}
               total={metrics.contracts.total}
               totalLabel="合同总数"

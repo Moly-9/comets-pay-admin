@@ -633,10 +633,6 @@ export const isContractAvailableForNewAssociation = (
   referenceDate = currentContractReferenceDate(),
 ) => isPaymentContract(contract) && !getContractValidity(contract, referenceDate).expired;
 
-export const isIncludedInContractTotal = (
-  contract: Pick<ContractRecord, 'isTemplate' | 'lifecycle'>,
-) => !contract.isTemplate && contract.lifecycle !== 'EDITING_DRAFT';
-
 export const getContractManagementBucket = (
   contract: ContractRecord,
   referenceDate = currentContractReferenceDate(),
@@ -647,6 +643,11 @@ export const getContractManagementBucket = (
   if (contract.lifecycle === 'GENERATED_DRAFT') return 'upload';
   if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return 'signature';
   return getContractReadiness(contract).ready ? 'ready' : 'attention';
+};
+
+export const isIncludedInContractTotal = (contract: ContractRecord) => {
+  const bucket = getContractManagementBucket(contract);
+  return bucket !== 'template' && bucket !== 'attention' && bucket !== 'draft';
 };
 
 const TEMPLATE_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';

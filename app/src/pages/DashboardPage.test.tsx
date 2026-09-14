@@ -123,8 +123,8 @@ describe('dashboard request project overview', () => {
 
     expect(dashboardDocumentMetricsFor(contracts, payouts, invoices)).toEqual({
       contracts: {
-        total: 5,
-        processing: 3,
+        total: 4,
+        processing: 2,
         ready: 1,
         expired: 1,
       },
@@ -156,6 +156,8 @@ describe('dashboard request project overview', () => {
     expect(contractRow).toContain('处理中');
     expect(contractRow).toContain('可用于付款');
     expect(contractRow).toContain('已失效');
+    expect(contractRow).toContain('待上传、待签署合同与付款可用状态');
+    expect(contractRow).not.toContain('待处理、待上传合同与付款可用状态');
     expect(contractRow).not.toContain('已打款');
     expect(invoiceRow).toContain('正在推进');
     expect(invoiceRow).toContain('已打款');

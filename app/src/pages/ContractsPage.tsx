@@ -615,7 +615,7 @@ export function ContractsPage({
         <article className="contract-overview-card contract-overview-card-peach">
           <span>合同总数</span>
           <strong>{contractTotalCount}</strong>
-          <small>{bucketCounts.draft} 份草稿 · {bucketCounts.upload} 份待上传 · {bucketCounts.signature} 份待签署</small>
+          <small>不含合同模板、待处理与草稿</small>
         </article>
         <article className="contract-overview-card contract-overview-card-mint">
           <span>可用于付款项目</span>
