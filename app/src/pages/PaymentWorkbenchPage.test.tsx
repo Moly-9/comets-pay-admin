@@ -227,7 +227,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(8);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
-    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(3);
 
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toContainEqual(expect.objectContaining({
       requestCode: 'REQ-202607-000015',
@@ -244,10 +244,12 @@ describe('PaymentWorkbenchPage currency overview', () => {
       status: '已退回',
       actionLabel: '查看详情',
       payouts: expect.arrayContaining([
-        expect.objectContaining({ id: 'payout_fixture_16_01', status: '已退回' }),
-        expect.objectContaining({ id: 'payout_fixture_16_02', status: '已退回' }),
+        expect.objectContaining({ id: 'payout_fixture_16_01', status: '未进入付款' }),
+        expect.objectContaining({ id: 'payout_fixture_16_02', status: '未进入付款' }),
       ]),
     }));
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' }).map((row) => row.requestCode))
+      .not.toContain('REQ-202607-000019');
 
     const reviewRows = buildPaymentProjectRows({ ...input, tab: 'review' });
     expect(reviewRows.map((row) => row.approvalStatus)).toEqual([
@@ -317,8 +319,11 @@ describe('PaymentWorkbenchPage currency overview', () => {
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
     const waitingRow = buildPaymentProjectRows({ ...input, tab: 'payment' })[0];
+    const financeReturnApproval = input.requests.find((request) => (
+      request.requestCode === 'REQ-202607-000016'
+    ))?.approval;
     const returnedRequests = input.requests.map((request) => request.id === waitingRow.requestId
-      ? { ...request, lifecycle: 'RETURNED' as const }
+      ? { ...request, lifecycle: 'RETURNED' as const, approval: financeReturnApproval }
       : request);
 
     expect(buildPaymentProjectRows({ ...input, requests: returnedRequests, tab: 'returned' }))

@@ -109,7 +109,7 @@ describe('request approval reminder surfaces', () => {
     );
 
     expect(html).toContain('付款失败');
-    expect(html).toContain('显示 1 / 16 个项目');
+    expect(html).toContain('显示 1 / 19 个项目');
     expect(html).toContain('REQ-202607-000015');
     expect(html).toContain('部分失败');
   });

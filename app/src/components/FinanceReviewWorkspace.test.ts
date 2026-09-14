@@ -159,22 +159,22 @@ describe('FinanceReviewWorkspace return issue types', () => {
       {
         value: 'INVOICE_CONTENT',
         label: 'Invoice 原因',
-        description: '仅开放该份 Invoice 修改权限',
+        description: '记录需要修改的 Invoice',
       },
       {
         value: 'PAYMENT_LIST',
         label: '付款清单原因',
-        description: '仅开放对应付款明细修改权限',
+        description: '记录需要修改的付款明细',
       },
       {
         value: 'CONTRACT_CONTENT',
-        label: '合同原因',
-        description: '仅开放指定的一份合同修改权限',
+        label: '合同问题',
+        description: '记录需要修改的指定合同',
       },
       {
         value: 'FULL_ITEM',
         label: '整笔退回',
-        description: '开放该达人本笔请款的合同、Invoice 和付款明细',
+        description: '记录该达人本笔请款的整体问题',
       },
     ]);
     expect(workspaceSource).toContain('ariaLabel="选择需修改合同"');

@@ -966,9 +966,37 @@ describe('media payment request list presentation', () => {
     expect(result.visible.map((request) => request.id)).toEqual(['request-3']);
   });
 
-  it('only allows adding creators while the request remains a draft', () => {
+  it('allows adding creators to drafts and approval-chain returns only', () => {
+    const approvalReturn = {
+      status: 'RETURNED_TO_MEDIA_REVIEW',
+      round: 1,
+      history: [{
+        round: 1,
+        stage: 'FINANCE',
+        action: 'RETURN',
+        actorAccount: 'finance',
+        actorName: '财务',
+        actorRole: '财务',
+        fromStatus: 'PENDING_FINANCE',
+        toStatus: 'RETURNED_TO_MEDIA_REVIEW',
+        reason: '需要修改',
+        occurredAt: '2026-08-07T10:00:00.000Z',
+      }],
+      submittedAt: '2026-08-07T09:00:00.000Z',
+      returnedFromStage: 'FINANCE',
+      resumeStatus: 'PENDING_FINANCE',
+      returnReason: '需要修改',
+      updatedAt: '2026-08-07T10:00:00.000Z',
+    } satisfies RequestApprovalState;
+    const executionReturn = {
+      ...approvalReturn,
+      history: [{ ...approvalReturn.history[0], fromStatus: 'APPROVED' }],
+    } satisfies RequestApprovalState;
+
     expect(canAddCreatorToPaymentRequest({ id: 'draft', lifecycle: 'DRAFT' })).toBe(true);
     expect(canAddCreatorToPaymentRequest({ id: 'returned', lifecycle: 'RETURNED' })).toBe(false);
+    expect(canAddCreatorToPaymentRequest({ id: 'approval-return', lifecycle: 'RETURNED', approval: approvalReturn })).toBe(true);
+    expect(canAddCreatorToPaymentRequest({ id: 'execution-return', lifecycle: 'RETURNED', approval: executionReturn })).toBe(false);
     expect(canAddCreatorToPaymentRequest({ id: 'submitted', lifecycle: 'SUBMITTED' })).toBe(false);
   });
 });

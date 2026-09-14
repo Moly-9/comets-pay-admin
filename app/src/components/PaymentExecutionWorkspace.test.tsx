@@ -385,19 +385,19 @@ describe('PaymentExecutionWorkspace', () => {
     );
 
     expect(project.payouts).toHaveLength(2);
-    expect(project.payouts.every((payout) => payout.status === '已退回')).toBe(true);
+    expect(project.payouts.every((payout) => payout.status === '未进入付款')).toBe(true);
     expect(request.approval).toMatchObject({
       status: 'RETURNED_TO_MEDIA_REVIEW',
       returnedFromStage: 'FINANCE',
-      returnReason: '付款资料需要媒介复核并修正后重新提交。',
     });
-    expect(html).toContain('2 位达人需修改 · 0 位达人已通过审核');
-    expect(html).toContain('付款资料需要媒介复核并修正后重新提交。');
+    expect(request.approval?.returnReason).toContain('Invoice 中的服务明细与审批资料不一致');
+    expect(html).toContain('1 位达人需修改 · 1 位达人已通过审核');
+    expect(html).toContain('Invoice 中的服务明细与审批资料不一致');
     expect(html.match(/payment-execution-content-card/g)).toHaveLength(3);
     expect(html.match(/payment-execution-project-field/g)).toHaveLength(15);
     expect(html.match(/payment-execution-payee-fields/g)).toHaveLength(2);
-    expect(html.match(/payment-execution-payee is-returned/g)).toHaveLength(2);
-    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(2);
+    expect(html.match(/payment-execution-payee is-returned/g)).toHaveLength(1);
+    expect(html.match(/payment-execution-payee-status is-error/g)).toHaveLength(1);
   });
 
   it('marks only scoped finance-return details as rejected and keeps the rest green', () => {

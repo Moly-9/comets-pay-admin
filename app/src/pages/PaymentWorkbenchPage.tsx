@@ -357,7 +357,10 @@ const requestMatchesWorkbenchTab = (
   if (tab === 'review') {
     return request.lifecycle === 'SUBMITTED' && isReviewApprovalStatus(request.approval?.status);
   }
-  if (tab === 'returned') return request.lifecycle === 'RETURNED';
+  if (tab === 'returned') {
+    return request.lifecycle === 'RETURNED'
+      && request.approval?.returnedFromStage === 'FINANCE';
+  }
   if (request.lifecycle === 'COMPLETED') return tab === 'paid';
   if (request.lifecycle !== 'APPROVED') return false;
 

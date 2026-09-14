@@ -11,6 +11,7 @@ import {
   type RequestApprovalEvent,
   type RequestApprovalState,
   type RequestApprovalStatus,
+  type RequestApprovalReturnIssueType,
 } from './businessWorkflow';
 import {
   ACTIVE_INVOICE_DEMO_INVOICES,
@@ -77,9 +78,9 @@ const REQUEST_PROJECT_DEMO_STAGE_BY_CODE: Record<string, RequestProjectDemoStage
   'PRJ-260801-02': 'PAID',
   'PRJ-260801-03': 'DRAFT',
   'PRJ-260801-04': 'RETURNED_TO_MEDIA_REVIEW',
-  'PRJ-260801-05': 'DRAFT',
-  'PRJ-260801-06': 'DRAFT',
-  'PRJ-260801-07': 'DRAFT',
+  'PRJ-260801-05': 'RETURNED_TO_MEDIA_REVIEW',
+  'PRJ-260801-06': 'RETURNED_TO_MEDIA_REVIEW',
+  'PRJ-260801-07': 'RETURNED_TO_MEDIA_REVIEW',
   'PRJ-260801-08': 'CANCELLED',
 };
 
@@ -98,14 +99,80 @@ const REQUEST_RESOURCE_PAYOUT_IDS_BY_REQUEST_CODE: Readonly<Record<string, Reado
     'payout_fixture_16_01',
     'payout_fixture_16_02',
   ]),
+  'REQ-202607-000017': new Set([
+    'payout_fixture_17_01',
+    'payout_fixture_17_02',
+  ]),
+  'REQ-202607-000018': new Set([
+    'payout_fixture_18_01',
+    'payout_fixture_18_02',
+  ]),
+  'REQ-202607-000019': new Set([
+    'pay-020',
+    'payout_fixture_19_02',
+  ]),
 };
 
-export const RETURNED_PAYMENT_REQUEST_DEMO = {
-  requestCode: 'REQ-202607-000016',
-  projectCode: 'PRJ-260801-04',
-  reason: '付款资料需要媒介复核并修正后重新提交。',
-  occurredAt: '2026-08-07T10:20:00.000Z',
-} as const;
+type ReturnedPaymentRequestDemo = {
+  requestCode: string;
+  projectCode: string;
+  stage: 'PM' | 'FINANCE';
+  resumeStatus: 'PENDING_PM' | 'PENDING_FINANCE';
+  issueType?: RequestApprovalReturnIssueType;
+  reason: string;
+  occurredAt: string;
+  targetCreatorIndex: number;
+};
+
+export const RETURNED_PAYMENT_REQUEST_DEMOS: readonly ReturnedPaymentRequestDemo[] = [
+  {
+    requestCode: 'REQ-202607-000016',
+    projectCode: 'PRJ-260801-04',
+    stage: 'FINANCE',
+    resumeStatus: 'PENDING_FINANCE',
+    issueType: 'INVOICE_CONTENT',
+    reason: 'Invoice 中的服务明细与审批资料不一致，请修正后重新提交。',
+    occurredAt: '2026-08-07T10:20:00.000Z',
+    targetCreatorIndex: 0,
+  },
+  {
+    requestCode: 'REQ-202607-000017',
+    projectCode: 'PRJ-260801-05',
+    stage: 'FINANCE',
+    resumeStatus: 'PENDING_FINANCE',
+    issueType: 'CONTRACT_CONTENT',
+    reason: '关联合同的付款条款需要修正，请更新指定合同后重新提交。',
+    occurredAt: '2026-08-07T10:35:00.000Z',
+    targetCreatorIndex: 0,
+  },
+  {
+    requestCode: 'REQ-202607-000018',
+    projectCode: 'PRJ-260801-06',
+    stage: 'FINANCE',
+    resumeStatus: 'PENDING_FINANCE',
+    issueType: 'PAYMENT_LIST',
+    reason: '付款清单中的收款账户信息需要重新校验。',
+    occurredAt: '2026-08-07T10:50:00.000Z',
+    targetCreatorIndex: 0,
+  },
+  {
+    requestCode: 'REQ-202607-000019',
+    projectCode: 'PRJ-260801-07',
+    stage: 'PM',
+    resumeStatus: 'PENDING_PM',
+    reason: '请补充本次请款的付款背景与项目成本说明。',
+    occurredAt: '2026-08-07T11:05:00.000Z',
+    targetCreatorIndex: 0,
+  },
+] as const;
+
+export const RETURNED_PAYMENT_REQUEST_DEMO = RETURNED_PAYMENT_REQUEST_DEMOS[0];
+
+const returnedDemoForRequest = (request: Pick<RequestProjectSummary, 'id' | 'requestCode'>) => (
+  RETURNED_PAYMENT_REQUEST_DEMOS.find((demo) => (
+    demo.requestCode === (request.requestCode ?? request.id)
+  ))
+);
 
 const RESOURCE_ACTOR = {
   account: 'prototype.fixture',
@@ -241,12 +308,13 @@ const approvalAtStage = (
     status === 'PENDING_FINANCE' && RESUBMITTED_PROJECT_CODES.has(request.id),
   );
   if (status === 'PENDING_FINANCE') return approval;
+  const returnedDemo = returnedDemoForRequest(request);
   const historyLength = {
     PENDING_PM: 0,
     PENDING_PROJECT_OWNER: 1,
     PENDING_OWNER: 2,
     APPROVED: 4,
-    RETURNED_TO_MEDIA_REVIEW: 3,
+    RETURNED_TO_MEDIA_REVIEW: returnedDemo?.stage === 'PM' ? 0 : 3,
   }[status];
   const history = approval.history.slice(0, historyLength);
   if (status === 'APPROVED') {
@@ -263,26 +331,29 @@ const approvalAtStage = (
     });
   }
   if (status === 'RETURNED_TO_MEDIA_REVIEW') {
+    if (!returnedDemo) throw new Error(`请款 ${request.requestCode ?? request.id} 缺少退回演示配置`);
+    const fromStatus = returnedDemo.resumeStatus;
+    const actorName = returnedDemo.stage === 'PM' ? request.pm || '项目 PM' : '财务';
     history.push({
       round: 1,
-      stage: 'FINANCE',
+      stage: returnedDemo.stage,
       action: 'RETURN',
-      actorAccount: 'fixture-finance',
-      actorName: '财务',
-      actorRole: '财务账号',
-      fromStatus: 'PENDING_FINANCE',
+      actorAccount: returnedDemo.stage === 'PM' ? 'fixture-pm' : 'fixture-finance',
+      actorName,
+      actorRole: returnedDemo.stage === 'PM' ? 'PM 账号' : '财务账号',
+      fromStatus,
       toStatus: 'RETURNED_TO_MEDIA_REVIEW',
-      reason: RETURNED_PAYMENT_REQUEST_DEMO.reason,
-      occurredAt: RETURNED_PAYMENT_REQUEST_DEMO.occurredAt,
+      reason: returnedDemo.reason,
+      occurredAt: returnedDemo.occurredAt,
     });
     return {
       ...approval,
       status,
       history,
-      returnedFromStage: 'FINANCE',
-      resumeStatus: 'PENDING_FINANCE',
-      returnReason: RETURNED_PAYMENT_REQUEST_DEMO.reason,
-      updatedAt: RETURNED_PAYMENT_REQUEST_DEMO.occurredAt,
+      returnedFromStage: returnedDemo.stage,
+      resumeStatus: returnedDemo.resumeStatus,
+      returnReason: returnedDemo.reason,
+      updatedAt: returnedDemo.occurredAt,
     };
   }
   return {
@@ -478,9 +549,12 @@ const requestInvoiceEntries: RequestInvoiceEntry[] = INITIAL_PROJECTS.flatMap((p
     const invoiceNumber = cloneSpecial
       ? `INV-${project.id.replace(/^PRJ-/, '')}-R${creatorPart}`
       : source.id;
+    const returnedDemo = returnedDemoForRequest(request);
+    const invoiceReturned = returnedDemo?.issueType === 'INVOICE_CONTENT'
+      && creatorIndex === returnedDemo.targetCreatorIndex;
     const status = request.lifecycle === 'APPROVED' || request.lifecycle === 'COMPLETED'
       ? '已通过' as const
-      : request.lifecycle === 'RETURNED'
+      : invoiceReturned
         ? '已退回' as const
         : '已通过' as const;
     return [{
@@ -519,7 +593,7 @@ const payoutSources = new Map([
   ...PAYMENT_REQUEST_CREATION_DEMO_PAYOUTS,
 ].map((payout) => [payout.id, payout]));
 
-const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, request, contract }) => {
+const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, request, contract, creatorIndex }) => {
   const baseline = payoutSources.get(source.sourcePayoutId);
   if (!baseline) throw new Error(`请款 Invoice ${source.id} 缺少 Payout 快照`);
   const account = invoice.snapshot.paymentMethod === 'paypal'
@@ -527,7 +601,9 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     : invoice.snapshot.payment.iban || invoice.snapshot.payment.accountNumber;
   const approved = request.lifecycle === 'APPROVED';
   const paid = request.lifecycle === 'COMPLETED';
-  const returned = request.lifecycle === 'RETURNED';
+  const returnedDemo = returnedDemoForRequest(request);
+  const invoiceReturned = returnedDemo?.issueType === 'INVOICE_CONTENT'
+    && creatorIndex === returnedDemo.targetCreatorIndex;
   const processing = REQUEST_PROJECT_DEMO_STAGE_BY_CODE[request.id] === 'PAYMENT_PROCESSING';
   const provider = paymentRequestProviderForChannel(request.paymentChannel)
     ?? invoicePaymentListProvider(invoice);
@@ -554,8 +630,8 @@ const requestPayouts: Payout[] = requestInvoiceEntries.map(({ invoice, source, r
     localClearingSystem: invoice.snapshot.payment.localClearingSystem,
     recipientCountry: invoice.snapshot.payment.bankCountry,
     feeBearer: 'ADVERTISER',
-    status: paid ? '已付款' : processing ? '付款处理中' : approved ? '等待付款' : returned ? '已退回' : '未进入付款',
-    invoiceReviewStatus: paid || approved ? '已通过' : returned ? '已退回' : '已通过',
+    status: paid ? '已付款' : processing ? '付款处理中' : approved ? '等待付款' : '未进入付款',
+    invoiceReviewStatus: invoiceReturned ? '已退回' : '已通过',
     invoiceVersion: invoice.version,
     invoiceSignedAt: invoice.generatedAt,
     invoiceSnapshot: invoice.snapshot,
@@ -586,7 +662,7 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requ
   const generatedAt = `2026-08-${String((requestIndex % 5) + 1).padStart(2, '0')}T12:00:00.000Z`;
   const items = entries.map((entry, itemIndex) => {
     const source = invoicePaymentListItem(entry.invoice, [entry.contract]);
-    return revalidatePaymentListItem({
+    const validated = revalidatePaymentListItem({
       ...source,
       id: `payment_item_request_fixture_${String(requestIndex + 1).padStart(2, '0')}_${String(itemIndex + 1).padStart(3, '0')}`,
       snapshot: {
@@ -597,6 +673,15 @@ const requestPaymentLists: PaymentListRecord[] = requestSeeds.map((request, requ
         description: '',
       },
     }, generatedAt);
+    const returnedDemo = returnedDemoForRequest(request);
+    return returnedDemo?.issueType === 'PAYMENT_LIST'
+      && itemIndex === returnedDemo.targetCreatorIndex
+      ? {
+          ...validated,
+          requiresRevalidation: true,
+          validationIssues: [returnedDemo.reason],
+        }
+      : validated;
   });
   const status = paymentListStatusFor(request);
   const version = status === 'draft' ? 0 : 1;
@@ -644,8 +729,60 @@ const requests: RequestProjectSummary[] = requestSeeds.map((request) => {
   ));
   const contractIds = new Set(creatorLinks.flatMap((link) => link.contractIds));
   const invoiceIds = creatorLinks.flatMap((link) => link.invoiceIds);
+  const returnedDemo = returnedDemoForRequest(request);
+  const targetEntry = returnedDemo?.issueType
+    ? entries[returnedDemo.targetCreatorIndex]
+    : undefined;
+  const targetList = lists[0];
+  const targetPaymentItem = targetEntry
+    ? targetList?.items.find((item) => item.invoiceId === targetEntry.invoice.invoiceId)
+    : undefined;
+  const returnItems = returnedDemo?.issueType && targetEntry
+    ? [{
+        pageKey: `invoice:${targetEntry.invoice.invoiceId}`,
+        invoiceId: targetEntry.invoice.invoiceId,
+        invoiceNumber: targetEntry.invoice.id,
+        issueType: returnedDemo.issueType,
+        reason: returnedDemo.reason,
+        contractIds: returnedDemo.issueType === 'CONTRACT_CONTENT'
+          ? [targetEntry.contract.contractId!]
+          : undefined,
+        paymentItems: targetList && targetPaymentItem
+          ? [{ paymentListId: targetList.paymentListId, itemId: targetPaymentItem.id }]
+          : [],
+      }]
+    : undefined;
+  const returnReason = returnItems?.map((item) => {
+    const issueLabel: Record<RequestApprovalReturnIssueType, string> = {
+      INVOICE_CONTENT: 'Invoice',
+      CONTRACT_CONTENT: '合同',
+      PAYMENT_LIST: '付款清单',
+      FULL_ITEM: '整笔请款',
+    };
+    const contractScope = item.contractIds?.length
+      ? ` · 合同范围：${item.contractIds.join('、')}`
+      : '';
+    return `${item.invoiceNumber}（${issueLabel[item.issueType]}${contractScope}）：${item.reason}`;
+  }).join('；');
+  const approval = request.approval && returnedDemo
+    ? {
+        ...request.approval,
+        returnReason: returnReason ?? returnedDemo.reason,
+        returnItems,
+        history: request.approval.history.map((event, index, history) => (
+          index === history.length - 1 && event.action === 'RETURN'
+            ? {
+                ...event,
+                reason: returnReason ?? returnedDemo.reason,
+                returnItems,
+              }
+            : event
+        )),
+      }
+    : request.approval;
   return {
     ...request,
+    approval,
     creatorLinks,
     invoiceIds,
     paymentListId: lists[0]?.paymentListId,
@@ -654,7 +791,7 @@ const requests: RequestProjectSummary[] = requestSeeds.map((request) => {
     contracts: contractIds.size,
     invoices: invoiceIds.length,
     paymentOrder: lists[0]?.paymentListCode ?? '待生成',
-    status: myProjectStatusFor(request),
+    status: myProjectStatusFor({ ...request, approval }),
   };
 });
 

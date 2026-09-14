@@ -21,6 +21,7 @@ import {
   revalidatePaymentListItem,
 } from './businessWorkflow';
 import type { GeneratedInvoiceRecord, InvoiceReviewStatus } from './types';
+import { requestApprovalReturnEditScope } from './requestApprovalWorkflow';
 
 export type PaymentRequestCreatorLink = {
   creatorId: CreatorId;
@@ -539,6 +540,10 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
 
 export const canAddCreatorToPaymentRequest = (request: PaymentRequestProjectLike) => (
   request.lifecycle === 'DRAFT'
+  || (
+    request.lifecycle === 'RETURNED'
+    && requestApprovalReturnEditScope(request.approval) === 'full'
+  )
 );
 
 export const isPaymentRequestFullyPaid = ({

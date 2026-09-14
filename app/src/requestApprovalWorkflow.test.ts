@@ -13,6 +13,7 @@ import {
   requestApprovalReturnItemForInvoice,
   requestApprovalReturnItemForInvoiceEdit,
   requestApprovalReturnItemForPaymentListEdit,
+  requestApprovalReturnEditScope,
   requestApprovalReturnDetails,
   requestApprovalStagesFor,
   returnApprovedRequestToMediaReview,
@@ -161,6 +162,7 @@ describe('request approval workflow', () => {
       }],
     });
     expect(requestApprovalHasScopedReturnItems(returned)).toBe(true);
+    expect(requestApprovalReturnEditScope(returned)).toBe('full');
     expect(requestApprovalReturnItemForInvoice(returned, 'stable-invoice-id' as never, 'PAYMENT_LIST'))
       .toMatchObject({ invoiceNumber: 'INV-TEST' });
     expect(requestApprovalAllowsInvoicePayoutOverride(returned, 'stable-invoice-id' as never)).toBe(false);
@@ -169,6 +171,25 @@ describe('request approval workflow', () => {
     expect(resubmitted.round).toBe(2);
     expect(requestApprovalReturnDetails(resubmitted)).toBeNull();
     expect(resubmitted.returnItems).toBeUndefined();
+  });
+
+  it('limits edits only after approval or during payment failure recovery', () => {
+    const approvalReturn = applyRequestApprovalAction(
+      { ...createRequestApprovalState(), status: 'PENDING_FINANCE' },
+      'RETURN',
+      userFor('finance'),
+      '付款资料需要修改',
+    );
+    const executionReturn = returnApprovedRequestToMediaReview(
+      { ...approvalReturn, status: 'APPROVED' },
+      userFor('finance'),
+      '付款执行前退回',
+    );
+
+    expect(requestApprovalReturnEditScope()).toBe('none');
+    expect(requestApprovalReturnEditScope(approvalReturn)).toBe('full');
+    expect(requestApprovalReturnEditScope(approvalReturn, true)).toBe('scoped');
+    expect(requestApprovalReturnEditScope(executionReturn)).toBe('scoped');
   });
 
   it('allows payout override only for the returned Invoice-content detail', () => {

@@ -1140,7 +1140,10 @@ const createPrototypeInvoice = (
   creatorIndex: number,
 ): GeneratedInvoiceRecord => {
   const creator = creatorForReference(reference.creatorId);
-  const account = prototypePaymentAccount(creator);
+  const account = project.id === 'PRJ-260801-07' && creatorIndex === 1
+    ? eligibleInvoicePayoutAccounts(creator).find((candidate) => candidate.provider === 'PayPal')
+      ?? prototypePaymentAccount(creator)
+    : prototypePaymentAccount(creator);
   const payment = createDocumentPayoutSnapshot(account, creator.id);
   const provider = account?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
   const amount = prototypeInvoiceAmounts.get(reference.engagementId) ?? 0;

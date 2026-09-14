@@ -45,6 +45,7 @@ import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import { validatePaymentListAccountViaApi } from '../requestPaymentAccountValidation';
 import {
   requestApprovalHasScopedReturnItems,
+  requestApprovalReturnEditScope,
   requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
   requestApprovalReturnItemForInvoiceEdit,
@@ -420,14 +421,16 @@ export function RequestProjectResourceManager({
     paymentFailureRecoveryMode,
   );
   const hasScopedApprovalReturn = requestApprovalHasScopedReturnItems(request.approval);
+  const returnEditScope = requestApprovalReturnEditScope(request.approval, paymentFailureRecoveryMode);
+  const hasEditScopeRestriction = returnEditScope === 'scoped';
   const hasScopedPaymentListReturn = Boolean(request.approval?.returnItems?.some((item) => (
     ['PAYMENT_LIST', 'FULL_ITEM'].includes(item.issueType)
   )));
-  const canEditLinkedResources = canEdit && !paymentFailureRecoveryMode && !hasScopedApprovalReturn;
+  const canEditLinkedResources = canEdit && !paymentFailureRecoveryMode && !hasEditScopeRestriction;
   const canEditPaymentList = canEdit
     && (
       paymentFailureRecoveryMode
-      || !hasScopedApprovalReturn
+      || !hasEditScopeRestriction
       || hasScopedPaymentListReturn
     );
   const canEditSubmittedPaymentList = ['admin', 'project', 'owner'].includes(currentUser.roleKey);
@@ -444,7 +447,7 @@ export function RequestProjectResourceManager({
     canEditPaymentList
     && currentPaymentList?.status === 'draft'
     && !paymentFailureRecoveryMode
-    && !hasScopedApprovalReturn,
+    && !hasEditScopeRestriction,
   );
   const paymentEditorList = paymentEditorListId
     ? paymentLists.find((list) => list.paymentListId === paymentEditorListId) ?? null
@@ -833,7 +836,7 @@ export function RequestProjectResourceManager({
         </article>
       </div>
 
-      {hasScopedApprovalReturn ? (
+      {hasEditScopeRestriction && hasScopedApprovalReturn ? (
         <NoticeBanner>财务已按明细指定修改范围：仅退回记录对应的合同、Invoice 或付款明细可修改，其余资料保持锁定。</NoticeBanner>
       ) : !canEditLinkedResources && !paymentFailureRecoveryMode ? <NoticeBanner>当前账号在项目提交后仅可查看与导出资料。</NoticeBanner> : null}
 
@@ -894,7 +897,7 @@ export function RequestProjectResourceManager({
             ) : null}
             {bulkPaymentNotice ? <div className="request-payment-bulk-notice" role="status">{bulkPaymentNotice}</div> : null}
             {paymentFailureRecoveryMode ? <NoticeBanner>付款失败恢复中：已付款明细保持冻结，仅失败明细可修改或重新校验。</NoticeBanner> : null}
-            {hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务退回范围内的付款明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
+            {hasEditScopeRestriction && hasScopedApprovalReturn && hasScopedPaymentListReturn ? <NoticeBanner>仅财务退回范围内的付款明细可修改，其他付款明细已通过并保持锁定。</NoticeBanner> : null}
             {!paymentListReady && currentPaymentList?.items.length ? <div className="payment-list-overview-guidance" role="status"><CircleAlert size={17} /><div><strong>付款清单尚未完成</strong><span>可通过每笔卡片下方的“编辑本笔”完善信息；点击“生成付款清单”将调用 Airwallex 接口校验并展示缺失字段。</span></div></div> : null}
             <div className="payment-list-overview-rows">
               {currentPaymentList?.items.map((item) => {
@@ -927,7 +930,7 @@ export function RequestProjectResourceManager({
                   .map((issue) => issue.message.replace(`${item.snapshot.invoiceNumber}：`, ''));
                 const rowCanEdit = canEditPaymentList
                   && !paymentFailureRecoveryMode
-                  && (!hasScopedApprovalReturn || Boolean(paymentListReturn))
+                  && (!hasEditScopeRestriction || Boolean(paymentListReturn))
                   && (list.status === 'draft' || canEditSubmittedPaymentList);
                 const transactionReference = String(paymentListItemValue(item, 'transactionReference') || '');
                 const transferMethod = String(paymentListItemValue(item, 'transferMethod') || effectiveAccount.transferMethod || '待补充');

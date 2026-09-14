@@ -95,6 +95,21 @@ export const requestApprovalHasScopedReturnItems = (
   && state.returnItems?.length,
 );
 
+export type RequestApprovalReturnEditScope = 'full' | 'scoped' | 'none';
+
+export const requestApprovalReturnEditScope = (
+  state?: RequestApprovalState,
+  hasPaymentFailureRecovery = false,
+): RequestApprovalReturnEditScope => {
+  if (state?.status !== 'RETURNED_TO_MEDIA_REVIEW') return 'none';
+  if (hasPaymentFailureRecovery) return 'scoped';
+  const returnEvent = [...state.history].reverse().find((event) => (
+    event.action === 'RETURN' && event.round === state.round
+  ));
+  if (!returnEvent) return state.returnItems?.length ? 'scoped' : 'full';
+  return returnEvent.fromStatus === 'APPROVED' ? 'scoped' : 'full';
+};
+
 export const requestApprovalReturnItemForInvoice = (
   state: RequestApprovalState | undefined,
   invoiceId: RequestApprovalReturnItem['invoiceId'],

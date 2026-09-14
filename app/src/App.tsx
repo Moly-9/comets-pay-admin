@@ -295,7 +295,7 @@ import {
   createRequestApprovalState,
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalAllowsInvoicePayoutOverride,
-  requestApprovalHasScopedReturnItems,
+  requestApprovalReturnEditScope,
   requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
   requestApprovalReturnItemForInvoiceEdit,
@@ -4284,9 +4284,16 @@ export default function App() {
     )
   );
 
+  const requestHasScopedEditRestriction = (request: RequestProjectSummary) => (
+    requestApprovalReturnEditScope(
+      request.approval,
+      requestHasPaymentFailureRecovery(request),
+    ) === 'scoped'
+  );
+
   const requestWholeResourceEditable = (request: RequestProjectSummary) => (
     requestResourceEditable(request)
-    && !requestApprovalHasScopedReturnItems(request.approval)
+    && !requestHasScopedEditRestriction(request)
   );
 
   const paymentListItemEditable = (
@@ -4295,7 +4302,7 @@ export default function App() {
   ) => (
     requestResourceEditable(request)
     && (
-      requestApprovalHasScopedReturnItems(request.approval)
+      requestHasScopedEditRestriction(request)
         ? Boolean(requestApprovalReturnItemForPaymentListEdit(request.approval, invoiceId))
         : !requestHasPaymentFailureRecovery(request)
       || Boolean(paymentFailurePayoutForInvoice(request, invoiceId))
@@ -4308,7 +4315,7 @@ export default function App() {
   ) => (
     requestResourceEditable(request)
     && (
-      !requestApprovalHasScopedReturnItems(request.approval)
+      !requestHasScopedEditRestriction(request)
       || Boolean(requestApprovalReturnItemForContract(request.approval, contractId))
     )
   );
@@ -4318,7 +4325,7 @@ export default function App() {
     && request.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
     && requestResourceEditable(request)
     && (
-      !requestApprovalHasScopedReturnItems(request.approval)
+      !requestHasScopedEditRestriction(request)
       || Boolean(requestApprovalReturnItemForInvoiceEdit(request.approval, invoiceId))
     )
   ));
@@ -4733,7 +4740,7 @@ export default function App() {
         !requestResourceEditable(request)
         || requestHasPaymentFailureRecovery(request)
         || !list
-        || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
+        || (requestHasScopedEditRestriction(request) && !scopedPaymentListReturn)
       ) return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? beginPaymentListEdit(candidate)
@@ -4751,7 +4758,7 @@ export default function App() {
         || requestHasPaymentFailureRecovery(request)
         || !list
         || list.status !== 'draft'
-        || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
+        || (requestHasScopedEditRestriction(request) && !scopedPaymentListReturn)
       ) return;
       const expectedInvoiceIds = paymentRequestInvoiceIds(request.creatorLinks ?? []);
       const validation = await mockValidatePaymentList({

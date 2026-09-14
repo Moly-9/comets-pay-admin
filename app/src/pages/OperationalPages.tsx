@@ -2087,8 +2087,10 @@ const createProjectCreatorProfiles = (
   projectIndex: number,
 ): NonNullable<ProjectSummary['creatorProfiles']> => (
   Array.from({ length: project.creators }, (_, creatorIndex) => {
-    const returnedRequestCreator = project.id === 'PRJ-260801-07' && creatorIndex === 0
-      ? INITIAL_CREATORS.find((creator) => creator.id === 'creator-marc')
+    const returnedRequestCreator = project.id === 'PRJ-260801-07'
+      ? INITIAL_CREATORS.find((creator) => (
+          creator.id === (creatorIndex === 0 ? 'creator-marc' : creatorIndex === 1 ? 'creator-noah' : '')
+        ))
       : undefined;
     const creator = returnedRequestCreator
       ?? INITIAL_CREATORS[(projectIndex * 5 + creatorIndex) % INITIAL_CREATORS.length];

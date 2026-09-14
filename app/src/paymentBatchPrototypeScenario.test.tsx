@@ -50,7 +50,7 @@ describe('payment batch prototype scenario', () => {
     expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(8);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
-    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(3);
 
     const paidRows = buildPaymentProjectRows({ ...input, tab: 'paid' });
     expect(paidRows.filter((row) => row.status === '付款处理中')).toHaveLength(1);
