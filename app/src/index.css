@@ -26485,15 +26485,10 @@ button:disabled {
 .dashboard-asset-stage {
   display: grid;
   min-width: 0;
-  flex: 1 1 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0 6px;
-}
-
-.dashboard-asset-stage:only-child {
   flex: 0 1 auto;
   grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 0 6px;
 }
 
 .dashboard-stage-dot {
