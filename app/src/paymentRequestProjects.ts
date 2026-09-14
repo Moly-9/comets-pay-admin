@@ -288,7 +288,7 @@ export const paymentRequestHasPaymentActivity = (
   payouts: Array<Pick<Payout, 'paymentRequestProjectId' | 'paymentFailureRecovery' | 'status'>>,
 ) => Boolean(paymentRequestProjectId) && payouts.some((payout) => (
   payout.paymentRequestProjectId === paymentRequestProjectId
-  && (Boolean(payout.paymentFailureRecovery) || ['等待付款', '付款处理中', '已付款'].includes(payout.status))
+  && (Boolean(payout.paymentFailureRecovery) || ['等待付款', '付款处理中', '付款失败', '已付款'].includes(payout.status))
 ));
 
 export const canCancelPaymentRequest = ({
@@ -334,6 +334,8 @@ export type RequestProjectStatus =
   | '财务审批中'
   | '正在付款'
   | '付款处理中'
+  | '部分失败'
+  | '全部失败'
   | '已付款'
   | '已退回';
 
@@ -382,19 +384,25 @@ export const myProjectStatusFor = (
 
 export const requestProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status' | 'paymentRequestProjectId'>,
-  payouts: Pick<Payout, 'paymentRequestProjectId' | 'status'>[] = [],
+  payouts: readonly Pick<Payout, 'paymentRequestProjectId' | 'status'>[] = [],
 ): RequestProjectStatus | null => {
   if (request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED' || (!request.approval && !request.lifecycle)) return null;
   if (request.lifecycle === 'COMPLETED') return '已付款';
-  if (request.lifecycle === 'RETURNED') return '已退回';
+  const linkedPayouts = request.paymentRequestProjectId
+    ? payouts.filter((payout) => payout.paymentRequestProjectId === request.paymentRequestProjectId)
+    : [];
+  const failedCount = linkedPayouts.filter((payout) => payout.status === '付款失败').length;
+  if (request.lifecycle === 'RETURNED') {
+    if (failedCount === linkedPayouts.length && failedCount > 0) return '全部失败';
+    if (failedCount > 0 || request.status === '部分打款失败' || request.status === '部分失败') return '部分失败';
+    if (request.status === '全部失败') return '全部失败';
+    return '已退回';
+  }
   if (request.lifecycle === 'APPROVED') {
-    const linkedPayouts = request.paymentRequestProjectId
-      ? payouts.filter((payout) => payout.paymentRequestProjectId === request.paymentRequestProjectId)
-      : [];
+    if (failedCount === linkedPayouts.length && failedCount > 0) return '全部失败';
+    if (failedCount > 0) return '部分失败';
     if (linkedPayouts.length > 0 && linkedPayouts.every((payout) => payout.status === '已付款')) return '已付款';
-    if (linkedPayouts.some((payout) => payout.status === '付款处理中' || payout.status === '付款失败')) {
-      return '付款处理中';
-    }
+    if (linkedPayouts.some((payout) => ['付款处理中', '已付款'].includes(payout.status))) return '付款处理中';
     return '正在付款';
   }
   if (request.approval) return REQUEST_PROJECT_APPROVAL_STATUS[request.approval.status];

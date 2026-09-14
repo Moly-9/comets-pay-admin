@@ -14703,6 +14703,31 @@ button:disabled {
   color: #3b82f6;
 }
 
+.project-status-select-failure .custom-select-value {
+  color: #b24f45;
+  font-weight: 650;
+}
+
+.project-status-select-failure.custom-select-open .custom-select-trigger {
+  border-color: rgba(178, 79, 69, 0.5);
+  box-shadow: 0 0 0 3px rgba(178, 79, 69, 0.12);
+}
+
+.project-status-select-failure .custom-select-option.custom-select-option-selected,
+.project-status-select-failure .custom-select-option.custom-select-option-selected:hover:not(:disabled),
+.project-status-select-failure .custom-select-option.custom-select-option-selected:focus-visible {
+  background: #fff1ef;
+  color: #b24f45;
+}
+
+.project-status-select-failure .custom-select-option-selected .custom-select-option-description {
+  color: #a4655e;
+}
+
+.project-status-select-failure .custom-select-option-selected .custom-select-option-check {
+  color: #b24f45;
+}
+
 .project-inline-filter-search .page-search {
   width: 100%;
   max-width: none;
@@ -26146,12 +26171,13 @@ button:disabled {
 
 .dashboard-request-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 
 .dashboard-request-card {
   width: 100%;
+  min-width: 0;
   position: relative;
   display: grid;
   min-height: 142px;
@@ -26217,6 +26243,14 @@ button:disabled {
   background: linear-gradient(138deg, #e8f9ee 0%, #e5f5f3 100%);
 }
 
+.dashboard-request-card-blue {
+  background: linear-gradient(138deg, #eaf4ff 0%, #e7f0fb 100%);
+}
+
+.dashboard-request-card-rose {
+  background: linear-gradient(138deg, #fff0ef 0%, #fbe5e8 100%);
+}
+
 .dashboard-request-card-head {
   position: relative;
   z-index: 1;
@@ -26231,6 +26265,7 @@ button:disabled {
   font-size: 11.5px;
   font-weight: 700;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-request-card-head i {
@@ -26261,12 +26296,13 @@ button:disabled {
 }
 
 .dashboard-request-card-value small {
+  display: -webkit-box;
   overflow: hidden;
   color: #817a84;
   font-size: 10.5px;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .dashboard-progress-segment {
@@ -26541,9 +26577,15 @@ button:disabled {
   }
 }
 
+@media (max-width: 1024px) {
+  .dashboard-request-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 860px) {
   .dashboard-request-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .dashboard-asset-row {
@@ -26631,29 +26673,32 @@ button:disabled {
   }
 
   .dashboard-request-card-grid {
-    gap: 9px;
+    gap: 6px;
   }
 
   .dashboard-request-card {
-    min-height: 123px;
-    padding: 13px;
+    min-height: 116px;
+    gap: 14px;
+    border-radius: 13px;
+    padding: 10px;
   }
 
   .dashboard-request-card-head > span {
-    font-size: 10.5px;
+    font-size: 9.5px;
   }
 
   .dashboard-request-card-head i {
-    width: 29px;
-    height: 29px;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
   }
 
   .dashboard-request-card-value strong {
-    font-size: 28px;
+    font-size: 24px;
   }
 
   .dashboard-request-card-value small {
-    font-size: 9.5px;
+    font-size: 8.5px;
   }
 
   .dashboard-asset-stage-values {

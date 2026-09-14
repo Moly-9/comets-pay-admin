@@ -998,13 +998,16 @@ describe('payment request module status presentation', () => {
     expect(requestProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
   });
 
-  it('moves an approved request through payment execution to paid', () => {
+  it('moves an approved request through mutually exclusive payment execution states', () => {
     const paymentRequestProjectId = 'request-status-payment' as PaymentRequestProjectId;
     const request = { lifecycle: 'APPROVED' as const, paymentRequestProjectId };
     const payoutFor = (status: Payout['status']) => ({ paymentRequestProjectId, status });
 
     expect(requestProjectStatusFor(request, [payoutFor('等待付款')])).toBe('正在付款');
     expect(requestProjectStatusFor(request, [payoutFor('付款处理中')])).toBe('付款处理中');
+    expect(requestProjectStatusFor(request, [payoutFor('已付款'), payoutFor('付款处理中')])).toBe('付款处理中');
+    expect(requestProjectStatusFor(request, [payoutFor('已付款'), payoutFor('付款失败')])).toBe('部分失败');
+    expect(requestProjectStatusFor(request, [payoutFor('付款失败'), payoutFor('付款失败')])).toBe('全部失败');
     expect(requestProjectStatusFor(request, [payoutFor('已付款')])).toBe('已付款');
   });
 
@@ -1049,6 +1052,19 @@ describe('payment request module status presentation', () => {
 
   it('keeps the partial payment failure status available to My Projects filters', () => {
     expect(myProjectStatusFor({ lifecycle: 'RETURNED', status: '部分打款失败' })).toBe('部分打款失败');
+  });
+
+  it('separates payment failure returns from ordinary approval returns', () => {
+    const paymentRequestProjectId = 'request-returned-failure' as PaymentRequestProjectId;
+    const payoutFor = (status: Payout['status']) => ({ paymentRequestProjectId, status });
+
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '待补资料', paymentRequestProjectId }, [
+      payoutFor('付款失败'),
+      payoutFor('已付款'),
+    ])).toBe('部分失败');
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '部分打款失败' })).toBe('部分失败');
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '全部失败' })).toBe('全部失败');
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '待补资料' })).toBe('已退回');
   });
 });
 

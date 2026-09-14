@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AppShell } from '../components/AppShell';
 import type { SystemUser } from '../data';
+import { applyPaymentBatchPrototypeScenario } from '../paymentBatchPrototypeScenario';
+import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import {
   NotificationsPage,
   REQUEST_PROJECT_STATUS_OPTIONS,
@@ -36,6 +38,13 @@ const notifications: SystemNotificationItem[] = [{
   target: { kind: 'invoice-review', invoiceId: 'INV-TEST' },
 }];
 
+const prototypeScenario = applyPaymentBatchPrototypeScenario({
+  payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+  requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+  generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+  paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+});
+
 describe('request approval reminder surfaces', () => {
   it('renders a dismissible reminder above the request list', () => {
     const html = renderToStaticMarkup(
@@ -69,10 +78,40 @@ describe('request approval reminder surfaces', () => {
       '财务审批中',
       '正在付款',
       '付款处理中',
+      '部分失败',
+      '全部失败',
       '已付款',
     ]);
     expect(html).toContain('全部状态');
     expect(html).not.toContain('完成审批');
+  });
+
+  it('shows current partial and total failures through the combined dashboard filter', () => {
+    const html = renderToStaticMarkup(
+      <RequestsPage
+        notify={vi.fn()}
+        currentUser={financeUser}
+        requests={prototypeScenario.requests}
+        payouts={prototypeScenario.payouts}
+        paymentLists={prototypeScenario.paymentLists}
+        creators={[]}
+        generatedInvoices={INITIAL_COMPLETE_REQUEST_RESOURCES.invoices}
+        approvalReminder={{ count: 0, requestIds: [], stageSummary: '' }}
+        showApprovalReminder={false}
+        onDismissApprovalReminder={vi.fn()}
+        onExportPaymentList={vi.fn()}
+        onApprovalAction={vi.fn()}
+        onOpenFinanceReview={vi.fn()}
+        initialStatusFilter="failed"
+        focusedRequestId={null}
+        onFocusCleared={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('付款失败');
+    expect(html).toContain('显示 1 / 16 个项目');
+    expect(html).toContain('REQ-202607-000015');
+    expect(html).toContain('部分失败');
   });
 
   it('adds the current approval reminder to the in-app inbox', () => {

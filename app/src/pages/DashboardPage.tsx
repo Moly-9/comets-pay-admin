@@ -1,10 +1,12 @@
 import {
   ArrowUpRight,
   CircleDollarSign,
+  CircleX,
   ClipboardCheck,
   Clock3,
   FileSignature,
   FolderKanban,
+  LoaderCircle,
   ReceiptText,
   UsersRound,
   type LucideIcon,
@@ -12,7 +14,7 @@ import {
 import { useMemo } from 'react';
 import { PageHeading } from '../components/Common';
 import { getContractManagementBucket, type ContractRecord } from '../contracts';
-import { MY_PROJECT_APPROVAL_STATUSES, myProjectStatusFor } from '../paymentRequestProjects';
+import { requestProjectStatusFor } from '../paymentRequestProjects';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type {
   CreatorProfile,
@@ -23,7 +25,7 @@ import type {
   RequestProjectStatusFilter,
 } from '../types';
 
-type DashboardStageTone = 'peach' | 'amber' | 'lilac' | 'blue' | 'mint';
+type DashboardStageTone = 'peach' | 'amber' | 'lilac' | 'blue' | 'mint' | 'rose';
 
 type DashboardStage = {
   id: string;
@@ -36,6 +38,35 @@ type DashboardRequestMetric = DashboardStage & {
   meta: string;
   icon: LucideIcon;
   statusFilter: RequestProjectStatusFilter;
+};
+
+export type DashboardRequestMetrics = {
+  total: number;
+  approving: number;
+  awaitingPayment: number;
+  paid: number;
+  processing: number;
+  failed: number;
+};
+
+export const dashboardRequestMetricsFor = (
+  requests: readonly RequestProjectSummary[],
+  payouts: readonly Pick<Payout, 'paymentRequestProjectId' | 'status'>[],
+): DashboardRequestMetrics => {
+  const statuses = requests.map((request) => requestProjectStatusFor(request, payouts));
+  return {
+    total: requests.length,
+    approving: statuses.filter((status) => (
+      status === 'PM审批中'
+      || status === '媒介负责人审批中'
+      || status === '老板审批中'
+      || status === '财务审批中'
+    )).length,
+    awaitingPayment: statuses.filter((status) => status === '正在付款').length,
+    paid: statuses.filter((status) => status === '已付款').length,
+    processing: statuses.filter((status) => status === '付款处理中').length,
+    failed: statuses.filter((status) => status === '部分失败' || status === '全部失败').length,
+  };
 };
 
 function DashboardRequestCard({
@@ -51,6 +82,7 @@ function DashboardRequestCard({
     <button
       className={`dashboard-request-card dashboard-request-card-${metric.tone}`}
       data-testid={`dashboard-request-card-${metric.id}`}
+      data-status-filter={metric.statusFilter}
       type="button"
       onClick={onOpen}
       aria-label={`查看${metric.label}`}
@@ -154,14 +186,7 @@ export function DashboardPage({
   onNavigate: (page: NavPage, options?: NavOptions) => void;
 }) {
   const metrics = useMemo(() => {
-    const requestStatuses = requests.map(myProjectStatusFor);
-    const approvingRequests = requestStatuses.filter((status) => (
-      MY_PROJECT_APPROVAL_STATUSES.has(status)
-    )).length;
-    const approvedRequests = requestStatuses.filter((status) => (
-      status === '待打款' || status === '已付款'
-    )).length;
-    const paidRequests = requestStatuses.filter((status) => status === '已付款').length;
+    const requestMetrics = dashboardRequestMetricsFor(requests, payouts);
 
     const activeCreatorHandles = new Set(
       payouts
@@ -191,10 +216,7 @@ export function DashboardPage({
 
     return {
       requests: {
-        total: requests.length,
-        approving: approvingRequests,
-        approved: approvedRequests,
-        paid: paidRequests,
+        ...requestMetrics,
       },
       creators: {
         total: creators.length,
@@ -233,22 +255,40 @@ export function DashboardPage({
       statusFilter: 'approving',
     },
     {
-      id: 'approved',
-      label: '完成审批的项目',
-      value: metrics.requests.approved,
-      meta: '已完成审批节点',
+      id: 'awaiting-payment',
+      label: '待打款项目',
+      value: metrics.requests.awaitingPayment,
+      meta: '已完成审批，还未执行打款',
       tone: 'lilac',
       icon: ClipboardCheck,
-      statusFilter: 'approved',
+      statusFilter: 'awaiting-payment',
     },
     {
       id: 'paid',
-      label: '已打款的项目',
+      label: '付款成功项目',
       value: metrics.requests.paid,
-      meta: '款项已完成支付',
+      meta: '全部付款明细已成功',
       tone: 'mint',
       icon: CircleDollarSign,
       statusFilter: 'paid',
+    },
+    {
+      id: 'processing',
+      label: '渠道处理中的项目',
+      value: metrics.requests.processing,
+      meta: '付款已发起，等待渠道结果',
+      tone: 'blue',
+      icon: LoaderCircle,
+      statusFilter: 'processing',
+    },
+    {
+      id: 'failed',
+      label: '付款失败的项目',
+      value: metrics.requests.failed,
+      meta: '包含部分付款失败、全部付款失败',
+      tone: 'rose',
+      icon: CircleX,
+      statusFilter: 'failed',
     },
   ];
 

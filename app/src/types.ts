@@ -35,7 +35,14 @@ export type NavPage =
   | 'system-settings'
   | 'notifications';
 
-export type RequestProjectStatusFilter = 'all' | 'approving' | 'approved' | 'paid';
+export type RequestProjectStatusFilter =
+  | 'all'
+  | 'approving'
+  | 'approved'
+  | 'awaiting-payment'
+  | 'processing'
+  | 'paid'
+  | 'failed';
 
 export type NavOptions = {
   requestStatusFilter?: RequestProjectStatusFilter;

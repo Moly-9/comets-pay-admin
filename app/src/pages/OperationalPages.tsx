@@ -212,7 +212,6 @@ import {
   type WorkflowAuditEvent,
 } from '../businessWorkflow';
 import {
-  MY_PROJECT_APPROVAL_STATUSES,
   myProjectStatusFor,
   requestProjectStatusFor,
 } from '../paymentRequestProjects';
@@ -412,6 +411,8 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '待打款': 'payment',
   '等待付款': 'payment',
   '部分打款失败': 'failure',
+  '部分失败': 'failure',
+  '全部失败': 'failure',
   '已完成': 'complete',
   '已付款': 'complete',
   '已归档': 'complete',
@@ -468,6 +469,8 @@ export const REQUEST_PROJECT_STATUS_OPTIONS = [
   '财务审批中',
   '正在付款',
   '付款处理中',
+  '部分失败',
+  '全部失败',
   '已付款',
 ] as const;
 
@@ -482,7 +485,7 @@ type ProjectFilterSelectOption = {
   description?: string;
   leading?: ReactNode;
   statuses?: string[];
-  tone?: 'all' | 'active' | 'complete';
+  tone?: 'all' | 'active' | 'complete' | 'failure';
 };
 
 const projectStatusSelectionsMatch = (current: string[], candidate: string[]) => (
@@ -545,9 +548,11 @@ export function ProjectInlineFilterPanel({
   const selectedStatusTone = selectedStatusOption?.tone
     ?? (selectedStatus === '已完成' || selectedStatus === '已付款'
       ? 'complete'
-      : selectedStatus === 'all'
-        ? 'all'
-        : 'active');
+      : selectedStatus === '部分失败' || selectedStatus === '全部失败'
+        ? 'failure'
+        : selectedStatus === 'all'
+          ? 'all'
+          : 'active');
 
   return (
     <div className="project-inline-filter-panel" aria-label={listAriaLabel}>
@@ -1325,7 +1330,8 @@ export function RequestsPage({
   const selectedRequest = selectedRequestId ? requests.find((request) => request.id === selectedRequestId) : null;
   const currentScopeName = currentUser.scopeName ?? currentUser.name;
   const relatedRequests = requests.filter((request) => {
-    if (!request.approval || request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED') return false;
+    if (request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED') return false;
+    if (!request.approval && request.lifecycle !== 'APPROVED' && request.lifecycle !== 'COMPLETED') return false;
     if (currentUser.roleKey === 'media') return request.media === currentScopeName;
     if (currentUser.roleKey === 'pm') return request.pm === currentScopeName;
     return true;
@@ -1335,11 +1341,16 @@ export function RequestsPage({
     requestProjectStatusFor(request, payouts),
   ]));
   const requestOverview = relatedRequests.reduce((summary, request) => {
-    const status = myProjectStatusFor(request);
-    if (MY_PROJECT_APPROVAL_STATUSES.has(status)) summary.approvalInProgress += 1;
-    if (status === '待打款') summary.awaitingPayment += 1;
+    const status = requestStatusById.get(request.id);
+    if (
+      status === 'PM审批中'
+      || status === '媒介负责人审批中'
+      || status === '老板审批中'
+      || status === '财务审批中'
+    ) summary.approvalInProgress += 1;
+    if (status === '正在付款') summary.awaitingPayment += 1;
     if (status === '已付款') summary.completed += 1;
-    if (status === '已退回') summary.needsAttention += 1;
+    if (status === '已退回' || status === '部分失败' || status === '全部失败') summary.needsAttention += 1;
     return summary;
   }, {
     approvalInProgress: 0,
@@ -1374,10 +1385,19 @@ export function RequestsPage({
     leading: (
       <span
         className={`project-status-select-dot ${
-          status === '已付款' ? 'project-status-select-dot-complete' : 'project-status-select-dot-active'
+          status === '已付款'
+            ? 'project-status-select-dot-complete'
+            : status === '部分失败' || status === '全部失败'
+              ? 'project-status-select-dot-failure'
+              : 'project-status-select-dot-active'
         }`}
       />
     ),
+    tone: status === '已付款'
+      ? 'complete' as const
+      : status === '部分失败' || status === '全部失败'
+        ? 'failure' as const
+        : 'active' as const,
   }));
   const requestStatusSelectOptions = [
     {
@@ -1386,6 +1406,28 @@ export function RequestsPage({
       description: `共 ${relatedRequests.length} 个项目`,
       leading: <span className="project-status-select-dot project-status-select-dot-all" />,
       tone: 'all' as const,
+    },
+    {
+      value: 'approved',
+      label: '全部付款阶段',
+      description: `${relatedRequests.filter((request) => {
+        const status = requestStatusById.get(request.id);
+        return Boolean(status && requestProjectStatusesForFilter('approved').includes(status));
+      }).length} 个项目`,
+      leading: <span className="project-status-select-dot project-status-select-dot-active" />,
+      statuses: requestProjectStatusesForFilter('approved'),
+      tone: 'active' as const,
+    },
+    {
+      value: 'failed',
+      label: '付款失败',
+      description: `${relatedRequests.filter((request) => {
+        const status = requestStatusById.get(request.id);
+        return Boolean(status && requestProjectStatusesForFilter('failed').includes(status));
+      }).length} 个项目`,
+      leading: <span className="project-status-select-dot project-status-select-dot-failure" />,
+      statuses: requestProjectStatusesForFilter('failed'),
+      tone: 'failure' as const,
     },
     ...requestStatusFilterOptions,
   ];
