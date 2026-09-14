@@ -466,7 +466,7 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
   };
 });
 
-type ContractManagementDemoBucket = 'attention' | 'draft' | 'signature';
+type ContractManagementDemoBucket = 'attention' | 'draft' | 'upload' | 'signature';
 
 type ContractManagementDemoSpec = {
   bucket: ContractManagementDemoBucket;
@@ -516,7 +516,7 @@ const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
     title: '多平台推广合作草稿',
   },
   {
-    bucket: 'signature',
+    bucket: 'upload',
     contractId: 'contract_fixture_management_signature_01' as ContractId,
     contractCode: 'CON-20260909-MGT-S01',
     ioNumber: 'IO-20260909-MGT-S01',
@@ -525,7 +525,7 @@ const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
     title: 'Instagram 图文合作协议',
   },
   {
-    bucket: 'signature',
+    bucket: 'upload',
     contractId: 'contract_fixture_management_signature_02' as ContractId,
     contractCode: 'CON-20260909-MGT-S02',
     ioNumber: 'IO-20260909-MGT-S02',
@@ -533,11 +533,21 @@ const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
     amount: 3300,
     title: 'Reels 内容制作协议',
   },
+  {
+    bucket: 'signature',
+    contractId: 'contract_fixture_management_sent_signature_01' as ContractId,
+    contractCode: 'CON-20260915-MGT-S01',
+    ioNumber: 'IO-20260915-MGT-S01',
+    creatorIndex: 6,
+    amount: 3000,
+    title: 'YouTube 视频合作签署协议',
+  },
 ];
 
 const CONTRACT_MANAGEMENT_DEMO_DATE = '2026-09-09';
 const CONTRACT_MANAGEMENT_DEMO_END_DATE = '2027-12-31';
 const CONTRACT_MANAGEMENT_DEMO_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
+const CONTRACT_MANAGEMENT_DEMO_SIGNATURE_SENT_AT = '2026-09-15T02:30:00.000Z';
 
 const contractManagementGenerationModel = (
   spec: ContractManagementDemoSpec,
@@ -628,6 +638,26 @@ export const CONTRACT_MANAGEMENT_DEMO_CONTRACTS: ContractRecord[] = CONTRACT_MAN
   }
 
   if (spec.bucket === 'signature') {
+    return {
+      ...generated,
+      documentNote: '合同识别信息已确认并发送给达人，当前等待达人完成签署。',
+      signed: false,
+      status: '待签署',
+      updated: CONTRACT_MANAGEMENT_DEMO_SIGNATURE_SENT_AT.slice(0, 10),
+      lifecycle: 'SENT_FOR_SIGNATURE',
+      extractionStage: 'applied',
+      sentForSignatureAt: CONTRACT_MANAGEMENT_DEMO_SIGNATURE_SENT_AT,
+      issues: [{
+        id: 'signature',
+        label: '等待达人签署',
+        description: '合同已发送给 C 端达人，完成签署前不能参与付款流程。',
+        severity: 'blocker',
+        source: '达人签署',
+      }],
+    };
+  }
+
+  if (spec.bucket === 'upload') {
     return {
       ...generated,
       status: '待回传',

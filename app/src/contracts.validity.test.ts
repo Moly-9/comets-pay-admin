@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   INITIAL_CONTRACTS,
+  completeContractSignature,
   contractMatchesValidityFilter,
   getContractManagementBucket,
   getContractValidity,
@@ -118,16 +119,15 @@ describe('contract validity', () => {
     expect(getContractManagementBucket({ ...baseContract, campaignEnd: futureDate, status: '待解析' }, REFERENCE_DATE)).toBe('ready');
   });
 
-  it('moves the generated demo records from pending signature to pending upload', () => {
+  it('provides demo records for each incomplete contract-management stage', () => {
     const bucketCounts = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.reduce<Record<string, number>>((counts, contract) => {
       const bucket = getContractManagementBucket(contract, '2026-09-09');
       counts[bucket] = (counts[bucket] ?? 0) + 1;
       return counts;
     }, {});
 
-    expect(CONTRACT_MANAGEMENT_DEMO_CONTRACTS).toHaveLength(6);
-    expect(bucketCounts).toMatchObject({ attention: 2, draft: 2, upload: 2 });
-    expect(bucketCounts.signature ?? 0).toBe(0);
+    expect(CONTRACT_MANAGEMENT_DEMO_CONTRACTS).toHaveLength(7);
+    expect(bucketCounts).toMatchObject({ attention: 2, draft: 2, upload: 2, signature: 1 });
     expect(bucketCounts.ready ?? 0).toBe(0);
     expect(bucketCounts.expired ?? 0).toBe(0);
 
@@ -152,14 +152,38 @@ describe('contract validity', () => {
       expect(contract.issues.some((issue) => issue.id === 'recognition-review')).toBe(true);
     });
 
-    const signatures = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => (
+    const uploads = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => (
       contract.lifecycle === 'GENERATED_DRAFT'
     ));
-    expect(signatures).toHaveLength(2);
-    signatures.forEach((contract) => {
+    expect(uploads).toHaveLength(2);
+    uploads.forEach((contract) => {
       expect(contract.generationVersion).toBe(1);
       expect(contract.generationSnapshot).toBeTruthy();
       expect(contract.documentUrl).toBeTruthy();
+    });
+
+    const pendingSignatures = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => (
+      contract.lifecycle === 'SENT_FOR_SIGNATURE'
+    ));
+    expect(pendingSignatures).toHaveLength(1);
+    expect(pendingSignatures[0]).toMatchObject({
+      signed: false,
+      extractionStage: 'applied',
+      sentForSignatureAt: '2026-09-15T02:30:00.000Z',
+      generationVersion: 1,
+    });
+    expect(pendingSignatures[0].generationSnapshot).toBeTruthy();
+    expect(pendingSignatures[0].documentUrl).toBeTruthy();
+    expect(pendingSignatures[0].issues).toContainEqual(expect.objectContaining({
+      id: 'signature',
+      severity: 'blocker',
+    }));
+
+    const completed = completeContractSignature(pendingSignatures[0], '2026-09-15T03:00:00.000Z');
+    expect(completed).toMatchObject({
+      lifecycle: 'CONFIRMED',
+      signed: true,
+      signedAt: '2026-09-15T03:00:00.000Z',
     });
   });
 });
