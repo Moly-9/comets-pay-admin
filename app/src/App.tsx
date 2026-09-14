@@ -5047,24 +5047,6 @@ export default function App() {
       ? '该项目已恢复进入新请款的关联项目候选。'
       : '历史请款、合同和 Invoice 关联不受影响。');
   };
-  const updateCooperationProjectStatus = (id: string, projectStatus: 'ACTIVE' | 'ARCHIVED') => {
-    const occurredAt = nowIso();
-    setProjectDirectory((current) => ({
-      ...current,
-      records: current.records.map((record) => record.id === id ? {
-        ...record,
-        projectStatus,
-        localUpdatedAt: occurredAt,
-        ...(record.source === 'FEISHU' ? { statusOverriddenAt: occurredAt } : {}),
-      } : record),
-    }));
-    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? {
-      ...project,
-      status: projectStatus,
-      localUpdatedAt: occurredAt,
-    } : project));
-    notify('项目状态已更新', `已改为${projectStatus === 'ACTIVE' ? '进行中' : '已归档'}。`);
-  };
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
   ));
@@ -5147,7 +5129,6 @@ export default function App() {
           onSync={() => { void synchronizeCooperationProjects(); }}
           onSaveManual={saveManualCooperationProject}
           onAvailabilityChange={updateCooperationProjectAvailability}
-          onProjectStatusChange={updateCooperationProjectStatus}
         />
       );
       break;

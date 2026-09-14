@@ -21,8 +21,6 @@ const formatTime = (value?: string) => value
 const availabilityLabel = {
   ACTIVE: '可用', DISABLED: '已停用',
 } as const;
-const projectStatusLabel = (value: string) => value === 'ACTIVE' ? '进行中' : value === 'ARCHIVED' ? '已归档' : value;
-
 export function FeishuCooperationProjectsPage({
   records,
   metadata,
@@ -35,7 +33,6 @@ export function FeishuCooperationProjectsPage({
   onSync,
   onSaveManual,
   onAvailabilityChange,
-  onProjectStatusChange,
 }: {
   records: CooperationProjectDirectoryRecord[];
   metadata: FeishuProjectMetadata;
@@ -48,11 +45,9 @@ export function FeishuCooperationProjectsPage({
   onSync: () => void;
   onSaveManual: (draft: ManualDraft, editingId?: string) => string | undefined;
   onAvailabilityChange: (id: string, availability: 'ACTIVE' | 'DISABLED') => void;
-  onProjectStatusChange: (id: string, status: 'ACTIVE' | 'ARCHIVED') => void;
 }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<FilterValue>('all');
-  const [statusFilter, setStatusFilter] = useState<FilterValue>('all');
   const [sourceFilter, setSourceFilter] = useState<FilterValue>('all');
   const [availabilityFilter, setAvailabilityFilter] = useState<FilterValue>('all');
   const [configOpen, setConfigOpen] = useState(false);
@@ -62,18 +57,16 @@ export function FeishuCooperationProjectsPage({
   const [formError, setFormError] = useState('');
 
   const allTypes = [...new Set([...metadata.projectTypes, ...records.map((record) => record.projectType)])].filter(Boolean);
-  const allStatuses = [...new Set([...metadata.projectStatuses, ...records.map((record) => record.projectStatus)])].filter(Boolean);
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return records.filter((record) => (
       (!query || `${record.name} ${record.initiatorName} ${record.projectCode}`.toLowerCase().includes(query))
       && (typeFilter === 'all' || record.projectType === typeFilter)
-      && (statusFilter === 'all' || record.projectStatus === statusFilter)
       && (sourceFilter === 'all' || record.source === sourceFilter)
       && (availabilityFilter === 'all' || record.availability === availabilityFilter)
     ));
-  }, [availabilityFilter, records, search, sourceFilter, statusFilter, typeFilter]);
-  const pagination = usePagination(filtered, { resetKey: `${search}\0${typeFilter}\0${statusFilter}\0${sourceFilter}\0${availabilityFilter}` });
+  }, [availabilityFilter, records, search, sourceFilter, typeFilter]);
+  const pagination = usePagination(filtered, { resetKey: `${search}\0${typeFilter}\0${sourceFilter}\0${availabilityFilter}` });
 
   useEffect(() => { pagination.setPage(1); }, [records.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -119,15 +112,14 @@ export function FeishuCooperationProjectsPage({
         <div className="project-inline-filter-panel feishu-project-filters">
           <label className="feishu-project-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索项目名称、发起人或编号" /></label>
           <SelectField ariaLabel="按项目类型筛选" value={typeFilter} options={[{ value: 'all', label: '全部类型' }, ...allTypes.map((value) => ({ value, label: value }))]} onChange={setTypeFilter} />
-          <SelectField ariaLabel="按项目状态筛选" value={statusFilter} options={[{ value: 'all', label: '全部项目状态' }, ...allStatuses.map((value) => ({ value, label: projectStatusLabel(value) }))]} onChange={setStatusFilter} />
           <SelectField ariaLabel="按数据来源筛选" value={sourceFilter} options={[{ value: 'all', label: '全部数据来源' }, { value: 'FEISHU', label: '飞书同步' }, { value: 'MANUAL', label: '手动添加' }]} onChange={setSourceFilter} />
           <SelectField ariaLabel="按可用状态筛选" value={availabilityFilter} options={[{ value: 'all', label: '全部可用状态' }, { value: 'ACTIVE', label: '可用' }, { value: 'DISABLED', label: '已停用' }]} onChange={setAvailabilityFilter} />
         </div>
         <div className="table-scroll feishu-project-table-wrap">
-          <table className="data-table operational-table feishu-project-table"><thead><tr><th>项目名称</th><th>项目类型</th><th>项目状态</th><th>项目发起人</th><th>项目周期</th><th>项目更新时间</th><th>数据来源</th><th>可用状态</th>{canManage ? <th>操作</th> : null}</tr></thead>
+          <table className="data-table operational-table feishu-project-table"><thead><tr><th>项目名称</th><th>项目类型</th><th>项目发起人</th><th>项目周期</th><th>项目更新时间</th><th>数据来源</th><th>可用状态</th>{canManage ? <th>操作</th> : null}</tr></thead>
             <tbody>{pagination.pageItems.map((record) => <tr key={record.id} className={record.availability !== 'ACTIVE' ? 'is-muted' : ''}>
               <td data-label="项目名称"><strong>{record.name}</strong><small>{record.projectCode}</small></td>
-              <td data-label="项目类型">{record.projectType}</td><td data-label="项目状态">{canManage ? <SelectField<'ACTIVE' | 'ARCHIVED'> ariaLabel={`修改 ${record.name} 的项目状态`} variant="compact" menuStrategy="fixed" className={`feishu-project-row-status is-${record.projectStatus.toLowerCase()}`} value={record.projectStatus as 'ACTIVE' | 'ARCHIVED'} options={[{ value: 'ACTIVE', label: '进行中', leading: <i className="feishu-project-status-dot is-active" /> }, { value: 'ARCHIVED', label: '已归档', leading: <i className="feishu-project-status-dot is-archived" /> }]} onChange={(status) => onProjectStatusChange(record.id, status)} /> : <span className={`feishu-project-status is-${record.projectStatus.toLowerCase()}`}><i />{projectStatusLabel(record.projectStatus)}</span>}</td><td data-label="项目发起人">{record.initiatorName}</td>
+              <td data-label="项目类型">{record.projectType}</td><td data-label="项目发起人">{record.initiatorName}</td>
               <td data-label="项目周期">{record.startDate}<small>至 {record.endDate}</small></td><td data-label="项目更新时间">{formatTime(record.sourceUpdatedAt ?? record.localUpdatedAt)}</td>
               <td data-label="数据来源"><span className={`feishu-project-source is-${record.source.toLowerCase()}`}>{record.source === 'FEISHU' ? '飞书同步' : '手动添加'}</span></td>
               <td data-label="可用状态">{canManage ? <SelectField<CooperationProjectAvailability>

@@ -20,7 +20,6 @@ const renderPage = (canManage: boolean) => renderToStaticMarkup(<FeishuCooperati
   onSync={vi.fn()}
   onSaveManual={vi.fn()}
   onAvailabilityChange={vi.fn()}
-  onProjectStatusChange={vi.fn()}
 />);
 
 describe('FeishuCooperationProjectsPage', () => {
@@ -31,13 +30,15 @@ describe('FeishuCooperationProjectsPage', () => {
     expect(html).toContain('海外达人合作');
     expect(html).toContain('请先配置项目类型');
     expect(html).toContain('同步飞书');
-    expect(html).toContain('全部项目状态');
+    expect(html).not.toContain('全部项目状态');
+    expect(html).not.toContain('<th>项目状态</th>');
+    expect(html).not.toContain('data-label="项目状态"');
     expect(html).toContain('全部数据来源');
     expect(html).toContain('全部可用状态');
     expect(html).toContain('修改 海外达人合作 的可用状态');
     expect(html).not.toContain('已移出同步范围');
     expect(html).toContain('已停用');
-    expect(html).toContain('修改 海外达人合作 的项目状态');
+    expect(html).not.toContain('修改 海外达人合作 的项目状态');
   });
 
   it('hides all maintenance controls for a read-only account', () => {
