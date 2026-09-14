@@ -15,8 +15,14 @@ import {
   applyConfirmedRecognitionToContract,
   type ContractGenerationModel,
   type ContractRecord,
+  type ContractSignatureRequest,
   type ContractUploadInput,
 } from './contracts';
+import {
+  createContractSignatureRequest,
+  sendContractSignatureRequest,
+  simulateDocuSignContractSend,
+} from './contractSignature';
 import type { ContractId, CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import type { ContractFieldKey, ContractRecognitionField } from './contractRecognitionTypes';
 
@@ -461,5 +467,75 @@ describe('generated contract upload workflow', () => {
     });
     expect(completed?.issues.some((issue) => issue.id === 'signature')).toBe(false);
     expect(isPaymentContract(completed!)).toBe(true);
+  });
+
+  it('freezes the confirmed fields and document reference after a simulated DocuSign send', async () => {
+    const recognized = {
+      ...createGeneratedContractDraft(generationModel, 1, 'blob:generated-contract'),
+      lifecycle: 'RECOGNITION_CONFIRMED' as const,
+      extractionStage: 'applied' as const,
+      signed: false,
+      issues: [{
+        id: 'signature',
+        label: '合同待发送达人签署',
+        description: '待发送',
+        severity: 'blocker' as const,
+        source: '达人签署',
+      }],
+    };
+    const request: ContractSignatureRequest = createContractSignatureRequest(recognized, {
+      creatorDisplayName: generationModel.creatorName,
+      amount: 'USD 3,000',
+      signerName: generationModel.publisher,
+      requestedAt: '2026-09-09T10:00:00.000Z',
+      paymentInformation: {
+        source: 'frozen-payout-account',
+        channel: 'Airwallex',
+        fields: [{ label: 'Account Name', value: 'Sample Creator Limited' }],
+      },
+    });
+    const result = await sendContractSignatureRequest(request, simulateDocuSignContractSend);
+
+    expect(result).toMatchObject({ ok: true, sentAt: request.requestedAt });
+    if (!result.ok) throw new Error(result.error);
+    const sent = sendContractForSignature(recognized, request, result);
+    expect(sent).toMatchObject({
+      lifecycle: 'SENT_FOR_SIGNATURE',
+      signatureEnvelopeId: result.envelopeId,
+      signatureRequestSnapshot: {
+        contractId: recognized.contractId,
+        creatorId: generationModel.creatorId,
+        signerName: generationModel.publisher,
+        documentReference: {
+          fileName: recognized.sourceName,
+          documentUrl: 'blob:generated-contract',
+        },
+      },
+    });
+    const completed = completeContractSignature(sent!, '2026-09-10T11:00:00.000Z');
+    expect(completed?.signedBy).toBe(generationModel.publisher);
+  });
+
+  it('keeps the contract unchanged when the signature adapter rejects the request', async () => {
+    const request = createContractSignatureRequest(
+      createGeneratedContractDraft(generationModel, 1, 'blob:generated-contract'),
+      {
+        creatorDisplayName: generationModel.creatorName,
+        amount: 'USD 3,000',
+        signerName: generationModel.publisher,
+        requestedAt: '2026-09-09T10:00:00.000Z',
+        paymentInformation: {
+          source: 'frozen-payout-account',
+          channel: 'Airwallex',
+          fields: [],
+        },
+      },
+    );
+    const result = await sendContractSignatureRequest(request, async () => ({
+      ok: false,
+      error: '模拟发送失败',
+    }));
+
+    expect(result).toEqual({ ok: false, error: '模拟发送失败' });
   });
 });

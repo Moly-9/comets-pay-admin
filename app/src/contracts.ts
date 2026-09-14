@@ -1,4 +1,9 @@
-import { allRecognitionFieldsConfirmed, normalizeDays, normalizeMoney } from './contractRecognition';
+import {
+  allRecognitionFieldsConfirmed,
+  normalizeContractRecognitionFields,
+  normalizeDays,
+  normalizeMoney,
+} from './contractRecognition';
 import type { ContractRecognitionField, ContractSourceDocument } from './contractRecognitionTypes';
 import {
   createPrototypeId,
@@ -43,6 +48,45 @@ export type ContractRecognizedAccountSnapshot = {
   paypalEmail?: string;
   transferNote?: string;
 };
+
+export type ContractSignaturePaymentInformation = {
+  source: 'recognized-contract' | 'frozen-payout-account';
+  channel: string;
+  fields: Array<{
+    label: string;
+    value: string;
+  }>;
+};
+
+export type ContractSignatureRequest = {
+  contractId: string;
+  contractCode: string;
+  creatorId: string;
+  creatorDisplayName: string;
+  advertiser: string;
+  publisher: string;
+  amount: string;
+  feeBearer: ContractFeeBearer;
+  paymentInformation: ContractSignaturePaymentInformation;
+  signerName: string;
+  documentReference: {
+    documentId?: string;
+    fileName: string;
+    documentUrl: string;
+  };
+  requestedAt: string;
+};
+
+export type ContractSignatureSendResult =
+  | {
+      ok: true;
+      envelopeId: string;
+      sentAt: string;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
 
 export type ContractTemplateFieldKey =
   | 'publisher'
@@ -333,6 +377,9 @@ export type ContractRecord = {
   payoutAccountFingerprint?: string;
   paymentSnapshot?: DocumentPayoutSnapshot;
   recognizedPaymentDetails?: ContractRecognizedAccountSnapshot;
+  signatureRequestSnapshot?: ContractSignatureRequest;
+  signatureEnvelopeId?: string;
+  signedBy?: string;
   signed: boolean;
   /** @deprecated Historical snapshot only. New workflow uses lifecycle, readiness and validity. */
   status?: ContractStatus;
@@ -1175,33 +1222,39 @@ export const applyConfirmedRecognitionToContract = (
   contract: ContractRecord,
   requiredFieldKeys?: readonly ContractRecognitionField['fieldKey'][],
 ): ContractRecord | null => {
-  const fields = contract.recognitionResults ?? [];
-  const fieldsToConfirm = requiredFieldKeys
-    ? fields.filter((field) => requiredFieldKeys.includes(field.fieldKey))
+  const fields = normalizeContractRecognitionFields(contract.recognitionResults ?? []);
+  const recognitionContract = { ...contract, recognitionResults: fields };
+  const normalizedRequiredFieldKeys: ContractRecognitionField['fieldKey'][] | undefined = requiredFieldKeys
+    ? Array.from(new Set(requiredFieldKeys.map((fieldKey) => (
+        fieldKey === 'campaignPeriod' ? 'contractExpiry' as const : fieldKey
+      ))))
+    : undefined;
+  const fieldsToConfirm = normalizedRequiredFieldKeys
+    ? fields.filter((field) => normalizedRequiredFieldKeys.includes(field.fieldKey))
     : fields;
   if (!allRecognitionFieldsConfirmed(fieldsToConfirm)) return null;
   const appliesField = (fieldKey: ContractRecognitionField['fieldKey']) => (
-    !requiredFieldKeys || requiredFieldKeys.includes(fieldKey)
+    !normalizedRequiredFieldKeys || normalizedRequiredFieldKeys.includes(fieldKey)
   );
 
-  const projectBrand = confirmedField(contract, 'projectBrand');
-  const platformChannel = confirmedField(contract, 'platformChannel');
-  const effectiveDate = confirmedField(contract, 'effectiveDate');
-  const campaignPeriod = confirmedField(contract, 'campaignPeriod');
-  const contractExpiry = confirmedField(contract, 'contractExpiry');
-  const signatureStatus = confirmedField(contract, 'signatureStatus');
-  const totalFees = confirmedField(contract, 'projectTotalFees');
-  const invoicePeriod = confirmedField(contract, 'invoiceIssuePeriod');
-  const paymentTerm = confirmedField(contract, 'paymentTerm');
-  const paymentMethodField = confirmedField(contract, 'paymentMethod');
-  const transferFeeField = confirmedField(contract, 'transferFee');
+  const projectBrand = confirmedField(recognitionContract, 'projectBrand');
+  const platformChannel = confirmedField(recognitionContract, 'platformChannel');
+  const effectiveDate = confirmedField(recognitionContract, 'effectiveDate');
+  const campaignPeriod = confirmedField(recognitionContract, 'campaignPeriod');
+  const contractExpiry = confirmedField(recognitionContract, 'contractExpiry');
+  const signatureStatus = confirmedField(recognitionContract, 'signatureStatus');
+  const totalFees = confirmedField(recognitionContract, 'projectTotalFees');
+  const invoicePeriod = confirmedField(recognitionContract, 'invoiceIssuePeriod');
+  const paymentTerm = confirmedField(recognitionContract, 'paymentTerm');
+  const paymentMethodField = confirmedField(recognitionContract, 'paymentMethod');
+  const transferFeeField = confirmedField(recognitionContract, 'transferFee');
   const paymentMethod = typeof paymentMethodField?.normalizedValue === 'string'
     ? paymentMethodField.normalizedValue
     : fieldText(paymentMethodField);
   const transferFee = typeof transferFeeField?.normalizedValue === 'string'
     ? transferFeeField.normalizedValue
     : fieldText(transferFeeField);
-  const beneficiary = fieldText(confirmedField(contract, 'beneficiaryAccount'));
+  const beneficiary = fieldText(confirmedField(recognitionContract, 'beneficiaryAccount'));
   const objectValue = <T,>(field: ContractRecognitionField | undefined) => (
     typeof field?.normalizedValue === 'object' && field.normalizedValue
       ? field.normalizedValue as T
@@ -1235,18 +1288,18 @@ export const applyConfirmedRecognitionToContract = (
     || generatedPayment?.paymentSnapshot.accountName
     || '';
   const recognizedBankDetails = {
-    accountName: fieldText(confirmedField(contract, 'accountName')),
-    accountNumber: fieldText(confirmedField(contract, 'accountNumber')),
-    beneficiaryBankName: fieldText(confirmedField(contract, 'beneficiaryBankName')),
-    beneficiaryBankAddress: fieldText(confirmedField(contract, 'beneficiaryBankAddress')),
-    swiftCode: fieldText(confirmedField(contract, 'swiftCode')),
-    iban: fieldText(confirmedField(contract, 'iban')),
-    remittanceInformation: fieldText(confirmedField(contract, 'remittanceInformation')),
+    accountName: fieldText(confirmedField(recognitionContract, 'accountName')),
+    accountNumber: fieldText(confirmedField(recognitionContract, 'accountNumber')),
+    beneficiaryBankName: fieldText(confirmedField(recognitionContract, 'beneficiaryBankName')),
+    beneficiaryBankAddress: fieldText(confirmedField(recognitionContract, 'beneficiaryBankAddress')),
+    swiftCode: fieldText(confirmedField(recognitionContract, 'swiftCode')),
+    iban: fieldText(confirmedField(recognitionContract, 'iban')),
+    remittanceInformation: fieldText(confirmedField(recognitionContract, 'remittanceInformation')),
   };
   const recognizedPaypalDetails = {
-    paypalUsername: fieldText(confirmedField(contract, 'paypalUsername')),
-    paypalEmail: fieldText(confirmedField(contract, 'paypalEmail')),
-    transferNote: fieldText(confirmedField(contract, 'transferNote')),
+    paypalUsername: fieldText(confirmedField(recognitionContract, 'paypalUsername')),
+    paypalEmail: fieldText(confirmedField(recognitionContract, 'paypalEmail')),
+    transferNote: fieldText(confirmedField(recognitionContract, 'transferNote')),
   };
   const hasRecognizedBankDetails = Object.values(recognizedBankDetails).some(Boolean);
   const hasRecognizedPaypalDetails = Object.values(recognizedPaypalDetails).some(Boolean);
@@ -1302,6 +1355,7 @@ export const applyConfirmedRecognitionToContract = (
     accountName: appliesField('beneficiaryAccount') ? beneficiary || fallbackAccountName : contract.accountName,
     accountFingerprint: appliesField('beneficiaryAccount') && beneficiary ? '合同识别快照' : contract.accountFingerprint,
     recognizedPaymentDetails,
+    recognitionResults: fields,
     extractionStage: 'applied',
     recognitionAppliedAt,
     lifecycle: recognizedSigned ? 'CONFIRMED' : 'RECOGNITION_CONFIRMED',
@@ -1322,19 +1376,35 @@ export const applyConfirmedRecognitionToContract = (
   };
 };
 
-export const sendContractForSignature = (
+export function sendContractForSignature(
   contract: ContractRecord,
-  occurredAt = new Date().toISOString(),
-): ContractRecord | null => {
+  occurredAt?: string,
+): ContractRecord | null;
+export function sendContractForSignature(
+  contract: ContractRecord,
+  request: ContractSignatureRequest,
+  result: Extract<ContractSignatureSendResult, { ok: true }>,
+): ContractRecord | null;
+export function sendContractForSignature(
+  contract: ContractRecord,
+  requestOrOccurredAt: ContractSignatureRequest | string = new Date().toISOString(),
+  result?: Extract<ContractSignatureSendResult, { ok: true }>,
+): ContractRecord | null {
   if (
     contract.lifecycle !== 'RECOGNITION_CONFIRMED'
     || contract.extractionStage !== 'applied'
     || contract.signed
   ) return null;
+  const request = typeof requestOrOccurredAt === 'string' ? undefined : requestOrOccurredAt;
+  const occurredAt = typeof requestOrOccurredAt === 'string'
+    ? requestOrOccurredAt
+    : result?.sentAt ?? requestOrOccurredAt.requestedAt;
   return {
     ...contract,
     lifecycle: 'SENT_FOR_SIGNATURE',
     sentForSignatureAt: occurredAt,
+    signatureRequestSnapshot: request,
+    signatureEnvelopeId: result?.envelopeId,
     signed: false,
     updated: occurredAt.slice(0, 10),
     issues: contract.issues.map((issue) => issue.id === 'signature'
@@ -1346,7 +1416,7 @@ export const sendContractForSignature = (
         }
       : issue),
   };
-};
+}
 
 export const completeContractSignature = (
   contract: ContractRecord,
@@ -1358,6 +1428,7 @@ export const completeContractSignature = (
     lifecycle: 'CONFIRMED',
     signed: true,
     signedAt: occurredAt,
+    signedBy: contract.signatureRequestSnapshot?.signerName || contract.publisher || undefined,
     confirmedAt: occurredAt,
     updated: occurredAt.slice(0, 10),
     issues: contract.issues.filter((issue) => issue.id !== 'signature'),

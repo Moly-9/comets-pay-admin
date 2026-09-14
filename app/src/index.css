@@ -23364,6 +23364,10 @@ button:disabled {
   gap: 14px;
 }
 
+.contract-template-metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .contract-metric-grid article {
   display: grid;
   min-height: 98px;
@@ -24608,7 +24612,8 @@ button:disabled {
 
 .contract-signature-check {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
   gap: 9px;
   margin-bottom: 9px;
   border: 1px solid #d7eee5;
@@ -24625,6 +24630,11 @@ button:disabled {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.contract-signature-send-action {
+  align-self: center;
+  justify-self: end;
 }
 
 .contract-signature-check strong {
@@ -24667,6 +24677,282 @@ button:disabled {
 .contract-signature-check.is-not-applicable > span,
 .contract-signature-check.is-not-applicable strong {
   color: #69707d;
+}
+
+.contract-signature-send-modal {
+  max-height: min(780px, calc(100vh - 56px));
+}
+
+.contract-signature-send-modal .modal-content {
+  background: #fbfbfc;
+}
+
+.contract-signature-send-content {
+  display: grid;
+  gap: 14px;
+}
+
+.contract-signature-send-intro {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ddd5e8;
+  border-radius: 11px;
+  background: #faf7fd;
+  padding: 12px 14px;
+}
+
+.contract-signature-send-intro > span {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #ede6f5;
+  color: #70548e;
+}
+
+.contract-signature-send-intro > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.contract-signature-send-intro strong {
+  color: #3f3748;
+  font-size: 12px;
+}
+
+.contract-signature-send-intro p {
+  margin: 0;
+  color: #776c81;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.contract-signature-send-intro em {
+  border: 1px solid #ddd1e9;
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px 8px;
+  color: #73588e;
+  font-size: 9.5px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.contract-signature-send-section {
+  overflow: hidden;
+  border: 1px solid #e1e3e8;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.contract-signature-send-section > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #eceef2;
+  padding: 11px 14px;
+}
+
+.contract-signature-send-section > header strong {
+  color: #373b45;
+  font-size: 11.5px;
+}
+
+.contract-signature-send-section > header small {
+  color: #888e9a;
+  font-size: 9.5px;
+  text-align: right;
+}
+
+.contract-signature-send-grid,
+.contract-signature-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 4px 14px;
+}
+
+.contract-signature-send-grid > div,
+.contract-signature-payment-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border-bottom: 1px solid #f0f1f4;
+  padding: 10px 12px 10px 0;
+}
+
+.contract-signature-send-grid > div:nth-last-child(-n + 2),
+.contract-signature-payment-grid > div:nth-last-child(-n + 2) {
+  border-bottom-color: transparent;
+}
+
+.contract-signature-send-grid dt,
+.contract-signature-payment-grid dt {
+  color: #858b97;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.contract-signature-send-grid dd,
+.contract-signature-payment-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #343842;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.contract-signature-signer-field {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e1e3e8;
+  border-radius: 11px;
+  background: #fff;
+  padding: 13px 14px;
+}
+
+.contract-signature-signer-field > span {
+  color: #444954;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.contract-signature-signer-field input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #d7dae2;
+  border-radius: 8px;
+  outline: 0;
+  background: #fff;
+  padding: 0 11px;
+  color: #30343d;
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.contract-signature-signer-field input:focus {
+  border-color: #8d76aa;
+  box-shadow: 0 0 0 3px rgba(126, 94, 154, 0.12);
+}
+
+.contract-signature-signer-field small {
+  color: #898f9b;
+  font-size: 9.5px;
+}
+
+.contract-signature-signer-field.is-error {
+  border-color: #ecc7c3;
+  background: #fffafa;
+}
+
+.contract-signature-signer-field.is-error input {
+  border-color: #d98f87;
+}
+
+.contract-signature-send-error,
+.contract-signature-send-note {
+  margin: 0;
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.contract-signature-send-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff0ee;
+  color: #a4493e;
+}
+
+.contract-signature-send-note {
+  background: #f1f3f6;
+  color: #747a86;
+}
+
+@media (max-width: 640px) {
+  .contract-signature-check {
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .contract-signature-send-action {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .modal-backdrop:has(.contract-signature-send-modal) {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .contract-signature-send-modal {
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .contract-signature-send-modal .modal-header,
+  .contract-signature-send-modal .modal-footer {
+    min-height: 62px;
+    padding-inline: 16px;
+  }
+
+  .contract-signature-send-modal .modal-content {
+    padding: 16px;
+  }
+
+  .contract-signature-send-modal .modal-footer > .button {
+    flex: 1 1 0;
+  }
+
+  .contract-signature-send-intro {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .contract-signature-send-intro em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .contract-signature-send-section > header {
+    display: grid;
+  }
+
+  .contract-signature-send-section > header small {
+    text-align: left;
+  }
+
+  .contract-signature-send-grid,
+  .contract-signature-payment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-signature-send-grid > div,
+  .contract-signature-payment-grid > div,
+  .contract-signature-send-grid > div:nth-last-child(-n + 2),
+  .contract-signature-payment-grid > div:nth-last-child(-n + 2) {
+    border-bottom: 1px solid #f0f1f4;
+  }
+
+  .contract-signature-send-grid > div:last-child,
+  .contract-signature-payment-grid > div:last-child {
+    border-bottom-color: transparent;
+  }
+
+  .contract-expiry-editor {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
 }
 
 .contract-check-success {
@@ -27488,6 +27774,39 @@ button:disabled {
   border-bottom: 2px solid #6b79a5;
   outline: 0;
   background: #fff;
+}
+
+.contract-expiry-editor {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.contract-expiry-editor > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #646b78;
+  font-size: 10px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.contract-expiry-editor > label > input[type="checkbox"] {
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #c8cdd7;
+  border-radius: 4px;
+  accent-color: #796092;
+}
+
+.contract-expiry-editor > input[type="date"]:disabled {
+  color: #979ca7;
+  cursor: not-allowed;
 }
 
 .contract-recognition-detail-readonly .contract-recognition-value input,

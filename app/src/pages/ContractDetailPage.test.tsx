@@ -19,8 +19,9 @@ import {
   contractPaymentFieldsFor,
   contractRecognitionKeysToConfirm,
   contractExpiryDisplayValue,
+  contractSignaturePaymentInformationFor,
+  contractSignatureStatusLabel,
   contractSummaryFieldsFor,
-  recognitionCampaignEndValue,
 } from './ContractDetailPage';
 
 const source: ContractSourceLocation = {
@@ -80,29 +81,13 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(detailSource).toContain('recognitionLocked={recognitionApplied || !canEditCurrentContract}');
   });
 
-  it.each(['INDEPENDENT', 'FRAMEWORK', 'IO'] as ContractType[])('replaces effective date with expiry while retaining Campaign Period for %s', (contractType) => {
+  it.each(['INDEPENDENT', 'FRAMEWORK', 'IO'] as ContractType[])('shows expiry and derived signature status for %s', (contractType) => {
     const fields = contractSummaryFieldsFor(contractType);
 
-    expect(fields).toContainEqual({ key: 'campaignEnd', label: '到期时间' });
-    expect(fields).toContainEqual({ key: 'campaignPeriod', label: 'Campaign Period' });
+    expect(fields).toContainEqual({ key: 'campaignEnd', label: '合同有效期' });
+    expect(fields).toContainEqual({ key: 'signatureStatus', label: '签署状态' });
+    expect(fields.some((field) => field.key === 'campaignPeriod')).toBe(false);
     expect(fields.some((field) => field.key === 'effectiveDate')).toBe(false);
-  });
-
-  it('derives the pending expiry preview from the Campaign Period end date', () => {
-    const campaignPeriod = recognitionField(
-      'campaignPeriod',
-      'August 10, 2026 to September 17, 2026',
-      { startDate: '2026-08-10', endDate: '2026-09-17' },
-    );
-
-    expect(recognitionCampaignEndValue(campaignPeriod)).toBe('2026-09-17');
-    expect(recognitionCampaignEndValue({
-      ...campaignPeriod,
-      editedValue: 'August 12, 2026 to September 30, 2026',
-      normalizedValue: '',
-    })).toBe('2026-09-30');
-    expect(recognitionCampaignEndValue(campaignPeriod, true)).toBe('长期有效');
-    expect(recognitionCampaignEndValue(undefined)).toBe('待补充');
   });
 
   it('uses the same formal campaignEnd and long-term rules as contract-list validity', () => {
@@ -111,7 +96,7 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(contractExpiryDisplayValue({ campaignEnd: '2025-01-01', isLongTerm: true })).toBe('长期有效');
   });
 
-  it('renders expiry as a read-only Campaign Period derivative without counting legacy effectiveDate', () => {
+  it('converts a historical Campaign Period to one expiry date picker without counting effectiveDate', () => {
     const campaignPeriod = recognitionField(
       'campaignPeriod',
       'August 10, 2026 to September 17, 2026',
@@ -134,10 +119,11 @@ describe('ContractDetailPage expiry presentation', () => {
       />,
     );
 
-    expect(html).toContain('data-derived-from="campaignPeriod"');
-    expect(html).toMatch(/aria-label="到期时间"[^>]*value="2026-09-17"/);
-    expect(html).toContain('自动同步');
-    expect(html).toContain('本页已确认 1/1 项');
+    expect(html).toMatch(/aria-label="合同有效期"[^>]*type="date"[^>]*value="2026-09-17"/);
+    expect(html).toContain('aria-label="长期有效"');
+    expect(html).not.toContain('data-derived-from="campaignPeriod"');
+    expect(html).toContain('本页已确认 1/2 项');
+    expect(html).toContain('aria-label="签署状态"');
     expect(html).not.toContain('aria-label="生效日期"');
   });
 
@@ -163,6 +149,25 @@ describe('ContractDetailPage expiry presentation', () => {
       endDate: '2026-09-17',
       expired: true,
     });
+  });
+
+  it('derives one signature summary value across formal lifecycle states', () => {
+    const base = INITIAL_CONTRACTS[0];
+
+    expect(contractSignatureStatusLabel({ ...base, isTemplate: true })).toBe('不适用');
+    expect(contractSignatureStatusLabel({ ...base, isTemplate: false, signed: true })).toBe('已签署');
+    expect(contractSignatureStatusLabel({
+      ...base,
+      isTemplate: false,
+      signed: false,
+      lifecycle: 'SENT_FOR_SIGNATURE',
+    })).toBe('待达人签署');
+    expect(contractSignatureStatusLabel({
+      ...base,
+      isTemplate: false,
+      signed: false,
+      lifecycle: 'RECOGNITION_CONFIRMED',
+    })).toBe('未签署');
   });
 
   it('excludes a missing optional Channel from confirmation but includes it when populated', () => {
@@ -341,6 +346,23 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(rows.filter((row) => row.label === 'Remittance Information (optional)')).toHaveLength(1);
   });
 
+  it('prefers recognized payment details and fills missing values from the frozen payout snapshot', () => {
+    const snapshot = paymentSnapshot('Airwallex');
+    const information = contractSignaturePaymentInformationFor({
+      ...INITIAL_CONTRACTS[0],
+      recognizedPaymentDetails: {
+        detectedChannel: 'BANK',
+        accountName: 'Recognized Creator Studio',
+        accountNumber: '',
+      },
+    }, snapshot);
+
+    expect(information.source).toBe('recognized-contract');
+    expect(information.channel).toBe('银行转账');
+    expect(information.fields.find((field) => field.label === 'Account Name')?.value).toBe('Recognized Creator Studio');
+    expect(information.fields.find((field) => field.label === 'Account Number')?.value).toBe('50002401');
+  });
+
   it('renders template-only cards and the paged field editor without ordinary contract controls', () => {
     const template = { ...INITIAL_CONTRACTS[1], uploadedByAccount: undefined } satisfies ContractRecord;
     const html = renderToStaticMarkup(
@@ -375,6 +397,8 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(html).not.toContain('7/7');
     expect(html).not.toContain('3/3');
     expect(html).toContain('系统内置');
+    expect(html).toContain('签署状态');
+    expect(html).toContain('不适用');
     expect(html.indexOf('合同类型')).toBeLessThan(html.indexOf('使用就绪度'));
     expect(html.indexOf('使用就绪度')).toBeLessThan(html.indexOf('上传者'));
   });
@@ -435,6 +459,8 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(html).toContain('关联请款项目');
     expect(html).toContain('合同关系');
     expect(html).toContain('合同摘要');
+    expect(html).toContain('签署状态');
+    expect(html).toContain('已签署');
     expect(html).toContain('付款与Invoice');
     expect(html).toContain('校验记录');
     expect(html).not.toContain('合同编辑器');

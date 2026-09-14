@@ -5,6 +5,7 @@ import {
   confirmRecognitionFields,
   editRecognitionField,
   normalizeCampaignPeriod,
+  normalizeContractRecognitionFields,
   normalizeMoney,
   recognitionFieldDisplayValue,
   recognizeContractFields,
@@ -354,6 +355,43 @@ describe('contract field recognition', () => {
 
     expect(expiry).toMatchObject({ rawValue: 'not a date', status: 'missing' });
     expect(canConfirmRecognitionFields([expiry], ['contractExpiry'])).toBe(false);
+  });
+
+  it('adapts a legacy Campaign Period snapshot to one expiry field and keeps its source', () => {
+    const legacy = {
+      ...field([
+        documentFixture('legacy-period', 'IO', [
+          'Campaign Period: August 10, 2026 to September 17, 2026',
+        ]),
+      ], 'campaignPeriod'),
+      status: 'confirmed' as const,
+    };
+    const normalized = normalizeContractRecognitionFields([legacy]);
+
+    expect(normalized).toHaveLength(2);
+    expect(normalized.find((item) => item.fieldKey === 'contractExpiry')).toMatchObject({
+      fieldKey: 'contractExpiry',
+      label: '合同有效期',
+      rawValue: '2026-09-17',
+      normalizedValue: { endDate: '2026-09-17', isLongTerm: false },
+      status: 'confirmed',
+      source: legacy.source,
+    });
+    expect(normalized.find((item) => item.fieldKey === 'signatureStatus')).toMatchObject({
+      status: 'missing',
+      requiredForConfirmation: true,
+    });
+    expect(normalized.some((item) => item.fieldKey === 'campaignPeriod')).toBe(false);
+  });
+
+  it('clears the expiry date when long-term validity is selected', () => {
+    const expiry = editRecognitionField(field([], 'contractExpiry'), '长期有效');
+
+    expect(expiry).toMatchObject({
+      rawValue: '长期有效',
+      normalizedValue: { endDate: '', isLongTerm: true },
+      status: 'detected',
+    });
   });
 
   it('keeps the IO number immediately before the system contract number for IO uploads', () => {

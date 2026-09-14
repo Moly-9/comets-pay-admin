@@ -215,6 +215,100 @@ export const normalizeCampaignPeriod = (raw: string) => {
   };
 };
 
+type ContractExpiryValue = {
+  endDate: string;
+  isLongTerm: boolean;
+};
+
+const isLongTermContractText = (value: string) => (
+  /\b(?:perpetual|indefinite|no\s+fixed\s+(?:end|term)|long[-\s]?term)\b|长期有效|永久有效|无固定期限/i.test(value)
+);
+
+const legacyCampaignPeriodExpiry = (
+  normalizedValue: unknown,
+  rawValue: string,
+): ContractExpiryValue => {
+  if (isLongTermContractText(rawValue)) return { endDate: '', isLongTerm: true };
+  const normalizedEnd = normalizedValue && typeof normalizedValue === 'object'
+    && 'endDate' in normalizedValue
+    ? String((normalizedValue as { endDate?: unknown }).endDate ?? '').trim()
+    : '';
+  return {
+    endDate: normalizeContractDate(normalizedEnd) || normalizeCampaignPeriod(rawValue).endDate,
+    isLongTerm: false,
+  };
+};
+
+const legacyCampaignCandidateAsExpiry = (
+  candidate: ContractFieldCandidate,
+): ContractFieldCandidate => {
+  const expiry = legacyCampaignPeriodExpiry(candidate.normalizedValue, candidate.rawValue);
+  return {
+    ...candidate,
+    rawValue: expiry.isLongTerm ? '长期有效' : expiry.endDate,
+    normalizedValue: expiry,
+  };
+};
+
+/**
+ * Adapts historical Campaign Period recognition snapshots to the current expiry-only field.
+ * The original source text and location remain attached to the converted field and candidates.
+ */
+export const normalizeContractRecognitionFields = (
+  fields: ContractRecognitionField[],
+): ContractRecognitionField[] => {
+  const currentExpiry = fields.find((field) => field.fieldKey === 'contractExpiry');
+  const legacyPeriod = fields.find((field) => field.fieldKey === 'campaignPeriod');
+  const expiry = legacyPeriod
+    ? legacyCampaignPeriodExpiry(
+        legacyPeriod.normalizedValue,
+        legacyPeriod.editedValue?.trim() || legacyPeriod.rawValue,
+      )
+    : null;
+  const rawValue = expiry?.isLongTerm ? '长期有效' : expiry?.endDate ?? '';
+  const converted: ContractRecognitionField | null = legacyPeriod && !currentExpiry
+    ? {
+        ...legacyPeriod,
+        fieldKey: 'contractExpiry',
+        label: CONTRACT_FIELD_LABELS.contractExpiry,
+        rawValue,
+        editedValue: legacyPeriod.editedValue === undefined ? undefined : rawValue,
+        normalizedValue: expiry,
+        status: rawValue ? legacyPeriod.status : 'missing',
+        candidates: legacyPeriod.candidates
+          .map(legacyCampaignCandidateAsExpiry)
+          .filter((candidate) => Boolean(candidate.rawValue)),
+        group: legacyPeriod.group === 'legacy' ? 'summary' : legacyPeriod.group,
+      }
+    : null;
+  const normalized = fields.flatMap((field) => (
+    field.fieldKey === 'campaignPeriod'
+      ? converted ? [converted] : []
+      : [field]
+  ));
+  if (!normalized.length || normalized.some((field) => field.fieldKey === 'signatureStatus')) {
+    return normalized;
+  }
+  return [
+    ...normalized,
+    {
+      fieldKey: 'signatureStatus',
+      label: CONTRACT_FIELD_LABELS.signatureStatus,
+      rawValue: '',
+      normalizedValue: null,
+      source: null,
+      confidence: 0,
+      status: 'missing',
+      candidates: [],
+      origin: 'document',
+      group: 'summary',
+      applicable: true,
+      requiredForConfirmation: true,
+      readOnly: false,
+    },
+  ];
+};
+
 export const normalizeMoney = (raw: string) => {
   const currency = raw.match(new RegExp(`\\b(${CURRENCY_CODES.join('|')})\\b`, 'i'))?.[1]?.toUpperCase() ?? '';
   const amountMatches = raw.replace(new RegExp(CURRENCY_CODES.join('|'), 'ig'), '').match(/(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/g);
