@@ -25,6 +25,43 @@ export type CooperationProjectDirectoryRecord = {
   syncedAt?: string;
 };
 
+export type ManualCooperationProjectInput = Pick<
+  CooperationProjectDirectoryRecord,
+  'name' | 'projectType' | 'initiatorName' | 'availability'
+>;
+
+export const manualCooperationProjectRecordFor = ({
+  input,
+  identity,
+  previous,
+  updatedAt,
+}: {
+  input: ManualCooperationProjectInput;
+  identity: Pick<CooperationProjectDirectoryRecord, 'id' | 'projectCode'>;
+  previous?: CooperationProjectDirectoryRecord;
+  updatedAt: string;
+}): CooperationProjectDirectoryRecord => ({
+  ...(previous ?? {
+    ...identity,
+    projectStatus: 'ACTIVE',
+    startDate: '',
+    endDate: '',
+  }),
+  ...input,
+  source: 'MANUAL',
+  localUpdatedAt: updatedAt,
+});
+
+export const duplicateActiveCooperationProjectFor = (
+  records: readonly CooperationProjectDirectoryRecord[],
+  input: Pick<ManualCooperationProjectInput, 'name' | 'availability'>,
+  editingId?: string,
+) => input.availability === 'ACTIVE'
+  ? records.find((record) => record.id !== editingId
+    && record.availability === 'ACTIVE'
+    && record.name.trim().toLowerCase() === input.name.trim().toLowerCase())
+  : undefined;
+
 export type CooperationProjectDirectoryStore = {
   version: 2;
   typeAllowlist: string[];

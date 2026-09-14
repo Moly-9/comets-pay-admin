@@ -255,12 +255,15 @@ import {
 } from './paymentListWorkbook';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import {
+  duplicateActiveCooperationProjectFor,
   emptyCooperationProjectDirectoryStore,
   loadCooperationProjectDirectory,
+  manualCooperationProjectRecordFor,
   saveCooperationProjectDirectory,
   synchronizeFeishuDirectory,
   type CooperationProjectDirectoryRecord,
   type CooperationProjectDirectoryStore,
+  type ManualCooperationProjectInput,
 } from './cooperationProjectDirectory';
 import type { FeishuProjectMetadata } from './cooperationProjects';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
@@ -5011,19 +5014,15 @@ export default function App() {
     }
   };
   const saveManualCooperationProject = (
-    draft: Pick<CooperationProjectDirectoryRecord, 'name' | 'projectType' | 'projectStatus' | 'initiatorName' | 'startDate' | 'endDate'>,
+    draft: ManualCooperationProjectInput,
     editingId?: string,
   ) => {
-    const duplicate = projectDirectory.records.find((record) => record.id !== editingId
-      && record.availability === 'ACTIVE' && record.name.trim().toLowerCase() === draft.name.trim().toLowerCase());
+    const duplicate = duplicateActiveCooperationProjectFor(projectDirectory.records, draft, editingId);
     if (duplicate && !window.confirm(`已存在同名可用项目“${duplicate.name}”。仍要作为独立项目保存吗？`)) return '已取消保存，同名项目不会自动合并。';
     const occurredAt = nowIso();
     const previous = editingId ? projectDirectory.records.find((record) => record.id === editingId && record.source === 'MANUAL') : undefined;
-    const record: CooperationProjectDirectoryRecord = {
-      ...(previous ?? { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ'), source: 'MANUAL' as const, availability: 'ACTIVE' as const }),
-      ...draft,
-      localUpdatedAt: occurredAt,
-    };
+    const identity = previous ?? { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ') };
+    const record = manualCooperationProjectRecordFor({ input: draft, identity, previous, updatedAt: occurredAt });
     setProjectDirectory((current) => ({ ...current, records: previous
       ? current.records.map((item) => item.id === record.id ? record : item)
       : [record, ...current.records] }));

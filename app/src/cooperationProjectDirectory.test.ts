@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activeCooperationProjectIds,
   COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY,
+  duplicateActiveCooperationProjectFor,
   emptyCooperationProjectDirectoryStore,
   LEGACY_COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY,
   loadCooperationProjectDirectory,
+  manualCooperationProjectRecordFor,
   synchronizeFeishuDirectory,
   type CooperationProjectDirectoryRecord,
 } from './cooperationProjectDirectory';
@@ -20,6 +23,60 @@ const incoming: FeishuCooperationProjectDto = {
 };
 
 describe('cooperation project directory', () => {
+  it('creates manual projects without fabricated dates and keeps availability independent from lifecycle', () => {
+    const active = manualCooperationProjectRecordFor({
+      input: { name: 'Manual active', projectType: '品牌营销', initiatorName: 'A', availability: 'ACTIVE' },
+      identity: { id: 'manual-active', projectCode: 'PRJ-MANUAL-ACTIVE' },
+      updatedAt: '2026-09-14T12:00:00Z',
+    });
+    const disabled = manualCooperationProjectRecordFor({
+      input: { name: 'Manual disabled', projectType: '品牌营销', initiatorName: 'B', availability: 'DISABLED' },
+      identity: { id: 'manual-disabled', projectCode: 'PRJ-MANUAL-DISABLED' },
+      updatedAt: '2026-09-14T12:00:00Z',
+    });
+
+    expect(active).toMatchObject({
+      projectStatus: 'ACTIVE',
+      availability: 'ACTIVE',
+      source: 'MANUAL',
+      startDate: '',
+      endDate: '',
+    });
+    expect(disabled).toMatchObject({ projectStatus: 'ACTIVE', availability: 'DISABLED' });
+    expect([...activeCooperationProjectIds([active, disabled])]).toEqual(['manual-active']);
+  });
+
+  it('preserves hidden lifecycle and historical dates when editing a manual project', () => {
+    const previous: CooperationProjectDirectoryRecord = {
+      ...existing,
+      id: 'manual-existing',
+      projectCode: 'PRJ-MANUAL-EXISTING',
+      source: 'MANUAL',
+      externalProjectId: undefined,
+      projectStatus: 'ARCHIVED',
+    };
+    const updated = manualCooperationProjectRecordFor({
+      input: { name: 'Updated manual', projectType: previous.projectType, initiatorName: 'B', availability: 'DISABLED' },
+      identity: previous,
+      previous,
+      updatedAt: '2026-09-14T13:00:00Z',
+    });
+
+    expect(updated).toMatchObject({
+      name: 'Updated manual',
+      projectStatus: 'ARCHIVED',
+      availability: 'DISABLED',
+      startDate: previous.startDate,
+      endDate: previous.endDate,
+    });
+  });
+
+  it('only reports same-name conflicts when the project will be available', () => {
+    expect(duplicateActiveCooperationProjectFor([existing], { name: ' old NAME ', availability: 'ACTIVE' })).toBe(existing);
+    expect(duplicateActiveCooperationProjectFor([existing], { name: 'Old name', availability: 'DISABLED' })).toBeUndefined();
+    expect(duplicateActiveCooperationProjectFor([existing], { name: 'Old name', availability: 'ACTIVE' }, existing.id)).toBeUndefined();
+  });
+
   it('updates by external id while retaining the internal identity', () => {
     const result = synchronizeFeishuDirectory({ current: [existing], incoming: [incoming], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
     expect(result[0]).toMatchObject({ id: existing.id, projectCode: existing.projectCode, name: 'New name', projectStatus: 'ARCHIVED', sourceProjectStatus: 'ARCHIVED', availability: 'ACTIVE' });
