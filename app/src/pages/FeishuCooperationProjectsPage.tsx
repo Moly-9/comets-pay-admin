@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CloudDownload, Plus, RefreshCw, Search, Settings2 } from 'lucide-react';
 import { Button, ListActionButton, Modal, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
-import type { CooperationProjectDirectoryRecord } from '../cooperationProjectDirectory';
+import type { CooperationProjectAvailability, CooperationProjectDirectoryRecord } from '../cooperationProjectDirectory';
 import type { FeishuProjectMetadata } from '../cooperationProjects';
 import './FeishuCooperationProjectsPage.css';
 
@@ -34,7 +34,7 @@ export function FeishuCooperationProjectsPage({
   onAllowlistChange,
   onSync,
   onSaveManual,
-  onDisable,
+  onAvailabilityChange,
   onProjectStatusChange,
 }: {
   records: CooperationProjectDirectoryRecord[];
@@ -47,7 +47,7 @@ export function FeishuCooperationProjectsPage({
   onAllowlistChange: (types: string[]) => void;
   onSync: () => void;
   onSaveManual: (draft: ManualDraft, editingId?: string) => string | undefined;
-  onDisable: (id: string) => void;
+  onAvailabilityChange: (id: string, availability: 'ACTIVE' | 'DISABLED') => void;
   onProjectStatusChange: (id: string, status: 'ACTIVE' | 'ARCHIVED') => void;
 }) {
   const [search, setSearch] = useState('');
@@ -121,17 +121,31 @@ export function FeishuCooperationProjectsPage({
           <SelectField ariaLabel="按项目类型筛选" value={typeFilter} options={[{ value: 'all', label: '全部类型' }, ...allTypes.map((value) => ({ value, label: value }))]} onChange={setTypeFilter} />
           <SelectField ariaLabel="按项目状态筛选" value={statusFilter} options={[{ value: 'all', label: '全部项目状态' }, ...allStatuses.map((value) => ({ value, label: projectStatusLabel(value) }))]} onChange={setStatusFilter} />
           <SelectField ariaLabel="按数据来源筛选" value={sourceFilter} options={[{ value: 'all', label: '全部数据来源' }, { value: 'FEISHU', label: '飞书同步' }, { value: 'MANUAL', label: '手动添加' }]} onChange={setSourceFilter} />
-          <SelectField ariaLabel="按同步状态筛选" value={availabilityFilter} options={[{ value: 'all', label: '全部同步状态' }, { value: 'ACTIVE', label: '可用' }, { value: 'DISABLED', label: '已停用' }]} onChange={setAvailabilityFilter} />
+          <SelectField ariaLabel="按可用状态筛选" value={availabilityFilter} options={[{ value: 'all', label: '全部可用状态' }, { value: 'ACTIVE', label: '可用' }, { value: 'DISABLED', label: '已停用' }]} onChange={setAvailabilityFilter} />
         </div>
         <div className="table-scroll feishu-project-table-wrap">
-          <table className="data-table operational-table feishu-project-table"><thead><tr><th>项目名称</th><th>项目类型</th><th>项目状态</th><th>项目发起人</th><th>项目周期</th><th>项目更新时间</th><th>数据来源</th><th>同步状态</th>{canManage ? <th>操作</th> : null}</tr></thead>
+          <table className="data-table operational-table feishu-project-table"><thead><tr><th>项目名称</th><th>项目类型</th><th>项目状态</th><th>项目发起人</th><th>项目周期</th><th>项目更新时间</th><th>数据来源</th><th>可用状态</th>{canManage ? <th>操作</th> : null}</tr></thead>
             <tbody>{pagination.pageItems.map((record) => <tr key={record.id} className={record.availability !== 'ACTIVE' ? 'is-muted' : ''}>
               <td data-label="项目名称"><strong>{record.name}</strong><small>{record.projectCode}</small></td>
               <td data-label="项目类型">{record.projectType}</td><td data-label="项目状态">{canManage ? <SelectField<'ACTIVE' | 'ARCHIVED'> ariaLabel={`修改 ${record.name} 的项目状态`} variant="compact" menuStrategy="fixed" className={`feishu-project-row-status is-${record.projectStatus.toLowerCase()}`} value={record.projectStatus as 'ACTIVE' | 'ARCHIVED'} options={[{ value: 'ACTIVE', label: '进行中', leading: <i className="feishu-project-status-dot is-active" /> }, { value: 'ARCHIVED', label: '已归档', leading: <i className="feishu-project-status-dot is-archived" /> }]} onChange={(status) => onProjectStatusChange(record.id, status)} /> : <span className={`feishu-project-status is-${record.projectStatus.toLowerCase()}`}><i />{projectStatusLabel(record.projectStatus)}</span>}</td><td data-label="项目发起人">{record.initiatorName}</td>
               <td data-label="项目周期">{record.startDate}<small>至 {record.endDate}</small></td><td data-label="项目更新时间">{formatTime(record.sourceUpdatedAt ?? record.localUpdatedAt)}</td>
               <td data-label="数据来源"><span className={`feishu-project-source is-${record.source.toLowerCase()}`}>{record.source === 'FEISHU' ? '飞书同步' : '手动添加'}</span></td>
-              <td data-label="同步状态"><span className={`feishu-project-availability is-${record.availability.toLowerCase()}`}>{availabilityLabel[record.availability]}</span></td>
-              {canManage ? <td data-label="操作"><span className="feishu-project-actions">{record.source === 'MANUAL' ? <ListActionButton kind="edit" onClick={() => openEdit(record)}>编辑</ListActionButton> : <small>飞书源数据只读</small>}{record.source === 'MANUAL' && record.availability === 'ACTIVE' ? <ListActionButton kind="danger" onClick={() => onDisable(record.id)}>停用</ListActionButton> : null}</span></td> : null}
+              <td data-label="可用状态">{canManage ? <SelectField<CooperationProjectAvailability>
+                ariaLabel={`修改 ${record.name} 的可用状态`}
+                variant="compact"
+                menuStrategy="fixed"
+                className={`feishu-project-row-availability is-${record.availability.toLowerCase()}`}
+                value={record.availability}
+                options={[
+                  { value: 'ACTIVE', label: '可用', leading: <i className="feishu-project-status-dot is-active" /> },
+                  { value: 'DISABLED', label: '已停用', leading: <i className="feishu-project-status-dot is-disabled" /> },
+                  { value: 'OUT_OF_SCOPE', label: '已移出同步范围（系统）', disabled: true, leading: <i className="feishu-project-status-dot is-disabled" /> },
+                ]}
+                onChange={(availability) => {
+                  if (availability !== 'OUT_OF_SCOPE') onAvailabilityChange(record.id, availability);
+                }}
+              /> : <span className={`feishu-project-availability is-${record.availability.toLowerCase()}`}>{availabilityLabel[record.availability]}</span>}</td>
+              {canManage ? <td data-label="操作"><span className="feishu-project-actions">{record.source === 'MANUAL' ? <ListActionButton kind="edit" onClick={() => openEdit(record)}>编辑</ListActionButton> : <small>飞书源数据只读</small>}</span></td> : null}
             </tr>)}</tbody></table>
           {!pagination.pageItems.length ? <div className="feishu-project-empty">暂无符合条件的项目。</div> : null}
         </div>

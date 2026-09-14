@@ -17,6 +17,8 @@ export type CooperationProjectDirectoryRecord = {
   endDate: string;
   source: CooperationProjectSourceType;
   availability: CooperationProjectAvailability;
+  sourceAvailability?: CooperationProjectAvailability;
+  availabilityOverriddenAt?: string;
   sourceUpdatedAt?: string;
   localUpdatedAt: string;
   syncedAt?: string;
@@ -86,7 +88,13 @@ export const synchronizeFeishuDirectory = ({ current, incoming, internalIdFor, s
   )));
   const retained = current.map((record) => (
     record.source === 'FEISHU' && record.externalProjectId && !incomingIds.has(record.externalProjectId)
-      ? { ...record, availability: 'OUT_OF_SCOPE' as const, localUpdatedAt: syncedAt, syncedAt }
+      ? {
+        ...record,
+        availability: record.availabilityOverriddenAt ? record.availability : 'OUT_OF_SCOPE' as const,
+        sourceAvailability: 'OUT_OF_SCOPE' as const,
+        localUpdatedAt: syncedAt,
+        syncedAt,
+      }
       : record
   ));
   const nextById = new Map(retained.map((record) => [record.id, record]));
@@ -106,7 +114,9 @@ export const synchronizeFeishuDirectory = ({ current, incoming, internalIdFor, s
       startDate: source.startDate,
       endDate: source.endDate,
       source: 'FEISHU',
-      availability: 'ACTIVE',
+      availability: previous?.availabilityOverriddenAt ? previous.availability : 'ACTIVE',
+      sourceAvailability: 'ACTIVE',
+      availabilityOverriddenAt: previous?.availabilityOverriddenAt,
       sourceUpdatedAt: source.updatedAt,
       localUpdatedAt: syncedAt,
       syncedAt,

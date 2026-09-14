@@ -5032,12 +5032,19 @@ export default function App() {
     notify(previous ? '项目已更新' : '项目已添加', `${record.projectCode} 已保存。`);
     return undefined;
   };
-  const disableManualCooperationProject = (id: string) => {
-    if (!window.confirm('停用后该项目不再进入新请款候选，历史关联仍保留。确认停用？')) return;
+  const updateCooperationProjectAvailability = (id: string, availability: 'ACTIVE' | 'DISABLED') => {
+    if (availability === 'DISABLED' && !window.confirm('停用后该项目不再进入新请款候选，历史关联仍保留。确认停用？')) return;
     const occurredAt = nowIso();
-    setProjectDirectory((current) => ({ ...current, records: current.records.map((record) => record.id === id ? { ...record, availability: 'DISABLED', localUpdatedAt: occurredAt } : record) }));
-    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability: 'DISABLED', localUpdatedAt: occurredAt } : project));
-    notify('项目已停用', '历史请款、合同和 Invoice 关联不受影响。');
+    setProjectDirectory((current) => ({ ...current, records: current.records.map((record) => record.id === id ? {
+      ...record,
+      availability,
+      availabilityOverriddenAt: occurredAt,
+      localUpdatedAt: occurredAt,
+    } : record) }));
+    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability, localUpdatedAt: occurredAt } : project));
+    notify(availability === 'ACTIVE' ? '项目已设为可用' : '项目已停用', availability === 'ACTIVE'
+      ? '该项目已恢复进入新请款的关联项目候选。'
+      : '历史请款、合同和 Invoice 关联不受影响。');
   };
   const updateCooperationProjectStatus = (id: string, projectStatus: 'ACTIVE' | 'ARCHIVED') => {
     const occurredAt = nowIso();
@@ -5138,7 +5145,7 @@ export default function App() {
           onAllowlistChange={(typeAllowlist) => setProjectDirectory((current) => ({ ...current, typeAllowlist }))}
           onSync={() => { void synchronizeCooperationProjects(); }}
           onSaveManual={saveManualCooperationProject}
-          onDisable={disableManualCooperationProject}
+          onAvailabilityChange={updateCooperationProjectAvailability}
           onProjectStatusChange={updateCooperationProjectStatus}
         />
       );

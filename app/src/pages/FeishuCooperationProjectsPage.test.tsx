@@ -19,7 +19,7 @@ const renderPage = (canManage: boolean) => renderToStaticMarkup(<FeishuCooperati
   onAllowlistChange={vi.fn()}
   onSync={vi.fn()}
   onSaveManual={vi.fn()}
-  onDisable={vi.fn()}
+  onAvailabilityChange={vi.fn()}
   onProjectStatusChange={vi.fn()}
 />);
 
@@ -33,7 +33,8 @@ describe('FeishuCooperationProjectsPage', () => {
     expect(html).toContain('同步飞书');
     expect(html).toContain('全部项目状态');
     expect(html).toContain('全部数据来源');
-    expect(html).toContain('全部同步状态');
+    expect(html).toContain('全部可用状态');
+    expect(html).toContain('修改 海外达人合作 的可用状态');
     expect(html).not.toContain('>已移出同步范围</span>');
     expect(html).toContain('修改 海外达人合作 的项目状态');
   });
@@ -43,5 +44,6 @@ describe('FeishuCooperationProjectsPage', () => {
     expect(html).not.toContain('配置同步范围');
     expect(html).not.toContain('手动添加</span>');
     expect(html).not.toContain('操作</th>');
+    expect(html).not.toContain('修改 海外达人合作 的可用状态');
   });
 });

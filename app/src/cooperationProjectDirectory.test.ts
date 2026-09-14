@@ -29,6 +29,12 @@ describe('cooperation project directory', () => {
     expect(result[0]).toMatchObject({ projectStatus: 'ARCHIVED', sourceProjectStatus: 'ACTIVE', statusOverriddenAt: overridden.statusOverriddenAt });
   });
 
+  it('keeps a manually overridden availability when the Feishu source is synchronized again', () => {
+    const overridden = { ...existing, availability: 'DISABLED' as const, availabilityOverriddenAt: '2026-02-01T00:00:00Z' };
+    const result = synchronizeFeishuDirectory({ current: [overridden], incoming: [incoming], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
+    expect(result[0]).toMatchObject({ availability: 'DISABLED', sourceAvailability: 'ACTIVE', availabilityOverriddenAt: overridden.availabilityOverriddenAt });
+  });
+
   it('marks missing Feishu records out of scope without removing manual records', () => {
     const manual = { ...existing, id: 'manual-1', externalProjectId: undefined, source: 'MANUAL' as const };
     const result = synchronizeFeishuDirectory({ current: [existing, manual], incoming: [], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
