@@ -65,7 +65,7 @@ export type ProjectSummary = {
   startDate?: string;
   endDate?: string;
   source?: 'FEISHU' | 'MANUAL';
-  availability?: 'ACTIVE' | 'OUT_OF_SCOPE' | 'DISABLED';
+  availability?: 'ACTIVE' | 'DISABLED';
   sourceUpdatedAt?: string;
   localUpdatedAt?: string;
   name: string;

@@ -19,7 +19,7 @@ const formatTime = (value?: string) => value
   : '尚未同步';
 
 const availabilityLabel = {
-  ACTIVE: '可用', OUT_OF_SCOPE: '已移出同步范围', DISABLED: '已停用',
+  ACTIVE: '可用', DISABLED: '已停用',
 } as const;
 const projectStatusLabel = (value: string) => value === 'ACTIVE' ? '进行中' : value === 'ARCHIVED' ? '已归档' : value;
 
@@ -109,7 +109,7 @@ export function FeishuCooperationProjectsPage({
         <article><span>全部项目</span><strong>{records.length}</strong><small>包含历史记录</small></article>
         <article><span>飞书同步</span><strong>{records.filter((item) => item.source === 'FEISHU').length}</strong><small>最近 {formatTime(lastSyncedAt)}</small></article>
         <article><span>手动项目</span><strong>{records.filter((item) => item.source === 'MANUAL').length}</strong><small>本地维护</small></article>
-        <article><span>移出范围</span><strong>{records.filter((item) => item.availability === 'OUT_OF_SCOPE').length}</strong><small>历史仍可追溯</small></article>
+        <article><span>已停用</span><strong>{records.filter((item) => item.availability === 'DISABLED').length}</strong><small>不进入新请款候选</small></article>
       </section>
 
       {syncError ? <div className="feishu-project-feedback is-error" role="alert">{syncError}</div> : null}
@@ -139,11 +139,8 @@ export function FeishuCooperationProjectsPage({
                 options={[
                   { value: 'ACTIVE', label: '可用', leading: <i className="feishu-project-status-dot is-active" /> },
                   { value: 'DISABLED', label: '已停用', leading: <i className="feishu-project-status-dot is-disabled" /> },
-                  { value: 'OUT_OF_SCOPE', label: '已移出同步范围（系统）', disabled: true, leading: <i className="feishu-project-status-dot is-disabled" /> },
                 ]}
-                onChange={(availability) => {
-                  if (availability !== 'OUT_OF_SCOPE') onAvailabilityChange(record.id, availability);
-                }}
+                onChange={(availability) => onAvailabilityChange(record.id, availability)}
               /> : <span className={`feishu-project-availability is-${record.availability.toLowerCase()}`}>{availabilityLabel[record.availability]}</span>}</td>
               {canManage ? <td data-label="操作"><span className="feishu-project-actions">{record.source === 'MANUAL' ? <ListActionButton kind="edit" onClick={() => openEdit(record)}>编辑</ListActionButton> : <small>飞书源数据只读</small>}</span></td> : null}
             </tr>)}</tbody></table>
@@ -152,7 +149,7 @@ export function FeishuCooperationProjectsPage({
         <Pagination total={filtered.length} page={pagination.page} pageSize={pagination.pageSize} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} />
       </section>
 
-      {configOpen ? <Modal className="feishu-project-modal" title="配置飞书同步范围" width="520px" onClose={() => setConfigOpen(false)} footer={<Button onClick={() => setConfigOpen(false)}>完成</Button>}><div className="feishu-project-allowlist"><p>只同步精确匹配以下类型的多维表格项目。取消选中后，已同步记录会在下次同步时标记为移出范围。</p>{metadata.projectTypes.map((type) => <label key={type}><input type="checkbox" checked={typeAllowlist.includes(type)} onChange={() => onAllowlistChange(typeAllowlist.includes(type) ? typeAllowlist.filter((item) => item !== type) : [...typeAllowlist, type])} /><span>{type}</span></label>)}</div></Modal> : null}
+      {configOpen ? <Modal className="feishu-project-modal" title="配置飞书同步范围" width="520px" onClose={() => setConfigOpen(false)} footer={<Button onClick={() => setConfigOpen(false)}>完成</Button>}><div className="feishu-project-allowlist"><p>只同步精确匹配以下类型的多维表格项目。取消选中后，不再返回的项目会在下次同步时自动设为已停用。</p>{metadata.projectTypes.map((type) => <label key={type}><input type="checkbox" checked={typeAllowlist.includes(type)} onChange={() => onAllowlistChange(typeAllowlist.includes(type) ? typeAllowlist.filter((item) => item !== type) : [...typeAllowlist, type])} /><span>{type}</span></label>)}</div></Modal> : null}
 
       {formOpen ? <Modal className="feishu-project-modal" title={editingId ? '编辑手动项目' : '手动添加合作项目'} width="640px" onClose={() => setFormOpen(false)} footer={<><Button variant="secondary" onClick={() => setFormOpen(false)}>取消</Button><Button onClick={submit}>保存</Button></>}><div className="feishu-project-form">{([
         ['name', '项目名称', 'text'], ['projectType', '项目类型', 'text'], ['projectStatus', '项目状态', 'text'], ['initiatorName', '项目发起人', 'text'], ['startDate', '开始时间', 'date'], ['endDate', '结束时间', 'date'],

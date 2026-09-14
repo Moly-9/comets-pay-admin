@@ -35,7 +35,8 @@ describe('FeishuCooperationProjectsPage', () => {
     expect(html).toContain('全部数据来源');
     expect(html).toContain('全部可用状态');
     expect(html).toContain('修改 海外达人合作 的可用状态');
-    expect(html).not.toContain('>已移出同步范围</span>');
+    expect(html).not.toContain('已移出同步范围');
+    expect(html).toContain('已停用');
     expect(html).toContain('修改 海外达人合作 的项目状态');
   });
 

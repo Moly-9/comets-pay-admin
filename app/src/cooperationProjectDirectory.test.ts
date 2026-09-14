@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY,
   emptyCooperationProjectDirectoryStore,
+  LEGACY_COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY,
   loadCooperationProjectDirectory,
   synchronizeFeishuDirectory,
   type CooperationProjectDirectoryRecord,
@@ -32,18 +34,45 @@ describe('cooperation project directory', () => {
   it('keeps a manually overridden availability when the Feishu source is synchronized again', () => {
     const overridden = { ...existing, availability: 'DISABLED' as const, availabilityOverriddenAt: '2026-02-01T00:00:00Z' };
     const result = synchronizeFeishuDirectory({ current: [overridden], incoming: [incoming], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
-    expect(result[0]).toMatchObject({ availability: 'DISABLED', sourceAvailability: 'ACTIVE', availabilityOverriddenAt: overridden.availabilityOverriddenAt });
+    expect(result[0]).toMatchObject({ availability: 'DISABLED', syncScope: 'IN_SCOPE', availabilityOverriddenAt: overridden.availabilityOverriddenAt });
   });
 
-  it('marks missing Feishu records out of scope without removing manual records', () => {
+  it('disables missing Feishu records while retaining sync scope metadata and manual records', () => {
     const manual = { ...existing, id: 'manual-1', externalProjectId: undefined, source: 'MANUAL' as const };
     const result = synchronizeFeishuDirectory({ current: [existing, manual], incoming: [], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
-    expect(result.find((item) => item.id === existing.id)?.availability).toBe('OUT_OF_SCOPE');
+    expect(result.find((item) => item.id === existing.id)).toMatchObject({ availability: 'DISABLED', syncScope: 'OUT_OF_SCOPE' });
     expect(result.find((item) => item.id === manual.id)?.availability).toBe('ACTIVE');
+  });
+
+  it('restores an automatically disabled project when it returns to the sync scope', () => {
+    const [outsideScope] = synchronizeFeishuDirectory({ current: [existing], incoming: [], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
+    const [restored] = synchronizeFeishuDirectory({ current: [outsideScope], incoming: [incoming], syncedAt: '2026-02-03T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
+    expect(restored).toMatchObject({ availability: 'ACTIVE', syncScope: 'IN_SCOPE' });
+  });
+
+  it('keeps an explicit active override when a project leaves the sync scope', () => {
+    const overridden = { ...existing, availabilityOverriddenAt: '2026-02-01T00:00:00Z' };
+    const [result] = synchronizeFeishuDirectory({ current: [overridden], incoming: [], syncedAt: '2026-02-02T00:00:00Z', internalIdFor: () => ({ id: 'new', projectCode: 'new' }) });
+    expect(result).toMatchObject({ availability: 'ACTIVE', syncScope: 'OUT_OF_SCOPE' });
+  });
+
+  it('migrates legacy out-of-scope records to the disabled state without losing data', () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      typeAllowlist: ['品牌营销'],
+      records: [{ ...existing, availability: 'OUT_OF_SCOPE', sourceAvailability: 'OUT_OF_SCOPE' }],
+      lastSyncedAt: '2026-02-02T00:00:00Z',
+    });
+    const storage = { getItem: (key: string) => key === LEGACY_COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY ? legacy : null };
+    expect(loadCooperationProjectDirectory(storage)).toMatchObject({
+      version: 2,
+      typeAllowlist: ['品牌营销'],
+      records: [{ id: existing.id, availability: 'DISABLED', syncScope: 'OUT_OF_SCOPE' }],
+    });
   });
 
   it('safely falls back when local storage is corrupt or from another version', () => {
     expect(loadCooperationProjectDirectory({ getItem: () => '{bad' })).toEqual(emptyCooperationProjectDirectoryStore());
-    expect(loadCooperationProjectDirectory({ getItem: () => JSON.stringify({ version: 0, records: [], typeAllowlist: ['x'] }) })).toEqual(emptyCooperationProjectDirectoryStore());
+    expect(loadCooperationProjectDirectory({ getItem: (key) => key === COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY ? JSON.stringify({ version: 0, records: [], typeAllowlist: ['x'] }) : null })).toEqual(emptyCooperationProjectDirectoryStore());
   });
 });

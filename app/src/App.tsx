@@ -469,6 +469,7 @@ const directoryRecordFromProject = (project: ProjectSummary): CooperationProject
   endDate: project.endDate ?? '2026-12-31',
   source: project.source ?? (project.externalProjectId ? 'FEISHU' : 'MANUAL'),
   availability: project.availability ?? 'ACTIVE',
+  syncScope: project.externalProjectId ? 'IN_SCOPE' : undefined,
   sourceUpdatedAt: project.sourceUpdatedAt,
   localUpdatedAt: project.localUpdatedAt ?? project.syncedAt ?? new Date(0).toISOString(),
   syncedAt: project.syncedAt,
