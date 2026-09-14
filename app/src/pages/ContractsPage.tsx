@@ -21,6 +21,7 @@ import {
   getContractReadiness,
   getContractManagementBucket,
   getContractValidity,
+  isIncludedInContractTotal,
   type ContractRecord,
   type ContractUploadInput,
   type ContractValidityFilter,
@@ -473,9 +474,10 @@ export function ContractsPage({
   }, { ready: 0, attention: 0, draft: 0, upload: 0, signature: 0, expired: 0 });
   const readyCount = bucketCounts.ready;
   const attentionCount = bucketCounts.attention;
-  const businessContractCount = contracts.filter((contract) => !contract.isTemplate).length;
+  const allContractRecordCount = contracts.filter((contract) => !contract.isTemplate).length;
+  const contractTotalCount = contracts.filter(isIncludedInContractTotal).length;
   const contractFilterCounts: Record<ContractFilter, number> = {
-    all: businessContractCount,
+    all: allContractRecordCount,
     ready: readyCount,
     attention: attentionCount,
     draft: bucketCounts.draft,
@@ -612,7 +614,7 @@ export function ContractsPage({
       <div className="contract-overview-strip">
         <article className="contract-overview-card contract-overview-card-peach">
           <span>合同总数</span>
-          <strong>{businessContractCount}</strong>
+          <strong>{contractTotalCount}</strong>
           <small>{bucketCounts.draft} 份草稿 · {bucketCounts.upload} 份待上传 · {bucketCounts.signature} 份待签署</small>
         </article>
         <article className="contract-overview-card contract-overview-card-mint">

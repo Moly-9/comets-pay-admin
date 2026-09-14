@@ -586,6 +586,10 @@ export const isContractAvailableForNewAssociation = (
   referenceDate = currentContractReferenceDate(),
 ) => isPaymentContract(contract) && !getContractValidity(contract, referenceDate).expired;
 
+export const isIncludedInContractTotal = (
+  contract: Pick<ContractRecord, 'isTemplate' | 'lifecycle'>,
+) => !contract.isTemplate && contract.lifecycle !== 'EDITING_DRAFT';
+
 export const getContractManagementBucket = (
   contract: ContractRecord,
   referenceDate = currentContractReferenceDate(),

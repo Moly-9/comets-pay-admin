@@ -54,6 +54,20 @@ describe('ContractsPage batch actions', () => {
     expect(html).not.toContain('data-testid="contract-bulk-delete"');
   });
 
+  it('excludes templates and editing drafts from the contract total without changing the all-tab count', () => {
+    const base = INITIAL_CONTRACTS.find((contract) => !contract.isTemplate)!;
+    const template = INITIAL_CONTRACTS.find((contract) => contract.isTemplate)!;
+    const html = renderContractsPage(false, [
+      { ...base, contractId: undefined, id: 'CON-FORMAL', lifecycle: 'CONFIRMED' },
+      { ...base, contractId: undefined, id: 'CON-GENERATED', lifecycle: 'GENERATED_DRAFT' },
+      { ...base, contractId: undefined, id: 'CON-EDITING-DRAFT', lifecycle: 'EDITING_DRAFT' },
+      template,
+    ]);
+
+    expect(html).toContain('<span>合同总数</span><strong>2</strong>');
+    expect(html).toContain('role="tab" aria-selected="true">全部<span>3</span>');
+  });
+
   it('disables new contract generation with an explicit reason when no active usable template exists', () => {
     const html = renderToStaticMarkup(
       <ContractsPage

@@ -123,8 +123,8 @@ describe('dashboard request project overview', () => {
 
     expect(dashboardDocumentMetricsFor(contracts, payouts, invoices)).toEqual({
       contracts: {
-        total: 6,
-        processing: 4,
+        total: 5,
+        processing: 3,
         ready: 1,
         expired: 1,
       },

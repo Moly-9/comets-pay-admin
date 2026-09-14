@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { PageHeading } from '../components/Common';
-import { getContractManagementBucket, type ContractRecord } from '../contracts';
+import { getContractManagementBucket, isIncludedInContractTotal, type ContractRecord } from '../contracts';
 import { requestProjectStatusFor } from '../paymentRequestProjects';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type {
@@ -94,8 +94,8 @@ export const dashboardDocumentMetricsFor = (
   payouts: readonly Pick<Payout, 'id' | 'invoice' | 'status'>[],
   generatedInvoices: readonly Pick<GeneratedInvoiceRecord, 'id' | 'invoiceId' | 'sourcePayoutId'>[],
 ): DashboardDocumentMetrics => {
-  const uploadedContracts = contracts.filter((contract) => !contract.isTemplate);
-  const contractBuckets = uploadedContracts.map((contract) => getContractManagementBucket(contract));
+  const countedContracts = contracts.filter(isIncludedInContractTotal);
+  const contractBuckets = countedContracts.map((contract) => getContractManagementBucket(contract));
 
   const invoiceKeyBySourcePayoutId = new Map(
     generatedInvoices.map((invoice) => [invoice.sourcePayoutId, String(invoice.invoiceId)]),
@@ -118,10 +118,9 @@ export const dashboardDocumentMetricsFor = (
 
   return {
     contracts: {
-      total: uploadedContracts.length,
+      total: countedContracts.length,
       processing: contractBuckets.filter((bucket) => (
-        bucket === 'draft'
-        || bucket === 'upload'
+        bucket === 'upload'
         || bucket === 'signature'
         || bucket === 'attention'
       )).length,
