@@ -26171,7 +26171,7 @@ button:disabled {
 
 .dashboard-request-card-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -26332,6 +26332,10 @@ button:disabled {
   background: linear-gradient(90deg, #69c89b, #46aa80);
 }
 
+.dashboard-progress-segment-rose {
+  background: linear-gradient(90deg, #e58e99, #d86f80);
+}
+
 .dashboard-assets-panel {
   overflow: hidden;
   border: 1px solid rgba(232, 234, 239, 0.92);
@@ -26475,12 +26479,13 @@ button:disabled {
 .dashboard-asset-stage-values {
   display: flex;
   align-items: center;
-  gap: 26px;
+  gap: 18px;
 }
 
 .dashboard-asset-stage {
   display: grid;
-  min-width: 96px;
+  min-width: 0;
+  flex: 1 1 0;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0 6px;
@@ -26512,6 +26517,10 @@ button:disabled {
 
 .dashboard-stage-dot-mint {
   background: #3aa879;
+}
+
+.dashboard-stage-dot-rose {
+  background: #d66f7d;
 }
 
 .dashboard-asset-stage small {
