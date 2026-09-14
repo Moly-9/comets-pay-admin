@@ -3,6 +3,8 @@ import {
   canConfirmRecognitionFields,
   confirmRecognitionField,
   confirmRecognitionFields,
+  contractExpiryRangeValidationMessage,
+  editContractExpiryRange,
   editRecognitionField,
   normalizeCampaignPeriod,
   normalizeContractRecognitionFields,
@@ -90,6 +92,32 @@ describe('contract field recognition', () => {
       startDate: '2026-08-01',
       endDate: '2026-08-31',
     });
+    expect(normalizeCampaignPeriod('2026年8月1日至2026年8月31日')).toEqual({
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+  });
+
+  it('combines split start and end labels and leaves an end-only match unconfirmable', () => {
+    const split = documentFixture('split-period', 'STANDARD_TERMS', [
+      'Campaign Start: 2026-08-10',
+      'Campaign End: 2026-09-17',
+    ]);
+    const endOnly = documentFixture('end-only-period', 'STANDARD_TERMS', [
+      'End Date: 2026-09-17',
+    ]);
+    const splitExpiry = field([split], 'contractExpiry');
+    const endOnlyExpiry = field([endOnly], 'contractExpiry');
+
+    expect(splitExpiry).toMatchObject({
+      normalizedValue: { startDate: '2026-08-10', endDate: '2026-09-17', isLongTerm: false },
+      status: 'detected',
+    });
+    expect(endOnlyExpiry).toMatchObject({
+      normalizedValue: { startDate: '', endDate: '2026-09-17', isLongTerm: false },
+      status: 'missing',
+    });
+    expect(canConfirmRecognitionFields([endOnlyExpiry], ['contractExpiry'])).toBe(false);
   });
 
   it.each([
@@ -234,7 +262,7 @@ describe('contract field recognition', () => {
     expect(result.source?.sourceText).toBe('Payment Term: Net 30 days after receipt of Invoice');
   });
 
-  it('builds the new upload field set from real contract text and keeps only the expiry date', () => {
+  it('builds the new upload field set from real contract text and keeps the full validity range', () => {
     const contract = {
       ...documentFixture('signed-bank-contract', 'STANDARD_TERMS', [
         'Advertiser: COMETS INTERNATIONAL LIMITED',
@@ -276,7 +304,7 @@ describe('contract field recognition', () => {
       'contractNumber',
     ]);
     expect(recognitionFieldDisplayValue(fields.find((item) => item.fieldKey === 'signatureStatus')!)).toBe('已签署');
-    expect(recognitionFieldDisplayValue(fields.find((item) => item.fieldKey === 'contractExpiry')!)).toBe('2026-09-17');
+    expect(recognitionFieldDisplayValue(fields.find((item) => item.fieldKey === 'contractExpiry')!)).toBe('2026-08-10 至 2026-09-17');
     expect(fields.find((item) => item.fieldKey === 'contractNumber')).toMatchObject({
       rawValue: 'CON-SYSTEM-001',
       status: 'confirmed',
@@ -357,7 +385,7 @@ describe('contract field recognition', () => {
     expect(canConfirmRecognitionFields([expiry], ['contractExpiry'])).toBe(false);
   });
 
-  it('adapts a legacy Campaign Period snapshot to one expiry field and keeps its source', () => {
+  it('adapts a legacy Campaign Period snapshot to one validity-range field and keeps its source', () => {
     const legacy = {
       ...field([
         documentFixture('legacy-period', 'IO', [
@@ -372,8 +400,8 @@ describe('contract field recognition', () => {
     expect(normalized.find((item) => item.fieldKey === 'contractExpiry')).toMatchObject({
       fieldKey: 'contractExpiry',
       label: '合同有效期',
-      rawValue: '2026-09-17',
-      normalizedValue: { endDate: '2026-09-17', isLongTerm: false },
+      rawValue: '2026-08-10 至 2026-09-17',
+      normalizedValue: { startDate: '2026-08-10', endDate: '2026-09-17', isLongTerm: false },
       status: 'confirmed',
       source: legacy.source,
     });
@@ -384,14 +412,33 @@ describe('contract field recognition', () => {
     expect(normalized.some((item) => item.fieldKey === 'campaignPeriod')).toBe(false);
   });
 
-  it('clears the expiry date when long-term validity is selected', () => {
-    const expiry = editRecognitionField(field([], 'contractExpiry'), '长期有效');
+  it('requires both validity dates and rejects a reversed range', () => {
+    const empty = field([], 'contractExpiry');
+    const endOnly = editContractExpiryRange(empty, '', '2026-09-17');
+    const reversed = editContractExpiryRange(empty, '2026-09-18', '2026-09-17');
+    const valid = editContractExpiryRange(empty, '2026-08-10', '2026-09-17');
 
-    expect(expiry).toMatchObject({
-      rawValue: '长期有效',
-      normalizedValue: { endDate: '', isLongTerm: true },
+    expect(endOnly.status).toBe('missing');
+    expect(contractExpiryRangeValidationMessage(endOnly.normalizedValue)).toBe('请选择开始日期和结束日期。');
+    expect(reversed.status).toBe('missing');
+    expect(contractExpiryRangeValidationMessage(reversed.normalizedValue)).toBe('结束日期不能早于开始日期。');
+    expect(valid).toMatchObject({
+      rawValue: '2026-08-10 至 2026-09-17',
+      normalizedValue: { startDate: '2026-08-10', endDate: '2026-09-17', isLongTerm: false },
       status: 'detected',
     });
+    expect(canConfirmRecognitionFields([valid], ['contractExpiry'])).toBe(true);
+  });
+
+  it('does not produce a long-term candidate for a new upload', () => {
+    const contract = {
+      ...documentFixture('long-term-contract', 'STANDARD_TERMS', ['Contract term: perpetual']),
+      contractType: 'INDEPENDENT' as const,
+    };
+    const expiry = recognizeUploadContractFields([contract], { systemContractNumber: 'CON-LONG-TERM' })
+      .find((item) => item.fieldKey === 'contractExpiry')!;
+
+    expect(expiry).toMatchObject({ rawValue: '', status: 'missing', candidates: [] });
   });
 
   it('keeps the IO number immediately before the system contract number for IO uploads', () => {

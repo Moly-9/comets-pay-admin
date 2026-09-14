@@ -108,6 +108,7 @@ describe('PDF contract parser', () => {
       'Publisher: Mina Kato',
       'Contract Amount: USD 1200',
       'Signature Status: Signed',
+      'Campaign Start: September 1, 2026',
       'Campaign End: September 30, 2026',
       'Transfer Fee: borne by Advertiser',
       'Publishing Platform: Instagram',
@@ -130,7 +131,7 @@ describe('PDF contract parser', () => {
     expect(result.parseStatus).toBe('parsed');
     expect(recognition.find((field) => field.fieldKey === 'publisher')?.rawValue).toBe('Mina Kato');
     expect(recognitionFieldDisplayValue(recognition.find((field) => field.fieldKey === 'signatureStatus')!)).toBe('已签署');
-    expect(recognitionFieldDisplayValue(recognition.find((field) => field.fieldKey === 'contractExpiry')!)).toBe('2026-09-30');
+    expect(recognitionFieldDisplayValue(recognition.find((field) => field.fieldKey === 'contractExpiry')!)).toBe('2026-09-01 至 2026-09-30');
     expect(recognition.filter((field) => field.group === 'paypal').map((field) => field.fieldKey)).toEqual([
       'paypalUsername',
       'paypalEmail',

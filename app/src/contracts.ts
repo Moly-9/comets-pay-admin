@@ -1218,23 +1218,28 @@ const fieldText = (field: ContractRecognitionField | undefined) => (
   field?.editedValue?.trim() || field?.rawValue.trim() || ''
 );
 
-export const applyConfirmedRecognitionToContract = (
+const projectConfirmedRecognitionToContract = (
   contract: ContractRecord,
   requiredFieldKeys?: readonly ContractRecognitionField['fieldKey'][],
 ): ContractRecord | null => {
   const fields = normalizeContractRecognitionFields(contract.recognitionResults ?? []);
   const recognitionContract = { ...contract, recognitionResults: fields };
-  const normalizedRequiredFieldKeys: ContractRecognitionField['fieldKey'][] | undefined = requiredFieldKeys
-    ? Array.from(new Set(requiredFieldKeys.map((fieldKey) => (
+  const requestedFieldKeys = requiredFieldKeys ?? fields
+    .filter((field) => (
+      field.applicable !== false
+      && !field.readOnly
+      && (field.requiredForConfirmation !== false || Boolean(field.editedValue?.trim() || field.rawValue.trim()))
+    ))
+    .map((field) => field.fieldKey);
+  const normalizedRequiredFieldKeys: ContractRecognitionField['fieldKey'][] = Array.from(
+    new Set(requestedFieldKeys.map((fieldKey) => (
         fieldKey === 'campaignPeriod' ? 'contractExpiry' as const : fieldKey
-      ))))
-    : undefined;
-  const fieldsToConfirm = normalizedRequiredFieldKeys
-    ? fields.filter((field) => normalizedRequiredFieldKeys.includes(field.fieldKey))
-    : fields;
-  if (!allRecognitionFieldsConfirmed(fieldsToConfirm)) return null;
+      ))),
+  );
+  const fieldsToConfirm = fields.filter((field) => normalizedRequiredFieldKeys.includes(field.fieldKey));
+  if (!fieldsToConfirm.length || !allRecognitionFieldsConfirmed(fieldsToConfirm)) return null;
   const appliesField = (fieldKey: ContractRecognitionField['fieldKey']) => (
-    !normalizedRequiredFieldKeys || normalizedRequiredFieldKeys.includes(fieldKey)
+    normalizedRequiredFieldKeys.includes(fieldKey)
   );
 
   const projectBrand = confirmedField(recognitionContract, 'projectBrand');
@@ -1264,7 +1269,7 @@ export const applyConfirmedRecognitionToContract = (
   const channelData = objectValue<{ platform?: string; channelName?: string; handle?: string; channelUrl?: string }>(platformChannel);
   const effectiveData = objectValue<{ date?: string }>(effectiveDate);
   const campaignData = objectValue<{ startDate?: string; endDate?: string }>(campaignPeriod);
-  const expiryData = objectValue<{ endDate?: string; isLongTerm?: boolean }>(contractExpiry);
+  const expiryData = objectValue<{ startDate?: string; endDate?: string; isLongTerm?: boolean }>(contractExpiry);
   const signatureData = objectValue<{ signed?: boolean; signedAt?: string }>(signatureStatus);
   const moneyData = typeof totalFees?.normalizedValue === 'object' && totalFees.normalizedValue
     ? totalFees.normalizedValue as { amount?: number | null; currency?: string }
@@ -1314,7 +1319,6 @@ export const applyConfirmedRecognitionToContract = (
         ...Object.fromEntries(Object.entries(recognizedPaypalDetails).filter(([, value]) => Boolean(value))),
       }
     : contract.recognizedPaymentDetails;
-  const recognitionAppliedAt = new Date().toISOString();
   const signatureWasApplied = appliesField('signatureStatus') && Boolean(signatureStatus);
   const recognizedSigned = signatureWasApplied && signatureData.signed === true;
 
@@ -1329,14 +1333,18 @@ export const applyConfirmedRecognitionToContract = (
     channelName: appliesField('platformChannel') ? channelData.channelName || channelData.handle || '' : contract.channelName,
     channelLink: appliesField('platformChannel') ? channelData.channelUrl ?? '' : contract.channelLink,
     effectiveDate: appliesField('effectiveDate') ? effectiveData.date ?? '' : contract.effectiveDate,
-    campaignStart: appliesField('campaignPeriod') ? campaignData.startDate ?? '' : contract.campaignStart,
+    campaignStart: appliesField('contractExpiry')
+      ? expiryData.startDate ?? ''
+      : appliesField('campaignPeriod')
+        ? campaignData.startDate ?? ''
+        : contract.campaignStart,
     campaignEnd: appliesField('contractExpiry')
       ? expiryData.endDate ?? ''
       : appliesField('campaignPeriod')
         ? campaignData.endDate ?? ''
         : contract.campaignEnd,
     isLongTerm: appliesField('contractExpiry')
-      ? Boolean(expiryData.isLongTerm)
+      ? false
       : contract.isLongTerm,
     totalFee: appliesField('projectTotalFees') ? moneyData.amount ?? fallbackTotalFee : contract.totalFee,
     currency: appliesField('projectTotalFees') ? moneyData.currency || fallbackCurrency : contract.currency,
@@ -1356,23 +1364,33 @@ export const applyConfirmedRecognitionToContract = (
     accountFingerprint: appliesField('beneficiaryAccount') && beneficiary ? '合同识别快照' : contract.accountFingerprint,
     recognizedPaymentDetails,
     recognitionResults: fields,
-    extractionStage: 'applied',
-    recognitionAppliedAt,
-    lifecycle: recognizedSigned ? 'CONFIRMED' : 'RECOGNITION_CONFIRMED',
-    confirmedAt: recognizedSigned ? recognitionAppliedAt : undefined,
     signedAt: recognizedSigned ? signatureData.signedAt : undefined,
     signed: recognizedSigned,
+  };
+};
+
+export const projectConfirmedRecognitionDraft = (
+  contract: ContractRecord,
+  requiredFieldKeys?: readonly ContractRecognitionField['fieldKey'][],
+) => projectConfirmedRecognitionToContract(contract, requiredFieldKeys);
+
+export const applyConfirmedRecognitionToContract = (
+  contract: ContractRecord,
+  requiredFieldKeys?: readonly ContractRecognitionField['fieldKey'][],
+  occurredAt = new Date().toISOString(),
+): ContractRecord | null => {
+  const projected = projectConfirmedRecognitionToContract(contract, requiredFieldKeys);
+  if (!projected?.signed) return null;
+  return {
+    ...projected,
+    extractionStage: 'applied',
+    recognitionAppliedAt: occurredAt,
+    lifecycle: 'CONFIRMED',
+    confirmedAt: occurredAt,
     status: undefined,
-    issues: contract.issues
-      .filter((issue) => issue.id !== 'recognition-review' && (!recognizedSigned || issue.id !== 'signature'))
-      .map((issue) => issue.id === 'signature'
-        ? {
-            ...issue,
-            label: '合同待发送达人签署',
-            description: '结构化信息已确认，发送给 C 端达人后等待签署完成。',
-            source: '达人签署',
-          }
-        : issue),
+    issues: projected.issues.filter((issue) => (
+      issue.id !== 'recognition-review' && issue.id !== 'signature'
+    )),
   };
 };
 
@@ -1390,11 +1408,19 @@ export function sendContractForSignature(
   requestOrOccurredAt: ContractSignatureRequest | string = new Date().toISOString(),
   result?: Extract<ContractSignatureSendResult, { ok: true }>,
 ): ContractRecord | null {
-  if (
-    contract.lifecycle !== 'RECOGNITION_CONFIRMED'
-    || contract.extractionStage !== 'applied'
-    || contract.signed
-  ) return null;
+  const isConfirmedRecognitionDraft = contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION'
+    && contract.extractionStage === 'confirmed';
+  const isAppliedUnsignedContract = contract.lifecycle === 'RECOGNITION_CONFIRMED'
+    && contract.extractionStage === 'applied';
+  if ((!isConfirmedRecognitionDraft && !isAppliedUnsignedContract) || contract.signed) return null;
+  if (isConfirmedRecognitionDraft) {
+    const signatureField = normalizeContractRecognitionFields(contract.recognitionResults ?? [])
+      .find((field) => field.fieldKey === 'signatureStatus');
+    const signatureValue = signatureField?.normalizedValue && typeof signatureField.normalizedValue === 'object'
+      ? signatureField.normalizedValue as { signed?: boolean }
+      : null;
+    if (signatureField?.status !== 'confirmed' || signatureValue?.signed !== false) return null;
+  }
   const request = typeof requestOrOccurredAt === 'string' ? undefined : requestOrOccurredAt;
   const occurredAt = typeof requestOrOccurredAt === 'string'
     ? requestOrOccurredAt
@@ -1421,16 +1447,40 @@ export function sendContractForSignature(
 export const completeContractSignature = (
   contract: ContractRecord,
   occurredAt = new Date().toISOString(),
+  requiredFieldKeys?: readonly ContractRecognitionField['fieldKey'][],
 ): ContractRecord | null => {
   if (contract.lifecycle !== 'SENT_FOR_SIGNATURE' || contract.signed) return null;
-  return {
+  const recognitionResults = contract.recognitionResults?.map((field) => (
+    field.fieldKey === 'signatureStatus'
+      ? {
+          ...field,
+          rawValue: '已签署',
+          editedValue: '已签署',
+          normalizedValue: {
+            signed: true,
+            signedAt: occurredAt,
+            signerName: contract.signatureRequestSnapshot?.signerName || contract.publisher || undefined,
+          },
+          confidence: 1,
+          status: 'confirmed' as const,
+        }
+      : field
+  ));
+  const signedContract: ContractRecord = {
     ...contract,
-    lifecycle: 'CONFIRMED',
     signed: true,
     signedAt: occurredAt,
     signedBy: contract.signatureRequestSnapshot?.signerName || contract.publisher || undefined,
-    confirmedAt: occurredAt,
+    recognitionResults,
     updated: occurredAt.slice(0, 10),
-    issues: contract.issues.filter((issue) => issue.id !== 'signature'),
+  };
+  if (contract.extractionStage === 'confirmed' && recognitionResults?.length) {
+    return applyConfirmedRecognitionToContract(signedContract, requiredFieldKeys, occurredAt);
+  }
+  return {
+    ...signedContract,
+    lifecycle: 'CONFIRMED',
+    confirmedAt: occurredAt,
+    issues: signedContract.issues.filter((issue) => issue.id !== 'signature'),
   };
 };

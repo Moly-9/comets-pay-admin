@@ -78,7 +78,7 @@ describe('ContractDetailPage expiry presentation', () => {
 
     expect(detailSource).toContain('canEdit = true');
     expect(detailSource).toContain('const canEditCurrentContract = canEdit && (!contract.isTemplate || canEditTemplate)');
-    expect(detailSource).toContain('recognitionLocked={recognitionApplied || !canEditCurrentContract}');
+    expect(detailSource).toContain("recognitionLocked={recognitionApplied || !canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE'}");
   });
 
   it.each(['INDEPENDENT', 'FRAMEWORK', 'IO'] as ContractType[])('shows expiry and derived signature status for %s', (contractType) => {
@@ -92,11 +92,12 @@ describe('ContractDetailPage expiry presentation', () => {
 
   it('uses the same formal campaignEnd and long-term rules as contract-list validity', () => {
     expect(contractExpiryDisplayValue({ campaignEnd: '2026-09-30', isLongTerm: false })).toBe('2026-09-30');
+    expect(contractExpiryDisplayValue({ campaignStart: '2026-08-10', campaignEnd: '2026-09-30', isLongTerm: false })).toBe('2026-08-10 至 2026-09-30');
     expect(contractExpiryDisplayValue({ campaignEnd: '', isLongTerm: false })).toBe('未设置');
     expect(contractExpiryDisplayValue({ campaignEnd: '2025-01-01', isLongTerm: true })).toBe('长期有效');
   });
 
-  it('converts a historical Campaign Period to one expiry date picker without counting effectiveDate', () => {
+  it('converts a historical Campaign Period to two validity date pickers without counting effectiveDate', () => {
     const campaignPeriod = recognitionField(
       'campaignPeriod',
       'August 10, 2026 to September 17, 2026',
@@ -119,15 +120,16 @@ describe('ContractDetailPage expiry presentation', () => {
       />,
     );
 
-    expect(html).toMatch(/aria-label="合同有效期"[^>]*type="date"[^>]*value="2026-09-17"/);
-    expect(html).toContain('aria-label="长期有效"');
+    expect(html).toMatch(/aria-label="合同有效期开始日期"[^>]*type="date"[^>]*value="2026-08-10"/);
+    expect(html).toMatch(/aria-label="合同有效期结束日期"[^>]*type="date"[^>]*value="2026-09-17"/);
+    expect(html).not.toContain('aria-label="长期有效"');
     expect(html).not.toContain('data-derived-from="campaignPeriod"');
     expect(html).toContain('本页已确认 1/2 项');
     expect(html).toContain('aria-label="签署状态"');
     expect(html).not.toContain('aria-label="生效日期"');
   });
 
-  it('writes the confirmed Campaign Period end to the formal validity source', () => {
+  it('writes the confirmed Campaign Period range to the formal validity source', () => {
     const campaignPeriod = recognitionField(
       'campaignPeriod',
       'August 10, 2026 to September 17, 2026',
@@ -137,13 +139,18 @@ describe('ContractDetailPage expiry presentation', () => {
       ...INITIAL_CONTRACTS[0],
       campaignEnd: '2026-12-31',
       lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
-      recognitionResults: [campaignPeriod],
+      recognitionResults: [
+        campaignPeriod,
+        recognitionField('signatureStatus', '已签署', { signed: true }),
+      ],
       issues: [],
     } satisfies ContractRecord;
 
-    const applied = applyConfirmedRecognitionToContract(contract, ['campaignPeriod']);
+    const applied = applyConfirmedRecognitionToContract(contract, ['campaignPeriod', 'signatureStatus']);
 
+    expect(applied?.campaignStart).toBe('2026-08-10');
     expect(applied?.campaignEnd).toBe('2026-09-17');
+    expect(applied?.isLongTerm).toBe(false);
     expect(getContractValidity(applied!, '2026-09-18')).toMatchObject({
       status: 'EXPIRED',
       endDate: '2026-09-17',
@@ -281,7 +288,11 @@ describe('ContractDetailPage expiry presentation', () => {
   it('applies the recognized expiry, signed state, and isolated contract account snapshot', () => {
     const originalPaymentSnapshot = paymentSnapshot('Airwallex');
     const fields: ContractRecognitionField[] = [
-      recognitionField('contractExpiry', '2026-12-31', { endDate: '2026-12-31', isLongTerm: false }),
+      recognitionField('contractExpiry', '2026-09-01 至 2026-12-31', {
+        startDate: '2026-09-01',
+        endDate: '2026-12-31',
+        isLongTerm: false,
+      }),
       recognitionField('signatureStatus', '已签署', { signed: true }),
       recognitionField('accountName', 'Mina Kato Studio', 'Mina Kato Studio'),
       recognitionField('accountNumber', '0000004826', '0000004826'),
@@ -303,6 +314,7 @@ describe('ContractDetailPage expiry presentation', () => {
     const applied = applyConfirmedRecognitionToContract(contract, fields.map((field) => field.fieldKey));
 
     expect(applied).toMatchObject({
+      campaignStart: '2026-09-01',
       campaignEnd: '2026-12-31',
       lifecycle: 'CONFIRMED',
       signed: true,
@@ -328,6 +340,37 @@ describe('ContractDetailPage expiry presentation', () => {
       accountFingerprint: contract.accountFingerprint,
     });
     expect(applied?.issues.some((issue) => issue.id === 'signature')).toBe(false);
+  });
+
+  it('keeps unsigned recognition unapplied and exposes the pre-signature flow copy', () => {
+    const detailSource = readFileSync(new URL('./ContractDetailPage.tsx', import.meta.url), 'utf8');
+    const fields = [
+      recognitionField('contractExpiry', '2026-09-01 至 2026-12-31', {
+        startDate: '2026-09-01',
+        endDate: '2026-12-31',
+        isLongTerm: false,
+      }),
+      recognitionField('signatureStatus', '未签署', { signed: false }),
+    ];
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      extractionStage: 'confirmed' as const,
+      signed: false,
+      recognitionResults: fields,
+    } satisfies ContractRecord;
+
+    expect(applyConfirmedRecognitionToContract(contract, fields.map((field) => field.fieldKey))).toBeNull();
+    expect(detailSource).toContain('合同尚未签署，请先发送达人签署并等待完成。');
+    expect(detailSource).toContain('projectConfirmedRecognitionDraft');
+    expect(detailSource).toContain('isConfirmedUnsignedUpload');
+  });
+
+  it('does not show the payment-ready success card for an expired signed contract', () => {
+    const detailSource = readFileSync(new URL('./ContractDetailPage.tsx', import.meta.url), 'utf8');
+
+    expect(detailSource).toContain('const paymentReady = readiness.ready && !validity.expired;');
+    expect(detailSource).toContain(') : !signaturePending && paymentReady ? (');
   });
 
   it('renders recognized mixed account groups without duplicating remittance information', () => {
