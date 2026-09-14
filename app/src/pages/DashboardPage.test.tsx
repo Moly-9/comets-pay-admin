@@ -74,6 +74,7 @@ describe('dashboard request project overview', () => {
     expect(styles).toMatch(/\.dashboard-request-card-grid\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s);
     expect(styles).toMatch(/@media \(max-width: 1024px\)[\s\S]*?\.dashboard-request-card-grid\s*{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
     expect(styles).toMatch(/@media \(max-width: 420px\)[\s\S]*?\.dashboard-request-card-grid\s*{[^}]*gap:\s*6px/);
+    expect(styles).toMatch(/\.dashboard-asset-stage:only-child\s*{[^}]*flex:\s*0 1 auto[^}]*grid-template-columns:\s*auto auto auto/s);
   });
 
   it('groups contract and Invoice progress into the requested dashboard stages', () => {

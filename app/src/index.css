@@ -26491,6 +26491,11 @@ button:disabled {
   gap: 0 6px;
 }
 
+.dashboard-asset-stage:only-child {
+  flex: 0 1 auto;
+  grid-template-columns: auto auto auto;
+}
+
 .dashboard-stage-dot {
   display: inline-block;
   width: 6px;
