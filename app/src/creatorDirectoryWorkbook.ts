@@ -184,7 +184,7 @@ export const createCreatorDirectoryWorkbook = async (
     views: [{ state: 'frozen', ySplit: 1 }],
   });
   profileSheet.addRow([
-    '达人名称', '真实姓名', '地区', 'Invoice 联系地址', 'Invoice 联系电话', 'Invoice 联系邮箱', '社媒账号数', '社媒平台数',
+    '达人名称', '真实姓名 / 公司名称', '地区', 'Invoice 联系地址', 'Invoice 联系电话', 'Invoice 联系邮箱', '社媒账号数', '社媒平台数',
   ]);
   creators.forEach((creator) => profileSheet.addRow([
     creator.name,

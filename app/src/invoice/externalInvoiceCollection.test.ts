@@ -196,7 +196,7 @@ describe('external Invoice collection workflow', () => {
     expect(published.reviewHistory[published.reviewHistory.length - 1]?.action).toBe('PUBLISHED');
   });
 
-  it('does not require a preset payout account but blocks a missing Real Name', () => {
+  it('does not require a preset payout account but blocks a missing Real Name / Company Name', () => {
     expect(() => createExternalInvoiceCollection({
       projectId: 'project-external-1' as ProjectId,
       projectName: 'Global Creator Campaign',
@@ -215,7 +215,7 @@ describe('external Invoice collection workflow', () => {
       },
       actor,
       publish: false,
-    })).toThrow('Real Name');
+    })).toThrow('Real Name / Company Name');
   });
 
   it('uses From and Bill To as hard contract blockers while allowing documented amount differences', () => {

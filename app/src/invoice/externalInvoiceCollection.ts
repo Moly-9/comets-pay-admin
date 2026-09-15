@@ -589,7 +589,7 @@ export const createExternalInvoiceCollection = ({
 }): ExternalInvoiceCollectionRecord => {
   if (creator && creator.id !== creatorId) throw new Error('达人档案与当前 creatorId 不一致。');
   const currentCreatorLegalName = creator?.contact.legalName.trim() ?? creatorLegalName.trim();
-  if (!currentCreatorLegalName) throw new Error('达人档案 Real Name 待补充。');
+  if (!currentCreatorLegalName) throw new Error('达人档案 Real Name / Company Name 待补充。');
   const status: ExternalInvoiceCollectionStatus = publish ? 'WAITING_UPLOAD' : 'DRAFT';
   const record: ExternalInvoiceCollectionRecord = {
     invoiceId: createPrototypeId('invoice') as InvoiceId,
@@ -671,7 +671,7 @@ export const publishExternalInvoiceCollection = (
   if (record.status !== 'DRAFT') throw new Error('只有待发布的外部 Invoice 可以发布。');
   if (creator && creator.id !== record.creatorId) throw new Error('达人档案与当前 creatorId 不一致。');
   if (!(creator?.contact.legalName ?? record.creatorLegalNameSnapshot ?? '').trim()) {
-    throw new Error('达人档案 Real Name 待补充。');
+    throw new Error('达人档案 Real Name / Company Name 待补充。');
   }
   return {
     ...record,
@@ -821,7 +821,7 @@ export const simulateExternalInvoiceUpload = ({
     getPayoutAccountId(candidate) === payoutAccountId
   ));
   if (!account) throw new Error('请选择达人档案中已验证且可用于 Invoice 的收款账户。');
-  if (!creator.contact.legalName.trim()) throw new Error('达人档案 Real Name 待补充。');
+  if (!creator.contact.legalName.trim()) throw new Error('达人档案 Real Name / Company Name 待补充。');
   const sourceValues = sourceValuesForScenario(record, creator, account, scenario, invoiceDate);
   const recognitionValues = recognitionValuesForScenario(sourceValues, scenario);
   const version = record.sourceFileVersions.length + 1;
@@ -968,9 +968,9 @@ export const externalInvoiceValidationIssues = ({
   }
   const creatorLegalName = creator?.contact.legalName.trim() ?? '';
   if (!creatorLegalName) {
-    addMismatch('PUBLISHER', '达人档案 Real Name', confirmation.values.PUBLISHER, '达人档案 Real Name 待补充。');
+    addMismatch('PUBLISHER', '达人档案 Real Name / Company Name', confirmation.values.PUBLISHER, '达人档案 Real Name / Company Name 待补充。');
   } else if (!sameText(confirmation.values.PUBLISHER, creatorLegalName)) {
-    addMismatch('PUBLISHER', creatorLegalName, confirmation.values.PUBLISHER, 'From 与达人档案 Real Name 不一致。');
+    addMismatch('PUBLISHER', creatorLegalName, confirmation.values.PUBLISHER, 'From 与达人档案 Real Name / Company Name 不一致。');
   }
   if (!account) {
     issues.push({

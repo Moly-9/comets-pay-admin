@@ -157,6 +157,7 @@ describe('createCreatorDirectoryWorkbook', () => {
       '全部社媒账号',
       '收款账户摘要',
     ]);
+    expect(workbook.worksheets[0].getRow(1).getCell(2).text).toBe('真实姓名 / 公司名称');
     expect(workbook.worksheets[0].getRow(2).getCell(1).text).toBe(beta.name);
     expect(workbook.worksheets[0].getRow(3).getCell(1).text).toBe(alpha.name);
     expect(workbook.worksheets[1].rowCount).toBe(7);

@@ -1905,7 +1905,7 @@ export function InvoiceBatchBuilderPage({
                   <input
                     type="search"
                     value={creatorSearch}
-                    placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name"
+                    placeholder="搜索 Display Name、Handle、Real Name / Company Name 或 Account Name"
                     aria-label="搜索达人档案"
                     onChange={(event) => setCreatorSearch(event.target.value)}
                   />

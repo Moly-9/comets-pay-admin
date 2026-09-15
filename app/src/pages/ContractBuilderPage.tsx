@@ -1079,7 +1079,7 @@ export function ContractBuilderPage({
               ) : null}
               {templateHasOutputField('publisher') && templateFieldPolicies.publisher !== 'OMIT' ? (
                 <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}>
-                  <span>Publisher（real name）*</span>
+                  <span>Publisher（Real Name / Company Name）*</span>
                   <input
                     value={templateFieldPolicies.publisher === 'MANUAL' ? manualScalarFieldValue('publisher') : publisher}
                     readOnly={templateFieldPolicies.publisher !== 'MANUAL'}

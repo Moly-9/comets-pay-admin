@@ -240,7 +240,7 @@ export function ExternalInvoiceCollectionCreatePage({
         <section className="content-card external-collection-card">
           <div className="external-section-heading">
             <div><span className="external-section-kicker">01</span><h2>任务对象</h2></div>
-            <p>达人仍按 Display Name 选择，From 使用档案 Real Name 校验。</p>
+            <p>达人仍按 Display Name 选择，From 使用档案 Real Name / Company Name 校验。</p>
           </div>
           <div className="form-grid external-form-grid">
             <div className="form-control">
@@ -370,14 +370,14 @@ export function ExternalInvoiceCollectionCreatePage({
           <div className="external-form-footer">
             <NoticeBanner>
               {selectedCreator && !selectedCreator.contact.legalName.trim()
-                ? '达人档案 Real Name 待补充，当前不能创建或发布采集任务。'
+                ? '达人档案 Real Name / Company Name 待补充，当前不能创建或发布采集任务。'
                 : selectedCreator
                   ? `From 校验基准：${selectedCreator.contact.legalName}。付款账户待达人上传时从本人有效账户中选择。`
                   : '保存草稿后列表显示“待发布”；正式发布后才会出现在 C 端待办中。'}
             </NoticeBanner>
             <div className="external-form-actions">
-              <Button variant="secondary" disabled={!complete} disabledReason="请完成必填信息、Real Name 与合同差异处理。" onClick={() => submit(false)}>保存草稿</Button>
-              <Button icon={<Send size={16} />} disabled={!complete} disabledReason="请完成必填信息、Real Name 与合同差异处理。" onClick={() => submit(true)}>发布收集任务</Button>
+              <Button variant="secondary" disabled={!complete} disabledReason="请完成必填信息、Real Name / Company Name 与合同差异处理。" onClick={() => submit(false)}>保存草稿</Button>
+              <Button icon={<Send size={16} />} disabled={!complete} disabledReason="请完成必填信息、Real Name / Company Name 与合同差异处理。" onClick={() => submit(true)}>发布收集任务</Button>
             </div>
           </div>
         </section>
@@ -470,7 +470,7 @@ export function ExternalInvoiceCollectionDetailPage({
       : `${accountSnapshot.accountName || '待补充'} / ${accountSnapshot.iban || accountSnapshot.accountNumber || '待补充'}`;
   const expectedPublisher = creator?.contact.legalName.trim()
     || record.creatorLegalNameSnapshot
-    || '达人档案 Real Name 待补充';
+    || '达人档案 Real Name / Company Name 待补充';
   const displayCurrency = confirmation?.values.CURRENCY || record.expected.currency;
   const displayAmount = Number(confirmation?.values.AMOUNT ?? record.expected.amount);
   const displayPaymentMethod = accountProvider === 'PayPal'
@@ -738,7 +738,7 @@ export function ExternalInvoiceCollectionDetailPage({
       label: '预计币种&金额',
       value: formatInvoiceMoney(record.expected.currency, record.expected.amount),
     },
-    { id: 'from', label: 'From', value: expectedPublisher, secondary: '达人档案 Real Name' },
+    { id: 'from', label: 'From', value: expectedPublisher, secondary: '达人档案 Real Name / Company Name' },
     { id: 'bill-to', label: 'Bill To', value: record.expected.billTo.name, secondary: '任务创建时选择的开票主体' },
     { id: 'description', label: '合作内容', value: record.expected.description },
     { id: 'due-date', label: '截止时间', value: record.expected.dueDate },

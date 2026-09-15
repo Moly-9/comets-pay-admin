@@ -86,7 +86,7 @@ const paymentParagraphs = (model: InvoiceDocumentModel) => {
   }
   return [
     new Paragraph({ spacing: { before: 0, after: 100 }, children: [new TextRun({ text: 'Paid by Bank', bold: true, size: 21, font: DOCX_FONT })] }),
-    paragraph('Real Name', model.from.legalName),
+    paragraph('Real Name / Company Name', model.from.legalName),
     paragraph('Account Name', model.payment.accountName),
     paragraph('Account Number', model.payment.accountNumber),
     paragraph('Beneficiary Bank Name', model.payment.bankName),
@@ -146,7 +146,7 @@ export async function generateInvoiceDocx(model: InvoiceDocumentModel) {
         margins: { top: 0, bottom: 120, left: 0, right: 240 },
         children: [
           new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: 'From', bold: true, size: 22, font: DOCX_FONT })] }),
-          paragraph('Real Name', model.from.legalName),
+          paragraph('Real Name / Company Name', model.from.legalName),
           paragraph('Address', model.from.address),
           paragraph('Tel', model.from.phone),
           paragraph('Email', model.from.email),

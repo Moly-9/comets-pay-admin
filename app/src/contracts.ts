@@ -750,7 +750,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
       },
     ],
     issues: [
-      { id: 'publisher', label: 'Publisher未填写', description: '需要填写真实姓名或公司法定名称。', severity: 'blocker', source: 'Standard Terms · 第1页' },
+      { id: 'publisher', label: 'Publisher未填写', description: '需要填写真实姓名 / 公司名称。', severity: 'blocker', source: 'Standard Terms · 第1页' },
       { id: 'currency', label: '项目币种缺失', description: 'Project Total Fees没有币种，无法与Invoice匹配。', severity: 'blocker', source: 'IO · 第14页' },
       { id: 'amount', label: '项目总费用缺失', description: 'Project Total Fees仍为模板占位符。', severity: 'blocker', source: 'IO · 第14页' },
       { id: 'days', label: '付款期限未确定', description: '模板仍保留[60/45] working days二选一。', severity: 'blocker', source: 'IO · 第15页' },

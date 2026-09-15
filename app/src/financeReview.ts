@@ -436,7 +436,7 @@ const reviewInvoice = (
     }),
     tripleField({
       id: 'real-name',
-      label: 'Real Name',
+      label: 'Real Name / Company Name',
       contracts,
       getContractValue: (contract) => contract.publisher,
       invoiceValue: invoiceRealName,

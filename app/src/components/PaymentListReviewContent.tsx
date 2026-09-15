@@ -842,7 +842,7 @@ export function PaymentListReviewContent({
                       { id: 'payment-method', label: '付款方式', value: transferMethodLabel(row.effectiveAccount.transferMethod, row.effectiveAccount.localClearingSystem) },
                       { id: 'swift-charge-option', label: 'SWIFT 费用选项', value: row.effectiveAccount.transferMethod === 'SWIFT' ? 'SHA · 共同承担' : '—' },
                       { id: 'fee-bearer', label: '手续费承担方', value: feeBearerLabel(paymentListItemValue(row.item, 'feeBearer')) },
-                      { id: 'real-name', label: 'Real Name', value: realName },
+                      { id: 'real-name', label: 'Real Name / Company Name', value: realName },
                       { id: 'beneficiary-type', label: '收款方类型', value: details?.beneficiaryType || 'PERSONAL' },
                       { id: 'bank-country', label: '银行国家 / 地区', value: bankCountry },
                       { id: 'account-currency', label: '账户币种', value: details?.accountCurrency || currency },
@@ -864,7 +864,7 @@ export function PaymentListReviewContent({
                       ...supplementalSchemaFields,
                     ]
                   : [
-                  { id: 'real-name', label: 'Real Name', value: row.item.snapshot.realName },
+                  { id: 'real-name', label: 'Real Name / Company Name', value: row.item.snapshot.realName },
                   { id: 'account-name', label: 'Account Name', value: details?.accountName },
                   { id: 'account-number', label: 'Account Number', value: details?.accountNumber },
                   { id: 'bank-name', label: 'Beneficiary Bank Name', value: details?.bankName },

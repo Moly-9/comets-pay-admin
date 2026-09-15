@@ -238,7 +238,7 @@ describe('request finance review', () => {
     });
   });
 
-  it('blocks a Real Name difference from the contract', () => {
+  it('blocks a Real Name / Company Name difference from the contract', () => {
     const review = buildRequestFinanceReview(
       requestWithContract,
       [{ ...invoice, snapshot: { ...invoice.snapshot, contractIds: ['contract-test'] as never[] } }],
@@ -247,6 +247,7 @@ describe('request finance review', () => {
     );
     expect(review.canApprove).toBe(false);
     expect(review.pages[0].fields.find((field) => field.id === 'real-name')).toMatchObject({
+      label: 'Real Name / Company Name',
       contractValue: 'Different Name',
       state: 'mismatch',
     });

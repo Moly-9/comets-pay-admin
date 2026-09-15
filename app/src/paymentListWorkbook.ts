@@ -46,7 +46,7 @@ export const PAYPAL_PAYMENT_LIST_HEADERS = [
   '付款清单编号',
   'Invoice 编号',
   '达人',
-  'Real Name',
+  'Real Name / Company Name',
   'PayPal Name',
   'PayPal Email',
   '付款币种',

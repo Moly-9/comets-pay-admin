@@ -181,7 +181,7 @@ describe('CreatorsPage profile cards', () => {
     expect(html).toContain('<th>Real Name / Company Name</th>');
     expect(html).not.toContain('<th>地区</th>');
     expect(html).toContain(creator.contact.legalName);
-    expect(html).toContain('搜索达人名称、账号、Real Name 或 Company Name');
+    expect(html).toContain('搜索达人名称、账号或 Real Name / Company Name');
     expect(html).toContain('<th>账户更新时间</th>');
     expect(html).toContain('creator-directory-identity');
     expect(html).toContain('@Luna_J');
@@ -194,7 +194,9 @@ describe('CreatorsPage profile cards', () => {
     expect(source).toContain('CreatorInvitationSendDialog');
     expect(source).toContain('CreatorInvitationRecordsDialog');
     expect(source).not.toContain('达人 C 端入驻');
-    expect(source).toContain('Display name · 默认跟随首个 Handle');
+    expect(source).toContain('Display Name · 默认使用首个 Handle（不含 @）');
+    expect(source).toContain('nameIsAutoDerived');
+    expect(source).toContain("const primaryHandle = normalizeSocialHandle(socialAccounts[0]?.handle ?? '')");
     expect(source).toContain('readOnly value={draft.region || \'待识别\'}');
     expect(source).toContain('请在联系地址末尾填写国家名');
     expect(source).not.toContain('<span>地区<em className="required-mark"');

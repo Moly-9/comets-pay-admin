@@ -47,7 +47,7 @@ export const creatorNameFromPrimaryHandle = (
 ) => {
   const handle = socialAccounts[0]?.handle.trim() ?? '';
   if (!handle) return '';
-  return handle.startsWith('@') ? handle : `@${handle}`;
+  return handle.replace(/^@+/, '');
 };
 
 export const isCreatorNameAutoDerived = (
@@ -55,8 +55,22 @@ export const isCreatorNameAutoDerived = (
   socialAccounts: readonly CreatorSocialAccount[],
 ) => {
   const normalizedName = name.trim();
-  return !normalizedName || normalizedName === creatorNameFromPrimaryHandle(socialAccounts);
+  const defaultName = creatorNameFromPrimaryHandle(socialAccounts);
+  return !normalizedName
+    || normalizedName === defaultName
+    || (Boolean(defaultName) && normalizedName === `@${defaultName}`);
 };
+
+export const creatorNameAfterManualInput = (
+  value: string,
+  socialAccounts: readonly CreatorSocialAccount[],
+) => value.trim() ? value : creatorNameFromPrimaryHandle(socialAccounts);
+
+export const creatorNameAfterSocialAccountsChange = (
+  currentName: string,
+  manuallyEdited: boolean,
+  socialAccounts: readonly CreatorSocialAccount[],
+) => manuallyEdited ? currentName : creatorNameFromPrimaryHandle(socialAccounts);
 
 export const creatorInitialsFromName = (name: string) => {
   const normalized = name.trim().replace(/^@+/, '');

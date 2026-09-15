@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   creatorInitialsFromName,
+  creatorNameAfterManualInput,
+  creatorNameAfterSocialAccountsChange,
   creatorNameFromPrimaryHandle,
   creatorRegionFromContactAddress,
   isCreatorNameAutoDerived,
@@ -13,13 +15,27 @@ const accounts = (firstHandle: string, secondHandle = '@secondary'): CreatorSoci
 ];
 
 describe('creator profile defaults', () => {
-  it('从第一个社媒账号生成带 @ 的默认达人名称', () => {
-    expect(creatorNameFromPrimaryHandle(accounts('luna.creator'))).toBe('@luna.creator');
-    expect(creatorNameFromPrimaryHandle(accounts('@luna.creator'))).toBe('@luna.creator');
+  it('从第一个社媒账号生成不带 @ 的默认达人名称', () => {
+    expect(creatorNameFromPrimaryHandle(accounts('luna.creator'))).toBe('luna.creator');
+    expect(creatorNameFromPrimaryHandle(accounts('@luna.creator'))).toBe('luna.creator');
+    expect(creatorNameFromPrimaryHandle(accounts('@@luna.creator'))).toBe('luna.creator');
     expect(creatorNameFromPrimaryHandle(accounts('', '@fallback'))).toBe('');
     expect(isCreatorNameAutoDerived('', accounts('@luna.creator'))).toBe(true);
+    expect(isCreatorNameAutoDerived('luna.creator', accounts('@luna.creator'))).toBe(true);
     expect(isCreatorNameAutoDerived('@luna.creator', accounts('@luna.creator'))).toBe(true);
     expect(isCreatorNameAutoDerived('Luna Jones', accounts('@luna.creator'))).toBe(false);
+  });
+
+  it('未人工修改时跟随新的首个 Handle，人工名称保持不变', () => {
+    const changedAccounts = accounts('@new.primary', '@old.secondary');
+    expect(creatorNameAfterSocialAccountsChange('old.primary', false, changedAccounts)).toBe('new.primary');
+    expect(creatorNameAfterSocialAccountsChange('Custom Name', true, changedAccounts)).toBe('Custom Name');
+    expect(creatorNameAfterSocialAccountsChange('old.primary', false, changedAccounts.slice(1))).toBe('old.secondary');
+  });
+
+  it('清空人工名称后恢复跟随首个 Handle', () => {
+    expect(creatorNameAfterManualInput('Custom Name', accounts('@luna.creator'))).toBe('Custom Name');
+    expect(creatorNameAfterManualInput('   ', accounts('@luna.creator'))).toBe('luna.creator');
   });
 
   it('自动名称生成头像缩写时忽略 @', () => {

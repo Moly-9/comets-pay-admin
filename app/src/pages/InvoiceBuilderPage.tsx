@@ -942,7 +942,7 @@ export function InvoiceBuilderPage({
             </div>
             <div className="invoice-form-subtitle">From</div>
             <div className="invoice-form-grid">
-              <label className={errors.legalName ? 'has-error' : ''}><span>真实姓名 / Real Name *</span><input value={from.legalName} onChange={(event) => setFrom((current) => ({ ...current, legalName: event.target.value }))} /><small>{errors.legalName}</small></label>
+              <label className={errors.legalName ? 'has-error' : ''}><span>真实姓名 / 公司名称 · Real Name / Company Name *</span><input value={from.legalName} onChange={(event) => setFrom((current) => ({ ...current, legalName: event.target.value }))} /><small>{errors.legalName}</small></label>
               <label className={errors.phone ? 'has-error' : ''}><span>联系电话 / Tel *</span><input value={from.phone} onChange={(event) => setFrom((current) => ({ ...current, phone: event.target.value }))} /><small>{errors.phone}</small></label>
               <label className={errors.email ? 'has-error' : ''}><span>联系邮箱 / Email *</span><input type="email" value={from.email} onChange={(event) => setFrom((current) => ({ ...current, email: event.target.value }))} /><small>{errors.email}</small></label>
               <label className={`full-width ${errors.address ? 'has-error' : ''}`}><span>联系地址 / Address *</span><textarea value={from.address} onChange={(event) => setFrom((current) => ({ ...current, address: event.target.value }))} /><small>{errors.address}</small></label>

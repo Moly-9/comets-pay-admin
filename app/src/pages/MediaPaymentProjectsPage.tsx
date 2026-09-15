@@ -2197,7 +2197,7 @@ export function MediaPaymentProjectsPage({
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
                   <div id="media-request-creator-options" className="creator-options" role="listbox" aria-label="达人档案列表" aria-multiselectable="true">
-                    <div className="creator-picker-search-row"><label className="creator-picker-search"><Search size={16} aria-hidden="true" /><input aria-label="搜索合作达人" placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} /></label><span className="creator-picker-result-count" aria-live="polite"><strong>{visibleCreators.length}</strong><span>位达人</span></span></div>
+                    <div className="creator-picker-search-row"><label className="creator-picker-search"><Search size={16} aria-hidden="true" /><input aria-label="搜索合作达人" placeholder="搜索 Display Name、Handle、Real Name / Company Name 或 Account Name" value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} /></label><span className="creator-picker-result-count" aria-live="polite"><strong>{visibleCreators.length}</strong><span>位达人</span></span></div>
                     <div className="creator-option-list">
                       {visibleCreators.map((creator) => {
                         const selected = selectedCreatorIds.includes(creator.id as CreatorId);

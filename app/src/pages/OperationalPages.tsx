@@ -178,6 +178,8 @@ import {
 } from '../creatorDirectoryWorkbook';
 import {
   creatorInitialsFromName,
+  creatorNameAfterManualInput,
+  creatorNameAfterSocialAccountsChange,
   creatorNameFromPrimaryHandle,
   creatorRegionFromContactAddress,
   isCreatorNameAutoDerived,
@@ -1634,7 +1636,7 @@ type ContactFieldDefinition = {
 };
 
 const INVOICE_CONTACT_FIELDS: ContactFieldDefinition[] = [
-  { key: 'legalName', label: '真实姓名', alias: 'Real Name', placeholder: '请输入证件或合同中的真实姓名' },
+  { key: 'legalName', label: '真实姓名 / 公司名称', alias: 'Real Name / Company Name', placeholder: '请输入证件姓名或公司法定名称' },
   { key: 'phone', label: '联系电话', alias: 'Tel', placeholder: '选填：请输入含国家区号的联系电话', inputType: 'tel', optional: true },
   { key: 'email', label: '联系邮箱', alias: 'Email', placeholder: '请输入达人联系邮箱', inputType: 'email' },
   { key: 'address', label: '联系地址', alias: 'Address', placeholder: '例如：New York, NY, United States（请将国家名放在末尾）', fullWidth: true },
@@ -2295,7 +2297,7 @@ function ProjectCreatorPicker({
           <div className="creator-picker-search-row">
             <label className="creator-picker-search">
               <Search size={16} aria-hidden="true" />
-              <input aria-label="搜索达人档案" placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <input aria-label="搜索达人档案" placeholder="搜索 Display Name、Handle、Real Name / Company Name 或 Account Name" value={search} onChange={(event) => setSearch(event.target.value)} />
             </label>
             <span className="creator-picker-result-count" aria-live="polite">
               <strong>{visibleCreators.length}</strong>
@@ -2901,9 +2903,13 @@ export function CreatorsPage({
       if (savedDraft) {
         const stored = JSON.parse(savedDraft) as unknown;
         if (isStoredCreatorDraft(stored) && !creators.some((creator) => creator.id === stored.profile.id)) {
+          const nameIsAutoDerived = isCreatorNameAutoDerived(stored.profile.name, stored.profile.socialAccounts);
           setSelectedId(null);
           setDraft({
             ...stored.profile,
+            name: nameIsAutoDerived
+              ? creatorNameFromPrimaryHandle(stored.profile.socialAccounts)
+              : stored.profile.name,
             region: stored.profile.region || creatorRegionFromContactAddress(stored.profile.contact.address),
             socialAccounts: stored.profile.socialAccounts.map((account) => ({ ...account })),
             contact: { ...stored.profile.contact },
@@ -2912,7 +2918,7 @@ export function CreatorsPage({
           });
           setEditing(true);
           setCreating(true);
-          setCreatorNameManuallyEdited(!isCreatorNameAutoDerived(stored.profile.name, stored.profile.socialAccounts));
+          setCreatorNameManuallyEdited(!nameIsAutoDerived);
           setFormErrors([]);
           setValidationAttempt(0);
           setCreatorCloseGuardOpen(false);
@@ -3005,7 +3011,7 @@ export function CreatorsPage({
     setCreatorNameManuallyEdited(hasManualName);
     setDraft((current) => current ? {
       ...current,
-      name: hasManualName ? value : creatorNameFromPrimaryHandle(current.socialAccounts),
+      name: creatorNameAfterManualInput(value, current.socialAccounts),
     } : current);
   };
 
@@ -3013,15 +3019,17 @@ export function CreatorsPage({
     setDraft((current) => {
       if (!current) return current;
       const platforms = [...new Set(socialAccounts.map((account) => account.platform.trim()).filter(Boolean))];
-      const primaryHandle = creatorNameFromPrimaryHandle(socialAccounts);
+      const primaryHandle = normalizeSocialHandle(socialAccounts[0]?.handle ?? '');
       return {
         ...current,
         socialAccounts,
         handle: primaryHandle,
         platform: platforms.join(' · '),
-        name: creatorNameManuallyEdited
-          ? current.name
-          : creatorNameFromPrimaryHandle(socialAccounts),
+        name: creatorNameAfterSocialAccountsChange(
+          current.name,
+          creatorNameManuallyEdited,
+          socialAccounts,
+        ),
       };
     });
   };
@@ -3045,7 +3053,7 @@ export function CreatorsPage({
     if (draft.socialAccounts.some((account) => account.profileUrl.trim() && !/^https?:\/\/\S+$/i.test(account.profileUrl.trim()))) {
       nextErrors.push('有效的社媒主页链接');
     }
-    if (!draft.contact.legalName.trim()) nextErrors.push('Invoice 真实姓名');
+    if (!draft.contact.legalName.trim()) nextErrors.push('Invoice 真实姓名 / 公司名称');
     if (!draft.contact.address.trim()) nextErrors.push('联系地址');
     if (!draft.contact.email.trim() || !/^\S+@\S+\.\S+$/.test(draft.contact.email)) nextErrors.push('有效联系邮箱');
     const payoutAccountError = getCreatorPayoutAccountValidationError(draft.payoutAccounts);
@@ -3171,7 +3179,7 @@ export function CreatorsPage({
       <section className="content-card">
         <div className="content-toolbar creator-directory-toolbar">
           <div className="creator-directory-filter-controls">
-            <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号、Real Name 或 Company Name" />
+            <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号或 Real Name / Company Name" />
             <SelectField
               ariaLabel="达人付款渠道筛选"
               className="creator-directory-provider-filter"
@@ -3326,8 +3334,8 @@ export function CreatorsPage({
               <CreatorPaymentSection icon={<Users size={19} />} title="达人基本资料" description="用于项目选择与档案检索，不参与银行账户验证">
                 <div className="form-grid creator-payment-form-grid">
                   <label>
-                    <span className="creator-payment-field-label"><span>达人名称</span><small>Display name · 默认跟随首个 Handle</small></span>
-                    <input aria-label="达人名称" placeholder="录入首个 Handle 后自动带入" value={draft.name} onChange={(event) => updateDraftName(event.target.value)} />
+                    <span className="creator-payment-field-label"><span>达人名称</span><small>Display Name · 默认使用首个 Handle（不含 @）</small></span>
+                    <input aria-label="达人名称" placeholder="录入首个 Handle 后自动带入，支持修改" value={draft.name} onChange={(event) => updateDraftName(event.target.value)} />
                   </label>
                   <label>
                     <span className="creator-payment-field-label"><span>地区</span><small>From contact address · 自动带入</small></span>

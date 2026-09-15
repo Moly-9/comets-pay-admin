@@ -40,6 +40,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontFamily: 'Helvetica-Bold', fontSize: 10.5, marginBottom: 6 },
   infoLine: { flexDirection: 'row', marginBottom: 3 },
   infoLineLabel: { fontFamily: 'Helvetica-Bold', width: 88 },
+  fromInfoLineLabel: { width: 132 },
   infoLineValue: { flexGrow: 1, maxWidth: 250 },
   table: { borderWidth: 0.8, borderColor: '#111111', marginBottom: 8 },
   tableRow: { flexDirection: 'row', minHeight: 27, borderBottomWidth: 0.6, borderBottomColor: '#777777' },
@@ -91,7 +92,7 @@ function TableHeader() {
 
 function PaymentInformation({ model }: { model: InvoiceDocumentModel }) {
   const bankLines = [
-    ['Real Name', model.from.legalName],
+    ['Real Name / Company Name', model.from.legalName],
     ['Account Name', model.payment.accountName],
     ['Account Number', model.payment.accountNumber],
     ['Beneficiary Bank Name', model.payment.bankName],
@@ -151,13 +152,13 @@ export function InvoicePdfDocument({ model }: { model: InvoiceDocumentModel }) {
               <View style={styles.infoColumn}>
                 <Text style={styles.sectionLabel}>From</Text>
                 {[
-                  ['Real Name', model.from.legalName],
+                  ['Real Name / Company Name', model.from.legalName],
                   ['Address', model.from.address],
                   ['Tel', model.from.phone],
                   ['Email', model.from.email],
                 ].map(([label, value]) => (
                   <View style={styles.infoLine} key={label}>
-                    <Text style={styles.infoLineLabel}>{label}:</Text>
+                    <Text style={[styles.infoLineLabel, styles.fromInfoLineLabel]}>{label}:</Text>
                     <Text style={[styles.infoLineValue, hasCjk(value) ? styles.cjk : {}]}>{value}</Text>
                   </View>
                 ))}

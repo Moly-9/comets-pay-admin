@@ -24,7 +24,7 @@ export const validateInvoiceDocumentModel = (
   if (!model.invoiceDate) errors.invoiceDate = '请选择 Invoice 日期';
   if (!model.billTo.name.trim()) errors.billToName = '请填写 Bill To 公司名称';
   if (!model.billTo.address.trim()) errors.billToAddress = '请填写 Bill To 地址';
-  if (!model.from.legalName.trim()) errors.legalName = '请填写真实姓名';
+  if (!model.from.legalName.trim()) errors.legalName = '请填写真实姓名 / 公司名称';
   if (!model.from.address.trim()) errors.address = '请填写联系地址';
   if (!model.from.phone.trim()) errors.phone = '请填写联系电话';
   if (!model.from.email.trim() || !/^\S+@\S+\.\S+$/.test(model.from.email)) {
