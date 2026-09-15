@@ -113,18 +113,20 @@ describe('request project payment presentation', () => {
     expect(sharedProjectInfo).toContain('<dt>备注</dt>');
     expect(paymentTable).toContain('<th>达人</th>');
     expect(paymentTable).toContain('<th>Invoice</th>');
-    expect(paymentTable).toContain('<th>请款金额</th>');
     expect(paymentTable).toContain('<th>付款渠道</th>');
-    expect(paymentTable).toContain('<th>付款方式</th>');
-    expect(paymentTable).toContain('<th>状态</th>');
+    expect(paymentTable).toContain('<th>请款金额</th>');
+    expect(paymentTable).toContain('<th>实际支出金额</th>');
+    expect(paymentTable).toContain('<th>校验状态</th>');
+    expect(paymentTable).toContain('<th>付款状态</th>');
+    expect(paymentTable.indexOf('<th>付款渠道</th>')).toBeLessThan(paymentTable.indexOf('<th>请款金额</th>'));
     expect(paymentTable).toContain('<CreatorIdentity');
     expect(paymentTable).toContain('<PaymentProviderBadge compact provider={payee.channel} />');
-    expect(paymentTable).toContain('request-detail-transfer-method');
     expect(paymentTable).toContain('fallbackHandle={payee.handle}');
     expect(paymentTable).toContain('fallbackPlatform={payee.platform}');
     expect(paymentTable).toContain('socialAccountsMaxVisible={1}');
-    expect(paymentTable).toContain('<span className="simple-status is-success"><i />已校验</span>');
-    expect(paymentTable).not.toContain('requestPaymentStatusLabel(payee.status)');
+    expect(paymentTable).toContain('payee.actualExpenditure');
+    expect(paymentTable).toContain('payee.validationStatus');
+    expect(paymentTable).toContain('payee.paymentStatus');
     expect(styles).toContain('.request-detail-creator-cell');
     expect(styles).toMatch(/\.request-detail-creator-cell > \.creator-identity\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
     expect(approvalActions.indexOf('退回媒介修改')).toBeLessThan(approvalActions.indexOf('审批通过'));
@@ -273,7 +275,9 @@ describe('request project payment presentation', () => {
       amount: 'USD 1,250.00',
       channel: 'Airwallex',
       paymentMethod: 'Local',
-      status: '付款处理中',
+      actualExpenditure: '待渠道回写',
+      validationStatus: '待校验',
+      paymentStatus: '付款处理中',
     }]);
   });
 

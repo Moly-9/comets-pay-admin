@@ -60,6 +60,7 @@ import {
 } from '../paymentRequestProjects';
 import { formatInvoiceMoney } from '../invoice/invoiceUtils';
 import { demoDisplayName } from '../demoCreatorNames';
+import { paymentPayoutExpenditureTotals } from '../paymentAttempts';
 
 export type RequestProjectSummary = PaymentRequestPaymentPlan & PaymentRequestExtraDetails & {
   id: string;
@@ -134,7 +135,10 @@ type RequestPayee = {
   amount: string;
   channel: string;
   paymentMethod?: string;
-  status: string;
+  actualExpenditure?: string;
+  validationStatus?: string;
+  paymentStatus?: string;
+  status?: string;
 };
 
 type RequestProgress = {
@@ -281,7 +285,7 @@ export const paymentRecordsFromLists = (
         { label: '付款方式', value: requestPaymentMethodLabel(provider) },
         { label: '支付币种', value: currency },
         { label: '收款币种', value: receiveCurrency },
-        { label: '付款金额', value: formatInvoiceMoney(currency, amount) },
+        { label: '请款金额', value: formatInvoiceMoney(currency, amount) },
         { label: '费用承担', value: requestFeeBearerLabel(paymentListItemValue(item, 'feeBearer')) },
         { label: '收款账户', value: accountDisplayValue(effectiveAccount.accountSummary) },
         { label: '付款原因', value: String(paymentListItemValue(item, 'paymentReason') || '未填写') },
@@ -316,6 +320,7 @@ export const requestPayeesFromPaymentLists = (
       const payout = invoice?.sourcePayoutId
         ? payoutById.get(invoice.sourcePayoutId)
         : payouts.find((candidate) => candidate.invoice === item.snapshot.invoiceNumber);
+      const expenditureTotals = payout ? paymentPayoutExpenditureTotals(payout) : [];
       return {
         name: item.snapshot.creatorName,
         creatorId: item.snapshot.creatorId,
@@ -330,7 +335,13 @@ export const requestPayeesFromPaymentLists = (
         amount: formatInvoiceMoney(currency, amount),
         channel: paymentProviderDisplayName(account.provider || list.provider),
         paymentMethod: requestTransferMethodLabel(account.transferMethod, account.provider || list.provider),
-        status: requestPaymentStatusLabel(payout?.status, list.status),
+        actualExpenditure: expenditureTotals.length
+          ? expenditureTotals.map(({ currency: expenditureCurrency, amount: expenditureAmount }) => (
+              formatInvoiceMoney(expenditureCurrency, expenditureAmount)
+            )).join(' · ')
+          : payout?.status === '付款处理中' ? '待渠道回写' : '—',
+        validationStatus: item.requiresRevalidation ? '需重新校验' : item.lastValidatedAt ? '已校验' : '待校验',
+        paymentStatus: requestPaymentStatusLabel(payout?.status, list.status),
       };
     })
   ));
@@ -790,7 +801,7 @@ function getRequestProjectResourceRecords(
           { label: '关联 Invoice', value: invoice.id },
           { label: '付款渠道', value: invoice.channel ?? '待确认' },
           { label: '付款方式', value: requestPaymentMethodLabel(invoice.channel ?? '') },
-          { label: '付款金额', value: invoice.amount },
+          { label: '请款金额', value: invoice.amount },
           { label: '付款状态', value: detail.payment.status },
         ],
       };
@@ -1075,17 +1086,19 @@ export function RequestProjectDetailPage({
 
           <section className="project-detail-card">
             <header className="project-detail-card-header">
-              <div><h2>付款明细</h2><p>展示当前请款中的达人、Invoice、付款渠道、方式与状态。</p></div>
+              <div><h2>付款明细</h2><p>展示当前请款中的达人、Invoice、请款与实际支出。</p></div>
               <span>共 {request.invoices} 份 Invoice</span>
             </header>
             <div className="table-scroll">
               <table className="data-table request-detail-payment-table">
-                <thead><tr><th>达人</th><th>Invoice</th><th>请款金额</th><th>付款渠道</th><th>付款方式</th><th>状态</th></tr></thead>
+                <thead><tr><th>达人</th><th>Invoice</th><th>付款渠道</th><th>请款金额</th><th>实际支出金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
                 <tbody>{payees.map((payee) => {
                   const creator = payee.creatorId
                     ? creators.find((candidate) => String(candidate.id) === String(payee.creatorId))
                     : creators.find((candidate) => candidate.name === payee.name);
-                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><CreatorIdentity creator={creator} displayName={payee.name} initials={payee.initials} accent={payee.accent} fallbackHandle={payee.handle} fallbackPlatform={payee.platform} socialAccountsMaxVisible={1} /></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td>{payee.amount}</td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td><span className="request-detail-transfer-method">{payee.paymentMethod ?? requestTransferMethodLabel(undefined, payee.channel)}</span></td><td><span className="simple-status is-success"><i />已校验</span></td></tr>;
+                  const validationStatus = payee.validationStatus ?? '已校验';
+                  const paymentStatus = payee.paymentStatus ?? payee.status ?? '未付款';
+                  return <tr key={`${request.id}${payee.invoice}`}><td><div className="request-detail-creator-cell"><CreatorIdentity creator={creator} displayName={payee.name} initials={payee.initials} accent={payee.accent} fallbackHandle={payee.handle} fallbackPlatform={payee.platform} socialAccountsMaxVisible={1} /></div></td><td><button className="invoice-record-link" type="button" onClick={() => { setDocumentViewer({ kind: 'invoice', recordId: payee.invoice }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{payee.invoice}</button></td><td><PaymentProviderBadge compact provider={payee.channel} /></td><td>{payee.amount}</td><td>{payee.actualExpenditure ?? '—'}</td><td><span className={`simple-status ${validationStatus === '已校验' ? 'is-success' : 'is-processing'}`}><i />{validationStatus}</span></td><td><span className={`simple-status ${paymentStatus === '已付款' ? 'is-success' : paymentStatus === '付款失败' ? 'is-danger' : 'is-processing'}`}><i />{paymentStatus}</span></td></tr>;
                 })}</tbody>
               </table>
             </div>

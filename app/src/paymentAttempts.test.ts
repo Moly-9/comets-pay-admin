@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   paymentAttemptAmountTotals,
+  paymentExpenditureTotalsForValues,
+  paymentPayoutExpenditureTotals,
   paymentAttemptSnapshotFor,
   withLatestFailedAttemptReturnReason,
   withPaymentAttemptSnapshot,
@@ -33,6 +35,43 @@ const payout = (): Payout => ({
 });
 
 describe('payment attempt snapshots', () => {
+  it('falls back to principal plus the payer fee share for all three fee policies', () => {
+    const base = {
+      principalAmount: 1_000,
+      principalCurrency: 'USD' as const,
+      transferFeeAmount: 20,
+      transferFeeCurrency: 'USD' as const,
+    };
+    expect(paymentExpenditureTotalsForValues({ ...base, feeBearer: 'ADVERTISER' }))
+      .toEqual([{ currency: 'USD', amount: 1_020 }]);
+    expect(paymentExpenditureTotalsForValues({ ...base, feeBearer: 'SHARED' }))
+      .toEqual([{ currency: 'USD', amount: 1_010 }]);
+    expect(paymentExpenditureTotalsForValues({ ...base, feeBearer: 'PUBLISHER' }))
+      .toEqual([{ currency: 'USD', amount: 1_000 }]);
+  });
+
+  it('keeps currencies separate and subtracts only confirmed refunds from project expenditure', () => {
+    const source = {
+      ...payout(),
+      feeBearer: 'ADVERTISER' as const,
+      paymentAttempts: [{
+        attemptNumber: 1,
+        status: '付款失败' as const,
+        principalAmount: 1_000,
+        principalCurrency: 'USD' as const,
+        transferFeeAmount: 5,
+        transferFeeCurrency: 'EUR' as const,
+        refundAmount: 1_000,
+        refundCurrency: 'USD' as const,
+        refundedAt: '2026-08-30T10:06:00.000Z',
+      }],
+    } satisfies Payout;
+    expect(paymentPayoutExpenditureTotals(source)).toEqual([
+      { currency: 'USD', amount: 0 },
+      { currency: 'EUR', amount: 5 },
+    ]);
+  });
+
   it('freezes a failed attempt debit and its confirmed refund', () => {
     const source = payout();
     const snapshot = paymentAttemptSnapshotFor({

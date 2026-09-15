@@ -93,6 +93,7 @@ import {
   type PaymentRequestRemarkAttachment,
 } from '../paymentRequestProjects';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
+import { paymentPayoutExpenditureTotals } from '../paymentAttempts';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
@@ -132,12 +133,13 @@ const PAYMENT_CHANNEL_OPTIONS = [
 const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const actualPayoutAmountLabel = (payout?: Payout) => {
-  if (!payout || payout.status !== '已付款') return '—';
-  const amount = payout.actualPaidAmount ?? payout.amount;
-  return `${payout.actualPaidCurrency ?? payout.currency} ${amount.toLocaleString('en-US', {
+  if (!payout) return '—';
+  const totals = paymentPayoutExpenditureTotals(payout);
+  if (!totals.length) return payout.status === '付款处理中' ? '待渠道回写' : '—';
+  return totals.map(({ currency, amount }) => `${currency} ${amount.toLocaleString('en-US', {
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
-  })}`;
+  })}`).join(' · ');
 };
 
 const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
@@ -1772,11 +1774,11 @@ export function MediaPaymentProjectsPage({
           />
         </section>
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与实际付款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
+          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与累计净支出。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
           {links.length ? (
             <div className="table-scroll">
               <table className="data-table project-creator-table media-request-creator-table">
-                <thead><tr><th>达人</th><th>付款渠道</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th className="media-request-money-heading">实际付款金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
+                <thead><tr><th>达人</th><th>付款渠道</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th className="media-request-money-heading">实际支出金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
                 <tbody>{links.map((link) => {
                   const creator = creators.find((item) => item.id === link.creatorId);
                   const presentation = paymentRequestCreatorPresentation({

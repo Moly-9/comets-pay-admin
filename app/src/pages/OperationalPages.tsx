@@ -4890,7 +4890,7 @@ export function BatchesPage({
                 <th>项目名称</th>
                 <th>请款金额及币种</th>
                 <th>转账手续费及币种</th>
-                <th>实际付款金额及币种</th>
+                <th>总支出金额及币种</th>
                 <th>发起人</th>
                 <th>付款人 / 时间</th>
                 <th className="payment-batch-status-cell">付款状态</th>

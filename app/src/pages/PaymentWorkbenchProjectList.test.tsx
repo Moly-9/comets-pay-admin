@@ -99,7 +99,7 @@ describe('PaymentWorkbenchPage project list controls', () => {
     expect(html).toContain('class="table-scroll payment-project-table-scroll"');
     expect(html).toContain('aria-label="付款项目明细表，可横向滚动查看更多列"');
     expect(html).toContain('tabindex="0"');
-    ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '实际付款金额及币种', '实际付款日期', '发起人', '项目状态', '操作']
+    ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '总支出金额及币种', '最后付款日期', '发起人', '项目状态', '操作']
       .forEach((heading) => expect(html).toContain(`>${heading}</th>`));
     expect(css).toMatch(/\.payment-project-table \.payment-project-status-cell\s*{[^}]*position: sticky;[^}]*right: 116px;/s);
     expect(css).toMatch(/\.payment-project-table \.payment-project-action-cell\s*{[^}]*position: sticky;[^}]*right: 0;/s);

@@ -200,7 +200,7 @@ describe('new payment request resource picker', () => {
     expect(contractOptionsSource).not.toContain('contract.id');
   });
 
-  it('simplifies the creator table and adds the actual paid amount after request amount', () => {
+  it('simplifies the creator table and adds actual expenditure after request amount', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     const tableSource = source.slice(
       source.indexOf('<table className="data-table project-creator-table media-request-creator-table">'),
@@ -210,8 +210,8 @@ describe('new payment request resource picker', () => {
 
     expect(headingSource).toContain('Invoice 金额');
     expect(headingSource).toContain('请款金额');
-    expect(headingSource).toContain('实际付款金额');
-    expect(headingSource.indexOf('请款金额')).toBeLessThan(headingSource.indexOf('实际付款金额'));
+    expect(headingSource).toContain('实际支出金额');
+    expect(headingSource.indexOf('请款金额')).toBeLessThan(headingSource.indexOf('实际支出金额'));
     expect(headingSource).not.toContain('<th>Invoice</th>');
     expect(headingSource).not.toContain('<th>合同</th>');
     expect(tableSource).not.toContain('invoice.invoiceNumber');

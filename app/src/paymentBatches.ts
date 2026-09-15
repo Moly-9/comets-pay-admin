@@ -36,6 +36,7 @@ import {
 import { aggregatePaymentStatus } from './paymentStatusFilters';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 import { nextPaymentBusinessCode } from './paymentNumbering';
+import { paymentExpenditureTotalsForValues } from './paymentAttempts';
 
 export type PaymentBatchPurpose = 'NORMAL' | 'REVERSAL' | 'RETRY';
 
@@ -1190,6 +1191,27 @@ export const paymentBatchFinancialSummary = (
   batch: PaymentBatchRecord,
 ): PaymentBatchFinancialSummary => {
   const items = batch.items.map((item) => paymentBatchItemForAttempt(batch, item));
+  const expenditureTotals = items.reduce<Map<InvoiceCurrency, number>>((result, item) => {
+    if (
+      item.paymentStatus !== '已付款'
+      && item.paymentStatus !== '付款失败'
+      && item.paymentStatus !== '已退回'
+      && item.paymentStatus !== '已冲退'
+    ) return result;
+    paymentExpenditureTotalsForValues({
+      principalAmount: item.amount,
+      principalCurrency: item.currency,
+      feeBearer: item.feeBearer,
+      transferFeeAmount: item.transferFeeAmount,
+      transferFeeCurrency: item.transferFeeCurrency,
+      actualPaidAmount: item.actualPaidAmount,
+      actualPaidCurrency: item.actualPaidCurrency,
+    }).forEach(({ currency, amount }) => {
+      const invoiceCurrency = currency as InvoiceCurrency;
+      result.set(invoiceCurrency, Math.round(((result.get(invoiceCurrency) ?? 0) + amount + Number.EPSILON) * 100) / 100);
+    });
+    return result;
+  }, new Map());
   return {
     items,
     paymentAmounts: paymentBatchMoneyTotals(items, (item) => item.amount, (item) => item.currency),
@@ -1198,11 +1220,7 @@ export const paymentBatchFinancialSummary = (
       (item) => item.transferFeeAmount,
       (item) => item.transferFeeCurrency,
     ),
-    actualPaidAmounts: paymentBatchMoneyTotals(
-      items,
-      (item) => item.actualPaidAmount,
-      (item) => item.actualPaidCurrency,
-    ),
+    actualPaidAmounts: [...expenditureTotals.entries()].map(([currency, amount]) => ({ currency, amount })),
   };
 };
 

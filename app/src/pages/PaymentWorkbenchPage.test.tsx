@@ -180,7 +180,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     }]);
 
     expect(html).toContain('待审核<span>1</span>');
-    const headings = ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '实际付款金额及币种', '实际付款日期', '发起人', '项目状态', '操作'];
+    const headings = ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '总支出金额及币种', '最后付款日期', '发起人', '项目状态', '操作'];
     expect(headings.every((heading) => html.includes(`>${heading}</th>`))).toBe(true);
     expect(headings.map((heading) => html.indexOf(`>${heading}</th>`))).toEqual(
       [...headings.map((heading) => html.indexOf(`>${heading}</th>`))].sort((left, right) => left - right),

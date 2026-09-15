@@ -127,7 +127,7 @@ export const createPaymentProjectWorkbook = async ({
     { header: '付款方式', key: 'transferMethod', width: 18 },
     { header: '支付币种', key: 'currency', width: 14 },
     { header: '收款币种', key: 'receiveCurrency', width: 14 },
-    { header: '付款金额', key: 'amount', width: 18 },
+    { header: '请款金额', key: 'amount', width: 18 },
     { header: '收款账户', key: 'accountSummary', width: 22 },
     { header: '费用承担', key: 'feeBearer', width: 18 },
     { header: '付款原因', key: 'paymentReason', width: 28 },
@@ -196,12 +196,20 @@ const workbookMoney = (amount?: number, currency?: string) => (
   amount !== undefined && currency ? `${currency} ${amount.toLocaleString('en-US')}` : '—'
 );
 
+export type PaymentProjectDetailWorkbookRecord = Readonly<{
+  recordKind: 'PAYMENT' | 'RETURN';
+  item: PaymentBatchItemSnapshot;
+  refundAmount?: number;
+  refundCurrency?: string;
+  refundedAt?: string;
+}>;
+
 export const createPaymentProjectDetailWorkbook = async ({
   request,
-  items,
+  items: sourceItems,
 }: {
   request: PaymentBatchRequestSnapshot;
-  items: readonly PaymentBatchItemSnapshot[];
+  items: readonly (PaymentBatchItemSnapshot | PaymentProjectDetailWorkbookRecord)[];
 }) => {
   const { Workbook } = await import('exceljs');
   const workbook = new Workbook();
@@ -214,38 +222,45 @@ export const createPaymentProjectDetailWorkbook = async ({
     { header: '付款方式', key: 'method', width: 18 },
     { header: '付款至', key: 'country', width: 22 },
     { header: '账户名', key: 'accountName', width: 28 },
-    { header: '实际付款日期', key: 'paidAt', width: 16 },
-    { header: '付款方支付的金额', key: 'actualPaidAmount', width: 22 },
-    { header: '付款方支付的币种', key: 'actualPaidCurrency', width: 20 },
-    { header: '状态', key: 'status', width: 16 },
+    { header: '付款日期', key: 'paidAt', width: 16 },
+    { header: '请款金额', key: 'requestAmount', width: 18 },
+    { header: '支出金额', key: 'expenditureAmount', width: 18 },
+    { header: '手续费', key: 'feeAmount', width: 18 },
+    { header: '付款状态', key: 'status', width: 16 },
     { header: '余额', key: 'balance', width: 22 },
   ];
-  sheet.autoFilter = { from: 'A1', to: 'I1' };
+  sheet.autoFilter = { from: 'A1', to: 'J1' };
   sheet.getRow(1).height = 34;
   sheet.getRow(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D5664' } };
   sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-  items.forEach((item, index) => {
+  sourceItems.forEach((source, index) => {
+    const record = 'item' in source ? source : { recordKind: 'PAYMENT' as const, item: source };
+    const item = record.item;
+    const isReturn = record.recordKind === 'RETURN';
     const paid = item.paymentStatus === '已付款';
+    const refundAmount = 'refundAmount' in record ? record.refundAmount : undefined;
+    const refundCurrency = 'refundCurrency' in record ? record.refundCurrency : undefined;
+    const refundedAt = 'refundedAt' in record ? record.refundedAt : undefined;
     const row = sheet.addRow({
       provider: paymentProviderDisplayName(item.provider),
       method: item.localClearingSystem || item.transferMethod || '待补充',
       country: item.recipientCountry || '待补充',
       accountName: item.accountName || '待补充',
-      paidAt: paid ? workbookDateLabel(item.paymentSubmittedAt) : '—',
-      actualPaidAmount: paid && item.actualPaidAmount !== undefined ? item.actualPaidAmount : '—',
-      actualPaidCurrency: paid ? item.actualPaidCurrency || '—' : '—',
-      status: item.paymentStatus,
-      balance: paid
+      paidAt: isReturn ? workbookDateLabel(refundedAt) : workbookDateLabel(item.paymentSubmittedAt),
+      requestAmount: isReturn ? '—' : workbookMoney(item.amount, item.currency),
+      expenditureAmount: isReturn
+        ? refundAmount !== undefined && refundCurrency ? workbookMoney(-Math.abs(refundAmount), refundCurrency) : '待渠道回写'
+        : workbookMoney(item.actualPaidAmount, item.actualPaidCurrency),
+      feeAmount: isReturn ? '—' : workbookMoney(item.transferFeeAmount, item.transferFeeCurrency),
+      status: isReturn ? refundAmount !== undefined && refundCurrency ? '已退回' : '退回处理中' : item.paymentStatus,
+      balance: paid && !isReturn
         ? workbookMoney(item.postTransactionBalance, item.postTransactionBalanceCurrency)
         : '—',
     });
     row.height = 26;
     row.font = { name: 'Arial', size: 10 };
     row.alignment = { vertical: 'middle', wrapText: true };
-    if (typeof row.getCell('actualPaidAmount').value === 'number') {
-      row.getCell('actualPaidAmount').numFmt = '#,##0.00';
-    }
     if (index % 2 === 1) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F8FA' } };
   });
   const buffer = await workbook.xlsx.writeBuffer();
@@ -278,7 +293,7 @@ export const createPaymentItemConfirmationPdf = async ({
   genericPdf?: (item: PaymentBatchItemSnapshot) => Promise<Blob>;
 }) => {
   if (item.paymentStatus !== '已付款' || !paymentDateKey(item.paymentSubmittedAt)) {
-    throw new Error('仅具备实际付款日期的已付款明细可以下载确认函。');
+    throw new Error('仅具备付款日期的已付款明细可以下载确认函。');
   }
   return item.provider === 'Airwallex'
     ? loadAsset(PAYMENT_CONFIRMATION_ASSET_PATH)
@@ -303,7 +318,7 @@ export const createPaymentProjectConfirmationArchive = async ({
   const eligibleItems = items.filter((item) => (
     item.paymentStatus === '已付款' && paymentDateKey(item.paymentSubmittedAt)
   ));
-  if (!eligibleItems.length) throw new Error('当前没有具备实际付款日期的已付款明细。');
+  if (!eligibleItems.length) throw new Error('当前没有具备付款日期的已付款明细。');
   const [{ default: JSZip }, airwallexTemplate] = await Promise.all([
     import('jszip'),
     eligibleItems.some((item) => item.provider === 'Airwallex')

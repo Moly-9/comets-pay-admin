@@ -22,6 +22,7 @@ import {
   paymentExecutionDatesForPayouts,
   type PaymentBatchRecord,
 } from '../paymentBatches';
+import { paymentAttemptAmountTotals, paymentPayoutExpenditureTotals } from '../paymentAttempts';
 import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
@@ -201,40 +202,35 @@ const paymentAmountTotalsFor = (payouts: Payout[], fallback: string) => (
   payouts.length ? aggregatePayoutCurrencies(payouts) : parsePaymentAmountSummary(fallback)
 );
 
-const aggregateOptionalPaymentAmounts = (
-  payouts: Payout[],
-  amountFor: (payout: Payout) => number | undefined,
-  currencyFor: (payout: Payout) => Payout['currency'] | undefined,
-) => sortPaymentCurrencyItems(Array.from(payouts.reduce<Map<string, PaymentCurrencyItem>>((result, payout) => {
-  const amount = amountFor(payout);
-  const currency = currencyFor(payout);
-  if (amount === undefined || !Number.isFinite(amount) || !currency) return result;
-  const current = result.get(currency) ?? { currency, amount: 0, count: 0 };
-  result.set(currency, {
-    currency,
-    amount: current.amount + amount,
-    count: current.count + 1,
-  });
-  return result;
-}, new Map()).values()));
-
 const paymentResultFieldsFor = (
   payouts: Payout[],
   paymentBatches: readonly PaymentBatchRecord[] = [],
 ) => {
-  const paidPayouts = payouts.filter((payout) => payout.status === '已付款');
+  const resultPayouts = payouts.filter((payout) => ['已付款', '付款失败', '已退回'].includes(payout.status));
+  const expenditureTotals = Array.from(resultPayouts.reduce<Map<string, PaymentCurrencyItem>>((result, payout) => {
+    paymentPayoutExpenditureTotals(payout).forEach(({ currency, amount }) => {
+      const current = result.get(currency) ?? { currency, amount: 0, count: 0 };
+      result.set(currency, { currency, amount: current.amount + amount, count: current.count + 1 });
+    });
+    return result;
+  }, new Map()).values());
+  const transferFeeTotals = Array.from(resultPayouts.reduce<Map<string, PaymentCurrencyItem>>((result, payout) => {
+    const totals = payout.paymentAttempts?.length
+      ? paymentAttemptAmountTotals(payout.paymentAttempts, 'transferFeeAmount', 'transferFeeCurrency')
+      : payout.transferFeeAmount !== undefined && payout.transferFeeCurrency
+        ? [{ currency: payout.transferFeeCurrency, amount: payout.transferFeeAmount }]
+        : [];
+    totals.forEach(({ currency, amount }) => {
+      const current = result.get(currency) ?? { currency, amount: 0, count: 0 };
+      result.set(currency, { currency, amount: current.amount + amount, count: current.count + 1 });
+    });
+    return result;
+  }, new Map()).values());
+  const executionDates = paymentExecutionDatesForPayouts(payouts, paymentBatches).sort();
   return {
-    transferFeeTotals: aggregateOptionalPaymentAmounts(
-      paidPayouts,
-      (payout) => payout.transferFeeAmount,
-      (payout) => payout.transferFeeCurrency,
-    ),
-    actualPaidTotals: aggregateOptionalPaymentAmounts(
-      paidPayouts,
-      (payout) => payout.actualPaidAmount,
-      (payout) => payout.actualPaidCurrency,
-    ),
-    paymentSubmittedDates: paymentExecutionDatesForPayouts(payouts, paymentBatches),
+    transferFeeTotals: sortPaymentCurrencyItems(transferFeeTotals),
+    actualPaidTotals: sortPaymentCurrencyItems(expenditureTotals),
+    paymentSubmittedDates: executionDates.length ? [executionDates[executionDates.length - 1]] : [],
   };
 };
 
@@ -584,8 +580,8 @@ function PaymentProjectTable({
               <th className="payment-project-associated-heading">关联项目</th>
               <th className="payment-project-money-heading">请款金额及币种</th>
               <th className="payment-project-money-heading">转账手续费及币种</th>
-              <th className="payment-project-money-heading">实际付款金额及币种</th>
-              <th className="payment-project-date-heading">实际付款日期</th>
+              <th className="payment-project-money-heading">总支出金额及币种</th>
+              <th className="payment-project-date-heading">最后付款日期</th>
               <th className="payment-project-initiator-heading">发起人</th>
               <th className="payment-project-status-cell">项目状态</th>
               <th className="action-cell payment-project-action-cell">操作</th>

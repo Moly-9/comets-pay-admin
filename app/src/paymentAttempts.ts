@@ -1,9 +1,86 @@
-import type { PaymentAttemptSnapshot, Payout } from './types';
+import type { InvoiceCurrency, PaymentAttemptSnapshot, Payout } from './types';
 
 export type PaymentAttemptAmountTotal = Readonly<{
   currency: string;
   amount: number;
 }>;
+
+type ExpenditureValues = Readonly<{
+  principalAmount: number;
+  principalCurrency: InvoiceCurrency;
+  feeBearer?: string;
+  transferFeeAmount?: number;
+  transferFeeCurrency?: InvoiceCurrency;
+  actualPaidAmount?: number;
+  actualPaidCurrency?: InvoiceCurrency;
+  refundAmount?: number;
+  refundCurrency?: InvoiceCurrency;
+}>;
+
+const payerFeeRatio = (feeBearer?: string) => {
+  if (['PUBLISHER', '收款人承担', '收款方承担', '对方承担'].includes(feeBearer ?? '')) return 0;
+  if (['SHARED', '共同承担', '双方共同承担'].includes(feeBearer ?? '')) return 0.5;
+  return 1;
+};
+
+const addMoney = (
+  totals: Map<string, number>,
+  currency: string | undefined,
+  amount: number | undefined,
+) => {
+  if (!currency || amount === undefined || !Number.isFinite(amount)) return;
+  const next = (totals.get(currency) ?? 0) + amount;
+  totals.set(currency, Math.round((next + Number.EPSILON) * 100) / 100);
+};
+
+export const paymentExpenditureTotalsForValues = (
+  values: ExpenditureValues,
+): readonly PaymentAttemptAmountTotal[] => {
+  const totals = new Map<string, number>();
+  if (values.actualPaidAmount !== undefined && values.actualPaidCurrency) {
+    addMoney(totals, values.actualPaidCurrency, values.actualPaidAmount);
+  } else {
+    addMoney(totals, values.principalCurrency, values.principalAmount);
+    addMoney(
+      totals,
+      values.transferFeeCurrency ?? values.principalCurrency,
+      values.transferFeeAmount === undefined
+        ? undefined
+        : values.transferFeeAmount * payerFeeRatio(values.feeBearer),
+    );
+  }
+  addMoney(totals, values.refundCurrency, values.refundAmount === undefined ? undefined : -values.refundAmount);
+  return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));
+};
+
+export const paymentPayoutExpenditureTotals = (
+  payout: Payout,
+): readonly PaymentAttemptAmountTotal[] => {
+  const attempts: readonly ExpenditureValues[] = payout.paymentAttempts?.length
+    ? [...payout.paymentAttempts.reduce<Map<string, PaymentAttemptSnapshot>>((result, attempt) => {
+        result.set(attemptIdentity(attempt), attempt);
+        return result;
+      }, new Map()).values()]
+    : payout.status === '已付款' || payout.status === '付款失败' || payout.status === '已退回'
+      ? [{
+          principalAmount: payout.amount,
+          principalCurrency: payout.currency,
+          transferFeeAmount: payout.transferFeeAmount,
+          transferFeeCurrency: payout.transferFeeCurrency,
+          actualPaidAmount: payout.actualPaidAmount,
+          actualPaidCurrency: payout.actualPaidCurrency,
+          refundAmount: payout.refundAmount,
+          refundCurrency: payout.refundCurrency,
+        }]
+      : [];
+  const totals = new Map<string, number>();
+  attempts.forEach((attempt) => {
+    paymentExpenditureTotalsForValues({ ...attempt, feeBearer: payout.feeBearer }).forEach(({ currency, amount }) => {
+      addMoney(totals, currency, amount);
+    });
+  });
+  return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));
+};
 
 const attemptIdentity = (attempt: PaymentAttemptSnapshot) => (
   attempt.paymentBatchId

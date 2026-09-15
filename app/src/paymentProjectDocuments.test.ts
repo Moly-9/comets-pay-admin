@@ -152,7 +152,7 @@ describe('payment project documents', () => {
     expect(sheet?.getCell('N2').value).toBe('0000002401');
   });
 
-  it('exports the nine payment-result fields with the frozen post-transaction balance', async () => {
+  it('exports payment records with request, expenditure, fee, status and balance fields', async () => {
     const workbookBlob = await createPaymentProjectDetailWorkbook({
       request,
       items: [{
@@ -171,17 +171,18 @@ describe('payment project documents', () => {
     await workbook.xlsx.load(await workbookBlob.arrayBuffer());
     const sheet = workbook.getWorksheet('付款明细');
 
-    expect(sheet?.columnCount).toBe(9);
+    expect(sheet?.columnCount).toBe(10);
     expect(sheet?.getRow(1).values).toEqual([
       undefined,
       '付款渠道',
       '付款方式',
       '付款至',
       '账户名',
-      '实际付款日期',
-      '付款方支付的金额',
-      '付款方支付的币种',
-      '状态',
+      '付款日期',
+      '请款金额',
+      '支出金额',
+      '手续费',
+      '付款状态',
       '余额',
     ]);
     expect(sheet?.getRow(2).values).toEqual([
@@ -191,11 +192,29 @@ describe('payment project documents', () => {
       'United States',
       'Mina Kato Account',
       '2026-08-18',
-      1258.5,
-      'USD',
+      'USD 1,250',
+      'USD 1,258.5',
+      '—',
       '已付款',
       'USD 48,741.5',
     ]);
+  });
+
+  it('includes confirmed and pending return records without inventing a refund number', async () => {
+    const workbookBlob = await createPaymentProjectDetailWorkbook({
+      request,
+      items: [{ recordKind: 'RETURN', item, refundAmount: 1_250, refundCurrency: 'USD', refundedAt: '2026-08-19T01:00:00Z' }, {
+        recordKind: 'RETURN', item: { ...item, payoutId: 'pending-return' },
+      }],
+    });
+    const { Workbook } = await import('exceljs');
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await workbookBlob.arrayBuffer());
+    const sheet = workbook.getWorksheet('付款明细');
+    expect(sheet?.getCell('G2').value).toBe('USD -1,250');
+    expect(sheet?.getCell('I2').value).toBe('已退回');
+    expect(sheet?.getCell('G3').value).toBe('待渠道回写');
+    expect(sheet?.getCell('I3').value).toBe('退回处理中');
   });
 
   it('groups confirmation PDFs by YYYYMMDD and provider with safe, collision-proof names', async () => {
@@ -263,7 +282,7 @@ describe('payment project documents', () => {
     await expect(createPaymentProjectConfirmationArchive({
       items: [{ ...item, paymentSubmittedAt: undefined }],
       loadAsset: async () => new Blob(['unused']),
-    })).rejects.toThrow('当前没有具备实际付款日期的已付款明细');
+    })).rejects.toThrow('当前没有具备付款日期的已付款明细');
   });
 
   it('downloads one confirmation PDF with the current payment-order filename', async () => {
