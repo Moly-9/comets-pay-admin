@@ -20,6 +20,17 @@ describe('new payment request resource picker', () => {
     expect(source).toContain("(project.availability ?? 'ACTIVE') === 'ACTIVE'");
   });
 
+  it('keeps my payment requests project-first before creator selection', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const projectPicker = source.indexOf('ariaLabel="选择合作项目"');
+    const creatorPicker = source.indexOf('<span>合作达人 <small className="request-optional-label">选填</small></span>');
+
+    expect(projectPicker).toBeGreaterThan(-1);
+    expect(creatorPicker).toBeGreaterThan(-1);
+    expect(projectPicker).toBeLessThan(creatorPicker);
+    expect(source).toContain("cooperationProjectId ? '可现在选择，也可创建请款后补充' : '请先选择关联项目'");
+  });
+
   it('uses request terminology only in the my-request list and detail', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
 

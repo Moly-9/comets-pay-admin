@@ -41,7 +41,8 @@ import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPan
 import { CreatorIdentity, CreatorSocialAccounts } from '../components/CreatorIdentity';
 import { Pagination, usePagination } from '../components/Pagination';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
-import { creatorSocialAccounts } from '../creatorSearchOptions';
+import { creatorSearchTerms, creatorSocialAccounts } from '../creatorSearchOptions';
+import { SearchableComboBox } from '../components/SearchableComboBox';
 import type { ContractRecord } from '../contracts';
 import {
   INVOICE_BATCH_MAX_ROWS,
@@ -66,8 +67,6 @@ import { createInvoiceBatchArchive } from '../invoice/invoiceBatchArchive';
 import {
   INVOICE_BATCH_PROTOTYPE_CURRENCY,
   createInvoiceBatchPrototypeSeed,
-  filterInvoiceBatchCreatorReferences,
-  selectableInvoiceBatchEngagementIds,
 } from '../invoice/invoiceBatchPrototype';
 import {
   createInvoiceContractMatchReview,
@@ -95,14 +94,14 @@ import {
 } from '../invoice/invoiceUtils';
 import {
   INVOICE_BATCH_CREATOR_IMPORT_MAX_FILE_SIZE,
-  exportInvoiceBatchCreatorTemplate,
-  importInvoiceBatchCreatorTemplate,
-  matchInvoiceBatchCreatorRows,
-  matchInvoiceBatchCreatorTokens,
+  exportInvoiceBatchGlobalCreatorTemplate,
+  importInvoiceBatchGlobalCreatorTemplate,
+  matchInvoiceBatchGlobalCreatorRows,
+  matchInvoiceBatchGlobalCreatorTokens,
   mergeInvoiceBatchCreatorSelection,
   parseInvoiceBatchCreatorTokens,
   type InvoiceBatchCreatorImportIssue,
-  type InvoiceBatchCreatorMatch,
+  type InvoiceBatchGlobalCreatorMatch,
 } from '../invoice/invoiceBatchCreatorImport';
 import type {
   CreatorProfile,
@@ -143,7 +142,7 @@ type InvoiceBatchBuilderPageProps = {
 type CreatorImportReview = {
   source: 'EXCEL' | 'TEXT';
   sourceName: string;
-  matches: InvoiceBatchCreatorMatch[];
+  matches: InvoiceBatchGlobalCreatorMatch[];
   issues: InvoiceBatchCreatorImportIssue[];
 };
 
@@ -1002,7 +1001,7 @@ function BatchRowTable({
       </table>
       {!visibleRows.length ? (
         <div className="invoice-batch-empty">
-          {onlyProblems ? '当前没有需要处理的问题行' : '请先选择项目达人'}
+          {onlyProblems ? '当前没有需要处理的问题行' : '请先选择达人并关联合作项目'}
         </div>
       ) : null}
     </div>
@@ -1030,8 +1029,10 @@ export function InvoiceBatchBuilderPage({
   const initialBatchDraftRef = useRef(initialDraft);
   const restoredDraft = initialBatchDraftRef.current;
   const [projectId, setProjectId] = useState<string>(restoredDraft?.projectId ?? '');
-  const [selectedEngagementIds, setSelectedEngagementIds] = useState<EngagementId[]>(
-    () => restoredDraft?.selectedEngagementIds ? [...restoredDraft.selectedEngagementIds] : [],
+  const [selectedCreatorIds, setSelectedCreatorIds] = useState<CreatorId[]>(
+    () => restoredDraft?.selectedCreatorIds?.length
+      ? [...restoredDraft.selectedCreatorIds]
+      : [...new Set(restoredDraft?.rows.map((row) => row.creatorId) ?? [])],
   );
   const [creatorSearch, setCreatorSearch] = useState('');
   const [bulkCreatorInput, setBulkCreatorInput] = useState('');
@@ -1072,9 +1073,12 @@ export function InvoiceBatchBuilderPage({
   const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
     projects.flatMap((project) => creators.map((creator) => {
       const projectId = projectIdFor(project);
+      const restoredRow = restoredDraft?.rows.find((row) => (
+        row.projectId === projectId && row.creatorId === creator.id
+      ));
       return [
         `${creator.id}:${projectId}`,
-        findExistingEngagementId({
+        restoredRow?.engagementId ?? findExistingEngagementId({
           project,
           creatorId: creator.id as CreatorId,
           contracts,
@@ -1114,6 +1118,12 @@ export function InvoiceBatchBuilderPage({
     };
   }), [creators, draftEngagementIds, projects]);
   const selectedProject = invoiceProjects.find((project) => projectIdFor(project) === projectId) ?? null;
+  const selectedEngagementIds = useMemo(() => projectId
+    ? selectedCreatorIds.flatMap((creatorId) => {
+        const engagementId = draftEngagementIds[`${creatorId}:${projectId}`];
+        return engagementId ? [engagementId] : [];
+      })
+    : [], [draftEngagementIds, projectId, selectedCreatorIds]);
   const restorationWarnings = restoredDraft ? [
     restoredDraft.projectId && !selectedProject
       ? '原草稿中的关联项目已失效，请重新选择项目。'
@@ -1154,63 +1164,58 @@ export function InvoiceBatchBuilderPage({
     selectedInvoiceEntity,
     selectedProject,
   ]);
-  const projectReferences = selectedProject?.creatorProfiles ?? [];
-  const filteredProjectReferences = useMemo(
-    () => filterInvoiceBatchCreatorReferences(projectReferences, creatorSearch, creators),
-    [creatorSearch, creators, projectReferences],
-  );
-  const creatorPagination = usePagination(filteredProjectReferences, {
+  const filteredCreators = useMemo(() => {
+    const normalizedQuery = creatorSearch.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return creators;
+    return creators.filter((creator) => creatorSearchTerms(creator).toLocaleLowerCase().includes(normalizedQuery));
+  }, [creatorSearch, creators]);
+  const creatorPagination = usePagination(filteredCreators, {
     initialPageSize: INVOICE_BATCH_CREATOR_PAGE_SIZE,
-    resetKey: `${projectId}:${creatorSearch}`,
+    resetKey: creatorSearch,
   });
-  const selectableEngagementIds = useMemo(
-    () => selectableInvoiceBatchEngagementIds(
-      projectReferences,
-      generatedInvoices,
-      INVOICE_BATCH_MAX_ROWS,
-    ),
-    [generatedInvoices, projectReferences],
-  );
+  const selectableCreatorIds = creators.map((creator) => creator.id as CreatorId);
   const prototypeSeed = useMemo(
     () => createInvoiceBatchPrototypeSeed(invoiceProjects, generatedInvoices),
     [generatedInvoices, invoiceProjects],
   );
-  const lockedEngagementIds = rows
+  const lockedCreatorIds = rows
     .filter((row) => row.status === 'GENERATED' || row.status === 'GENERATING')
-    .map((row) => row.engagementId);
+    .map((row) => row.creatorId);
   const creatorSelectionPreview = creatorImportReview
     ? mergeInvoiceBatchCreatorSelection({
-        currentIds: selectedEngagementIds,
-        incomingIds: creatorImportReview.matches.map((match) => match.engagementId),
-        lockedIds: lockedEngagementIds,
+        currentIds: selectedCreatorIds,
+        incomingIds: creatorImportReview.matches.map((match) => match.creatorId),
+        lockedIds: lockedCreatorIds,
         mode: creatorSelectionMode,
         maxRows: INVOICE_BATCH_MAX_ROWS,
       })
     : null;
-  const allSelectableSelected = Boolean(selectableEngagementIds.length)
-    && selectableEngagementIds.every((id) => selectedEngagementIds.includes(id));
+  const allSelectableSelected = Boolean(selectableCreatorIds.length)
+    && selectableCreatorIds.slice(0, INVOICE_BATCH_MAX_ROWS).every((id) => selectedCreatorIds.includes(id));
   const hasPendingRows = rows.some((row) => row.status !== 'GENERATED');
+  const hasPendingDraft = Boolean(selectedCreatorIds.length) && (!rows.length || hasPendingRows);
   const hasGeneratedRows = rows.some((row) => row.status === 'GENERATED');
   const isDirty = Boolean(
     rows.length
-    || selectedEngagementIds.length
+    || selectedCreatorIds.length
     || sharedDescriptions.some((item) => item.description.trim())
     || currency !== INVOICE_BATCH_PROTOTYPE_CURRENCY
     || selectedBillingEntityId !== invoiceBillingSettings.defaultEntityId
   );
 
   useEffect(() => {
-    onDirtyChange(isDirty && hasPendingRows);
-  }, [hasPendingRows, isDirty, onDirtyChange]);
+    onDirtyChange(isDirty && hasPendingDraft);
+  }, [hasPendingDraft, isDirty, onDirtyChange]);
 
   useEffect(() => {
-    if (!onDraftChange || !hasPendingRows) return;
+    if (!onDraftChange) return;
     onDraftChange({
       batchId,
       projectId: projectId as ProjectId | '',
       invoiceDate,
       selectedBillingEntityId,
       currency,
+      selectedCreatorIds: [...selectedCreatorIds],
       selectedEngagementIds: [...selectedEngagementIds],
       sharedDescriptions: sharedDescriptions.map((item) => ({ ...item })),
       rows: rows.map((row) => ({
@@ -1222,8 +1227,8 @@ export function InvoiceBatchBuilderPage({
         generated: row.generated ? { record: row.generated.record } : undefined,
       })),
       generationProgress,
-    }, isDirty);
-  }, [batchId, currency, generationProgress, hasPendingRows, invoiceDate, isDirty, onDraftChange, projectId, rows, selectedBillingEntityId, selectedEngagementIds, sharedDescriptions]);
+    }, isDirty && hasPendingDraft);
+  }, [batchId, currency, generationProgress, hasPendingDraft, invoiceDate, isDirty, onDraftChange, projectId, rows, selectedBillingEntityId, selectedCreatorIds, selectedEngagementIds, sharedDescriptions]);
 
   useEffect(() => {
     if (!restoredDraft || restoredFilesRef.current) return;
@@ -1249,19 +1254,20 @@ export function InvoiceBatchBuilderPage({
   }, [restoredDraft, rows]);
 
   useEffect(() => {
-    if (!isDirty || !hasPendingRows) return undefined;
+    if (!isDirty || !hasPendingDraft) return undefined;
     const guard = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
-  }, [hasPendingRows, isDirty]);
+  }, [hasPendingDraft, isDirty]);
 
   const projectOptions = projects.map((project) => ({
     value: projectIdFor(project),
     label: project.name,
-    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${creators.length} 位达人可选 · 飞书合作项目`,
+    description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
+    searchText: `${project.name} ${project.brand} ${project.cooperationProjectCode ?? ''} ${project.projectCode ?? ''}`,
   }));
   const billingEntityOptions = invoiceBillingSettings.entities.map((entity) => ({
     value: entity.id,
@@ -1273,14 +1279,35 @@ export function InvoiceBatchBuilderPage({
   }));
 
   const setProject = (value: string) => {
+    if (hasGeneratedRows) return;
     setProjectId(value);
-    setSelectedEngagementIds([]);
-    setCreatorSearch('');
     setBulkCreatorInput('');
     setBulkCreatorInputOpen(false);
     setCreatorImportReview(null);
     setCreatorSelectionMode('APPEND');
-    setRows([]);
+    const project = invoiceProjects.find((candidate) => projectIdFor(candidate) === value);
+    if (!project) {
+      setRows([]);
+    } else {
+      const nextContext: InvoiceBatchContext = {
+        project,
+        creators,
+        payouts,
+        contracts,
+        generatedInvoices,
+        invoiceEntity: selectedInvoiceEntity,
+      };
+      setRows(selectedCreatorIds.flatMap((creatorId) => {
+        const nextEngagementId = draftEngagementIds[`${creatorId}:${value}`];
+        return nextEngagementId ? [createInvoiceBatchRow({
+          ...nextContext,
+          engagementId: nextEngagementId,
+          invoiceDate,
+          currency,
+          lineItems: sharedDescriptions,
+        })] : [];
+      }));
+    }
     setCollapsedMatchRows(new Set());
     setGenerationError('');
     setGenerationProgress({ current: 0, total: 0 });
@@ -1323,7 +1350,10 @@ export function InvoiceBatchBuilderPage({
     });
 
     setProjectId(prototypeSeed.projectId);
-    setSelectedEngagementIds(prototypeSeed.rows.map((row) => row.engagementId));
+    setSelectedCreatorIds(prototypeSeed.rows.flatMap((row) => {
+      const reference = project.creatorProfiles?.find((candidate) => candidate.engagementId === row.engagementId);
+      return reference ? [reference.creatorId] : [];
+    }));
     setCreatorSearch('');
     setCurrency(prototypeSeed.currency);
     setSharedDescriptions([descriptionSeed]);
@@ -1336,39 +1366,48 @@ export function InvoiceBatchBuilderPage({
     setGenerationProgress({ current: 0, total: 0 });
   };
 
-  const applySelection = (nextIds: EngagementId[]) => {
+  const applySelection = (nextIds: CreatorId[]) => {
     setCollapsedMatchRows(new Set());
-    setSelectedEngagementIds(nextIds);
+    setSelectedCreatorIds(nextIds);
+    if (!nextIds.length && !hasGeneratedRows) {
+      setProjectId('');
+      setRows([]);
+      setGenerationError('');
+      setGenerationProgress({ current: 0, total: 0 });
+      return;
+    }
     if (!context) {
       setRows([]);
       return;
     }
-    setRows((current) => nextIds.map((engagementId) => (
-      current.find((row) => row.engagementId === engagementId)
+    setRows((current) => nextIds.flatMap((creatorId) => {
+      const nextEngagementId = draftEngagementIds[`${creatorId}:${projectId}`];
+      if (!nextEngagementId) return [];
+      return [current.find((row) => row.creatorId === creatorId)
       ?? createInvoiceBatchRow({
         ...context,
-        engagementId,
+        engagementId: nextEngagementId,
         invoiceDate,
         currency,
         lineItems: sharedDescriptions,
-      })
-    )));
+      })];
+    }));
   };
 
-  const toggleEngagement = (engagementId: EngagementId) => {
-    if (lockedEngagementIds.includes(engagementId)) return;
-    const nextIds = selectedEngagementIds.includes(engagementId)
-      ? selectedEngagementIds.filter((id) => id !== engagementId)
-      : selectedEngagementIds.length < INVOICE_BATCH_MAX_ROWS
-        ? [...selectedEngagementIds, engagementId]
-        : selectedEngagementIds;
+  const toggleCreator = (creatorId: CreatorId) => {
+    if (lockedCreatorIds.includes(creatorId)) return;
+    const nextIds = selectedCreatorIds.includes(creatorId)
+      ? selectedCreatorIds.filter((id) => id !== creatorId)
+      : selectedCreatorIds.length < INVOICE_BATCH_MAX_ROWS
+        ? [...selectedCreatorIds, creatorId]
+        : selectedCreatorIds;
     applySelection(nextIds);
   };
 
   const toggleSelectAll = () => {
     const nextIds = allSelectableSelected
-      ? lockedEngagementIds
-      : [...new Set([...lockedEngagementIds, ...selectableEngagementIds])];
+      ? lockedCreatorIds
+      : [...new Set([...lockedCreatorIds, ...selectableCreatorIds])];
     applySelection(nextIds.slice(0, INVOICE_BATCH_MAX_ROWS));
   };
 
@@ -1459,21 +1498,17 @@ export function InvoiceBatchBuilderPage({
   };
 
   const downloadCreatorTemplate = async () => {
-    if (!selectedProject) return;
-    const blob = await exportInvoiceBatchCreatorTemplate({
-      projectId: projectId as ProjectId,
-      projectName: selectedProject.name,
-    });
+    const blob = await exportInvoiceBatchGlobalCreatorTemplate();
     downloadBlob(
       blob,
-      `COMETS-Invoice-Creators-${selectedProject.projectCode ?? selectedProject.id}.xlsx`,
+      'COMETS-Invoice-Creators.xlsx',
     );
   };
 
   const openCreatorImportReview = (
     source: CreatorImportReview['source'],
     sourceName: string,
-    matches: InvoiceBatchCreatorMatch[],
+    matches: InvoiceBatchGlobalCreatorMatch[],
     issues: InvoiceBatchCreatorImportIssue[],
   ) => {
     setCreatorSelectionMode('APPEND');
@@ -1481,12 +1516,10 @@ export function InvoiceBatchBuilderPage({
   };
 
   const reviewBulkCreatorInput = () => {
-    if (!selectedProject) return;
     const tokens = parseInvoiceBatchCreatorTokens(bulkCreatorInput);
-    const result = matchInvoiceBatchCreatorTokens({
+    const result = matchInvoiceBatchGlobalCreatorTokens({
       tokens,
       creators,
-      projectReferences,
     });
     const issues = tokens.length ? result.issues : [{
       code: 'NOT_FOUND' as const,
@@ -1497,7 +1530,6 @@ export function InvoiceBatchBuilderPage({
   };
 
   const importCreatorTemplate = async (file: File) => {
-    if (!selectedProject) return;
     setBulkCreatorInputOpen(false);
     const basicIssues: InvoiceBatchCreatorImportIssue[] = [];
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
@@ -1513,18 +1545,14 @@ export function InvoiceBatchBuilderPage({
 
     setImportingCreators(true);
     try {
-      const imported = await importInvoiceBatchCreatorTemplate(
-        await file.arrayBuffer(),
-        projectId as ProjectId,
-      );
+      const imported = await importInvoiceBatchGlobalCreatorTemplate(await file.arrayBuffer());
       if (imported.fatal) {
         openCreatorImportReview('EXCEL', file.name, [], imported.issues);
         return;
       }
-      const matched = matchInvoiceBatchCreatorRows({
+      const matched = matchInvoiceBatchGlobalCreatorRows({
         rows: imported.rows,
         creators,
-        projectReferences,
       });
       openCreatorImportReview(
         'EXCEL',
@@ -1680,7 +1708,7 @@ export function InvoiceBatchBuilderPage({
     >
       <PageHeading
         title="批量生成 Invoice"
-        subtitle="在同一份长表单内选择合作项目达人、填写费用并完成批量校验与生成。"
+        subtitle="先从达人档案选择名单，再关联同一合作项目并完成批量生成。"
         actions={(
           <>
             <Button
@@ -1710,33 +1738,6 @@ export function InvoiceBatchBuilderPage({
       <section className="invoice-builder-form invoice-batch-form">
         <section
           className="invoice-builder-section invoice-batch-card"
-          data-batch-section="project"
-        >
-          <header>
-            <span><FileText size={18} /></span>
-            <div>
-              <h2>选择合作项目</h2>
-              <p>单批限定一个合作项目，选择后再导入或勾选项目内达人。</p>
-            </div>
-          </header>
-          <div className="invoice-form-grid invoice-batch-project-grid">
-            <div className="invoice-form-control full-width">
-              <span>合作项目 *</span>
-              <SelectField
-                ariaLabel="批量 Invoice 项目"
-                variant="form"
-                value={projectId}
-                options={projectOptions}
-                placeholder="选择可编辑项目"
-                onChange={setProject}
-              />
-              <small />
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="invoice-builder-section invoice-batch-card"
           data-batch-section="creators"
         >
           <header>
@@ -1746,13 +1747,12 @@ export function InvoiceBatchBuilderPage({
               <p>支持逐个勾选、Excel 名单导入或多分隔符批量输入，最多选择 {INVOICE_BATCH_MAX_ROWS} 位达人。</p>
             </div>
           </header>
-          {selectedProject ? (
-            <div className="invoice-batch-creator-picker">
+          <div className="invoice-batch-creator-picker">
               <div className="invoice-batch-creator-import-actions">
                 <div>
                   <FileSpreadsheet size={20} />
                   <span>
-                    <strong>批量添加项目达人</strong>
+                    <strong>批量添加达人</strong>
                     <small>Excel 每行填写频道ID、Display Name、频道链接中的任意一项。</small>
                   </span>
                 </div>
@@ -1780,7 +1780,7 @@ export function InvoiceBatchBuilderPage({
                       {creatorImportReview.source === 'EXCEL' ? <FileSpreadsheet size={17} /> : <ClipboardPaste size={17} />}
                       <span>
                         <strong>达人档案 · 导入预览</strong>
-                        <small>{creatorImportReview.sourceName} · 匹配范围：{selectedProject.name}</small>
+                        <small>{creatorImportReview.sourceName} · 匹配范围：全部达人档案</small>
                       </span>
                     </span>
                     <div className="invoice-batch-selection-mode" role="radiogroup" aria-label="导入应用方式">
@@ -1816,12 +1816,11 @@ export function InvoiceBatchBuilderPage({
                   {creatorImportReview.matches.length ? (
                     <div className="invoice-batch-creator-grid invoice-batch-import-preview-grid">
                       {creatorImportReview.matches.map((match) => {
-                        const accepted = creatorSelectionPreview.selectedIds.includes(match.engagementId);
+                        const accepted = creatorSelectionPreview.selectedIds.includes(match.creatorId);
                         const creator = creators.find((candidate) => candidate.id === match.creatorId);
-                        const reference = selectedProject.creatorProfiles?.find((candidate) => candidate.engagementId === match.engagementId);
                         return (
                           <article
-                            key={match.engagementId}
+                            key={match.creatorId}
                             className={`invoice-batch-creator invoice-batch-import-preview-card${accepted ? ' is-selected' : ' is-disabled'}`}
                           >
                             <span className="invoice-batch-creator-check"><Check size={13} /></span>
@@ -1831,7 +1830,7 @@ export function InvoiceBatchBuilderPage({
                               initials={creatorInitials(match.creatorName)}
                               accent="#5f72d8"
                               fallbackHandle={match.creatorHandle}
-                              fallbackPlatform={reference?.platform}
+                              fallbackPlatform={creator?.platform}
                               socialAccountsMode="expanded"
                             />
                             <em className={accepted ? 'is-ready' : ''}>{accepted ? '将选择' : '超过50人上限'}</em>
@@ -1840,7 +1839,7 @@ export function InvoiceBatchBuilderPage({
                       })}
                     </div>
                   ) : (
-                    <div className="invoice-batch-search-empty">未匹配到可预览的项目达人</div>
+                    <div className="invoice-batch-search-empty">未匹配到可预览的达人档案</div>
                   )}
 
                   {creatorImportReview.issues.length || creatorSelectionPreview.overflowIds.length ? (
@@ -1856,12 +1855,12 @@ export function InvoiceBatchBuilderPage({
                             <span>{issue.message}</span>
                           </li>
                         ))}
-                        {creatorSelectionPreview.overflowIds.map((engagementId) => {
-                          const match = creatorImportReview.matches.find((candidate) => candidate.engagementId === engagementId);
+                        {creatorSelectionPreview.overflowIds.map((creatorId) => {
+                          const match = creatorImportReview.matches.find((candidate) => candidate.creatorId === creatorId);
                           return (
-                            <li key={`limit:${engagementId}`}>
+                            <li key={`limit:${creatorId}`}>
                               <AlertTriangle size={15} />
-                              <span>{match?.creatorName ?? engagementId} 超过单批50人上限，未加入选择</span>
+                              <span>{match?.creatorName ?? creatorId} 超过单批50人上限，未加入选择</span>
                             </li>
                           );
                         })}
@@ -1895,8 +1894,8 @@ export function InvoiceBatchBuilderPage({
                 <div>
                   <strong>达人档案</strong>
                   <span aria-live="polite">
-                    已选 {selectedEngagementIds.length}/{Math.min(
-                      selectableEngagementIds.length,
+                    已选 {selectedCreatorIds.length}/{Math.min(
+                      selectableCreatorIds.length,
                       INVOICE_BATCH_MAX_ROWS,
                     )}
                   </span>
@@ -1914,20 +1913,20 @@ export function InvoiceBatchBuilderPage({
                 <button
                   className="invoice-batch-select-all"
                   type="button"
-                  disabled={!selectableEngagementIds.length}
+                  disabled={!selectableCreatorIds.length}
                   onClick={toggleSelectAll}
                 >
                   <Check size={15} />
-                  {allSelectableSelected ? '取消全选' : '全选可生成达人'}
+                  {allSelectableSelected ? '取消全选' : '全选达人'}
                 </button>
               </div>
 
               <div className="invoice-batch-creator-grid">
-                {creatorPagination.pageItems.map((reference) => {
-                  const creator = creators.find((candidate) => candidate.id === reference.creatorId);
-                  const selected = selectedEngagementIds.includes(reference.engagementId);
-                  const locked = lockedEngagementIds.includes(reference.engagementId);
-                  const disabled = !selected && selectedEngagementIds.length >= INVOICE_BATCH_MAX_ROWS;
+                {creatorPagination.pageItems.map((creator) => {
+                  const creatorId = creator.id as CreatorId;
+                  const selected = selectedCreatorIds.includes(creatorId);
+                  const locked = lockedCreatorIds.includes(creatorId);
+                  const disabled = !selected && selectedCreatorIds.length >= INVOICE_BATCH_MAX_ROWS;
                   return (
                     <label
                       className={[
@@ -1935,30 +1934,30 @@ export function InvoiceBatchBuilderPage({
                         selected ? 'is-selected' : '',
                         disabled ? 'is-disabled' : '',
                       ].filter(Boolean).join(' ')}
-                      key={reference.engagementId}
+                      key={creatorId}
                     >
                       <input
                         type="checkbox"
                         checked={selected}
                         disabled={disabled || locked}
-                        onChange={() => toggleEngagement(reference.engagementId)}
+                        onChange={() => toggleCreator(creatorId)}
                       />
                       <span className="invoice-batch-creator-check"><Check size={13} /></span>
-                      <CreatorIdentity creator={creator} displayName={reference.name} fallbackHandle={reference.handle} fallbackPlatform={reference.platform} socialAccountsMode="expanded" />
+                      <CreatorIdentity creator={creator} socialAccountsMode="expanded" />
                     </label>
                   );
                 })}
               </div>
-              {!filteredProjectReferences.length ? (
-                <div className="invoice-batch-search-empty">没有匹配的项目达人</div>
+              {!filteredCreators.length ? (
+                <div className="invoice-batch-search-empty">没有匹配的达人档案</div>
               ) : null}
-              {filteredProjectReferences.length > INVOICE_BATCH_CREATOR_PAGE_SIZE ? (
+              {filteredCreators.length > INVOICE_BATCH_CREATOR_PAGE_SIZE ? (
                 <div className="invoice-batch-creator-pagination">
                   <span>每页 {INVOICE_BATCH_CREATOR_PAGE_SIZE} 位达人，已选结果跨页保留</span>
                   <Pagination
                     page={creatorPagination.page}
                     pageSize={INVOICE_BATCH_CREATOR_PAGE_SIZE}
-                    total={filteredProjectReferences.length}
+                    total={filteredCreators.length}
                     ariaLabel="达人档案分页"
                     onPageChange={creatorPagination.setPage}
                   />
@@ -1967,13 +1966,34 @@ export function InvoiceBatchBuilderPage({
                 </>
               )}
             </div>
-          ) : (
-            <div className="invoice-batch-empty-state">
-              <Users size={22} />
-              <strong>先选择项目</strong>
-              <span>选择后可搜索、勾选、导入 Excel 或批量输入项目内达人。</span>
+        </section>
+
+        <section
+          className="invoice-builder-section invoice-batch-card"
+          data-batch-section="project"
+        >
+          <header>
+            <span><FileText size={18} /></span>
+            <div>
+              <h2>选择合作项目</h2>
+              <p>单批限定一个合作项目，生成成功后会将所选达人绑定到该项目。</p>
             </div>
-          )}
+          </header>
+          <div className="invoice-form-grid invoice-batch-project-grid">
+            <div className="invoice-form-control full-width">
+              <span>合作项目 *</span>
+              <SearchableComboBox
+                ariaLabel="批量 Invoice 项目"
+                value={projectId}
+                options={projectOptions}
+                placeholder={selectedCreatorIds.length ? '搜索项目名称、编号或品牌' : '请先选择达人'}
+                disabled={!selectedCreatorIds.length || generating || hasGeneratedRows}
+                onChange={setProject}
+                onClear={() => setProject('')}
+              />
+              <small>{hasGeneratedRows ? '已有生成结果，合作项目已锁定' : selectedCreatorIds.length ? '选择当前账号可管理的合作项目' : ''}</small>
+            </div>
+          </div>
         </section>
 
         <section
@@ -2169,7 +2189,7 @@ export function InvoiceBatchBuilderPage({
               })}
             />
           ) : (
-            <div className="invoice-batch-empty">请先选择项目和达人</div>
+            <div className="invoice-batch-empty">请先选择达人并关联合作项目</div>
           )}
         </section>
 
@@ -2219,7 +2239,7 @@ export function InvoiceBatchBuilderPage({
         </footer>
       </section>
 
-      {bulkCreatorInputOpen && selectedProject ? (
+      {bulkCreatorInputOpen ? (
         <Modal
           title="批量输入达人"
           width="680px"
@@ -2250,8 +2270,8 @@ export function InvoiceBatchBuilderPage({
         >
           <div className="invoice-batch-bulk-input">
             <div>
-              <strong>{selectedProject.name}</strong>
-              <span>支持 Creator ID、频道 ID/Handle、完整频道链接和 Display Name，仅匹配当前项目达人。</span>
+              <strong>全部达人档案</strong>
+              <span>支持 Creator ID、频道 ID/Handle、完整频道链接和 Display Name；选择项目后再建立合作关系。</span>
             </div>
             <label>
               <span>达人名单</span>

@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_CONTRACT_ADVERTISER_SETTINGS } from '../data';
@@ -8,6 +9,8 @@ import {
   DEFAULT_CONTRACT_TEMPLATE_FIELD_POLICIES,
 } from '../contractTemplateFieldPolicies';
 import { ContractBuilderPage, contractBuilderTemplateOutputFieldKeys } from './ContractBuilderPage';
+
+const contractBuilderSource = readFileSync(new URL('./ContractBuilderPage.tsx', import.meta.url), 'utf8');
 
 const renderBuilder = (advertiser: 'SYSTEM' | 'MANUAL' | 'OMIT') => {
   const template = INITIAL_CONTRACTS.find((contract) => contract.isTemplate)!;
@@ -53,6 +56,14 @@ describe('contractBuilderTemplateOutputFieldKeys', () => {
 });
 
 describe('ContractBuilderPage advertiser controls', () => {
+  it('selects a global creator before enabling the project picker', () => {
+    expect(contractBuilderSource.indexOf('<span>合作达人 *</span>')).toBeLessThan(
+      contractBuilderSource.indexOf('<span>合作项目 *</span>'),
+    );
+    expect(contractBuilderSource).toContain('disabled={!creatorId}');
+    expect(contractBuilderSource).toContain("setProjectSelectionId('')");
+  });
+
   it('offers every configured entity and preselects the contract default in SYSTEM mode', () => {
     const html = renderBuilder('SYSTEM');
 

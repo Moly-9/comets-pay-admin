@@ -61,7 +61,7 @@ import {
   getPayoutAccountId,
   getPayoutAccountSummary,
 } from '../payoutAccounts';
-import type { CooperationProjectId, ContractId, CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
+import { createPrototypeId, type CooperationProjectId, type ContractId, type CreatorId, type EngagementId, type ProjectId } from '../businessWorkflow';
 import type { CreatorProfile, InvoiceBillingSettings, InvoiceCurrency } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
 import './ExternalInvoiceCollectionPage.css';
@@ -104,6 +104,16 @@ export function ExternalInvoiceCollectionCreatePage({
   const [projectId, setProjectId] = useState('');
   const [creatorId, setCreatorId] = useState('');
   const [creatorSocialAccountId, setCreatorSocialAccountId] = useState('');
+  const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
+    projects.flatMap((project) => creators.map((creator) => {
+      const stableProjectId = String(project.cooperationProjectId ?? project.projectId ?? project.id);
+      const existing = project.creatorProfiles?.find((reference) => reference.creatorId === creator.id);
+      return [
+        `${creator.id}:${stableProjectId}`,
+        existing?.engagementId ?? createPrototypeId('engagement') as EngagementId,
+      ];
+    })),
+  ));
   const [contractIds, setContractIds] = useState<ContractId[]>([]);
   const [amount, setAmount] = useState('4800');
   const [currency, setCurrency] = useState<InvoiceCurrency>('USD');
@@ -114,10 +124,12 @@ export function ExternalInvoiceCollectionCreatePage({
   const [dueDate, setDueDate] = useState('2026-09-05');
   const [contractMatchReason, setContractMatchReason] = useState('');
 
-  const selectedProject = projects.find((project) => String(project.projectId ?? project.id) === projectId);
-  const creatorReferences = selectedProject?.creatorProfiles?.filter((reference) => reference.status !== 'removed') ?? [];
-  const selectedReference = creatorReferences.find((reference) => String(reference.creatorId) === creatorId);
+  const selectedProject = projects.find((project) => String(project.cooperationProjectId ?? project.projectId ?? project.id) === projectId);
+  const selectedReference = selectedProject?.creatorProfiles?.find((reference) => String(reference.creatorId) === creatorId);
   const selectedCreator = creators.find((creator) => String(creator.id) === creatorId);
+  const selectedEngagementId = creatorId && projectId
+    ? draftEngagementIds[`${creatorId}:${projectId}`]
+    : undefined;
   const selectedSocialAccount = resolveCreatorSocialAccount(
     selectedCreator,
     creatorSocialAccountId,
@@ -137,23 +149,16 @@ export function ExternalInvoiceCollectionCreatePage({
       : undefined,
   })), [invoiceBillingSettings]);
   const projectOptions = useMemo(() => projects.map((project) => ({
-    value: String(project.projectId ?? project.id),
+    value: String(project.cooperationProjectId ?? project.projectId ?? project.id),
     label: project.name,
     description: [project.projectCode ?? project.cooperationProjectCode ?? project.id, project.brand].filter(Boolean).join(' · '),
+    searchText: `${project.name} ${project.brand} ${project.projectCode ?? ''} ${project.cooperationProjectCode ?? ''}`,
     leading: <BriefcaseBusiness size={17} />,
   })), [projects]);
-  const creatorOptions = useMemo(() => creatorReferences.flatMap((reference) => {
-    const creator = creators.find((item) => String(item.id) === String(reference.creatorId));
-    if (creator) return [externalInvoiceCreatorSearchOption(creator)];
-    const channelId = reference.handle || '频道 ID 待补充';
-    return [{
-      value: String(reference.creatorId),
-      label: reference.name,
-      selectedLabel: reference.name,
-      description: channelId,
-      searchText: [reference.name, reference.handle, reference.platform].filter(Boolean).join(' '),
-    }];
-  }), [creatorReferences, creators]);
+  const creatorOptions = useMemo(
+    () => creators.map(externalInvoiceCreatorSearchOption),
+    [creators],
+  );
   const eligibleContracts = useMemo(() => contracts.filter((contract) => (
     contract.lifecycle === 'CONFIRMED'
     && Boolean(contract.contractId)
@@ -169,16 +174,16 @@ export function ExternalInvoiceCollectionCreatePage({
     dueDate,
   }) : undefined, [amount, currency, description, dueDate, selectedBillingEntity]);
   const creationContractMatch = selectedProject
-    && selectedReference
+    && selectedEngagementId
     && selectedCreator
     && expectedValues
       ? evaluateExternalInvoiceCreationContractMatch({
           creator: selectedCreator,
-          creatorId: selectedReference.creatorId as CreatorId,
+          creatorId: selectedCreator.id as CreatorId,
           creatorHandle: selectedSocialAccount?.handle ?? selectedCreator.handle,
-          projectId: (selectedProject.projectId ?? selectedProject.id) as ProjectId,
+          projectId: (selectedProject.cooperationProjectId ?? selectedProject.projectId ?? selectedProject.id) as ProjectId,
           projectName: selectedProject.name,
-          engagementId: selectedReference.engagementId as EngagementId,
+          engagementId: selectedEngagementId,
           contractIds,
           contracts,
           expected: expectedValues,
@@ -190,7 +195,7 @@ export function ExternalInvoiceCollectionCreatePage({
   }, [amount, billingEntityId, contractIds, creatorId, currency]);
   const complete = Boolean(
     selectedProject
-    && selectedReference
+    && selectedEngagementId
     && selectedCreator
     && validAmount
     && selectedBillingEntity
@@ -204,15 +209,15 @@ export function ExternalInvoiceCollectionCreatePage({
     if (
       !complete
       || !selectedProject
-      || !selectedReference
+      || !selectedEngagementId
       || !selectedCreator
       || !expectedValues
     ) return;
     onCreate({
-      projectId: (selectedProject.projectId ?? selectedProject.id) as ProjectId,
+      projectId: (selectedProject.cooperationProjectId ?? selectedProject.projectId ?? selectedProject.id) as ProjectId,
       projectName: selectedProject.name,
-      engagementId: selectedReference.engagementId as EngagementId,
-      creatorId: selectedReference.creatorId as CreatorId,
+      engagementId: selectedEngagementId,
+      creatorId: selectedCreator.id as CreatorId,
       creatorName: selectedCreator.name,
       creatorLegalName: selectedCreator.contact.legalName.trim(),
       creatorHandle: selectedSocialAccount?.handle ?? selectedCreator.handle,
@@ -229,7 +234,7 @@ export function ExternalInvoiceCollectionCreatePage({
       <button className="external-back-button" type="button" onClick={onBack}><ArrowLeft size={17} />返回 Invoice 管理</button>
       <PageHeading
         title="发起外部 Invoice 收集"
-        subtitle="先固定合作项目、达人及 Invoice 校验基准，再向对应达人档案发布上传任务。"
+        subtitle="先选择达人档案，再关联合作项目并固定 Invoice 校验基准。"
       />
       <div className="external-collection-form">
         <section className="content-card external-collection-card">
@@ -239,53 +244,54 @@ export function ExternalInvoiceCollectionCreatePage({
           </div>
           <div className="form-grid external-form-grid">
             <div className="form-control">
-              <span className="required-field-label">合作项目 <em className="required-mark">*</em></span>
-              <SelectField
-                ariaLabel="选择合作项目"
-                variant="form"
-                menuStrategy="fixed"
-                value={projectId}
-                placeholder="请选择合作项目"
-                options={projectOptions}
-                onChange={(value) => {
-                  setProjectId(value);
-                  setCreatorId('');
-                  setCreatorSocialAccountId('');
-                  setContractIds([]);
-                }}
-              />
-            </div>
-            <div className="form-control">
               <span className="required-field-label">达人档案 <em className="required-mark">*</em></span>
               <SearchableComboBox
-                ariaLabel="选择项目内达人"
+                ariaLabel="选择达人"
                 className="creator-search-combobox"
                 value={creatorSelectionValue}
-                placeholder={selectedProject ? '搜索达人名称、频道ID、频道链接...' : '请先选择合作项目'}
+                placeholder="搜索达人名称、频道ID、频道链接..."
                 options={creatorOptions}
                 resultUnit="位达人"
-                renderOption={(option) => {
-                  const creator = creators.find((item) => item.id === option.value);
-                  const reference = creatorReferences.find((item) => String(item.creatorId) === option.value);
-                  return <CreatorIdentity creator={creator} displayName={reference?.name} fallbackHandle={reference?.handle} fallbackPlatform={reference?.platform} socialAccountsMode="expanded" />;
-                }}
-                disabled={!selectedProject}
+                renderOption={(option) => (
+                  <CreatorIdentity
+                    creator={creators.find((item) => item.id === option.value)}
+                    socialAccountsMode="expanded"
+                  />
+                )}
                 onChange={(value) => {
                   const creator = creators.find((item) => item.id === value);
-                  const reference = creatorReferences.find((item) => String(item.creatorId) === value);
                   setCreatorId(value);
-                  setCreatorSocialAccountId(resolveCreatorSocialAccount(
-                    creator,
-                    reference?.socialAccountId,
-                    reference?.handle,
-                    reference?.platform,
-                  )?.id ?? '');
+                  setCreatorSocialAccountId(resolveCreatorSocialAccount(creator)?.id ?? '');
+                  setProjectId('');
                   setContractIds([]);
+                  setContractMatchReason('');
                 }}
                 onClear={() => {
                   setCreatorId('');
                   setCreatorSocialAccountId('');
+                  setProjectId('');
                   setContractIds([]);
+                  setContractMatchReason('');
+                }}
+              />
+            </div>
+            <div className="form-control">
+              <span className="required-field-label">合作项目 <em className="required-mark">*</em></span>
+              <SearchableComboBox
+                ariaLabel="选择合作项目"
+                value={projectId}
+                placeholder={selectedCreator ? '搜索项目名称、编号或品牌' : '请先选择达人'}
+                options={projectOptions}
+                disabled={!selectedCreator}
+                onChange={(value) => {
+                  setProjectId(value);
+                  setContractIds([]);
+                  setContractMatchReason('');
+                }}
+                onClear={() => {
+                  setProjectId('');
+                  setContractIds([]);
+                  setContractMatchReason('');
                 }}
               />
             </div>

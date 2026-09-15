@@ -528,7 +528,7 @@ export type InvoiceBatchDraftRow = Omit<InvoiceBatchRow, 'generated'> & {
 
 export type InvoiceCreationDraftBase = {
   draftId: string;
-  schemaVersion: '1.0';
+  schemaVersion: '1.0' | '2.0';
   createdByAccount: string;
   createdByName: string;
   createdAt: string;
@@ -560,6 +560,7 @@ export type InvoiceBatchDraft = InvoiceCreationDraftBase & {
   invoiceDate: string;
   selectedBillingEntityId: string;
   currency: InvoiceCurrency;
+  selectedCreatorIds: CreatorId[];
   selectedEngagementIds: EngagementId[];
   sharedDescriptions: Array<Pick<InvoiceBatchLineItem, 'templateKey' | 'description'>>;
   rows: InvoiceBatchDraftRow[];

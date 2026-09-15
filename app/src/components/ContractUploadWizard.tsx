@@ -130,6 +130,7 @@ export function ContractUploadWizard({
     value: cooperationProjectIdFor(project),
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · ${project.creators} 位达人`,
+    searchText: `${project.name} ${project.brand} ${project.cooperationProjectCode ?? ''} ${project.projectCode ?? ''}`,
   }));
   const creatorOptions = contractUploadCreatorSearchOptions(creators);
   const frameworkOptions = contracts
@@ -302,10 +303,10 @@ export function ContractUploadWizard({
             disabled={!canSave}
             disabledReason={parsing
               ? '合同文件正在解析，请稍候。'
-              : !selectedProject
-                ? '请先选择合作项目。'
-                : !selectedCreator
+              : !selectedCreator
                   ? '请先选择合作达人。'
+                : !selectedProject
+                  ? '请选择合作项目。'
                   : !documents.length
                     ? '请先上传一份合同文件。'
                     : !contractName.trim()
@@ -329,52 +330,55 @@ export function ContractUploadWizard({
             <span><UserRound size={18} /></span>
             <div>
               <h3 id="contract-upload-association-title">关联信息</h3>
-              <p>选择合同所属项目与合作达人，系统将按内部关联关系保存。</p>
+              <p>先选择合作达人，再选择合同所属项目；保存后建立内部关联关系。</p>
             </div>
             <em>必填</em>
           </header>
           <div className="contract-upload-field-grid">
-            <div className="contract-upload-field">
-              <span>合作项目 *</span>
-              <SelectField
-                ariaLabel="合作项目"
-                variant="form"
-                value={projectId}
-                placeholder="选择飞书合作项目"
-                options={projectOptions}
-                onChange={(value) => {
-                  setProjectId(value);
-                  setCreatorId('');
-                  setCreatorSocialAccountId('');
-                  setDraftContractId('');
-                }}
-              />
-              <small>用于合同、IO 与后续 Invoice 的系统关联</small>
-            </div>
             <div className="contract-upload-field">
               <span>合作达人 *</span>
               <SearchableComboBox
                 ariaLabel="合作达人"
                 className="creator-search-combobox"
                 value={creatorSelectionValue}
-                placeholder={selectedProject ? '支持搜索 Display Name、频道 ID、频道链接、法定真名、Account Name' : '请先选择项目'}
+                placeholder="搜索 Display Name、频道 ID、频道链接…"
                 options={creatorOptions}
                 resultUnit="位达人"
                 renderOption={(option) => <CreatorIdentity creator={creators.find((creator) => creator.id === option.value)} socialAccountsMode="expanded" />}
-                disabled={!selectedProject}
                 onChange={(value) => {
                   const creator = creators.find((item) => item.id === value);
                   setCreatorId(creator?.id ?? '');
                   setCreatorSocialAccountId(resolveCreatorSocialAccount(creator)?.id ?? '');
+                  setProjectId('');
                   setDraftContractId('');
                 }}
                 onClear={() => {
                   setCreatorId('');
                   setCreatorSocialAccountId('');
+                  setProjectId('');
                   setDraftContractId('');
                 }}
               />
-              <small>{selectedProject ? '支持搜索全系统达人的 Display Name、频道 ID、频道链接、法定真名和 Account Name；未关联当前项目时保存会自动补建合作关系' : '选择项目后加载全系统达人'}</small>
+              <small>支持搜索 Display Name、频道 ID、频道链接、法定真名、Account Name；范围为全部达人档案</small>
+            </div>
+            <div className="contract-upload-field">
+              <span>合作项目 *</span>
+              <SearchableComboBox
+                ariaLabel="合作项目"
+                value={projectId}
+                placeholder={selectedCreator ? '搜索项目名称、编号或品牌' : '请先选择达人'}
+                options={projectOptions}
+                disabled={!selectedCreator}
+                onChange={(value) => {
+                  setProjectId(value);
+                  setDraftContractId('');
+                }}
+                onClear={() => {
+                  setProjectId('');
+                  setDraftContractId('');
+                }}
+              />
+              <small>{selectedCreator ? '可选择当前账号可管理的项目；保存后自动建立项目达人关系' : '选择达人后加载合作项目'}</small>
             </div>
             <div className="contract-upload-field">
               <span>历史生成合同</span>
@@ -426,7 +430,7 @@ export function ContractUploadWizard({
           <div className="contract-upload-file-grid">
             <label className={`contract-file-drop${!selectedCreator ? ' disabled' : ''}`}>
               {parsing ? <LoaderCircle className="contract-upload-spinner" size={24} /> : <Upload size={24} />}
-              <strong>{parsing ? '正在浏览器本地解析…' : selectedCreator ? '点击选择合同文件' : '请先完成项目与达人关联'}</strong>
+              <strong>{parsing ? '正在浏览器本地解析…' : selectedCreator ? '点击选择合同文件' : '请先选择合作达人'}</strong>
               <small>仅支持 1 份，单份不超过 30 MB</small>
               <span>{selectedFiles.length ? '重新选择文件' : '选择 PDF / DOCX'}</span>
               <input

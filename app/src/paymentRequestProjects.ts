@@ -629,6 +629,11 @@ export const findExistingEngagementId = ({
   ));
   if (activeReference) return activeReference.engagementId;
 
+  const removedReference = project.creatorProfiles?.find((reference) => (
+    reference.creatorId === creatorId && reference.status === 'removed'
+  ));
+  if (removedReference) return removedReference.engagementId;
+
   const invoiceReference = invoicesForCooperationCreator(invoices, projectId, creatorId)
     .find((invoice) => invoice.snapshot.engagementId)?.snapshot.engagementId;
   if (invoiceReference) return invoiceReference as EngagementId;

@@ -6,6 +6,7 @@ import type { GeneratedInvoiceRecord } from '../types';
 import {
   updateCreatorProjectCounts,
   upsertGeneratedInvoiceEngagements,
+  upsertProjectCreatorEngagements,
 } from './invoiceEngagements';
 
 const creator = { ...INITIAL_CREATORS[0], projects: 0 };
@@ -99,5 +100,46 @@ describe('generated Invoice engagement persistence', () => {
       contracts: [],
       invoices: [record],
     })).toBe(engagementId);
+  });
+
+  it('restores a removed relationship with its stable engagement ID instead of duplicating it', () => {
+    const removedAt = '2026-08-10T09:00:00.000Z';
+    const removedProject = {
+      ...project,
+      creatorProfiles: [{
+        creatorId: creator.id as CreatorId,
+        engagementId,
+        projectId,
+        status: 'removed' as const,
+        createdAt: removedAt,
+        updatedAt: removedAt,
+        name: creator.name,
+        handle: creator.handle,
+        platform: creator.platform,
+      }],
+    };
+
+    expect(findExistingEngagementId({
+      project: removedProject,
+      creatorId: creator.id as CreatorId,
+      contracts: [],
+      invoices: [],
+    })).toBe(engagementId);
+
+    const [restored] = upsertProjectCreatorEngagements({
+      projects: [removedProject],
+      creators: [creator],
+      associations: [{ projectId, creatorId: creator.id as CreatorId, engagementId }],
+      occurredAt: '2026-08-11T09:00:00.000Z',
+    });
+
+    expect(restored.creatorProfiles).toHaveLength(1);
+    expect(restored.creatorProfiles?.[0]).toMatchObject({
+      engagementId,
+      status: 'active',
+      createdAt: removedAt,
+      updatedAt: '2026-08-11T09:00:00.000Z',
+    });
+    expect(restored.creators).toBe(1);
   });
 });

@@ -378,6 +378,7 @@ export function InvoiceBuilderPage({
     value: cooperationProjectIdFor(project),
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
+    searchText: `${project.name} ${project.brand} ${project.cooperationProjectCode ?? ''} ${project.projectCode ?? ''}`,
   }));
   const billingEntityOptions = [
     ...(!matchedBillingEntity && editSnapshot ? [{
@@ -844,7 +845,15 @@ export function InvoiceBuilderPage({
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>
                 <span>合作项目 *</span>
-                <SelectField ariaLabel="合作项目" variant="form" value={selectedProjectId} placeholder={creatorId ? '选择飞书合作项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
+                <SearchableComboBox
+                  ariaLabel="合作项目"
+                  value={selectedProjectId}
+                  placeholder={creatorId ? '搜索项目名称、编号或品牌' : '请先选择达人'}
+                  options={projectOptions}
+                  onChange={selectProject}
+                  onClear={() => selectProject('')}
+                  disabled={!creatorId || isEditing}
+                />
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>

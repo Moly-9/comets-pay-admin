@@ -9,7 +9,7 @@ import {
   upsertInvoiceCreationDraft,
 } from './invoiceCreationDrafts';
 import type { InvoiceBatchDraft, InvoiceSingleCreationDraft } from '../types';
-import { createPrototypeId } from '../businessWorkflow';
+import { createPrototypeId, type CreatorId } from '../businessWorkflow';
 
 const singleDraft = (overrides: Partial<InvoiceSingleCreationDraft> = {}): InvoiceSingleCreationDraft => ({
   draftId: 'draft-single-1',
@@ -86,7 +86,30 @@ describe('invoice creation drafts', () => {
     } as unknown as InvoiceBatchDraft;
     expect(invoiceBatchDraftGeneratedCount(batch)).toBe(1);
     expect(invoiceBatchDraftHasPendingRows(batch)).toBe(true);
+    const migrated = parseInvoiceCreationDrafts(JSON.stringify([batch]), 'jeff');
+    expect(migrated[0]).toMatchObject({
+      kind: 'BATCH',
+      schemaVersion: '2.0',
+      selectedCreatorIds: batch.rows.map((row) => row.creatorId),
+    });
     expect(upsertInvoiceCreationDraft([], batch)).toHaveLength(1);
     expect(removeInvoiceCreationDraft([batch], batch.draftId)).toEqual([]);
+  });
+
+  it('keeps a version 2 batch draft after creators are selected but before a project is chosen', () => {
+    const creatorId = createPrototypeId('creator') as CreatorId;
+    const creatorOnlyDraft = {
+      draftId: 'draft-batch-creator-only', schemaVersion: '2.0', kind: 'BATCH', batchId: 'batch-creator-only',
+      createdByAccount: 'jeff', createdByName: 'Jeff', createdAt: '2026-09-09T01:00:00.000Z', updatedAt: '2026-09-09T02:00:00.000Z',
+      projectId: '', invoiceDate: '2026-09-09', selectedBillingEntityId: 'entity-1', currency: 'USD',
+      selectedCreatorIds: [creatorId], selectedEngagementIds: [], sharedDescriptions: [], rows: [],
+      generationProgress: { current: 0, total: 0 },
+    } as InvoiceBatchDraft;
+
+    expect(invoiceBatchDraftHasPendingRows(creatorOnlyDraft)).toBe(true);
+    expect(parseInvoiceCreationDrafts(JSON.stringify([creatorOnlyDraft]), 'jeff')).toMatchObject([{
+      draftId: 'draft-batch-creator-only',
+      selectedCreatorIds: [creatorId],
+    }]);
   });
 });

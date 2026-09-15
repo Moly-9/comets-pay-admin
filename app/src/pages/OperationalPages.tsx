@@ -3451,6 +3451,7 @@ export function InvoicePage({
   contracts = [],
   invoiceBillingSettings,
   projects = [],
+  creationProjects = projects,
   generatedInvoices,
   creationDrafts = [],
   externalInvoices = [],
@@ -3497,6 +3498,7 @@ export function InvoicePage({
   contracts?: ContractRecord[];
   invoiceBillingSettings: InvoiceBillingSettings;
   projects?: ProjectSummary[];
+  creationProjects?: ProjectSummary[];
   generatedInvoices: GeneratedInvoiceRecord[];
   creationDrafts?: InvoiceCreationDraft[];
   externalInvoices?: ExternalInvoiceCollectionRecord[];
@@ -3579,8 +3581,15 @@ export function InvoicePage({
         progressLabel: '尚未生成文件',
       };
     }
-    const names = draft.rows.map((row) => row.creatorName).filter(Boolean);
+    const rowNames = new Map(draft.rows.map((row) => [row.creatorId, row.creatorName]));
+    const creatorIds = draft.selectedCreatorIds?.length
+      ? draft.selectedCreatorIds
+      : draft.rows.map((row) => row.creatorId);
+    const names = creatorIds.map((creatorId) => (
+      rowNames.get(creatorId) ?? creators.find((candidate) => candidate.id === creatorId)?.name ?? '达人档案已失效'
+    ));
     const generatedCount = invoiceBatchDraftGeneratedCount(draft);
+    const totalCount = Math.max(draft.rows.length, creatorIds.length);
     return {
       draft,
       typeLabel: '批量 Invoice',
@@ -3588,7 +3597,7 @@ export function InvoicePage({
         ? `${names.slice(0, 2).join('、')}${names.length > 2 ? ` 等 ${names.length} 位` : ''}`
         : '待选择达人',
       projectLabel: project?.name ?? (draft.projectId ? '项目已失效，请重新选择' : '待选择项目'),
-      progressLabel: `${generatedCount}/${draft.rows.length} 已生成 · ${Math.max(0, draft.rows.length - generatedCount)} 待生成`,
+      progressLabel: `${generatedCount}/${totalCount} 已生成 · ${Math.max(0, totalCount - generatedCount)} 待生成`,
     };
   }), [creationDrafts, creators, projects]);
   const normalizedDraftSearch = draftSearch.trim().toLocaleLowerCase();
@@ -3941,7 +3950,7 @@ export function InvoicePage({
   if (showExternalCreate) {
     return (
       <ExternalInvoiceCollectionCreatePage
-        projects={projects}
+        projects={creationProjects}
         creators={creators}
         contracts={contracts}
         invoiceBillingSettings={invoiceBillingSettings}

@@ -132,7 +132,11 @@ describe('ExternalInvoiceCollectionCreatePage', () => {
     expect(option.searchText).toContain('External Creator LLC');
     expect(externalCreateSource).toContain("搜索达人名称、频道ID、频道链接...");
     expect(externalCreateSource).toContain('<InvoiceContractSelector');
-    expect(externalCreateSource).toContain('selectedLabel: reference.name');
+    expect(externalCreateSource).toContain('creators.map(externalInvoiceCreatorSearchOption)');
+    expect(externalCreateSource.indexOf('>达人档案 <')).toBeLessThan(
+      externalCreateSource.indexOf('>合作项目 <'),
+    );
+    expect(externalCreateSource).toContain('disabled={!selectedCreator}');
     expect(externalCreateSource).toContain("field === 'INVOICE_DATE'");
     expect(externalCreateSource).toContain("'NOT_CHECKED'");
     expect(externalCreateSource).toContain('仅记录，不参与系统校验');

@@ -132,6 +132,8 @@ import {
 import {
   updateCreatorProjectCounts,
   upsertGeneratedInvoiceEngagements,
+  upsertProjectCreatorEngagements,
+  type ProjectCreatorEngagementInput,
 } from './invoice/invoiceEngagements';
 import {
   buildRequestFinanceReview,
@@ -237,6 +239,7 @@ import {
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   paymentRequestCancellationIssue,
+  findExistingEngagementId,
   requestOwningInvoice,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
@@ -811,7 +814,9 @@ export default function App() {
     snapshot: InvoiceBatchDraftState,
     meaningful: boolean,
   ) => {
-    if (!meaningful || !snapshot.rows.some((row) => row.status !== 'GENERATED')) {
+    const hasPendingContent = snapshot.rows.some((row) => row.status !== 'GENERATED')
+      || (!snapshot.rows.length && Boolean(snapshot.selectedCreatorIds.length));
+    if (!meaningful || !hasPendingContent) {
       const draftId = activeInvoiceCreationDraftIdRef.current;
       if (!draftId) return;
       updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
@@ -920,6 +925,23 @@ export default function App() {
     ]);
   }, [currentUser]);
 
+  const persistProjectCreatorEngagements = useCallback((
+    associations: ProjectCreatorEngagementInput[],
+    occurredAt = nowIso(),
+  ) => {
+    if (!associations.length) return;
+    setProjects((currentProjects) => {
+      const nextProjects = upsertProjectCreatorEngagements({
+        projects: currentProjects,
+        creators,
+        associations,
+        occurredAt,
+      });
+      setCreators((currentCreators) => updateCreatorProjectCounts(currentCreators, nextProjects));
+      return nextProjects;
+    });
+  }, [creators]);
+
   const approvalInvalidatedRequest = useCallback((
     request: RequestProjectSummary,
     summary: string,
@@ -966,54 +988,24 @@ export default function App() {
 
   const uploadContracts = useCallback((inputs: ContractUploadInput[]) => {
     const engagementByKey = new Map<string, EngagementId>();
-    const projectUpdates = new Map<string, ProjectSummary>();
     const resolvedInputs = inputs.map((input) => {
       const projectKey = String(input.cooperationProjectId ?? input.projectId);
       const engagementKey = `${projectKey}:${input.creatorId}`;
-      const existingProject = projectUpdates.get(projectKey)
-        ?? projects.find((project) => getProjectId(project) === input.projectId);
+      const existingProject = projects.find((project) => getProjectId(project) === input.projectId);
       let engagementId = input.engagementId;
       if (!engagementId) {
         engagementId = engagementByKey.get(engagementKey)
-          ?? existingProject?.creatorProfiles?.find((reference) => (
-            reference.creatorId === input.creatorId && reference.status !== 'removed'
-          ))?.engagementId;
+          ?? (existingProject ? findExistingEngagementId({
+            project: existingProject,
+            creatorId: input.creatorId,
+            contracts,
+            invoices: generatedInvoices,
+          }) : undefined);
       }
-      if (!engagementId) {
-        engagementId = createPrototypeId('engagement') as EngagementId;
-        const creator = creators.find((candidate) => candidate.id === input.creatorId);
-        if (existingProject && creator) {
-          const occurredAt = nowIso();
-          const activeCreatorCount = existingProject.creatorProfiles?.filter((reference) => reference.status !== 'removed').length;
-          const nextProject: ProjectSummary = {
-            ...existingProject,
-            creators: (activeCreatorCount ?? existingProject.creators) + 1,
-            creatorProfiles: [
-              ...(existingProject.creatorProfiles ?? []),
-              {
-                creatorId: input.creatorId,
-                engagementId,
-                projectId: getProjectId(existingProject),
-                status: 'active',
-                createdAt: occurredAt,
-                updatedAt: occurredAt,
-                name: creator.name,
-                handle: input.creatorHandle,
-                platform: input.creatorPlatform,
-                socialAccountId: input.creatorSocialAccountId,
-              },
-            ],
-          };
-          projectUpdates.set(projectKey, nextProject);
-        }
-      }
+      if (!engagementId) engagementId = createPrototypeId('engagement') as EngagementId;
       engagementByKey.set(engagementKey, engagementId);
       return { ...input, engagementId };
     });
-
-    if (projectUpdates.size) {
-      setProjects((current) => current.map((project) => projectUpdates.get(String(getProjectId(project))) ?? project));
-    }
 
     const frameworkIdsByUploadKey = new Map<string, ContractId>();
     const orderedInputs = [...resolvedInputs].sort((left, right) => {
@@ -1038,6 +1030,14 @@ export default function App() {
       recordsByInput.set(input, record);
     });
     const records = resolvedInputs.map((input) => recordsByInput.get(input)!).filter(Boolean);
+    persistProjectCreatorEngagements(resolvedInputs.map((input) => ({
+      projectId: input.projectId,
+      creatorId: input.creatorId,
+      engagementId: input.engagementId,
+      creatorHandle: input.creatorHandle,
+      creatorSocialAccountId: input.creatorSocialAccountId,
+      creatorPlatform: input.creatorPlatform,
+    })));
     setContracts((current) => {
       const replaced = new Map(records.filter((record) => record.uploadedFromDraftId).map((record) => [record.contractId, record]));
       return [
@@ -1058,7 +1058,7 @@ export default function App() {
       });
     });
     return records;
-  }, [contracts, creators, currentUser.account, projects, registerProjectMutation]);
+  }, [contracts, currentUser.account, generatedInvoices, persistProjectCreatorEngagements, projects, registerProjectMutation]);
 
   const bindFrameworkContract = useCallback((ioContractId: ContractId, frameworkContractId?: ContractId) => {
     const ioContract = contracts.find((contract) => (contract.contractId ?? contract.id) === ioContractId);
@@ -1103,6 +1103,14 @@ export default function App() {
         || contract.id === model.contractNumber)
     ));
     const record = createEditingContractDraft(model, existingDraft, currentUser.account);
+    persistProjectCreatorEngagements([{
+      projectId: model.projectId,
+      creatorId: model.creatorId,
+      engagementId: model.engagementId,
+      creatorHandle: model.creatorHandle,
+      creatorSocialAccountId: model.creatorSocialAccountId,
+      creatorPlatform: model.creatorPlatform,
+    }]);
     setContracts((current) => existingDraft
       ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
       : [record, ...current]);
@@ -1110,7 +1118,7 @@ export default function App() {
     setContractBuilderDirty(false);
     notify('合同草稿已保存', `${record.name} 已保存到草稿箱，可稍后继续编辑。`);
     return record;
-  }, [contracts, currentUser.account, editingContractDraftId, notify]);
+  }, [contracts, currentUser.account, editingContractDraftId, notify, persistProjectCreatorEngagements]);
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const existingDraft = contracts.find((contract) => (
@@ -1120,40 +1128,14 @@ export default function App() {
     ));
     const projectKey = String(model.cooperationProjectId ?? model.projectId);
     const existingProject = projects.find((project) => getProjectId(project) === projectKey);
-    const existingReference = existingProject?.creatorProfiles?.find((reference) => (
-      reference.creatorId === model.creatorId && reference.status !== 'removed'
-    ));
-    const resolvedEngagementId = existingReference?.engagementId
+    const resolvedEngagementId = (existingProject ? findExistingEngagementId({
+      project: existingProject,
+      creatorId: model.creatorId,
+      contracts,
+      invoices: generatedInvoices,
+    }) : undefined)
       || model.engagementId
       || createPrototypeId('engagement') as EngagementId;
-    if (existingProject && !existingReference) {
-      const creator = creators.find((candidate) => candidate.id === model.creatorId);
-      if (creator) {
-        const occurredAt = nowIso();
-        const activeCreatorCount = existingProject.creatorProfiles?.filter((reference) => reference.status !== 'removed').length;
-        setProjects((current) => current.map((project) => getProjectId(project) === projectKey
-          ? {
-              ...project,
-              creators: (activeCreatorCount ?? project.creators) + 1,
-              creatorProfiles: [
-                ...(project.creatorProfiles ?? []),
-                {
-                  creatorId: model.creatorId,
-                  engagementId: resolvedEngagementId,
-                  projectId: getProjectId(project),
-                  status: 'active',
-                  createdAt: occurredAt,
-                  updatedAt: occurredAt,
-                  name: creator.name,
-                  handle: model.creatorHandle,
-                  platform: model.creatorPlatform ?? model.platform,
-                  socialAccountId: model.creatorSocialAccountId,
-                },
-              ],
-            }
-          : project));
-      }
-    }
     const resolvedModel = { ...model, engagementId: resolvedEngagementId };
     const documentUrl = URL.createObjectURL(files.pdfBlob);
     const record = createGeneratedContractDraft(resolvedModel, existingDraft?.generationVersion ?? 1, documentUrl, {
@@ -1163,6 +1145,14 @@ export default function App() {
       pageCount: files.pageCount,
       uploadedByAccount: currentUser.account,
     });
+    persistProjectCreatorEngagements([{
+      projectId: resolvedModel.projectId,
+      creatorId: resolvedModel.creatorId,
+      engagementId: resolvedEngagementId,
+      creatorHandle: resolvedModel.creatorHandle,
+      creatorSocialAccountId: resolvedModel.creatorSocialAccountId,
+      creatorPlatform: resolvedModel.creatorPlatform,
+    }]);
     setContracts((current) => existingDraft
       ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
       : [record, ...current]);
@@ -1177,7 +1167,7 @@ export default function App() {
       summary: `已生成合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
-  }, [contracts, creators, currentUser.account, editingContractDraftId, projects, registerProjectMutation]);
+  }, [contracts, currentUser.account, editingContractDraftId, generatedInvoices, persistProjectCreatorEngagements, projects, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
@@ -3727,6 +3717,14 @@ export default function App() {
         actor: externalInvoiceActor(),
         publish,
       });
+      persistProjectCreatorEngagements([{
+        projectId: record.projectId,
+        creatorId: record.creatorId,
+        engagementId: record.engagementId,
+        creatorHandle: record.creatorHandle,
+        creatorSocialAccountId: record.creatorSocialAccountId,
+        creatorPlatform: record.creatorPlatform,
+      }]);
       setExternalInvoices((current) => [record, ...current]);
       setInvoiceTab('upload');
       notify(
@@ -5397,6 +5395,7 @@ export default function App() {
           contracts={contracts}
           invoiceBillingSettings={invoiceBillingSettings}
           projects={projects}
+          creationProjects={manageableCooperationProjects}
           generatedInvoices={generatedInvoices}
           creationDrafts={accountInvoiceCreationDrafts}
           externalInvoices={externalInvoices}

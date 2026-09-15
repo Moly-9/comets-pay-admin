@@ -5,7 +5,7 @@ import type {
   InvoiceSingleCreationDraft,
 } from '../types';
 
-export const INVOICE_CREATION_DRAFT_SCHEMA_VERSION = '1.0' as const;
+export const INVOICE_CREATION_DRAFT_SCHEMA_VERSION = '2.0' as const;
 export const INVOICE_CREATION_DRAFT_STORAGE_PREFIX = 'comets-pay.invoice-creation-drafts.v1';
 
 export const invoiceCreationDraftStorageKey = (account: string) => (
@@ -19,7 +19,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 const isDraftBase = (value: unknown): value is Record<string, unknown> => (
   isRecord(value)
   && typeof value.draftId === 'string'
-  && value.schemaVersion === INVOICE_CREATION_DRAFT_SCHEMA_VERSION
+  && (value.schemaVersion === '1.0' || value.schemaVersion === INVOICE_CREATION_DRAFT_SCHEMA_VERSION)
   && typeof value.createdByAccount === 'string'
   && typeof value.createdByName === 'string'
   && typeof value.createdAt === 'string'
@@ -108,6 +108,7 @@ export const isInvoiceCreationDraft = (value: unknown): value is InvoiceCreation
       && typeof value.invoiceDate === 'string'
       && typeof value.selectedBillingEntityId === 'string'
       && typeof value.currency === 'string'
+      && (value.selectedCreatorIds === undefined || isStringArray(value.selectedCreatorIds))
       && isStringArray(value.selectedEngagementIds)
       && Array.isArray(value.sharedDescriptions)
       && value.sharedDescriptions.every((item) => (
@@ -136,6 +137,29 @@ export const parseInvoiceCreationDrafts = (
     return parsed
       .filter(isInvoiceCreationDraft)
       .filter((draft) => draft.createdByAccount.trim().toLowerCase() === normalizedAccount)
+      .map((draft): InvoiceCreationDraft => {
+        if (draft.kind !== 'BATCH') {
+          return { ...draft, schemaVersion: INVOICE_CREATION_DRAFT_SCHEMA_VERSION };
+        }
+        const creatorIdByEngagementId = new Map(draft.rows.map((row) => [
+          row.engagementId,
+          row.creatorId,
+        ]));
+        const migratedCreatorIds = [
+          ...draft.selectedEngagementIds.flatMap((engagementId) => {
+            const creatorId = creatorIdByEngagementId.get(engagementId);
+            return creatorId ? [creatorId] : [];
+          }),
+          ...draft.rows.map((row) => row.creatorId),
+        ];
+        return {
+          ...draft,
+          schemaVersion: INVOICE_CREATION_DRAFT_SCHEMA_VERSION,
+          selectedCreatorIds: draft.selectedCreatorIds?.length
+            ? [...draft.selectedCreatorIds]
+            : [...new Set(migratedCreatorIds)] as InvoiceBatchDraft['selectedCreatorIds'],
+        };
+      })
       .filter((draft) => draft.kind === 'SINGLE' || invoiceBatchDraftHasPendingRows(draft))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   } catch {
@@ -194,6 +218,7 @@ export const invoiceSingleDraftHasMeaningfulContent = (
 
 export const invoiceBatchDraftHasPendingRows = (draft: InvoiceBatchDraft) => (
   draft.rows.some((row) => row.status !== 'GENERATED')
+  || (!draft.rows.length && Boolean(draft.selectedCreatorIds?.length))
 );
 
 export const invoiceBatchDraftGeneratedCount = (draft: InvoiceBatchDraft) => (
