@@ -142,6 +142,8 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html).toContain('>EUR\u00a0200<');
     expect(html).toContain('>GBP\u00a0300<');
     expect(html).toContain('>HKD\u00a0400<');
+    expect(html).toContain('USD 100 ｜ EUR 200 ｜ GBP 300 ｜ HKD 400');
+    expect(html).not.toContain('USD 100 · EUR 200');
   });
 
   it('renders the USD zero-value fallback when no review request exists', () => {

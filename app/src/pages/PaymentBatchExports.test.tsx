@@ -203,6 +203,28 @@ describe('payment batch filters and selection', () => {
     expect(basePayout.status).toBe('已付款');
   });
 
+  it('exposes the source batch for reversal rows', () => {
+    const source = TEST_BATCHES[0];
+    const reversal = {
+      ...source,
+      paymentBatchId: 'payment_batch_reversal_test' as PaymentBatchRecord['paymentBatchId'],
+      paymentBatchCode: 'BAT-REVERSAL-TEST',
+      purpose: 'REVERSAL' as const,
+      sourcePaymentBatchId: source.paymentBatchId,
+      sourcePaymentBatchCode: source.paymentBatchCode,
+    };
+
+    expect(paymentBatchRows([reversal])[0]).toMatchObject({
+      purpose: 'REVERSAL',
+      sourcePaymentBatchCode: source.paymentBatchCode,
+    });
+
+    const html = renderToStaticMarkup(
+      <BatchesPage batches={[reversal]} onNewBatch={vi.fn()} notify={vi.fn()} canCreateBatch />,
+    );
+    expect(html).toContain('>冲退付款</span><small class="cell-subtext" title="BAT-20260716-007">来源批次 BAT-20260716-007</small>');
+  });
+
   it('exports the current request-project status with a frozen snapshot fallback', () => {
     const source = TEST_BATCHES[0];
     const currentRequest = {

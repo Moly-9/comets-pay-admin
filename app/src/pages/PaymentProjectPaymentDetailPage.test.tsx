@@ -503,6 +503,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('.payment-project-detail-code-heading');
     expect(css).toContain('.payment-project-detail-type-heading');
     expect(css).toContain('.payment-project-attempt-badge');
+    expect(css).toMatch(/\.payment-project-attempt-badge\.is-return\s*{[^}]*background: #fff2f0;[^}]*color: #9a4b42;/s);
     expect(css).toContain('.payment-project-attempt-card.is-current');
     expect(css).toContain('position: sticky');
     expect(css).toContain('right: 116px');
@@ -521,7 +522,10 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(css).toContain('.payment-project-attempt-card');
     expect(css).toMatch(/\.payment-project-attempt-history\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
     expect(css).toContain('.payment-project-retry-badge');
-    expect(css).toContain('font-size: 28px');
+    expect(css).toContain('font-size: 30px');
+    expect(css).toMatch(/\.payment-project-payment-detail-page:not\(\.payment-batch-payment-detail-page\) \.payment-batch-detail-total > strong\s*{[^}]*font-size: 30px;[^}]*font-weight: 500;/s);
+    expect(css).toMatch(/\.payment-project-payment-detail-page\.payment-batch-detail-page \.payment-project-summary-card strong\s*{[^}]*font-weight: 500;/s);
+    expect(css).toMatch(/\.payment-project-payment-detail-page\.payment-batch-payment-detail-page\.payment-batch-detail-page[\s\S]*?\.payment-project-summary-provider \.payment-provider-badge\s*{[^}]*font-size: 18px;[^}]*font-weight: 500;/s);
     expect(css).toContain('border-radius: 14px');
     expect(css).toContain('.payment-project-info-cards');
     expect(css).toContain('min-height: 44px');

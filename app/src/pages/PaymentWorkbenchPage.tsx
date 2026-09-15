@@ -821,7 +821,7 @@ export function PaymentWorkbenchPage({
   const activeTabSummaryLabel = TAB_SUMMARY_LABELS[activeTab];
   const displayedAmountSummary = displayedSummary.amounts
     .map(({ currency, amount }) => `${currency} ${formatOverviewAmount(amount)}`)
-    .join(' · ');
+    .join(' ｜ ');
 
   useEffect(() => {
     setSelectedIdsByTab((current) => {

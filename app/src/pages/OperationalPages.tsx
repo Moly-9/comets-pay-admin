@@ -4435,6 +4435,7 @@ export type PaymentBatchRow = {
   paymentBatchId: PaymentBatchRecord['paymentBatchId'];
   id: string;
   purpose: PaymentBatchPurpose;
+  sourcePaymentBatchCode?: string;
   requestCode: string;
   provider: string;
   paymentEntity: string;
@@ -4491,6 +4492,7 @@ export const paymentBatchRows = (
       paymentBatchId: batch.paymentBatchId,
       id: batch.paymentBatchCode,
       purpose: batch.purpose,
+      sourcePaymentBatchCode: batch.sourcePaymentBatchCode,
       requestCode: batch.request.requestCode,
       provider: batch.provider,
       paymentEntity: batch.request.paymentEntity || '待补充',
@@ -4911,7 +4913,12 @@ export function BatchesPage({
                       />
                     </td>
                     <td className="mono-cell">{batch.id}</td>
-                    <td><span className={`payment-batch-purpose-badge is-${batch.purpose.toLowerCase()}`}>{paymentBatchPurposeLabel(batch.purpose)}</span></td>
+                    <td>
+                      <span className={`payment-batch-purpose-badge is-${batch.purpose.toLowerCase()}`}>{paymentBatchPurposeLabel(batch.purpose)}</span>
+                      {batch.purpose === 'REVERSAL' && batch.sourcePaymentBatchCode
+                        ? <small className="cell-subtext" title={batch.sourcePaymentBatchCode}>来源批次 {batch.sourcePaymentBatchCode}</small>
+                        : null}
+                    </td>
                     <td className="mono-cell" title={batch.requestCode}>{batch.requestCode}</td>
                     <td><PaymentProviderBadge compact provider={batch.provider} /></td>
                     <td className="payment-batch-text-cell" title={batch.paymentEntity}>{batch.paymentEntity}</td>

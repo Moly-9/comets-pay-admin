@@ -549,7 +549,7 @@ export function PaymentBatchDetailPage({
           <div><span>付款渠道</span><strong>{paymentProviderDisplayName(batch.provider)}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></div>
         </div>
         <div className="payment-project-summary-card is-result">
-          <div><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>实际付款金额 {actualPaidTotal}</small></div>
+          <div><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>总支出金额 {actualPaidTotal}</small></div>
         </div>
       </section>
 
@@ -622,9 +622,9 @@ export function PaymentBatchDetailPage({
                           <th className="payment-batch-col-provider" scope="col">付款渠道</th>
                           <th className="payment-batch-col-account" scope="col">收款银行账号</th>
                           <th className="payment-batch-col-date" scope="col">付款日期</th>
-                          <th className="payment-batch-col-amount" scope="col">付款金额</th>
+                          <th className="payment-batch-col-amount" scope="col">请款金额</th>
                           <th className="payment-batch-col-fee" scope="col">手续费</th>
-                          <th className="payment-batch-col-actual" scope="col">实际付款金额</th>
+                          <th className="payment-batch-col-actual" scope="col">总支出金额</th>
                           <th className="payment-batch-col-attempt" scope="col">付款类型</th>
                           <th className="payment-batch-col-status" scope="col">付款状态</th>
                           <th className="action-cell payment-batch-col-actions" scope="col">操作</th>
