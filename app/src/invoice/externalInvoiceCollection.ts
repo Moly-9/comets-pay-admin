@@ -44,7 +44,7 @@ export type ExternalInvoiceCollectionStatus =
   | 'RECOGNITION_FAILED'
   | 'CANCELLED';
 
-export type ExternalInvoiceListStatus = '待发布' | '待上传' | '待重新上传' | '待审核' | '已通过';
+export type ExternalInvoiceListStatus = '待发布' | '待上传' | '待重新上传' | '待审核' | '待发起请款';
 
 export type ExternalInvoiceScenario =
   | 'NORMAL'
@@ -308,7 +308,7 @@ export const externalInvoiceListStatus = (
     return '待重新上传';
   }
   if (status === 'WAITING_MEDIA_REVIEW') return '待审核';
-  if (status === 'APPROVED') return '已通过';
+  if (status === 'APPROVED') return '待发起请款';
   return '待上传';
 };
 

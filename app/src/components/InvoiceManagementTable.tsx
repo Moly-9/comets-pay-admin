@@ -15,7 +15,6 @@ const STATUS_CLASS: Record<InvoiceManagementRow['status'], string> = {
   待审核: 'review',
   待复核: 'recheck',
   待发起请款: 'request',
-  已通过: 'approved',
   OA审批中: 'oa',
   付款中: 'paying',
   已付款: 'paid',

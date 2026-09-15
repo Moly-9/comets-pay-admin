@@ -150,6 +150,7 @@ export const getInvoiceRowStatus = (payout: Pick<Payout, 'invoiceReviewStatus' |
   if (payout.invoiceReviewStatus === '待媒介审核') return '待审核';
   if (payout.invoiceReviewStatus === '待媒介复核') return '待复核';
   if (payout.invoiceReviewStatus === '已通过') {
+    if (payout.status === '未进入付款') return '待发起请款';
     return getApprovedInvoicePaymentStatus(payout) === '已付款' ? '已付款' : '付款中';
   }
   return INVOICE_REVIEW_STATUS_META[payout.invoiceReviewStatus].label;

@@ -178,6 +178,7 @@ describe('external Invoice collection workflow', () => {
     expect(externalInvoiceListStatus('WAITING_CONFIRMATION')).toBe('待上传');
     expect(externalInvoiceListStatus('RETURNED_FOR_CORRECTION')).toBe('待重新上传');
     expect(externalInvoiceListStatus('RETURNED_FOR_REUPLOAD')).toBe('待重新上传');
+    expect(externalInvoiceListStatus('APPROVED')).toBe('待发起请款');
     expect(externalInvoicePageTab('WAITING_MEDIA_REVIEW')).toBe('review');
   });
 

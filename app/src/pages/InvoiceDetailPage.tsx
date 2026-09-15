@@ -457,7 +457,7 @@ export function InvoiceDetailPage({
     : null;
   const navigationTarget = managementView?.status === 'OA审批中'
     ? 'REQUEST'
-    : managementView?.status === '已通过'
+    : managementView?.status === '待发起请款'
       ? 'PROJECT'
       : managementView && ['付款中', '已付款'].includes(managementView.status)
         ? 'PAYMENT'

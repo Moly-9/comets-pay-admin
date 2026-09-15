@@ -401,6 +401,7 @@ const PROJECT_STATUS_TONES: Record<string, ProjectStatusTone> = {
   '请款提交': 'review',
   '待补资料': 'review',
   '待财务复核': 'review',
+  '待发起请款': 'active',
   'PM审批通过': 'active',
   '媒介负责人审批通过': 'active',
   '老板审批通过': 'active',

@@ -15,7 +15,6 @@ export type InvoiceManagementStatus =
   | '达人反馈'
   | '待审核'
   | '待复核'
-  | '已通过'
   | 'OA审批中'
   | '付款中'
   | '已付款'
@@ -60,7 +59,7 @@ export const INVOICE_MANAGEMENT_STATUSES_BY_TAB: Record<InvoicePageTab, InvoiceM
   signature: ['待发布', '待签署'],
   upload: ['待发布', '待上传', '待重新上传'],
   review: ['达人反馈', '待审核', '待复核'],
-  approved: ['待发起请款', '已通过', 'OA审批中', '付款中', '已付款'],
+  approved: ['待发起请款', 'OA审批中', '付款中', '已付款'],
   returned: ['已退回'],
 };
 
@@ -172,7 +171,7 @@ export const getInvoiceManagementView = (
   ) {
     return { tab: 'approved', status: '付款中', requestApprovalStatus: request?.approval?.status };
   }
-  return { tab: 'approved', status: '已通过', requestApprovalStatus: request?.approval?.status };
+  return { tab: 'approved', status: '待发起请款', requestApprovalStatus: request?.approval?.status };
 };
 
 export const getInvoiceManagementReturnContext = (
