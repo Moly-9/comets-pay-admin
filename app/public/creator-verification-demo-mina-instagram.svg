@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">Instagram Professional dashboard demo for Mina Kato</title>
+  <desc id="desc">Synthetic creator analytics dashboard used only for the COMETS Pay prototype.</desc>
+  <defs>
+    <linearGradient id="ig" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#833ab4"/><stop offset=".48" stop-color="#fd1d1d"/><stop offset="1" stop-color="#fcb045"/></linearGradient>
+    <linearGradient id="chart" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d69ae9" stop-opacity=".7"/><stop offset="1" stop-color="#d69ae9" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1280" height="800" fill="#f7f7f9"/>
+  <rect width="238" height="800" fill="#fff"/>
+  <rect x="237" width="1" height="800" fill="#e8e8ed"/>
+  <circle cx="54" cy="57" r="22" fill="url(#ig)"/>
+  <rect x="44" y="47" width="20" height="20" rx="6" fill="none" stroke="#fff" stroke-width="3"/><circle cx="54" cy="57" r="5" fill="none" stroke="#fff" stroke-width="3"/>
+  <text x="89" y="64" fill="#212126" font-family="Arial, sans-serif" font-size="20" font-weight="700">Professional</text>
+  <g font-family="Arial, sans-serif" font-size="17" fill="#676772">
+    <text x="42" y="145">Overview</text><text x="42" y="198">Insights</text><text x="42" y="251">Audience</text><text x="42" y="304">Content</text><text x="42" y="357">Monetization</text>
+  </g>
+  <rect x="22" y="169" width="194" height="48" rx="12" fill="#f4ecf7"/><text x="42" y="199" fill="#7a328b" font-family="Arial, sans-serif" font-size="17" font-weight="700">Insights</text>
+  <text x="278" y="64" fill="#25252b" font-family="Arial, sans-serif" font-size="29" font-weight="700">Account insights</text>
+  <text x="278" y="99" fill="#777782" font-family="Arial, sans-serif" font-size="16">@MinaKato · Sep 01–Sep 12, 2026</text>
+  <rect x="278" y="134" width="294" height="132" rx="18" fill="#fff" stroke="#e5e5ea"/><text x="306" y="175" fill="#73737d" font-family="Arial, sans-serif" font-size="16">Accounts reached</text><text x="306" y="226" fill="#24242a" font-family="Arial, sans-serif" font-size="36" font-weight="700">184,206</text><text x="466" y="226" fill="#16865a" font-family="Arial, sans-serif" font-size="15">+18.7%</text>
+  <rect x="592" y="134" width="294" height="132" rx="18" fill="#fff" stroke="#e5e5ea"/><text x="620" y="175" fill="#73737d" font-family="Arial, sans-serif" font-size="16">Content interactions</text><text x="620" y="226" fill="#24242a" font-family="Arial, sans-serif" font-size="36" font-weight="700">32,841</text><text x="767" y="226" fill="#16865a" font-family="Arial, sans-serif" font-size="15">+9.3%</text>
+  <rect x="906" y="134" width="294" height="132" rx="18" fill="#fff" stroke="#e5e5ea"/><text x="934" y="175" fill="#73737d" font-family="Arial, sans-serif" font-size="16">Total followers</text><text x="934" y="226" fill="#24242a" font-family="Arial, sans-serif" font-size="36" font-weight="700">621,490</text><text x="1092" y="226" fill="#16865a" font-family="Arial, sans-serif" font-size="15">+4.1%</text>
+  <rect x="278" y="292" width="610" height="390" rx="18" fill="#fff" stroke="#e5e5ea"/>
+  <text x="306" y="338" fill="#2c2c32" font-family="Arial, sans-serif" font-size="20" font-weight="700">Reach over time</text><text x="306" y="366" fill="#7a7a84" font-family="Arial, sans-serif" font-size="14">Organic and paid reach</text>
+  <path d="M314 586 C372 563 402 579 456 515 C514 447 557 502 612 425 C666 349 710 421 766 353 C808 302 840 328 862 320 L862 629 L314 629 Z" fill="url(#chart)"/>
+  <path d="M314 586 C372 563 402 579 456 515 C514 447 557 502 612 425 C666 349 710 421 766 353 C808 302 840 328 862 320" fill="none" stroke="#a146b9" stroke-width="6" stroke-linecap="round"/>
+  <g stroke="#ececf0"><line x1="314" y1="420" x2="862" y2="420"/><line x1="314" y1="520" x2="862" y2="520"/><line x1="314" y1="620" x2="862" y2="620"/></g>
+  <rect x="910" y="292" width="290" height="390" rx="18" fill="#fff" stroke="#e5e5ea"/>
+  <text x="938" y="338" fill="#2c2c32" font-family="Arial, sans-serif" font-size="20" font-weight="700">Top locations</text>
+  <g font-family="Arial, sans-serif" font-size="16"><text x="938" y="400" fill="#555560">Japan</text><text x="1139" y="400" fill="#25252b" font-weight="700">41%</text><text x="938" y="466" fill="#555560">United States</text><text x="1139" y="466" fill="#25252b" font-weight="700">26%</text><text x="938" y="532" fill="#555560">Singapore</text><text x="1139" y="532" fill="#25252b" font-weight="700">18%</text><text x="938" y="598" fill="#555560">Other</text><text x="1139" y="598" fill="#25252b" font-weight="700">15%</text></g>
+  <rect x="278" y="716" width="922" height="52" rx="13" fill="#fff4db" stroke="#eed396"/><text x="304" y="749" fill="#835d17" font-family="Arial, sans-serif" font-size="17" font-weight="700">COMETS PAY PROTOTYPE · DEMO DATA · NOT A REAL PLATFORM SCREENSHOT</text>
+</svg>

@@ -315,6 +315,7 @@ export function CreatorInvitationSendDialog({
 
 const RECORD_STATUS_OPTIONS: ReadonlyArray<{ value: CreatorInvitationStatusFilter; label: string }> = [
   { value: 'all', label: '全部入驻状态' },
+  { value: 'ACTIVE', label: '邀请中' },
   { value: 'SENT', label: '已发送' },
   { value: 'EXPIRED', label: '已失效' },
   { value: 'VERIFICATION_REQUESTED', label: '已请求邀请码' },
@@ -324,15 +325,17 @@ const RECORD_STATUS_OPTIONS: ReadonlyArray<{ value: CreatorInvitationStatusFilte
 
 export function CreatorInvitationRecordsDialog({
   records,
+  initialStatus = 'all',
   onClose,
   notify,
 }: {
   records: readonly CreatorInvitationRecord[];
+  initialStatus?: CreatorInvitationStatusFilter;
   onClose: () => void;
   notify: Notify;
 }) {
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<CreatorInvitationStatusFilter>('all');
+  const [status, setStatus] = useState<CreatorInvitationStatusFilter>(initialStatus);
   const filteredRecords = useMemo(() => filterCreatorInvitationRecords(records, {
     search,
     status,

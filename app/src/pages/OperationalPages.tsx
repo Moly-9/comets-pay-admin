@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   FileText,
   Files,
+  Images,
   Link2,
   ListFilter,
   LoaderCircle,
@@ -137,6 +138,7 @@ import type {
   CreatorInvoiceContact,
   CreatorProfile,
   CreatorSocialAccount,
+  CreatorSocialVerificationScreenshot,
   GeneratedInvoiceRecord,
   InvoiceBillingEntity,
   InvoiceBillingSettings,
@@ -163,6 +165,7 @@ import {
 import {
   CREATOR_DIRECTORY_PROVIDER_OPTIONS,
   createCreatorDirectoryWorkbook,
+  creatorDirectoryLegalEntityName,
   creatorDirectoryWorkbookFilename,
   creatorPayoutAccountVersionResult,
   distinctCreatorSocialPlatformCount,
@@ -182,7 +185,9 @@ import {
 import {
   loadCreatorInvitationRecords,
   saveCreatorInvitationRecords,
+  summarizeActiveCreatorInvitations,
   type CreatorInvitationRecord,
+  type CreatorInvitationStatusFilter,
 } from '../creatorInvitations';
 import { InvoiceDetailPage, type InvoiceDetailSource } from './InvoiceDetailPage';
 import {
@@ -382,8 +387,27 @@ function SearchableMultiFilter({
   );
 }
 
-function MetricCard({ label, value, meta, tone = 'plain' }: { label: string; value: string; meta: string; tone?: 'plain' | 'peach' | 'lilac' }) {
-  return <article className={`metric-card metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{meta}</small></article>;
+function MetricCard({
+  label,
+  value,
+  meta,
+  tone = 'plain',
+  onClick,
+}: {
+  label: string;
+  value: string;
+  meta: string;
+  tone?: 'plain' | 'peach' | 'lilac';
+  onClick?: () => void;
+}) {
+  const content = <><span>{label}</span><strong>{value}</strong><small>{meta}</small></>;
+  return onClick ? (
+    <button className={`metric-card metric-card-action metric-${tone}`} type="button" onClick={onClick}>
+      {content}
+    </button>
+  ) : (
+    <article className={`metric-card metric-${tone}`}>{content}</article>
+  );
 }
 
 type ProjectStatusTone = 'active' | 'review' | 'payment' | 'complete' | 'failure' | 'draft' | 'default';
@@ -1647,11 +1671,13 @@ const createSocialAccount = (
   platform = '',
   handle = '',
   profileUrl = '',
+  verificationScreenshots?: CreatorSocialVerificationScreenshot[],
 ): CreatorSocialAccount => ({
   id,
   platform,
   handle,
   profileUrl: profileUrl || defaultSocialProfileUrl(platform, handle),
+  ...(verificationScreenshots?.length ? { verificationScreenshots } : {}),
 });
 
 const CREATOR_DRAFT_STORAGE_VERSION = 1;
@@ -1985,6 +2011,32 @@ const PROTOTYPE_PAYPAL_CREATOR_SEEDS = [
 export const INITIAL_CREATORS: CreatorProfile[] = [
   createSeedCreator({
     id: 'creator-mina', initials: 'MK', accent: '#f59e0b', name: 'Mina Kato', handle: '@MinaKato', region: '日本', platform: 'Instagram · TikTok', projects: 4,
+    socialAccounts: [
+      createSocialAccount(
+        'social-creator-mina-instagram',
+        'Instagram',
+        '@MinaKato',
+        '',
+        [{
+          id: 'screenshot-creator-mina-instagram-1',
+          fileName: 'mina-instagram-professional-dashboard-demo.svg',
+          imageUrl: '/creator-verification-demo-mina-instagram.svg',
+          uploadedAt: '2026-09-12T03:18:00.000Z',
+        }],
+      ),
+      createSocialAccount(
+        'social-creator-mina-tiktok',
+        'TikTok',
+        '@MinaKato',
+        '',
+        [{
+          id: 'screenshot-creator-mina-tiktok-1',
+          fileName: 'mina-tiktok-analytics-dashboard-demo.svg',
+          imageUrl: '/creator-verification-demo-mina-tiktok.svg',
+          uploadedAt: '2026-09-12T03:21:00.000Z',
+        }],
+      ),
+    ],
     contact: createInvoiceContact('Mina Kato', 'mina.kato@creator.example', '+81 90 0000 1024', 'Shibuya-ku, Tokyo, Japan'),
     bank: { countryCode: 'JP', countryName: 'Japan', currency: 'JPY', accountNumber: '0000000001', accountCategory: 'Savings', bankName: 'MUFG Bank', clearingSystem: 'ZENGIN', routingType1: 'bank_code', routingValue1: '0005', routingType2: 'branch_code', routingValue2: '001', streetAddress: '2-7-1 Marunouchi', city: 'Chiyoda-ku', state: 'Tokyo', postcode: '100-8388' },
     paypal: { username: 'minakato.creator', email: 'mina.kato@example.com' },
@@ -2385,7 +2437,86 @@ export function CreatorSocialPlatformIcons({
   );
 }
 
-function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAccount[] }) {
+function CreatorSocialScreenshotDialog({
+  account,
+  onClose,
+}: {
+  account: CreatorSocialAccount;
+  onClose: () => void;
+}) {
+  const screenshots = account.verificationScreenshots ?? [];
+  const [selectedScreenshotId, setSelectedScreenshotId] = useState(screenshots[0]?.id ?? '');
+  const activeScreenshot = screenshots.find((screenshot) => screenshot.id === selectedScreenshotId)
+    ?? screenshots[0];
+  const activeIndex = activeScreenshot
+    ? screenshots.findIndex((screenshot) => screenshot.id === activeScreenshot.id)
+    : -1;
+
+  return (
+    <Modal
+      title="查看后台截图"
+      width="980px"
+      className="creator-social-screenshot-modal"
+      onClose={onClose}
+      footer={<Button variant="secondary" onClick={onClose}>关闭</Button>}
+    >
+      <div className="creator-social-screenshot-context">
+        <span className={`creator-social-platform-mark creator-social-platform-${socialPlatformTone(account.platform)}`}>
+          <SocialPlatformIcon platform={account.platform} handle={account.handle} size={21} />
+        </span>
+        <span>
+          <strong>{account.platform || '平台待补充'}</strong>
+          <small>{account.handle || '账号待补充'} · 达人上传的平台后台认证材料</small>
+        </span>
+        <em>{screenshots.length} 张</em>
+      </div>
+      {activeScreenshot ? (
+        <div className="creator-social-screenshot-layout">
+          <figure className="creator-social-screenshot-stage">
+            <img
+              src={activeScreenshot.imageUrl}
+              alt={`${account.platform} ${account.handle} 后台截图第 ${activeIndex + 1} 张`}
+            />
+            <figcaption>演示数据</figcaption>
+          </figure>
+          {screenshots.length > 1 ? (
+            <div className="creator-social-screenshot-thumbnails" aria-label="后台截图列表">
+              {screenshots.map((screenshot, index) => (
+                <button
+                  className={screenshot.id === activeScreenshot.id ? 'is-active' : ''}
+                  type="button"
+                  aria-label={`查看第 ${index + 1} 张后台截图`}
+                  aria-pressed={screenshot.id === activeScreenshot.id}
+                  key={screenshot.id}
+                  onClick={() => setSelectedScreenshotId(screenshot.id)}
+                >
+                  <img src={screenshot.imageUrl} alt="" />
+                  <span>{index + 1}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <dl className="creator-social-screenshot-meta">
+            <div><dt>文件名</dt><dd>{activeScreenshot.fileName}</dd></div>
+            <div>
+              <dt>上传时间</dt>
+              <dd><time dateTime={activeScreenshot.uploadedAt}>{formatCreatorPayoutAccountUpdatedAt(activeScreenshot.uploadedAt)}</time></dd>
+            </div>
+            <div><dt>当前序号</dt><dd>{activeIndex + 1} / {screenshots.length}</dd></div>
+          </dl>
+        </div>
+      ) : (
+        <div className="creator-social-screenshot-empty">
+          <Images size={24} />
+          <span><strong>后台截图待补充</strong><small>该历史账号尚未同步达人上传的认证材料。</small></span>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+export function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAccount[] }) {
+  const [previewAccount, setPreviewAccount] = useState<CreatorSocialAccount | null>(null);
   if (accounts.length === 0) {
     return (
       <div className="creator-social-empty">
@@ -2396,33 +2527,55 @@ function CreatorSocialAccountDetails({ accounts }: { accounts: CreatorSocialAcco
   }
 
   return (
-    <div className="creator-social-account-list">
-      {accounts.map((account) => {
-        const tone = socialPlatformTone(account.platform);
-        return (
-          <article className="creator-social-account-card" key={account.id}>
-            <span className={`creator-social-platform-mark creator-social-platform-${tone}`}>
-              <SocialPlatformIcon platform={account.platform} handle={account.handle} size={21} />
-            </span>
-            <div>
-              <strong>{account.platform || '平台待补充'}</strong>
-              <small>{account.handle || '账号待补充'}</small>
-            </div>
-            <span className="creator-social-verification">
-              <Clock3 size={13} />
-              认证状态待同步
-            </span>
-            {account.profileUrl ? (
-              <a href={account.profileUrl} target="_blank" rel="noreferrer" aria-label={`打开 ${account.platform} 主页`}>
-                <ExternalLink size={14} />
-              </a>
-            ) : (
-              <span className="creator-social-link-empty">未填写主页链接</span>
-            )}
-          </article>
-        );
-      })}
-    </div>
+    <>
+      <div className="creator-social-account-list">
+        {accounts.map((account) => {
+          const tone = socialPlatformTone(account.platform);
+          const screenshotCount = account.verificationScreenshots?.length ?? 0;
+          return (
+            <article className="creator-social-account-card" key={account.id}>
+              <span className={`creator-social-platform-mark creator-social-platform-${tone}`}>
+                <SocialPlatformIcon platform={account.platform} handle={account.handle} size={21} />
+              </span>
+              <div className="creator-social-account-copy">
+                <strong>{account.platform || '平台待补充'}</strong>
+                <small>{account.handle || '账号待补充'}</small>
+              </div>
+              <span className="creator-social-verification">
+                <Clock3 size={13} />
+                认证状态待同步
+              </span>
+              <div className="creator-social-account-actions">
+                {account.profileUrl ? (
+                  <a href={account.profileUrl} target="_blank" rel="noreferrer" aria-label={`打开 ${account.platform} 主页`}>
+                    <ExternalLink size={14} />
+                    查看主页
+                  </a>
+                ) : (
+                  <span className="creator-social-link-empty">未填写主页链接</span>
+                )}
+                <button
+                  className="creator-social-screenshot-button"
+                  type="button"
+                  disabled={!screenshotCount}
+                  title={screenshotCount ? `查看 ${screenshotCount} 张后台截图` : '达人暂未上传后台截图'}
+                  aria-label={screenshotCount
+                    ? `查看 ${account.platform} ${account.handle} 的 ${screenshotCount} 张后台截图`
+                    : `${account.platform} ${account.handle} 后台截图待补充`}
+                  onClick={() => setPreviewAccount(account)}
+                >
+                  <Images size={14} />
+                  {screenshotCount ? `查看后台截图（${screenshotCount}）` : '后台截图待补充'}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {previewAccount ? (
+        <CreatorSocialScreenshotDialog account={previewAccount} onClose={() => setPreviewAccount(null)} />
+      ) : null}
+    </>
   );
 }
 
@@ -2597,6 +2750,7 @@ export function CreatorsPage({
   });
   const [invitationSendOpen, setInvitationSendOpen] = useState(false);
   const [invitationRecordsOpen, setInvitationRecordsOpen] = useState(false);
+  const [invitationRecordsInitialStatus, setInvitationRecordsInitialStatus] = useState<CreatorInvitationStatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(focusedCreatorId ?? null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -2634,10 +2788,10 @@ export function CreatorsPage({
     const defaultAccount = explicitDefaultPayoutAccount(creator);
     return Boolean(defaultAccount && isPayoutAccountVerified(defaultAccount));
   }).length;
-  const attentionCount = creators.filter((creator) => {
-    const status = explicitDefaultPayoutAccount(creator)?.status ?? 'DRAFT';
-    return ['DRAFT', 'REVIEW_REQUIRED', 'INVALID'].includes(status);
-  }).length;
+  const activeInvitationSummary = useMemo(
+    () => summarizeActiveCreatorInvitations(invitationRecords),
+    [invitationRecords],
+  );
   const {
     page,
     pageItems: visibleCreators,
@@ -2669,6 +2823,11 @@ export function CreatorsPage({
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
+  };
+
+  const openInvitationRecords = (initialStatus: CreatorInvitationStatusFilter = 'all') => {
+    setInvitationRecordsInitialStatus(initialStatus);
+    setInvitationRecordsOpen(true);
   };
 
   const exportSelectedCreators = async () => {
@@ -3001,12 +3160,18 @@ export function CreatorsPage({
       <div className="metrics-grid">
         <MetricCard label="达人总数" value={creators.length.toLocaleString('zh-CN')} meta="当前档案" tone="peach" />
         <MetricCard label="默认账户已验证" value={verifiedCount.toLocaleString('zh-CN')} meta={creators.length ? `验证率 ${((verifiedCount / creators.length) * 100).toFixed(1)}%` : '暂无账户'} />
-        <MetricCard label="需要处理" value={attentionCount.toLocaleString('zh-CN')} meta="待补充、复核或无效" tone="lilac" />
+        <MetricCard
+          label="邀请中"
+          value={activeInvitationSummary.total.toLocaleString('zh-CN')}
+          meta={`已发送 ${activeInvitationSummary.sent} · 入驻中 ${activeInvitationSummary.onboarding}`}
+          tone="lilac"
+          onClick={() => openInvitationRecords('ACTIVE')}
+        />
       </div>
       <section className="content-card">
         <div className="content-toolbar creator-directory-toolbar">
           <div className="creator-directory-filter-controls">
-            <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号或地区" />
+            <SearchBar value={search} onChange={handleSearchChange} placeholder="搜索达人名称、账号、Real Name 或 Company Name" />
             <SelectField
               ariaLabel="达人付款渠道筛选"
               className="creator-directory-provider-filter"
@@ -3026,7 +3191,7 @@ export function CreatorsPage({
             >
               {exportingCreators ? '正在导出' : `导出所选（${selectedCreators.length}）`}
             </Button>
-            <Button variant="secondary" icon={<ClipboardCheck size={16} />} onClick={() => setInvitationRecordsOpen(true)}>
+            <Button variant="secondary" icon={<ClipboardCheck size={16} />} onClick={() => openInvitationRecords('all')}>
               邀请记录
             </Button>
           </div>
@@ -3047,7 +3212,7 @@ export function CreatorsPage({
                     ))}
                   />
                 </th>
-                <th>达人</th><th>地区</th><th>社媒平台数</th><th>收款账户</th><th>账户更新时间</th><th>合作项目</th><th className="action-cell">操作</th>
+                <th>达人</th><th>Real Name / Company Name</th><th>社媒平台数</th><th>收款账户</th><th>账户更新时间</th><th>合作项目</th><th className="action-cell">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -3076,7 +3241,7 @@ export function CreatorsPage({
                         socialAccountsMode="expanded"
                       />
                     </td>
-                    <td>{creator.region}</td>
+                    <td><span className="creator-directory-legal-entity-name">{creatorDirectoryLegalEntityName(creator)}</span></td>
                     <td><strong className="creator-directory-platform-count">{distinctCreatorSocialPlatformCount(creator)} 个</strong></td>
                     <td>
                       <span className={`creator-directory-payout ${defaultAccount ? 'has-default-account' : 'is-unset'}`}>
@@ -3258,13 +3423,14 @@ export function CreatorsPage({
           onRecordsChange={updateInvitationRecords}
           onOpenRecords={() => {
             setInvitationSendOpen(false);
-            setInvitationRecordsOpen(true);
+            openInvitationRecords('all');
           }}
         />
       ) : null}
       {invitationRecordsOpen ? (
         <CreatorInvitationRecordsDialog
           records={invitationRecords}
+          initialStatus={invitationRecordsInitialStatus}
           notify={notify}
           onClose={() => setInvitationRecordsOpen(false)}
         />

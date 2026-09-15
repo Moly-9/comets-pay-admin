@@ -253,11 +253,23 @@ export type CreatorInvoiceContact = {
   email: string;
 };
 
+export type CreatorSocialVerificationScreenshot = {
+  id: string;
+  fileName: string;
+  imageUrl: string;
+  uploadedAt: string;
+};
+
 export type CreatorSocialAccount = {
   id: string;
   platform: string;
   handle: string;
   profileUrl: string;
+  /**
+   * 达人在入驻流程中上传的平台后台截图。
+   * 历史档案可能缺少该字段，管理端仅做只读展示。
+   */
+  verificationScreenshots?: CreatorSocialVerificationScreenshot[];
 };
 
 export type CreatorProfile = {

@@ -22,6 +22,16 @@ export const explicitDefaultPayoutAccount = (
   creator: Pick<CreatorProfile, 'payoutAccounts'>,
 ) => creator.payoutAccounts.find((account) => account.isDefault && account.status !== 'DISABLED') ?? null;
 
+export const creatorDirectoryLegalEntityName = (
+  creator: Pick<CreatorProfile, 'contact' | 'payoutAccounts'>,
+) => {
+  const defaultAccount = explicitDefaultPayoutAccount(creator);
+  if (defaultAccount?.provider === 'Airwallex' && defaultAccount.entityType === 'COMPANY') {
+    return defaultAccount.companyName.trim() || '待补充';
+  }
+  return creator.contact.legalName.trim() || '待补充';
+};
+
 const normalizePlatform = (platform: string) => {
   const normalized = platform.trim().toLowerCase().replace(/[\s_-]+/g, '');
   return normalized === 'twitter' ? 'x' : normalized;

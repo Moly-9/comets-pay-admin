@@ -7,6 +7,7 @@ import {
 import type { CreatorProfile } from './types';
 import {
   createCreatorDirectoryWorkbook,
+  creatorDirectoryLegalEntityName,
   creatorDirectoryWorkbookFilename,
   creatorPayoutAccountVersionResult,
   distinctCreatorSocialPlatformCount,
@@ -109,6 +110,29 @@ describe('creator directory helpers', () => {
     expect(latestCreatorPayoutAccountUpdatedAt(airwallex)).toBe('2026-08-31T03:20:00.000Z');
     expect(formatCreatorPayoutAccountUpdatedAt('2026-08-31T03:20:00.000Z')).toBe('2026-08-31 11:20');
     expect(formatCreatorPayoutAccountUpdatedAt('')).toBe('未记录');
+  });
+
+  it('按默认账户主体类型展示 Real Name 或 Company Name', () => {
+    const personal = creator('creator-personal');
+    const companyBase = creator('creator-company');
+    const company = {
+      ...companyBase,
+      payoutAccounts: companyBase.payoutAccounts.map((account) => account.provider === 'Airwallex'
+        ? { ...account, entityType: 'COMPANY' as const, companyName: 'Creator Company LLC' }
+        : account),
+    };
+    const companyMissingName = {
+      ...company,
+      payoutAccounts: company.payoutAccounts.map((account) => account.provider === 'Airwallex'
+        ? { ...account, companyName: '' }
+        : account),
+    };
+    const paypal = creator('creator-paypal', 'PayPal');
+
+    expect(creatorDirectoryLegalEntityName(personal)).toBe('Real creator-personal');
+    expect(creatorDirectoryLegalEntityName(company)).toBe('Creator Company LLC');
+    expect(creatorDirectoryLegalEntityName(companyMissingName)).toBe('待补充');
+    expect(creatorDirectoryLegalEntityName(paypal)).toBe('Real creator-paypal');
   });
 
   it('全选覆盖当前筛选结果，保留其他筛选中的已选达人', () => {

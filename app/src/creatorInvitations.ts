@@ -31,6 +31,12 @@ export type CreatorInvitationStatus =
   | 'COMPLETED'
   | 'EXPIRED';
 
+export const ACTIVE_CREATOR_INVITATION_STATUSES: readonly CreatorInvitationStatus[] = [
+  'SENT',
+  'VERIFICATION_REQUESTED',
+  'REGISTERING',
+];
+
 export type CreatorInvitationSocialAccount = {
   id: string;
   platform: CreatorInvitationPlatform;
@@ -458,8 +464,37 @@ export const resolveCreatorInvitationStatus = (
 };
 
 const isActiveInvitation = (record: CreatorInvitationRecord, now: Date) => (
-  ['SENT', 'VERIFICATION_REQUESTED', 'REGISTERING'].includes(resolveCreatorInvitationStatus(record, now))
+  ACTIVE_CREATOR_INVITATION_STATUSES.includes(resolveCreatorInvitationStatus(record, now))
 );
+
+export type ActiveCreatorInvitationSummary = {
+  total: number;
+  sent: number;
+  onboarding: number;
+};
+
+export const summarizeActiveCreatorInvitations = (
+  records: readonly CreatorInvitationRecord[],
+  now: Date = new Date(),
+): ActiveCreatorInvitationSummary => {
+  const activeByEmail = new Map<string, CreatorInvitationRecord & { status: CreatorInvitationStatus }>();
+  records.forEach((record) => {
+    const status = resolveCreatorInvitationStatus(record, now);
+    if (!ACTIVE_CREATOR_INVITATION_STATUSES.includes(status)) return;
+    const emailKey = normalizeCreatorInvitationEmail(record.email) || record.id;
+    const current = activeByEmail.get(emailKey);
+    if (!current || record.sentAt.localeCompare(current.sentAt) > 0) {
+      activeByEmail.set(emailKey, { ...record, status });
+    }
+  });
+  const active = [...activeByEmail.values()];
+  const sent = active.filter((record) => record.status === 'SENT').length;
+  return {
+    total: active.length,
+    sent,
+    onboarding: active.length - sent,
+  };
+};
 
 export const buildCreatorInvitationPreview = ({
   workbook,
@@ -672,7 +707,7 @@ export const saveCreatorInvitationRecords = (
   }));
 };
 
-export type CreatorInvitationStatusFilter = 'all' | CreatorInvitationStatus;
+export type CreatorInvitationStatusFilter = 'all' | 'ACTIVE' | CreatorInvitationStatus;
 
 export const filterCreatorInvitationRecords = (
   records: readonly CreatorInvitationRecord[],
@@ -690,7 +725,8 @@ export const filterCreatorInvitationRecords = (
   return records
     .map((record) => ({ ...record, status: resolveCreatorInvitationStatus(record, now) }))
     .filter((record) => {
-      if (status !== 'all' && record.status !== status) return false;
+      if (status === 'ACTIVE' && !ACTIVE_CREATOR_INVITATION_STATUSES.includes(record.status)) return false;
+      if (status !== 'all' && status !== 'ACTIVE' && record.status !== status) return false;
       if (!query) return true;
       const searchable = [
         record.email,
