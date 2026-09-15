@@ -318,6 +318,28 @@ const formatEvidenceTime = (value?: string) => {
   });
 };
 
+export const externalInvoiceEvidenceItems = (
+  evidence: NonNullable<InvoiceReviewOverviewField['evidence']>,
+) => [
+  {
+    label: '系统首次 OCR',
+    value: evidence.recognizedValue,
+    meta: '首次识别值不可覆盖',
+  },
+  {
+    label: '达人最终确认值',
+    value: evidence.confirmedValue,
+    meta: evidence.correctionReason ?? '达人确认识别结果',
+  },
+  {
+    label: '纠正与复核',
+    value: evidence.mediaReview ?? '待复核',
+    meta: evidence.correctedBy
+      ? `${evidence.correctedBy} · ${formatEvidenceTime(evidence.correctedAt)}`
+      : '该字段未发生达人纠正',
+  },
+];
+
 const contractStateLabel = (state: InvoiceReviewContractCheck['state']) => {
   if (state === 'PASS') return '已通过';
   if (state === 'WARNING') return '需关注';
@@ -477,7 +499,7 @@ export function InvoiceReviewWorkspace({
         <div className="invoice-review-row-actions">
           {field.evidence ? (
             <button type="button" onClick={() => toggleEvidence(field)} aria-expanded={expanded}>
-              <Eye size={14} />查看证据<ChevronDown size={13} />
+              <Eye size={14} />查看识别记录<ChevronDown size={13} />
             </button>
           ) : null}
           {field.allowConfirmCorrection && onFieldAction ? (
@@ -510,10 +532,9 @@ export function InvoiceReviewWorkspace({
         </div>
         {expanded && field.evidence ? (
           <div className="invoice-review-evidence-grid">
-            <div><span>原始 Invoice 原文</span><strong>{field.evidence.sourceValue}</strong><small>第 {field.evidence.pageNumber ?? 1} 页</small></div>
-            <div><span>系统首次 OCR</span><strong>{field.evidence.recognizedValue}</strong><small>首次识别值不可覆盖</small></div>
-            <div><span>达人最终确认值</span><strong>{field.evidence.confirmedValue}</strong><small>{field.evidence.correctionReason ?? '达人确认识别结果'}</small></div>
-            <div><span>纠正与复核</span><strong>{field.evidence.mediaReview ?? '待复核'}</strong><small>{field.evidence.correctedBy ? `${field.evidence.correctedBy} · ${formatEvidenceTime(field.evidence.correctedAt)}` : '该字段未发生达人纠正'}</small></div>
+            {externalInvoiceEvidenceItems(field.evidence).map((item) => (
+              <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>{item.meta}</small></div>
+            ))}
           </div>
         ) : null}
       </article>
@@ -779,7 +800,7 @@ export function InvoiceReviewWorkspace({
           {activeTab === 'history' ? (
             <div className="invoice-review-history-section">
               <div className="invoice-review-section-heading">
-                <div><History size={18} /><span><strong>审核与流转记录</strong><small>展示当前 Invoice 的版本摘要与完整流程</small></span></div>
+                <div><History size={18} /><span><strong>审核与流转记录</strong><small>展示当前 Invoice 的完整审核与流转记录</small></span></div>
               </div>
               {historySummary.length ? (
                 <dl className="invoice-review-history-summary">

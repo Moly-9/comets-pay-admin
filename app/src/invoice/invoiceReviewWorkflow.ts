@@ -10,11 +10,15 @@ import type {
   Payout,
   PayoutStatus,
 } from '../types';
+import type { ContractRecord } from '../contracts';
 import type { InvoicePageTab } from './invoiceManagement';
 import { todayInputValue } from './invoiceUtils';
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
 import { accountDisplayValue } from '../accountPresentation';
-import { currentInvoiceContractMatchReview } from './invoiceContractMatching';
+import {
+  resolveGeneratedInvoiceContractMatch,
+  type GeneratedInvoiceContractMatchReadiness,
+} from './invoiceContractMatching';
 import {
   createInvoiceNotificationDeliveries,
 } from './invoiceNotification';
@@ -31,6 +35,12 @@ export type InvoiceReviewActor = {
   account: string;
   name: string;
   role: string;
+};
+
+export type ApplyInvoiceReviewActionOptions = {
+  occurredAt?: string;
+  notificationEmail?: string;
+  contractMatchReadiness?: Pick<GeneratedInvoiceContractMatchReadiness, 'canProceed' | 'blockingMessage'>;
 };
 
 const signatureDateFromOccurredAt = (occurredAt: string) => (
@@ -232,14 +242,20 @@ export const applyInvoiceReviewAction = (
   action: InvoiceReviewAction,
   actor: InvoiceReviewActor,
   reason?: string,
-  occurredAt = new Date().toISOString(),
-  notificationEmail?: string,
+  options: ApplyInvoiceReviewActionOptions = {},
 ): Payout => {
+  const occurredAt = options.occurredAt ?? new Date().toISOString();
+  if (action === 'APPROVE_MEDIA' && !options.contractMatchReadiness?.canProceed) {
+    throw new Error(
+      options.contractMatchReadiness?.blockingMessage
+        ?? '缺少当前 Invoice 的合同匹配校验结果，不能审核通过。',
+    );
+  }
   const reviewEvent = createInvoiceReviewEvent(payout, action, actor, reason, occurredAt);
   const event: InvoiceReviewEvent = action === 'RETURN_TO_CREATOR'
     ? {
         ...reviewEvent,
-        notificationDeliveries: createInvoiceNotificationDeliveries(notificationEmail),
+        notificationDeliveries: createInvoiceNotificationDeliveries(options.notificationEmail),
       }
     : reviewEvent;
   const isCreatorFeedback = action === 'RECORD_CREATOR_FEEDBACK';
@@ -715,16 +731,17 @@ export const markGeneratedInvoiceSigned = (
   record: GeneratedInvoiceRecord,
   actor: InvoiceReviewActor,
   occurredAt = new Date().toISOString(),
+  contracts: ContractRecord[] = [],
 ): Payout => {
   if (record.sourcePayoutId !== payout.id) {
     throw new Error('生成记录与付款记录的稳定关联不一致。');
   }
-  const contractMatchReview = currentInvoiceContractMatchReview(record);
-  if (
-    contractMatchReview
-    && (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED')
-  ) {
-    throw new Error('合同与 Invoice 仍存在未处理的阻断项，不能提交审核。');
+  const contractMatchReadiness = resolveGeneratedInvoiceContractMatch(record, contracts);
+  if (!contractMatchReadiness.canProceed) {
+    throw new Error(
+      contractMatchReadiness.blockingMessage
+        ?? '合同与 Invoice 仍存在未处理的阻断项，不能提交审核。',
+    );
   }
   const event = createInvoiceReviewEvent(payout, 'MARK_SIGNED', actor, undefined, occurredAt);
   const signedSnapshot = {

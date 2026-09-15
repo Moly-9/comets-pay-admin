@@ -2,6 +2,7 @@ import type { ContractRecord } from '../contracts';
 import { accountDisplayValue } from '../accountPresentation';
 import type {
   DocumentPayoutSnapshot,
+  GeneratedInvoiceRecord,
   InvoiceContractMatchField,
   InvoiceContractMatchIssue,
   InvoiceContractMatchReview,
@@ -169,26 +170,6 @@ const issue = (
   invoiceValue,
   message,
   ...(paymentAccountDifference ? { paymentAccountDifference } : {}),
-});
-
-export const invoiceContractMatchFingerprint = (
-  contracts: ContractRecord[],
-  model: InvoiceDocumentModel,
-  options: InvoiceContractMatchOptions = {},
-) => JSON.stringify({
-  contractIds: contracts.map((contract) => contract.contractId),
-  publisher: model.from.legalName,
-  advertiser: model.billTo.name,
-  currency: model.currency,
-  amount: invoiceTotal(model),
-  paymentAccountPending: Boolean(options.paymentAccountPending),
-  ...(options.paymentAccountPending ? {} : {
-    paymentMethod: model.paymentMethod,
-    payoutAccountId: model.payoutAccountId,
-    payoutAccountVersion: model.payoutAccountVersion,
-    payoutAccountFingerprint: model.payoutAccountFingerprint,
-    payment: model.payment,
-  }),
 });
 
 export const evaluateInvoiceContractMatch = (
@@ -384,6 +365,24 @@ export const evaluateInvoiceContractMatch = (
   };
 };
 
+const invoiceContractMatchIssuesFingerprint = (issues: InvoiceContractMatchIssue[]) => JSON.stringify(
+  issues.map((matchIssue) => ({
+    field: matchIssue.field,
+    severity: matchIssue.severity,
+    contractIds: [...matchIssue.contractIds].sort(),
+    contractValue: matchIssue.contractValue,
+    invoiceValue: matchIssue.invoiceValue,
+  })),
+);
+
+export const invoiceContractMatchFingerprint = (
+  contracts: ContractRecord[],
+  model: InvoiceDocumentModel,
+  options: InvoiceContractMatchOptions = {},
+) => invoiceContractMatchIssuesFingerprint(
+  evaluateInvoiceContractMatch(contracts, model, '', options).issues,
+);
+
 export const createInvoiceContractMatchReview = ({
   contracts,
   model,
@@ -405,6 +404,7 @@ export const createInvoiceContractMatchReview = ({
   return {
     version,
     contractIds: contractIds(contracts),
+    fingerprint: invoiceContractMatchIssuesFingerprint(result.issues),
     result: result.result,
     issues: result.issues,
     reason: result.reasonRequiredIssues.length && result.reasonValid ? reason.trim() : undefined,
@@ -422,3 +422,57 @@ export const currentInvoiceContractMatchReview = (record: {
 }) => [...(record.contractMatchReviews ?? [])]
   .reverse()
   .find((review) => review.version === (record.version ?? 1));
+
+export type GeneratedInvoiceContractMatchReadiness = {
+  match: ReturnType<typeof evaluateInvoiceContractMatch>;
+  review?: InvoiceContractMatchReview;
+  fingerprint: string;
+  reviewMatches: boolean;
+  effectiveReason: string;
+  missingContractIds: string[];
+  canProceed: boolean;
+  blockingMessage?: string;
+};
+
+export const resolveGeneratedInvoiceContractMatch = (
+  record: Pick<GeneratedInvoiceRecord, 'version' | 'snapshot' | 'contractMatchReviews'>,
+  contracts: ContractRecord[],
+): GeneratedInvoiceContractMatchReadiness => {
+  const selectedContractIds = record.snapshot.contractIds ?? [];
+  const selectedContractIdSet = new Set(selectedContractIds);
+  const selectedContracts = contracts.filter((contract) => (
+    Boolean(contract.contractId && selectedContractIdSet.has(contract.contractId))
+  ));
+  const resolvedContractIds = new Set(selectedContracts.flatMap((contract) => (
+    contract.contractId ? [contract.contractId] : []
+  )));
+  const missingContractIds = selectedContractIds.filter((contractId) => !resolvedContractIds.has(contractId));
+  const review = currentInvoiceContractMatchReview(record);
+  const unresolvedMatch = evaluateInvoiceContractMatch(selectedContracts, record.snapshot);
+  const fingerprint = invoiceContractMatchIssuesFingerprint(unresolvedMatch.issues);
+  const reviewMatches = Boolean(review && (
+    review.fingerprint
+      ? review.fingerprint === fingerprint
+      : invoiceContractMatchIssuesFingerprint(review.issues) === fingerprint
+  ));
+  const effectiveReason = reviewMatches ? review?.reason?.trim() ?? '' : '';
+  const match = evaluateInvoiceContractMatch(selectedContracts, record.snapshot, effectiveReason);
+  const canProceed = missingContractIds.length === 0 && match.canProceed;
+  const blockingMessage = missingContractIds.length
+    ? `关联的合同已失效或不可用：${missingContractIds.join('、')}`
+    : match.blockerIssues[0]?.message
+      ?? (match.reasonRequiredIssues.length && !match.reasonValid
+        ? '合同存在可放行差异，请填写 1–300 字说明。'
+        : undefined);
+
+  return {
+    match,
+    review,
+    fingerprint,
+    reviewMatches,
+    effectiveReason,
+    missingContractIds,
+    canProceed,
+    blockingMessage,
+  };
+};

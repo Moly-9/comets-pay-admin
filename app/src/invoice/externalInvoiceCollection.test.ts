@@ -592,6 +592,10 @@ describe('external Invoice collection workflow', () => {
     expect(approved.collection.status).toBe('APPROVED');
     expect(approved.invoice.invoiceType).toBe('EXTERNAL');
     expect(approved.invoice.status).toBe('已通过');
+    expect(approved.invoice.contractMatchReviews?.[0]).toMatchObject({
+      version: 1,
+      result: 'NOT_APPLICABLE',
+    });
     expect(approved.invoice.snapshot.billTo).toEqual(submitted.expected.billTo);
     expect(approved.invoice.snapshot.billTo).not.toBe(submitted.expected.billTo);
     expect(approved.payout.invoiceReviewStatus).toBe('已通过');

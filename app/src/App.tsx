@@ -107,6 +107,7 @@ import {
   upsertInvoiceCreationDraft,
 } from './invoice/invoiceCreationDrafts';
 import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
+import { resolveGeneratedInvoiceContractMatch } from './invoice/invoiceContractMatching';
 import {
   buildApprovedExternalInvoice,
   confirmExternalInvoiceSignature,
@@ -3996,13 +3997,19 @@ export default function App() {
     }
     try {
       const creatorEmail = creators.find((creator) => creator.id === payout.creatorId)?.contact.email;
+      const generatedInvoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
+      const contractMatchReadiness = action === 'APPROVE_MEDIA' && generatedInvoice
+        ? resolveGeneratedInvoiceContractMatch(generatedInvoice, contracts)
+        : undefined;
       const updated = applyInvoiceReviewAction(
         payout,
         action,
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
         reason,
-        undefined,
-        creatorEmail,
+        {
+          notificationEmail: creatorEmail,
+          contractMatchReadiness,
+        },
       );
       setPayouts((current) => current.map((item) => (
         item.id === payout.id ? updated : item
@@ -4169,6 +4176,8 @@ export default function App() {
         linkedPayout,
         record,
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        undefined,
+        contracts,
       );
       setPayouts((current) => current.map((payout) => (
         payout.id === linkedPayout.id ? updatedPayout : payout

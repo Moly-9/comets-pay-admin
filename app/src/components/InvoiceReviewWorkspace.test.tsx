@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  externalInvoiceEvidenceItems,
   InvoiceReviewReturnDialogContent,
   InvoiceReviewWorkspace,
 } from './InvoiceReviewWorkspace';
@@ -20,6 +21,24 @@ const baseProps = {
 };
 
 describe('InvoiceReviewWorkspace', () => {
+  it('keeps uploaded source text out of the external comparison cards', () => {
+    const items = externalInvoiceEvidenceItems({
+      sourceValue: '2026-08-22',
+      recognizedValue: '2026-08-22',
+      confirmedValue: '2026-08-22',
+      pageNumber: 1,
+      mediaReview: '无需额外复核',
+    });
+
+    expect(items.map((item) => item.label)).toEqual([
+      '系统首次 OCR',
+      '达人最终确认值',
+      '纠正与复核',
+    ]);
+    expect(JSON.stringify(items)).not.toContain('原始 Invoice 原文');
+    expect(JSON.stringify(items)).not.toContain('第 1 页');
+  });
+
   it('keeps the four audit tabs stable for an internal Invoice', () => {
     const html = renderToStaticMarkup(
       <InvoiceReviewWorkspace

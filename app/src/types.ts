@@ -411,6 +411,7 @@ export type InvoicePaymentAccountDifference = {
 export type InvoiceContractMatchReview = {
   version: number;
   contractIds: ContractId[];
+  fingerprint?: string;
   result: 'MATCHED' | 'NOT_APPLICABLE' | 'BLOCKED' | 'APPROVED_WITH_REASON' | 'REASON_REQUIRED';
   issues: InvoiceContractMatchIssue[];
   reason?: string;

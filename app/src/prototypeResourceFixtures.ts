@@ -21,6 +21,7 @@ import {
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 import { demoAccountName } from './demoCreatorNames';
 import { normalizeLegacyPaymentOrderCode } from './paymentNumbering';
+import { createInvoiceContractMatchReview } from './invoice/invoiceContractMatching';
 import type {
   ContractId,
   CreatorId,
@@ -901,6 +902,31 @@ const createInvoiceModel = (
 export const PROJECT_DEMO_INVOICES: GeneratedInvoiceRecord[] = demoReferences.map((reference, index) => {
   const creator = creatorForReference(reference.creatorId);
   const snapshot = createInvoiceModel(creator, reference, index);
+  const selectedContracts = PROJECT_DEMO_CONTRACTS.filter((contract) => (
+    Boolean(contract.contractId && snapshot.contractIds?.includes(contract.contractId))
+  ));
+  const initialContractMatchReview = createInvoiceContractMatchReview({
+    contracts: selectedContracts,
+    model: snapshot,
+    version: 1,
+    actor: { account: 'fixture.media', name: '原型媒介', role: '媒介账号' },
+    reviewedAt: DEMO_TIMESTAMP,
+    historicalMigration: true,
+  });
+  const contractMatchReview = initialContractMatchReview.result === 'REASON_REQUIRED'
+    ? createInvoiceContractMatchReview({
+        contracts: selectedContracts,
+        model: snapshot,
+        version: 1,
+        reason: '合同冻结资料与 Invoice 当前结算资料存在历史快照差异，已按本次实际结算信息复核。',
+        actor: { account: 'fixture.media', name: '原型媒介', role: '媒介账号' },
+        reviewedAt: DEMO_TIMESTAMP,
+        historicalMigration: true,
+      })
+    : initialContractMatchReview;
+  if (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED') {
+    throw new Error(`Invoice ${snapshot.invoiceNumber} 的合同匹配演示数据不完整`);
+  }
 
   return {
     id: snapshot.invoiceNumber,
@@ -911,6 +937,7 @@ export const PROJECT_DEMO_INVOICES: GeneratedInvoiceRecord[] = demoReferences.ma
     snapshot,
     validationStatus: 'valid',
     version: 1,
+    contractMatchReviews: [contractMatchReview],
   };
 });
 
@@ -1209,6 +1236,7 @@ const createRequestInvoiceAssociationFixture = ({
   description,
   generatedAt,
   contractIds,
+  contractMatchReason,
 }: {
   source: GeneratedInvoiceRecord;
   invoiceId: InvoiceId;
@@ -1218,17 +1246,9 @@ const createRequestInvoiceAssociationFixture = ({
   description: string;
   generatedAt: string;
   contractIds?: ContractId[];
-}): GeneratedInvoiceRecord => ({
-  ...source,
-  id: invoiceNumber,
-  invoiceId,
-  sourcePayoutId,
-  status: '已通过',
-  generatedAt,
-  validationStatus: 'valid',
-  version: 1,
-  revisions: undefined,
-  snapshot: {
+  contractMatchReason?: string;
+}): GeneratedInvoiceRecord => {
+  const snapshot: InvoiceDocumentModel = {
     ...source.snapshot,
     invoiceNumber,
     invoiceDate: generatedAt.slice(0, 10),
@@ -1240,8 +1260,39 @@ const createRequestInvoiceAssociationFixture = ({
       quantity: 1,
       lineTotal: amount,
     }],
-  },
-});
+  };
+  const selectedContractIds = new Set(snapshot.contractIds ?? []);
+  const selectedContracts = [
+    ...PROJECT_DEMO_CONTRACTS,
+    ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
+  ].filter((contract) => Boolean(contract.contractId && selectedContractIds.has(contract.contractId)));
+  const contractMatchReview = createInvoiceContractMatchReview({
+    contracts: selectedContracts,
+    model: snapshot,
+    version: 1,
+    reason: contractMatchReason,
+    actor: { account: 'fixture.media', name: '原型媒介', role: '媒介账号' },
+    reviewedAt: generatedAt,
+    historicalMigration: true,
+  });
+  if (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED') {
+    throw new Error(`关联 Invoice ${invoiceNumber} 缺少有效合同差异说明或存在主体阻断`);
+  }
+
+  return {
+    ...source,
+    id: invoiceNumber,
+    invoiceId,
+    sourcePayoutId,
+    status: '已通过',
+    generatedAt,
+    validationStatus: 'valid',
+    version: 1,
+    revisions: undefined,
+    snapshot,
+    contractMatchReviews: [contractMatchReview],
+  };
+};
 
 const associationInvoiceSourceFor = (projectId: ProjectId, creatorId: CreatorId) => (
   ALL_PROJECT_PROTOTYPE_INVOICES.find((invoice) => (
@@ -1269,6 +1320,7 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     amount: 1250,
     description: '二次发布素材授权服务费（合成演示数据）',
     generatedAt: '2026-08-06T09:20:00.000Z',
+    contractMatchReason: '本次 Invoice 仅结算二次发布素材授权，金额低于关联合同整体金额。',
   }),
   createRequestInvoiceAssociationFixture({
     source: associationInvoiceSources.yuki!,
@@ -1279,6 +1331,7 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     description: '追加短视频内容服务费（合成演示数据）',
     generatedAt: '2026-08-06T10:05:00.000Z',
     contractIds: ['contract_fixture_301164_06' as ContractId],
+    contractMatchReason: '本次 Invoice 仅结算追加短视频内容，金额低于关联合同整体金额。',
   }),
   createRequestInvoiceAssociationFixture({
     source: associationInvoiceSources.sara!,

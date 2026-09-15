@@ -29,6 +29,7 @@ import { formatInvoiceNumber, invoiceDatePart, nextInvoiceNumber } from './invoi
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
 import { createInvoiceNotificationDeliveries } from './invoiceNotification';
 import {
+  createInvoiceContractMatchReview,
   evaluateInvoiceContractMatch,
 } from './invoiceContractMatching';
 
@@ -1326,6 +1327,12 @@ export const buildApprovedExternalInvoice = ({
     freezeStage: 'EXTERNAL_APPROVED',
     frozenAt: occurredAt,
   });
+  const finalContractMatch = evaluateExternalInvoiceContractMatch({
+    record,
+    creator,
+    contracts,
+    reason: contractMatchReason,
+  });
   const invoice: GeneratedInvoiceRecord = {
     id: invoiceNumber,
     invoiceId: record.invoiceId,
@@ -1337,6 +1344,18 @@ export const buildApprovedExternalInvoice = ({
     paymentFreezeSnapshot,
     validationStatus: 'valid',
     version: record.sourceFileVersions.length,
+    contractMatchReviews: [createInvoiceContractMatchReview({
+      contracts: selectedExternalContracts(record, contracts),
+      model: snapshot,
+      version: record.sourceFileVersions.length,
+      reason: finalContractMatch.effectiveReason,
+      actor: {
+        account: actor.account,
+        name: actor.name,
+        role: actor.role,
+      },
+      reviewedAt: occurredAt,
+    })],
   };
   const provider: Payout['provider'] = account.provider;
   const rawAccount = account.provider === 'PayPal'
