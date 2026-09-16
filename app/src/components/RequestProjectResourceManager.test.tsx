@@ -168,7 +168,11 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('placeholder="搜索达人名称、频道 ID、频道链接…"');
     expect(source).toContain('socialAccountsMode="expanded"');
     expect(source).toContain('Invoice 候选范围不会受当前请款达人名单限制');
-    expect(styles).toMatch(/\.request-resource-creator-search \.contract-search-input-wrap,[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
+    expect(styles).toMatch(/\.request-resource-creator-search \.contract-search-input-wrap\s*\{[\s\S]*?border:\s*1px solid #d8dce4;/);
+    expect(styles).toMatch(/\.request-resource-creator-search \.contract-search-input-wrap input,[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
+    expect(styles).toMatch(/\.request-resource-link-modal \.project-resource-browser-heading strong\s*\{[^}]*font-weight:\s*500;/);
+    expect(styles).toMatch(/\.request-resource-candidate > label > span > strong\s*\{[^}]*font-size:\s*12px;[^}]*font-weight:\s*500;/);
+    expect(styles).toMatch(/\.request-resource-candidate-creator \.creator-identity-copy > strong\s*\{[^}]*font-size:\s*12px;[^}]*font-weight:\s*500;/);
     expect(requestResourceCreatorSearchText(undefined, [
       'Mina Kato',
       '@MinaKato',

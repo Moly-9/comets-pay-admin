@@ -3978,6 +3978,10 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   font-size: 14px;
 }
 
+.request-resource-link-modal .project-resource-browser-heading strong {
+  font-weight: 500;
+}
+
 .project-resource-browser-heading p {
   margin: 5px 0 0;
   color: #858b97;
@@ -4233,11 +4237,22 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   flex: 0 0 auto;
 }
 
-.request-resource-creator-search .contract-search-input-wrap,
-.request-resource-creator-search .contract-search-input-wrap:focus-within {
+.request-resource-creator-search .contract-search-input-wrap {
   min-height: 40px;
+  border: 1px solid #d8dce4;
+  background: #fff;
+  box-shadow: none;
+}
+
+.request-resource-creator-search .contract-search-input-wrap:focus-within {
+  border-color: #ad91b3;
+  box-shadow: none;
+}
+
+.request-resource-creator-search .contract-search-input-wrap input,
+.request-resource-creator-search .contract-search-input-wrap input:focus {
   border: 0;
-  background: transparent;
+  outline: 0;
   box-shadow: none;
 }
 
@@ -4436,6 +4451,16 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
 .request-resource-candidate strong { color: #29303c; font-size: 13px; }
 .request-resource-candidate small { margin-top: 3px; color: #7b8493; font-size: 12px; line-height: 1.45; }
 .request-resource-candidate.is-disabled > div:last-of-type strong { color: #a65c22; }
+
+.request-resource-candidate > label > span > strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.request-resource-candidate-creator .creator-identity-copy > strong {
+  font-size: 12px;
+  font-weight: 500;
+}
 
 .request-resource-candidate-creator > span {
   display: inline-flex;
