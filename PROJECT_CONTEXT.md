@@ -1,6 +1,6 @@
 # COMETS Pay 项目上下文
 
-更新时间：2026-08-08（Asia/Shanghai）
+更新时间：2026-09-17（Asia/Shanghai）
 
 这份文件用于在新的 Codex 任务中快速恢复项目上下文。开始工作前，应同时阅读
 `AGENTS.md`、`SYSTEM_AUDIT.md`、`app/SOURCE_BASELINE.md` 和 `ID_STANDARD.md`，
@@ -37,12 +37,13 @@ Codex 在本项目中持续以以下双重角色工作：
 ## 3. 工作区与版本状态
 
 - 主工作区：`/Users/aria/Documents/支付系统管理端`
-- 当前 Codex 工作树：`/Users/aria/.codex/worktrees/fc9a/支付系统管理端`
 - 维护源码：当前工作区下的 `app/`
 - GitHub：`https://github.com/Moly-9/comets-pay-admin`（公开仓库）
 - 默认远程分支：`main`
-- 当前功能基线：`e42f7fe style(requests): refine creator document columns`
-- Codex 工作树分支：`codex/merge-weekend-enhancements`，功能基线与 `main` 一致。
+- 当前维护分支：`codex/merge-colleague-20260812`
+- 当前功能基线：`abc1b93 refactor(projects): rename Feishu status update action`
+- GitHub 同名分支尚未同步最新本地提交；推送前必须重新执行 `git fetch`、
+  `git status --short --branch` 和完整验证，不得仅依赖本文档的快照。
 - 源码基线提交：`1513bd6 chore: import maintainable frontend source baseline`
 - 原始源码压缩包标记提交：`7d419cb8694e7a3afbd05f608f69256a511cae81`
 - 原始压缩包 SHA-256：
@@ -51,20 +52,26 @@ Codex 在本项目中持续以以下双重角色工作：
 源码是从桌面压缩包导入 `app/` 的，没有覆盖根目录已有审计文档、增强模块、远端
 快照或历史代码。导入时已移除固定演示密码、员工邮箱和完整示例收款号码。
 
-当前工作树有一条需保护的用户改动：
-`app/design-qa-airwallex-beneficiary.md` 处于未提交删除状态。不得撤销、暂存或
-纳入其他需求提交，除非用户明确授权。
+截至本次更新，工作树没有未提交的跟踪文件；以下未跟踪资料必须继续保留在
+Git 提交之外：
+
+- `outputs/` 下的 Excel 临时锁文件。
+- `outputs/design-qa-contract-signature/`。
+- `outputs/frontend-style-audit-20260911/`。
 
 ## 4. 本地运行与验证
 
 - 本地预览：`http://127.0.0.1:5173/`
 - Vite 开发和预览服务只绑定 `127.0.0.1`。
-- 当前功能基线已通过 33 个测试文件、227 项 Vitest 测试和 `npm run build`。
+- 当前功能基线已通过 134 个测试文件、1029 项 Vitest 测试和
+  `npm run build`（2026-09-17）。
 - 主要页面已进行桌面端与 390px 窄屏视觉检查；个别新需求仍应重新验收。
 - 登录和主控制台已检查，浏览器控制台没有警告或错误。
 - `/health`、首页、静态资源、SPA 回退、404、405、`server.mjs` 语法和 plist
   均已验证。
-- `npm audit` 仍报告 Vite 5 工具链相关风险；升级需要单独评估和回归验证。
+- `npm audit --omit=dev` 报告 8 个依赖风险（4 个 high、4 个 moderate），主要涉及
+  Vite/esbuild、Browserslist、PostCSS、Nano ID 和 ExcelJS 间接依赖。不得直接运行
+  `npm audit fix --force`；升级必须单独评估破坏性变更并完成全量回归。
 
 如果新任务中预览地址失效，应从 `app/` 启动本地开发服务，不得因此操作远端。
 
@@ -88,10 +95,16 @@ COMETS Pay 当前是 React 18、Vite 和 TypeScript 构建的纯前端高保真�
 当前已实现的主要原型能力：
 
 - 合作项目与媒介请款项目分离；飞书合作项目使用本地适配器和演示数据。
-- “我的项目”负责创建、资源维护和提交；“请款项目”保持独立审批工作台。
+- “我的请款”负责新建、草稿、退回修改、资源维护和提交；合作审批、财务审批与
+  付款工作台保持独立角色入口。
+- 请款的项目 PM 为选填；选择 PM 时使用“PM → 媒介负责人 → 老板 → 财务”，
+  未选择时从媒介负责人开始。
 - 合同支持单页上传、PDF/DOCX 本地解析、字段确认、结构化生成与 PDF/DOCX 下载。
 - Invoice 支持单笔和批量生成、签署提醒、媒介审核、版本修订和付款失败回退。
-- 同一达人可关联多份合同和多份 Invoice；关联通过合作项目、达人和合作关系 ID 约束。
+- 同一达人可关联多份合同；但在一次请款中只能关联一份已审核通过的
+  Invoice。历史多 Invoice 记录只保留展示，编辑或重提前必须修正为一份。
+- 合同、Invoice 和请款的资源关联均使用稳定 `creatorId`、`engagementId` 和业务实体 ID；
+  Handle、Display Name 和平台不用作跨模块主键。
 - 收款账户支持 Airwallex、PayPal 和 PayMax；文档使用选定账户的不可变快照。
 - 付款清单按 Invoice 保存独立付款行，支持版本化编辑、重新校验和 Excel 导出。
 - 管理员修改已提交资源时，现有审批和付款校验会失效并要求重提。
